@@ -100,16 +100,11 @@ export class RegistrationExecutor {
 		authorizedFence?: ExecutionFence,
 		approval?: OperationApprovalEnvelope,
 	): Promise<void> {
-		// The deletion fence anchors the whole approval→commit chain: the dApp
-		// path threads the capture made AT the interaction's session
-		// re-validation (upstream of the refreshSession park); popup-origin
-		// dispatches capture here, where dispatch IS the authorization. A
-		// deletion (or a delete + same-id re-import) landing anywhere after the
-		// capture moves the epoch, so the commit's assert against it fails
-		// closed. Token ops are not switch-blocked (not a SENDING kind), so
-		// every identity below must derive from this one capture plus the
-		// ownership-checked network row — never a live re-read. The capture's
-		// only throw is the locked gate; re-thrown under the pinned message.
+		// The dApp path passes the fence it captured at its session re-validation; a popup dispatch is
+		// the authorization, so it captures here. Token ops are not switch-blocked, so every identity
+		// below derives from this capture and the ownership-checked network row, never a live re-read,
+		// and a deletion after the capture fails the commit's epoch assert. The capture throws only
+		// when locked.
 		let fence: ExecutionFence
 		if (authorizedFence) {
 			fence = authorizedFence
@@ -141,10 +136,7 @@ export class RegistrationExecutor {
 		) {
 			throw new Error("Couldn't find necessary methods in the contract interface. Try to add token manually.")
 		}
-		// Thread the dApp origin into the journal entry so the tokens-view
-		// TokenImportRow can render "Requested by <origin>" for dapp imports.
-		// Anonymous-DApp fallback matches the repo convention used in
-		// tx-enrichment.ts and tx-detail-helpers.ts.
+		// TokenImportRow shows "Requested by <origin>"; the anonymous fallback matches tx-enrichment.ts.
 		const opContext: OperationContext =
 			origin.type === OriginType.DAPP ? { origin: "dapp", dappOrigin: origin.name ?? "dApp" } : { origin: "popup" }
 		const expected = shown && { name: shown.name, symbol: shown.symbol, decimals: shown.decimals }
@@ -175,10 +167,8 @@ export class RegistrationExecutor {
 		return this.deps.pxeService.registerSender(networkInfoFrom(network), op.address)
 	}
 
-	// Resolves to void: the 5.0.1 wallet-sdk WalletSchema declares
-	// `registerContract(): Promise<void>`, and the dApp-side proxy validates the
-	// response with z.void() — any non-undefined result rejects the whole call
-	// on the dApp even though registration succeeded wallet-side.
+	// Resolves to void: the dApp-side proxy validates the response with z.void(), so any value
+	// rejects a registration that succeeded.
 	public async executeAztecRegisterContract(op: AztecRegisterContractOperation, registrant?: Registrant): Promise<void> {
 		const instance = await ContractInstanceWithAddressSchema.parseAsync(op.instance)
 		const network = await this.deps.networkService.getNetwork(op.networkId)
@@ -192,14 +182,10 @@ export class RegistrationExecutor {
 		try {
 			providedArtifact = await ContractArtifactSchema.optional().parseAsync(op.artifact)
 		} catch {
-			// artifact parse failed — will fall back to lookup below
+			// Unlike `register_contract`'s strict parse, a malformed artifact reads as omitted: the lookup
+			// below tries the PXE and the bundled artifacts, and nothing remote.
 		}
 
-		// Smart-tighten: if the dApp didn't pass an artifact, the wallet can
-		// still resolve it via the chain's PXE (already-registered) or the
-		// compiled-in known bundle (Aztec/Wonderland tokens, FPCs, NFTs,
-		// etc.). When neither has it, fail loudly with a message telling
-		// the dApp to pass `artifact` — there is no remote registry fallback.
 		const classId = instance.originalContractClassId
 		const artifact = providedArtifact ?? (await this.deps.pxeService.getContractArtifact(networkInfoFrom(network), classId))
 		if (!artifact) {

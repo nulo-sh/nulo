@@ -233,7 +233,7 @@ The `pr-quick` / `pr-extension-smoke-e2e` / `pr-extension-network-e2e` `changes`
 
 - **Built targets** (`extension`, `landing`, `playground`) → gated on the **whole package** (`apps/<target>/**`), so no build input (manifest, vite/tsconfig configs, `public/` assets, scripts, the e2e harness) can ever be silently missed.
 - **Dependency libraries** (`wallet-core`, `wallet-crypto`, `extension-messaging`, `aztec-runtime`, `wallet-bridge`, `design`, `legal`, `resolve-asset`, `third-party-notices`, `token-list`, `wallet-sdk-schema-patch`) → gated on their consumed surface (`packages/<dep>/src/**` + `package.json`, plus `third-party-notices`' `texts/**`, the licence texts every extension build reads); their own README/docs stay out of the gate.
-- Plus repo-wide build inputs (`package.json`, `bun.lock`, `bunfig.toml`, `tsconfig.json`, **`patches/**`**) + each suite's harness/workflow files.
+- Plus repo-wide build inputs (`package.json`, `bun.lock`, `bunfig.toml`, `tsconfig.json`, `tsconfig.base.json`, **`patches/**`**) + each suite's harness/workflow files.
 
 **Two hard rules:**
 

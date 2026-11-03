@@ -17,6 +17,7 @@ interface Calls {
 function fakeIO(
 	script: {
 		releaseSha?: string | null
+		lookupError?: Error
 		openPr?: number | null
 		mergeable?: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
 		prNumber?: number
@@ -33,6 +34,7 @@ function fakeIO(
 	const io: SyncIO = {
 		async resolveReleasePrMergeSha(headSha) {
 			calls.resolveReleasePrMergeSha.push(headSha)
+			if (script.lookupError) throw script.lookupError
 			return script.releaseSha === undefined ? headSha : script.releaseSha
 		},
 		async findOpenSyncPr(branch) {
@@ -84,6 +86,14 @@ describe("runSync — eligibility gate (zero-API on the common path)", () => {
 		const r = await runSync(opts({ io }))
 		expect(r.action).toBe("skip")
 		expect(calls.resolveReleasePrMergeSha).toHaveLength(1)
+		expect(calls.prepareSyncBranch).toHaveLength(0)
+	})
+
+	test("push+stable but GitHub cannot say which PR HEAD merged → rejects with that error, opening nothing", async () => {
+		const lookupError = new Error("gh api commits/f00/pulls failed (exit 4): HTTP 502")
+		const { io, calls } = fakeIO({ lookupError })
+		await expect(runSync(opts({ io }))).rejects.toBe(lookupError)
+		expect(calls.findOpenSyncPr).toHaveLength(0)
 		expect(calls.prepareSyncBranch).toHaveLength(0)
 	})
 
@@ -139,7 +149,7 @@ describe("runSync — opening the sync PR", () => {
 describe("the gh lookup", () => {
 	const lookup = (sha: string) => `api repos/o/r/commits/${sha}/pulls --jq .[]`
 
-	test("a failed lookup reads as no release merge, an unreadable answer throws, and the release PR is picked past an unrelated one, reading no further", async () => {
+	test("a failed lookup and an unreadable answer each reject, and the release PR is picked past an unrelated one, reading no further", async () => {
 		const unrelated = JSON.stringify({ merged_at: "2026-11-01T00:00:00Z", base: { ref: "dev" }, labels: [], merge_commit_sha: "u00" })
 		const release = JSON.stringify({
 			merged_at: "2026-11-01T00:00:00Z",
@@ -154,7 +164,9 @@ describe("the gh lookup", () => {
 		])
 		try {
 			const io = realSyncIO("o/r")
-			expect(await io.resolveReleasePrMergeSha("f00")).toBeNull()
+			expect(await io.resolveReleasePrMergeSha("f00").catch((e: Error) => e.message)).toBe(
+				"gh api commits/f00/pulls failed (exit 4): HTTP 502",
+			)
 			expect(await io.resolveReleasePrMergeSha("b00").catch((e: Error) => e.name)).toBe("SyntaxError")
 			expect(await io.resolveReleasePrMergeSha("m00")).toBe("m00")
 		} finally {

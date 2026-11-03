@@ -125,6 +125,7 @@ jobs:
               - 'bunfig.toml'
               - 'biome.json'
               - 'tsconfig.json'
+              - 'tsconfig.base.json'
               - '.commitlintrc.json'
               - '.githooks/**'
               - 'patches/**'

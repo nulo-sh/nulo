@@ -1,7 +1,7 @@
 ---
 plan: quality-execution-1
 tier: light (the spawn prompt names it; one Codex audit at high on gpt-6.1-sol, plus one Opus Plan lens)
-status: arc 1 in review; arc 2 next
+status: completed
 issues: "#1442, #1438, #1440 (arc 1, Closes); #1455, #1472 (arc 2, Closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 93b9a2dfb
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed: arc 1 as #1585; arc 2 with this close-out as one PR.
+- **Shipped**: arc 1 closes #1442 (phase 1), #1438 (phase 2) and #1440 (phase 3). Arc 2 closes #1455 (phase 4: one gas projection and one embedded-payment collapse, NO_FROM's history row through the shared recorder, one live-handle resolution for both reuse arms; the `NO_WAIT` rule was already single since #1485) and #1472 (phase 5: one confirm list for the button and `approve()`, one grant-pending rule; the decode helpers had landed in #1501). Each move was pinned first and the pins shown red on deliberate wrong edits. No screen, copy, stored row, wire answer or log line changed.
+- **Known limits**: none.
+- **Dispositions**: kept as is, the fee window's own confirm list (outside #1472) and the execute window's unreachable fee-pick warning (D7). Rejected: a third PR for #1472 (D8); bigint fee caps in the NO_FROM sentinel pin and retiring the shared recorder's return pin (audit verdicts). Accepted without a change: the live-handle helper's return and NO_FROM's empty authwit-index await each add one settlement hop; every later check still runs before the broadcast.
+- **Lessons**: none promoted (`lessons.md` is at its 8 KiB budget). The one gotcha met in both arcs, the type-roles producer digest on `auth-registry/service.ts` and `operation-planner.ts`, names its remedy in its own failure message.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # quality-execution-1: one lane surface, one registration home, one copy of each send step
 
@@ -51,7 +62,7 @@ Five quality findings on the wallet's execution hub, all refactors a person neve
 - **Phase 2, #1438.** `wireExecutors()` builds `ExecutionLane` and `TxRequestBuilder` first (`wireLaneAndBuilder()`), then one shared-deps literal, then the transfer, dApp-send and view executors. New `execution/shared-send-deps.ts` holds `SharedSendDeps`: the eleven deps both send executors declare (ten reads and `addTransaction`), with the dApp widths (`getActiveProfile(): Promise<{ id: string } | undefined>`, `getPendingForAccount(): { hash: string }[]`) and the member docs that today sit in both interfaces. `TransferExecutorDeps extends SharedSendDeps` and narrows `getActiveProfile` to `ProfileInfo` (it calls `requireActiveProfile`); `DappSendExecutorDeps extends SharedSendDeps`. Both lane interfaces go: the deps take `Pick<ExecutionLane, …>` (7 names; 13 without `beginJournal`) and the service passes `this.lane`. Tests drop the `beginJournal` fakes and the two `not.toHaveBeenCalled` pins, which the `Pick` now enforces at compile time.
 - **Phase 3, #1440.** Pins first, through the facade's public `executeOperations` so they survive the move unchanged. (a) In `register-counts.composition.test.ts` (bb-free): a dApp `register_token` dispatched under an authorized fence reaches `tokenService.addTokenAuthorized` with that fence by identity. (b) In `register-contract-account.real.test.ts` (Node environment; a keyed registration derives keys through Poseidon, which a composition test may not load, `tests/COMPOSITION-TESTS.md` D6): a dApp's keyed `aztec_registerContract` reaches admission with the app's origin and the authorized fence by identity; a refused admission writes neither the account nor the contract; an admitted control writes the account, then the contract. The facade is built through its own `init` over stub services. Then new `execution/registration-executor.ts`: `RegistrationExecutor` with `RegistrationExecutorDeps` in `ViewExecutorDeps`' shape and field names, typed narrow: `networkService: Pick<NetworkService, "getNetwork">`, `pxeService: Pick<PxeServiceClient, "getContractInstance" | "getContractArtifact" | "registerContract" | "registerSender" | "registerAccount">`, `tokenService: Pick<TokenService, "parseTokenInterface" | "addTokenAuthorized">`, `profileService: Pick<ProfileService, "captureExecutionFence">`, `dappSessionService: Pick<DappSessionService, "admitDappRegistration">` (type-only import). The five handlers, `registrant`, `admitDappRegistration` and the `Registrant` type move verbatim; the only edit is `this.x` to `this.deps.x`, and `registrant`'s `this.captureFence()` becomes `this.deps.profileService.captureExecutionFence()`, the call `captureFence` makes. The dispatch arms keep `await this.registration.registrant(origin, authorizedFence)` before the handler. The stale TSDoc at `service.ts:1226-1235` goes. The seven tests that cast the facade build `new RegistrationExecutor({...} satisfies RegistrationExecutorDeps)`; their assertions do not change. As built, the fakes are cast (`as never`): they are partial stand-ins that cannot meet the full `Pick` shapes, and they were as untyped through the facade's private fields. `execution/README.md`'s file map gains the module.
 
-**Arc 2 — the send paths and the windows (branch `quality-execution-1-arc2`, on arc 1).**
+**Arc 2 — the send paths and the windows (branch `quality-execution-1-a2`, off `dev` after arc 1 landed; D10).**
 
 - **Phase 4, #1455.** Pins first, each red if its extraction were wrong: the full reuse-arm order `getNetwork < getNode < getPXE < assertFence < getAccountContract`, then the fence re-check, on both executors (no test pins `getNode`/`getPXE` today); NO_FROM's history row with a failing `addTransaction` (the send's error and its journal stage as today); distinct `gasLimits` and `teardownGasLimits` sentinels, and absent gas settings, in the existing planner and NO_FROM projection tests (today they pin only the fees and the padding). Then three extractions, one commit each:
   - `gasFeeOptionsOf(gasSettings)` exported from `operation-planner.ts` (the four gas fields and `gasPadding: 1`); `feeOptionsOf` and `prepareNoFrom` write their payer fields first and spread it after, so each object keeps today's keys in today's order. `embeddedPaymentOf(route)` in `utils/fee-detection.ts` is the one embedded collapse, used by `detectEmbeddedFeePayment` and `feeOptionsOf`.
@@ -77,8 +88,8 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 - [x] **Phase 2 (#1438).** Gate: `bun run lint`; `bun run typecheck:all`; tests `src/wallet/services/execution` (composition files included, which prove the wiring and the builder's order).
 - [x] **Phase 3 (#1440).** Gate: the two new pins green before the move and after it; phase 2's gate, plus tests `src/wallet/services/legal src/wallet/services/dapp-session`; `grep -nE "private async (executeRegister|executeAztecRegister|registrant|admitDappRegistration)" apps/extension/src/wallet/services/execution/service.ts` prints nothing (grep exits 1, the one command whose pass is not exit 0).
 - [x] **Arc 1 end.** `bun run audit:vue`; `bun run test:all`; `bun run audit:dup` (production clones and dup lines no worse than base: 184 / 8768); `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/contracts-register.test.ts tests/e2e/network/data-registerSender.test.ts tests/e2e/network/register-token.test.ts tests/e2e/network/tx-sendTx-noFrom.test.ts tests/e2e/network/transfers.test.ts` on Chrome (the network config retries twice unless `NULO_E2E_RETRY` says otherwise; `tx-sendTx-noFrom` is proverless-gated, so the run is proverless, as CI's shard pool is); `bun run check:plans` after staging.
-- [ ] **Phase 4 (#1455).** Gate per extraction: the new pins red on a deliberately wrong order (shown once in `lessons/phase-4.md`, then reverted), green after; tests `src/wallet/services/execution src/wallet/services/legal` (the FPC byte-parity test in `fee/strategies-structural.test.ts` included); `bun run lint`; `bun run typecheck:all`.
-- [ ] **Phase 5 (#1472).** Gate: the error/warning pin green before the move and after it; tests `src/popup/windows/execute src/popup/windows/fee`; `bun run lint`; `bun run typecheck:all`.
+- [x] **Phase 4 (#1455).** Gate per extraction: the new pins red on a deliberately wrong order (shown once in `lessons/phase-4.md`, then reverted), green after; tests `src/wallet/services/execution src/wallet/services/legal` (the FPC byte-parity test in `fee/strategies-structural.test.ts` included); `bun run lint`; `bun run typecheck:all`.
+- [x] **Phase 5 (#1472).** Gate: the error/warning pin green before the move and after it; tests `src/popup/windows/execute src/popup/windows/fee`; `bun run lint`; `bun run typecheck:all`.
 - [ ] **Arc 2 end.** Arc 1's end gate, with the network files `tx-sendTx-default.test.ts tx-sendTx-noFrom.test.ts tx-sendTx-feePayer.test.ts tx-sendTx-delegated-authwit.test.ts transfers.test.ts` on Chrome and `tx-sendTx-default.test.ts` on Firefox (`NULO_E2E_BROWSER=firefox`), each with `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0`.
 
 ## Decision ledger
@@ -92,6 +103,7 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 - D7. `approve()` keeps its fee-pick warning, as the issue says, though the disabled button makes it unreachable from the window; removing copy is not this lane's call.
 - D8. PR #1568 merged (`00895dbb1`) without touching the confirm list; arc 2 merges `origin/dev` as usual. #1472 stays in arc 2 rather than a third PR off `dev` (Opus O6 rejected): the lane brief asks for at most two PRs, the second on the first, and one close-out home.
 - D9. `awaitsGrantDecode` takes one operation and a boolean (Codex R1, Opus): the fee window has no index; `grantRefusal` stays as is.
+- D10. Arc 1 squash-merged before arc 2 began, so arc 2 branched from `dev` at `cf9ed1e40` as `quality-execution-1-a2` and ships as one PR to `dev` (no stack), with the close-out as its last commits. As built: `approve()` reads the fee-pick warning's condition from `needsFeeSelection` instead of a second copy of its expression, and the reuse-order pins share `tests/helpers/call-sequence.ts`.
 
 ## Audit verdicts
 
@@ -104,11 +116,15 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 | Arc 1 Codex R1 (`gpt-6.1-sol`, high, on `51a692426..502420dc6`) | approve | none; no findings (moved methods byte-equivalent apart from the receiver, registrant capture, admission order and fence threading unchanged, the re-pinned digest recomputed) | none |
 | Arc 1 Opus review (`opus`) | approve | R1: the executor's module doc states live behaviour only, and no longer says a registration takes no journal record (a token add writes one); R4: the refused-admission pin names `ScopeViolationError.CODE` | R2: `satisfies` on the retargeted fakes (they cannot meet the full `Pick` shapes; recorded at phase 3); R3: info, no change |
 | Arc 1 Codex R2 (resumed, on `bd464a4c8`) | approve | none; the Opus fixes verified, no regression | none |
+| Arc 2 Codex R1 (`gpt-6.1-sol`, high, on `cf9ed1e40..501fbc21e`) | approve | C1: NO_FROM's sponsor lookup pinned before the line's first `leave`; C2: comment trims (the fee-pick cast, `confirmBlocked`, two restating one-line docs, a narrating NO_FROM line) | none; noted without change: the helper's return and NO_FROM's empty index await add settlement hops, every later check still runs |
+| Arc 2 Opus review (`opus`) | approve | O1: the same trims; O2: `resolveLiveHandles`' doc no longer ties the network reads to the fence's profile; O5: the phase-4 lesson's edit count | O3: bigint caps in the NO_FROM sentinel pin (NO_FROM's fingerprint JSON-encodes them, so they arrive as strings); O4: retiring the shared recorder's return pin (predates the arc, still holds) |
+| Arc 2 Codex R2 (resumed, on `0d277dcfe`) | approve | none; the fixes verified, no regression | none |
+| Net diff Codex (fresh, `gpt-6.1-sol`, high, `a0458e21a..HEAD`) | approve | three comment trims: the registration executor's fence, origin, SDK-return and fallback comments; `SharedSendDeps.addTransaction`'s doc; the order pins' "listed in order" lines | none |
 
 ## Delivery
 
 - **Arc 1** (phases 1-3): branch `worktree-quality-execution-1` to `dev`, `gh pr create` (the stack's base layer), ready, no labels at creation. Title: `refactor(execution): one lane surface, a registration executor, no registry import cycle` (88 characters). Body: what moved and why, the gates with outcomes, `audit:dup` and the touched files' line counts before and after, `Closes #1442`, `Closes #1438`, `Closes #1440`.
-- **Arc 2** (phases 4-5): `gh stack add quality-execution-1-arc2` on arc 1, after arc 1's loop converges; `gh stack submit --auto` when its loop converges. Title: `refactor(execution): one copy of each send step, one confirm list in the execute window` (87 characters); Body adds the two `approve()` direct-call differences (Security section). `Closes #1455`, `Closes #1472`. The close-out is arc 2's final commits.
+- **Arc 2** (phases 4-5): branch `quality-execution-1-a2` off `dev` (D10), `gh pr create` once its loop converges, ready, no labels at creation. Title: `refactor(execution): one copy of each send step, one confirm list in the execute window` (87 characters); Body adds the two `approve()` direct-call differences (Security section). `Closes #1455`, `Closes #1472`. The close-out is arc 2's final commits.
 - **Parallelism:** none; arc 2 builds on arc 1's interface.
 
 ## Post-implementation

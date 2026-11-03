@@ -726,7 +726,7 @@ describe("CI behavior-gating guard", () => {
 			["network", network],
 		] as const) {
 			expect(pats, `${label}: patches/** rewrites installed deps`).toContain("patches/**")
-			for (const root of ["package.json", "bun.lock", "bunfig.toml", "tsconfig.json"]) {
+			for (const root of ["package.json", "bun.lock", "bunfig.toml", "tsconfig.json", "tsconfig.base.json"]) {
 				expect(pats, `${label}: root input ${root}`).toContain(root)
 			}
 		}

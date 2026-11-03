@@ -25,7 +25,10 @@ export const SYNC_BRANCH_PREFIX = "sync/main-to-dev-v"
 
 /** The injectable GitHub/git side — real impls shell out to `gh` / `git`. */
 export interface SyncIO {
-	/** The merge_commit_sha of the merged Release PR at `headSha`, or null when HEAD is not a Release-PR merge. */
+	/**
+	 * The merge_commit_sha of the merged Release PR at `headSha`, or null when HEAD is not a Release-PR merge.
+	 * Rejects when GitHub cannot say, so the job turns red instead of passing green with no sync PR.
+	 */
 	resolveReleasePrMergeSha(headSha: string): Promise<string | null>
 	/** The number of an already-open sync PR for `branch` (base dev), or null. */
 	findOpenSyncPr(branch: string): Promise<number | null>
@@ -113,10 +116,7 @@ const PRERELEASE_MANIFEST = ".release-please-prerelease-manifest.json"
 export function realSyncIO(repo: string): SyncIO {
 	return {
 		async resolveReleasePrMergeSha(headSha) {
-			// Unlike auto-unstick, a failed lookup reads as "not a Release-PR merge", so the job skips.
-			const text = await commitPullsText(repo, headSha).catch(() => null)
-			if (text === null) return null
-			for (const pr of parsePulls(text)) {
+			for (const pr of parsePulls(await commitPullsText(repo, headSha))) {
 				const labels = (pr.labels ?? []).map((l) => l.name)
 				const isReleasePr =
 					pr.merged_at != null &&

@@ -75,6 +75,7 @@ jobs:
               - 'bun.lock'
               - 'bunfig.toml'
               - 'tsconfig.json'
+              - 'tsconfig.base.json'
               - 'patches/**'
               - '.github/workflows/_extension-smoke-e2e.yml'
               - '.github/workflows/pr-extension-smoke-e2e-firefox.yml'

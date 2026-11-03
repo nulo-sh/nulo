@@ -17,7 +17,7 @@ import {
 } from "@nulo/wallet-crypto"
 import { InvalidPasswordError, RetiredProfileError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { fakePasskeyAnswer, freshPrfSalt } from "../../../../tests/helpers/fake-passkey"
-import { validateAndMigrateBackup } from "@/composables/useFullBackupImport"
+import { validateAndMigrateBackup } from "@/wallet/services/backup/trust-gate"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"

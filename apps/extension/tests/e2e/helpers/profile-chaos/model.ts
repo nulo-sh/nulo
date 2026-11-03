@@ -301,22 +301,25 @@ export const ACTIONS_PER_RUN = 24
 
 const SERVICE = "src/wallet/services/profile/service.ts"
 const SESSIONS = "src/wallet/services/profile/session-manager.ts"
+const CODEC = "src/wallet/services/profile/profile-secret-codec.ts"
 const IMPORT = "src/composables/useFullBackupImport.ts"
-const CREATE_OPENS = cite(SERVICE, 773, "public async createProfile(")
-const PASSKEY_CREATE_OPENS = cite(SERVICE, 885, "public async createPasskeyProfile(")
-const PASSKEY_CREATE_PHRASE = cite(SERVICE, 915, "deriveMasterFromMnemonic(await getMnemonic(entropy))")
-const UNLOCK_REFUSES = cite(SERVICE, 836, "throw new InvalidPasswordError()")
-const PASSKEY_UNLOCK_BINDS = cite(SERVICE, 970, "answer.credential.id !== snapshot.credentialId")
-const LOCK_CLOSES = cite(SERVICE, 1033, "public async lockActiveProfile(")
-const RENAME = cite(SERVICE, 1153, "public async changeProfileName(")
-const PASSWORD_CHANGE = cite(SERVICE, 1305, 'throw new Error("Invalid profile old password")')
-const PASSWORD_CHANGE_REOPENS = cite(SERVICE, 1338, "this.reopenAfterPasswordChangeHoldingLock(")
-const DELETE = cite(SERVICE, 1806, "public async deleteProfile(")
-const PHRASE_IMPORT = cite(SERVICE, 2019, "public async importMnemonic(")
-const PHRASE_EXPORT = cite(SERVICE, 2245, 'new Error("Invalid profile old password")')
-const DUPLICATE_WARNS = cite(SERVICE, 2349, "throw new DuplicateWalletError(")
-const RESTORE_CLONE = cite(SERVICE, 2492, "CLONE DIVERGENCE")
-const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2435, "if (!credentialData && !password) {")
+const SELECTION = "src/composables/full-backup-selection.ts"
+const GATE = "src/wallet/services/backup/trust-gate.ts"
+const CREATE_OPENS = cite(SERVICE, 643, "public async createProfile(")
+const PASSKEY_CREATE_OPENS = cite(SERVICE, 755, "public async createPasskeyProfile(")
+const PASSKEY_CREATE_PHRASE = cite(SERVICE, 785, "deriveMasterFromMnemonic(await getMnemonic(entropy))")
+const UNLOCK_REFUSES = cite(SERVICE, 706, "throw new InvalidPasswordError()")
+const PASSKEY_UNLOCK_BINDS = cite(SERVICE, 840, "answer.credential.id !== snapshot.credentialId")
+const LOCK_CLOSES = cite(SERVICE, 903, "public async lockActiveProfile(")
+const RENAME = cite(SERVICE, 1023, "public async changeProfileName(")
+const PASSWORD_CHANGE = cite(SERVICE, 1175, 'throw new Error("Invalid profile old password")')
+const PASSWORD_CHANGE_REOPENS = cite(SERVICE, 1208, "this.reopenAfterPasswordChangeHoldingLock(")
+const DELETE = cite(SERVICE, 1681, "public async deleteProfile(")
+const PHRASE_IMPORT = cite(SERVICE, 1894, "public async importMnemonic(")
+const PHRASE_EXPORT = cite(SERVICE, 2087, 'new Error("Invalid profile old password")')
+const DUPLICATE_WARNS = cite(SERVICE, 2126, "throw new DuplicateWalletError(")
+const RESTORE_CLONE = cite(SERVICE, 2269, "CLONE DIVERGENCE")
+const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2212, "if (!credentialData && !password) {")
 const OPEN_BEARER = cite(SESSIONS, 299, "const bearer = !this.strictSecurityMode && dek")
 const SESSION_RESTORE = cite(SESSIONS, 611, "session.passhash || (this.strictSecurityMode && session.bearer) || !session.bearer")
 const LOCK_DELETES_ROW = cite(SESSIONS, 428, "this.deletePersistedSession()")
@@ -337,9 +340,9 @@ const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 681, "publ
 const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 765, "public async importAccount(")
 const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 837, "This account is already in your wallet")
 const ACCOUNT_HELD = cite("src/popup/pages/settings/accounts/import.vue", 310, 'data-testid="import-account-held"')
-const BACKUP_UNREADABLE = cite(IMPORT, 656, "DECRYPTION_FAILED.title")
-const BACKUP_INTEGRITY = cite(IMPORT, 173, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
-const BACKUP_UNPARSED = cite(IMPORT, 601, "parseError.title, parseError.tooltip")
+const BACKUP_UNREADABLE = cite(SELECTION, 96, "DECRYPTION_FAILED.title, DECRYPTION_FAILED.message")
+const BACKUP_INTEGRITY = cite(GATE, 106, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
+const BACKUP_UNPARSED = cite(SELECTION, 57, "title: parseError.title, message: parseError.tooltip")
 const RESTORE_ASKS_PASSWORD = cite(
 	"src/components/composite/import/ImportFullBackupForm.vue",
 	140,
@@ -347,44 +350,44 @@ const RESTORE_ASKS_PASSWORD = cite(
 )
 const RESTORE_ROLLS_BACK = cite(
 	"src/composables/full-backup-restore.ts",
-	962,
+	946,
 	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
 )
-const RESTORE_FINALIZES = cite(IMPORT, 508, "restoreRun = await finalizeWithReminder(")
+const RESTORE_FINALIZES = cite(IMPORT, 337, "restoreRun = await finalizeWithReminder(")
 const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
 const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 373, "discoveryQueue.drain(")
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
 const REVEAL_PASSKEY = cite(SEED_PAGE, 124, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal"')
 const REVEAL_CANCEL = cite(SEED_PAGE, 129, "handleCancelOrUnconfirmed(error, openToast)")
 const CEREMONY_ENDS_WITH_PAGE = cite("src/components/passkey/PasskeyCeremonyDialog.vue", 85, 'cancel("dialog dismounted")')
-const SLOTS_BIND_PASSKEY = cite(SERVICE, 473, "credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null")
-const PASSKEY_SLOTS_REFUSE = cite(SERVICE, 974, "if (!opened) throw new PasskeyNotOpenedError()")
-const PASSKEY_KIND_GATE = cite(SERVICE, 158, 'if (row.type === "password") throw new Error("Profile requires password")')
-const RETIRED_UNLOCK = cite(SERVICE, 153, 'if (kind === "retired") throw new RetiredProfileError()')
-const RETIRED_SLOTS = cite(SERVICE, 418, 'if (classified.kind === "retired") throw new RetiredProfileError()')
-const RETIRED_EXPORTS = cite(SERVICE, 531, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_LISTED = cite(SERVICE, 2414, 'classifyProfileRow(profile).kind === "retired")')
-const RETIRED_RESEAL = cite(SERVICE, 1298, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_FINALIZE = cite(SERVICE, 2596, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const SLOTS_BIND_PASSKEY = cite(CODEC, 141, "credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null")
+const PASSKEY_SLOTS_REFUSE = cite(SERVICE, 844, "if (!opened) throw new PasskeyNotOpenedError()")
+const PASSKEY_KIND_GATE = cite(SERVICE, 108, 'if (row.type === "password") throw new Error("Profile requires password")')
+const RETIRED_UNLOCK = cite(SERVICE, 103, 'if (kind === "retired") throw new RetiredProfileError()')
+const RETIRED_SLOTS = cite(CODEC, 86, 'if (classified.kind === "retired") throw new RetiredProfileError()')
+const RETIRED_EXPORTS = cite(SERVICE, 401, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_LISTED = cite(SERVICE, 2191, 'classifyProfileRow(profile).kind === "retired")')
+const RETIRED_RESEAL = cite(SERVICE, 1168, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_FINALIZE = cite(SERVICE, 2373, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 384, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 152, 'stage.value = "phrase"')
 const ONBOARDING_SAVED = cite(ONBOARDING, 176, "if (isMounted()) leavePhrase()")
 const ONBOARDING_LATER = cite(ONBOARDING, 196, '@later="leavePhrase"')
-const EARLIER_AT_PICK = cite(IMPORT, 596, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
-const EARLIER_AT_DECRYPT = cite(IMPORT, 641, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
-const EARLIER_SHAPE = cite(IMPORT, 134, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
+const EARLIER_AT_PICK = cite(SELECTION, 55, "refusal: EARLIER_PASSKEY_BACKUP")
+const EARLIER_AT_DECRYPT = cite(SELECTION, 89, "refuse(selected, banner, EARLIER_PASSKEY_BACKUP")
+const EARLIER_SHAPE = cite(GATE, 75, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
 const IMPORT_FLOW = "src/composables/useProfileImportFlow.ts"
 const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 195, 'await deps.unlockFor(admitted, { step: "import", profileName: name }, existing)')
-const RESTORE_CARD = cite(IMPORT, 445, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
-const PASSKEY_IMPORT_SEALS = cite(SERVICE, 2038, "seal = await this.newRowSeal(password, credentialData)")
-const RESTORE_SEALS = cite(SERVICE, 2468, "seal = await this.newRowSeal(password, credentialData)")
+const RESTORE_CARD = cite(IMPORT, 274, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
+const PASSKEY_IMPORT_SEALS = cite(SERVICE, 1913, "seal = await this.newRowSeal(password, credentialData)")
+const RESTORE_SEALS = cite(SERVICE, 2245, "seal = await this.newRowSeal(password, credentialData)")
 const DISCOVERS = cite("src/wallet/utils/passkey-ceremony.ts", 117, "credentialId === undefined ? buildDiscoverOptions(prfSalt)")
 const UNLOCK_METHOD = "src/popup/pages/settings/security/unlock-method.vue"
-const METHOD_CHANGE = cite(SERVICE, 1393, "public async changeUnlockMethod(")
-const METHOD_CHANGE_WRITES = cite(SERVICE, 1505, "await this.repo.set(original.id, replacement)")
-const METHOD_CHANGE_REOPENS = cite(SERVICE, 1523, "await this.openSessionVerified(replacement, secret, dek)")
-const METHOD_VERIFY_REFUSES = cite(SERVICE, 1356, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
+const METHOD_CHANGE = cite(SERVICE, 1263, "public async changeUnlockMethod(")
+const METHOD_CHANGE_WRITES = cite(SERVICE, 1380, "await this.repo.set(original.id, replacement)")
+const METHOD_CHANGE_REOPENS = cite(SERVICE, 1398, "await this.openSessionVerified(replacement, secret, dek)")
+const METHOD_VERIFY_REFUSES = cite(SERVICE, 1226, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
 const METHOD_WRONG_PASSWORD = cite(UNLOCK_METHOD, 193, "if (isCurrent()) isWrongPassword.value = true")
 /** A password profile's change checks the password before it makes a passkey, so a wrong one mints none. */
 const METHOD_PASSWORD_FIRST = cite(UNLOCK_METHOD, 190, "await managers.profile.verifyUnlockCredential(id, { password: typed })")
@@ -407,10 +410,10 @@ const ACCOUNT_FILE_TYPE_RESETS = cite(ACCOUNT_PAGE, 162, "() => appStore.profile
 const ACCOUNT_FILE_NETWORK_RESETS = cite(ACCOUNT_PAGE, 181, "() => appStore.network?.chainId,")
 /** A session opened in place re-runs the window's bootstrap, which clears the network first. */
 const BOOTSTRAP_CLEARS_NETWORK = cite("src/composables/useProfileBootstrap.ts", 152, "appStore.network = undefined")
-const EXPORT_CHECK_REFUSES = cite(SERVICE, 1373, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
+const EXPORT_CHECK_REFUSES = cite(SERVICE, 1243, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
 export const EARLIER_TITLE = "Backup from an earlier version"
-const EARLIER_TITLE_SOURCE = cite(IMPORT, 122, `title: "${EARLIER_TITLE}"`)
+const EARLIER_TITLE_SOURCE = cite(GATE, 63, `title: "${EARLIER_TITLE}"`)
 
 /** The names a release gives the two profiles a `pre-update` start makes on it. */
 export const PRE_UPDATE_NAMES = { password: "Main", passkey: "Chaos 1" } as const

@@ -11,6 +11,7 @@ import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { useProfileImportFlow } from "@/composables/useProfileImportFlow"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useToast } from "@/composables/toast"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Utils */
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
@@ -221,6 +222,7 @@ onBeforeUnmount(() => {
 					:disabled="!decryptionPassword"
 					data-testid="onboarding-submit-import"
 					@click="decryptBackup"
+					@keydown.enter="refuseRepeatEnter"
 				>
 					Decrypt backup
 				</Button>
@@ -232,6 +234,7 @@ onBeforeUnmount(() => {
 						:loading="restoreStatus === 'progress'"
 						data-testid="onboarding-submit-import"
 						@click="restoreBackup"
+						@keydown.enter="refuseRepeatEnter"
 					>
 						{{ restoreStatus === "progress" ? "Importing..." : "Import profile" }}
 					</Button>
@@ -269,6 +272,7 @@ onBeforeUnmount(() => {
 					:disabled="isRetryingAccountState"
 					data-testid="import-full-backup-continue-btn"
 					@click="continueImport"
+					@keydown.enter="refuseRepeatEnter"
 				>
 					Continue
 				</Button>

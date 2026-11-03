@@ -257,6 +257,16 @@ describe("OperationPlanner.buildTransferOperation", () => {
 })
 
 describe("OperationPlanner.processAztecJsPayload", () => {
+	const FEE_OPTION_KEYS = [
+		"embeddedFeePayment",
+		"requestedPayment",
+		"gasLimits",
+		"teardownGasLimits",
+		"maxFeesPerGas",
+		"maxPriorityFeesPerGas",
+		"gasPadding",
+	]
+
 	test("returns empty actions + AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE for a minimal ExecutionPayload", async () => {
 		const planner = new OperationPlanner(makeProfile(), makeTokenService(makeToken()))
 		const exec = { calls: [], authWitnesses: [], capsules: [], extraHashedArgs: [] } as unknown as ExecutionPayload
@@ -341,6 +351,48 @@ describe("OperationPlanner.processAztecJsPayload", () => {
 		const { feeOptions } = await planner.processAztecJsPayload(exec, opts)
 		expect(feeOptions.maxFeesPerGas).toEqual({ feePerDaGas: "1000", feePerL2Gas: "2000" })
 		expect(feeOptions.maxPriorityFeesPerGas).toEqual({ feePerDaGas: "5", feePerL2Gas: "7" })
+	})
+
+	test("every gas setting reaches the fee options, each in its own field, in the options' key order", async () => {
+		const planner = new OperationPlanner(makeProfile(), makeTokenService(makeToken()))
+		const exec = { calls: [], authWitnesses: [], capsules: [], extraHashedArgs: [] } as unknown as ExecutionPayload
+		const gasLimits = { daGas: 11, l2Gas: 12 }
+		const teardownGasLimits = { daGas: 13, l2Gas: 14 }
+		const gasSettings = {
+			gasLimits,
+			teardownGasLimits,
+			maxFeesPerGas: { feePerDaGas: 15n, feePerL2Gas: 16n },
+			maxPriorityFeesPerGas: { feePerDaGas: 17n, feePerL2Gas: 18n },
+		}
+		const { feeOptions } = await planner.processAztecJsPayload(exec, { fee: { gasSettings } } as never)
+		expect(feeOptions).toStrictEqual({
+			embeddedFeePayment: undefined,
+			requestedPayment: undefined,
+			gasLimits,
+			teardownGasLimits,
+			maxFeesPerGas: { feePerDaGas: "15", feePerL2Gas: "16" },
+			maxPriorityFeesPerGas: { feePerDaGas: "17", feePerL2Gas: "18" },
+			gasPadding: 1,
+		})
+		expect(Object.keys(feeOptions)).toEqual(FEE_OPTION_KEYS)
+		expect(feeOptions.gasLimits).toBe(gasLimits)
+		expect(feeOptions.teardownGasLimits).toBe(teardownGasLimits)
+	})
+
+	test("no gas settings leave every gas field unset and keep the padding", async () => {
+		const planner = new OperationPlanner(makeProfile(), makeTokenService(makeToken()))
+		const exec = { calls: [], authWitnesses: [], capsules: [], extraHashedArgs: [] } as unknown as ExecutionPayload
+		const { feeOptions } = await planner.processAztecJsPayload(exec, {} as never)
+		expect(feeOptions).toStrictEqual({
+			embeddedFeePayment: undefined,
+			requestedPayment: undefined,
+			gasLimits: undefined,
+			teardownGasLimits: undefined,
+			maxFeesPerGas: undefined,
+			maxPriorityFeesPerGas: undefined,
+			gasPadding: 1,
+		})
+		expect(Object.keys(feeOptions)).toEqual(FEE_OPTION_KEYS)
 	})
 })
 
