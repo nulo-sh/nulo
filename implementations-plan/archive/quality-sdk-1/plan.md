@@ -1,7 +1,7 @@
 ---
 plan: quality-sdk-1
 tier: light
-status: plan approved (Codex final r3); arc 1 implementing
+status: completed
 issues: "#1444, #1474 (arc 1); #1451 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 51a692426
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed: arc 1 as #1587; arc 2 with this close-out as one PR.
+- **Shipped**: arc 1 closes #1444 (`background.ts` 971 → 430 lines: wiring, beside `content-admission.ts` and `wallet-message.ts`) and #1474 (`scripts/ci-cd/edge-headers.test.ts`: the five surfaces' shared headers agree, nine differences recorded with their values). Arc 2 closes #1451: `raceTimeout` and `raceAbort` in `@nulo/wallet-core/utils`, 17 sites converted, three pins added first; each pin and five helper properties shown red under a mutation. Callers resume on the same turn at sites 1-5, 11-14 and 16b, earlier at 6-10 and 15, one turn later at 17. Three latent changes, on inputs that cannot occur today: site 17 answers `true` on a rejected input (it hung), 16b observes a rejected refresh (unhandled), 15 rejects with an `Error` (a bare string). No screen, copy, stored row, wire message, log line or header value changed.
+- **Known limits**: none.
+- **Dispositions**: kept as is, site 18 (`execution-mutex.ts`: mapping the outcome adds a turn before the catch that frees a capped slot), site 16a (its timer is the injected sleep its tests drive) and the peripheral copies outside #1451's list (a timer against an event or a watcher). Aligning a header value is a separate decision (#1474's Decision comment). Rejected: `packages/edge-headers`, a canonical header table, a `.finally` helper (Alternatives not taken); deleting arc 1's module doc comments (audit verdicts). Filed on the way, not this plan's: #1590 (a Firefox e2e flake).
+- **Lessons**: none promoted (`lessons.md` is at its 8 KiB budget). The turn rule lives in `race.ts` and the wallet-core README; a moved chaos citation names its file and line when it fails.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
+- **Size**: 166 lines against light's 150; the excess is the two arcs' audit rows and this block.
 
 # quality-sdk-1: background.ts in three modules, one deadline and abort helper, edge headers that must agree
 
@@ -38,7 +50,7 @@ Claims that did not hold (recon): sites 5, 17, 18 use no `Promise.race`; site 4 
 ## Assumptions
 
 - **Facts**: F1 the recon cites. F2 `discovery-flow.ts` is the extraction precedent: its own deps type, projected per call by `discoveryDeps` (`background.ts:786`). F3 `background.transport.test.ts` drives every admission check through `initWalletSdkHandler`. F4 `Promise.race` subscribes to every input, so an input that rejects after the race settled is observed. F5 every site's package already imports `@nulo/wallet-core/utils`; site 1 is inside `wallet-core` and imports `../utils/race`. F6 none of the four header modules imports anything; `test:ci-gating` runs `scripts/ci-cd/` in `quality-status`.
-- **Inferences**: I1 a pure move adds no `await` and reorders no read, so microtask order is unchanged in arc 1. I2 (corrected, Codex r1; probed on Node 24 and Bun 1.4.2) `raceTimeout` returns the bare `Promise.race`, its timer cleared from `work.then`, so sites 1-5 and 11-15 resume after as many microtask turns as today; the `.finally` sites 6-10 resume earlier (three turns on V8, one on Bun). Those callers act on which input settled first, not on the turn count; their pins prove the outcomes. I3 site 16b keeps its turn count; site 17's caller resumes one turn later (the `.then` that maps the outcome), and its next step (`waitForEarlier`) reads live state after its own awaits. Site 18 is not converted: mapping the outcome to its rejection adds a turn before the catch that frees a capped slot (Codex r1, reproduced; Opus r1 held the ticks would match, the trace shows the mapping's turn).
+- **Inferences**: I1 a pure move adds no `await` and reorders no read, so microtask order is unchanged in arc 1. I2 (corrected, Codex r1; probed on Node 24 and Bun 1.4.2) `raceTimeout` returns the bare `Promise.race`, its timer cleared from `work.then`, so sites 1-5 and 11-14 resume after as many microtask turns as today, site 15 one turn earlier (its second `await fetch` goes, ledger); the `.finally` sites 6-10 resume earlier (three turns on V8, one on Bun). Those callers act on which input settled first, not on the turn count; their pins prove the outcomes. I3 site 16b keeps its turn count; site 17's caller resumes one turn later (the `.then` that maps the outcome), and its next step (`waitForEarlier`) reads live state after its own awaits. Site 18 is not converted: mapping the outcome to its rejection adds a turn before the catch that frees a capped slot (Codex r1, reproduced; Opus r1 held the ticks would match, the trace shows the mapping's turn).
 - **Asks**: none. The header differences with no recorded reason are kept and said so (D6); whether to align them is a separate decision, noted in the #1474 Decision comment.
 
 ## Architecture & Implementation
@@ -86,13 +98,13 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 
 ## Arc 2: one helper for deadline and abort races (#1451)
 
-### Phase 4: the helper and the missing pins
+### Phase 4: the helper and the missing pins ✓
 
 - **Pins first**, on the base: site 17's abort and fulfil pins exist (`execution-lane.test.ts:893`, `:909`); add that no abort listener is left after either. Tighten site 2's pin to the request's own timeout error. Add a site 8 pin: the deadline already past, the read rejecting later, gives `late` and no unhandled rejection. All pass on the base: they pin behaviour, not a fix.
 - Add D4 with `race.test.ts`: `raceTimeout` work wins (value, no timer left, `onTimeout` never called), work rejects (its reason, no timer left), timer wins (`onTimeout`'s value, called once), `onTimeout` throws (its error; `work`'s later rejection raises no unhandled rejection); `raceAbort` fulfilled, rejected, aborted while pending, already aborted then rejected, aborted then rejected (no unhandled rejection in either), and no listener left in each.
 - **Gate**: lint; typecheck:all; `bun run --cwd packages/wallet-core test --retry=0`; the three pinned suites at retry 0.
 
-### Phase 5: the conversions
+### Phase 5: the conversions ✓
 
 - Convert D5 one package at a time, one commit each (wallet-core, extension-messaging, aztec-runtime, then the extension's services, composables and views). Each site's pins pass unedited after its commit.
 - **Gate**: lint; typecheck:all; each package's `test --retry=0`; `bun run --cwd apps/extension test src/stores src/popup/auth-guard.test.ts src/composables src/components/JsonViewer src/wallet/services/token src/wallet/services/profile src/wallet/services/network-reset src/wallet/services/execution --retry=0`; `bun run test:all`; `bun run audit:vue`; `audit:dup` before and after.
@@ -109,6 +121,10 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 | D1-D6 | as above | see Alternatives not taken |
 | Close-out | arc 2's final commits, as `w3-dapp-1` did | a third, docs-only PR (the two-PR cap) |
 | Phase 2 e2e | run with `NULO_E2E_PROVERLESS=1`, as CI's network shard pool runs: `inflight-call-background-death` refuses to start without it | a prover-on run (the file opts out of it) |
+| Arc 2 test helpers (deviation) | `collectUnhandledRejections` moves to `@nulo/wallet-core/testing`, typed by the slice of `process` it uses so consumers without Node's types compile, and the extension's helper re-exports it; `trackAbortListeners` joins it | a second copy in `race.test.ts` |
+| Arc 2 turn pins (deviation) | `race.test.ts` pins both helpers' resume turn against the hand-built shapes, so a `.finally` close goes red | relying on I2's probe alone |
+| Site 15 (deviation) | returns the race's value, one turn earlier than its second `await fetch`; a component's log batch, nothing orders against it | keeping the redundant second await to hold the turn |
+| Arc 2 e2e | the plan's phase 5 files plus arc 1's network files, proverless, as the brief asks | the phase 5 list alone |
 
 ## Audit verdicts
 
@@ -121,14 +137,18 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 | Arc 1 Codex r1 | approve: admission byte-identical bar the `export`; the pipeline identical modulo D2; pins, digests and the header test hold | none | none |
 | Arc 1 Opus | conditional approve: the price-exposure scan misses `content-admission.ts`; the projection's early read is unstated; a header no non-excepted surface sets passes; a bare note path | all 4: the scan row, a TSDoc on `messagePipelineDeps`, a null-agreement report with its control test, the full path | none |
 | Arc 1 Codex r2 (resumed) | approve: the four fixes hold; an exhaustive comparison of the split `disagreements` finds only the new null report | none | none |
+| Arc 2 Codex r1 | approve: no runtime defect; I2's range, `race.ts`'s turn sentence, the lessons' size claim, two TSDocs restating the helper | all 4: I2 reads 11-14 plus site 15; the sentence states the constraint; the size claim is measured (production net −60); both TSDocs go | none |
+| Arc 2 Opus | approve: every site's outcome, teardown, clock and turn probed; the site 8 pin's 20 ms margin can flake under load; the wallet-core README misses the new files; the same two comment nits | all: the pin's margin is 200 ms; README rows for `race.ts` and the two probes; the comments as above | none |
+| Arc 2 Codex r2 (resumed) | approve: the fixes hold; the new README row repeats the overbroad turn claim (P3) | the row now says no cleanup adds turns | none |
+| Net-diff Codex (fresh, arcs 1 and 2) | approve: no cross-arc defect, all 95 chaos citations resolve; "arcs share no file" is inexact; arc 1's module and type TSDocs and the `disagreements` TSDoc (P3) | the Parallelism line; the `disagreements` TSDoc, which claimed one line per surface where an agreement break lists every surface on one line | the module and type TSDocs: they state the gate order and the per-message projection, which the code does not show at a glance (settled in arc 1's rounds) |
 
 ## Delivery
 
 - **Before building**: a `## Decision` comment on each issue (done, and how; for #1474, that today's differences are kept and recorded, and that aligning one is a separate decision).
 - **Arc 1**: branch `worktree-quality-sdk-1`, one PR to `dev`, ready, no labels at creation, after the Codex loop and the gates. Title: `refactor: background.ts in three modules, and a test that the edge headers agree` (80 characters). Body: the moves and the D2 renames, each pin edit, the header exceptions as recorded, the gates with outcomes, `audit:dup` and line counts before and after, each browser's wall-clock, `Closes #1444`, `Closes #1474`.
-- **Arc 2**: `gh stack add quality-sdk-1-a2` on arc 1, `gh stack submit --auto`, then `gh pr edit`. Title: `refactor: one helper for deadline and abort races, in place of seventeen copies` (79 characters). Body as arc 1's, with the three stated latent changes and site 18's reason, `Closes #1451`. The close-out lands as its final commits.
+- **Arc 2**: branch `quality-sdk-1-a2` from `origin/dev` once arc 1 merged (no stack), `gh pr create`. Title: `refactor: one helper for deadline and abort races, in place of seventeen copies` (79 characters). Body as arc 1's, with the three stated latent changes and site 18's reason, `Closes #1451`. The close-out lands as its final commits.
 - **Neighbours**: quality-services-1 arc 1 edits `token/service.ts`'s constructor (site 8 is at `:1120`); quality-profile-1 (#1439) and quality-popup-1 (#1443) start later and plan on whichever lands first. Arc 2 merges `origin/dev` before its PR and reruns its gate.
-- **Parallelism**: arcs share no file but run in sequence in one worktree; lanes would save little.
+- **Parallelism**: arcs share no production file (the chaos model's citations and this plan's files overlap) but run in sequence in one worktree; lanes would save little.
 
 ## Post-implementation
 

@@ -24,7 +24,7 @@ import {
 } from "@nulo/extension-messaging/errors"
 import { Lock } from "@/wallet/utils"
 import { isGeneratedProfileId, ProfileRepository } from "./repository"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { EventHandler, raceTimeout } from "@nulo/wallet-core/utils"
 import { array_equals, canonicalizeMnemonic, deferred, getEntropy, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import {
 	asMasterSecretBytes,
@@ -1402,14 +1402,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private async awaitDeletionDelegate(): Promise<ProfileDeletionDelegate> {
 		const deadline = performance.now() + DEFAULT_INIT_TIMEOUT_MS
 		await this.ensureInitialized()
-		if (!this.deletionDelegate) {
-			let timer: ReturnType<typeof setTimeout> | undefined
-			const bound = new Promise<void>((resolve) => {
-				timer = setTimeout(resolve, Math.max(0, deadline - performance.now()))
-			})
-			await Promise.race([this.deletionDelegateInjected.promise, bound])
-			clearTimeout(timer)
-		}
+		if (!this.deletionDelegate)
+			await raceTimeout(this.deletionDelegateInjected.promise, Math.max(0, deadline - performance.now()), () => undefined)
 		const delegate = this.deletionDelegate
 		if (!delegate) throw new Error("deletion coordinator not ready")
 		return delegate

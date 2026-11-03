@@ -45,7 +45,7 @@ import { FpcServiceClient } from "@/wallet/services/fpc/client"
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 import { TxStatus } from "@/wallet/services/transaction/spec"
-import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { errorMessageFromUnknown, raceTimeout } from "@nulo/wallet-core/utils"
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 export type BalanceScope = ActivityScope
@@ -138,18 +138,8 @@ export const INIT_RETRY_BACKOFF_MS = [5_000, 10_000, 20_000, 30_000]
  * reads, so a later retry re-attaches to the same in-flight computation.
  */
 export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
-		const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-		promise.then(
-			(value) => {
-				clearTimeout(timer)
-				resolve(value)
-			},
-			(error) => {
-				clearTimeout(timer)
-				reject(error)
-			},
-		)
+	return raceTimeout(promise, ms, () => {
+		throw new Error(`${label} timed out after ${ms}ms`)
 	})
 }
 

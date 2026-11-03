@@ -12,6 +12,7 @@
  * launching work too.
  */
 
+import { raceTimeout } from "@nulo/wallet-core/utils"
 import {
 	ACCOUNT_STATE_SKIP_DEADLINE,
 	ACCOUNT_STATE_SKIP_UNREACHABLE,
@@ -115,11 +116,11 @@ async function registerOneNetwork(
 	if (remaining === 0) return skipOutcome(item, ACCOUNT_STATE_SKIP_DEADLINE, true)
 	// Raced at the EXACT remainder: the deadline is absolute (the service enforces its own copy per
 	// launch, so nothing useful runs past it). A rejection's message never reaches a record.
-	let timer: ReturnType<typeof setTimeout> | undefined
-	const deadline = new Promise<undefined>((resolve) => {
-		timer = setTimeout(() => resolve(undefined), remaining)
-	})
-	const result = await Promise.race([deps.restore([item], remaining).catch(() => undefined), deadline]).finally(() => clearTimeout(timer))
+	const result = await raceTimeout(
+		deps.restore([item], remaining).catch(() => undefined),
+		remaining,
+		() => undefined,
+	)
 	if (!Array.isArray(result)) return skipOutcome(item, ACCOUNT_STATE_SKIP_DEADLINE, true)
 	return { item, records: result, retryable: result.some(reportsNetworkFailure) }
 }

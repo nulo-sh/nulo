@@ -314,12 +314,12 @@ const LOCK_CLOSES = cite(SERVICE, 888, "public async lockActiveProfile(")
 const RENAME = cite(SERVICE, 1008, "public async changeProfileName(")
 const PASSWORD_CHANGE = cite(SERVICE, 1163, "{ password: oldPassword }, invalidOldPassword")
 const PASSWORD_CHANGE_REOPENS = cite(SERVICE, 1189, "this.reopenAfterPasswordChangeHoldingLock(")
-const DELETE = cite(SERVICE, 1656, "public async deleteProfile(")
-const PHRASE_IMPORT = cite(SERVICE, 1866, "public async importMnemonic(")
-const PHRASE_EXPORT = cite(SERVICE, 2036, "withOpenedSlots(profile, key, invalidOldPassword")
-const DUPLICATE_WARNS = cite(SERVICE, 2068, "throw new DuplicateWalletError(")
-const RESTORE_CLONE = cite(SERVICE, 2211, "CLONE DIVERGENCE")
-const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2154, "if (!credentialData && !password) {")
+const DELETE = cite(SERVICE, 1650, "public async deleteProfile(")
+const PHRASE_IMPORT = cite(SERVICE, 1860, "public async importMnemonic(")
+const PHRASE_EXPORT = cite(SERVICE, 2030, "withOpenedSlots(profile, key, invalidOldPassword")
+const DUPLICATE_WARNS = cite(SERVICE, 2062, "throw new DuplicateWalletError(")
+const RESTORE_CLONE = cite(SERVICE, 2205, "CLONE DIVERGENCE")
+const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2148, "if (!credentialData && !password) {")
 const OPEN_BEARER = cite(SESSIONS, 299, "const bearer = !this.strictSecurityMode && dek")
 const SESSION_RESTORE = cite(SESSIONS, 611, "session.passhash || (this.strictSecurityMode && session.bearer) || !session.bearer")
 const LOCK_DELETES_ROW = cite(SESSIONS, 428, "this.deletePersistedSession()")
@@ -350,7 +350,7 @@ const RESTORE_ASKS_PASSWORD = cite(
 )
 const RESTORE_ROLLS_BACK = cite(
 	"src/composables/full-backup-restore.ts",
-	951,
+	946,
 	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
 )
 const RESTORE_FINALIZES = cite(IMPORT, 337, "restoreRun = await finalizeWithReminder(")
@@ -366,9 +366,9 @@ const PASSKEY_KIND_GATE = cite(SERVICE, 114, 'if (row.type === "password") throw
 const RETIRED_UNLOCK = cite(SERVICE, 109, 'if (kind === "retired") throw new RetiredProfileError()')
 const RETIRED_SLOTS = cite(CODEC, 86, 'if (classified.kind === "retired") throw new RetiredProfileError()')
 const RETIRED_EXPORTS = cite(SERVICE, 407, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_LISTED = cite(SERVICE, 2133, 'classifyProfileRow(profile).kind === "retired")')
+const RETIRED_LISTED = cite(SERVICE, 2127, 'classifyProfileRow(profile).kind === "retired")')
 const RETIRED_RESEAL = cite(SERVICE, 1153, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_FINALIZE = cite(SERVICE, 2308, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_FINALIZE = cite(SERVICE, 2302, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 384, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 152, 'stage.value = "phrase"')
@@ -380,8 +380,8 @@ const EARLIER_SHAPE = cite(GATE, 75, 'typeof (fullBackup as Record<string, unkno
 const IMPORT_FLOW = "src/composables/useProfileImportFlow.ts"
 const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 195, 'await deps.unlockFor(admitted, { step: "import", profileName: name }, existing)')
 const RESTORE_CARD = cite(IMPORT, 274, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
-const PASSKEY_IMPORT_SEALS = cite(SERVICE, 1885, "seal = await this.newRowSeal(password, credentialData)")
-const RESTORE_SEALS = cite(SERVICE, 2187, "seal = await this.newRowSeal(password, credentialData)")
+const PASSKEY_IMPORT_SEALS = cite(SERVICE, 1879, "seal = await this.newRowSeal(password, credentialData)")
+const RESTORE_SEALS = cite(SERVICE, 2181, "seal = await this.newRowSeal(password, credentialData)")
 const DISCOVERS = cite("src/wallet/utils/passkey-ceremony.ts", 117, "credentialId === undefined ? buildDiscoverOptions(prfSalt)")
 const UNLOCK_METHOD = "src/popup/pages/settings/security/unlock-method.vue"
 const METHOD_CHANGE = cite(SERVICE, 1235, "public async changeUnlockMethod(")
