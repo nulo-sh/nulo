@@ -19,6 +19,9 @@ import { LoggerStore } from "@/wallet/logger"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
+import { UI_PREFERENCE_SERVICE_NAME } from "@/wallet/services/ui-preference/spec"
+import type { FeePickUpdate } from "@/utils/fee-picks"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
@@ -45,15 +48,17 @@ import { FPC_STORAGE_ROOT } from "./spec"
 const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 const SPONSOR_ARTIFACT = { functions: [{ name: "sponsor_unconditionally", parameters: [], returnTypes: [] }] }
-const NETWORK = {
+/** A chain that offers the sponsor, so discovery stores both protocol rows. */
+const CHAIN = CHAIN_IDS.TESTNET
+const networkOn = (chainId: number) => ({
 	id: "n1",
 	profileId: "p1",
-	chainId: 1,
+	chainId,
 	l1ChainId: 1,
 	name: "N",
 	primaryEndpointId: "e1",
 	endpoints: [{ id: "e1", rpcUrl: "https://n.example/" }],
-}
+})
 
 /** The liveness contract `NetworkService` offers: a mark, and reservations counted since it. */
 function makeReservations() {
@@ -71,7 +76,8 @@ function makeReservations() {
 	}
 }
 
-async function makeHarness() {
+async function makeHarness(chainId: number = CHAIN) {
+	const network = networkOn(chainId)
 	const api = new FakeBrowserApi()
 	api.reset()
 	const deletionState = new ProfileDeletionState()
@@ -95,24 +101,34 @@ async function makeHarness() {
 	services.add(
 		svc(NETWORK_SERVICE_NAME, {
 			registerChainPurgeSubscriber: () => {},
-			getNetwork: async () => NETWORK,
-			getNetworks: async () => [NETWORK],
+			getNetwork: async () => network,
+			getNetworks: async () => [network],
 			isNetworkLive: reservations.isNetworkLive,
 			captureLiveness: reservations.captureLiveness,
+		}),
+	)
+	// The fee-pick updates the service asks for, each answered by `answer`.
+	const preference = { forgets: [] as Array<[string, FeePickUpdate]>, answer: async (): Promise<boolean> => true }
+	services.add(
+		svc(UI_PREFERENCE_SERVICE_NAME, {
+			saveFeePick: async (profileId: string, update: FeePickUpdate) => {
+				preference.forgets.push([profileId, update])
+				return preference.answer()
+			},
 		}),
 	)
 	const service = new FpcService(new LoggerStore(new ConfigStore()), api)
 	services.add(service)
 	await services.start()
 	// Pre-seed the protocol-address cache so no real Poseidon derivation runs.
-	;(service as unknown as { protocolAddresses: Map<number, unknown> }).protocolAddresses.set(1, {
+	;(service as unknown as { protocolAddresses: Map<number, unknown> }).protocolAddresses.set(chainId, {
 		sponsored: "0xsponsored",
 		private: "0xprivate",
 	})
 	const lock = () => {
 		session.serial = undefined
 	}
-	return { api, deletionState, reservations, service, lock }
+	return { api, deletionState, reservations, service, lock, preference }
 }
 
 type Harness = Awaited<ReturnType<typeof makeHarness>>
@@ -193,7 +209,7 @@ describe("FPC creation fences", () => {
 		const registered: string[] = []
 		setPxe(h, { registerContract: async ({ instance }: Registration) => void registered.push(instance.address.toString()) })
 
-		const fpcs = await h.service.getFpcs(1)
+		const fpcs = await h.service.getFpcs(CHAIN)
 		expect(registered).toEqual(["0xsponsored", "0xprivate"])
 		expect(fpcs.map((f) => [f.type, f.address, f.isProtocol])).toEqual(
 			expect.arrayContaining([
@@ -218,7 +234,7 @@ describe("FPC creation fences", () => {
 		})
 		const writes = recordWrites(h.api.storage.local, "nulo:core:fpcs@")
 
-		const run = h.service.getFpcs(1)
+		const run = h.service.getFpcs(CHAIN)
 		try {
 			await reached.promise
 			h.deletionState.beginDeletion("p1")
@@ -239,7 +255,7 @@ describe("FPC creation fences", () => {
 		const gate = deferred<void>()
 		setPxe(h, { registerContract: () => gate.promise })
 
-		const runs = Promise.all([h.service.getFpcs(1), h.service.getFpcs(1)])
+		const runs = Promise.all([h.service.getFpcs(CHAIN), h.service.getFpcs(CHAIN)])
 		await macrotask()
 		gate.resolve()
 
@@ -261,12 +277,12 @@ describe("FPC creation fences", () => {
 			},
 		})
 
-		const run = h.service.getFpcs(1)
+		const run = h.service.getFpcs(CHAIN)
 		try {
 			await reached.promise
 			expect(await fpcRowCount(h.api)).toBe(1)
 			h.reservations.reserve()
-			await h.service.clearChainState("p1", 1)
+			await h.service.clearChainState("p1", CHAIN)
 			h.reservations.release()
 		} finally {
 			gate.resolve()
@@ -290,11 +306,11 @@ describe("FPC creation fences", () => {
 			},
 		})
 
-		const run = h.service.getFpcs(1)
+		const run = h.service.getFpcs(CHAIN)
 		try {
 			await reached.promise
 			h.reservations.reserve()
-			await h.service.clearChainState("p1", 1)
+			await h.service.clearChainState("p1", CHAIN)
 			h.reservations.release()
 		} finally {
 			gate.resolve()
@@ -319,7 +335,7 @@ describe("FPC creation fences", () => {
 		})
 		const writes = recordWrites(h.api.storage.local, "nulo:core:fpcs@")
 
-		const run = h.service.getFpcs(1)
+		const run = h.service.getFpcs(CHAIN)
 		await reached.promise
 		h.lock()
 		gate.resolve()
@@ -345,7 +361,7 @@ describe("FPC creation fences", () => {
 		}
 		const writes = recordWrites(h.api.storage.local, "nulo:core:fpcs@")
 
-		await h.service.getFpcs(1)
+		await h.service.getFpcs(CHAIN)
 		writes.restore()
 		expect(writes.log).toEqual([])
 		expect(await fpcRowCount(h.api)).toBe(0)
@@ -364,7 +380,7 @@ describe("FPC creation fences", () => {
 		})
 		const logged = spyLogs(h)
 
-		await h.service.getFpcs(1)
+		await h.service.getFpcs(CHAIN)
 		expect(registered).toEqual(["0xsponsored"])
 		expect(logged.warn).toEqual([])
 		expect(logged.error).toEqual([])
@@ -384,11 +400,11 @@ describe("FPC creation fences", () => {
 		})
 		const logged = spyLogs(h)
 
-		const run = h.service.getFpcs(1)
+		const run = h.service.getFpcs(CHAIN)
 		try {
 			await reached.promise
 			h.reservations.reserve()
-			await h.service.clearChainState("p1", 1)
+			await h.service.clearChainState("p1", CHAIN)
 			h.reservations.release()
 		} finally {
 			gate.resolve()
@@ -410,7 +426,7 @@ describe("FPC creation fences", () => {
 		})
 		const logged = spyLogs(h)
 
-		await h.service.getFpcs(1)
+		await h.service.getFpcs(CHAIN)
 		expect(logged.error).toEqual(["Failed to discover FPC 0xsponsored", "Failed to discover FPC 0xprivate"])
 		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its session ended")
 		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its network was reset or removed")
@@ -435,7 +451,7 @@ describe("FPC creation fences", () => {
 		}
 		const logged = spyLogs(h)
 
-		await h.service.getFpcs(1)
+		await h.service.getFpcs(CHAIN)
 		expect(logged.error).toEqual(["Failed to discover FPC 0xsponsored", "Failed to discover FPC 0xprivate"])
 		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its network was reset or removed")
 	})
@@ -446,12 +462,12 @@ describe("FPC creation fences", () => {
 		setPxe(h, { registerContract: async ({ instance }: Registration) => void registered.push(instance.address.toString()) })
 
 		h.reservations.reserve()
-		expect(await h.service.getFpcs(1)).toEqual([])
+		expect(await h.service.getFpcs(CHAIN)).toEqual([])
 		expect(registered).toEqual([])
 		expect(await fpcRowCount(h.api)).toBe(0)
 
 		h.reservations.release()
-		expect(await h.service.getFpcs(1)).toHaveLength(2)
+		expect(await h.service.getFpcs(CHAIN)).toHaveLength(2)
 		expect(registered).toEqual(["0xsponsored", "0xprivate"])
 	})
 
@@ -468,7 +484,7 @@ describe("FPC creation fences", () => {
 			h.deletionState.beginDeletion("p1")
 		})
 
-		await h.service.getFpcs(1)
+		await h.service.getFpcs(CHAIN)
 		writes.restore()
 		expect(writes.log).toHaveLength(2)
 		expect(writes.log[1]).toBe(writes.log[0]?.replace(/^set:/, "remove:"))
@@ -528,7 +544,7 @@ describe("FpcService.getFpcImpl — only the protocol PrivateFPC can pay", () =>
 	const row = (id: string, type: FpcType, address: string) => ({
 		id,
 		profileId: "p1",
-		chainId: 1,
+		chainId: CHAIN,
 		type,
 		address,
 		name: "F",
@@ -622,5 +638,120 @@ describe("FpcService.updateFpcAddress — the write lands on the row as it stand
 
 		await expect(h.service.updateFpcAddress(id, NEW)).resolves.toMatchObject({ name: "Mine", address: NEW })
 		expect(await fpcRowCount(h.api)).toBe(1)
+	})
+})
+
+describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => {
+	const MAINNET = CHAIN_IDS.MAINNET
+	const HAND_ADDRESS = `0x${"22".repeat(32)}`
+	const row = (id: string, type: FpcType, address: string) => ({ id, profileId: "p1", chainId: MAINNET, type, address, name: "F" })
+
+	async function plant(h: Harness, ...rows: ReturnType<typeof row>[]) {
+		await h.api.storage.local.set(Object.fromEntries(rows.map((r) => [`${FPC_STORAGE_ROOT}@${r.id}`, JSON.stringify(r)])))
+	}
+
+	async function mainnet() {
+		const h = await makeHarness(MAINNET)
+		const registered: string[] = []
+		setPxe(h, {
+			registerContract: async ({ instance }: Registration) => void registered.push(instance.address.toString()),
+			getContractInstance: async () => ({ currentContractClassId: "c1" }),
+			getContractArtifact: async () => SPONSOR_ARTIFACT,
+		})
+		const deleted: string[] = []
+		h.service.onFpcDeleted.add((fpc) => void deleted.push(fpc.id))
+		return { h, registered, deleted }
+	}
+
+	const serviceLock = (h: Harness) =>
+		(h.service as unknown as { lock: { withLock<T>(fn: () => Promise<T>): Promise<T>; waiting: number } }).lock
+
+	test("discovery registers and stores only the Private Fee Juice FPC", async () => {
+		const { h, registered } = await mainnet()
+
+		const fpcs = await h.service.getFpcs(MAINNET)
+		expect(registered).toEqual(["0xprivate"])
+		expect(fpcs.map((f) => [f.type, f.address, f.isProtocol])).toEqual([[FpcType.PrivateFpc, "0xprivate", true]])
+		expect(await fpcRowCount(h.api)).toBe(1)
+	})
+
+	test("holding the Private row, a read starts no discovery", async () => {
+		const { h, registered } = await mainnet()
+		await plant(h, row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+		const capture = vi.spyOn(h.reservations, "captureLiveness")
+
+		expect((await h.service.getFpcs(MAINNET)).map((f) => f.id)).toEqual(["f-pr"])
+		expect(capture).not.toHaveBeenCalled()
+		expect(registered).toEqual([])
+	})
+
+	test("a stored canonical Sponsored row is removed with its picks; a hand-added sponsor stays", async () => {
+		const { h, deleted } = await mainnet()
+		await plant(
+			h,
+			row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"),
+			row("f-pr", FpcType.PrivateFpc, "0xprivate"),
+			row("f-hand", FpcType.DefaultSponsoredFpc, HAND_ADDRESS),
+		)
+
+		const fpcs = await h.service.getFpcs(MAINNET)
+		expect(fpcs.map((f) => f.id).sort()).toEqual(["f-hand", "f-pr"])
+		expect(deleted).toEqual(["f-sp"])
+		expect(h.preference.forgets).toEqual([["p1", { kind: "forgetFpc", fpcId: "f-sp" }]])
+		await expect(h.service.getFpcImpl("f-sp")).rejects.toThrow(/^Invalid id$/)
+		expect(await fpcRowCount(h.api)).toBe(2)
+	})
+
+	test.each([
+		{ case: "refused", answer: async () => false },
+		{ case: "failed", answer: async (): Promise<boolean> => Promise.reject(new Error("storage")) },
+	])("a $case forget leaves the removal and the read's answer intact", async ({ answer }) => {
+		const { h, deleted } = await mainnet()
+		h.preference.answer = answer
+		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+
+		expect((await h.service.getFpcs(MAINNET)).map((f) => f.id)).toEqual(["f-pr"])
+		expect(deleted).toEqual(["f-sp"])
+		expect(await fpcRowCount(h.api)).toBe(1)
+	})
+
+	test("an address edit landing before the removal takes the lock keeps the row", async () => {
+		const { h, deleted } = await mainnet()
+		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+		const lock = serviceLock(h)
+		const gate = deferred<void>()
+		const held = lock.withLock(() => gate.promise)
+
+		const edit = h.service.updateFpcAddress("f-sp", HAND_ADDRESS)
+		await vi.waitFor(() => expect(lock.waiting).toBe(1))
+		const read = h.service.getFpcs(MAINNET)
+		await vi.waitFor(() => expect(lock.waiting).toBe(2))
+		gate.resolve()
+		await held
+
+		await expect(edit).resolves.toMatchObject({ id: "f-sp", address: HAND_ADDRESS })
+		expect((await read).map((f) => f.id).sort()).toEqual(["f-pr", "f-sp"])
+		expect(deleted).toEqual([])
+		expect(h.preference.forgets).toEqual([])
+		expect(await fpcRowCount(h.api)).toBe(2)
+	})
+
+	test("a session that ends before the removal commits keeps the row", async () => {
+		const { h, deleted } = await mainnet()
+		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+		const lock = serviceLock(h)
+		const gate = deferred<void>()
+		const held = lock.withLock(() => gate.promise)
+
+		const read = h.service.getFpcs(MAINNET)
+		await vi.waitFor(() => expect(lock.waiting).toBe(1))
+		h.lock()
+		gate.resolve()
+		await held
+		await read
+
+		expect(deleted).toEqual([])
+		expect(h.preference.forgets).toEqual([])
+		expect(await fpcRowCount(h.api)).toBe(2)
 	})
 })

@@ -73,6 +73,7 @@ function setup(mode: Mode, fpcs: RegisteredFpc[] = [PRIVATE_FPC, SPONSOR]) {
 	const built = scope.run(() => {
 		const verdicts = useSponsorVerdicts({ isEstimating: () => false })
 		const knownFpcs = ref(fpcs)
+		const readFpcs = ref<RegisteredFpc[] | null>(null)
 		const methods = computed(() =>
 			buildFeeMethods(knownFpcs.value, isInitComplete.value ? gasBalances.value : undefined, {
 				shortSponsorIds: verdicts.shortSponsorIds,
@@ -84,6 +85,7 @@ function setup(mode: Mode, fpcs: RegisteredFpc[] = [PRIVATE_FPC, SPONSOR]) {
 			snapshot,
 			verdicts,
 			knownFpcs,
+			readFpcs,
 			methods,
 			getFeePicks: (profileId: string) => client.getFeePicks(profileId),
 			saveFeePick: (profileId: string, update: FeePickUpdate) => client.saveFeePick(profileId, update),
@@ -92,7 +94,7 @@ function setup(mode: Mode, fpcs: RegisteredFpc[] = [PRIVATE_FPC, SPONSOR]) {
 			"origin" in mode
 				? useSendFeeSelection({ ...input, origin: () => props.originPrivacy as "private" | "public" })
 				: useAppFeeSelection({ ...input, lockedMethod: () => props.lockedMethod, fallsBack: () => props.fallsBack })
-		return { rules, verdicts, methods, knownFpcs }
+		return { rules, verdicts, methods, knownFpcs, readFpcs }
 	})
 	if (!built) throw new Error("no scope")
 	/** The snapshot's run: the selection read, then the commit with the reconcile inside it. */
@@ -111,11 +113,15 @@ const type = (r: FeeSelection) => r.effectiveMethod.value?.type
 const fpcId = (r: FeeSelection) => r.effectiveMethod.value?.fpc?.id
 
 describe("Send's rule book", () => {
-	test("while the snapshot loads, the saved pick's row is a preview and nothing pays", async () => {
-		storage[sendFeePicksKey("p1")] = { "0xa": { private: { type: "fpc", fpc: { id: "s1" } } } }
+	test("while the snapshot loads, a saved sponsor previews only once the read FPC list holds it, and nothing pays", async () => {
+		storage[sendFeePicksKey("p1")] = { "0xa": { private: { type: "fpc", fpc: { id: "s1", name: "Old name" } } } }
 		const t = setup({ origin: "private" })
 		await t.rules.load(SCOPE, () => true)
-		expect(t.rules.previewMethod.value?.fpc?.id).toBe("s1")
+		expect(t.rules.previewMethod.value).toBeUndefined()
+		t.readFpcs.value = [PRIVATE_FPC, HAND]
+		expect(t.rules.previewMethod.value).toBeUndefined()
+		t.readFpcs.value = [PRIVATE_FPC, SPONSOR]
+		expect(t.rules.previewMethod.value).toMatchObject({ title: "Sponsor", fpc: { id: "s1" } })
 		expect(t.rules.effectiveMethod.value).toBeUndefined()
 
 		await t.commit({ publicFeeJuice: HELD, privateFeeJuice: "0" }, null)
@@ -240,7 +246,7 @@ describe("Send's rule book", () => {
 describe("the app windows' rule book", () => {
 	test.each([
 		{ case: "a lock", mode: { lockedMethod: "fj" }, saved: { type: "fpc", fpc: { id: "s1" } }, shows: "fj" },
-		{ case: "a saved pick", mode: {}, saved: { type: "fpc", title: "Sponsor", fpc: { id: "s1" } }, shows: "fpc" },
+		{ case: "a saved pick", mode: {}, saved: { type: "fj", title: "Public Fee Juice", subtitle: "public" }, shows: "fj" },
 		{ case: "nothing saved", mode: {}, saved: undefined, shows: undefined },
 	])("the load pre-fills from $case before the snapshot lands", async ({ mode, saved, shows }) => {
 		if (saved) storage[feePicksKey("p1")] = { "0xa": saved }
@@ -248,6 +254,23 @@ describe("the app windows' rule book", () => {
 		const load = await t.rules.load(SCOPE, () => true)
 		expect(type(t.rules)).toBe(shows)
 		expect(load?.baseline?.method).toBe(t.rules.effectiveMethod.value)
+		t.stop()
+	})
+
+	test("a saved sponsor shows while loading only as the row the read FPC list holds, then reconciles to it", async () => {
+		storage[feePicksKey("p1")] = {
+			"0xa": { type: "fpc", title: "Old name", subtitle: "sponsored", fpc: { id: "s1", isProtocol: true } },
+		}
+		const t = setup({})
+		const load = await t.rules.load(SCOPE, () => true)
+		expect(t.rules.effectiveMethod.value).toBeUndefined()
+		t.readFpcs.value = [PRIVATE_FPC, HAND]
+		expect(t.rules.effectiveMethod.value).toBeUndefined()
+		t.readFpcs.value = [PRIVATE_FPC, SPONSOR]
+		expect(t.rules.effectiveMethod.value).toMatchObject({ title: "Sponsor", fpc: { id: "s1" } })
+
+		await t.commit({ publicFeeJuice: HELD, privateFeeJuice: null }, load)
+		expect(t.rules.effectiveMethod.value).toEqual(t.row("fpc", "s1"))
 		t.stop()
 	})
 

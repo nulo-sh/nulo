@@ -1,5 +1,5 @@
 import type { TransferSide } from "@/components/composite/send/publish-facts"
-import type { SendPick } from "@/utils/fee-picks"
+import type { FeePickType, SendPick } from "@/utils/fee-picks"
 import { buildFeeMethods, defaultSponsor, type FeeMethodOption, type GasBalances, type RegisteredFpc } from "./fee-helpers"
 
 export type { TransferSide }
@@ -88,20 +88,27 @@ function walkPublicOrigin(payers: Payers, know: FeeKnowledge): SendSelection {
 	return publicUnread || privateUnread ? { kind: "hold" } : { kind: "none" }
 }
 
+/** What names a saved pick's row: Send's and the app windows' picks both carry it. */
+type PickKey = { type: FeePickType; fpc?: { id: string } | null }
+
 /** The fresh row a saved pick names, or undefined when that row no longer exists. */
-export function rowForPick(pick: SendPick | undefined, methods: FeeMethodOption[]): FeeMethodOption | undefined {
+export function rowForPick(pick: PickKey | undefined, methods: FeeMethodOption[]): FeeMethodOption | undefined {
 	if (!pick) return undefined
 	if (pick.type !== "fpc") return methods.find((m) => m.type === pick.type)
 	const id = pick.fpc?.id
 	return id ? methods.find((m) => m.type === "fpc" && m.fpc?.id === id) : undefined
 }
 
-/** What the trigger shows before the first snapshot. FPC rows do not exist until the FPC list has
- *  loaded, so a sponsor pick is drawn from its saved label — display only, it carries no `fpc` to pay with. */
-export function previewForPick(pick: SendPick | undefined, methods: FeeMethodOption[]): FeeMethodOption | undefined {
-	const row = rowForPick(pick, methods)
-	if (row || pick?.type !== "fpc" || !pick.fpc?.id) return row
-	return { type: "fpc", title: pick.fpc.name || "Sponsored", subtitle: "sponsored" }
+/** What the trigger shows before the first snapshot: display only, it never pays. A sponsor pick shows
+ *  only as the row the live identity's read FPC list (`readFpcs`, null while unread or failed) holds
+ *  for it, so the trigger never names a sponsor the menu cannot offer. */
+export function previewForPick(
+	pick: PickKey | undefined,
+	methods: FeeMethodOption[],
+	readFpcs: RegisteredFpc[] | null,
+): FeeMethodOption | undefined {
+	if (pick?.type !== "fpc") return rowForPick(pick, methods)
+	return readFpcs ? rowForPick(pick, buildFeeMethods(readFpcs)) : undefined
 }
 
 /** A saved pick wins when its row still exists and is eligible; otherwise the default walk. */
