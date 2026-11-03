@@ -13,3 +13,5 @@
 **Recommendation.** B: a person creating a first password can check what they typed, as everywhere else in the wallet. It is a visible change, so it waits for your word.
 
 **What ships now.** A. Arc 2 changes only `create.vue`'s cap constant; the fields look and behave as today.
+
+**Open at close-out (2026-11-03).** Unanswered (decision page 103, P103-01). B would render `NewPasswordPair` in `create.vue` with its two headings kept.

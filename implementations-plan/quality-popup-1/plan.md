@@ -1,7 +1,7 @@
 ---
 plan: quality-popup-1
 tier: light (the spawn prompt names it; one Codex audit at high on gpt-6.1-sol, plus one Opus Plan lens)
-status: approved by the panel; arc 1 merged (#1595), arc 2 in progress
+status: completed
 issues: "#1443, #1478 (arc 1, Closes); #1453 (arc 2, Closes); #1471 (not done, closed with its reason)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,23 @@ base: origin/dev at cf9ed1e40
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed in two PRs: #1595 (arc 1), then arc 2 with this close-out (`refactor(ui): one new-password pair, one current-password field, one length cap`).
+- **Shipped**:
+  - #1443 (#1595; D2-D6, D14): the backup trust gate in `wallet/services/backup/trust-gate.ts`, so no wallet module imports a composable; one pick and decrypt classifier (`composables/full-backup-selection.ts`) and one error log (`composables/restore-error-log.ts`) for both import pages; `retryNetworkIds` in place of three derivations.
+  - #1478's guard (#1595; D8): onboarding import's Decrypt, Import and Continue refuse a repeat Enter, an accessibility call under the owner's 2026-10-19 delegation.
+  - #1453 (arc 2; D9, D13, D15-D18): `MAX_PASSWORD_LENGTH` in place of ten declarations; `NewPasswordPair` in six forms and `CurrentPasswordField` in three. Twenty screens are byte-identical before and after in both themes ([pictures](screenshots/), light); production duplication went from 174 clones / 8744 lines to 169 / 8282 at the merged `dev` tip, and the touched production files from 2785 to 2638 lines.
+- **Known limits**: none.
+- **Dispositions**:
+  - Not done: #1471 (D7), closed with its reason when #1595 opened; #1478's shared action stack (D7, D8).
+  - Kept as they are: `auth.vue`'s current-password field (D11); onboarding's Create profile fields, whose cap constant alone changed, until OA-1 is answered.
+  - Declined in review: restoring the alert's two template-formatting spaces (D18). Left to its lane: `fu2-security-1/plan.md` cites `change-password.vue:75` for the success toast, now line 71; that lane's arc 2 edits the file.
+- **Lessons**: one promoted, a bound `defineModel` reading the host's value a render late, folded into the Vue 3.5.42 line; VTU's trimming `.text()` joined the exact-identity line. Pruned: the merge-ref line, which the `e2e-testing` skill (the PR lanes' head SHA, a conflicting PR's absent run) and CI.md now carry.
+- **Open items**: OA-1 ([OWNER-ASKS.md](OWNER-ASKS.md)), unanswered on decision page 103 (P103-01); nothing ships until it is.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # quality-popup-1: the backup trust gate and pick classifier, one pair of password components
 
