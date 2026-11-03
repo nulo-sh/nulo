@@ -647,7 +647,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		})
 	}
 
-	/** The public-event readers' log lines, at the level each asks for. An arrow, so it keeps `this`. */
+	/** An arrow, so it keeps `this` when the public-event readers call it. */
 	private readonly logPublicEvent: PublicEventLogger = (level, msg, ...rest) =>
 		level === "warn" ? this.logWarn(msg, ...rest) : this.logDebug(msg, ...rest)
 
