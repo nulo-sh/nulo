@@ -19,3 +19,6 @@
 - Gate run 1: `bun run audit:vue` red in `useLogFilters.scan.test.ts`: every client needs a row in the logs window's source filter, and `token-list` sat in `NO_CLIENT`. Fixed in `06aa99a5c`; run 2 exit 0 (17179 tests). `bun run test:all` exit 0; `bun run check:plans` 0 findings.
 - Focused e2e on the armed builds, retry 0: Chrome `token-list`, `settings-crud`, `legal-acceptance` (25 tests, 166 s); Firefox `token-list`, `settings-crud` (11 tests, 57 s).
 - Review R1: Codex (gpt-6.1-sol, high) clean; Opus (general-purpose) two lows, applied in `51421ed29`. R2: Codex resumed, clean.
+- Final head (after merging dev's `aa13371af`): `bun run audit:vue` exit 0 (17179 tests), `bun run test:all` exit 0, `bun run lint` exit 0, `bun run check:plans` 0 findings.
+- Full smoke suite on the armed builds, retry 0, no rerun: Chrome 62 files, 275 tests, 1936 s; Firefox 66 files, 279 tests, 2703 s. `token-list.test.ts` in the full runs: 23.9 s (Chrome), 28.8 s (Firefox); the host was shared with other leads, so these run slower than the focused measures above.
+- CI before (dev's last smoke runs that executed, `worktree-price-feed-1`, 3 shards): Chrome 11 min 5 s wall, Firefox 14 min 3 s.

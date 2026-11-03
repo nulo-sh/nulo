@@ -81,7 +81,7 @@ One arc, one PR, closes #1608. The owner chose B + C on #1608: "I'd still change
 - § 5.11 What it is: "The extension downloads it once you have accepted the Terms, then about every six hours. After a failed attempt it tries again within minutes, then less often, at most a day apart. Once you have accepted the Terms, you can also ask for it in Settings → Tokens." § 5.11 Your control: "the regular download cannot be turned off". § 6 `alarms`: "the token list about every six hours". It names the page, not the control, so it holds for every OA-1 option.
 - `BEFORE-LAUNCH.md` § 4: a "Due at the release that publishes privacy 1.2.N" block in the 1.2.8 form, plus re-pasting the Chrome `alarms` justification from `listing.md` § Permissions.
 
-**File-level change map**: `wallet/services/token-list/{spec.ts, service.ts, client.ts (new), service.composition.test.ts}`; `popup/pages/settings/tokens/{index.vue, index.test.ts, list-refresh.ts (new), list-refresh.test.ts (new)}`; `tests/e2e/token-list.test.ts`, `tests/e2e/fixtures/{token-list.ts, egress-guard.ts}`, `tests/e2e/README.md`; `legal/privacy.md`, `legal/archive/privacy-1.2.7.md` (new), `packages/legal/src/manifest.ts`; `apps/extension/store/listing.md`; `ARCHITECTURE.md`; `BEFORE-LAUNCH.md`.
+**File-level change map**: `wallet/services/token-list/{spec.ts, service.ts, client.ts (new), service.composition.test.ts}`; `popup/pages/settings/tokens/{index.vue, index.test.ts, list-refresh.ts (new), list-refresh.test.ts (new)}`; `tests/e2e/token-list.test.ts`, `tests/e2e/fixtures/{token-list.ts, egress-guard.ts}`, `tests/e2e/README.md`; `legal/privacy.md`, `legal/archive/privacy-1.2.8.md` (new), `packages/legal/src/manifest.ts`; `apps/extension/store/listing.md`; `ARCHITECTURE.md`; `BEFORE-LAUNCH.md`.
 
 ## Decision ledger
 
@@ -114,7 +114,7 @@ One arc, one PR, closes #1608. The owner chose B + C on #1608: "I'd still change
 
 Settings → Tokens gains one control and its result line; the owner picks its placement and words (OA-1). The privacy patch the owner directed on #1608 changes three surfaces through existing mechanisms: Settings → About's "Privacy Policy v1.2.N" title and its "Privacy Policy updated" line for an install that saw an older version (`utils/legal-about.ts`); the published policy; the store's `alarms` justification. The new client also takes its row in the logs window's source filter (`token-list-client`), as every client does (`useLogFilters.scan.test.ts`). No other surface changes.
 
-## Phase 1: cadence, RPC, page control, docs and privacy
+## Phase 1: cadence, RPC, page control, docs and privacy ✓
 
 Steps, in order:
 
