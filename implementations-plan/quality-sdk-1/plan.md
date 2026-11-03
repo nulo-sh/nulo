@@ -127,6 +127,7 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 | Arc 1 Codex r2 (resumed) | approve: the four fixes hold; an exhaustive comparison of the split `disagreements` finds only the new null report | none | none |
 | Arc 2 Codex r1 | approve: no runtime defect; I2's range, `race.ts`'s turn sentence, the lessons' size claim, two TSDocs restating the helper | all 4: I2 reads 11-14 plus site 15; the sentence states the constraint; the size claim is measured (production net −60); both TSDocs go | none |
 | Arc 2 Opus | approve: every site's outcome, teardown, clock and turn probed; the site 8 pin's 20 ms margin can flake under load; the wallet-core README misses the new files; the same two comment nits | all: the pin's margin is 200 ms; README rows for `race.ts` and the two probes; the comments as above | none |
+| Arc 2 Codex r2 (resumed) | approve: the fixes hold; the new README row repeats the overbroad turn claim (P3) | the row now says no cleanup adds turns | none |
 
 ## Delivery
 
