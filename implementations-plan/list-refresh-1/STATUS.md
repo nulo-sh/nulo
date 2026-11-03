@@ -1,6 +1,0 @@
-- 2026-11-03 phase 0: adopted worktree list-refresh-1 at dev ff395c3d0; recon started (2 Explore agents, sonnet).
-- 2026-11-03 audit r1: Codex and Opus both conditional approve; all findings folded (plan ledger D1-D10).
-- 2026-11-03 final Codex pass: conditional approve (local full smoke suites), condition adopted in D10; resumed: approve.
-- 2026-11-03 phase 1 gate run 1: audit:vue red, useLogFilters.scan (token-list-client had no log source row); fixed.
-- 2026-11-03 phase 1 gate: audit:vue, test:all, check:plans green; focused e2e green on Chrome and Firefox; review loop converged (Codex R1 clean, Opus 2 lows fixed, Codex R2 clean).
-- 2026-11-03 final gate on the final head: audit:vue, test:all, lint, check:plans green; full smoke retry 0 green on Chrome (275 tests, 1936 s) and Firefox (279 tests, 2703 s). Phase 1 ✓.

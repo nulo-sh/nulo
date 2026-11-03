@@ -1,7 +1,7 @@
 ---
 plan: list-refresh-1
 tier: mid
-status: phase 1 built, review loop converged; the PR waits on OA-1
+status: completed in #1625; the merge waits on OA-1
 issues: "#1608"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at ff395c3d0
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed, one arc: #1625, which closes #1608. Merge condition: the owner's OA-1 pick (`OWNER-ASKS.md`). Option A is built; B or C changes only the page's template.
+- **Shipped**: a usable answer schedules the next refresh six hours plus up to 30 minutes out, with the backoff and the 26 h ceiling unchanged (D1, D2). `TokenListService` is a `Service` whose `refresh()` returns the single-flight result (D4, D5). Settings → Tokens has a refresh row whose live status line maps every result (D6, D9). Privacy is 1.2.9 (§§ 5.11 and 6). Deviations: D11.
+- **Known limits**: #1626 (five failed presses while offline set the next timed attempt a day out, D7).
+- **Dispositions**: not chosen by the owner, option A (a refetch on extension update). Rejected: a 2 h jitter (D1); a 24 h ceiling (D2); a refetch at first boot after the update (D3); a delegate on `TokenService` or a page-written deadline (D4); a second method or a stored last outcome (D5); a three-value result and a single "checked" toast (D6); a press-only failure path (D7).
+- **Lessons**: none promoted. The armed-build rule this arc met is already in the `e2e-testing` skill, and the logs-filter row is enforced by its own scan test.
+- **Open items**: `BEFORE-LAUNCH.md` § 4, the block "Due at the release that publishes privacy 1.2.9".
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # list-refresh-1: the token list every six hours, and a manual refresh on Settings → Tokens
 
