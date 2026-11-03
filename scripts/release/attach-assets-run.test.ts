@@ -458,11 +458,11 @@ describe("the REST transport", () => {
 	})
 
 	test("a download asks the API for the bytes, then follows its redirect with no credential", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "attach-dl-"))
 		const stub = answering(
 			new Response(null, { status: 302, headers: { location: "https://objects.example/asset" } }),
 			new Response("zip bytes"),
 		)
-		const dir = mkdtempSync(join(tmpdir(), "attach-dl-"))
 		try {
 			await realIO("o/r", "t").downloadAsset(7, `${dir}/a.zip`)
 			expect(stub.calls()).toEqual([

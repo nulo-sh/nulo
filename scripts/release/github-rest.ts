@@ -1,4 +1,7 @@
-/** The GitHub REST headers and refusal text the release runners share; status, redirect and timeout policy stay with each caller's `fetch`. */
+/**
+ * The GitHub REST headers and refusal text the release runners share.
+ * Status, redirect and timeout policy stay with each caller's `fetch`.
+ */
 
 /** The token goes wherever the caller's URL points: pass GitHub hosts only. */
 export function githubHeaders(token: string, accept = "application/vnd.github+json"): Record<string, string> {

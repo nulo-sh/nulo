@@ -123,8 +123,12 @@ describe("the REST transport", () => {
 			Response.json({ data: { createCommitOnBranch: null }, errors: [stale] })) as unknown as typeof fetch)
 		try {
 			expect(await realLockIO("o/r", "t").commit("b", "h0", "bun.lock", "text", "chore: x")).toBe(false)
-			expect(fetchSpy.mock.calls.map(([url, init]) => [String(url), init?.method])).toEqual([
-				["https://api.github.com/graphql", "POST"],
+			expect(fetchSpy.mock.calls.map(([url, init]) => [String(url), init?.method, init?.headers])).toEqual([
+				[
+					"https://api.github.com/graphql",
+					"POST",
+					{ Authorization: "Bearer t", Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+				],
 			])
 		} finally {
 			fetchSpy.mockRestore()
