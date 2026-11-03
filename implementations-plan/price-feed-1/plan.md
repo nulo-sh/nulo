@@ -1,7 +1,7 @@
 ---
 plan: price-feed-1
 tier: mid
-status: approved by the panel (final Codex pass approve); arc 1 implementing
+status: completed (one PR against dev, which carries this close-out)
 issues: "#1605"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at c77e77f13
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-03.
+- **Status:** delivered as one ready PR against `dev` from `worktree-price-feed-1`, which carries this close-out; its merge closes the plan and #1605.
+- **Shipped:** an optional `priceFeeds` map in `nulo-token-list/1` (`packages/token-list/src/price-feeds.ts`: the D3 bounds, one `FEED_ID` spelling, `isFeedId`); strict refusal and wallet drop as the rules table says; the approver digest binding the feeds. The wallet's price table is the held list's feeds plus Fee Juice's compiled one (`priceTableOf`), each answer built from one list's table, the band re-checked in the popup, the `tokenPrices` decoder row-local (stamp 3, additive, one golden). `prepare` shows a feed diff and runs an advisory keyless CoinGecko band check (`infra/token-list/scripts/price-check.ts`). FORMAT.md, SECURITY.md, ARCHITECTURE.md and the e2e-testing skill follow. Privacy 1.2.8 (§ 5.2, the owner's OA-2 wording), effective date filled at the promote that publishes it.
+- **Review loop:** the plan took Codex reject, Opus conditional approve, Codex approve, then a fresh Codex conditional approve and approve. The arc's diff took Codex approve with two Low comment findings and Opus conditional approve with six Low findings, all fixed; Codex R2 approve; Codex R3 approve over Privacy 1.2.8.
+- **Gates at the head:** after merging `origin/dev` at `ff395c3d0` (the source list and served envelope only): lint, `typecheck:all`, `test:all`, `test:ci-gating`, `test:release` (with a local `zip`), `lint:actions`, the tree check, and the network specs (3 pass, 135 s) exit 0. The smoke specs ran on the armed source builds at the last code commit, retry 0: Chrome 44 pass and 1 Firefox-only skip in 297 s, Firefox 45 pass in 617 s; no source-run build or spec reads the merged files. No e2e scenario added.
+- **Deviations:** D15 (file placement, no `feedFault`), D16 (Privacy 1.2.8 in this PR); the new cases written with the code, since at the base they fail at import (`lessons/phase-1.md`).
+- **Dropped:** none. The first publish with feeds is a later token-list PR, #1611.
+- **Known limits:** #1610 (D12: a feed correction does not raise the floor).
+- **Open items:** #1611 (publish the first list with feeds right after this merges, OA-1 = A; cWETH's feed is the owner's call). #1608 already holds the daily-refresh gap.
+- **Lessons:** none promoted. `lessons.md` holds 8083 of its 8192 bytes; the write-time test fix is the existing success-control entry's case, and the missing `zip` is a host trait (`lessons/phase-2.md`).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # price-feed-1: the signed token list carries each token's price feed
 
