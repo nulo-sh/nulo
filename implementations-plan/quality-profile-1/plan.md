@@ -1,7 +1,7 @@
 ---
 plan: quality-profile-1
 tier: mid (the lane brief names it; competing outline, Codex + Opus dual audit, a fresh Codex final pass)
-status: approved 2026-11-03 (final Codex pass; the orchestrator's auto-continue); arc 1 merged (#1589); arc 2 and the close-out in one PR
+status: completed 2026-11-03; arc 1 as #1589, arc 2 with the close-out as one PR
 issues: "#1439 (arc 2, Closes); #1446 (closed before building as a known limit: the class declined; arc 2 ships its log router)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,17 @@ trunk: dev
 post_implementation_hardening: not scheduled
 standard: implementations-plan/README.md § Post-implementation standard, read at 846030f16
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed: arc 1 as #1589; arc 2 with this close-out as one PR (D14).
+- **Shipped**: arc 1 moved the slot codec out of `ProfileService` unchanged as `ProfileSecretCodec`, made one words-to-master predicate, and pinned the slot wipe on nine paths whose body throws. Arc 2 closes #1439: `withOpenedSlots` at ten sites, wiping the slots once the body settles while each site keeps its fence, checks, order and lock placement; one `verifyCredential` behind both verify RPCs; one `liveRowHoldingLock` for six gates; `INVALID_PROFILE_ID`; two named refusal factories (D15); and `PxeService`'s `logPublicEvent`. `profile/service.ts` went from 2,663 to 2,365 lines and its internal duplication from 4 / 46 to 2 / 20. No screen, copy, stored row, wire message, error or log line changed.
+- **Known limits**: #1446 (the `ProfileIncarnations` class, D9).
+- **Dispositions**: not done, `sameUnlockFields` (D7) and the restore cluster (outside the finding); `openForReveal` replaced by `withOpenedSlots` (D2). Superseded: the planned three-PR stack, by D14.
+- **Lessons**: none promoted (`lessons.md` is at its 8 KiB budget). The one cross-task gotcha, a closing keyword in a PR body's prose that closes its issue at merge, is in [lessons/phase-2.md](lessons/phase-2.md).
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # quality-profile-1: ProfileService's slot codec and reveal frame, PxeService's log router
 
