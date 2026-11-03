@@ -189,6 +189,11 @@ describe("select", () => {
 			{ shasums: `${"e".repeat(64)}  ${NAMES[0]}\n${BUILT[NAMES[1]]}  ${NAMES[1]}\n` },
 			"SHASUMS256.txt does not match",
 		],
+		[
+			"a SHASUMS256.txt that names another zip",
+			{ shasums: `${BUILT[NAMES[0]]}  ${NAMES[0]}\n${BUILT[NAMES[1]]}  nulo-edge-1.2.3.zip\n` },
+			"SHASUMS256.txt does not list exactly the two zips",
+		],
 	])("refuses %s", async (_, over, reason) => {
 		const { exit, outputs, logs } = runIn(DISPATCH, published(over), "select")
 		expect(await exit).toBe(1)

@@ -295,12 +295,23 @@ export async function fetchVerified(
 	return checkBytes(io, input, asset, path)
 }
 
-/** The SHASUMS256.txt in `dir` must name exactly the two zips, with the hashes of the zips beside it. */
-async function checkShasums(io: AttachIO, version: string, dir: string): Promise<string | null> {
+const releaseZips = (version: string): string[] => assetNames(version).filter((name) => name.endsWith(".zip"))
+
+/**
+ * The SHASUMS256.txt in `dir` must name exactly the version's two zips, and each zip in `hashed`, both
+ * by default, must hash to its line.
+ */
+export async function checkShasums(
+	io: Pick<PublishedReadIO, "readText" | "sha256">,
+	version: string,
+	dir: string,
+	hashed: readonly string[] = releaseZips(version),
+): Promise<string | null> {
 	const sums = parseShasums(await io.readText(`${dir}/SHASUMS256.txt`))
-	const zips = assetNames(version).filter((name) => name.endsWith(".zip"))
-	if (!sums || sums.size !== zips.length) return "SHASUMS256.txt does not list exactly the two zips"
-	for (const zip of zips) {
+	const zips = releaseZips(version)
+	if (!sums || sums.size !== zips.length || !zips.every((name) => sums.has(name)))
+		return "SHASUMS256.txt does not list exactly the two zips"
+	for (const zip of hashed) {
 		if (sums.get(zip) !== (await io.sha256(`${dir}/${zip}`))) return `SHASUMS256.txt does not match ${zip}`
 	}
 	return null
