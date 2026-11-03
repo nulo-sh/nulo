@@ -181,6 +181,8 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 2 r1 | Codex, gpt-6.1-sol (session 01a1a28e) | findings (4 low) | both ceilings pinned as literals; `readCapped`'s and `cors.ts`' comments corrected; three narrating comments cut | none |
 | arc 2 r1 | Opus 5.5 (diff review) | findings (1 medium, 5 low) | an IPv6 caller counted by its /64; step 6 reads dRPC's own refusals; `CI.md:33`'s count; the duplicate-`method` parser differential as a known limit | none |
 | arc 2 r2 | Codex, resumed | **clean** | the fixes verified; `limiterKey` over 2,305 forms | none |
+| net 1 | Codex, fresh, both arcs (session 01a1a29d) | findings (3 low) | the rotation step names the endpoints the unlock leaves; OS-6's dRPC-refusal check | cutting the kill-switch comment: it states the ordering invariant |
+| net 2 | Codex, resumed | **clean** | both fixes verified | none |
 
 ## Seeds (not run; orchestrator-owned)
 

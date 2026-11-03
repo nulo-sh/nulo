@@ -33,3 +33,9 @@ Verdict: findings, one medium and five low. Accepted:
 ## Arc 2 review round 2, Codex (resumed)
 
 Verdict: clean. It verified every accepted fix and checked `limiterKey` over 2,305 IPv6 forms (compression positions, case, zero padding); the header format Cloudflare sends in production stays unverified (owner step 6 exercises it).
+
+## Cross-arc pass, fresh Codex (gpt-6.1-sol, high), session 01a1a29d
+
+Over arc 1's squash commit (the constant's file excluded by pathspec) and this branch. Verdict: findings, three low; no cross-arc runtime defect (it drove the real wallet adapter through the handler: batches of 100 and 1 pass, only `content-type` is sent, a JSON 4xx stops after one request, and `maxBatchSizeFor` leaves both proxy hosts uncapped). Accepted: the rotation step named only older builds as losing the old key's endpoint, while arc 1 leaves an endpoint in place when its network already holds the keyless URL, a reset is in flight, or the move failed until the next background start (README step 7 and OS-7 now say so, with the recovery); OS-6 lacked the dRPC-refusal check the README gained. Rejected: cutting the kill-switch comment, which states the ordering invariant (before the method check, the limiter and the body) that the early return alone does not.
+
+Round 2 (resumed): clean; both fixes verified.
