@@ -218,6 +218,21 @@ until then it reads `«FILL: effective date»`:
       AMO's Privacy policy field carries the 1.2.8 text (`apps/extension/store/listing.md`
       § Privacy policy text)
 
+**Due at the release that publishes privacy 1.2.9:** §§ 5.11 and 6 say the token list is downloaded
+about every six hours, retried within minutes then less often after a failure, and on request in
+Settings → Tokens. A patch, so nobody is asked to accept again. The version is archived and in
+place; its effective date is the day the promote publishes it, so until then it reads
+`«FILL: effective date»`. A promote that publishes both 1.2.8 and 1.2.9 dates both, and the archived
+`legal/archive/privacy-1.2.8.md` with them, since it was archived before its date was known:
+
+- [ ] `legal/privacy.md` — the version line and the 1.2.9 history row, dated the day it is published
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.9 (now `null`), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.9/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.9 text (`apps/extension/store/listing.md`
+      § Privacy policy text)
+- [ ] The Chrome Web Store's `alarms` justification is re-pasted from `apps/extension/store/listing.md`
+      § Permissions, which now says the token list refreshes about every six hours
+
 **Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
 2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
 

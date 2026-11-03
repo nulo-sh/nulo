@@ -31,3 +31,12 @@ export type RefreshOutcome =
 	| "oversize"
 	| "http-status"
 	| "network"
+
+/** What one refresh did: its request's outcome, why it made none, or `"error"` when it threw. */
+export type RefreshResult = RefreshOutcome | "terms-not-current" | "off" | "error"
+
+export type Methods = {
+	refresh(): RefreshResult
+}
+
+export type Events = Record<never, never>
