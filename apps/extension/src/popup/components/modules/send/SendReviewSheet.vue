@@ -5,7 +5,6 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
 import { vSnackFooter } from "@/composables/snackInset"
-import { maskAddress } from "@/components/composite/send/masked-address"
 import {
 	type FactCell,
 	factWord,
@@ -21,6 +20,7 @@ import {
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { fitHero, HERO_MIN_SCALE } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
+import { addressEnds } from "@/utils/string"
 import { FEE_JUICE_BRIDGE_URL } from "./fee-helpers"
 
 const props = defineProps<{
@@ -59,11 +59,7 @@ const ROWS: { cell: FactCell; id: string; name: string }[] = [
 	{ cell: "amount", id: "amount", name: "Amount" },
 ]
 
-const masked = computed(() => maskAddress(props.recipientAddress))
-const toLine = computed(() => {
-	const address = masked.value || "—"
-	return props.recipientName ? `to ${props.recipientName} · ${address}` : `to ${address}`
-})
+const recipientEnds = computed(() => addressEnds(props.recipientAddress ?? ""))
 const paid = computed(() => paidBy(props.payerKind, props.payerType))
 const sendable = computed(() => props.show && props.canSend && props.ready && !props.sending)
 const submitLabel = computed(() => {
@@ -133,7 +129,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<span aria-hidden="true" :class="$style.amount_ruler">
 							<span ref="amountRuler" :class="$style.amount"><span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol" class="type--meta">{{ symbol }}</small></span>
 						</span>
-						<span :class="$style.to" data-testid="send-review-recipient">{{ toLine }}</span>
+						<span :class="$style.to" data-testid="send-review-recipient">to <template v-if="recipientName">{{ recipientName }} · </template><span v-if="recipientAddress" class="type--meta" data-testid="send-review-recipient-address"><span :class="$style.address_end">{{ recipientEnds.head }}</span>{{ recipientEnds.middle }}<span :class="$style.address_end">{{ recipientEnds.tail }}</span></span><template v-else>—</template></span>
 					</div>
 
 					<div :class="$style.rows">
@@ -260,6 +256,11 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 .to {
 	composes: type--meta from global;
 	color: var(--nulo-secondary);
+	overflow-wrap: anywhere;
+}
+
+.address_end {
+	color: var(--txt-primary);
 }
 
 .rows {

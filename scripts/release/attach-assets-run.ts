@@ -31,6 +31,7 @@ import {
 	type ReleaseState,
 	type RemoteAsset,
 } from "./attach-assets"
+import { githubHeaders, refusal } from "./github-rest"
 import { command } from "./workflow-command"
 
 export interface ReleaseRecord {
@@ -294,12 +295,23 @@ export async function fetchVerified(
 	return checkBytes(io, input, asset, path)
 }
 
-/** The SHASUMS256.txt in `dir` must name exactly the two zips, with the hashes of the zips beside it. */
-async function checkShasums(io: AttachIO, version: string, dir: string): Promise<string | null> {
+const releaseZips = (version: string): string[] => assetNames(version).filter((name) => name.endsWith(".zip"))
+
+/**
+ * The SHASUMS256.txt in `dir` must name exactly the version's two zips, and each zip in `hashed`, both
+ * by default, must hash to its line.
+ */
+export async function checkShasums(
+	io: Pick<PublishedReadIO, "readText" | "sha256">,
+	version: string,
+	dir: string,
+	hashed: readonly string[] = releaseZips(version),
+): Promise<string | null> {
 	const sums = parseShasums(await io.readText(`${dir}/SHASUMS256.txt`))
-	const zips = assetNames(version).filter((name) => name.endsWith(".zip"))
-	if (!sums || sums.size !== zips.length) return "SHASUMS256.txt does not list exactly the two zips"
-	for (const zip of zips) {
+	const zips = releaseZips(version)
+	if (!sums || sums.size !== zips.length || !zips.every((name) => sums.has(name)))
+		return "SHASUMS256.txt does not list exactly the two zips"
+	for (const zip of hashed) {
 		if (sums.get(zip) !== (await io.sha256(`${dir}/${zip}`))) return `SHASUMS256.txt does not match ${zip}`
 	}
 	return null
@@ -369,18 +381,15 @@ export async function readBounded(res: Response, limit: number, where: string): 
 }
 
 export function realIO(repo: string, token: string, assetLimit = Number.POSITIVE_INFINITY): AttachIO {
-	const call = async (url: string, init: RequestInit = {}, accept = "application/vnd.github+json"): Promise<Response> => {
+	const call = async (url: string, init: RequestInit = {}, accept?: string): Promise<Response> => {
 		const res = await fetch(url.startsWith("https://") ? url : `https://api.github.com/repos/${repo}/${url}`, {
 			...init,
-			headers: { Authorization: `Bearer ${token}`, Accept: accept, "X-GitHub-Api-Version": "2022-11-28", ...init.headers },
+			headers: { ...githubHeaders(token, accept), ...init.headers },
 			redirect: "manual",
 			signal: AbortSignal.timeout(300_000),
 		})
 		if (res.ok || res.status === 302 || res.status === 404 || res.status === 422) return res
-		const detail = ((await res.json().catch(() => null)) as { message?: unknown } | null)?.message
-		throw new Error(
-			`${init.method ?? "GET"} ${url.split("?")[0]}: HTTP ${res.status}${typeof detail === "string" ? `: ${detail}` : ""}`,
-		)
+		throw await refusal(res, init.method ?? "GET", url)
 	}
 	const ok = async (url: string, init: RequestInit = {}): Promise<unknown> => {
 		const res = await call(url, init)
