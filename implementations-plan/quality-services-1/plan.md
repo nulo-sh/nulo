@@ -1,7 +1,7 @@
 ---
 plan: quality-services-1
 tier: light
-status: approved (Codex round 3); arc 1 in review, arc 2 next
+status: approved (Codex round 3); arc 1 merged, arc 2 in review
 issues: "#1436, #1441, #1447, #1467 (arc 1); #1437 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -23,7 +23,7 @@ Five quality findings, done as behaviour-preserving refactors in two arcs. Arc 1
 
 Each is a quality finding, **demonstrated** by code trace (recon), with no runtime defect: the consequence is change cost (a new sealed store, fence step or optional seam is one more copy). Each is worth its diff: every copy it removes is a rule written two to twelve times with nothing checking the copies agree.
 
-**Claims that did not hold.** (1) #1441: typing `admit` as `() => void` does not make "no await between the check and the commit" a type-level fact: TypeScript accepts an async function there. The helper never awaits `admit`, and its TSDoc says so. (2) #1437: 6 test writes go through the `set` trap, not 7; no account or network client is `.connect()`ed (both open on first request). (3) #1467: 45 test constructions, not about 40 (JournalReaper 23, TokenBalanceService 12, TokenService 6, IncomingTransferService 4), of which 35 pass an optional argument. (4) #1447: the status predicate is identical to the row one, so it need not stay at its call site. (5) #1441's comment: token `:559` (`finishAdd`) deletes only under an owned ticket, so it is not an instance.
+**Claims that did not hold.** (1) #1441: typing `admit` as `() => void` does not make "no await between the check and the commit" a type-level fact: TypeScript accepts an async function there. The helper never awaits `admit`, and its TSDoc says so. (2) #1437: no account or network client is `.connect()`ed (both open on first request). Its count of 7 test writes through the `set` trap held: the recon found 6 and missed a cast write in `stores/app.store.test.ts`. (3) #1467: 45 test constructions, not about 40 (JournalReaper 23, TokenBalanceService 12, TokenService 6, IncomingTransferService 4), of which 35 pass an optional argument. (4) #1447: the status predicate is identical to the row one, so it need not stay at its call site. (5) #1441's comment: token `:559` (`finishAdd`) deletes only under an owned ticket, so it is not an instance.
 
 ## Outcome & Quality Bar
 
@@ -55,6 +55,7 @@ Each is a quality finding, **demonstrated** by code trace (recon), with no runti
 - **D5 (#1467).** Exported options types beside each class: `TokenServiceOptions { pxeClientFactory?, seederOverrides? }`, `TokenBalanceServiceOptions { ticker?, projectionGate? }`, `IncomingTransferServiceOptions { pollIntervalMs?, publicReader?, incomingPollGate? }`, `JournalReaperOptions { now?, bootCutoff? }`, each the last parameter with `= {}`. Defaults are applied with `??` in the constructor, so each is still created at construction. `runtime.ts` loses four placeholders and the `:591` comment; the E2E stamp lines stay. Tests: the 35 constructions that pass an optional argument move to the options object; the 10 that pass only required ones stay as written. `ConstructorParameters<typeof TokenService>[3]` becomes `TokenServiceOptions["seederOverrides"]`.
 - **D6 (#1437, writers).** `utils/core.ts` adds `replaceNetworkClient()`, `replaceAccountClient()` and `ensureAccountClient()`: synchronous, each returns the slot's client; replace disconnects the previous client first, as the call sites do today. `initTransactionService` writes through the same private slot writer. The five sites call them; `app.vue` passes `replaceAccountClient` as the network-switch dependency. The two ensure sites call `ensureAccountClient()` for its effect only and read the slot when they use it (`new-profile-helpers.ts` through `requireAccount()` after its await), so a bootstrap that replaces the slot meanwhile is still followed, as today. The new `utils/` exports regenerate the tracked `src/types/` auto-import files, which the arc commits. The fences, captured references, callback registration, timing and cleanup order are unchanged, and all three `initTransactionService` calls stay.
 - **D7 (#1437, read-only).** `managers` becomes `Readonly<AppServices>`, its Proxy `set` throws, and `initAppServiceContext()` returns `void`. `utils/core.test.ts` replaces its six trap writes: the unset state by `vi.resetModules()` and a fresh import, the set state through the owned writers with the client modules mocked. Page tests write their own `@/utils/core` mock through a hoisted handle.
+- **Deviations (arc 2).** The seventh trap write (`stores/app.store.test.ts`) installs its client through `replaceNetworkClient` with the constructor mocked. D7's hoisted handle is needed only by the create page's test, whose mocked `requireAccount` reads it; the unlock page's test writes no slot, its mock exposing `ensureAccountClient` as a spy, and the ensure policy is pinned once, in `core.test.ts`. One pin added: the create page loads accounts from the client the slot holds after its await. The transaction writer, untested before, is pinned before it moves. Two chaos-model line citations re-pinned.
 - **D8 (tests).** Each new or changed rule gets the smallest test, red at the base through a stub where the export is new: `create-fence.test.ts` (a deletion during the commit removes the row, throws, and skips `landed`; on success `landed` runs before a deletion queued as a microtask at the final check, and `remove` never; a stale epoch commits nothing and skips `admit`); `seal-on-unlock.test.ts` (a failing seal warns once with the message and `{ error }` and leaves no rejection; a passing one warns nothing; a `null` source subscribes nothing; the task has started when `invoke` returns), plus the two odd boundaries: ui-preference's first store failing still converts the next, and auth-registry's authwit failure skips its statuses (its existing two-store test is the success control); `accountScopeMatcher` cases in a new `account/spec.test.ts` (tuple match, chain 0 included; another chain, address or profile refused; an old-shape raw row refused, a full one matched); in `sealed-entity-storage.test.ts`, the exact opened text of the three keyed writes (`prepare`, the legacy seal, adoption: `{"k":…,"r":…}` with the row text verbatim) and `set` dispatched in the call by a keyed prepared write and by `commitSealedTogether`, pinned before D2 moves them; `core.test.ts` (replace disconnects and installs; ensure keeps an existing client and creates one when unset; a write through `managers` throws while an owned writer works). No e2e scenario is added.
 
 ## Architecture & Implementation
@@ -106,13 +107,13 @@ None. No screen, copy, row or format changes; arc 2 changes which function write
 
 **Gate (arc 1 boundary):** from the root `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run audit:vue`, `bun run audit:dup`; the armed builds (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then the same flags with `build:firefox`); `(cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/sealed-storage.test.ts tests/e2e/contacts.test.ts tests/e2e/settings-crud.test.ts --retry=0)`, then with `NULO_E2E_BROWSER=firefox`; from the root, `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/connect-dapp.test.ts tests/e2e/network/tokens.test.ts tests/e2e/network/default-token-seeding.test.ts tests/e2e/network/incoming-transfers.test.ts --retry=0`; `bun run check:plans` after staging. Pass: every command exits 0 at retry 0; `audit:dup`'s clones and duplicated lines below the base (recon); the touched files' line counts before and after recorded.
 
-## Phase 5 (arc 2): owned writers (#1437)
+## Phase 5 (arc 2): owned writers (#1437) ✓
 
 1. Add D8's `core.test.ts` replace and ensure cases against stubs; require red. Make D6, moving the page tests' mocks to the owned writers (the commit says the seam moved). Run `bun run --cwd apps/extension build` and commit `apps/extension/src/types/`. Commit.
 
 **Gate:** phase 1's root commands; from `apps/extension`, `bun --bun vitest run src/utils src/composables src/popup src/onboarding src/components src/stores --retry=0`. Pass: every command exits 0; from `apps/extension`, `grep -rnE --exclude='*.test.ts' 'managers\.(network|account|transaction)\s*(\?\?=|=)[^=]' src` finds only `utils/core.ts` (none once phase 6 lands); the build leaves `git status` clean.
 
-## Phase 6 (arc 2): the read-only registry (#1437)
+## Phase 6 (arc 2): the read-only registry (#1437) ✓
 
 1. Add the throwing-write case; require red. Make D7. Commit.
 
@@ -142,6 +143,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | Arc 1, round 1 | Codex `gpt-6.1-sol`, high | approve | none | none |
 | Arc 1, round 1 | Opus 5.5, diff | approve | four comments: two restating their line or type deleted, one caller reference rewritten, one restated `if` dropped | an async-hook type guard: the TSDoc states the rule |
 | Arc 1, round 2, resumed | Codex `gpt-6.1-sol`, high | approve | none | none |
+| Arc 2, round 1 | Codex `gpt-6.1-sol`, high | conditional approve | three comments: a caller named, a private doc restating its body, a past tense | the hoisted handles' docs: they state the mocks' contracts |
 
 ## Seeds (not run; orchestrator-owned)
 
