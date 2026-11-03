@@ -131,7 +131,7 @@ export class TxRequestBuilder {
 		private readonly profileService: ProfileService,
 		private readonly networkService: NetworkService,
 		private readonly accountService: AccountService,
-		private readonly authRegistryService: AuthRegistryService,
+		private readonly authRegistryService: Pick<AuthRegistryService, "assertWithinCap">,
 		private readonly taskService: TaskService,
 		private readonly resolver: ContractResolver,
 		private readonly authwit: AuthwitDiscoverer,

@@ -6,13 +6,14 @@ import { restoreRows } from "@/wallet/services/restore-rows"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { maybeRethrowAsRpcCancel } from "@/wallet/services/execution/rpc-cancel"
-import {
+import type {
 	ExecutionService,
-	type FeeSettings,
-	type AuthwitContent,
-	type SendTransactionOperation,
-	type TransferFeeEstimate,
+	FeeSettings,
+	AuthwitContent,
+	SendTransactionOperation,
+	TransferFeeEstimate,
 } from "@/wallet/services/execution/service"
+import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService } from "@/wallet/services/network/service"
@@ -135,7 +136,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		this.profileService = services.get(ProfileService.name)
 		this.networkService = services.get(NetworkService.name)
 		this.accountService = services.get(AccountService.name)
-		this.executionService = services.get(ExecutionService.name)
+		this.executionService = services.get(EXECUTION_SERVICE_NAME)
 		this.transactionService = services.get(TransactionService.name)
 		this.taskService = services.get(TaskService.name)
 

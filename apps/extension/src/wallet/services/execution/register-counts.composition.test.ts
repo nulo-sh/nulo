@@ -32,7 +32,7 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { TaskService } from "@/wallet/services/task/service"
 import { TokenService } from "@/wallet/services/token/service"
-import { TransactionService } from "@/wallet/services/transaction/service"
+import { OriginType, TransactionService } from "@/wallet/services/transaction/service"
 import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
@@ -87,7 +87,14 @@ async function makeHarness() {
 	collection.add(svc(NetworkService.name, { getNetwork: async () => NETWORK }))
 	collection.add(svc(AccountService.name, {}))
 	collection.add(svc(TransactionService.name, { onTransactionUpdated: { add: () => {} } }))
-	collection.add(svc(TokenService.name, {}))
+	const addTokenAuthorized = vi.fn(async () => ({}))
+	const parseTokenInterface = vi.fn(async () => ({
+		getNameFn: { name: "get_name" },
+		getSymbolFn: { name: "get_symbol" },
+		getDecimalsFn: { name: "get_decimals" },
+		balanceOfPublicFn: { name: "balance_of_public" },
+	}))
+	collection.add(svc(TokenService.name, { addTokenAuthorized, parseTokenInterface }))
 	collection.add(svc(FpcService.name, { onFpcUpdated: { add: () => {} }, onFpcDeleted: { add: () => {} } }))
 	collection.add(svc(ContactService.name, {}))
 	collection.add(svc(AuthRegistryService.name, {}))
@@ -137,7 +144,18 @@ async function makeHarness() {
 		await sessions.purgeForProfile("p1")
 		deletionState.release("p1")
 	}
-	return { connect, registerSender, counts, holdNetwork, getNetworksRaw, deleteAndReimport, api }
+	return {
+		connect,
+		registerSender,
+		counts,
+		holdNetwork,
+		getNetworksRaw,
+		deleteAndReimport,
+		api,
+		execution,
+		addTokenAuthorized,
+		captureExecutionFence,
+	}
 }
 
 const refusalOf = (call: Promise<unknown>) =>
@@ -179,5 +197,28 @@ describe("a dApp's registrations through the dispatcher spend its app's count", 
 		expect(await call).toBe("refused")
 		expect(registerSender).not.toHaveBeenCalled()
 		expect(await api.storage.local.get("nulo:core:dappRegistrations@p1")).toEqual({})
+	})
+})
+
+describe("a dApp's token add through the facade", () => {
+	test("commits under the fence that authorized it, never a fresh capture", async () => {
+		const { execution, addTokenAuthorized, captureExecutionFence } = await makeHarness()
+		const fence = await captureExecutionFence()
+		const op = { kind: "register_token", networkId: NETWORK.id, address: addressAt(7), accountAddress: addressAt(8) } as never
+		const shown = { name: "Test USDC", symbol: "USDC", decimals: 6, classId: `0x${"c1".repeat(32)}` }
+		const approval = { interactionId: "i-1", index: 0, tokenMetadata: shown }
+
+		const results = await execution.executeOperations(
+			[op],
+			{ type: OriginType.DAPP, name: APP_A },
+			undefined,
+			undefined,
+			[approval],
+			fence,
+		)
+
+		expect(results).toEqual([{ status: "ok", result: undefined }])
+		expect(addTokenAuthorized).toHaveBeenCalledTimes(1)
+		expect((addTokenAuthorized.mock.calls[0] as unknown[])[0]).toBe(fence)
 	})
 })
