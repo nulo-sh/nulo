@@ -1,7 +1,7 @@
 ---
 plan: deps-ci-2
 tier: light
-status: approved (Codex r3)
+status: completed
 issues: "#1434"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at 44d5a7064
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-03. Planned and delivered as one arc.
+- **Status:** completed. The arc and this close-out ship as PR #1654 into `dev`; its merge archives this plan and closes #1434. Dependabot closes alerts 38 to 49 on its rescan.
+- **Shipped:** setup-aztec's CLI lockfile moves `follow-redirects` 1.16.1 → 1.16.2 and `node-forge` 1.4.0 → 1.4.2 in place; `bun.lock`'s `follow-redirects` moves to 1.16.2 with no manifest edit; the stale acknowledgement of 1244003 is deleted and `SECURITY.md` reads 34; one sentence in the `aztec-update` skill records the in-place recipe (D7).
+- **Review loop:** plan: Codex r1 and r2 `conditional approve`, r3 `approve`. Diff: Codex r1 `clean`, the Opus review `clean` (its note became D7), Codex r2 one finding (fixed), r3 `clean`.
+- **Gates:** G1 to G7 green at `ae634dc93` and on the final head; G6 again after the `dev` merge, against `5d41de8ef` (644 files per build, identical). On PR #1654 at `ed25247ca`, all five required checks green; each network lane installed the new tree cold (Aztec cache miss, 1048 packages).
+- **Dropped:** the floor-test extension (D3); the local Docker CI-like runner (D4).
+- **Known limits:** none. Alerts 34, 50 and 51 stay under #1420 and #1456.
+- **Open items:** none.
+- **Lessons:** none promoted. The one durable procedure went to the `aztec-update` skill (D7); the missing `zip` is this host's gap, not the repository's.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 # deps-ci-2: node-forge and follow-redirects past their advisories
 
@@ -108,7 +121,7 @@ Validation gate (scratch files under `~/.cache/nulo-backlog/deps-ci-2/`):
 
 ## Implementation record
 
-- Phase 1 (`ae634dc93`): steps 1 to 5 as written; Bun's update changed the one line, so the fallback did not apply. G1 to G7 green: two npm keys, one `bun.lock` line, integrities match; both `npm ci` trees differ in the two packages alone; a fresh frozen install exits 0; the gate reads 34/0/0/0 in enforce; both builds are byte-identical to the base (643 files each). Deviation: this host has no `zip`, so `test:release`'s two zip suites fail here, and identically at `44d5a7064`. With Ubuntu's `zip` 3.0 unpacked to a scratch `PATH`, `test:release` passes (359); CI's runners carry `zip` (`lessons/phase-1.md`).
+- Phase 1 (`ae634dc93`): steps 1 to 5 as written; Bun's update changed the one line, so the fallback did not apply. G1 to G7 green: two npm keys, one `bun.lock` line, integrities match; both `npm ci` trees differ in the two packages alone; a fresh frozen install exits 0; the gate reads 34/0/0/0 in enforce; both builds are byte-identical to the base (643 files each). Deviation: this host has no `zip`, so `test:release`'s two zip suites fail here, and identically at `44d5a7064`. With Ubuntu's `zip` 3.0 unpacked to a scratch `PATH`, `test:release` passes (359); CI's runners carry `zip` (`lessons/phase-1.md`). After the `origin/dev` merge (`5d41de8ef`, `apps/` changes), G6 reran in two fresh exports, `dev` against the merged head: identical.
 
 ## Delivery
 
