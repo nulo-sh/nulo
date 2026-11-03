@@ -11,6 +11,7 @@
 - Vue unit tests (3.5.42, VTU 2.4.11, 2026-10): only `vue`/`vue-router` auto-import; stub `@nulo/design`'s recursing `Button`; a 2nd `mount` strips the 1st's stubs. [Evidence](archive/ux-feedback/plan.md#vue-tests)
 - A check that accepts a wrong state passes broken code: pair a never-happens test with a success control; match a captured identity exactly (whole `textContent`: `innerText` follows `text-transform`); stub only what production returns. [Evidence](archive/connect-window/plan.md#controls), [more](archive/harden-dedupe/plan.md#success-control)
 - CodeQL's ReDoS query fails a PR on any regex it reaches, tests' too: never put a free-form group beside `\s*`; split on the delimiter (2026-10). [Evidence](archive/forms-and-contacts/lessons/phase-3.md)
+- Moving code the chaos model cites reds `profile-chaos-model.test.ts`: re-cite by a line diff from base. [Evidence](quality-popup-2/lessons/phase-4.md)
 
 ## Git & GitHub
 
@@ -33,7 +34,6 @@
 - A MAC binds only what it names: key it on the storage key (a stored `id` moves with its row); refuse on failure, never self-heal. [Evidence](archive/mac-identity-binding/plan.md#mac-scope)
 - Firefox lays out in 1/60 px, and a `storage.local` read inside its own `onChanged` listener can return the old value (153.0.4, 2026-10): use `newValue`. [Evidence](archive/type-roles/plan.md#lessons), [more](archive/onboarding-3/lessons/phase-4.md)
 - Code paused across an await checks its `ActiveSession` or pick, never a re-keyed id or a counter, and the live state after its last await. [Evidence](archive/dapp-dispatch-hold/plan.md#mechanics-that-are-not-obvious), [more](archive/docs-1/lessons/phase-5.md), [more](archive/lock-ux-1/lessons/phase-5.md)
-- A `Lock` watchdog handoff admits a successor but never stops the displaced holder, which writes on. [Evidence](archive/incoming-transfers/decisions.md#decision-ledger)
 - A C1 hook's `dispose()` must be terminal: a run fence that only drops answers in flight lets a continuation released after unmount start a new call. [Evidence](archive/incoming-transfers/lessons/phase-3.md)
 
 ## Aztec

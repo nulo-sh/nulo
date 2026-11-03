@@ -1,7 +1,7 @@
 ---
 plan: quality-popup-2
 tier: light (the spawn prompt names it; one Codex audit at high on gpt-6.1-sol, plus one Opus Plan lens)
-status: approved by the final Codex pass; arc 1 in review; phase 5 waits on OA-1
+status: completed in part (phase 5 not built: OA-1 unanswered)
 issues: "#1469, #1476, #1445 (arc 1, Closes); #1468, #1473 (arc 2, Closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,22 @@ base: origin/dev at 6c7ba2867
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed in part. Arc 1 merged as #1596 (closes #1469, #1476, #1445); arc 2 and this close-out are one PR (closes #1468). Phase 5 (#1473) was not built: OA-1, the plan's one open ask, is unanswered, and #1473 stays open with a comment saying why.
+- **Shipped**: arc 1 gives Home and History one row card (`ActivityRowCard`), the row and hero widths a name each (`ROW_AMOUNT_LENGTH`, `DETAIL_AMOUNT_LENGTH`), the journal amount gate one function (`journalTransferAmount`), the account scope one reader (`activeAccountScope`), the tx and receipt pages one address card (`DetailAddressCard`) and the shared `TxHashRow`, and the Home feed's task mirror and re-ask sheet two hooks (`useExecutingTask`, `useReaskReview`). Arc 2: `askProfilePasskey` is the one typed stored-passkey ask for five callers, and the four passkey pages leave Firefox's toolbar panel through `leavePanelFor`. No screen, copy, testid, stored byte, wire message or log line changed; no e2e scenario added. `audit:dup` production (clones / duplicated lines): 177 / 8775 → 176 / 8768 over arc 1; 174 / 8744 → 174 / 8748 over arc 2, the four lines one html-format template clone (`auth.vue` ↔ `unlock-method.vue`) widened by the ask's wrapped call.
+- **Known limits**: #1593 (D15), #1594 (D16).
+- **Open items**: #1473, waiting on OA-1 ([OWNER-ASKS.md](OWNER-ASKS.md)).
+- **Dispositions**:
+  - Not built: phase 5, the two views on `useConfigRead` (D13, OA-1).
+  - Declined: `activityAmount`/`activityFiat` (D4), `useAccountIncoming` (D5), `PopupManager` on `useConfigRead` (D14).
+  - Rejected: keeping Home's unused `id` and the receipt's `gap="12"` (D6, D7).
+  - Superseded: the arc 2 stack (D1); arc 2 shipped as one PR off `dev` once arc 1 merged (D17).
+  - Corrected claims: [recon.md](recon.md) lists each issue claim that did not hold.
+- **Lessons**: one promoted, re-citing the chaos model by a line diff; the pruning pass retired the `Lock` handoff entry, which `Lock.withLock`'s TSDoc now states.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # quality-popup-2: one row card, named amount widths, a task mirror and a re-ask hook; one passkey ask; two config reads
 
@@ -81,8 +97,8 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 - [x] **Phase 3.** Tests `src/composables/useExecutingTask.test.ts src/composables/useReaskReview.test.ts src/popup/components/modules/general src/popup/incoming-row-parity.test.ts`; lint; typecheck.
 - [x] **Arc 1 end.** `bun run audit:vue`; `bun run test:all`; `bun run audit:dup` (production clones and dup lines no worse than 177 / 8775); smoke `cd apps/extension && bun run test:e2e -- tests/e2e/rows.test.ts tests/e2e/type-roles.test.ts tests/e2e/send-outcome-rows.test.ts tests/e2e/received-fee-privacy.test.ts tests/e2e/navigation.test.ts --retry=0` on Chrome and with `NULO_E2E_BROWSER=firefox`; network `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/cancel-mid-prove.test.ts tests/e2e/network/account-switch-isolation.test.ts tests/e2e/network/account-switch-live-session.test.ts` on Chrome; `bun run check:plans` after staging.
 - [x] **Phase 4.** Tests `src/utils/profile-passkey.test.ts src/utils/own-window.test.ts src/popup/pages/settings/security src/popup/pages/auth.test.ts src/composables/useFullBackupExport.test.ts`; lint; typecheck.
-- [ ] **Phase 5 (on OA-1).** Tests `src/popup/components/modules/general/BalanceView.test.ts src/popup/pages/holdings.test.ts src/composables/useConfigRead.test.ts`; lint; typecheck.
-- [ ] **Arc 2 end.** After merging `origin/dev`: arc 1's end gate, with smoke `security.test.ts security-backup.test.ts passkey-paths.test.ts fiat-display.test.ts sw-resilience.test.ts` on both browsers and `toolbar-panel.test.ts` on Firefox; no network file (no service path moves).
+- [ ] **Phase 5 (on OA-1; not built, OA-1 unanswered).** Tests `src/popup/components/modules/general/BalanceView.test.ts src/popup/pages/holdings.test.ts src/composables/useConfigRead.test.ts`; lint; typecheck.
+- [x] **Arc 2 end.** After merging `origin/dev`: arc 1's end gate, with smoke `security.test.ts security-backup.test.ts passkey-paths.test.ts fiat-display.test.ts sw-resilience.test.ts` on both browsers and `toolbar-panel.test.ts` on Firefox; no network file (no service path moves).
 
 ## Decision ledger
 
