@@ -82,6 +82,7 @@ jobs:
               - 'bun.lock'
               - 'bunfig.toml'
               - 'tsconfig.json'
+              - 'tsconfig.base.json'
               - 'patches/**'
               - '.github/workflows/_extension-network-e2e.yml'
               - '.github/workflows/_extension-network-e2e-lane.yml'
