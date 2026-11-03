@@ -9,7 +9,7 @@ import { describe, expect, inject } from "vitest"
 import { TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
 import { extensionUrl, isFirefox, newPage, openScratchPage, stopBackground } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
-import { navigateByHash, openHoldings, switchToNetwork, unlockAfterBackgroundDeath } from "./fixtures/helpers"
+import { navigateByHash, navigateToSettings, openHoldings, switchToNetwork, unlockAfterBackgroundDeath } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
 import {
 	E2E_LIST_FLAGGED,
@@ -97,7 +97,7 @@ async function seedRowSymbols(page: Page): Promise<string[]> {
 }
 
 describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
-	test("accepting the Terms fetches the list, whose defaults show as placeholders; a forged list and an older one change nothing; no request carries a cookie, a referrer or a cache validator", {
+	test("accepting the Terms fetches the list, whose defaults show as placeholders; a forged list and an older one change nothing; Settings → Tokens' refresh takes a newer one; no request carries a cookie, a referrer or a cache validator", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ freshExtensionPerTest: ctx }) => {
@@ -138,7 +138,15 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 			expect((await waitForStoredList(control, (state) => state.failures === 2)).envelope).toBe(first)
 			expect(await seedRowSymbols(popup)).toEqual(shown)
 
-			expect(host.requests()).toHaveLength(3)
+			// The page's control reaches the worker's service over its port and reads back what it did.
+			const newer = await signTestList()
+			host.serve(newer)
+			await navigateToSettings(popup, "tokens")
+			await clickByTestId(popup, "token-list-refresh")
+			await popup.waitForSelector(`${sel("token-list-refresh-result")}[data-state="updated"]`, VISIBLE)
+			expect((await waitForStoredList(control, (state) => state.envelope === newer)).failures).toBe(0)
+
+			expect(host.requests()).toHaveLength(4)
 			for (const request of host.requests()) {
 				expect(request.cookie, "a list request carried a cookie").toBeUndefined()
 				expect(request.referer, "a list request carried a referrer").toBeUndefined()

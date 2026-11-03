@@ -12,9 +12,11 @@
 
 /** Services */
 import { TokenServiceClient } from "@/wallet/services/token/client"
+import { TokenListServiceClient } from "@/wallet/services/token-list/client"
 
 /** Utils */
 import { dashIfBlank, stringCompare } from "@/utils/string"
+import { LIST_REFRESH_COPY, LIST_REFRESH_DANGER, LIST_REFRESH_STATE } from "./list-refresh"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -29,7 +31,10 @@ import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
 
+const listRefresh = ref("idle")
+
 const tokenService = new TokenServiceClient()
+const tokenListService = new TokenListServiceClient()
 const { entities: tokens, refresh: refreshTokens } = useEntityCrud({
 	fetch: () => tokenService.getTokens(appStore.profile.id, appStore.network.chainId),
 	added: tokenService.onTokenAdded,
@@ -60,6 +65,16 @@ const handleDelete = (target) => {
 	})
 }
 
+const handleListRefresh = async () => {
+	if (listRefresh.value === "running") return
+	listRefresh.value = "running"
+	try {
+		listRefresh.value = LIST_REFRESH_STATE[await tokenListService.refresh()]
+	} catch {
+		listRefresh.value = "failed"
+	}
+}
+
 watch(
 	() => tokens.value.length,
 	() => {
@@ -69,6 +84,7 @@ watch(
 
 onBeforeUnmount(() => {
 	tokenService.disconnect()
+	tokenListService.disconnect()
 })
 </script>
 
@@ -99,6 +115,31 @@ onBeforeUnmount(() => {
 		</ItemsContainer>
 
 		<ListStatusMessage v-else headline="NO TOKENS YET" sub="Import tokens to track balances and send or receive." />
+
+		<ItemsContainer>
+			<SettingItem
+				size="small"
+				icon="refresh"
+				:loading="listRefresh === 'running'"
+				title="Refresh token list"
+				wrapDescription
+				data-testid="token-list-refresh"
+				@click="handleListRefresh"
+			>
+				<!-- Mounted from the first render: a live region announces only text that changes inside it. -->
+				<template #description>
+					<span
+						role="status"
+						aria-live="polite"
+						aria-atomic="true"
+						data-testid="token-list-refresh-result"
+						:data-state="listRefresh"
+						:class="{ 'color--txt-danger': LIST_REFRESH_DANGER.has(listRefresh) }"
+						>{{ LIST_REFRESH_COPY[listRefresh] }}</span
+					>
+				</template>
+			</SettingItem>
+		</ItemsContainer>
 
 		<Button @click="popupStore.open('new_token')" wide variant="primary" size="large" data-testid="token-import-btn">
 			Import token
