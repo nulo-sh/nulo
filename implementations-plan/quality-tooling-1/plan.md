@@ -1,7 +1,7 @@
 ---
 plan: quality-tooling-1
 tier: light
-status: approved; arc 1 implementing
+status: approved; arc 1 in review
 issues: "#1454 (arc 1); #1448, its tsconfig half (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -111,6 +111,9 @@ New modules sit in `scripts/release/` beside `workflow-command.ts`, the preceden
 | Codex r2 (resumed) | conditional approve: the resolved-config gate must compare parsed JSON and allow the implied `preserveConstEnums`; D11's runtime claim overreaches; recon cells superseded | all three: the gate, D11's wording (Codex accepts D11 itself), recon's verdicts and F6 note | none |
 | Codex r3 (resumed) | approve: every round-2 edit verified; no new material finding | none | none |
 | Opus r1 | conditional approve: the build command; resolved configs; name D11; download, upload and timeout pins; `unreadableAnswer` returns a reason; Phase 2 unpinned; drop D8 and `ensureLabel`; wording | all: D1 reshaped to `githubHeaders`, the closure test (F3 widened), the RECOVERY pin, the base comment, D6, D8, claim (b), F3, Outcome (1), collision status | none |
+| Arc 1 Codex r1 | conditional approve: the fake `gh` matched too loosely; open-sync's parse failure and the lazy parse unpinned; four comments restated code | all: exact-invocation fake `gh` that fails unmatched calls, both parse pins, the comment trims | none |
+| Arc 1 Opus r1 | approve: lock-version's default Accept unpinned; the download pin installs its spies before a fallible `mkdtemp`; one over-long comment | all three | none |
+| Arc 1 Codex r2 (resumed) | approve: every condition and the Opus items hold; no new finding | none | none |
 
 ## Delivery
 
