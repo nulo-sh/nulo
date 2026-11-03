@@ -136,7 +136,7 @@ Add no label: the path filters run all four e2e lanes (F8).
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `44d5a7064`. Specific to this plan:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `44d5a7064`. Specific to this plan:
 
 1. Step 1 (diff review) is absent: `code_review: off`.
 2. The review loop runs once over the whole diff from `44d5a7064`, after Phase 1. Use `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh` on the same session. Stop when no round has a new material finding; hard stop after three rounds, then report. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) runs beside round 1.
