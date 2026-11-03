@@ -58,7 +58,8 @@ import type { FpcIdentitySnapshot } from "@/wallet/services/fpc/spec"
 import type { IPXE } from "@/wallet/services/pxe/client"
 import { StepContent, type TaskService, type WrappedTask } from "@/wallet/services/task/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
-import type { DiscoveryProbe } from "../discovery-aware-estimator"
+import { carriedHashes } from "../decode-authwit-effects"
+import type { DiscoveryProbe, DiscoveryProbeContext } from "../discovery-aware-estimator"
 import { throwIfAborted } from "../rpc-cancel"
 import type { Action, FeeOptions, FeeSettings } from "../spec"
 import type { BuiltStandardTx, TxRequestBuilder } from "../tx-request-builder"
@@ -200,6 +201,18 @@ export function probedFirstSimOpts(
 		skipTxValidation: true,
 		scopes: built.scopes,
 		stubAccountAddresses: [built.account.address.toString()],
+	}
+}
+
+/** What a strategy hands its probe: the simulated build's node and network, the account it signs
+ *  as, the scopes it read and the witnesses its request carries. */
+export function probeContext(built: Pick<BuiltStandardTx, "node" | "network" | "account" | "scopes" | "txRequest">): DiscoveryProbeContext {
+	return {
+		node: built.node,
+		network: built.network,
+		signer: built.account.address,
+		scopes: built.scopes,
+		carried: carriedHashes(built.txRequest),
 	}
 }
 

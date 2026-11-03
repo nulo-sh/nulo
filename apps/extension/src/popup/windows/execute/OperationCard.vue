@@ -219,10 +219,11 @@ const createAuthwitSurface = (m: unknown): CreateAuthwitSurface => {
 	return { kind: "hash", consumer: wire(intent.consumer, 80), innerHash: wire(intent.innerHash, 80) }
 }
 
-/** Which surface lists what the wallet will sign for this operation: the preview for a
- *  NO_FROM operation, the fee estimate for a standard one; `send_transaction` adds none
- *  at confirm, and an embedded-fee standard operation skips discovery there too. Nothing is
- *  rendered when there is nothing to list: an absent row must not read as a claim of absence. */
+/** Which surface lists the authorizations this operation uses: the preview for a NO_FROM
+ *  operation, the fee estimate for a standard one; `send_transaction` adds none at confirm, and
+ *  an embedded-fee standard operation signs none, so it lists only those another account already
+ *  gave. Nothing is rendered when there is nothing to list: an absent row must not read as a claim
+ *  of absence. */
 type AuthwitSurface =
 	| { kind: "list"; authwits: readonly DiscoveredAuthwit[] }
 	| { kind: "pending" }
@@ -236,9 +237,10 @@ const authwitSurface = (op: UIOperation): AuthwitSurface => {
 		// A refusal also fails the preview, and asking a refused request again cannot list anything.
 		return props.previewFailed && !props.refused ? { kind: "failed" } : { kind: "hidden" }
 	}
-	if (isEmbeddedFeePayment(op)) return { kind: "hidden" }
 	const listed = props.feeEstimate?.discoveredAuthwits ?? props.approvedAuthwits
-	return listed ? { kind: "list", authwits: listed } : { kind: "hidden" }
+	if (!isEmbeddedFeePayment(op)) return listed ? { kind: "list", authwits: listed } : { kind: "hidden" }
+	const consumed = listed?.filter((a) => a.onBehalfOf !== undefined)
+	return consumed?.length ? { kind: "list", authwits: consumed } : { kind: "hidden" }
 }
 const authwits = computed(() => authwitSurface(props.op))
 
@@ -257,6 +259,24 @@ const authwitArgs = (a: DiscoveredAuthwit): CallSurface =>
 const summaryAuthwits = computed(() =>
 	authwits.value.kind === "list" ? authwits.value.authwits.map((authwit) => ({ authwit, surface: authwitArgs(authwit) })) : undefined,
 )
+
+/** The details keep what the wallet signs apart from what another account already gave; `k` stays
+ *  each record's index in the listed order, which the advice reads. */
+const authwitGroups = computed(() => {
+	const rows = (authwits.value.kind === "list" ? authwits.value.authwits : []).map((a, k) => ({ a, k }))
+	return [
+		{
+			testid: "execute-op-discovered-authwits",
+			label: "Authorizations the wallet will sign (found during estimation)",
+			rows: rows.filter(({ a }) => a.onBehalfOf === undefined),
+		},
+		{
+			testid: "execute-op-consumed-authwits",
+			label: "Authorizations your other accounts already gave",
+			rows: rows.filter(({ a }) => a.onBehalfOf !== undefined),
+		},
+	].filter((group) => group.rows.length)
+})
 
 const detailsOpen = ref(false)
 const detailsId = useId()
@@ -384,16 +404,17 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 						<CallArguments :surface="surface" :contract="call.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-op" json-view />
 					</Flex>
 					<Flex
-						v-if="authwits.kind === 'list' && authwits.authwits.length"
-						data-testid="execute-op-discovered-authwits"
+						v-for="group in authwitGroups"
+						:key="group.testid"
+						:data-testid="group.testid"
 						direction="column"
 						gap="4"
 						:class="$style.group"
 					>
-						<Text variant="label-section" color="secondary">Authorizations the wallet will sign (found during estimation)</Text>
+						<Text variant="label-section" color="secondary">{{ group.label }}</Text>
 						<!-- The hash in the key remounts a re-estimated row: AddressDisplay reads its address once, at mount. -->
 						<Flex
-							v-for="(a, k) in authwits.authwits"
+							v-for="{ a, k } in group.rows"
 							:key="`${k}:${a.messageHash}`"
 							data-testid="execute-op-discovered-authwit"
 							:data-message-hash="a.messageHash"
@@ -412,6 +433,10 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 							<Flex justify="between" :class="$style.row">
 								<Text variant="label-section" color="secondary">Function:</Text>
 								<Text variant="meta" color="primary" data-testid="execute-discovered-authwit-function">{{ authwitTitle(a.selector, a.consumer, authwitArgs(a)) }}</Text>
+							</Flex>
+							<Flex v-if="a.onBehalfOf" justify="between" :class="$style.row">
+								<Text variant="label-section" color="secondary">Authorized by:</Text>
+								<AddressDisplay :address="a.onBehalfOf" data-testid="execute-discovered-authorized-by" />
 							</Flex>
 							<DetailsToggle
 								data-testid="execute-discovered-authwit-toggle"

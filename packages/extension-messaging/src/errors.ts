@@ -240,6 +240,18 @@ export class OwnAccountIntentRefusalError extends ScopeViolationError {
 	}
 }
 
+const UNATTACHED_AUTHORIZATION_VIOLATION_MESSAGE =
+	"Scope violation: a transaction's authorization request names another account and carries no witness for it"
+
+/** The wallet signs only as the sending account, so another account's authorization a transaction
+ *  needs must arrive with it. It shares `SCOPE_VIOLATION`; its constant message rebuilds it across RPC. */
+export class UnattachedAuthorizationRefusalError extends ScopeViolationError {
+	public constructor() {
+		super(UNATTACHED_AUTHORIZATION_VIOLATION_MESSAGE)
+		this.name = "UnattachedAuthorizationRefusalError"
+	}
+}
+
 /**
  * Raised when a dApp's sendTx is refused because the per-(profileId, chainId)
  * execution lane is at capacity — either the dApp's own per-origin pending cap
@@ -701,6 +713,9 @@ export function walletErrorFromPayload(payload: WalletErrorPayload): WalletError
 	if (ctor === CapabilityNotGrantedError) return CapabilityNotGrantedError.fromPayload(payload)
 	if (ctor === ScopeViolationError && isAuthRegistryRefusalMessage(payload.message)) return new AuthRegistryRefusalError(payload.message)
 	if (ctor === ScopeViolationError && payload.message === OWN_ACCOUNT_INTENT_VIOLATION_MESSAGE) return new OwnAccountIntentRefusalError()
+	if (ctor === ScopeViolationError && payload.message === UNATTACHED_AUTHORIZATION_VIOLATION_MESSAGE) {
+		return new UnattachedAuthorizationRefusalError()
+	}
 	// The wire `details` is unvalidated. Constant-message constructors ignore both arguments, and
 	// `ScopeViolationError` ignores the details.
 	return new ctor(payload.message, payload.details as never)

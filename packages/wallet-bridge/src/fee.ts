@@ -103,9 +103,9 @@ export type TransferFeeEstimate = {
 	 *  when both exist). Confirm refuses to sign an authorization the snapshot
 	 *  under this id never listed. */
 	readonly previewId?: string
-	/** Private authorizations the wallet found it must sign while estimating a
-	 *  dApp `aztec_sendTx`. Omitted where confirm adds none (`send_transaction`,
-	 *  the Send page). */
+	/** Private authorizations the wallet found while estimating a dApp `aztec_sendTx`: those it
+	 *  must sign, then those another approved account already gave. Omitted where confirm adds
+	 *  none (`send_transaction`, the Send page). */
 	readonly discoveredAuthwits?: readonly DiscoveredAuthwit[]
 	/** Set only when the sponsor row's own contract, at `address`, pays and its balance was read;
 	 *  absent means unknown, which must never disable a sponsor, since a failed read is not an
@@ -143,9 +143,9 @@ export type FeeJuiceShortfall = {
 }
 
 /** One private authorization discovered by simulation: the call it authorizes,
- *  decoded from the `CallAuthorizationRequest` the contract emitted, with the
- *  message hash the wallet would sign. Every field is stringified — the record
- *  crosses the RPC boundary as JSON. */
+ *  decoded from the `CallAuthorizationRequest` the contract emitted, with its
+ *  message hash. The wallet signs it unless `onBehalfOf` is set. Every field is
+ *  stringified — the record crosses the RPC boundary as JSON. */
 export type DiscoveredAuthwit = {
 	/** Contract that will consume the witness. */
 	readonly consumer: string
@@ -157,10 +157,14 @@ export type DiscoveredAuthwit = {
 	readonly args: readonly string[]
 	readonly innerHash: string
 	readonly messageHash: string
+	/** Another approved account of the send, whose witness the transaction already carries; the
+	 *  wallet does not sign it. Absent on a request the sending account signs. */
+	readonly onBehalfOf?: string
 }
 
 /** Result of a NO_FROM (`default_entrypoint`) authorization preview: the
- *  discovered set the wallet would sign at confirm, without signing. */
+ *  discovered set the wallet would sign at confirm, then any it would consume
+ *  for another account, without signing. */
 export type OperationAuthwitPreview = {
 	readonly previewId: string
 	readonly discoveredAuthwits: readonly DiscoveredAuthwit[]

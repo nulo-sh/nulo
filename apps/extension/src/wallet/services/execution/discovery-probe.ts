@@ -18,16 +18,15 @@
  *
  * The instance is per-estimate and stateful: `collected` is the executor's
  * bookkeeping surface (what discovery added), replacing the standalone
- * discovery sim's return value in the folded flow.
+ * discovery sim's return value in the folded flow. An app-paid send hands its
+ * one validated run to a probe too, and reads only what another account gave.
  */
 
-import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { collectOffchainEffects } from "@aztec-labs/stdlib/tx"
 import { liveChainInfo } from "@nulo/aztec-runtime/utils"
 import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
 import { type AuthwitDecodeCrypto, decodeAuthwitEffects } from "./decode-authwit-effects"
-import type { DiscoveryProbe } from "./discovery-aware-estimator"
-import type { FeeEstimate } from "./fee/fee-strategy"
+import type { DiscoveryProbe, DiscoveryProbeContext } from "./discovery-aware-estimator"
 import type { AddPrivateAuthwitAction } from "./spec"
 
 export type { AuthwitDecodeCrypto as DiscoveryProbeCrypto } from "./decode-authwit-effects"
@@ -35,7 +34,8 @@ export type { AuthwitDecodeCrypto as DiscoveryProbeCrypto } from "./decode-authw
 export class CollectingDiscoveryProbe implements DiscoveryProbe {
 	/** Actions this probe's one extraction produced — executor bookkeeping. */
 	public readonly collected: AddPrivateAuthwitAction[] = []
-	/** The decoded authorization behind each collected action, same order. */
+	/** The decoded authorization behind each collected action, same order, then each one another
+	 *  account of the send already gave, which no action signs. */
 	public readonly discovered: DiscoveredAuthwit[] = []
 	private used = false
 
@@ -46,7 +46,7 @@ export class CollectingDiscoveryProbe implements DiscoveryProbe {
 
 	public async extractEffects(
 		sim: unknown,
-		ctx: { node: FeeEstimate["node"]; network: FeeEstimate["network"]; signer: AztecAddress },
+		ctx: DiscoveryProbeContext,
 	): Promise<{ actions: AddPrivateAuthwitAction[]; requested: boolean }> {
 		if (this.used) {
 			return { actions: [], requested: false }
@@ -64,7 +64,7 @@ export class CollectingDiscoveryProbe implements DiscoveryProbe {
 		const chainInfo = liveChainInfo(ctx.network, nodeInfo)
 
 		const seen = new Set(this.existingMessageHashes)
-		const { signable, requested } = await decodeAuthwitEffects(effects, chainInfo, ctx.signer, this.crypto)
+		const { signable, consumed, requested } = await decodeAuthwitEffects(effects, chainInfo, ctx, this.crypto)
 		for (const { record } of signable) {
 			if (seen.has(record.messageHash)) {
 				continue
@@ -73,6 +73,7 @@ export class CollectingDiscoveryProbe implements DiscoveryProbe {
 			this.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: record.messageHash } })
 			this.discovered.push(record)
 		}
+		this.discovered.push(...consumed)
 		return { actions: [...this.collected], requested }
 	}
 }

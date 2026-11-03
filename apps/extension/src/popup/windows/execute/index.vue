@@ -269,7 +269,7 @@ const payerShort = computed(() =>
 )
 
 // A `default_entrypoint` operation never gets a fee estimate (the dApp pays), so
-// the authorizations the wallet would sign are previewed through their own slot
+// the authorizations it uses are previewed through their own slot
 // of the same engine: same attempt token, flow key, cancel and handoff rules.
 const {
 	results: authwitPreviews,

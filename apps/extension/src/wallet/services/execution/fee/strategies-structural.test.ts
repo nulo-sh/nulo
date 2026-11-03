@@ -217,7 +217,7 @@ describe("EmbeddedStrategy structural parity", () => {
 		await new EmbeddedStrategy(deps).buildAndEstimate(ctx)
 
 		expect(simulateTxTask).toHaveBeenCalledTimes(1)
-		expect(simulateTxTask.mock.calls[0]?.[2]).not.toHaveProperty("stubAccountAddresses")
+		expect((simulateTxTask.mock.calls[0] as unknown[] | undefined)?.[2]).not.toHaveProperty("stubAccountAddresses")
 		expect(probe.extractEffects).toHaveBeenCalledTimes(1)
 		const [sim, chain] = probe.extractEffects.mock.calls[0] as unknown as [unknown, { signer: unknown; scopes: unknown }]
 		expect(sim).toBe(await simulateTxTask.mock.results[0]?.value)

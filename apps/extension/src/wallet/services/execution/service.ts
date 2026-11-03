@@ -512,8 +512,8 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			lane: this.lane,
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
+			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt, probe) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe, undefined, onBuilt),
 			protocolSponsorAddress: async (chainId) => (await this.fpcService.getOrComputeProtocolAddresses(chainId)).sponsored,
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>

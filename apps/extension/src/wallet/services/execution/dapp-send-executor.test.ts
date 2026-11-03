@@ -31,6 +31,7 @@ import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/sp
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { DappSendExecutor, type DappSendExecutorDeps } from "./dapp-send-executor"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
+import { probeContext } from "./fee/fee-strategy"
 import { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import type { CollectingDiscoveryProbe } from "./discovery-probe"
 import type { ProveAndSendContext } from "./execution-coordinator"
@@ -877,7 +878,7 @@ describe("DappSendExecutor.executeNoFromSendTx (via default_entrypoint)", () => 
 		expect(deps.lane.acquireSlot).not.toHaveBeenCalled()
 	})
 
-	test("three-site scope rule: discovery WITHOUT account (deduped), real sim + prove WITH account", async () => {
+	test("three-site scope rule: discovery reads WITHOUT the account and stubs it and each scope (deduped), real sim + prove WITH it", async () => {
 		collectOffchainEffectsMock.mockReturnValue([])
 		const scopeA = addr("0xscopeA")
 		const scopeB = addr("0xscopeB")
@@ -892,12 +893,12 @@ describe("DappSendExecutor.executeNoFromSendTx (via default_entrypoint)", () => 
 		)
 
 		// Site 1 — kernelless discovery: dApp scopes only (hex-deduped, the
-		// LAST duplicate instance wins per Map.set), the account stubbed via
-		// msgSender, NOT in scopes.
+		// LAST duplicate instance wins per Map.set), the account NOT in scopes;
+		// the account and every scope account stubbed.
 		const discovery = pxe.simulateTx.mock.calls[0] as unknown[]
 		expect((discovery[1] as { scopes: unknown[] }).scopes).toEqual([scopeADup, scopeB])
 		expect((discovery[1] as { scopes: unknown[] }).scopes).toHaveLength(2)
-		expect(discovery[2]).toEqual(["0xacct"])
+		expect(discovery[2]).toEqual(["0xacct", "0xscopeA", "0xscopeB"])
 		// Site 2 — real simulation: account first, then deduped dApp scopes.
 		const simCall = (deps.coordinator.simulateTxTask as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
 		expect((simCall[2] as { scopes: unknown[] }).scopes).toEqual([built.account.address, scopeADup, scopeB])
@@ -1994,27 +1995,29 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 				})),
 			} as never,
 		}
-		const observing = (records: unknown[]) =>
-			vi.fn(async (...args: unknown[]) => {
+		const appPaidOp = () => readingOwner({ feeSettings: { paymentMethod: { kind: "embedded" } } })
+		const EMBEDDED = { paymentMethod: { kind: "embedded" } } as never
+		/** A validated pipeline whose probe reads `runs[n]` on its n-th build, the last one after. */
+		const observing = (...runs: unknown[][]) => {
+			let n = 0
+			return vi.fn(async (...args: unknown[]) => {
+				const records = runs[Math.min(n++, runs.length - 1)] ?? []
 				;(args[6] as { discovered: unknown[] } | undefined)?.discovered.push(...records)
 				await (args[5] as ((txCalls: unknown) => Promise<void>) | undefined)?.(base.built.txCalls)
 				return base.built as never
 			})
+		}
 		const h = makeHarness({ ...appPaid, buildAndEstimateValidated: observing([record("own"), consumed("b")]) })
-		const estimate = await h.executor.estimateOperationFee(
-			readingOwner(),
-			{ paymentMethod: { kind: "embedded" } } as never,
-			undefined,
-			CTX,
-		)
+		const estimate = await h.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
 		expect(estimate.discoveredAuthwits).toEqual([consumed("b")])
-		await h.executor.executeAztecSendTx(readingOwner(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: estimate.previewId })
+		await h.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: estimate.previewId })
 		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
 
-		const unseen = makeHarness({ ...appPaid, buildAndEstimateValidated: observing([consumed("b")]) })
-		snapshots(unseen.deps).stash("pv", { ...identity, discoveredHashes: [] })
+		const unseen = makeHarness({ ...appPaid, buildAndEstimateValidated: observing([], [consumed("b")]) })
+		const blank = await unseen.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
+		expect(blank.discoveredAuthwits).toEqual([])
 		await expect(
-			unseen.executor.executeAztecSendTx(readingOwner(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: "pv" }),
+			unseen.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: blank.previewId }),
 		).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
 		expect(unseen.proveAndSend).not.toHaveBeenCalled()
 	})
@@ -2191,10 +2194,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			const base = makeHarness()
 			const buildAndEstimateFolded = vi.fn(async (...args: unknown[]) => {
 				const probe = args[3] as CollectingDiscoveryProbe
-				await probe.extractEffects(
-					{ privateExecutionResult: {} },
-					{ node: base.node as never, network: base.built.network, signer: base.account.address },
-				)
+				await probe.extractEffects({ privateExecutionResult: {} }, probeContext(base.built as never))
 				return base.built as never
 			})
 			return makeHarness({ buildAndEstimateFolded })

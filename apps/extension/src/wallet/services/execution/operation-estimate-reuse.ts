@@ -55,8 +55,8 @@ export type OperationEstimateReuseEntry = ReuseEntryBase & {
 	readonly feeSettings: FeeSettings
 	readonly txCalls: BuiltStandardTx["txCalls"]
 	readonly pendingPublicAuthwits: BuiltStandardTx["pendingPublicAuthwits"]
-	/** Message hashes of the private authwits discovery signed into `txRequest` —
-	 *  what a reuse hit would sign, checked against the preview at confirm. */
+	/** The `listedKey` of each private authorization the build signs into `txRequest` or consumes
+	 *  for another account — what a reuse hit would send, checked against the preview at confirm. */
 	readonly discoveredHashes: readonly string[]
 	/** The account's send epoch before the build (`SendSequencer.epoch`). */
 	readonly sequenceEpoch: number
