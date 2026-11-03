@@ -1,13 +1,14 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import type { ApiRequest } from "./publish-chrome-store"
 import {
-	type ApiResponse,
 	POLL_INTERVAL_MS,
 	REQUEST_TIMEOUT_MS,
 	type RunIO,
 	UPLOAD_DEADLINE_MS,
+	realFetch,
 	runPublishChromeStore,
 } from "./publish-chrome-store-run"
+import type { ApiResponse } from "./store-http"
 
 const ITEM = "abcdefghijklmnopabcdefghijklmnop"
 const TOKEN = "TOKEN-A1B2"
@@ -365,6 +366,31 @@ describe("logging contract", () => {
 			expect(maskAt).toBeGreaterThanOrEqual(0)
 			for (const line of leaked) expect(h.lines.indexOf(line)).toBeGreaterThan(maskAt)
 			expect(h.lines.filter((l) => l.startsWith("::add-mask::"))).toHaveLength(1)
+		}
+	})
+})
+
+describe("realFetch", () => {
+	test("reads a JSON body, reads a body that is not JSON as null, and rejects a body that fails mid-read", async () => {
+		const broken = new ReadableStream({ start: (c) => c.error(new TypeError("terminated")) })
+		const answers = [Response.json({ a: 1 }, { status: 201 }), new Response("<html>", { status: 502 }), new Response(broken)]
+		const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async () => answers.shift()) as unknown as typeof fetch)
+		try {
+			expect(await realFetch({ url: "https://x.example/v2/i:fetchStatus", method: "GET", headers: {} }, 1000)).toEqual({
+				status: 201,
+				json: { a: 1 },
+			})
+			expect(await realFetch({ url: "https://x.example/v2/i:fetchStatus", method: "GET", headers: {} }, 1000)).toEqual({
+				status: 502,
+				json: null,
+			})
+			expect(
+				await realFetch({ url: "https://x.example/v2/i:fetchStatus", method: "GET", headers: {} }, 1000).catch(
+					(e: Error) => e.name,
+				),
+			).toBe("TypeError")
+		} finally {
+			fetchSpy.mockRestore()
 		}
 	})
 })

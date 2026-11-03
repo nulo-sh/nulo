@@ -35,6 +35,7 @@ import {
 	uploadStatusRequest,
 	versionRequest,
 } from "./publish-firefox-amo"
+import { type ApiResponse, readApiResponse, requestFailure, unreadableAnswer } from "./store-http"
 import { command, plain } from "./workflow-command"
 
 export const REQUEST_TIMEOUT_MS = 15_000
@@ -42,12 +43,6 @@ export const REQUEST_TIMEOUT_MS = 15_000
 export const UPLOAD_TIMEOUT_MS = 120_000
 export const VALIDATION_DEADLINE_MS = 5 * 60_000
 export const POLL_INTERVAL_MS = 5_000
-
-export interface ApiResponse {
-	status: number
-	/** Parsed JSON body, or null when the body is not JSON. */
-	json: unknown
-}
 
 export interface Files {
 	exists(path: string): boolean
@@ -284,13 +279,10 @@ async function call(io: RunIO, auth: Auth, req: ApiRequest, what: string, timeou
 	try {
 		res = await io.fetch(req, `JWT ${token}`, timeoutMs)
 	} catch (e) {
-		const name = e instanceof Error ? e.name : "Error"
-		return {
-			ok: false,
-			reason: `${what}: request failed (${name === "TimeoutError" || name === "AbortError" ? `timed out after ${timeoutMs / 1000}s` : name})`,
-		}
+		return { ok: false, reason: requestFailure(what, e, timeoutMs) }
 	}
-	if (res.json === null || typeof res.json !== "object") return { ok: false, reason: `${what}: HTTP ${res.status} with a non-JSON body` }
+	const unreadable = unreadableAnswer(what, res)
+	if (unreadable) return { ok: false, reason: unreadable }
 	if (res.status >= 400) return { ok: false, status: res.status, reason: `${what}: HTTP ${res.status} — ${apiError(res.json)}` }
 	return { ok: true, status: res.status, json: res.json }
 }
@@ -326,15 +318,7 @@ export async function realFetch(req: ApiRequest, authorization: string, timeoutM
 		for (const [k, f] of Object.entries(req.files)) form.append(k, new Blob([f.bytes], { type: f.type }), f.filename)
 		body = form
 	}
-	const res = await fetch(req.url, { method: req.method, headers, body, signal: AbortSignal.timeout(timeoutMs) })
-	const text = await res.text()
-	let json: unknown = null
-	try {
-		json = JSON.parse(text)
-	} catch {
-		json = null
-	}
-	return { status: res.status, json }
+	return readApiResponse(await fetch(req.url, { method: req.method, headers, body, signal: AbortSignal.timeout(timeoutMs) }))
 }
 
 if (import.meta.main) {

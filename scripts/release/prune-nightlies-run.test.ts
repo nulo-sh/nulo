@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import { main, nextPage, type PruneIO } from "./prune-nightlies-run"
+import { describe, expect, spyOn, test } from "bun:test"
+import { main, nextPage, type PruneIO, realPruneIO } from "./prune-nightlies-run"
 
 const nights = (count: number, start = 26200): string[] => Array.from({ length: count }, (_, i) => `v0.30.2-nightly.${start + i}`)
 
@@ -111,5 +111,31 @@ describe("nextPage", () => {
 		expect(nextPage('<https://api.github.com/repositories/1/releases?page=1>; rel="prev"')).toBeNull()
 		expect(nextPage(null)).toBeNull()
 		expect(() => nextPage('<https://example.com/steal?page=2>; rel="next"')).toThrow("outside https://api.github.com/")
+	})
+})
+
+describe("the REST transport", () => {
+	test("a refused delete carries GitHub's message, sent with the token, no redirects and 60 s", async () => {
+		const timeouts = spyOn(AbortSignal, "timeout")
+		const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async () =>
+			Response.json({ message: "Reference does not exist" }, { status: 422 })) as unknown as typeof fetch)
+		try {
+			const error = await realPruneIO("o/r", "t")
+				.deleteTag("v1")
+				.catch((e: Error) => e.message)
+			expect(error).toBe("DELETE git/refs/tags/v1: HTTP 422: Reference does not exist")
+			expect(fetchSpy.mock.calls.map(([url, init]) => [String(url), init?.method, init?.redirect, init?.headers])).toEqual([
+				[
+					"https://api.github.com/repos/o/r/git/refs/tags/v1",
+					"DELETE",
+					"manual",
+					{ Authorization: "Bearer t", Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+				],
+			])
+			expect(timeouts.mock.calls).toEqual([[60_000]])
+		} finally {
+			fetchSpy.mockRestore()
+			timeouts.mockRestore()
+		}
 	})
 })
