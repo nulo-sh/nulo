@@ -68,7 +68,7 @@ None. No screen, copy, stored shape, wire message or log line changes; header va
 
 No runtime behaviour changes in this arc: code moves, and a test is added.
 
-### Phase 1: content admission
+### Phase 1: content admission ✓
 
 - Move D1 and its D3 references (`ARCHITECTURE.md:187`, `OWNED`, the relay and ping-pong comments, the chaos citation's line).
 - **Gate**: `bun run lint`; `bun run typecheck:all`; `bun run --cwd apps/extension test src/wallet/services/wallet-sdk src/components/JsonViewer/useLogFilters.scan.test.ts scripts/e2e/profile-chaos-model.test.ts --retry=0`; `diff <(git show 51a692426:apps/extension/src/wallet/services/wallet-sdk/background.ts | sed -n 320,474p) <(sed -n '/^type DiscoveryCredit/,$p' apps/extension/src/wallet/services/wallet-sdk/content-admission.ts | sed 's/^export function buildContentTransport(/function buildContentTransport(/')`. Pass: every command exits 0 (the `diff` too: the one permitted difference, the `export`, is normalised before comparing; Codex final r2).
