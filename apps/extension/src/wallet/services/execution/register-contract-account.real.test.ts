@@ -188,7 +188,7 @@ describe("a dApp's keyed registerContract through the facade", () => {
 
 		const [result] = await register(own.instance, own.secretKey)
 
-		expect(result?.status).not.toBe("ok")
+		expect(result).toMatchObject({ status: "failed", code: ScopeViolationError.CODE })
 		expect(writes).toEqual(["admit"])
 	})
 })

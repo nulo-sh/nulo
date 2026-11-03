@@ -7,3 +7,4 @@
 - 2026-11-02 phase 1 green: cycle lint clean over both dirs, typecheck:all, lint, 86 test files pass
 - 2026-11-02 phase 2 green: lint, typecheck:all, src/wallet/services/execution 76 files pass (composition included)
 - 2026-11-03 phase 3 green: grep gate prints nothing (exit 1), lint, typecheck:all, execution + legal + dapp-session 84 files / 1694 tests pass
+- 2026-11-03 arc 1 end gate green: audit:vue, test:all, audit:dup (production 180/8725 vs 183/8752), 5 network e2e files on Chrome proverless at retry 0, check:plans; Codex R1 approve; Opus review pending

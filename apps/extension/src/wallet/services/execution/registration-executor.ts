@@ -1,8 +1,8 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 /**
- * `RegistrationExecutor` — the contract, sender and token registrations, moved verbatim off the
- * execution facade. A registration takes no execution slot, journal record or cancel controller and
- * sends nothing, so it has no lane deps; the facade still owns dispatch and the guards before it.
+ * `RegistrationExecutor` — the contract, sender and token registrations. None takes an execution
+ * slot or cancel controller, or sends, so it has no lane deps; the facade owns dispatch and the
+ * guards before it.
  */
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { type ContractArtifact, ContractArtifactSchema } from "@aztec-labs/stdlib/abi"
