@@ -162,7 +162,7 @@ No issue covers P96-04 or P96-05 (searched: "connection check", "Connection esta
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `1e6c5bc1f`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `1e6c5bc1f`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc at its boundary over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1. After arc 2, one fresh Codex session over the net diff for cross-arc issues. Prompts under `~/.cache/nulo-backlog/fu2-security-1/`. Hard stop at three rounds; each round in `lessons/phase-N.md` and the table below.
 - Approval boundary (a plan change; stop): any copy beyond the quoted picks and the "ships now" forms, a change to the recovery card, a new step or state in the backup run (D2's reuse of the existing fence is in scope), a width rule in `SettingItem` beyond D6, a new e2e scenario.
 - Close-out: the Outcome; OA-1 to OA-5, if still open, filed as one `owner-decision` issue; a comment on #1529 about P93-13's superseded words; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done fu2-security-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/fu2-security-1/plan.md`.
