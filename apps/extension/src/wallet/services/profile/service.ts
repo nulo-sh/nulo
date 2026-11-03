@@ -386,6 +386,17 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		return profile
 	}
 
+	/** The row `id` stores, refused as an invalid id when it is missing or a deletion reserved the id:
+	 *  a tombstoned row (mid-delete: row present, id reserved) is being erased, and `repo.get` alone
+	 *  is blind to the reservation. Caller MUST hold the facade lock. */
+	private async liveRowHoldingLock(id: string): Promise<Profile> {
+		const profile = await this.getProfileOrThrowHoldingLock(id)
+		if (this.deletionState.isReserved(id)) {
+			throw new Error("Invalid profile id")
+		}
+		return profile
+	}
+
 	/** Capture the row + its deletion epoch in ONE critical section. A tombstoned
 	 *  profile (mid-delete: row present, id reserved) is invalid here — `repo.get`
 	 *  alone is blind to the reservation. The epoch survives even a delete FOLLOWED
@@ -393,10 +404,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  check rejects the stale generation. */
 	private async captureRowFence(id: string): Promise<{ profile: Profile; capturedEpoch: number }> {
 		return this.runExclusive(async () => {
-			const profile = await this.getProfileOrThrowHoldingLock(id)
-			if (this.deletionState.isReserved(id)) {
-				throw new Error("Invalid profile id")
-			}
+			const profile = await this.liveRowHoldingLock(id)
 			// Before any field is read: a retired row has nothing to export.
 			if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()
 			return { profile, capturedEpoch: this.deletionState.capture(id) }
@@ -425,13 +433,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  opener), and only the passkey arm requires the row to classify as passkey. */
 	private async snapshotForUnlock(id: string, expect: "password" | "passkey"): Promise<Profile> {
 		return this.runExclusive(async () => {
-			const fetched = await this.getProfileOrThrowHoldingLock(id)
-			// A tombstoned profile (mid-delete: row present, id reserved) must not be
-			// unlocked — its data is being purged; `repo.get` alone is blind to the
-			// reservation.
-			if (this.deletionState.isReserved(id)) {
-				throw new Error("Invalid profile id")
-			}
+			const fetched = await this.liveRowHoldingLock(id)
 			assertUnlockKind(fetched, expect)
 			return fetched
 		})
@@ -712,15 +714,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 				// Phase 3 — re-enter lock, revalidate, open session.
 				return await this.runExclusive(async () => {
-					const current = await this.repo.get(id)
-					if (!current) {
-						throw new Error("Invalid profile id")
-					}
 					// A deletion that began during the (lock-free) phase-2 unseal must
 					// abort the unlock — the id is now reserved even if the row lingers.
-					if (this.deletionState.isReserved(id)) {
-						throw new Error("Invalid profile id")
-					}
+					const current = await this.liveRowHoldingLock(id)
 					if (current.type !== "password") {
 						throw new Error("Profile requires passkey")
 					}
@@ -860,12 +856,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		id: string,
 		snapshot: Extract<Profile, { type: "passkey" }>,
 	): Promise<Extract<Profile, { type: "passkey" }>> {
-		const current = await this.repo.get(id)
 		// A deletion that began during the (lock-free) prompt aborts the unlock — the id is now
 		// reserved even if the row lingers.
-		if (!current || this.deletionState.isReserved(id)) {
-			throw new Error("Invalid profile id")
-		}
+		const current = await this.liveRowHoldingLock(id)
 		if (current.type !== "passkey") {
 			throw new Error("Profile requires password")
 		}
@@ -1668,10 +1661,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 		const { profile, epoch, snapshot } = await this.runExclusive(async () => {
 			this.sweepStalePendingRestore(Date.now())
-			const profile = await this.repo.get(id)
-			if (!profile || this.deletionState.isReserved(id)) {
-				throw new Error("Invalid profile id")
-			}
+			const profile = await this.liveRowHoldingLock(id)
 			if (tornGuard !== undefined) {
 				await this.assertTornGuardUnchangedHoldingLock(id, profile, tornGuard)
 			}
@@ -2315,16 +2305,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		try {
 			// Sweep stale entries but never the id being finalized here.
 			this.sweepStalePendingRestore(Date.now(), id)
-			const profile = await this.repo.get(id)
-			if (!profile) {
-				throw new Error("Invalid profile id")
-			}
-			// A tombstoned profile (SW died mid-delete: row still present, id
-			// reserved) must not open a session — it is being erased. Gate here as
-			// well as at row-read so a delete that began mid-restore is caught.
-			if (this.deletionState.isReserved(id)) {
-				throw new Error("Invalid profile id")
-			}
+			// A tombstoned profile (SW died mid-delete) must not open a session. Gated here as well as
+			// at row-read so a delete that began mid-restore is caught.
+			const profile = await this.liveRowHoldingLock(id)
 			if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()
 
 			// Clear the restore-in-progress marker at ENTRY: being called at all
