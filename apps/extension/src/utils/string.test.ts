@@ -1,7 +1,7 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { describe, expect, test } from "vitest"
 import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
-import { dashIfBlank, getInitials, isBlank, stripBidiAndZeroWidth, trimAddress } from "./string"
+import { addressEnds, dashIfBlank, getInitials, isBlank, stripBidiAndZeroWidth, trimAddress } from "./string"
 
 describe("trimAddress", () => {
 	const ADDR = "0x1234567890abcdef1234567890abcdef12345678"
@@ -128,5 +128,18 @@ describe("stripBidiAndZeroWidth", () => {
 			"a\u00A0b 0-9 ._!?",
 		]
 		for (const text of kept) expect(stripBidiAndZeroWidth(text), JSON.stringify(text)).toBe(text)
+	})
+})
+
+describe("addressEnds", () => {
+	test("cuts a whole address where the header's short form does, losing nothing", () => {
+		const address = `0x22ee${"0".repeat(56)}c204`
+		const { head, middle, tail } = addressEnds(address)
+		expect([head, tail, `${head}${middle}${tail}`]).toEqual(["0x22ee", "c204", address])
+		expect(trimAddress(address, 6, 4, "...")).toBe(`${head}...${tail}`)
+	})
+
+	test("an address too short to cut is all head", () => {
+		expect(addressEnds("0x12")).toEqual({ head: "0x12", middle: "", tail: "" })
 	})
 })

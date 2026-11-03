@@ -17,9 +17,11 @@
  *  - All I/O is injected, so every branch is unit-testable with zero secrets.
  */
 
+import { $ } from "bun"
 // Relative, not `@nulo/legal`: this job installs no dependency, and launch.ts imports nothing.
 import { LAUNCH_DOCUMENTS, launchBlanks } from "../../packages/legal/src/launch"
 import { AUTORELEASE_PENDING_LABEL, AUTORELEASE_TAGGED_LABEL, type AutoUnstickAction, decideUnstick } from "./auto-unstick"
+import { commitPullsText, parsePulls } from "./gh-pulls"
 import { command } from "./workflow-command"
 
 export interface MergedPrRef {
@@ -134,33 +136,12 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 	}
 }
 
-// CLI entry — the `auto-unstick` release job runs `bun scripts/release/auto-unstick-run.ts`.
-// Skipped on import (import.meta.main is false in the unit tests, which inject a fake IO).
-// The real IO shells out to `gh` + `git`; the decision + action-mapping above are what's
-// unit-tested, so this boundary stays a thin, un-mocked wrapper.
-if (import.meta.main) {
-	const { $ } = await import("bun")
-	const repo = process.env.GITHUB_REPOSITORY ?? ""
-
-	const realIO: UnstickIO = {
+export function realUnstickIO(repo: string): UnstickIO {
+	return {
 		async resolveMergedPr(headSha) {
-			const res = await $`gh api ${`repos/${repo}/commits/${headSha}/pulls`} --jq ${".[]"}`.nothrow().quiet()
-			// Fail LOUD on a transport/auth/rate-limit error. Returning null here would be
-			// indistinguishable from "no Release PR" → a silent noop → a stuck-but-green
-			// release. A commit with no PRs is exit 0 + empty output (handled below).
-			if (res.exitCode !== 0)
-				throw new Error(`gh api commits/${headSha}/pulls failed (exit ${res.exitCode}): ${res.stderr.toString().trim()}`)
-			// One JSON object per line. GitHub also associates a commit with PRs that merely contain
-			// it, so only the PR this commit merged counts.
-			for (const line of res.stdout.toString().split("\n")) {
-				if (!line.trim()) continue
-				const pr = JSON.parse(line) as {
-					number?: number
-					merged_at?: string | null
-					base?: { ref?: string }
-					labels?: Array<{ name: string }>
-					merge_commit_sha?: string
-				}
+			// A failed lookup throws: read as "no Release PR", it would leave a stuck release green.
+			// Only the PR this commit merged counts, not one that merely contains it.
+			for (const pr of parsePulls(await commitPullsText(repo, headSha))) {
 				if (!pr.number || pr.merge_commit_sha !== headSha) continue
 				return {
 					number: pr.number,
@@ -199,7 +180,10 @@ if (import.meta.main) {
 		},
 		log: (m) => console.log(m),
 	}
+}
 
+if (import.meta.main) {
+	const realIO = realUnstickIO(process.env.GITHUB_REPOSITORY ?? "")
 	const version = process.env.VERSION?.trim() || ((await Bun.file("package.json").json()) as { version: string }).version
 	const flag = parseAutoUnstickFlag(process.env.AUTO_UNSTICK_ENABLED)
 	if (flag.warning) console.log(command("warning", flag.warning))

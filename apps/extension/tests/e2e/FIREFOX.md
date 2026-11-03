@@ -118,6 +118,8 @@ The toolbar panel has no Puppeteer target, so `page.screenshot` cannot take it. 
 2. Call `browsingContext.currentWindowGlobal.drawSnapshot(null, 2, "white")` on it.
 3. Draw the bitmap on a canvas made from the browser's `ownerDocument`. `ownerGlobal` reads `undefined` in that scope, and a throw inside the promise's callback leaves the script hanging until its timeout.
 
+A wallet page in a tab or window refuses `page.screenshot` too, so a before/after picture of one is drawn the same way: its browser is the entry of `gBrowser.browsers`, in any `navigator:browser` window, whose `currentURI` is the page's URL.
+
 A hand-off window opened by hand must name the last-focused normal window as its opener, as the panel does. The background reopens the panel only where focus returns.
 
 ## CI

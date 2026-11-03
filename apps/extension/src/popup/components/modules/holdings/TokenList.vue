@@ -39,6 +39,8 @@ const props = defineProps({
 	/** Fresh USD rate per row for the dust fold; absent → the fold hides empties only. */
 	usdRateOf: { type: Function as PropType<RowFn<number | undefined>>, default: () => () => undefined },
 	dustThresholdUsd: { type: Number, default: 0 },
+	/** A listed row's balance is being re-read: one mark beside the label, none on the rows. */
+	refreshing: { type: Boolean, default: false },
 })
 
 const query = ref("")
@@ -118,7 +120,10 @@ const toggleSort = () => {
 		</div>
 
 		<Flex align="end" justify="between">
-			<SectionLabel :label :count="visibleCount" :countTestid="tid('count')" />
+			<Flex align="center" gap="8">
+				<SectionLabel :label :count="visibleCount" :countTestid="tid('count')" />
+				<span v-if="refreshing" :class="$style.refreshing_dot" :data-testid="tid('refreshing')" aria-hidden="true" />
+			</Flex>
 			<button v-if="sortable" type="button" @click="toggleSort" :data-testid="tid('sort')" :data-sort="sort" :class="$style.sort">
 				{{ sort === "value" ? "BY VALUE" : "A–Z" }}
 			</button>
@@ -163,6 +168,10 @@ const toggleSort = () => {
 </template>
 
 <style module>
+.refreshing_dot {
+	composes: dot from "@/components/refreshing-dot.module.css";
+}
+
 .sticky {
 	position: sticky;
 	top: 0;
