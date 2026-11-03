@@ -23,3 +23,4 @@
 - Cross-arc: one fresh Codex session over #1573 and arc 2: approve, no cross-arc finding.
 - Captures: a seed harness from the shots branch (the execute window fed a recorded payload, the real decoder's output and a fixed estimate) applied uncommitted, built with CI's smoke flags, captured on Chrome, then removed; the "before" build swapped in `dev`'s `call-surface.ts` only.
 - Close-out: `## Decision` on #1380, a note on #127 (the queue drops a row a reused id replaced), OA-2 filed as #1644 and OA-3 as #1645 (`owner-decision`, no duplicate found).
+- Final head, after merging `dev` (`2b037ef18`) and the close-out: lint 0, typecheck:all 0, execute + fee 431/431, `test:all` 0 (160 s), `check:plans` 0 findings; network e2e at retry 0, Chrome 6/6 (331 s), Firefox 6/6 (536 s).
