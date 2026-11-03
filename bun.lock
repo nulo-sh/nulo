@@ -157,6 +157,16 @@
         "wrangler": "^4",
       },
     },
+    "infra/rpc-proxy": {
+      "name": "@nulo/rpc-proxy",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@aztec-labs/stdlib": "6.0.0",
+        "@types/bun": "1.4.2",
+        "typescript": "^6.0.3",
+        "wrangler": "4.129.1",
+      },
+    },
     "infra/subscribe": {
       "name": "@nulo/subscribe",
       "version": "0.0.0",
@@ -843,6 +853,8 @@
     "@nulo/playground": ["@nulo/playground@workspace:apps/playground"],
 
     "@nulo/resolve-asset": ["@nulo/resolve-asset@workspace:packages/resolve-asset"],
+
+    "@nulo/rpc-proxy": ["@nulo/rpc-proxy@workspace:infra/rpc-proxy"],
 
     "@nulo/subscribe": ["@nulo/subscribe@workspace:infra/subscribe"],
 
