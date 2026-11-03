@@ -83,6 +83,25 @@ describe("the unlock's conversion", () => {
 		expect(JSON.stringify([...area.data])).not.toContain(ACCOUNT.slice(2))
 		expect(area.data.get(pinnedTokensKey("q"))).toEqual({ "7": [B] })
 	})
+
+	test("a map whose conversion fails stays for the next worker, and the maps after it still convert", async () => {
+		const area = new MemoryStorageArea().seed({
+			[pinnedTokensKey("p")]: { "7": [A] },
+			[feePicksKey("p")]: APP,
+			[sendFeePicksKey("p")]: SEND,
+		})
+		const { service, session } = await startUiPreferences({ storage: { local: area } } as unknown as BrowserApi)
+		const internals = service as unknown as { pins: SealedEntityStorage<unknown>; logWarn(...data: unknown[]): void }
+		vi.spyOn(internals.pins, "sealLegacy").mockRejectedValueOnce(new Error("quota"))
+		const warn = vi.spyOn(internals, "logWarn")
+
+		await session.unlock("p")
+		await sealed(area, feePicksKey("p"), sendFeePicksKey("p"))
+		expect(area.data.get(pinnedTokensKey("p"))).toEqual({ "7": [A] })
+		expect(warn).toHaveBeenCalledExactlyOnceWith("sealing a plaintext preference failed; the next worker retries", {
+			error: expect.objectContaining({ message: "quota" }),
+		})
+	})
 })
 
 describe("reads and writes", () => {

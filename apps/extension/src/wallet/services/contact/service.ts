@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
@@ -8,7 +9,8 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { assertRestoreEpoch, captureRestoreEpochs, restoreRowProfileId } from "@/wallet/services/restore-fence"
-import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { commitFencedCreate } from "@/wallet/services/create-fence"
+import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { RunFence } from "@/wallet/services/profile/spec"
 import { restoreRows } from "@/wallet/services/restore-rows"
 import { nextRandomId, preferOrReallocId } from "@/wallet/services/id-allocators"
@@ -63,17 +65,18 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext contacts failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 	}
 
 	/** Seals the profile's plaintext contacts under the lock every contact writer holds, so no write
 	 *  lands between a row's read and its sealed commit. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext contacts failed; the next worker retries", { error })
-		}
+		await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
 	}
 
 	public async getContacts(fence?: RunFence | null): Promise<Contact[]> {
@@ -126,19 +129,11 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 				abbr: this._getAbbreviation(stored),
 			}
 
-			// Sealed before the checks, committed with no await after them.
 			const write = await this.storage.prepare(contact.id, contact)
-			deletion.assertCurrent(fence.profileId, fence.epoch)
-			this.assertStillLive(runFence)
-			await write.commit()
-			// The set awaits — compensate the just-written row if the deletion
-			// landed during it, before the row becomes observable via the emit.
-			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-				await this.storage.delete(contact.id)
-				throw profileDeletedError(fence.profileId)
-			}
-
-			this.emit("onContactAdded", contact)
+			await commitFencedCreate(deletion, fence, write, () => this.storage.delete(contact.id), {
+				admit: () => this.assertStillLive(runFence),
+				landed: () => this.emit("onContactAdded", contact),
+			})
 
 			return contact
 		})
