@@ -9,3 +9,4 @@
 - 2026-11-03: phase 2 green: lint, typecheck:all, test:all, audit:vue, test:ci-gating; audit:dup unchanged (production 183 clones / 8752 lines); `background.ts` 971 → 430 lines. Network e2e proverless at retry 0: Chrome 7/7 (254 s), Firefox 4/4 (233 s).
 - 2026-11-03: arc 1 review: Codex r1 approve; Opus conditional approve (4 accepted); Codex r2 approve. Arc 1 PR next.
 - 2026-11-03: merged origin/dev (index.md conflict resolved by keeping both); lint, typecheck:all, test:all, test:ci-gating, check:plans, build green. PR #1587 opened; Firefox network shard 2/5 failed once on `pin-to-home` (popup token-import toast timeout, unrelated path, filed #1590), green on a rerun of the failed job; every required check green.
+- 2026-11-03: arc 2 phase 4 green: site pins at retry 0 on the base (each red under its mutation), `race.test.ts` 11/11 (five helper mutations each red), lint, typecheck:all, wallet-core 344/344.
