@@ -7,7 +7,7 @@ const props = defineProps<{
 </script>
 
 <template>
-	<div v-if="props.words.length" :class="$style.wrapper" :data-testid="testId" translate="no">
+	<div v-if="props.words.length" :class="[$style.wrapper, columns === 4 && $style.reflows]" :data-testid="testId" translate="no">
 		<!-- Page translation must never rewrite a recovery word. -->
 		<ol :class="[$style.grid, columns === 4 ? $style.four : $style.three]">
 			<li v-for="(word, i) in props.words" :key="i" :class="$style.cell">
@@ -50,6 +50,25 @@ const props = defineProps<{
 
 .four {
 	grid-template-columns: repeat(4, 1fr);
+}
+
+/* A column of four holds the widest BIP39 word, 67.2 px, beside its number in 91.2 px. Four of
+ * them, their gaps, padding and border need 455 px of grid, two need 241; below that the words
+ * keep their order in fewer columns. */
+.reflows {
+	container: phrase / inline-size;
+}
+
+@container phrase (width < 455px) {
+	.four {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+@container phrase (width < 241px) {
+	.four {
+		grid-template-columns: 1fr;
+	}
 }
 
 .cell {

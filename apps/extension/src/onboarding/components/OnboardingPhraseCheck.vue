@@ -48,7 +48,7 @@ onMounted(() => {
 
 		<Text variant="body" color="secondary" height="150">Pick 3 words by their position.</Text>
 
-		<Flex direction="column" gap="24">
+		<Flex direction="column" gap="24" :class="$style.questions">
 			<!-- No <form>: Enter on a choice submits nothing, and Confirm is the one way on. -->
 			<fieldset
 				v-for="(question, index) in props.questions"
@@ -126,6 +126,18 @@ onMounted(() => {
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
 	gap: 8px;
+}
+
+/* A chip holds the widest BIP39 word, 67.2 px, in 77.2 px: four of them and their gaps need 333 px,
+ * so below that the choices keep their order in two columns. */
+.questions {
+	container: choices / inline-size;
+}
+
+@container choices (width < 333px) {
+	.choices {
+		grid-template-columns: repeat(2, 1fr);
+	}
 }
 
 .choice {

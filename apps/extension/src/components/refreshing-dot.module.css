@@ -1,0 +1,24 @@
+/* A shown value being re-read: 4px grey, pulsing. */
+.dot {
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background: var(--nulo-secondary);
+	animation: refresh_pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes refresh_pulse {
+	0%,
+	100% {
+		opacity: 0.25;
+	}
+	50% {
+		opacity: 0.9;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dot {
+		animation: none;
+	}
+}
