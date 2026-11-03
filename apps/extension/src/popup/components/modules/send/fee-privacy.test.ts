@@ -281,7 +281,7 @@ describe("previewForPick", () => {
 })
 
 describe("recordOf", () => {
-	test("stores the semantic key, plus the sponsor's label for the loading preview", () => {
+	test("stores the semantic key, plus the sponsor's label", () => {
 		expect(recordOf(FJ)).toEqual({ type: "fj" })
 		expect(recordOf(PRIV)).toEqual({ type: "private_fpc" })
 		expect(recordOf(SPON)).toEqual({ type: "fpc", fpc: { id: "spon", name: SPON.fpc?.name } })

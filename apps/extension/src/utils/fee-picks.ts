@@ -9,8 +9,8 @@ import { isRecord } from "@nulo/wallet-core/utils"
 export type FeePickType = "fj" | "private_fpc" | "fpc"
 export type FeeSide = "private" | "public"
 
-/** Send's pick for one transfer side. `fpc.name` only labels the loading preview; a pick is resolved
- *  by `fpc.id` against fresh rows, never by name. */
+/** Send's pick for one transfer side. `fpc.name` stays in the stored shape but nothing reads it: a
+ *  pick is resolved, and shown, by `fpc.id` against fresh rows, never by name. */
 export type SendPick = { type: FeePickType; fpc?: { id: string; name?: string } | null }
 export type SendSlots = { private?: SendPick; public?: SendPick }
 

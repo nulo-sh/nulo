@@ -21,7 +21,7 @@ import { startNodeStub } from "./fixtures/node-stub"
 import { skipUnlessListPrices } from "./fixtures/token-list"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
-import { SEEDED_FPC_IDS, SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
+import { SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
 import { savedFeePicks } from "./helpers/ui-preferences"
 import { activeTestId, coveredAt, focusRing, pressEscape, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
@@ -58,7 +58,8 @@ async function openSendPage(ctx: ExtensionContext, { priced = false, sponsors = 
 	const scope = priced || sponsors ? await readActivityScope(page, { priced }) : undefined
 	if (scope && sponsors) {
 		expect(await fpcRowIds(page), "FPC rows before the seed").toEqual([])
-		await seedProtocolFpcs(page, scope)
+		const seeded = await seedProtocolFpcs(page, scope)
+		expect(seeded, "the sponsor is offered on the spec's chain").toContain(SEEDED_SPONSOR_FPC_ID)
 	}
 	if (scope && priced) {
 		await seedTokenRow(page, scope, 1)
@@ -324,6 +325,7 @@ test("the token card draws the accent ring when focused", { timeout: 180_000, re
 
 async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void> {
 	const page = await openSendPage(ctx, { priced: true, sponsors: true })
+	const seeded = await fpcRowIds(page)
 	const account = await getAccountAddress(page)
 	await page.waitForSelector(sel("send-fee-method-trigger"), { visible: true, timeout: 30_000 })
 	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
@@ -363,7 +365,7 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 	await page.keyboard.press("Escape")
 	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
 	await waitForFocus(page, "send-fee-method-trigger")
-	expect(await fpcRowIds(page), "FPC rows after the picks").toEqual([...SEEDED_FPC_IDS].sort())
+	expect(await fpcRowIds(page), "FPC rows after the picks").toEqual(seeded)
 
 	// Only the chosen priority carries the accent border; the level under the pointer does not.
 	await page.waitForSelector(sel("send-fee-priority-fast"), { visible: true, timeout: 10_000 })

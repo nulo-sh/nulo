@@ -2094,7 +2094,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 	})
 
 	describe("the loading preview", () => {
-		test("a saved sponsor pick is previewed by its saved label before the FPC list exists, and pays nothing", async () => {
+		test("a saved sponsor pick is previewed as the read FPC list's row before the balances land, and pays nothing", async () => {
 			const gas = deferred<unknown>()
 			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, SPONSOR])
 			mocks.getGasBalances.mockReturnValue(gas.promise)
