@@ -623,7 +623,8 @@ describe("two profiles on one credential with their prfSalt values swapped", () 
 				drive: {
 					3: async (r, step, before) => {
 						const sibling = await storedRow(r, "P2")
-						replace(r.profiles, "openSlots", (original) => async (row: { prfSalt: string }, key: unknown) => {
+						const codec = (r.profiles as unknown as { codec: object }).codec
+						replace(codec, "openSlots", (original) => async (row: { prfSalt: string }, key: unknown) => {
 							const own = await original(row as never, key as never)
 							if (own) return own
 							fellBack = true
