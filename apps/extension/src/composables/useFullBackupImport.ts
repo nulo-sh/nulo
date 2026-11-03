@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { computed, ref, type Ref, type ShallowRef, shallowRef, toRaw } from "vue"
+import { computed, ref, type Ref, type ShallowRef, shallowRef } from "vue"
 import { sanitizeString } from "@/utils/string"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
@@ -15,23 +15,15 @@ import { TOKEN_BALANCE_SERVICE_NAME } from "@/wallet/services/token-balance/spec
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { FilePickCanceledError } from "@/utils/files"
-import {
-	AccountFileNotBackupError,
-	type BackupSelection,
-	collectRestoreErrors,
-	normalizeAllIds,
-	openSelection,
-	readBackupFile,
-	unreadableSelection,
-} from "@/utils/full-backup-helpers"
+import { type BackupSelection, normalizeAllIds } from "@/utils/full-backup-helpers"
 import {
 	type BackupProfile,
-	EARLIER_PASSKEY_BACKUP,
 	type FullBackupEnvelope,
-	refusedAsEarlierPasskey,
 	type ValidatedBackup,
 	validateAndMigrateBackup,
 } from "@/wallet/services/backup/trust-gate"
+import { BACKUP_READ_FAILED, openPickedBackup, readPickedBackup } from "./full-backup-selection"
+import { errorLogWriters, hasRowsBeyondRetry } from "./restore-error-log"
 import { armRestoreOutcome } from "@/utils/restore-outcome"
 import {
 	accountStateNetworkIds,
@@ -51,7 +43,7 @@ import {
 	restoreTokensStage,
 	refreshRestoredTokensStage,
 	retryAccountStateStage,
-	retryReplacedRows,
+	retryNetworkIds,
 	runRestoreFailurePath,
 	settleHeldAccounts,
 } from "./full-backup-restore"
@@ -65,24 +57,6 @@ import { isNewPasswordValid } from "@/utils/password"
 import type { NewProfileUnlock, UnlockMethod } from "@/composables/useNewProfilePasskey"
 import type { NewPasskeyDisplay } from "@/wallet/services/passkey/spec"
 import type { HeldAccount } from "@/components/composite/import/restore-warning"
-
-/** A picked file that is no backup the wallet reads. */
-export const UNRECOGNIZED_BACKUP = {
-	title: "Unrecognized Backup File",
-	message: "The selected file is not a valid backup. Please select a correct backup file.",
-} as const
-
-export const DECRYPTION_FAILED = {
-	title: "Decryption Failed",
-	message:
-		"The provided password is incorrect or the backup file is corrupted. Please try again with the correct password or select another file.",
-} as const
-
-/** An encrypted account file picked as a backup, recognised once its password opens it. */
-export const ACCOUNT_FILE_NOT_BACKUP = {
-	title: "Not a Backup File",
-	message: "This is an account file. Import it from Settings > Accounts > Import Account.",
-} as const
 
 export interface UseFullBackupImportOptions {
 	password: Ref<string>
@@ -441,23 +415,13 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 			state.parsedBackupName.value = null
 			return
 		}
-		const { selection, parseError } = await readBackupFile(file)
-		const refused = selection.kind === "plain" && (await refusedAsEarlierPasskey(selection.backup))
+		const { selection, refusal } = await readPickedBackup(file)
 		if (overtaken()) return
 		// Every selection replaces the previous one's name, a nameless one included.
 		state.parsedBackupName.value = null
-		if (refused) {
-			state.selectedBackup.value = unreadableSelection(selection.name)
-			opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
-			return
-		}
 		state.selectedBackup.value = selection
-		if (parseError) {
-			opts.fillError("full_backup", parseError.title, parseError.tooltip)
-			return
-		}
-		if (selection.kind === "unreadable" || (selection.kind === "plain" && !selection.profileType)) {
-			opts.fillError("full_backup", UNRECOGNIZED_BACKUP.title, UNRECOGNIZED_BACKUP.message)
+		if (refusal) {
+			opts.fillError("full_backup", refusal.title, refusal.message)
 			return
 		}
 		// Surface the backup-embedded profile name as soon as it's available so the parent
@@ -472,50 +436,35 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 	} catch (err) {
 		// A closed chooser keeps the chosen backup, its name and its Retry.
 		if (err instanceof FilePickCanceledError || overtaken()) return
-		opts.fillError("full_backup", "Failed to read the backup file")
+		opts.fillError("full_backup", BACKUP_READ_FAILED)
 		console.error("Failed to read backup file:", { error: err })
 	}
 }
 
 async function runDecryptBackup(state: ImportRefs, opts: UseFullBackupImportOptions) {
 	if (!state.decryptionPassword.value) return
-	// Snapshot the selection this decrypt belongs to (the stale fences live in
-	// openSelection — a late publication must not resurrect a replaced selection).
 	const target = state.selectedBackup.value
 	if (!target) return
-	try {
-		const opened = await openSelection(target, state.decryptionPassword.value, () => state.selectedBackup.value !== target)
-		if (opened.kind === "stale") return
-		const refused = await refusedAsEarlierPasskey(opened.selection.backup)
-		// The helper fences internally, but its resolution yields a microtask before this
-		// continuation — a queued re-pick in that window must not be overwritten (same
-		// await-boundary class as useProfileBootstrap's network write).
-		if (state.selectedBackup.value !== target) return
-		if (refused) {
-			state.selectedBackup.value = unreadableSelection(target.name)
-			opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
-			return
-		}
-		state.selectedBackup.value = opened.selection
-		// Encrypted backups only expose the embedded name AFTER decrypt succeeds. Surface it
-		// for the parent's prefill watcher (same sanitization rationale as pickBackupFile).
-		state.parsedBackupName.value = embeddedBackupName(opened.selection.backup)
-		opts.clearError()
-	} catch (err) {
-		if (state.selectedBackup.value !== target) return
-		if (err instanceof AccountFileNotBackupError) {
-			state.selectedBackup.value = unreadableSelection(target.name)
-			opts.fillError("full_backup", ACCOUNT_FILE_NOT_BACKUP.title, ACCOUNT_FILE_NOT_BACKUP.message)
-			return
-		}
-		opts.fillError("full_backup", DECRYPTION_FAILED.title, DECRYPTION_FAILED.message)
+	const stale = () => state.selectedBackup.value !== target
+	const opened = await openPickedBackup(target, state.decryptionPassword.value, stale)
+	// The result lands a microtask after the helper's last check: a re-pick in that gap wins.
+	if (opened.kind === "stale" || stale()) return
+	if (opened.kind === "refused") {
+		if (opened.selection) state.selectedBackup.value = opened.selection
+		opts.fillError("full_backup", opened.refusal.title, opened.refusal.message)
+		return
 	}
+	state.selectedBackup.value = opened.selection
+	// Encrypted backups only expose the embedded name AFTER decrypt succeeds. Surface it
+	// for the parent's prefill watcher (same sanitization rationale as pickBackupFile).
+	state.parsedBackupName.value = embeddedBackupName(opened.selection.backup)
+	opts.clearError()
 }
 
 async function runRestoreBackup(
 	state: ImportRefs,
 	opts: UseFullBackupImportOptions,
-	guards: { isAllowed: () => boolean; hasErrors: () => boolean; recordRestoreErrors: (serviceName: string, data: unknown) => unknown[] },
+	guards: { isAllowed: () => boolean; hasErrors: () => boolean } & Pick<RestoreIo, "recordRestoreErrors" | "appendErrors">,
 	existing: boolean,
 ) {
 	// Re-entrancy guard: a second concurrent run (double-click, or the popup's
@@ -553,9 +502,7 @@ async function runRestoreBackup(
 			state.restoreStage.value = v
 		},
 		recordRestoreErrors: guards.recordRestoreErrors,
-		appendErrors: (serviceName, records) => {
-			state.restoreErrorLog.value[serviceName] = [...(state.restoreErrorLog.value[serviceName] ?? []), ...records]
-		},
+		appendErrors: guards.appendErrors,
 	}
 
 	try {
@@ -623,15 +570,8 @@ async function runRetryAccountState(
 }
 
 function retryNetworkNames(ctx: AccountStateRetryContext): string[] {
-	const retried = new Set(ctx.retryable.map((item) => item.networkId))
+	const retried = retryNetworkIds(ctx)
 	return ctx.networks.filter((network) => retried.has(network.id)).map((network) => network.name)
-}
-
-/** Whether `log` holds a row a Retry of `ctx` would not replace; with no context, any row. */
-export function hasRowsBeyondRetry(log: Record<string, unknown[]>, ctx: AccountStateRetryContext | null): boolean {
-	const replaced = new Set(ctx ? retryReplacedRows(ctx) : [])
-	// Rows read back through the reactive log are proxies: compare the raw rows.
-	return Object.values(log).some((rows) => rows.some((row) => !replaced.has(toRaw(row))))
 }
 
 function retryWarningRefs(state: ImportRefs) {
@@ -642,38 +582,6 @@ function retryWarningRefs(state: ImportRefs) {
 		}),
 		hasOtherRestoreErrors: computed(() => hasRowsBeyondRetry(state.restoreErrorLog.value, state.accountStateRetry.value)),
 	}
-}
-
-function reportRestoreErrors(serviceName: string, data: unknown): unknown[] {
-	const errors = collectRestoreErrors(serviceName, data) ?? []
-	// Names the service and the count only: the rows carry network ids and addresses, which stay
-	// in the error viewer and never reach the exportable log.
-	if (errors.length) console.warn(`[full-backup-import] ${serviceName} reported ${errors.length} restore error(s)`)
-	return errors
-}
-
-/** The error log's two writers: a stage's append, and a Retry's swap of the rows it replaces. */
-export function errorLogWriters(restoreErrorLog: Ref<Record<string, unknown[]>>) {
-	function recordRestoreErrors(serviceName: string, data: unknown): unknown[] {
-		const errors = reportRestoreErrors(serviceName, data)
-		// APPEND, not assign: some services already have entries recorded before
-		// their restore runs (e.g. token-balance's un-relinkable rows are recorded
-		// pre-restore) — a plain assignment would clobber those diagnostics.
-		if (errors.length) restoreErrorLog.value[serviceName] = [...(restoreErrorLog.value[serviceName] ?? []), ...errors]
-		return errors
-	}
-	/** Swaps `stale` rows for `data`'s in ONE assignment, so the screen never passes through an
-	 *  empty log; an emptied key is deleted, because a key alone counts as an error. */
-	function replaceRestoreErrors(serviceName: string, stale: unknown[], data: unknown): unknown[] {
-		const fresh = reportRestoreErrors(serviceName, data)
-		// Rows read back through the reactive log are proxies: compare the raw rows.
-		const staleRows = new Set(stale.map((row) => toRaw(row)))
-		const { [serviceName]: current = [], ...others } = toRaw(restoreErrorLog.value)
-		const rows = [...current.filter((row) => !staleRows.has(toRaw(row))), ...fresh]
-		restoreErrorLog.value = rows.length ? { ...others, [serviceName]: rows } : others
-		return fresh
-	}
-	return { recordRestoreErrors, replaceRestoreErrors }
 }
 
 function createImportRefs(): ImportRefs {
@@ -721,7 +629,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 			(opts.unlockMethod?.value === "passkey" || isNewPasswordValid(opts.password.value ?? "", opts.repeatedPassword.value ?? "")),
 	)
 
-	const { recordRestoreErrors, replaceRestoreErrors } = errorLogWriters(restoreErrorLog)
+	const { appendErrors, recordRestoreErrors, replaceRestoreErrors } = errorLogWriters(restoreErrorLog)
 
 	const { unrestoredNetworkNames, hasOtherRestoreErrors } = retryWarningRefs(state)
 	const pickBackupFile = () => runPickBackupFile(state, opts)
@@ -730,6 +638,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 		isAllowed: () => isAllowedToImportBackup.value,
 		hasErrors: () => isRestoreHasErrors.value,
 		recordRestoreErrors,
+		appendErrors,
 	}
 	const restoreBackup = () => runRestoreBackup(state, opts, restoreGuards, false)
 	const restoreBackupWithExistingPasskey = async () => {

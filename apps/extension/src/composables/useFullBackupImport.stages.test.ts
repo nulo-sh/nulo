@@ -78,11 +78,17 @@ vi.mock("@/wallet/services/transaction/spec", async (importOriginal) =>
 	(await import("../../tests/helpers/backup-import-harness")).transactionSpecModule(importOriginal),
 )
 vi.mock("@/wallet/storage/migrations", async () => (await import("../../tests/helpers/backup-import-harness")).migrationsModule())
+vi.mock("./full-backup-selection", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./full-backup-selection")>()
+	return { ...actual, openPickedBackup: vi.fn(actual.openPickedBackup) }
+})
 
 // Imported AFTER mocks are registered.
+import { openPickedBackup } from "./full-backup-selection"
 import { useFullBackupImport } from "./useFullBackupImport"
 import { readLiveness } from "@/utils/background-liveness"
 import { FilePickCanceledError } from "@/utils/files"
+import { sealFullBackupText } from "@/utils/full-backup-helpers"
 
 // ── Setup ───────────────────────────────────────────────────────────────────
 
@@ -596,7 +602,7 @@ describe("a passkey profile's body meets the password body's gates", () => {
 })
 
 describe("decrypt publication race — the last await seam", () => {
-	it("a re-pick landing between the helper's final fence and the caller's continuation is NOT overwritten", async () => {
+	it("a re-pick queued while the opened body is checked for an earlier passkey backup is NOT overwritten", async () => {
 		const innerJson = JSON.stringify({ data: { profile: { type: "password", name: "RaceName" } } })
 		const key = await EncryptionKey.fromPassword("pw12345678")
 		const sealed = Buffer.from(await key.encrypt(new TextEncoder().encode(innerJson))).toString("base64")
@@ -608,9 +614,8 @@ describe("decrypt publication race — the last await seam", () => {
 		c.selectedBackup.value = original
 		c.decryptionPassword.value = "pw12345678"
 
-		// The re-pick is queued from the helper's parse of the decrypted body, which runs after its
-		// last stale check and before it returns, so the microtask runs ahead of the caller's
-		// continuation: only the caller's own fence can keep the replacement.
+		// The re-pick is queued from the parse of the decrypted body, after the open's last stale
+		// check: only the check after the earlier-passkey read can keep the replacement.
 		const realParse = JSON.parse
 		const parse = vi.spyOn(JSON, "parse").mockImplementation((text, reviver) => {
 			if (text === innerJson) {
@@ -628,6 +633,34 @@ describe("decrypt publication race — the last await seam", () => {
 		// proxy of the assigned object); the decrypted publication must not land.
 		expect(c.selectedBackup.value).toStrictEqual(replacement)
 		expect(c.parsedBackupName.value).not.toBe("RaceName")
+	})
+
+	it("a re-pick landing after the opened backup's last check, before the caller resumes, is NOT overwritten", async () => {
+		const { openPickedBackup: realOpen } = await vi.importActual<typeof import("./full-backup-selection")>("./full-backup-selection")
+		const innerJson = JSON.stringify({ data: { profile: { type: "password", name: "RaceName" } } })
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		const replacement = { name: "new.json", backup: {}, kind: "plain" as const, profileType: "password" }
+		c.selectedBackup.value = {
+			name: "e.txt",
+			backup: await sealFullBackupText(innerJson, "pw12345678"),
+			kind: "sealed",
+			profileType: null,
+		}
+		c.decryptionPassword.value = "pw12345678"
+		let result: Awaited<ReturnType<typeof realOpen>> | undefined
+		vi.mocked(openPickedBackup).mockImplementationOnce(async (...args) => {
+			result = await realOpen(...args)
+			c.selectedBackup.value = replacement
+			return result
+		})
+
+		await c.decryptBackup()
+
+		expect(result?.kind).toBe("opened")
+		expect(c.selectedBackup.value).toStrictEqual(replacement)
+		expect(c.parsedBackupName.value).not.toBe("RaceName")
+		expect(opts.clearError).not.toHaveBeenCalled()
 	})
 })
 

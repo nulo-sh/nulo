@@ -861,10 +861,15 @@ export interface AccountStateRetryContext {
 	cut: string[]
 }
 
+/** The ids of the networks a Retry of `ctx` replays. */
+export function retryNetworkIds(ctx: AccountStateRetryContext): ReadonlySet<string> {
+	return new Set(ctx.retryable.map((item) => item.networkId))
+}
+
 /** The rows a Retry of `ctx` replaces: the retried networks' outcome rows only. A violation row
  *  records entries the normalizer discarded, which no registration brings back. */
 export function retryReplacedRows(ctx: AccountStateRetryContext): unknown[] {
-	const retried = new Set<unknown>(ctx.retryable.map((item) => item.networkId))
+	const retried: ReadonlySet<unknown> = retryNetworkIds(ctx)
 	return ctx.outcomeRows.filter((row) => retried.has((row as { networkId?: unknown } | null)?.networkId))
 }
 

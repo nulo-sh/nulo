@@ -54,12 +54,17 @@ vi.mock("@/wallet/storage/migrations", async () => {
 	})
 	return { BASELINE_VERSION: 1, realMigrations: [], migrations: [], backupMigrations: [v2] }
 })
+vi.mock("./full-backup-selection", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./full-backup-selection")>()
+	return { ...actual, openPickedBackup: vi.fn(actual.openPickedBackup) }
+})
 
 import { ACCOUNT_STATE_SKIP_DEADLINE, normalizeAccountStateSlice } from "@/wallet/services/account-state/normalize"
 import { sealFullBackupText } from "@/utils/full-backup-helpers"
 import { restoreOutcomeKey } from "@/utils/profile-ui-keys"
 import { armRestoreOutcome, clearRestoreOutcome, finishRestoreOutcome } from "@/utils/restore-outcome"
 import { planRestoreAgain } from "./full-backup-restore"
+import { openPickedBackup } from "./full-backup-selection"
 import { useRestoreAgain } from "./useRestoreAgain"
 
 const KEY = restoreOutcomeKey("p1")
@@ -479,6 +484,32 @@ describe("useRestoreAgain: refusals change nothing", () => {
 		expect(page.selectedBackup.value?.profileType).toBeNull()
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
 		expect(store.get(KEY)).toEqual(before)
+	})
+
+	test("a pick landing after the opened backup's last check, before the page resumes, keeps its selection", async () => {
+		const { page, opts, original } = await open()
+		const { openPickedBackup: realOpen } = await vi.importActual<typeof import("./full-backup-selection")>("./full-backup-selection")
+		const replacement = { name: "new.json", backup: original, kind: "plain" as const, profileType: "password" }
+		page.selectedBackup.value = {
+			name: "b.txt",
+			backup: await sealFullBackupText(JSON.stringify(original), "right password"),
+			kind: "sealed",
+			profileType: null,
+		}
+		page.decryptionPassword.value = "right password"
+		let result: Awaited<ReturnType<typeof realOpen>> | undefined
+		vi.mocked(openPickedBackup).mockImplementationOnce(async (...args) => {
+			result = await realOpen(...args)
+			page.selectedBackup.value = replacement
+			return result
+		})
+
+		await page.decryptBackup()
+
+		expect(result?.kind).toBe("opened")
+		expect(page.selectedBackup.value).toStrictEqual(replacement)
+		expect(opts.clearError).not.toHaveBeenCalled()
+		expect(opts.fillError).not.toHaveBeenCalled()
 	})
 })
 
