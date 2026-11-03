@@ -20,3 +20,6 @@
 - Codex r1 (`gpt-6.1-sol`, high): approve, one comment. Opus r1 (`general-purpose`): conditional approve. Its title finding holds: a raw surface had no `fn`, so `surfaceName` fell back to `call.name`, the dApp's label (`call-surface.ts` `surfaceName`). The worker's selector binding (`assertSelectorBinding`) runs at simulation, not before the window draws. Its right-to-left point holds and is #1380's own consequence; JavaScript has no `Bidi_Class` property escape, so the check uses UAX #9's default R and AL ranges, which hold every assigned R and AL character.
 - Codex r2 (resumed): approve, no new finding; the loop converged at `8bbf0f564`.
 - Network e2e at `8bbf0f564`, retry 0, `type-roles-windows.test.ts` + `authwit-lifecycle.test.ts`: Chrome 6/6 in 327 s; Firefox 6/6 in 583 s. No scenario added.
+- Cross-arc: one fresh Codex session over #1573 and arc 2: approve, no cross-arc finding.
+- Captures: a seed harness from the shots branch (the execute window fed a recorded payload, the real decoder's output and a fixed estimate) applied uncommitted, built with CI's smoke flags, captured on Chrome, then removed; the "before" build swapped in `dev`'s `call-surface.ts` only.
+- Close-out: `## Decision` on #1380, a note on #127 (the queue drops a row a reused id replaced), OA-2 filed as #1644 and OA-3 as #1645 (`owner-decision`, no duplicate found).

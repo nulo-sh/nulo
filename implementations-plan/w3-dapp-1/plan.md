@@ -1,7 +1,7 @@
 ---
 plan: w3-dapp-1
 tier: light
-status: arc 1 merged (#1573); arc 2 in progress (OA-1 answered E)
+status: completed
 issues: "#1460, #1461 (arc 1); #1380 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at ed30c2565
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed, two arcs: #1573 (arc 1) and arc 2, the PR that closes #1380.
+- **Shipped**: #1573 closes #1460 (D1, D2: the newest live locked Connect drains on unlock; a dead or replaced entry leaves the queue) and #1461 (D3: a window closed before `create()` answers settles at once). Arc 2 closes #1380 on OA-1's answer E (D5, D6): the card drops the `str<N>` padding, prints UTF-8 text holding a character past Latin-1 as written, and reads a string it still cannot print whole (a stripped, default-ignorable or right-to-left character, a field past one byte) as unreadable; a call keeps its decoded title and stays approvable, a grant is refused. Each fix proven by tests red on `dev` first.
+- **Known limits**: none.
+- **Dispositions**: rejected, UTF-8 whenever valid (two encodings of Latin-1 text would read alike, D5), today's reading for a field past one byte (the contract reads its low byte), right-to-left text printed as written (it reorders, OA-3), and arc 1's alternatives (§ Architecture).
+- **Lessons**: none promoted: `lessons.md` is at its 8 KiB budget with nothing superseded; the `str<N>` wire facts sit in Findings (c) and at `readWireString`.
+- **Open items**: #1644 (OA-2, Latin-1-only text), #1645 (OA-3, right-to-left text), both `owner-decision`.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # w3-dapp-1: a Connect retried while locked, a window closed early, a stripped string argument
 
@@ -95,7 +106,7 @@ The claims held. Not in the issues: (a) a dApp that resends one `requestId` whil
 
 ## Arc 2: a call string the card cannot print whole (#1380, OA-1 E)
 
-### Phase 2
+### Phase 2 ✓
 
 - **Red first** (one commit): the cases marked Red fail on `origin/dev`.
 - Do D5 and D6 in `call-surface.ts` (it replaces `printsWhole`).
@@ -106,6 +117,7 @@ The claims held. Not in the issues: (a) a dApp that resends one `requestId` whil
   - `OperationCard.wire.test.ts`: the U+202E call shows the notice, its raw toggle and the section open; "€" prints in the decoded row.
   - `index.test.ts`: Confirm stays enabled under an unreadable call; a UTF-8 grant enables it, an unprintable one holds it.
 - **Gate**: `bun run lint`; `bun run typecheck:all`; `bun run --cwd apps/extension test src/popup/windows/execute src/popup/windows/fee --retry=0`; `bun run test:all`; no smoke file opens the execute window (it needs a dApp), so the network files that open it and read its arguments: `NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/type-roles-windows.test.ts tests/e2e/network/authwit-lifecycle.test.ts`, on Chrome and with `NULO_E2E_BROWSER=firefox`. No e2e scenario is added: the reading is pure and the component tests drive the card. Captures: the U+202E call before and after, light, Chrome.
+- **Result** (`0ef779bad` red, `c334716d3` fix, review fixes `8bbf0f564`): lint, typecheck:all, the execute and fee tests (431) and `test:all` exit 0. Red evidence and the mutation check: `lessons/phase-2.md`. Network at retry 0: Chrome 6/6 (327 s), Firefox 6/6 (583 s). Captures: [before](screenshots/a2-before-u202e-details.png), [after at rest](screenshots/a2-after-u202e-rest.png), [after, details](screenshots/a2-after-u202e-details.png), taken through a seed harness that was never committed.
 
 ## Decision ledger
 
@@ -137,6 +149,7 @@ The claims held. Not in the issues: (a) a dApp that resends one `requestId` whil
 | Arc 2 Codex r1 | approve: one comment (the grant gate's non-idempotence) | the comment | none |
 | Arc 2 Opus r1 | conditional approve: an unreadable decode titled by the dApp's label; decomposed Latin-1 drew like the SDK's; UI impact understated the SDK's wide fields and named a section that does not open; a grant test on the UTF-8 strip path; right-to-left reordering | all, the last as A plus OA-3 | the Confirm pin as red evidence (kept as a pin: the window stubs the card); a comment on the cut that never binds (Codex asked for fewer comments there) |
 | Arc 2 Codex r2 (resumed) | approve: no new finding; the right-to-left ranges hold every assigned R, AL and AN character but U+200F (refused as default-ignorable) and no left-to-right one, against Unicode 17 | none | none |
+| Cross-arc (fresh Codex session, both arcs) | approve: no cross-arc finding | none | none |
 | Opus r1 | conditional approve | incoming liveness (1), resend dropped first (2), `debug` levels (3), re-queue (4), detach and the dead fence (5), extraction names (6), test wording and captured outcome (7), F2, F4 (8), OA-1 reach and A plus E (9), `audit:vue` in arc 2 | the badge acknowledgement (ledger); I1 "holds" (kept as disputed, D1 does not depend on it) |
 
 ## Delivery

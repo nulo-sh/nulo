@@ -22,6 +22,8 @@
 
 ## OA-2: text whose every character is Latin-1 has two encodings that read alike (#1380, arc 2)
 
+**Open as #1644** (`owner-decision`).
+
 - **Surface**: the execute window, a call's or a grant's string argument whose text is accented Latin-1 only, such as "José", "café", "Zürich" or "Ñandú".
 - **The ambiguity**: a contract's `str<N>` is bytes, and Noir writes text as UTF-8, so "José" is `4a 6f 73 c3 a9`. The SDK's encoder writes one field per JavaScript character instead, so a dApp passing "José" through it sends `4a 6f 73 e9`. Today the card reads one character per field: the first prints "JosÃ©", the second "José". Read as UTF-8, both would print "José": two different arguments, one text on screen, and only the UTF-8 one is the contract's "José".
 - **Built (A for this case, as the pick's note asks)**: such text keeps today's reading, composed or decomposed ("José" as `e` plus a combining accent draws like the SDK's "José", so it stays bytes too). The SDK's "José" prints "José"; the UTF-8 "José" prints "JosÃ©"; UTF-8 text whose Latin-1 bytes are control characters ("Ñ" is `c3 91`) reads as unreadable, as option A does. Text holding any character beyond Latin-1 has no one-byte twin, so it prints as written: "€", "José — café", "日本", "Ω".
@@ -32,6 +34,8 @@
 - **Recommendation**: keep as built: it keeps every reading the card prints whole today and never shows two arguments as one text.
 
 ## OA-3: right-to-left text (#1380, arc 2)
+
+**Open as #1645** (`owner-decision`).
 
 - **Surface**: the execute window, a call's or a grant's string argument holding Hebrew, Arabic or another right-to-left script.
 - **The risk**: printed as written, right-to-left letters reorder the digits and words around them with no control character: the bytes of `12א34` draw as `34א12`. That is #1380's own consequence, a string read in another order than the contract holds, and today's card never shows it, since its one-character-per-byte reading holds no right-to-left letter.
