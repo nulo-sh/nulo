@@ -1,6 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { computed, ref, type Ref, type ShallowRef, shallowRef, toRaw } from "vue"
-import { EncryptionKey } from "@nulo/wallet-crypto"
+import { computed, ref, type Ref, type ShallowRef, shallowRef } from "vue"
 import { sanitizeString } from "@/utils/string"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
@@ -16,25 +15,21 @@ import { TOKEN_BALANCE_SERVICE_NAME } from "@/wallet/services/token-balance/spec
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { FilePickCanceledError } from "@/utils/files"
+import { type BackupSelection, normalizeAllIds } from "@/utils/full-backup-helpers"
 import {
-	AccountFileNotBackupError,
-	type BackupSelection,
-	collectRestoreErrors,
-	normalizeAllIds,
-	openSelection,
-	readBackupFile,
-	unreadableSelection,
-} from "@/utils/full-backup-helpers"
-import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, isSupportedCompatEpoch } from "@/wallet/services/backup/backup-migration-registry"
-import { maxBackupSchemaVersion, migrateBackupData } from "@/wallet/services/backup/backup-migrator"
+	type BackupProfile,
+	type FullBackupEnvelope,
+	type ValidatedBackup,
+	validateAndMigrateBackup,
+} from "@/wallet/services/backup/trust-gate"
+import { BACKUP_READ_FAILED, decryptSelection, readPickedBackup } from "./full-backup-selection"
+import { errorLogWriters, hasRowsBeyondRetry } from "./restore-error-log"
 import { armRestoreOutcome } from "@/utils/restore-outcome"
 import {
 	accountStateNetworkIds,
 	type AccountStateRetryContext,
 	applyOutcome,
-	type BackupProfile,
 	buildRestoreSecret,
-	type RestoreData,
 	type RestoreIo,
 	type RestoreRun,
 	type RestoreScratch,
@@ -48,10 +43,9 @@ import {
 	restoreTokensStage,
 	refreshRestoredTokensStage,
 	retryAccountStateStage,
-	retryReplacedRows,
+	retryNetworkIds,
 	runRestoreFailurePath,
 	settleHeldAccounts,
-	INTEGRITY_FAILED,
 } from "./full-backup-restore"
 
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
@@ -63,171 +57,6 @@ import { isNewPasswordValid } from "@/utils/password"
 import type { NewProfileUnlock, UnlockMethod } from "@/composables/useNewProfilePasskey"
 import type { NewPasskeyDisplay } from "@/wallet/services/passkey/spec"
 import type { HeldAccount } from "@/components/composite/import/restore-warning"
-
-// Beside the checksum, outside the body it covers, in the backups of passkey profiles made before 1.1.
-const EARLIER_PASSKEY_CHECK_FIELD = "backup-mac"
-
-/** The full-backup envelope: the checksum and the checksum-covered body. */
-export type FullBackupEnvelope = {
-	checksum?: string
-	[EARLIER_PASSKEY_CHECK_FIELD]?: unknown
-	"compat-epoch"?: unknown
-	"backup-schema-version"?: unknown
-	"master-key"?: string
-	"active-chain-id"?: number
-	data: Record<string, unknown>
-}
-
-/** The checksum-stripped body + the migrated slices that survive stage 1. */
-type ValidatedBackup = {
-	data: RestoreData & { profile: BackupProfile }
-	backup: Omit<FullBackupEnvelope, "checksum" | typeof EARLIER_PASSKEY_CHECK_FIELD>
-	/** The verified checksum: it names this exact backup. */
-	checksum: string
-}
-
-type ValidateAndMigrateResult = ({ kind: "ok" } & ValidatedBackup) | { kind: "rejected"; title: string; message: string }
-
-/** A picked file that is no backup the wallet reads. */
-export const UNRECOGNIZED_BACKUP = {
-	title: "Unrecognized Backup File",
-	message: "The selected file is not a valid backup. Please select a correct backup file.",
-} as const
-
-export const DECRYPTION_FAILED = {
-	title: "Decryption Failed",
-	message:
-		"The provided password is incorrect or the backup file is corrupted. Please try again with the correct password or select another file.",
-} as const
-
-/** An encrypted account file picked as a backup, recognised once its password opens it. */
-export const ACCOUNT_FILE_NOT_BACKUP = {
-	title: "Not a Backup File",
-	message: "This is an account file. Import it from Settings > Accounts > Import Account.",
-} as const
-
-const INTEGRITY_REFUSAL = { kind: "rejected", ...INTEGRITY_FAILED } as const
-
-const INCOMPATIBLE_BACKUP = {
-	kind: "rejected",
-	title: "Incompatible backup",
-	message:
-		"This backup was created by an incompatible wallet version and cannot be imported. Re-export a backup from a current version of the wallet.",
-} as const
-
-/** A body a passkey profile made before 1.1 exported: its master opened with the passkey alone,
- *  so no recovery phrase rides beside it, and no build restores it. Compared by identity. */
-export const EARLIER_PASSKEY_BACKUP = {
-	kind: "rejected",
-	title: "Backup from an earlier version",
-	message: "This backup was made by a passkey profile on an earlier version of Nulo, and this version can't restore it.",
-} as const
-
-/** That body by its shape: a passkey body carrying the passkey-sealed key or the passkey check, or
- *  with no recovery phrase. A later passkey body carries the password body's fields; a password body
- *  meets its own gates whatever else it carries. */
-function isEarlierPasskeyBody(fullBackup: FullBackupEnvelope, profile: BackupProfile): boolean {
-	return (
-		profile.type === "passkey" &&
-		(Object.hasOwn(fullBackup, EARLIER_PASSKEY_CHECK_FIELD) ||
-			Object.hasOwn(fullBackup, "imported-keys-dek-sealed") ||
-			typeof (fullBackup as Record<string, unknown>).entropy !== "string")
-	)
-}
-
-/** The restore reads `type` and `name` as the wallet wrote them; `id` is replaced by the service
- *  whenever the wallet would not have generated it. */
-function isBackupProfile(profile: unknown): profile is BackupProfile {
-	if (typeof profile !== "object" || profile === null || Array.isArray(profile)) return false
-	const { type, name } = profile as Record<string, unknown>
-	return (type === "password" || type === "passkey") && typeof name === "string"
-}
-
-/**
- * Stage 1 of the full-backup restore — integrity + compatibility gate,
- * then migrate the verified slices forward, all BEFORE any live state is
- * touched. Deliberately closure-state-free (a pure function of the envelope +
- * the module-level codec/migrator): a `rejected` result carries the exact
- * user-facing title/message the caller surfaces via `fillError`; an `ok` result
- * carries the migrated `data` + the checksum-stripped `backup`. The re-entrancy
- * / permission guard and the `restoreStatus`/`fillError` side effects stay with
- * the caller.
- */
-export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): Promise<ValidateAndMigrateResult> {
-	const { checksum, [EARLIER_PASSKEY_CHECK_FIELD]: _earlierCheck, ...backup } = fullBackup
-
-	// Trust-gate order is deliberate: integrity FIRST — re-serialized exactly as
-	// the exporter hashed it (the exporter also hashed JSON.stringify of the
-	// object, so this IS the exported body) — then the non-migratable
-	// compat-epoch, then the migratable schema-version range. The checksum is
-	// accidental-integrity detection only — a plain backup's checksum is
-	// attacker-recomputable, so nothing downstream may treat it as authentication.
-	let body: string
-	try {
-		body = JSON.stringify(backup)
-	} catch {
-		// A body nested past the engine's stack cannot be re-serialised, so it cannot be verified.
-		return INTEGRITY_REFUSAL
-	}
-	const comparisonChecksum = await EncryptionKey.getHashHex(body)
-	if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL
-
-	// A pre-baseline blob (the legacy conflated `schema-version: 2`, no
-	// `compat-epoch`) fails this gate too — intended fail-closed.
-	if (!isSupportedCompatEpoch(backup[COMPAT_EPOCH_FIELD])) return INCOMPATIBLE_BACKUP
-
-	const backupSchemaVersion = backup[BACKUP_SCHEMA_VERSION_FIELD]
-	if (typeof backupSchemaVersion !== "number" || !Number.isInteger(backupSchemaVersion) || backupSchemaVersion < 1) {
-		return {
-			kind: "rejected",
-			title: "Incompatible backup",
-			message: "This backup does not carry a valid schema version. Re-export a backup from a current version of the wallet.",
-		}
-	}
-	if (backupSchemaVersion > maxBackupSchemaVersion()) {
-		return {
-			kind: "rejected",
-			title: "Backup is too new",
-			message: "This backup was created by a newer version of the wallet. Update the wallet, then import it again.",
-		}
-	}
-
-	// Migrate the verified slices forward BEFORE anything touches live storage:
-	// pure and in-memory, so a failure here rejects the import with ZERO live
-	// state to roll back. The migrated data replaces the parsed slices; the
-	// checksum was already verified over the ORIGINAL bytes and is dropped —
-	// migration is a pure function of verified input, so its output is covered
-	// transitively (never recompute-and-trust a post-migration checksum).
-	// `master-key` is a top-level field, not a slice — it never enters the migrator.
-	const migrationResult = await migrateBackupData({ data: backup.data, backupSchemaVersion })
-	if (migrationResult.kind === "incompatible") {
-		return { kind: "rejected", title: "Incompatible backup", message: migrationResult.reason }
-	}
-	if (migrationResult.kind === "failed") {
-		return {
-			kind: "rejected",
-			title: "Import failed",
-			message: `The backup could not be upgraded to the current format: ${migrationResult.reason}`,
-		}
-	}
-
-	const data = migrationResult.data as RestoreData
-	if (!isBackupProfile(data.profile)) return INTEGRITY_REFUSAL
-	if (isEarlierPasskeyBody(fullBackup, data.profile)) return EARLIER_PASSKEY_BACKUP
-	return { kind: "ok", data: data as ValidatedBackup["data"], backup, checksum: comparisonChecksum }
-}
-
-/** Whether a picked or opened body is one {@link EARLIER_PASSKEY_BACKUP} refuses. Restore and
- *  Restore again ask before they publish the selection, so the refusal shows before any other
- *  control does; the run validates again before it writes. */
-export async function refusedAsEarlierPasskey(backup: unknown): Promise<boolean> {
-	if (typeof backup !== "object" || backup === null || Array.isArray(backup)) return false
-	try {
-		return (await validateAndMigrateBackup(backup as FullBackupEnvelope)) === EARLIER_PASSKEY_BACKUP
-	} catch {
-		return false
-	}
-}
 
 export interface UseFullBackupImportOptions {
 	password: Ref<string>
@@ -586,23 +415,13 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 			state.parsedBackupName.value = null
 			return
 		}
-		const { selection, parseError } = await readBackupFile(file)
-		const refused = selection.kind === "plain" && (await refusedAsEarlierPasskey(selection.backup))
+		const { selection, refusal } = await readPickedBackup(file)
 		if (overtaken()) return
 		// Every selection replaces the previous one's name, a nameless one included.
 		state.parsedBackupName.value = null
-		if (refused) {
-			state.selectedBackup.value = unreadableSelection(selection.name)
-			opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
-			return
-		}
 		state.selectedBackup.value = selection
-		if (parseError) {
-			opts.fillError("full_backup", parseError.title, parseError.tooltip)
-			return
-		}
-		if (selection.kind === "unreadable" || (selection.kind === "plain" && !selection.profileType)) {
-			opts.fillError("full_backup", UNRECOGNIZED_BACKUP.title, UNRECOGNIZED_BACKUP.message)
+		if (refusal) {
+			opts.fillError("full_backup", refusal.title, refusal.message)
 			return
 		}
 		// Surface the backup-embedded profile name as soon as it's available so the parent
@@ -617,50 +436,22 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 	} catch (err) {
 		// A closed chooser keeps the chosen backup, its name and its Retry.
 		if (err instanceof FilePickCanceledError || overtaken()) return
-		opts.fillError("full_backup", "Failed to read the backup file")
+		opts.fillError("full_backup", BACKUP_READ_FAILED)
 		console.error("Failed to read backup file:", { error: err })
 	}
 }
 
-async function runDecryptBackup(state: ImportRefs, opts: UseFullBackupImportOptions) {
-	if (!state.decryptionPassword.value) return
-	// Snapshot the selection this decrypt belongs to (the stale fences live in
-	// openSelection — a late publication must not resurrect a replaced selection).
-	const target = state.selectedBackup.value
-	if (!target) return
-	try {
-		const opened = await openSelection(target, state.decryptionPassword.value, () => state.selectedBackup.value !== target)
-		if (opened.kind === "stale") return
-		const refused = await refusedAsEarlierPasskey(opened.selection.backup)
-		// The helper fences internally, but its resolution yields a microtask before this
-		// continuation — a queued re-pick in that window must not be overwritten (same
-		// await-boundary class as useProfileBootstrap's network write).
-		if (state.selectedBackup.value !== target) return
-		if (refused) {
-			state.selectedBackup.value = unreadableSelection(target.name)
-			opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
-			return
-		}
-		state.selectedBackup.value = opened.selection
-		// Encrypted backups only expose the embedded name AFTER decrypt succeeds. Surface it
-		// for the parent's prefill watcher (same sanitization rationale as pickBackupFile).
-		state.parsedBackupName.value = embeddedBackupName(opened.selection.backup)
-		opts.clearError()
-	} catch (err) {
-		if (state.selectedBackup.value !== target) return
-		if (err instanceof AccountFileNotBackupError) {
-			state.selectedBackup.value = unreadableSelection(target.name)
-			opts.fillError("full_backup", ACCOUNT_FILE_NOT_BACKUP.title, ACCOUNT_FILE_NOT_BACKUP.message)
-			return
-		}
-		opts.fillError("full_backup", DECRYPTION_FAILED.title, DECRYPTION_FAILED.message)
-	}
+function runDecryptBackup(state: ImportRefs, opts: UseFullBackupImportOptions) {
+	// An encrypted backup shows its embedded name only once opened, for the parent's prefill.
+	return decryptSelection(state.selectedBackup, state.decryptionPassword.value, opts, (opened) => {
+		state.parsedBackupName.value = embeddedBackupName(opened.backup)
+	})
 }
 
 async function runRestoreBackup(
 	state: ImportRefs,
 	opts: UseFullBackupImportOptions,
-	guards: { isAllowed: () => boolean; hasErrors: () => boolean; recordRestoreErrors: (serviceName: string, data: unknown) => unknown[] },
+	guards: { isAllowed: () => boolean; hasErrors: () => boolean } & Pick<RestoreIo, "recordRestoreErrors" | "appendErrors">,
 	existing: boolean,
 ) {
 	// Re-entrancy guard: a second concurrent run (double-click, or the popup's
@@ -698,9 +489,7 @@ async function runRestoreBackup(
 			state.restoreStage.value = v
 		},
 		recordRestoreErrors: guards.recordRestoreErrors,
-		appendErrors: (serviceName, records) => {
-			state.restoreErrorLog.value[serviceName] = [...(state.restoreErrorLog.value[serviceName] ?? []), ...records]
-		},
+		appendErrors: guards.appendErrors,
 	}
 
 	try {
@@ -768,15 +557,8 @@ async function runRetryAccountState(
 }
 
 function retryNetworkNames(ctx: AccountStateRetryContext): string[] {
-	const retried = new Set(ctx.retryable.map((item) => item.networkId))
+	const retried = retryNetworkIds(ctx)
 	return ctx.networks.filter((network) => retried.has(network.id)).map((network) => network.name)
-}
-
-/** Whether `log` holds a row a Retry of `ctx` would not replace; with no context, any row. */
-export function hasRowsBeyondRetry(log: Record<string, unknown[]>, ctx: AccountStateRetryContext | null): boolean {
-	const replaced = new Set(ctx ? retryReplacedRows(ctx) : [])
-	// Rows read back through the reactive log are proxies: compare the raw rows.
-	return Object.values(log).some((rows) => rows.some((row) => !replaced.has(toRaw(row))))
 }
 
 function retryWarningRefs(state: ImportRefs) {
@@ -787,38 +569,6 @@ function retryWarningRefs(state: ImportRefs) {
 		}),
 		hasOtherRestoreErrors: computed(() => hasRowsBeyondRetry(state.restoreErrorLog.value, state.accountStateRetry.value)),
 	}
-}
-
-function reportRestoreErrors(serviceName: string, data: unknown): unknown[] {
-	const errors = collectRestoreErrors(serviceName, data) ?? []
-	// Names the service and the count only: the rows carry network ids and addresses, which stay
-	// in the error viewer and never reach the exportable log.
-	if (errors.length) console.warn(`[full-backup-import] ${serviceName} reported ${errors.length} restore error(s)`)
-	return errors
-}
-
-/** The error log's two writers: a stage's append, and a Retry's swap of the rows it replaces. */
-export function errorLogWriters(restoreErrorLog: Ref<Record<string, unknown[]>>) {
-	function recordRestoreErrors(serviceName: string, data: unknown): unknown[] {
-		const errors = reportRestoreErrors(serviceName, data)
-		// APPEND, not assign: some services already have entries recorded before
-		// their restore runs (e.g. token-balance's un-relinkable rows are recorded
-		// pre-restore) — a plain assignment would clobber those diagnostics.
-		if (errors.length) restoreErrorLog.value[serviceName] = [...(restoreErrorLog.value[serviceName] ?? []), ...errors]
-		return errors
-	}
-	/** Swaps `stale` rows for `data`'s in ONE assignment, so the screen never passes through an
-	 *  empty log; an emptied key is deleted, because a key alone counts as an error. */
-	function replaceRestoreErrors(serviceName: string, stale: unknown[], data: unknown): unknown[] {
-		const fresh = reportRestoreErrors(serviceName, data)
-		// Rows read back through the reactive log are proxies: compare the raw rows.
-		const staleRows = new Set(stale.map((row) => toRaw(row)))
-		const { [serviceName]: current = [], ...others } = toRaw(restoreErrorLog.value)
-		const rows = [...current.filter((row) => !staleRows.has(toRaw(row))), ...fresh]
-		restoreErrorLog.value = rows.length ? { ...others, [serviceName]: rows } : others
-		return fresh
-	}
-	return { recordRestoreErrors, replaceRestoreErrors }
 }
 
 function createImportRefs(): ImportRefs {
@@ -866,7 +616,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 			(opts.unlockMethod?.value === "passkey" || isNewPasswordValid(opts.password.value ?? "", opts.repeatedPassword.value ?? "")),
 	)
 
-	const { recordRestoreErrors, replaceRestoreErrors } = errorLogWriters(restoreErrorLog)
+	const { appendErrors, recordRestoreErrors, replaceRestoreErrors } = errorLogWriters(restoreErrorLog)
 
 	const { unrestoredNetworkNames, hasOtherRestoreErrors } = retryWarningRefs(state)
 	const pickBackupFile = () => runPickBackupFile(state, opts)
@@ -875,6 +625,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 		isAllowed: () => isAllowedToImportBackup.value,
 		hasErrors: () => isRestoreHasErrors.value,
 		recordRestoreErrors,
+		appendErrors,
 	}
 	const restoreBackup = () => runRestoreBackup(state, opts, restoreGuards, false)
 	const restoreBackupWithExistingPasskey = async () => {
