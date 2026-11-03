@@ -72,7 +72,7 @@ Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording
 ### Phase 3: review, close-out, final replays, delivery
 1. Run the review loop (§ Post-implementation) over `git diff origin/dev...HEAD`.
 2. Merge `origin/dev`, then read what changed in `index.md` and `lessons.md`. Write the close-out commits (§ Post-implementation).
-3. At that head `H`, confirm the recording's SHA-256 is unchanged. Write `git diff --stat P H -- . ':(exclude)implementations-plan' ':(exclude)apps/extension/tests/e2e/fixtures/update/v1.1.0.storage.json'` to `lessons/phase-3.md`.
+3. At that head `H`, confirm the recording's SHA-256 is unchanged. Write `git diff --stat P H -- . ':(exclude)implementations-plan' ':(exclude)apps/extension/tests/e2e/fixtures/update/v1.1.0.storage.json'` to the PR body (D5).
 4. Rebuild both candidates at `H`. Run Phase 1 step 5 on both browsers. When step 3's diff is not empty, also run Phase 1 steps 3 and 4 without `NULO_E2E_UPDATE_RECORD`. A red at `H` replaces the green at `P` for that run: report it and write it to `OWNER-ASKS.md`; the committed recording still ships.
 5. **Gate:** `bun run lint`; `bun run typecheck:all`; `bun run test:all`; `bun run check:plans` after staging. Pass: exit 0. Step 4's runs count toward Phase 1's two gates. Layers: lint, typecheck, unit, e2e.
 6. Push `H`. Open the PR ready (§ Delivery). `gh pr view <n> --json headRefOid` must equal `H`. Run `gh pr checks <n> --watch` once.
@@ -96,12 +96,15 @@ None. The lane changes one test fixture and touches no screen.
 | D2 | At the PR head `H`: both replays always; both live runs too when a build input moved since `P`; a red at `H` replaces the green at `P` | replays at `H` only (draft); runs at `P` only, with a tree-equality proof | the committed recording at `H`, with `dev` merged in, is what the pre-promote replay reads; an offline replay cannot stand for the live sandbox run on a changed candidate (Codex P2) |
 | D3 | Two outcomes: a valid recording ships even when a later run is red, and that red holds the promote through `OWNER-ASKS.md` | no PR on any red | the recording is valid on its own, and the promote needs it either way; the draft's gates contradicted this (Codex P2) |
 | D4 | After the live red, no diagnostic run with the host declared in an uncommitted edit; file #1636 and ship the recording | the diagnostic (lead's lean) | Codex: the edit changes the guard's acceptance, which "reported, not patched" forbids whatever its label; the fix lane reruns both live runs anyway |
+| D5 | The runs at `H` and the `P..H` diff go to the PR body, not to `lessons/` | a commit after the runs | any commit after the builds moves HEAD off the candidate (F3); the plan's draft asked for `lessons/phase-3.md` |
 
 ## Review verdicts
 
 - **Codex plan audit, round 1** (gpt-6.1-sol, high, read-only): conditional approve, three P2s, all accepted. (1) D2 left candidate drift open: replays alone at `H` cannot stand for the live run on a changed candidate; now both live runs rerun at `H` when a build input moved, and a red at `H` replaces the green at `P`. (2) The draft's gates contradicted D3; now two outcomes, recording delivered and promote ready, and a Chrome live red keeps a written file. (3) The handoff command for the frozen candidate was missing; now in Delivery. Also accepted: copied log excerpts have their URLs replaced. Confirmed sound: D1, the close-out before the PR, and no new path for the provider key.
 - **Round 2** (resumed): conditional approve, one P2, accepted: the "no recording" rule read a red live rerun at `H` as no recording; it now applies only to the recording run at `P`, and a red at `H` ships the committed recording with the blocker.
 - **Round 3** (resumed): **approve**, no remaining finding.
+- **After Phase 1** (resumed): option A over the lead's diagnostic run (D4); two findings to #1636.
+- **Arc review loop, round 1** (fresh session, over the arc diff): `clean`; converged ([lessons/phase-3.md](lessons/phase-3.md)).
 
 ## Delivery
 
