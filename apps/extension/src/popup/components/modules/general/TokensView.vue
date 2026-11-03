@@ -144,18 +144,19 @@ const balanceTasks = useBalanceTasks({
 		return () => scopeGen === atStart
 	},
 })
-const setRowUpdating = (tbId, updating) => {
+/** A row is updating while any of its refreshes is unfinished, whichever task the event names. */
+const syncRowUpdating = (tbId) => {
 	const row = tokenBalances.value.find((tb) => tb.id === tbId)
-	if (row) row.isUpdating = updating
+	if (row) row.isUpdating = balanceTasks.isUpdating(tbId)
 }
 function onTaskCreated(task) {
-	if (balanceTasks.onTaskCreated(task)) setRowUpdating(task.content.tbId, true)
+	if (balanceTasks.onTaskCreated(task)) syncRowUpdating(task.content.tbId)
 }
 function onTaskUpdated(task) {
-	if (balanceTasks.onTaskUpdated(task)) setRowUpdating(task.content.tbId, false)
+	if (balanceTasks.onTaskUpdated(task)) syncRowUpdating(task.content.tbId)
 }
 function onTaskDeleted(task) {
-	if (balanceTasks.onTaskDeleted(task)) setRowUpdating(task.content.tbId, false)
+	if (balanceTasks.onTaskDeleted(task)) syncRowUpdating(task.content.tbId)
 }
 
 // `scopeGen` identifies the current (account, network) scope. The watcher bumps it SYNCHRONOUSLY (before

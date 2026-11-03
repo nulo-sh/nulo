@@ -21,8 +21,7 @@ interface TokenBalanceSnapshotDeps<T> extends TokenBalanceEventRules {
 	/** Captured at run start; a run whose fence is false when it settles lands nothing and arms no
 	 *  retry. For a parent whose own reads or scope changes the run's generation cannot see. */
 	scopeFence?: () => () => boolean
-	/** Applied to each row a read or an event lists; an update that replaces a listed row writes it
-	 *  as received. */
+	/** Applied to each row a read or an event lists. */
 	mapRow?: (row: TokenBalanceInfo) => T
 }
 
@@ -54,7 +53,7 @@ function tokenBalanceEvents<T>(
 	function onBalanceUpdated(tb: TokenBalanceInfo) {
 		if (inActiveScope(tb)) markDirty()
 		const idx = indexOf(tb.id)
-		if (idx !== -1) rows.value[idx] = tb as T
+		if (idx !== -1) rows.value[idx] = mapped(tb)
 	}
 
 	function onBalanceDeleted(tb: TokenBalanceInfo) {

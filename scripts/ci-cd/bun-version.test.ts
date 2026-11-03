@@ -144,11 +144,13 @@ describe("the Bun version", () => {
 				"apps/extension/package.json",
 				"apps/playground/package.json",
 				"infra/subscribe/package.json",
+				"infra/rpc-proxy/package.json",
 				"apps/extension/scripts/e2e/docker-ci-like.sh",
 				PINS,
 				SOURCE_BUILD,
 				"infra/token-list/README.md",
 				"infra/subscribe/README.md",
+				"infra/rpc-proxy/README.md",
 			]),
 		)
 		expect(restatementFindings(files, version)).toEqual([])

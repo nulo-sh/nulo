@@ -94,13 +94,13 @@ export function seedForKind(kind: ChainKind | undefined): DefaultSeed | undefine
 	return kind === undefined ? undefined : DEFAULT_SEEDS.find((s) => s.kind === kind)
 }
 
-/** The largest JSON-RPC batch each provider endpoint accepts, by origin. dRPC's free plan answers a
- *  batch above 3 entries with HTTP 500, and the prover fans one read out per contract in a single
- *  tick. Keyed by literal origin, not read off the seeds, so a row seeded on one of these hosts
- *  keeps its cap after a later build moves the seed. */
+/** The largest JSON-RPC batch each provider endpoint allows, by origin: dRPC's free plan allows 25
+ *  entries (its statement, 2026-11), and the prover fans one read out per contract in a single tick,
+ *  which the client would otherwise send as one batch of up to 100. Keyed by literal origin, not read
+ *  off the seeds, so a row seeded on one of these hosts keeps its cap after a later build moves the seed. */
 const BATCH_CAPS: Readonly<Record<string, number>> = {
-	"https://aztec-mainnet.drpc.org": 3,
-	"https://aztec-testnet.drpc.org": 3,
+	"https://aztec-mainnet.drpc.org": 25,
+	"https://aztec-testnet.drpc.org": 25,
 }
 
 /** The batch cap for `rpcUrl`'s origin; `undefined` leaves the client's own default. */

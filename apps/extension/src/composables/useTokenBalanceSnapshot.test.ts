@@ -184,6 +184,14 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(4)
 	})
 
+	test("an update for a listed id lands through mapRow", async () => {
+		const s = setup({ mapRow: (r) => ({ ...r, mapped: true }) as never })
+		s.client.getTokenBalances.mockResolvedValue([row(1)])
+		await s.snap.fetchTokenBalances()
+		s.snap.onBalanceUpdated({ ...row(1), marker: "moved" } as never)
+		expect(s.rows.value).toEqual([{ ...row(1), marker: "moved", mapped: true }])
+	})
+
 	test("an update for an unseen id waits for the next read, in scope or not", async () => {
 		const s = setup()
 		s.client.getTokenBalances.mockResolvedValue([row(1)])
