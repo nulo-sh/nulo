@@ -2383,21 +2383,17 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			throw new Error("Password is required for password profile")
 		}
 		const key = await this.slotKey(password, credentialData)
-		const opened = await this.codec.openSlots(profile, key)
-		if (!opened) {
-			throw this.notOpened(key, () => new InvalidPasswordError())
-		}
 		let dek: ImportedKeysDek | null = null
 		try {
-			// Pairing check before the session opens: a tamper between restore()
-			// and finalize must not open a session whose recovery phrase is a lie. Inside
-			// the try so a pairing throw still wipes the unsealed buffers.
-			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
-			dek = await this.unsealTrustedDekHoldingLock(id, profile, opened, "finalizeRestore")
-			return await this.openAndWarnIfDegradedHoldingLock(profile, opened.secret, dek)
+			return await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {
+				// Pairing check before the session opens: a tamper between restore()
+				// and finalize must not open a session whose recovery phrase is a lie.
+				await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
+				dek = await this.unsealTrustedDekHoldingLock(id, profile, opened, "finalizeRestore")
+				return await this.openAndWarnIfDegradedHoldingLock(profile, opened.secret, dek)
+			})
 		} finally {
-			// zero buffers after sessionManager has copied.
-			opened.wipe()
+			// After sessionManager has copied it; the frame wiped the slots first.
 			zeroize(dek)
 		}
 	}
