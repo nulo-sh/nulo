@@ -6,14 +6,9 @@
  * `key` and a millisecond `sortKey` for ordering and date grouping.
  */
 import { DateTime } from "luxon"
-import TransactionCard from "./TransactionCard.vue"
-import TransactionTerminalCard from "@/components/composite/activity/TransactionTerminalCard.vue"
-import TransactionIncomingCard from "@/components/composite/activity/TransactionIncomingCard.vue"
+import ActivityRowCard from "./ActivityRowCard.vue"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "@/composables/usePrices"
-import { activityRowRoute } from "@/utils/activity-rows"
-import { buildJournalTerminalCardProps } from "@/utils/journal-state"
-import { buildIncomingCardProps } from "@/utils/received-display"
 
 const props = defineProps({
 	rows: { type: Array, required: true },
@@ -43,14 +38,9 @@ onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
 })
-function incomingCardProps(inc) {
-	return buildIncomingCardProps(inc, props.tokens, prices.tokenFiatLabel)
-}
 
 const tokensById = computed(() => new Map(props.tokens.map((t) => [t.id, t])))
-function terminalCardProps(op) {
-	return buildJournalTerminalCardProps(op, { tokenById: (id) => tokensById.value.get(id), tokens: props.tokens })
-}
+const tokenById = (id) => tokensById.value.get(id)
 </script>
 
 <template>
@@ -61,20 +51,15 @@ function terminalCardProps(op) {
 				<div :class="$style.separator_line" />
 			</Flex>
 
-			<template v-for="row in group.rows" :key="row.key">
-				<TransactionCard v-if="row.type === 'tx'" :tx="row.tx" :tokens="tokens" :to="activityRowRoute(row)" />
-				<TransactionIncomingCard
-					v-else-if="row.type === 'incoming'"
-					v-bind="incomingCardProps(row.inc)"
-					:to="activityRowRoute(row)"
-					:arriving="isArriving?.(row.inc) ?? false"
-				/>
-				<TransactionTerminalCard
-					v-else-if="row.type === 'journal' && terminalCardProps(row.op)"
-					v-bind="terminalCardProps(row.op)"
-					:to="activityRowRoute(row)"
-				/>
-			</template>
+			<ActivityRowCard
+				v-for="row in group.rows"
+				:key="row.key"
+				:row="row"
+				:tokens="tokens"
+				:tokenById="tokenById"
+				:fiatLabel="prices.tokenFiatLabel"
+				:isArriving="isArriving"
+			/>
 		</Flex>
 	</Flex>
 </template>
