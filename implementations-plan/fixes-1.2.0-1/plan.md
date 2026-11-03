@@ -1,7 +1,7 @@
 ---
 plan: fixes-1.2.0-1
 tier: light
-status: phase 1 ✓; review loop next
+status: completed (arc 1 PR to dev, awaiting merge)
 issues: "#1574"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,17 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed, one arc: the PR that carries this close-out, to `dev`.
+- **Shipped**: closes #1574. Every writer of a Home token row's `isUpdating` derives it from the row's unfinished balance tasks: the three task handlers (D1, D2) and the balance update path, which now goes through `mapRow` (D5). Four tests, red at `3b845ef02` first.
+- **Known limits**: #1628 (Holdings dims a failed row during its retry, D4 (b)), #1629 (a task read overtaken by a create event, D4 (c)).
+- **Dispositions**: rejected, dropping the mirrored flag (B), a state-returning composable (C) and a TokensView wrapper around the balance update (D).
+- **Lessons**: none promoted: `lessons.md` holds 8174 of 8192 bytes, and the rule is stated at `syncRowUpdating`.
+- **Open items**: #1627 (a throwing failure write orphans balance tasks, D4 (a)).
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
+
 # fixes-1.2.0-1: Home's refreshing dot stays lit while a newer refresh of the same row runs
 
 Home's Holdings header dot can go out while a row's balance is still being re-read (#1574). One arc, one PR to `dev`. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md).
@@ -27,7 +38,6 @@ Home's Holdings header dot can go out while a row's balance is still being re-re
 - **The browser trigger of the delete path is plausible but unverified.** It needs a finished task for row X retained longer than 60 minutes (`spec.ts:7`), a newer refresh of X in flight while Home shows X, and a task read by another reader (Holdings, `useExecutingTask` on Home's activity list, the balance queue's `getTaskSync`), whose `cleanupStaleTasks` emits the delete (`service.ts:192-227`). Home's own reconnect read re-derives every flag after it lands (TokensView.vue:219-228).
 - **The update path needs two unfinished tasks for one row,** which the balance queue does not produce on its normal paths (recon § Producer). The rule below does not depend on producer order, so it covers both orders at no cost.
 - **A consequence the issue does not name:** `TokenCard`'s `syncFailed` (TokenCard.vue:84) reads the same flag, so on Home a row whose last sync failed shows its failure dim while its retry runs. The same fix covers it.
-- "Holdings' own dot derives from the remaining tasks" holds (holdings.vue:72).
 
 ## Outcome & Quality Bar
 
@@ -40,7 +50,7 @@ Home's Holdings header dot can go out while a row's balance is still being re-re
 - F1. `onTaskCreated` writes `true`, `onTaskUpdated` and `onTaskDeleted` write `false`, through `setRowUpdating` (TokensView.vue:147-159).
 - F2. `useBalanceTasks` drops the event's task by id before it returns; `isUpdating(tbId)` is true while any kept task of that row is unfinished (useBalanceTasks.ts:42-60).
 - F3. `withTaskFlags` (TokensView.vue:166) is the balance snapshot's `mapRow`; the snapshot (`useTokenBalanceSnapshot.ts:100`) and the add event (:45-52) apply it, the update event (:54-58) does not. TokensView is the only caller that passes `mapRow`. The reconnect loop (TokensView.vue:227) derives the flag too.
-- F4. The flag's readers are `anyRefreshing` (TokensView.vue:89) and `TokenCard`'s `syncFailed` (TokenCard.vue:84). `TokenList` forwards the whole row (TokenList.vue:148-163); Holdings' rows lack the flag because holdings.vue never decorates them.
+- F4. The flag's readers are `anyRefreshing` (TokensView.vue:89) and `TokenCard`'s `syncFailed` (TokenCard.vue:84). `TokenList` forwards the whole row (TokenList.vue:148-163); Holdings' rows lack the flag because holdings.vue never decorates them; its dot derives from the remaining tasks, as #1574 says (holdings.vue:72).
 - F5. The task service deletes only finished root tasks past retention, with their subtrees (service.ts:219-235); it cannot finish a parent with unfinished subtasks (service.ts:105-114).
 - F6. The component harness emits task and balance events directly and has `balanceTask`, `balanceRow` and `sectionDot` (TokensView.test.ts:16-50, :120-242).
 - F7. `home-links.test.ts` is a general Home smoke check: it mounts Home's token list and waits for it to settle (`waitForSettledTokens`); it asserts nothing about the dot.
@@ -75,9 +85,8 @@ No change to `useBalanceTasks`, the task service, `TokenCard`, Holdings, storage
 
 ## Security & Adversarial Considerations
 
-- **Surface:** none new. The events come from the wallet's own services over the extension port; the change reads state the view already holds. No storage, message shape, permission or log line changes.
+- **Surface and trust:** none new. The events come from the wallet's own services over the extension port; the change reads state the view already holds, trusting `useBalanceTasks`' list as Holdings and the reconnect path already do (I1 states where it can miss a task). No storage, message shape, permission or log line changes.
 - **What could go wrong:** a row lit for as long as an unfinished task stays kept. The one orphaning path (recon § Producer, plausible but unverified) already lights the row on every Home mount (`withTaskFlags`) and on Holdings at base; this fix does not create it (D4 (a)).
-- **Trust:** the fix trusts `useBalanceTasks`' list, as Holdings and the reconnect path already do; I1 states where that list can miss a task.
 
 ## UI impact
 
@@ -85,11 +94,10 @@ Home's Holdings header dot (`tokens-refreshing`) and a failed row's dim on Home:
 
 ## Phase 1 (arc 1): every Home row writer derives the flag from the remaining tasks ✓
 
-1. Add three tests to `TokensView.test.ts`, describe "TokensView — section refresh dot", rows `[X]`:
+1. Add three tests to `TokensView.test.ts`, describe "TokensView — section refresh dot", rows `[X]`, each ending on its success control (the dot can still go out):
    - T1: old task created then finished, new task created, old task deleted: the dot is lit and the card's `tokenBalance.isUpdating` is `true`; then the new task finishes: the dot is out.
    - T2: old and new tasks created, old finished: the dot is lit; then the new task finishes: the dot is out.
    - T3: a task created, then a balance update for X: the dot is lit and the card's flag is `true`; then the task finishes: the dot is out.
-   Each final assertion is the success control: it proves the dot can still go out.
 2. Add to `useTokenBalanceSnapshot.test.ts` one test: with a `mapRow`, an update for a listed id lands through it.
 3. Run the four tests at this commit: all red. Record the output in `lessons/phase-1.md`.
 4. Make the two changes in Architecture & Implementation. Run them again: green.
@@ -128,6 +136,8 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 |---|---|---|---|
 | 1 | Codex gpt-6.1-sol high | changes-required | (1) the balance update path drops the flag: accepted, demonstrated; fixed in the composable (D5), not the wrapper Codex offered. (2) I1 overstated: accepted; I1 qualified, D4 (c). (3) TokenList forwards the whole row: accepted; F4 and B corrected. (4) home-links proves no dot, e2e is possible with hooks: accepted; F7, I2, D3 narrowed. D4 (a) and (b) homes confirmed. |
 | 2 | Codex gpt-6.1-sol high (resumed) | approve | No new material finding. D5 verified: "writes it as received" documented behaviour preserved through the extraction, not an invariant; callers without `mapRow` are unchanged. |
+| diff 1 | Codex gpt-6.1-sol high + one Opus 5.5 review | clean (Codex); one finding (Opus) | Opus: the balance-update test never checked the update reached the row: accepted, it now asserts the card's `publicBalance` too. |
+| diff 2 | Codex (resumed) | clean | Verified the test fix; no regression. Loop converged. |
 
 ## Seeds (not run; orchestrator-owned)
 
