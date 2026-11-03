@@ -5,3 +5,6 @@
 - 2026-11-03: Codex r1 conditional approve; 5 of 6 accepted, D11 argued back. Token-list tsconfigs stay standalone.
 - 2026-11-03: Opus r1 conditional approve; all 21 findings accepted. Branch fast-forwarded to a0458e21a (#1583 merged). Final Codex pass started.
 - 2026-11-03: Codex r2 conditional approve (gate compares parsed JSON); Codex r3 approve. Plan approved under auto-continue; arc 1 starts.
+- 2026-11-03: arc 1 phase 1 green: lint 0, typecheck:all 0, test:release 344 pass / 7 fail (F7's host reds only); pins green before and after the move.
+- 2026-11-03: arc 1 phase 2 green: lint 0, typecheck:all 0, test:release 346 pass / 7 host reds.
+- 2026-11-03: arc 1 phase 3 green: lint 0, typecheck:all 0, test:release 350 pass / 7 host reds, test:ci-gating 741 pass, audit:vue 0, check:plans 0; audit:dup 1548 clones / 21288 lines against 1548 / 21291 at `a0458e21a`; the eight runners 1990 → 1938 lines, plus 74 in three modules.

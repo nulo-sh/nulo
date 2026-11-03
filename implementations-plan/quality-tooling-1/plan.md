@@ -58,20 +58,20 @@ New modules sit in `scripts/release/` beside `workflow-command.ts`, the preceden
 
 ## Arc 1 (#1454) — branch `worktree-quality-tooling-1`
 
-### Phase 1 — GitHub transport
+### Phase 1 — GitHub transport ✓
 - Move lock-version's IO verbatim out of `main` into exported `realLockIO(repo, token)` (D2).
 - Pin first, green on the base, one commit, with `fetch` and `AbortSignal.timeout` spied (no wait). Prune `deleteTag("v1")` on a 422 `{"message":"Reference does not exist"}` rejects `DELETE git/refs/tags/v1: HTTP 422: Reference does not exist`, sending the bearer, the JSON `Accept`, the version, `redirect: "manual"` and 60 s. Attach `tagCommit("v9")` reads a 404 as `null` and rejects a 500 `{"message":"boom"}` as `GET git/ref/tags/v9: HTTP 500: boom`. Attach `uploadAsset` posts to `uploads.github.com` with the bearer, `Content-Type: application/octet-stream` and 300 s. Attach `downloadAsset` asks with `Accept: application/octet-stream` and `redirect: "manual"`, then follows the 302 with a request that carries no `Authorization`. Lock `read` sends the raw `Accept`, no `redirect` and 60 s, and rejects a 404 `{"message":"Not Found"}` as `GET repos/o/r/contents/bun.lock: HTTP 404: Not Found`. Lock `commit` reads a `STALE_DATA` answer as `false`.
 - Add `github-rest.ts`; route the three runners. `github-rest.test.ts`: one table for `refusal` (JSON message, non-JSON body, query dropped).
 - Add the closure test: from every `scripts/release/*-run.ts`, each import is relative, `node:*` or `bun`.
 - **Gate**: `bun run lint && bun run typecheck:all && bun run test:release`. Pass: the first two exit 0; `test:release` fails only F7's 7 host reds; every pin is green before and after the move.
 
-### Phase 2 — commit-to-PR lookup
+### Phase 2 — commit-to-PR lookup ✓
 - Move both runners' IO verbatim out of `main` into exported `realUnstickIO(repo)` and `realSyncIO(repo)` (D2).
 - Pin first, green on the base, through `fake-gh.ts`: unstick `resolveMergedPr` rejects a non-zero exit with its text, reads empty output as `null`, and skips an associated PR whose `merge_commit_sha` is not the commit; sync `resolveReleasePrMergeSha` reads a non-zero exit as `null` and picks the release PR past an unrelated one.
 - Add `gh-pulls.ts`; route both runners. Open-sync catches `commitPullsText`'s throw alone and returns `null`: today's skip, until OA-1.
 - **Gate**: Phase 1's.
 
-### Phase 3 — store answers and SHASUMS
+### Phase 3 — store answers and SHASUMS ✓
 - Pin first, green on the base: each runner's `realFetch` on a JSON body, a non-JSON body (`json: null`) and a body whose stream fails (rejects); Firefox on a non-JSON 400 from create-version prints RECOVERY, not REJECTED.
 - Add `store-http.ts`; route both runners; the `realFetch` pins move to `store-http.test.ts`. The pinned texts ("HTTP 502 with a non-JSON body", "timed out after", "unexpected failure (…)") stay green unedited.
 - Export `checkShasums`; `store-copy-run.ts` calls it with `[zip]`. New case in `attach-assets-run.test.ts`: a two-line SHASUMS naming a wrong zip reads "does not list exactly the two zips" (D7).
@@ -98,6 +98,9 @@ New modules sit in `scripts/release/` beside `workflow-command.ts`, the preceden
 | D8 | the frozen 0.30.2 digest path stays as it is: one compare line, a path stores no longer serve | exporting two helpers for it (Opus r1) |
 | D9 | 18 configs extend the base; the Workers keep ES2022, so no typecheck accepts anything new; the token-list configs stay standalone (F8, Codex r1); `tsconfig.node.json` (composite, unused, fails `tsc -p` today) stays, noted on #1448 | settling the Workers' floor here; growing `SIGNING_PATHS`; a new issue |
 | D10 | arc 1 first; `w3-ci-1` merged as #1583, so arc 2 has no collision left | one PR for both |
+| Dev1 | the `realFetch` pins stay in the two runner tests: `realFetch` stays per runner and is what they exercise, so no `store-http.test.ts` | moving them (plan text) |
+| Dev2 | Phase 2's verbatim extraction lands with the `gh-pulls.ts` routing in one commit: once a method, Biome scores `resolveReleasePrMergeSha` at 16; the pins ran green on the extraction first (lessons/phase-2.md) | a suppression |
+| Dev3 | `checkShasums`'s `hashed` defaults to both zips, so the three attach callers stay unchanged | a zips list at each caller |
 | D11 | `isolatedModules` joins the base, a named convergence for landing and playground: both transpile per file (Vite's transformer, `bun test`), for which Vite recommends the flag; it only adds diagnostics (some refused code transpiles safely today, Codex r2), changes no emitted byte, and both pass it today | keeping it local in 16 configs (Codex r1); `false` overrides that restate the drift |
 
 ## Audit verdicts
