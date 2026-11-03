@@ -65,7 +65,6 @@ export function isWellFormedQuote(id: string, quote: unknown, now: number): quot
 	return q.providerUpdatedAt === null || (typeof q.providerUpdatedAt === "number" && Number.isFinite(q.providerUpdatedAt))
 }
 
-/** Well-formed, and inside the band of the feed `table` holds for its id. */
 export function isValidQuote(id: string, quote: unknown, now: number, table: PriceTable): quote is PriceQuote {
 	return isWellFormedQuote(id, quote, now) && Object.hasOwn(table, id) && inBand(quote.usd, table[id])
 }
@@ -83,7 +82,6 @@ export function freshQuotes(stored: unknown, now: number): PriceState {
 	return fresh
 }
 
-/** The quotes `table` has a feed for, inside that feed's band. */
 export function withinTable(quotes: PriceState, table: PriceTable): PriceState {
 	return Object.fromEntries(Object.entries(quotes).filter(([id, quote]) => Object.hasOwn(table, id) && inBand(quote.usd, table[id])))
 }

@@ -6,8 +6,8 @@
  * listed token's feed (id, band, ticker); Fee Juice's is the one compiled feed. The request is the
  * table's ids, so it varies with the held list, never with holdings or the network.
  *
- * `min`/`max` is a hard accept-band in USD. Quotes outside it are rejected at write AND read time —
- * a poisoned or garbage response can never enter (or survive in) the cache.
+ * `min`/`max` is a hard accept-band in USD: a quote outside the band of the held list's feed is refused
+ * at write and never served, though a row a later list's narrower band excludes stays stored.
  */
 
 import { FEE_JUICE_PRICE_FEED, FEE_JUICE_PRICE_ID, type PriceFeed, type PriceFeeds, type TokenListEntry, tokenKey } from "@nulo/token-list"

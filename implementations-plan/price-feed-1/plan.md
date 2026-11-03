@@ -160,7 +160,7 @@ list fetch → `readTokenList` (verify, parse wallet, select; feeds attached) �
 - With a list that carries no feeds (today's), a build with this arc shows no fiat for the Testnet stables until the feeds publish: OA-1.
 - `UI impact: none beyond values appearing`, under OA-1's order.
 
-## Phase 1: the format and the wallet
+## Phase 1: the format and the wallet ✓
 
 1. Add `packages/token-list/src/price-feeds.ts`; delete `price-ids.ts`; update `parse.ts`, `index.ts`, `sign.ts`, `README.md`.
 2. Write the `parse.test.ts` and `sign.test.ts` cases of invariants 2 to 8 first; run them red; then implement.
@@ -174,7 +174,7 @@ list fetch → `readTokenList` (verify, parse wallet, select; feeds attached) �
 - Pass: every command exits 0; the new cases are green and were red at the base copy; `snapshot.test.ts` green with the new stamp.
 - Layers: typecheck/lint, unit, component.
 
-## Phase 2: the publisher
+## Phase 2: the publisher ✓
 
 1. Update `summary.ts` and `summary.test.ts`.
 2. Add `price-check.ts` and `test/price-check.test.ts` (injected `fetch`: inside, outside, unknown, oversize body, timeout, redirect; no feed).
@@ -185,7 +185,7 @@ list fetch → `readTokenList` (verify, parse wallet, select; feeds attached) �
 - Pass: every command exits 0.
 - Layers: lint, unit, CI gating.
 
-## Phase 3: docs and the end-to-end gates
+## Phase 3: docs and the end-to-end gates ✓
 
 1. Update `SECURITY.md` (the price posture and "The signer is the asset"), `ARCHITECTURE.md` § Price feed and § Token list, `.claude/skills/e2e-testing/SKILL.md:813-816`, and the comments in `price-map.ts` and `service.ts`.
 2. Run the gates below.
