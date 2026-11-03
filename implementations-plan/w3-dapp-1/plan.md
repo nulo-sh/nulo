@@ -136,6 +136,7 @@ The claims held. Not in the issues: (a) a dApp that resends one `requestId` whil
 | Arc 2 Codex plan r1 | conditional approve: U+034F survives the print check; nested and emoji tests; injectivity holds per `str<N>` and as exact text; comments | all 4 | none (it confirmed A for OA-2, display placement, and a field past 0xFF unreadable against the pinned serde) |
 | Arc 2 Codex r1 | approve: one comment (the grant gate's non-idempotence) | the comment | none |
 | Arc 2 Opus r1 | conditional approve: an unreadable decode titled by the dApp's label; decomposed Latin-1 drew like the SDK's; UI impact understated the SDK's wide fields and named a section that does not open; a grant test on the UTF-8 strip path; right-to-left reordering | all, the last as A plus OA-3 | the Confirm pin as red evidence (kept as a pin: the window stubs the card); a comment on the cut that never binds (Codex asked for fewer comments there) |
+| Arc 2 Codex r2 (resumed) | approve: no new finding; the right-to-left ranges hold every assigned R, AL and AN character but U+200F (refused as default-ignorable) and no left-to-right one, against Unicode 17 | none | none |
 | Opus r1 | conditional approve | incoming liveness (1), resend dropped first (2), `debug` levels (3), re-queue (4), detach and the dead fence (5), extraction names (6), test wording and captured outcome (7), F2, F4 (8), OA-1 reach and A plus E (9), `audit:vue` in arc 2 | the badge acknowledgement (ledger); I1 "holds" (kept as disputed, D1 does not depend on it) |
 
 ## Delivery

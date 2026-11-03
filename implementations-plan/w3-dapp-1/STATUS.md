@@ -11,3 +11,4 @@
 - 2026-11-02: network e2e green at 0dcec23fc: Chrome 5 passed, 1 skipped (221 s); Firefox 6/6 (270 s). Final-head lint, lint:actions, typecheck:all, test:all green. Phase 1 ✓; PR next.
 - 2026-11-03: arc 2 opened on w3-dapp-1-a2 off dev at ea282b7bc; OA-1 answered E; plan widened (D5, D6), OA-2 filed; Codex arc 2 plan r1 conditional approve, all 4 folded.
 - 2026-11-03: arc 2 phase 2 code in (0ef779bad red, c334716d3 fix); test:all green (186 s). Review r1: Codex approve, Opus conditional; fixes 8bbf0f564 (title keeps the decoded name, NFC, right-to-left as A, OA-3 filed); Codex r2 next.
+- 2026-11-03: Codex r2 approve (converged). Network e2e at 8bbf0f564, retry 0: Chrome 6/6 (327 s), Firefox 6/6 (583 s).

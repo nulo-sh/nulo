@@ -18,3 +18,5 @@
 ## Arc 2 review round 1
 
 - Codex r1 (`gpt-6.1-sol`, high): approve, one comment. Opus r1 (`general-purpose`): conditional approve. Its title finding holds: a raw surface had no `fn`, so `surfaceName` fell back to `call.name`, the dApp's label (`call-surface.ts` `surfaceName`). The worker's selector binding (`assertSelectorBinding`) runs at simulation, not before the window draws. Its right-to-left point holds and is #1380's own consequence; JavaScript has no `Bidi_Class` property escape, so the check uses UAX #9's default R and AL ranges, which hold every assigned R and AL character.
+- Codex r2 (resumed): approve, no new finding; the loop converged at `8bbf0f564`.
+- Network e2e at `8bbf0f564`, retry 0, `type-roles-windows.test.ts` + `authwit-lifecycle.test.ts`: Chrome 6/6 in 327 s; Firefox 6/6 in 583 s. No scenario added.
