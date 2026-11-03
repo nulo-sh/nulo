@@ -144,6 +144,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | Arc 1, round 1 | Opus 5.5, diff | approve | four comments: two restating their line or type deleted, one caller reference rewritten, one restated `if` dropped | an async-hook type guard: the TSDoc states the rule |
 | Arc 1, round 2, resumed | Codex `gpt-6.1-sol`, high | approve | none | none |
 | Arc 2, round 1 | Codex `gpt-6.1-sol`, high | conditional approve | three comments: a caller named, a private doc restating its body, a past tense | the hoisted handles' docs: they state the mocks' contracts |
+| Arc 2, round 1 | Opus 5.5, diff | approve | `initNetworks`' doc named a slot read it no longer makes | none; a gap it noted predates the diff: no test tells `app.vue`'s replace dependency from ensure |
+| Arcs 1 and 2, net, round 2 | Codex `gpt-6.1-sol`, high (fresh) | approve | the registry header (history, and a promise a write now breaks); `adoptOwnerless`'s "same dispatch" and the legacy commit's "ONE `set`", both wrong before arc 1 | none |
+| Arcs 1 and 2, net, round 3, resumed | Codex `gpt-6.1-sol`, high | approve | none | none |
 
 ## Seeds (not run; orchestrator-owned)
 
