@@ -8,3 +8,5 @@
   - Run 2, the same tree: `Checked 1028 installs … (no changes)`, then D1 downloaded both browsers itself and the test passed. 2 min 09 s wall-clock.
   - The volumes and both scratch trees were removed afterwards. The trees were root-owned from the container, so a container removed them.
 - Gate: `lint`, `lint:actions`, `typecheck:all`, `test`, `test:all`, `test:ci-gating` (739 pass), and the playground's `test` and `typecheck` all exit 0. `test:release`: the same 7 zip-only reds as in phase 1, which are environmental.
+- Codex loop, round 1 (fresh session) and an Opus diff review in parallel. Both found that the script regex's lookbehind rejected `./scripts/ci-cd/…` and that its character class stopped at a nested `/`. Opus added `$GITHUB_WORKSPACE/`, `../../`, a directory passing `existsSync`, and the untested `${{ }}`/`!=`/case paths in `decided`. Fixed in `2a779dd77`. Each of the two new copy cases was red against its mutation (the old regex; a case-sensitive compare) before the fix was restored.
+- Round 2 (resumed): clean.

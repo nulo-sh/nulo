@@ -6,3 +6,4 @@
 - 2026-11-02: final Codex pass (resumed session): approve. Plan committed; arc 1 next (auto-continue).
 - 2026-11-02: Phase 1 gate green (red at 278d8c981 with the eight expected lines, green at a2b790694); test:release reds are environmental only (no zip on the host; green in a container with zip).
 - 2026-11-02: Phase 2 gate green: red at 2d11315b6, green at 3d435fbcd; host proof Chrome + Firefox pass; Docker runs 1 and 2 pass with no NODE_OPTIONS (run 2: no changes, D1 downloaded). Inference 2 did not hold (host passes on base: link-local IPv6 on docker0); D7 revised, README unchanged.
+- 2026-11-03: Codex loop converged: round 1 findings (regex gap, comments) fixed in 2a779dd77; round 2 clean. Opus diff review folded.

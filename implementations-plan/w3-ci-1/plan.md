@@ -1,7 +1,7 @@
 ---
 plan: w3-ci-1
 tier: light
-status: phases 1 and 2 green; Codex fix loop next
+status: phases 1 and 2 green; Codex loop converged (round 2 clean); PR next
 issues: "#1419, #1493"
 driver: claude-code
 claude_model: opus
@@ -215,6 +215,9 @@ Over the light tier's 150-line target. The panel's conditions added a host base 
 | Plan 1 | Codex `gpt-6.1-sol`, high | conditional approve | KL-1, with the Outcome and Security narrowed; Docker run 2 with no browser cache; no browser volume (persistent state); eight red lines; copies checked against the live findings; host base run first; proven and expected configurations kept apart | none |
 | Plan 1 | Opus 5.5, Plan | conditional approve | Docker proof reaches D1; D4 decides on bound strings only, ignoring case, plus copy (iv); missing `action.yml` or script is an error; regex anchored; threat model guards against drift and no longer says "narrower"; Fact 7; the transpiler-cache run; comment at `:855-859`; `CI.md` says exact | Moving the draft-flag test onto the derived scripts: out of scope (D6) |
 | Plan 2, resumed | Codex `gpt-6.1-sol`, high | approve | the fold checked against the code and the CLI's output format; no material finding | none |
+| Arc 1, round 1 | Codex `gpt-6.1-sol`, high | findings | A run line naming `./scripts/ci-cd/…` went underived: any prefix and the whole nested path now match, an unreadable mention throws, and a copy case pins it; a redundant comment deleted | none |
+| Arc 1, round 1 | Opus 5.5, diff review | findings | The same regex gap, plus `$GITHUB_WORKSPACE/`, `../../` and subdirectories, and a directory accepted as a script; a copy case for `${{ }}`, `!=` and case; duplicate rationale comments trimmed; vite.config's comment no longer says "every client"; KL-1's reopening text names the test | `.github/` paths in `run:` lines: none reached, and they would need glob reconciliation, outside D3. A README change for by-hand playground runs during rollout: plausible, transient |
+| Arc 1, round 2 | Codex, resumed | clean | the fixes probed in memory: prefixes, nested paths, unresolved names, directories, the wrapped condition | none |
 
 ## Seeds (not run; orchestrator-owned)
 
