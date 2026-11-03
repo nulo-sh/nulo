@@ -77,7 +77,7 @@ import { MAX_WAIT_MS, type SendSequencer, type SequenceScope, type SequenceTicke
 import { probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { type FeeEstimate, finalizeGasLimits, type OnBuilt, suggestGasLimits } from "./fee/fee-strategy"
-import type { OperationPlanner } from "./operation-planner"
+import { gasFeeOptionsOf, type OperationPlanner } from "./operation-planner"
 import type {
 	Action,
 	AztecSendTxOperation,
@@ -1334,22 +1334,9 @@ export class DappSendExecutor {
 		// NO_FROM is enforced to use embedded payment, so `embeddedFeePayment` is
 		// set explicitly here (the planner-built path infers it) — that is what
 		// gates `applyEmbeddedFpcGasCap`; see the helper's JSDoc for the cap rationale.
-		const maxFeesUpstream = op.opts.fee?.gasSettings?.maxFeesPerGas
-		const maxPriorityFeesUpstream = op.opts.fee?.gasSettings?.maxPriorityFeesPerGas
 		const feeOpts: FeeOptions = {
 			embeddedFeePayment: detectEmbeddedFeePayment(op.exec?.feePayer, op.opts.from, op.exec?.calls) ?? "fpc",
-			gasLimits: op.opts.fee?.gasSettings?.gasLimits,
-			teardownGasLimits: op.opts.fee?.gasSettings?.teardownGasLimits,
-			maxFeesPerGas: maxFeesUpstream
-				? { feePerDaGas: maxFeesUpstream.feePerDaGas.toString(), feePerL2Gas: maxFeesUpstream.feePerL2Gas.toString() }
-				: undefined,
-			maxPriorityFeesPerGas: maxPriorityFeesUpstream
-				? {
-						feePerDaGas: maxPriorityFeesUpstream.feePerDaGas.toString(),
-						feePerL2Gas: maxPriorityFeesUpstream.feePerL2Gas.toString(),
-					}
-				: undefined,
-			gasPadding: 1,
+			...gasFeeOptionsOf(op.opts.fee?.gasSettings),
 		}
 		suggestGasLimits(txRequest, feeOpts)
 		await applyEmbeddedFpcGasCap(txRequest, feeOpts, node)
