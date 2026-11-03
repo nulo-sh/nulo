@@ -98,8 +98,8 @@ const DEK_UNRECOVERABLE_MESSAGE =
 
 /** A path's refusal of a password that does not open the row. */
 const invalidPassword = (): Error => new InvalidPasswordError()
-/** The legacy refusal of a wrong password at a password change and a phrase export, identity-stable:
- *  the change-password UI matches its exact text for its wrong-password branch. */
+/** The legacy refusal of a wrong password at a password change and a phrase export, identity-stable
+ *  and pinned by the integration suite: the change-password UI matches its exact text. */
 const invalidOldPassword = (): Error => new Error("Invalid profile old password")
 
 /** The unlock-type gate of `snapshotForUnlock`: a retired row first, then the other stored type by
@@ -1948,11 +1948,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// An export asks for its credential again, so an empty one is a missing one here.
 			if (!password && !credentialData) throw new Error("Password is required")
 			const key = await this.slotKey(password, credentialData)
-			const opened = await this.codec.openSlots(profile, key)
-			try {
-				if (!opened) {
-					throw this.notOpened(key, () => new InvalidPasswordError())
-				}
+			return await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {
 				// Revalidate AFTER the slow unseal: a delete that completed DURING
 				// derivation — even fully (row gone, reservation released) — must
 				// not still hand back the now-erased profile's master secret.
@@ -1966,11 +1962,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				// Backup `master-key` semantics: ALWAYS the derived master, never entropy —
 				// restore() seals this value verbatim as the working master.
 				return toBase64(opened.secret)
-			} finally {
-				// zero secrets after base64-encode escapes (the base64
-				// string is the wire format; we can't zero strings).
-				opened?.wipe()
-			}
+			})
 		} catch (error) {
 			if (error instanceof InvalidPasswordError || error instanceof PasskeyNotOpenedError) {
 				this.logDebug("Export refused its credential", { error })
@@ -1998,37 +1990,34 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		const key = await this.slotKey(password, credentialData)
-		const opened = await this.codec.openSlots(profile, key)
 		let sourceDek: ImportedKeysDek | null = null
 		let handedOver = false
 		try {
-			if (!opened) {
-				throw this.notOpened(key, () => new InvalidPasswordError())
-			}
-			if (await this.profileFenceBroken(id, capturedEpoch)) {
-				throw new Error("Invalid profile id")
-			}
-			// Pairing check before EXPORT: a backup built from a tampered/
-			// transplanted row would otherwise report success with an unrestorable pair.
-			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
-			// DELIBERATELY opens the slot even when the envelope MAC no longer covers the row, unlike
-			// every path that puts the DEK to work: a planted DEK opens none of this profile's rows,
-			// which then travel unopened into the restore's orphan taxonomy, while refusing would
-			// strand a MAC-corrupted profile whose only non-destructive repair is this backup.
-			sourceDek = await opened.openDek(profile.dekSealed)
-			if (!sourceDek) {
-				this.logger.log(this.name, LogLevel.Warn, "imported-keys DEK unrecoverable at export — rows travel unopened", id)
-			}
-			const material = {
-				masterKey: toBase64(opened.secret),
-				entropy: toBase64(opened.entropy),
-				sourceDek,
-				transferKey: generateImportedKeysDek(),
-			}
-			handedOver = true
-			return material
+			return await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {
+				if (await this.profileFenceBroken(id, capturedEpoch)) {
+					throw new Error("Invalid profile id")
+				}
+				// Pairing check before EXPORT: a backup built from a tampered/
+				// transplanted row would otherwise report success with an unrestorable pair.
+				await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
+				// DELIBERATELY opens the slot even when the envelope MAC no longer covers the row, unlike
+				// every path that puts the DEK to work: a planted DEK opens none of this profile's rows,
+				// which then travel unopened into the restore's orphan taxonomy, while refusing would
+				// strand a MAC-corrupted profile whose only non-destructive repair is this backup.
+				sourceDek = await opened.openDek(profile.dekSealed)
+				if (!sourceDek) {
+					this.logger.log(this.name, LogLevel.Warn, "imported-keys DEK unrecoverable at export — rows travel unopened", id)
+				}
+				const material = {
+					masterKey: toBase64(opened.secret),
+					entropy: toBase64(opened.entropy),
+					sourceDek,
+					transferKey: generateImportedKeysDek(),
+				}
+				handedOver = true
+				return material
+			})
 		} finally {
-			opened?.wipe()
 			if (!handedOver) zeroize(sourceDek)
 		}
 	}
@@ -2041,11 +2030,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		const key = await this.slotKey(password, credentialData)
 		// Authenticate via the guard round-trip (full unseal), THEN open the DEK slot.
-		const opened = await this.codec.openSlots(profile, key)
-		try {
-			if (!opened) {
-				throw this.notOpened(key, () => new InvalidPasswordError())
-			}
+		return await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {
 			if (await this.profileFenceBroken(id, capturedEpoch)) {
 				throw new Error("Invalid profile id")
 			}
@@ -2058,9 +2043,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				throw new Error("Imported-keys key unrecoverable")
 			}
 			return dek
-		} finally {
-			opened?.wipe()
-		}
+		})
 	}
 
 	/** The session's imported-keys DEK (a COPY — caller zeroizes), or `undefined` for a degraded
@@ -2078,14 +2061,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		const key = await this.slotKey(password, credentialData)
-		const opened = await this.codec.openSlots(profile, key)
-		try {
-			if (!opened) {
-				// Legacy identity-stable message, pinned by the integration suite — kept in
-				// lockstep with changeProfilePassword's, whose exact string the
-				// change-password UI matches for its wrong-password branch.
-				throw this.notOpened(key, () => new Error("Invalid profile old password"))
-			}
+		return await this.codec.withOpenedSlots(profile, key, invalidOldPassword, async (opened) => {
 			// The recovery words come from the STORED ENTROPY (the master derives one-way from
 			// them and cannot be reversed). Pairing check before the words are ever revealed:
 			// words that no longer derive the stored master would point at a DIFFERENT wallet —
@@ -2100,13 +2076,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				}
 			})
 			return mnemonic
-		} finally {
-			// zero secrets after mnemonic words derived. The mnemonic
-			// is itself sensitive (the user shows it on screen), but
-			// zeroing the underlying buffers at least closes the
-			// in-memory window.
-			opened?.wipe()
-		}
+		})
 	}
 
 	/**
