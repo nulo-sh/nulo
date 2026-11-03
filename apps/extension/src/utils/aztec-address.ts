@@ -29,14 +29,11 @@ export function isValidAztecAddress(hex: string): boolean {
 
 const EDGE = /^[\p{White_Space}\p{Default_Ignorable_Code_Point}]$/u
 
-/**
- * `text` without the white space and default-ignorable code points at its two ends, when what is
- * left is an address `isValidAztecAddress` accepts, unchanged in case; undefined otherwise. Nothing
- * inside is removed, so padding or joiners that make one value read as another are refused, never
- * reinterpreted.
- */
+/** `text` less the white space and default-ignorable code points at its two ends, when that is a valid
+ *  address, case kept; else undefined. The result is always an unaltered slice of `text`. */
 export function bareAztecAddress(text: string): string | undefined {
-	// Code points, so an edge character outside the BMP goes whole; one pass each way keeps it linear.
+	// By code point, so an edge character outside the BMP goes whole; a `[…]+$` regex would backtrack
+	// quadratically on a long run of padding.
 	const chars = Array.from(text)
 	let start = 0
 	let end = chars.length

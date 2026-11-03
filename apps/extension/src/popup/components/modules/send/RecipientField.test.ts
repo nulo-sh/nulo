@@ -1,11 +1,3 @@
-/**
- * Locks the recipient contract for RecipientField after the P3 card redesign:
- *   - the `vault` icon is gone everywhere (suffix + suggestions)
- *   - suggestion rows render an <AccountAvatar> (initials), no vault fallback
- *   - a selected recipient renders the <RecipientCard> (masked addr + reveal),
- *     replacing the typing input
- *   - the card's `change` action clears the selection and restores the input
- */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { nextTick } from "vue"
@@ -185,7 +177,7 @@ describe("modules/send/RecipientField", () => {
 					await input.setValue(`${char}${usdc}${char}`)
 					expect((input.element as HTMLInputElement).value).toBe(usdc)
 					expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([usdc])
-					await typeAndLeave(w, `${usdc}${char}`)
+					expect((await typeAndLeave(w, `${usdc}${char}`)).value).toBe(usdc)
 					expect(hint(w)).toBe(false)
 				},
 			)

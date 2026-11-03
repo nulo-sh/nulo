@@ -66,7 +66,7 @@ const activeIndex = computed(() => (showSuggestions.value ? shownContacts.value.
 const activeId = computed(() => (activeIndex.value >= 0 ? optionId(activeIndex.value) : undefined))
 /** Keyed by candidate and address, so a row a held press is on is never rebound to another destination. */
 const rowKey = (c) => (c.id === undefined ? `account:${c.address}` : `contact:${c.id}:${c.address}`)
-/** A pasted address keeps nothing at its two ends; any other text keeps its spaces, as a name may hold one. */
+/** An address keeps nothing at its two ends; any other text keeps its spaces, as a name may hold one. */
 const normalizeRecipient = (text) => {
 	const kept = stripBidiAndZeroWidth(text)
 	return bareAztecAddress(kept) ?? kept

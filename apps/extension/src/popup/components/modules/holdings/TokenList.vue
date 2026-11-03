@@ -9,7 +9,7 @@ import { SectionLabel } from "@nulo/design"
 import ListStatusMessage from "@/components/composite/ListStatusMessage.vue"
 import SearchField from "@/components/composite/SearchField.vue"
 import TokenCard from "@/popup/components/modules/general/TokenCard.vue"
-import { bareAztecAddress } from "@/utils/aztec-address"
+import { isValidAztecAddress } from "@/utils/aztec-address"
 import { usdThresholdToMicro } from "@/utils/incoming-dust"
 import { stringCompare, trimAddress } from "@/utils/string"
 import { foldLabel, isHiddenHolding } from "@/utils/token-fold"
@@ -50,9 +50,7 @@ const showHidden = ref(false)
 const ctx = computed<OrderCtx<Row>>(() => ({ pinnedContracts: props.pinnedContracts, fiatOf: props.fiatOf }))
 const thresholdMicro = computed(() => usdThresholdToMicro(props.dustThresholdUsd))
 
-/** A pasted address without what pads its ends, so its row and the add offer read the same address. */
-const pastedAddress = computed(() => bareAztecAddress(query.value))
-const matching = computed(() => props.rows.filter((tb) => matchesQuery(tb.token, pastedAddress.value ?? query.value)))
+const matching = computed(() => props.rows.filter((tb) => matchesQuery(tb.token, query.value)))
 
 /** Value order comes from the shared comparator; name order is plain, with pins still first. */
 const ordered = computed(() => {
@@ -94,7 +92,10 @@ const foldText = computed(() =>
 const showDivider = computed(() => partition.value.pinned.length > 0 && partition.value.rest.length > 0)
 /** A pasted address no row matches. Stricter than the New token popup's hex check: a value that is
  *  no curve point gets the no-results line, never an add offer. */
-const addCandidate = computed(() => (matching.value.length === 0 ? pastedAddress.value : undefined))
+const addCandidate = computed(() => {
+	const q = query.value.trim()
+	return matching.value.length === 0 && isValidAztecAddress(q) ? q : undefined
+})
 const addFlagged = computed(() => addCandidate.value !== undefined && props.isFlagged(addCandidate.value))
 const noResults = computed(() => query.value.trim() !== "" && matching.value.length === 0)
 const visibleCount = computed(() => matching.value.length)

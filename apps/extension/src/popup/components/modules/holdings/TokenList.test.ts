@@ -258,10 +258,12 @@ describe("TokenList — add a pasted address", () => {
 
 	describe("pasted with white space or a joiner at its ends", () => {
 		const zwj = "\u200D"
+		const field = (w: ReturnType<typeof mountList>) => w.find('[data-testid="holdings-search"]').element as HTMLInputElement
 
-		test("an unlisted address offers to add the bare address", async () => {
+		test("an unlisted address offers to add the bare address, and the field holds the address", async () => {
 			const w = mountList({ rows: listed() })
 			await setQuery(w, `\u00A0${UNLISTED}${zwj}`)
+			expect(field(w).value).toBe(UNLISTED)
 			expect(w.find('[data-testid="holdings-no-results"]').exists()).toBe(false)
 			await w.get('[data-testid="holdings-add-token"]').trigger("click")
 			expect(w.emitted("addToken")).toEqual([[UNLISTED]])

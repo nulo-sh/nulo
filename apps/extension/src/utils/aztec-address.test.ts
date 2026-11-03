@@ -88,6 +88,7 @@ describe("bareAztecAddress", () => {
 		["a visible character at an edge", `${TEST_USDC}.`],
 		["a combining mark at an edge", `${TEST_USDC}${cp(0x301)}`],
 		["fullwidth digits", TEST_USDC.replace(/[0-9]/g, (d) => cp(0xff10 + Number(d)))],
+		["a Cyrillic look-alike letter", TEST_USDC.replace("a", cp(0x430))],
 		["two addresses", `${TEST_USDC} ${KAT_ACCOUNT}`],
 		["hex off the curve", ` ${OFF_CURVE}${cp(0x200d)}`],
 		["a name", "Alice "],
