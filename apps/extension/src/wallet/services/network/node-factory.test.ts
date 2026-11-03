@@ -7,7 +7,7 @@ afterEach(() => {
 	vi.unstubAllGlobals()
 })
 
-test("the wallet's node factory sends the Mainnet default no request of more than 3 entries", async () => {
+test("the wallet's node factory sends the Mainnet default no request of more than 25 entries", async () => {
 	const mainnet = seedForKind("mainnet")
 	if (!mainnet) throw new Error("this build seeds no Mainnet network")
 	const fetch = vi.fn(async (_url: string, init: RequestInit) => {
@@ -16,6 +16,6 @@ test("the wallet's node factory sends the Mainnet default no request of more tha
 	})
 	vi.stubGlobal("fetch", fetch)
 	const node: AztecNode = createWalletNodeFactory().createNode(mainnet.rpcUrl)
-	await Promise.all(Array.from({ length: 8 }, () => node.getBlockNumber()))
-	expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([3, 3, 2])
+	await Promise.all(Array.from({ length: 60 }, () => node.getBlockNumber()))
+	expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([25, 25, 10])
 })
