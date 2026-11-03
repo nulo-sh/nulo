@@ -57,6 +57,7 @@ const SELECTORS = new Map([
 	["transfer_public_to_commitment", "0xd427610c"],
 	["transfer_private_to_public_with_commitment", "0x398c27b4"],
 	["exit_to_l1_public", "0xfd157a1f"],
+	["set_memo", "0x5e7a3e30"],
 ])
 vi.spyOn(FunctionSelector, "fromNameAndParameters").mockImplementation(async (name) =>
 	FunctionSelector.fromString(SELECTORS.get(name) ?? "0x00000000"),
@@ -239,5 +240,52 @@ describe("OperationCard — a call as the wire carries it", () => {
 		expect(one(padded, "execute-op-unverified-args").attributes("data-reason")).toBe("arguments")
 		expect(one(padded, "execute-op-unverified-warning").text()).toContain("Can't read the arguments")
 		expect(decodedNames(padded)).toEqual([])
+	})
+
+	describe("a `str<12>` memo, its fields one byte each", () => {
+		const transfer = TOKEN_ARTIFACT.functions.find((f) => f.name === "transfer_private_to_private")
+		const MEMOS = {
+			...TOKEN_ARTIFACT,
+			name: "Memos",
+			functions: [
+				{
+					...transfer,
+					name: "set_memo",
+					parameters: [{ name: "memo", type: { kind: "string", length: 12 }, visibility: "private" }],
+				},
+			],
+			nonDispatchPublicFunctions: [],
+		} as ContractArtifact
+		const memo = (units: number[]) =>
+			mountCard(
+				sendTx(
+					callOf(
+						"set_memo",
+						[...units, ...Array<number>(12 - units.length).fill(0)].map((u) => field(BigInt(u))),
+					),
+				),
+				{
+					tokens: [],
+					artifact: MEMOS,
+				},
+			)
+
+		test("one holding U+202E shows the notice, the advice and its raw fields, never the stripped text", async () => {
+			const w = await memo([0x70, 0x61, 0x79, 0x202e, 0x65, 0x76, 0x69, 0x6c])
+			expect(intentKind(w)).toBe("raw")
+			expect(one(w, "execute-op-summary-unverified-args").attributes("data-reason")).toBe("arguments")
+			expect(one(w, "execute-op-unverified-args").attributes("data-reason")).toBe("arguments")
+			expect(one(w, "execute-op-unverified-warning").text()).toBe("Can't read the arguments")
+			expect(one(w, "execute-op-summary-unverified-advice").exists()).toBe(true)
+			expect(one(w, "execute-op-raw-toggle").text()).toContain("Show 12 raw values")
+			expect(w.text()).not.toContain("payevil")
+		})
+
+		test("one in UTF-8 text with a euro sign prints as written", async () => {
+			const w = await memo([...new TextEncoder().encode("Total 5 €")])
+			expect(intentKind(w)).toBe("decoded")
+			expect(one(w, "execute-op-decoded-param-value").text()).toBe("Total 5 €")
+			expect(one(w, "execute-op-unverified-args").exists()).toBe(false)
+		})
 	})
 })
