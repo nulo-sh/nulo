@@ -129,6 +129,18 @@ describe("usdMicroToTokenAmount / usdToTokenAmount (C3 inverse, round-DOWN)", ()
 	})
 })
 
+describe("the lowest band a list feed may name", () => {
+	test("at $0.0001 the snapped rate is within 0.5% of the quote for display and 1% for dollar entry", async () => {
+		const { rateToMicroUsdCeil } = await import("./convert")
+		const { MIN_FEED_USD } = await import("@nulo/token-list")
+		for (const usd of [MIN_FEED_USD, 0.000_149_99, 0.000_150_01, 0.000_199_9]) {
+			const micro = usd * 1_000_000
+			expect(Math.abs(Number(rateToMicroUsd(usd)) - micro) / micro).toBeLessThanOrEqual(0.005)
+			expect((Number(rateToMicroUsdCeil(usd)) - micro) / micro).toBeLessThan(0.01)
+		}
+	})
+})
+
 describe("ceil rate + machine formatting", () => {
 	test("the C3 inverse uses a CEILED rate: sub-micro rates never yield extra tokens", async () => {
 		const { rateToMicroUsdCeil, usdMicroToTokenAmount } = await import("./convert")

@@ -265,6 +265,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [port-client-connect](port-client-connect/plan.md) — completed — a synchronous port-open failure rejects at once with a typed error, and nothing retries
 - [prerelease-rollout](prerelease-rollout/plan.md) — completed — release-candidate tags cut from dev beside the stable release flow
 - [presto-migration](presto-migration/plan.md) — completed — Presto replaces the Aztec Accelerator, and the wallet reports where a proof ran
+- [price-feed-1](price-feed-1/plan.md) — completed — the signed token list carries each token's price feed; the wallet stops compiling an allowlist (#1605)
 - [primitive-adoption-closure](primitive-adoption-closure/plan.md) — completed — the alarm dispatcher and shared row helpers adopted where code was already identical
 - [private-fuel-fee-fix](private-fuel-fee-fix/plan.md) — completed — the private fuel claim's budget-check revert fixed in the wallet and the bridge's numbers
 - [private-transfer-row](private-transfer-row/plan.md) — completed — one list of authwit nonce names for the approval card and the wallet's transfer matching

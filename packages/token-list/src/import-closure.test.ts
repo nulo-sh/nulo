@@ -51,7 +51,7 @@ describe("signing import closure", () => {
 			"envelope.ts",
 			"keys.ts",
 			"parse.ts",
-			"price-ids.ts",
+			"price-feeds.ts",
 			"sign-cli.ts",
 			"sign.ts",
 		])

@@ -16,15 +16,25 @@ import {
 	publishPrs,
 	runPublish,
 } from "../scripts/open-publish-pr"
-import { flagDiff, publishedList, REPO_ROOT, renderDiff, renderFlagDiff, SIGNING_PATHS, tokenDiff } from "../scripts/summary"
+import {
+	feedDiff,
+	flagDiff,
+	publishedList,
+	REPO_ROOT,
+	renderDiff,
+	renderFeedDiff,
+	renderFlagDiff,
+	SIGNING_PATHS,
+	tokenDiff,
+} from "../scripts/summary"
 
 const b64url = (text: string) => btoa(text).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "")
-const envelopeFor = (sequence: number, tokens: unknown[] = [], flagged?: unknown[]) =>
+const envelopeFor = (sequence: number, tokens: unknown[] = [], flagged?: unknown[], priceFeeds?: unknown) =>
 	`${JSON.stringify(
 		{
 			format: "nulo-token-list-envelope/1",
 			keyId: "nulo-ci-1",
-			payload: b64url(JSON.stringify({ sequence, tokens, flagged })),
+			payload: b64url(JSON.stringify({ sequence, tokens, flagged, priceFeeds })),
 			signature: "x",
 		},
 		null,
@@ -480,10 +490,31 @@ describe("the prepare summary", () => {
 		expect(renderFlagDiff(flagDiff([pair(1)], [pair(1)]))).toBe("No flag changes against the served list.\n")
 	})
 
-	test("reads the served envelope's tokens and flags, and none before the first publish", () => {
+	test("diffs price feeds by id, a changed record as was and now, and escapes each cell", () => {
+		const usd = { min: 0.2, max: 5, ticker: "USDC" }
+		const diff = feedDiff(
+			{ "usd-coin": usd, tether: { ...usd, ticker: "USDT" } },
+			{ "usd-coin": { ...usd, max: 2 }, weth: { min: 100, max: 50_000, ticker: "WETH" } },
+		)
+		expect(renderFeedDiff(diff).split("\n").slice(0, 6)).toEqual([
+			"| | price id | min | max | ticker |",
+			"|---|---|---|---|---|",
+			"| + | weth | 100 | 50000 | WETH |",
+			"| − | tether | 0.2 | 5 | USDT |",
+			"| was | usd\\-coin | 0.2 | 5 | USDC |",
+			"| now | usd\\-coin | 0.2 | 2 | USDC |",
+		])
+		expect(renderFeedDiff(feedDiff({ "usd-coin": usd }, { "usd-coin": { ...usd } }))).toBe(
+			"No price feed changes against the served list.\n",
+		)
+	})
+
+	test("reads the served envelope's tokens, flags and feeds, and none before the first publish", () => {
 		const flagged = [{ chainId: 1, address: token(9).address }]
-		expect(publishedList(undefined)).toEqual({ tokens: [], flagged: [] })
-		expect(publishedList(envelopeFor(5, [token(4)]))).toEqual({ tokens: [token(4)], flagged: [] })
-		expect(publishedList(envelopeFor(5, [token(4)], flagged))).toEqual({ tokens: [token(4)], flagged })
+		const priceFeeds = { "usd-coin": { min: 0.2, max: 5, ticker: "USDC" } }
+		expect(publishedList(undefined)).toEqual({ tokens: [], flagged: [], priceFeeds: {} })
+		expect(publishedList(envelopeFor(5, [token(4)]))).toEqual({ tokens: [token(4)], flagged: [], priceFeeds: {} })
+		expect(publishedList(envelopeFor(5, [token(4)], flagged))).toEqual({ tokens: [token(4)], flagged, priceFeeds: {} })
+		expect(publishedList(envelopeFor(5, [token(4)], undefined, priceFeeds)).priceFeeds).toEqual(priceFeeds)
 	})
 })

@@ -73,6 +73,42 @@ afterEach(() => {
 
 const reconnect = (client: ReturnType<typeof fakeClient>) => (client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
 
+describe("composables/usePrices — the list's feeds", () => {
+	const USDC_KEY = `${CHAIN_IDS.TESTNET}:${TEST_USDC}`
+	const weth = { coingeckoId: "weth", min: 100, max: 100_000, ticker: "WETH" }
+
+	test("a token priced by an id no build knew reads its quote and the list's ticker", async () => {
+		const client = fakeClient()
+		client.refreshIfStale.mockResolvedValue({
+			...snap({ weth: { coingeckoId: "weth", usd: 3012.5, fetchedAt: Date.now(), providerUpdatedAt: null } }),
+			pricedTokens: { [USDC_KEY]: weth },
+		})
+		const { api } = await withPrices(client)
+		expect(api.quoteFor(CHAIN_IDS.TESTNET, TEST_USDC)?.usd).toBe(3012.5)
+		expect(api.priceEntryFor(CHAIN_IDS.TESTNET, TEST_USDC)?.ticker).toBe("WETH")
+	})
+
+	test("a quote outside the band of the mapping it is read with prices nothing; inside it does", async () => {
+		const client = fakeClient()
+		const narrowed = { [USDC_KEY]: { coingeckoId: "usd-coin", min: 1, max: 5, ticker: "USDC" } }
+		client.refreshIfStale.mockResolvedValue({ ...snap(quoteState(Date.now())), pricedTokens: narrowed })
+		const { api } = await withPrices(client)
+		expect(api.quoteFor(CHAIN_IDS.TESTNET, TEST_USDC)).toBeUndefined()
+		client.onQuotesUpdated.invoke(snap(quoteState(Date.now())))
+		await flushPromises()
+		expect(api.quoteFor(CHAIN_IDS.TESTNET, TEST_USDC)?.usd).toBe(0.999857)
+	})
+
+	test("a mapping to an inherited name prices nothing", async () => {
+		const client = fakeClient()
+		const inherited = { [USDC_KEY]: { coingeckoId: "constructor", min: 1, max: 5, ticker: "X" } }
+		client.refreshIfStale.mockResolvedValue({ ...snap(quoteState(Date.now())), pricedTokens: inherited })
+		const { api } = await withPrices(client)
+		expect(api.isPriced(CHAIN_IDS.TESTNET, TEST_USDC)).toBe(true)
+		expect(api.quoteFor(CHAIN_IDS.TESTNET, TEST_USDC)).toBeUndefined()
+	})
+})
+
 describe("composables/usePrices", () => {
 	test("initial mount refreshes stale-on-connect and adopts the result", async () => {
 		const client = fakeClient(quoteState(Date.now()))

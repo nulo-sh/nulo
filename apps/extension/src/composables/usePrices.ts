@@ -7,7 +7,7 @@ import { useTicker } from "@/composables/ticker"
 /** Services */
 import type { PriceServiceClient, PriceSnapshot, PriceState, PriceQuote } from "@/wallet/services/price/client"
 import { isQuoteFresh } from "@/wallet/services/price/spec"
-import { getPriceMapEntry, FEE_JUICE_ENTRY, type PricedTokens } from "@/wallet/services/price/price-map"
+import { getPriceMapEntry, inBand, FEE_JUICE_ENTRY, type PriceMapEntry, type PricedTokens } from "@/wallet/services/price/price-map"
 import { tokenAmountToUsdMicro, formatUsdMicro } from "@/wallet/services/price/convert"
 import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { isFlaggedToken } from "@/utils/token-flag"
@@ -119,17 +119,21 @@ export function usePrices(priceService: PriceServiceClient) {
 		return usable
 	})
 
-	/** Quote for a mapped token, or undefined (unmapped / unpriced / stale / disabled). */
+	/** The feed the signed list prices this token with: its id, band and proxy ticker. */
+	const priceEntryFor = (chainId: number | undefined, contract: string | undefined): PriceMapEntry | undefined =>
+		chainId === undefined || contract === undefined ? undefined : getPriceMapEntry(list.pricedTokens.value, chainId, contract)
+
+	/** Quote for a mapped token, or undefined (unmapped / unpriced / stale / disabled). The band is
+	 *  checked here too: a cache read adopts a newer list's mapping before the quotes that match it. */
 	const quoteFor = (chainId: number | undefined, contract: string | undefined): PriceQuote | undefined => {
-		if (chainId === undefined || contract === undefined) return undefined
-		const entry = getPriceMapEntry(list.pricedTokens.value, chainId, contract)
-		if (!entry) return undefined
-		return usableQuotes.value[entry.coingeckoId]
+		const entry = priceEntryFor(chainId, contract)
+		if (!entry || !Object.hasOwn(usableQuotes.value, entry.coingeckoId)) return undefined
+		const quote = usableQuotes.value[entry.coingeckoId]
+		return inBand(quote.usd, entry) ? quote : undefined
 	}
 
 	/** The signed list prices this token. False until `mapped`. */
-	const isPriced = (chainId: number | undefined, contract: string | undefined): boolean =>
-		chainId !== undefined && contract !== undefined && getPriceMapEntry(list.pricedTokens.value, chainId, contract) !== undefined
+	const isPriced = (chainId: number | undefined, contract: string | undefined): boolean => priceEntryFor(chainId, contract) !== undefined
 
 	/** The signed list flags this token as a scam, on its chain and contract. False until `mapped`. */
 	const isFlagged = (token: PricedToken | undefined): boolean => isFlaggedToken(list.flaggedTokens.value, token)
@@ -171,6 +175,7 @@ export function usePrices(priceService: PriceServiceClient) {
 		mapped: readonly(list.mapped),
 		isPriced,
 		isFlagged,
+		priceEntryFor,
 		quoteFor,
 		feeJuiceQuote,
 		tokenFiatMicro,

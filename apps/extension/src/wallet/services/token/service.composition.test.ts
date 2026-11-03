@@ -57,6 +57,7 @@ const FIXTURE_LIST: TokenListSnapshot = {
 	sequence: 1,
 	keyId: "nulo-ci-1",
 	flagged: [],
+	priceFeeds: {},
 	entries: [
 		{
 			chainId: FIXTURE_SEED.chainId,

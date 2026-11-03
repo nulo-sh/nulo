@@ -13,6 +13,7 @@ import {
 	type TokenListEntry,
 	tokenKey,
 } from "./parse"
+import { MAX_PRICE_FEEDS } from "./price-feeds"
 import { freshKey } from "./test-keys"
 
 const CLASS = BUNDLED_TOKEN_CLASS_IDS[0]
@@ -27,6 +28,7 @@ const entry = (n: number, over: Partial<Record<keyof TokenListEntry, unknown>> =
 	priceId: "usd-coin",
 	...over,
 })
+const USD = { min: 0.2, max: 5, ticker: "USDC" }
 const flag = (n: bigint, over: Record<string, unknown> = {}) => ({ chainId: 1, address: hex64(n), ...over })
 const payload = (tokens: unknown[], over: Record<string, unknown> = {}) => ({
 	format: "nulo-token-list/1",
@@ -102,7 +104,6 @@ describe("payload", () => {
 		expect(checkPayload(extended, "wallet").tokens[0]).not.toHaveProperty("logo")
 		expect(refusedAt(extended, "strict")).toBe("payload.mirror")
 		expect(refusedAt(payload([entry(0, { logo: "x" } as never)]), "strict")).toBe("payload.tokens[0].logo")
-		expect(refusedAt(payload([entry(0, { priceId: "dogecoin" })]), "strict")).toBe("payload.tokens[0].priceId")
 		expect(refusedAt(payload([entry(0, { classId: hex64(7n) })]), "strict")).toBe("payload.tokens[0].classId")
 		const seventeen = Array.from({ length: MAX_ENTRIES_PER_CHAIN + 1 }, (_, i) => entry(i))
 		expect(refusedAt(payload(seventeen), "strict")).toBe(`payload.tokens[${MAX_ENTRIES_PER_CHAIN}].chainId`)
@@ -136,11 +137,17 @@ describe("payload", () => {
 		expect(checkPayload(extended, "wallet").flagged).toEqual([flag(9n)])
 	})
 
-	test("the source holds tokens and optional flags, under strict rules", () => {
+	test("the source holds tokens, optional flags and optional feeds, under strict rules", () => {
 		expect(checkSource({ tokens: [entry(0)] })).toEqual({ tokens: [entry(0)] })
 		expect(checkSource({ tokens: [], flagged: [flag(9n)] })).toEqual({ tokens: [], flagged: [flag(9n)] })
+		expect(checkSource({ tokens: [entry(0)], priceFeeds: { "usd-coin": USD } })).toEqual({
+			tokens: [entry(0)],
+			priceFeeds: { "usd-coin": USD },
+		})
 		expect(() => checkSource({ tokens: [entry(0)], sequence: 5 })).toThrow(PayloadError)
-		expect(() => checkSource({ tokens: [entry(0, { priceId: "dogecoin" })] })).toThrow(PayloadError)
+		expect(() => checkSource({ tokens: [entry(0, { priceId: "dogecoin" })], priceFeeds: { "usd-coin": USD } })).toThrow(
+			"source.tokens[0].priceId",
+		)
 	})
 })
 
@@ -158,8 +165,101 @@ describe("tokenKey", () => {
 	})
 })
 
+describe("price feeds", () => {
+	const WETH = { min: 100, max: 100_000, ticker: "WETH" }
+	const priced = (value: unknown) => selectEntries(checkPayload(value, "wallet").tokens, checkPayload(value, "wallet").priceFeeds ?? {})
+
+	test("a list with no feed map, as today's, passes strict and prices nothing", () => {
+		const today = payload([entry(0), entry(1, { priceId: "dogecoin" })])
+		expect(checkPayload(today, "strict")).not.toHaveProperty("priceFeeds")
+		expect(priced(today).map((t) => t.priceId)).toEqual([undefined, undefined])
+	})
+
+	test("both modes read a feed map alike, and an entry is priced only through its record", () => {
+		const value = payload([entry(0), entry(1, { priceId: "weth" })], { priceFeeds: { "usd-coin": USD, weth: WETH } })
+		expect(checkPayload(value, "strict")).toEqual(checkPayload(value, "wallet"))
+		expect(checkPayload(value, "strict").priceFeeds).toEqual({ "usd-coin": USD, weth: WETH })
+		expect(priced(value).map((t) => t.priceId)).toEqual(["usd-coin", "weth"])
+		const edges = { "usd-coin": { min: 0.0001, max: 0.1, ticker: "x".repeat(12) }, weth: { min: 1000, max: 1_000_000, ticker: "WETH" } }
+		expect(checkPayload(payload([entry(0), entry(1, { priceId: "weth" })], { priceFeeds: edges }), "strict").priceFeeds).toEqual(edges)
+	})
+
+	test("strict refuses a record outside the bounds; the wallet drops it, unprices its entry and keeps the flags", () => {
+		const cases: [Record<string, unknown>, string][] = [
+			[{ min: 0 }, "min"],
+			[{ min: -1 }, "min"],
+			[{ min: 0.000_09, max: 0.05 }, "min"],
+			[{ min: Number.NaN }, "min"],
+			[{ min: Number.POSITIVE_INFINITY }, "min"],
+			[{ min: "0.2" }, "min"],
+			[{ min: 2, max: 2 }, "max"],
+			[{ min: 2, max: 1 }, "max"],
+			[{ min: 2000, max: 1_000_001 }, "max"],
+			[{ min: 1, max: 1001 }, "max"],
+			[{ ticker: "" }, "ticker"],
+			[{ ticker: "US DC" }, "ticker"],
+			[{ ticker: "USDC\u202e" }, "ticker"],
+			[{ ticker: "<b>USDC</b>" }, "ticker"],
+			[{ ticker: "\u0415TH" }, "ticker"],
+			[{ ticker: "x".repeat(13) }, "ticker"],
+		]
+		for (const [over, field] of cases) {
+			const value = payload([entry(0)], { priceFeeds: { "usd-coin": { ...USD, ...over } }, flagged: [flag(9n)] })
+			expect(refusedAt(value, "strict")).toBe(`payload.priceFeeds.usd-coin.${field}`)
+			expect(checkPayload(value, "wallet").priceFeeds).toEqual({})
+			expect(priced(value)[0]).not.toHaveProperty("priceId")
+			expect(checkPayload(value, "wallet").flagged).toEqual([flag(9n)])
+		}
+		expect(refusedAt(payload([entry(0)], { priceFeeds: { "usd-coin": "USDC" } }), "strict")).toBe("payload.priceFeeds.usd-coin")
+	})
+
+	test("a feed id with another spelling, Fee Juice's or an inherited name is refused by index in strict and dropped in wallet", () => {
+		for (const id of ["USD-COIN", "a&b", "a,b", "a%2C", "a/b", "a?b", "constructor", "aztec", "__proto__"]) {
+			const value = JSON.parse(JSON.stringify(payload([entry(0, { priceId: "usd-coin" })]))) as Record<string, unknown>
+			value.priceFeeds = JSON.parse(`{"usd-coin": ${JSON.stringify(USD)}, ${JSON.stringify(id)}: ${JSON.stringify(USD)}}`)
+			expect(refusedAt(value, "strict")).toBe("payload.priceFeeds[1]")
+			expect(Object.keys(checkPayload(value, "wallet").priceFeeds ?? {})).toEqual(["usd-coin"])
+		}
+		const inherited = payload([entry(0, { priceId: "constructor" }), entry(1, { priceId: "aztec" })], { priceFeeds: {} })
+		expect(priced(inherited).map((t) => t.priceId)).toEqual([undefined, undefined])
+	})
+
+	test("strict, with a feed map, refuses a price id with no record and a record no entry names", () => {
+		const unrecorded = payload([entry(0, { priceId: "tether" })], { priceFeeds: { "usd-coin": USD } })
+		expect(refusedAt(unrecorded, "strict")).toBe("payload.tokens[0].priceId")
+		expect(refusedAt(payload([entry(0)], { priceFeeds: { "usd-coin": USD, weth: WETH } }), "strict")).toBe("payload.priceFeeds.weth")
+		expect(priced(unrecorded)[0]).not.toHaveProperty("priceId")
+	})
+
+	test("a feed map is an object of at most 32 records in both modes; strict refuses an unknown field, the wallet ignores it", () => {
+		const many = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`id-${i}`, USD]))
+		expect(Object.keys(checkPayload(payload([], { priceFeeds: many(MAX_PRICE_FEEDS) }), "wallet").priceFeeds ?? {})).toHaveLength(
+			MAX_PRICE_FEEDS,
+		)
+		for (const mode of ["wallet", "strict"] as const) {
+			expect(refusedAt(payload([], { priceFeeds: many(MAX_PRICE_FEEDS + 1) }), mode)).toBe("payload.priceFeeds")
+			expect(refusedAt(payload([], { priceFeeds: [USD] }), mode)).toBe("payload.priceFeeds")
+		}
+		const extended = payload([entry(0)], { priceFeeds: { "usd-coin": { ...USD, logo: "x" } } })
+		expect(refusedAt(extended, "strict")).toBe("payload.priceFeeds.usd-coin.logo")
+		expect(checkPayload(extended, "wallet").priceFeeds).toEqual({ "usd-coin": USD })
+	})
+
+	test("a verified list carries the feeds its kept entries name, and no other", async () => {
+		const { privateKey, pinned } = await freshKey()
+		const listed = payload([entry(0), entry(1, { priceId: "weth", classId: hex64(7n) })], {
+			sequence: SEQUENCE_FLOOR,
+			priceFeeds: { "usd-coin": USD, weth: WETH, tether: USD },
+		})
+		const bytes = new TextEncoder().encode(JSON.stringify(listed))
+		const list = await readTokenList(JSON.stringify(await signEnvelope(bytes, privateKey, pinned.keyId)), [pinned])
+		expect(list.priceFeeds).toEqual({ "usd-coin": USD })
+		expect(list.entries.map((t) => t.priceId)).toEqual(["usd-coin"])
+	})
+})
+
 describe("selectEntries", () => {
-	test("keeps the first 16 bundled-class entries per chain and unprices an unknown id", () => {
+	test("keeps the first 16 bundled-class entries per chain and unprices an id with no feed", () => {
 		const tokens = checkPayload(
 			payload([
 				entry(100, { classId: hex64(7n) }),
@@ -168,7 +268,7 @@ describe("selectEntries", () => {
 			]),
 			"wallet",
 		).tokens
-		const selected = selectEntries(tokens)
+		const selected = selectEntries(tokens, { "usd-coin": USD })
 		const chain1 = selected.filter((t) => t.chainId === 1)
 		expect(chain1.map((t) => t.symbol)).toEqual(Array.from({ length: MAX_ENTRIES_PER_CHAIN }, (_, i) => `T${i}`))
 		expect(selected.find((t) => t.chainId === 2)).toEqual(expect.not.objectContaining({ priceId: expect.anything() }))
