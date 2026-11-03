@@ -548,6 +548,41 @@ describe("onboarding import — the CTA bar in each state", () => {
 	})
 })
 
+describe("onboarding import — a held Enter on a full-backup CTA", () => {
+	const HELD_ENTER: Array<[string, ApisPatch]> = [
+		[
+			"Decrypt backup",
+			({ backup }) => {
+				backup.selectedBackup.value = { ...ENCRYPTED }
+				backup.decryptionPassword.value = "pw"
+			},
+		],
+		[
+			"Import profile",
+			(a) => {
+				a.backup.selectedBackup.value = DECRYPTED
+				validPair(a)
+			},
+		],
+		[
+			"Continue",
+			({ backup }) => {
+				backup.selectedBackup.value = DECRYPTED
+				backup.restoreStatus.value = "finished"
+				backup.restoreErrorLog.value = { ...ACCOUNT_STATE_ERRORS }
+			},
+		],
+	]
+
+	test.each(HELD_ENTER)("%s refuses a repeat Enter and lets a fresh one through", async (text, patch) => {
+		const w = await mountFullBackup(patch)
+		const button = w.findAll("button").find((b) => b.text() === text)
+		if (!button) throw new Error(`no ${text} button`)
+		expect(enterOn(button.element, { repeat: true }).defaultPrevented).toBe(true)
+		expect(enterOn(button.element).defaultPrevented).toBe(false)
+	})
+})
+
 describe("onboarding import — the phrase form while an import runs", () => {
 	test("the unlock choice takes no input while the import runs, and takes it again when it fails", async () => {
 		let fail!: (error: Error) => void

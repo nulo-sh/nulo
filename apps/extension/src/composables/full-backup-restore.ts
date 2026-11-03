@@ -33,6 +33,7 @@ import {
 } from "@/wallet/services/account-state/normalize"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
+import type { RestoreData } from "@/wallet/services/backup/trust-gate"
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS, runImportChainSync } from "./importChainSync"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 
@@ -184,12 +185,6 @@ async function rollbackAndFail(
 	return { kind: "fail", title: "Import incomplete", message: CLEANUP_PENDING_MESSAGE }
 }
 
-/** What a backup that is not the one the wallet exported shows, whichever check refused it. */
-export const INTEGRITY_FAILED = {
-	title: "Backup Integrity Check Failed",
-	message: "The backup file appears to be corrupted or has been tampered with. Please ensure you have the correct backup file.",
-} as const
-
 /**
  * The restore secret at the backup boundary, the same for both unlock methods: `master-key` is the
  * base64 plain master, `entropy` the recovery phrase's entropy (the service checks the words
@@ -286,21 +281,6 @@ export async function restoreActiveNetworkPointer(
 		console.warn("[full-backup] could not restore active-network selection:", activeErr)
 	}
 }
-
-/**
- * The migrated backup body the restore stages read and filter in place. `validateAndMigrateBackup`
- * guarantees each present root slice is an array of plain objects with a valid row id, and that
- * `profile` is a {@link BackupProfile}.
- */
-export type RestoreData = Record<string, unknown> & {
-	account?: Array<Record<string, unknown>>
-	token?: Array<Record<string, unknown>>
-	"token-balance"?: Array<Record<string, unknown>>
-	profile?: unknown
-}
-
-/** The backup's profile part as the restore reads it; the profile service judges the `id`. */
-export type BackupProfile = { id: unknown; name: string; type: "password" | "passkey" }
 
 /** Bound on dropped-balance records. This path never reaches the collector, so it carries no cap
  *  of its own — and a hostile backup can ship tens of thousands of un-relinkable rows. */
@@ -881,10 +861,14 @@ export interface AccountStateRetryContext {
 	cut: string[]
 }
 
+export function retryNetworkIds(ctx: AccountStateRetryContext): ReadonlySet<string> {
+	return new Set(ctx.retryable.map((item) => item.networkId))
+}
+
 /** The rows a Retry of `ctx` replaces: the retried networks' outcome rows only. A violation row
  *  records entries the normalizer discarded, which no registration brings back. */
 export function retryReplacedRows(ctx: AccountStateRetryContext): unknown[] {
-	const retried = new Set<unknown>(ctx.retryable.map((item) => item.networkId))
+	const retried: ReadonlySet<unknown> = retryNetworkIds(ctx)
 	return ctx.outcomeRows.filter((row) => retried.has((row as { networkId?: unknown } | null)?.networkId))
 }
 

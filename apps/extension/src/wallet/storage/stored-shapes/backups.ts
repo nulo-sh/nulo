@@ -1,5 +1,5 @@
-import { type FullBackupEnvelope, validateAndMigrateBackup } from "@/composables/useFullBackupImport"
 import { normalizeBackupData } from "@/wallet/services/backup/backup-migration-registry"
+import { type FullBackupEnvelope, validateAndMigrateBackup } from "@/wallet/services/backup/trust-gate"
 import { unreadRows } from "./reads"
 
 /**
