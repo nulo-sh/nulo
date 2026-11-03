@@ -32,7 +32,7 @@ export type RefreshOutcome =
 	| "http-status"
 	| "network"
 
-/** What one refresh did: its request's outcome, or why it made none. */
+/** What one refresh did: its request's outcome, why it made none, or `"error"` when it threw. */
 export type RefreshResult = RefreshOutcome | "terms-not-current" | "off" | "error"
 
 export type Methods = {

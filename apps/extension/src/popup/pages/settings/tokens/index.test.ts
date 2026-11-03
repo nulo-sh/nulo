@@ -165,6 +165,7 @@ test("an unreached host reads in the danger colour, and a call that fails reads 
 	await flushPromises()
 	expect(refreshLine(wrapper).attributes("data-state")).toBe("failed")
 	expect(refreshLine(wrapper).element.textContent).toBe("Could not update the token list. Try again later.")
+	expect(refreshLine(wrapper).classes()).toContain("color--txt-danger")
 	expect(L.refresh).toHaveBeenCalledTimes(2)
 })
 
