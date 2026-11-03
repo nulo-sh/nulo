@@ -1,11 +1,3 @@
-/**
- * Locks the recipient contract for RecipientField after the P3 card redesign:
- *   - the `vault` icon is gone everywhere (suffix + suggestions)
- *   - suggestion rows render an <AccountAvatar> (initials), no vault fallback
- *   - a selected recipient renders the <RecipientCard> (masked addr + reveal),
- *     replacing the typing input
- *   - the card's `change` action clears the selection and restores the input
- */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { nextTick } from "vue"
@@ -170,6 +162,48 @@ describe("modules/send/RecipientField", () => {
 			const w = real({ candidates: [bob] })
 			await typeAndLeave(w, `${rlo}${address}${zwsp}`)
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([bob])
+		})
+
+		describe("and an address keeps no white space or joiner at its two ends", () => {
+			const usdc = "0x0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
+			const edges = [" ", "\u00A0", "\t", "\u200C", "\u200D", "\u3164"]
+
+			test.each(edges.map((c) => [c.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0"), c]))(
+				"U+%s around a pasted address is gone before the field is left, and leaving it shows no hint",
+				async (_, char) => {
+					const w = real({ candidates: [] })
+					const input = w.get("input")
+					await input.trigger("focus")
+					await input.setValue(`${char}${usdc}${char}`)
+					expect((input.element as HTMLInputElement).value).toBe(usdc)
+					expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([usdc])
+					expect((await typeAndLeave(w, `${usdc}${char}`)).value).toBe(usdc)
+					expect(hint(w)).toBe(false)
+				},
+			)
+
+			test("a saved address pasted with a trailing space is picked when the field is left", async () => {
+				const carol = { id: "8", name: "Carol", address: usdc }
+				const w = real({ candidates: [carol] })
+				await typeAndLeave(w, `${usdc} `)
+				expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([carol])
+			})
+
+			test("a name keeps its trailing space", async () => {
+				const w = real({ candidates: [] })
+				const input = await typeAndLeave(w, "Alice ")
+				expect(w.emitted("update:searchTerm")?.at(-1)).toEqual(["Alice "])
+				expect(input.value).toBe("Alice ")
+			})
+
+			test("an address with a joiner inside stays as typed, and leaving it shows the hint", async () => {
+				const typed = `${usdc.slice(0, 30)}\u200D${usdc.slice(30)}`
+				const w = real({ candidates: [] })
+				const input = await typeAndLeave(w, typed)
+				expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([typed])
+				expect(input.value).toBe(typed)
+				expect(hint(w)).toBe(true)
+			})
 		})
 	})
 
