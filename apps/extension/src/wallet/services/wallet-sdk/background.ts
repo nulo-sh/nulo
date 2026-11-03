@@ -28,21 +28,12 @@
 import "@nulo/wallet-sdk-schema-patch/register"
 
 import logoDataUri from "@/assets/logo.png?inline"
-import {
-	BackgroundConnectionHandler,
-	type BackgroundTransport,
-	type PendingDiscovery,
-	type ActiveSession,
-} from "@aztec-labs/wallet-sdk/extension/handlers"
-import { NOOP_LOGGER, type WalletMessage, type WalletResponse } from "@aztec-labs/wallet-sdk/types"
-import { attachContentListener } from "./content-message-relay"
-import { type ContentScriptMessageEnvelope, isSubframeSender, validateContentScriptMessage } from "./content-script-validator"
-import { sessionDisconnectedMessage, sessionKnownTo, staleSessionVerdict } from "./stale-session"
-import { SESSION_INVALID_ERROR, toWalletResponseError } from "./error-envelope"
-import { toJsonSafe } from "./to-json-safe"
+import { BackgroundConnectionHandler, type PendingDiscovery } from "@aztec-labs/wallet-sdk/extension/handlers"
+import { NOOP_LOGGER } from "@aztec-labs/wallet-sdk/types"
+import { buildContentTransport } from "./content-admission"
+import { sessionKnownTo } from "./stale-session"
 import { cancelPendingVerification, deletePendingVerificationForTab, type PendingVerificationEntry } from "./pending-verification"
 import {
-	enforceSessionProfileBinding,
 	type ProfileSwitchEpoch,
 	stampSessionProfileGuarded,
 	trackProfileSwitchEpoch,
@@ -60,46 +51,24 @@ import { LegalAcceptanceService, type LegalAdmission } from "@/wallet/services/l
 import { NETWORK_RESET_SERVICE_NAME, type ResetRunGate } from "@/wallet/services/network-reset/spec"
 import { DappSessionService } from "@/wallet/services/dapp-session/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import {
-	describeExternalId,
-	describeWireMethod,
-	type DispatchHooks,
-	DiscoveryQueue,
-	type INetworkReader,
-	type SessionContext,
-	WalletSdkDispatcher,
-} from "@nulo/wallet-bridge"
+import { describeExternalId, DiscoveryQueue, type INetworkReader, WalletSdkDispatcher } from "@nulo/wallet-bridge"
 import type { ClockPort, WindowPort } from "@nulo/wallet-core/ports"
-import {
-	ChainNotSupportedError,
-	InvalidWalletArgumentsError,
-	ScopeViolationError,
-	TermsAcceptanceRequiredError,
-	TooManyPendingError,
-	UnsupportedMethodError,
-	isReceiverGoneRejection,
-} from "@nulo/extension-messaging/errors"
 import type { KeyedLock } from "@nulo/wallet-core/utils"
 import { VerifyAdmissionGate } from "./verify-admission"
 import { type DiscoveryDeps, handleDiscovery, type PendingWindow } from "./discovery-flow"
-import { failQueuedForError, failQueuedIfUnclaimed, type QueuedFailureKind, tryCreateQueuedJournal } from "./queued-journal"
-import { chainSendTxWithVouching } from "./queued-wait-vouching"
-import { createSessionBaton } from "./session-baton"
-import { chainInfoToChainId, handleSessionEstablished } from "./session-established"
+import { handleSessionEstablished } from "./session-established"
 import { wireSessionTeardown } from "./session-revocation"
 import { wireTabLifecycle } from "./tab-lifecycle"
 import { wireRestartPreparation } from "./restart-preparation"
 import type { TrackedWindowPort } from "@/wallet/services/window-manager/restart-ended-windows"
-import { bindLiveSession, type LiveSession } from "./live-session"
-import { MAX_PENDING_PER_SESSION, type VerificationHold, wireVerificationHold } from "./verification-hold"
+import { bindLiveSession } from "./live-session"
+import { MAX_PENDING_PER_SESSION, wireVerificationHold } from "./verification-hold"
+import { type MessagePipelineDeps, onWalletMessage } from "./wallet-message"
 import { SessionHolders } from "./session-holders"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 
 declare const __VERSION__: string
-
-/** A queued row's developer line when its call's session ended before the call ran. */
-const SESSION_NO_LONGER_VALID = "Session no longer valid — reconnect"
 
 /**
  * Initialize the wallet-sdk BackgroundConnectionHandler and wire it
@@ -317,162 +286,6 @@ function tearDownTabAttempts(state: SdkHandlerState, tabId: number): void {
 	deletePendingVerificationForTab(state.pendingVerification, tabId)
 }
 
-type DiscoveryCredit = Pick<PendingDiscovery, "origin" | "tabId">
-
-/** What the content wrapper needs besides the SDK's listener. */
-type ContentWrapperDeps = {
-	logger: ILogger
-	/** Whether the sender's tab holds the session, per the handler that exists right now; asked only for a session-bound message. */
-	sessionKnown: (sessionId: string, tabId: number) => boolean
-	/** The tab and origin the pending discovery under this id is credited to, if one is pending. */
-	discoveryCredit: (sessionId: string) => DiscoveryCredit | undefined
-	sendToTab: BackgroundTransport["sendToTab"]
-}
-
-function buildContentTransport(
-	logger: ILogger,
-	{ sessionKnown, discoveryCredit }: Pick<ContentWrapperDeps, "sessionKnown" | "discoveryCredit">,
-): BackgroundTransport {
-	// The handler's `sendToTab` returns void, so the send's rejection is nobody's to observe. A
-	// tab that navigated away (or lost its content script) has nowhere to deliver to; every
-	// other failure still surfaces as an unhandled rejection.
-	const sendToTab: BackgroundTransport["sendToTab"] = (tabId, message) => {
-		chrome.tabs.sendMessage(tabId, message).catch((err: unknown) => {
-			if (!isReceiverGoneRejection(err)) throw err
-		})
-	}
-	return {
-		sendToTab,
-		addContentListener: (listener) => {
-			// The chrome.runtime.onMessage registration lives in the module-scope
-			// content-message-relay (cold-wake fix): registering a SECOND chrome
-			// listener here would double-deliver — a duplicate discovery's
-			// coalesce→reject path deletes the entry its twin queued, and a
-			// duplicate secure-message double-journals a sendTx. Attach to the
-			// relay instead; buffered cold-wake messages flush through this same
-			// validated wrapper.
-			attachContentListener(admitContentMessage(listener, { logger, sessionKnown, discoveryCredit, sendToTab }))
-		},
-	}
-}
-
-/**
- * The checks every content-script message passes before the SDK handler sees it, in this order:
- * top frame, envelope schema, a key exchange from its discovery's document, then a session this
- * background knows.
- */
-function admitContentMessage(
-	listener: Parameters<BackgroundTransport["addContentListener"]>[0],
-	deps: ContentWrapperDeps,
-): (message: unknown, sender: chrome.runtime.MessageSender) => undefined {
-	const { logger } = deps
-	// Build-time, immutable per release: a runtime config would be a widening primitive an attacker
-	// could try to flip by storage poisoning or popup compromise. Vite inlines the literal here as at
-	// module scope; it is read when the wrapper is built, so a test can set it without re-evaluating
-	// this module. Even on, a key exchange completes only from a frame of the origin its session is
-	// credited to, the top frame's: a cross-origin subframe cannot connect.
-	const allowIframeDapps = import.meta.env?.VITE_NULO_ALLOW_IFRAME_DAPPS === "1"
-	return (message, sender) => {
-		// Subframe rejection. Upstream `BackgroundConnectionHandler`
-		// attributes origin via `sender.tab?.url` (top-frame URL), so an
-		// iframe at https://evil.com/x.html embedded in https://app.example.com
-		// would be credited to https://app.example.com — inheriting any
-		// grants the user gave to the parent page.
-		//
-		// Nulo-side defense-in-depth: reject content-script messages
-		// from subframes at the wrapper layer. `sender.frameId === 0`
-		// is the top frame; a tab sender with any other defined
-		// `frameId` is a subframe.
-		//
-		// Feature flag: `allowIframeDapps` (`VITE_NULO_ALLOW_IFRAME_DAPPS=1`
-		// at build time) disables this check. Default is "reject subframes"
-		// because research found NO legitimate iframe-dApp use cases in the
-		// Nulo ecosystem. If a counterexample surfaces, set the env
-		// var rather than removing this check.
-		//
-		// Frame-targeted send replies (the full fix) require upstream
-		// `chrome.tabs.sendMessage(tabId, msg, { frameId })` support
-		// in `BackgroundConnectionHandler`'s sendToTab signature —
-		// upstream's `(tabId, msg)` interface doesn't pass frameId
-		// through, so this remains an upstream coordination item.
-		if (!allowIframeDapps && isSubframeSender(sender)) {
-			logger.log(
-				"wallet-sdk",
-				LogLevel.Debug,
-				// The tab and sender URLs are the user's browsing history, and any subframe on any
-				// page can trigger this line. The frame identity is what diagnoses the rejection.
-				`Rejected content-script message from subframe (frameId=${sender.frameId}, tabId=${sender.tab?.id}) — subframe defense-in-depth`,
-			)
-			return undefined
-		}
-
-		// Zod-validate content-script-originated envelopes before
-		// forwarding to the upstream handler. `passthrough` lets
-		// non-content-script messages through (ServiceClient
-		// responses, offscreen pings, etc.) — the upstream handler
-		// filters those by `origin`. `invalid` drops adversarial /
-		// malformed envelopes early with a structured debug log.
-		const verdict = validateContentScriptMessage(message)
-		if (verdict.kind === "invalid") {
-			logger.log("wallet-sdk", LogLevel.Debug, "Dropping malformed content-script envelope", verdict.reason)
-			return undefined
-		}
-		if (verdict.kind === "valid" && !keyExchangeFromItsDiscovery(verdict.message, sender, deps.discoveryCredit)) {
-			logger.log("wallet-sdk", LogLevel.Debug, "Dropping a key exchange from outside its discovery's document")
-			return undefined
-		}
-		if (verdict.kind === "valid" && replyIfStale(verdict.message, sender.tab?.id, deps)) return undefined
-		listener(message, sender)
-		return undefined
-	}
-}
-
-/**
- * Upstream credits a session to the pending discovery its key exchange names, so the exchange must come
- * from that discovery's tab and document origin; one naming no pending discovery is upstream's to drop.
- */
-function keyExchangeFromItsDiscovery(
-	envelope: ContentScriptMessageEnvelope,
-	sender: chrome.runtime.MessageSender,
-	discoveryCredit: ContentWrapperDeps["discoveryCredit"],
-): boolean {
-	if (envelope.type !== "key-exchange-request" || envelope.sessionId === undefined) return true
-	const credit = discoveryCredit(envelope.sessionId)
-	if (credit === undefined) return true
-	return sender.tab?.id === credit.tabId && credit.origin !== "unknown" && senderDocumentOrigin(sender) === credit.origin
-}
-
-/** The sending document's own origin: Chrome sets `sender.origin` (an opaque document's is `"null"`),
- *  Firefox only `sender.url`. */
-function senderDocumentOrigin(sender: chrome.runtime.MessageSender): string | undefined {
-	if (sender.origin !== undefined) return sender.origin
-	if (sender.url === undefined) return undefined
-	try {
-		return new URL(sender.url).origin
-	} catch {
-		return undefined
-	}
-}
-
-/**
- * A validated message for a session the sender's tab does not hold is answered with the SDK's
- * own disconnect instead of being forwarded: the handler would drop it in silence, and the page
- * would wait out its 300 s ceiling for a background that forgot it (see `stale-session.ts`).
- * Returns whether the message was answered here.
- */
-function replyIfStale(envelope: ContentScriptMessageEnvelope, tabId: number | undefined, deps: ContentWrapperDeps): boolean {
-	const stale = staleSessionVerdict(envelope, tabId, deps.sessionKnown)
-	if (stale === "forward") return false
-	// A connected page repeats this every heartbeat until it reconnects; debug keeps it out of
-	// every user's log buffer.
-	deps.logger.log("wallet-sdk", LogLevel.Debug, "Answering a message for a session the sender's tab does not hold", {
-		type: envelope.type,
-		session: describeExternalId(stale.sessionId),
-	})
-	deps.sendToTab(stale.disconnectTab, sessionDisconnectedMessage(stale.sessionId))
-	return true
-}
-
 function buildHandlerCallbacks(
 	deps: SdkDeps,
 	state: SdkHandlerState,
@@ -521,214 +334,8 @@ function buildHandlerCallbacks(
 			state.sessions.end(sessionId)
 		},
 
-		onWalletMessage: (session, message) => onWalletMessage(session, message, deps, state),
+		onWalletMessage: (session, message) => onWalletMessage(session, message, messagePipelineDeps(deps, state)),
 	}
-}
-
-function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: SdkDeps, state: SdkHandlerState): void {
-	const key = session.sessionId
-	// Upstream passes whatever the ciphertext's JSON decoded to. A non-object has no id to answer, and
-	// reading one past the admission below would throw before its slot could be released.
-	if (typeof message !== "object" || message === null) {
-		deps.logger.log(
-			"wallet-sdk",
-			LogLevel.Debug,
-			`Dropping a decrypted message that is not an object, session ${describeExternalId(key)}`,
-		)
-		return
-	}
-	const live = bindLiveSession(state.late.handler!, session)
-	// Captured once, on arrival. Upstream reads the session before it awaits the decrypt, so a message
-	// whose session ended meanwhile arrives with the old object: it must not capture a successor's
-	// hold under the same id, and it has nowhere to be answered.
-	const hold = live.isLive() ? state.sessions.holds.get(key) : undefined
-	if (hold === undefined) {
-		deps.logger.log(
-			"wallet-sdk",
-			LogLevel.Debug,
-			`Dropping ${describeWireMethod(message.type)}: its session ${describeExternalId(key)} ended`,
-		)
-		return
-	}
-	const release = hold.admit()
-	if (release === undefined) {
-		refuseOverPendingCap(live, key, message, state.sessions.decryptLocks, deps.logger)
-		return
-	}
-	const prev = state.sessions.sessionQueues.get(key) ?? Promise.resolve()
-
-	// Baton-based FIFO (see `session-baton.ts` for mechanics).
-	// Resolves when the sendTx handler enqueues on the execution mutex
-	// (via `onExecutionEnqueued`) OR when the handler completes
-	// (safety-net `.finally(releaseFifo)`), whichever fires first.
-	const { baton, releaseFifo } = createSessionBaton()
-
-	// Gate on establishment validation. Between the SDK's
-	// key-exchange response and onSessionEstablished's async validation, a
-	// message must not ride a session being terminated as unverified — and
-	// must not persist a durable journal record for it. Capture the
-	// per-session validation promise and re-check its identity after the
-	// await: a termination during the wait deletes (or replaces) the entry,
-	// so an already-waiting handler drops. This gate is computed on message
-	// ARRIVAL, NOT behind the FIFO baton — so a queued sibling still gets its
-	// durable queued-journal record immediately. Two concurrent `sendTx`
-	// requests must BOTH show as `queued` before either is approved (the
-	// anti-lost-tx invariant `concurrent-sendtx.test.ts` pins); serializing
-	// only execution — never record creation — behind the baton preserves it.
-	const validation = state.sessions.establishmentStatus.get(key)
-	const establishedPromise = (validation ?? Promise.resolve(false)).then(
-		(established) => established && state.sessions.establishmentStatus.get(key) === validation,
-	)
-
-	// Queued journal is created on arrival (concurrent across siblings),
-	// gated on establishment. Only a top-level `sendTx` gets one: the
-	// dispatcher refuses a batch holding a `sendTx` leg before any leg runs,
-	// so no batched send ever waits to be shown.
-	const queuedJournalIdPromise: Promise<string | undefined> =
-		message.type === "sendTx"
-			? establishedPromise.then((ok) => createQueuedJournalIfStamped(ok, message, session, deps, state))
-			: Promise.resolve(undefined)
-
-	// Pre-claim liveness: the record ages in `queued` through the whole
-	// session-FIFO wait + its own approval popup — a legitimate wait
-	// the reaper's grace cannot distinguish from a lost handler. The
-	// begin/end PLACEMENT invariants live (unit-pinned) in
-	// `queued-wait-vouching.ts`.
-	// The slot frees when the call's handling settles, not at the FIFO release: a send past its
-	// baton still holds its arguments until it is answered.
-	chainSendTxWithVouching({
-		queuedJournalIdPromise,
-		prev,
-		vouch: deps.executionService,
-		releaseFifo,
-		run: (queuedJournalId) =>
-			runEstablishedMessage(queuedJournalId, establishedPromise, releaseFifo, { session, live, hold }, message, deps, state),
-	}).then(release, release)
-	state.sessions.sessionQueues.set(
-		key,
-		baton.catch(() => {}),
-	)
-}
-
-/** The stamp guard runs BEFORE the durable journal write: this path
- *  independently resolves profile/session/account/network, so without the
- *  anchor an A-era message racing a switch could persist a B-profile
- *  operation. Establishment stamps before its validation promise resolves, so
- *  a missing stamp here means a superseded/foreign session — skip the record
- *  (the handler's own guard rejects the message itself). */
-function createQueuedJournalIfStamped(
-	ok: boolean,
-	message: WalletMessage,
-	session: ActiveSession,
-	deps: SdkDeps,
-	state: SdkHandlerState,
-): ReturnType<typeof tryCreateQueuedJournal> | undefined {
-	const stampedProfileId = state.sessions.sessionProfiles.get(session.sessionId)
-	return ok && stampedProfileId !== undefined
-		? tryCreateQueuedJournal(message, session, {
-				journal: deps.operationJournal,
-				profile: deps.profileService,
-				dappSession: deps.dappSessionService,
-				networkSvc: deps.networkService,
-				account: deps.accountService,
-				stampedProfileId,
-				logger: deps.logger,
-			})
-		: undefined
-}
-
-/** Refused at arrival, before any row or FIFO slot: `MAX_PENDING_PER_SESSION` of the session's
- *  calls already wait or run. The reply rides the session's decrypt lane, so the lane's depth bounds
- *  owed replies with its decrypts; it is enqueued and never awaited, since this runs inside the lane. */
-function refuseOverPendingCap(
-	live: LiveSession,
-	sessionId: string,
-	message: WalletMessage,
-	decryptLocks: KeyedLock,
-	logger: ILogger,
-): void {
-	logger.log("wallet-sdk", LogLevel.Debug, `Refusing ${describeWireMethod(message.type)}: too many of the session's calls are pending`)
-	const response: WalletResponse = {
-		messageId: message.messageId,
-		walletId: "nulo",
-		error: toWalletResponseError(new TooManyPendingError()),
-	}
-	decryptLocks
-		.withLock(sessionId, () => live.respond(response))
-		.catch((error: unknown) => {
-			logger.log("wallet-sdk", LogLevel.Error, `Failed to send response for ${describeWireMethod(message.type)}`, { error })
-		})
-}
-
-/** A call whose session ended before it ran: nothing is sent, and its queued row fails as `kind`. */
-async function dropUnrunMessage(
-	message: WalletMessage,
-	sessionId: string,
-	queuedJournalId: string | undefined,
-	kind: QueuedFailureKind,
-	operationJournal: OperationJournalService,
-	logger: ILogger,
-): Promise<void> {
-	logger.log(
-		"wallet-sdk",
-		LogLevel.Debug,
-		`Dropping ${describeWireMethod(message.type)} for session ${describeExternalId(sessionId)}: the session ended before it ran`,
-	)
-	if (queuedJournalId) await failQueuedIfUnclaimed(operationJournal, queuedJournalId, SESSION_NO_LONGER_VALID, logger, kind)
-}
-
-async function runEstablishedMessage(
-	queuedJournalId: string | undefined,
-	establishedPromise: Promise<boolean>,
-	releaseFifo: ReturnType<typeof createSessionBaton>["releaseFifo"],
-	call: { session: ActiveSession; live: LiveSession; hold: VerificationHold },
-	message: WalletMessage,
-	deps: SdkDeps,
-	state: SdkHandlerState,
-): Promise<void> {
-	const { session, live } = call
-	// Re-gate execution behind the baton. A session that
-	// failed/lost establishment must not execute either — not just skip
-	// its journal. Same promise as the journal gate, so it resolves once.
-	if (!(await establishedPromise)) {
-		deps.logger.log(
-			"wallet-sdk",
-			LogLevel.Warn,
-			`Dropping message for session ${describeExternalId(session.sessionId)}: failed/lost establishment validation`,
-		)
-		return
-	}
-	// Behind the FIFO, so the calls a check held run in arrival order once it is confirmed. A call
-	// parked here keeps its settled gates: a session that ended meanwhile, whatever now holds its id,
-	// runs nothing of it.
-	const outcome = await call.hold.outcome
-	if (outcome !== "released" || !live.isLive()) {
-		const kind = outcome === "released" ? "wallet_refused" : outcome
-		return dropUnrunMessage(message, session.sessionId, queuedJournalId, kind, deps.operationJournal, deps.logger)
-	}
-	return handleWalletMessage(
-		{
-			session,
-			message,
-			live,
-			hooks: {
-				// The FIFO releases once ExecutionService enqueues the approved request on the execution
-				// mutex, which keeps the session's sends in arrival order.
-				onExecutionEnqueued: releaseFifo,
-				queuedJournalId,
-			},
-		},
-		{
-			dispatcher: deps.dispatcher,
-			profileService: deps.profileService,
-			operationJournal: deps.operationJournal,
-			sessionProfiles: state.sessions.sessionProfiles,
-			switchEpoch: state.late.switchEpoch!,
-			logger: deps.logger,
-			legal: deps.legal,
-			resetRun: deps.resetRun,
-		},
-	)
 }
 
 /**
@@ -802,170 +409,22 @@ function discoveryDeps(deps: SdkDeps, state: SdkHandlerState): DiscoveryDeps {
 	}
 }
 
-export type WalletMessageDeps = {
-	dispatcher: WalletSdkDispatcher
-	profileService: ProfileService
-	operationJournal: OperationJournalService
-	sessionProfiles: Map<string, string>
-	switchEpoch: ProfileSwitchEpoch
-	logger: ILogger
-	legal: LegalAdmission
-	resetRun?: ResetRunGate
-}
-
-/**
- * Handle an incoming wallet message from a connected dApp.
- *
- * Dispatches the method call to the WalletSdkDispatcher, then encrypts
- * and sends the response back through the BackgroundConnectionHandler.
- * Every send and termination goes through `live`, so a call whose session
- * ended mid-flight never reaches a successor under the same id.
- *
- * `hooks` is the wallet-bridge `DispatchHooks` contract, imported rather than mirrored, so the
- * `onExecutionEnqueued` wiring is type-checked against the dispatcher end to end. Its
- * `queuedJournalId` decides, on the identity-guard and catch paths, whether an unclaimed `queued`
- * record is failed.
- */
-export async function handleWalletMessage(
-	request: { session: ActiveSession; message: WalletMessage; live: LiveSession; hooks?: DispatchHooks },
-	deps: WalletMessageDeps,
-): Promise<void> {
-	const { session, message, live, hooks } = request
-	const { dispatcher, profileService, operationJournal, sessionProfiles, switchEpoch, logger, legal, resetRun } = deps
-	const response: WalletResponse = {
-		messageId: message.messageId,
-		walletId: "nulo",
+/** `late` is bound before `handler.initialize()` and never rebound, so reading it on arrival equals
+ *  reading it behind the session's FIFO. */
+function messagePipelineDeps(deps: SdkDeps, state: SdkHandlerState): MessagePipelineDeps {
+	return {
+		handler: state.late.handler!,
+		sessions: state.sessions,
+		switchEpoch: state.late.switchEpoch!,
+		dispatcher: deps.dispatcher,
+		profileService: deps.profileService,
+		accountService: deps.accountService,
+		networkService: deps.networkService,
+		dappSessionService: deps.dappSessionService,
+		executionService: deps.executionService,
+		operationJournal: deps.operationJournal,
+		legal: deps.legal,
+		resetRun: deps.resetRun,
+		logger: deps.logger,
 	}
-	// The switch epoch the response is composed under — gates delivery at the
-	// tail. Captured BEFORE the awaited profile read: a switch landing inside
-	// that await must register as a bump AFTER this baseline, or the stale
-	// `profile` would pass the entry guard and the tail would see no change.
-	const preEntryEpoch = switchEpoch.current()
-	let entryEpoch: number | undefined
-
-	try {
-		// The admission moment: capture the execution fence (profile + deletion epoch +
-		// live session serial) that every fenced op this message dispatches runs under, in
-		// place of a bare active-profile read. Throws when locked, same as before.
-		const fence = await profileService.captureExecutionFence()
-		entryEpoch = preEntryEpoch
-
-		// Identity guard: the channel serves ONLY the profile that established
-		// it (map-miss = fail closed). The dApp gets the error envelope, then
-		// the standard disconnect. `ctx.profileId` below is therefore always
-		// the session's OWN profile, and the dispatcher's session lookup
-		// anchors on it — an in-flight message that outlives a later switch
-		// stays A-consistent or fails closed; it can never observe the new
-		// profile.
-		const mayProceed = await enforceSessionProfileBinding({
-			sessionId: session.sessionId,
-			origin: session.origin,
-			activeProfileId: fence.profileId,
-			sessionProfiles,
-			respond: () => {
-				response.error = SESSION_INVALID_ERROR
-				return live.respond(response)
-			},
-			terminateSession: () => live.terminate(),
-			logger,
-		})
-		if (!mayProceed) {
-			// The guard's early return bypasses the catch below — close a
-			// pre-created queued record here too, or it sits at "Queued..."
-			// until the reaper's stuck sweep.
-			if (hooks?.queuedJournalId) {
-				await failQueuedIfUnclaimed(operationJournal, hooks.queuedJournalId, SESSION_NO_LONGER_VALID, logger, "wallet_refused")
-			}
-			return
-		}
-
-		const ctx: SessionContext = {
-			chainId: chainInfoToChainId(session),
-			profileId: fence.profileId,
-			origin: session.origin,
-			sessionId: session.sessionId,
-			fence,
-		}
-
-		// Once per top-level request, before the dispatcher sees a method name: no dApp request is
-		// served without a current Terms acceptance. The catch below answers with the typed envelope
-		// and closes any queued journal row, exactly as for every other refusal.
-		// A request that arrives while a network reset runs waits for it, at most a bounded time;
-		// the per-chain guards still decide what it may do once admitted.
-		await resetRun?.waitForRunEnd()
-		await legal.assertCurrent()
-		// The last await before the dispatch: the session can end, and its id re-key, inside any of
-		// the reads above.
-		if (!live.isLive()) {
-			return dropUnrunMessage(message, session.sessionId, hooks?.queuedJournalId, "wallet_refused", operationJournal, logger)
-		}
-
-		// Hooks ride as an internal 4th arg — deliberately NOT on `ctx` so
-		// `dispatch("batch", ...)`'s recursive ctx forwarding can't leak them
-		// into batch legs (would let an inner sendTx release the top-level
-		// baton before the batch finishes).
-		const raw = await dispatcher.dispatch(message.type, message.args, ctx, hooks)
-		response.result = toJsonSafe(raw)
-	} catch (error) {
-		// Structured EIP-1193-aligned envelope for recognised WalletError subclasses
-		// (JobCancelledError → 4001, CapabilityNotGrantedError → 4100). Upstream
-		// `@aztec-labs/wallet-sdk` collapses `response.error` to
-		// `new Error(JSON.stringify(error))` at `extension_wallet.ts:181`, so dApps
-		// that want to discriminate parse the message — see the wallet-bridge
-		// README for the recipe. Mapping lives in `error-envelope.ts` so it can be
-		// unit-tested in isolation; everything not recognised collapses to a
-		// string, preserving the original wire contract.
-		response.error = toWalletResponseError(error)
-		// Pass the error as an OBJECT, never pre-stringified: a finished string is opaque to the
-		// logger's redaction, so interpolating it here would smuggle whatever the error carries
-		// (endpoint URLs, argument values) straight into the log store.
-		logger.log(
-			"wallet-sdk",
-			isExpectedRefusal(error) ? LogLevel.Debug : LogLevel.Error,
-			`Method ${describeWireMethod(message.type)} failed for session ${describeExternalId(session.sessionId)}`,
-			response.error,
-		)
-
-		if (hooks?.queuedJournalId) {
-			await failQueuedForError(operationJournal, hooks.queuedJournalId, error, logger)
-		}
-	}
-
-	// The entry guard is one-shot: a switch landing mid-dispatch normally tears
-	// the session down (upstream sendResponse then no-ops), but a teardown
-	// hiccup can leave the channel live — and a response composed with the NEW
-	// profile's reads must never reach the old channel. The EPOCH comparison
-	// (not an active-identity check) also catches switch-then-lock, where the
-	// active profile reads `undefined` and an identity check would wave the
-	// response through. Pure lock/unlock-to-same bumps nothing, so those
-	// pinned flows still deliver.
-	if (entryEpoch !== undefined && switchEpoch.current() !== entryEpoch) {
-		logger.log(
-			"wallet-sdk",
-			LogLevel.Warn,
-			`Suppressing ${describeWireMethod(message.type)} response for session ${describeExternalId(session.sessionId)}: profile switched mid-dispatch`,
-		)
-		return
-	}
-
-	try {
-		await live.respond(response)
-	} catch (sendError) {
-		// The error goes as an OBJECT, not interpolated: this is an internal transport failure worth
-		// diagnosing, and passing it whole lets the logger's projection scrub and cap it.
-		logger.log("wallet-sdk", LogLevel.Error, `Failed to send response for ${describeWireMethod(message.type)}`, sendError)
-	}
-}
-
-/** A refusal a connected dApp can repeat on every poll, or with silent sends over the waiting-sends
- *  cap, so it logs at `debug`: an `error` line lands in every user's log buffer. */
-function isExpectedRefusal(error: unknown): boolean {
-	return (
-		error instanceof TermsAcceptanceRequiredError ||
-		error instanceof ScopeViolationError ||
-		error instanceof ChainNotSupportedError ||
-		error instanceof InvalidWalletArgumentsError ||
-		error instanceof UnsupportedMethodError ||
-		error instanceof TooManyPendingError
-	)
 }

@@ -4738,10 +4738,10 @@ describe("ProfileService — a retired passkey profile", () => {
 	test("the slot opener and the row-key fill refuse a retired row themselves", async () => {
 		const { service } = await withRetired()
 		const internals = service as unknown as {
-			openSlots(row: unknown, key: { password: string }): Promise<unknown>
+			codec: { openSlots(row: unknown, key: { password: string }): Promise<unknown> }
 			fillRowKeysHoldingLock(row: unknown, master: Uint8Array): Promise<void>
 		}
-		await expect(internals.openSlots(retiredRow(), { password: "pass1234" })).rejects.toBeInstanceOf(RetiredProfileError)
+		await expect(internals.codec.openSlots(retiredRow(), { password: "pass1234" })).rejects.toBeInstanceOf(RetiredProfileError)
 		await expect(internals.fillRowKeysHoldingLock(retiredRow(), new Uint8Array(32).fill(7))).rejects.toBeInstanceOf(RetiredProfileError)
 	}, 30_000)
 })

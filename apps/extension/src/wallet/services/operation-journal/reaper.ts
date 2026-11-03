@@ -72,7 +72,7 @@ export const REAP_PERIOD_MINUTES = 1
  */
 const STAGE_GRACE_MS: Readonly<Record<ActiveStage, number>> = {
 	// Matches the wallet-sdk dApp-interaction popup timeout (INTERACTION_TIMEOUT_MS).
-	// A queued record that survives 10 minutes means background.ts either crashed
+	// A queued record that survives 10 minutes means wallet-message.ts either crashed
 	// or somehow lost the handler — sweep it so the activity feed doesn't show a
 	// permanently-stuck "Queued..." card.
 	queued: 10 * 60_000,

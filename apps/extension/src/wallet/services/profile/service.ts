@@ -22,25 +22,19 @@ import {
 	StaleUnlockCredentialError,
 	UnlockMethodChangedError,
 } from "@nulo/extension-messaging/errors"
-import { fromBase64Lenient, Lock } from "@/wallet/utils"
+import { Lock } from "@/wallet/utils"
 import { isGeneratedProfileId, ProfileRepository } from "./repository"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { array_equals, canonicalizeMnemonic, deferred, getEntropy, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import {
-	asBase64Ciphertext,
-	asImportedKeysDek,
 	asMasterSecretBytes,
 	computeWalletFingerprint,
 	deriveDappSessionMacKey as deriveDappSessionMacKeyFromSecrets,
 	deriveMasterFromMnemonic,
 	EncryptionKey,
 	generateImportedKeysDek,
-	IMPORTED_DEK_AAD,
-	IMPORTED_KEYS_DEK_LEN,
-	type EncryptedProfileSecret,
 	type ImportedKeysDek,
 	type MasterSecretBytes,
-	openPasskeySlots,
 	type Passhash,
 	type PasskeyCredential,
 	PasswordSecretBox,
@@ -48,8 +42,6 @@ import {
 	type Sealed,
 	sealDekUnderWrapKey,
 	sealPasskeySlots,
-	unsealDekUnderWrapKey,
-	verifyEnvelopeMacV3,
 	zeroize,
 } from "@nulo/wallet-crypto"
 import { PasskeyService } from "@/wallet/services/passkey/service"
@@ -58,17 +50,9 @@ import { PasskeyRecoveryCoordinator, type PasskeyAnswer } from "./passkey-recove
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { SessionManager } from "./session-manager"
 import { RowKeyring } from "./row-keyring"
+import { type OpenedSlots, ProfileSecretCodec, type RowSeal, type SlotKey, unlocksWith } from "./profile-secret-codec"
 import { ExpiringStash } from "./expiring-stash"
-import {
-	classifyProfileRow,
-	envelopeMacFor,
-	macEnvelopeV3,
-	newPasskeyRow,
-	newPasswordRow,
-	newRowFor,
-	replacementRow,
-	sameStoredRow,
-} from "./profile-row"
+import { classifyProfileRow, envelopeMacFor, newPasskeyRow, newPasswordRow, newRowFor, replacementRow, sameStoredRow } from "./profile-row"
 import {
 	PROFILE_SERVICE_NAME,
 	type ProfileInfo,
@@ -106,40 +90,6 @@ type RestoreCommit = Readonly<{
 	material: RestoreMaterial
 	allowDuplicate: boolean
 }>
-
-/** What opens a row's slots: its password, or a passkey answer, which opens a passkey row only for
- *  the row's own credential and `prfSalt`. */
-type SlotKey = { password: string } | { passkey: PasskeyCredential }
-
-/** What a new or resealed row is sealed under: a password's hash, or a passkey answer, whose own
- *  `prfSalt` the row then stores. */
-type RowSeal = { passhash: Passhash } | { credential: PasskeyCredential }
-
-/** A row's slots and DEK slot sealed under a {@link RowSeal}, and the unlock fields the row takes. */
-type SealedUnder = {
-	slots: EncryptedProfileSecret
-	dekSealed: string
-	unlock: { type: "password" } | { type: "passkey"; credentialId: string; prfSalt: string }
-}
-
-/** A row's slots opened under its unlock, from {@link ProfileService.openSlots}. The caller owns the
- *  buffers and calls `wipe()` on every path. */
-type OpenedSlots = {
-	secret: MasterSecretBytes
-	entropy: Uint8Array<ArrayBuffer>
-	/** Opens a DEK slot under the same key; `null` when it does not open. */
-	openDek(dekSealed: string): Promise<ImportedKeysDek | null>
-	wipe(): void
-}
-
-/** Whether `key` is for the unlock `row` stores: the same kind and, for a passkey, the row's own
- *  credential at its own input. A key that is still has to open the slots. */
-function unlocksWith(row: Profile, key: SlotKey): boolean {
-	const classified = classifyProfileRow(row)
-	if (classified.kind === "password") return "password" in key
-	if (classified.kind !== "passkey" || !("passkey" in key)) return false
-	return key.passkey.id === classified.credentialId && key.passkey.unlockKeyFor(classified.prfSalt) !== null
-}
 
 /** The refusal at password change once the DEK slot no longer unseals: the DEK keys the PXE store
  *  and every dApp-session tag, so the only non-destructive repair is export + restore. */
@@ -196,6 +146,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private readonly lock = new Lock()
 	private readonly repo: ProfileRepository
 	private readonly secretBox: PasswordSecretBox
+	private readonly codec: ProfileSecretCodec
 	private readonly sessionManager: SessionManager
 	private passkeys: PasskeyService = null!
 	private passkeyCoordinator: PasskeyRecoveryCoordinator = null!
@@ -320,6 +271,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		this.staleNetworks = new StaleNetworkRepository(this.local)
 		this.restorePending = new RestorePendingRepository(this.local)
 		this.secretBox = new PasswordSecretBox()
+		this.codec = new ProfileSecretCodec(this.secretBox)
 		this.sessionManager = new SessionManager(
 			config,
 			logger,
@@ -405,88 +357,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			await this.fillRowKeysHoldingLock(session.profile, master)
 		} finally {
 			zeroize(master)
-		}
-	}
-
-	/** The only reader of a row's sealed slots: the master and entropy `key` opens, or `null` when
-	 *  the row does not classify as the unlock `key` is for, or `key` does not open its slots (wrong,
-	 *  or a slot corrupted), which each caller maps to its own refusal. A passkey row opens only
-	 *  under its own credential and its own `prfSalt`. Refuses a retired row before anything else.
-	 *  The DEK opens through the result, so it opens only after the guard. */
-	private async openSlots(row: Profile, key: SlotKey): Promise<OpenedSlots | null> {
-		const classified = classifyProfileRow(row)
-		if (classified.kind === "retired") throw new RetiredProfileError()
-		if (classified.kind === "password" && "password" in key) return this.openPasswordSlots(classified.slots, key.password)
-		if (classified.kind === "passkey" && "passkey" in key) return this.openPasskeyRowSlots(classified, key.passkey)
-		return null
-	}
-
-	private async openPasswordSlots(
-		slots: { guard: string; secret: string; entropy: string },
-		password: string,
-	): Promise<OpenedSlots | null> {
-		const passhash = await EncryptionKey.getPasshash(password)
-		let opened: OpenedSlots | null = null
-		try {
-			opened = await this.openUnderPasshash(slots, passhash)
-		} finally {
-			if (!opened) zeroize(passhash)
-		}
-		if (!opened) return null
-		const { wipe } = opened
-		return {
-			...opened,
-			wipe: () => {
-				wipe()
-				zeroize(passhash)
-			},
-		}
-	}
-
-	/** {@link openPasswordSlots} under a hash the caller owns, and wipes. */
-	private async openUnderPasshash(
-		slots: { guard: string; secret: string; entropy: string },
-		passhash: Passhash,
-	): Promise<OpenedSlots | null> {
-		const opened = await this.secretBox.unsealWithPasshash(passhash, {
-			guard: asBase64Ciphertext(slots.guard),
-			secret: asBase64Ciphertext(slots.secret),
-			entropy: asBase64Ciphertext(slots.entropy),
-		})
-		if (!opened) return null
-		const { secret, entropy } = opened
-		return {
-			secret,
-			entropy,
-			openDek: (dekSealed) => this.unsealDekWithPasshash(passhash, dekSealed),
-			wipe: () => {
-				zeroize(secret)
-				zeroize(entropy)
-			},
-		}
-	}
-
-	private async openPasskeyRowSlots(
-		row: Extract<ReturnType<typeof classifyProfileRow>, { kind: "passkey" }>,
-		credential: PasskeyCredential,
-	): Promise<OpenedSlots | null> {
-		const unlockKey = credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null
-		if (!unlockKey) return null
-		const opened = await openPasskeySlots(unlockKey, {
-			guard: asBase64Ciphertext(row.slots.guard),
-			secret: asBase64Ciphertext(row.slots.secret),
-			entropy: asBase64Ciphertext(row.slots.entropy),
-		})
-		if (!opened) return null
-		const { secret, entropy } = opened
-		return {
-			secret,
-			entropy,
-			openDek: (dekSealed) => unsealDekUnderWrapKey(unlockKey, dekSealed).catch(() => null),
-			wipe: () => {
-				zeroize(secret)
-				zeroize(entropy)
-			},
 		}
 	}
 
@@ -583,7 +453,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		try {
 			dek = await opened.openDek(row.dekSealed)
 			if (dek) {
-				const macOk = await this.envelopeMacValid(id, row, opened.secret, dek)
+				const macOk = await this.codec.envelopeMacValid(id, row, opened.secret, dek)
 				if (!macOk) {
 					zeroize(dek)
 					dek = null
@@ -789,7 +659,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			const sealed = await this.secretBox.seal(password, secret, entropy)
 			passhash = sealed.passhash
 			const encrypted = sealed.encrypted
-			const dekSealed = await this.sealDekWithPasshash(passhash, dek)
+			const dekSealed = await this.codec.sealDekWithPasshash(passhash, dek)
 			return await this.runExclusive(async () => {
 				// Invariant assertion on fresh CSPRNG entropy (a collision is cryptographically
 				// impossible) — kept uniform with the import/restore paths.
@@ -828,7 +698,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 		// Phase 2 — crypto UNLOCKED. Caller pays ~1s PBKDF2 but the rest of
 		// the RPC surface stays responsive.
-		const opened = await this.openSlots(snapshot, { password })
+		const opened = await this.codec.openSlots(snapshot, { password })
 		if (!opened) {
 			// Can't tell wrong-password from storage corruption from this single
 			// null, but GUARD catches wrong-password first in practice. Auth UI
@@ -842,7 +712,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// exported recovery phrase would point at a DIFFERENT wallet — fail closed before any
 			// session opens. (CORE material — this failure BLOCKS, per the degradation state
 			// machine rule 1; the DEK/MAC checks below degrade instead.)
-			await this.assertEntropyMasterPair(opened.secret, opened.entropy)
+			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 
 			// Phase 3 — re-enter lock, revalidate, open session.
 			return await this.runExclusive(async () => {
@@ -970,13 +840,13 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (answer.credential.id !== snapshot.credentialId) {
 				throw new Error("Invalid profile id")
 			}
-			const opened = await this.openSlots(snapshot, { passkey: answer.credential })
+			const opened = await this.codec.openSlots(snapshot, { passkey: answer.credential })
 			if (!opened) throw new PasskeyNotOpenedError()
 			let dek: ImportedKeysDek | null = null
 			try {
 				// The pairing check runs at every unlock: the stored words must still derive the stored
 				// master (CORE material — this failure BLOCKS; the DEK/MAC checks below degrade instead).
-				await this.assertEntropyMasterPair(opened.secret, opened.entropy)
+				await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 				return await this.runExclusive(async () => {
 					const current = await this.revalidatePasskeyRowHoldingLock(id, snapshot)
 					dek = await this.unsealTrustedDekHoldingLock(id, current, opened, "passkey unlock")
@@ -1189,7 +1059,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			throw new Error("Profile storage corrupted")
 		}
 		try {
-			await this.assertEntropyMasterPair(secret, entropy)
+			await this.codec.assertEntropyMasterPair(secret, entropy)
 			await this.precheckBeforeRekeyHoldingLock(profile, secret)
 		} catch (err) {
 			zeroize(secret)
@@ -1235,7 +1105,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			throw new Error(DEK_UNRECOVERABLE_MESSAGE)
 		}
 		try {
-			if (!(await this.envelopeMacValid(profile.id, profile, secret, dek))) {
+			if (!(await this.codec.envelopeMacValid(profile.id, profile, secret, dek))) {
 				this.logger.log(this.name, LogLevel.Error, `envelope MAC does not cover the DEK slot at ${changing} change`, profile.id)
 				throw new Error(`Profile integrity check failed. Export a full backup and restore it before changing the ${changing}`)
 			}
@@ -1256,7 +1126,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	): Promise<{ dek: ImportedKeysDek; newDekSealed: string }> {
 		const dek = await this.trustedDekForRekeyHoldingLock(profile, secret, old, "password")
 		try {
-			return { dek, newDekSealed: await this.sealDekWithPasshash(newPasshash, dek) }
+			return { dek, newDekSealed: await this.codec.sealDekWithPasshash(newPasshash, dek) }
 		} catch (err) {
 			zeroize(dek)
 			throw err
@@ -1300,7 +1170,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				throw new Error("Operation not supported for passkey profile")
 			}
 
-			const old = await this.openSlots(profile, { password: oldPassword })
+			const old = await this.codec.openSlots(profile, { password: oldPassword })
 			if (!old) {
 				throw new Error("Invalid profile old password")
 			}
@@ -1352,10 +1222,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		const key = await this.unlockCredentialKey(credential)
-		const opened = await this.openSlots(profile, key)
+		const opened = await this.codec.openSlots(profile, key)
 		if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())
 		try {
-			await this.assertEntropyMasterPair(opened.secret, opened.entropy)
+			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 			await this.runExclusive(async () => {
 				if (!(await this.rowUnchangedHoldingLock(profile, capturedEpoch))) throw new Error("Invalid profile id")
 				zeroize(await this.trustedDekForRekeyHoldingLock(profile, opened.secret, opened, "unlock method"))
@@ -1369,10 +1239,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		const key = await this.unlockCredentialKey(credential)
-		const opened = await this.openSlots(profile, key)
+		const opened = await this.codec.openSlots(profile, key)
 		if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())
 		try {
-			await this.assertEntropyMasterPair(opened.secret, opened.entropy)
+			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 			await this.runExclusive(async () => {
 				if (!(await this.rowUnchangedHoldingLock(profile, capturedEpoch))) throw new Error("Invalid profile id")
 			})
@@ -1406,7 +1276,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		const seal = "password" in next ? await this.newRowSeal(next.password, undefined) : await this.newRowSeal(undefined, next.passkey)
 		let opened: OpenedSlots | null = null
 		try {
-			opened = await this.openSlots(snapshot, key)
+			opened = await this.codec.openSlots(snapshot, key)
 			if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())
 			const old = opened
 			return await this.runExclusive((isCurrent) =>
@@ -1447,11 +1317,16 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		const id = snapshot.id
 		const unchanged = () => this.rowUnchangedHoldingLock(snapshot, capturedEpoch)
 		if (!(await unchanged())) throw await this.movedRowRefusal(id, capturedEpoch, key)
-		await this.assertEntropyMasterPair(old.secret, old.entropy)
+		await this.codec.assertEntropyMasterPair(old.secret, old.entropy)
 		const dek = await this.trustedDekForRekeyHoldingLock(snapshot, old.secret, old, "unlock method")
 		try {
 			if ("credential" in seal) await this.assertPrfSaltUnusedHoldingLock(seal.credential.prfSalt)
-			const replacement = await replacementRow(snapshot, await this.sealUnder(seal, old.secret, old.entropy, dek), old.secret, dek)
+			const replacement = await replacementRow(
+				snapshot,
+				await this.codec.sealUnder(seal, old.secret, old.entropy, dek),
+				old.secret,
+				dek,
+			)
 			await this.assertReplacementOpens(replacement, seal, { secret: old.secret, entropy: old.entropy, dek })
 			await this.precheckBeforeRekeyHoldingLock(snapshot, old.secret)
 			// The lock's watchdog may have admitted a successor during the slow steps above or this read,
@@ -1480,8 +1355,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		let reopened: OpenedSlots | null = null
 		let dek: ImportedKeysDek | null = null
 		try {
-			if ("credential" in seal) reopened = await this.openSlots(row, { passkey: seal.credential })
-			else if (classified.kind === "password") reopened = await this.openUnderPasshash(classified.slots, seal.passhash)
+			if ("credential" in seal) reopened = await this.codec.openSlots(row, { passkey: seal.credential })
+			else if (classified.kind === "password") reopened = await this.codec.openUnderPasshash(classified.slots, seal.passhash)
 			dek = reopened ? await reopened.openDek(row.dekSealed) : null
 			const same =
 				!!reopened &&
@@ -2060,39 +1935,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		return { passhash: await EncryptionKey.getPasshash(password) }
 	}
 
-	/** Seals master, entropy and `dek` under `seal`. The caller owns every buffer. */
-	private async sealUnder(
-		seal: RowSeal,
-		secret: MasterSecretBytes,
-		entropy: Uint8Array<ArrayBuffer>,
-		dek: ImportedKeysDek,
-	): Promise<SealedUnder> {
-		const sealDek = await this.sealSlotsUnder(seal, secret, entropy)
-		return sealDek(dek)
-	}
-
-	/** {@link sealUnder} in two steps, so a caller can draw the DEK after the slots are sealed. */
-	private async sealSlotsUnder(
-		seal: RowSeal,
-		secret: MasterSecretBytes,
-		entropy: Uint8Array<ArrayBuffer>,
-	): Promise<(dek: ImportedKeysDek) => Promise<SealedUnder>> {
-		if ("passhash" in seal) {
-			const { passhash } = seal
-			const slots = await this.secretBox.sealWithPasshash(passhash, secret, entropy)
-			return async (dek) => ({ slots, dekSealed: await this.sealDekWithPasshash(passhash, dek), unlock: { type: "password" } })
-		}
-		const { id: credentialId, prfSalt } = seal.credential
-		const unlockKey = seal.credential.unlockKeyFor(prfSalt)
-		if (!unlockKey) throw new Error("Passkey answered for another request")
-		const slots = await sealPasskeySlots(unlockKey, secret, entropy)
-		return async (dek) => ({
-			slots,
-			dekSealed: await sealDekUnderWrapKey(unlockKey, dek),
-			unlock: { type: "passkey", credentialId, prfSalt },
-		})
-	}
-
 	/** Each profile's passkey input is its own: a second profile on the same passkey keys its slots
 	 *  under a fresh input, never one a stored row already opens under. Caller MUST hold the facade
 	 *  lock, so the check and the write it guards are one step. */
@@ -2112,7 +1954,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// An export asks for its credential again, so an empty one is a missing one here.
 			if (!password && !credentialData) throw new Error("Password is required")
 			const key = await this.slotKey(password, credentialData)
-			const opened = await this.openSlots(profile, key)
+			const opened = await this.codec.openSlots(profile, key)
 			try {
 				if (!opened) {
 					throw this.notOpened(key, () => new InvalidPasswordError())
@@ -2126,7 +1968,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				// Pairing check at every entropy-decryption reveal site: this master feeds
 				// `exportAccount` (which derives real signing keys), so a corrupted/transplanted
 				// secret slot must fail loudly here too, not silently downstream.
-				await this.assertEntropyMasterPair(opened.secret, opened.entropy)
+				await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 				// Backup `master-key` semantics: ALWAYS the derived master, never entropy —
 				// restore() seals this value verbatim as the working master.
 				return toBase64(opened.secret)
@@ -2162,7 +2004,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		const key = await this.slotKey(password, credentialData)
-		const opened = await this.openSlots(profile, key)
+		const opened = await this.codec.openSlots(profile, key)
 		let sourceDek: ImportedKeysDek | null = null
 		let handedOver = false
 		try {
@@ -2174,7 +2016,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			}
 			// Pairing check before EXPORT: a backup built from a tampered/
 			// transplanted row would otherwise report success with an unrestorable pair.
-			await this.assertEntropyMasterPair(opened.secret, opened.entropy)
+			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 			// DELIBERATELY opens the slot even when the envelope MAC no longer covers the row, unlike
 			// every path that puts the DEK to work: a planted DEK opens none of this profile's rows,
 			// which then travel unopened into the restore's orphan taxonomy, while refusing would
@@ -2205,7 +2047,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		const key = await this.slotKey(password, credentialData)
 		// Authenticate via the guard round-trip (full unseal), THEN open the DEK slot.
-		const opened = await this.openSlots(profile, key)
+		const opened = await this.codec.openSlots(profile, key)
 		try {
 			if (!opened) {
 				throw this.notOpened(key, () => new InvalidPasswordError())
@@ -2242,7 +2084,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		const key = await this.slotKey(password, credentialData)
-		const opened = await this.openSlots(profile, key)
+		const opened = await this.codec.openSlots(profile, key)
 		try {
 			if (!opened) {
 				// Legacy identity-stable message, pinned by the integration suite — kept in
@@ -2255,7 +2097,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// words that no longer derive the stored master would point at a DIFFERENT wallet —
 			// the split-brain recovery attack — so fail closed instead of handing them out.
 			const mnemonic = await getMnemonic(opened.entropy)
-			await this.assertEntropyMasterPair(opened.secret, opened.entropy)
+			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 			// Revalidate under the lock AFTER the async derivations — a delete interleaving
 			// during them must not let the erased profile's words escape.
 			await this.runExclusive(async () => {
@@ -2270,71 +2112,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// zeroing the underlying buffers at least closes the
 			// in-memory window.
 			opened?.wipe()
-		}
-	}
-
-	/**
-	 * The words↔master pairing check, run at every site that has decrypted BOTH the entropy and
-	 * the master: the stored recovery words MUST still derive the stored master. A mismatch means
-	 * a tampered or cross-profile-transplanted ciphertext (the backup checksum is integrity-not-
-	 * auth; purpose-AAD stops slot-swaps but not same-slot moves between same-password profiles).
-	 * Throws before any secret is revealed, persisted, or exported. Zeroizes its own scratch.
-	 */
-	private async assertEntropyMasterPair(secret: MasterSecretBytes, entropy: Uint8Array<ArrayBuffer>): Promise<void> {
-		const words = await getMnemonic(entropy)
-		const rederived = await deriveMasterFromMnemonic(words)
-		const paired = array_equals(rederived, secret)
-		zeroize(rederived)
-		if (!paired) {
-			throw new Error("Profile storage corrupted")
-		}
-	}
-
-	/**
-	 * Does the stored MAC still cover this exact record? EVERY site that is about to trust the DEK
-	 * must ask — not just the unlock path. The DEK slot's AAD is a purpose constant, not
-	 * profile-bound, so a same-password sibling's `dekSealed` transplants cleanly into another
-	 * profile's row and unseals there; the whole-envelope MAC is the only check that catches it.
-	 * A site that skips this either blesses the planted slot (laundering the tamper into a
-	 * freshly-valid MAC) or exports material sealed to a key the profile does not own.
-	 */
-	private async envelopeMacValid(
-		requestedId: string,
-		p: {
-			guard: string
-			secret: string
-			entropy: string
-			dekSealed: string
-			walletFingerprint: string
-			envelopeMac: string
-		},
-		secret: MasterSecretBytes,
-		dek: ImportedKeysDek,
-	): Promise<boolean> {
-		return verifyEnvelopeMacV3(requestedId, secret, dek, macEnvelopeV3(p, p.dekSealed, p.walletFingerprint), p.envelopeMac)
-	}
-
-	/** Seal the imported-keys DEK under the password credential (EncryptionKey — the audited
-	 *  PBKDF2 + AES-GCM path — with the shared purpose AAD). */
-	private async sealDekWithPasshash(passhash: Passhash, dek: ImportedKeysDek): Promise<string> {
-		const key = await EncryptionKey.fromPasshash(passhash)
-		return toBase64(await key.encrypt(dek, IMPORTED_DEK_AAD))
-	}
-
-	/** Unseal the DEK slot under the password credential. `null` — not a throw — on any
-	 *  wrong-key / transplant / corruption / length failure: the caller applies the degradation
-	 *  state machine (derived-only session), never a profile block. */
-	private async unsealDekWithPasshash(passhash: Passhash, dekSealed: string): Promise<ImportedKeysDek | null> {
-		try {
-			const key = await EncryptionKey.fromPasshash(passhash)
-			const pt = await key.decrypt(fromBase64Lenient(dekSealed), IMPORTED_DEK_AAD)
-			if (pt.length !== IMPORTED_KEYS_DEK_LEN) {
-				zeroize(pt)
-				return null
-			}
-			return asImportedKeysDek(pt)
-		} catch {
-			return null
 		}
 	}
 
@@ -2401,7 +2178,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				const walletFingerprint = await this.assertNotDuplicateWallet(secret, allowDuplicate)
 				if ("credential" in seal) await this.assertPrfSaltUnusedHoldingLock(seal.credential.prfSalt)
 				const id = await this.nextUnreservedId()
-				const sealed = await this.sealUnder(seal, secret, entropy, dek)
+				const sealed = await this.codec.sealUnder(seal, secret, entropy, dek)
 				const profile = await newRowFor({ id, name, walletFingerprint, ...sealed }, secret, dek)
 				await this.persistNewProfileHoldingLock(profile)
 				await this.markProfileFlagHoldingLock(profileImportedKey(id))
@@ -2499,7 +2276,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// new row — restoring A's backup beside a still-live A must not let the
 			// clone's credential open keys A imports later. The backup's own key rows
 			// stay usable via the source→destination rewrap context below.
-			const sealDek = await this.sealSlotsUnder(seal, material.master, material.entropy)
+			const sealDek = await this.codec.sealSlotsUnder(seal, material.master, material.entropy)
 			const destinationDek = generateImportedKeysDek()
 			scratch.destinationDek = destinationDek
 			const sealed = await sealDek(destinationDek)
@@ -2642,7 +2419,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			throw new Error("Password is required for password profile")
 		}
 		const key = await this.slotKey(password, credentialData)
-		const opened = await this.openSlots(profile, key)
+		const opened = await this.codec.openSlots(profile, key)
 		if (!opened) {
 			throw this.notOpened(key, () => new InvalidPasswordError())
 		}
@@ -2651,7 +2428,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// Pairing check before the session opens: a tamper between restore()
 			// and finalize must not open a session whose recovery phrase is a lie. Inside
 			// the try so a pairing throw still wipes the unsealed buffers.
-			await this.assertEntropyMasterPair(opened.secret, opened.entropy)
+			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 			dek = await this.unsealTrustedDekHoldingLock(id, profile, opened, "finalizeRestore")
 			return await this.openAndWarnIfDegradedHoldingLock(profile, opened.secret, dek)
 		} finally {
