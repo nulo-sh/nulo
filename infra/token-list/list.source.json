@@ -52,5 +52,22 @@
 			"decimals": 18,
 			"name": "cWETH"
 		}
-	]
+	],
+	"priceFeeds": {
+		"usd-coin": {
+			"min": 0.2,
+			"max": 5,
+			"ticker": "USDC"
+		},
+		"tether": {
+			"min": 0.2,
+			"max": 5,
+			"ticker": "USDT"
+		},
+		"euro-coin": {
+			"min": 0.2,
+			"max": 5,
+			"ticker": "EURC"
+		}
+	}
 }
