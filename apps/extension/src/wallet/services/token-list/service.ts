@@ -1,14 +1,18 @@
+import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { EnvelopeError, MAX_ENVELOPE_BYTES, PINNED_KEYS, readTokenList, type VerifiedTokenList } from "@nulo/token-list"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { ValueDecodeError } from "@nulo/wallet-core/storage"
 import { AlarmDispatcher, EventHandler, ResponseTooLargeError, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
-import type { IService, ServiceCollection } from "@/wallet/base"
+import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import { LegalAcceptanceService, type LegalStatus } from "@/wallet/services/legal/service"
 import type { ValueStorage } from "@/wallet/storage"
 import { valueStorage } from "@/wallet/storage/stores"
 import {
+	type Events,
+	type Methods,
 	type RefreshOutcome,
+	type RefreshResult,
 	TOKEN_LIST_REFRESH_ALARM_NAME,
 	TOKEN_LIST_SERVICE_NAME,
 	TOKEN_LIST_URL,
@@ -20,9 +24,13 @@ export * from "./spec"
 
 const HOUR_MS = 3_600_000
 const DAY_MS = 24 * HOUR_MS
-const JITTER_MS = 2 * HOUR_MS
+const REFRESH_MS = 6 * HOUR_MS
+const JITTER_MS = REFRESH_MS / 12
 /** The wait after the Nth consecutive failure; the last step repeats. */
 export const FAILURE_BACKOFF_MS: readonly number[] = [5 * 60_000, 30 * 60_000, 2 * HOUR_MS, 6 * HOUR_MS, DAY_MS]
+/** Past every deadline any build has written, the earlier daily cadence's two-hour jitter included,
+ *  so a row stored before an update reads as written. */
+export const DEADLINE_CEILING_MS = DAY_MS + 2 * HOUR_MS
 const FETCH_TIMEOUT_MS = 10_000
 
 const FAILED: ReadonlySet<RefreshOutcome> = new Set(["older-sequence", "refused", "oversize", "http-status", "network"])
@@ -33,11 +41,11 @@ export type TokenListStoredState = { envelope?: string; lastSuccessAt?: number; 
 type StoredState = TokenListStoredState
 
 /** Storage is writable by every extension page: a malformed field reads as absent, and a deadline
- *  past the longest one this service writes reads as due, so a planted value cannot stop refreshes. */
+ *  past {@link DEADLINE_CEILING_MS} reads as due, so a planted value cannot stop refreshes. */
 export function decodeTokenListState(raw: unknown, now: number): TokenListStoredState {
 	if (!raw || typeof raw !== "object") return { failures: 0 }
 	const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw as Record<string, unknown>
-	const latest = now + DAY_MS + JITTER_MS
+	const latest = now + DEADLINE_CEILING_MS
 	return {
 		envelope: typeof envelope === "string" ? envelope : undefined,
 		lastSuccessAt: Number.isFinite(lastSuccessAt) ? (lastSuccessAt as number) : undefined,
@@ -56,9 +64,9 @@ export type TokenListServiceOptions = {
 	random?: () => number
 }
 
-/** The one deadline rule: a day plus up to two hours of jitter after a usable answer, the backoff after a failure. */
+/** The one deadline rule: six hours plus up to half an hour of jitter after a usable answer, the backoff after a failure. */
 export function nextAttemptAt(outcome: RefreshOutcome, failures: number, now: number, random: () => number): number {
-	if (!FAILED.has(outcome)) return now + DAY_MS + Math.floor(random() * JITTER_MS)
+	if (!FAILED.has(outcome)) return now + REFRESH_MS + Math.floor(random() * JITTER_MS)
 	return now + FAILURE_BACKOFF_MS[Math.min(failures, FAILURE_BACKOFF_MS.length) - 1]
 }
 
@@ -70,13 +78,14 @@ class DownloadError extends Error {
 
 /**
  * Keeps the signed token list the default tokens and prices come from. Nothing is requested before
- * the Terms acceptance is current; after that, at boot when due, on each acceptance, and at the
- * persisted deadline. A list replaces the kept one only when it verifies against a pinned key and
- * carries a higher sequence, so a host can withhold an update but never swap or roll one back.
+ * the Terms acceptance is current; after that, at boot when due, on each acceptance, at the
+ * persisted deadline, and when an extension page asks. A list replaces the kept one only when it
+ * verifies against a pinned key and carries a higher sequence, so a host can withhold an update but
+ * never swap or roll one back.
  */
-export class TokenListService implements IService {
+export class TokenListService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
+	protected readonly rpcMethods = defineRpcMethods<Methods>()("refresh")
 	public static readonly name = TOKEN_LIST_SERVICE_NAME
-	public readonly name = TOKEN_LIST_SERVICE_NAME
 	public readonly dependencies = [LegalAcceptanceService.name] as const
 
 	public readonly onListChanged = new EventHandler<TokenListSnapshot>()
@@ -95,13 +104,10 @@ export class TokenListService implements IService {
 
 	private legal!: LegalAcceptanceService
 	private snapshot: TokenListSnapshot | undefined
-	private inflight: Promise<void> | undefined
+	private inflight: Promise<RefreshResult> | undefined
 
-	public constructor(
-		private readonly logger: ILogger,
-		browserApi: BrowserApi,
-		options: TokenListServiceOptions = {},
-	) {
+	public constructor(logger: ILogger, browserApi: BrowserApi, options: TokenListServiceOptions = {}) {
+		super(TOKEN_LIST_SERVICE_NAME, logger)
 		this.storage = valueStorage<StoredState>("tokenList", browserApi.storage.local)
 		this.dispatcher = new AlarmDispatcher(TOKEN_LIST_REFRESH_ALARM_NAME, browserApi.alarms)
 		this.getSource = options.getSource ?? (async () => ({ url: TOKEN_LIST_URL, keys: PINNED_KEYS }))
@@ -110,7 +116,7 @@ export class TokenListService implements IService {
 		this.random = options.random ?? Math.random
 	}
 
-	public async start(services: ServiceCollection): Promise<void> {
+	protected async init(services: ServiceCollection): Promise<void> {
 		this.legal = services.get(LegalAcceptanceService.name)
 		this.legal.onAcceptanceChanged.add(this.onAcceptanceChanged)
 		this.snapshot = await this.loadStored()
@@ -127,10 +133,14 @@ export class TokenListService implements IService {
 		return this.refreshIfDue()
 	}
 
-	/** Single-flight. Never rejects: the outcome and the next deadline are stored, or the failure logged. */
-	public refresh(): Promise<void> {
+	/** Single-flight: a caller that joins a running refresh gets its result. Never rejects: the outcome
+	 *  and the next deadline are stored, or the failure is logged and the result is `"error"`. */
+	public refresh(): Promise<RefreshResult> {
 		this.inflight ??= this.doRefresh()
-			.catch((error) => this.log(LogLevel.Warn, "token list refresh failed", { error }))
+			.catch((error): RefreshResult => {
+				this.log(LogLevel.Warn, "token list refresh failed", { error })
+				return "error"
+			})
 			.finally(() => {
 				this.inflight = undefined
 			})
@@ -179,10 +189,10 @@ export class TokenListService implements IService {
 		}
 	}
 
-	private async doRefresh(): Promise<void> {
-		if ((await this.legal.getStatus()) !== "current") return
+	private async doRefresh(): Promise<RefreshResult> {
+		if ((await this.legal.getStatus()) !== "current") return "terms-not-current"
 		const source = await this.getSource()
-		if (!source) return
+		if (!source) return "off"
 		// Read before the fetch: a failed read fetches and writes nothing. With no list held (the boot
 		// read failed), the stored one is adopted first, so a replayed older list cannot pass.
 		let state = await this.readState()
@@ -207,9 +217,11 @@ export class TokenListService implements IService {
 		await this.storage.set(next)
 		await this.dispatcher.create({ when: next.nextAttemptAt })
 		this.log(SUSPECT.has(outcome) ? LogLevel.Warn : LogLevel.Debug, "token list refresh", { outcome, failures })
-		if (!list) return
-		this.snapshot = list
-		this.onListChanged.invoke(list)
+		if (list) {
+			this.snapshot = list
+			this.onListChanged.invoke(list)
+		}
+		return outcome
 	}
 
 	private async fetchList(source: TokenListSource): Promise<{ outcome: RefreshOutcome; list?: TokenListSnapshot; envelope?: string }> {
