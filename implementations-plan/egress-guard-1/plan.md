@@ -56,7 +56,7 @@ The live update scenario from v1.1.0 is red on both browsers at the egress guard
 - **Gate:** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e/update-recording.test.ts scripts/e2e/egress-guard.test.ts scripts/e2e/release-build.test.ts` at retry 0; `bun run test:all`. Pass: exit 0. Layers: lint, typecheck, unit.
 - Commit: `test(e2e): the egress guard declares each release's testnet host from its traits`.
 
-### Phase 2: review loop, then builds and runs at the reviewed commit `C`
+### Phase 2: review loop, then builds and runs at the reviewed commit `C` ✓ (`C` = `77e2f5795`; four runs green: [lessons/phase-2.md](lessons/phase-2.md))
 1. The review loop (§ Post-implementation) over `git diff 6bef2ce57...HEAD`, with the Opus diff review beside round 1; fixes committed, Phase 1's gate rerun.
 2. Merge `origin/dev` if it moved; rerun Phase 1's gate. HEAD is now `C`. `git status --porcelain` must show only this plan's files.
 3. From the repo root: `bash apps/extension/scripts/e2e/build-update-candidate.sh chrome`, then `firefox`; `cd apps/extension && bun scripts/e2e/install-firefox.ts`.
