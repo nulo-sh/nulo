@@ -9,3 +9,7 @@
 - Codex R1 (`gpt-6.1-sol`, high, read-only, diff `cf9ed1e40..827194887`): approve. Gate functions and refusals byte-identical, both pick paths and the decrypt's fences preserved, citations correct. Nonblocking: four comments restated their declarations; three removed, the gate's nine-line doc cut to two.
 - Opus `general-purpose` review beside it: conditional approve, no behaviour drift. F1 held: the race pin's re-pick (queued from the decrypted body's parse) lands before the earlier-passkey read starts, so moving the last stale check above that read stayed green. A second case queues the re-pick from inside the read (`EncryptionKey.getHashHex`, its first await); with the check moved up it fails, the parse case passes; restored, both pass. F2 (the read-failure pin rejected the chooser, not the read) and F3 (the name reset asserted from an unset name) fixed. Two comments that named their callers reworded.
 - Codex R2 (resumed on `827194887..c97b7db35`): approve, no remaining material finding. The loop converged in two rounds.
+
+## Arc 1 dev merge
+
+- `origin/dev` merged into the arc branch before the PR (`bd1edacb0`) with three conflicts (`src/types/auto-imports.d.ts`, the chaos model's citations, `index.md`). In `index.md` the arc appended its line under two lines dev removed when it archived their plans, and the resolution kept both sides, so the two retired lines came back. They were dropped in `5f3ec3efc`; resolve an `index.md` conflict line by line against dev's archive.

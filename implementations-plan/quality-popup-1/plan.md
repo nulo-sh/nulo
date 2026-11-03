@@ -1,7 +1,7 @@
 ---
 plan: quality-popup-1
 tier: light (the spawn prompt names it; one Codex audit at high on gpt-6.1-sol, plus one Opus Plan lens)
-status: approved by the panel; arc 1 in progress
+status: approved by the panel; arc 1 merged (#1595), arc 2 in progress
 issues: "#1443, #1478 (arc 1, Closes); #1453 (arc 2, Closes); #1471 (not done, closed with its reason)"
 driver: claude-code
 claude_model: opus
@@ -81,6 +81,7 @@ Four quality findings on the import pages and the password fields, all refactors
 - D9. Testids pass as an exact `testids` object, so none is invented or renamed (CLAUDE.md § testid preservation; Codex R1-4 over Opus O5's named exception). `repeatPlaceholder` serves change-password alone: the copy cannot change and the other choice is a copy of the pair.
 - D13. Visibility is a `hidden` model: the hosts whose ref outlives the field bind it (both import forms, both `unlock-method.vue` steps), so a method switch or a step change keeps a revealed field revealed, as today (Codex R1-2); the rest leave it unbound and the component holds it for the same lifetime their ref had (final pass).
 - D14. Decrypt publishes inside the helper, not after it returns (implementation, arc 1 end gate). A stateless `openPickedBackup` left both pages the same fence-and-publish tail, a new production clone (`audit:dup` 178/8787 to 179/8794), and a gap after the helper's return that each page had to re-fence and pin. Writing through the page's selection ref and banner with no await after the last check removes the clone and the gap by construction; `audit:dup` is back to 178/8787.
+- D15. Arc 2 is one PR from `origin/dev`, on branch `quality-popup-1-a2` (the orchestrator's spawn): arc 1 landed as #1595 before arc 2 began, so there is no stack to add to; the close-out rides at its end.
 - D10. Per-site placeholders, autofocus and labels stay props; unifying them is copy.
 - D11. `auth.vue` keeps its own field: its alert margin, programmatic focus, `autocapitalize`/`autocorrect` and second alert differ, and three other lanes edit the file. `create.vue` keeps its variant (OA-1).
 - D12. Sequencing: quality-sdk-1 also moves lines of `full-backup-restore.ts`; whichever lane lands second re-cites. Arc 2 merges `origin/dev` before its PR, after quality-popup-2 and fu2-security-1 arc 2 where they share `unlock-method.vue` and `change-password.vue`.
@@ -99,7 +100,7 @@ Every gate runs from the worktree root. A test command is `(cd apps/extension &&
 - [x] **Phase 2.** Phase 1's gate plus tests `src/utils src/popup/pages src/onboarding/pages`; `grep -n useFullBackupImport apps/extension/src/composables/useRestoreAgain.ts` prints nothing.
 - [x] **Phase 3.** The new pin; tests `src/onboarding/pages/import.test.ts`; lint; typecheck.
 - [x] **Arc 1 end.** `bun run audit:vue` (its build regenerates `src/types/`: read the whole diff and commit it); `bun run test:all`; `bun run audit:dup` (production clones and dup lines no worse than 178 / 8787); smoke `tests/e2e/{backup-roundtrip,passkey-backup,restore-outcome,import-errors-scroll,import-dead-rpc,backup-migration,onboarding-import}.test.ts` on both browsers, wall-clock before and after; `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/restore-again.test.ts tests/e2e/network/backup-restore-integrity.test.ts` on Chrome; `bun run check:plans` after staging.
-- [ ] **Phase 4.** lint; typecheck; tests `src/components src/popup/pages src/onboarding/pages src/composables/useProfileImportFlow.test.ts scripts/e2e/profile-chaos-model.test.ts`; `grep -rnw 128` over the ten files prints only the constant.
+- [x] **Phase 4.** lint; typecheck; tests `src/components src/popup/pages src/onboarding/pages src/composables/useProfileImportFlow.test.ts scripts/e2e/profile-chaos-model.test.ts`; `grep -rnw 128` over the ten files prints only the constant.
 - [ ] **Phase 5.** Before pictures first (below). The new component test (at least ten cases, CLAUDE.md L3 minimum); tests `src/components src/popup src/onboarding scripts/e2e/profile-chaos-model.test.ts`; lint; typecheck.
 - [ ] **Phase 6.** The same as phase 5 for the current field.
 - [ ] **Arc 2 end.** Arc 1's end gate with smoke `tests/e2e/{security,security-backup,keyboard-guards,backup-roundtrip,passkey-backup,duplicate-phrase-import,auth-flows}.test.ts` on both browsers, no network run (no service path changes). Pictures: a scratch capture spec kept outside the repository, copied into `tests/e2e/` only to run and never committed (fu2-security-1's route), shoots New profile, Import (phrase and backup forms), Change password (with a wrong current password), Unlock method (both steps) and the three exports' unlock, light theme, Chrome, at the base and at the head; each pair is pixel-identical, and the PR attaches them.

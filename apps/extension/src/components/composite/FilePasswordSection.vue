@@ -4,11 +4,12 @@
  * password with its eye and the new-password hint, then its repeat. `testid` prefixes every control.
  */
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
+import { MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { newPasswordHint } from "@/utils/password-hint"
 
 defineProps({
 	testid: { type: String, required: true },
-	maxLength: { type: Number, default: 128 },
+	maxLength: { type: Number, default: MAX_PASSWORD_LENGTH },
 	labelRepeat: { type: Boolean, default: false },
 })
 

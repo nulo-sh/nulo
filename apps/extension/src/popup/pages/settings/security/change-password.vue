@@ -26,7 +26,7 @@ import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityT
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
-import { isNewPasswordValid } from "@/utils/password"
+import { isNewPasswordValid, MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { newPasswordHint } from "@/utils/password-hint"
 import { leaveFor } from "@/utils/page-back"
 const appStore = useAppStore()
@@ -38,7 +38,6 @@ let profileService = null
 const currentPassword = ref("")
 const newPassword = ref("")
 const repeatedNewPassword = ref("")
-const maxPasswordLength = 128
 // The current password has its own eye, so revealing the new pair never shows it.
 const isCurrentPasswordHidden = ref(true)
 const isNewPasswordHidden = ref(true)
@@ -182,7 +181,7 @@ onBeforeUnmount(() => {
 					v-model="newPassword"
 					:type="isNewPasswordHidden ? 'password' : 'text'"
 					@input="handlePasswordInput"
-					:maxLength="maxPasswordLength"
+					:maxLength="MAX_PASSWORD_LENGTH"
 					placeholder="Enter new password"
 					autocomplete="new-password"
 					data-testid="new-password-input"
@@ -206,7 +205,7 @@ onBeforeUnmount(() => {
 					data-testid="new-password-repeat-input"
 					:type="isNewPasswordHidden ? 'password' : 'text'"
 					@input="handlePasswordInput"
-					:maxLength="maxPasswordLength"
+					:maxLength="MAX_PASSWORD_LENGTH"
 					placeholder="Repeat new password"
 					autocomplete="new-password"
 				/>

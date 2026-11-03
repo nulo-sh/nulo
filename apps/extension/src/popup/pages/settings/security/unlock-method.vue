@@ -32,7 +32,7 @@ import { logCredentialFailure } from "@/utils/credential-refusal"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
-import { isNewPasswordValid } from "@/utils/password"
+import { isNewPasswordValid, MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { newPasswordHint } from "@/utils/password-hint"
 
 /** Store */
@@ -40,8 +40,6 @@ import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 const router = useRouter()
-
-const maxPasswordLength = 128
 
 const isPasskey = computed(() => appStore.profile?.type === "passkey")
 /** A profile open in recovery mode has no imported-keys key, which every reseal needs: the page says
@@ -310,7 +308,7 @@ onBeforeUnmount(() => {
 				<Input
 					v-model="newPassword"
 					:type="isNewPasswordHidden ? 'password' : 'text'"
-					:maxLength="maxPasswordLength"
+					:maxLength="MAX_PASSWORD_LENGTH"
 					placeholder="Enter new password"
 					autocomplete="new-password"
 					autofocus
@@ -333,7 +331,7 @@ onBeforeUnmount(() => {
 				<Input
 					v-model="repeatedNewPassword"
 					:type="isNewPasswordHidden ? 'password' : 'text'"
-					:maxLength="maxPasswordLength"
+					:maxLength="MAX_PASSWORD_LENGTH"
 					placeholder="Repeat password"
 					autocomplete="new-password"
 					data-testid="unlock-method-new-password-confirm-input"

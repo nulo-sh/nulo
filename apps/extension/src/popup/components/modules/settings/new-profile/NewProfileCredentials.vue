@@ -1,13 +1,14 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
+import { MAX_PASSWORD_LENGTH } from "@/utils/password"
 /**
  * Credentials section for the create-profile page in `password` mode:
  * a new-password input + repeat input + a small strength hint. Owns
  * the visibility toggle internally.
  */
 const props = defineProps({
-	maxPasswordLength: { type: Number, default: 128 },
+	maxPasswordLength: { type: Number, default: MAX_PASSWORD_LENGTH },
 	strengthHint: { type: String, default: "" },
 })
 

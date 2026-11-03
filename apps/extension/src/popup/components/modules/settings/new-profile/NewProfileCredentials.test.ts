@@ -1,7 +1,14 @@
 import { Flex, Icon, Input, Text } from "@nulo/design"
-import { mount, type VueWrapper } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, test } from "vitest"
-import { enterOn, expectMaskToggle, expectNativeAttrs, nativeInput, typeNow } from "../../../../../../tests/helpers/credential-pins"
+import {
+	enterOn,
+	expectMaskToggle,
+	expectNativeAttrs,
+	nativeInput,
+	pasteInto,
+	typeNow,
+} from "../../../../../../tests/helpers/credential-pins"
 import NewProfileCredentials from "./NewProfileCredentials.vue"
 
 const PAIR = ["register-password-input", "register-password-confirm-input"]
@@ -51,6 +58,14 @@ describe("NewProfileCredentials", () => {
 	test("the hint under the first field is the strengthHint prop", () => {
 		const w = mountCredentials({ strengthHint: "Passwords don't match" })
 		expect(w.get(`[data-testid="${PAIR[0]}"]`).text()).toContain("Passwords don't match")
+	})
+
+	test("with no limit passed, a paste into either field is capped at 128", async () => {
+		const w = mountCredentials({ maxPasswordLength: undefined })
+		for (const id of PAIR) pasteInto(nativeInput(w, id), "z".repeat(200))
+		await flushPromises()
+		expect(w.emitted("update:password")?.at(-1)).toEqual(["z".repeat(128)])
+		expect(w.emitted("update:repeatedPassword")?.at(-1)).toEqual(["z".repeat(128)])
 	})
 
 	test("Enter in the repeat field reaches the page's root uncancelled", () => {

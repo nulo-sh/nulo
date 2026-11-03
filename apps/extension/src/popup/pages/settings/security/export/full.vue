@@ -63,8 +63,6 @@ const {
 	dispose,
 } = useFullBackupExport({ runCeremony, leaveAfterPasskeyFailure })
 
-const maxPasswordLength = 128
-
 const addedNetworksText = computed(() => {
 	const { accounts, networks } = importsOnAddedNetworks.value
 	const count = accounts === 1 ? "1 imported account is" : `${accounts} imported accounts are`
@@ -313,7 +311,6 @@ onBeforeUnmount(() => {
 					v-model:password="password"
 					v-model:repeatedPassword="repeatedPassword"
 					testid="backup-encrypt-password"
-					:maxLength="maxPasswordLength"
 					labelRepeat
 				/>
 			</template>

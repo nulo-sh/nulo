@@ -3,6 +3,7 @@
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
 import { showsDecryptCta } from "@/utils/full-backup-ctas"
+import { MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { newPasswordHint } from "@/utils/password-hint"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import { restoreWarningText } from "./restore-warning"
@@ -29,7 +30,7 @@ const props = defineProps({
 	askNewPassword: { type: Boolean, default: true },
 	error: { type: Object, default: () => ({ type: "", title: "", tooltip: "" }) },
 	isCopied: { type: Boolean, default: false },
-	maxPasswordLength: { type: Number, default: 128 },
+	maxPasswordLength: { type: Number, default: MAX_PASSWORD_LENGTH },
 })
 
 const emit = defineEmits(["pickFile", "copyError", "passwordInput"])

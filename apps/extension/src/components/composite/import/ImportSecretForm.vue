@@ -2,6 +2,7 @@
 <script setup>
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
+import { MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { newPasswordHint } from "@/utils/password-hint"
 import { PHRASE_WORD_COUNT, phraseHint } from "@/utils/recovery-phrase"
 /**
@@ -15,7 +16,7 @@ const props = defineProps({
 	error: { type: Object, default: () => ({ type: "", title: "", tooltip: "" }) },
 	/** The flow's verdict on the typed phrase, the same one its Import button follows. */
 	phraseVerdict: { type: Object, default: () => ({ kind: "empty" }) },
-	maxPasswordLength: { type: Number, default: 128 },
+	maxPasswordLength: { type: Number, default: MAX_PASSWORD_LENGTH },
 	/** An import is in flight: the unlock choice it was admitted with stays put. */
 	importing: { type: Boolean, default: false },
 })
