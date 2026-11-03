@@ -8,3 +8,13 @@
 
 - Bun: `/\p{Default_Ignorable_Code_Point}/u` matches U+034F, U+00AD, U+3164, U+200B, U+E0001, U+FEFF; `new TextDecoder("utf-8", { fatal: true, ignoreBOM: true })` keeps a leading BOM and throws `TypeError` on a lone `e9`.
 - No smoke e2e file opens the execute window: it needs a dApp, so its e2e gate is the network files that open it.
+
+## Runs (retry 0)
+
+- Red at `0ef779bad` against the base `call-surface.ts`: `call-surface.real.test.ts` 16 failed (every new case; the "as today" rows fail on the padding only), `call-surface.test.ts` 2 failed, `OperationCard.wire.test.ts` 2 failed, `index.test.ts` 1 failed (the UTF-8 grant). The index call-Confirm case passes on the base by design (the window stubs the card): a pin, not red evidence.
+- Fix `c334716d3`: execute + fee tests 428/428; lint 0; typecheck:all 0 (after typing the test's `0x` fields, folded into the red commit before any push); `test:all` 0 in 186 s.
+- Round 1 fixes `8bbf0f564`: execute + fee 431/431; lint 0; typecheck:all 0. Mutation check, each reverted after: dropping `fn` on the raw surface, the right-to-left test, the NFC step, or the default-ignorable test each reds exactly its own case.
+
+## Arc 2 review round 1
+
+- Codex r1 (`gpt-6.1-sol`, high): approve, one comment. Opus r1 (`general-purpose`): conditional approve. Its title finding holds: a raw surface had no `fn`, so `surfaceName` fell back to `call.name`, the dApp's label (`call-surface.ts` `surfaceName`). The worker's selector binding (`assertSelectorBinding`) runs at simulation, not before the window draws. Its right-to-left point holds and is #1380's own consequence; JavaScript has no `Bidi_Class` property escape, so the check uses UAX #9's default R and AL ranges, which hold every assigned R and AL character.

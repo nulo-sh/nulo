@@ -24,9 +24,20 @@
 
 - **Surface**: the execute window, a call's or a grant's string argument whose text is accented Latin-1 only, such as "José", "café", "Zürich" or "Ñandú".
 - **The ambiguity**: a contract's `str<N>` is bytes, and Noir writes text as UTF-8, so "José" is `4a 6f 73 c3 a9`. The SDK's encoder writes one field per JavaScript character instead, so a dApp passing "José" through it sends `4a 6f 73 e9`. Today the card reads one character per field: the first prints "JosÃ©", the second "José". Read as UTF-8, both would print "José": two different arguments, one text on screen, and only the UTF-8 one is the contract's "José".
-- **Built (A for this case, as the pick's note asks)**: such text keeps today's reading. The SDK's "José" prints "José"; the UTF-8 "José" prints "JosÃ©"; UTF-8 text whose Latin-1 bytes are control characters ("Ñ" is `c3 91`) reads as unreadable, as option A does. Text holding any character beyond Latin-1 has no one-byte twin, so it prints as written: "€", "José — café", "日本", "Ω".
+- **Built (A for this case, as the pick's note asks)**: such text keeps today's reading, composed or decomposed ("José" as `e` plus a combining accent draws like the SDK's "José", so it stays bytes too). The SDK's "José" prints "José"; the UTF-8 "José" prints "JosÃ©"; UTF-8 text whose Latin-1 bytes are control characters ("Ñ" is `c3 91`) reads as unreadable, as option A does. Text holding any character beyond Latin-1 has no one-byte twin, so it prints as written: "€", "José — café", "日本", "Ω".
 - **Options**:
   - **Keep as built.** Two arguments never read alike; UTF-8 accented text keeps its mojibake.
   - **Read the UTF-8 form as written too.** "José" prints for both encodings; the card can no longer tell them apart, and a contract keyed by the text sees two different keys.
   - **Read the UTF-8 form as written, and the SDK's one-byte form as unreadable.** Faithful to the contract; a dApp that passes "José" through the SDK's encoder shows "Can't read the arguments" (a call stays approvable, a grant is refused).
 - **Recommendation**: keep as built: it keeps every reading the card prints whole today and never shows two arguments as one text.
+
+## OA-3: right-to-left text (#1380, arc 2)
+
+- **Surface**: the execute window, a call's or a grant's string argument holding Hebrew, Arabic or another right-to-left script.
+- **The risk**: printed as written, right-to-left letters reorder the digits and words around them with no control character: the bytes of `12א34` draw as `34א12`. That is #1380's own consequence, a string read in another order than the contract holds, and today's card never shows it, since its one-character-per-byte reading holds no right-to-left letter.
+- **Built (A for this case)**: a string holding a character of a right-to-left block reads as unreadable: the existing notice and raw toggle, a call still approvable, a grant refused. Most such UTF-8 text already reads that way today, because its bytes carry control characters.
+- **Options**:
+  - **Keep as built.** Right-to-left memos never print, so nothing reorders.
+  - **Print right-to-left text, drawn strictly left to right in stored order** (a style on the value). Nothing reorders, but a Hebrew or Arabic reader sees each word reversed. A new look for the row.
+  - **Print right-to-left text as written.** Reads naturally; digits and words around it can swap places on screen.
+- **Recommendation**: keep as built.
