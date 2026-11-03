@@ -81,7 +81,7 @@ const STUBS = {
 			</button>
 		`,
 	},
-	DappStatusStrip: { template: '<div data-testid="status-strip" />', props: ["accountName", "networkName", "status"] },
+	IdentityStrip: { template: '<div data-testid="status-strip" />', props: ["accountLabel", "networkLabel", "status", "warn"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
 		props: ["dapp", "actionLabel", "hostnameTestId", "nameTestId"],

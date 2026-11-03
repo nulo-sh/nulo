@@ -123,4 +123,14 @@ describe("composite/DappIdentityBlock", () => {
 		const w = factory({ actionLabel: "wants to connect on Testnet", actionTestId: "discover-action" })
 		expect(w.find('[data-testid="discover-action"]').text()).toBe("wants to connect on Testnet")
 	})
+
+	test("a block given no action line draws none, its name still under the origin", () => {
+		const w = mount(DappIdentityBlock, {
+			props: { dapp: { url: "https://dapp.example", name: "Playground" }, actionTestId: "verify-action" },
+			global: { stubs: STUBS },
+		})
+		expect(w.find('[data-testid="verify-action"]').exists()).toBe(false)
+		expect(w.find(".dapp_action, [class*='dapp_action']").exists()).toBe(false)
+		expect(w.text()).toContain("Playground")
+	})
 })
