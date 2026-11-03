@@ -53,6 +53,7 @@ import { PXE_NOT_SYNCED_DIAGNOSTIC, withStaleAnchorRetry } from "./stale-anchor"
 import { assertScopesRegistered } from "./scope-guard"
 import { PxeScopeUnregisteredError } from "@nulo/extension-messaging/errors"
 import {
+	type PublicEventLogger,
 	type PublicScanTips,
 	type PublicTokenClassStatus,
 	type PublicTransferFetchArgs,
@@ -646,6 +647,10 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		})
 	}
 
+	/** The public-event readers' log lines, at the level each asks for. An arrow, so it keeps `this`. */
+	private readonly logPublicEvent: PublicEventLogger = (level, msg, ...rest) =>
+		level === "warn" ? this.logWarn(msg, ...rest) : this.logDebug(msg, ...rest)
+
 	/**
 	 * One page of decoded public `Transfer` events for `(network, contract)`. Node-only read
 	 * (no PXE store mutation), so `withPxeRead`. Args are zod-parsed here (the offscreen trust
@@ -658,9 +663,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	): Promise<PublicTransferPage> {
 		const parsedArgs = await PublicTransferFetchArgsSchema.parseAsync(args)
 		return this.withPxeRead("getPublicTokenTransferEvents", network, (_pxe, node) =>
-			fetchPublicTokenTransferEvents(node, contract, parsedArgs, (level, msg, ...rest) =>
-				level === "warn" ? this.logWarn(msg, ...rest) : this.logDebug(msg, ...rest),
-			),
+			fetchPublicTokenTransferEvents(node, contract, parsedArgs, this.logPublicEvent),
 		)
 	}
 
@@ -681,9 +684,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		checkpointHash: string,
 	): Promise<PublicTokenClassStatus> {
 		return this.withPxeRead("getPublicTokenClassStatus", network, (_pxe, node) =>
-			resolveTokenClassStatus(node, contract, checkpointHash, (level, msg, ...rest) =>
-				level === "warn" ? this.logWarn(msg, ...rest) : this.logDebug(msg, ...rest),
-			),
+			resolveTokenClassStatus(node, contract, checkpointHash, this.logPublicEvent),
 		)
 	}
 
