@@ -33,17 +33,13 @@ import {
 	runFenceLive,
 } from "./full-backup-restore"
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
+import { ACCOUNT_FILE_NOT_BACKUP, DECRYPTION_FAILED, errorLogWriters, hasRowsBeyondRetry, UNRECOGNIZED_BACKUP } from "./useFullBackupImport"
 import {
-	ACCOUNT_FILE_NOT_BACKUP,
-	DECRYPTION_FAILED,
 	EARLIER_PASSKEY_BACKUP,
-	errorLogWriters,
 	type FullBackupEnvelope,
-	hasRowsBeyondRetry,
 	refusedAsEarlierPasskey,
-	UNRECOGNIZED_BACKUP,
 	validateAndMigrateBackup,
-} from "./useFullBackupImport"
+} from "@/wallet/services/backup/trust-gate"
 
 export interface RestoreAgainProfileClient {
 	captureRunFence(): Promise<RunFence>

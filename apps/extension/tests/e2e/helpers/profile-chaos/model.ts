@@ -302,6 +302,7 @@ export const ACTIONS_PER_RUN = 24
 const SERVICE = "src/wallet/services/profile/service.ts"
 const SESSIONS = "src/wallet/services/profile/session-manager.ts"
 const IMPORT = "src/composables/useFullBackupImport.ts"
+const GATE = "src/wallet/services/backup/trust-gate.ts"
 const CREATE_OPENS = cite(SERVICE, 773, "public async createProfile(")
 const PASSKEY_CREATE_OPENS = cite(SERVICE, 885, "public async createPasskeyProfile(")
 const PASSKEY_CREATE_PHRASE = cite(SERVICE, 915, "deriveMasterFromMnemonic(await getMnemonic(entropy))")
@@ -337,9 +338,9 @@ const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 681, "publ
 const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 765, "public async importAccount(")
 const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 837, "This account is already in your wallet")
 const ACCOUNT_HELD = cite("src/popup/pages/settings/accounts/import.vue", 310, 'data-testid="import-account-held"')
-const BACKUP_UNREADABLE = cite(IMPORT, 656, "DECRYPTION_FAILED.title")
-const BACKUP_INTEGRITY = cite(IMPORT, 173, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
-const BACKUP_UNPARSED = cite(IMPORT, 601, "parseError.title, parseError.tooltip")
+const BACKUP_UNREADABLE = cite(IMPORT, 511, "DECRYPTION_FAILED.title")
+const BACKUP_INTEGRITY = cite(GATE, 114, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
+const BACKUP_UNPARSED = cite(IMPORT, 456, "parseError.title, parseError.tooltip")
 const RESTORE_ASKS_PASSWORD = cite(
 	"src/components/composite/import/ImportFullBackupForm.vue",
 	140,
@@ -347,10 +348,10 @@ const RESTORE_ASKS_PASSWORD = cite(
 )
 const RESTORE_ROLLS_BACK = cite(
 	"src/composables/full-backup-restore.ts",
-	967,
+	947,
 	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
 )
-const RESTORE_FINALIZES = cite(IMPORT, 508, "restoreRun = await finalizeWithReminder(")
+const RESTORE_FINALIZES = cite(IMPORT, 363, "restoreRun = await finalizeWithReminder(")
 const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
 const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 766, "discoveryQueue.drain(")
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
@@ -371,12 +372,12 @@ const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 152, 'stage.value = "phrase"')
 const ONBOARDING_SAVED = cite(ONBOARDING, 176, "if (isMounted()) leavePhrase()")
 const ONBOARDING_LATER = cite(ONBOARDING, 196, '@later="leavePhrase"')
-const EARLIER_AT_PICK = cite(IMPORT, 596, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
-const EARLIER_AT_DECRYPT = cite(IMPORT, 641, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
-const EARLIER_SHAPE = cite(IMPORT, 134, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
+const EARLIER_AT_PICK = cite(IMPORT, 451, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
+const EARLIER_AT_DECRYPT = cite(IMPORT, 496, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
+const EARLIER_SHAPE = cite(GATE, 75, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
 const IMPORT_FLOW = "src/composables/useProfileImportFlow.ts"
 const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 195, 'await deps.unlockFor(admitted, { step: "import", profileName: name }, existing)')
-const RESTORE_CARD = cite(IMPORT, 445, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
+const RESTORE_CARD = cite(IMPORT, 300, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
 const PASSKEY_IMPORT_SEALS = cite(SERVICE, 2044, "seal = await this.newRowSeal(password, credentialData)")
 const RESTORE_SEALS = cite(SERVICE, 2474, "seal = await this.newRowSeal(password, credentialData)")
 const DISCOVERS = cite("src/wallet/utils/passkey-ceremony.ts", 117, "credentialId === undefined ? buildDiscoverOptions(prfSalt)")
@@ -410,7 +411,7 @@ const BOOTSTRAP_CLEARS_NETWORK = cite("src/composables/useProfileBootstrap.ts", 
 const EXPORT_CHECK_REFUSES = cite(SERVICE, 1373, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
 export const EARLIER_TITLE = "Backup from an earlier version"
-const EARLIER_TITLE_SOURCE = cite(IMPORT, 122, `title: "${EARLIER_TITLE}"`)
+const EARLIER_TITLE_SOURCE = cite(GATE, 63, `title: "${EARLIER_TITLE}"`)
 
 /** The names a release gives the two profiles a `pre-update` start makes on it. */
 export const PRE_UPDATE_NAMES = { password: "Main", passkey: "Chaos 1" } as const
