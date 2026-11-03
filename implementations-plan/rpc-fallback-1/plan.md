@@ -1,0 +1,365 @@
+---
+plan: rpc-fallback-1
+tier: mega-deep (the orchestrator's spawn; above the common brief's `mid`)
+status: approved (Codex round 5: approve); nothing implemented; arcs wait on the owner's read and the orchestrator's word
+issues: "#1624 (spec); context #1607 #1609"
+driver: claude-code
+claude_model: opus
+codex_model: sol
+code_review: off
+explainer: off
+eli5_mode: skipped (orchestrator-owned)
+budget: research 6 explorers (sonnet); three independent designs (main, Codex gpt-6.1-sol high, Opus 5.5 Plan); Codex rounds to approve plus the Opus Plan leg; final fresh Codex pass
+base: origin/dev at 3b845ef02 (#1622, lane rpc-proxy-1 arc 1, merged); research read e5cffd82d plus #1622's branch
+trunk: dev
+post_implementation_hardening: not scheduled
+---
+
+# rpc-fallback-1: a network with several endpoints fails over to the next and returns to its primary
+
+Every node the wallet builds comes from one URL, the network's primary endpoint, so one misbehaving provider stops proving, sending and balance reads (#1607, #1609). This plan routes each network's node calls across its endpoints in the order Settings shows (the primary first, then the rest as stored), moves a call to the next endpoint when the one before fails for a reason that is the endpoint's fault, and returns to the primary once it answers again. Arc 5 then adds Nulo's relay (`rpc.nulo.sh`, `testnet.rpc.nulo.sh`, lane `rpc-proxy-1`) as each default network's second endpoint. Research: [research/](research/). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+
+## The brief, checked
+
+- **Holds:** the row already has `endpoints[]` and `primaryEndpointId`; `networkInfoFrom` projects the primary's `rpcUrl`; the offscreen PXE's node is built from that one URL (`chain-runtime.ts:181`); privacy § 5.1 carries the pending-transaction sentence.
+- **Holds, with a correction:** "the one `createAztecNodeClient` call site" is the adapter, but it has three builders (`createNode`, `probeChainId`, the silent single-attempt client) and #1622 adds `maxBatchSizeFor` to all three.
+- **Did not hold: "the PXE's synced state is per node URL?"** It is per (profile, chain) (`chain-coordinates.ts:17-29`); only the in-memory runtime is bound to a URL, and a changed URL rebuilds it under the chain write guard (`chain-runtime.ts:352-385`).
+- **Did not hold: "about 4,000 calls per unlocked wallet-hour".** #143's fix made the pollers block-gated with a forced tick every 2 min (`incoming-transfer/service.ts:62-66`); no current total is measured. E1 (arc 3) measures the per-relay peak.
+- **Did not hold: "per-endpoint `maxBatchSize`".** #1622 keys the cap by provider origin in code (`maxBatchSizeFor(rpcUrl)`), not on the endpoint row. This plan uses it unchanged.
+- **Missed by the brief:** Terms § 7.1 repeats the pending sentence verbatim (`legal/terms.md:227-233`); `getNodeForUrl(primaryEndpointUrl(network))` serves two intents (a pending transaction's pin, and #658's "this row's node, not the active profile's"), and only the first stays pinned.
+- **Did not hold: "foundation retries a 5xx three times".** The wallet never uses the SDK's fetch; its own `makeFetchWithTimeout` has the same four attempts and also aborts each at 60 s (`utils/fetch.ts:19,132-157`).
+
+## Outcome & Quality Bar
+
+- **For whom:** a person on a default network whose free endpoint fails mid-session, with a send proving, balances refreshing and incoming transfers scanning; and the owner, who pays for the relay only while the free endpoint fails.
+- **Excellent:** (1) a send that is proving when the primary dies finishes through the next endpoint, is sent exactly once, and its pending checks go only to the endpoint that carried it; (2) balances never dip because the wallet moved to an endpoint that is behind (the endpoint it is already on keeps today's behaviour); (3) the wallet is back on the primary within minutes of it answering, and a half-dead primary moves only what it cannot serve; (4) a network with one endpoint sends what it sends today, request for request, sends included.
+- **Good enough:** health is per context and in memory (a background restart pays one detection again); a proof interrupted by a fork the fallback lacks still ends in the existing stale-anchor retry; status surfaces show what the owner signs, nothing more.
+
+## Assumptions
+
+**Facts** (verified at `e5cffd82d` and at `3b845ef02`, where #1622 merged; file:line in `research/`)
+
+1. The wallet's node transport is `makeFetchWithTimeout`: 60 s per attempt, four attempts with 1, 2 and 3 s sleeps, `retryWhile` asked before each retry; a 4xx with a JSON body is `NoRetryError`; a non-JSON body on any status and every 5xx are retried (`packages/aztec-runtime/src/utils/fetch.ts:19,79-157`). A hang costs about 246 s.
+2. The SDK client hands the fetch's own error object to every entry of a failed batch as `{ code: -32000, data: err }`, and each caller gets `Error(message, { cause })`; methods are plain functions on a plain object (`safe_json_rpc_client.js:115-137,190-199`).
+3. The PXE uses its node only through the `AztecNode` interface, wrapped in `withCache(node)` (`pxe.js:116`; `caching_aztec_node.js:86-97`); nothing reads a client property.
+4. A PXE that syncs from a node whose tip is below its own emits `chain-pruned` and deletes notes, events and facts above that tip; it reconciles the checkpointed, proven and finalized tiers against the source's independently, so a source lower on any tier moves that tier back (`l2_block_stream.js:109-175`; `block_synchronizer.js:96-126`; `note_store.js:227-262`). The stream's errors are swallowed; the initial header read is not (`block_synchronizer.js:179-190`).
+5. `sendTxTask` holds the one `node.sendTx` (`execution-coordinator.ts:320`, pinned by `legal/call-sites.test.ts`); `commitSubmitting` writes `{ txHash, submittedEndpointUrl, expiry }` before it; the URL comes from `primaryEndpointUrl(network)` at six sites (`transfer-executor.ts:266,459`; `dapp-send-executor.ts:749,902,1135,1302`).
+6. Pending receipts, the send check and finality read the recorded URL (`transaction/service.ts:585-598,640`; `send-check.ts:353`); `runWorker` awaits every due poll before its next 1 s sleep, so one hung pinned endpoint holds every other poll for up to about 246 s (`transaction/service.ts:462-480`).
+7. Network rows are a sealed root; endpoint order is the array order; nothing reorders it; the popup subscribes to no network event and reads status on demand (`app.store.ts:514-529`).
+8. The header status and Manage Networks' active row probe only the primary (`service.ts:933-963`); `Inactive` and `InvalidChain` share the "Cannot reach the network" tone (`utils/network-status.ts:5-17`); backup export skips a network whose status probe fails (`account-state/service.ts:112-127,254-260`).
+9. The privacy head is 1.2.8, unpublished (`packages/legal/src/manifest.ts:113-119`); a privacy version never blocks (CLAUDE.md § Terms acceptance).
+10. Both network lanes' filters hold `apps/extension/**` and `packages/aztec-runtime/src/**`; the shard pool takes every `tests/e2e/network/**/*.test.ts` (`apps/extension/vitest.e2e.network.config.ts:19`).
+11. #1622 makes `AztecNodeFactoryAdapter`'s `maxBatchSizeFor(rpcUrl)` required and builds every wallet factory through `createWalletNodeFactory()`.
+12. The PXE's sender sync reads the receipt of each pending transaction its logs cannot place, and drops that transaction's pending tag indexes on one `DROPPED` (`tagging/sender_sync/utils/classify_pending_txs.js:28-51`, `sender_tagging_store.js:186-205`; Codex round 1 traced it).
+
+**Inferences** (each attacked by the audits; each has a gate that settles it)
+
+- I1. A provider gateway's refusal carries a JSON-RPC code outside the reserved range −32768..−32000 (dRPC: 35, 26, 30 in #1607's comments), and the Aztec node's own errors use reserved codes (`safe_json_rpc_server.js:91,101,200`, −32701/−32702 per entry). Phase 2's table tests both shapes; another provider that breaks the rule hops one call too few or too many, never replays a send.
+- I2. The 6.0.0 node answers an anchored read at an unknown block hash with a per-entry error, not with a 4xx. Phase 4 step 1 (S6) records the real answer before the suite is written.
+- I3. Production endpoints of one network lag each other by a block or two, so a failover rarely waits on the floor. Unmeasured: the sandbox's S3 shows the floor's mechanics with a synthetic lag only.
+- I4. A wallet on the relay stays under its per-IP limit (100 requests per 10 s) outside catch-up syncs. E1 records the per-relay peak across both contexts, through an unlock's catch-up; the number goes to `rpc-proxy-1`'s issue before arc 5.
+
+**Asks** ([OWNER-ASKS.md](OWNER-ASKS.md), each with the form the arc builds if the owner picks the recommendation): OA-1 what the header status means; OA-2 the privacy and Terms sentence for failover; OA-3 Settings → Networks; OA-4 Home; OA-5 existing profiles and the relay; OA-6 the relay's label; OA-7 the relay's privacy text; OA-8 failover for second endpoints people already added.
+
+## Architecture & Implementation
+
+### Where routing lives (D1, D2)
+
+A **routed `AztecNode`** per network per context, in `packages/aztec-runtime/src/routing/`, sits over one endpoint-bound client per endpoint. Each client is built by the existing adapter with that URL's batch cap (#1622) and the silent logger, and makes one attempt per call. The routed node owns the retry loop the clients no longer run. The background's `NetworkService` holds one per network row; the offscreen `ChainRuntime` holds one per runtime. Health lives in the routed node, in memory, per context; neither context asks the other. Nothing persists, and failover never writes a network row.
+
+### What fails over (D3)
+
+The fetch tags every error it throws with a `TransportFailure` kind; `transportFailureOf(error)` reads it from the error or from `error.cause.data` (Fact 2). A per-entry error reaches the caller as `Error(message, { cause: entry.error })`, so the router reads its code from `cause.code` (`safe_json_rpc_client.js:170-174`). Rules, per HTTP request:
+
+| Answer (first matching row wins) | Retried on the same endpoint (as today) | Moves to another endpoint | Counts toward `down` |
+|---|---|---|---|
+| fetch threw (refused, DNS, TLS, CORS): `unreachable` | yes | yes | yes |
+| abort at 60 s: `timeout` | yes | yes | yes, at once |
+| HTTP 5xx, any body: `server` | yes | yes | yes |
+| a body that is not JSON, on any other status (an HTML 429 page included): `malformed` | yes | yes | yes |
+| HTTP 408, 425 or 429 with a JSON body: `overloaded` | no | yes | no |
+| any other 4xx with a JSON body whose JSON-RPC code is outside −32768..−32000, or has none: `refused` | no | yes | no |
+| a 200 whose body is a JSON-RPC error object with a non-reserved code, not a batch array: `refused`, thrown by the fetch as a `NoRetryError` (today the client fails each entry with no retry: the same outcome on one endpoint) | no | yes | no |
+| a per-entry error with a non-reserved code (a gateway refusing one entry of a batch): `refused` for that call | no | yes | no |
+| a 4xx with a JSON body whose code is reserved; a per-entry error with a reserved code (the node's own, `safe_json_rpc_server.js:96-342`); any other 200 | no | no: the node's answer | no |
+| a body over 32 MiB; a stop from `retryWhile` | no | no | no |
+
+- **Sync reads follow the active endpoint.** The PXE block stream's reads by number (`getChainTips`, an untagged `getBlockNumber`, `getBlock` by number, `getBlocks`; `block_stream_source.js:7-35`, and `PXE.create`'s `getBlock(0)`, `pxe.js:110`) go to the active endpoint only, so a sync pass never mixes one endpoint's tip with another's blocks. When one fails on the active endpoint with any kind that moves, the active role passes to the next qualifying endpoint (below) and the read is re-sent there once; with none, it fails, and the stream retries on its next pass. A refusal passes the role without marking the endpoint `down`. Reads by hash (`getBlock(hash)`, `getBlockData(hash)`) are anchored and move like any other call.
+- **Every other call** walks the endpoints in preference order. Within a round it tries each endpoint still in play once, moving at once on a failure that moves; between rounds it sleeps 1, 2 then 3 s; four rounds at most; `retryWhile` is asked before every move, before every sleep and after it (`fetch.ts:141-143,159-164`). A call moves only to an endpoint seen at or above the floor; one not seen there since the floor last rose is probed first.
+- An endpoint that answered `overloaded` or `refused` is spent for that call and never re-enters its rounds (today's `NoRetryError`); when every endpoint is spent, the call ends. Only the transport kinds count toward `down`: a 429 or a gateway refusal moves that one call and leaves the endpoint `ready`, so a rate-limited free endpoint keeps serving every call it accepts, and the relay is paid only for the ones it refuses.
+- `down` endpoints are skipped while another endpoint can take the call. When none can, the call's rounds try only the most-preferred endpoint that is not `wrong-chain`, so the worst case stays today's four attempts; the others come back through probes. `wrong-chain` and never-admitted endpoints never take a call.
+- With one endpoint this is today's sequence: the same attempts, sleeps and requests per call, a JSON 429 or gateway refusal ending the call at once, and no probe (D6). No message text is matched.
+
+### Health, probes and return to the primary (D7, D8)
+
+Per endpoint: `unknown → ready ↔ down`, plus `behind` and `wrong-chain`; one endpoint holds the active role.
+
+- **Down:** after one `timeout`, or after three requests in a row failing with a kind that counts, with no success between. One failed batch counts once (the error object is shared). A primary that fails some calls and serves others stays `ready`; only its failed calls move. Calls already in flight on an endpoint when it goes down still wait out their own attempt, up to 60 s each; calls that start after it skip it.
+- **Qualifying, and the active role.** An endpoint qualifies when it is admitted, not `down` or `wrong-chain`, and last seen at or above the floor. The active endpoint loses the role when it goes down, when a sync read on it fails, or when the floor is seeded above it; the most-preferred qualifying endpoint takes it at once (probed first if not seen at or above the floor since it last rose). While none qualifies there is no active endpoint: every routed call then probes the endpoints that are not `wrong-chain`, in preference order, at most one per endpoint per 5 s, and the first that qualifies takes the role at once.
+- **Probe:** one request, a batch `[getNodeInfo, getChainTips]`, one attempt, aborted at `IDENTITY_PROBE_MS` (5 s). At most one in flight per endpoint, and at most one per 5 s for a `behind` endpoint; calls waiting on it share its answer. Lazy: a routed call starts a probe of a more-preferred endpoint whose `nextProbeAt` has passed, and is itself served by the active endpoint without waiting for it. No timer and no alarm; an idle context sends nothing.
+- **Return:** a more-preferred endpoint takes the role back from a less-preferred active one after two passing probes at least `holdDown` apart, qualifying on both. `holdDown` starts at 30 s and doubles each time the endpoint loses the role again after a return while another endpoint served, at most 30 min; it resets to 30 s once the endpoint holds the role 30 min. The person's own connection dropping fails every endpoint at once and doubles nothing. A failed probe sets `nextProbeAt = now + holdDown`. The doubling's trace: a free endpoint under load answers the cheap probe and hangs on heavy reads; with a fixed 30 s, every call in flight pays up to 60 s about once a minute, and with the doubling, about once per 30 min at worst. A lone endpoint always holds the role, never probes and is never `behind`; a success returns it to `ready`.
+- **Wrong chain:** probed again after 30 min.
+
+### Admission: identity and the floor (D9, D10)
+
+- **Identity:** with one endpoint, it takes calls under today's checks alone (`assertNodeServesChain` when the offscreen runtime is built, `assertLiveChainIdentity` when each operation is built, the stale-network classifier), with no router probe. With two or more, every endpoint, the primary included, is admitted by a probe before its first call: `l1ChainId` equal to the row's, `walletChainId(l1ChainId, rollupVersion)` equal to its `chainId` (`assertSameChainIdentity`), and, in the offscreen, `l1ContractAddresses.rollupAddress` equal to the store's stamp when there is one. The trust root is what the wallet stored, never the primary's live answer, so a fallback is admitted at cold start while the primary is dead. The background stores no rollup address and checks none, as today. An endpoint's first call runs its probe as that round's attempt. Chain 0 drops every non-loopback endpoint when the routed node is built and keeps today's chain-0 rule (`nodeChainId`).
+- **Floor** (the prune guard, Fact 4): the highest proposed block number the active endpoint has served through `getChainTips` (the PXE's sync calls it every pass; the router reads the answer on its way back) or an untagged `getBlockNumber`, and, in the offscreen, the PXE's synced block number, seeded when the runtime is built (below; the genesis floor on a store that has never synced). A candidate's probe never raises it. An endpoint whose last observed proposed tip is below it is `behind`: it never takes the active role and takes no moved call until a probe sees it caught up. Seeding the floor takes the role from an active endpoint below it whenever the network has another endpoint, the primary included: after a session on the fallback, a primary still catching up never starts a rebuilt runtime. The proposed tier is the one that matters: the wallet runs the PXE at its default `syncChainTip: 'proposed'` (nothing sets it), so the checkpointed, proven and finalized events only move the tips store (`block_synchronizer.js:57-94`), and the finalized number reaches sender sync only as a bound that delays finalizing indexes (`private_execution_oracle.js:271-275`).
+- **The floor follows the active endpoint, never time.** The active endpoint's answers reach the PXE as they do today; when it serves a lower tip (its own prune, or a provider pool's lagging upstream), the floor takes it. The floor only stops a change of active endpoint, or a moved call, to one behind what the PXE has seen. While every endpoint at or above the floor is unreachable, calls fail until one returns or another catches up (known limit, § Security). Both contexts run the same router; the background's floor keeps its tip and storage reads from going backwards on a move.
+
+### The send (D11, D12)
+
+The pick happens where the proof's reads were made: the offscreen. `PxeService.pickSendEndpoint(network, { txHash, anchorHash })` (a new PXE request) answers it, and `ProveAndSendContext` loses `node` and `submittedEndpointUrl` and gains `pickSendEndpoint(tx)`, wired in `shared-send-deps.ts` and `execution/service.ts` to that request plus `NetworkService.getNodeForUrl(url)`. The frozen sequence becomes: prove → `assertAuthorization` → `toTx` → **`pickSendEndpoint`** → `commitSubmitting({ txHash, submittedEndpointUrl: picked.url, expiry })` → `checkCancelled` → `sendTxTask(picked.node, …)` → `recordTransaction(…, picked.url)`.
+
+- **No lock, no rebuild.** The request holds only the profile barrier's read side and reads the runtime with `registry.peek(profileId, chainId)`; it never takes the chain guard (a pick must not wait behind another operation's proof, `rw-guard.ts:70-79,125-131`) and never calls `ensure` (a stale endpoint list must not rebuild a runtime). With no runtime (a rebuild in flight), it takes the not-ready branch below over the request's endpoints, with no health to skip by.
+- **The pick.** When the active endpoint is `ready`, the pick is the active endpoint, with no request: that is the endpoint the proof read through, and today's send dials the primary the same way. Only when the active endpoint is not `ready` does it ask the others in preference order, one batch `[getNodeInfo, getBlockData(anchorHash)]` each, one attempt, 5 s, and take the first whose identity passes and that knows the anchor. An endpoint that answers for another chain becomes `wrong-chain` and is never picked; if every answer was another chain, the send is refused with the build check's chain-identity error. If none answers in time or none knows the anchor, the active endpoint is picked, as today; with no active endpoint, the send is refused before anything is recorded or broadcast, with the error a send meets today on an unreachable node. So a healthy network contacts no endpoint but the active one, and a one-endpoint network, whose lone endpoint always holds the role, sends exactly today's requests.
+- **The pin.** The pick records `txHash → picked endpoint` before it returns; a second pick for a pinned hash returns the same endpoint. Pins are held by the offscreen `PxeService` per (profile, chain) for the document's life and handed to every runtime it builds for that pair, so a rebuild after an endpoint edit keeps them. A routed `getTxReceipt` for a pinned hash goes to that endpoint only, under today's retry rules, never moved; it is the PXE 6.0.0's only node read that takes a pending hash (`classify_pending_txs.js:29`, `resolve_pending_txs.js:36`, `tx_resolver_service.js:18`, `utility_execution_oracle.js:826-841`). A pin to an endpoint since removed is served by a client built for its URL, as `getNodeForUrl` does, with its own health record in the pin map. A pin ends once its endpoint reports the transaction finalized: an unfinalized block can be pruned, and the PXE keeps the transaction's pending indexes through a rollback (`sender_tagging_store.js:53`; the wallet's own poll goes back to pending the same way, `transaction/service.ts:649`), so its next receipt read must still reach that endpoint. An unused pin (a cancelled send) is harmless and stays.
+- **A dead pinned endpoint answers "pending".** When the pinned endpoint is `down`, or its attempt fails, the pinned `getTxReceipt` returns a `TxReceipt` with status `PENDING` and sends nothing until the endpoint's `nextProbeAt`; the first pinned read after it makes one attempt on that URL, which returns the endpoint to `ready` and the real receipt on success, or sets `nextProbeAt = now + holdDown` on failure. That is how an out-of-route pinned URL recovers, and the submission endpoint stays the only one asked. `PENDING` is the PXE's own keep-pending branch (`classify_pending_txs.js:46-51`), never `DROPPED`, never moved. Otherwise every later private execution that syncs that tagging secret would fail on the read (`allToCompletion` rethrows) until the endpoint returns, blocking sends to that recipient while balances read fine. The indexes stay reserved; a mined transaction is still found through its logs, though the PXE's own effect lookups for it (`tx_resolver_service.js:18-27`) wait for the endpoint (known limit 4).
+- `picked.node` is `getNodeForUrl(picked.url)`: today's pinned client, retrying on that one URL as today. The routed node's `sendTx` throws; a submission never passes through routing, so it is never moved.
+- The six `primaryEndpointUrl` stamps take `picked.url`. The coordinator returns the picked handle with its result (`execution-coordinator.ts:352-378`), and the dApp `wait` polls it.
+- **The auth registry** reads every grant's and revoke's receipt through that transaction's recorded endpoint, found by hash in the operation's own profile (the journal's `submittedEndpointUrl`, else the transaction row; a profile-scoped accessor, no new stored field). A transaction with no recorded endpoint fails closed with today's `grantNotInBlock`: a grant can be indexed without an activity row (`dapp-send-executor.ts:740-761`). Only the registry's own reads (`isAuthwitConsumable`) go through the route.
+- Pending receipts, the send check and finality keep their pin. The pending poll moves from the retrying client to the single-attempt one (`getSingleAttemptNodeForUrl`), so a dead pinned endpoint holds the other polls for at most one 60 s attempt instead of about 246 s (Fact 6); `reportEndpointFailure`, which would now evict the send's client instead of the poll's, goes in the same commit.
+
+### Wiring by context
+
+- **Offscreen.** `NetworkInfo` replaces `rpcUrl` with `endpoints: readonly RouteEndpoint[]` (ordered) and adds `l1ChainId`; the type checker lists every consumer. `ChainRuntime.rpcUrl` becomes `endpointsKey`; `peekMatching` and `ensure` compare it, so only a Settings edit rebuilds a runtime and a failover never does. `createChainRuntime` opens the store and reads its stamp before any routed call (`opfs-store.ts` splits the open from checking and first writing the stamp, `:166-225`), and gives the route the stamp as its rollup reference. It then checks the active endpoint's identity and rollup against the stamp, refusing on a mismatch as today, or writes the stamp on a fresh store from that endpoint, as today from the primary. Every node read after the open sits inside the close-on-throw that today wraps only `buildRuntime` (`chain-runtime.ts:198-207`), so a failed read during an outage never leaks the store's lock. Once `createPXE` returns, before any operation, the route's floor is seeded with the PXE's synced block number when the store has one (the anchor store throws on a store that never synced, `anchor_block_store.js:23`: that case keeps the genesis floor, and any other store error propagates) (`createPXE` starts no sync: `PXE.create` reads only the node's info and the genesis block, `pxe.js:99-156`). `ProductionPxeFactory` builds `nodeFactory.createRoutedNode(spec, { retryWhile })`.
+- **Background.** `NetworkService.nodes` becomes `routes: Map<networkId, RoutedNode>`, built from the captured row and evicted wherever `nodes.delete` runs today (`retireDefaultEndpoints`, `deleteNetwork`, `setActiveNetwork`, `updateEndpoint`, `setPrimaryEndpoint`, `resetChainInPlace`) and on every other change to the row's endpoint list (`addEndpoint`, `deleteEndpoint`, `updateEndpoint` or a retirement on a non-primary endpoint): the key the offscreen runtime compares. `getNodeFor(network)` returns it; `getNode(chainId)` resolves the active profile's row and calls it. `getSingleAttemptNodeFor(network, timeoutMs)` returns `route.singleAttempt(timeoutMs)`: one attempt at the active endpoint within the caller's own budget (sponsor funding keeps its 5 s), its outcome fed into the same health, never moved. `readChainTip`, `readPublicStorageOnce`, `view-executor.ts:164,220`, the auth registry's `nodeFor`/`singleAttemptNodeFor` and `incoming-transfer/service.ts:660-662` move onto these. The reset paths (`primaryMoved`, `applyResetEndpoint`, `decideEndpoint`) and estimate reuse keep reading the persisted primary.
+- **Status** (OA-1, arc 3): `getNodeStatus`/`probeNodeStatus` answer for the route as OA-1 decides; the recommended form is `Active` while any endpoint admits, `InvalidChain` only when every reachable endpoint is `wrong-chain`.
+- **Readers.** The PXE's sync, the note bracket, the public scan's pages and tips (`getPublicScanTips`, `getLatestBlockNumber`) go through the offscreen route; the background's tip read (`readChainTip`, for the tip gate and the scan's fallback) and the recorded-transfer fetch go through the background's. The floor keeps each on endpoints at or ahead of what it has seen, and a real fork stays a reorg as today.
+- **Logs.** The router's own events carry the chain id, endpoint id, kind and new state, never a URL: a state change at `info`, a move at `debug`; its endpoint clients are silent. An error that leaves the route keeps today's pipeline, whose redactor reduces every URL to its origin (`wallet/logger/utils.ts:148-199`).
+
+### Interfaces
+
+```ts
+// packages/aztec-runtime/src/utils/fetch.ts
+export type TransportFailure = "unreachable" | "timeout" | "server" | "malformed" | "overloaded" | "refused"
+export function transportFailureOf(error: unknown): TransportFailure | undefined
+// packages/aztec-runtime/src/routing/
+export interface RouteEndpoint { readonly id: string; readonly rpcUrl: string } // `rpcUrl`: a key the log redactor reduces to its origin
+export interface RouteSpec { chainId: number; l1ChainId: number; endpoints: readonly RouteEndpoint[]; rollupAddress?: string }
+export type EndpointState = "unknown" | "ready" | "down" | "behind" | "wrong-chain"
+export interface Route {
+	active(): RouteEndpoint | undefined
+	singleAttempt(timeoutMs: number): AztecNode
+	seedFloor(proposedBlockNumber: number): void
+	pickForSend(txHash: string, anchorHash: string): Promise<RouteEndpoint>
+	snapshot(): readonly { id: string; state: EndpointState; since: number }[]
+}
+export type RoutedNode = AztecNode & { readonly route: Route }
+// packages/aztec-runtime/src/ports/node-factory-port.ts (NodeFactory gains)
+createRoutedNode(spec: RouteSpec, options?: RetryOptions & { pins?: SubmissionPins }): RoutedNode
+// apps/extension/src/wallet/services/network/service.ts
+getNodeFor(network: Network): Promise<RoutedNode>
+getSingleAttemptNodeFor(network: Network, timeoutMs: number): Promise<AztecNode>
+// packages/aztec-runtime/src/pxe/{spec,descriptors,client,service}.ts (a `Methods` entry, off `IPXE`)
+pickSendEndpoint(network: NetworkInfo, tx: { txHash: string; anchorHash: string }): Promise<{ rpcUrl: string }>
+```
+
+`routeNode(clients, spec, deps)` takes `deps: { now(): number; sleep(ms): Promise<void>; log(e): void }` so the unit tests drive time. `SubmissionPins` is a plain map the offscreen `PxeService` owns per (profile, chain). The state machine is a pure module (`routing/endpoint-health.ts`) with its constants in one place. `FakeNodeFactory.createRoutedNode` builds the real router over its fake per-URL nodes, with a `transportFailure(kind)` helper that throws the shape the real client produces; since the primary takes calls with no probe, the fake's existing one-endpoint consumers need no admission stubs.
+
+### File-level change map
+
+- **Arc 1:** `packages/aztec-runtime/src/utils/fetch.ts` (+ `fetch.pins.test.ts`) and `utils/index.ts`; new `routing/{endpoint-health,routed-node,index}.ts` (+ tests) and its export in `packages/aztec-runtime/package.json`; `ports/node-factory-port.ts` and `ports/index.ts`; `adapters/aztec-node-factory-adapter.ts` (+ tests); `apps/extension/src/core/testing/fake-node-factory.ts`.
+- **Arc 2:** new `apps/extension/tests/e2e/fixtures/rpc-relay.ts`; new `apps/extension/scripts/e2e/rpc-relay.test.ts`; new `apps/extension/tests/e2e/network/rpc-routing.sandbox.test.ts`; `apps/extension/tests/e2e/shard-timings.json`; `apps/extension/tests/e2e/README.md` (the relay).
+- **Arc 3:** `packages/aztec-runtime/src/pxe/{spec,descriptors,client,service,chain-runtime,opfs-store}.ts` (+ `service.test.ts`, `opfs-store.test.ts` and both `chain-runtime.test.ts`; the store's open split from its stamp check; the `pickSendEndpoint` request: its `Methods` entry, descriptor, dispatch, argument validation and generation fence, off `IPXE`; the pin map; the store opened before the first routed call and the floor seeded after `createPXE`); `apps/extension/src/wallet/services/network/{spec,service,client}.ts`; `execution/{execution-coordinator,transfer-executor,dapp-send-executor,view-executor,shared-send-deps,service}.ts` (the picker's wiring and the coordinator's result); `auth-registry/service.ts` (registry reads on the route; grant and revoke receipts on each transaction's recorded endpoint); `operation-journal` and `transaction/service.ts` (a profile-scoped lookup of a hash's recorded endpoint); `incoming-transfer/service.ts:660`; `transaction/service.ts` (single-attempt poll); `account-state/service.ts` (status semantics); new `tests/e2e/network/rpc-failover-send.test.ts`; `legal/privacy.md`, `legal/terms.md`, `legal/archive/*`, `packages/legal/src/manifest.ts` (OA-2); `ARCHITECTURE.md` (the routing section).
+- **Arc 4:** the surfaces OA-3 and OA-4 pick, and the snapshot they read: `PxeService.getRouteSnapshot(network)` for the account engine's route (ids and states, no URLs; `undefined` when no runtime exists), or `NetworkService.getRouteSnapshot(networkId)` for the background's, whichever the owner's answer names.
+- **Arc 5:** `services/network/{seeds,service,seed-offers}.ts`; `apps/extension/scripts/{seed-identity,seed-preflight-node}.ts` and their tests (they read `DefaultSeed.rpcUrl`); a stored-shape stamp, pin and golden if OA-5 picks the one-time append; `legal/*` and `packages/legal` (OA-7).
+
+### Trade-offs not taken
+
+- **A routing fetch under one client** (the main draft): one client sizes each batch for one endpoint's cap, so a batch built for the relay breaks the free endpoint and the reverse makes the relay take batches of 3; the transport would also have to recognise `aztec_sendTx` by reading bodies. Rejected by both reviewers independently.
+- **The network service swapping the primary's URL:** every switch rebuilds the PXE behind any running proof, writes the row the reset journal and estimate reuse compare, and cannot move a call mid-operation.
+- **Pinning each PXE operation to one endpoint, failing it when that endpoint fails** (Codex): simpler per operation, but a send proving when the primary dies fails and the person proves again. With the per-tier floor, a move mid-operation reaches an endpoint at or ahead of every tip the PXE has seen; an anchored read at a block the new endpoint lacks (a fork) is a per-entry error that ends the operation in today's stale-anchor handling (D5; Phase 4 records the real node's answer).
+- **Shorter read attempts (10 s)** (Codex, conceded in round 1): no measurement shows every legitimate read under 10 s on the free plan, and it changes every caller's budget. The 60 s attempt is paid by the calls in flight when the endpoint hangs, once per outage per context; later calls skip the `down` endpoint (D4).
+- **A shared health authority across contexts:** the offscreen document has only `chrome.runtime`, and a handshake ties a proof to the worker's life. The send pick runs in the context that proved, which settles the one disagreement that matters (D11).
+- **A send pick in the background** (round 0): the background cannot see which endpoint served the proof, and the PXE's own receipt reads, made in the offscreen, would not know the pin (Codex round 1, finding 5).
+- **Refusing HTTP redirects** (Codex round 1, finding 7): only a configured endpoint can redirect, and the same endpoint can forward a submission server-side; refusing redirects removes neither.
+- **Timer probes:** idle cost, and MV3 timers die with the worker.
+- **A routed node only for networks with two or more endpoints:** two code paths; the parity test pins the one-endpoint path instead (D6).
+
+## Security & Adversarial Considerations
+
+- **Threat model.** Attackers: an endpoint that fails or misbehaves (a provider, its gateway, the relay), and anyone who can make an endpoint fail to push traffic elsewhere. The wallet trusts each endpoint the person configured for chain data, as it does today with one; a configured endpoint that lies is outside this plan's boundaries (below). Boundaries: a submission reaches exactly the endpoint the wallet records; a pending transaction's hash is read only through that endpoint, by the background and by the PXE alike; a node answering for another chain receives no routed call; the router's events carry no URL.
+- **Wrong chain.** Identity (and, in the offscreen, the rollup address against the store's stamp) is checked when a non-primary endpoint is admitted, when any endpoint returns, and when a send is picked away from the active endpoint; the primary keeps today's checks (each operation's build calls `assertLiveChainIdentity`, `tx-request-builder.ts:259-265`). Between those points a provider that changes chain is caught at the next of them, and by the stale-network classifier; the plan claims "verified at admission, return and a moved send", never continuous attestation.
+- **A configured endpoint that lies** about its tips while active raises the floor and can hold a more-preferred endpoint `behind` until the person removes it. That needs an endpoint the person chose acting against them, a condition the wallet does not support for chain data today: a closed `known-limit` issue at close-out, reopened if the wallet ever ships an endpoint it does not operate or vouch for as a fallback. Candidate probes never raise the floor, so an endpoint that is not active cannot pull traffic this way.
+- **Forced failover.** An attacker who makes the primary fail moves reads to the next endpoint the person configured; the set and order stay the person's. A submission is never moved after dispatch, and its receipts never follow the route.
+- **Privacy.** A failover sends reads to the next configured endpoint, which then sees the person's IP and request shapes; OA-2 says so. A submission's same-URL retries can reach two upstream nodes behind one pool or the relay, as today. The pending-receipt pin keeps a transaction's hash on its own endpoint in both contexts, so the PXE's sender sync cannot read `DROPPED` from an endpoint that never saw it (Codex round 1, demonstrated). The relay (arc 5) makes the Developer a recipient; OA-7.
+- **Cost and abuse.** No timer probes; one probe per endpoint in flight; `holdDown` at least 30 s; the send pick sends nothing while the active endpoint is `ready` and one small batch per candidate otherwise, so neither the relay nor an added endpoint learns of a send it does not carry while the primary serves. The relay's per-IP limit is checked against the peak E1 measures across both contexts, including an unlock's catch-up, before arc 5.
+- **Supply chain.** No new dependency. The relay fixture uses `node:http` on loopback ports claimed through the registry, lives under `tests/`, and is outside every bundle.
+- **Known limits** (filed and closed at close-out, each with its path and reopening condition): (1) a configured endpoint that lies (above); (2) every endpoint at or above the floor unreachable while the chain does not advance, so calls fail until one returns (an outage of the newest endpoint during a sequencer stall); (3) the offscreen document closed and reopened (a browser restart, a crash) between a send and its block while the route has moved, so the pins are gone and the PXE's sender syncs, while the transaction is still absent from the logs, read its receipt through the active endpoint until it resolves; (4) a pinned endpoint down from before its transaction's finality keeps that transaction `PENDING` to the PXE until the endpoint answers again: a dropped one's indexes stay reserved, which a long run of later sends to the same recipient can exhaust (the PXE's unfinalized-index window), and a mined one's effects wait for the endpoint; (5) health kept per context and in memory: a background restart pays one detection again, and the background's tip read that the send's tip gate compares (`chain-tip-gate.ts:2-3,25`) may come from another endpoint than the PXE's, which the gate already treats as a degraded read; (6) the active endpoint's own lag (a provider pool's upstream behind the PXE) reaches the PXE as it does today, an endpoint that takes the role on one probe sample can be a pool's lagging upstream on the next read, and an active endpoint whose tip stops moving while it answers is not detected (#1624 lists "a lagging tip": it moves nothing until the endpoint fails).
+
+## UI impact
+
+- **Arc 3, header network chip and Manage Networks' active row** (`components/Header.vue:229-242`, `settings/networks/index.vue:106`): today they probe only the primary, so a dead primary reads "Cannot reach the network" while another endpoint serves. After (OA-1 recommended): "Connected" while any endpoint serves; no new copy. Backup export follows the same status (a network served by its second endpoint is no longer skipped).
+- **Arc 3, legal documents** (privacy § 5.1, Terms § 7.1): one added sentence each (OA-2); Settings → About's existing non-blocking privacy notice shows the version.
+- **Arc 4, Settings → Networks → a network** (`settings/networks/[id].vue:291-323`): today each endpoint row shows its label, URL and the primary checkbox. After: what OA-3 picks (an "In use" marker, a state per row, or nothing).
+- **Arc 4, Home**: today nothing; after: what OA-4 picks.
+- **Arc 5, Settings → Networks → Alpha and Testnet**: a second endpoint row for the relay, labelled per OA-6, for new profiles and per OA-5 for existing ones; legal pages per OA-7.
+- Arcs 1 and 2 touch no surface.
+
+## Test plan (the floor, per layer)
+
+| Layer | Test | Failure mode it proves |
+|---|---|---|
+| Unit, `aztec-runtime` | `fetch.pins.test.ts`, a kind per row of the D3 table | each answer gets its kind and today's retry count unchanged; a 200 error object with a non-reserved code is a `NoRetryError` |
+| Unit | `routing/endpoint-health.test.ts` | down after three counting failures or one timeout, never on a 429 or a refusal; one batch counts once; a change of active endpoint needs two probes `holdDown` apart with identity and floor met; `holdDown` doubles on each re-fall and resets after 30 min; a lone endpoint holds the role and returns on a success; with no active endpoint, calls probe and the first qualifying endpoint takes the role (a `behind` fallback catching up while the primary is dead; every endpoint failing together doubles no `holdDown`); a `behind` endpoint is probed at most every 5 s; the floor never raised by a candidate, follows the active endpoint down, and its seeding takes the role from any active endpoint below it when another exists |
+| Unit | `routing/routed-node.test.ts` | preference order; a move needs no sleep; a failed sync read passes the active role and is re-sent once, never otherwise moved, and a refusal passes it without `down`; reads by hash move; a call never moves to an endpoint below the floor; with two or more endpoints the primary is probed before its first call; a spent endpoint is not retried in the call; all-down rounds try only the most-preferred; one-endpoint parity with today's fetch (attempts, sleeps and requests per call, terminal answers, no probe), also after `down`; `retryWhile` before and after sleeps; lazy single-flight probes; another chain and another rollup refused, a fallback admitted with the primary dead; chain 0 drops non-loopback; `pickForSend` (no request while the active endpoint is ready, sequential probes otherwise, refusal on another chain, the active endpoint when none answers, refusal when there is none); a pinned receipt never moves, reads `PENDING` with no request while its endpoint is down, and makes one attempt once its `nextProbeAt` passes (an out-of-route pinned URL recovers this way: timeout, then recovery, then the real receipt); the pin holds through a prune of its block and ends at finality; `sendTx` throws; not thenable |
+| Unit | adapter tests, the `answering` stub | each endpoint keeps its batch cap inside one routed node (`[3,3,2]` on the capped origin, `[8]` on the other); the endpoint clients print nothing |
+| Unit, extension | `network/service.test.ts`, `pxe/service.test.ts`, `chain-runtime.test.ts` ×2, `execution-coordinator.test.ts`, `transaction/service.test.ts`, `auth-registry/service.test.ts` | every endpoint edit evicts the route; pinned accessors never route; reset paths read the stored primary; a bounded reader keeps its own budget; a runtime rebuilds on an endpoint-list edit, never on a failover; the store is opened and its stamp read before the first routed call, a failed node read after the open closes the store, and the floor is seeded from the synced header, or genesis on a store that never synced; the pick returns while a write holds the chain guard, never rebuilds, probes the request's endpoints when no runtime exists, and pins survive a rebuild; pick after `toTx`, before `commitSubmitting`; the recorded URL is the dialed URL; a dead pinned endpoint holds other polls for one attempt at most; a grant's or revoke's receipt is read on its recorded endpoint, and refused with none |
+| Sandbox | `rpc-routing.sandbox.test.ts`: the real adapter, router and server-entrypoint PXE (proverless: kernels simulated, anchored reads real) behind two relays in front of one sandbox | S1 reads polled each second survive A killed, 500, 429, a gateway 400 and malformed bodies, and one blackhole at the real 60 s abort; a runtime built while A refuses `getBlock` starts on B (~110 s); S3 B frozen two blocks below A, A killed: B stays `behind`, calls wait and fail, the PXE's synced block number never falls, B is used once released; then A restored but frozen below the floor, and the runtime rebuilt by an endpoint edit: A stays `behind`, the rebuilt runtime starts on B, and A returns once released (~80 s); S3b B admitted in an earlier outage and frozen two blocks below, A active, A answering 500 once on `getChainTips` and once on an anchored read: the PXE's synced block number never falls (~40 s); S4 A killed on the first anchored read inside `pxe.proveTx` (the relay arms on a marker the test sets just before it): the proof completes through B, `sendTx` and receipts reach B only, mined (~90 s); S5 a half-dead A (tips served, anchored reads 500) moves only its failures, through the PXE's real `withCache` wrapper (~30 s); S6 an anchored read at an unknown block hash on the real node: its HTTP status and entry code recorded, classified terminal (~5 s); S7 a transaction sent through B while A is active again: the PXE's next sender sync reads that hash on B only (~60 s); S7b A killed after a send through A: the same transfer sent again through B succeeds, and A's counter sees nothing new (~60 s). About 8 min, measured in the PR |
+| E2E | `rpc-failover-send.test.ts` (E1), `@requires-proverless`, Chrome and Firefox | the real background and offscreen wiring (not a move inside a running proof, which only S4 proves): a transfer held at the proof gate (before `proveTx`), A killed, released: its build, pick, send and receipts move to B; A restored before the block; a second transfer of the same token to the same recipient sent while the first is pending, so the PXE's sender sync reads the first's receipt: B's counter sees that read and A's counter sees no request carrying the hash from either context; mined and recorded on B; the per-relay request peak per 10 s across both contexts, through an unlock's catch-up, a send and one idle minute, recorded as a local lower bound |
+
+No composition test: the send path cannot reach `sendTxTask` in-process without a proving stub outside `apps/extension/tests/COMPOSITION-TESTS.md`'s named seams, so the coordinator's unit tests and E1 carry it. The sandbox suite is browser-independent, imports no browser fixture, uses a genesis account no other network file uses, and skips itself on the Firefox lane with that reason in one line, so each PR runs it once (its shard timing is Chrome's only); it is the only layer that proves a move after the build's anchored reads began. E1 is the only scenario that proves `NetworkInfo.endpoints` crossing into the offscreen document and the real pick across both contexts; estimate 2 min per browser, measured in the PR.
+
+## Phases
+
+Each gate's commands run from the worktree root unless a `cd` is shown. "Pass" means every command exits 0 and each new assertion was seen red before its change.
+
+### Phase 1 (arc 1): typed transport failures
+
+1. Write the tests first: one per D3 row in `fetch.pins.test.ts`, each asserting `transportFailureOf` and today's retry count; require each red.
+2. Tag every error `fetchOnce` throws; add `transportFailureOf`. Change no retry rule.
+
+**Gate:** `bun run lint`; `bun run typecheck:all`; `(cd packages/aztec-runtime && bun --bun vitest run src/utils --retry=0)`; `bun run test:all`. Pass: all exit 0; the existing fetch pins stay green unedited.
+
+### Phase 2 (arc 1): the routed node
+
+1. Write `routing/endpoint-health.test.ts` and `routing/routed-node.test.ts` first (the unit rows of the test plan), on an injected clock; require each red.
+2. Write `endpoint-health.ts` (pure states and constants) and `routed-node.ts` (built from `AztecNodeApiSchema`'s keys; `sendTx` throws; `then` absent). Add `createRoutedNode` to the port, the adapter (silent single-attempt clients at 60 s, probes at 5 s, each with `maxBatchSizeFor(url)`) and `FakeNodeFactory`.
+3. Wire nothing.
+
+**Gate:** Phase 1's commands; `(cd packages/aztec-runtime && bun --bun vitest run src/routing src/adapters --retry=0)`; `bun run test`. Pass: all exit 0; no production caller of `createRoutedNode` exists (`git grep -n createRoutedNode -- apps packages ':!*.test.ts'` lists only the port, the adapter, `core/testing/fake-node-factory.ts` and `routing/`).
+
+### Phase 3 (arc 2): the fault relay
+
+1. Write `scripts/e2e/rpc-relay.test.ts` first: against a local stub upstream, each fault (kill and restore on the same port, blackhole, delay, a chosen status and body, refusing chosen methods, a batch cap, a frozen tip that answers `getChainTips` and `getBlockNumber` with the values captured when it froze) and the counters (requests and methods per relay).
+2. Write `tests/e2e/fixtures/rpc-relay.ts` on `listenClaimed` and `planBatchReplies`; teardown destroys its sockets and releases its port.
+
+**Gate:** `bun run lint`; `bun run typecheck:all`; `(cd apps/extension && bun --bun vitest run scripts/e2e/rpc-relay --retry=0)`. Pass: all exit 0.
+
+### Phase 4 (arc 2): the sandbox suite
+
+1. Write S6 first and record in `lessons/phase-4.md` how the real node answers an anchored read at an unknown block hash (HTTP status, entry code); if it is not a per-entry error, stop: D5's claim about forks changes.
+2. Write `rpc-routing.sandbox.test.ts` with S1, S3, S3b, S4, S5, S7 and S7b, a genesis account no other network file uses (`git grep getInitialTestAccountsData apps/extension/tests`) and a data dir under `~/.cache/nulo-e2e/`. The one blackhole case waits the real 60 s abort: no test-only timeout option.
+3. Run it twice; add its timing to `shard-timings.json`.
+
+**Gate:** Phase 3's commands; `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/rpc-routing.sandbox.test.ts --retry=0` twice. Pass: both runs green; S3 shows no tier of the PXE's synced tips falling; S7's relay A counted no request carrying the hash; each scenario's runtime recorded in the lessons.
+
+### Phase 5 (arc 3): the offscreen route
+
+1. Update both `chain-runtime.test.ts` files first: rebuild on an endpoint-list edit, none on a failover, the floor raised to the synced header.
+2. Make the `NetworkInfo` change and fix every consumer the type checker lists; build the runtime's node with `createRoutedNode`.
+
+**Gate:** `bun run lint`; `bun run typecheck:all`; `(cd packages/aztec-runtime && bun --bun vitest run src/pxe --retry=0)`; `bun run test`. Pass: all exit 0.
+
+### Phase 6 (arc 3): the background routes
+
+Warning: OA-1 and OA-8 must be answered before step 2. OA-8 decides whether a second endpoint that people already added takes traffic; OA-1 decides the status. Build each only on the owner's recorded answer.
+
+1. Add the service tests first: eviction on every endpoint mutation; `getNodeFor` by row; `getSingleAttemptNodeFor` with the caller's budget; pinned accessors untouched (`service.test.ts:382-461` unedited); reset paths on the stored primary; the status per OA-1.
+2. Replace `nodes` with `routes`; move the readers listed under Wiring; change the status per OA-1.
+
+**Gate:** Phase 5's commands; `(cd apps/extension && bun --bun vitest run src/wallet/services/network src/wallet/services/account-state src/wallet/services/auth-registry src/wallet/services/incoming-transfer --retry=0)`. Pass: all exit 0.
+
+### Phase 7 (arc 3): the send path
+
+1. First, as its own commit: the pending poll moves to the single-attempt client and `reportEndpointFailure` goes, with its test (a blackholed pinned endpoint holds the other polls for one attempt at most). It fixes a stall that exists today.
+2. Write the coordinator, executor, auth-registry, PXE-service and transaction tests; require each red.
+3. Add the `pickSendEndpoint` PXE request over the route's `pickForSend` (built and unit-tested in arc 1) with the service-level pin map, and its wiring through `shared-send-deps.ts` and `execution/service.ts`; change `ProveAndSendContext`, the coordinator's result and the frozen-sequence pin deliberately; replace the six stamps; move the dApp `wait` and the auth registry's receipts onto the profile-scoped recorded-endpoint lookup, as the Architecture says.
+
+**Gate:** Phase 6's commands; `(cd apps/extension && bun --bun vitest run src/wallet/services/execution src/wallet/services/transaction src/wallet/services/operation-journal src/wallet/services/network-reset src/wallet/services/legal --retry=0)`; `bun run test:all`. Pass: all exit 0; `legal/call-sites.test.ts` still finds exactly one `node.sendTx`.
+
+### Phase 8 (arc 3): legal text and the browser proof
+
+Warning: OA-2 must be answered first; the text is the owner's.
+
+1. Write E1 (proverless: it holds the transfer at the proof gate). Run it on Chrome and Firefox; record each runtime and the per-relay peak.
+2. Apply OA-2's text and version through `packages/legal/README.md` § Shipping a new version. Update `ARCHITECTURE.md` with a routing section (who routes, the floor, the send pick and its pin, what stays pinned).
+
+**Gate:** `bun run test:all`; `bun run audit:vue`; `NULO_E2E_PROVERLESS=1 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/rpc-failover-send.test.ts tests/e2e/network/failed-send-check.test.ts --retry=0`; `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/endpoint-refused-recovery.test.ts tests/e2e/network/rpc-routing.sandbox.test.ts --retry=0`; the prover-on canaries `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts --retry=0`; each of the three again with `NULO_E2E_BROWSER=firefox`; the armed smoke build and run per browser, after the network runs (`e2e:agent` leaves an unarmed `dist/<browser>`): `(set -e; for b in chrome firefox; do VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:$b; NULO_E2E_BROWSER=$b NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 env -u EXTENSION_PATH bun run --cwd apps/extension test:e2e tests/e2e/endpoints.test.ts --retry=0; done)`. Pass: all exit 0; the PR body states each browser's network suite wall-clock before and after.
+
+### Phase 9 (arc 4): the status surfaces
+
+Starts only once OA-3 and OA-4 are answered; the phase builds exactly what they pick, with a component test per state on wire-shaped data and a screenshot per surface in the PR.
+
+**Gate:** `bun run audit:vue`; the touched network files on both browsers; then `(set -e; for b in chrome firefox; do VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:$b; NULO_E2E_BROWSER=$b NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 env -u EXTENSION_PATH bun run --cwd apps/extension test:e2e tests/e2e/endpoints.test.ts --retry=0; done)`. Pass: all exit 0.
+
+### Phase 10 (arc 5): the relay as each default network's second endpoint
+
+Starts only once `rpc-proxy-1`'s Worker is live (its OS-1 to OS-6 and OS-9 done) and OA-5, OA-6 and OA-7 are answered. `DefaultSeed` takes an ordered endpoint list; existing profiles follow OA-5 (the recommended one-time append runs inside `sealOnRowKeysReady` after #1622's retirement step, skips a row a reset journal holds, and is recorded in `SeedOffers` so a deleted relay stays deleted: an additive stamp through `bun run baseline:storage -- --additive "<why>"`, its pin and a golden). Legal per OA-7.
+
+**Gate:** Phase 7's commands; `bun run test:ci-gating`; `bun run audit:vue`; the stored-shape tests; `bun run check:seeds` from `apps/extension`; the touched network files on both browsers. Pass: all exit 0.
+
+## Delivery
+
+- **Stack** (`gh stack`, base `dev` at or after `3b845ef02`): arc 1 `rpc-fallback-1-a1`, PR `feat(aztec-runtime): a routed node that fails over between a network's endpoints` (80); arc 2 `rpc-fallback-1-a2`, `test(e2e): a fault relay and a sandbox suite for routing between endpoints` (74); arc 3 `rpc-fallback-1-a3`, `feat(network): fail over to a network's next endpoint and return to the primary` (79); arc 4 `rpc-fallback-1-a4`, title per OA-3, `Closes #1624` (if OA-3 and OA-4 both pick A, arc 4 is empty and arc 3 closes #1624); arc 5 `rpc-fallback-1-a5`, `feat(network): nulo's relay as the second endpoint of each default network` (74); close-out `rpc-fallback-1-close-out`. Arcs 1 to 3 say "Part of #1624".
+- **Merging:** the orchestrator's word only; never auto-merge. The owner smokes arc 3 and arc 5 by hand before they merge.
+- **Arc 5 may trail.** If its gate is not met when arc 4 merges, the close-out files arc 5 as one `blocked:external` issue naming that gate, and the plan closes without it.
+- PR bodies: what changed and why, the claims that did not hold, the UI impact with screenshots (arcs 3 to 5), the runs with each e2e file's runtime and each browser's suite wall-clock before and after, `Closes`/`Part of`, ending `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Open without labels; add `e2e:extension-network` only if the path filter skips a lane the arc needs. No local path, account name, launch day or keyed URL.
+- **Parallelism:** arc 2 needs arc 1's router and arc 3 needs both; arcs 4 and 5 wait on owner answers. Serial; lanes would save nothing on the critical path.
+
+## Post-implementation
+
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `3b845ef02`. Specific here:
+
+- Step 1 is absent (`code_review: off`). Step 2 runs per arc at its boundary over `git diff <arc base>...HEAD` with `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside each arc's round 1. Hard stop at three rounds. After the last arc, one fresh Codex session over the net diff for cross-arc issues. Prompts under `~/.cache/nulo-backlog/rpc-fallback-1/`.
+- **Approval boundary (a plan change; stop):** a persisted field or a write to a network row other than arc 5's approved one; a timer, alarm or background task; any change to a timeout or retry count; a send moved to another endpoint; a pending check moved off its recorded URL; a new workflow or required check; a UI change beyond the owner's answers; any `legal/` text beyond the owner's.
+- Close-out: the Outcome; the known limits under § Security filed and closed (`known-limit`), each with its path and reopening condition; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done rpc-fallback-1 --merged`, trunk `dev`.
+
+## Decision ledger
+
+Sources: M main draft, C Codex design, O Opus design, A audits.
+
+| # | Decision | Rejected | Why |
+|---|---|---|---|
+| D1 | One routed node per network per context; health in memory | a shared authority; persisted health | the offscreen has only `chrome.runtime`; a handshake ties a proof to the worker (C, O) |
+| D2 | A facade over endpoint-bound clients | a routing fetch under one client (M) | per-endpoint batch caps; `sendTx` visible by name (C, O) |
+| D3 | Move on transport faults, JSON 408/425/429 and non-reserved codes (a 4xx, a 200 error object, or one entry); never on a reserved code; only transport kinds count toward `down`; a spent endpoint never re-enters the call; no text matching | any error; Codex's terminal 400-404; refusals counting toward `down` | a gateway refusal can succeed elsewhere; the node's own answer cannot; a rate-limited free endpoint must keep serving (O, C; round 1: A-C2, A-O1, A-O8) |
+| D4 | Keep 60 s attempts | 10 s (C) | no measurement; paid by the calls in flight, once per outage per context (C conceded, round 1) |
+| D5 | A call moves mid-operation, gated by the floor | pin each operation, fail it (C) | a send survives; a fork the new endpoint lacks ends in today's stale-anchor handling (O, M; S6 records the node's answer) |
+| D6 | One code path; parity test for one endpoint; a lone endpoint admitted by today's checks with no router probe, always holding the role; with two or more, every endpoint probed before its first call; no pick request while the active endpoint is ready | routing only from two endpoints (M); a one-endpoint fast path (A-C2) | one path; one endpoint sends what it sends today, request for request (O; rounds 1 and 2: A2-C8, A2-O5, A2-O6) |
+| D7 | Lazy single-flight probes on traffic | timer probes | idle cost; MV3 timers (C, O, M) |
+| D8 | Two passing probes `holdDown` apart; `holdDown` doubles on each re-fall, 30 min cap, reset after 30 min up | one probe; a fixed hold (A-C16) | the trace under § Health: a probe-passing, call-hanging endpoint costs a 60 s stall a minute with a fixed hold (C, O) |
+| D9 | Identity at admission, return and a moved send pick, against what the wallet stored (the row's ids; the store's rollup stamp in the offscreen); an affirmative mismatch refuses the send | the primary's live answer as reference (A2-C1, A2-O2); falling back to the active endpoint after a mismatch (A-C6) | a fallback must be admissible while the primary is dead at cold start; the composite alone misses an L1 mismatch (C) |
+| D10 | Proposed-tier floor from the active endpoint's served tips and the synced header (genesis on a store that never synced), seeded before the first operation (seeding takes the role from any active endpoint below it when another exists); candidates never raise it; it follows the active endpoint down, never time; no call moves below it | no floor; time-based lowering (A-C4); a per-tier floor (A-C9) | time-based lowering lets a stale survivor prune the PXE (C, demonstrated); the PXE runs at `syncChainTip: 'proposed'`, so lower tiers move only conservative inputs (A-O7, verified) |
+| D11 | Pick the send endpoint after `toTx` in the offscreen, outside the chain guard and without `ensure`: the active endpoint when ready, else candidates in order by anchor; pins held per (profile, chain) for the document's life | a background pick (round 0); a parallel pick to every endpoint (A2-O5); a pick under the chain guard (A2-O4); pins per runtime (A2-C3) | the recorded URL is the dialed URL; the PXE's own sender sync reads pending receipts (A-C5); a pick must not wait out another proof or contact endpoints that carry nothing |
+| D12 | Pinned client keeps today's same-URL retries | single-attempt submissions (C) | out of scope: no new evidence beyond the lesson the send check already handles |
+| D13 | Pending poll single-attempt on its pin, its own commit | keep retrying; poll another endpoint | the stall drops from about 246 s to one 60 s attempt; § 5.1 (C, O; A-C3, A-O5) |
+| D14 | `NetworkInfo.endpoints` replaces `rpcUrl` | keep `rpcUrl` beside it | the type checker lists every consumer |
+| D15 | Relay fixture in the extension tests tree | a new workspace package | one owning app (C, O) |
+| D16 | Sandbox suite in the shard pool, once per PR | a dedicated lane job | no lane pins to edit; filters already cover routing (O) |
+| D17 | Arc 5 trails behind an external gate | holding the plan open | the Worker is outside this repo |
+| D18 | Redirects keep today's handling | refusing them in the transport (A-C7) | only a configured endpoint can redirect, and it can forward server-side anyway |
+| D19 | Pinned send clients keep today's logger | silent pinned clients (A-O9) | the redactor reduces every URL to its origin by design (`logger/utils.ts:148-153`); routed endpoints carry `rpcUrl` so the walker sees them |
+| D21 | The PXE block stream's reads by number go to the active endpoint; a failed one passes the active role and is re-sent once there; reads by hash move like other calls | moving every call alike (A2-O1); never moving them (A3-C1, A3-O6) | one moved tips or block read from an endpoint behind or ahead prunes notes; a refusing primary must not wedge sync or `PXE.create` |
+| D22 | A pinned receipt reads `PENDING` while its endpoint is down, with one attempt per `nextProbeAt`; a pin holds to finality | failing the read; moving it; ending the pin at inclusion (A4-C9) | a failed read fails every later execution that syncs the secret; moving it leaks the hash (A2-O3); a pruned block returns the transaction to pending (A4-C9); an out-of-route pin must recover (A4-C8) |
+| D23 | Grant and revoke receipts found by a profile-scoped lookup of the recorded endpoint | `executeSendTransaction` returning its endpoint (A2-C4) | one mechanism for both, no API change (A2-O10) |
+| D20 | One router in both contexts, floor included | no floor in the background (A-O19) | a flag for one context is more code than the floor; background tip and storage reads must not go backwards either |
+| D24 | With no active endpoint, routed calls probe until one qualifies; `holdDown` doubles only when another endpoint served meanwhile | waiting for the return rule (A3-O1) | a fallback catching up, or the person's connection returning, must restore sync at once |
+| D25 | A pick with no active endpoint and no answering candidate refuses before anything is recorded | sending to the primary anyway (A3-C4) | nothing is broadcast to an endpoint the route knows is failing; the person retries |
+
+## Audit verdicts
+
+Round 1 merged the contradiction check into both legs (a deviation from the tier's separate round, recorded in `lessons/phase-0.md`). `A-C<n>` and `A-O<n>` name round 1's Codex and Opus findings; `A2-C<n>` and `A2-O<n>` round 2's; `A3-C<n>` and `A3-O<n>` round 3's; `A4-C<n>` round 4's. The Codex leg approved at round 5; the Opus leg's last verdict (round 3) was approve with changes, all applied.
+
+| Round | Leg | Verdict | Accepted | Rejected |
+|---|---|---|---|---|
+| design | Codex `01a1a26f` | design | facade, per-context health, admission, send pick after the proof, single-attempt pending reads, the relay's home | per-operation pin (D5), 10 s attempts (D4), single-attempt sends (D12) |
+| design | Opus 5.5 Plan | design | per-call move with the floor, reserved-code rule, parity, holdDown per flap, `pickForSend`, the sandbox suite | the per-entry `-32601` move (no provider evidence) |
+| 1 | Codex `01a1a289` | revise (2 blockers) | 1-6, 8, 10-17 (pending-hash pin, no time-based floor lowering, parity, identity refusal, file map, gates, composition seam, known limits, OA-3) | 7 (D18); 9's per-tier floor (D10) |
+| 1 | Opus 5.5 Plan | revise (1 blocker) | 1-6, 8, 10-18, 20, 21 (parity, refusals never mark `down`, re-probing a `behind` fallback, auth receipts, eviction, `retryWhile` after sleeps, OA-5's default-primary option) | 9's silent pinned clients (D19); 19's background floor removal (D20); 2's known-limit disposition, superseded by the pin |
+| 2 | Codex `01a1a289` resumed | revise (6 majors) | 1, 3-9 (cold-start trust root, pins per (profile, chain), auth lookup, offscreen snapshot, S4 inside `proveTx`, composition dropped, stale tier text, the request's `Methods` entry); conceded D10 and D18 | 2 (outside routing, handed to the orchestrator); 4's API change (D23) |
+| 2 | Opus 5.5 Plan, fresh | revise (3 blockers) | 1-14 (sync reads never move, no move below the floor, store-first build with floor seeding, `PENDING` for a dead pin, a pick outside the chain guard with no request while ready, lone-endpoint return, all-down rounds, probe spacing, gateway codes in a 200, `reportEndpointFailure`, E1's restored A, the smoke command, S2 cut, Fact 3) | none |
+| 3 | Codex `01a1a2b3`, fresh | revise (3 majors) | all 7 (a refusing active endpoint wedging sync and `PXE.create`; the store's open split from its stamp check; genesis floor on a fresh store; the no-active pick; E1's sender-sync trigger; `set -e` on the smoke loop; the restart wording) | none |
+| 3 | Opus 5.5 Plan, round-2 auditor verifying | approve with changes (3 majors) | 13 of its 14 round-2 findings resolved, the 14th completed by E1's second transfer; N1-N9 (no-active exit, seeding takes the role from any endpoint, pinned out-of-route health, store-first buildability, by-hash reads, refusals passing the role, no-runtime pick, a pin ending in a block, ledger fixes) | none |
+| 4 | Codex `01a1a2b3` resumed | revise (2 majors) | all 7 round-3 findings resolved; 8 (an out-of-route pinned URL never recovers) and 9 (a pin ended at inclusion is lost on a prune): one attempt per `nextProbeAt`, pins held to finality (D22) | none |
+| 5 | Codex `01a1a2b3` resumed | approve | 8 and 9 resolved; no new blocker or major | none |
+
+## Seeds (not run; orchestrator-owned)
+
+```
+/goal Phases 1 to 8 of implementations-plan/rpc-fallback-1/plan.md marked ✓ with their gates passing in the transcript; each arc's Codex loop (gpt-6.1-sol, high) converged; arcs 1 to 3 open as ready PRs against dev in one gh stack; bun run test:all and bun run lint exit 0; no PR merged.
+```
+
+```
+/loop 15m Drive implementations-plan/rpc-fallback-1 per its plan.md and the README § Post-implementation standard at 3b845ef02: run each phase's gate, decide open questions with Codex (gpt-6.1-sol, high), stop at an unanswered owner ask, open each arc's PR, never merge, never open the endpoint-constants file; report once every PR's checks are green.
+```

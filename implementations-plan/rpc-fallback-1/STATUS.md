@@ -1,0 +1,10 @@
+# rpc-fallback-1 status
+
+- 2026-11-03: spec issue #1624 filed (enhancement; #1607 and #1609 as context).
+- 2026-11-03: research phase: six read-only explorers mapped the node client, the PXE's node use, the network service and its UI, execution and pending checks, the background readers and the test and CI tooling (`research/`).
+- 2026-11-03: plan, recon and owner asks drafted from three independent designs; #1622 merged on dev as `3b845ef02`, the worktree fast-forwarded to it and the plan's base moved there.
+- 2026-11-03: audit round 1 running (Codex gpt-6.1-sol high; Opus 5.5 Plan).
+- 2026-11-03: audit round 1: Codex revise (2 blockers), Opus revise (1 blocker); plan, owner asks and ledger revised (D3, D6, D8-D11, D13, D18-D20).
+- 2026-11-03: audit round 2: Codex (resumed) revise, fresh Opus revise (3 blockers); plan revised (D3, D6, D9-D11, D21-D23), composition test dropped, S3b and S7b added.
+- 2026-11-03: audit round 3: fresh Codex revise (3 majors), Opus approve with changes; plan revised (D21, D24, D25; store open split from the stamp check; E1's second transfer). Round 4: the round-3 Codex session verifies.
+- 2026-11-03: audit rounds 4 and 5: Codex approve at round 5. Plan approved; nothing implemented. Waiting on the owner's read, OA-1 to OA-8, and the orchestrator's word to start arc 1.
