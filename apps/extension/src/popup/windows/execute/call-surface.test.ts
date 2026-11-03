@@ -441,6 +441,27 @@ describe("readableGrants", () => {
 		}
 	})
 
+	test("a grant reads its strings as a call does: the padding and UTF-8 text no longer refuse it", () => {
+		/** A decoded `str<N>` holds one character per field: here the UTF-8 bytes of the text, then the padding. */
+		const wire = (text: string, length: number) =>
+			String.fromCharCode(...new TextEncoder().encode(text), ...Array<number>(length).fill(0)).slice(0, length)
+		for (const grant of [memo(wire("pay alice", 12)), memo(wire("Total 5 €", 12))]) {
+			expect(readableGrants([grant], 1)).toEqual([grant])
+		}
+	})
+
+	test("the grant gate hands the decoder's string on, so the card reads it once", () => {
+		const grant = memo(String.fromCharCode(...new TextEncoder().encode("5 €")))
+		const [kept] = readableGrants([grant], 1)
+		expect(kept).toBe(grant)
+		if (kept?.kind !== "decoded") throw new Error("unreachable")
+		expect(callSurface(undefined, kept.call, kept.decoded)).toEqual({
+			kind: "decoded",
+			fn: "set",
+			params: [{ name: "memo", value: { kind: "string", value: "5 €" } }],
+		})
+	})
+
 	test("a grant the batch left out is unavailable, so a short batch cannot read as complete", () => {
 		const shown = memo("ok")
 		expect(readableGrants([shown], 2)).toEqual([shown, { kind: "undecoded", reason: "unavailable" }])
