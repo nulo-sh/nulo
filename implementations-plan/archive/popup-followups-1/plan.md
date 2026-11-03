@@ -28,7 +28,7 @@ post_implementation_hardening: not scheduled
 
 # popup-followups-1: two config reads on `useConfigRead`, and Create profile on the shared password pair
 
-Two owner picks left open by two archived lanes, both signed on 2026-11-03 at head `0b14e59c4`. **P104-01 = A** (page 104, 14:41 UTC): Home's balance hero and Holdings read their settings through `useConfigRead` ([OA-1](../archive/quality-popup-2/OWNER-ASKS.md), [design](../archive/quality-popup-2/plan.md), § Phase 5). The owner's note: "If it's not too complex, A sounds good. But I wouldn't add tons of complexity into our code just because of this." **P103-01 = B** (page 103, 14:02 UTC): "Use the shared pair. The first field gains the eye button and the lock-icon hint under it, as on New profile; the two headings stay." ([OA-1](../archive/quality-popup-1/OWNER-ASKS.md)). Recon and claim checks: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+Two owner picks left open by two archived lanes, both signed on 2026-11-03 at head `0b14e59c4`. **P104-01 = A** (page 104, 14:41 UTC): Home's balance hero and Holdings read their settings through `useConfigRead` ([OA-1](../quality-popup-2/OWNER-ASKS.md), [design](../quality-popup-2/plan.md), § Phase 5). The owner's note: "If it's not too complex, A sounds good. But I wouldn't add tons of complexity into our code just because of this." **P103-01 = B** (page 103, 14:02 UTC): "Use the shared pair. The first field gains the eye button and the lock-icon hint under it, as on New profile; the two headings stay." ([OA-1](../quality-popup-1/OWNER-ASKS.md)). Recon and claim checks: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Outcome & Quality Bar
 
