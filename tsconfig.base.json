@@ -1,0 +1,13 @@
+{
+	// Compiler checks only: Bun resolves imports through this chain at run time, in jobs that hold
+	// secrets, so it never takes `paths` or `baseUrl`.
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"strict": true,
+		"noEmit": true,
+		"isolatedModules": true,
+		"skipLibCheck": true
+	}
+}
