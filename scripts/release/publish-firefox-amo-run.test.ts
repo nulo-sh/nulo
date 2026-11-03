@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import {
 	type ApiRequest,
 	GECKO_ID,
@@ -15,6 +15,7 @@ import {
 	type Files,
 	POLL_INTERVAL_MS,
 	type RunIO,
+	realFetch,
 	runPublishFirefoxAmo,
 	VALIDATION_DEADLINE_MS,
 } from "./publish-firefox-amo-run"
@@ -385,6 +386,14 @@ describe("publish flow", () => {
 		expect(h.kinds()).toEqual(["upload", "upload-status", "version"])
 	})
 
+	test("a non-JSON 400 on the version request may still have left a version: it gives the recovery", async () => {
+		const h = harness([ok({ uuid: "u-1" }), VALID, ok(null, 400)])
+		expect((await runPublishFirefoxAmo(env(), h.io)).exit).toBe(1)
+		expect(h.output()).toContain("create version: HTTP 400 with a non-JSON body")
+		expect(h.output()).toContain(RECOVERY)
+		expect(h.output()).not.toContain(REJECTED)
+	})
+
 	test("a non-JSON 502 and an upload timeout are reported by status or by timeout, never raw", async () => {
 		const gateway = harness([ok(null, 502)])
 		expect((await runPublishFirefoxAmo(env(), gateway.io)).exit).toBe(1)
@@ -443,5 +452,30 @@ describe("workflow commands", () => {
 		expect((await runPublishFirefoxAmo(env(), h.io)).exit).toBe(0)
 		expect(h.lines.filter((l) => /^(upload ok|version ok|published): /.test(l))).toHaveLength(3)
 		expectEscaped(h)
+	})
+})
+
+describe("realFetch", () => {
+	test("reads a JSON body, reads a body that is not JSON as null, and rejects a body that fails mid-read", async () => {
+		const broken = new ReadableStream({ start: (c) => c.error(new TypeError("terminated")) })
+		const answers = [Response.json({ a: 1 }, { status: 201 }), new Response("<html>", { status: 502 }), new Response(broken)]
+		const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async () => answers.shift()) as unknown as typeof fetch)
+		try {
+			expect(await realFetch({ kind: "json", url: "https://x.example/api/v5/addons/", method: "GET" }, "JWT t", 1000)).toEqual({
+				status: 201,
+				json: { a: 1 },
+			})
+			expect(await realFetch({ kind: "json", url: "https://x.example/api/v5/addons/", method: "GET" }, "JWT t", 1000)).toEqual({
+				status: 502,
+				json: null,
+			})
+			expect(
+				await realFetch({ kind: "json", url: "https://x.example/api/v5/addons/", method: "GET" }, "JWT t", 1000).catch(
+					(e: Error) => e.name,
+				),
+			).toBe("TypeError")
+		} finally {
+			fetchSpy.mockRestore()
+		}
 	})
 })
