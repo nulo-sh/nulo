@@ -108,6 +108,7 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 | Arc 2 Codex R1 (`gpt-6.1-sol`, high, on `cf9ed1e40..501fbc21e`) | approve | C1: NO_FROM's sponsor lookup pinned before the line's first `leave`; C2: comment trims (the fee-pick cast, `confirmBlocked`, two restating one-line docs, a narrating NO_FROM line) | none; noted without change: the helper's return and NO_FROM's empty index await add settlement hops, every later check still runs |
 | Arc 2 Opus review (`opus`) | approve | O1: the same trims; O2: `resolveLiveHandles`' doc no longer ties the network reads to the fence's profile; O5: the phase-4 lesson's edit count | O3: bigint caps in the NO_FROM sentinel pin (NO_FROM's fingerprint JSON-encodes them, so they arrive as strings); O4: retiring the shared recorder's return pin (predates the arc, still holds) |
 | Arc 2 Codex R2 (resumed, on `0d277dcfe`) | approve | none; the fixes verified, no regression | none |
+| Net diff Codex (fresh, `gpt-6.1-sol`, high, `a0458e21a..HEAD`) | approve | three comment trims: the registration executor's fence, origin, SDK-return and fallback comments; `SharedSendDeps.addTransaction`'s doc; the order pins' "listed in order" lines | none |
 
 ## Delivery
 
