@@ -73,13 +73,13 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 - Move D1 and its D3 references (`ARCHITECTURE.md:187`, `OWNED`, the relay and ping-pong comments, the chaos citation's line).
 - **Gate**: `bun run lint`; `bun run typecheck:all`; `bun run --cwd apps/extension test src/wallet/services/wallet-sdk src/components/JsonViewer/useLogFilters.scan.test.ts scripts/e2e/profile-chaos-model.test.ts --retry=0`; `diff <(git show 51a692426:apps/extension/src/wallet/services/wallet-sdk/background.ts | sed -n 320,474p) <(sed -n '/^type DiscoveryCredit/,$p' apps/extension/src/wallet/services/wallet-sdk/content-admission.ts | sed 's/^export function buildContentTransport(/function buildContentTransport(/')`. Pass: every command exits 0 (the `diff` too: the one permitted difference, the `export`, is normalised before comparing; Codex final r2).
 
-### Phase 2: the request pipeline
+### Phase 2: the request pipeline ✓
 
 - Move D2 with the rest of D3, in one commit that names each pin edit.
 - **Gate**: Phase 1's commands but the diff, plus `src/wallet/services/legal src/wallet/services/price src/wallet/services/operation-journal src/utils/copy-dash-ban.test.ts`; `bun run --cwd packages/wallet-bridge test --retry=0`; `bun run test:all`; `bun run audit:vue`; `bun run audit:dup` (record the figures and `background.ts`'s line count before and after); `git diff --color-moved=zebra 51a692426 -- apps/extension/src/wallet/services/wallet-sdk` shows only the D2 renames outside moved blocks.
-- Network e2e at retry 0 from the root: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/connect-dapp.test.ts tests/e2e/network/concurrent-sendtx.test.ts tests/e2e/network/concurrent-sendtx-approve.test.ts tests/e2e/network/legal-acceptance-wall.test.ts tests/e2e/network/inflight-call-background-death.test.ts`, then `connect-dapp` and `inflight-call-background-death` with `NULO_E2E_BROWSER=firefox` (`senderDocumentOrigin` reads Firefox's `sender.url`). Pass: every command exits 0; record each browser's wall-clock. No smoke file opens a touched path; no e2e scenario is added.
+- Network e2e at retry 0 from the root: `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/connect-dapp.test.ts tests/e2e/network/concurrent-sendtx.test.ts tests/e2e/network/concurrent-sendtx-approve.test.ts tests/e2e/network/legal-acceptance-wall.test.ts tests/e2e/network/inflight-call-background-death.test.ts`, then `connect-dapp` and `inflight-call-background-death` with `NULO_E2E_BROWSER=firefox` (`senderDocumentOrigin` reads Firefox's `sender.url`). Pass: every command exits 0; record each browser's wall-clock. No smoke file opens a touched path; no e2e scenario is added.
 
-### Phase 3: edge headers
+### Phase 3: edge headers ✓
 
 - Add D6. Control tests on a synthetic surface set: a non-excepted surface that drops nosniff yields that surface and header; an exception whose surface now agrees yields a stale entry; an exception whose surface takes another wrong value yields that surface and header.
 - **Gate**: `bun test scripts/ci-cd/edge-headers.test.ts`; `bun run test:ci-gating`; `bun run typecheck:scripts`; lint. Pass: exit 0; the real surfaces report no disagreement.
@@ -108,6 +108,7 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 | `concurrency-rapid-fire` e2e | not added (Opus r1, optional): `concurrent-sendtx-approve` covers the FIFO release | adding it |
 | D1-D6 | as above | see Alternatives not taken |
 | Close-out | arc 2's final commits, as `w3-dapp-1` did | a third, docs-only PR (the two-PR cap) |
+| Phase 2 e2e | run with `NULO_E2E_PROVERLESS=1`, as CI's network shard pool runs: `inflight-call-background-death` refuses to start without it | a prover-on run (the file opts out of it) |
 
 ## Audit verdicts
 
@@ -117,6 +118,9 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 | Opus r1 | conditional approve: exact exception values, sourced reasons, D3 sweep, a site 8 pin, `raceAbort`'s construction | exact values (1); reasons only with a source (2); the comment sweep (3); the site 8 pin (4); `raceAbort` as one `new Promise` that also subscribes when already aborted (5, with Codex r1 6); I2 corrected by the probe (6); F5, D2 renames, the e2e cycle lint, the stated latent changes (7); the arc split by risk (8) | that sites 17 and 18 keep their turn count (the outcome mapping adds one; I3); `concurrency-rapid-fire` (optional, covered) |
 | Codex final r2 (resumed) | conditional approve: the Phase 1 `diff` exits 1 on the permitted `export`; recon's site 17 cell is stale | both: the `export` is normalised before the `diff`; the recon cell corrected | none |
 | Codex final r3 (resumed) | approve: both corrections present, no regression | none | none |
+| Arc 1 Codex r1 | approve: admission byte-identical bar the `export`; the pipeline identical modulo D2; pins, digests and the header test hold | none | none |
+| Arc 1 Opus | conditional approve: the price-exposure scan misses `content-admission.ts`; the projection's early read is unstated; a header no non-excepted surface sets passes; a bare note path | all 4: the scan row, a TSDoc on `messagePipelineDeps`, a null-agreement report with its control test, the full path | none |
+| Arc 1 Codex r2 (resumed) | approve: the four fixes hold; an exhaustive comparison of the split `disagreements` finds only the new null report | none | none |
 
 ## Delivery
 
