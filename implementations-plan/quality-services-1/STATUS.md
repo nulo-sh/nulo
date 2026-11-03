@@ -7,3 +7,4 @@
 - 2026-11-02: arc 1 phase 2 ✓ (#1441): helper tests red on a stub, green after, and red again with an await before `landed`; vitest 16 files / 474 tests (the four compensation tests unchanged), lint, typecheck:all exit 0.
 - 2026-11-02: arc 1 phase 3 ✓ (#1436): helper tests red on a stub, green after; both boundary tests green at base and red under a merged or split boundary; the 12 messages byte-identical; vitest 279 files / 5582 tests (src/wallet/services, src/wallet/storage, log-payload-ban), lint, typecheck:all exit 0.
 - 2026-11-02: arc 1 phase 4 ✓ (#1467): four options types, 35 test constructions rewritten, production wiring in `runtime.ts`; vitest `src/wallet` 309 files / 6030 tests, lint, typecheck:all exit 0.
+- 2026-11-03: arc 1 boundary gate green at retry 0; review loop converged (Codex r1 approve, Opus diff approve with four comment fixes, Codex r2 approve).

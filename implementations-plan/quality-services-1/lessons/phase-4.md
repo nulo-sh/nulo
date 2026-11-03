@@ -15,3 +15,4 @@
   - the `AccountScopedRow` doc restated its type; deleted;
   - "No items, no write." restated the `if`; dropped.
   It also flagged a latent footgun: `admit` and `landed` accept an async function. It is not a bug today, and the TSDoc states the rule. No type trick, per its own call.
+- Round 2, Codex resumed: approve, no new findings; the four comment fixes verified, executable code unchanged. Converged.

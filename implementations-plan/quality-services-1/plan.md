@@ -1,7 +1,7 @@
 ---
 plan: quality-services-1
 tier: light
-status: approved (Codex round 3); arc 1 implemented, review loop next
+status: approved (Codex round 3); arc 1 in review, arc 2 next
 issues: "#1436, #1441, #1447, #1467 (arc 1); #1437 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -141,6 +141,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | Plan 3, resumed | Codex `gpt-6.1-sol`, high | approve | the audit table's separator | none |
 | Arc 1, round 1 | Codex `gpt-6.1-sol`, high | approve | none | none |
 | Arc 1, round 1 | Opus 5.5, diff | approve | four comments: two restating their line or type deleted, one caller reference rewritten, one restated `if` dropped | an async-hook type guard: the TSDoc states the rule |
+| Arc 1, round 2, resumed | Codex `gpt-6.1-sol`, high | approve | none | none |
 
 ## Seeds (not run; orchestrator-owned)
 
