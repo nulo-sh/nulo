@@ -17,6 +17,7 @@ interface Calls {
 function fakeIO(
 	script: {
 		releaseSha?: string | null
+		lookupError?: Error
 		openPr?: number | null
 		mergeable?: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
 		prNumber?: number
@@ -33,6 +34,7 @@ function fakeIO(
 	const io: SyncIO = {
 		async resolveReleasePrMergeSha(headSha) {
 			calls.resolveReleasePrMergeSha.push(headSha)
+			if (script.lookupError) throw script.lookupError
 			return script.releaseSha === undefined ? headSha : script.releaseSha
 		},
 		async findOpenSyncPr(branch) {
@@ -84,6 +86,14 @@ describe("runSync — eligibility gate (zero-API on the common path)", () => {
 		const r = await runSync(opts({ io }))
 		expect(r.action).toBe("skip")
 		expect(calls.resolveReleasePrMergeSha).toHaveLength(1)
+		expect(calls.prepareSyncBranch).toHaveLength(0)
+	})
+
+	test("push+stable but GitHub cannot say which PR HEAD merged → rejects with that error, opening nothing", async () => {
+		const lookupError = new Error("gh api commits/f00/pulls failed (exit 4): HTTP 502")
+		const { io, calls } = fakeIO({ lookupError })
+		await expect(runSync(opts({ io }))).rejects.toBe(lookupError)
+		expect(calls.findOpenSyncPr).toHaveLength(0)
 		expect(calls.prepareSyncBranch).toHaveLength(0)
 	})
 

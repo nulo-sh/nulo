@@ -27,7 +27,7 @@ export const SYNC_BRANCH_PREFIX = "sync/main-to-dev-v"
 export interface SyncIO {
 	/**
 	 * The merge_commit_sha of the merged Release PR at `headSha`, or null when HEAD is not a Release-PR merge.
-	 * Rejects when GitHub cannot say, so a stuck release turns the job red instead of skipping it.
+	 * Rejects when GitHub cannot say, so the job turns red instead of passing green with no sync PR.
 	 */
 	resolveReleasePrMergeSha(headSha: string): Promise<string | null>
 	/** The number of an already-open sync PR for `branch` (base dev), or null. */
