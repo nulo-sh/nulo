@@ -10,6 +10,7 @@
  */
 
 import { type Doomed, KEEP, planPrune, type ReleaseEntry } from "./prune-nightlies"
+import { githubHeaders, refusal } from "./github-rest"
 import { command } from "./workflow-command"
 
 export interface PruneIO {
@@ -84,19 +85,15 @@ export function realPruneIO(repo: string, token: string): PruneIO {
 	const call = (url: string, method = "GET"): Promise<Response> =>
 		fetch(url.startsWith(API) ? url : `${API}repos/${repo}/${url}`, {
 			method,
-			headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+			headers: githubHeaders(token),
 			redirect: "manual",
 			signal: AbortSignal.timeout(60_000),
 		})
-	const refuse = async (res: Response, method: string, url: string): Promise<never> => {
-		const detail = ((await res.json().catch(() => null)) as { message?: unknown } | null)?.message
-		throw new Error(`${method} ${url.split("?")[0]}: HTTP ${res.status}${typeof detail === "string" ? `: ${detail}` : ""}`)
-	}
 	const every = async <T>(first: string, parse: (item: unknown) => T): Promise<T[]> => {
 		const found: T[] = []
 		for (let url: string | null = first; url !== null; ) {
 			const res = await call(url)
-			if (!res.ok) await refuse(res, "GET", url)
+			if (!res.ok) throw await refusal(res, "GET", url)
 			found.push(...((await res.json()) as unknown[]).map(parse))
 			url = nextPage(res.headers.get("link"))
 		}
@@ -106,12 +103,12 @@ export function realPruneIO(repo: string, token: string): PruneIO {
 	const present = async (url: string): Promise<Response | null> => {
 		const res = await call(url)
 		if (res.status === 404) return null
-		if (!res.ok) await refuse(res, "GET", url)
+		if (!res.ok) throw await refusal(res, "GET", url)
 		return res
 	}
 	const remove = async (url: string): Promise<void> => {
 		const res = await call(url, "DELETE")
-		if (res.status !== 204) await refuse(res, "DELETE", url)
+		if (res.status !== 204) throw await refusal(res, "DELETE", url)
 	}
 	return {
 		releases: () => every("releases?per_page=100", parseEntry),

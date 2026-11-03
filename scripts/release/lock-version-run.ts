@@ -5,6 +5,7 @@
  * Run by `_release-pr-lockfile.yml`, which nothing waits on: a failure here never holds a release.
  */
 
+import { githubHeaders, refusal } from "./github-rest"
 import { EXTENSION_PACKAGE_JSON, LOCKFILE, lockWithVersion, packageVersion, releaseBranch } from "./lock-version"
 import { command } from "./workflow-command"
 
@@ -58,30 +59,24 @@ function fail(io: LockIO, reason: string): 1 {
 }
 
 export function realLockIO(repo: string, token: string): LockIO {
-	const call = async (path: string, accept: string, init: RequestInit = {}): Promise<Response> => {
+	const call = async (path: string, init: RequestInit = {}, accept?: string): Promise<Response> => {
 		const res = await fetch(`https://api.github.com/${path}`, {
 			...init,
-			headers: { Authorization: `Bearer ${token}`, Accept: accept, "X-GitHub-Api-Version": "2022-11-28" },
+			headers: githubHeaders(token, accept),
 			signal: AbortSignal.timeout(60_000),
 		})
-		if (!res.ok) {
-			const detail = ((await res.json().catch(() => null)) as { message?: unknown } | null)?.message
-			throw new Error(
-				`${init.method ?? "GET"} ${path.split("?")[0]}: HTTP ${res.status}${typeof detail === "string" ? `: ${detail}` : ""}`,
-			)
-		}
+		if (!res.ok) throw await refusal(res, init.method ?? "GET", path)
 		return res
 	}
-	const json = "application/vnd.github+json"
 	return {
 		async head(branch) {
-			const ref = (await (await call(`repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`, json)).json()) as {
+			const ref = (await (await call(`repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`)).json()) as {
 				object: { sha: string }
 			}
 			return ref.object.sha
 		},
 		async read(path, commit) {
-			return (await call(`repos/${repo}/contents/${path}?ref=${commit}`, "application/vnd.github.raw+json")).text()
+			return (await call(`repos/${repo}/contents/${path}?ref=${commit}`, {}, "application/vnd.github.raw+json")).text()
 		},
 		async commit(branch, expectedHead, path, text, message) {
 			const query = "mutation ($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }"
@@ -91,7 +86,7 @@ export function realLockIO(repo: string, token: string): LockIO {
 				message: { headline: message },
 				fileChanges: { additions: [{ path, contents: Buffer.from(text).toString("base64") }] },
 			}
-			const res = await call("graphql", json, { method: "POST", body: JSON.stringify({ query, variables: { input } }) })
+			const res = await call("graphql", { method: "POST", body: JSON.stringify({ query, variables: { input } }) })
 			const { data, errors } = (await res.json()) as {
 				data?: { createCommitOnBranch?: { commit?: { oid?: string } } } | null
 				errors?: GraphQLError[]
