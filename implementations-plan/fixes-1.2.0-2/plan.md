@@ -80,7 +80,7 @@ Two bounded wallet changes for the 1.2.0 freeze, as two independent PRs off `dev
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/network/seeds.test.ts src/wallet/services/network/node-factory.test.ts scripts/seed-identity.test.ts --retry=0`; `bun run test:all`; `bun run --cwd apps/extension check:seeds` (live). **Pass:** all exit 0; `check:seeds` prints `OK` for Mainnet and Testnet. **Layers:** lint, typecheck, unit, live endpoint check.
 
-## Phase 2 (arc 2): the Sponsored list (on OA-1's answer)
+## Phase 2 (arc 2): the Sponsored list and the hold (OA-1, B) ✓
 
 Before you change code, capture the "before": a temporary smoke spec (`tests/e2e/zz-shots-1618.test.ts`, never committed) registers a profile (Mainnet), stores both protocol rows with `seedFpcs`, opens Send's fee picker and Settings → Fee payers, and calls `shotSend` with `NULO_E2E_SHOT_DIR` set; keep the light PNGs.
 
@@ -127,6 +127,8 @@ Before you change code, capture the "before": a temporary smoke spec (`tests/e2e
 | arc 1 r2 | Codex, resumed | clean | none needed | none |
 | plan r5 (B) | Codex gpt-6.1-sol high (session 01a1a306) | changes required | a sponsor selection carried over an identity switch bypassed the hold: the app windows now gate what they expose while pending (D8 revised); the hold covers pending selections only, with a rejected-read test and the retained-list control (D9); two comments made false by the hold | none |
 | plan r6 (B) | Codex, resumed | approve | none needed | none |
+| arc 2 r1 | Codex gpt-6.1-sol high (session 01a1a321) | changes required | the lock's watchdog can hand the lock on while the removal reads: the commit now also needs `withLock`'s `isCurrent` (a parked-read test, red without it); two pre-fill comments no longer promise a sponsor on the trigger | none |
+| arc 2 r2 | Codex, resumed | clean | none needed | none |
 
 ## Delivery
 

@@ -10,3 +10,4 @@
 - 2026-11-03 PR #1643 CI: 51 pass, 6 skipped; all five required statuses pass. Arc 2 waits on OA-1.
 - 2026-11-03 OA-1 answered B (page 106, signed 19:59 UTC); plan revised for the hold (D8-D10); Codex plan r5 next.
 - 2026-11-03 Codex plan r5: changes required (3, accepted; D8 revised to gate the app's exposed selection); r6 approve.
+- 2026-11-03 phase 2: tests red on base then green; lint, typecheck:all, unit (retry 0), test:all green; smoke e2e Chrome and Firefox green at retry 0; captures saved. Network fee-methods and the Codex loop running.
