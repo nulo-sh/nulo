@@ -41,7 +41,7 @@ function fakeBuildCtx() {
 		simulateTx,
 		getNodeInfo,
 		ctx: {
-			txRequest: { txContext: {} },
+			txRequest: { txContext: {}, authWitnesses: [] },
 			node: { getNodeInfo },
 			pxe: { simulateTx },
 			account: { address: { toString: () => "0xacc" } },
@@ -52,7 +52,7 @@ function fakeBuildCtx() {
 }
 
 describe("AuthwitDiscoverer.discoverPrivateAuthwits", () => {
-	test("invokes buildTxRequest with PREEXISTING_FEE_JUICE and simulates under the build's scopes, stubbing only the account", async () => {
+	test("invokes buildTxRequest with PREEXISTING_FEE_JUICE and simulates under the build's scopes, stubbing every one of them", async () => {
 		const disc = new AuthwitDiscoverer(fakeLogger())
 		const op = { networkId: "net", accountAddress: "0xabc", actions: [] as Action[] }
 		const { ctx, simulateTx } = fakeBuildCtx()
@@ -68,7 +68,8 @@ describe("AuthwitDiscoverer.discoverPrivateAuthwits", () => {
 			skipTxValidation: true,
 			skipFeeEnforcement: true,
 		})
-		expect(stubbed).toEqual(["0xacc"])
+		// Another scope account's check must pass too, or its authorization request never reaches the effects.
+		expect(stubbed).toEqual(["0xacc", "0xsecond"])
 		// The build's scopes exactly: a note an additional scope holds must be readable at discovery.
 		expect((simulateOpts as { scopes: unknown }).scopes).toBe(ctx.scopes)
 		expect(result).toEqual({ actions: [], discovered: [] })

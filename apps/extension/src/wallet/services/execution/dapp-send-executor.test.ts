@@ -1832,6 +1832,15 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 		return makeHarness({ buildAndEstimateFolded: foldedDiscovering(tags, base.built), ...overrides })
 	}
 	const snapshots = (deps: DappSendExecutorDeps) => deps.previewSnapshots
+	/** The record of `tag` the owner's attached witness covers, which the wallet lists and never signs. */
+	const consumed = (tag: string) => ({ ...record(tag), onBehalfOf: "0xowner" })
+	/** The send carries the owner's witness for `tag`'s request. */
+	const carry = (built: { txRequest: unknown }, tag: string) =>
+		(built.txRequest as { authWitnesses: unknown[] }).authWitnesses.push({ requestHash: { toString: () => `mh:ih:${tag}` } })
+	const readingOwner = (overrides: Record<string, unknown> = {}) =>
+		makeAztecOp({ opts: { from: addr("0xacct"), additionalScopes: [addr("0xowner")], wait: "NO_WAIT" }, ...overrides })
+	const signedHashes = (account: { createAuthWit: ReturnType<typeof vi.fn> }) =>
+		(account.createAuthWit.mock.calls as unknown[][]).map(([hash]) => String(hash))
 
 	test("estimate (aztec_sendTx): returns the discovered list, previewId = estimateId, snapshot + stash carry the hashes", async () => {
 		const { executor, deps } = harnessDiscovering(["a"])
@@ -1962,6 +1971,54 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 		expect(proveAndSend).not.toHaveBeenCalled()
 	})
 
+	test("estimate: a request the owner's carried witness covers is listed after the signer's and keyed by its account", async () => {
+		const { executor, deps } = makeHarness({
+			authwit: { discoverPrivateAuthwits: vi.fn(async () => ({ actions: [], discovered: [record("a"), consumed("b")] })) },
+		})
+		const result = await executor.estimateOperationFee(readingOwner(), { paymentMethod: { kind: "fj" } } as never, undefined, CTX)
+		expect(result.discoveredAuthwits).toEqual([record("a"), consumed("b")])
+		expect(snapshots(deps).take(result.previewId, identity)).toEqual({
+			kind: "found",
+			snapshot: expect.objectContaining({ discoveredHashes: ["mh:ih:a", "0xowner:mh:ih:b"] }),
+		})
+	})
+
+	test("an app-paid estimate lists only the authorizations its validated run consumed, and its confirm is held to them", async () => {
+		const base = makeHarness()
+		const appPaid = {
+			planner: {
+				processAztecJsPayload: vi.fn(async () => ({
+					actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+					feePaymentMethod: undefined,
+					feeOptions: { embeddedFeePayment: "fpc" },
+				})),
+			} as never,
+		}
+		const observing = (records: unknown[]) =>
+			vi.fn(async (...args: unknown[]) => {
+				;(args[6] as { discovered: unknown[] } | undefined)?.discovered.push(...records)
+				await (args[5] as ((txCalls: unknown) => Promise<void>) | undefined)?.(base.built.txCalls)
+				return base.built as never
+			})
+		const h = makeHarness({ ...appPaid, buildAndEstimateValidated: observing([record("own"), consumed("b")]) })
+		const estimate = await h.executor.estimateOperationFee(
+			readingOwner(),
+			{ paymentMethod: { kind: "embedded" } } as never,
+			undefined,
+			CTX,
+		)
+		expect(estimate.discoveredAuthwits).toEqual([consumed("b")])
+		await h.executor.executeAztecSendTx(readingOwner(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: estimate.previewId })
+		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
+
+		const unseen = makeHarness({ ...appPaid, buildAndEstimateValidated: observing([consumed("b")]) })
+		snapshots(unseen.deps).stash("pv", { ...identity, discoveredHashes: [] })
+		await expect(
+			unseen.executor.executeAztecSendTx(readingOwner(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: "pv" }),
+		).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
+		expect(unseen.proveAndSend).not.toHaveBeenCalled()
+	})
+
 	test("the silent path (no envelope) is never held to a preview", async () => {
 		const { executor, proveAndSend } = harnessDiscovering(["a"])
 		await executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
@@ -2051,6 +2108,52 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			const silent = makeHarness()
 			await silent.executor.executeAztecSendTx(noFromOp(), ORIGIN, undefined, undefined, FENCE)
 			expect(silent.account.createAuthWit).toHaveBeenCalledTimes(1)
+		})
+
+		describe("with another approved account in its scopes", () => {
+			const noFromReading = () =>
+				readingOwner({ executionMode: "default_entrypoint", feeSettings: { paymentMethod: { kind: "embedded" } } })
+
+			test("discovery stubs every scope account; the preview lists the owner's carried request after the account's; confirm signs the account's only", async () => {
+				collectOffchainEffectsMock.mockReturnValue([effect("theirs", "0xowner"), effect("ours")])
+				const { executor, built, pxe, account, proveAndSend } = makeHarness()
+				carry(built, "theirs")
+				const preview = await executor.previewOperationAuthwits(noFromReading(), CTX)
+				expect((pxe.simulateTx.mock.calls[0] as unknown[])[2]).toEqual(["0xacct", "0xowner"])
+				expect(preview.discoveredAuthwits).toEqual([record("ours"), consumed("theirs")])
+				await executor.executeAztecSendTx(noFromReading(), ORIGIN, undefined, undefined, FENCE, {
+					...CTX,
+					previewId: preview.previewId,
+				})
+				expect(signedHashes(account)).toEqual(["mh:ih:ours"])
+				expect(proveAndSend).toHaveBeenCalledTimes(1)
+			})
+
+			test("a hash listed for the owner and decoded at confirm for the account is refused before any witness", async () => {
+				collectOffchainEffectsMock.mockReturnValueOnce([effect("x", "0xowner")]).mockReturnValue([effect("x")])
+				const { executor, built, account, proveAndSend } = makeHarness()
+				carry(built, "x")
+				const preview = await executor.previewOperationAuthwits(noFromReading(), CTX)
+				expect(preview.discoveredAuthwits).toEqual([consumed("x")])
+				await expect(
+					executor.executeAztecSendTx(noFromReading(), ORIGIN, undefined, undefined, FENCE, {
+						...CTX,
+						previewId: preview.previewId,
+					}),
+				).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
+				expect(account.createAuthWit).not.toHaveBeenCalled()
+				expect(proveAndSend).not.toHaveBeenCalled()
+			})
+
+			test("a confirm with no preview that would consume the owner's authorization asks for a retry", async () => {
+				collectOffchainEffectsMock.mockReturnValue([effect("x", "0xowner")])
+				const { executor, built, proveAndSend } = makeHarness()
+				carry(built, "x")
+				await expect(executor.executeAztecSendTx(noFromReading(), ORIGIN, undefined, undefined, FENCE, CTX)).rejects.toThrow(
+					ESTIMATE_INCOMPLETE_MESSAGE,
+				)
+				expect(proveAndSend).not.toHaveBeenCalled()
+			})
 		})
 
 		test("ROUTED: a popup approval dispatched through executeOperations reaches the NO_FROM guard (no preview ⇒ retry)", async () => {

@@ -27,6 +27,8 @@ export const USDC = "0x2f4e81000000000000000000000000000000000000000000000000000
 export const RECIPIENT = "0x1e6f120000000000000000000000000000000000000000000000000000007a8b"
 export const UNKNOWN = "0x2c3d4e0000000000000000000000000000000000000000000000000000004e5f"
 export const VAULT = "0x0d9a170000000000000000000000000000000000000000000000000000045f6a"
+/** Another account of the profile, whose authorization the app attaches to Main's send. */
+export const SAVINGS = "0x0c7d3e00000000000000000000000000000000000000000000000000000052e1"
 const L1_RECIPIENT = "0x7c41d2a90b3e85f61c0d7e4b2a9f13c86d5be9f0"
 
 export const field = (n: bigint): string => `0x${n.toString(16).padStart(64, "0")}`
@@ -37,6 +39,9 @@ const INNER_1 = "0x14f2a6c8e0b3d5f7192b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4
 const INNER_2 = "0x05d7f9b1c3e5a7092d4f6b8c0e2a4d6f8b0c2e4a6d8f0b2c4e6a8d0f2b4c6e8a"
 const MESSAGE_1 = "0x21a3c5e7f9b1d3052f4b6d8e0a2c4f6b8d0e2a4c6f8b0d2e4a6c8f0b2d4e6a8c"
 const MESSAGE_2 = "0x12c4e6a8f0b2d4062e8a0c2f4b6d8e0a2c4f6b8d0e2a4c6f8b0d2e4a6c8f0b2d"
+const SPEND_NONCE = "0x0e2c4a6b8d1f3e5c7a9b0d2f4e6c8a1b3d5f7e9c0a2b4d6f8e1c3a5b7d9f0e2c"
+const INNER_3 = "0x2a6c8e0b3d5f7192b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c14f"
+const MESSAGE_3 = "0x1d3f5b7a9c0e2d4f6a8b1c3e5d7f9a0b2c4e6d8f1a3b5c7e9d0f2a4b6c8e1d3f"
 
 const EXIT_SELECTOR = "0x5a3e1b2c"
 const CHECKPOINT_SELECTOR = "0x6c4d2e1f"
@@ -99,6 +104,17 @@ export const AUTHWITS: readonly DiscoveredAuthwit[] = [
 	{ consumer: VAULT, caller: HUB, selector: WITHDRAW_SELECTOR, args: [MAIN, field(1000n)], innerHash: INNER_2, messageHash: MESSAGE_2 },
 ]
 
+/** Main moving 1 USDC of Savings', covered by the witness the app attached: listed, never signed. */
+export const CONSUMED: DiscoveredAuthwit = {
+	consumer: USDC,
+	caller: MAIN,
+	selector: vocabularySelector("transfer_private_to_private", 4) ?? "",
+	args: [SAVINGS, RECIPIENT, field(1_000_000n), SPEND_NONCE],
+	innerHash: INNER_3,
+	messageHash: MESSAGE_3,
+	onBehalfOf: SAVINGS,
+}
+
 export const feeEstimateWith = (discoveredAuthwits: readonly DiscoveredAuthwit[]) => ({
 	maxFee: "1",
 	gasDetails: { l2GasLimit: 0, daGasLimit: 0, teardownL2GasLimit: 0, teardownDaGasLimit: 0, feePerL2Gas: "1", feePerDaGas: "1" },
@@ -143,6 +159,9 @@ export const decodeFixture = async ({ vaultDecoded = true } = {}) => {
 		]),
 	}
 }
+
+/** The decode the window fetches for {@link CONSUMED}. */
+export const decodeConsumed = (): Promise<DecodedCall> => decodeCallForDisplay(lookup, authwitDisplayCall(CONSUMED))
 
 /** A `grantPublicAuthwit` content as the playground sends it: the owner and spender as hex, the
  *  amount and nonce as decimal strings. */

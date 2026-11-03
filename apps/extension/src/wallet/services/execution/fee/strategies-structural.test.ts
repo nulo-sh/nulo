@@ -36,6 +36,7 @@ function sentinelTxRequest() {
 		// (the multicall-wrapped shape carries the entrypoint address instead,
 		// and must never be stubbed — pinned below).
 		origin: { toString: () => "0xaccount" },
+		authWitnesses: [],
 		txContext: {
 			gasSettings: new GasSettings(new Gas(11_000, 22_000), new Gas(3_300, 4_400), new GasFees(555n, 666n), PRIORITY),
 		},
@@ -207,6 +208,20 @@ describe("EmbeddedStrategy structural parity", () => {
 		const ctx = makeCtx({ fee: { embeddedFeePayment: "fjwc" } as never })
 		const result = await new EmbeddedStrategy(deps).buildAndEstimate(ctx)
 		expect(result.feePaymentMethod).toBe(AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM)
+	})
+
+	test("with a probe, it hands the probe its one validated simulation, unstubbed", async () => {
+		const { deps, simulateTxTask, built } = makeDeps()
+		const probe = { extractEffects: vi.fn(async () => ({ actions: [], requested: false })) }
+		const ctx = { ...makeCtx({ fee: { embeddedFeePayment: "fpc" } as never }), probe } as FeeStrategyContext
+		await new EmbeddedStrategy(deps).buildAndEstimate(ctx)
+
+		expect(simulateTxTask).toHaveBeenCalledTimes(1)
+		expect(simulateTxTask.mock.calls[0]?.[2]).not.toHaveProperty("stubAccountAddresses")
+		expect(probe.extractEffects).toHaveBeenCalledTimes(1)
+		const [sim, chain] = probe.extractEffects.mock.calls[0] as unknown as [unknown, { signer: unknown; scopes: unknown }]
+		expect(sim).toBe(await simulateTxTask.mock.results[0]?.value)
+		expect(chain).toMatchObject({ signer: built.account.address, scopes: built.scopes })
 	})
 
 	test("missing embeddedFeePayment throws the frozen message", async () => {

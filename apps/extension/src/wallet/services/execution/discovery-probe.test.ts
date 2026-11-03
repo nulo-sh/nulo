@@ -47,7 +47,13 @@ function fakeNode() {
 }
 
 const effect = (tag: string, onBehalfOf: unknown = SIGNER) => ({ contractAddress: { toString: () => "0xtoken" }, data: [tag, onBehalfOf] })
-const ctxOf = (node: never, network: never = NETWORK) => ({ node, network, signer: SIGNER })
+const ctxOf = (node: never, network: never = NETWORK, scopes: never[] = [SIGNER], carried: string[] = []) => ({
+	node,
+	network,
+	signer: SIGNER,
+	scopes,
+	carried: new Set(carried),
+})
 
 describe("CollectingDiscoveryProbe", () => {
 	test("no effects: returns [] without fetching node info (lazy chain fetch)", async () => {
@@ -117,6 +123,27 @@ describe("CollectingDiscoveryProbe", () => {
 			fakeCrypto((d) => String(d[0])),
 		)
 		expect(await onlyTheirs.extractEffects(fakeSim([effect("theirs", OTHER)]), ctxOf(node))).toEqual({ actions: [], requested: true })
+	})
+
+	test("another scope account's carried request joins discovered after the signer's, never collected", async () => {
+		const probe = new CollectingDiscoveryProbe(
+			new Set(),
+			fakeCrypto((d) => String(d[0])),
+		)
+		const { node } = fakeNode()
+
+		const out = await probe.extractEffects(
+			fakeSim([effect("theirs", OTHER), effect("ours")]),
+			ctxOf(node, NETWORK, [SIGNER, OTHER], ["mh:theirs"]),
+		)
+
+		const ours = { kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:ours" } }
+		expect(out.actions).toEqual([ours])
+		expect(probe.collected).toEqual([ours])
+		expect(probe.discovered.map((d) => [d.messageHash, d.onBehalfOf])).toEqual([
+			["mh:ours", undefined],
+			["mh:theirs", "0xother"],
+		])
 	})
 
 	test("first-sim-only: the second extraction is inert and leaves collected untouched", async () => {
