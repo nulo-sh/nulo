@@ -11,12 +11,9 @@
  * hit real Poseidon via bb.js) are mocked at the module boundary; the full
  * real-schema path is pinned end-to-end by
  * `tests/e2e/network/contracts-register.test.ts` (strict "ok" through the real
- * wallet-sdk client). Service construction uses the private-field-injection
- * pattern from the characterization suite.
+ * wallet-sdk client).
  */
 import { describe, expect, test, vi } from "vitest"
-import { ConfigStore } from "@/wallet/config"
-import { LoggerStore } from "@/wallet/logger"
 
 vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => {
 	const original = await importOriginal<Record<string, unknown>>()
@@ -31,7 +28,7 @@ vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => {
 	}
 })
 
-import { ExecutionService } from "./service"
+import { RegistrationExecutor } from "./registration-executor"
 
 const NETWORK = {
 	id: "net1",
@@ -49,16 +46,11 @@ function fakeInstance(addressBigInt: bigint) {
 	}
 }
 
+/** The fakes stand in for stdlib values, so the call takes them untyped. */
 function makeService(pxe: Record<string, unknown>) {
-	const service = new ExecutionService(new LoggerStore(new ConfigStore()))
-	const internals = service as unknown as {
-		networkService: unknown
-		pxeService: unknown
+	return new RegistrationExecutor({ networkService: { getNetwork: async () => NETWORK }, pxeService: pxe } as never) as unknown as {
 		executeAztecRegisterContract(op: unknown): Promise<unknown>
 	}
-	internals.networkService = { getNetwork: async () => NETWORK }
-	internals.pxeService = pxe
-	return internals
 }
 
 describe("aztec_registerContract resolves void (5.0.1 WalletSchema conformance)", () => {

@@ -10,9 +10,8 @@
  * per-(profileId, chainId) FIFO mutex that keeps two approved sendTx
  * from interleaving their simulate/prove against shared private-note
  * state. The slot, the queued-record claim, the journal helpers, and
- * the controller registry all live behind `deps.lane` — the facade owns
- * the implementations today; the execution-lane seam swaps the wiring,
- * not this module's control flow.
+ * the controller registry all live behind `deps.lane`, the slice of
+ * `ExecutionLane` this module calls.
  *
  * Frozen ordering invariants (do not reorder):
  *   - `acquireSlot` BEFORE the journal claim and any PXE-touching work.
@@ -48,24 +47,24 @@ import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { collectOffchainEffects, type TxHash, type TxProvingResult } from "@aztec-labs/stdlib/tx"
 import { liveChainInfo } from "@nulo/aztec-runtime/utils"
-import { type JobError, type JobProgress, JobCancelledSentinel, type QueuedFeeReask } from "@nulo/wallet-core/jobs"
+import { type JobProgress, JobCancelledSentinel, type QueuedFeeReask } from "@nulo/wallet-core/jobs"
 import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 import { feeDisplay } from "@/utils/fee-estimation"
 import { pickPrimaryIndex, pickPrimaryWireCall } from "@/utils/primary-method"
-import { type JournalAuthwits, type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
+import { type JournalAuthwits, type JournalCallCarrier, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
-import type { AddTransactionInput, LocalTxOrigin, TransactionService, Tx } from "@/wallet/services/transaction/service"
+import type { AddTransactionInput, LocalTxOrigin, Tx } from "@/wallet/services/transaction/service"
 import { type FeeChoice, OriginType } from "@/wallet/services/transaction/spec"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { Network } from "@/wallet/services/network/service"
-import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import type { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks } from "./execution-coordinator"
 import { builtCapOf } from "./estimate-reuse-shared"
 import type { ChainTipGate } from "./chain-tip-gate"
-import type { OriginTurn } from "./execution-lane"
+import type { ExecutionLane, OriginTurn } from "./execution-lane"
+import type { SharedSendDeps } from "./shared-send-deps"
 import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { OperationEstimateReuse, OperationEstimateReuseEntry } from "./operation-estimate-reuse"
 import { fingerprintNoFromInputs, fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
@@ -113,55 +112,6 @@ function primaryActionCalls(actions: readonly Action[] | undefined): JournalCall
 	return undefined
 }
 
-/** Execution-lane subset the dApp-send flows depend on: the FIFO slot,
- *  the queued-record claim, the journal helpers, and the controller
- *  registry. Implementations live on the facade today. */
-export interface DappSendExecutorLane {
-	deleteController(journalId: string): void
-	acquireSlot(
-		networkId: string,
-		queuedJournalId: string | undefined,
-		fence: ExecutionFence,
-		onEnqueued?: () => void,
-		originKey?: string,
-	): Promise<{ release: ExecutionMutexRelease; preController: AbortController | undefined }>
-	claimOrCreateJournal(
-		networkId: string,
-		accountAddress: string,
-		origin: LocalTxOrigin,
-		calls: JournalCallCarrier[] | undefined,
-		hooks: ExecutionHooks | undefined,
-		reuseController: AbortController | undefined,
-		fence: ExecutionFence,
-	): Promise<{ journalId: string | undefined; controller: AbortController | undefined }>
-	beginJournal(
-		networkId: string,
-		accountAddress: string,
-		origin: LocalTxOrigin,
-		calls?: JournalCallCarrier[],
-		fence?: ExecutionFence,
-	): Promise<string | undefined>
-	recordBuiltCall(journalId: string | undefined, txCalls: Tx["calls"]): Promise<void>
-	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, retitle?: JournalRetitle): Promise<void>
-	commitJournal(journalId: string | undefined, progress: JobProgress, publicAuthwits?: JournalAuthwits): Promise<void>
-	clearJournalAuthwits(journalId: string | undefined, txHash: string): Promise<void>
-	parkSlot(
-		release: ExecutionMutexRelease,
-		networkId: string,
-		queuedJournalId: string | undefined,
-		fence: ExecutionFence,
-		preController: AbortController | undefined,
-		originKey: string | undefined,
-		wait: () => Promise<void>,
-	): Promise<ExecutionMutexRelease>
-	joinOriginLine(fence: ExecutionFence, chainId: number, originKey: string | undefined): OriginTurn
-	failUnclaimed(journalId: string | undefined, error: unknown): Promise<void>
-	/** `queued → pending` after a park; a row still `pending` stays, any other stage ends the send. */
-	reclaimParked(journalId: string): Promise<void>
-	beginQueuedWait(journalId: string): void
-	endQueuedWait(journalId: string): void
-}
-
 /** Where a granted dApp send stands until it starts: its origin's line, and a waiter in the line of
  *  each account it may spend from. */
 interface DappSendLine {
@@ -186,11 +136,26 @@ interface SentTx {
 	journalId: string | undefined
 }
 
-export interface DappSendExecutorDeps {
+export interface DappSendExecutorDeps extends SharedSendDeps {
 	planner: OperationPlanner
 	txBuilder: TxRequestBuilder
 	coordinator: ExecutionCoordinator
-	lane: DappSendExecutorLane
+	lane: Pick<
+		ExecutionLane,
+		| "deleteController"
+		| "acquireSlot"
+		| "claimOrCreateJournal"
+		| "recordBuiltCall"
+		| "markJournal"
+		| "commitJournal"
+		| "clearJournalAuthwits"
+		| "parkSlot"
+		| "joinOriginLine"
+		| "failUnclaimed"
+		| "reclaimParked"
+		| "beginQueuedWait"
+		| "endQueuedWait"
+	>
 	/** Discover-then-estimate pipeline — the ONLY route to probed/folded
 	 *  strategy instances. Distinctly typed from the validated dep so
 	 *  probe-forbidden paths (executeSendTransaction, embedded, NO_FROM)
@@ -201,17 +166,6 @@ export interface DappSendExecutorDeps {
 	/** What the approval card showed per `(interactionId, index)` — confirm
 	 *  refuses to sign an authorization outside it. */
 	previewSnapshots: PreviewSnapshots
-	getActiveProfile(): Promise<{ id: string } | undefined>
-	captureExecutionFence(): Promise<ExecutionFence>
-	assertFence(fence: ExecutionFence): Promise<void>
-	isFenceLive(fence: ExecutionFence): boolean
-	getNetwork(networkId: string): Promise<Network>
-	getNode(chainId: number): Promise<FeeEstimate["node"]>
-	/** The sponsor probe's read: bounded and silent, unlike the build's retrying `node`. */
-	readPublicStorageOnce: PublicStorageReader
-	getPXE(network: Network): FeeEstimate["pxe"]
-	getAccountContract(profileId: string, chainId: number, accountAddress: string): Promise<FeeEstimate["account"]>
-	getPendingForAccount(account: string): { hash: string }[]
 	/** The account's send epoch (`SendSequencer.epoch`). */
 	sequenceEpoch(chainId: number, account: string): number
 	/** The probe-free validated pipeline (the service's strategy map). */
@@ -223,9 +177,6 @@ export interface DappSendExecutorDeps {
 		signal?: AbortSignal,
 		onBuilt?: OnBuilt,
 	): Promise<FeeEstimate>
-	/** Mirrors `TransactionService.addTransaction` — indexed type keeps the
-	 *  seam in sync with the source signature. */
-	addTransaction: TransactionService["addTransaction"]
 	/** The canonical SponsoredFPC's address on `chainId`, derived by the wallet, never read from a
 	 *  row; `undefined` when there is none to compare against. */
 	protocolSponsorAddress(chainId: number): Promise<string | undefined>
