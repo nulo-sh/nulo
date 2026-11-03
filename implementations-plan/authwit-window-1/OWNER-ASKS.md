@@ -1,6 +1,6 @@
 # authwit-window-1: owner asks
 
-The owner's words of 2026-11-03 sign off the scope (#1639 § Decision). Two asks decide what a person reads; the PR builds the recommendation for each and waits for the pick before it merges. The third is a question about adding a record, not built. Captures (light, Chrome, the two-account fixture: B sends 1 USDC of A's to X) land in `screenshots/` during the arc, one per rendering; the text mockups below match them.
+The owner's words of 2026-11-03 sign off the scope (#1639 § Decision). Three asks decide what a person reads or what a send does (OA-1, OA-2, OA-6); the PR builds the recommendation for each and waits for the picks before it merges. OA-3 is a question about adding a record, not built. Captures (light, Chrome, the e2e's two-account fixture: "Second" sends 1 unit of "Account 1"'s test token to another address) are in [`screenshots/`](screenshots/). The test token is not in the wallet's list, so the row reads "Lets Second call Transfer Private To Private on …" where a listed token reads "Lets Second move 1 USDC from Account 1 to …"; the mockups below use the listed form.
 
 ## OA-1. The line for an authorization another account already gave (execute window, `SendTxSummary.vue`)
 
@@ -32,7 +32,7 @@ What the line can vouch for: the transaction asks for an authorization on behalf
 
 Recommendation: A, with the name and the lane's words. The row keeps the words of the person's own rows, so one reading covers both; the line adds only who authorized it; no new section to scan. B separates "the wallet signs" from "already given" more strongly, at one more heading. C fits on one line but makes the sentence longer than its neighbours.
 
-What ships now: A with the name.
+What ships now: A with the name. Captures: before, [at rest](screenshots/before-at-rest.png) and [details](screenshots/before-details.png) (no line); A, [at rest](screenshots/after-at-rest.png) and [details](screenshots/after-details.png); [B](screenshots/rendering-b-at-rest.png); [C](screenshots/rendering-c-at-rest.png).
 
 ## OA-2. The reason when the app did not attach that authorization (execute window, refusal block)
 
@@ -42,7 +42,7 @@ Today the window shows the toast "Couldn't estimate fee. Try again." and the sen
 - **B.** "This transaction needs another of your accounts to authorize it first. The app did not include that authorization, so it can't be sent. Reject tells the app."
 - Naming the account inside the reason is left out: it needs the account carried on the refusal across the worker, and the person can see which accounts the app is connected to.
 
-What ships now: A.
+What ships now: A. Capture: [the refusal](screenshots/after-refusal.png).
 
 ## OA-3. When and for which app the other account signed
 
@@ -55,6 +55,17 @@ What ships now: nothing. Say so if you want it; it would be its own plan.
 When the app pays its own fee, the wallet signs no authorization in that send, and today the window lists none. If the app attached an authorization the sending account gave earlier (with a window or without asking), the send uses it and the window does not name it. On every other route the wallet lists such a request as one it signs. This lane names only another account's authorization (its scope); naming the sender's own on an app-paid send would add the same line, "Already authorized by <this account>.", to app-paid windows.
 
 What ships now: not named, as today.
+
+## OA-6. The registry refusal on a send whose app pays its own fee
+
+Where: the execute window of a send whose app pays its own fee, when the transaction's private code asks the authorization registry to change an account's public authorizations. Every other route already holds such a request as the refusal "This transaction asks your account to change its public authorizations from inside another contract. Apps are never allowed to, so it can't be sent. Reject tells the app." The app-paid route never read its simulation, so the request went through there. Naming another account's authorization on that route means reading its simulation, and the decoder's registry rule comes with the read.
+
+Who notices: an app-paid send carrying a witness for such a registry change (from one of the person's accounts, signed outside this wallet or earlier, or from an outside account) used to go out; it is now refused, and Reject tells the app. The wallet never signs such a request itself, so a send that needed the wallet's signature failed before too. The refusal's words say "your account" even when the approver is an outside account.
+
+- **A (recommended).** One rule on every route: the app-paid route refuses it too. No new text: the existing registry refusal block.
+- **B.** Exempt the app-paid route, keeping today's behaviour there: a decoder option the route passes, so the rule stays in one place.
+
+What ships now: A. The PR does not merge before this pick.
 
 ## OA-5. Where the new refusal shows after Reject: History, and the app's error
 
