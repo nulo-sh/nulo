@@ -158,7 +158,7 @@ Deviations, the tree winning:
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `1e6c5bc1f`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `1e6c5bc1f`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc at its boundary over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1; after arc 2, one fresh Codex session over the net diff. Prompts under `~/.cache/nulo-backlog/fu2-home-1/`. Hard stop at three rounds; each round in `lessons/phase-N.md` and the table below.
 - Approval boundary (stop): any copy, spacing or mark beyond the picks and the two answered asks, an onboarding fix that hides, reorders or rewords, a change to the shared pinned hero. A word beyond a pick is a question on the PR.
 - Close-out, as arc 2's last commits: the Outcome; lessons promoted within budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done fu2-home-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/fu2-home-1/plan.md`.
