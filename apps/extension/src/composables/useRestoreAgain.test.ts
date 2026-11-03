@@ -390,6 +390,54 @@ describe("useRestoreAgain: refusals change nothing", () => {
 		expect(store.get(KEY)).toEqual(before)
 	})
 
+	const PICK_REFUSALS = [
+		[
+			"an unparsable file",
+			new File(["{not json"], "bad.json"),
+			{ kind: "unreadable", name: "bad.json", backup: null, profileType: null },
+			["full_backup", "Invalid JSON Format", "The selected file is not a valid JSON backup. Please select a correct backup file."],
+		],
+		[
+			"a plain body with no profile type",
+			new File([JSON.stringify({ data: {} })], "n.json"),
+			{ kind: "plain", name: "n.json", backup: { data: {} }, profileType: null },
+			["full_backup", "Unrecognized Backup File", "The selected file is not a valid backup. Please select a correct backup file."],
+		],
+		[
+			"a file of neither format",
+			new File(["not a backup"], "x.txt"),
+			{ kind: "unreadable", name: "x.txt", backup: null, profileType: null },
+			["full_backup", "Unrecognized Backup File", "The selected file is not a valid backup. Please select a correct backup file."],
+		],
+	] as const
+
+	test.each(PICK_REFUSALS)("%s is refused at the pick and never offered", async (_label, file, selection, refusal) => {
+		const { page, opts } = await open()
+		const before = structuredClone(store.get(KEY))
+		opts.pickFile.mockResolvedValue(file as never)
+
+		await page.pickBackupFile()
+
+		expect(page.selectedBackup.value).toStrictEqual(selection)
+		expect(opts.fillError.mock.calls).toEqual([refusal])
+		expect(opts.clearError).not.toHaveBeenCalled()
+		expect(store.get(KEY)).toEqual(before)
+	})
+
+	test("a pick whose read fails shows the read-failure copy and logs restore again's own line", async () => {
+		const { page, opts } = await open()
+		const error = new Error("io")
+		opts.pickFile.mockRejectedValue(error)
+		const logged = vi.spyOn(console, "warn").mockImplementation(() => {})
+		try {
+			await page.pickBackupFile()
+			expect(logged.mock.calls).toEqual([["[restore-again] the backup file could not be read", { error }]])
+		} finally {
+			logged.mockRestore()
+		}
+		expect(opts.fillError.mock.calls).toEqual([["full_backup", "Failed to read the backup file"]])
+	})
+
 	test("an account file opened with its own password is refused as one, never as a wrong password", async () => {
 		const { page, opts } = await open()
 		const before = structuredClone(store.get(KEY))

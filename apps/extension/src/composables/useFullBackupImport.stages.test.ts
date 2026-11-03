@@ -446,6 +446,45 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 		expect(opts.clearError).toHaveBeenCalled()
 	})
 
+	it("an unparsable pick shows its parse refusal and leaves the status and the passwords", async () => {
+		const opts = makeOpts()
+		opts.pickFile.mockResolvedValue(new File(["{not json"], "bad.json", { type: "application/json" }))
+		const c = useFullBackupImport(opts)
+		opts.password.value = "kept"
+		c.decryptionPassword.value = "kept"
+		c.restoreStatus.value = "failed"
+		await c.pickBackupFile()
+		expect(c.selectedBackup.value).toStrictEqual({ kind: "unreadable", name: "bad.json", backup: null, profileType: null })
+		expect(opts.fillError.mock.calls).toEqual([
+			["full_backup", "Invalid JSON Format", "The selected file is not a valid JSON backup. Please select a correct backup file."],
+		])
+		expect(opts.password.value).toBe("kept")
+		expect(c.decryptionPassword.value).toBe("kept")
+		expect(c.restoreStatus.value).toBe("failed")
+		expect(opts.clearError).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		[
+			"a plain body with no profile type",
+			JSON.stringify({ data: {} }),
+			"n.json",
+			{ kind: "plain", name: "n.json", backup: { data: {} }, profileType: null },
+		],
+		["a file of neither format", "not a backup", "x.txt", { kind: "unreadable", name: "x.txt", backup: null, profileType: null }],
+	] as const)("%s shows the unrecognized refusal", async (_label, text, name, selection) => {
+		const opts = makeOpts()
+		opts.pickFile.mockResolvedValue(new File([text], name))
+		const c = useFullBackupImport(opts)
+		await c.pickBackupFile()
+		expect(c.selectedBackup.value).toStrictEqual(selection)
+		expect(c.parsedBackupName.value).toBeNull()
+		expect(opts.fillError.mock.calls).toEqual([
+			["full_backup", "Unrecognized Backup File", "The selected file is not a valid backup. Please select a correct backup file."],
+		])
+		expect(opts.clearError).not.toHaveBeenCalled()
+	})
+
 	it("a throwing pick surfaces the read-failure copy", async () => {
 		const opts = makeOpts()
 		const io = new Error("io")
