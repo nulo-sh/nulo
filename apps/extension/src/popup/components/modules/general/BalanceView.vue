@@ -20,6 +20,7 @@ import { FULL_SIZE, fiatHeroCandidates, fitHero, holdHeroFit, tokenHeroCandidate
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
 
 /** Composables */
+import { useConfigRead } from "@/composables/useConfigRead"
 import { usePrices } from "@/composables/usePrices"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 
@@ -91,9 +92,14 @@ configService.onUpdate.add(onConfigUpdate)
 function onConfigUpdate(prop) {
 	if (prop.key === "showFiatValues") showFiatValues.value = prop.value !== false
 }
-configService.getValue("showFiatValues").then((v) => {
-	showFiatValues.value = v !== false
-})
+const fiatRead = useConfigRead(
+	configService,
+	() => configService.getValue("showFiatValues"),
+	(v, updatedSince) => {
+		if (!updatedSince("showFiatValues")) showFiatValues.value = v !== false
+	},
+)
+void fiatRead.read()
 
 /** Secondary line for the token hero: `≈ $x.xx`, or undefined (hidden, also for a malformed row). */
 const displayedTokenFiat = computed(() => {
@@ -260,6 +266,7 @@ onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
 	configService.disconnect()
+	fiatRead.dispose()
 })
 </script>
 

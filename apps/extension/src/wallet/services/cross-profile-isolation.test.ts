@@ -15,6 +15,7 @@
 import { beforeEach, describe, expect, test } from "vitest"
 import { accountRowId } from "@/wallet/services/account/spec"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { ServiceCollection, type IService } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
@@ -346,7 +347,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
-			network = new NetworkService(mkLogger(), api)
+			network = new NetworkService(mkLogger(), api, new FakeNodeFactory())
 			services.add(network)
 			await services.start()
 			await seedRow(api, "nulo:core:networks", "net-p2", {

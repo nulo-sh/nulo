@@ -12,6 +12,7 @@ vi.mock("@aztec-labs/stdlib/interfaces/client", async (importOriginal) => ({
 }))
 
 const { AztecNodeFactoryAdapter } = await import("./aztec-node-factory-adapter")
+const uncapped = () => undefined
 
 describe("AztecNodeFactoryAdapter.probeChainId", () => {
 	test.each([
@@ -19,6 +20,6 @@ describe("AztecNodeFactoryAdapter.probeChainId", () => {
 		{ l1ChainId: 1, rollupVersion: 2 ** 31, expected: 2147483649 },
 	])("($l1ChainId, $rollupVersion) probes as the unsigned composite $expected", async ({ l1ChainId, rollupVersion, expected }) => {
 		Object.assign(nodeInfo, { l1ChainId, rollupVersion })
-		await expect(new AztecNodeFactoryAdapter().probeChainId("https://rpc.example", 1_000)).resolves.toBe(expected)
+		await expect(new AztecNodeFactoryAdapter(uncapped).probeChainId("https://rpc.example", 1_000)).resolves.toBe(expected)
 	})
 })

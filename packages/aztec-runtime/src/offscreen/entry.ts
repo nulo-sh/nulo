@@ -21,18 +21,11 @@ export interface PxeOffscreenDeps {
 	profiles: IProfileReader
 	logger: ILogger
 	/**
-	 * Optional `PxeFactory` override. When omitted, `PxeService` defaults
-	 * to `new ProductionPxeFactory()` (HTTPS-only Presto with the silent
-	 * WASM fallback preserved — production behavior).
-	 *
-	 * The extension shell uses this seam to pass a pre-built
-	 * `ProductionPxeFactory(undefined, { provingMode: "required", host, port, httpsPort })` when
-	 * the build is configured for required-mode (CI only). Keeping the
-	 * factory as the seam — rather than threading policy primitives —
-	 * lets this package stay decoupled from the extension's
-	 * `@/presto/config` module.
+	 * The `PxeFactory` the service builds every chain runtime with. Required: the extension shell
+	 * owns the node factory (each provider's batch cap) and the proving mode (`@/presto/config`),
+	 * so this package stays decoupled from both and no default can build an uncapped node.
 	 */
-	factory?: PxeFactory
+	factory: PxeFactory
 	/** The sink whose `emit` the factory's `onProvePhase` was given; the service
 	 *  forwards everything it carries to the SW as `onProvePhase` events. */
 	provePhaseSink?: ProvePhaseSink

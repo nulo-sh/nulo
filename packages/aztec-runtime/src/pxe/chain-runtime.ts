@@ -7,7 +7,6 @@ import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { PrestoProver, type PrestoPhase } from "@alejoamiras/presto"
 import type { ProveBackend } from "@nulo/wallet-core/jobs"
 import { PxeStoreKeyMissingError } from "@nulo/extension-messaging/errors"
-import { AztecNodeFactoryAdapter } from "../adapters/aztec-node-factory-adapter"
 import type { NodeFactory } from "../ports/node-factory-port"
 import { assertNodeServesChain } from "../utils/chain-identity"
 import type { RetryOptions } from "../utils/fetch"
@@ -156,8 +155,8 @@ export class ProductionPxeFactory implements PxeFactory {
 	private readonly proverless: boolean
 	private readonly onProvePhase: ProvePhaseObserver | undefined
 
-	public constructor(nodeFactory?: NodeFactory, options?: ProductionPxeFactoryOptions) {
-		this.nodeFactory = nodeFactory ?? new AztecNodeFactoryAdapter()
+	public constructor(nodeFactory: NodeFactory, options?: ProductionPxeFactoryOptions) {
+		this.nodeFactory = nodeFactory
 		const provingMode = options?.provingMode ?? "default"
 		// `required` + `proverless` is unrepresentable in the union, so the old
 		// runtime mutual-exclusion throw is no longer reachable.
