@@ -1,7 +1,7 @@
 ---
 plan: w3-popup-1
 tier: light
-status: arc 1 merged (#1580); arc 2 built on OA-1's answer (A)
+status: completed
 issues: "#1486, #1499, #1406 (arc 1); #1405 (arc 2, after OA-1)"
 driver: claude-code
 claude_model: opus
@@ -15,9 +15,20 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed, two arcs: #1580 (arc 1) and arc 2, the PR that closes #1405.
+- **Shipped**: #1580 closes #1486 (D1: an unmounted detail page does not navigate), #1499 (D2: New sender's Enter refuses a listed address, compared as a field element) and #1406 (D4: Holdings' and the developer searches keep no character the typed-text rule removes). Arc 2 closes #1405 on OA-1's answer A (D7, D8): `bareAztecAddress`, Send's recipient keeping only the address of a padded paste, and `SearchField` doing the same for Holdings and the picker, a paste past its cap included. Each fix proven by tests red on `dev` first.
+- **Known limits**: #1615 (New sender's Add clicked before the list lands, D2), #1616 (a paste cut by the search field's length cap, D8).
+- **Dispositions**: rejected, a failed-read state for the detail page (D1); a `normalize` prop on `SearchField` (D4); a rewrite at blur or a trimmed copy for the recipient (D3). Superseded, the arc 2 edge rule in `TokenList`'s computeds, by the field (D8). Rejected, predicting the browser's cut of a too-long paste (Codex fix R2 on arc 2; #1616).
+- **Lessons**: none promoted: the length cap's cut is specific to `SearchField`, the one native field with a rule (D8), and the zsh word split met here already has its line.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
+
 # w3-popup-1: the connected app's detail page, New sender's Enter, pasted addresses with invisible characters
 
-Two arcs. Arc 1 fixes three bugs whose rules already exist. Arc 2 (#1405) changes which pasted text Send accepts, so it waited on the owner (OA-1), who picked A. Each fix starts with a test that is red at the base. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/extension/src/` unless they name a package.
+Two arcs. Arc 1 fixes three bugs whose rules already exist. Arc 2 (#1405) changes which pasted text Send accepts, so it waited on the owner (OA-1), who picked A. Each fix starts with a test that is red at the base. Over the light target (164 lines): two arcs with an owner ask between them, and the owner's sign-off quoted where the brief asks. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/extension/src/` unless they name a package.
 
 ## Outcome & Quality Bar
 
@@ -57,7 +68,7 @@ Two arcs. Arc 1 fixes three bugs whose rules already exist. Arc 2 (#1405) change
 - **#1499 (arc 1)**: the gate returns false on `isAlreadyExist`; the verdict watcher watches `[senderAddress, senders]`, so a list that lands after the address shows "Already exists"; `usePopupEntity` gets `{ submitWaitsForShow: true }` (F8), so Enter waits for the list. The duplicate check compares with `sameFieldAddress`, as New FPC does, since `getSenders` answers lower case and the field takes either (Opus fix R1). The button's `:disabled` stays.
 - **#1406 (arc 1)**: `SearchField.vue` applies `stripBidiAndZeroWidth` on each `input` that is not composing, and once at `compositionend`. When the text changes, it writes the kept text to the element, puts the caret after what preceded it (as `AccountSelectRow.vue:52-62` does), and emits it. A composing input emits the raw text, as today. `TokenList` is unchanged: its matches and `addCandidate` keep reading one trimmed query (F6). The three developer searches pass `:normalize="stripBidiAndZeroWidth"`.
 - **#1405 (arc 2, OA-1's answer A)**: new `bareAztecAddress(text): string | undefined` in `utils/aztec-address.ts`. It drops `\p{White_Space}` and `\p{Default_Ignorable_Code_Point}` code points from each end, one character at a time with code-point indices and one final slice, so no `+$` regex reaches CodeQL's ReDoS rule (`lessons.md`) and the cost stays linear. It returns the rest when `isValidAztecAddress` accepts it, else undefined; a text that is no address after that is never rewritten. `RecipientField`'s `normalize` becomes `stripBidiAndZeroWidth`, then `bareAztecAddress(kept) ?? kept`. As built (D8), `SearchField` applies the same rule after its typed-text strip, so `TokenList`'s rows and add offer read one query, and the field holds only the address; a paste its `maxlength` would cut is judged whole.
-- **Files, arc 1**: `popup/pages/settings/connected-apps/[id].vue`, `popup/components/popups/NewSenderPopup.vue`, `components/composite/SearchField.vue`, `popup/pages/settings/developer/account-state/{contracts,notes,authwits}/index.vue`, and their tests. **Arc 2**: `utils/aztec-address.ts`, `popup/components/modules/send/RecipientField.vue`, `popup/components/modules/holdings/TokenList.vue`, and their tests.
+- **Files, arc 1**: `popup/pages/settings/connected-apps/[id].vue`, `popup/components/popups/NewSenderPopup.vue`, `components/composite/SearchField.vue`, `popup/pages/settings/developer/account-state/{contracts,notes,authwits}/index.vue`, and their tests. **Arc 2**, as built (D8): `utils/aztec-address.ts`, `popup/components/modules/send/RecipientField.vue`, `components/composite/SearchField.vue`, and the tests of those three, `TokenList` and `SelectTokenPopup`.
 
 ## Decision ledger
 
@@ -68,7 +79,7 @@ Two arcs. Arc 1 fixes three bugs whose rules already exist. Arc 2 (#1405) change
 - D5. No new e2e. Component tests witness each fix (the real `Input` and `SearchField` where a field's strip is the fix; New sender's stubbed `Input` suffices for its gate); the existing smoke specs reach the touched surfaces in a browser, not the composition order (I2).
 - D6. As built: the page tests register `Input` and `Flex` from `@nulo/design` (the test environment has no component resolver), and authwits' takes a `realInput` mount option so its other tests keep their stub.
 - D7. OA-1 answered **A** by the owner (decision page 102, P102-01, signed 2026-11-03): "When the pasted text is an address once the invisible characters at its two ends are removed, the field keeps only the address. It looks exactly as a clean paste does today." That sign-off covers exactly the recipient, Holdings' search and the picker's Add token offer as OA-1 describes them; arc 2 builds § Architecture's #1405 entry and changes no copy. As built: `bareAztecAddress` slices `Array.from(text)` (code points), so an edge character outside the BMP goes whole; the regenerated auto-import types ship with it.
-- D8. The edge rule for Holdings and the picker lives in `SearchField`, not in `TokenList`'s computeds (Codex fix R1): the owner's words are that the field keeps only the address, and D4 put the typed-text rule in the field so it holds no unseen character; `TokenList` is unchanged at the base. The field's `maxlength="80"` cut a paste with 15 or more leading padding characters before `input` ran, so `onPaste` judges the whole insertion when the cut would reach it and the result is an address; any other paste stays native. Opus R1 called that cut a known limit; the fix is local, a handler and its test, inside the owner's rule.
+- D8. The edge rule for Holdings and the picker lives in `SearchField`, not in `TokenList`'s computeds (Codex fix R1): the owner's words are that the field keeps only the address, and D4 put the typed-text rule in the field so it holds no unseen character; `TokenList` is unchanged at the base. The field's `maxlength="80"` cut a paste with 15 or more leading padding characters before `input` ran, so `onPaste` judges the whole insertion when the cut would reach it and the result is an address; any other paste stays native. Opus R1 called that cut a known limit; the fix is local, a handler and its test, inside the owner's rule. A paste that is no address as a whole is still cut natively, which can bring inner padding to an edge (Codex fix R2); the base does the same with spaces and zero-width spaces, so it is a known limit (#1616), not a joiner-only patch.
 
 ## Security & Adversarial Considerations
 
@@ -130,6 +141,8 @@ No copy, layout, row or format changes in arc 1; each surface keeps its rule.
 | Codex fix R2 (arc 1) | clean | none | none |
 | Codex fix R1 (arc 2) | changes requested | the edge rule in `SearchField` with a paste guard for its `maxlength` (D8); the helper's doc cut to its contract; the recipient test file's milestone header removed | none |
 | Opus fix R1 (arc 2) | clean, four nits | the typed-space test asserts the field's text; the scan's comment names the regex it avoids; "pasted" dropped from the rule's comment; a Cyrillic look-alike row | its known-limit call on the `maxlength` cut: Codex's trace and a local fix (D8) |
+| Codex fix R2 (arc 2) | changes requested | none: round 1's fixes verified | a too-long paste cut into an edge-padded address: pre-existing for spaces and zero-width spaces, no capability gained (#1616, D8) |
+| Codex fix R3 (arc 2) | clean | the R2 disposition upheld | none |
 
 ## Delivery
 
@@ -147,5 +160,5 @@ Execution contract: `implementations-plan/README.md` § Post-implementation stan
 
 ## Seeds (not run; orchestrator-owned)
 
-- `/goal` Phases 1-3 ✓ in implementations-plan/w3-popup-1/plan.md, each gate passing in the transcript; the Codex loop converged on arc 1's diff from baec79333; a ready PR to dev closing #1486, #1499 and #1406; `bun run test` and `bun run lint` exit 0. Phase 4 only once OA-1 is answered.
-- `/loop 15m` Drive implementations-plan/w3-popup-1 from plan.md and lessons/: the next unchecked phase, its gate, the Codex loop, delivery, the close-out; never merge.
+- `/goal` (retired) Phases 1-4 ✓ in implementations-plan/w3-popup-1/plan.md, each gate passing in the transcript; the Codex loop converged per arc; ready PRs to dev closing #1486, #1499, #1406 and #1405.
+- `/loop 15m` (retired) Drive implementations-plan/w3-popup-1 from plan.md and lessons/: the next unchecked phase, its gate, the Codex loop, delivery, the close-out; never merge.
