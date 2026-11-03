@@ -1657,6 +1657,7 @@ describe("DappSendExecutor — the authorizing session", () => {
 		const { executor, deps, proveAndSend } = makeHarness({ operationEstimateReuse: reusing(vi.fn(async () => entry())) })
 		ownSnapshot(deps)
 		await executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE, APPROVAL("est-1"))
+		// Listed in the order the arm must call them.
 		const steps = {
 			tryConsume: deps.operationEstimateReuse.tryConsume,
 			getNetwork: deps.getNetwork,
@@ -1669,17 +1670,7 @@ describe("DappSendExecutor — the authorizing session", () => {
 			proveAndSend,
 		}
 		const sequence = callSequence(steps)
-		expect(sequence.slice(sequence.indexOf("tryConsume"), sequence.indexOf("proveAndSend") + 1)).toEqual([
-			"tryConsume",
-			"getNetwork",
-			"getNode",
-			"getPXE",
-			"assertFence",
-			"getAccountContract",
-			"isFenceLive",
-			"recordBuiltCall",
-			"proveAndSend",
-		])
+		expect(sequence.slice(sequence.indexOf("tryConsume"), sequence.indexOf("proveAndSend") + 1)).toEqual(Object.keys(steps))
 	})
 
 	test("the session ending before a reused build resolves its account: no lookup, no send, failed/session_ended", async () => {

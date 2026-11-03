@@ -543,6 +543,7 @@ describe("TransferExecutor: the authorizing session", () => {
 			estimateReuse: { tryConsume: vi.fn(async () => snapshot()), stash: vi.fn() } as never,
 		})
 		await executor.execute(makeReq(), "est-1", fence)
+		// Listed in the order the arm must call them.
 		const steps = {
 			tryConsume: deps.estimateReuse.tryConsume,
 			getNetwork: deps.getNetwork,
@@ -554,16 +555,7 @@ describe("TransferExecutor: the authorizing session", () => {
 			proveAndSend,
 		}
 		const sequence = callSequence(steps)
-		expect(sequence.slice(sequence.indexOf("tryConsume"), sequence.indexOf("proveAndSend") + 1)).toEqual([
-			"tryConsume",
-			"getNetwork",
-			"getNode",
-			"getPXE",
-			"assertFence",
-			"getAccountContract",
-			"isFenceLive",
-			"proveAndSend",
-		])
+		expect(sequence.slice(sequence.indexOf("tryConsume"), sequence.indexOf("proveAndSend") + 1)).toEqual(Object.keys(steps))
 	})
 
 	test("a session that ends while the reused arm resolves its account: no send, failed/session_ended", async () => {
