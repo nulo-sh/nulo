@@ -10,3 +10,4 @@
 - 2026-11-03 arc 1 review loop converged: Codex R1 changes (4 accepted), Opus approve (comments folded), Codex R2 approve; audit:vue green; audit:dup production 176/8768 (base 177/8775); smoke Chrome 5 files green
 - 2026-11-03 final head: lint, typecheck:all, test:all green (extension 980 files / 17080 tests); smoke 5 files green on Chrome (35, 1 Firefox-only skip) and Firefox (36); known limits filed closed: #1593 (D15), #1594 (D16)
 - 2026-11-03 network (Chrome, proverless, retry 0): 4 files / 21 tests green in 797 s; check:plans green; arc 1 end gate passed
+- 2026-11-03 merged origin/dev (index.md conflict only); on the merged head: lint, typecheck:all, test:all (extension 17100 tests), smoke Chrome 35 + 1 Firefox-only skip, smoke Firefox 36, network 21 in 804 s, check:plans: all green
