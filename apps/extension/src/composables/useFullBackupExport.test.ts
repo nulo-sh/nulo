@@ -673,7 +673,6 @@ describe("useFullBackupExport — a current run", () => {
 	})
 
 	// A new await is a new place a run can be superseded: add its row to the table, then this count.
-	// The stored-passkey lookup awaits inside its helper, which the run calls.
 	it("every await in the composable has a row above", () => {
 		const awaits = (file: string) =>
 			readFileSync(resolve(__dirname, file), "utf8")
