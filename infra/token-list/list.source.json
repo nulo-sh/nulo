@@ -34,6 +34,23 @@
 			"symbol": "GBPC",
 			"decimals": 6,
 			"name": "Test GBPC"
+		},
+		{
+			"chainId": 2070860441,
+			"address": "0x30112e52178143b74cf6037d047bbba924f4b0db8aab587a340aacfc6ecb4f38",
+			"classId": "0x2ff0939914ff64bd3f7979926dbe8cf3332bc2fee55928bf3cc9ca802568ea9f",
+			"symbol": "cUSDC",
+			"decimals": 6,
+			"name": "cUSDC",
+			"priceId": "usd-coin"
+		},
+		{
+			"chainId": 2070860441,
+			"address": "0x2a36cedc4f7fa6bd9fbb77ab799737f30d12cd86ffa9d9d63737d51a6e7247fe",
+			"classId": "0x2ff0939914ff64bd3f7979926dbe8cf3332bc2fee55928bf3cc9ca802568ea9f",
+			"symbol": "cWETH",
+			"decimals": 18,
+			"name": "cWETH"
 		}
 	]
 }
