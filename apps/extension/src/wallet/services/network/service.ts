@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
+import { runSealing, type SealWarn, sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
@@ -10,7 +10,7 @@ import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
-import { AztecNodeFactoryAdapter, isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
+import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { NodeFactory } from "@nulo/aztec-runtime/ports"
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
 import type { ILogger } from "@/wallet/logger"
@@ -31,7 +31,17 @@ import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
 import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { ERR_NOT_RESETTABLE, ERR_RESET_PENDING, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
 import type { RawRowState } from "@/wallet/utils/raw-row"
-import { DEFAULT_SEEDS, type DefaultSeed, isSeedChain, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND, seedForKind } from "./seeds"
+import {
+	DEFAULT_SEEDS,
+	type DefaultSeed,
+	isSeedChain,
+	LOCAL_NETWORK_RPC_URL,
+	PRIMARY_SEED,
+	RETIRED_DEFAULT_ENDPOINTS,
+	SEED_L1_BY_KIND,
+	seedForKind,
+} from "./seeds"
+import { type RetiredEndpoint, retireEndpoints } from "./retired-endpoints"
 import { readSeedOffers, type SeedOffers, sameSeedOffers, seedOffersKey, seedsToOffer, writeSeedOffers } from "./seed-offers"
 import {
 	type ChainKind,
@@ -239,7 +249,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	public constructor(
 		logger: ILogger,
 		private readonly browserApi: BrowserApi,
-		nodeFactory?: NodeFactory,
+		nodeFactory: NodeFactory,
 	) {
 		super(NETWORK_SERVICE_NAME, logger)
 		this.storage = sealedEntityStorage("networks", browserApi.storage.local, (profileId) => this.profileService?.rowKeys(profileId))
@@ -250,17 +260,23 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		// admit a concurrent network mutator into the middle of that cascade;
 		// queueing behind it is the correct semantic.
 		this.lock = new Lock("network", logger, null)
-		this.nodeFactory = nodeFactory ?? new AztecNodeFactoryAdapter()
+		this.nodeFactory = nodeFactory
 	}
 
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
+		const warn: SealWarn = (...data) => this.logWarn(...data)
 		sealOnRowKeysReady(
 			this.profileService,
-			(...data) => this.logWarn(...data),
+			warn,
 			"sealing the profile's plaintext networks failed; the next worker retries",
-			(profileId) => this.sealLegacyRows(profileId),
+			async (profileId) => {
+				await this.sealLegacyRows(profileId)
+				await runSealing(warn, "moving the profile's endpoints off a retired default failed; the next worker retries", () =>
+					this.retireDefaultEndpoints(profileId),
+				)
+			},
 		)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.pxeServiceClient = new PxeServiceClient(this.logger)
@@ -270,6 +286,29 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 *  lands between a row's read and its sealed commit. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
 		await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+	}
+
+	/** Moves the profile's endpoints off a default an earlier build seeded and this one retired, as
+	 *  `updateEndpoint` would. A network a reset journal holds keeps its endpoints as captured, since
+	 *  the reset's resume matches its primary against the captured URL. */
+	private async retireDefaultEndpoints(
+		profileId: string,
+		retired: readonly RetiredEndpoint[] = RETIRED_DEFAULT_ENDPOINTS,
+	): Promise<void> {
+		await this.lock.withLock(async () => {
+			const held = (await this.staleNetworks.getJournal(profileId))?.networkId
+			for (const network of await this.storage.getValues()) {
+				if (network.profileId !== profileId || network.id === held) continue
+				const moved = await retireEndpoints(network, retired)
+				if (moved === undefined) continue
+				await this.storage.set(moved.id, moved)
+				network.endpoints.forEach((endpoint, i) => {
+					if (endpoint.rpcUrl !== moved.endpoints[i]?.rpcUrl) this.transientNodes.delete(endpoint.rpcUrl)
+				})
+				if (findPrimaryEndpoint(network)?.rpcUrl !== findPrimaryEndpoint(moved)?.rpcUrl) this.nodes.delete(moved.chainId)
+				this.emit("onNetworkUpdated", moved)
+			}
+		})
 	}
 
 	// ── Read paths ───────────────────────────────────────────────────────

@@ -47,6 +47,7 @@ import { answerSealedReads } from "@/e2e/sealed-read"
 import { FpcService } from "./services/fpc/service"
 import { LogViewerService } from "./services/log-viewer/service"
 import { LoggerService } from "./services/logger/service"
+import { createWalletNodeFactory } from "./services/network/node-factory"
 import { NetworkService } from "./services/network/service"
 import { NoteService } from "./services/note/service"
 import { OperationJournalService } from "./services/operation-journal/service"
@@ -540,7 +541,7 @@ function registerServices(
 	services.add(new FpcService(logger, browserApi))
 	services.add(new LogViewerService(logger))
 	services.add(new LoggerService(logger))
-	const networkService = new NetworkService(logger, browserApi)
+	const networkService = new NetworkService(logger, browserApi, createWalletNodeFactory())
 	services.add(networkService)
 	registerPxeScopeRegistrar(createScopeRegistrar(accountService, networkService))
 	registerPxeChainGuard((profileId, chainId) => networkService.isChainQuarantined(profileId, chainId))

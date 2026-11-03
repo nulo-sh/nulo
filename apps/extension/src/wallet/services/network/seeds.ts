@@ -1,5 +1,6 @@
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import type { RetiredEndpoint } from "./retired-endpoints"
 import type { ChainKind } from "./spec"
 
 /** Immutable L1 identities for the seeded kinds — the trust root `getL1ChainIdStored` validates
@@ -74,6 +75,14 @@ export function isSeedChain(chainId: number): boolean {
 	return DEFAULT_SEEDS.some((seed) => seed.chainId === chainId)
 }
 
+/** Defaults an earlier build seeded, by the digest of the exact URL it stored, each with the URL the
+ *  unlock moves such an endpoint to. Entries stay for good: a profile last unlocked on an older
+ *  build may unlock on this one at any time. */
+export const RETIRED_DEFAULT_ENDPOINTS: readonly RetiredEndpoint[] = [
+	// The keyed Testnet endpoint earlier builds seeded.
+	{ sha256: "8c97d123e13121add8218c0240ca5f9af70cd57e2e50b9cfd1f9d5ef882f4ec5", replacement: TESTNET_RPC_URL },
+]
+
 /** The one seed marked `isPrimaryActive` (Mainnet). Single source
  *  for the primary/default network — consumed by `getOrInitNetworks` (fresh seed) AND
  *  `getPrimaryNetwork` (the import/bootstrap fallback), so the two can't disagree. */
@@ -83,4 +92,24 @@ export const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)
  *  this build carries. */
 export function seedForKind(kind: ChainKind | undefined): DefaultSeed | undefined {
 	return kind === undefined ? undefined : DEFAULT_SEEDS.find((s) => s.kind === kind)
+}
+
+/** The largest JSON-RPC batch each provider endpoint accepts, by origin. dRPC's free plan answers a
+ *  batch above 3 entries with HTTP 500, and the prover fans one read out per contract in a single
+ *  tick. Keyed by literal origin, not read off the seeds, so a row seeded on one of these hosts
+ *  keeps its cap after a later build moves the seed. */
+const BATCH_CAPS: Readonly<Record<string, number>> = {
+	"https://aztec-mainnet.drpc.org": 3,
+	"https://aztec-testnet.drpc.org": 3,
+}
+
+/** The batch cap for `rpcUrl`'s origin; `undefined` leaves the client's own default. */
+export function maxBatchSizeFor(rpcUrl: string): number | undefined {
+	let origin: string
+	try {
+		origin = new URL(rpcUrl).origin
+	} catch {
+		return undefined
+	}
+	return Object.hasOwn(BATCH_CAPS, origin) ? BATCH_CAPS[origin] : undefined
 }

@@ -16,12 +16,11 @@ The bridge's half of a bump — the generation runbook, the Noir contract surfac
 Two independent questions:
 
 1. **Did the target network reset?** Probe the live node and compare against our pin. The Testnet
-   seed's endpoint (`TESTNET_RPC_URL`) carries the provider key in its path, so read it from the
-   file rather than printing it (or probe the target network's announced endpoint instead):
+   seed (`TESTNET_RPC_URL`) is dRPC's keyless endpoint, so probe it directly (or the target
+   network's announced endpoint). The node's methods are namespaced `aztec_`:
    ```bash
-   url=$(rg -o 'https://[^"]+' apps/extension/src/wallet/constants/network-endpoints.ts)
-   curl -s -X POST "$url" -H 'content-type: application/json' \
-     -d '{"jsonrpc":"2.0","id":1,"method":"node_getNodeInfo","params":[]}' | jq '.result | {nodeVersion, rollupVersion}'
+   curl -s -X POST https://aztec-testnet.drpc.org -H 'content-type: application/json' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"aztec_getNodeInfo","params":[]}' | jq '.result | {nodeVersion, rollupVersion}'
    rg -n 'TESTNET_ROLLUP_VERSION' apps/extension/src/utils/chain-ids.ts
    ```
    Different rollupVersion ⇒ **NETWORK RESET** ⇒ Branch B below (the wallet's side of the reset) is mandatory. The bridge's new generation on that network belongs to `alejoamiras/unleashed`.
