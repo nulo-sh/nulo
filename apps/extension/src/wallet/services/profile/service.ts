@@ -98,6 +98,9 @@ const DEK_UNRECOVERABLE_MESSAGE =
 
 /** A path's refusal of a password that does not open the row. */
 const invalidPassword = (): Error => new InvalidPasswordError()
+/** The legacy refusal of a wrong password at a password change and a phrase export, identity-stable:
+ *  the change-password UI matches its exact text for its wrong-password branch. */
+const invalidOldPassword = (): Error => new Error("Invalid profile old password")
 
 /** The unlock-type gate of `snapshotForUnlock`: a retired row first, then the other stored type by
  *  name; only the passkey arm requires the row to classify as passkey. */
@@ -1168,44 +1171,40 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				throw new Error("Operation not supported for passkey profile")
 			}
 
-			const old = await this.codec.openSlots(profile, { password: oldPassword })
-			if (!old) {
-				throw new Error("Invalid profile old password")
-			}
-
-			// Unseal the (new-cipher) secret up front so integrity can be checked BEFORE the new
-			// password is persisted — if a gate throws, nothing is committed and the RPC failure
-			// is honest; a null unseal of the just-sealed cipher means corruption, never a pass.
 			let resealed: Sealed | undefined
 			let secret: MasterSecretBytes | null = null
 			let entropy: Uint8Array<ArrayBuffer> | null = null
 			let dek: ImportedKeysDek | null = null
 			try {
-				resealed = await this.secretBox.seal(newPassword, old.secret, old.entropy)
-				;({ secret, entropy } = await this.unsealResealedVerifiedHoldingLock(profile, resealed))
-				const rekeyed = await this.rekeyedDekForPasswordChangeHoldingLock(profile, secret, old, resealed.passhash)
-				dek = rekeyed.dek
+				await this.codec.withOpenedSlots(profile, { password: oldPassword }, invalidOldPassword, async (old) => {
+					// Unseal the (new-cipher) secret up front so integrity can be checked BEFORE the new
+					// password is persisted — if a gate throws, nothing is committed and the RPC failure
+					// is honest; a null unseal of the just-sealed cipher means corruption, never a pass.
+					resealed = await this.secretBox.seal(newPassword, old.secret, old.entropy)
+					;({ secret, entropy } = await this.unsealResealedVerifiedHoldingLock(profile, resealed))
+					const rekeyed = await this.rekeyedDekForPasswordChangeHoldingLock(profile, secret, old, resealed.passhash)
+					dek = rekeyed.dek
 
-				// Dual reseal is atomic with this same pre-persist-verified commit:
-				// guard, master, entropy, AND the DEK re-encrypt together — nothing may remain
-				// decryptable under the retired password — and the envelope MAC v3 re-keys over
-				// the new ciphertexts (still bound to this row's id + fingerprint) so both verify
-				// sites keep holding.
-				profile.guard = resealed.encrypted.guard
-				profile.secret = resealed.encrypted.secret
-				profile.entropy = resealed.encrypted.entropy
-				profile.dekSealed = rekeyed.newDekSealed
-				profile.envelopeMac = await envelopeMacFor(
-					{ id, slots: resealed.encrypted, dekSealed: rekeyed.newDekSealed, walletFingerprint: profile.walletFingerprint },
-					secret,
-					dek,
-				)
-				await this.repo.set(id, profile)
-				this.emit("onProfileUpdated", this.getProfileInfo(profile))
+					// Dual reseal is atomic with this same pre-persist-verified commit:
+					// guard, master, entropy, AND the DEK re-encrypt together — nothing may remain
+					// decryptable under the retired password — and the envelope MAC v3 re-keys over
+					// the new ciphertexts (still bound to this row's id + fingerprint) so both verify
+					// sites keep holding.
+					profile.guard = resealed.encrypted.guard
+					profile.secret = resealed.encrypted.secret
+					profile.entropy = resealed.encrypted.entropy
+					profile.dekSealed = rekeyed.newDekSealed
+					profile.envelopeMac = await envelopeMacFor(
+						{ id, slots: resealed.encrypted, dekSealed: rekeyed.newDekSealed, walletFingerprint: profile.walletFingerprint },
+						secret,
+						dek,
+					)
+					await this.repo.set(id, profile)
+					this.emit("onProfileUpdated", this.getProfileInfo(profile))
 
-				await this.reopenAfterPasswordChangeHoldingLock(id, profile, secret, dek)
+					await this.reopenAfterPasswordChangeHoldingLock(id, profile, secret, dek)
+				})
 			} finally {
-				old.wipe()
 				zeroize(secret)
 				zeroize(entropy)
 				zeroize(dek)
@@ -1272,16 +1271,13 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		if (!unlocksWith(snapshot, key)) throw new StaleUnlockCredentialError()
 		if (kind === "password" && "password" in next) throw new SameUnlockMethodError()
 		const seal = "password" in next ? await this.newRowSeal(next.password, undefined) : await this.newRowSeal(undefined, next.passkey)
-		let opened: OpenedSlots | null = null
 		try {
-			opened = await this.codec.openSlots(snapshot, key)
-			if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())
-			const old = opened
-			return await this.runExclusive((isCurrent) =>
-				this.commitUnlockChangeHoldingLock({ snapshot, capturedEpoch, key, old, seal, isCurrent }),
+			return await this.codec.withOpenedSlots(snapshot, key, invalidPassword, (old) =>
+				this.runExclusive((isCurrent) =>
+					this.commitUnlockChangeHoldingLock({ snapshot, capturedEpoch, key, old, seal, isCurrent }),
+				),
 			)
 		} finally {
-			opened?.wipe()
 			if ("passhash" in seal) zeroize(seal.passhash)
 		}
 	}
