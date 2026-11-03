@@ -17,13 +17,12 @@ import {
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import { isNewPasswordValid } from "@/utils/password"
-import { newPasswordHint } from "@/utils/password-hint"
 
 /**
  * Shared orchestration for the profile-CREATE flow, consumed by both the popup
  * (`popup/pages/profile/new.vue`) and onboarding (`onboarding/pages/create.vue`)
- * shells. Owns name + password validation, the strength hint, the passkey
- * create-with-retry ceremony, and the submit handler up to activation.
+ * shells. Owns name + password validation, the passkey create-with-retry
+ * ceremony, and the submit handler up to activation.
  *
  * The activation tail is INJECTED via `onCreated`: the popup runs its manual
  * post-create sequence (it relies on `popup/app.vue`'s `onActiveProfileChanged`
@@ -102,10 +101,6 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 	const password = ref("")
 	const repeatedPassword = ref("")
 	const isCreating = ref(false)
-
-	const strengthHint = computed(() =>
-		authMethod.value === "passkey" ? "" : newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""),
-	)
 
 	// Name check is excluded on purpose — name is validated at submit time so an
 	// empty name shakes the input instead of silently disabling the button.
@@ -197,7 +192,6 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		password,
 		repeatedPassword,
 		isCreating,
-		strengthHint,
 		isAllowedToContinue,
 		handleCreate,
 		handleCreateWithExistingPasskey,

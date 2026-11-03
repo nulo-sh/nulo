@@ -1,8 +1,11 @@
-<script setup>
+<script setup lang="ts">
 /**
- * `testids` names `input`, `confirm`, `toggle` and an optional `hint` exactly as the host's selectors
- * know them. A host whose visibility state outlives the pair binds `v-model:hidden`, so a pair mounted
- * again keeps what the person revealed.
+ * `testids` names `input`, `confirm`, `toggle`, and optionally `hint` and the confirm field's native
+ * `confirmInput`, exactly as the host's selectors know them. A host whose visibility state outlives
+ * the pair binds `v-model:hidden`, so a pair mounted again keeps what the person revealed.
+ *
+ * `#repeatLabel` takes a host's heading for the repeat field, 8 px above it as an `Input` label sits,
+ * and its `id` labels the field; `labelRepeat`'s heading keeps the export page's 12 px.
  */
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import { MAX_PASSWORD_LENGTH } from "@/utils/password"
@@ -15,6 +18,7 @@ defineProps({
 	autofocus: { type: Boolean, default: false },
 	maxLength: { type: Number, default: MAX_PASSWORD_LENGTH },
 	labelRepeat: { type: Boolean, default: false },
+	hideHint: { type: Boolean, default: false },
 })
 
 const password = defineModel("password", { default: "" })
@@ -49,7 +53,7 @@ watch(hidden, (value) => (latest = value), { flush: "sync" })
 			<template #suffix>
 				<PasswordVisibilityToggle :hidden="hidden" :data-testid="testids.toggle" @toggle="toggleHidden" />
 			</template>
-			<template #bottom>
+			<template v-if="!hideHint" #bottom>
 				<Flex align="center" gap="6" :class="$style.hint_row">
 					<Icon name="lock" :size="12" color="tertiary" />
 					<Text variant="body" color="tertiary" :data-testid="testids.hint">{{ hint }}</Text>
@@ -57,15 +61,19 @@ watch(hidden, (value) => (latest = value), { flush: "sync" })
 			</template>
 		</Input>
 		<span v-if="labelRepeat" :id="repeatLabelId" class="export_section_label type--label-section">Repeat password</span>
-		<Input
-			v-model="repeatedPassword"
-			:ariaLabelledby="labelRepeat ? repeatLabelId : undefined"
-			:type="hidden ? 'password' : 'text'"
-			:maxLength="maxLength"
-			:placeholder="repeatPlaceholder"
-			autocomplete="new-password"
-			:data-testid="testids.confirm"
-		/>
+		<Flex direction="column" gap="8">
+			<slot name="repeatLabel" :id="repeatLabelId" />
+			<Input
+				v-model="repeatedPassword"
+				:ariaLabelledby="labelRepeat || $slots.repeatLabel ? repeatLabelId : undefined"
+				:type="hidden ? 'password' : 'text'"
+				:maxLength="maxLength"
+				:placeholder="repeatPlaceholder"
+				autocomplete="new-password"
+				:data-testid="testids.confirm"
+				:inputTestid="testids.confirmInput"
+			/>
+		</Flex>
 		<slot />
 	</Flex>
 </template>

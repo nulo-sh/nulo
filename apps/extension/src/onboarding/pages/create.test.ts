@@ -154,6 +154,30 @@ describe("onboarding create", () => {
 		expect(document.activeElement).toBe(w.get('[data-testid="onboarding-password-input"] input').element)
 	})
 
+	test("the password pair: one eye unmasks both fields, the hint sits under the first, and each heading tops its field", async () => {
+		const w = await mountCreate()
+		await choosePassword(w)
+		const field = w.get('[data-testid="onboarding-password-input"]').element
+		const confirm = w.get('[data-testid="onboarding-password-confirm"]').element
+		const native = [
+			field.querySelector("input"),
+			w.get('[data-testid="onboarding-password-confirm-input"]').element,
+		] as HTMLInputElement[]
+		expect(confirm.contains(native[1])).toBe(true)
+		expect(field.parentElement?.previousElementSibling?.textContent).toBe("Password")
+		expect(field.textContent).toContain("At least 8 characters")
+		const heading = confirm.previousElementSibling as HTMLElement
+		expect(heading.textContent).toBe("Confirm password")
+		expect(native[1].getAttribute("aria-labelledby")).toBe(heading.id)
+		expect(native.map((input) => input.placeholder)).toEqual(["Strong password", "Repeat password"])
+
+		const eye = w.get('[data-testid="onboarding-password-input-visibility-toggle"]')
+		expect(eye.attributes("tabindex")).toBe("-1")
+		expect(native.map((input) => input.type)).toEqual(["password", "password"])
+		await eye.trigger("click")
+		expect(native.map((input) => input.type)).toEqual(["text", "text"])
+	})
+
 	test("the first profile is created as Main", async () => {
 		const w = await mountCreate()
 		await choosePassword(w)
