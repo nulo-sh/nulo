@@ -169,6 +169,7 @@ function mountAuth(provide: Record<string, unknown> = {}, selectedAtMount?: Prof
 			stubs: {
 				Input: InputStub,
 				Button: { template: `<button type="submit" v-bind="$attrs"><slot /></button>` },
+				Tooltip: { name: "Tooltip", template: `<div><slot /></div>` },
 				Flex: { template: `<div><slot /></div>` },
 				AuthProfilePill: true,
 				PasskeyCeremonyDialog: true,
