@@ -1,7 +1,7 @@
 ---
 plan: fixes-1.2.0-2
 tier: light
-status: arc 1 ✓ (#1643 merged); arc 2 in progress on OA-1's answer (B)
+status: completed
 issues: "refs #1609 (arc 1); #1618 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at ea282b7bc
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed, two arcs: #1643 (merged) and the PR that carries this close-out, both to `dev`.
+- **Shipped**: refs #1609: the free dRPC endpoints' batch cap is 25 (arc 1). Closes #1618: the canonical Sponsored FPC is offered only on Testnet and the local network (`sponsored-fpc-chains.ts`); on any other chain discovery skips it, a canonical row stored earlier is removed on read with its fee picks forgotten (best effort), no `getFpcs` answer carries it, `addFpc` refuses its address, and the loading menu holds no place for it. OA-1, B: before a fee card's snapshot commits, a sponsor shows on its trigger only as the row the read FPC list holds, in Send and the app windows, on every network. Every new test was red on `origin/dev` first.
+- **Known limits**: none.
+- **Dispositions**: rejected, a deny-list, a read filter alone, a node probe, an unlock sweep, a durable forget retry, a trigger-only filter and an app preview map (D2, D3, D8). Accepted as is: in the app windows a sponsor picked before the commit leaves the trigger while another card re-reads the same FPC list, as it leaves the menu (Opus, item 3).
+- **Lessons**: none promoted: `lessons.md` holds 8174 of 8192 bytes; the one candidate, `Lock`'s watchdog handing the lock on mid-run, is in [lessons/phase-2.md](lessons/phase-2.md) and stated at `removeSponsorRow`.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # fixes-1.2.0-2: the dRPC batch cap at 25, and the Sponsored fee payer offered only on Testnet and the local network
 
@@ -129,6 +140,8 @@ Before you change code, capture the "before": a temporary smoke spec (`tests/e2e
 | plan r6 (B) | Codex, resumed | approve | none needed | none |
 | arc 2 r1 | Codex gpt-6.1-sol high (session 01a1a321) | changes required | the lock's watchdog can hand the lock on while the removal reads: the commit now also needs `withLock`'s `isCurrent` (a parked-read test, red without it); two pre-fill comments no longer promise a sponsor on the trigger | none |
 | arc 2 r2 | Codex, resumed | clean | none needed | none |
+| arc 2 Opus | Opus 5.5 diff review, beside r1 | no material findings | a read whose removal stood down still returned the canonical sponsor; `addFpc` took its address off the list; three comments the hold made wrong; tests for a deletion while the card loads, chain 0 and two concurrent reads; the send-keyboard e2e compares against the seeded ids | none |
+| cross-arc r3 | Codex gpt-6.1-sol high, fresh (session 01a1a332) | changes required | the post-discovery answer skipped the exclusion: one `offeredOn` now filters both answers; a mixed-case address dodged the canonical match: `sameFieldAddress` in the match, the re-check and the `addFpc` refusal; a redundant e2e comment. Fixed with red-first tests; no fourth round (hard stop at three) | none |
 
 ## Delivery
 
