@@ -36,6 +36,7 @@ import { QueuedFeeAnswers } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
 import { TransferExecutor, type TransferExecutorDeps } from "./transfer-executor"
 import { getEstimatedFee } from "./tx-fee-details"
+import { callSequence } from "../../../../tests/helpers/call-sequence"
 import { FpcType } from "@/wallet/services/fpc/spec"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 
@@ -535,6 +536,25 @@ describe("TransferExecutor: the authorizing session", () => {
 		expect(deps.estimateReuse.tryConsume).toHaveBeenCalledWith("est-1", req, fence, undefined)
 		expect(deps.getAccountContract).toHaveBeenCalledWith("p-fence", 7, "0xme")
 		expect(order(deps.assertFence)).toBeLessThan(order(deps.getAccountContract))
+	})
+
+	test("the reused arm resolves network, node, PXE, fence and account in that order, then re-checks the fence", async () => {
+		const { executor, deps, proveAndSend } = makeHarness({
+			estimateReuse: { tryConsume: vi.fn(async () => snapshot()), stash: vi.fn() } as never,
+		})
+		await executor.execute(makeReq(), "est-1", fence)
+		const steps = {
+			tryConsume: deps.estimateReuse.tryConsume,
+			getNetwork: deps.getNetwork,
+			getNode: deps.getNode,
+			getPXE: deps.getPXE,
+			assertFence: deps.assertFence,
+			getAccountContract: deps.getAccountContract,
+			isFenceLive: deps.isFenceLive,
+			proveAndSend,
+		}
+		const sequence = callSequence(steps)
+		expect(sequence.slice(sequence.indexOf("tryConsume"), sequence.indexOf("proveAndSend") + 1)).toEqual(Object.keys(steps))
 	})
 
 	test("a session that ends while the reused arm resolves its account: no send, failed/session_ended", async () => {

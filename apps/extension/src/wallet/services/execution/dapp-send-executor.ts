@@ -60,7 +60,7 @@ import { type FeeChoice, OriginType } from "@/wallet/services/transaction/spec"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { Network } from "@/wallet/services/network/service"
 import type { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
-import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks } from "./execution-coordinator"
+import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks, resolveLiveHandles } from "./execution-coordinator"
 import { builtCapOf } from "./estimate-reuse-shared"
 import type { ChainTipGate } from "./chain-tip-gate"
 import type { ExecutionLane, OriginTurn } from "./execution-lane"
@@ -77,7 +77,7 @@ import { MAX_WAIT_MS, type SendSequencer, type SequenceScope, type SequenceTicke
 import { probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { type FeeEstimate, finalizeGasLimits, type OnBuilt, suggestGasLimits } from "./fee/fee-strategy"
-import type { OperationPlanner } from "./operation-planner"
+import { gasFeeOptionsOf, type OperationPlanner } from "./operation-planner"
 import type {
 	Action,
 	AztecSendTxOperation,
@@ -1163,14 +1163,7 @@ export class DappSendExecutor {
 
 		if (reused) {
 			this.deps.logDebug(`[executeAztecSendTx] reusing precomputed estimate ${estimateId}`)
-			// Live handles are re-resolved, never cached, for the fence's profile.
-			const network = await this.deps.getNetwork(op.networkId)
-			const node = await this.deps.getNode(network.chainId)
-			const pxe = this.deps.getPXE(network)
-			await this.deps.assertFence(fence)
-			const account = await this.deps.getAccountContract(fence.profileId, network.chainId, op.accountAddress)
-			// The lookup reads whichever session is live: re-check the fence before its keys are used.
-			fenceChecks(this.deps, fence).assertLive()
+			const { network, node, pxe, account } = await resolveLiveHandles(this.deps, fence, op.networkId, op.accountAddress)
 			// The estimate's build ran outside this send, so its calls name the record only now.
 			await onBuilt(reused.txCalls)
 			return {
@@ -1278,12 +1271,23 @@ export class DappSendExecutor {
 					parentTask,
 				)
 				await finalizeGasLimits(node, txRequest, simulatedTx, { gasPadding: 1, customLimits: feeOpts, feeMultiplier: 1, txsLimits })
-				const submittedEndpointUrl = primaryEndpointUrl(network)
-				// The request carries its own fee payment, so the choice is always the app's.
-				const feeChoice = this.feeChoiceFor("app", network.chainId, txCalls)
+				const recordTransaction = this.sentTxRecorder({
+					origin,
+					network,
+					account,
+					txCalls,
+					nonce: Fr.ZERO,
+					feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+					txRequest,
+					fence,
+					networkId: op.networkId,
+					pendingPublicAuthwits: [],
+					// The request carries its own fee payment, so the choice is always the app's.
+					feeChosenBy: "app",
+					journalId,
+				})
 				leaveLine()
 
-				// Prove with account in scope
 				const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
 					pxe,
 					node,
@@ -1295,25 +1299,10 @@ export class DappSendExecutor {
 					...fenceChecks(this.deps, fence),
 					markJournal,
 					commitSubmitting,
-					submittedEndpointUrl,
+					submittedEndpointUrl: primaryEndpointUrl(network),
 					onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 					wantOffchainOutput: offchainOutputOf,
-					recordTransaction: async (hash) =>
-						this.deps.addTransaction({
-							origin,
-							chainId: network.chainId,
-							account: account.address.toString(),
-							calls: txCalls,
-							nonce: Fr.ZERO.toString(),
-							feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
-							hash,
-							submittedEndpointUrl,
-							estimatedFee: getEstimatedFee(txRequest),
-							gasDetails: getGasDetails(txRequest),
-							fence,
-							networkId: op.networkId,
-							feeChoice: await feeChoice,
-						}),
+					recordTransaction,
 				})
 				return { txHash, offchainOutput, node }
 			},
@@ -1334,22 +1323,9 @@ export class DappSendExecutor {
 		// NO_FROM is enforced to use embedded payment, so `embeddedFeePayment` is
 		// set explicitly here (the planner-built path infers it) — that is what
 		// gates `applyEmbeddedFpcGasCap`; see the helper's JSDoc for the cap rationale.
-		const maxFeesUpstream = op.opts.fee?.gasSettings?.maxFeesPerGas
-		const maxPriorityFeesUpstream = op.opts.fee?.gasSettings?.maxPriorityFeesPerGas
 		const feeOpts: FeeOptions = {
 			embeddedFeePayment: detectEmbeddedFeePayment(op.exec?.feePayer, op.opts.from, op.exec?.calls) ?? "fpc",
-			gasLimits: op.opts.fee?.gasSettings?.gasLimits,
-			teardownGasLimits: op.opts.fee?.gasSettings?.teardownGasLimits,
-			maxFeesPerGas: maxFeesUpstream
-				? { feePerDaGas: maxFeesUpstream.feePerDaGas.toString(), feePerL2Gas: maxFeesUpstream.feePerL2Gas.toString() }
-				: undefined,
-			maxPriorityFeesPerGas: maxPriorityFeesUpstream
-				? {
-						feePerDaGas: maxPriorityFeesUpstream.feePerDaGas.toString(),
-						feePerL2Gas: maxPriorityFeesUpstream.feePerL2Gas.toString(),
-					}
-				: undefined,
-			gasPadding: 1,
+			...gasFeeOptionsOf(op.opts.fee?.gasSettings),
 		}
 		suggestGasLimits(txRequest, feeOpts)
 		await applyEmbeddedFpcGasCap(txRequest, feeOpts, node)

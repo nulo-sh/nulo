@@ -21,7 +21,13 @@ import SignerIdentityStrip from "../execute/SignerIdentityStrip.vue"
 /** Utils */
 import { type FeeDisplay, feeDisplay, feeFigure, formatGasBalance } from "@/utils/fee-estimation"
 import { openJsonWindow } from "@/utils/json-window"
-import { authwitDisplayCall, decodeCallsOrUnavailable, decodeGrantsOrUnavailable, grantContentsOf } from "../execute/display-calls"
+import {
+	authwitDisplayCall,
+	awaitsGrantDecode,
+	decodeCallsOrUnavailable,
+	decodeGrantsOrUnavailable,
+	grantContentsOf,
+} from "../execute/display-calls"
 import { grantRefusalRow } from "../execute/call-surface"
 import {
 	WrongProfileError,
@@ -110,7 +116,7 @@ const {
 })
 
 const question = computed(() => payload.value?.feeQuestion)
-const grantsPending = computed(() => !!operation.value && grantContentsOf(operation.value).length > 0 && !decodedGrants.value)
+const grantsPending = computed(() => !!operation.value && awaitsGrantDecode(operation.value, !!decodedGrants.value))
 const grantRefusal = computed(() => grantRefusalRow(decodedGrants.value ?? []))
 /** Read from the question, so it needs no quote and names the fee before the card mounts. */
 const confirmLabel = computed(() => (question.value ? `Send for ${feeFigure(feeDisplay(question.value.fee, undefined))}` : "Send for FJ"))
