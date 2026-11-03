@@ -42,11 +42,8 @@ vi.mock("@/utils/core", async () => {
 	}
 	return {
 		managers,
-		// app.store reads the lazy clients via require*()/get*(). The replace writers
-		// REASSIGN `managers.network`/`.account` to the mocked
-		// `new NetworkServiceClient()`/`new AccountServiceClient()` (which carry
-		// getNodeStatus etc.), so these MUST read the CURRENT `managers.X` — close
-		// over `managers`, not the original *Mock consts (matching the real impl).
+		// The replace writers install fresh mocked clients (which carry getNodeStatus etc.), so the
+		// accessors read the current `managers.X`, never the original *Mock consts, as the real ones do.
 		replaceNetworkClient: () => {
 			managers.network.disconnect()
 			managers.network = new NetworkServiceClient() as never

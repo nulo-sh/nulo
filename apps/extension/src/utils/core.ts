@@ -208,7 +208,6 @@ export async function refreshBalances(accounts: Array<{ address: string }>): Pro
 
 type LazySlot = "network" | "account" | "transaction"
 
-/** Disconnects the slot's client, if any, then installs the one `create` builds. */
 function replaceSlot<Slot extends LazySlot>(slot: Slot, create: () => NonNullable<AppServices[Slot]>): NonNullable<AppServices[Slot]> {
 	const registry = services()
 	registry[slot]?.disconnect()
@@ -229,7 +228,7 @@ export function replaceAccountClient(): AccountServiceClient {
 
 /**
  * The account client, created only while the slot is unset. An existing one is kept: replacing it
- * abandoned a connected port, and disconnecting it would reject the calls of any flow still holding it.
+ * would abandon a connected port, and disconnecting it would reject the calls of any flow still holding it.
  */
 export function ensureAccountClient(): AccountServiceClient {
 	const registry = services()
