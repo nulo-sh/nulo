@@ -1,7 +1,7 @@
 ---
 plan: quality-sdk-1
 tier: light
-status: arc 1 merged (#1587); arc 2 implementing
+status: completed
 issues: "#1444, #1474 (arc 1); #1451 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 51a692426
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed: arc 1 as #1587; arc 2 with this close-out as one PR.
+- **Shipped**: arc 1 closes #1444 (`background.ts` 971 → 430 lines: wiring, beside `content-admission.ts` and `wallet-message.ts`) and #1474 (`scripts/ci-cd/edge-headers.test.ts`: the five surfaces' shared headers agree, nine differences recorded with their values). Arc 2 closes #1451: `raceTimeout` and `raceAbort` in `@nulo/wallet-core/utils`, 17 sites converted, three pins added first; each pin and five helper properties shown red under a mutation. Callers resume on the same turn at sites 1-5, 11-14 and 16b, earlier at 6-10 and 15, one turn later at 17. Three latent changes, on inputs that cannot occur today: site 17 answers `true` on a rejected input (it hung), 16b observes a rejected refresh (unhandled), 15 rejects with an `Error` (a bare string). No screen, copy, stored row, wire message, log line or header value changed.
+- **Known limits**: none.
+- **Dispositions**: kept as is, site 18 (`execution-mutex.ts`: mapping the outcome adds a turn before the catch that frees a capped slot), site 16a (its timer is the injected sleep its tests drive) and the peripheral copies outside #1451's list (a timer against an event or a watcher). Aligning a header value is a separate decision (#1474's Decision comment). Rejected: `packages/edge-headers`, a canonical header table, a `.finally` helper (Alternatives not taken); deleting arc 1's module doc comments (audit verdicts). Filed on the way, not this plan's: #1590 (a Firefox e2e flake).
+- **Lessons**: none promoted (`lessons.md` is at its 8 KiB budget). The turn rule lives in `race.ts` and the wallet-core README; a moved chaos citation names its file and line when it fails.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
+- **Size**: 166 lines against light's 150; the excess is the two arcs' audit rows and this block.
 
 # quality-sdk-1: background.ts in three modules, one deadline and abort helper, edge headers that must agree
 

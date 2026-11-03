@@ -13,3 +13,8 @@
 - Opus (general-purpose): approve, its probes match the plan's turn table (bare race 2 → 2; site 6 V8 5 → 2, Bun 3 → 2; site 15 3 → 2; site 16b 1 → 1; site 17 1 → 2). Accepted: the site 8 pin's deadline margin (20 ms could expire before the service's own entry check on a loaded runner), the README rows, the two comment nits.
 - Codex r2 (resumed): approve; one P3 (the README row restated the overbroad turn claim), fixed.
 - Net-diff Codex (fresh session over both arcs, round 3): approve, no cross-arc defect; two P3s accepted (the plan's Parallelism line, an inexact TSDoc on `disagreements`), arc 1's module and type TSDocs kept. Loop stops here: no material finding open.
+
+## After merging `origin/dev` (`aaaf9278c`)
+
+- The merge conflicted only in the chaos model's citations: `dev` had moved `profile/service.ts` (its slot codec left) and `full-backup-restore.ts` (the trust gate left). Took `dev`'s side and re-cited the eleven shifted lines by fragment.
+- Gates on the merged head at retry 0: lint, typecheck:all, `test:all` (17070 extension tests), `test:ci-gating` 747/747, `audit:vue`, `check:plans`. Network e2e proverless: Chrome 9/9 files (407 s), Firefox 2/2 (222 s). Smoke: Chrome 6/6 (234 s), Firefox 6/6 (208 s, 9 skips the suite declares).
