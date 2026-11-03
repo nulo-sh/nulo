@@ -34,7 +34,7 @@ import {
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS, runImportChainSync } from "./importChainSync"
-import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { errorMessageFromUnknown, raceTimeout } from "@nulo/wallet-core/utils"
 
 export type RestoreStatus = "" | "progress" | "failed" | "finished" | null | undefined
 
@@ -675,17 +675,12 @@ export async function refreshRestoredTokensStage(fence: RunFence, deadlineAt: nu
 	const remaining = deadlineAt - Date.now()
 	if (remaining <= 0) return
 	const tokenService = new TokenServiceClient()
-	let timer: ReturnType<typeof setTimeout> | undefined
 	try {
-		const deadline = new Promise<void>((resolve) => {
-			timer = setTimeout(resolve, remaining)
-		})
 		const refresh = tokenService.refreshRestoredTokens(fence, deadlineAt).catch((error: unknown) => {
 			console.debug("[full-backup] restored tokens kept their backup metadata", { error })
 		})
-		await Promise.race([refresh, deadline])
+		await raceTimeout(refresh, remaining, () => undefined)
 	} finally {
-		clearTimeout(timer)
 		tokenService.disconnect()
 	}
 }
