@@ -1,7 +1,7 @@
 ---
 plan: quality-sdk-1
 tier: light
-status: plan approved (Codex final r3); arc 1 implementing
+status: arc 1 merged (#1587); arc 2 implementing
 issues: "#1444, #1474 (arc 1); #1451 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -86,13 +86,13 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 
 ## Arc 2: one helper for deadline and abort races (#1451)
 
-### Phase 4: the helper and the missing pins
+### Phase 4: the helper and the missing pins ✓
 
 - **Pins first**, on the base: site 17's abort and fulfil pins exist (`execution-lane.test.ts:893`, `:909`); add that no abort listener is left after either. Tighten site 2's pin to the request's own timeout error. Add a site 8 pin: the deadline already past, the read rejecting later, gives `late` and no unhandled rejection. All pass on the base: they pin behaviour, not a fix.
 - Add D4 with `race.test.ts`: `raceTimeout` work wins (value, no timer left, `onTimeout` never called), work rejects (its reason, no timer left), timer wins (`onTimeout`'s value, called once), `onTimeout` throws (its error; `work`'s later rejection raises no unhandled rejection); `raceAbort` fulfilled, rejected, aborted while pending, already aborted then rejected, aborted then rejected (no unhandled rejection in either), and no listener left in each.
 - **Gate**: lint; typecheck:all; `bun run --cwd packages/wallet-core test --retry=0`; the three pinned suites at retry 0.
 
-### Phase 5: the conversions
+### Phase 5: the conversions ✓
 
 - Convert D5 one package at a time, one commit each (wallet-core, extension-messaging, aztec-runtime, then the extension's services, composables and views). Each site's pins pass unedited after its commit.
 - **Gate**: lint; typecheck:all; each package's `test --retry=0`; `bun run --cwd apps/extension test src/stores src/popup/auth-guard.test.ts src/composables src/components/JsonViewer src/wallet/services/token src/wallet/services/profile src/wallet/services/network-reset src/wallet/services/execution --retry=0`; `bun run test:all`; `bun run audit:vue`; `audit:dup` before and after.
@@ -109,6 +109,10 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 | D1-D6 | as above | see Alternatives not taken |
 | Close-out | arc 2's final commits, as `w3-dapp-1` did | a third, docs-only PR (the two-PR cap) |
 | Phase 2 e2e | run with `NULO_E2E_PROVERLESS=1`, as CI's network shard pool runs: `inflight-call-background-death` refuses to start without it | a prover-on run (the file opts out of it) |
+| Arc 2 test helpers (deviation) | `collectUnhandledRejections` moves to `@nulo/wallet-core/testing`, typed by the slice of `process` it uses so consumers without Node's types compile, and the extension's helper re-exports it; `trackAbortListeners` joins it | a second copy in `race.test.ts` |
+| Arc 2 turn pins (deviation) | `race.test.ts` pins both helpers' resume turn against the hand-built shapes, so a `.finally` close goes red | relying on I2's probe alone |
+| Site 15 (deviation) | returns the race's value, one turn earlier than its second `await fetch`; a component's log batch, nothing orders against it | keeping the redundant second await to hold the turn |
+| Arc 2 e2e | the plan's phase 5 files plus arc 1's network files, proverless, as the brief asks | the phase 5 list alone |
 
 ## Audit verdicts
 
@@ -126,7 +130,7 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 
 - **Before building**: a `## Decision` comment on each issue (done, and how; for #1474, that today's differences are kept and recorded, and that aligning one is a separate decision).
 - **Arc 1**: branch `worktree-quality-sdk-1`, one PR to `dev`, ready, no labels at creation, after the Codex loop and the gates. Title: `refactor: background.ts in three modules, and a test that the edge headers agree` (80 characters). Body: the moves and the D2 renames, each pin edit, the header exceptions as recorded, the gates with outcomes, `audit:dup` and line counts before and after, each browser's wall-clock, `Closes #1444`, `Closes #1474`.
-- **Arc 2**: `gh stack add quality-sdk-1-a2` on arc 1, `gh stack submit --auto`, then `gh pr edit`. Title: `refactor: one helper for deadline and abort races, in place of seventeen copies` (79 characters). Body as arc 1's, with the three stated latent changes and site 18's reason, `Closes #1451`. The close-out lands as its final commits.
+- **Arc 2**: branch `quality-sdk-1-a2` from `origin/dev` once arc 1 merged (no stack), `gh pr create`. Title: `refactor: one helper for deadline and abort races, in place of seventeen copies` (79 characters). Body as arc 1's, with the three stated latent changes and site 18's reason, `Closes #1451`. The close-out lands as its final commits.
 - **Neighbours**: quality-services-1 arc 1 edits `token/service.ts`'s constructor (site 8 is at `:1120`); quality-profile-1 (#1439) and quality-popup-1 (#1443) start later and plan on whichever lands first. Arc 2 merges `origin/dev` before its PR and reruns its gate.
 - **Parallelism**: arcs share no file but run in sequence in one worktree; lanes would save little.
 
