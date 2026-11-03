@@ -1,7 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import { FieldWarning } from "@nulo/design"
-import { isFieldAddress } from "@nulo/wallet-bridge"
+import { isFieldAddress, sameFieldAddress } from "@nulo/wallet-bridge"
 import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** Utils */
@@ -36,13 +36,14 @@ const fillError = (type, title, tooltip) => {
 	error.value = { type, title, tooltip }
 }
 
-const isAlreadyExist = computed(() => senders.value?.includes(senderAddress.value))
+const isAlreadyExist = computed(() => senders.value.some((sender) => sameFieldAddress(sender, senderAddress.value)))
 const isAvailableToAddSender = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isLoading.value) return false
 	if (!senderAddress.value.length) return false
 	if (!isFieldAddress(senderAddress.value)) return false
+	if (isAlreadyExist.value) return false
 
 	return true
 })
@@ -83,22 +84,24 @@ const handleAddSender = async () => {
 	}
 }
 
-watch(
-	() => senderAddress.value,
-	() => validateSenderAddress(),
+// The list can land after the address was typed; the verdict must follow it.
+watch([senderAddress, senders], () => validateSenderAddress())
+usePopupEntity(
+	() => props.show,
+	{
+		submit: handleAddSender,
+		onShow: async () => {
+			accountStateClientService = new AccountStateServiceClient()
+			senders.value = await accountStateClientService.getSenders(appStore.network.id)
+		},
+		onHide: () => {
+			accountStateClientService.disconnect()
+			accountStateClientService = null
+			senderAddress.value = ""
+		},
+	},
+	{ submitWaitsForShow: true },
 )
-usePopupEntity(() => props.show, {
-	submit: handleAddSender,
-	onShow: async () => {
-		accountStateClientService = new AccountStateServiceClient()
-		senders.value = await accountStateClientService.getSenders(appStore.network.id)
-	},
-	onHide: () => {
-		accountStateClientService.disconnect()
-		accountStateClientService = null
-		senderAddress.value = ""
-	},
-})
 </script>
 
 <template>
