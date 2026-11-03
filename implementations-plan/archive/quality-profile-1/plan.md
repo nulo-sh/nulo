@@ -1,7 +1,7 @@
 ---
 plan: quality-profile-1
 tier: mid (the lane brief names it; competing outline, Codex + Opus dual audit, a fresh Codex final pass)
-status: approved 2026-11-03 (final Codex pass; the orchestrator's auto-continue); arc 1 in review, arc 2 next
+status: completed 2026-11-03; arc 1 as #1589, arc 2 with the close-out as one PR
 issues: "#1439 (arc 2, Closes); #1446 (closed before building as a known limit: the class declined; arc 2 ships its log router)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,17 @@ trunk: dev
 post_implementation_hardening: not scheduled
 standard: implementations-plan/README.md § Post-implementation standard, read at 846030f16
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed: arc 1 as #1589; arc 2 with this close-out as one PR (D14).
+- **Shipped**: arc 1 moved the slot codec out of `ProfileService` unchanged as `ProfileSecretCodec`, made one words-to-master predicate, and pinned the slot wipe on nine paths whose body throws. Arc 2 closes #1439: `withOpenedSlots` at ten sites, wiping the slots once the body settles while each site keeps its fence, checks, order and lock placement; one `verifyCredential` behind both verify RPCs; one `liveRowHoldingLock` for six gates; `INVALID_PROFILE_ID`; two named refusal factories (D15); and `PxeService`'s `logPublicEvent`. `profile/service.ts` went from 2,663 to 2,365 lines and its internal duplication from 4 / 46 to 2 / 20. No screen, copy, stored row, wire message, error or log line changed.
+- **Known limits**: #1446 (the `ProfileIncarnations` class, D9).
+- **Dispositions**: not done, `sameUnlockFields` (D7) and the restore cluster (outside the finding); `openForReveal` replaced by `withOpenedSlots` (D2). Superseded: the planned three-PR stack, by D14.
+- **Lessons**: none promoted (`lessons.md` is at its 8 KiB budget). The one cross-task gotcha, a closing keyword in a PR body's prose that closes its issue at merge, is in [lessons/phase-2.md](lessons/phase-2.md).
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # quality-profile-1: ProfileService's slot codec and reveal frame, PxeService's log router
 
@@ -107,20 +118,20 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 1. Add `entropyDerivesMaster(master, entropy)`; call it from `assertEntropyMasterPair` and `decodeRestoreMaterial`.
 **Gate:** fast gate; `restore-material.test.ts` and `service.open-slots.test.ts` green unedited; `bun run test:all`; `bun run audit:vue`; the smoke set on both browsers.
 
-### Phase 4 (arc 2): the frame and the credential check
+### Phase 4 (arc 2): the frame and the credential check ✓
 
 1. Add `withOpenedSlots`, move `notOpened` into the codec, and add `profile-secret-codec.test.ts` (one test): on a password row sealed by the codec, with a deferred body, the master and entropy stay intact while the body is pending; once it rejects, the master, entropy and passhash are zero and the rejection propagates; success control: a resolving body's value returns and the buffers are zero after.
 2. Adopt it at the ten sites, one commit per group (unlocks; password and unlock-method changes; exports; finalize).
 3. Merge the verify pair into `verifyCredential`.
 **Gate:** fast gate; Phase 1's test and every pin in `service.open-slots.test.ts`, `service.passkey-unlock.test.ts`, `service.integration.test.ts`, `unlock-method.composition.test.ts` and both `profile-chaos*.composition.test.ts` green unedited.
 
-### Phase 5 (arc 2): the small copies
+### Phase 5 (arc 2): the small copies ✓
 
 1. `liveRowHoldingLock` at the six gates.
 2. `INVALID_PROFILE_ID` in `spec.ts`, the remaining sites and `client.ts`.
 **Gate:** fast gate; `client.test.ts` green; from the repo root, `rg -n -F --glob '*.ts' --glob '!*.test.ts' '"Invalid profile id"' apps/extension/src` prints exactly one line, the constant in `profile/spec.ts`.
 
-### Phase 6 (arc 2): the PXE log router
+### Phase 6 (arc 2): the PXE log router ✓
 
 1. `logPublicEvent` in `PxeService`, at both call sites.
 **Gate:** `bun run lint`, `bun run typecheck:all`, `cd packages/aztec-runtime && bun run test`; then the arc's full gate: `bun run test:all`, `bun run audit:vue`, `bun run audit:dup` below the base (production 183 / 8,841; `profile/service.ts` internal 4 / 46), the smoke set on both browsers, and `NULO_E2E_BROWSER=chrome NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/incoming-public-transfers.test.ts --retry=0` (every scenario green, none skipped).
@@ -148,6 +159,9 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 | D11 | Tests change only where a seam moved, in the moving commit; a seam that could pass vacuously is made to throw | — |
 | D12 | The PXE router rides in arc 2 as its own commit | A third PR: a full CI run for a three-line change |
 | D13 | Commit subjects and PR titles put identifiers in backticks (found at arc 1's first commit: `subject-case` is `lower-case`) | — |
+| D14 | Arc 2 and the close-out ship as one PR on `quality-profile-1-a2` off `dev` (the orchestrator's call once arc 1 had squash-merged) | The planned stack: nothing left to stack on |
+| D15 | Two module-level refusal factories, `invalidPassword` and `invalidOldPassword`, passed to the frame | Inline arrows: the formatter will not hug a trailing callback after an arrow argument, so each site splits into four argument lines; and the two "Invalid profile old password" literals the code kept "in lockstep" become one |
+| D16 | A passkey-only key passes `invalidPassword` too: the frame maps any passkey key to `PasskeyNotOpenedError` | A `PasskeyNotOpenedError` factory at that one site: a refusal the frame never calls |
 
 ## Audit verdicts
 
@@ -158,11 +172,13 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 - **Codex final r2** (resumed): approve, no new material findings.
 - **Arc 1, Codex r1** (gpt-6.1-sol, high, over the arc's diff): no material findings; one comment trimmed. **r2** (resumed): no new material findings, converged.
 - **Arc 1, Opus** (general-purpose, over the arc's diff): no material findings. Two codec doc trims deferred to arc 2, which edits the codec (`lessons/phase-1.md`).
+- **Arc 2, Codex r1** (gpt-6.1-sol, high, over the arc's diff): approve. Accepted: the codec test's wrong-key arm matches a sentinel refusal by identity; the frame's TSDoc says its slots are lent; three restating comments cut. **Opus** (beside r1): no behaviour drift at any of the ten sites; four comment trims accepted. **r2** (resumed): approve, every fix verified. **Net pass** (fresh session over both arcs): approve; one comment nit accepted. Detail: `lessons/phase-2.md`.
 
 ## Delivery
 
 - **Before building:** a `## Decision` comment on #1439; on #1446 a `## Decision` comment with the reopening condition (an incarnation state that has to touch the op paths, the provision and the erase together), the `known-limit` label, and closed as not planned. The Outcome lists it as `Known limits: #1446`; arc 2's body cites it under "Not done, and why" and says its log router is the part that holds.
-- **Stack** via `gh stack init --adopt worktree-quality-profile-1 --base dev`: arc 1 on `worktree-quality-profile-1` (Phases 1-3), arc 2 `gh stack add quality-profile-1-frame` (Phases 4-6), close-out `gh stack add quality-profile-1-close-out` (docs only). Each arc boundary runs the review loop before the next arc opens; no pipelined boundary. `code_review: off`.
+- **Arc 2, as built (D14):** one PR, arc 2's commits then the close-out's, on `quality-profile-1-a2` off `dev`; `Closes #1439` in its body. Arc 1's squash body closed #1439 early, through the prose "closes #1439"; reopened with a comment.
+- **Stack** (arc 1 only) via `gh stack init --adopt worktree-quality-profile-1 --base dev`: arc 1 on `worktree-quality-profile-1` (Phases 1-3), arc 2 `gh stack add quality-profile-1-frame` (Phases 4-6), close-out `gh stack add quality-profile-1-close-out` (docs only). Each arc boundary runs the review loop before the next arc opens; no pipelined boundary. `code_review: off`.
 - **PR titles** (≤ 92 characters): arc 1 ``refactor(profile): move the slot codec out of `ProfileService` `` (62); arc 2 ``refactor: one reveal frame and credential check in `ProfileService`, one pxe log router`` (87; `Closes #1439`). Commitlint's `subject-case` is lower-case, so identifiers sit in backticks (D13); close-out `docs(plans): close quality-profile-1` (36).
 - **Each PR body:** what changed and why, each seam edit, the gates with outcomes, `audit:dup` and the touched files' line counts before and after, "Not done, and why" (D7, D9's class), and each browser's smoke wall-clock (no e2e scenario added or changed).
 - **Parallelism:** arcs share `service.ts` and stay serial; no lanes.

@@ -11,6 +11,10 @@ export const PROFILE_SERVICE_NAME = "profile"
  *  wallet on disk from its profile metadata. */
 export const PROFILE_STORAGE_ROOT = "nulo:core:profiles"
 
+/** The text of the service's invalid-id refusal. It never changes: the refusal crosses the port as a
+ *  plain `Error` known by this text alone. */
+export const INVALID_PROFILE_ID = "Invalid profile id"
+
 export type ProfileType = "password" | "passkey"
 
 /** An {@link ExecutionFence} a popup holds across several RPCs. Serials and deletion epochs restart
