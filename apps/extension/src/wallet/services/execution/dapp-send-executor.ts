@@ -60,7 +60,7 @@ import { type FeeChoice, OriginType } from "@/wallet/services/transaction/spec"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { Network } from "@/wallet/services/network/service"
 import type { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
-import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks } from "./execution-coordinator"
+import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks, resolveLiveHandles } from "./execution-coordinator"
 import { builtCapOf } from "./estimate-reuse-shared"
 import type { ChainTipGate } from "./chain-tip-gate"
 import type { ExecutionLane, OriginTurn } from "./execution-lane"
@@ -1163,14 +1163,7 @@ export class DappSendExecutor {
 
 		if (reused) {
 			this.deps.logDebug(`[executeAztecSendTx] reusing precomputed estimate ${estimateId}`)
-			// Live handles are re-resolved, never cached, for the fence's profile.
-			const network = await this.deps.getNetwork(op.networkId)
-			const node = await this.deps.getNode(network.chainId)
-			const pxe = this.deps.getPXE(network)
-			await this.deps.assertFence(fence)
-			const account = await this.deps.getAccountContract(fence.profileId, network.chainId, op.accountAddress)
-			// The lookup reads whichever session is live: re-check the fence before its keys are used.
-			fenceChecks(this.deps, fence).assertLive()
+			const { network, node, pxe, account } = await resolveLiveHandles(this.deps, fence, op.networkId, op.accountAddress)
 			// The estimate's build ran outside this send, so its calls name the record only now.
 			await onBuilt(reused.txCalls)
 			return {
