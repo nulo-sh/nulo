@@ -19,6 +19,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { recordWrites } from "../storage-write-log"
+import { bytesToHex, EventHandler } from "@nulo/wallet-core/utils"
 import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
@@ -2510,6 +2511,24 @@ describe("NetworkService.isChainQuarantined", () => {
 	})
 })
 
+const stored = async (local: FakeStorageArea, id: string): Promise<Network> =>
+	(await sealedEntityStorage("networks", local, ROW_KEY_FAKE.rowKeys).get(id)) as Network
+
+/** A reset journal of profile `p1` that holds `networkId`. */
+const journalFor = (networkId: string) =>
+	JSON.stringify({
+		profileId: "p1",
+		networkId,
+		fromChainId: 10,
+		toChainId: 20,
+		l1ChainId: 5,
+		cause: { networkReset: true, addressesMoved: false },
+		purged: false,
+		switchToSeedNode: false,
+		probedEndpoint: null,
+		accounts: [],
+	})
+
 describe("NetworkService in-place reset", () => {
 	const OLD = 4321
 	const MY_NODE = "https://my-node.example"
@@ -2542,21 +2561,6 @@ describe("NetworkService in-place reset", () => {
 				{ id: "u2", rpcUrl: "https://other.example", label: "Other" },
 			],
 			...over,
-		})
-	const stored = async (local: FakeStorageArea, id: string): Promise<Network> =>
-		(await sealedEntityStorage("networks", local, ROW_KEY_FAKE.rowKeys).get(id)) as Network
-	const journalFor = (networkId: string) =>
-		JSON.stringify({
-			profileId: "p1",
-			networkId,
-			fromChainId: 10,
-			toChainId: 20,
-			l1ChainId: 5,
-			cause: { networkReset: true, addressesMoved: false },
-			purged: false,
-			switchToSeedNode: false,
-			probedEndpoint: null,
-			accounts: [],
 		})
 
 	test("the row is not live during the purge, and the network lock stays free for other networks", async () => {
@@ -2862,5 +2866,56 @@ describe("NetworkService in-place reset", () => {
 		const getNodeInfo = vi.fn().mockResolvedValue({ l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: TESTNET_L1_CHAIN_ID })
 		vi.spyOn(factory, "createSingleAttemptNode").mockReturnValue({ getNodeInfo } as unknown as AztecNode)
 		await expect(service.probeIdentityOnce(MY_NODE, "testnet", 5000)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+	})
+})
+
+describe("NetworkService — an endpoint on a retired default", () => {
+	const RETIRED_URL = "https://lb.drpc.live/aztec-testnet/FAKEKEY"
+	const REPLACEMENT = "https://aztec-testnet.drpc.org"
+	const digest = async (text: string) => bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))))
+	const synthetic = async () => [{ sha256: await digest(RETIRED_URL), replacement: REPLACEMENT }]
+	const retire = async (service: NetworkService) =>
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+		(service as any).retireDefaultEndpoints("p1", await synthetic())
+	const retiredTestnet = (local: FakeStorageArea, id: string) =>
+		storeRow(local, {
+			id,
+			chainId: CHAIN_IDS.TESTNET,
+			l1ChainId: TESTNET_L1_CHAIN_ID,
+			kind: "testnet",
+			primaryEndpointId: "seed1",
+			endpoints: [{ id: "seed1", rpcUrl: RETIRED_URL, label: "dRPC" }],
+		})
+
+	test("the unlock seals the row and moves it to the replacement, announced once, and the chain's node is rebuilt on it", async () => {
+		const { service, factory, local } = setupServiceWithStorage({})
+		retiredTestnet(local, "tn")
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+		const internals = service as any
+		const profiles = Object.assign(internals.profileService, { onRowKeysReady: new EventHandler<string>() })
+		await internals.init({ get: () => profiles })
+		const real = internals.retireDefaultEndpoints.bind(service)
+		vi.spyOn(internals, "retireDefaultEndpoints").mockImplementation(async (profileId) => real(profileId, await synthetic()))
+		await service.getNode(CHAIN_IDS.TESTNET)
+		const updated: Network[] = []
+		service.onNetworkUpdated.add((network) => updated.push(network))
+		profiles.onRowKeysReady.invoke("p1")
+		await vi.waitFor(() => expect(updated.map((network) => network.id)).toEqual(["tn"]))
+		// Sealed: no stored value holds either URL in the clear.
+		expect([...local.store.values()].some((value) => JSON.stringify(value).includes("aztec-testnet"))).toBe(false)
+		expect((await stored(local, "tn")).endpoints).toEqual([{ id: "seed1", rpcUrl: REPLACEMENT, label: "dRPC" }])
+		await service.getNode(CHAIN_IDS.TESTNET)
+		expect(factory.created.map((c) => c.rpcUrl)).toEqual([RETIRED_URL, REPLACEMENT])
+	})
+
+	test("a network a reset journal holds keeps its endpoints as captured", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		retiredTestnet(local, "tn")
+		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
+		const updated: Network[] = []
+		service.onNetworkUpdated.add((network) => updated.push(network))
+		await retire(service)
+		expect((await stored(local, "tn")).endpoints[0]?.rpcUrl).toBe(RETIRED_URL)
+		expect(updated).toEqual([])
 	})
 })
