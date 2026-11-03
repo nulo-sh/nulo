@@ -6,3 +6,4 @@
 - 2026-11-03 Opus R1 conditional approve; Codex R2 approve; Opus findings folded (prototype key, band at the popup, D12 known limit).
 - 2026-11-03 final fresh Codex pass conditional approve, conditions met, resumed pass approve; plan committed; arc 1 starts (auto-continue).
 - 2026-11-03 Phase 1 gate green: lint, typecheck:all, packages/token-list (47), infra/token-list (85), extension unit (17171); stamp 3 appended additive with the `tokenPrices.feeds` golden.
+- 2026-11-03 Phase 2 gate green: infra/token-list check and test (91), test:ci-gating (747), test:release (359, with a local `zip`), lint:actions, lint.

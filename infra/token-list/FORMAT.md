@@ -59,7 +59,10 @@ The payload is a UTF-8 JSON object:
 			"chainId": 2904119610,
 			"address": "0x2a6c…41d7"
 		}
-	]
+	],
+	"priceFeeds": {
+		"usd-coin": { "min": 0.2, "max": 5, "ticker": "USDC" }
+	}
 }
 ```
 
@@ -72,8 +75,9 @@ The payload is a UTF-8 JSON object:
 | `symbol` | 1 to 32 characters. |
 | `name` | 1 to 80 characters. |
 | `decimals` | Integer, 0 to 18. |
-| `priceId` | Optional CoinGecko id. Absent means unpriced. |
+| `priceId` | Optional CoinGecko id: 1 to 64 characters of `a-z`, `0-9` and `-`, starting with a letter or digit. Absent means unpriced. |
 | `flagged` | Optional array of `{chainId, address}` pairs, under the rules above: tokens the publisher flags as scams. Absent means none. |
+| `priceFeeds` | Optional object, at most 32 keys: CoinGecko id → `{min, max, ticker}`, under [Price feeds](#price-feeds). Absent means every entry is unpriced. |
 
 `symbol` and `name` contain no control, format (bidi overrides, zero-width joiners) or line and
 paragraph separator characters. Each (`chainId`, `address`) pair appears once across `tokens` and
@@ -84,9 +88,28 @@ paragraph separator characters. Each (`chainId`, `address`) pair appears once ac
 - Ignore keys it does not know, in the payload and in each entry.
 - Skip an entry whose `classId` it cannot verify on chain. Nulo seeds only Token classes it bundles
   an artifact for, and checks the class, symbol and decimals against the chain before it adds a row.
-- Leave an entry unpriced when its `priceId` is not one it knows.
+- Leave an entry unpriced when the list carries no feed for its `priceId` that you accept.
 - Use at most the first 16 entries per `chainId`. The publisher never signs more than 16.
 - Warn wherever a flagged token shows, whoever added it, and never treat a flagged pair as listed.
+
+### Price feeds
+
+Each key of `priceFeeds` is a CoinGecko id, under the `priceId` rule; `aztec` is not a key, since
+Fee Juice's feed is fixed in the wallet, and neither is a member of `Object.prototype`
+(`constructor`). Each record is:
+
+| Field | Rule |
+|---|---|
+| `min`, `max` | The USD band a unit's quote must sit in: finite numbers, 0.0001 ≤ `min` < `max` ≤ 1,000,000, and `max` at most 1000 × `min`. |
+| `ticker` | 1 to 12 ASCII letters and digits: the Ethereum-side symbol the quote is for, shown beside the fiat figure. |
+
+When `priceFeeds` is present, every entry's `priceId` has a record and every record is named by an
+entry; the publisher never signs a list that breaks either.
+
+A reader prices an entry only through the record its `priceId` names, and drops any quote outside
+that record's band, whenever it was fetched. A record it cannot accept (a bad key, a field out of
+range, a malformed ticker) leaves the entries naming it unpriced and the rest of the list, flags
+included, in force. A reader that knows no `priceFeeds` ignores the key and keeps its own table.
 
 A list is a suggestion of which contracts to show, not a statement that a token is safe or worth
 anything. The class, symbol and decimals are checked against the chain. The name is a label: Nulo

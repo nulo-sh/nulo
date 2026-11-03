@@ -1,7 +1,7 @@
 /**
  * The `prepare` job's step summary: what the owner approves when the `sign` job asks. It shows the
- * token and flag diffs against the served envelope, the digest of both `sign` will refuse to differ
- * from, and every signing-relevant change since the list before the current one was first published, because the
+ * token, flag and price feed diffs against the served envelope, the digest of all three `sign` will
+ * refuse to differ from, and every signing-relevant change since the list before the current one was first published, because the
  * environment approves a run and does not vet the code that run executes.
  *
  *   bun infra/token-list/scripts/summary.ts   (writes `tokens_sha256` to $GITHUB_OUTPUT when set)
@@ -9,9 +9,9 @@
 import { spawnSync } from "node:child_process"
 import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import type { TokenListEntry, TokenListPair } from "@nulo/token-list"
+import type { PriceFeed, PriceFeeds, TokenListEntry, TokenListPair } from "@nulo/token-list"
 import { decodeBase64Url } from "@nulo/token-list/envelope"
-import { checkFlagged, checkSource, checkTokens } from "@nulo/token-list/parse"
+import { checkFlagged, checkPriceFeeds, checkSource, checkTokens } from "@nulo/token-list/parse"
 import { listSha256 } from "@nulo/token-list/sign"
 import { ENVELOPE, HOST_ROOT, SOURCE } from "./check"
 import { FLOOR_PATH, raisesFloor } from "./floor"
@@ -31,6 +31,12 @@ export const SIGNING_PATHS = [
 export type TokenDiff = { added: TokenListEntry[]; removed: TokenListEntry[]; changed: { from: TokenListEntry; to: TokenListEntry }[] }
 
 export type FlagDiff = { added: TokenListPair[]; removed: TokenListPair[] }
+
+export type FeedDiff = {
+	added: [string, PriceFeed][]
+	removed: [string, PriceFeed][]
+	changed: { id: string; from: PriceFeed; to: PriceFeed }[]
+}
 
 const keyOf = (t: TokenListPair) => `${t.chainId}:${t.address}`
 
@@ -53,14 +59,31 @@ export function flagDiff(published: readonly TokenListPair[], next: readonly Tok
 	return { added: next.filter((p) => !before.has(keyOf(p))), removed: published.filter((p) => !after.has(keyOf(p))) }
 }
 
-/** The served envelope's tokens and flags, decoded without verification: this is a display of what changes. */
-export function publishedList(envelopeText: string | undefined): { tokens: TokenListEntry[]; flagged: TokenListPair[] } {
-	if (envelopeText === undefined) return { tokens: [], flagged: [] }
+export function feedDiff(published: PriceFeeds, next: PriceFeeds): FeedDiff {
+	const before = Object.entries(published)
+	const after = Object.entries(next)
+	return {
+		added: after.filter(([id]) => !Object.hasOwn(published, id)),
+		removed: before.filter(([id]) => !Object.hasOwn(next, id)),
+		changed: after.flatMap(([id, to]) => {
+			const from = Object.hasOwn(published, id) ? published[id] : undefined
+			return from && JSON.stringify(from) !== JSON.stringify(to) ? [{ id, from, to }] : []
+		}),
+	}
+}
+
+type PublishedList = { tokens: TokenListEntry[]; flagged: TokenListPair[]; priceFeeds: PriceFeeds }
+
+/** The served envelope's tokens, flags and feeds, decoded without verification: this is a display of what changes. */
+export function publishedList(envelopeText: string | undefined): PublishedList {
+	if (envelopeText === undefined) return { tokens: [], flagged: [], priceFeeds: {} }
 	const payload = decodeBase64Url((JSON.parse(envelopeText) as { payload: string }).payload)
 	if (!payload) throw new Error(`${ENVELOPE}: undecodable payload`)
-	const fields = JSON.parse(new TextDecoder().decode(payload)) as { tokens: unknown; flagged?: unknown }
+	const fields = JSON.parse(new TextDecoder().decode(payload)) as { tokens: unknown; flagged?: unknown; priceFeeds?: unknown }
 	const tokens = checkTokens(fields.tokens, "published.tokens", "wallet")
-	return { tokens, flagged: checkFlagged(fields.flagged, "published.flagged", "wallet", tokens) }
+	const flagged = checkFlagged(fields.flagged, "published.flagged", "wallet", tokens)
+	const priceFeeds = fields.priceFeeds === undefined ? {} : checkPriceFeeds(fields.priceFeeds, "published.priceFeeds", "wallet")
+	return { tokens, flagged, priceFeeds }
 }
 
 // Backslash-escaping every ASCII punctuation mark shows the signed text verbatim: no `<!-- -->` hides
@@ -76,6 +99,18 @@ export function renderFlagDiff(diff: FlagDiff): string {
 	]
 	if (rows.length === 0) return "No flag changes against the served list.\n"
 	return ["| | chainId | address |", "|---|---|---|", ...rows, ""].join("\n")
+}
+
+const feedRow = (sign: string, id: string, f: PriceFeed) => `| ${sign} | ${cell(id)} | ${f.min} | ${f.max} | ${cell(f.ticker)} |`
+
+export function renderFeedDiff(diff: FeedDiff): string {
+	const rows = [
+		...diff.added.map(([id, f]) => feedRow("+", id, f)),
+		...diff.removed.map(([id, f]) => feedRow("−", id, f)),
+		...diff.changed.flatMap(({ id, from, to }) => [feedRow("was", id, from), feedRow("now", id, to)]),
+	]
+	if (rows.length === 0) return "No price feed changes against the served list.\n"
+	return ["| | price id | min | max | ticker |", "|---|---|---|---|---|", ...rows, ""].join("\n")
 }
 
 export function renderDiff(diff: TokenDiff): string {
@@ -140,15 +175,15 @@ export function signingChanges(root: string = REPO_ROOT): string {
 }
 
 if (import.meta.main) {
-	const { tokens, flagged = [] } = checkSource(JSON.parse(readFileSync(join(HOST_ROOT, SOURCE), "utf8")))
+	const { tokens, flagged = [], priceFeeds } = checkSource(JSON.parse(readFileSync(join(HOST_ROOT, SOURCE), "utf8")))
 	const envelope = join(HOST_ROOT, ENVELOPE)
 	const published = publishedList(existsSync(envelope) ? readFileSync(envelope, "utf8") : undefined)
-	const digest = await listSha256({ tokens, flagged })
+	const digest = await listSha256({ tokens, flagged, priceFeeds })
 	process.stdout.write(
 		[
 			"## Token list: review before approving `sign`",
 			"",
-			`Tokens and flags sha256 (\`sign\` refuses any other set): \`${digest}\``,
+			`Tokens, flags and price feeds sha256 (\`sign\` refuses any other set): \`${digest}\``,
 			"",
 			"### Token changes",
 			"",
@@ -156,6 +191,9 @@ if (import.meta.main) {
 			"### Flag changes",
 			"",
 			renderFlagDiff(flagDiff(published.flagged, flagged)),
+			"### Price feed changes",
+			"",
+			renderFeedDiff(feedDiff(published.priceFeeds, priceFeeds ?? {})),
 			`Raises the compiled floor against the served list: ${raisesFloor(published, { tokens, flagged }) ? `yes. The publish PR sets \`${FLOOR_PATH}\` to the signed sequence, and every wallet built after it refuses an older list.` : "no."} The publish PR also compares the lists at publish PR and branch heads, and its body names every reason the floor rises.`,
 			"",
 			"### Signing-relevant changes",

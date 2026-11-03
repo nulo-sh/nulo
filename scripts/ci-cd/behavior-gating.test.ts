@@ -1812,7 +1812,8 @@ describe("token-list publish", () => {
 	})
 
 	// The node URL is part of the pinned line: a keyed endpoint would leak at commit, before any run.
-	test("prepare's live check runs after the summary, advisory and bounded, against the keyless public node", () => {
+	// The price check's URL is compiled in its script, which sends no header, so no key reaches it.
+	test("prepare's live and price feed checks run after the summary, advisory and bounded, keyless", () => {
 		const steps = wf.jobs.prepare.steps
 		const at = steps.findIndex((step: { id?: string }) => step.id === "summary")
 		expect(steps.slice(at + 1)).toEqual([
@@ -1821,6 +1822,12 @@ describe("token-list publish", () => {
 				"continue-on-error": true,
 				"timeout-minutes": 5,
 				run: 'bun infra/token-list/scripts/live-check.ts https://aztec-testnet.drpc.org >> "$GITHUB_STEP_SUMMARY"',
+			},
+			{
+				name: "Price feed check (advisory)",
+				"continue-on-error": true,
+				"timeout-minutes": 2,
+				run: 'bun infra/token-list/scripts/price-check.ts >> "$GITHUB_STEP_SUMMARY"',
 			},
 		])
 	})
