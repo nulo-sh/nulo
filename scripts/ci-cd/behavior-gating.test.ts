@@ -11,7 +11,7 @@
  * that step this guard would never run on a PR and the whole mechanism would be hollow.
  */
 import { describe, expect, test } from "bun:test"
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { MOVE_APPROVED_LABEL } from "../complexity-baseline/scan"
@@ -985,7 +985,7 @@ const readRepoYaml: ReadFile = (path) => {
 }
 const LOCAL_WORKFLOW = "./.github/workflows/"
 const LOCAL_ACTION = "./.github/actions/"
-const CI_SCRIPT = /(?<![\w./-])scripts\/ci-cd\/[\w.-]+/g
+const CI_SCRIPT = /(?<![\w.-])scripts\/ci-cd\/[\w./-]+/g
 const DECIDABLE = /^inputs\.(\w+) (==|!=) '([^']*)'$/
 
 /**
@@ -1016,14 +1016,20 @@ function calleeInputs(
 	return inputs
 }
 
-/** The `scripts/ci-cd/` files a step's command lines name; a name with no file behind it throws. */
+/**
+ * The `scripts/ci-cd/` files a step's command lines name, however the path is prefixed; a mention
+ * the walk cannot read as one file (an expression in the name, a directory) throws.
+ */
 function ciScripts(run: unknown, at: string): string[] {
-	const scripts = commandLines(run).flatMap((line) => line.match(CI_SCRIPT) ?? [])
-	for (const script of scripts) if (!existsSync(join(ROOT, script))) throw new Error(`${at} runs ${script}, which does not exist`)
-	return scripts
+	return commandLines(run).flatMap((line) => {
+		const scripts = line.match(CI_SCRIPT) ?? []
+		const unread = (line.match(/scripts\/ci-cd\//g) ?? []).length !== scripts.length
+		const missing = scripts.find((script) => !statSync(join(ROOT, script), { throwIfNoEntry: false })?.isFile())
+		if (unread || missing) throw new Error(`${at} runs a scripts/ci-cd path the walk cannot read: ${line}`)
+		return scripts
+	})
 }
 
-/** The CI files a PR e2e lane runs: see the describe below. */
 function laneInfrastructure(lane: string, read: ReadFile = readRepoYaml): string[] {
 	const reached = new Set<string>()
 	const visitSteps = (steps: WalkStep[] | undefined, inputs: Inputs | undefined, at: string): void => {
@@ -1079,22 +1085,21 @@ describe("each e2e lane's filter names the CI files it runs", () => {
 			copies[path] ?? readRepoYaml(path)
 	const added = (read: ReadFile): string[] =>
 		LANES.flatMap((lane) => infrastructureFindings(lane, read).filter((line) => !live[lane].includes(line)))
-	const withPatterns = (lane: string, edit: (patterns: string[]) => string[]): ReadFile => {
+	const stepsOf = (file: WalkFile): WalkStep[] => Object.values(file.jobs ?? {}).flatMap((job) => job.steps ?? [])
+	const withPatterns = (lane: string, edit: (patterns: string[]) => string[], editSteps?: (steps: WalkStep[]) => void): ReadFile => {
 		const path = `.github/workflows/${lane}`
 		const copy = structuredClone(readRepoYaml(path))
-		const step = Object.values(copy.jobs ?? {})
-			.flatMap((job) => job.steps ?? [])
-			.find((candidate) => candidate.uses?.includes("dorny/paths-filter"))
+		const step = stepsOf(copy).find((candidate) => candidate.uses?.includes("dorny/paths-filter"))
 		const [[name, patterns]] = Object.entries(dornyFilters(copy as GateWorkflow, lane))
 		if (step?.with) step.with.filters = JSON.stringify({ [name]: edit(patterns) })
+		editSteps?.(stepsOf(copy))
 		return overlay({ [path]: copy })
 	}
 	const withGeckodriverIf = (condition: string): ReadFile => {
 		const copies: Record<string, WalkFile> = {}
 		for (const suite of [".github/workflows/_extension-smoke-e2e.yml", `.github/workflows/${NETWORK_SUITE}`]) {
 			const copy = structuredClone(readRepoYaml(suite))
-			for (const step of Object.values(copy.jobs ?? {}).flatMap((job) => job.steps ?? []))
-				if (step.uses === `${LOCAL_ACTION}setup-geckodriver`) step.if = condition
+			for (const step of stepsOf(copy)) if (step.uses === `${LOCAL_ACTION}setup-geckodriver`) step.if = condition
 			copies[suite] = copy
 		}
 		return overlay(copies)
@@ -1132,6 +1137,29 @@ describe("each e2e lane's filter names the CI files it runs", () => {
 			"a browser condition the walk cannot decide",
 			withGeckodriverIf("inputs.browser == inputs.other"),
 			[SMOKE, NETWORK].map((lane) => `${lane}: missing .github/actions/setup-geckodriver/**`),
+		],
+		[
+			"a wrapped, inverted, upper-case browser condition",
+			withGeckodriverIf("${{ inputs.browser != 'FIREFOX' }}"),
+			[
+				`${SMOKE}: missing .github/actions/setup-geckodriver/**`,
+				`${SMOKE_FIREFOX}: dead .github/actions/setup-geckodriver/**`,
+				`${NETWORK}: missing .github/actions/setup-geckodriver/**`,
+				`${NETWORK_FIREFOX}: dead .github/actions/setup-geckodriver/**`,
+			],
+		],
+		[
+			"a gate script run by a relative path, missing from the filter",
+			withPatterns(
+				SMOKE,
+				(patterns) => patterns.filter((pattern) => pattern !== "scripts/ci-cd/live-labels.sh"),
+				(steps) => {
+					for (const step of steps)
+						if (typeof step.run === "string")
+							step.run = step.run.replace("bash scripts/ci-cd/live-labels.sh", "bash ./scripts/ci-cd/live-labels.sh")
+				},
+			),
+			[`${SMOKE}: missing scripts/ci-cd/live-labels.sh`],
 		],
 	])("a copy with %s is refused", (_, read, expected) => {
 		expect(added(read)).toEqual(expected)
