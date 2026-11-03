@@ -86,7 +86,7 @@ export function commitSealedTogether(area: MinimalStorageArea, writes: readonly 
 
 /** Writes `items`, dispatched in the call, then removes `removals` once the write lands: a
  *  rejected write leaves every original, and an interrupted pair leaves both copies, which reads
- *  dedupe and the next pass resolves. No items, no write. */
+ *  dedupe and the next pass resolves. */
 async function setThenRemove(area: MinimalStorageArea, items: Record<string, string>, removals: string[]): Promise<void> {
 	if (Object.keys(items).length > 0) await area.set(items)
 	if (removals.length > 0) await area.remove(removals)

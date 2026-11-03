@@ -6,3 +6,4 @@
 - 2026-11-02: arc 1 phase 1 ✓ (#1447): storage pins green at base and red under a k/r swap and a deferred set; matcher tests red on a stub, green after; vitest 56 files / 1105 tests, lint, typecheck:all exit 0.
 - 2026-11-02: arc 1 phase 2 ✓ (#1441): helper tests red on a stub, green after, and red again with an await before `landed`; vitest 16 files / 474 tests (the four compensation tests unchanged), lint, typecheck:all exit 0.
 - 2026-11-02: arc 1 phase 3 ✓ (#1436): helper tests red on a stub, green after; both boundary tests green at base and red under a merged or split boundary; the 12 messages byte-identical; vitest 279 files / 5582 tests (src/wallet/services, src/wallet/storage, log-payload-ban), lint, typecheck:all exit 0.
+- 2026-11-02: arc 1 phase 4 ✓ (#1467): four options types, 35 test constructions rewritten, production wiring in `runtime.ts`; vitest `src/wallet` 309 files / 6030 tests, lint, typecheck:all exit 0.

@@ -319,9 +319,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  key. In memory only: a restart forgets a strike, which only delays the delete by one scan. */
 	private readonly noteStrikes = new Map<string, string>()
 
-	/** E2E-only deterministic race lever. `undefined` in production (the option
-	 *  is only ever set under `E2E_PROVERLESS` in runtime.ts), so every call
-	 *  site is a no-op `?.` in prod. */
+	/** E2E-only race lever; undefined in a production build, so each `?.` call is a no-op. */
 	private readonly incomingPollGate?: IncomingPollGate
 
 	public constructor(logger: ILogger, browserApi: BrowserApi, options: IncomingTransferServiceOptions = {}) {

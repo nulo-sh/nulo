@@ -60,7 +60,6 @@ export function accountScopeKey(chainId: number, address: string): string {
 	return `${chainId}:${address}`
 }
 
-/** A row scoped to one account on one chain, as the stores an account deletion purges hold it. */
 export type AccountScopedRow = { profileId: string; chainId: number; account: string }
 
 /**

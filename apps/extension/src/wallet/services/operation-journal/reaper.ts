@@ -102,8 +102,6 @@ export class JournalReaper {
 	// bootCutoff}` args) and the periodic no-arg tick stay local — the two call
 	// shapes genuinely differ, so the wrapper deliberately doesn't own them.
 	private readonly dispatcher: AlarmDispatcher
-	/** Per-instance now-source. Real `Date.now()` in production; injectable
-	 *  through `options.now` for unit tests using fake clocks. */
 	private readonly now: () => number
 	/** The boot-sweep cutoff. When the composition root supplies it (captured
 	 *  BEFORE `services.start()`), it protects even ops created by a popup-RPC

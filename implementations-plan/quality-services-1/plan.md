@@ -1,7 +1,7 @@
 ---
 plan: quality-services-1
 tier: light
-status: approved (Codex round 3); arc 1 next
+status: approved (Codex round 3); arc 1 implemented, review loop next
 issues: "#1436, #1441, #1447, #1467 (arc 1); #1437 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -80,7 +80,7 @@ None. No screen, copy, row or format changes; arc 2 changes which function write
 - The purge matcher decides which rows an account deletion erases. D1 keeps the full tuple, so a sibling profile's rows (shared addresses are supported) and another chain's rows stay; `account/spec.test.ts` and the existing purge tests pin it.
 - The sealing failure boundary stays a warn with `{ error }` (`trim` projects it to name and message), at the same level and reach. Known limits: none.
 
-## Phase 1 (arc 1): the matcher, the envelope and the commit tail (#1447)
+## Phase 1 (arc 1): the matcher, the envelope and the commit tail (#1447) ✓
 
 1. Post a `## Decision` comment (done, in which arc, and what the plan changed from the issue) on each of #1436, #1437, #1441, #1447 and #1467.
 2. Add D8's `account/spec.test.ts` cases against a stub export; require them red. Add D8's `sealed-entity-storage.test.ts` pins; require them green at the base. Commit.
@@ -88,19 +88,19 @@ None. No screen, copy, row or format changes; arc 2 changes which function write
 
 **Gate:** from the root, `bun run lint` and `bun run typecheck:all`; from `apps/extension`, `bun --bun vitest run src/wallet/storage src/wallet/services/account src/wallet/services/auth-registry src/wallet/services/token-balance src/wallet/services/ui-preference src/wallet/services/incoming-transfer --retry=0`. Pass: every command exits 0; the new cases red before, green after.
 
-## Phase 2 (arc 1): the fenced create (#1441)
+## Phase 2 (arc 1): the fenced create (#1441) ✓
 
 1. Add `create-fence.test.ts` against a stub; require red. Make D3. Commit.
 
 **Gate:** phase 1's root commands; from `apps/extension`, `bun --bun vitest run src/wallet/services/create-fence.test.ts src/wallet/services/network src/wallet/services/contact src/wallet/services/dapp-session src/wallet/services/fpc --retry=0`. Pass: as phase 1; the four compensation tests (recon) pass unchanged.
 
-## Phase 3 (arc 1): the sealing shell (#1436)
+## Phase 3 (arc 1): the sealing shell (#1436) ✓
 
 1. Add `seal-on-unlock.test.ts` against a stub; require red. Make D4. Commit.
 
 **Gate:** phase 1's root commands; from `apps/extension`, `bun --bun vitest run src/wallet/services src/wallet/storage src/utils/log-payload-ban.test.ts --retry=0`. Pass: as phase 1; `git diff` shows every message string unchanged.
 
-## Phase 4 (arc 1): options objects (#1467)
+## Phase 4 (arc 1): options objects (#1467) ✓
 
 1. Make D5, `JournalReaper` last. Commit.
 
@@ -139,6 +139,8 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | Plan 1 | Opus 5.5, Plan | conditional approve | The ensure sites read the slot when they use it; arc 2 builds and commits `src/types/`; phase 5's grep excludes tests and its vitest run widens; `runSealing` runs the task in the event's turn, `warn` keeps `this`; `keyedRowText(naturalId, text)`; `security-reset.test.ts` in phase 6; the C1 note on #1437 | none |
 | Plan 2, resumed | Codex `gpt-6.1-sol`, high | conditional approve | D2's empty-batch reason corrected: `forgetFpc` always returns both maps, so no caller builds an empty batch (my trace was wrong; the Opus leg was right) | none |
 | Plan 3, resumed | Codex `gpt-6.1-sol`, high | approve | the audit table's separator | none |
+| Arc 1, round 1 | Codex `gpt-6.1-sol`, high | approve | none | none |
+| Arc 1, round 1 | Opus 5.5, diff | approve | four comments: two restating their line or type deleted, one caller reference rewritten, one restated `if` dropped | an async-hook type guard: the TSDoc states the rule |
 
 ## Seeds (not run; orchestrator-owned)
 
