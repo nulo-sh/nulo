@@ -1,8 +1,8 @@
 ---
 plan: release-replay-1
 tier: light
-status: approved, arc 1 in progress
-issues: "none closed; refs #1314"
+status: completed in part
+issues: "none closed; refs #1314; #1636 filed in Phase 1"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,18 @@ post_implementation_hardening: not scheduled
 base: origin/dev at 3b845ef02
 trunk: dev
 ---
+
+## Outcome
+
+- Date: 2026-11-03.
+- Status: completed in part. The recording is refreshed, delivered as the PR `test(e2e): the v1.1.0 recording refreshed for the 1.2.0 candidate` against `dev`, awaiting the merge. The promote stays held: both live runs are red at the egress guard (#1636).
+- Shipped: `fixtures/update/v1.1.0.storage.json`, recorded again from Chrome at a candidate built from `55b2ad17b` (SHA-256 `217c3d50…38fd`). Both replays pass all four cases with it at `55b2ad17b`; the runs at the PR's head are in its body.
+- Did not hold: I1. Both live runs fail at the guard's close on v1.1.0's own Testnet host, which #1622 left undeclared, and the close's error hides whether the update itself passed ([lessons/phase-1.md](lessons/phase-1.md)).
+- Lessons: none promoted. The cause is an open issue, and `lessons.md` is at its budget.
+- Known limits: none.
+- Open items: #1636.
+- Deadline: the recording's dApp session expires 7 days after 2026-11-03 18:06-18:09 UTC. The replay refuses it from 2026-11-10 17:56 UTC at the earliest; record it again before a promote after that.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # release-replay-1: the v1.1.0 recording refreshed, and the update scenarios run against the 1.2.0 candidate
 
@@ -69,7 +81,7 @@ Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording
 3. **Gate:** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e/update-recording.test.ts`. Pass: exit 0. Layers: lint, typecheck, unit.
 4. Commit: `test(e2e): record v1.1.0's storage again for the 1.2.0 candidate`.
 
-### Phase 3: review, close-out, final replays, delivery
+### Phase 3: review, close-out, final replays, delivery ✓ (review loop clean at round 1: [lessons/phase-3.md](lessons/phase-3.md); the final-head runs: the PR body)
 1. Run the review loop (§ Post-implementation) over `git diff origin/dev...HEAD`.
 2. Merge `origin/dev`, then read what changed in `index.md` and `lessons.md`. Write the close-out commits (§ Post-implementation).
 3. At that head `H`, confirm the recording's SHA-256 is unchanged. Write `git diff --stat P H -- . ':(exclude)implementations-plan' ':(exclude)apps/extension/tests/e2e/fixtures/update/v1.1.0.storage.json'` to the PR body (D5).
