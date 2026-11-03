@@ -114,7 +114,7 @@ One PR from `worktree-fixes-1.2.0-1` to `dev` with `gh pr create`, opened only a
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `3b845ef02`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `3b845ef02`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over `git diff 3b845ef02...HEAD` after phase 1 is green: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; prompts under `~/.cache/nulo-backlog/fixes-1.2.0-1/`. Hard stop at three rounds; each round in `lessons/phase-1.md` and the table below.
 - **Approval boundary (a plan change; stop):** any code edit outside `TokensView.vue`, `useTokenBalanceSnapshot.ts` and their two test files; a change to `useBalanceTasks`, the task service or its retention; a new e2e scenario.
 - Close-out, as the PR's final commits: the Outcome block; D4's items filed in their homes after a dedupe; lessons promoted only if one generalizes; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done fixes-1.2.0-1 --merged`, trunk `dev`.
