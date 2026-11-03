@@ -11,7 +11,6 @@ import {
 	sourcePackageJsonPath,
 } from "./publish-firefox-amo"
 import {
-	type ApiResponse,
 	type Files,
 	POLL_INTERVAL_MS,
 	type RunIO,
@@ -19,6 +18,7 @@ import {
 	runPublishFirefoxAmo,
 	VALIDATION_DEADLINE_MS,
 } from "./publish-firefox-amo-run"
+import type { ApiResponse } from "./store-http"
 
 const SECRET = "SECRET-A1B2"
 const FIREFOX_MANIFEST = {

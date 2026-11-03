@@ -1,7 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test"
 import type { ApiRequest } from "./publish-chrome-store"
 import {
-	type ApiResponse,
 	POLL_INTERVAL_MS,
 	REQUEST_TIMEOUT_MS,
 	type RunIO,
@@ -9,6 +8,7 @@ import {
 	realFetch,
 	runPublishChromeStore,
 } from "./publish-chrome-store-run"
+import type { ApiResponse } from "./store-http"
 
 const ITEM = "abcdefghijklmnopabcdefghijklmnop"
 const TOKEN = "TOKEN-A1B2"
