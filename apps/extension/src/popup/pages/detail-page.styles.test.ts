@@ -57,6 +57,15 @@ describe("the detail pages share one look", () => {
 		)
 	})
 
+	test("the address card is the shared card, and its static form outranks the shared hover by two classes", () => {
+		const source = readFileSync(resolve(__dirname, "../components/modules/tx/DetailAddressCard.vue"), "utf8")
+			.replace(/\/\*[\s\S]*?\*\//g, "")
+			.replace(/\s+/g, " ")
+		expect(source).toContain('.card { composes: address_card from "../../../pages/detail-page.module.css"; }')
+		expect(source).toContain(".card.card_static { cursor: default; &:hover { background: transparent; } }")
+		expect(source).toContain('.label { composes: caption from "../../../pages/detail-page.module.css"; }')
+	})
+
 	test("the hero line's classes are the shared ones, with no rule of their own", () => {
 		const r = rules("../components/modules/tx/DetailHeroMeta.vue")
 		const names = ["hero_meta", "tx_time", "meta_sep", "hero_link"]

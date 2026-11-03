@@ -34,6 +34,7 @@ import {
 	journalProgressWord,
 } from "@/utils/journal-state"
 import { dashIfBlank } from "@/utils/string"
+import { activeAccountScope } from "@/utils/active-scope"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Composables */
@@ -81,10 +82,7 @@ const {
 	incomingTransferService,
 	configService,
 	priceService: incomingPriceService,
-	scope: () =>
-		appStore.profile?.id && appStore.network?.id && appStore.account?.address
-			? { profileId: appStore.profile.id, networkId: appStore.network.id, account: appStore.account.address }
-			: undefined,
+	scope: () => activeAccountScope(appStore),
 	afterRead: arrivals?.load,
 })
 
