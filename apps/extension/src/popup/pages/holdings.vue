@@ -17,6 +17,7 @@ import TokenList from "../components/modules/holdings/TokenList.vue"
 /** Services */
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
+import { TaskServiceClient } from "@/wallet/services/task/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 
@@ -28,6 +29,7 @@ import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
 
 /** Composables */
+import { useBalanceTasks } from "@/composables/useBalanceTasks"
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
 import { type TokenBalanceSnapshotState, useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
@@ -56,6 +58,17 @@ tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add((tb) => balances.inActiveScope(tb) && balances.onBalanceUpdated(tb))
 tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
 void balances.fetchTokenBalances()
+
+const taskService = new TaskServiceClient()
+const balanceTasks = useBalanceTasks({ client: taskService, account: () => appStore.account?.address })
+taskService.onTaskCreated.add(balanceTasks.onTaskCreated)
+taskService.onTaskUpdated.add(balanceTasks.onTaskUpdated)
+taskService.onTaskDeleted.add(balanceTasks.onTaskDeleted)
+/** A refused read costs only the refresh dot; a reconnect or a scope change reads again. */
+const readTasks = () => void balanceTasks.snapshot().catch(() => undefined)
+taskService.onConnected.add(readTasks)
+readTasks()
+const refreshing = computed(() => rows.value.some((tb) => balanceTasks.isUpdating(tb.id)))
 
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
@@ -162,6 +175,7 @@ watch(
 		rows.value = []
 		balancesState.value = "loading"
 		void balances.fetchTokenBalances()
+		readTasks()
 		void pins.refresh()
 	},
 )
@@ -176,6 +190,8 @@ onBeforeUnmount(() => {
 	document.fonts?.removeEventListener("loadingdone", fitTotal)
 	balances.dispose()
 	tokenBalanceService.disconnect()
+	balanceTasks.dispose()
+	taskService.disconnect()
 	prices.dispose()
 	priceService.disconnect()
 	configService.onConnected.remove(readConfig)
@@ -218,6 +234,7 @@ onBeforeUnmount(() => {
 				:usdRateOf="usdRateOf"
 				:dustThresholdUsd="dustThresholdUsd"
 				:isFlagged="isFlaggedAddress"
+				:refreshing="refreshing"
 				@addToken="openAddToken"
 			/>
 		</Flex>

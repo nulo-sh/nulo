@@ -1258,7 +1258,7 @@ function scrimCovers(page: Page, kind: PinnedPage): Promise<{ hero: boolean; nav
 	})
 }
 
-test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the middle still covers it; the shadow shows only once the middle has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; PageDown on a row scrolls the middle", async ({
+test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the middle still covers it; the shadow shows only once the middle has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; at 240px the hero scrolls away with the page; PageDown on a row scrolls the middle", async ({
 	listedExtensionPerTest,
 	skip,
 }) => {
@@ -1320,6 +1320,31 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 		expect(Math.abs(end.heroTop - top.heroTop)).toBeLessThanOrEqual(0.5)
 		expect(Math.abs(end.navBottom - end.viewport)).toBeLessThanOrEqual(0.5)
 	}
+
+	// Below the popup's width the whole page scrolls: the hero leaves with the rows, the middle never
+	// scrolls on its own, its shadow is gone, and the nav keeps the bottom.
+	await setViewport(page, { width: 240, height: 600 })
+	await settledRows(page, HOME_ROWS.length)
+	const narrow = await page.$eval(sel("home-page"), async (wrapper) => {
+		const q = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement
+		wrapper.scrollTop = 0
+		const heroTop = q("balance-amount").getBoundingClientRect().top
+		wrapper.scrollTop = wrapper.scrollHeight
+		await new Promise(requestAnimationFrame)
+		return {
+			scrollTop: wrapper.scrollTop,
+			heroRise: heroTop - q("balance-amount").getBoundingClientRect().top,
+			middle: q("home-scroller").scrollTop,
+			shadow: getComputedStyle(q("home-scroll-shadow")).display,
+			navGap: Math.abs(q("bottom-nav").getBoundingClientRect().bottom - window.innerHeight),
+		}
+	})
+	console.log(`[rows] Home at 240 × 600, scrolled to its end: ${JSON.stringify(narrow)}`)
+	expect(narrow.scrollTop).toBeGreaterThan(0)
+	expect(Math.abs(narrow.heroRise - narrow.scrollTop)).toBeLessThanOrEqual(0.5)
+	expect([narrow.middle, narrow.shadow]).toEqual([0, "none"])
+	expect(narrow.navGap).toBeLessThanOrEqual(0.5)
+	await shotSend(page, "home-240-scrolled", "home-page")
 
 	await setViewport(page, { width: 360, height: 600 })
 	await settledRows(page, HOME_ROWS.length)

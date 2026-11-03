@@ -114,7 +114,7 @@ export type Companions = (naturalId: string) => Promise<LegacySeal[]>
 /**
  * Commits prepared legacy conversions, of any sealed roots, as one: only while every legacy key
  * still holds the text it was sealed from, every profile its keys and `isCurrent()` holds, all
- * read after the last read and before the dispatch. Then ONE `set` of every sealed copy and, once
+ * read after the last read and before the dispatch. Then at most ONE `set` of every sealed copy and, once
  * it lands, ONE `remove` of every plaintext key a keyed root leaves behind; a crash between leaves
  * both forms of each row, which reads dedupe and the next pass finishes. Returns whether it did.
  */
@@ -455,7 +455,7 @@ export class SealedEntityStorage<T> {
 
 	/**
 	 * Gives the ownerless legacy row at `naturalId` to `profileId`: seals it, stamped with the
-	 * profile, under the profile's keyed id and removes the plaintext original in the same dispatch,
+	 * profile, under the profile's keyed id, then removes the plaintext original once that lands,
 	 * only while the original still holds `text` and the profile the keys it was sealed under. A
 	 * sealed row the profile already holds at that id is kept and only the original removed: an
 	 * unauthenticated row never replaces an authenticated one. The caller decides the profile owns it

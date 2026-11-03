@@ -4,9 +4,8 @@ import { ActivationSupersededError, activationFailureReason, awaitProfileActivat
 import { isActivating, isActivatingOtherThan, supersedeProfileActivations } from "@/composables/useProfileBootstrap"
 import { isPopupSubmitKey } from "@/composables/usePopupEntity"
 import type { useAppStore } from "@/stores/app.store"
-import { initTransactionService, managers } from "@/utils/core"
+import { ensureAccountClient, initTransactionService, managers, requireAccount } from "@/utils/core"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { AccountServiceClient } from "@/wallet/services/account/client"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 
 type AppStore = ReturnType<typeof useAppStore>
@@ -59,14 +58,12 @@ async function openCreatedProfile(profile: ProfileInfo, { appStore, router, flow
 	})
 	assertActive()
 
-	// Keep an existing client: replacing it abandoned a connected port, and disconnecting it would
-	// reject the calls of any flow still holding it.
-	managers.account ??= new AccountServiceClient()
+	ensureAccountClient()
 
 	await setLastActiveProfileId(profile.id)
 	assertActive()
 	if (!appStore.network) throw new Error("Network not set")
-	const accounts = await managers.account.getAccounts(profile.id, appStore.network.chainId, true)
+	const accounts = await requireAccount().getAccounts(profile.id, appStore.network.chainId, true)
 	assertActive()
 	appStore.accounts = accounts
 

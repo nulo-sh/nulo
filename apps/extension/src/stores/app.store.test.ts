@@ -5,9 +5,18 @@ import type { Network } from "@/wallet/services/network/client"
 import type { Tx } from "@/wallet/services/transaction/spec"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 
-import { managers as coreManagers } from "@/utils/core"
+import { replaceNetworkClient } from "@/utils/core"
 import { NodeStatus } from "@/wallet/services/network/client"
 import { useAppStore } from "./app.store"
+
+/** The network client the owned writer installs; a test sets its status read. */
+const networkClient = vi.hoisted(() => ({ getNodeStatus: vi.fn(), disconnect: vi.fn() }))
+vi.mock("@/wallet/services/network/client", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	NetworkServiceClient: vi.fn(function NetworkServiceClient() {
+		return networkClient
+	}),
+}))
 
 // `managers` is auto-imported from `@/utils/core` by the PRODUCTION vite config
 // (which scans `src/utils/`); the vitest config only auto-imports vue/vue-router,
@@ -383,8 +392,11 @@ describe("app.store — explorer choice", () => {
 })
 
 describe("app.store — the network status dot", () => {
+	beforeEach(() => {
+		replaceNetworkClient()
+	})
 	const statusRead = (read: () => Promise<NodeStatus>) => {
-		;(coreManagers as { network?: unknown }).network = { getNodeStatus: vi.fn(read) }
+		networkClient.getNodeStatus.mockImplementation(read)
 	}
 
 	test("a status read the popup loses reads inactive, not sync; one that answers keeps its answer (control)", async () => {

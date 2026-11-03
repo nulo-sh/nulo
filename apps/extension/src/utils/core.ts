@@ -1,29 +1,14 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 /**
- * Popup-side service-client registry.
- *
- * Historically this was `core.js` with module-eval side effects — importing
- * it opened `ProfileServiceClient` + `ContactServiceClient` ports eagerly,
- * which made the module impossible to import in tests without a live SW and
- * caused phantom ports when multiple popup surfaces loaded the bundle.
- *
- * The public shape (`managers`, `isServiceReady`, `initTransactionService`,
- * `refreshBalances`) is preserved — every existing consumer keeps working
- * unchanged. Under the hood:
- *   1. `managers` is a Proxy; client construction is deferred until first
- *      access (or until `initAppServiceContext()` is called explicitly).
- *   2. `initAppServiceContext()` is the explicit boot hook. Called from
- *      `popup/index.ts` at startup to preserve the old eager-init timing.
- *
- * Tests that import `@/utils/core` without calling `initAppServiceContext()`
- * and without touching `managers` pay nothing. Tests that want the real
- * clients can still call the init explicitly.
+ * Popup-side service-client registry. Importing it opens no port: `managers` builds the eager
+ * clients on first access, or at the boot hook `initAppServiceContext()`. `managers` is read-only;
+ * the lazy slots change only through their owned writers below.
  */
 
-import type { AccountServiceClient } from "@/wallet/services/account/client"
+import { AccountServiceClient } from "@/wallet/services/account/client"
 import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { LegalAcceptanceServiceClient } from "@/wallet/services/legal/client"
-import type { NetworkServiceClient } from "@/wallet/services/network/client"
+import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { NetworkResetServiceClient } from "@/wallet/services/network-reset/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
@@ -58,8 +43,9 @@ export function waitForServiceReady(ms: number): Promise<boolean> {
 /**
  * Service-client container. `profile`, `contact`, `legal`, `networkReset` and `uiPreference` are populated eagerly by
  * `initAppServiceContext()` (called at popup boot). `network`, `transaction`,
- * `account` are LAZY: `null` until the popup's unlock flow assigns them (after
- * `bootstrapActiveProfile()` resolves the active profile/network/account).
+ * `account` are LAZY: `null` until the popup's unlock flow installs them through
+ * their owned writers (after `bootstrapActiveProfile()` resolves the active
+ * profile/network/account).
  *
  * The lazy three are typed `| null` (honest) — a bare `managers.network` read is
  * `NetworkServiceClient | null`, so an unchecked `.foo()` is a compile error IN
@@ -109,8 +95,6 @@ function createAppServices(): AppServices {
 	const uiPreferenceService = new UiPreferenceServiceClient()
 	uiPreferenceService.connect()
 
-	// `network`, `transaction`, `account` remain `null` until the popup's unlock
-	// flow sets them (see AppServices jsdoc + the require*/get* accessors).
 	return {
 		profile: profileService,
 		network: null,
@@ -123,30 +107,32 @@ function createAppServices(): AppServices {
 	}
 }
 
+function services(): AppServices {
+	appServices ??= createAppServices()
+	return appServices
+}
+
 /**
  * Eagerly create the profile + contact clients. Safe to call multiple times.
  * Call once at popup boot (see `popup/index.ts`) to match the old module-eval
  * init timing.
  */
-export function initAppServiceContext(): AppServices {
-	if (!appServices) appServices = createAppServices()
-	return appServices
+export function initAppServiceContext(): void {
+	services()
 }
 
 /**
  * Public handle. Lazily triggers `initAppServiceContext()` on first access,
  * so any consumer that reads `managers.profile` gets a live client even if
- * the boot hook wasn't called.
+ * the boot hook wasn't called. A write throws: a lazy slot changes only
+ * through its owned writer.
  */
-export const managers: AppServices = new Proxy({} as AppServices, {
+export const managers: Readonly<AppServices> = new Proxy({} as AppServices, {
 	get(_, prop: string | symbol) {
-		const services = appServices ?? initAppServiceContext()
-		return (services as unknown as Record<string | symbol, unknown>)[prop]
+		return (services() as unknown as Record<string | symbol, unknown>)[prop]
 	},
-	set(_, prop: string | symbol, value: unknown) {
-		const services = appServices ?? initAppServiceContext()
-		;(services as unknown as Record<string | symbol, unknown>)[prop] = value
-		return true
+	set(_, prop: string | symbol) {
+		throw new TypeError(`managers is read-only: ${String(prop)} changes only through its owned writer`)
 	},
 })
 
@@ -167,8 +153,7 @@ export function requireAccount(): AccountServiceClient {
 	return client
 }
 
-/** The lazy clients or `null` — for sites that tolerate the unset case (e.g.
- *  `getNetwork()?.disconnect()` before reassigning). */
+/** The lazy clients or `null`, for sites that tolerate the unset case. */
 export const getNetwork = (): NetworkServiceClient | null => managers.network
 export const getTransaction = (): TransactionServiceClient | null => managers.transaction
 export const getAccount = (): AccountServiceClient | null => managers.account
@@ -203,11 +188,42 @@ export async function refreshBalances(accounts: Array<{ address: string }>): Pro
 	}
 }
 
+type LazySlot = "network" | "account" | "transaction"
+
+function replaceSlot<Slot extends LazySlot>(slot: Slot, create: () => NonNullable<AppServices[Slot]>): NonNullable<AppServices[Slot]> {
+	const registry = services()
+	registry[slot]?.disconnect()
+	const client = create()
+	registry[slot] = client
+	return client
+}
+
+/** Installs a new network client in place of the current one, which is disconnected. */
+export function replaceNetworkClient(): NetworkServiceClient {
+	return replaceSlot("network", () => new NetworkServiceClient())
+}
+
+/** Installs a new account client in place of the current one, which is disconnected. */
+export function replaceAccountClient(): AccountServiceClient {
+	return replaceSlot("account", () => new AccountServiceClient())
+}
+
+/**
+ * The account client, created only while the slot is unset. An existing one is kept: replacing it
+ * would abandon a connected port, and disconnecting it would reject the calls of any flow still holding it.
+ */
+export function ensureAccountClient(): AccountServiceClient {
+	const registry = services()
+	registry.account ??= new AccountServiceClient()
+	return registry.account
+}
+
 export function initTransactionService(onTransactionAdded: (tx: Tx) => void, onTransactionUpdated: (tx: Tx) => void): void {
-	if (managers.transaction) managers.transaction.disconnect()
-	const transactionService = new TransactionServiceClient()
-	transactionService.onTransactionAdded.add(onTransactionAdded)
-	transactionService.onTransactionUpdated.add(onTransactionUpdated)
-	transactionService.connect()
-	managers.transaction = transactionService
+	replaceSlot("transaction", () => {
+		const transactionService = new TransactionServiceClient()
+		transactionService.onTransactionAdded.add(onTransactionAdded)
+		transactionService.onTransactionUpdated.add(onTransactionUpdated)
+		transactionService.connect()
+		return transactionService
+	})
 }

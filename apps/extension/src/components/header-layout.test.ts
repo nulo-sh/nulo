@@ -30,8 +30,9 @@ test("the name sits in a slot with no intrinsic width, and the account group kee
 	expect(declarationsOf(parsed, ".name_slot")).toMatchObject({ contain: "inline-size", "align-self": "stretch" })
 	expect(declarationsOf(parsed, ".account_group")["min-width"]).toBeUndefined()
 	expect(declarationsOf(parsed, ".account_col")["min-width"]).toBeUndefined()
-	// The copy icon spans 6 to 18px past the address: this padding and the row's 12px gap hold it.
+	// The copy icon spans 2 to 14px past the address: this padding and the row's 8px gap hold it.
 	expect(declarationsOf(parsed, ".account_address").padding).toBe("0 6px 0 0")
+	expect(declarationsOf(parsed, ".copy_reveal").left).toBe("calc(100% + 2px)")
 })
 
 test("the network chip's row may shrink below its content", () => {
@@ -60,4 +61,17 @@ test("with its name hidden, the network chip keeps the height the name gives it,
 
 test("below the popup's width the network chip keeps its narrow sides, so its dot stays inside it at 240px", () => {
 	expect(declarationsAt(".network_chip", "(width < 359px)")).toEqual({ gap: "4px", padding: "6px 3px" })
+})
+
+test("at the popup's width the avatar keeps the 24px column, the chips take the right-hand room, and the chip has no cap", () => {
+	expect(declarationsAt(".wrapper")).toMatchObject({ gap: "8px", padding: "0 6px 0 24px" })
+	expect(declarationsAt(".wrapper", "(width < 359px)")).toEqual({ padding: "0 12px 0 16px" })
+	expect(declarationsOf(parsed, ".network_chip")["max-width"]).toBeUndefined()
+})
+
+test("narrow with the name on, the account column gives way first: below 117px its name and address leave", () => {
+	expect(declarationsAt(".name_first .account_group", "(width < 359px)")).toEqual({ flex: "1 1 0" })
+	expect(declarationsAt(".name_first .account_col", "(width < 359px)")).toEqual({ container: "account / inline-size" })
+	expect(declarationsOf(parsed, ".account_col").container).toBeUndefined()
+	expect(declarationsAt(".name_slot, .account_address", "account (width < 117px)")).toEqual({ display: "none" })
 })

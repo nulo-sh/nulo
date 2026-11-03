@@ -189,6 +189,11 @@ describe("select", () => {
 			{ shasums: `${"e".repeat(64)}  ${NAMES[0]}\n${BUILT[NAMES[1]]}  ${NAMES[1]}\n` },
 			"SHASUMS256.txt does not match",
 		],
+		[
+			"a SHASUMS256.txt that names another zip",
+			{ shasums: `${BUILT[NAMES[0]]}  ${NAMES[0]}\n${BUILT[NAMES[1]]}  nulo-edge-1.2.3.zip\n` },
+			"SHASUMS256.txt does not list exactly the two zips",
+		],
 	])("refuses %s", async (_, over, reason) => {
 		const { exit, outputs, logs } = runIn(DISPATCH, published(over), "select")
 		expect(await exit).toBe(1)
@@ -395,6 +400,84 @@ describe("inputs", () => {
 			])
 		} finally {
 			fetchSpy.mockRestore()
+		}
+	})
+})
+
+const API_HEADERS = { Authorization: "Bearer t", "X-GitHub-Api-Version": "2022-11-28" }
+
+describe("the REST transport", () => {
+	const answering = (...answers: Response[]) => {
+		const timeouts = spyOn(AbortSignal, "timeout")
+		const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async () => answers.shift()) as unknown as typeof fetch)
+		const calls = () => fetchSpy.mock.calls.map(([url, init]) => [String(url), init?.method, init?.redirect, init?.headers])
+		const restore = () => {
+			fetchSpy.mockRestore()
+			timeouts.mockRestore()
+		}
+		return { timeouts, calls, restore }
+	}
+
+	test("a tag read lets a 404 through as no tag and refuses a 500 with GitHub's message", async () => {
+		const stub = answering(
+			Response.json({ message: "Not Found" }, { status: 404 }),
+			Response.json({ message: "boom" }, { status: 500 }),
+		)
+		try {
+			const io = realIO("o/r", "t")
+			expect(await io.tagCommit("v9")).toBeNull()
+			expect(await io.tagCommit("v9").catch((e: Error) => e.message)).toBe("GET git/ref/tags/v9: HTTP 500: boom")
+			expect(stub.calls()[0]).toEqual([
+				"https://api.github.com/repos/o/r/git/ref/tags/v9",
+				undefined,
+				"manual",
+				{ ...API_HEADERS, Accept: "application/vnd.github+json" },
+			])
+			expect(stub.timeouts.mock.calls).toEqual([[300_000], [300_000]])
+		} finally {
+			stub.restore()
+		}
+	})
+
+	test("an upload goes to the uploads host as octet-stream, with the token and 300 s", async () => {
+		const stub = answering(Response.json({ id: 1 }, { status: 201 }))
+		try {
+			await realIO("o/r", "t").uploadAsset(7, "nulo-chrome-1.2.3.zip", "/nonexistent.zip")
+			expect(stub.calls()).toEqual([
+				[
+					"https://uploads.github.com/repos/o/r/releases/7/assets?name=nulo-chrome-1.2.3.zip",
+					"POST",
+					"manual",
+					{ ...API_HEADERS, Accept: "application/vnd.github+json", "Content-Type": "application/octet-stream" },
+				],
+			])
+			expect(stub.timeouts.mock.calls).toEqual([[300_000]])
+		} finally {
+			stub.restore()
+		}
+	})
+
+	test("a download asks the API for the bytes, then follows its redirect with no credential", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "attach-dl-"))
+		const stub = answering(
+			new Response(null, { status: 302, headers: { location: "https://objects.example/asset" } }),
+			new Response("zip bytes"),
+		)
+		try {
+			await realIO("o/r", "t").downloadAsset(7, `${dir}/a.zip`)
+			expect(stub.calls()).toEqual([
+				[
+					"https://api.github.com/repos/o/r/releases/assets/7",
+					undefined,
+					"manual",
+					{ ...API_HEADERS, Accept: "application/octet-stream" },
+				],
+				["https://objects.example/asset", undefined, undefined, undefined],
+			])
+			expect(stub.timeouts.mock.calls).toEqual([[300_000], [300_000]])
+		} finally {
+			stub.restore()
+			rmSync(dir, { recursive: true, force: true })
 		}
 	})
 })

@@ -112,15 +112,24 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(w.get('[data-testid="send-review-sheet"]').attributes("data-open")).toBe("true")
 	})
 
-	test("summary: amount with its symbol, the recipient's name and masked address", () => {
+	const emphasisedEnds = (wrapper: ReturnType<typeof mountSheet>) =>
+		wrapper
+			.get('[data-testid="send-review-recipient"]')
+			.findAll("span")
+			.filter((el) => el.classes().some((name) => name.includes("address_end")))
+			.map((el) => el.text())
+
+	test("summary: amount with its symbol, the recipient's name and whole address, its first six and last four characters emphasised", () => {
 		w = mountSheet()
 		expect(w.get('[data-testid="send-review-amount"]').text()).toBe("25TST")
-		expect(w.get('[data-testid="send-review-recipient"]').text()).toBe("to Ana · 0xaaaaaa…12345678")
+		expect(w.get('[data-testid="send-review-recipient"]').text()).toBe(`to Ana · ${ADDRESS}`)
+		expect(emphasisedEnds(w)).toEqual([ADDRESS.slice(0, 6), ADDRESS.slice(-4)])
 	})
 
-	test("a recipient with no name is just its masked address", () => {
+	test("a recipient with no name is just its whole address, with the same ends", () => {
 		w = mountSheet({ recipientName: undefined })
-		expect(w.get('[data-testid="send-review-recipient"]').text()).toBe("to 0xaaaaaa…12345678")
+		expect(w.get('[data-testid="send-review-recipient"]').text()).toBe(`to ${ADDRESS}`)
+		expect(emphasisedEnds(w)).toEqual([ADDRESS.slice(0, 6), ADDRESS.slice(-4)])
 	})
 
 	test("an unfinished form reads — and cannot send", () => {

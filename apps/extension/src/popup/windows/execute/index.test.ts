@@ -244,6 +244,7 @@ const factory = () => mount(Execute, { global: { stubs: STUBS } })
 type ExecVm = {
 	reject: (end: "reject" | "close" | "lock" | "switch") => Promise<void>
 	approve: () => Promise<void>
+	setError: (title: string, tooltip?: string, type?: string) => void
 	closeWindow: (interactionCompleted?: boolean) => void
 	isWrongProfile: boolean
 	initComplete: boolean
@@ -1168,6 +1169,31 @@ describe("execute window — an operation the app pays for", () => {
 		expect(sendEvent(confirm().element, "click")).toBeDefined()
 		await flushPromises()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test.each([
+		["error", true],
+		["warning", false],
+	])("with every other hold clear, a processing %s holds Confirm: %s", async (type, held) => {
+		const { vm, fees, confirm } = await opened()
+		fees.api.results.value = verdict(false)
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		vm.setError("Processing error.", "The node refused the request", type)
+		await flushPromises()
+		expect(confirm().attributes("disabled") !== undefined).toBe(held)
+	})
+
+	test.each([
+		["error", 0],
+		["warning", 1],
+	])("approve() under a processing %s sends %i approvals", async (type, sent) => {
+		const { vm, fees } = await opened()
+		fees.api.results.value = verdict(false)
+		await flushPromises()
+		vm.setError("Processing error.", "The node refused the request", type)
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(sent)
 	})
 
 	test("a short read the transaction could still fund leaves Confirm as today", async () => {

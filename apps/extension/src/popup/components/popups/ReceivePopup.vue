@@ -16,6 +16,7 @@ import { usePopupStore } from "@/stores/popup.store.ts"
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
 import { endsSelection } from "@/utils/selection"
+import { addressEnds } from "@/utils/string"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
 const { order, depth } = usePopupStack("receive")
@@ -26,14 +27,16 @@ const props = defineProps({
 })
 
 const account = computed(() => appStore.account)
+const addressParts = computed(() => addressEnds(appStore.account.address))
 
 const handleCopyAddress = (e) => {
 	if (endsSelection(e)) return
 	void copyWithToast(appStore.account.address, openToast, "Address is copied")
 }
 
+// The QR follows the address the text under it shows, should the account change while the sheet is open.
 watch(
-	() => props.show,
+	() => [props.show, appStore.account?.address],
 	() => {
 		if (!props.show) return
 
@@ -63,15 +66,9 @@ watch(
 								{{ account.name }}
 							</Text>
 
-							<Flex @click="handleCopyAddress" align="center" gap="6" class="copyable" data-testid="receive-address">
-								<Text variant="data-lead" color="body" data-testid="receive-address-text">
-									{{ account.address.slice(0, 6) }}
-									<Text color="tertiary">•••</Text>
-									{{ account.address.slice(-4) }}
-								</Text>
-
-								<Icon name="copy" size="12" color="tertiary" />
-							</Flex>
+							<button type="button" :aria-label="`Copy address ${account.address}`" :class="$style.address" data-testid="receive-address" @click="handleCopyAddress">
+								<span class="type--input-data" :class="$style.address_text" data-testid="receive-address-text"><span :class="$style.address_end">{{ addressParts.head }}</span>{{ addressParts.middle }}<span :class="$style.address_end">{{ addressParts.tail }}</span><Icon name="copy" size="14" aria-hidden="true" :class="$style.address_glyph" /></span>
+							</button>
 
 							<Text variant="caption" color="secondary" :class="$style.network" data-testid="receive-network">Your address on {{ appStore.network.name }}</Text>
 						</Flex>
@@ -95,6 +92,36 @@ watch(
 
 .name_size {
 	font-size: 14px;
+}
+
+.address {
+	padding: 0;
+	background: none;
+	cursor: pointer;
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
+}
+
+.address_text {
+	display: block;
+	max-width: 260px;
+	text-align: center;
+	color: var(--txt-tertiary);
+	overflow-wrap: anywhere;
+	user-select: text;
+}
+
+.address_end {
+	color: var(--txt-primary);
+}
+
+.address_glyph {
+	display: inline-block;
+	margin-left: 6px;
+	vertical-align: -2px;
 }
 
 .network {

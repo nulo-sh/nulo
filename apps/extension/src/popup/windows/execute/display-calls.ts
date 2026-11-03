@@ -47,6 +47,8 @@ export function grantContentsOf(op: DraftUIOperation): AuthwitContent[] {
 	return (op.actions ?? []).flatMap((action) => (action.kind === "add_public_authwit" ? [action.content] : []))
 }
 
+export const awaitsGrantDecode = (op: DraftUIOperation, decoded: boolean): boolean => grantContentsOf(op).length > 0 && !decoded
+
 /** The decoder itself was unreachable: every call reads as undecoded for that reason, so the card
  *  falls back to raw fields instead of waiting forever. */
 export const undecodedAll = (count: number): DecodedCall[] =>

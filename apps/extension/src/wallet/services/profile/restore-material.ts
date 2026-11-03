@@ -1,13 +1,6 @@
-import { array_equals, getMnemonic } from "@nulo/wallet-core/utils"
-import {
-	asImportedKeysDek,
-	asMasterSecretBytes,
-	deriveMasterFromMnemonic,
-	type ImportedKeysDek,
-	type MasterSecretBytes,
-	zeroize,
-} from "@nulo/wallet-crypto"
+import { asImportedKeysDek, asMasterSecretBytes, type ImportedKeysDek, type MasterSecretBytes, zeroize } from "@nulo/wallet-crypto"
 import { fromBase64Lenient } from "@/wallet/utils"
+import { entropyDerivesMaster } from "./profile-secret-codec"
 import type { RestoreSecret } from "./spec"
 
 /** A full backup's secret body once decoded and checked, whatever unlock the restored profile
@@ -31,10 +24,7 @@ export async function decodeRestoreMaterial(secret: RestoreSecret): Promise<Rest
 		zeroize(entropy)
 		throw new Error("Invalid entropy length")
 	}
-	const rederived = await deriveMasterFromMnemonic(await getMnemonic(entropy))
-	const paired = array_equals(rederived, master)
-	zeroize(rederived)
-	if (!paired) {
+	if (!(await entropyDerivesMaster(master, entropy))) {
 		zeroize(master)
 		zeroize(entropy)
 		throw new Error("Backup entropy does not derive the backup master key")

@@ -7,7 +7,7 @@ import StaleNetworkTakeover from "@/components/stale-network/StaleNetworkTakeove
 import NetworkArrival from "@/components/network-arrival/NetworkArrival.vue"
 
 /** Utils */
-import { managers, isServiceReady } from "@/utils/core"
+import { managers, isServiceReady, replaceAccountClient } from "@/utils/core"
 import { legalSheetMayCover } from "@/utils/legal-sheet"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { pointToolbarAtSidebar } from "@/utils/browser-surface"
@@ -299,11 +299,7 @@ const switchNetwork = createNetworkSwitchHandler({
 		appStore.profile?.id === scope.profileId && appStore.network?.id === scope.networkId && appStore.network?.chainId === scope.chainId,
 	syncNetworkStatus: () => appStore.syncNetworkStatus(),
 	markNetworkInactive: (networkId) => appStore.markNetworkInactive(networkId),
-	replaceAccountClient: () => {
-		managers.account?.disconnect()
-		managers.account = new AccountServiceClient()
-		return managers.account
-	},
+	replaceAccountClient,
 	setAccounts: (accounts) => {
 		appStore.accounts = accounts
 	},
