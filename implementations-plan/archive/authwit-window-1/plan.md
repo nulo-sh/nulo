@@ -154,7 +154,7 @@ The owner's words are the scope's sign-off (#1639 § Decision); the rendering an
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `ea282b7bc`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `ea282b7bc`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over `git diff ea282b7bc...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, with one Opus 5.5 diff review (`general-purpose`) beside round 1. Prompts under `~/.cache/nulo-backlog/authwit-window-1/`. Hard stop at three rounds; log each in `lessons/phase-1.md` and § Audit verdicts.
 - Approval boundary (a plan change; stop): a signature as any account but the sender; a screen change beyond § UI impact; a new log line; a stored shape; a change to the bridge's scope check.
 - Close-out: the Outcome; I3 and I4 filed as closed `known-limit` issues; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done authwit-window-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/authwit-window-1/plan.md`. A session without a `/loop` arms one background wait after its report.

@@ -707,7 +707,7 @@ the pattern.
   entry (`state` ending `(network)`) must also be read by a state `type-roles-windows.test.ts`
   renders, or that file's last test fails: budget the sweep as an e2e scenario. An `AddressDisplay`
   paints its name only once its contact lookup returns; wait on `[data-address-shows="name"]`
-  before reading it (`implementations-plan/authwit-window-1/lessons/phase-1.md`).
+  before reading it (`implementations-plan/archive/authwit-window-1/lessons/phase-1.md`).
 - **The dApp never sees the wallet's real error.** A failed `simulateTx` / `sendTx` reaches the feed
   as `"The wallet could not process the request."` (the scrubbed envelope, by design). The reason
   is in the worker's log trail, retained only with Developer Mode on: toggle
