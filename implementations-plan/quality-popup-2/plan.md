@@ -117,6 +117,9 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 | Arc 1 Codex R1 (diff from `6c7ba2867`) | changes, no production regression | A1: the corner-link pin sends its click through `sendEvent`; A2: the dispose pin holds a recent own record (mutation-checked); A3: `accept`'s comment; A4: four restating comments cut | A4 in part: the `isArriving` and `tokens` prop comments kept (each states a rule the code cannot) |
 | Arc 1 Opus review (beside R1) | approve, no defect | seven comments corrected (dApp tasks refused, the catch, the window, an empty snapshot, the cancel and scope comments, a stale line); one unused import dropped | none; two findings duplicated A3 and A4 |
 | Arc 1 Codex R2 (resumed) | approve | none; fixes verified, no regression | none |
+| Arc 2 Codex R1 (diff from `422e22932`) | approve | B1: the await-count pin's restating comment cut | none |
+| Arc 2 Opus review (beside R1) | approve | O1: a pin per page for D18's `undefined` stop (red with the stop removed); O2: the helper's TSDoc names the stop; O3: `currentPasskey`'s comment keeps only what the wrapper adds | none |
+| Arc 2 Codex R2 (resumed) | approve | none; fixes verified, no regression | none |
 
 ## Delivery
 

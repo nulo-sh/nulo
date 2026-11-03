@@ -13,3 +13,4 @@
 - 2026-11-03 merged origin/dev (index.md conflict only); on the merged head: lint, typecheck:all, test:all (extension 17100 tests), smoke Chrome 35 + 1 Firefox-only skip, smoke Firefox 36, network 21 in 804 s, check:plans: all green
 - 2026-11-03 arc 2 started: branch `quality-popup-2-a2` from `origin/dev` at 422e22932 (D17); base audit:dup production 174/8744; base smoke Chrome 5 files 24 passed in 159 s, Firefox 6 files 25 passed + 5 Chrome-only skips in 327 s
 - 2026-11-03 phase 4 green: pins green before the move (scope pin and both name pins mutation-checked); 14 test files / 662 tests pass, lint, typecheck:all
+- 2026-11-03 arc 2 review loop converged: Codex R1 approve (1 nit), Opus approve (3 accepted), Codex R2 approve
