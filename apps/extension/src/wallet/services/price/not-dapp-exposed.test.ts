@@ -9,6 +9,7 @@
 
 import { describe, expect, test } from "vitest"
 import backgroundSource from "@/wallet/services/wallet-sdk/background.ts?raw"
+import contentAdmissionSource from "@/wallet/services/wallet-sdk/content-admission.ts?raw"
 import discoverySource from "@/wallet/services/wallet-sdk/discovery-flow.ts?raw"
 import walletMessageSource from "@/wallet/services/wallet-sdk/wallet-message.ts?raw"
 import dispatcherSource from "../../../../../../packages/wallet-bridge/src/dispatcher.ts?raw"
@@ -16,6 +17,7 @@ import dispatcherSource from "../../../../../../packages/wallet-bridge/src/dispa
 describe("PriceService dApp exposure", () => {
 	test.each([
 		["background handler", backgroundSource, "export function initWalletSdkHandler("],
+		["content admission", contentAdmissionSource, "export function buildContentTransport("],
 		["discovery workflow", discoverySource, "export async function handleDiscovery("],
 		["request pipeline", walletMessageSource, "export async function handleWalletMessage("],
 	])("wallet-sdk %s does not wire the price service", (_, source, entry) => {

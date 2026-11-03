@@ -23,7 +23,7 @@ type Exception = { value: string | null; note: string }
 type Exceptions = Partial<Record<Surface, Partial<Record<Shared, Exception>>>>
 
 const NO_RECORDED_REASON = "kept as found; no document records a reason"
-const EMPTY_API_ERRORS = "its own responses are empty-bodied /api/* errors; the origin's pages set it (src/worker.ts)"
+const EMPTY_API_ERRORS = "its own responses are empty-bodied /api/* errors; the origin's pages set it (apps/landing/src/worker.ts)"
 
 const EXCEPTIONS: Exceptions = {
 	landing: { "referrer-policy": { value: "strict-origin-when-cross-origin", note: NO_RECORDED_REASON } },
@@ -59,27 +59,41 @@ const SURFACES: Readonly<Record<Surface, HeaderMap>> = {
 	"token-list": headersFile("infra/token-list/public/_headers"),
 }
 
+/** The surfaces without an exception for `header` must all set it, to one value. */
+function agreementProblems(header: Shared, values: ReadonlyMap<Surface, string | null>): string[] {
+	const distinct = new Set(values.values())
+	if (distinct.size > 1) return [`${header}: ${[...values].map(([surface, value]) => `${surface}=${value}`).join(", ")}`]
+	if (distinct.has(null)) return [`${header}: no surface without an exception sets it`]
+	return []
+}
+
+/** An excepted surface must hold exactly its recorded value, and that value must still differ. */
+function exceptionProblem(
+	header: Shared,
+	surface: Surface,
+	value: string | null,
+	exception: Exception,
+	agreed: string | null | undefined,
+): string | undefined {
+	if (value !== exception.value) return `${header}: ${surface}=${value}, its exception records ${exception.value}`
+	if (exception.value === agreed) return `${header}: ${surface} now agrees, so its exception is stale`
+	return undefined
+}
+
 /** One line per surface and shared header that breaks the rule; empty when every surface holds it. */
 function disagreements(surfaces: Readonly<Record<Surface, HeaderMap>>, exceptions: Exceptions): string[] {
-	const found: string[] = []
 	const names = Object.keys(surfaces) as Surface[]
-	for (const header of SHARED) {
+	return SHARED.flatMap((header) => {
 		const headerOf = (surface: Surface) => surfaces[surface][header] ?? null
-		const agreeing = names.filter((surface) => exceptions[surface]?.[header] === undefined)
-		const values = new Set(agreeing.map(headerOf))
-		if (values.size > 1) found.push(`${header}: ${agreeing.map((s) => `${s}=${headerOf(s)}`).join(", ")}`)
-		const [agreed] = values
-		for (const surface of names) {
+		const agreeing = new Map(names.filter((s) => exceptions[s]?.[header] === undefined).map((s) => [s, headerOf(s)]))
+		const distinct = new Set(agreeing.values())
+		const agreed = distinct.size === 1 ? [...distinct][0] : undefined
+		const excepted = names.flatMap((surface) => {
 			const exception = exceptions[surface]?.[header]
-			if (exception === undefined) continue
-			if (headerOf(surface) !== exception.value) {
-				found.push(`${header}: ${surface}=${headerOf(surface)}, its exception records ${exception.value}`)
-			} else if (values.size === 1 && exception.value === agreed) {
-				found.push(`${header}: ${surface} now agrees, so its exception is stale`)
-			}
-		}
-	}
-	return found
+			return exception ? (exceptionProblem(header, surface, headerOf(surface), exception, agreed) ?? []) : []
+		})
+		return [...agreementProblems(header, agreeing), ...excepted]
+	})
 }
 
 const withHeader = (surface: Surface, header: Shared, value: string | null) => {
@@ -110,6 +124,16 @@ describe("the edge surfaces' shared security headers", () => {
 		],
 	])("reports %s", (_, surfaces, line) => {
 		expect(disagreements(surfaces, EXCEPTIONS)).toEqual([line])
+	})
+
+	test("reports a header that no surface without an exception sets", () => {
+		const dropped = Object.fromEntries(
+			Object.entries(SURFACES).map(([surface, headers]) => {
+				const { "x-content-type-options": _dropped, ...rest } = headers
+				return [surface, rest]
+			}),
+		) as Record<Surface, HeaderMap>
+		expect(disagreements(dropped, EXCEPTIONS)).toEqual(["x-content-type-options: no surface without an exception sets it"])
 	})
 
 	test("reports an exception the surface's value has caught up with as stale", () => {

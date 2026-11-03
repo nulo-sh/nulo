@@ -409,6 +409,8 @@ function discoveryDeps(deps: SdkDeps, state: SdkHandlerState): DiscoveryDeps {
 	}
 }
 
+/** `late` is bound before `handler.initialize()` and never rebound, so reading it on arrival equals
+ *  reading it behind the session's FIFO. */
 function messagePipelineDeps(deps: SdkDeps, state: SdkHandlerState): MessagePipelineDeps {
 	return {
 		handler: state.late.handler!,
