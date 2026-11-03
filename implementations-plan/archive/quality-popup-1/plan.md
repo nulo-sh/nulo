@@ -1,7 +1,7 @@
 ---
 plan: quality-popup-1
 tier: light (the spawn prompt names it; one Codex audit at high on gpt-6.1-sol, plus one Opus Plan lens)
-status: approved by the panel; arc 1 in progress
+status: completed
 issues: "#1443, #1478 (arc 1, Closes); #1453 (arc 2, Closes); #1471 (not done, closed with its reason)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,23 @@ base: origin/dev at cf9ed1e40
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed in two PRs: #1595 (arc 1), then arc 2 with this close-out (`refactor(ui): one new-password pair, one current-password field, one length cap`).
+- **Shipped**:
+  - #1443 (#1595; D2-D6, D14): the backup trust gate in `wallet/services/backup/trust-gate.ts`, so no wallet module imports a composable; one pick and decrypt classifier (`composables/full-backup-selection.ts`) and one error log (`composables/restore-error-log.ts`) for both import pages; `retryNetworkIds` in place of three derivations.
+  - #1478's guard (#1595; D8): onboarding import's Decrypt, Import and Continue refuse a repeat Enter, an accessibility call under the owner's 2026-10-19 delegation.
+  - #1453 (arc 2; D9, D13, D15-D18): `MAX_PASSWORD_LENGTH` in place of ten declarations; `NewPasswordPair` in six forms and `CurrentPasswordField` in three. Twenty screens are byte-identical before and after in both themes ([pictures](screenshots/), light); production duplication went from 174 clones / 8744 lines to 169 / 8282 at the merged `dev` tip, and the touched production files from 2785 to 2638 lines.
+- **Known limits**: none.
+- **Dispositions**:
+  - Not done: #1471 (D7), closed with its reason when #1595 opened; #1478's shared action stack (D7, D8).
+  - Kept as they are: `auth.vue`'s current-password field (D11); onboarding's Create profile fields, whose cap constant alone changed, until OA-1 is answered.
+  - Declined in review: restoring the alert's two template-formatting spaces (D18). Left to its lane: `fu2-security-1/plan.md` cites `change-password.vue:75` for the success toast, now line 71; that lane's arc 2 edits the file.
+- **Lessons**: one promoted, a bound `defineModel` reading the host's value a render late, folded into the Vue 3.5.42 line; VTU's trimming `.text()` joined the exact-identity line. Pruned: the merge-ref line, which the `e2e-testing` skill (the PR lanes' head SHA, a conflicting PR's absent run) and CI.md now carry.
+- **Open items**: OA-1 ([OWNER-ASKS.md](OWNER-ASKS.md)), unanswered on decision page 103 (P103-01); nothing ships until it is.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # quality-popup-1: the backup trust gate and pick classifier, one pair of password components
 
@@ -81,6 +98,10 @@ Four quality findings on the import pages and the password fields, all refactors
 - D9. Testids pass as an exact `testids` object, so none is invented or renamed (CLAUDE.md § testid preservation; Codex R1-4 over Opus O5's named exception). `repeatPlaceholder` serves change-password alone: the copy cannot change and the other choice is a copy of the pair.
 - D13. Visibility is a `hidden` model: the hosts whose ref outlives the field bind it (both import forms, both `unlock-method.vue` steps), so a method switch or a step change keeps a revealed field revealed, as today (Codex R1-2); the rest leave it unbound and the component holds it for the same lifetime their ref had (final pass).
 - D14. Decrypt publishes inside the helper, not after it returns (implementation, arc 1 end gate). A stateless `openPickedBackup` left both pages the same fence-and-publish tail, a new production clone (`audit:dup` 178/8787 to 179/8794), and a gap after the helper's return that each page had to re-fence and pin. Writing through the page's selection ref and banner with no await after the last check removes the clone and the gap by construction; `audit:dup` is back to 178/8787.
+- D15. Arc 2 is one PR from `origin/dev`, on branch `quality-popup-1-a2` (the orchestrator's spawn): arc 1 landed as #1595 before arc 2 began, so there is no stack to add to; the close-out rides at its end.
+- D16. The current field's `v-model` rides `$attrs` to the `Input`, so every `update:modelValue` reaches the host as before (a `defineModel` drops an unchanged value's emit, and `SecretUnlockSection` clears its error on each); its `hidden` is a prop the host negates on `toggle`, the eye's own contract, since both eye hosts own their flag. The pair keeps D13's model and toggles from the value it last wrote: a bound model reads the host's value a render late, and two clicks in one task must cancel (phase 5).
+- D17. `FilePasswordSection`'s `maxLength` and `NewProfileCredentials`' `maxPasswordLength` props go: after phase 4 no caller passes either (grep), the pair's default carries the cap and its pins hold it, and the custom-cap case moved to the pair's test.
+- D18. The current field's alert interpolates its copy, so its `textContent` loses the two spaces the old literal's template formatting left around the words (`" Wrong password "` → `"Wrong password"`). It renders and is announced the same (the error-state pictures are byte-identical; assistive technology trims), and nothing reads the padded string (unit tests use the trimmed `.text()`; the e2e readers of an `error-text` testid are other pages). Reproducing the spaces would be code kept for a formatting artifact.
 - D10. Per-site placeholders, autofocus and labels stay props; unifying them is copy.
 - D11. `auth.vue` keeps its own field: its alert margin, programmatic focus, `autocapitalize`/`autocorrect` and second alert differ, and three other lanes edit the file. `create.vue` keeps its variant (OA-1).
 - D12. Sequencing: quality-sdk-1 also moves lines of `full-backup-restore.ts`; whichever lane lands second re-cites. Arc 2 merges `origin/dev` before its PR, after quality-popup-2 and fu2-security-1 arc 2 where they share `unlock-method.vue` and `change-password.vue`.
@@ -99,9 +120,9 @@ Every gate runs from the worktree root. A test command is `(cd apps/extension &&
 - [x] **Phase 2.** Phase 1's gate plus tests `src/utils src/popup/pages src/onboarding/pages`; `grep -n useFullBackupImport apps/extension/src/composables/useRestoreAgain.ts` prints nothing.
 - [x] **Phase 3.** The new pin; tests `src/onboarding/pages/import.test.ts`; lint; typecheck.
 - [x] **Arc 1 end.** `bun run audit:vue` (its build regenerates `src/types/`: read the whole diff and commit it); `bun run test:all`; `bun run audit:dup` (production clones and dup lines no worse than 178 / 8787); smoke `tests/e2e/{backup-roundtrip,passkey-backup,restore-outcome,import-errors-scroll,import-dead-rpc,backup-migration,onboarding-import}.test.ts` on both browsers, wall-clock before and after; `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/restore-again.test.ts tests/e2e/network/backup-restore-integrity.test.ts` on Chrome; `bun run check:plans` after staging.
-- [ ] **Phase 4.** lint; typecheck; tests `src/components src/popup/pages src/onboarding/pages src/composables/useProfileImportFlow.test.ts scripts/e2e/profile-chaos-model.test.ts`; `grep -rnw 128` over the ten files prints only the constant.
-- [ ] **Phase 5.** Before pictures first (below). The new component test (at least ten cases, CLAUDE.md L3 minimum); tests `src/components src/popup src/onboarding scripts/e2e/profile-chaos-model.test.ts`; lint; typecheck.
-- [ ] **Phase 6.** The same as phase 5 for the current field.
+- [x] **Phase 4.** lint; typecheck; tests `src/components src/popup/pages src/onboarding/pages src/composables/useProfileImportFlow.test.ts scripts/e2e/profile-chaos-model.test.ts`; `grep -rnw 128` over the ten files prints only the constant.
+- [x] **Phase 5.** Before pictures first (below). The new component test (at least ten cases, CLAUDE.md L3 minimum); tests `src/components src/popup src/onboarding scripts/e2e/profile-chaos-model.test.ts`; lint; typecheck.
+- [x] **Phase 6.** The same as phase 5 for the current field.
 - [ ] **Arc 2 end.** Arc 1's end gate with smoke `tests/e2e/{security,security-backup,keyboard-guards,backup-roundtrip,passkey-backup,duplicate-phrase-import,auth-flows}.test.ts` on both browsers, no network run (no service path changes). Pictures: a scratch capture spec kept outside the repository, copied into `tests/e2e/` only to run and never committed (fu2-security-1's route), shoots New profile, Import (phrase and backup forms), Change password (with a wrong current password), Unlock method (both steps) and the three exports' unlock, light theme, Chrome, at the base and at the head; each pair is pixel-identical, and the PR attaches them.
 
 ## Audit verdicts
@@ -115,6 +136,11 @@ Every gate runs from the worktree root. A test command is `(cd apps/extension &&
 | Arc 1 Codex fix R1 (`gpt-6.1-sol`, high) | approve | comment cleanup: `validateAndMigrateBackup`'s doc to two lines, three captions that restate their names removed | none |
 | Arc 1 Opus diff review | conditional approve | F1 a second re-pick race, inside the earlier-passkey read: the parse race could not tell where the last check sits; F2 the read-failure pin reaches the catch after the pick counter; F3 the name reset pinned from a set name; two comments that named their callers reworded; D3, phase 2 and the invariants line updated for D14 | none |
 | Arc 1 Codex fix R2 (resumed) | approve | none: the fixes verified, no regression | none |
+| Arc 2 Codex fix R1 (`gpt-6.1-sol`, high) | conditional approve | P2 a same-value input pin for D16's forwarding; P3 the cap comment (UTF-16 code units, not a native `maxlength`); P3 five component headers cut to their constraints | none |
+| Arc 2 Opus diff review | approve | P3 the backup form's and Unlock method's D13 bindings and the form's `passwordInput` pinned; P3 the mirror's comment names host writes | none (another lane's citation left to that lane) |
+| Arc 2 Codex fix R2 (resumed) | approve | none: the fixes verified, no regression | none |
+| Net-diff Codex pass (fresh, `gpt-6.1-sol`, high) | conditional approve | P3 D17 recorded; P3 the backup form's header states its constraint; P2's fact (the alert's two spaces) corrected in the lessons | P2's code change (D18) |
+| Net-diff Codex pass R2 (resumed) | approve | none: D17 and the header verified, D18 stands | none |
 
 ## Delivery
 

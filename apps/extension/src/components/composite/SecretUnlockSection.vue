@@ -1,13 +1,8 @@
 <script setup>
-/**
- * Password-gate section for the recovery-phrase export page. Hosts the
- * "Unlock" label, the password input, and the inline "Wrong password"
- * indicator. The page owns the password state + unlock attempt; this
- * composite is the visual treatment.
- *
- * `v-model` ↔ password ref; `error` ↔ `isWrongPassword`. Resetting the
- * error on click/input matches the page's prior inline pattern.
- */
+/** The export pages' password gate. `error` is the page's wrong-password flag, which an input or a
+ *  click on the field clears. */
+import CurrentPasswordField from "@/components/composite/CurrentPasswordField.vue"
+
 defineProps({
 	modelValue: { type: String, default: undefined },
 	error: { type: Boolean, default: false },
@@ -25,43 +20,17 @@ const onClick = () => emit("clearError")
 <template>
 	<div class="export_section_last">
 		<span class="export_section_label type--label-section">Unlock</span>
-		<div :class="[error && $style.shake]">
-			<Input
-				:modelValue="modelValue"
-				@update:modelValue="onInput"
-				:error="error"
-				:ariaInvalid="error"
-				@click="onClick"
-				type="password"
-				label="Password"
-				placeholder="Enter password"
-				autocomplete="current-password"
-				autofocus
-				data-testid="unlock-password-input"
-			/>
-		</div>
-		<Transition name="fade">
-			<span
-				v-if="error"
-				:class="$style.error_text"
-				role="alert"
-				data-testid="unlock-error-text"
-			>
-				Wrong password
-			</span>
-		</Transition>
+		<CurrentPasswordField
+			:modelValue="modelValue"
+			@update:modelValue="onInput"
+			:error="error"
+			@click="onClick"
+			label="Password"
+			placeholder="Enter password"
+			autocomplete="current-password"
+			autofocus
+			data-testid="unlock-password-input"
+			errorTestid="unlock-error-text"
+		/>
 	</div>
 </template>
-
-<style module>
-.error_text {
-	composes: type--body from global;
-	color: var(--txt-danger);
-	margin-top: 4px;
-	display: block;
-}
-
-.shake {
-	composes: shake_password from "./shake.module.css";
-}
-</style>

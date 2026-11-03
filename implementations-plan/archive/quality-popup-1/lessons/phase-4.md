@@ -1,0 +1,7 @@
+# Phase 4: one length cap
+
+- Arc 1 landed as #1595 (`aaaf9278c`) before arc 2 began, so arc 2 branched from `origin/dev` as `quality-popup-1-a2` and ships as one PR, not a `gh stack` arc (D15).
+- `MAX_PASSWORD_LENGTH = 128` sits in `utils/password.ts` beside the minimum. The four prop defaults use it; change-password, unlock-method and onboarding's create bind it on their inputs; the import flow returns it under its old key, so both import shells and their page tests are untouched. `new.vue` and `export/full.vue` passed 128 into a component whose default is now the constant, so the binding and its local constant went.
+- Pin first for the binding `new.vue` dropped: `NewProfileCredentials.test.ts` caps a paste at 128 with no limit passed. Red with the default set to 64 (`expected [ Array(1) ] to deeply equal [ Array(1) ]`, 1 failed), green restored. `FilePasswordSection`'s default already had its pin.
+- Re-cite: unlock-method's eleven citations moved up 2, create's three up 1, `ImportFullBackupForm.vue:140` down 1. The citation test passes on a fragment found at the cited line, so a fragment repeated on a nearby line hides a shift: `@later="leavePhrase"` stands on two adjacent lines of `create.vue` and stayed green at the old number. Every moved citation was checked against the source line it named at the base, not only the fragment.
+- Gate at retry 0: lint 0 (after formatting three files), `typecheck:all` 0, tests 151 files / 2839 passed, the `grep -rnw 128` over the ten files prints only the constant.

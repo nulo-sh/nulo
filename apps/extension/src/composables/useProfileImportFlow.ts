@@ -12,7 +12,7 @@ import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
 import { managers } from "@/utils/core"
 import { canonicalizeMnemonic, errorMessageFromUnknown, getEntropy } from "@nulo/wallet-core/utils"
 import { zeroize } from "@nulo/wallet-crypto"
-import { isNewPasswordValid } from "@/utils/password"
+import { isNewPasswordValid, MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { PHRASE_WORD_COUNT, type PhraseVerdict, readPhraseVerdict } from "@/utils/recovery-phrase"
 import { stringCompare } from "@/utils/string"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
@@ -309,7 +309,6 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 	const { seedPhrase, phraseVerdict } = usePhraseVerdict()
 	const password = ref("")
 	const repeatedPassword = ref("")
-	const maxPasswordLength = 128
 	const isImporting = ref(false)
 	// A phrase opens on Passkey, as Create does; a backup opens on the unlock it was made with.
 	const unlockMethod = ref<UnlockMethod>("passkey")
@@ -378,7 +377,7 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 		password,
 		repeatedPassword,
 		unlockMethod,
-		maxPasswordLength,
+		maxPasswordLength: MAX_PASSWORD_LENGTH,
 		isImporting,
 		error,
 		isCopied,

@@ -51,8 +51,6 @@ const backTo = computed(() => String(route.query.from || "/popup/register"))
 const selectedOnEntry = appStore.profile?.id
 const flowLive = openingFlowLive()
 
-const maxPasswordLength = 128
-
 const {
 	nameFieldState,
 	profileName,
@@ -67,7 +65,6 @@ const {
 	password,
 	repeatedPassword,
 	isCreating,
-	strengthHint,
 	isAllowedToContinue,
 	handleCreate,
 	handleCreateWithExistingPasskey,
@@ -117,8 +114,6 @@ onBeforeUnmount(() => {
 			v-if="type === 'password'"
 			v-model:password="password"
 			v-model:repeatedPassword="repeatedPassword"
-			:maxPasswordLength="maxPasswordLength"
-			:strengthHint="strengthHint"
 		/>
 
 		<!-- Passkey info -->

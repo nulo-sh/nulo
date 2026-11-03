@@ -1,8 +1,9 @@
 import { Flex, Icon, Input, Text } from "@nulo/design"
-import { mount, type VueWrapper } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { boundAttr, declarationsOf, elementByTestid, parseSource } from "../../../../scripts/type-roles/source-scan"
-import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto } from "../../../../tests/helpers/credential-pins"
+import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto, typeNow } from "../../../../tests/helpers/credential-pins"
+import { sendEvent } from "../../../../tests/helpers/send-event"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import ImportFullBackupForm from "./ImportFullBackupForm.vue"
 
@@ -304,5 +305,18 @@ describe("ImportFullBackupForm — credential controls, real Input", () => {
 		expect(pasteInto(nativeInput(w, PAIR[1]), "z".repeat(130))).toBe(true)
 		expect(w.emitted("update:repeatedPassword")?.at(-1)).toEqual(["z".repeat(128)])
 		await expectMaskToggle(w, { toggle: "import-full-backup-password-input-visibility-toggle", field: PAIR[0], drives: PAIR })
+	})
+
+	it("a revealed pair stays revealed when the method switches away and back; a keystroke in either field emits passwordInput once", async () => {
+		const w = mountReal(PASSWORD)
+		sendEvent(w.get('[data-testid="import-full-backup-password-input-visibility-toggle"]').element, "click")
+		await flushPromises()
+		expect(PAIR.map((id) => nativeInput(w, id).type)).toEqual(["text", "text"])
+		await w.setProps({ unlockMethod: "passkey" })
+		expect(w.find(`[data-testid="${PAIR[0]}"]`).exists()).toBe(false)
+		await w.setProps({ unlockMethod: "password" })
+		expect(PAIR.map((id) => nativeInput(w, id).type)).toEqual(["text", "text"])
+		for (const id of PAIR) typeNow(nativeInput(w, id), "x")
+		expect(w.emitted("passwordInput")).toHaveLength(2)
 	})
 })

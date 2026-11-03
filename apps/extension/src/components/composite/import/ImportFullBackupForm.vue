@@ -1,17 +1,14 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
+import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
 import { showsDecryptCta } from "@/utils/full-backup-ctas"
-import { newPasswordHint } from "@/utils/password-hint"
+import { MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import { restoreWarningText } from "./restore-warning"
-/**
- * Renders the full-backup-restore form: file picker, error/warning
- * banners, decryption-password section (when the backup is encrypted),
- * and how the new profile will unlock (when restoring into a new one).
- * Visibility toggles for the password fields are local.
- */
+/** The visibility refs outlive the conditional password sections, so a section shown again keeps
+ *  what was revealed. */
 const props = defineProps({
 	selectedBackup: { type: Object, default: null },
 	restoreStatus: { type: [String, null], default: "" },
@@ -29,7 +26,7 @@ const props = defineProps({
 	askNewPassword: { type: Boolean, default: true },
 	error: { type: Object, default: () => ({ type: "", title: "", tooltip: "" }) },
 	isCopied: { type: Boolean, default: false },
-	maxPasswordLength: { type: Number, default: 128 },
+	maxPasswordLength: { type: Number, default: MAX_PASSWORD_LENGTH },
 })
 
 const emit = defineEmits(["pickFile", "copyError", "passwordInput"])
@@ -45,7 +42,6 @@ const isPasswordType = ref(true)
 const isDecryptionPasswordType = ref(true)
 const warningRef = useTemplateRef("warningRef")
 
-const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 const showWarning = computed(() => props.restoreStatus === "finished" && props.isRestoreHasErrors)
 const shownWarning = computed(
 	() => props.warningText ?? restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors, props.heldAccounts),
@@ -143,43 +139,22 @@ watch(
 			passwordTestid="import-full-backup-method-password"
 			passkeyTestid="import-full-backup-method-passkey"
 		>
-			<Flex direction="column" gap="12">
-				<Input
-					v-model="password"
-					:type="isPasswordType ? 'password' : 'text'"
-					@input="emit('passwordInput')"
-					:maxLength="maxPasswordLength"
-					placeholder="Enter new password"
-					autocomplete="new-password"
-					data-testid="import-full-backup-password-input"
-				>
-					<template #suffix>
-						<PasswordVisibilityToggle
-							:hidden="isPasswordType"
-							data-testid="import-full-backup-password-input-visibility-toggle"
-							@toggle="isPasswordType = !isPasswordType"
-						/>
-					</template>
-					<template #bottom>
-						<Flex align="center" gap="6" :class="$style.hint_row">
-							<Icon name="lock" :size="12" color="tertiary" />
-							<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
-						</Flex>
-					</template>
-				</Input>
-				<Input
-					v-model="repeatedPassword"
-					:type="isPasswordType ? 'password' : 'text'"
-					@input="emit('passwordInput')"
-					:maxLength="maxPasswordLength"
-					placeholder="Repeat password"
-					autocomplete="new-password"
-					data-testid="import-full-backup-password-confirm-input"
-				/>
+			<NewPasswordPair
+				v-model:password="password"
+				v-model:repeatedPassword="repeatedPassword"
+				v-model:hidden="isPasswordType"
+				:testids="{
+					input: 'import-full-backup-password-input',
+					confirm: 'import-full-backup-password-confirm-input',
+					toggle: 'import-full-backup-password-input-visibility-toggle',
+				}"
+				:maxLength="maxPasswordLength"
+				@input="emit('passwordInput')"
+			>
 				<Text variant="body" color="tertiary" height="150">
 					Create a new password that will be used to log in to your profile in the future
 				</Text>
-				</Flex>
+			</NewPasswordPair>
 		</UnlockMethodChoice>
 	</div>
 </template>
@@ -194,10 +169,6 @@ watch(
 
 .section_label {
 	composes: section_label from "./import-shared.module.css";
-}
-
-.hint_row {
-	margin-top: 4px;
 }
 
 .error_tag {

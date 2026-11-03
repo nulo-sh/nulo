@@ -20,6 +20,7 @@ import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
+import { MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { createFailedNotice } from "@/utils/profile-flow-notices"
 import { buildPhraseCheck, type PhraseQuestion } from "../phrase-check"
@@ -40,8 +41,6 @@ const router = useRouter()
 const notificationStore = useNotificationStore()
 const { openToast } = useToast()
 const { bootstrapActiveProfile } = useProfileBootstrap()
-
-const maxPasswordLength = 128
 
 // The words live only in this ref, for this page's life, and the check holds only its questions.
 // `closed` renders nothing while the route to Ready settles, so neither the words nor a second
@@ -237,7 +236,7 @@ onBeforeUnmount(() => {
 						type="password"
 						placeholder="Strong password"
 						autocomplete="new-password"
-						:maxLength="maxPasswordLength"
+						:maxLength="MAX_PASSWORD_LENGTH"
 						autofocus
 						data-testid="onboarding-password-input"
 					/>
@@ -249,7 +248,7 @@ onBeforeUnmount(() => {
 						type="password"
 						placeholder="Repeat password"
 						autocomplete="new-password"
-						:maxLength="maxPasswordLength"
+						:maxLength="MAX_PASSWORD_LENGTH"
 						data-testid="onboarding-password-confirm"
 						inputTestid="onboarding-password-confirm-input"
 					/>

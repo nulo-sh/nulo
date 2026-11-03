@@ -172,6 +172,7 @@
     "MAX_CONTACT_IMPORT_BYTES": true,
     "MAX_CONTACT_IMPORT_ROWS": true,
     "MAX_DECIMALS": true,
+    "MAX_PASSWORD_LENGTH": true,
     "MINT_SIGNATURES": true,
     "MIN_NEW_PASSWORD_LENGTH": true,
     "MarkableGetStartedFlag": true,
