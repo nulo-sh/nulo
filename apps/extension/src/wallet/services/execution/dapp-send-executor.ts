@@ -171,8 +171,8 @@ export interface DappSendExecutorDeps extends SharedSendDeps {
 	previewSnapshots: PreviewSnapshots
 	/** The account's send epoch (`SendSequencer.epoch`). */
 	sequenceEpoch(chainId: number, account: string): number
-	/** The validated pipeline (the service's strategy map). A `probe` reads its validated run and
-	 *  never makes it stubbed. */
+	/** The validated pipeline (the service's strategy map). An `observer` reads an app-paid send's
+	 *  one validated run; it is never the fold's probe, so it cannot make a run stubbed. */
 	buildAndEstimateValidated(
 		inputOp: { networkId: string; accountAddress: string; actions: Action[]; fee?: FeeOptions },
 		feeSettings: FeeSettings,
@@ -180,7 +180,7 @@ export interface DappSendExecutorDeps extends SharedSendDeps {
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
 		onBuilt?: OnBuilt,
-		probe?: DiscoveryProbe,
+		observer?: DiscoveryProbe,
 	): Promise<FeeEstimate>
 	/** The canonical SponsoredFPC's address on `chainId`, derived by the wallet, never read from a
 	 *  row; `undefined` when there is none to compare against. */

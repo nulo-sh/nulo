@@ -210,14 +210,18 @@ describe("EmbeddedStrategy structural parity", () => {
 		expect(result.feePaymentMethod).toBe(AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM)
 	})
 
-	test("with a probe, it hands the probe its one validated simulation, unstubbed", async () => {
+	test("with an observer, it hands the observer its one validated simulation, unstubbed", async () => {
 		const { deps, simulateTxTask, built } = makeDeps()
 		const probe = { extractEffects: vi.fn(async () => ({ actions: [], requested: false })) }
-		const ctx = { ...makeCtx({ fee: { embeddedFeePayment: "fpc" } as never }), probe } as FeeStrategyContext
+		const ctx = { ...makeCtx({ fee: { embeddedFeePayment: "fpc" } as never }), observer: probe } as FeeStrategyContext
 		await new EmbeddedStrategy(deps).buildAndEstimate(ctx)
 
 		expect(simulateTxTask).toHaveBeenCalledTimes(1)
-		expect((simulateTxTask.mock.calls[0] as unknown[] | undefined)?.[2]).not.toHaveProperty("stubAccountAddresses")
+		expect((simulateTxTask.mock.calls[0] as unknown[] | undefined)?.[2]).toEqual({
+			simulatePublic: true,
+			skipFeeEnforcement: true,
+			scopes: built.scopes,
+		})
 		expect(probe.extractEffects).toHaveBeenCalledTimes(1)
 		const [sim, chain] = probe.extractEffects.mock.calls[0] as unknown as [unknown, { signer: unknown; scopes: unknown }]
 		expect(sim).toBe(await simulateTxTask.mock.results[0]?.value)

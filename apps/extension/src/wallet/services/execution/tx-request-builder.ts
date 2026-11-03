@@ -272,9 +272,6 @@ export class TxRequestBuilder {
 		return { network, account, node, pxe, nodeInfo, instances, artifacts }
 	}
 
-	/** Account lookups read the keys of whichever session is live when they run, so the fence is
-	 *  checked again once the lookup returns: a lock and re-unlock of the same profile meanwhile
-	 *  would otherwise hand this build the next session's keys. */
 	/** Discovery stubs every scope account, and a stub runs on the account's registered contract
 	 *  instance; the sender's is registered by its own build. */
 	private async registerScopeContracts(
@@ -291,6 +288,9 @@ export class TxRequestBuilder {
 		}
 	}
 
+	/** Account lookups read the keys of whichever session is live when they run, so the fence is
+	 *  checked again once the lookup returns: a lock and re-unlock of the same profile meanwhile
+	 *  would otherwise hand this build the next session's keys. */
 	private async resolveAccount(fence: ExecutionFence, chainId: number, accountAddress: string): Promise<IAccountContract> {
 		const account = await this.accountService.getAccountContract(fence.profileId, chainId, accountAddress)
 		fenceChecks(this.profileService, fence).assertLive()

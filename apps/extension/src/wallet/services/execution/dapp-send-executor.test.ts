@@ -1984,6 +1984,23 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 		})
 	})
 
+	test("confirm, rebuilt: a hash listed for the owner and rediscovered as the account's own is refused before the prove", async () => {
+		const discoverPrivateAuthwits = vi
+			.fn()
+			.mockResolvedValueOnce({ actions: [], discovered: [consumed("x")] })
+			.mockResolvedValue({
+				actions: [{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:ih:x" } }],
+				discovered: [record("x")],
+			})
+		const { executor, proveAndSend } = makeHarness({ authwit: { discoverPrivateAuthwits } })
+		const estimate = await executor.estimateOperationFee(readingOwner(), { paymentMethod: { kind: "fj" } } as never, undefined, CTX)
+		expect(estimate.discoveredAuthwits).toEqual([consumed("x")])
+		await expect(
+			executor.executeAztecSendTx(readingOwner(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: estimate.previewId }),
+		).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
+		expect(proveAndSend).not.toHaveBeenCalled()
+	})
+
 	test("an app-paid estimate lists only the authorizations its validated run consumed, and its confirm is held to them", async () => {
 		const base = makeHarness()
 		const appPaid = {
@@ -2231,6 +2248,31 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			const allowed = folded()
 			const result = await allowed.executor.estimateOperationFee(makeAztecOp(), FJ, undefined, CTX)
 			expect(result.discoveredAuthwits).toEqual([record("a")])
+		})
+
+		test("an app-paid estimate's validated run refuses it, as every other route does", async () => {
+			const base = makeHarness()
+			const buildAndEstimateValidated = vi.fn(async (...args: unknown[]) => {
+				await (args[6] as CollectingDiscoveryProbe).extractEffects(
+					{ privateExecutionResult: {} },
+					probeContext(base.built as never),
+				)
+				return base.built as never
+			})
+			const { executor } = makeHarness({
+				buildAndEstimateValidated,
+				planner: {
+					processAztecJsPayload: vi.fn(async () => ({
+						actions: [],
+						feePaymentMethod: undefined,
+						feeOptions: { embeddedFeePayment: "fpc" },
+					})),
+				} as never,
+			})
+			collectOffchainEffectsMock.mockReturnValueOnce([registryEffect])
+			await expect(
+				executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "embedded" } } as never, undefined, CTX),
+			).rejects.toBeInstanceOf(AuthRegistryRefusalError)
 		})
 
 		test("the NO_FROM preview refuses it", async () => {

@@ -156,6 +156,10 @@ export type FeeStrategyContext = {
 	 *  into one sim. Absent on every non-dApp path (transfer, send,
 	 *  embedded), which therefore keep byte-identical sim options. */
 	probe?: DiscoveryProbe
+	/** Reads an app-paid send's one validated simulation for the authorizations it consumes. Only
+	 *  the embedded strategy reads it, and it never makes a run stubbed, so no fee kind can turn it
+	 *  into a fold. */
+	observer?: DiscoveryProbe
 	/** The validated `fpc` row a caller ordered the send against: the build pays with it, never with a
 	 *  later read an edit may have moved. Absent, the strategy resolves the row itself. */
 	fpc?: Fpc
