@@ -51,7 +51,7 @@ The npm tree runs only in CI jobs and the local Docker runner (`install.sh`, `np
 - **Files**: `.github/actions/setup-aztec/cli/package-lock.json` (2 entries), `bun.lock` (1 line), `scripts/ci-cd/audit-acks.json` (the `1244003` entry), `SECURITY.md` (the count and one row). No `package.json`, `lock.sh`, test or workflow changes.
 - **Alternative not taken**: a fresh `lock.sh 6.0.0` re-resolve, which moves dozens of unrelated packages (D1).
 
-## Phase 1 — the lockfiles and the record
+## Phase 1 — the lockfiles and the record ✓
 
 Assumptions: F2–F7. Change map, in this order:
 1. From `.github/actions/setup-aztec/cli`, run `npm_config_registry=https://registry.npmjs.org/ npm_config_min_release_age=7 npm_config_min_release_age_exclude=$'@aztec-labs/*\n\n@aztec-foundation/*' npm update follow-redirects node-forge --package-lock-only --ignore-scripts --no-audit --no-fund` (npm ≥ 11.17.0). Confirm that no `node_modules/` appeared there.
@@ -102,6 +102,10 @@ Validation gate (scratch files under `~/.cache/nulo-backlog/deps-ci-2/`):
   Rejected: extending the floor test (D3). Codex reads the pattern as "a floor on resolved versions at any path". The floor exists because the override is a fix the repository must remember, and the owner's #1278 rule disposes of an alert a resolve does not fix by dismissal, not by a red bump. Agreed: D1, D2, D4, D5, D6.
 - **Codex r2** (resumed): `conditional approve`. D3's argument holds; the round-1 floor condition is withdrawn. Two fallback details, both accepted: read the update's diff before the frozen install, and restore every file it changed, including when it leaves `follow-redirects` unmoved; on the fallback, the mode command prints `report` while the local audit stays `--mode enforce`.
 - **Codex r3** (resumed, verify only): `approve`. Both conditions met; no regression, no new finding.
+
+## Implementation record
+
+- Phase 1 (`ae634dc93`): steps 1 to 5 as written; Bun's update changed the one line, so the fallback did not apply. G1 to G7 green: two npm keys, one `bun.lock` line, integrities match; both `npm ci` trees differ in the two packages alone; a fresh frozen install exits 0; the gate reads 34/0/0/0 in enforce; both builds are byte-identical to the base (643 files each). Deviation: this host has no `zip`, so `test:release`'s two zip suites fail here, and identically at `44d5a7064`. With Ubuntu's `zip` 3.0 unpacked to a scratch `PATH`, `test:release` passes (359); CI's runners carry `zip` (`lessons/phase-1.md`).
 
 ## Delivery
 

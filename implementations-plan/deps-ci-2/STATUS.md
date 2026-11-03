@@ -4,3 +4,4 @@
 - 2026-11-03: Codex r1 conditional approve; plan revised (Bun flags and fallback, whole ack group, G6 binding, package review); D3 argued back.
 - 2026-11-03: Codex r2 conditional approve; D3 settled (no floor extension); fallback restore and report-mode expectation fixed.
 - 2026-11-03: Codex r3 approve; plan committed; auto-continue into arc 1.
+- 2026-11-03: arc 1 Phase 1 green (G1-G7; test:release needed a scratch zip on PATH, pre-existing host gap).
