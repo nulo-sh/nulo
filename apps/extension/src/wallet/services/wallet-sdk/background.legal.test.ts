@@ -11,7 +11,7 @@ vi.mock("./content-message-relay", () => ({ attachContentListener: () => {} }))
 vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
-import { handleWalletMessage } from "./background"
+import { handleWalletMessage } from "./wallet-message"
 import { bindLiveSession } from "./live-session"
 
 const SESSION = { sessionId: "s1", origin: "https://dapp.example", chainInfo: { chainId: "1", version: "1" } } as never

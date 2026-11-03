@@ -38,7 +38,7 @@ import { isSubframeSender, validateContentScriptMessage } from "./content-script
  * validation at attach — harmlessly, the checks are pure.
  */
 
-/** Mirrors background.ts's build-time iframe-dApps escape hatch. */
+/** Mirrors content-admission.ts's build-time iframe-dApps escape hatch. */
 const NULO_ALLOW_IFRAME_DAPPS: boolean = import.meta.env?.VITE_NULO_ALLOW_IFRAME_DAPPS === "1"
 
 export const CONTENT_RELAY_GLOBAL_CAP = 32

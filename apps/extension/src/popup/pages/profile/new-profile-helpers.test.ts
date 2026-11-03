@@ -6,8 +6,13 @@ const accountInstance = {
 	getAccounts: vi.fn(async () => [{ address: "0xACC", index: 0, visible: true }]),
 }
 
+/** The mocked registry's account slot. The ensure writer only returns it, so a test installs the client. */
+const accountSlot = vi.hoisted(() => ({ client: undefined as unknown }))
+
 vi.mock("@/utils/core", () => ({
-	managers: { account: undefined as unknown, uiPreference: { setSelectedAccount: vi.fn(async () => true) } },
+	managers: { uiPreference: { setSelectedAccount: vi.fn(async () => true) } },
+	ensureAccountClient: vi.fn(() => accountSlot.client),
+	requireAccount: () => accountSlot.client,
 	initTransactionService: vi.fn(),
 }))
 
@@ -26,17 +31,10 @@ vi.mock("@/composables/useProfileBootstrap", async () => {
 	}
 })
 
-vi.mock("@/wallet/services/account/client", () => ({
-	AccountServiceClient: vi.fn(function () {
-		return accountInstance
-	}),
-}))
-
 import * as bootstrap from "@/composables/useProfileBootstrap"
 import { isActivatingOtherThan, supersedeProfileActivations } from "@/composables/useProfileBootstrap"
-import { initTransactionService, managers } from "@/utils/core"
+import { ensureAccountClient, initTransactionService, managers } from "@/utils/core"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { AccountServiceClient } from "@/wallet/services/account/client"
 import { activateCreatedProfile, makeCreateKeydownHandler } from "./new-profile-helpers"
 
 type AppStoreLike = Parameters<typeof activateCreatedProfile>[1]["appStore"]
@@ -130,7 +128,7 @@ beforeEach(() => {
 	activations.clear()
 	vi.mocked(isActivatingOtherThan).mockReturnValue(false)
 	vi.useFakeTimers()
-	managers.account = undefined as never
+	accountSlot.client = accountInstance
 })
 
 afterEach(() => {
@@ -408,19 +406,24 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		expect(openToast).not.toHaveBeenCalled()
 	})
 
-	test("keeps an account client the wallet already holds instead of abandoning it connected", async () => {
-		const existing = { getAccounts: vi.fn(async () => [{ address: "0xEXISTING", index: 0, visible: true }]) }
-		managers.account = existing as never
+	test("ensures the account client, then loads accounts from the slot's client, one a bootstrap installed meanwhile included", async () => {
+		const installed = { getAccounts: vi.fn(async () => [{ address: "0xINSTALLED", index: 0, visible: true }]) }
+		vi.mocked(setLastActiveProfileId).mockImplementationOnce(async () => {
+			accountSlot.client = installed
+		})
 		const store = makeAppStore()
 		bootstrapped(store, "created")
 		const { router, state } = start(store)
 		await vi.advanceTimersByTimeAsync(0)
 
 		expect(state.outcome).toBe("resolved")
-		expect(AccountServiceClient).not.toHaveBeenCalled()
-		expect(managers.account).toBe(existing)
-		expect(existing.getAccounts).toHaveBeenCalledWith("created", "1", true)
-		expect(store.accounts).toEqual([{ address: "0xEXISTING", index: 0, visible: true }])
+		expect(ensureAccountClient).toHaveBeenCalledTimes(1)
+		expect(vi.mocked(ensureAccountClient).mock.invocationCallOrder[0]!).toBeLessThan(
+			vi.mocked(setLastActiveProfileId).mock.invocationCallOrder[0]!,
+		)
+		expect(accountInstance.getAccounts).not.toHaveBeenCalled()
+		expect(installed.getAccounts).toHaveBeenCalledWith("created", "1", true)
+		expect(store.accounts).toEqual([{ address: "0xINSTALLED", index: 0, visible: true }])
 		expect(router.push).toHaveBeenCalledWith("/popup/general")
 	})
 

@@ -23,7 +23,7 @@
 			"digests": {
 				"apps/extension/src/wallet/services/auth-registry/service.ts": "196e310a3dacf05241f53a666bb3b70c4de2f9d3b06ee6bd284ec04515d90f9d",
 				"apps/extension/src/wallet/services/execution/operation-planner.ts": "3bdb4c1538359fe7d11572c82d19fa07677be5b74a40429ea7cb64e02d47d1ec",
-				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
+				"packages/wallet-bridge/src/dispatcher.ts": "8a520b3c0d21001f9227eef0057336c061b2f953f002ae63859886b6a69fd4ea"
 			},
 			"evidence": [
 				{
@@ -53,7 +53,7 @@
 				}
 			],
 			"digests": {
-				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
+				"packages/wallet-bridge/src/dispatcher.ts": "8a520b3c0d21001f9227eef0057336c061b2f953f002ae63859886b6a69fd4ea"
 			},
 			"evidence": [
 				{
@@ -87,7 +87,7 @@
 				}
 			],
 			"digests": {
-				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
+				"packages/wallet-bridge/src/dispatcher.ts": "8a520b3c0d21001f9227eef0057336c061b2f953f002ae63859886b6a69fd4ea"
 			},
 			"evidence": [
 				{
