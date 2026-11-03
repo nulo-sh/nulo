@@ -1,7 +1,7 @@
 ---
 plan: rpc-proxy-1
 tier: mid
-status: arc 1 merged (#1622); arc 2 Phase 3 ✓, review loop next
+status: completed
 issues: "#1607 #1609 (arc 1, closed)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,16 @@ base: origin/dev at ff395c3d0
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-03.
+- **Status:** completed. Arc 1 merged as #1622; arc 2 and this close-out land as one PR (D21).
+- **Shipped:** arc 1, the keyless dRPC defaults on both networks with a batch cap of 3 keyed by provider origin (`maxBatchSizeFor`, D2), every node factory required (D17), and the at-unlock move of a stored Testnet endpoint off the retired keyed default, matched by digest (D4, D5); closes #1607 and #1609. Arc 2, `infra/rpc-proxy`: the Worker `nulo-rpc-proxy` for `rpc.nulo.sh` and `testnet.rpc.nulo.sh`, the handler contract of § Arc 2 with an IPv6 caller counted by its /64, its tests (a real node client through the handler among them), README with the owner checklist, and the proxy in the ruleset, `CI.md`, `SECURITY.md` and the Aztec pin sweep. No wallet build references it.
+- **Known limits:** #1630 (an endpoint the unlock leaves on the retired URL), #1631 (records keep the retired URL), #1632 (the shared quota), #1633 (a repeated `method` key).
+- **Open items:** #1634 (OA-1, `owner-decision`), #1635 (OS-1 to OS-10, `blocked:external`).
+- **Dispositions:** the persisted cap with a stamp and golden, rejected (D2); the host-and-prefix match, rejected (D4); the `node_*` allowlist, did not hold (D8); a per-package workflow, rejected (D13); the stack, superseded (D21). The import-time throw of D20 went into `CLAUDE.md`'s warm-cache rule, which it instances; `lessons.md` gained nothing, its budget full.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are not to be run.
 
 # rpc-proxy-1: keyless dRPC defaults with a batch cap, and a Nulo-run keyed reverse proxy
 
