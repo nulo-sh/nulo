@@ -91,6 +91,7 @@ None. Test fixtures only.
 
 - **Codex plan audit, round 1** (gpt-6.1-sol, high, read-only): conditional approve, three P2 and three P3, all accepted. P2: a tag with no traits installs through the arrival scenario (D3); the rerun condition excluded the harness under test (Phase 3 step 1); the key guarantee overclaimed for existing diagnostics (Security). P3: D1's "catches nothing" was false, now the real trade-off; the hostname check passed a trailing dot; D2 as a rejected disposition. Confirmed: no import cycle or Bun hazard in the guard importing `release.ts`; the handoff's names and flags; the build-then-run order.
 - **Round 2** (resumed): **approve**; one P3 accepted, the `/goal` seed now names `C` and the plan-only diff to `H`.
+- **Arc review loop:** Codex round 1 two P3 comment cuts, the Opus review one README P3, all accepted; Codex round 2 clean, converged ([lessons/phase-2.md](lessons/phase-2.md)).
 
 ## Delivery
 
