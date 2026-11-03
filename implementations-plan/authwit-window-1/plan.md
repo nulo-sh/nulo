@@ -173,6 +173,8 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | impl 1 | Codex, gpt-6.1-sol (session 01a1a2e3) | approve | two nits: the fence doc moved back onto `resolveAccount`; the embedded test asserts the exact validated options | none |
 | impl 1 | Opus 5.5 (general-purpose) | conditional approve | the registry refusal now reaching the app-paid route, surfaced as OA-6 with a pinning test (L11); the `observer` split (L10); the same comment nit; a classic confirm test for a hash listed for another account | none (its hostile-contract divergence note adds nothing beyond I3) |
 | impl 1, resumed | Codex, same session | agree with changes | OA-6 is a merge requirement, not a UI-impact line alone; its premise corrected (an owned account's witness for a registry change can already exist); the observer test spans `embedded`, `fj` and `fpc` settings | none |
+| impl 2 | Codex, same session | approve | the round-1 fixes verified; OA-6's affected cases stated correctly | none |
+| impl 3 | Codex, same session, with the README's two review rules quoted verbatim over the whole arc | approve | one nit: the observer wiring test's header cut to the reason the test exists | none |
 
 ## Seeds (not run; orchestrator-owned)
 
