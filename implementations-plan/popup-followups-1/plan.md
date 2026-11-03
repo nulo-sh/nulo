@@ -1,7 +1,7 @@
 ---
 plan: popup-followups-1
 tier: light (the spawn prompt names it; one Codex audit at high on gpt-6.1-sol, resumed until approve, plus one Opus Plan lens)
-status: approved by Codex R3; arc 1 in progress
+status: completed
 issues: "#1473 (Closes); #1453 (context only, closed)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 67c1ac545
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed. One PR to `dev` closes #1473 and moves Create profile onto the shared password pair (P103-01; #1453 is context only).
+- **Shipped**: `BalanceView.vue` and `holdings.vue` read their config through `useConfigRead`, one reader per Holdings key, so after a worker restart both follow the stored settings and an older read never puts back a newer change; Holdings' mount sends two reads, not four. `NewPasswordPair` gains `testids.confirmInput`, a `#repeatLabel` slot in an 8 px column with the confirm field, and `hideHint`, and its script is TypeScript (D9); Create uses it with both headings, their spacing, placeholders, the hint's words and every testid kept. `useProfileCreateFlow.strengthHint` is gone. No e2e scenario added. Captures: [screenshots/](screenshots/).
+- **Known limits**: none.
+- **Open items**: #1620 (OA-1, owner-decision: what moves while "Creating..." shows).
+- **Dispositions**: `PopupManager`'s read stays (declined earlier, as the plan says); a test for a forgotten `dispose()` rejected (D8).
+- **Lessons**: one promoted, extending the `vue-tsc` entry: a TS host sees none of a JS SFC's slots.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # popup-followups-1: two config reads on `useConfigRead`, and Create profile on the shared password pair
 
