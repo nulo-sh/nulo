@@ -59,6 +59,15 @@ export function unlocksWith(row: Profile, key: SlotKey): boolean {
 	return key.passkey.id === classified.credentialId && key.passkey.unlockKeyFor(classified.prfSalt) !== null
 }
 
+/** Whether the recovery words `entropy` encodes still derive `master`. Wipes only its own
+ *  derivation: the inputs stay the caller's. */
+export async function entropyDerivesMaster(master: Uint8Array<ArrayBuffer>, entropy: Uint8Array<ArrayBuffer>): Promise<boolean> {
+	const rederived = await deriveMasterFromMnemonic(await getMnemonic(entropy))
+	const paired = array_equals(rederived, master)
+	zeroize(rederived)
+	return paired
+}
+
 /**
  * How a profile row's secrets are opened, sealed and checked: the slots and the DEK slot under a
  * password's hash or a passkey's unlock key, the words-to-master pairing and the envelope MAC. It
@@ -190,11 +199,7 @@ export class ProfileSecretCodec {
 	 * Throws before any secret is revealed, persisted, or exported. Zeroizes its own scratch.
 	 */
 	public async assertEntropyMasterPair(secret: MasterSecretBytes, entropy: Uint8Array<ArrayBuffer>): Promise<void> {
-		const words = await getMnemonic(entropy)
-		const rederived = await deriveMasterFromMnemonic(words)
-		const paired = array_equals(rederived, secret)
-		zeroize(rederived)
-		if (!paired) {
+		if (!(await entropyDerivesMaster(secret, entropy))) {
 			throw new Error("Profile storage corrupted")
 		}
 	}

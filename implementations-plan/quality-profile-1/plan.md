@@ -147,6 +147,7 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 | D10 | Phase 1's pin covers nine paths in one table-driven test | Only the paired paths: misses the verify merge, finalize and the DEK export (Opus r1); a test per path: the same scenario multiplied (Codex r1) |
 | D11 | Tests change only where a seam moved, in the moving commit; a seam that could pass vacuously is made to throw | — |
 | D12 | The PXE router rides in arc 2 as its own commit | A third PR: a full CI run for a three-line change |
+| D13 | Commit subjects and PR titles put identifiers in backticks (found at arc 1's first commit: `subject-case` is `lower-case`) | — |
 
 ## Audit verdicts
 
@@ -160,7 +161,7 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 
 - **Before building:** a `## Decision` comment on #1439; on #1446 a `## Decision` comment with the reopening condition (an incarnation state that has to touch the op paths, the provision and the erase together), the `known-limit` label, and closed as not planned. The Outcome lists it as `Known limits: #1446`; arc 2's body cites it under "Not done, and why" and says its log router is the part that holds.
 - **Stack** via `gh stack init --adopt worktree-quality-profile-1 --base dev`: arc 1 on `worktree-quality-profile-1` (Phases 1-3), arc 2 `gh stack add quality-profile-1-frame` (Phases 4-6), close-out `gh stack add quality-profile-1-close-out` (docs only). Each arc boundary runs the review loop before the next arc opens; no pipelined boundary. `code_review: off`.
-- **PR titles** (≤ 92 characters): arc 1 `refactor(profile): move the slot codec out of ProfileService` (60); arc 2 `refactor: one reveal frame and credential check in ProfileService, one PXE log router` (85; `Closes #1439`); close-out `docs(plans): close quality-profile-1` (36).
+- **PR titles** (≤ 92 characters): arc 1 ``refactor(profile): move the slot codec out of `ProfileService` `` (62); arc 2 ``refactor: one reveal frame and credential check in `ProfileService`, one pxe log router`` (87; `Closes #1439`). Commitlint's `subject-case` is lower-case, so identifiers sit in backticks (D13); close-out `docs(plans): close quality-profile-1` (36).
 - **Each PR body:** what changed and why, each seam edit, the gates with outcomes, `audit:dup` and the touched files' line counts before and after, "Not done, and why" (D7, D9's class), and each browser's smoke wall-clock (no e2e scenario added or changed).
 - **Parallelism:** arcs share `service.ts` and stay serial; no lanes.
 - **Neighbour:** quality-sdk-1 arc 2 edits `awaitDeletionDelegate` in `service.ts`; the regions do not overlap. Each arc merges `origin/dev` before its PR and reruns its gate.
