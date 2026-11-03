@@ -1,7 +1,7 @@
 ---
 plan: rpc-proxy-1
 tier: mid
-status: arc 1 phases 1 and 2 ✓; arc 1 review loop next
+status: arc 1 phases 1 and 2 ✓, its review loop converged; arc 1 PR open, arc 2 next
 issues: "#1607 #1609 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -173,6 +173,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | final 2 | Codex, resumed | **approve** | the four conditions verified; no regression | none |
 | arc 1 r1 | Codex, gpt-6.1-sol (session 01a1a242) | findings (3 low) | the preflight client's cap and its `[3, 3, 2]` test; the seal-then-move order pinned; two comments reworded | none |
 | arc 1 r1 | Opus 5.5 (diff review) | findings (4 low) | README:99's host; the adapter's lookup required and the dead re-export removed; the other-profile row in the unlock test; the lesson corrected | none (the request-rate limit noted under I4) |
+| arc 1 r2 | Codex, resumed | **clean** | the seven fixes verified; no regression | none |
 
 ## Seeds (not run; orchestrator-owned)
 

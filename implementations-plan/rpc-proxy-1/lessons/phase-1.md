@@ -29,3 +29,7 @@ Verdict: findings, all low. Accepted:
 3. The profile filter had no test: the unlock test now holds a second profile's row on the retired URL, which stays; without the filter it reds.
 4. The lesson's "proves the seal-then-move order" was false at the time: Codex finding 2's assertion makes it true.
 Noted, not a change: the cap turns a large tick into many parallel requests, and a 429 is not retried; Assumption I4 and `rpc-fallback-1` own a provider's request-rate limit.
+
+## Arc 1 review round 2, Codex (resumed)
+
+Verdict: clean. It verified the seven accepted fixes and found no regression. The loop converged.
