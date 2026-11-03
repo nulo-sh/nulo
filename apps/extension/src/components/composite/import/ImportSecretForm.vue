@@ -1,9 +1,9 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
+import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
 import { MAX_PASSWORD_LENGTH } from "@/utils/password"
-import { newPasswordHint } from "@/utils/password-hint"
 import { PHRASE_WORD_COUNT, phraseHint } from "@/utils/recovery-phrase"
 /**
  * Section labels carry the visual heading; individual Inputs run
@@ -31,7 +31,6 @@ const unlockMethod = defineModel("unlockMethod", { default: "passkey" })
 const isPasswordType = ref(true)
 const hideCredentials = ref(true)
 
-const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 const seedHint = computed(() => phraseHint(props.phraseVerdict))
 /** A count still short of 24 is progress; anything else Import refuses reads as an error. */
 const seedHintColor = computed(() => {
@@ -81,40 +80,18 @@ const seedHintColor = computed(() => {
 			passkeyTestid="import-method-passkey"
 			:disabled="importing"
 		>
-			<Flex direction="column" gap="12">
-				<Input
-					v-model="password"
-					data-testid="import-password-input"
-					:type="isPasswordType ? 'password' : 'text'"
-					@input="emit('passwordInput')"
-					:maxLength="maxPasswordLength"
-					placeholder="Enter new password"
-					autocomplete="new-password"
-				>
-					<template #suffix>
-						<PasswordVisibilityToggle
-							:hidden="isPasswordType"
-							data-testid="import-password-input-visibility-toggle"
-							@toggle="isPasswordType = !isPasswordType"
-						/>
-					</template>
-					<template #bottom>
-						<Flex align="center" gap="6" :class="$style.hint_row">
-							<Icon name="lock" :size="12" color="tertiary" />
-							<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
-						</Flex>
-					</template>
-				</Input>
-				<Input
-					v-model="repeatedPassword"
-					data-testid="import-password-confirm-input"
-					:type="isPasswordType ? 'password' : 'text'"
-					@input="emit('passwordInput')"
-					:maxLength="maxPasswordLength"
-					placeholder="Repeat password"
-					autocomplete="new-password"
-				/>
-				</Flex>
+			<NewPasswordPair
+				v-model:password="password"
+				v-model:repeatedPassword="repeatedPassword"
+				v-model:hidden="isPasswordType"
+				:testids="{
+					input: 'import-password-input',
+					confirm: 'import-password-confirm-input',
+					toggle: 'import-password-input-visibility-toggle',
+				}"
+				:maxLength="maxPasswordLength"
+				@input="emit('passwordInput')"
+			/>
 		</UnlockMethodChoice>
 
 		<Flex v-if="error.type === 'unknown'" align="center" gap="8" :class="$style.unknown_error">

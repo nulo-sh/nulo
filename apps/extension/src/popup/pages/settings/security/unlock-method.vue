@@ -11,6 +11,7 @@
 <script setup>
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
+import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 
@@ -32,8 +33,7 @@ import { logCredentialFailure } from "@/utils/credential-refusal"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
-import { isNewPasswordValid, MAX_PASSWORD_LENGTH } from "@/utils/password"
-import { newPasswordHint } from "@/utils/password-hint"
+import { isNewPasswordValid } from "@/utils/password"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -54,7 +54,6 @@ const newPassword = ref("")
 const repeatedNewPassword = ref("")
 const isNewPasswordHidden = ref(true)
 const isBusy = ref(false)
-const newPasswordHintText = computed(() => newPasswordHint(newPassword.value ?? "", repeatedNewPassword.value ?? ""))
 const canSaveNewPassword = computed(() => isNewPasswordValid(newPassword.value ?? "", repeatedNewPassword.value ?? ""))
 
 const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
@@ -304,39 +303,17 @@ onBeforeUnmount(() => {
 
 		<div v-if="isNewPasswordStep" class="export_section_last">
 			<span class="export_section_label type--label-section">New Password</span>
-			<Flex direction="column" gap="12">
-				<Input
-					v-model="newPassword"
-					:type="isNewPasswordHidden ? 'password' : 'text'"
-					:maxLength="MAX_PASSWORD_LENGTH"
-					placeholder="Enter new password"
-					autocomplete="new-password"
-					autofocus
-					data-testid="unlock-method-new-password-input"
-				>
-					<template #suffix>
-						<PasswordVisibilityToggle
-							:hidden="isNewPasswordHidden"
-							data-testid="unlock-method-new-password-input-visibility-toggle"
-							@toggle="isNewPasswordHidden = !isNewPasswordHidden"
-						/>
-					</template>
-					<template #bottom>
-						<Flex align="center" gap="6" :class="$style.hint_row">
-							<Icon name="lock" :size="12" color="tertiary" />
-							<Text variant="body" color="tertiary">{{ newPasswordHintText }}</Text>
-						</Flex>
-					</template>
-				</Input>
-				<Input
-					v-model="repeatedNewPassword"
-					:type="isNewPasswordHidden ? 'password' : 'text'"
-					:maxLength="MAX_PASSWORD_LENGTH"
-					placeholder="Repeat password"
-					autocomplete="new-password"
-					data-testid="unlock-method-new-password-confirm-input"
-				/>
-			</Flex>
+			<NewPasswordPair
+				v-model:password="newPassword"
+				v-model:repeatedPassword="repeatedNewPassword"
+				v-model:hidden="isNewPasswordHidden"
+				:testids="{
+					input: 'unlock-method-new-password-input',
+					confirm: 'unlock-method-new-password-confirm-input',
+					toggle: 'unlock-method-new-password-input-visibility-toggle',
+				}"
+				autofocus
+			/>
 		</div>
 
 		<template v-if="!cannotChange" #bottom>
@@ -378,10 +355,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-.hint_row {
-	margin-top: 4px;
-}
-
 .error_text {
 	composes: type--body from global;
 	color: var(--txt-danger);

@@ -9,6 +9,7 @@ import {
 	pasteInto,
 	typeNow,
 } from "../../../../../../tests/helpers/credential-pins"
+import { NEW_PASSWORD_HINTS } from "@/utils/password-hint"
 import NewProfileCredentials from "./NewProfileCredentials.vue"
 
 const PAIR = ["register-password-input", "register-password-confirm-input"]
@@ -19,7 +20,7 @@ afterEach(() => {
 
 function mountCredentials(props: Record<string, unknown> = {}) {
 	const w = mount(NewProfileCredentials, {
-		props: { maxPasswordLength: 128, strengthHint: "At least 8 characters", ...props },
+		props,
 		attachTo: document.body,
 		global: { components: { Flex, Input, Text, Icon } },
 	})
@@ -55,13 +56,17 @@ describe("NewProfileCredentials", () => {
 		for (const [ev] of inputs) expect((ev as Event).target).toBeInstanceOf(HTMLInputElement)
 	})
 
-	test("the hint under the first field is the strengthHint prop", () => {
-		const w = mountCredentials({ strengthHint: "Passwords don't match" })
-		expect(w.get(`[data-testid="${PAIR[0]}"]`).text()).toContain("Passwords don't match")
+	test("the hint under the first field follows what was typed", async () => {
+		const w = mountCredentials()
+		expect(w.get(`[data-testid="${PAIR[0]}"]`).text()).toContain(NEW_PASSWORD_HINTS.short)
+		typeNow(nativeInput(w, PAIR[0]), "12345678")
+		typeNow(nativeInput(w, PAIR[1]), "12345679")
+		await flushPromises()
+		expect(w.get(`[data-testid="${PAIR[0]}"]`).text()).toContain(NEW_PASSWORD_HINTS.mismatch)
 	})
 
-	test("with no limit passed, a paste into either field is capped at 128", async () => {
-		const w = mountCredentials({ maxPasswordLength: undefined })
+	test("a paste into either field is capped at 128", async () => {
+		const w = mountCredentials()
 		for (const id of PAIR) pasteInto(nativeInput(w, id), "z".repeat(200))
 		await flushPromises()
 		expect(w.emitted("update:password")?.at(-1)).toEqual(["z".repeat(128)])

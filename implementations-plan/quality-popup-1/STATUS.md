@@ -11,3 +11,5 @@
 - 2026-11-03 arc 1 final gates on 34b55d07d: lint, typecheck:all, test:all, check:plans green; audit:dup 178/8787; smoke Chrome 22 passed (221 s), Firefox 18 passed 4 skipped (197 s); network 4 passed. PR next.
 - 2026-11-03 arc 1 dev merge (`bd1edacb0`) before the PR: three conflicts (auto-imports, the chaos model, `index.md`); the `index.md` resolution kept two lines for plans dev had archived, dropped in `5f3ec3efc`. PR #1595 squash-merged as `aaaf9278c`; arc 2 branches from `origin/dev` there.
 - 2026-11-03 arc 2 phase 4: lint, typecheck:all, tests (151 files, 2839 passed), the cap grep green; the cap is one constant. Phase 5 next (before pictures first).
+- 2026-11-03 arc 2 base `aaaf9278c` (armed builds): before pictures captured, 20 screens x 2 themes, two runs pixel-identical; smoke 7 files Chrome 21 passed (158 s), Firefox 21 passed (215 s); audit:dup production 175 / 8751.
+- 2026-11-03 arc 2 phase 5: lint, typecheck:all, tests (308 files, 5286 passed) green; head capture pixel-identical to base. Phase 6 next.

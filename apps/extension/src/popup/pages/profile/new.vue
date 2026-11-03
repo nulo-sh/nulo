@@ -65,7 +65,6 @@ const {
 	password,
 	repeatedPassword,
 	isCreating,
-	strengthHint,
 	isAllowedToContinue,
 	handleCreate,
 	handleCreateWithExistingPasskey,
@@ -115,7 +114,6 @@ onBeforeUnmount(() => {
 			v-if="type === 'password'"
 			v-model:password="password"
 			v-model:repeatedPassword="repeatedPassword"
-			:strengthHint="strengthHint"
 		/>
 
 		<!-- Passkey info -->

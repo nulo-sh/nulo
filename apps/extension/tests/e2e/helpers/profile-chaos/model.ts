@@ -345,7 +345,7 @@ const BACKUP_INTEGRITY = cite(GATE, 106, "if (checksum !== comparisonChecksum) r
 const BACKUP_UNPARSED = cite(SELECTION, 57, "title: parseError.title, message: parseError.tooltip")
 const RESTORE_ASKS_PASSWORD = cite(
 	"src/components/composite/import/ImportFullBackupForm.vue",
-	141,
+	140,
 	"askNewPassword && selectedBackup?.profileType",
 )
 const RESTORE_ROLLS_BACK = cite(
@@ -388,18 +388,18 @@ const METHOD_CHANGE = cite(SERVICE, 1263, "public async changeUnlockMethod(")
 const METHOD_CHANGE_WRITES = cite(SERVICE, 1380, "await this.repo.set(original.id, replacement)")
 const METHOD_CHANGE_REOPENS = cite(SERVICE, 1398, "await this.openSessionVerified(replacement, secret, dek)")
 const METHOD_VERIFY_REFUSES = cite(SERVICE, 1226, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
-const METHOD_WRONG_PASSWORD = cite(UNLOCK_METHOD, 191, "if (isCurrent()) isWrongPassword.value = true")
+const METHOD_WRONG_PASSWORD = cite(UNLOCK_METHOD, 190, "if (isCurrent()) isWrongPassword.value = true")
 /** A password profile's change checks the password before it makes a passkey, so a wrong one mints none. */
-const METHOD_PASSWORD_FIRST = cite(UNLOCK_METHOD, 188, "await managers.profile.verifyUnlockCredential(id, { password: typed })")
-const METHOD_THEN_MINTS = cite(UNLOCK_METHOD, 195, "const next = await nextPasskey()")
-const METHOD_NEW_PASSKEY = cite(UNLOCK_METHOD, 144, "const nextPasskey = () => newPasskey.ask(")
-const METHOD_CHECKS_PASSKEY = cite(UNLOCK_METHOD, 207, "await managers.profile.verifyUnlockCredential(id, { passkey: current })")
-const METHOD_CHECKS_HELD = cite(UNLOCK_METHOD, 219, "verifyUnlockCredential(appStore.profile.id, { passkey: answer })")
-const METHOD_CANCEL = cite(UNLOCK_METHOD, 172, "if (handleCancelOrUnconfirmed(error, openToast)) return")
-const METHOD_LEAVES = cite(UNLOCK_METHOD, 158, 'leaveFor(router, "/popup/settings")')
-const METHOD_ENDS_WITH_SESSION = cite(UNLOCK_METHOD, 249, "if (!logged) onSessionEnded()")
-const METHOD_DROPS_PROMPT = cite(UNLOCK_METHOD, 105, 'onCeremonyReject(new Error("The unlock method page started over"))')
-const METHOD_CHANGED_ELSEWHERE = cite(UNLOCK_METHOD, 88, "if (!renamed) onChangedElsewhere()")
+const METHOD_PASSWORD_FIRST = cite(UNLOCK_METHOD, 187, "await managers.profile.verifyUnlockCredential(id, { password: typed })")
+const METHOD_THEN_MINTS = cite(UNLOCK_METHOD, 194, "const next = await nextPasskey()")
+const METHOD_NEW_PASSKEY = cite(UNLOCK_METHOD, 143, "const nextPasskey = () => newPasskey.ask(")
+const METHOD_CHECKS_PASSKEY = cite(UNLOCK_METHOD, 206, "await managers.profile.verifyUnlockCredential(id, { passkey: current })")
+const METHOD_CHECKS_HELD = cite(UNLOCK_METHOD, 218, "verifyUnlockCredential(appStore.profile.id, { passkey: answer })")
+const METHOD_CANCEL = cite(UNLOCK_METHOD, 171, "if (handleCancelOrUnconfirmed(error, openToast)) return")
+const METHOD_LEAVES = cite(UNLOCK_METHOD, 157, 'leaveFor(router, "/popup/settings")')
+const METHOD_ENDS_WITH_SESSION = cite(UNLOCK_METHOD, 248, "if (!logged) onSessionEnded()")
+const METHOD_DROPS_PROMPT = cite(UNLOCK_METHOD, 104, 'onCeremonyReject(new Error("The unlock method page started over"))')
+const METHOD_CHANGED_ELSEWHERE = cite(UNLOCK_METHOD, 87, "if (!renamed) onChangedElsewhere()")
 const ACCOUNT_PAGE = "src/popup/pages/settings/security/export/account.vue"
 const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 221, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile"')
 const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 224, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")

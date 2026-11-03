@@ -21,13 +21,13 @@ const { openToast } = useToast()
 
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
+import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
-import { isNewPasswordValid, MAX_PASSWORD_LENGTH } from "@/utils/password"
-import { newPasswordHint } from "@/utils/password-hint"
+import { isNewPasswordValid } from "@/utils/password"
 import { leaveFor } from "@/utils/page-back"
 const appStore = useAppStore()
 
@@ -40,7 +40,6 @@ const newPassword = ref("")
 const repeatedNewPassword = ref("")
 // The current password has its own eye, so revealing the new pair never shows it.
 const isCurrentPasswordHidden = ref(true)
-const isNewPasswordHidden = ref(true)
 
 /**
  * Split error state: `isWrongCurrentPassword` drives the lock-screen
@@ -58,8 +57,6 @@ const handlePasswordInput = () => {
 	isWrongCurrentPassword.value = false
 	unexpectedErrorMessage.value = ""
 }
-
-const passwordHint = computed(() => newPasswordHint(newPassword.value ?? "", repeatedNewPassword.value ?? ""))
 
 const isAllowedToChange = computed(
 	() => !!currentPassword.value?.length && isNewPasswordValid(newPassword.value ?? "", repeatedNewPassword.value ?? ""),
@@ -176,40 +173,17 @@ onBeforeUnmount(() => {
 		<!-- New password -->
 		<div :class="$style.section_last">
 			<span :class="$style.section_label">New password</span>
-			<Flex direction="column" gap="12">
-				<Input
-					v-model="newPassword"
-					:type="isNewPasswordHidden ? 'password' : 'text'"
-					@input="handlePasswordInput"
-					:maxLength="MAX_PASSWORD_LENGTH"
-					placeholder="Enter new password"
-					autocomplete="new-password"
-					data-testid="new-password-input"
-				>
-					<template #suffix>
-						<PasswordVisibilityToggle
-							:hidden="isNewPasswordHidden"
-							data-testid="new-password-input-visibility-toggle"
-							@toggle="isNewPasswordHidden = !isNewPasswordHidden"
-						/>
-					</template>
-					<template #bottom>
-						<Flex align="center" gap="6" :class="$style.hint_row">
-							<Icon name="lock" :size="12" color="tertiary" />
-							<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
-						</Flex>
-					</template>
-				</Input>
-				<Input
-					v-model="repeatedNewPassword"
-					data-testid="new-password-repeat-input"
-					:type="isNewPasswordHidden ? 'password' : 'text'"
-					@input="handlePasswordInput"
-					:maxLength="MAX_PASSWORD_LENGTH"
-					placeholder="Repeat new password"
-					autocomplete="new-password"
-				/>
-			</Flex>
+			<NewPasswordPair
+				v-model:password="newPassword"
+				v-model:repeatedPassword="repeatedNewPassword"
+				:testids="{
+					input: 'new-password-input',
+					confirm: 'new-password-repeat-input',
+					toggle: 'new-password-input-visibility-toggle',
+				}"
+				repeatPlaceholder="Repeat new password"
+				@input="handlePasswordInput"
+			/>
 
 			<Flex
 				v-if="unexpectedErrorMessage"
@@ -266,10 +240,6 @@ onBeforeUnmount(() => {
 .section_label {
 	composes: type--label-section from global;
 	color: var(--nulo-secondary);
-}
-
-.hint_row {
-	margin-top: 4px;
 }
 
 .error_text {

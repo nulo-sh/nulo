@@ -1,10 +1,10 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
+import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
 import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { MAX_PASSWORD_LENGTH } from "@/utils/password"
-import { newPasswordHint } from "@/utils/password-hint"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import { restoreWarningText } from "./restore-warning"
 /**
@@ -46,7 +46,6 @@ const isPasswordType = ref(true)
 const isDecryptionPasswordType = ref(true)
 const warningRef = useTemplateRef("warningRef")
 
-const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 const showWarning = computed(() => props.restoreStatus === "finished" && props.isRestoreHasErrors)
 const shownWarning = computed(
 	() => props.warningText ?? restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors, props.heldAccounts),
@@ -144,43 +143,22 @@ watch(
 			passwordTestid="import-full-backup-method-password"
 			passkeyTestid="import-full-backup-method-passkey"
 		>
-			<Flex direction="column" gap="12">
-				<Input
-					v-model="password"
-					:type="isPasswordType ? 'password' : 'text'"
-					@input="emit('passwordInput')"
-					:maxLength="maxPasswordLength"
-					placeholder="Enter new password"
-					autocomplete="new-password"
-					data-testid="import-full-backup-password-input"
-				>
-					<template #suffix>
-						<PasswordVisibilityToggle
-							:hidden="isPasswordType"
-							data-testid="import-full-backup-password-input-visibility-toggle"
-							@toggle="isPasswordType = !isPasswordType"
-						/>
-					</template>
-					<template #bottom>
-						<Flex align="center" gap="6" :class="$style.hint_row">
-							<Icon name="lock" :size="12" color="tertiary" />
-							<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
-						</Flex>
-					</template>
-				</Input>
-				<Input
-					v-model="repeatedPassword"
-					:type="isPasswordType ? 'password' : 'text'"
-					@input="emit('passwordInput')"
-					:maxLength="maxPasswordLength"
-					placeholder="Repeat password"
-					autocomplete="new-password"
-					data-testid="import-full-backup-password-confirm-input"
-				/>
+			<NewPasswordPair
+				v-model:password="password"
+				v-model:repeatedPassword="repeatedPassword"
+				v-model:hidden="isPasswordType"
+				:testids="{
+					input: 'import-full-backup-password-input',
+					confirm: 'import-full-backup-password-confirm-input',
+					toggle: 'import-full-backup-password-input-visibility-toggle',
+				}"
+				:maxLength="maxPasswordLength"
+				@input="emit('passwordInput')"
+			>
 				<Text variant="body" color="tertiary" height="150">
 					Create a new password that will be used to log in to your profile in the future
 				</Text>
-				</Flex>
+			</NewPasswordPair>
 		</UnlockMethodChoice>
 	</div>
 </template>
@@ -195,10 +173,6 @@ watch(
 
 .section_label {
 	composes: section_label from "./import-shared.module.css";
-}
-
-.hint_row {
-	margin-top: 4px;
 }
 
 .error_tag {

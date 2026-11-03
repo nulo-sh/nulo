@@ -64,6 +64,7 @@ declare module 'vue' {
     LogsViewer: typeof import('./../components/JsonViewer/LogsViewer.vue')['default']
     MigrationBarrier: typeof import('./../components/MigrationBarrier.vue')['default']
     NetworkArrival: typeof import('./../components/network-arrival/NetworkArrival.vue')['default']
+    NewPasswordPair: typeof import('./../components/composite/NewPasswordPair.vue')['default']
     NotificationManager: typeof import('./../components/NotificationManager.vue')['default']
     OnboardingBackLink: typeof import('./../onboarding/components/OnboardingBackLink.vue')['default']
     OnboardingPage: typeof import('./../onboarding/components/OnboardingPage.vue')['default']
