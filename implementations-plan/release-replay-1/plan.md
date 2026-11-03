@@ -50,7 +50,7 @@ The release runbook's step 1 (`.claude/skills/release/SKILL.md` § Stable releas
 - **Two outcomes.** *Recording delivered*: the Chrome live run wrote the file and Phase 2's checks pass; the PR ships. *Promote ready*: every run at `P` and at `H` passed. A red run blocks only the second; it goes to `OWNER-ASKS.md` and holds the promote (D3).
 - **Alternative not taken:** commit the recording first and build after. Refused: the recording comes from a run whose candidate must already equal HEAD (F3), so the order is fixed.
 
-### Phase 1: build and run, retry 0, no commit
+### Phase 1: build and run, retry 0, no commit ✗ (both live runs red at the egress guard, #1636; both replays green: [lessons/phase-1.md](lessons/phase-1.md))
 Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording or the pinned backups. Never print a URL from a run log.
 1. Confirm `git status --porcelain` is empty and HEAD is `P`. Write `P` and `git diff --stat origin/dev P -- . ':(exclude)implementations-plan'` (empty) to `lessons/phase-1.md`.
 2. From the repo root, run `bash apps/extension/scripts/e2e/build-update-candidate.sh chrome`, then `... firefox`. From `apps/extension`, run `bun scripts/e2e/install-firefox.ts`. Note both browser versions.
@@ -63,7 +63,7 @@ Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording
 - **The recording run (step 3, at `P` only) red before the file changed** (`git diff --quiet` on the recording exits 0): there is no recording. Stop after the remaining runs and report `LEAD_BLOCKED`; open no PR. **Red after it changed**: keep the file (F4); Phase 2 checks it on its own.
 - **Gate, recording delivered:** the recording changed and Phase 2 passes. **Gate, promote ready:** both live runs pass; on both browsers the replay's four cases report passed (a skipped case is not a pass). Layers: e2e-live-network, e2e.
 
-### Phase 2: check and commit the recording
+### Phase 2: check and commit the recording ✓ (checks and gate green: [lessons/phase-1.md](lessons/phase-1.md))
 1. Hand check, counts only: `tag` `v1.1.0`, `browser` `chrome`, every `dials` entry loopback, no `nulo:e2e:` key, every plaintext URL loopback. Compare its key families and per-family counts with the old recording's (`git show HEAD:<file>`). Record its SHA-256.
 2. Derive the new expiry from step 3's populate window plus 7 days (F5); the replay refuses it 10 minutes earlier.
 3. **Gate:** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e/update-recording.test.ts`. Pass: exit 0. Layers: lint, typecheck, unit.
@@ -95,6 +95,7 @@ None. The lane changes one test fixture and touches no screen.
 | D1 | Commit the plan before the builds; no commit during Phase 1 | plan uncommitted until the PR | F3: the plan is not a build input, and the planner commits it |
 | D2 | At the PR head `H`: both replays always; both live runs too when a build input moved since `P`; a red at `H` replaces the green at `P` | replays at `H` only (draft); runs at `P` only, with a tree-equality proof | the committed recording at `H`, with `dev` merged in, is what the pre-promote replay reads; an offline replay cannot stand for the live sandbox run on a changed candidate (Codex P2) |
 | D3 | Two outcomes: a valid recording ships even when a later run is red, and that red holds the promote through `OWNER-ASKS.md` | no PR on any red | the recording is valid on its own, and the promote needs it either way; the draft's gates contradicted this (Codex P2) |
+| D4 | After the live red, no diagnostic run with the host declared in an uncommitted edit; file #1636 and ship the recording | the diagnostic (lead's lean) | Codex: the edit changes the guard's acceptance, which "reported, not patched" forbids whatever its label; the fix lane reruns both live runs anyway |
 
 ## Review verdicts
 
