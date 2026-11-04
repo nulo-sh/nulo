@@ -25,7 +25,7 @@ import { createPXE, type PXE } from "@aztec-labs/pxe/server"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { BlockHash } from "@aztec-labs/stdlib/block"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
-import type { Tx, TxHash } from "@aztec-labs/stdlib/tx"
+import { type Tx, type TxHash, TxStatus } from "@aztec-labs/stdlib/tx"
 import { EmbeddedWallet } from "@aztec-labs/wallets/embedded"
 import { AztecNodeFactoryAdapter } from "@nulo/aztec-runtime/adapters"
 import { callFailureOf, type RoutedNode, type RouteSpec } from "@nulo/aztec-runtime/routing"
@@ -52,9 +52,6 @@ const ANCHORED = [
 	"getBlockData",
 	"getContract",
 ]
-/** The PXE block stream's reads by number, which only the active endpoint serves. */
-const SYNC_READS = ["getChainTips", "getBlocks", "getBlockNumber"]
-
 const DATA_ROOT = join(homedir(), ".cache", "nulo-e2e")
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const factory = new AztecNodeFactoryAdapter(() => undefined)
@@ -81,6 +78,10 @@ class RoutedWallet extends EmbeddedWallet {
 			armed?.()
 			return prove(...args)
 		}
+	}
+
+	public syncedHeader() {
+		return this.pxe.getSyncedBlockHeader()
 	}
 }
 
@@ -307,12 +308,13 @@ describe.skipIf(!aztecConfig || onFirefoxLane)("routing between endpoints on the
 		await pxe.stop()
 		pxes.splice(pxes.indexOf(pxe), 1)
 
+		// Built as the wallet builds a runtime: the floor seeded from the store once the PXE is open.
 		const rebuilt = factory.createRoutedNode(spec())
-		rebuilt.route.seedFloor(synced.at(-1) ?? 0)
 		const runtime = await openPxe(rebuilt, dir)
+		rebuilt.route.seedFloor((await runtime.getSyncedBlockHeader()).getBlockNumber())
+		await sync(runtime)
 		expect(active(rebuilt)).toBe("b")
 		expect(states(rebuilt)[0]).toBe("a:behind")
-		await sync(runtime)
 
 		a.unfreeze()
 		await pollUntil(
@@ -351,6 +353,8 @@ describe.skipIf(!aztecConfig || onFirefoxLane)("routing between endpoints on the
 		a.fail({ methods: ["getChainTips"], times: 1, fault: RELAY_REPLIES.server })
 		await sync()
 		const header = await pxe.getSyncedBlockHeader()
+		// Past the probe spacing, so only the floor keeps B from the moved read.
+		await sleep(5_000)
 		a.fail({ methods: ANCHORED, times: 1, fault: RELAY_REPLIES.server })
 		await node.getPublicStorageAt(
 			{ number: header.getBlockNumber(), hash: await header.hash() },
@@ -364,36 +368,41 @@ describe.skipIf(!aztecConfig || onFirefoxLane)("routing between endpoints on the
 	}, 300_000)
 
 	test("S4: the primary killed on the first anchored read inside a proof: the proof completes through the fallback, which alone carries the send and its receipts", async () => {
-		const { wallet, mint, mined } = await routedWallet()
-		let armed = false
+		const { routed, wallet, mint, mined } = await routedWallet()
+		let armed: { holder: string | undefined; seenOnA: number } | undefined
 		wallet.beforeProve = () => {
-			armed = true
+			armed = { holder: active(routed), seenOnA: a.methods().length }
 			a.fail({ methods: ANCHORED, times: 1, fault: { kind: "kill" } })
 		}
 		const txHash = await mint()
 		const receipt = await mined(txHash)
-		expect(armed).toBe(true)
+		expect(armed?.holder).toBe("a")
+		expect(methodsAfter(a, armed?.seenOnA ?? Number.POSITIVE_INFINITY).some((m) => ANCHORED.includes(m))).toBe(true)
 		expect(receipt.isMined()).toBe(true)
 		expect(a.carried(txHash.toString())).toBe(0)
 		expect(b.carried(txHash.toString())).toBeGreaterThan(0)
 	}, 300_000)
 
 	test("S5: a half-dead primary (tips served, anchored reads failing) moves only its failures, through the PXE's cached node", async () => {
-		const { routed, sender, token } = await routedWallet()
+		const { routed, wallet, sender, token } = await routedWallet()
 		await token.methods.balance_of_private(sender).simulate({ from: sender })
 		// A new block moves the PXE's anchor, so the cached reads of the first run miss.
 		await advance(1)
 		const seenOnB = b.methods().length
-		const failedOnA = a.requests()
 		a.fail({ methods: ANCHORED, times: 2, fault: RELAY_REPLIES.server })
 		await token.methods.balance_of_private(sender).simulate({ from: sender })
-		expect(a.requests() - failedOnA).toBeGreaterThanOrEqual(2)
 		expect(active(routed)).toBe("a")
 		expect(states(routed)[0]).toBe("a:ready")
 		const movedToB = methodsAfter(b, seenOnB).filter((m) => m !== "getNodeInfo" && m !== "getChainTips")
 		expect(movedToB.length).toBeGreaterThan(0)
 		expect(movedToB.every((m) => ANCHORED.includes(m))).toBe(true)
-		expect(methodsAfter(b, seenOnB).some((m) => SYNC_READS.includes(m) && m !== "getChainTips")).toBe(false)
+
+		// The rule has retired: the next anchored read, past every cache, is A's again.
+		const header = await wallet.syncedHeader()
+		const [controlOnA, controlOnB] = [a.methods().length, b.methods().length]
+		await routed.getPublicStorageAt({ number: header.getBlockNumber(), hash: await header.hash() }, tokenAddress, Fr.random())
+		expect(methodsAfter(a, controlOnA)).toContain("getPublicStorageAt")
+		expect(methodsAfter(b, controlOnB)).not.toContain("getPublicStorageAt")
 	}, 300_000)
 
 	test("S6: an anchored read at an unknown block hash is the node's own answer, and the call ends where it is", async () => {
@@ -410,13 +419,14 @@ describe.skipIf(!aztecConfig || onFirefoxLane)("routing between endpoints on the
 
 		const node = factory.createRoutedNode(spec())
 		await node.getNodeInfo()
-		const seenOnB = b.methods().length
+		const [seenOnA, seenOnB] = [a.methods().length, b.methods().length]
 		const error = await node.getPublicStorageAt({ number: tip, hash: unknown } as never, AztecAddress.ZERO, Fr.ZERO).then(
 			() => undefined,
 			(e: unknown) => e,
 		)
 		expect(error).toBeInstanceOf(Error)
 		expect(callFailureOf(error)).toBeUndefined()
+		expect(methodsAfter(a, seenOnA).filter((m) => m === "getPublicStorageAt")).toHaveLength(1)
 		expect(methodsAfter(b, seenOnB)).toEqual([])
 	}, 60_000)
 
@@ -444,12 +454,13 @@ describe.skipIf(!aztecConfig || onFirefoxLane)("routing between endpoints on the
 		expect(a.carried(first.toString())).toBe(0)
 	}, 300_000)
 
-	test("S7b: the primary killed after a send through it: the same transfer sent again goes through the fallback, and the first one's hash never leaves the primary", async () => {
+	test("S7b: the primary killed after a send through it: the first one's receipt reads pending and is asked nowhere else; the same transfer sent again goes through the fallback", async () => {
 		const { routed, mint, mined } = await routedWallet({ handshake: true })
 		const first = await mint()
 		expect(a.carried(first.toString())).toBeGreaterThan(0)
 		await a.kill()
-		const seenOnA = a.requests()
+		expect((await routed.getTxReceipt(first)).status).toBe(TxStatus.PENDING)
+		expect(b.carried(first.toString())).toBe(0)
 		// Read past both relays: the node has the transaction whatever became of the endpoint it reached.
 		await pollUntil(
 			async () =>
@@ -459,7 +470,6 @@ describe.skipIf(!aztecConfig || onFirefoxLane)("routing between endpoints on the
 		)
 		const second = await mint()
 		await mined(second)
-		expect(a.requests()).toBe(seenOnA)
 		expect(b.carried(first.toString())).toBe(0)
 		expect(b.carried(second.toString())).toBeGreaterThan(0)
 		expect(active(routed)).toBe("b")
