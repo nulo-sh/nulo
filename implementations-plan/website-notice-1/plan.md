@@ -1,7 +1,7 @@
 ---
 plan: website-notice-1
 tier: light
-status: arc 1 in progress (OA-1 answered 2026-11-04)
+status: completed
 issues: "#1541"
 driver: claude-code
 claude_model: opus
@@ -12,6 +12,19 @@ eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 040334f53; standard: implementations-plan/README.md § Post-implementation standard at 040334f53
 budget: recon 1 explorer (sonnet); one Codex gpt-6.1-sol high audit, resumed until approve
 ---
+
+## Outcome
+
+- **Date:** 2026-11-04. Planned and delivered as one arc.
+- **Status:** completed. The arc and this close-out ship as PR #1663 into `dev`; its merge archives this plan and closes #1541. The notice takes effect when the promote deploys the landing and `nulo-subscribe` (D7).
+- **Shipped:** website privacy notice 1.1 with the owner's four sentences and history row; the 1.0 archive, byte for byte; `CONSENT_VERSION` "1.1"; a landing test holding each archived notice to its row's version and date and to its own history (D2); the runbook's check before each send (D3); the promote step in `BEFORE-LAUNCH.md` § 4 (D7).
+- **Review loop:** plan: Codex r1 and r2 `conditional approve`, r3 `approve`. Diff: Codex r1 `approve`, the Opus review `conditional approve` (three findings adopted, one rejected), Codex r2 `approve`.
+- **Gates:** the Phase 1 gate green at `e377326d6` and again on the final head `b5646afaf`.
+- **Dropped:** a reply-to pin (D5; no file holds the value, it lives in Resend). Reported to the owner through the orchestrator and the PR body, outside this plan's scope by the lane brief: `infra/subscribe/README.md:70` still says "the launch email", and the Resend topic's name still says "Launch".
+- **Known limits:** none.
+- **Open items:** the promote step in `BEFORE-LAUNCH.md` § 4 (website notice 1.1).
+- **Lessons:** none promoted; `lessons.md` sits at its budget and this plan found no gotcha beyond its own procedure.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 # Website privacy notice 1.1
 
