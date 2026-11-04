@@ -14,3 +14,4 @@
 - 2026-11-04: arc 1 review round 2: Codex revise (2, one root cause: an await between the last check and the dispatch); fixed, routing/adapters/utils 174/174, lint 0, typecheck 0
 - 2026-11-04: arc 1 review round 3: Codex revise (1 major), fixed after the round; the loop stopped at its three-round cap
 - 2026-11-04: arc 1 final gates on 9d1691aad: lint 0, typecheck:all 0, test:all 0 (aztec-runtime 535, extension 17452), check:plans 0
+- 2026-11-04: Phase 3 gate pass (lint, typecheck:all, scripts/e2e/rpc-relay 11/11). Deviation D29 in the ledger.
