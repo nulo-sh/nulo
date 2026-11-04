@@ -1,21 +1,27 @@
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { afterEach, expect, test, vi } from "vitest"
+import { stubBatchFetch } from "../../../../tests/helpers/batch-fetch"
 import { createWalletNodeFactory } from "./node-factory"
-import { seedForKind } from "./seeds"
+import { maxBatchSizeFor, seedForKind } from "./seeds"
+
+vi.mock("./seeds", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./seeds")>()
+	return { ...actual, maxBatchSizeFor: vi.fn(actual.maxBatchSizeFor) }
+})
 
 afterEach(() => {
 	vi.unstubAllGlobals()
+	vi.mocked(maxBatchSizeFor).mockReset()
 })
 
-test("the wallet's node factory sends the Mainnet default no request of more than 25 entries", async () => {
-	const mainnet = seedForKind("mainnet")
-	if (!mainnet) throw new Error("this build seeds no Mainnet network")
-	const fetch = vi.fn(async (_url: string, init: RequestInit) => {
-		const calls = JSON.parse(String(init.body)) as { id: number }[]
-		return new Response(JSON.stringify(calls.map((c) => ({ jsonrpc: "2.0", id: c.id, result: 7 }))))
-	})
-	vi.stubGlobal("fetch", fetch)
+const mainnet = seedForKind("mainnet")
+if (!mainnet) throw new Error("this build seeds no Mainnet network")
+
+// No remote default has a cap, so only a cap the lookup is made to answer shows the factory forwards it.
+test("the wallet's node factory sends no request above the cap the lookup answers", async () => {
+	const entriesPerRequest = stubBatchFetch()
+	vi.mocked(maxBatchSizeFor).mockReturnValueOnce(3)
 	const node: AztecNode = createWalletNodeFactory().createNode(mainnet.rpcUrl)
-	await Promise.all(Array.from({ length: 60 }, () => node.getBlockNumber()))
-	expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([25, 25, 10])
+	await Promise.all(Array.from({ length: 8 }, () => node.getBlockNumber()))
+	expect(entriesPerRequest()).toEqual([3, 3, 2])
 })

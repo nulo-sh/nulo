@@ -1,24 +1,34 @@
 import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import { bytesToHex } from "@nulo/wallet-core/utils"
-import { LOCAL_NETWORK_RPC_URL, maxBatchSizeFor, RETIRED_DEFAULT_ENDPOINTS, seedForKind } from "./seeds"
+import { stubBatchFetch } from "../../../../tests/helpers/batch-fetch"
+import { createWalletNodeFactory } from "./node-factory"
+import { DRPC_FREE_PLAN_BATCH_LIMIT, LOCAL_NETWORK_RPC_URL, maxBatchSizeFor, RETIRED_DEFAULT_ENDPOINTS, seedForKind } from "./seeds"
 import type { Network } from "./spec"
 
-const remoteSeedUrls = (["mainnet", "testnet"] as const).map((kind) => {
-	const seed = seedForKind(kind)
-	if (!seed) throw new Error(`this build seeds no ${kind} network`)
-	return seed.rpcUrl
+describe("the remote defaults' batches", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals()
+	})
+
+	// The remote defaults take no batch cap, so the client's own default must stay within dRPC's
+	// limit. Red here means an Aztec bump raised it: give both dRPC origins a `BATCH_CAPS` entry.
+	test.each(["mainnet", "testnet"] as const)("the wallet's %s node sends no request above dRPC's limit", async (kind) => {
+		const seed = seedForKind(kind)
+		if (!seed) throw new Error(`this build seeds no ${kind} network`)
+		const entriesPerRequest = stubBatchFetch()
+		const node = createWalletNodeFactory().createNode(seed.rpcUrl)
+		const calls = 2 * DRPC_FREE_PLAN_BATCH_LIMIT + 50
+		await Promise.all(Array.from({ length: calls }, () => node.getBlockNumber()))
+		const sent = entriesPerRequest()
+		expect(sent.reduce((sum, n) => sum + n, 0)).toBe(calls)
+		expect(Math.max(...sent)).toBeLessThanOrEqual(DRPC_FREE_PLAN_BATCH_LIMIT)
+	})
 })
 
 describe("maxBatchSizeFor", () => {
-	test("caps both remote defaults at 25, also when the URL is typed with a trailing slash", () => {
-		for (const url of [...remoteSeedUrls, "https://aztec-mainnet.drpc.org/", "https://aztec-testnet.drpc.org/"]) {
-			expect(maxBatchSizeFor(url)).toBe(25)
-		}
-	})
-
 	test.each([
 		["the local network", LOCAL_NETWORK_RPC_URL],
 		["a custom node", "https://node.example"],
