@@ -44,7 +44,8 @@ export function isReservedRpcCode(code: unknown): boolean {
 	return typeof code === "number" && code >= -32768 && code <= -32000
 }
 
-function tagged<E extends Error>(error: E, kind: TransportFailure): E {
+/** Tags `error` with `kind`, the shape the fetch throws; for tests and fakes that stand in for a node client. */
+export function withTransportFailure<E extends Error>(error: E, kind: TransportFailure): E {
 	Object.defineProperty(error, TRANSPORT_FAILURE, { value: kind })
 	return error
 }
@@ -123,9 +124,9 @@ function fetchOnce(timeoutMs: number): JsonRpcFetch {
  *  the SDK-compatible host-prefixed message. */
 function mapFetchDispatchFailure(err: unknown, host: string, timeoutMs: number): Error {
 	if (err instanceof DOMException && err.name === "AbortError") {
-		return tagged(new Error(`Request to ${host} timed out after ${timeoutMs}ms`), "timeout")
+		return withTransportFailure(new Error(`Request to ${host} timed out after ${timeoutMs}ms`), "timeout")
 	}
-	return tagged(new Error(`Error fetching from host ${host}: ${err}`), "unreachable")
+	return withTransportFailure(new Error(`Error fetching from host ${host}: ${err}`), "unreachable")
 }
 
 /** An oversize body is terminal on any status, since a retry would read the same reply; any other
@@ -133,8 +134,8 @@ function mapFetchDispatchFailure(err: unknown, host: string, timeoutMs: number):
 function mapBodyFailure(err: unknown, resp: Response, aborted: boolean): Error {
 	if (err instanceof ResponseTooLargeError) return new NoRetryError(err.message)
 	const kind: TransportFailure = aborted ? "timeout" : resp.status >= 500 ? "server" : "malformed"
-	if (!resp.ok) return tagged(new Error(resp.statusText), kind)
-	return tagged(new Error(`Failed to parse body as JSON`), kind)
+	if (!resp.ok) return withTransportFailure(new Error(resp.statusText), kind)
+	return withTransportFailure(new Error(`Failed to parse body as JSON`), kind)
 }
 
 function rpcErrorOf(entry: unknown): { code?: unknown; message?: unknown } | undefined {
@@ -149,10 +150,10 @@ function classifyRpcFailure(resp: Response, host: string, responseJson: unknown,
 	const errorMessage = `Error ${resp.status} from server ${host}: ${typeof message === "string" ? message : resp.statusText}`
 	const is4xx = resp.status >= 400 && resp.status < 500
 	const error = noRetry || is4xx ? new NoRetryError(errorMessage) : new Error(errorMessage)
-	if (!is4xx) return tagged(error, "server")
-	if (resp.status === 408 || resp.status === 425 || resp.status === 429) return tagged(error, "overloaded")
+	if (!is4xx) return withTransportFailure(error, "server")
+	if (resp.status === 408 || resp.status === 425 || resp.status === 429) return withTransportFailure(error, "overloaded")
 	const entries = Array.isArray(responseJson) ? responseJson : [responseJson]
-	return entries.some((entry) => isReservedRpcCode(rpcErrorOf(entry)?.code)) ? error : tagged(error, "refused")
+	return entries.some((entry) => isReservedRpcCode(rpcErrorOf(entry)?.code)) ? error : withTransportFailure(error, "refused")
 }
 
 /** A 200 whose body is one JSON-RPC error object with a non-reserved code: a provider gateway
@@ -163,7 +164,7 @@ function gatewayRefusal(resp: Response, host: string, responseJson: unknown): Er
 	const error = rpcErrorOf(responseJson)
 	if (error === undefined || typeof error.code !== "number" || isReservedRpcCode(error.code)) return undefined
 	const message = typeof error.message === "string" ? error.message : resp.statusText
-	return tagged(new NoRetryError(`Error ${resp.status} from server ${host}: ${message}`), "refused")
+	return withTransportFailure(new NoRetryError(`Error ${resp.status} from server ${host}: ${message}`), "refused")
 }
 
 /**

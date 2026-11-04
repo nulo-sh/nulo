@@ -1,6 +1,7 @@
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
+import type { RouteSpec, RoutedNode, SubmissionPins } from "../routing/routed-node"
 import type { RetryOptions } from "../utils/fetch"
 
 /**
@@ -50,4 +51,13 @@ export interface NodeFactory {
 	 * endpoint URL. Throws on timeout, refusal, or a reply that is not a field.
 	 */
 	readPublicStorageOnce(rpcUrl: string, contract: AztecAddress, slot: Fr, timeoutMs: number): Promise<Fr>
+
+	/**
+	 * A node over one network's endpoints in preference order, moving each call off an endpoint
+	 * that fails it and returning to the primary once it answers again (`routing/routed-node.ts`).
+	 * Its endpoint clients make one silent attempt per call, each with its URL's batch cap; the
+	 * router owns the retries. An endpoint whose URL the transport rule refuses is dropped; throws
+	 * when none is left. `pins` carries submitted transactions' endpoints across the nodes a caller builds.
+	 */
+	createRoutedNode(spec: RouteSpec, options?: RetryOptions & { pins?: SubmissionPins }): RoutedNode
 }

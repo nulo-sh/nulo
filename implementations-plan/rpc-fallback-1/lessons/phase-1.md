@@ -17,3 +17,11 @@ The plan was written at `3b845ef02`; `dev` moved twelve commits. Every base-depe
 
 ## Runs
 
+- 2026-11-04, Phase 1 gate at `f592601e6`: `bun run lint` 0 (after `biome format` on the two touched files); `bun run typecheck:all` 0; `(cd packages/aztec-runtime && bun --bun vitest run src/utils --retry=0)` 55/55, the 20 new rows seen red first; `bun run test:all` run 1: one red, `apps/extension/src/utils/copy-dash-ban.test.ts` timing out at 5 s while load1 was about 170 on this shared host (the file passes alone in 1.9 s; nothing in `apps/extension` changed); run 2: every workspace exit 0.
+
+# Phase 2 (arc 1): the routed node
+
+- Deviations, both recorded as D26 and D27 in the plan's ledger: a sync read with no other qualifying endpoint keeps today's rounds on the active one, stopping once another endpoint holds the role; admission probes run once per call before its rounds, and a round with nothing to try ends the call.
+- Parity is per call, not per wall-clock millisecond: each routed retry re-enters the SDK client's zero-delay batch window (`setTimeout(sendBatch, 0)`), so a lone endpoint's failing call takes up to 1 ms per retry longer than the retrying fetch did. Requests, sleeps and outcomes are identical (`aztec-node-factory-adapter.test.ts`, seven reply shapes against `createNode`). Concurrent calls that fail together retry in separate batch windows only if their sleeps straddle a millisecond; nothing pins batching across retries.
+- A primary that loses the role through a refused sync read is probed again on the next call (its `nextProbeAt` is "now"), the first of the two passing probes a return needs; the adapter test's request list shows it.
+- 2026-11-04, Phase 2 gate on the final tree: `bun run lint` 0 (two cognitive-complexity reds fixed by splitting `walk`, `pickByAnchor`, `pinnedReceipt` and `walkRest`, no suppression); `bun run typecheck:all` 0; `(cd packages/aztec-runtime && bun --bun vitest run src/utils src/routing src/adapters --retry=0)` 161/161, the routing files red first (module missing) and the sync-retry guard red under a mutation; `bun run test:all` exit 0 (aztec-runtime 521, extension 17438; `bun run test` is its extension leg); `git grep -n createRoutedNode -- apps packages ':!*.test.ts'` lists the port, the adapter and `core/testing/fake-node-factory.ts` only.
