@@ -1,7 +1,7 @@
 ---
 plan: website-notice-1
 tier: light
-status: approved by Codex; arc 1 waits on OA-1
+status: arc 1 in progress (OA-1 answered 2026-11-04)
 issues: "#1541"
 driver: claude-code
 claude_model: opus
@@ -15,19 +15,19 @@ budget: recon 1 explorer (sonnet); one Codex gpt-6.1-sol high audit, resumed unt
 
 # Website privacy notice 1.1
 
-`legal/website-privacy.md` 1.0 promises "one email when Nulo is on the stores" and says replies are not received, while the launch email asks for replies and its reply address is hello@nulo.sh (#1541). The owner, 2026-11-04: "Sounds good, notice ok." That approves exactly three sentence changes, which are the scope. Version 1.1 ships with the landing and the `nulo-subscribe` Worker, which both deploy from `main` at the next promote.
+`legal/website-privacy.md` 1.0 promises "one email when Nulo is on the stores" and says replies are not received, while the launch email asks for replies and its reply address is hello@nulo.sh (#1541). The owner, 2026-11-04: "Sounds good, notice ok." That approves exactly three sentence changes. The owner, the same day, on OA-1: "notice 3.2 ok.", which adds § 3.2's first sentence and signs the history row. Those four changes and the row are the scope. Version 1.1 ships with the landing and the `nulo-subscribe` Worker, which both deploy from `main` at the next promote.
 
 ## Outcome & Quality Bar
 
 - **For whom**: a person who reads nulo.sh/website-privacy before or after joining the list, and the owner, whose consent record names the notice version in effect.
-- **Excellent**: (1) the three approved sentences read word for word as approved, and every other sentence of 1.0 is unchanged; (2) the archived 1.0 Markdown is byte-identical to the 1.0 file, `nulo.sh/website-privacy/v1.0/` renders it under its own date, and once both Workers have deployed, a signup records `consent_version` "1.1".
-- **Good enough**: other stale text is reported, not changed (OA-1, recon.md).
+- **Excellent**: (1) the four approved sentences and the row read word for word as approved, and every other sentence of 1.0 is unchanged; (2) the archived 1.0 Markdown is byte-identical to the 1.0 file, `nulo.sh/website-privacy/v1.0/` renders it under its own date, and once both Workers have deployed, a signup records `consent_version` "1.1".
+- **Good enough**: other stale text is reported, not changed (recon.md).
 
 ## UI impact
 
-- `nulo.sh/website-privacy` (signed by the owner's words above): the box's last sentence becomes "You get occasional product updates, and you can leave in one click."; § 3.4's first and last sentences become "Occasional product updates, from `hello@news.nulo.sh`." and "Replies reach hello@nulo.sh."; § 3.5's last sentence becomes "Before each send I review the list and remove entries that are plainly not real."; the header reads "Version 1.1 — effective 4 November 2026"; the version history gains a 1.1 row, whose wording waits on OA-1.
+- `nulo.sh/website-privacy` (signed by the owner's words above): the box's last sentence becomes "You get occasional product updates, and you can leave in one click."; § 3.4's first and last sentences become "Occasional product updates, from `hello@news.nulo.sh`." and "Replies reach hello@nulo.sh."; § 3.5's last sentence becomes "Before each send I review the list and remove entries that are plainly not real."; § 3.2's first sentence becomes "To send occasional product updates." (OA-1); the header reads "Version 1.1 — effective 4 November 2026"; the version history gains the 1.1 row signed on OA-1: "Drops the one-time email at store launch (summary, §§ 3.2 and 3.4); replies reach hello@nulo.sh (§ 3.4); the list is reviewed before each send (§ 3.5)."
 - `nulo.sh/website-privacy/v1.0/`: a new permalink with the 1.0 text, which the build makes from the archived copy.
-- No other surface changes. § 3.2 waits on OA-1.
+- No other surface changes.
 
 ## Assumptions
 
@@ -45,12 +45,12 @@ budget: recon 1 explorer (sonnet); one Codex gpt-6.1-sol high audit, resumed unt
 - I2. "Replies reach hello@nulo.sh" holds while each broadcast's reply-to in Resend is hello@nulo.sh: the lane brief says the launch draft carries it. The repo's fixtures show no live configuration. The runbook step of D3 is a manual check, not enforcement.
 - I3. The effective date is the promote day, 4 November 2026. If the orchestrator relays a slip, the header, the row and the gate script's two date strings move together.
 
-**Asks**: OA-1 in `OWNER-ASKS.md` (§ 3.2, and the history row's wording). The arc ships the "ships now" form without it.
+**Asks**: OA-1 in `OWNER-ASKS.md` (§ 3.2, and the history row's wording), answered 2026-11-04: option (a) and the row quoted under UI impact.
 
 ## Architecture & Implementation
 
 - **Shape**: text and one config value. No code path changes. The procedure is `legal/README.md` § Changing these documents.
-- **Change map**: `legal/archive/website-privacy-1.0.md` (new, a byte copy of the 1.0 file at base); `legal/website-privacy.md` (header, three sentences, history row); `infra/subscribe/wrangler.jsonc` (`CONSENT_VERSION` "1.1"); `apps/landing/scripts/legal-pages.test.ts` (D2); `infra/subscribe/README.md` (D3).
+- **Change map**: `legal/archive/website-privacy-1.0.md` (new, a byte copy of the 1.0 file at base); `legal/website-privacy.md` (header, four sentences, history row); `infra/subscribe/wrangler.jsonc` (`CONSENT_VERSION` "1.1"); `apps/landing/scripts/legal-pages.test.ts` (D2); `infra/subscribe/README.md` (D3).
 - **Order**: copy the archive first, then edit. Editing first and copying after archives 1.1 under the 1.0 name.
 - **Alternative not taken**: a script that archives and bumps the notice. The procedure is a `cp` and two lines, run a few times a year.
 
@@ -69,10 +69,11 @@ budget: recon 1 explorer (sonnet); one Codex gpt-6.1-sol high audit, resumed unt
    ```text
    3      **Version 1.1 — effective 4 November 2026**
    12-13  > You get occasional product updates, and you can leave in one click.
+   65     To send occasional product updates. **Legal basis (GDPR):**
    80-82  Occasional product updates, from `hello@news.nulo.sh`. Nothing is sent when you sign up.
           Replies reach hello@nulo.sh.
    91     received it and lets you leave in one click. Before each send I review the list and remove
-   +153   | 1.1 | 4 November 2026 | <the OA-1 row> |
+   +153   | 1.1 | 4 November 2026 | <the row signed on OA-1> |
    ```
 3. Set `CONSENT_VERSION` to `"1.1"` in `infra/subscribe/wrangler.jsonc`.
 4. Add D2's test to "the real documents" in `apps/landing/scripts/legal-pages.test.ts`. Prove it red twice: with the archived file moved away, then with its header date changed. After each case, restore the file with `git show 040334f53:legal/website-privacy.md > legal/archive/website-privacy-1.0.md` (the file is untracked, so `git checkout` cannot restore it).
@@ -90,6 +91,7 @@ budget: recon 1 explorer (sonnet); one Codex gpt-6.1-sol high audit, resumed unt
     	["> You get one email when Nulo is on the stores, then occasional product updates, and you can leave in\n> one click.", "> You get occasional product updates, and you can leave in one click."],
     	["One email when Nulo is available on the Chrome Web Store and Firefox Add-ons, then occasional\nproduct updates, from `hello@news.nulo.sh`. Nothing is sent when you sign up. Replies to these\nemails are not received; write to hello@nulo.sh instead.", "Occasional product updates, from `hello@news.nulo.sh`. Nothing is sent when you sign up.\nReplies reach hello@nulo.sh."],
     	["Before the launch email I review", "Before each send I review"],
+    	["To tell you when Nulo is available and to send occasional product updates.", "To send occasional product updates."],
     	["| 1.0 | 27 October 2026 | First published version. |\n", `| 1.0 | 27 October 2026 | First published version. |\n| 1.1 | 4 November 2026 | ${ROW} |\n`],
     ]
     let want = base
@@ -110,7 +112,7 @@ budget: recon 1 explorer (sonnet); one Codex gpt-6.1-sol high audit, resumed unt
 - D1. The approved words go in verbatim. The sender keeps its existing code formatting (`` `hello@news.nulo.sh` ``).
 - D2. One test beside `legal-pages.test.ts:226-231`: each superseded history row has `legal/archive/website-privacy-<v>.md`, and its header equals `{ version, effective }` from that row. It asserts that the superseded list is not empty, so the test cannot pass on nothing. One small row-date helper serves both tests. Why: an archived copy with its row's version and a wrong date (copied from a half-edited head, or the date retyped) publishes that wrong date in the version list. The build already fails on a missing file (`build-legal.ts`) or a wrong version (`legal-pages.ts:186`); nothing catches the date. This mirrors `packages/legal/src/manifest.test.ts:53-60` for the wallet documents.
 - D3. Operator runbook only: `infra/subscribe/README.md:51` "Review the list for junk before the launch send." becomes "Before each send, review the list for junk and check that the broadcast's reply-to is hello@nulo.sh (website privacy notice §§ 3.4, 3.5)." Why: 1.1 makes both promises for every send, and the owner reads the runbook before sending. It is a manual check, not enforcement, and not user-facing copy. `:70` ("the launch email says why") is reported, not changed: rewriting it as "every email" would state a wider duty than § 3.5's "first email".
-- D4. § 3.2 stays as in 1.0 (OA-1). The approval names three changes; a fourth would guess the owner's words.
+- D4. § 3.2 waited on the owner, since the first approval named three changes. OA-1's answer (2026-11-04, "notice 3.2 ok.") replaces its first sentence only; line 66 keeps its wrap, so no other byte moves.
 - D5. No reply-to pin. The value lives in Resend, and the brief forbids inventing one. The PR body says so.
 - D6. No CI change: `build-landing` already checks the notice and its v1.0 page.
 
@@ -123,7 +125,7 @@ budget: recon 1 explorer (sonnet); one Codex gpt-6.1-sol high audit, resumed unt
 
 ## Delivery
 
-Single arc, single PR from `worktree-website-notice-1` to `dev`, opened ready: `docs(legal): website privacy notice 1.1 drops the launch-email promise and fixes replies` (88 characters), `Closes #1541`. Body: the three changes as approved, the history row, what the repo proves (F3) and cannot (I1, I2, F4: no reply-to pin), OA-1's state, the validation runs. No e2e label: no suite's path filter covers the change, and none is needed. The close-out lands as the PR's final commits.
+Single arc, single PR from `worktree-website-notice-1` to `dev`, opened ready: `docs(legal): website privacy notice 1.1 drops the launch-email promise and fixes replies` (88 characters), `Closes #1541`. Body: the four changes and the row as approved, quoting both approvals ("Sounds good, notice ok." and "notice 3.2 ok.", 2026-11-04), what the repo proves (F3) and cannot (I1, I2, F4: no file pins the reply address), the validation runs. No e2e label: no suite's path filter covers the change, and none is needed. The close-out lands as the PR's final commits.
 
 ## Post-implementation
 
@@ -131,7 +133,7 @@ The standard named in the front matter governs. Plan-specific values:
 - Step 1 is absent (`code_review: off`).
 - Step 2 runs once over `040334f53..HEAD` after Phase 1: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. One Opus `general-purpose` review runs beside round 1. Hard stop after three rounds. Log each round in `lessons/phase-1.md` and under Audit verdicts.
 - Step 3: rerun the Phase 1 gate on the final head. Then `gh pr create --base dev` (ready), then the close-out commits, with `bun run check:plans` green after staging. Then `gh pr checks <n> --watch` once. Never merge.
-- Step 4 lists #1541 as closed by the PR. OA-1's § 3.2 question, if the owner leaves it for later, becomes an `owner-decision` issue.
+- Step 4 lists #1541 as closed by the PR. OA-1 is answered, so no `owner-decision` issue.
 - Step 5: after the merge, `agent-worktree done website-notice-1 --merged`. This session runs headless and arms no wait; the orchestrator's next session in this worktree runs it.
 
 ## Seeds
