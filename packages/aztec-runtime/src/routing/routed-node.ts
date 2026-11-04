@@ -242,10 +242,10 @@ class Router implements Route {
 		const pinned = this.pins.byTxHash.get(key)
 		if (pinned) return pinned
 		const active = this.health.active()
-		const picked =
-			active !== undefined && this.health.state(active) === "ready"
-				? this.endpoints[active]
-				: await this.pickByAnchor(active, anchorHash)
+		// The active endpoint is the proof's own only while its last call answered: one that failed
+		// since has moved the proof's later reads elsewhere, though one failed batch leaves it `ready`.
+		const trusted = active !== undefined && this.health.state(active) === "ready" && this.health.answeredLast(active)
+		const picked = trusted ? this.endpoints[active] : await this.pickByAnchor(active, anchorHash)
 		if (!picked) throw noEndpoint("the transaction")
 		const raced = this.pins.byTxHash.get(key)
 		if (raced) return raced

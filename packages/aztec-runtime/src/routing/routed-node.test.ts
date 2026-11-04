@@ -596,6 +596,19 @@ describe("pickForSend", () => {
 		expect(h.requests.length).toBe(before + 4)
 	})
 
+	test("an active endpoint that failed since its last answer is not taken on trust: the others are asked", async () => {
+		const h = new Harness([A, B])
+		await call(h)
+		h.endpoint(A).fail = () => transport("unreachable")
+		await call(h)
+		expect(h.node.route.active()?.id).toBe("e0")
+		expect(h.node.route.snapshot()[0]?.state).toBe("ready")
+		const [fromA, fromB] = [h.seen(A).length, h.seen(B).length]
+		expect((await h.node.route.pickForSend(TX.toString(), ANCHOR)).id).toBe("e1")
+		expect(h.seen(A).length).toBe(fromA)
+		expect(h.seen(B).slice(fromB)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getBlockData@${probeTimeoutMs}`])
+	})
+
 	test("with no active endpoint, asks the endpoints in order and picks the first that knows the anchor", async () => {
 		const h = new Harness([A, B, C])
 		await call(h)

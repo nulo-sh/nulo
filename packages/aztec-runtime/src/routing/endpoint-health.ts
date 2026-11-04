@@ -162,6 +162,11 @@ export class RouteHealth {
 		return this.at(index).holdDownMs
 	}
 
+	/** No counting failure since its last answer. */
+	public answeredLast(index: number): boolean {
+		return this.at(index).failures === 0
+	}
+
 	public isAdmitted(index: number): boolean {
 		return this.at(index).admitted
 	}
