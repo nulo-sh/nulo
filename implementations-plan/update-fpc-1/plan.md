@@ -1,7 +1,7 @@
 ---
 plan: update-fpc-1
 tier: light
-status: approved (Codex plan audit)
+status: completed
 issues: none (lane brief; no issue filed)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ post_implementation_hardening: not scheduled
 base: origin/dev at 040334f53
 trunk: dev
 ---
+
+## Outcome
+
+- Date: 2026-11-04.
+- Status: completed.
+- Shipped: PR #1665 `test(e2e): the update test expects the sponsor's removal where its chain offers none` against `dev`: `unofferedSponsorIds` and the opt-in `unofferedSponsors` option of `updateProblems`, `allowedPicks` with the picks compared after the sandbox visit, the first (locked) check excusing nothing, the pure pins module, the moved row parser, three unit tests and the README. All four update runs from v1.1.0 pass at retry 0 on both browsers at `72d73236b` and again at the merged head `002cb69ac` ([lessons/phase-2.md](lessons/phase-2.md)).
+- Did not hold: the lane brief's Alpha Mainnet; the lost row is the canonical sponsor on the run's custom sandbox network, under the same product rule ([lessons/phase-0.md](lessons/phase-0.md)).
+- Lessons: none promoted. `lessons.md` is at its budget, and the fix is in code with its tests.
+- Known limits: none.
+- Open items: none. OA-1 in [OWNER-ASKS.md](OWNER-ASKS.md) is informational, recommends no change, and is the orchestrator's to relay.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # update-fpc-1: the update test expects the sponsor's removal where its chain offers none
 
