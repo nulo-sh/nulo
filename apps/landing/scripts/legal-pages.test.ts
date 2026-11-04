@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { LEGAL_MANIFEST, hasPlaceholders, parseDocumentHeader, parseVersionHistory } from "@nulo/legal"
@@ -214,6 +214,12 @@ describe("the real documents", () => {
 	const noticeMarkdown = readFileSync(resolve(legalDir, "website-privacy.md"), "utf8")
 	const noticeHeader = parseDocumentHeader(noticeMarkdown)
 	const shipped = pageVersions([{ doc: "website-privacy", version: noticeHeader.version, markdown: noticeMarkdown }])
+	const rowEffective = (version: string) =>
+		noticeMarkdown
+			.split("\n")
+			.find((line) => line.startsWith(`| ${version} |`))
+			?.split("|")[2]
+			?.trim()
 
 	test.each(["terms", "privacy", "website-privacy"] as const)("%s.md renders against the shipped versions", (doc) => {
 		const markdown = readFileSync(resolve(legalDir, `${doc}.md`), "utf8")
@@ -227,8 +233,19 @@ describe("the real documents", () => {
 	test("the notice is not a wallet document, and its history row carries its header's version and date", () => {
 		expect(Object.keys(LEGAL_MANIFEST)).not.toContain("website-privacy")
 		expect(parseVersionHistory(noticeMarkdown).at(-1)).toBe(noticeHeader.version)
-		const row = noticeMarkdown.split("\n").find((line) => line.startsWith(`| ${noticeHeader.version} |`)) ?? ""
-		expect(row.split("|")[2]?.trim()).toBe(noticeHeader.effective)
+		expect(rowEffective(noticeHeader.version)).toBe(noticeHeader.effective)
+	})
+
+	test("every superseded notice version has an archived copy dated by its row and ending its own history", () => {
+		const superseded = parseVersionHistory(noticeMarkdown).slice(0, -1)
+		expect(superseded.length).toBeGreaterThan(0)
+		for (const version of superseded) {
+			const file = resolve(legalDir, "archive", `website-privacy-${version}.md`)
+			expect(existsSync(file), version).toBe(true)
+			const archived = readFileSync(file, "utf8")
+			expect(parseDocumentHeader(archived)).toEqual({ version, effective: rowEffective(version) })
+			expect(parseVersionHistory(archived).at(-1)).toBe(version)
+		}
 	})
 
 	// The launch-legal job runs this on every pull request into main. nulo.sh publishes the notice from
