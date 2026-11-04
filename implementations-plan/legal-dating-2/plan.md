@@ -49,7 +49,7 @@ The owner set 4 November 2026 as the 1.2.0 promote day. `BEFORE-LAUNCH.md` § 4 
 - **Files**: the F1 set, plus `BEFORE-LAUNCH.md` lines 206-207, 215-216 and 228-229.
 - **Alternatives not taken**: push to #1538's branch (D1); a test that pins row dates to the manifest (D3).
 
-## Phase 1 — date the three versions
+## Phase 1 — date the three versions ✓
 
 Warning: change no other byte of the archived copy (D2).
 
@@ -113,6 +113,13 @@ Warning: change no other byte of the archived copy (D2).
   Agreed: F1 to F3, I2, the change map, D1, D3, D4, D6; D2 reworded as the narrow exception it is.
 - **Codex r2** (resumed): `conditional approve`. It re-verified the three `sed` edits independently (seven document, three manifest and six checklist substitutions, no other byte). Two shell findings, both demonstrated and accepted: a clean `git grep` exits 1, so "every command exits 0" refused correct work; a `for` loop's status hid an earlier `cmp` failure. Fixed: `pipefail`, a `fail` flag set by each compare, the grep required to exit 1, and one `G2 fail=0` line as the pass signal.
 - **Codex r3** (resumed, verify only): `approve`. Both fixes verified under zsh, with failure controls (an early `cmp` failure, an upstream pipe failure, a remaining placeholder, a grep error) and the success control. No new material finding.
+- **Diff review, Codex r1** (gpt-6.1-sol, high, fresh session): `clean`. **Opus diff review** beside it: `clean`, one optional note: `legal/archive/README.md` names only a dead-link exception to its no-edit rule, while #893 and this diff date an archived copy (D2).
+- **Diff review, Codex r2** (resumed, on that note only): `clean`. Leave the README unchanged: this PR follows `BEFORE-LAUNCH.md` § 4 and D2, and a sixth file would change the approved contract without fixing a defect here; fold the exception in when that procedure is next revised.
+
+## Implementation record
+
+- Phase 1 (`eb8ef5477`): steps 1 to 8 as written, edits by hand. Step 1 at the base: the launch check failed on the five `«FILL` lines. G1 to G4 green on that head. `test:all`'s first run had one red, `log-payload-ban.test.ts` "Test timed out in 5000ms" at load1 127; the same file passed in `bun run test` on that head, and the diff touches no extension source. One rerun, per the host-saturation rule: green (`lessons/phase-1.md`).
+- `origin/dev` moved to `040334f53` (#1649; no change to `index.md`, `lessons.md` or the five files); merged, and G1 to G4 rerun on the merged head with `B=040334f53`: all green, `test:all` at its first run.
 
 ## Delivery
 
