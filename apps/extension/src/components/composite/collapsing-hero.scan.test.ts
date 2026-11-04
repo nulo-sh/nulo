@@ -29,6 +29,7 @@ const PAGES = {
 	"popup/pages/settings/security/export/full.vue": [3, ["Before you continue", "Backup"]],
 	"popup/pages/settings/security/export/account.vue": [3, ["Select account", "Before you continue", "File"]],
 	"popup/pages/settings/security/export/seed.vue": [4, ["Before you continue", "Your recovery phrase", "Keep in mind"]],
+	"popup/pages/restore-again.vue": [1, []],
 } as const
 
 const FORMS = {
@@ -57,9 +58,5 @@ describe("the more-below button's stops", () => {
 		const source = read(path)
 		expect(markCount(source)).toBe(count)
 		expect(markedLabels(source)).toEqual(expect.arrayContaining([...labels]))
-	})
-
-	test("Restore again keeps today's layout until the owner says otherwise", () => {
-		expect(opensWithMoreBelow(read("popup/pages/restore-again.vue"))).toBe(false)
 	})
 })

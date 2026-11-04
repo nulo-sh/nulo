@@ -126,10 +126,11 @@ onBeforeUnmount(() => {
 		heroSub="Again"
 		collapsingLabel="Restore again"
 		backTo="/popup/general"
+		moreBelow
 		data-testid="restore-again-page"
 		@keydown="onKeydown"
 	>
-		<div v-if="networkNames.length" :class="$style.intro">
+		<div v-if="networkNames.length" :class="$style.intro" data-scroll-section>
 			<Text variant="body" height="150" color="secondary" :class="$style.names" data-testid="restore-again-intro">
 				{{ restoreAgainIntroText(networkNames) }}
 			</Text>
