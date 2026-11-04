@@ -1,6 +1,8 @@
 ---
 plan: scroll-cue-3
 tier: light
+status: completed
+issues: Part of #1658
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -9,6 +11,16 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev 040334f53
 ---
+
+## Outcome
+
+- Date: 2026-11-04.
+- Status: completed.
+- Shipped: PR #1666 `feat(popup): a "more below" button on screens whose content runs past the fold` against `dev`: `ScrollMoreButton` in `@nulo/design/ui`, `useScrollRemaining`, the pure `nextScrollTop`, and `data-scroll-section` marks on the nine signed screens (P109-01 = A, P109-02 = A) and on Restore again (OWNER-ASKS Q1, "restore yes"). The end room is 28 px, not the planned 48 (D3). Local smoke at retry 0: Chrome 276 passed, Firefox 280 passed; the follow-up's `restore-outcome.test.ts` 3/3 on both browsers ([lessons/phase-1.md](lessons/phase-1.md)).
+- Lessons: none promoted. `lessons.md` is at its budget, and the behaviour is in code with its tests.
+- Known limits: none.
+- Open items: #1658, open for the shells this plan left out (Send, the Terms sheet, onboarding, the execute window), after 1.2.0.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # A "more below" button on the screens whose content runs past the fold
 
