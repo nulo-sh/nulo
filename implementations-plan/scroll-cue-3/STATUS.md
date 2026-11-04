@@ -1,0 +1,3 @@
+- 2026-11-04 16:09 plan drafted (light); recon done
+- 2026-11-04 16:09 Codex plan audit round 1: revise, 4 findings accepted (marks, Restore again gated + Q1, tall-section step, button in @nulo/design)
+- 2026-11-04 16:15 Codex round 2: revise (repeat-field stop, rejected as D9); round 3: approve
