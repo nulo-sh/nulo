@@ -67,7 +67,7 @@ The release runbook's live update scenario (`tests/e2e/network/update-in-place.t
 - **Gate**, from the repo root: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`; then `(cd apps/extension && bun --bun vitest run scripts/e2e/update-rows.test.ts scripts/e2e/update-recording.test.ts)`. Pass: every command exits 0; the new tests fail on the base copy of the fixtures. Layers: lint, typecheck, unit.
 - Commit: `test(e2e): the update checker excuses the sponsor the candidate withdraws from a chain`.
 
-### Phase 2: review loop, then builds and the four runs at the reviewed commit `C`
+### Phase 2: review loop, then builds and the four runs at the reviewed commit `C` ✓ (`C` = `72d73236b`, then `M` = `002cb69ac` after a trunk merge; all four green at both: [lessons/phase-2.md](lessons/phase-2.md))
 1. The review loop (§ Post-implementation) over `git diff 040334f53...HEAD`; fixes committed; Phase 1's gate rerun.
 2. Merge `origin/dev` if it moved; rerun Phase 1's gate. HEAD is now `C`; `git status --porcelain` shows only this plan's files.
 3. From the repo root: `bash apps/extension/scripts/e2e/build-update-candidate.sh chrome`, then `firefox`.
@@ -103,6 +103,7 @@ None. Test fixtures only.
 
 - **Codex plan audit, round 1** (gpt-6.1-sol, high, read-only): reject, one P1, three P2, one P3, all verified and accepted. P1: no check read the picks after the removal, so a faulty forget passed; the comparison moves after the sandbox visit and its decision is a tested pure function (D2). P2: a lower-case compare accepted a `0X` prefix the product refuses (now `isHex32`); the forgotten form now follows the listed rows actually gone, not all of them; the handoff now pastes the exact commands. P3: "every custom network" now "whose derived chain id is unlisted" (here and in `OWNER-ASKS.md`). Confirmed: D1's opt-in option, the `rowsOf` move, D3, the reuse of `offersSponsoredFpc`, the pin and `applyFeePickUpdate`; title 84 characters; no local path.
 - **Round 2** (resumed): **approve**, no remaining material finding; the five fixes verified.
+- **Arc review loop:** Codex r1 (gpt-6.1-sol, high) over `040334f53...91fecb329` clean; the Opus diff review beside it found one, accepted: the first `updateProblems` call runs while the wallet is locked, when the product cannot delete, so only the final call excuses the sponsor (`72d73236b`); Codex r2 (resumed) clean, converged ([lessons/phase-1.md](lessons/phase-1.md)).
 
 ## Delivery
 

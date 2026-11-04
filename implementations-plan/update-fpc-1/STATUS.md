@@ -4,3 +4,5 @@
 - 2026-11-04 plan drafted (light); Codex plan audit next.
 - 2026-11-04 Codex plan audit: r1 reject (five findings, all accepted), r2 approve. Plan committed; arc 1 next (auto-continue).
 - 2026-11-04 arc 1 phase 1 gate: green after one fix (D4: pure modules for the scripts tsconfig).
+- 2026-11-04 review loop converged (Codex r1 clean, Opus one fix, Codex r2 clean); gate green at C=72d73236b; builds and four runs next.
+- 2026-11-04 phase 2 green: four runs green at C=72d73236b and again at M=002cb69ac (trunk merge with a legal build input). PR next.
