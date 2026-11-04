@@ -457,6 +457,42 @@ const wireCall = (fields: Record<string, unknown>) => ({
 const buildNoFrom = (call: unknown, opts: unknown = {}) =>
 	h.builder.buildNoFrom({ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), exec: { calls: [call] }, opts } as never, FENCE)
 
+describe("each scope account's contract is in the PXE before a run stubs it", () => {
+	const OTHER = AztecAddress.fromBigIntUnsafe(0x07e5n)
+	const withOther = () => {
+		const other = { address: OTHER, ensureRegistered: vi.fn(async () => {}), ensureContractRegistered: vi.fn(async () => {}) }
+		h.deps.accountService.getAccountContract.mockImplementation((async (_profile: string, _chain: number, address: string) =>
+			address === OTHER.toString() ? other : h.account) as never)
+		return other
+	}
+	const standard = (additionalScopes: string[]) =>
+		h.builder.buildStandard(
+			{ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), actions: [], opts: { additionalScopes } },
+			FENCE,
+			{ fake: "feeMethod" } as never,
+		)
+
+	test("a standard build registers another scope account's contract; one naming its sender alone resolves no other", async () => {
+		const other = withOther()
+		await standard([OTHER.toString()])
+		expect(h.deps.accountService.getAccountContract).toHaveBeenCalledWith("p1", 31337, OTHER.toString())
+		expect(other.ensureContractRegistered).toHaveBeenCalledTimes(1)
+
+		h = makeHarness()
+		await standard([ACCOUNT_ADDR.toString()])
+		expect(h.deps.accountService.getAccountContract.mock.calls.map((call) => (call as unknown[])[2])).toEqual([ACCOUNT_ADDR.toString()])
+		expect(h.account.ensureContractRegistered).not.toHaveBeenCalled()
+	})
+
+	test("a NO_FROM build registers another scope account's contract beside its own", async () => {
+		noFromHarness()
+		const other = withOther()
+		await buildNoFrom(wireCall({ name: FN.name, selector: await selectorOf() }), { additionalScopes: [OTHER.toString()] })
+		expect(h.account.ensureContractRegistered).toHaveBeenCalledTimes(1)
+		expect(other.ensureContractRegistered).toHaveBeenCalledTimes(1)
+	})
+})
+
 describe("selector binding: the dApp's name must be the selector's function", () => {
 	const UNKNOWN_SELECTOR = "0x0badc0de"
 	const MISMATCH = "Scope violation: call name does not match selector's function"

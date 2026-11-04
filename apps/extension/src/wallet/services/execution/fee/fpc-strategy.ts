@@ -92,6 +92,7 @@ import {
 	DEFAULT_FEE_MULTIPLIER,
 	finalizeGasLimits,
 	isInitWrapped,
+	probeContext,
 	probedFirstSimOpts,
 	startEstimateTask,
 	suggestGasLimits,
@@ -173,11 +174,7 @@ export class FpcStrategy implements FeeStrategy {
 			// whose stub constructor gas is untrustworthy.
 			let discovered: Action[] = []
 			if (ctx.probe) {
-				const extracted = await ctx.probe.extractEffects(simulatedTx, {
-					node: built.node,
-					network: built.network,
-					signer: built.account.address,
-				})
+				const extracted = await ctx.probe.extractEffects(simulatedTx, probeContext(built))
 				discovered = extracted.actions
 				if (extracted.requested || isInitWrapped(built)) {
 					if (discovered.length) ctx.op.actions.push(...discovered)
@@ -237,9 +234,7 @@ export class FpcStrategy implements FeeStrategy {
 			// seed Pass-2's envelope, so re-derive it from a validated Pass-1.
 			let discovered: Action[] = []
 			if (ctx.probe) {
-				discovered = (
-					await ctx.probe.extractEffects(simulatedTx, { node: built.node, network: built.network, signer: built.account.address })
-				).actions
+				discovered = (await ctx.probe.extractEffects(simulatedTx, probeContext(built))).actions
 				if (discovered.length) {
 					ctx.op.actions.push(...discovered)
 				}

@@ -41,6 +41,7 @@ function makeBuilt(opts: BuildOpts) {
 	return {
 		txRequest: {
 			origin: { toString: () => (opts.initWrapped ? "0xentrypoint" : "0xaccount") },
+			authWitnesses: [{ requestHash: { toString: () => `0xcarried-${n}` } }],
 			txContext: {
 				gasSettings: new GasSettings(new Gas(11_000, 22_000), new Gas(3_300, 4_400), new GasFees(555n, 666n), new GasFees(7n, 8n)),
 			},
@@ -376,12 +377,14 @@ describe("probe fold", () => {
 			expect(h.probe.extractEffects).toHaveBeenCalledTimes(1)
 			const [sim, chain] = h.probe.extractEffects.mock.calls[0] as unknown as [
 				unknown,
-				{ node: unknown; network: unknown; signer: unknown },
+				{ node: unknown; network: unknown; signer: unknown; scopes: unknown; carried: unknown },
 			]
 			expect(sim).toBe(await h.simulateTxTask.mock.results[0]?.value)
 			expect(chain.node).toBe(h.builds[0]?.node)
 			expect(chain.network).toBe(h.builds[0]?.network)
 			expect(chain.signer).toBe(h.builds[0]?.account.address)
+			expect(chain.scopes).toBe(h.builds[0]?.scopes)
+			expect(chain.carried).toEqual(new Set(h.builds[0]?.txRequest.authWitnesses.map((w) => w.requestHash.toString())))
 			expect(h.ctx.op.actions).toEqual(actions)
 		},
 	)

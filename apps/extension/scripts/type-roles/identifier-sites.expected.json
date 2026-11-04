@@ -1117,7 +1117,7 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "a.consumer",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-consumer\"]",
@@ -1127,7 +1127,7 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "a.caller",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-caller\"]",
@@ -1136,8 +1136,18 @@
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
+			"expression": "a.onBehalfOf",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && a.onBehalfOf",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"execute-discovered-authorized-by\"]",
+			"surface": "windows-execute",
+			"state": "a send consuming another account's authwit, all details open (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "trimAddress(safeWire(a.innerHash, 80), 10, 6)",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length && isAuthwitOpen(a)",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && isAuthwitOpen(a)",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-inner-hash\"]",
@@ -1404,6 +1414,16 @@
 			"selector": "[data-testid=\"execute-discovered-line-consumer\"]",
 			"surface": "windows-execute",
 			"state": "a send with a discovered authwit (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"expression": "a.onBehalfOf",
+			"branch": "authwitRows.length && a.onBehalfOf",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"execute-op-summary-authwit-on-behalf-account\"]",
+			"surface": "windows-execute",
+			"state": "a send consuming another account's authwit (network)"
 		}
 	]
 }

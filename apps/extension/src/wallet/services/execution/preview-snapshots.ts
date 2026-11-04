@@ -28,8 +28,9 @@ export type PreviewIdentity = {
 }
 
 export type PreviewSnapshot = PreviewIdentity & {
+	/** One `listedKey` per record the card listed. */
 	readonly discoveredHashes: readonly string[]
-	/** The rows the card listed for those hashes, so a later window can show the same disclosure. */
+	/** The rows the card listed for those keys, so a later window can show the same disclosure. */
 	readonly discoveredAuthwits?: readonly DiscoveredAuthwit[]
 	readonly builtAt: number
 }

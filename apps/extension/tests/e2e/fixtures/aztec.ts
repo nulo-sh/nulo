@@ -730,6 +730,17 @@ export async function mintPublicTokensForAccount(
 	}
 }
 
+/** Mints `amount` of the fixture token privately to `accountAddress` from a throwaway sponsored wallet. */
+export async function mintPrivateTokensForAccount(aztecConfig: AztecTestConfig, accountAddress: string, amount: bigint): Promise<void> {
+	const { wallet, node, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
+	try {
+		const feeOptions = await createSponsoredFeeOptions(wallet)
+		await mintPrivateTokens(wallet, node, aztecConfig.tokenAddress, accountAddress, amount, aztecConfig.minterAddress, feeOptions)
+	} finally {
+		await cleanup()
+	}
+}
+
 /**
  * Deploy extra tokens (distinct symbols) with the sandbox minter and mint a public balance of each
  * to `accountAddress`. Home's three-row cap and the Holdings list need more than the one fixture
