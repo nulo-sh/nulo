@@ -1,8 +1,12 @@
+import { isHex32 } from "@nulo/wallet-core/utils"
 import type { Page } from "puppeteer"
+import { FPC_STORAGE_ROOT, FpcType } from "@/wallet/services/fpc/spec"
+import { offersSponsoredFpc } from "@/wallet/services/fpc/sponsored-fpc-chains"
 import { LEGACY_SELECTED_ACCOUNT_KEY, SELECTED_ACCOUNT_ROOT, SELECTED_ACCOUNT_ROW_ID } from "@/wallet/services/ui-preference/spec"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
 import { STORES } from "@/wallet/storage/stores"
+import { SPONSOR_FPC_ADDRESS } from "../../helpers/protocol-fpc-pins"
 import type { ReleaseTraits } from "./release"
 import { FIXTURE_PREFIX, shapeOfKey, unreadRows } from "./stored-rows"
 
@@ -90,6 +94,24 @@ export const isEnvelope = (raw: unknown): boolean => {
 const moved = (key: string, after: Record<string, unknown>) =>
 	key === LEGACY_SELECTED_ACCOUNT_KEY && isEnvelope(after[SELECTED_ACCOUNT_KEY])
 
+/**
+ * The ids of `fpcs`, a release's fee payer rows as it reads them, that the candidate deletes on its
+ * first fee read on their chain, forgetting their picks: the canonical sponsor, matched as the wallet
+ * matches it (`0x` and 64 hex digits in either case), on a chain that offers no sponsor.
+ */
+export const unofferedSponsorIds = (fpcs: readonly Record<string, unknown>[]): string[] =>
+	fpcs.flatMap(({ id, type, address, chainId }) =>
+		typeof id === "string" &&
+		type === FpcType.DefaultSponsoredFpc &&
+		typeof address === "string" &&
+		isHex32(address) &&
+		address.toLowerCase() === SPONSOR_FPC_ADDRESS &&
+		typeof chainId === "number" &&
+		!offersSponsoredFpc(chainId)
+			? [id]
+			: [],
+	)
+
 /** Queues a running wallet drains: a row is deleted once its balance refresh succeeds. */
 const QUEUES: ReadonlySet<string> = new Set<string>(["incomingBalanceOutbox"] satisfies StoredShapeName[])
 
@@ -99,18 +121,26 @@ const QUEUES: ReadonlySet<string> = new Set<string>(["incomingBalanceOutbox"] sa
  * build's registry. Empty when it does. The release's selection counts as moved once the sealed
  * selection row is stored. A drained queue row counts as lost unless
  * `balancesAsserted`: the caller asserts every balance such a row would refresh, so a row dropped
- * before its refresh shows there as a stale balance.
+ * before its refresh shows there as a stale balance. The fee payer row of each of
+ * `unofferedSponsors` ({@link unofferedSponsorIds}) may be gone: the candidate deletes it by design.
  */
 export async function updateProblems(
 	before: Record<string, unknown>,
 	after: Record<string, unknown>,
-	opts: { balancesAsserted?: true } = {},
+	opts: { balancesAsserted?: true; unofferedSponsors?: readonly string[] } = {},
 ): Promise<string[]> {
 	const drained = (name: string | undefined) => opts.balancesAsserted === true && name !== undefined && QUEUES.has(name)
 	const rekeyed = (key: string) => REKEYED.has(shapeOfKey(key) ?? "")
+	const withdrawn = new Set((opts.unofferedSponsors ?? []).map((id) => `${FPC_STORAGE_ROOT}@${id}`))
 	const lost = Object.keys(before)
 		.filter(
-			(key) => !key.startsWith(FIXTURE_PREFIX) && !(key in after) && !drained(shapeOfKey(key)) && !rekeyed(key) && !moved(key, after),
+			(key) =>
+				!key.startsWith(FIXTURE_PREFIX) &&
+				!(key in after) &&
+				!drained(shapeOfKey(key)) &&
+				!rekeyed(key) &&
+				!moved(key, after) &&
+				!withdrawn.has(key),
 		)
 		.map((key) => `${key}: lost in the update`)
 	const rowsOf = (entries: Record<string, unknown>, name: string) => Object.keys(entries).filter((key) => shapeOfKey(key) === name).length

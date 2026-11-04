@@ -203,8 +203,8 @@ Nulo shows it, Alpha. A patch, so nobody is asked to accept again. The version i
 place; its effective date is the day the promote publishes it, so until then it reads
 `«FILL: effective date»`:
 
-- [ ] `legal/terms.md` — the version line and the 1.2.1 history row, dated the day it is published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.2.1 (now `null`), same date
+- [x] `legal/terms.md` — the version line and the 1.2.1 history row, dated the day it is published (4 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.2.1 (4 November 2026), same date
 - [ ] After the deploy, `nulo.sh/terms` and `nulo.sh/terms/v1.2.1/` show no DRAFT banner
 
 **Due at the release that publishes privacy 1.2.8:** § 5.2 says prices are requested for the price
@@ -212,8 +212,8 @@ identifiers the signed token list names, and for AZTEC. A patch, so nobody is as
 The version is archived and in place; its effective date is the day the promote publishes it, so
 until then it reads `«FILL: effective date»`:
 
-- [ ] `legal/privacy.md` — the version line and the 1.2.8 history row, dated the day it is published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.8 (now `null`), same date
+- [x] `legal/privacy.md` — the version line and the 1.2.8 history row, dated the day it is published (4 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.8 (4 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.8/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.8 text (`apps/extension/store/listing.md`
       § Privacy policy text)
@@ -225,13 +225,23 @@ place; its effective date is the day the promote publishes it, so until then it 
 `«FILL: effective date»`. A promote that publishes both 1.2.8 and 1.2.9 dates both, and the archived
 `legal/archive/privacy-1.2.8.md` with them, since it was archived before its date was known:
 
-- [ ] `legal/privacy.md` — the version line and the 1.2.9 history row, dated the day it is published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.9 (now `null`), same date
+- [x] `legal/privacy.md` — the version line and the 1.2.9 history row, dated the day it is published (4 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.9 (4 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.9/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.9 text (`apps/extension/store/listing.md`
       § Privacy policy text)
 - [ ] The Chrome Web Store's `alarms` justification is re-pasted from `apps/extension/store/listing.md`
       § Permissions, which now says the token list refreshes about every six hours
+
+**Due at the release that publishes website notice 1.1:** the notice drops the email at store
+launch and says replies reach hello@nulo.sh. It is dated for the promote it was written for, 4
+November 2026; the landing and `nulo-subscribe` both deploy from that promote's push to `main`:
+
+- [ ] `legal/website-privacy.md` — the version line and the 1.1 history row carry the day the
+      promote lands; on any other day, both move to it before the promote merges
+- [ ] After the deploy, `nulo.sh/website-privacy` shows 1.1 and `nulo.sh/website-privacy/v1.0/`
+      shows the 1.0 text
+- [ ] `nulo-subscribe` deployed from the same push, so a new signup records `consent_version` 1.1
 
 **Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
 2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):

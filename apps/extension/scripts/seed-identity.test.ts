@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION } from "../src/utils/chain-ids"
-import { seedForKind } from "../src/wallet/services/network/seeds"
+import { DRPC_FREE_PLAN_BATCH_LIMIT, maxBatchSizeFor, seedForKind } from "../src/wallet/services/network/seeds"
+import { stubBatchFetch } from "../tests/helpers/batch-fetch"
 import { checkSeed } from "./seed-identity"
 import { createPreflightNodeClient } from "./seed-preflight-node"
+
+vi.mock("../src/wallet/services/network/seeds", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../src/wallet/services/network/seeds")>()
+	return { ...actual, maxBatchSizeFor: vi.fn(actual.maxBatchSizeFor) }
+})
 
 const TESTNET = seedForKind("testnet")
 if (!TESTNET) throw new Error("this build seeds no Testnet")
@@ -42,34 +48,47 @@ describe("checkSeed", () => {
 	})
 })
 
-describe("checkSeed's batch at the seed's cap", () => {
+describe("checkSeed's batch", () => {
 	afterEach(() => {
 		vi.unstubAllGlobals()
+		vi.mocked(maxBatchSizeFor).mockReset()
 	})
 
-	test("a node that refuses one request of the cap's size fails the seed", async () => {
-		const mainnet = seedForKind("mainnet")
-		if (!mainnet) throw new Error("this build seeds no Mainnet network")
-		const fetch = vi.fn(
-			async (_url: string, _init: RequestInit) =>
-				new Response(JSON.stringify({ error: { message: "Batch of more than 24 requests are not allowed" } }), { status: 500 }),
+	const mainnet = seedForKind("mainnet")
+	if (!mainnet) throw new Error("this build seeds no Mainnet network")
+
+	test("a node that refuses one request of dRPC's limit fails the seed", async () => {
+		// Both the tick and the client take the limit, so one request of exactly that size goes out.
+		vi.mocked(maxBatchSizeFor).mockReturnValue(DRPC_FREE_PLAN_BATCH_LIMIT)
+		// dRPC refuses a batch above its limit whole: HTTP 400, with an error for every entry.
+		const error = { code: 31, message: "Batch of more than 99 requests are not allowed on free plan" }
+		const entriesPerRequest = stubBatchFetch(
+			(calls) => new Response(JSON.stringify(calls.map((c) => ({ jsonrpc: "2.0", id: c.id, error }))), { status: 400 }),
 		)
-		vi.stubGlobal("fetch", fetch)
 		const result = await checkSeed(mainnet, createPreflightNodeClient(mainnet.rpcUrl))
 		expect(result.ok).toBe(false)
-		expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([25])
+		expect(entriesPerRequest()).toEqual([DRPC_FREE_PLAN_BATCH_LIMIT])
 	})
 
-	test("the preflight client sends the Mainnet seed no request of more than 25 entries", async () => {
-		const mainnet = seedForKind("mainnet")
-		if (!mainnet) throw new Error("this build seeds no Mainnet network")
-		const fetch = vi.fn(async (_url: string, init: RequestInit) => {
-			const calls = JSON.parse(String(init.body)) as { id: number }[]
-			return new Response(JSON.stringify(calls.map((c) => ({ jsonrpc: "2.0", id: c.id, result: 7 }))))
-		})
-		vi.stubGlobal("fetch", fetch)
+	test("checkSeed sends a seed with no cap one tick of dRPC's limit", async () => {
+		const getNodeInfo = vi.fn(async () => ({ l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: TESTNET_ROLLUP_VERSION }))
+		expect((await checkSeed(TESTNET, node(getNodeInfo))).ok).toBe(true)
+		expect(getNodeInfo).toHaveBeenCalledTimes(DRPC_FREE_PLAN_BATCH_LIMIT)
+	})
+
+	// A cap that differs from dRPC's limit shows the lookup is used.
+	test("checkSeed sends one tick of the cap the lookup answers", async () => {
+		vi.mocked(maxBatchSizeFor).mockReturnValueOnce(3)
+		const getNodeInfo = vi.fn(async () => ({ l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: TESTNET_ROLLUP_VERSION }))
+		expect((await checkSeed(TESTNET, node(getNodeInfo))).ok).toBe(true)
+		expect(getNodeInfo).toHaveBeenCalledTimes(3)
+	})
+
+	test("the preflight client sends no request above the cap the lookup answers", async () => {
+		const entriesPerRequest = stubBatchFetch()
+		vi.mocked(maxBatchSizeFor).mockReturnValueOnce(3)
 		const node = createPreflightNodeClient(mainnet.rpcUrl)
-		await Promise.all(Array.from({ length: 60 }, () => node.getBlockNumber()))
-		expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([25, 25, 10])
+		await Promise.all(Array.from({ length: 8 }, () => node.getBlockNumber()))
+		expect(entriesPerRequest()).toEqual([3, 3, 2])
 	})
 })
