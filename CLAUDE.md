@@ -214,7 +214,7 @@ Six layers, low → high. A layer can import only from layers below it. Enforced
                        No chrome.*.
 
 [L2] ui primitives     @nulo/design/ui — ALL migrated: Badge, Banner, BrutalistTitle, Button,
-                       Checkbox, Input, LoadingState, Popover, RowAction, SectionLabel, Spinner,
+                       Checkbox, Input, LoadingState, Popover, RowAction, ScrollMoreButton, SectionLabel, Spinner,
                        SubPageHeaderBase, Toggle, Tooltip, ToastManagerBase.
                        The 4 host-coupled ones live LOCALLY in src/components/ui/: Button,
                        SubPageHeader, ToastManager (thin wrappers rendering the package base) and

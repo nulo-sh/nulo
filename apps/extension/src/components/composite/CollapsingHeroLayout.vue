@@ -44,9 +44,12 @@ const props = defineProps({
 	moreBelow: { type: Boolean, default: false },
 })
 
-/** The button's footprint (36 px + its 12 px inset), kept free after the last section: the button
- *  shows only while more than this remains, so it is gone before it could cover the last control. */
-const END_ROOM_PX = 48
+/** The button's footprint: 36 px tall, 12 px above the scroll area's bottom. It shows only while
+ *  more than this is left below, so it is gone before it could cover the last control. */
+const FOOTPRINT_PX = 48
+/** With the 20 px bottom padding a section carries, the room keeps the footprint blank at the end,
+ *  so the button never shows while only blank space is left. */
+const END_ROOM_PX = FOOTPRINT_PX - 20
 
 const wrapperRef = useTemplateRef("wrapperRef")
 const headerRef = useTemplateRef("headerRef")
@@ -54,7 +57,7 @@ const titleRef = useTemplateRef("titleRef")
 const heroVisible = ref(true)
 const scrollEl = shallowRef(null)
 const { remaining, gutter } = useScrollRemaining(computed(() => (props.moreBelow ? scrollEl.value : null)))
-const moreShown = computed(() => props.moreBelow && remaining.value > END_ROOM_PX)
+const moreShown = computed(() => props.moreBelow && remaining.value > FOOTPRINT_PX)
 
 const handleScroll = () => {
 	if (!scrollEl.value) return

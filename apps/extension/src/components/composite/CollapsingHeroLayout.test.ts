@@ -69,11 +69,11 @@ describe("the more-below button", () => {
 		expect(w.html()).not.toContain("padding-bottom")
 	})
 
-	test("it shows only while more than the 48 px room remains, the room kept after the content", async () => {
+	test("it shows only while more than its 48 px footprint is left, and 28 px of room follow the content", async () => {
 		const at = async (scrollTop: number) => (await scrolled(scrollTop)).w.find('[data-testid="scroll-more"]').exists()
 		expect(await at(207)).toBe(false)
 		expect(await at(206.5)).toBe(true)
-		expect((await scrolled(0)).w.html()).toContain("padding-bottom: 48px")
+		expect((await scrolled(0)).w.html()).toContain("padding-bottom: 28px")
 	})
 
 	test("a press scrolls smoothly to the end when no section is marked", async () => {

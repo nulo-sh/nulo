@@ -69,15 +69,16 @@ describe("nextScrollTop", () => {
 		["no section left below: the end", view({ sections: [{ top: 150, bottom: 480 }] }), 178],
 		["a screen that marks none: the end", view({}), 178],
 		[
-			"Change password: the New password section (top about 400 below the bar) clamps to the end, its repeat field in view",
+			"Change password as measured: the New password section, 369 px below the bar, clamps the press to the end",
 			view({
-				maxScroll: 169,
+				maxScroll: 149,
 				sections: [
-					{ top: 160, bottom: 290 },
-					{ top: 456, bottom: 638 },
+					{ top: 190, bottom: 308 },
+					{ top: 308, bottom: 425 },
+					{ top: 425, bottom: 622 },
 				],
 			}),
-			169,
+			149,
 		],
 		["a section ending within a pixel of the fold counts as in view", view({ sections: [{ top: 300, bottom: 501.9 }] }), 178],
 		["one ending past that pixel does not", view({ maxScroll: 900, sections: [{ top: 300, bottom: 502.1 }] }), 244],

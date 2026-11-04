@@ -20,7 +20,7 @@ let nudged = false
 watch(
 	() => props.shown,
 	(shown) => {
-		// Reduced motion runs no animation, so no `animationend` clears a nudge a hide interrupted.
+		// A hide can remove the button mid-nudge, before any `animationend` clears it.
 		if (!shown) nudging.value = false
 		if (!shown || nudged) return
 		nudged = true
