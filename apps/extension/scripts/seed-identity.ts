@@ -17,8 +17,8 @@ export async function checkSeed(seed: DefaultSeed, node: Pick<AztecNode, "getNod
 	const pinned = `pinned chainId=${seed.chainId} l1ChainId=${seed.l1ChainId}`
 	let info: { l1ChainId: number; rollupVersion: number }
 	try {
-		// One tick's calls go out as one request: a provider that refuses a batch of the largest size the
-		// wallet sends it fails the seed here, before any send meets it.
+		// One tick of the largest batch the wallet may send this seed: a provider that refuses the
+		// requests the client makes of it fails the seed here, before any send meets it.
 		const batch = Array.from({ length: maxBatchSizeFor(seed.rpcUrl) ?? DRPC_FREE_PLAN_BATCH_LIMIT }, () => node.getNodeInfo())
 		;[info] = await Promise.all(batch)
 	} catch {

@@ -103,7 +103,7 @@ None. No screen, copy or format changes. No e2e scenario is added.
 | D2 | 250 calls → `[100, 100, 50]` (arc 1; arc 2 replaces the splits with the guard, D3); a refusal fixture shaped as dRPC's (HTTP 400, an error per entry); a forwarding case per client with the lookup answering 3 | 60 calls; the old HTTP 500 single-object fixture; the split alone | 60 fits in one request at 100; a wire-shaped fixture is the house rule; at 100 the split equals the client's default, so only a distinct cap proves each client forwards the lookup (Codex r1) |
 | D3 | The guard bounds the requests the wallet's client sends (each at most 100), not the default's value | a pin on `DEFAULT_MAX_BATCH_SIZE` (arc 1: none at all) | a lower default is harmless and stays green; the guard reads observed requests, so it also covers how the client applies its default (Codex, arc 2) |
 | D4 | The package adapter test keeps its injected 3 | moving it to 100 | it proves the threading for any value |
-| D5 | One PR off `dev`, the plan and its close-out in it | a stack | one arc; the brief's shape |
+| D5 | One PR off `dev`, the plan and its close-out in it | a stack | one PR: arc 2 follows up arc 1 before the merge; the brief's shape |
 | D6 | The shared reply budget of a batch of 100 is a closed `known-limit` issue | a lower cap, a per-batch reply budget | unverified on the wallet's real ticks; every other node already batches 100; a fix changes the transport, out of scope |
 | D7 | `DRPC_FREE_PLAN_BATCH_LIMIT` exported from `seeds.ts`; `checkSeed` sends `cap ?? limit` | the constant in the script; always the constant | the guard in `src/` and the script both need it, and `src/` imports nothing from `scripts/`; the fallback keeps the `checkSeed` forwarding case and proves an entry above 100 if one is added (Codex, arc 2) |
 
@@ -117,6 +117,7 @@ None. No screen, copy or format changes. No e2e scenario is added.
 | arc 1 r2 | Codex, resumed | 1 finding (minor) | demonstrated: a `mockReturnValueOnce` left unconsumed by a failing case survives `afterEach` and feeds the next test; both files' `afterEach` now `mockReset()` the lookup (restores the real one, checked on Vitest 4.1.12) | none |
 | arc 1 r3 | Codex, resumed | approve | none needed | none |
 | arc 2 design | Codex gpt-6.1-sol high (session 01a1a763) | approve with changes | no wire change today (traced: every construction forwards the lookup; `undefined` takes the default of 100); constant in `seeds.ts` with the `??` fallback (D7); the guard unmocked in `seeds.test.ts`, red at a default of 101 or 1000 in its in-memory runs (D3); the refusal test independent of the default; a no-cap case for the fallback; the fetch stub extracted; the plan reconciled throughout, history kept | none |
+| arc 2 r1 | Codex gpt-6.1-sol high (session 01a1a769) | changes needed (2 low, docs) | `checkSeed`'s comment no longer promises one request (a lower client default splits the tick); the Post-implementation paragraph and D5 now separate arc 1's history from arc 2. Its probes: the guard passes at defaults 25 and 100 and fails at 101 and 1000; the refusal test sends `[100]` throughout | none |
 
 ## Delivery
 
@@ -126,7 +127,7 @@ None. No screen, copy or format changes. No e2e scenario is added.
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `fa6913668`, with these values. No diff review (`code_review: off`). The Codex loop runs once over the arc's diff against `origin/dev`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, with the README's two rules verbatim, and a hard stop at three rounds. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) of the diff runs beside the first Codex round. Log each round in Audit verdicts and `lessons/phase-1.md`. Teardown: run `agent-worktree done batch-cap-100 --merged` once `implementations-plan/archive/batch-cap-100/plan.md` is on `dev`.
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `fa6913668`, with these values. No diff review (`code_review: off`). Arc 1: the Codex loop runs once over the arc's diff against `origin/dev`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, with the README's two rules verbatim, and a hard stop at three rounds. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) of the diff runs beside the first Codex round. Log each round in Audit verdicts and `lessons/phase-1.md`. Arc 2: the Codex loop alone over its diff against `ea7ea1965`, logged in Audit verdicts and [lessons/phase-2.md](lessons/phase-2.md). Teardown: run `agent-worktree done batch-cap-100 --merged` once `implementations-plan/archive/batch-cap-100/plan.md` is on `dev`.
 
 ## Seeds
 

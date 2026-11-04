@@ -10,3 +10,7 @@
 - Touched files at retry 0: 15 of 15 pass.
 - Both entries at 101: the guard failed on both seeds (`expected 101 to be less than or equal to 100`), and the no-cap case failed (`called 100 times, but got 101 times`). Reverted.
 - `checkSeed` falling back to 1: only the no-cap case failed (`called 100 times, but got 1 times`). Reverted.
+
+## Review, arc 2 round 1
+
+- Codex (gpt-6.1-sol, high, session 01a1a769): changes needed, two low documentation findings, both accepted. `checkSeed`'s comment promised one request, which a lower client default breaks; the plan's Post-implementation paragraph and D5 still read as one arc. No runtime defect; its probes found no mock or stub leak.
