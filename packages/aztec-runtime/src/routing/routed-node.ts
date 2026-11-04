@@ -11,7 +11,8 @@
  * - No call moves to an endpoint seen below the floor (the proposed tip the active endpoint last
  *   served, or the caller's seeded sync height), so a lagging endpoint cannot prune the PXE.
  * - With one endpoint a call makes exactly the requests, sleeps and attempts the node fetch alone
- *   made, and nothing is probed.
+ *   made, and nothing is probed. A pinned receipt is the one exception, on any route: while its
+ *   endpoint is down it reads `PENDING` and asks once per hold-down.
  */
 
 import { BlockHash } from "@aztec-labs/stdlib/block"
@@ -164,11 +165,13 @@ function retriesOnSameEndpoint(error: unknown): boolean {
 
 const noEndpoint = (what: string) => withTransportFailure(new Error(`No endpoint of this network can take ${what}`), "unreachable")
 
-type Attempt =
+/** What one dispatched request came back with. */
+type Dispatched =
 	| { readonly kind: "ok"; readonly value: unknown }
 	| { readonly kind: "answer"; readonly error: unknown }
 	| { readonly kind: "failed"; readonly error: unknown; readonly spent: boolean }
-	| { readonly kind: "skipped" }
+
+type Attempt = Dispatched | { readonly kind: "skipped" } | { readonly kind: "stopped" }
 
 type RoundOutcome =
 	| { readonly kind: "ok"; readonly value: unknown }
@@ -217,12 +220,18 @@ class Router implements Route {
 		const cached = this.singleAttempts.get(timeoutMs)
 		if (cached) return cached
 		const node = nodeOf(async (method, args) => {
-			const index = await this.activeOrAdmitted()
+			const pinned = method === "getTxReceipt" ? this.pins.byTxHash.get(pinKey(args[0])) : undefined
+			if (pinned) return this.pinnedReceipt(pinned, args, timeoutMs, 1)
+			const index = this.health.active()
 			const endpoint = index === undefined ? undefined : this.endpoints[index]
-			if (index === undefined || !endpoint) throw noEndpoint("the call")
-			const out = await this.attemptOn(index, this.client(endpoint.rpcUrl, timeoutMs), method, args)
+			if (index === undefined || !endpoint) {
+				// Admission's probes would outlast the caller's budget: start them for its next try.
+				void this.admitFirst()
+				throw noEndpoint("the call")
+			}
+			const out = await this.attemptOn(index, this.client(endpoint.rpcUrl, timeoutMs), method, args, timeoutMs)
 			if (out.kind === "ok") return out.value
-			throw out.kind === "skipped" ? noEndpoint("the call") : out.error
+			throw out.error
 		})
 		this.singleAttempts.set(timeoutMs, node)
 		return node
@@ -238,6 +247,8 @@ class Router implements Route {
 				? this.endpoints[active]
 				: await this.pickByAnchor(active, anchorHash)
 		if (!picked) throw noEndpoint("the transaction")
+		const raced = this.pins.byTxHash.get(key)
+		if (raced) return raced
 		this.pins.byTxHash.set(key, picked)
 		return picked
 	}
@@ -247,7 +258,7 @@ class Router implements Route {
 		this.health.tick(now)
 		this.startReturnProbes(now)
 		const pinned = method === "getTxReceipt" ? this.pins.byTxHash.get(pinKey(args[0])) : undefined
-		if (pinned) return this.pinnedReceipt(pinned, args)
+		if (pinned) return this.pinnedReceipt(pinned, args, ROUTE_TIMING.callTimeoutMs, ROUTE_TIMING.backoffMs.length + 1)
 		if (this.health.active() === undefined) await this.admitFirst()
 		return this.walk(method, args, isSyncRead(method, args))
 	}
@@ -260,7 +271,7 @@ class Router implements Route {
 			const order = this.candidates(spent, sync)
 			if (order.length === 0) break
 			if (round > 0) await this.pause(round, last)
-			const out = await this.round(order, spent, method, args, sync)
+			const out = await this.round(order, spent, method, args, { sync, retrying: round > 0, last })
 			if (out.kind === "ok") return out.value
 			if (out.kind === "answer") throw out.error
 			if (out.kind !== "failed") continue
@@ -276,31 +287,33 @@ class Router implements Route {
 		spent: Set<number>,
 		method: string,
 		args: unknown[],
-		sync: boolean,
+		{ sync, retrying, last }: { sync: boolean; retrying: boolean; last: unknown },
 	): Promise<RoundOutcome> {
-		let failed: { error: unknown; index: number } | undefined
+		let lastError = last
+		let failedAt: number | undefined
 		for (const index of order) {
-			if (failed && !this.retryWhile()) throw failed.error
-			const out = await this.attempt(index, method, args)
+			const out = await this.attempt(index, method, args, retrying || failedAt !== undefined)
+			if (out.kind === "stopped") throw lastError
 			if (out.kind === "skipped") continue
 			if (out.kind !== "failed") return out
-			failed = { error: out.error, index }
+			lastError = out.error
+			failedAt = index
 			if (out.spent) spent.add(index)
 			if (sync) break
 		}
-		return failed ? { kind: "failed", ...failed } : { kind: "skipped" }
+		return failedAt === undefined ? { kind: "skipped" } : { kind: "failed", error: lastError, index: failedAt }
 	}
 
 	/** The active endpoint failed a sync read: the role passes to the next qualifying endpoint and the
 	 *  read is re-sent there once. With none, the read keeps today's rounds on the active endpoint. */
 	private async resendSync(failed: number, method: string, args: unknown[], error: unknown): Promise<unknown> {
+		if (!this.retryWhile()) throw error
 		const next = this.health.lone ? undefined : await this.nextQualifying(failed)
 		if (next === undefined) return this.walkRest(failed, method, args, error)
-		if (!this.retryWhile()) throw error
 		this.health.passRole(failed, next, this.deps.now())
-		const out = await this.attempt(next, method, args)
+		const out = await this.attempt(next, method, args, true)
 		if (out.kind === "ok") return out.value
-		throw out.kind === "skipped" ? error : out.error
+		throw out.kind === "failed" || out.kind === "answer" ? out.error : error
 	}
 
 	/** Today's remaining rounds on the one endpoint whose first attempt failed with `error`, while no
@@ -311,7 +324,7 @@ class Router implements Route {
 			await this.pause(round, last)
 			const active = this.health.active()
 			if (active !== undefined && active !== index) break
-			const out = await this.attempt(index, method, args)
+			const out = await this.attempt(index, method, args, true)
 			if (out.kind === "ok") return out.value
 			if (out.kind !== "failed") throw out.kind === "answer" ? out.error : last
 			last = out.error
@@ -349,20 +362,37 @@ class Router implements Route {
 		return this.deps.retryWhile?.() ?? true
 	}
 
-	/** One attempt on `index`, preceded by its probe when it must answer one first. */
-	private async attempt(index: number, method: string, args: unknown[]): Promise<Attempt> {
-		if (this.health.needsProbe(index) && this.health.state(index) !== "down") {
-			if (!this.health.mayProbe(index, this.deps.now())) return { kind: "skipped" }
-			const failure = await this.probe(index)
-			if (failure !== undefined) return { kind: "failed", error: failure, spent: false }
-			if (!this.health.qualifies(index)) return { kind: "skipped" }
-		}
+	/** One attempt on `index`. A `retrying` attempt (any but a call's first) asks `retryWhile` before it
+	 *  moves and again before it dispatches. */
+	private async attempt(index: number, method: string, args: unknown[], retrying: boolean): Promise<Attempt> {
+		if (retrying && !this.retryWhile()) return { kind: "stopped" }
+		const refused = await this.admit(index, retrying)
+		if (refused) return refused
 		const endpoint = this.endpoints[index]
 		if (!endpoint) return { kind: "skipped" }
 		return this.attemptOn(index, this.client(endpoint.rpcUrl, ROUTE_TIMING.callTimeoutMs), method, args)
 	}
 
-	private async attemptOn(index: number, client: AztecNode, method: string, args: unknown[]): Promise<Attempt> {
+	/** Probes `index` first when it must answer one; `undefined` when it may take the call. Judged after
+	 *  every await: a down endpoint only while still at the floor, any other only while it qualifies. */
+	private async admit(index: number, retrying: boolean): Promise<Attempt | undefined> {
+		if (this.health.needsProbe(index) && this.health.state(index) !== "down") {
+			if (!this.health.mayProbe(index, this.deps.now())) return { kind: "skipped" }
+			const failure = await this.probe(index)
+			if (failure !== undefined) return { kind: "failed", error: failure, spent: false }
+			if (retrying && !this.retryWhile()) return { kind: "stopped" }
+		}
+		const down = this.health.state(index) === "down"
+		return (down ? this.health.atFloor(index) : this.health.qualifies(index)) ? undefined : { kind: "skipped" }
+	}
+
+	private async attemptOn(
+		index: number,
+		client: AztecNode,
+		method: string,
+		args: unknown[],
+		attemptMs: number = ROUTE_TIMING.callTimeoutMs,
+	): Promise<Dispatched> {
 		try {
 			const value = await (client as unknown as Callable)[method]?.(...args)
 			const tip = servedProposedTip(method, args, value)
@@ -375,7 +405,7 @@ class Router implements Route {
 				this.health.succeeded(index, this.deps.now())
 				return { kind: "answer", error }
 			}
-			this.health.failed(index, failure, sharedCause(error), this.deps.now())
+			this.health.failed(index, failure, sharedCause(error), this.deps.now(), attemptMs)
 			const endpointId = this.endpoints[index]?.id ?? String(index)
 			if (!this.health.lone) this.deps.log({ event: "move", chainId: this.spec.chainId, endpointId, failure, method })
 			return { kind: "failed", error, spent: !countsTowardDown(failure) }
@@ -389,11 +419,6 @@ class Router implements Route {
 			if (this.health.state(index) === "wrong-chain" && !this.health.mayProbe(index, this.deps.now())) continue
 			if (this.health.mayProbe(index, this.deps.now()) || this.probes.has(index)) await this.probe(index)
 		}
-	}
-
-	private async activeOrAdmitted(): Promise<number | undefined> {
-		if (this.health.active() === undefined) await this.admitFirst()
-		return this.health.active()
 	}
 
 	/** The most preferred endpoint other than `failed` that qualifies, probing one not seen at the floor. */
@@ -471,35 +496,38 @@ class Router implements Route {
 		return active === undefined ? undefined : this.endpoints[active]
 	}
 
-	/** One batch `[getNodeInfo, getBlockData(anchor)]`: whether `index` serves this chain and knows the anchor. */
+	/** One batch `[getNodeInfo, getBlockData(anchor)]`: whether `index` serves this chain and knows the
+	 *  anchor. Identity is judged from its own answer even when the block read fails. */
 	private async askForAnchor(index: number, anchorHash: string): Promise<"knows" | "lacks" | "silent" | Error> {
 		const endpoint = this.endpoints[index]
 		if (!endpoint) return "silent"
 		const client = this.client(endpoint.rpcUrl, ROUTE_TIMING.probeTimeoutMs)
-		try {
-			const [info, block] = await Promise.all([client.getNodeInfo(), client.getBlockData(BlockHash.fromString(anchorHash))])
-			const mismatch = this.identityMismatch(info)
-			if (mismatch) {
-				this.health.probed(index, { answered: true, sameChain: false, tip: 0 }, this.deps.now())
-				return mismatch
-			}
-			this.health.succeeded(index, this.deps.now())
-			return block === undefined ? "lacks" : "knows"
-		} catch (error) {
-			const kind = callFailureOf(error)
-			if (kind !== undefined) this.health.failed(index, kind, sharedCause(error), this.deps.now())
-			return "silent"
+		const [info, block] = await Promise.allSettled([client.getNodeInfo(), client.getBlockData(BlockHash.fromString(anchorHash))])
+		if (info.status === "rejected") return this.silentAnswer(index, info.reason)
+		const mismatch = this.identityMismatch(info.value)
+		if (mismatch) {
+			this.health.probed(index, { answered: true, sameChain: false, tip: 0 }, this.deps.now())
+			return mismatch
 		}
+		this.health.succeeded(index, this.deps.now())
+		if (block.status === "rejected") return callFailureOf(block.reason) === undefined ? "lacks" : this.silentAnswer(index, block.reason)
+		return block.value === undefined ? "lacks" : "knows"
+	}
+
+	private silentAnswer(index: number, error: unknown): "silent" {
+		const kind = callFailureOf(error)
+		if (kind !== undefined) this.health.failed(index, kind, sharedCause(error), this.deps.now(), ROUTE_TIMING.probeTimeoutMs)
+		return "silent"
 	}
 
 	/** A pinned hash's receipt, read only where it was sent: `PENDING` while that endpoint fails. */
-	private async pinnedReceipt(endpoint: RouteEndpoint, args: unknown[]): Promise<TxReceipt> {
+	private async pinnedReceipt(endpoint: RouteEndpoint, args: unknown[], timeoutMs: number, maxRounds: number): Promise<TxReceipt> {
 		const index = this.endpoints.findIndex((e) => e.rpcUrl === endpoint.rpcUrl)
 		const detached = index >= 0 ? undefined : this.detachedHealth(endpoint.rpcUrl)
 		const down = (detached ? detached.state : this.health.state(index)) === "down"
 		const dueAt = detached ? detached.nextProbeAt : this.health.nextProbeAt(index)
 		if (down && this.deps.now() < dueAt) return new PendingTxReceipt(args[0] as never, undefined as never)
-		const receipt = await this.readPinned(endpoint, index, detached, args, down ? 1 : ROUTE_TIMING.backoffMs.length + 1)
+		const receipt = await this.readPinned({ endpoint, index, detached, timeoutMs }, args, down ? 1 : maxRounds)
 		if (receipt?.status === "finalized") this.pins.byTxHash.delete(pinKey(args[0]))
 		if (receipt) return receipt
 		this.deferPinnedProbe(index, detached)
@@ -508,13 +536,16 @@ class Router implements Route {
 
 	/** Today's rounds on the pinned URL alone; `undefined` once they all failed in transport. */
 	private async readPinned(
-		endpoint: RouteEndpoint,
-		index: number,
-		detached: EndpointHealth | undefined,
+		{
+			endpoint,
+			index,
+			detached,
+			timeoutMs,
+		}: { endpoint: RouteEndpoint; index: number; detached: EndpointHealth | undefined; timeoutMs: number },
 		args: unknown[],
 		rounds: number,
 	): Promise<TxReceipt | undefined> {
-		const client = this.client(endpoint.rpcUrl, ROUTE_TIMING.callTimeoutMs) as unknown as Callable
+		const client = this.client(endpoint.rpcUrl, timeoutMs) as unknown as Callable
 		let last: unknown
 		for (let round = 0; round < rounds; round++) {
 			if (round > 0) await this.pause(round, last)
@@ -526,7 +557,7 @@ class Router implements Route {
 				const failure = callFailureOf(error)
 				if (failure === undefined) throw error
 				last = error
-				this.pinFailed(index, detached, failure, sharedCause(error))
+				this.pinFailed({ index, detached, timeoutMs }, failure, sharedCause(error))
 				if (!countsTowardDown(failure)) return undefined
 			}
 		}
@@ -546,9 +577,13 @@ class Router implements Route {
 		else this.health.succeeded(index, this.deps.now())
 	}
 
-	private pinFailed(index: number, detached: EndpointHealth | undefined, failure: TransportFailure, cause: object): void {
-		if (detached) recordFailure(detached, failure, cause, this.deps.now())
-		else this.health.failed(index, failure, cause, this.deps.now())
+	private pinFailed(
+		{ index, detached, timeoutMs }: { index: number; detached: EndpointHealth | undefined; timeoutMs: number },
+		failure: TransportFailure,
+		cause: object,
+	): void {
+		if (detached) recordFailure(detached, failure, cause, this.deps.now(), timeoutMs)
+		else this.health.failed(index, failure, cause, this.deps.now(), timeoutMs)
 	}
 
 	/** A down pinned endpoint is asked again only once its next probe is due. */

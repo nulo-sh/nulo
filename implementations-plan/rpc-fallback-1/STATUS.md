@@ -10,3 +10,4 @@
 - 2026-11-03: audit rounds 4 and 5: Codex approve at round 5. Plan approved; nothing implemented. Waiting on the owner's read, OA-1 to OA-8, and the orchestrator's word to start arc 1.
 - 2026-11-04: Phase 1 gate pass (lint, typecheck:all, src/utils 55/55, test:all green on its second run; the first run's one red was a load timeout in copy-dash-ban, unrelated).
 - 2026-11-04: Phase 2 gate pass (lint, typecheck:all, utils+routing+adapters 161/161, test:all green, no production caller of createRoutedNode). Deviations D26, D27 in the ledger.
+- 2026-11-04: arc 1 review round 1: Codex revise (5), Opus approve with changes; all folded, routing/adapters/utils 170/170, lint 0, aztec-runtime typecheck 0

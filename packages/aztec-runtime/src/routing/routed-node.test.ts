@@ -2,7 +2,7 @@ import { BlockHash } from "@aztec-labs/stdlib/block"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { TxHash } from "@aztec-labs/stdlib/tx"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
 import { type TransportFailure, withTransportFailure } from "../utils/fetch"
 import { ROUTE_TIMING } from "./endpoint-health"
 import { createSubmissionPins, type RouteSpec, type RoutedNode, routeNode, type SubmissionPins } from "./routed-node"
@@ -202,28 +202,36 @@ describe("routing calls", () => {
 		expect(h.seen(B)).toEqual([])
 	})
 
-	test("down endpoints are skipped, and when none can take the call its rounds try only the most-preferred: four attempts", async () => {
+	test("down endpoints are skipped, and when none can take the call its rounds try only the most-preferred", async () => {
 		const h = new Harness([A, B])
 		await call(h)
-		h.endpoint(B).fail = () => transport("timeout")
 		h.endpoint(A).fail = (m) => (m === "getContract" ? transport("server") : undefined)
+		await call(h)
+		h.endpoint(A).fail = () => transport("server")
+		h.endpoint(B).fail = () => transport("timeout")
+		const contractReads = (url: string) => h.seen(url).filter((r) => r.startsWith("getContract")).length
+		const [fromA, fromB] = [contractReads(A), contractReads(B)]
 		await expect(call(h)).rejects.toThrow("fetch server")
-		expect(h.seen(B)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`])
-		await expect(call(h)).rejects.toThrow("fetch server")
-		expect(h.seen(A).filter((r) => r.startsWith("getContract"))).toHaveLength(1 + 4 + 4)
-		expect(h.seen(B)).toHaveLength(2)
-		expect(h.sleeps).toEqual([1_000, 2_000, 3_000, 1_000, 2_000, 3_000])
+		expect(h.node.route.snapshot().map((e) => e.state)).toEqual(["down", "down"])
+		expect(contractReads(A) - fromA).toBe(4)
+		expect(contractReads(B) - fromB).toBe(1)
+		expect(h.sleeps).toEqual([1_000, 2_000, 3_000])
 	})
 
-	test("a call never moves to an endpoint seen below the floor", async () => {
+	test("a call never moves to an admitted endpoint the floor has passed, probed again or not", async () => {
 		const h = new Harness([A, B])
 		await call(h)
+		h.endpoint(B).tip = 15
+		h.endpoint(A).fail = (m) => (m === "getContract" ? transport("server") : undefined)
+		await call(h)
+		expect(h.seen(B)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`, `getContract@${callTimeoutMs}`])
 		h.endpoint(A).tip = 20
 		await h.node.getChainTips()
-		h.endpoint(B).tip = 15
 		h.endpoint(A).fail = (m) => (m === "getContract" ? transport("refused") : undefined)
 		await expect(call(h)).rejects.toThrow("fetch refused")
-		expect(h.seen(B)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`])
+		h.now += ROUTE_TIMING.probeSpacingMs
+		await expect(call(h)).rejects.toThrow("fetch refused")
+		expect(h.seen(B).slice(3)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`])
 		expect(h.node.route.snapshot()[1]?.state).toBe("behind")
 	})
 
@@ -280,6 +288,20 @@ describe("routing calls", () => {
 		await expect(h.node.sendTx(undefined as never)).rejects.toThrow(/submission/)
 		expect(h.requests).toEqual([])
 	})
+
+	test("a timeout under a caller's shorter budget counts as one failure: the endpoint keeps serving and the role", async () => {
+		const h = new Harness([A, B])
+		await call(h)
+		h.endpoint(A).fail = (_method, timeoutMs) => (timeoutMs === probeTimeoutMs ? transport("timeout") : undefined)
+		const read = () => h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
+		await expect(read()).rejects.toThrow("fetch timeout")
+		await expect(read()).rejects.toThrow("fetch timeout")
+		expect(h.node.route.snapshot().map((e) => e.state)).toEqual(["ready", "unknown"])
+		expect(h.node.route.active()?.id).toBe("e0")
+		await expect(read()).rejects.toThrow("fetch timeout")
+		expect(h.node.route.snapshot()[0]?.state).toBe("down")
+		expect(h.seen(B)).toEqual([])
+	})
 })
 
 describe("sync reads", () => {
@@ -331,6 +353,108 @@ describe("sync reads", () => {
 		await expect(h.node.getChainTips()).rejects.toThrow("fetch timeout")
 		expect(h.node.route.active()?.id).toBe("e1")
 		expect(h.seen(A).filter((r) => r.startsWith(`getChainTips@${callTimeoutMs}`))).toHaveLength(2)
+	})
+})
+
+describe("races", () => {
+	const held = () => {
+		let release: () => void = () => {}
+		const promise = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		return { promise, release }
+	}
+
+	test("a sync read's same-endpoint retry never dispatches below a floor another endpoint raised meanwhile", async () => {
+		const h = new Harness([A, B])
+		await h.node.getChainTips()
+		h.endpoint(B).tip = 5
+		await h.node.route.pickForSend(TX.toString(), ANCHOR)
+		h.endpoint(A).fail = (m) => (m === "getChainTips" ? transport("timeout") : undefined)
+		let once = true
+		h.onSleep = async () => {
+			if (!once) return
+			once = false
+			h.endpoint(B).tip = 20
+			h.now += ROUTE_TIMING.probeSpacingMs
+			await h.node.getChainTips()
+			h.endpoint(B).fail = () => transport("timeout")
+			await h.node.getContract(undefined as never).catch(() => {})
+		}
+		await expect(h.node.getChainTips()).rejects.toThrow("fetch timeout")
+		expect(h.node.route.active()).toBeUndefined()
+		expect(h.seen(A).filter((r) => r === `getChainTips@${callTimeoutMs}`)).toHaveLength(2)
+	})
+
+	test("singleAttempt reads a pinned receipt only where it was sent", async () => {
+		const pins = createSubmissionPins()
+		pins.byTxHash.set(TX.toString(), { id: "e1", rpcUrl: B })
+		const h = new Harness([A, B], { pins })
+		await call(h)
+		await h.node.route.singleAttempt(probeTimeoutMs).getTxReceipt(TX)
+		expect(h.seen(B)).toEqual([`getTxReceipt@${probeTimeoutMs}`])
+		expect(h.seen(A).filter((r) => r.startsWith("getTxReceipt"))).toEqual([])
+	})
+
+	test("two picks for one hash racing return the same endpoint", async () => {
+		const h = new Harness([A, B])
+		const gate = held()
+		let blockReads = 0
+		h.endpoint(A).hold = (m) => (m === "getBlockData" && blockReads++ === 0 ? gate.promise : undefined)
+		const first = h.node.route.pickForSend(TX.toString(), ANCHOR)
+		await Promise.resolve()
+		h.endpoint(A).knownBlocks.clear()
+		const second = await h.node.route.pickForSend(TX.toString(), ANCHOR)
+		h.endpoint(A).knownBlocks.add(ANCHOR)
+		gate.release()
+		expect(second.id).toBe("e1")
+		expect((await first).id).toBe("e1")
+	})
+
+	test("a stop raised while a moved call's admission probe runs dispatches nothing after it", async () => {
+		const h = new Harness([A, B])
+		await call(h)
+		h.endpoint(A).fail = (m) => (m === "getContract" ? transport("server") : undefined)
+		const gate = held()
+		let probing: () => void = () => {}
+		const probeStarted = new Promise<void>((resolve) => {
+			probing = resolve
+		})
+		h.endpoint(B).hold = (m) => {
+			if (m !== "getNodeInfo") return undefined
+			probing()
+			return gate.promise
+		}
+		let allowed = true
+		h.retryWhile = () => allowed
+		const pending = call(h)
+		await probeStarted
+		allowed = false
+		gate.release()
+		await expect(pending).rejects.toThrow("fetch server")
+		expect(h.seen(B).filter((r) => r.startsWith("getContract"))).toEqual([])
+	})
+
+	test("a stopped sync read probes no alternative", async () => {
+		const h = new Harness([A, B])
+		await h.node.getChainTips()
+		h.endpoint(A).fail = (m) => (m === "getChainTips" ? transport("server") : undefined)
+		h.retryWhile = () => false
+		await expect(h.node.getChainTips()).rejects.toThrow("fetch server")
+		expect(h.seen(B)).toEqual([])
+	})
+
+	test("singleAttempt with no active endpoint fails at once and leaves admission running for the caller's next try", async () => {
+		const h = new Harness([A, B])
+		const gate = held()
+		h.endpoint(A).hold = (m) => (m === "getNodeInfo" ? gate.promise : undefined)
+		const read = () => h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
+		await expect(read()).rejects.toThrow(/No endpoint/)
+		gate.release()
+		await vi.waitFor(() => expect(h.node.route.active()?.id).toBe("e0"))
+		await expect(read()).resolves.toBe("getContract:ok")
+		expect(h.seen(A)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`, `getContract@${probeTimeoutMs}`])
+		expect(h.seen(B)).toEqual([])
 	})
 })
 
@@ -427,6 +551,28 @@ describe("pickForSend", () => {
 		dead.endpoint(B).fail = () => transport("unreachable")
 		await expect(dead.node.route.pickForSend(TX.toString(), ANCHOR)).rejects.toThrow()
 		expect(pins.byTxHash.size).toBe(0)
+	})
+
+	test("identity is judged when the block read fails, and the node's own refusal of it means the anchor is unknown", async () => {
+		const h = new Harness([A, B, C])
+		await call(h)
+		h.node.route.seedFloor(1_000)
+		const unknownBlock = (m: string) => (m === "getBlockData" ? entryError(-32602) : undefined)
+		h.endpoint(A).fail = unknownBlock
+		h.endpoint(B).l1ChainId = 1
+		h.endpoint(B).fail = unknownBlock
+		expect((await h.node.route.pickForSend(TX.toString(), ANCHOR)).id).toBe("e2")
+		expect(h.node.route.snapshot().map((e) => e.state)).toEqual(["behind", "wrong-chain", "unknown"])
+		const elsewhere = new Harness([A, B])
+		for (const url of [A, B]) {
+			elsewhere.endpoint(url).l1ChainId = 1
+			elsewhere.endpoint(url).fail = unknownBlock
+		}
+		await expect(elsewhere.node.route.pickForSend(TX.toString(), ANCHOR)).rejects.toThrow(/Chain identity mismatch/)
+		const mixed = new Harness([A, B])
+		mixed.endpoint(A).fail = unknownBlock
+		mixed.endpoint(B).l1ChainId = 1
+		await expect(mixed.node.route.pickForSend(TX.toString(), ANCHOR)).rejects.toThrow(/No endpoint/)
 	})
 
 	test("a lone endpoint is picked with no request, down or not", async () => {

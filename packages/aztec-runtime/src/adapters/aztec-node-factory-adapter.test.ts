@@ -337,7 +337,11 @@ describe("createRoutedNode", () => {
 		const calls = JSON.parse(body) as { id: number }[]
 		return reply(calls.map((c) => ({ jsonrpc: "2.0", id: c.id, result: 5 })))
 	}
-	const replies: [string, (n: number, body: string) => Response | Promise<Response>][] = [
+	const hangUntilAbort = (signal: AbortSignal | null | undefined) =>
+		new Promise<Response>((_, reject) => {
+			signal?.addEventListener("abort", () => reject(new DOMException("The operation was aborted.", "AbortError")))
+		})
+	const replies: [string, (n: number, body: string, signal: AbortSignal | null | undefined) => Response | Promise<Response>][] = [
 		["a 503 every time", () => reply({ error: { message: "boom" } }, 503)],
 		["a 503 twice, then the answer", (n, body) => (n <= 2 ? reply({ error: { message: "boom" } }, 503) : answered(body))],
 		["a refused connection every time", () => Promise.reject(new TypeError("fetch failed"))],
@@ -345,6 +349,8 @@ describe("createRoutedNode", () => {
 		["a JSON 429", () => reply({ error: { code: 429, message: "slow down" } }, 429)],
 		["a gateway refusal", () => reply({ error: { code: 35, message: "no" } }, 400)],
 		["the node's own 400", () => reply({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "too big" } }, 400)],
+		["a gateway refusal in a 200", () => reply({ jsonrpc: "2.0", id: null, error: { code: 26, message: "limit" } }, 200)],
+		["no answer within the 60 s abort, every time", (_n, _body, signal) => hangUntilAbort(signal)],
 	]
 	test.each(replies)("one endpoint, %s: the same requests, sleeps and outcome as createNode", async (_label, answer) => {
 		const outcomes: unknown[] = []
@@ -354,7 +360,7 @@ describe("createRoutedNode", () => {
 		]) {
 			let requests = 0
 			globalThis.fetch = vi.fn(async (_url: string, init: RequestInit) =>
-				answer(++requests, String(init.body)),
+				answer(++requests, String(init.body), init.signal),
 			) as unknown as typeof fetch
 			vi.useFakeTimers()
 			const node = build(new AztecNodeFactoryAdapter(uncapped))
@@ -367,7 +373,7 @@ describe("createRoutedNode", () => {
 			void settled.then(() => {
 				finishedAt = Date.now()
 			})
-			await vi.advanceTimersByTimeAsync(20_000)
+			await vi.advanceTimersByTimeAsync(300_000)
 			outcomes.push({ outcome: await settled, requests, waitedMs: finishedAt - started })
 			vi.useRealTimers()
 		}

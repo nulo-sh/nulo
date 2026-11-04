@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { type HealthChange, type ProbeAnswer, ROUTE_TIMING, RouteHealth } from "./endpoint-health"
 
-const { holdDownMinMs, holdDownMaxMs, holdResetMs, probeSpacingMs } = ROUTE_TIMING
+const { holdDownMinMs, holdDownMaxMs, holdResetMs, probeSpacingMs, probeTimeoutMs } = ROUTE_TIMING
 
 const passing = (tip: number): ProbeAnswer => ({ answered: true, sameChain: true, tip })
 const failing = (): ProbeAnswer => ({ answered: false, failure: "unreachable", cause: new Error("refused") })
@@ -15,10 +15,11 @@ function admittedPair(tip = 10, now = 0): RouteHealth {
 	return health
 }
 
-/** Moves the role from the primary to the fallback by taking the primary down. */
+/** Moves the role from the primary to the fallback by taking the primary down; the fallback then serves a call. */
 function failOver(health: RouteHealth, now: number): void {
 	health.failed(0, "timeout", new Error("abort"), now)
 	expect(health.active()).toBe(1)
+	health.succeeded(1, now)
 }
 
 /** Brings the primary back through two passing return probes `holdDown` apart; returns the time it took the role. */
@@ -47,6 +48,16 @@ describe("down", () => {
 		const timedOut = admittedPair()
 		timedOut.failed(1, "timeout", new Error("abort"), 1)
 		expect(timedOut.state(1)).toBe("down")
+	})
+
+	test("a probe's or a caller's shorter abort counts as one failure; only a call attempt timing out downs at once", () => {
+		const health = admittedPair()
+		health.failed(0, "timeout", new Error("caller abort"), 1, probeTimeoutMs)
+		health.probed(0, { answered: false, failure: "timeout", cause: new Error("probe abort") }, 2)
+		expect(health.state(0)).toBe("ready")
+		expect(health.active()).toBe(0)
+		health.failed(0, "timeout", new Error("caller abort again"), 3, probeTimeoutMs)
+		expect(health.state(0)).toBe("down")
 	})
 
 	test("never on a 429 or a gateway refusal", () => {
@@ -122,20 +133,22 @@ describe("the active role", () => {
 		expect(health.holdDownMs(0)).toBe(holdDownMinMs)
 	})
 
-	test("every endpoint failing together doubles no holdDown, and the primary takes the role back at once", () => {
+	test("every endpoint failing together doubles no holdDown, in either order, and the primary takes the role back at once", () => {
 		const health = admittedPair()
 		failOver(health, 1)
 		let now = returnPrimary(health, 1)
-		for (let n = 0; n < 3; n++) {
+		for (let n = 0; n < 4; n++) {
 			now += 1
-			health.failed(1, "timeout", new Error("abort"), now)
-			health.failed(0, "timeout", new Error("abort"), now)
+			health.probed(1, passing(10), now)
+			const order = n % 2 === 0 ? [1, 0] : [0, 1]
+			for (const index of order) health.failed(index, "timeout", new Error("abort"), now)
 			expect(health.active()).toBeUndefined()
 			now += probeSpacingMs
 			health.probed(0, passing(10), now)
 			expect(health.active()).toBe(0)
+			health.succeeded(0, now)
 		}
-		expect(health.holdDownMs(0)).toBe(holdDownMinMs)
+		expect([health.holdDownMs(0), health.holdDownMs(1)]).toEqual([holdDownMinMs, holdDownMinMs])
 	})
 
 	test("a lone endpoint holds the role through down, is never probed or behind, and a success returns it to ready", () => {

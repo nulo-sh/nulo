@@ -338,6 +338,7 @@ Sources: M main draft, C Codex design, O Opus design, A audits.
 | D25 | A pick with no active endpoint and no answering candidate refuses before anything is recorded | sending to the primary anyway (A3-C4) | nothing is broadcast to an endpoint the route knows is failing; the person retries |
 | D26 | (implementation, arc 1) A sync read whose active endpoint fails while no other endpoint qualifies keeps today's same-endpoint rounds (D3's "retried on the same endpoint" column), and stops as soon as another endpoint holds the role | failing at once, as § What fails over's text reads | with two endpoints and the other one behind or down, failing at once turns one transient 5xx into a failed `PXE.create`, where one endpoint retries it today; the stop keeps a stale endpoint from answering a tip read after a newer one served |
 | D27 | (implementation, arc 1) With no active endpoint a call first runs the admission probes (preference order, 5 s spacing, shared), then its rounds; a round with nothing it may try ends the call instead of sleeping; a down endpoint takes a call directly only as a round's last resort, and only when admitted and at the floor | probing inside every round | the call's own requests stay at today's four; the probes are the route's, rate-limited across calls |
+| D28 | (implementation, arc 1) D22 holds on a lone endpoint too: its pinned receipt reads `PENDING` while it is down, the one exception to the one-endpoint parity of § What fails over | exempting a lone endpoint | D22's reason holds with one endpoint: a failed pinned read fails every later execution that syncs the secret |
 
 ## Audit verdicts
 
@@ -355,6 +356,8 @@ Round 1 merged the contradiction check into both legs (a deviation from the tier
 | 3 | Opus 5.5 Plan, round-2 auditor verifying | approve with changes (3 majors) | 13 of its 14 round-2 findings resolved, the 14th completed by E1's second transfer; N1-N9 (no-active exit, seeding takes the role from any endpoint, pinned out-of-route health, store-first buildability, by-hash reads, refusals passing the role, no-runtime pick, a pin ending in a block, ledger fixes) | none |
 | 4 | Codex `01a1a2b3` resumed | revise (2 majors) | all 7 round-3 findings resolved; 8 (an out-of-route pinned URL never recovers) and 9 (a pin ended at inclusion is lost on a prune): one attempt per `nextProbeAt`, pins held to finality (D22) | none |
 | 5 | Codex `01a1a2b3` resumed | approve | 8 and 9 resolved; no new blocker or major | none |
+| arc 1, 1 | Codex `01a1a756` | revise (1 blocker, 3 majors) | all 5: a sync retry below a raised floor; `singleAttempt` ignoring a pin; racing picks for one hash; `retryWhile` after an awaited admission; a hold-down doubled by a shared outage (now doubled on a served call) | none |
+| arc 1, 1 | Opus 5.5, fresh | approve with changes (1 major) | 2-5 (the four Codex findings it shared); 1 (a timeout under a probe's or caller's shorter budget counts as one failure); 6 (identity judged when the anchor read fails); 7 (D28); 8 (`singleAttempt` with no active endpoint fails at once and starts admission); 9 (two tests strengthened, two parity rows); the residual doubling after a role left with no holder | none |
 
 ## Seeds (not run; orchestrator-owned)
 

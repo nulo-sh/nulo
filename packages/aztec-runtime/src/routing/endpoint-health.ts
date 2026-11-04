@@ -51,13 +51,24 @@ export function countsTowardDown(failure: TransportFailure): boolean {
 	return failure !== "overloaded" && failure !== "refused"
 }
 
-/** Counts one failure; returns whether it took the endpoint down. `cause` is the fetch's error object. */
-export function recordFailure(health: EndpointHealth, failure: TransportFailure, cause: object, now: number): boolean {
+/**
+ * Counts one failure; returns whether it took the endpoint down. `cause` is the fetch's error object;
+ * `attemptMs` the abort of the attempt that failed: only a full call attempt timing out takes the
+ * endpoint down at once, since a probe's or a caller's shorter budget says nothing of a 60 s read.
+ */
+export function recordFailure(
+	health: EndpointHealth,
+	failure: TransportFailure,
+	cause: object,
+	now: number,
+	attemptMs: number = ROUTE_TIMING.callTimeoutMs,
+): boolean {
 	if (!countsTowardDown(failure) || health.counted.has(cause)) return false
 	health.counted.add(cause)
 	health.failures++
 	if (health.state === "down") return false
-	if (failure !== "timeout" && health.failures < ROUTE_TIMING.downAfterFailures) return false
+	const atOnce = failure === "timeout" && attemptMs >= ROUTE_TIMING.callTimeoutMs
+	if (!atOnce && health.failures < ROUTE_TIMING.downAfterFailures) return false
 	setState(health, "down", now)
 	health.nextProbeAt = now + health.holdDownMs
 	return true
@@ -87,7 +98,7 @@ interface RouteEndpointHealth extends EndpointHealth {
 	returnPassAt: number | undefined
 	/** Lost the role since its hold-down last reset: its next fall doubles the hold-down. */
 	hasFallen: boolean
-	/** Lost the role after a return; doubles once another endpoint takes the role. */
+	/** Lost the role after a return; doubles once another endpoint serves in its place. */
 	fellAfterReturn: boolean
 	heldSince: number | undefined
 }
@@ -192,11 +203,12 @@ export class RouteHealth {
 		const health = this.at(index)
 		if (recordSuccess(health, now)) this.onChange({ kind: "state", index, state: "ready" })
 		if (this.activeIndex === undefined && this.qualifies(index)) this.setActive(index, now)
+		if (index === this.activeIndex) this.settleFalls(index)
 	}
 
-	public failed(index: number, failure: TransportFailure, cause: object, now: number): void {
+	public failed(index: number, failure: TransportFailure, cause: object, now: number, attemptMs?: number): void {
 		const health = this.at(index)
-		if (!recordFailure(health, failure, cause, now)) return
+		if (!recordFailure(health, failure, cause, now, attemptMs)) return
 		this.onChange({ kind: "state", index, state: "down", failure })
 		if (index === this.activeIndex && !this.lone) this.loseRole(index, now, undefined)
 		health.nextProbeAt = now + health.holdDownMs
@@ -266,7 +278,7 @@ export class RouteHealth {
 
 	private probeFailed(index: number, answer: { failure: TransportFailure | undefined; cause: object }, now: number): void {
 		const health = this.at(index)
-		if (answer.failure !== undefined) this.failed(index, answer.failure, answer.cause, now)
+		if (answer.failure !== undefined) this.failed(index, answer.failure, answer.cause, now, ROUTE_TIMING.probeTimeoutMs)
 		this.restartReturn(health, now)
 	}
 
@@ -307,7 +319,10 @@ export class RouteHealth {
 		health.nextProbeAt = now
 		this.activeIndex = undefined
 		this.setActive(next ?? this.mostPreferredQualifying(), now)
-		if (this.activeIndex === undefined) this.onChange({ kind: "active", index: undefined })
+		if (this.activeIndex !== undefined) return
+		// Nobody left to serve: a shared outage (the person's own connection) is no endpoint's flap.
+		for (const other of this.endpoints) other.fellAfterReturn = false
+		this.onChange({ kind: "active", index: undefined })
 	}
 
 	private mostPreferredQualifying(): number | undefined {
@@ -322,12 +337,19 @@ export class RouteHealth {
 		health.heldSince = now
 		health.returnPassAt = undefined
 		health.fellAfterReturn = false
-		for (const other of this.endpoints) {
-			if (!other.fellAfterReturn) continue
+		this.onChange({ kind: "active", index })
+	}
+
+	/** The active endpoint `server` answered a call: each endpoint that fell after a return doubles its
+	 *  hold-down. Doubling waits for a served call, and the role left with no holder clears every
+	 *  pending fall, so every endpoint failing together (the person's own connection dropping)
+	 *  doubles nothing, whatever order the failures arrive in. */
+	private settleFalls(server: number): void {
+		this.endpoints.forEach((other, index) => {
+			if (index === server || !other.fellAfterReturn) return
 			other.holdDownMs = Math.min(other.holdDownMs * 2, ROUTE_TIMING.holdDownMaxMs)
 			other.fellAfterReturn = false
-		}
-		this.onChange({ kind: "active", index })
+		})
 	}
 
 	private at(index: number): RouteEndpointHealth {
