@@ -10,6 +10,7 @@ vi.mock("./seeds", async (importOriginal) => {
 
 afterEach(() => {
 	vi.unstubAllGlobals()
+	vi.mocked(maxBatchSizeFor).mockReset()
 })
 
 const mainnet = seedForKind("mainnet")

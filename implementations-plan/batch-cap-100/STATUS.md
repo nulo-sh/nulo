@@ -6,3 +6,4 @@
 - 2026-11-04: Codex plan r2 approve; plan committed; auto-continue to arc 1.
 - 2026-11-04: phase 1 gate green: lint, typecheck:all, the three files 14/14 at retry 0 (4 red on base; forwarding cases red with the cap dropped), test:all exit 0, check:seeds live OK on Testnet and Alpha (15:23 UTC).
 - 2026-11-04: arc 1 r1: Codex clean; Opus 2 findings accepted (checkSeed lookup case, comment).
+- 2026-11-04: arc 1 r2: Codex 1 minor finding (mock leak) fixed.

@@ -97,6 +97,7 @@ None. No screen, copy or format changes. No e2e scenario is added.
 | plan r1 | Codex gpt-6.1-sol high (session 01a1a71d) | conditional approve | a forwarding case per client (the split at 100 cannot prove it); the shared reply budget recorded as a known limit (D6); Fact 5 qualified to a parsed body; the gate's `cd` in a subshell; I1 restated as unknown; the timeout report says per attempt, with the retry worst case | none |
 | plan r2 | Codex, resumed | approve | none needed; it confirmed the mocks reach every client (`vi.mock("./seeds")` in `node-factory.test.ts`) and that one lookup per construction makes `mockReturnValueOnce(3)` enough, set just before the client is built and outside `checkSeed`, which looks up again | none |
 | arc 1 r1 | Codex gpt-6.1-sol high (session 01a1a728) + Opus 5.5 | Codex clean; Opus 2 findings | Opus: the refusal's `[100]` no longer proves `checkSeed` sizes its tick from the lookup (a hard-coded 100 passes, demonstrated): a case with the lookup answering 3 expects 3 reads, red with `length: 100`; the `BATCH_CAPS` comment's prover clause tied back to the limit | none |
+| arc 1 r2 | Codex, resumed | 1 finding (minor) | demonstrated: a `mockReturnValueOnce` left unconsumed by a failing case survives `afterEach` and feeds the next test; both files' `afterEach` now `mockReset()` the lookup (restores the real one, checked on Vitest 4.1.12) | none |
 
 ## Delivery
 

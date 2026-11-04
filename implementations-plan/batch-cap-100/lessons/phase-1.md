@@ -10,3 +10,7 @@
 
 - Codex (gpt-6.1-sol, high, session 01a1a728): clean.
 - Opus 5.5 diff review: two findings, both accepted. (1) Demonstrated by trace: the refusal test's `[100]` passes when `checkSeed` hard-codes 100, because the real lookup also answers 100. The new case `checkSeed sends one tick of the cap the lookup answers` expects 3 reads; with `seed-identity.ts:21` changed to `length: 100` it failed (`called 3 times, but got 100 times`), and passed once reverted. (2) The comment's prover clause no longer tied to anything; it now says one prover tick can exceed the limit.
+
+## Review, arc 1 round 2
+
+- Codex (resumed): one minor finding, accepted. Under the regression the new case detects, its queued `mockReturnValueOnce(3)` is never used up and survives `afterEach` (`vi.unstubAllGlobals` does not touch mocks, and no global `mockReset` is configured), so the next test uses it. Both files' `afterEach` now call `vi.mocked(maxBatchSizeFor).mockReset()`. A scratch test confirmed that on Vitest 4.1.12, `mockReset` on `vi.fn(impl)` restores `impl` and drops queued values. With `checkSeed` hard-coding 100, only the targeted case failed (1 failed, 6 passed).

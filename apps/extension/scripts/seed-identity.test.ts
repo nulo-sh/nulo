@@ -50,6 +50,7 @@ describe("checkSeed", () => {
 describe("checkSeed's batch at the seed's cap", () => {
 	afterEach(() => {
 		vi.unstubAllGlobals()
+		vi.mocked(maxBatchSizeFor).mockReset()
 	})
 
 	const mainnet = seedForKind("mainnet")
