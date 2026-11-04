@@ -294,18 +294,19 @@ onBeforeUnmount(() => {
 		heroSub="Profile"
 		collapsingLabel="Delete Profile"
 		backTo="/popup/settings"
+		moreBelow
 		tone="destructive"
 		:data-profile-name="target?.name ?? ''"
 	>
 		<!-- Profile -->
-		<div :class="$style.section">
+		<div :class="$style.section" data-scroll-section>
 			<span :class="$style.section_label">Profile to delete</span>
 			<ItemsContainer flat>
 				<SettingItem :title="target?.name ?? ''" titleVariant="name" raw />
 			</ItemsContainer>
 		</div>
 
-		<div v-if="importedAccounts.length" :class="$style.section" data-testid="reset-imported">
+		<div v-if="importedAccounts.length" :class="$style.section" data-testid="reset-imported" data-scroll-section>
 			<span :class="$style.section_label">Imported accounts</span>
 			<ItemsContainer flat>
 				<SettingItem
@@ -324,7 +325,7 @@ onBeforeUnmount(() => {
 		</div>
 
 		<!-- Agreements -->
-		<div :class="$style.section">
+		<div :class="$style.section" data-scroll-section>
 			<span :class="$style.section_label">Agreements required</span>
 			<Flex direction="column" gap="12">
 				<Checkbox v-model="checks.permanent" data-testid="reset-checkbox-permanent">
@@ -340,7 +341,7 @@ onBeforeUnmount(() => {
 		</div>
 
 		<!-- Confirmation -->
-		<div :class="$style.section_last">
+		<div :class="$style.section_last" data-scroll-section>
 			<span :class="$style.section_label">Confirm deletion</span>
 			<Input
 				v-model="confirmText"

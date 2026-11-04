@@ -388,10 +388,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<CollapsingHeroLayout heroMain="Account" heroSub="Backup" :collapsingLabel="collapsingLabel" backTo="/popup/settings/security/export">
+	<CollapsingHeroLayout heroMain="Account" heroSub="Backup" :collapsingLabel="collapsingLabel" backTo="/popup/settings/security/export" moreBelow>
 		<!-- Step 1: account picker (skipped when deep-linked with a preselected address) -->
 		<template v-if="!selectedAddress">
-			<div class="export_section_last">
+			<div class="export_section_last" data-scroll-section>
 				<span class="export_section_label type--label-section">Select account</span>
 				<ItemsContainer flat>
 					<SettingItem
@@ -414,7 +414,7 @@ onBeforeUnmount(() => {
 
 		<!-- Step 2: agree gate -->
 		<template v-else-if="!isAgreed">
-			<div class="export_section_last">
+			<div class="export_section_last" data-scroll-section>
 				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
 					<Text variant="body" height="150" color="body"> This file gives full control of one account. </Text>
@@ -445,7 +445,7 @@ onBeforeUnmount(() => {
 
 		<!-- Steps 4-6: file ready / protected / saved -->
 		<template v-else>
-			<div class="export_section_last">
+			<div class="export_section_last" data-scroll-section>
 				<span class="export_section_label type--label-section">File</span>
 				<Flex direction="column" gap="12">
 					<Banner v-if="fileStatus === 'ready'" variant="info" direction="vertical" data-testid="account-file-ready-banner">

@@ -62,7 +62,7 @@ watch(
 </script>
 
 <template>
-	<div :class="$style.section">
+	<div :class="$style.section" data-scroll-section>
 		<span :class="$style.section_label">Backup File</span>
 		<ItemsContainer flat>
 			<SettingItem
@@ -113,7 +113,7 @@ watch(
 		</Flex>
 	</div>
 
-	<div v-if="showsDecryptCta({ selectedBackup })" :class="$style.section">
+	<div v-if="showsDecryptCta({ selectedBackup })" :class="$style.section" data-scroll-section>
 		<span :class="$style.section_label">Decryption Password</span>
 		<Input
 			v-model="decryptionPassword"
@@ -133,7 +133,7 @@ watch(
 		</Input>
 	</div>
 
-	<div v-if="askNewPassword && selectedBackup?.profileType && !restoreStatus" :class="$style.section">
+	<div v-if="askNewPassword && selectedBackup?.profileType && !restoreStatus" :class="$style.section" data-scroll-section>
 		<UnlockMethodChoice
 			v-model="unlockMethod"
 			passwordTestid="import-full-backup-method-password"

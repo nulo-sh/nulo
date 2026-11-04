@@ -18,6 +18,7 @@ import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 import { createBalanceCount } from "./balance-count"
 import { FULL_SIZE, fiatHeroCandidates, fitHero, holdHeroFit, tokenHeroCandidates } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
+import { isCalm } from "@/utils/motion"
 
 /** Composables */
 import { useConfigRead } from "@/composables/useConfigRead"
@@ -126,8 +127,6 @@ const balanceCount = createBalanceCount({
 		countMicro.value = micro
 	},
 })
-const isCalm = () =>
-	window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.classList.contains("noanimations")
 /** Home's arrival chip: none on the token hero, and none while the fiat hero is hidden. */
 const chip = computed(() => (!tokenToDisplay.value && showFiatValues.value && props.arrival?.label ? props.arrival : null))
 const chipCalm = ref(false)

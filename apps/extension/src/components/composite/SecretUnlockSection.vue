@@ -18,7 +18,7 @@ const onClick = () => emit("clearError")
 </script>
 
 <template>
-	<div class="export_section_last">
+	<div class="export_section_last" data-scroll-section>
 		<span class="export_section_label type--label-section">Unlock</span>
 		<CurrentPasswordField
 			:modelValue="modelValue"

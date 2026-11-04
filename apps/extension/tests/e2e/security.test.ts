@@ -8,6 +8,7 @@ import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { changePassword, lockWallet, navigateByHash, selectedAccount, waitForToast } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
+import { activeTestId, coveredAt } from "./helpers/pointer-probes"
 
 const ORIGINAL_PASSWORD = TEST_PASSWORD
 const NEW_PASSWORD = "NewTestPassword456!"
@@ -133,6 +134,46 @@ test("the unlock method changes to a passkey and back to a password", { timeout:
 		await auth.cleanup()
 		await page.close()
 	}
+})
+
+// The more-below button needs a real layout: the 360 x 600 fold, the hit test over the scroll
+// area, the press that keeps focus where it was. jsdom lays nothing out.
+test("Delete profile's more-below press brings the name field into view and keeps focus", async ({ registeredExtension }) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	await navigateByHash(page, "#/popup/settings/security/reset")
+	await page.waitForSelector('[data-testid="scroll-more"]', { visible: true, timeout: 5_000 })
+	const fieldInView = () => {
+		const field = document.querySelector('[data-testid="reset-confirm-input"]')?.getBoundingClientRect()
+		const scroller = document.querySelector<HTMLElement>('[data-testid="collapsing-hero-scroller"]')
+		const bar = document.querySelector('[data-testid="collapsing-hero-header"]')?.getBoundingClientRect().bottom
+		if (!field || !scroller || bar === undefined) return false
+		return field.top >= bar && field.bottom <= scroller.getBoundingClientRect().top + scroller.clientHeight
+	}
+	expect(await page.evaluate(fieldInView)).toBe(false)
+	expect(await coveredAt(page, "scroll-more")).toBeNull()
+
+	await page.$eval('[data-testid="reset-checkbox-permanent"]', (el) => (el as HTMLElement).focus())
+	expect(await activeTestId(page)).toBe("reset-checkbox-permanent")
+	const centre = (testid: string) =>
+		page.$eval(`[data-testid="${testid}"]`, (el) => {
+			const box = el.getBoundingClientRect()
+			return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+		})
+	const more = await centre("scroll-more")
+	await page.mouse.click(more.x, more.y)
+	await page.waitForFunction(fieldInView, { timeout: 5_000 })
+	await page.waitForFunction(() => !document.querySelector('[data-testid="scroll-more"]'), { timeout: 5_000 })
+	expect(await activeTestId(page)).toBe("reset-checkbox-permanent")
+
+	expect(await coveredAt(page, "reset-confirm-input")).toBeNull()
+	const field = await centre("reset-confirm-input")
+	await page.mouse.click(field.x, field.y)
+	expect(await activeTestId(page)).toBe("reset-confirm-input")
+
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
+	await page.close()
 })
 
 test("auto-lock TTL change persists across navigation", async ({ registeredExtensionPerTest }) => {

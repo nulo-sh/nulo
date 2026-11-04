@@ -276,6 +276,7 @@ declare global {
   const isAnyActivating: typeof import('../composables/useProfileBootstrap').isAnyActivating
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
   const isBlank: typeof import('../utils/string').isBlank
+  const isCalm: typeof import('../utils/motion').isCalm
   const isCardWindow: typeof import('../utils/own-window').isCardWindow
   const isComposing: typeof import('../composables/usePopupEntity').isComposing
   const isEmptyContactName: typeof import('../utils/contact-name').isEmptyContactName
@@ -326,6 +327,7 @@ declare global {
   const landingRoute: typeof import('../utils/panel-handback').landingRoute
   const leaveFor: typeof import('../utils/page-back').leaveFor
   const leavePanelFor: typeof import('../utils/own-window').leavePanelFor
+  const leftToScroll: typeof import('../composables/useScrollRemaining').leftToScroll
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
   const legalSheetMayCover: typeof import('../utils/legal-sheet').legalSheetMayCover
   const listOwnAccountRow: typeof import('../utils/account-rows').listOwnAccountRow
@@ -596,6 +598,7 @@ declare global {
   const useRoute: typeof import('vue-router').useRoute
   const useRouter: typeof import('vue-router').useRouter
   const useScopedTokens: typeof import('../composables/useScopedTokens').useScopedTokens
+  const useScrollRemaining: typeof import('../composables/useScrollRemaining').useScrollRemaining
   const useSecretClipboardCopy: typeof import('../composables/useSecretClipboardCopy').useSecretClipboardCopy
   const useSecretCountdown: typeof import('../composables/useSecretCountdown').useSecretCountdown
   const useSeedStatus: typeof import('../composables/useSeedStatus').useSeedStatus
@@ -1197,6 +1200,7 @@ declare module 'vue' {
     readonly isAnyActivating: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isAnyActivating']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>
     readonly isBlank: UnwrapRef<typeof import('../utils/string')['isBlank']>
+    readonly isCalm: UnwrapRef<typeof import('../utils/motion')['isCalm']>
     readonly isCardWindow: UnwrapRef<typeof import('../utils/own-window')['isCardWindow']>
     readonly isComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isComposing']>
     readonly isEmptyContactName: UnwrapRef<typeof import('../utils/contact-name')['isEmptyContactName']>
@@ -1247,6 +1251,7 @@ declare module 'vue' {
     readonly landingRoute: UnwrapRef<typeof import('../utils/panel-handback')['landingRoute']>
     readonly leaveFor: UnwrapRef<typeof import('../utils/page-back')['leaveFor']>
     readonly leavePanelFor: UnwrapRef<typeof import('../utils/own-window')['leavePanelFor']>
+    readonly leftToScroll: UnwrapRef<typeof import('../composables/useScrollRemaining')['leftToScroll']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly legalSheetMayCover: UnwrapRef<typeof import('../utils/legal-sheet')['legalSheetMayCover']>
     readonly listOwnAccountRow: UnwrapRef<typeof import('../utils/account-rows')['listOwnAccountRow']>
@@ -1517,6 +1522,7 @@ declare module 'vue' {
     readonly useRoute: UnwrapRef<typeof import('vue-router')['useRoute']>
     readonly useRouter: UnwrapRef<typeof import('vue-router')['useRouter']>
     readonly useScopedTokens: UnwrapRef<typeof import('../composables/useScopedTokens')['useScopedTokens']>
+    readonly useScrollRemaining: UnwrapRef<typeof import('../composables/useScrollRemaining')['useScrollRemaining']>
     readonly useSecretClipboardCopy: UnwrapRef<typeof import('../composables/useSecretClipboardCopy')['useSecretClipboardCopy']>
     readonly useSecretCountdown: UnwrapRef<typeof import('../composables/useSecretCountdown')['useSecretCountdown']>
     readonly useSeedStatus: UnwrapRef<typeof import('../composables/useSeedStatus')['useSeedStatus']>

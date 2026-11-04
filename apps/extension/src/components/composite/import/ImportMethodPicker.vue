@@ -9,7 +9,7 @@ const props = defineProps({
 </script>
 
 <template>
-	<div :class="$style.section_last">
+	<div :class="$style.section_last" data-scroll-section>
 		<span :class="$style.section_label">{{ type === "recovery" ? "Recovery" : "Import" }} with</span>
 		<ItemsContainer flat>
 			<SettingItem

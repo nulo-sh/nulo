@@ -202,12 +202,13 @@ onBeforeUnmount(() => {
 		heroSub="Profile"
 		:collapsingLabel="type === 'recovery' ? 'Recover Profile' : 'Import Profile'"
 		:backTo="backTo"
+		moreBelow
 		data-testid="import-page"
 		:data-name-field="nameFieldState"
 		:data-restore-stage="restoreStage"
 		@keydown="onKeydown"
 	>
-		<div v-if="nameFieldState === 'shown'" :class="$style.name_section">
+		<div v-if="nameFieldState === 'shown'" :class="$style.name_section" data-scroll-section>
 			<span :class="$style.section_label">Profile name</span>
 			<ProfileNameField
 				ref="nameInputRef"

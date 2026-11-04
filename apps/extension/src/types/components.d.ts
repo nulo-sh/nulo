@@ -97,6 +97,7 @@ declare module 'vue' {
     ScopeAddress: typeof import('./../components/ScopeAddress.vue')['default']
     ScopeClassId: typeof import('./../components/ScopeClassId.vue')['default']
     ScopePatternList: typeof import('./../components/composite/capabilities/ScopePatternList.vue')['default']
+    ScrollMoreButton: typeof import('@nulo/design')['ScrollMoreButton']
     SearchField: typeof import('./../components/composite/SearchField.vue')['default']
     SecretCountdownClose: typeof import('./../components/composite/SecretCountdownClose.vue')['default']
     SecretUnlockSection: typeof import('./../components/composite/SecretUnlockSection.vue')['default']

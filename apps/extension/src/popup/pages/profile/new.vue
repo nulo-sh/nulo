@@ -92,11 +92,12 @@ onBeforeUnmount(() => {
 		heroSub="Profile"
 		collapsingLabel="Create Profile"
 		:backTo="backTo"
+		moreBelow
 		data-testid="register-page"
 		:data-name-field="nameFieldState"
 		@keydown="onKeydown"
 	>
-		<div v-if="nameFieldState === 'shown'" :class="$style.section_last">
+		<div v-if="nameFieldState === 'shown'" :class="$style.section_last" data-scroll-section>
 			<span :class="$style.section_label">Profile name</span>
 			<ProfileNameField
 				ref="nameInputRef"
@@ -117,7 +118,7 @@ onBeforeUnmount(() => {
 		/>
 
 		<!-- Passkey info -->
-		<div v-else :class="$style.section_last">
+		<div v-else :class="$style.section_last" data-scroll-section>
 			<span :class="$style.section_label">Passkey</span>
 			<Text variant="body" height="150" color="body" data-testid="register-passkey-info">{{ PASSKEY_COPY.choice }}</Text>
 		</div>

@@ -35,6 +35,7 @@ const EXPECTED_MIGRATED = [
 	// package-native — never had a local SFC, so there is no shadow to delete
 	"Skeleton",
 	"RowAction",
+	"ScrollMoreButton",
 ]
 
 // Wrapper-backed: the extension keeps a LOCAL SFC of this name, so the bare tag must resolve to that

@@ -3,6 +3,7 @@ import { type ObjectDirective, onScopeDispose, type Ref, readonly, ref, watch } 
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { leftToScroll } from "@/composables/useScrollRemaining"
 
 /** The drawn gap between the snack and what it sits above: the viewport's bottom edge or a footer. */
 export const SNACK_GAP = 12
@@ -120,8 +121,6 @@ function clearListed(inset: number, viewportHeight: number, rows: readonly Foote
 
 /** Overflow values a user can scroll directly; `hidden` scrolls only programmatically. */
 const SCROLLABLE = new Set(["auto", "scroll", "overlay"])
-
-const leftToScroll = (el: Element) => Math.max(0, el.scrollHeight - el.clientHeight - el.scrollTop)
 
 /** How far `el` rises once each container that scrolls it, the page included, is scrolled to its
  *  end. A sticky box keeps its place while the container it sticks to scrolls. */
