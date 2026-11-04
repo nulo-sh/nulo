@@ -359,6 +359,7 @@ Round 1 merged the contradiction check into both legs (a deviation from the tier
 | arc 1, 1 | Codex `01a1a756` | revise (1 blocker, 3 majors) | all 5: a sync retry below a raised floor; `singleAttempt` ignoring a pin; racing picks for one hash; `retryWhile` after an awaited admission; a hold-down doubled by a shared outage (now doubled on a served call) | none |
 | arc 1, 1 | Opus 5.5, fresh | approve with changes (1 major) | 2-5 (the four Codex findings it shared); 1 (a timeout under a probe's or caller's shorter budget counts as one failure); 6 (identity judged when the anchor read fails); 7 (D28); 8 (`singleAttempt` with no active endpoint fails at once and starts admission); 9 (two tests strengthened, two parity rows); the residual doubling after a role left with no holder | none |
 | arc 1, 2 | Codex `01a1a756` resumed | revise (1 blocker, 1 major) | both: the await between admission and dispatch let a floor rise or a stop land unchecked; the last check now runs with no await before the dispatch, the pinned read's retry included; round 1's five confirmed closed | none |
+| arc 1, 3 | Codex `01a1a756` resumed | revise (1 major) | round 2's two confirmed closed; the major (a sync read re-sent to an endpoint that qualified while the failure had already handed the role to another) fixed after the round: the resend goes to the role's holder, and a sync dispatch refuses any endpoint but the active one. The three-round cap ended the loop, so this fix has no Codex verdict | none |
 
 ## Seeds (not run; orchestrator-owned)
 

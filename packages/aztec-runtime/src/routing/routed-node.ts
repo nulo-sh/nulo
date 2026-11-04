@@ -292,7 +292,7 @@ class Router implements Route {
 		let lastError = last
 		let failedAt: number | undefined
 		for (const index of order) {
-			const out = await this.attempt(index, method, args, retrying || failedAt !== undefined)
+			const out = await this.attempt(index, method, args, retrying || failedAt !== undefined, sync)
 			if (out.kind === "stopped") throw lastError
 			if (out.kind === "skipped") continue
 			if (out.kind !== "failed") return out
@@ -304,16 +304,26 @@ class Router implements Route {
 		return failedAt === undefined ? { kind: "skipped" } : { kind: "failed", error: lastError, index: failedAt }
 	}
 
-	/** The active endpoint failed a sync read: the role passes to the next qualifying endpoint and the
-	 *  read is re-sent there once. With none, the read keeps today's rounds on the active endpoint. */
+	/** The active endpoint failed a sync read: the read is re-sent once to the endpoint that holds the
+	 *  role next, the failure's own hand-off or the next qualifying one. With none, the read keeps
+	 *  today's rounds on the endpoint that failed. */
 	private async resendSync(failed: number, method: string, args: unknown[], error: unknown): Promise<unknown> {
 		if (!this.retryWhile()) throw error
-		const next = this.health.lone ? undefined : await this.nextQualifying(failed)
+		const next = this.health.lone ? undefined : await this.successor(failed)
 		if (next === undefined) return this.walkRest(failed, method, args, error)
-		this.health.passRole(failed, next, this.deps.now())
-		const out = await this.attempt(next, method, args, true)
+		const out = await this.attempt(next, method, args, true, true)
 		if (out.kind === "ok") return out.value
 		throw out.kind === "failed" || out.kind === "answer" ? out.error : error
+	}
+
+	/** The endpoint other than `failed` holding the role once `failed` gives it up, if any. */
+	private async successor(failed: number): Promise<number | undefined> {
+		const holder = this.health.active()
+		if (holder !== undefined && holder !== failed) return holder
+		const next = await this.nextQualifying(failed)
+		if (next !== undefined) this.health.passRole(failed, next, this.deps.now())
+		const active = this.health.active()
+		return active === undefined || active === failed ? undefined : active
 	}
 
 	/** Today's remaining rounds on the one endpoint whose first attempt failed with `error`, while no
@@ -324,7 +334,7 @@ class Router implements Route {
 			await this.pause(round, last)
 			const active = this.health.active()
 			if (active !== undefined && active !== index) break
-			const out = await this.attempt(index, method, args, true)
+			const out = await this.attempt(index, method, args, true, true)
 			if (out.kind === "ok") return out.value
 			if (out.kind !== "failed") throw out.kind === "answer" ? out.error : last
 			last = out.error
@@ -364,8 +374,8 @@ class Router implements Route {
 
 	/** One attempt on `index`, probing it first when it must answer one. A `retrying` attempt (any but a
 	 *  call's first) asks `retryWhile` before it moves and again after the probe. The last check, of the
-	 *  stop and of the floor, runs with no await before the dispatch. */
-	private async attempt(index: number, method: string, args: unknown[], retrying: boolean): Promise<Attempt> {
+	 *  stop, the floor and a sync read's holder, runs with no await before the dispatch. */
+	private async attempt(index: number, method: string, args: unknown[], retrying: boolean, sync = false): Promise<Attempt> {
 		if (retrying && !this.retryWhile()) return { kind: "stopped" }
 		if (this.health.needsProbe(index) && this.health.state(index) !== "down") {
 			if (!this.health.mayProbe(index, this.deps.now())) return { kind: "skipped" }
@@ -374,12 +384,15 @@ class Router implements Route {
 			if (retrying && !this.retryWhile()) return { kind: "stopped" }
 		}
 		const endpoint = this.endpoints[index]
-		if (!endpoint || !this.mayDispatch(index)) return { kind: "skipped" }
+		if (!endpoint || !this.mayDispatch(index, sync)) return { kind: "skipped" }
 		return this.attemptOn(index, this.client(endpoint.rpcUrl, ROUTE_TIMING.callTimeoutMs), method, args)
 	}
 
-	/** A down endpoint only while still at the floor, any other only while it qualifies. */
-	private mayDispatch(index: number): boolean {
+	/** A down endpoint only while still at the floor, any other only while it qualifies; a sync read
+	 *  only on the active endpoint, or with none active on the one it already reads. */
+	private mayDispatch(index: number, sync: boolean): boolean {
+		const active = this.health.active()
+		if (sync && active !== undefined && active !== index) return false
 		return this.health.state(index) === "down" ? this.health.atFloor(index) : this.health.qualifies(index)
 	}
 

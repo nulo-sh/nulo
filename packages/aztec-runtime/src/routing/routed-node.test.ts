@@ -323,6 +323,22 @@ describe("sync reads", () => {
 		expect(h.sleeps).toEqual([])
 	})
 
+	test("a sync read is re-sent to the endpoint its failure handed the role to, never to another that qualified meanwhile", async () => {
+		const h = new Harness([A, B, C])
+		h.endpoint(B).fail = () => transport("unreachable")
+		await h.node.getChainTips()
+		h.endpoint(A).fail = (m) => (m === "getContract" ? transport("server") : undefined)
+		await call(h)
+		expect(h.node.route.snapshot().map((e) => e.state)).toEqual(["ready", "unknown", "ready"])
+		h.now += ROUTE_TIMING.probeSpacingMs
+		h.endpoint(B).fail = () => undefined
+		h.endpoint(B).tip = 20
+		h.endpoint(A).fail = (m) => (m === "getChainTips" ? transport("timeout") : undefined)
+		await expect(h.node.getChainTips()).resolves.toMatchObject({ proposed: { number: 10 } })
+		expect(h.node.route.active()?.id).toBe("e2")
+		expect(h.seen(B).filter((r) => r.startsWith("getChainTips@60"))).toEqual([])
+	})
+
 	test("a refusal on a sync read passes the role without marking the endpoint down", async () => {
 		const h = new Harness([A, B])
 		await h.node.getChainTips()
