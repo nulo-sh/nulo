@@ -362,28 +362,25 @@ class Router implements Route {
 		return this.deps.retryWhile?.() ?? true
 	}
 
-	/** One attempt on `index`. A `retrying` attempt (any but a call's first) asks `retryWhile` before it
-	 *  moves and again before it dispatches. */
+	/** One attempt on `index`, probing it first when it must answer one. A `retrying` attempt (any but a
+	 *  call's first) asks `retryWhile` before it moves and again after the probe. The last check, of the
+	 *  stop and of the floor, runs with no await before the dispatch. */
 	private async attempt(index: number, method: string, args: unknown[], retrying: boolean): Promise<Attempt> {
 		if (retrying && !this.retryWhile()) return { kind: "stopped" }
-		const refused = await this.admit(index, retrying)
-		if (refused) return refused
-		const endpoint = this.endpoints[index]
-		if (!endpoint) return { kind: "skipped" }
-		return this.attemptOn(index, this.client(endpoint.rpcUrl, ROUTE_TIMING.callTimeoutMs), method, args)
-	}
-
-	/** Probes `index` first when it must answer one; `undefined` when it may take the call. Judged after
-	 *  every await: a down endpoint only while still at the floor, any other only while it qualifies. */
-	private async admit(index: number, retrying: boolean): Promise<Attempt | undefined> {
 		if (this.health.needsProbe(index) && this.health.state(index) !== "down") {
 			if (!this.health.mayProbe(index, this.deps.now())) return { kind: "skipped" }
 			const failure = await this.probe(index)
 			if (failure !== undefined) return { kind: "failed", error: failure, spent: false }
 			if (retrying && !this.retryWhile()) return { kind: "stopped" }
 		}
-		const down = this.health.state(index) === "down"
-		return (down ? this.health.atFloor(index) : this.health.qualifies(index)) ? undefined : { kind: "skipped" }
+		const endpoint = this.endpoints[index]
+		if (!endpoint || !this.mayDispatch(index)) return { kind: "skipped" }
+		return this.attemptOn(index, this.client(endpoint.rpcUrl, ROUTE_TIMING.callTimeoutMs), method, args)
+	}
+
+	/** A down endpoint only while still at the floor, any other only while it qualifies. */
+	private mayDispatch(index: number): boolean {
+		return this.health.state(index) === "down" ? this.health.atFloor(index) : this.health.qualifies(index)
 	}
 
 	private async attemptOn(
@@ -548,7 +545,10 @@ class Router implements Route {
 		const client = this.client(endpoint.rpcUrl, timeoutMs) as unknown as Callable
 		let last: unknown
 		for (let round = 0; round < rounds; round++) {
-			if (round > 0) await this.pause(round, last)
+			if (round > 0) {
+				await this.pause(round, last)
+				if (!this.retryWhile()) throw last
+			}
 			try {
 				const receipt = (await client.getTxReceipt?.(...args)) as TxReceipt
 				this.pinAnswered(index, detached)

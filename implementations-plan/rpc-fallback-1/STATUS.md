@@ -11,3 +11,4 @@
 - 2026-11-04: Phase 1 gate pass (lint, typecheck:all, src/utils 55/55, test:all green on its second run; the first run's one red was a load timeout in copy-dash-ban, unrelated).
 - 2026-11-04: Phase 2 gate pass (lint, typecheck:all, utils+routing+adapters 161/161, test:all green, no production caller of createRoutedNode). Deviations D26, D27 in the ledger.
 - 2026-11-04: arc 1 review round 1: Codex revise (5), Opus approve with changes; all folded, routing/adapters/utils 170/170, lint 0, aztec-runtime typecheck 0
+- 2026-11-04: arc 1 review round 2: Codex revise (2, one root cause: an await between the last check and the dispatch); fixed, routing/adapters/utils 174/174, lint 0, typecheck 0

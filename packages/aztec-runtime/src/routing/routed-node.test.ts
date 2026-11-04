@@ -52,6 +52,9 @@ class Harness {
 	public readonly endpoints = new Map<string, FakeEndpoint>()
 	public retryWhile: () => boolean = () => true
 	public onSleep: () => Promise<unknown> | undefined = () => undefined
+	/** Flags a test's injected race sets. */
+	public stopped = false
+	public raised = false
 	public node!: RoutedNode
 
 	public constructor(
@@ -442,6 +445,58 @@ describe("races", () => {
 		h.retryWhile = () => false
 		await expect(h.node.getChainTips()).rejects.toThrow("fetch server")
 		expect(h.seen(B)).toEqual([])
+	})
+
+	/** Runs `run` once per question `retryWhile` is asked, `act` landing in a microtask queued by that
+	 *  question, so it lands after the check and before anything the router awaits next. */
+	async function landAfterEachQuestion(questions: number, run: (h: Harness) => Promise<unknown>, act: (h: Harness) => void) {
+		for (let k = 1; k <= questions; k++) {
+			const pins = createSubmissionPins()
+			pins.byTxHash.set(TX.toString(), { id: "e1", rpcUrl: B })
+			const h = new Harness([A, B], { pins })
+			await call(h)
+			h.endpoint(A).fail = (m) => (m === "getContract" ? transport("server") : undefined)
+			let asked = 0
+			h.retryWhile = () => {
+				if (++asked === k) queueMicrotask(() => act(h))
+				return h.stopped !== true
+			}
+			await run(h).catch(() => {})
+		}
+	}
+
+	test("a stop landing after any question is honoured before the next dispatch", async () => {
+		const sentAfterStop: string[] = []
+		await landAfterEachQuestion(
+			24,
+			async (h) => {
+				h.endpoint(B).fail = () => transport("server")
+				for (const url of [A, B]) h.endpoint(url).hold = (m) => void (h.stopped && sentAfterStop.push(`${url} ${m}`))
+				await call(h).catch(() => {})
+				h.stopped = false
+				await h.node.getTxReceipt(TX)
+			},
+			(h) => {
+				h.stopped = true
+			},
+		)
+		expect(sentAfterStop).toEqual([])
+	})
+
+	test("a floor rising after any question keeps the next dispatch off an endpoint below it", async () => {
+		const belowFloor: string[] = []
+		await landAfterEachQuestion(
+			6,
+			async (h) => {
+				h.endpoint(B).hold = (m) => void (h.raised && m === "getContract" && belowFloor.push(m))
+				await call(h)
+			},
+			(h) => {
+				h.raised = true
+				h.node.route.seedFloor(20)
+			},
+		)
+		expect(belowFloor).toEqual([])
 	})
 
 	test("singleAttempt with no active endpoint fails at once and leaves admission running for the caller's next try", async () => {
