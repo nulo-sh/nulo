@@ -124,7 +124,7 @@ type Populated = {
 	preferences: ReleasePreferences
 	/** A sealing release's loopback origins, which the replay's recording names. */
 	dials?: string[]
-	/** The release's fee payer rows the candidate deletes by design ({@link unofferedSponsorIds}). */
+	/** The ids of the release's fee payer rows the candidate deletes by design ({@link unofferedSponsorIds}). */
 	unofferedSponsors: string[]
 }
 
@@ -360,8 +360,8 @@ async function expectAccounts(page: Page, names: readonly string[]): Promise<voi
 }
 
 async function verify(ctx: ExtensionContext, populated: Populated): Promise<void> {
-	const allowed = { balancesAsserted: true, unofferedSponsors: populated.unofferedSponsors } as const
-	expect(await updateProblems(populated.before, await readLocalStorage(ctx), allowed)).toEqual([])
+	// Still locked: the candidate deletes a fee payer only in an unlocked session, so none is excused yet.
+	expect(await updateProblems(populated.before, await readLocalStorage(ctx), { balancesAsserted: true })).toEqual([])
 
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/auth", 30_000)
@@ -400,6 +400,7 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	expect(await shownOverlays(page)).toEqual([])
 	await page.close()
 
+	const allowed = { balancesAsserted: true, unofferedSponsors: populated.unofferedSponsors } as const
 	expect(await updateProblems(populated.before, await readLocalStorage(ctx), allowed)).toEqual([])
 }
 
