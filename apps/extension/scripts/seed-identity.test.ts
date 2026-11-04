@@ -84,7 +84,14 @@ describe("checkSeed's batch at the seed's cap", () => {
 		expect(entriesPerRequest()).toEqual([100, 100, 50])
 	})
 
-	// The client's own default is also 100, so only a cap that differs from it shows the client forwards the lookup.
+	// The real cap equals the client's own default of 100, so only a cap that differs from it shows the lookup is used.
+	test("checkSeed sends one tick of the cap the lookup answers", async () => {
+		vi.mocked(maxBatchSizeFor).mockReturnValueOnce(3)
+		const getNodeInfo = vi.fn(async () => ({ l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: TESTNET_ROLLUP_VERSION }))
+		expect((await checkSeed(TESTNET, node(getNodeInfo))).ok).toBe(true)
+		expect(getNodeInfo).toHaveBeenCalledTimes(3)
+	})
+
 	test("the preflight client sends no request above the cap the lookup answers", async () => {
 		const entriesPerRequest = stubAnsweringFetch()
 		vi.mocked(maxBatchSizeFor).mockReturnValueOnce(3)

@@ -95,10 +95,10 @@ export function seedForKind(kind: ChainKind | undefined): DefaultSeed | undefine
 }
 
 /** The largest JSON-RPC batch each provider endpoint allows, by origin: dRPC's free plan refuses a
- *  batch above 100 entries whole (HTTP 400, seen 2026-11), and the prover fans one read out per
- *  contract in a single tick. The client's own default is 100 too; the entry keeps the provider's
- *  limit if an Aztec bump moves that default. Keyed by literal origin, not read off the seeds, so a
- *  row seeded on one of these hosts keeps its cap after a later build moves the seed. */
+ *  batch above 100 entries whole (HTTP 400, seen 2026-11), and one prover tick, a read per contract,
+ *  can exceed that. The client's own default is 100 too; the entry holds the provider's limit if an
+ *  Aztec bump moves that default. Keyed by literal origin, not read off the seeds, so a row seeded on
+ *  one of these hosts keeps its cap after a later build moves the seed. */
 const BATCH_CAPS: Readonly<Record<string, number>> = {
 	"https://aztec-mainnet.drpc.org": 100,
 	"https://aztec-testnet.drpc.org": 100,

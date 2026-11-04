@@ -56,7 +56,7 @@ dRPC raised its free-plan limits (its support message to the owner, 2026-11-04):
 
 - **Change:** both `BATCH_CAPS` entries become 100. The comment states the limit dRPC enforces, which it refuses whole above 100 with HTTP 400 (seen 2026-11). The comment also says why the entry stays when the client's default is 100 today: it holds the provider's limit if an Aztec bump moves that default. Nothing else in production code moves.
 - **Tests** (D2): in `seeds.test.ts`, both remote defaults cap at 100. In `node-factory.test.ts` and `seed-identity.test.ts`, 250 calls in one tick go out as `[100, 100, 50]`. In the refusal test, the fixture answers as dRPC refuses today: HTTP 400, and an array with one error (code 31) for each entry. The seed fails after one request of 100.
-- **Forwarding** (D2, Codex r1): at 100 the split cannot tell the cap from the client's default, so neither file would notice a client that drops the cap. Each file wraps the real lookup in `vi.fn` (`vi.mock` of the seeds module with `importOriginal`). One added case answers 3 for one lookup, and 8 calls in one tick go out as `[3, 3, 2]`, through the wallet's factory and through the preflight client.
+- **Forwarding** (D2, Codex r1): at 100 the split cannot tell the cap from the client's default, so neither file would notice a client that drops the cap. Each file wraps the real lookup in `vi.fn` (`vi.mock` of the seeds module with `importOriginal`). One added case answers 3 for one lookup, and 8 calls in one tick go out as `[3, 3, 2]`, through the wallet's factory and through the preflight client. A third, in `seed-identity.test.ts`, has `checkSeed` send 3 reads when the lookup answers 3 (Opus, arc 1 r1).
 - **Rejected:** removing the entries (D1); a test that pins the upstream default (D3); any timeout change (out of scope).
 
 ## Security & Adversarial Considerations
@@ -67,7 +67,7 @@ dRPC raised its free-plan limits (its support message to the owner, 2026-11-04):
 - **Privacy:** the provider sees the same calls in fewer requests, so batching discloses nothing more.
 - **Least privilege, crypto, supply chain:** no change. No dependency is added.
 
-## Phase 1 (arc 1): the batch cap at 100
+## Phase 1 (arc 1): the batch cap at 100 ✓
 
 1. Change the tests first, as the Architecture section says. Run them on the base code. Each of the four moved tests must fail. The two forwarding cases pass on the base code; show that each fails when its client drops the cap (in `node-factory.ts`, pass `() => undefined`; in `seed-preflight-node.ts`, remove `maxBatchSize`), then revert. Record the reds in `lessons/phase-1.md`.
 2. Set both `BATCH_CAPS` entries to 100. Rewrite their comment as the Architecture section says.
@@ -96,6 +96,7 @@ None. No screen, copy or format changes. No e2e scenario is added.
 |---|---|---|---|---|
 | plan r1 | Codex gpt-6.1-sol high (session 01a1a71d) | conditional approve | a forwarding case per client (the split at 100 cannot prove it); the shared reply budget recorded as a known limit (D6); Fact 5 qualified to a parsed body; the gate's `cd` in a subshell; I1 restated as unknown; the timeout report says per attempt, with the retry worst case | none |
 | plan r2 | Codex, resumed | approve | none needed; it confirmed the mocks reach every client (`vi.mock("./seeds")` in `node-factory.test.ts`) and that one lookup per construction makes `mockReturnValueOnce(3)` enough, set just before the client is built and outside `checkSeed`, which looks up again | none |
+| arc 1 r1 | Codex gpt-6.1-sol high (session 01a1a728) + Opus 5.5 | Codex clean; Opus 2 findings | Opus: the refusal's `[100]` no longer proves `checkSeed` sizes its tick from the lookup (a hard-coded 100 passes, demonstrated): a case with the lookup answering 3 expects 3 reads, red with `length: 100`; the `BATCH_CAPS` comment's prover clause tied back to the limit | none |
 
 ## Delivery
 
