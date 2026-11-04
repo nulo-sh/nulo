@@ -117,7 +117,7 @@ None. No screen, copy or format changes. No e2e scenario is added.
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `fa6913668`, with these values. No diff review (`code_review: off`). The Codex loop runs once over the arc's diff against `origin/dev`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, with the README's two rules verbatim, and a hard stop at three rounds. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) of the diff runs beside the first Codex round. Log each round in Audit verdicts and `lessons/phase-1.md`. Teardown: run `agent-worktree done batch-cap-100 --merged` once `implementations-plan/archive/batch-cap-100/plan.md` is on `dev`.
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `fa6913668`, with these values. No diff review (`code_review: off`). The Codex loop runs once over the arc's diff against `origin/dev`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, with the README's two rules verbatim, and a hard stop at three rounds. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) of the diff runs beside the first Codex round. Log each round in Audit verdicts and `lessons/phase-1.md`. Teardown: run `agent-worktree done batch-cap-100 --merged` once `implementations-plan/archive/batch-cap-100/plan.md` is on `dev`.
 
 ## Seeds
 
