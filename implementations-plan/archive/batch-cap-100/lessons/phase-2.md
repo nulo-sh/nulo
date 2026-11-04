@@ -14,3 +14,7 @@
 ## Review, arc 2 round 1
 
 - Codex (gpt-6.1-sol, high, session 01a1a769): changes needed, two low documentation findings, both accepted. `checkSeed`'s comment promised one request, which a lower client default breaks; the plan's Post-implementation paragraph and D5 still read as one arc. No runtime defect; its probes found no mock or stub leak.
+
+## Review, arc 2 round 2
+
+- Codex (resumed): approve, no findings. Both fixes verified; no regression over the arc.

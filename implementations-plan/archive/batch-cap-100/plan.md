@@ -118,6 +118,7 @@ None. No screen, copy or format changes. No e2e scenario is added.
 | arc 1 r3 | Codex, resumed | approve | none needed | none |
 | arc 2 design | Codex gpt-6.1-sol high (session 01a1a763) | approve with changes | no wire change today (traced: every construction forwards the lookup; `undefined` takes the default of 100); constant in `seeds.ts` with the `??` fallback (D7); the guard unmocked in `seeds.test.ts`, red at a default of 101 or 1000 in its in-memory runs (D3); the refusal test independent of the default; a no-cap case for the fallback; the fetch stub extracted; the plan reconciled throughout, history kept | none |
 | arc 2 r1 | Codex gpt-6.1-sol high (session 01a1a769) | changes needed (2 low, docs) | `checkSeed`'s comment no longer promises one request (a lower client default splits the tick); the Post-implementation paragraph and D5 now separate arc 1's history from arc 2. Its probes: the guard passes at defaults 25 and 100 and fails at 101 and 1000; the refusal test sends `[100]` throughout | none |
+| arc 2 r2 | Codex, resumed | approve | none needed; both fixes verified, no regression over the arc | none |
 
 ## Delivery
 
