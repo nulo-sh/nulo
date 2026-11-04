@@ -27,4 +27,4 @@ Base: `origin/dev` at `040334f53`. One reuse sweep (Explore, sonnet) plus the pl
 
 - #1541 (this lane). #1236 (open enhancement, double opt-in "before any campaign after the launch email"): no collision; 1.1's "Before each send I review the list" matches its stated mitigation.
 - Closed known limits #1237-#1239 (rate limit, preview binding, timing): untouched.
-- The window between the `nulo-landing` and `nulo-subscribe` deploys of one `main` push, where a signup can record the other version, is settled: the record is "the version in effect", not proof of what was shown ([mailing-list-1](../archive/mailing-list-1/plan.md), its Codex row on `CONSENT_VERSION`).
+- The window between the `nulo-landing` and `nulo-subscribe` deploys of one `main` push, where a signup can record the other version, is settled: the record is "the version in effect", not proof of what was shown ([mailing-list-1](../mailing-list-1/plan.md), its Codex row on `CONSENT_VERSION`).

@@ -532,3 +532,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fixes-1.2.0-2](fixes-1.2.0-2/plan.md) — completed — the free dRPC endpoints' batch cap at 25, and the Sponsored fee payer only on Testnet and the local network, a saved sponsor's label held until the read fee payer list holds it (refs #1609; closes #1618)
 - [egress-guard-1](egress-guard-1/plan.md) — completed — the egress guard declares each pinned release's Testnet host, from its traits, for the update scenarios; all four update runs from v1.1.0 green (closes #1636)
 - [deps-ci-2](deps-ci-2/plan.md) — completed — node-forge and follow-redirects past alerts 38 to 49 in setup-aztec's npm lockfile, plus bun.lock's follow-redirects (#1434)
+- [website-notice-1](website-notice-1/plan.md) — completed — website privacy notice 1.1: no launch-email promise, replies reach hello@nulo.sh, § 3.2's purpose matches, the 1.0 text archived and `CONSENT_VERSION` 1.1 (closes #1541)
