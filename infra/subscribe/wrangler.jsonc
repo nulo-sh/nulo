@@ -13,7 +13,7 @@
 	"vars": {
 		"RESEND_SEGMENT_ID": "6f48382e-5d4c-4b81-8631-231b0b18e206",
 		"RESEND_TOPIC_ID": "bd2fd224-25d7-4707-9742-1e3ffc39f9d7",
-		"CONSENT_VERSION": "1.0",
+		"CONSENT_VERSION": "1.1",
 		"SUBSCRIBE_OFF": "0"
 	},
 	// Counted per Cloudflare location and approximate: a ceiling on bursts, not an exact quota.
