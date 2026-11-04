@@ -18,6 +18,7 @@ import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } fr
 import {
 	buildFor,
 	finalizeGasLimits,
+	probeContext,
 	isInitWrapped,
 	probedFirstSimOpts,
 	startEstimateTask,
@@ -38,11 +39,7 @@ export class FeeJuiceStrategy implements FeeStrategy {
 			let simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, probedFirstSimOpts(ctx.probe, built), task)
 			let discovered: Action[] = []
 			if (ctx.probe) {
-				const extracted = await ctx.probe.extractEffects(simulatedTx, {
-					node: built.node,
-					network: built.network,
-					signer: built.account.address,
-				})
+				const extracted = await ctx.probe.extractEffects(simulatedTx, probeContext(built))
 				discovered = extracted.actions
 				// The stub answered every check of the signer's witness, so any request, even one
 				// dropped unsigned, needs a validated rebuild+re-sim; so does an init-wrapped build,

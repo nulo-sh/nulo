@@ -18,7 +18,8 @@ import ArgsNotice from "./ArgsNotice.vue"
 
 const props = defineProps<{
 	calls: readonly { call: WireCall; surface: CallSurface }[]
-	/** The authorizations the wallet will sign, each with its reading; absent while none are listed. */
+	/** The authorizations the transaction uses, each with its reading: the wallet signs each with no
+	 *  `onBehalfOf`; absent while none are listed. */
 	authwits?: readonly { authwit: DiscoveredAuthwit; surface: CallSurface }[]
 	/** The wallet is still finding the authorizations. */
 	checkingAuthwits?: boolean
@@ -114,6 +115,7 @@ const authwitRows = computed(() =>
 				data-testid="execute-op-summary-authwit"
 				:data-message-hash="a.messageHash"
 				:data-line-kind="line.kind"
+				:data-on-behalf="a.onBehalfOf"
 				:class="$style.item"
 			>
 				<Text variant="body" color="secondary" aria-hidden="true" :class="$style.marker">•</Text>
@@ -124,6 +126,9 @@ const authwitRows = computed(() =>
 						<template v-if="line.kind === 'move' && amount?.baseUnits"> base units</template>
 						<template v-if="line.kind === 'move'"> from <AddressDisplay :address="line.from" data-testid="execute-discovered-line-from" /> to <AddressDisplay :address="line.to" data-testid="execute-discovered-line-to" /></template>
 						<template v-else> call <Text variant="meta" data-testid="execute-discovered-line-function">{{ line.fn }}</Text> on <AddressDisplay :address="a.consumer" data-testid="execute-discovered-line-consumer" /></template>
+					</Text>
+					<Text v-if="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf" variant="body" color="secondary" height="130">
+						Already authorized by <AddressDisplay :address="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf-account" />.
 					</Text>
 					<Flex v-if="surface.kind === 'raw'" data-testid="execute-op-summary-authwit-unverified-args" :data-reason="surface.reason" direction="column" gap="4">
 						<ArgsNotice :title="RAW_TITLE" :body="RAW_LINE[surface.reason]" prefix="execute-op-summary-authwit" kind="unverified" />

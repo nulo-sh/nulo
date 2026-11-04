@@ -31,6 +31,7 @@ import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/sp
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { DappSendExecutor, type DappSendExecutorDeps } from "./dapp-send-executor"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
+import { probeContext } from "./fee/fee-strategy"
 import { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import type { CollectingDiscoveryProbe } from "./discovery-probe"
 import type { ProveAndSendContext } from "./execution-coordinator"
@@ -877,7 +878,7 @@ describe("DappSendExecutor.executeNoFromSendTx (via default_entrypoint)", () => 
 		expect(deps.lane.acquireSlot).not.toHaveBeenCalled()
 	})
 
-	test("three-site scope rule: discovery WITHOUT account (deduped), real sim + prove WITH account", async () => {
+	test("three-site scope rule: discovery reads WITHOUT the account and stubs it and each scope (deduped), real sim + prove WITH it", async () => {
 		collectOffchainEffectsMock.mockReturnValue([])
 		const scopeA = addr("0xscopeA")
 		const scopeB = addr("0xscopeB")
@@ -892,12 +893,12 @@ describe("DappSendExecutor.executeNoFromSendTx (via default_entrypoint)", () => 
 		)
 
 		// Site 1 — kernelless discovery: dApp scopes only (hex-deduped, the
-		// LAST duplicate instance wins per Map.set), the account stubbed via
-		// msgSender, NOT in scopes.
+		// LAST duplicate instance wins per Map.set), the account NOT in scopes;
+		// the account and every scope account stubbed.
 		const discovery = pxe.simulateTx.mock.calls[0] as unknown[]
 		expect((discovery[1] as { scopes: unknown[] }).scopes).toEqual([scopeADup, scopeB])
 		expect((discovery[1] as { scopes: unknown[] }).scopes).toHaveLength(2)
-		expect(discovery[2]).toEqual(["0xacct"])
+		expect(discovery[2]).toEqual(["0xacct", "0xscopeA", "0xscopeB"])
 		// Site 2 — real simulation: account first, then deduped dApp scopes.
 		const simCall = (deps.coordinator.simulateTxTask as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
 		expect((simCall[2] as { scopes: unknown[] }).scopes).toEqual([built.account.address, scopeADup, scopeB])
@@ -1832,6 +1833,15 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 		return makeHarness({ buildAndEstimateFolded: foldedDiscovering(tags, base.built), ...overrides })
 	}
 	const snapshots = (deps: DappSendExecutorDeps) => deps.previewSnapshots
+	/** The record of `tag` the owner's attached witness covers, which the wallet lists and never signs. */
+	const consumed = (tag: string) => ({ ...record(tag), onBehalfOf: "0xowner" })
+	/** The send carries the owner's witness for `tag`'s request. */
+	const carry = (built: { txRequest: unknown }, tag: string) =>
+		(built.txRequest as { authWitnesses: unknown[] }).authWitnesses.push({ requestHash: { toString: () => `mh:ih:${tag}` } })
+	const readingOwner = (overrides: Record<string, unknown> = {}) =>
+		makeAztecOp({ opts: { from: addr("0xacct"), additionalScopes: [addr("0xowner")], wait: "NO_WAIT" }, ...overrides })
+	const signedHashes = (account: { createAuthWit: ReturnType<typeof vi.fn> }) =>
+		(account.createAuthWit.mock.calls as unknown[][]).map(([hash]) => String(hash))
 
 	test("estimate (aztec_sendTx): returns the discovered list, previewId = estimateId, snapshot + stash carry the hashes", async () => {
 		const { executor, deps } = harnessDiscovering(["a"])
@@ -1962,6 +1972,73 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 		expect(proveAndSend).not.toHaveBeenCalled()
 	})
 
+	test("estimate: a request the owner's carried witness covers is listed after the signer's and keyed by its account", async () => {
+		const { executor, deps } = makeHarness({
+			authwit: { discoverPrivateAuthwits: vi.fn(async () => ({ actions: [], discovered: [record("a"), consumed("b")] })) },
+		})
+		const result = await executor.estimateOperationFee(readingOwner(), { paymentMethod: { kind: "fj" } } as never, undefined, CTX)
+		expect(result.discoveredAuthwits).toEqual([record("a"), consumed("b")])
+		expect(snapshots(deps).take(result.previewId, identity)).toEqual({
+			kind: "found",
+			snapshot: expect.objectContaining({ discoveredHashes: ["mh:ih:a", "0xowner:mh:ih:b"] }),
+		})
+	})
+
+	test("confirm, rebuilt: a hash listed for the owner and rediscovered as the account's own is refused before the prove", async () => {
+		const discoverPrivateAuthwits = vi
+			.fn()
+			.mockResolvedValueOnce({ actions: [], discovered: [consumed("x")] })
+			.mockResolvedValue({
+				actions: [{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:ih:x" } }],
+				discovered: [record("x")],
+			})
+		const { executor, proveAndSend } = makeHarness({ authwit: { discoverPrivateAuthwits } })
+		const estimate = await executor.estimateOperationFee(readingOwner(), { paymentMethod: { kind: "fj" } } as never, undefined, CTX)
+		expect(estimate.discoveredAuthwits).toEqual([consumed("x")])
+		await expect(
+			executor.executeAztecSendTx(readingOwner(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: estimate.previewId }),
+		).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
+		expect(proveAndSend).not.toHaveBeenCalled()
+	})
+
+	test("an app-paid estimate lists only the authorizations its validated run consumed, and its confirm is held to them", async () => {
+		const base = makeHarness()
+		const appPaid = {
+			planner: {
+				processAztecJsPayload: vi.fn(async () => ({
+					actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+					feePaymentMethod: undefined,
+					feeOptions: { embeddedFeePayment: "fpc" },
+				})),
+			} as never,
+		}
+		const appPaidOp = () => readingOwner({ feeSettings: { paymentMethod: { kind: "embedded" } } })
+		const EMBEDDED = { paymentMethod: { kind: "embedded" } } as never
+		/** A validated pipeline whose probe reads `runs[n]` on its n-th build, the last one after. */
+		const observing = (...runs: unknown[][]) => {
+			let n = 0
+			return vi.fn(async (...args: unknown[]) => {
+				const records = runs[Math.min(n++, runs.length - 1)] ?? []
+				;(args[6] as { discovered: unknown[] } | undefined)?.discovered.push(...records)
+				await (args[5] as ((txCalls: unknown) => Promise<void>) | undefined)?.(base.built.txCalls)
+				return base.built as never
+			})
+		}
+		const h = makeHarness({ ...appPaid, buildAndEstimateValidated: observing([record("own"), consumed("b")]) })
+		const estimate = await h.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
+		expect(estimate.discoveredAuthwits).toEqual([consumed("b")])
+		await h.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: estimate.previewId })
+		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
+
+		const unseen = makeHarness({ ...appPaid, buildAndEstimateValidated: observing([], [consumed("b")]) })
+		const blank = await unseen.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
+		expect(blank.discoveredAuthwits).toEqual([])
+		await expect(
+			unseen.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: blank.previewId }),
+		).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
+		expect(unseen.proveAndSend).not.toHaveBeenCalled()
+	})
+
 	test("the silent path (no envelope) is never held to a preview", async () => {
 		const { executor, proveAndSend } = harnessDiscovering(["a"])
 		await executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
@@ -2053,6 +2130,52 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			expect(silent.account.createAuthWit).toHaveBeenCalledTimes(1)
 		})
 
+		describe("with another approved account in its scopes", () => {
+			const noFromReading = () =>
+				readingOwner({ executionMode: "default_entrypoint", feeSettings: { paymentMethod: { kind: "embedded" } } })
+
+			test("discovery stubs every scope account; the preview lists the owner's carried request after the account's; confirm signs the account's only", async () => {
+				collectOffchainEffectsMock.mockReturnValue([effect("theirs", "0xowner"), effect("ours")])
+				const { executor, built, pxe, account, proveAndSend } = makeHarness()
+				carry(built, "theirs")
+				const preview = await executor.previewOperationAuthwits(noFromReading(), CTX)
+				expect((pxe.simulateTx.mock.calls[0] as unknown[])[2]).toEqual(["0xacct", "0xowner"])
+				expect(preview.discoveredAuthwits).toEqual([record("ours"), consumed("theirs")])
+				await executor.executeAztecSendTx(noFromReading(), ORIGIN, undefined, undefined, FENCE, {
+					...CTX,
+					previewId: preview.previewId,
+				})
+				expect(signedHashes(account)).toEqual(["mh:ih:ours"])
+				expect(proveAndSend).toHaveBeenCalledTimes(1)
+			})
+
+			test("a hash listed for the owner and decoded at confirm for the account is refused before any witness", async () => {
+				collectOffchainEffectsMock.mockReturnValueOnce([effect("x", "0xowner")]).mockReturnValue([effect("x")])
+				const { executor, built, account, proveAndSend } = makeHarness()
+				carry(built, "x")
+				const preview = await executor.previewOperationAuthwits(noFromReading(), CTX)
+				expect(preview.discoveredAuthwits).toEqual([consumed("x")])
+				await expect(
+					executor.executeAztecSendTx(noFromReading(), ORIGIN, undefined, undefined, FENCE, {
+						...CTX,
+						previewId: preview.previewId,
+					}),
+				).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
+				expect(account.createAuthWit).not.toHaveBeenCalled()
+				expect(proveAndSend).not.toHaveBeenCalled()
+			})
+
+			test("a confirm with no preview that would consume the owner's authorization asks for a retry", async () => {
+				collectOffchainEffectsMock.mockReturnValue([effect("x", "0xowner")])
+				const { executor, built, proveAndSend } = makeHarness()
+				carry(built, "x")
+				await expect(executor.executeAztecSendTx(noFromReading(), ORIGIN, undefined, undefined, FENCE, CTX)).rejects.toThrow(
+					ESTIMATE_INCOMPLETE_MESSAGE,
+				)
+				expect(proveAndSend).not.toHaveBeenCalled()
+			})
+		})
+
 		test("ROUTED: a popup approval dispatched through executeOperations reaches the NO_FROM guard (no preview ⇒ retry)", async () => {
 			collectOffchainEffectsMock.mockReturnValue([effect("n")])
 			const { executor, account } = makeHarness()
@@ -2088,10 +2211,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			const base = makeHarness()
 			const buildAndEstimateFolded = vi.fn(async (...args: unknown[]) => {
 				const probe = args[3] as CollectingDiscoveryProbe
-				await probe.extractEffects(
-					{ privateExecutionResult: {} },
-					{ node: base.node as never, network: base.built.network, signer: base.account.address },
-				)
+				await probe.extractEffects({ privateExecutionResult: {} }, probeContext(base.built as never))
 				return base.built as never
 			})
 			return makeHarness({ buildAndEstimateFolded })
@@ -2128,6 +2248,31 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			const allowed = folded()
 			const result = await allowed.executor.estimateOperationFee(makeAztecOp(), FJ, undefined, CTX)
 			expect(result.discoveredAuthwits).toEqual([record("a")])
+		})
+
+		test("an app-paid estimate's validated run refuses it, as every other route does", async () => {
+			const base = makeHarness()
+			const buildAndEstimateValidated = vi.fn(async (...args: unknown[]) => {
+				await (args[6] as CollectingDiscoveryProbe).extractEffects(
+					{ privateExecutionResult: {} },
+					probeContext(base.built as never),
+				)
+				return base.built as never
+			})
+			const { executor } = makeHarness({
+				buildAndEstimateValidated,
+				planner: {
+					processAztecJsPayload: vi.fn(async () => ({
+						actions: [],
+						feePaymentMethod: undefined,
+						feeOptions: { embeddedFeePayment: "fpc" },
+					})),
+				} as never,
+			})
+			collectOffchainEffectsMock.mockReturnValueOnce([registryEffect])
+			await expect(
+				executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "embedded" } } as never, undefined, CTX),
+			).rejects.toBeInstanceOf(AuthRegistryRefusalError)
 		})
 
 		test("the NO_FROM preview refuses it", async () => {

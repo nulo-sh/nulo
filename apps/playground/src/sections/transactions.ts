@@ -59,6 +59,7 @@ export function renderTransactions(): string {
 				<button data-testid="pg-btn-sendTx-default" type="button" ${dis}>sendTx default</button>
 				<button data-testid="pg-btn-sendTx-wait" type="button" ${dis}>sendTx default (wait for receipt)</button>
 				<button data-testid="pg-btn-sendTx-onBehalf" type="button" ${dis}>sendTx on behalf of authwit owner</button>
+				<button data-testid="pg-btn-sendTx-onBehalf-unattached" type="button" ${dis}>sendTx on behalf of authwit owner (no witness)</button>
 				<button data-testid="pg-btn-sendTx-noFrom" type="button" ${dis}>sendTx NoFrom</button>
 				<button data-testid="pg-btn-sendTx-noFrom-sponsored" type="button" ${dis}>sendTx NoFrom (sponsored)</button>
 				<button data-testid="pg-btn-sendTx-feePayer" type="button" ${dis}>sendTx feePayer</button>
@@ -147,7 +148,9 @@ async function sendAppSponsored() {
 	return wallet.sendTx(payload, sendOpts(fromAddr) as any)
 }
 
-async function sendOnBehalf() {
+/** The authwit owner's tokens moved by the sender, with the owner in the send's scopes;
+ *  `withWitness: false` leaves out the owner's authorization the transfer consumes. */
+async function sendOnBehalfOf(withWitness: boolean) {
 	const wallet = getWallet()!
 	const tokenAddress = getInput("tokenAddress")
 	const owner = getInput("authwitOwner")
@@ -165,8 +168,8 @@ async function sendOnBehalf() {
 	const exec = await token.methods
 		.transfer_private_to_private(ownerAddr, AztecAddress.fromStringUnsafe(recipient), amount, nonce)
 		.request()
-	const witness = await wallet.createAuthWit(ownerAddr, { caller: senderAddr, call: exec.calls[0] })
-	const payload = { calls: exec.calls, authWitnesses: [witness], capsules: [], extraHashedArgs: [] }
+	const authWitnesses = withWitness ? [await wallet.createAuthWit(ownerAddr, { caller: senderAddr, call: exec.calls[0] })] : []
+	const payload = { calls: exec.calls, authWitnesses, capsules: [], extraHashedArgs: [] }
 	// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload + SendOptions structural cast
 	return wallet.sendTx(payload as any, { ...sendOpts(senderAddr), additionalScopes: [ownerAddr] } as any)
 }
@@ -180,7 +183,8 @@ async function sendAwaitingReceipt() {
 
 const NAMED_SENDS: ReadonlyArray<readonly [testId: string, send: () => Promise<unknown>]> = [
 	["pg-btn-sendTx-wait", sendAwaitingReceipt],
-	["pg-btn-sendTx-onBehalf", sendOnBehalf],
+	["pg-btn-sendTx-onBehalf", () => sendOnBehalfOf(true)],
+	["pg-btn-sendTx-onBehalf-unattached", () => sendOnBehalfOf(false)],
 	["pg-btn-sendTx-appSponsored", sendAppSponsored],
 ]
 

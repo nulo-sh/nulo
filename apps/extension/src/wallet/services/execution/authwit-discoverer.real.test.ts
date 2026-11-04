@@ -74,7 +74,8 @@ describe("AuthwitDiscoverer.discoverPrivateAuthwits — a real CallAuthorization
 		const account = ACCOUNT
 		const simulateTx = async () => ({ privateExecutionResult: executionResult(consumer, fields) })
 		const ctx = {
-			txRequest: {},
+			txRequest: { authWitnesses: [] },
+			scopes: [ACCOUNT],
 			node: { getNodeInfo: async () => CHAIN },
 			pxe: { simulateTx },
 			account: { address: account },
@@ -112,7 +113,8 @@ describe("AuthwitDiscoverer.discoverPrivateAuthwits — a real CallAuthorization
 		const { fields } = await realAuthorizationFields(AztecAddress.fromFieldUnsafe(new Fr(0xabcdn)))
 		const consumer = AztecAddress.fromFieldUnsafe(new Fr(0x5555n))
 		const ctx = {
-			txRequest: {},
+			txRequest: { authWitnesses: [] },
+			scopes: [ACCOUNT],
 			node: { getNodeInfo: async () => CHAIN },
 			pxe: { simulateTx: async () => ({ privateExecutionResult: executionResult(consumer, fields) }) },
 			account: { address: ACCOUNT },
@@ -131,7 +133,8 @@ describe("AuthwitDiscoverer.discoverPrivateAuthwits — a real CallAuthorization
 		forged[1] = new Fr(0xdeadbeefn) // innerHash no longer matches [msgSender, selector, argsHash]
 		const consumer = AztecAddress.fromFieldUnsafe(new Fr(0x5555n))
 		const ctx = {
-			txRequest: {},
+			txRequest: { authWitnesses: [] },
+			scopes: [ACCOUNT],
 			node: { getNodeInfo: async () => CHAIN },
 			pxe: { simulateTx: async () => ({ privateExecutionResult: executionResult(consumer, forged) }) },
 			account: { address: AztecAddress.fromFieldUnsafe(new Fr(0xacc0n)) },
@@ -219,7 +222,8 @@ describe("AuthwitDiscoverer — the live chain binding", () => {
 				const { fields } = await realAuthorizationFields(ACCOUNT)
 				simulateTx.mockResolvedValue({ privateExecutionResult: executionResult(consumer, fields) } as never)
 				const ctx = {
-					txRequest: {},
+					txRequest: { authWitnesses: [] },
+					scopes: [ACCOUNT],
 					node: { getNodeInfo: async () => nodeInfo },
 					pxe: { simulateTx },
 					account: { address: AztecAddress.fromFieldUnsafe(new Fr(0xacc0n)) },
