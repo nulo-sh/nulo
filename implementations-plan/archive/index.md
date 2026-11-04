@@ -533,3 +533,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [egress-guard-1](egress-guard-1/plan.md) — completed — the egress guard declares each pinned release's Testnet host, from its traits, for the update scenarios; all four update runs from v1.1.0 green (closes #1636)
 - [deps-ci-2](deps-ci-2/plan.md) — completed — node-forge and follow-redirects past alerts 38 to 49 in setup-aztec's npm lockfile, plus bun.lock's follow-redirects (#1434)
 - [website-notice-1](website-notice-1/plan.md) — completed — website privacy notice 1.1: no launch-email promise, replies reach hello@nulo.sh, § 3.2's purpose matches, the 1.0 text archived and `CONSENT_VERSION` 1.1 (closes #1541)
+- [legal-dating-2](legal-dating-2/plan.md) — completed — Terms 1.2.1 and privacy 1.2.8 and 1.2.9 dated 4 November 2026 for the 1.2.0 promote, superseding #1538
