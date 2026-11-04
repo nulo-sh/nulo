@@ -59,6 +59,19 @@ describe("reduced motion and Disable animations both stop the shakes and the shi
 	})
 })
 
+describe("the more-below button neither nudges, lifts nor fades under reduced motion and Disable animations", () => {
+	const source = readFileSync(resolve(REPO_ROOT, "packages/design/src/ui/ScrollMoreButton.vue"), "utf8")
+
+	test.each([
+		[".nudge", "animation: none;"],
+		[".more:hover", "transform: none;"],
+		[".more, .fade", "transition: none;"],
+	])("%s", (selectors, body) => {
+		expect(reducedMotionRules(source).get(selectors)).toBe(body)
+		expect(noAnimationsRules(source).get(selectors)).toBe(body)
+	})
+})
+
 test("the execute window's disclosure chevron turns without a transition under reduced motion", () => {
 	expect(reducedMotionRules(read("popup/windows/execute/DetailsToggle.vue")).get(".chevron")).toBe("transition: none;")
 })

@@ -1,5 +1,7 @@
-import { describe, expect, test } from "vitest"
-import { mount } from "@vue/test-utils"
+import { afterEach, describe, expect, test, vi } from "vitest"
+import { flushPromises, mount } from "@vue/test-utils"
+import { ScrollMoreButton } from "@nulo/design"
+import { defineComponent, h, ref } from "vue"
 import CollapsingHeroLayout from "./CollapsingHeroLayout.vue"
 
 const STUBS = {
@@ -26,8 +28,67 @@ const factory = (props: Record<string, unknown> = {}, slots: Record<string, stri
 			...props,
 		},
 		slots,
-		global: { stubs: STUBS },
+		global: { stubs: STUBS, components: { ScrollMoreButton } },
 	})
+
+/** A Flex that exposes its root as `wrapper`, as the real one does, so the layout finds its scroller. */
+const ExposingFlex = defineComponent({
+	inheritAttrs: false,
+	setup(_, { attrs, expose, slots }) {
+		const wrapper = ref<HTMLElement | null>(null)
+		expose({ wrapper })
+		return () => h("div", { ...attrs, ref: wrapper }, slots.default?.())
+	},
+})
+
+/** A `moreBelow` layout whose scroller holds 700 px in a 445 px view, scrolled to `scrollTop`. */
+async function scrolled(scrollTop: number, props: Record<string, unknown> = { moreBelow: true }) {
+	const w = mount(CollapsingHeroLayout, {
+		props: { heroMain: "Delete", collapsingLabel: "Delete", backTo: "/x", ...props },
+		global: { stubs: { ...STUBS, Flex: ExposingFlex }, components: { ScrollMoreButton } },
+	})
+	await flushPromises()
+	const scroller = w.get('[data-testid="collapsing-hero-scroller"]').element as HTMLElement
+	Object.defineProperties(scroller, {
+		scrollHeight: { value: 700, configurable: true },
+		clientHeight: { value: 445, configurable: true },
+	})
+	scroller.scrollTop = scrollTop
+	scroller.scrollTo = vi.fn() as unknown as HTMLElement["scrollTo"]
+	scroller.dispatchEvent(new Event("scroll"))
+	await flushPromises()
+	return { w, scroller }
+}
+
+afterEach(() => document.documentElement.classList.remove("noanimations"))
+
+describe("the more-below button", () => {
+	test("a layout without moreBelow has neither the button nor the room after its content", async () => {
+		const { w } = await scrolled(0, {})
+		expect(w.find('[data-testid="scroll-more"]').exists()).toBe(false)
+		expect(w.html()).not.toContain("padding-bottom")
+	})
+
+	test("it shows only while more than the 48 px room remains, the room kept after the content", async () => {
+		const at = async (scrollTop: number) => (await scrolled(scrollTop)).w.find('[data-testid="scroll-more"]').exists()
+		expect(await at(207)).toBe(false)
+		expect(await at(206.5)).toBe(true)
+		expect((await scrolled(0)).w.html()).toContain("padding-bottom: 48px")
+	})
+
+	test("a press scrolls smoothly to the end when no section is marked", async () => {
+		const { w, scroller } = await scrolled(0)
+		await w.get('[data-testid="scroll-more"]').trigger("click")
+		expect(scroller.scrollTo).toHaveBeenCalledWith({ top: 255, behavior: "smooth" })
+	})
+
+	test("under Disable animations a press jumps", async () => {
+		document.documentElement.classList.add("noanimations")
+		const { w, scroller } = await scrolled(0)
+		await w.get('[data-testid="scroll-more"]').trigger("click")
+		expect(scroller.scrollTo).toHaveBeenCalledWith({ top: 255, behavior: "auto" })
+	})
+})
 
 describe("composite/CollapsingHeroLayout", () => {
 	test("renders heroMain in the title stack", () => {

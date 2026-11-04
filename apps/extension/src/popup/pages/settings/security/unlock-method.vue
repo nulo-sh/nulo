@@ -260,8 +260,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<CollapsingHeroLayout heroMain="Unlock" heroSub="Method" collapsingLabel="Unlock Method" backTo="/popup/settings" @keydown="onKeydown">
-		<div :class="step || isNewPasswordStep ? 'export_section' : 'export_section_last'">
+	<CollapsingHeroLayout heroMain="Unlock" heroSub="Method" collapsingLabel="Unlock Method" backTo="/popup/settings" moreBelow @keydown="onKeydown">
+		<div :class="step || isNewPasswordStep ? 'export_section' : 'export_section_last'" data-scroll-section>
 			<Text variant="body" height="150" color="body" data-testid="unlock-method-current">
 				{{ currentLine }}
 			</Text>
@@ -270,7 +270,7 @@ onBeforeUnmount(() => {
 			</Text>
 		</div>
 
-		<div v-if="step === 'enterPassword'" class="export_section_last">
+		<div v-if="step === 'enterPassword'" class="export_section_last" data-scroll-section>
 			<CurrentPasswordField
 				v-model="password"
 				:error="isWrongPassword"
@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
 			/>
 		</div>
 
-		<div v-if="isNewPasswordStep" class="export_section_last">
+		<div v-if="isNewPasswordStep" class="export_section_last" data-scroll-section>
 			<span class="export_section_label type--label-section">New Password</span>
 			<NewPasswordPair
 				v-model:password="newPassword"

@@ -124,10 +124,11 @@ onBeforeUnmount(() => {
 		heroSub="Password"
 		collapsingLabel="Change Password"
 		backTo="/popup/settings"
+		moreBelow
 		@keydown="onKeydown"
 	>
 		<!-- Profile -->
-		<div :class="$style.section">
+		<div :class="$style.section" data-scroll-section>
 			<span :class="$style.section_label">Profile</span>
 			<ItemsContainer flat>
 				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" raw />
@@ -135,7 +136,7 @@ onBeforeUnmount(() => {
 		</div>
 
 		<!-- Current password -->
-		<div :class="$style.section">
+		<div :class="$style.section" data-scroll-section>
 			<span :class="$style.section_label">Current password</span>
 			<CurrentPasswordField
 				v-model="currentPassword"
@@ -154,7 +155,7 @@ onBeforeUnmount(() => {
 		</div>
 
 		<!-- New password -->
-		<div :class="$style.section_last">
+		<div :class="$style.section_last" data-scroll-section>
 			<span :class="$style.section_label">New password</span>
 			<NewPasswordPair
 				v-model:password="newPassword"

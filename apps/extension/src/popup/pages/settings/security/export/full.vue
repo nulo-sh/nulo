@@ -179,6 +179,7 @@ onBeforeUnmount(() => {
 		heroSub="Backup"
 		collapsingLabel="Full Backup"
 		backTo="/popup/settings/security/export"
+		moreBelow
 		@keydown="onKeydown"
 	>
 		<!-- Agreement gate -->
@@ -192,6 +193,7 @@ onBeforeUnmount(() => {
 				:class="pendingReset && $style.agreement_blocked"
 				:data-blocked="pendingReset ? 'true' : 'false'"
 				data-testid="full-backup-agreement"
+				data-scroll-section
 			>
 				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
@@ -226,6 +228,7 @@ onBeforeUnmount(() => {
 				<div
 					v-if="backupStatus === 'progress' || backupStatus === 'encrypting'"
 					class="export_section_last"
+					data-scroll-section
 				>
 					<StatusCard
 						:title="backupStatus === 'encrypting' ? 'Encrypting your backup' : 'Creating your backup'"
@@ -238,7 +241,7 @@ onBeforeUnmount(() => {
 					/>
 				</div>
 
-				<div v-else class="export_section">
+				<div v-else class="export_section" data-scroll-section>
 					<span v-if="showsBackupBanner" class="export_section_label type--label-section">Backup</span>
 					<Banner v-if="dekReplaced" variant="warning" direction="vertical" data-testid="backup-keys-lost-banner">
 						<template #title> Imported keys are not in this backup </template>

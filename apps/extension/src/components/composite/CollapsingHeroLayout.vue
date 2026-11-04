@@ -10,6 +10,8 @@
  *   `<SecretCountdownClose>`)
  * - Bare `overlay` slot after the bottom bar for fixed-position dialogs
  * - `COLLAPSING_HERO`, through which its content reveals a block
+ * - With `moreBelow`, the "more below" button, whose press walks the content's
+ *   `[data-scroll-section]` blocks, then its end
  *
  * The page owns its flow/state; the layout is purely visual chrome.
  * Extra attributes fall through to the root element (single root), so
@@ -18,11 +20,13 @@
 
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
+import { useScrollRemaining } from "@/composables/useScrollRemaining"
 
 /** Utils */
-import { COLLAPSING_HERO, revealMove } from "./collapsing-hero"
+import { isCalm } from "@/utils/motion"
+import { COLLAPSING_HERO, nextScrollTop, revealMove } from "./collapsing-hero"
 
-defineProps({
+const props = defineProps({
 	/**
 	 * Hero title is rendered in two stacked lines using the `<<main>>`
 	 * + `<<sub>>` pair. Pass a single string in `heroMain` if you don't
@@ -36,38 +40,62 @@ defineProps({
 	backTo: { type: String, required: true },
 	/** "accent" (default) or "destructive" — reds the hero title + bar. */
 	tone: { type: String, default: "accent" },
+	/** Shows the "more below" button while content runs past the fold. */
+	moreBelow: { type: Boolean, default: false },
 })
+
+/** The button's footprint (36 px + its 12 px inset), kept free after the last section: the button
+ *  shows only while more than this remains, so it is gone before it could cover the last control. */
+const END_ROOM_PX = 48
 
 const wrapperRef = useTemplateRef("wrapperRef")
 const headerRef = useTemplateRef("headerRef")
 const titleRef = useTemplateRef("titleRef")
 const heroVisible = ref(true)
-let scrollEl = null
+const scrollEl = shallowRef(null)
+const { remaining, gutter } = useScrollRemaining(computed(() => (props.moreBelow ? scrollEl.value : null)))
+const moreShown = computed(() => props.moreBelow && remaining.value > END_ROOM_PX)
 
 const handleScroll = () => {
-	if (!scrollEl) return
-	heroVisible.value = scrollEl.scrollTop < 40
+	if (!scrollEl.value) return
+	heroVisible.value = scrollEl.value.scrollTop < 40
+}
+
+/** Sections are read on each press: a page's steps swap them. */
+function showMore() {
+	const scroller = scrollEl.value
+	const bar = headerRef.value?.$el
+	if (!scroller || !bar) return
+	const top = nextScrollTop({
+		scrollTop: scroller.scrollTop,
+		maxScroll: scroller.scrollHeight - scroller.clientHeight,
+		barBottom: bar.getBoundingClientRect().bottom,
+		viewBottom: scroller.getBoundingClientRect().top + scroller.clientHeight,
+		sections: [...scroller.querySelectorAll("[data-scroll-section]")].map((el) => el.getBoundingClientRect()),
+	})
+	scroller.scrollTo({ top, behavior: isCalm() ? "auto" : "smooth" })
 }
 
 function reveal(el) {
+	const scroller = scrollEl.value
 	const bar = headerRef.value?.$el
 	const title = titleRef.value
-	if (!scrollEl || !bar || !title) {
+	if (!scroller || !bar || !title) {
 		el.scrollIntoView({ block: "nearest" })
 		return
 	}
 	const block = el.getBoundingClientRect()
-	const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight
+	const maxScroll = scroller.scrollHeight - scroller.clientHeight
 	const move = revealMove({
-		scrollTop: scrollEl.scrollTop,
+		scrollTop: scroller.scrollTop,
 		maxScroll,
 		barBottom: bar.getBoundingClientRect().bottom,
-		viewBottom: scrollEl.getBoundingClientRect().top + scrollEl.clientHeight,
+		viewBottom: scroller.getBoundingClientRect().top + scroller.clientHeight,
 		titleBottom: title.getBoundingClientRect().bottom,
 		blockTop: block.top,
 		blockBottom: block.bottom,
 	})
-	if (move === "end") scrollEl.scrollTop = maxScroll
+	if (move === "end") scroller.scrollTop = maxScroll
 	else if (move === "nearest") el.scrollIntoView({ block: "nearest" })
 }
 
@@ -75,44 +103,53 @@ provide(COLLAPSING_HERO, { reveal })
 
 onMounted(async () => {
 	await nextTick()
-	scrollEl = wrapperRef.value?.wrapper
-	if (!scrollEl) return
-	scrollEl.addEventListener("scroll", handleScroll, { passive: true })
+	scrollEl.value = wrapperRef.value?.wrapper ?? null
+	if (!scrollEl.value) return
+	scrollEl.value.addEventListener("scroll", handleScroll, { passive: true })
 	handleScroll()
 })
 
 onBeforeUnmount(() => {
-	scrollEl?.removeEventListener("scroll", handleScroll)
-	scrollEl = null
+	scrollEl.value?.removeEventListener("scroll", handleScroll)
+	scrollEl.value = null
 })
 </script>
 
 <template>
 	<Flex direction="column" :class="$style.page">
-		<Flex ref="wrapperRef" direction="column" :class="$style.wrapper" data-testid="collapsing-hero-scroller">
-			<SubPageHeader ref="headerRef" :backTo="backTo" data-testid="collapsing-hero-header">
-				<template #title>
-					<span :class="[$style.collapsing_label, !heroVisible && $style.collapsing_label_visible]" aria-hidden="true">
-						{{ collapsingLabel }}
-					</span>
-				</template>
-			</SubPageHeader>
+		<div :class="$style.frame">
+			<Flex ref="wrapperRef" direction="column" :class="$style.wrapper" data-testid="collapsing-hero-scroller">
+				<SubPageHeader ref="headerRef" :backTo="backTo" data-testid="collapsing-hero-header">
+					<template #title>
+						<span :class="[$style.collapsing_label, !heroVisible && $style.collapsing_label_visible]" aria-hidden="true">
+							{{ collapsingLabel }}
+						</span>
+					</template>
+				</SubPageHeader>
 
-			<Flex direction="column" :class="$style.content">
-				<div :class="$style.hero">
-					<div ref="titleRef" :class="$style.title_stack" data-testid="collapsing-hero-title">
-						<span :class="[$style.title_main, tone === 'destructive' && $style.title_main_destructive]">{{ heroMain }}</span>
-						<span v-if="heroSub" :class="$style.title_sub">{{ heroSub }}</span>
+				<Flex direction="column" :class="$style.content" :style="moreBelow ? { paddingBottom: `${END_ROOM_PX}px` } : undefined">
+					<div :class="$style.hero">
+						<div ref="titleRef" :class="$style.title_stack" data-testid="collapsing-hero-title">
+							<span :class="[$style.title_main, tone === 'destructive' && $style.title_main_destructive]">{{ heroMain }}</span>
+							<span v-if="heroSub" :class="$style.title_sub">{{ heroSub }}</span>
+						</div>
+						<div
+							:class="[$style.hero_bar, tone === 'destructive' && $style.hero_bar_destructive]"
+							data-testid="collapsing-hero-accent"
+						/>
 					</div>
-					<div
-						:class="[$style.hero_bar, tone === 'destructive' && $style.hero_bar_destructive]"
-						data-testid="collapsing-hero-accent"
-					/>
-				</div>
 
-				<slot />
+					<slot />
+				</Flex>
 			</Flex>
-		</Flex>
+			<ScrollMoreButton
+				:shown="moreShown"
+				:class="$style.more_below"
+				:style="{ right: `${16 + gutter}px` }"
+				data-testid="scroll-more"
+				@press="showMore"
+			/>
+		</div>
 
 		<div v-if="$slots.bottom" v-snack-footer :class="$style.bottom">
 			<slot name="bottom" />
@@ -127,6 +164,20 @@ onBeforeUnmount(() => {
 	flex: 1;
 	min-height: 0;
 	background: var(--app-bg);
+}
+
+.frame {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.more_below {
+	position: absolute;
+	bottom: 12px;
+	z-index: 1;
 }
 
 .wrapper {

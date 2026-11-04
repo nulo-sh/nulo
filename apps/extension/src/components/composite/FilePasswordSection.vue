@@ -18,7 +18,7 @@ const testids = computed(() => ({
 </script>
 
 <template>
-	<div class="export_section_last">
+	<div class="export_section_last" data-scroll-section>
 		<span class="export_section_label type--label-section">File password</span>
 		<NewPasswordPair
 			v-model:password="password"

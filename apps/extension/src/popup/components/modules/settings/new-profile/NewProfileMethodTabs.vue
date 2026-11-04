@@ -7,7 +7,7 @@ const type = defineModel("type", { type: String, default: "passkey" })
 </script>
 
 <template>
-	<div :class="$style.section">
+	<div :class="$style.section" data-scroll-section>
 		<span :class="$style.section_label">Method</span>
 		<AuthMethodTabs
 			v-model="type"

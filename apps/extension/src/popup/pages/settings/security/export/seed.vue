@@ -168,11 +168,12 @@ onBeforeUnmount(() => {
 		heroSub="Phrase"
 		collapsingLabel="Recovery Phrase"
 		:backTo="BACKUP_MENU"
+		moreBelow
 		@keydown="onKeydown"
 	>
 		<!-- Agreement gate -->
 		<template v-if="!isStarted">
-			<div class="export_section">
+			<div class="export_section" data-scroll-section>
 				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
 					<Text variant="body" height="150" color="body">
@@ -190,7 +191,7 @@ onBeforeUnmount(() => {
 		</template>
 
 		<!-- Password gate; a passkey profile's gate is its button, under one sentence -->
-		<div v-else-if="isStarted && !isUnlocked && isPasskeyProfile" class="export_section_last">
+		<div v-else-if="isStarted && !isUnlocked && isPasskeyProfile" class="export_section_last" data-scroll-section>
 			<Text variant="body" height="150" color="body" data-testid="reveal-passkey-note">
 				Your passkey confirms it's you before the phrase shows.
 			</Text>
@@ -204,7 +205,7 @@ onBeforeUnmount(() => {
 
 		<!-- Revealed phrase -->
 		<template v-else>
-			<div class="export_section">
+			<div class="export_section" data-scroll-section>
 				<span class="export_section_label type--label-section">Your recovery phrase</span>
 				<RecoveryPhraseGrid :words="words" :columns="3" testId="reveal-content">
 					<Button variant="primary_outline" wide data-testid="reveal-content-copy" @click="handleCopy">
@@ -213,7 +214,7 @@ onBeforeUnmount(() => {
 				</RecoveryPhraseGrid>
 			</div>
 
-			<div class="export_section_last">
+			<div class="export_section_last" data-scroll-section>
 				<span class="export_section_label type--label-section">Keep in mind</span>
 				<Flex direction="column" gap="10">
 					<Flex v-for="warning in RECOVERY_PHRASE_WARNINGS" :key="warning" gap="8">
