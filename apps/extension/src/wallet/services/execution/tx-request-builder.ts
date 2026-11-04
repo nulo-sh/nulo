@@ -234,10 +234,9 @@ export class TxRequestBuilder {
 				}
 			}
 
-			const result = {
-				...(await this.finalizeStandardBuild(ctx, feePaymentMethod, gasSettings, collected)),
-				scopes: sendScopes(account.address, op.opts?.additionalScopes),
-			}
+			const scopes = sendScopes(account.address, op.opts?.additionalScopes)
+			await this.registerScopeContracts(fence, ctx.network.chainId, ctx.pxe, account.address, scopes)
+			const result = { ...(await this.finalizeStandardBuild(ctx, feePaymentMethod, gasSettings, collected)), scopes }
 			task.complete()
 			return result
 		} catch (error) {
@@ -271,6 +270,22 @@ export class TxRequestBuilder {
 			onRegister: () => this.log("Register contract"),
 		})
 		return { network, account, node, pxe, nodeInfo, instances, artifacts }
+	}
+
+	/** Discovery stubs every scope account, and a stub runs on the account's registered contract
+	 *  instance; the sender's is registered by its own build. */
+	private async registerScopeContracts(
+		fence: ExecutionFence,
+		chainId: number,
+		pxe: IPXE,
+		sender: AztecAddress,
+		scopes: readonly AztecAddress[],
+	): Promise<void> {
+		for (const scope of scopes) {
+			if (scope.toString() === sender.toString()) continue
+			const account = await this.resolveAccount(fence, chainId, scope.toString())
+			await account.ensureContractRegistered(pxe)
+		}
 	}
 
 	/** Account lookups read the keys of whichever session is live when they run, so the fence is
@@ -429,9 +444,16 @@ export class TxRequestBuilder {
 
 			// Register account in PXE (needed for scopes)
 			await account.ensureRegistered(pxe)
-			// Discovery stubs this account, and the run executes it to check any authorization, both by
-			// its registered instance, which otherwise only a standard build registers.
+			// Discovery stubs this account and each scope account, and the run executes them to check any
+			// authorization, each by its registered instance, which otherwise only a standard build registers.
 			await account.ensureContractRegistered(pxe)
+			await this.registerScopeContracts(
+				fence,
+				network.chainId,
+				pxe,
+				account.address,
+				sendScopes(account.address, op.opts?.additionalScopes),
+			)
 			this.log("buildNoFrom: account registered in PXE")
 
 			// Register contracts referenced in the payload (same pattern as buildStandard)

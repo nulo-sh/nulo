@@ -59,7 +59,9 @@ import type { AddTransactionInput, LocalTxOrigin, Tx } from "@/wallet/services/t
 import { type FeeChoice, OriginType } from "@/wallet/services/transaction/spec"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { Network } from "@/wallet/services/network/service"
-import type { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
+import type { DiscoveryAwareEstimator, DiscoveryProbe } from "./discovery-aware-estimator"
+import { CollectingDiscoveryProbe } from "./discovery-probe"
+import { listedKey } from "./discovered-authwit"
 import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks, resolveLiveHandles } from "./execution-coordinator"
 import { builtCapOf } from "./estimate-reuse-shared"
 import type { ChainTipGate } from "./chain-tip-gate"
@@ -69,7 +71,7 @@ import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { OperationEstimateReuse, OperationEstimateReuseEntry } from "./operation-estimate-reuse"
 import { fingerprintNoFromInputs, fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
 import { PREVIEW_FOREIGN_MESSAGE, type PreviewLookup, type PreviewSnapshots, assertWithinPreview } from "./preview-snapshots"
-import { decodeAuthwitEffects } from "./decode-authwit-effects"
+import { carriedHashes, decodeAuthwitEffects, type DecodedAuthwits } from "./decode-authwit-effects"
 import { throwIfAborted } from "./rpc-cancel"
 import { askFeeAgain, feeRiseAsks, personalPayerOf } from "./fee-reask"
 import type { QueuedFeeAnswers } from "./queued-fee-cap"
@@ -156,10 +158,11 @@ export interface DappSendExecutorDeps extends SharedSendDeps {
 		| "beginQueuedWait"
 		| "endQueuedWait"
 	>
-	/** Discover-then-estimate pipeline — the ONLY route to probed/folded
-	 *  strategy instances. Distinctly typed from the validated dep so
-	 *  probe-forbidden paths (executeSendTransaction, embedded, NO_FROM)
-	 *  cannot reach it by construction. */
+	/** Discover-then-estimate pipeline — the ONLY route to folded strategy
+	 *  instances, whose first run is stubbed. Distinctly typed from the
+	 *  validated dep so paths that must never run stubbed
+	 *  (executeSendTransaction, embedded, NO_FROM) cannot reach it by
+	 *  construction. */
 	estimateWithDiscovery: DiscoveryAwareEstimator
 	/** Estimate→confirm reuse for standard-mode aztec_sendTx (fj/fpc). */
 	operationEstimateReuse: OperationEstimateReuse
@@ -168,7 +171,8 @@ export interface DappSendExecutorDeps extends SharedSendDeps {
 	previewSnapshots: PreviewSnapshots
 	/** The account's send epoch (`SendSequencer.epoch`). */
 	sequenceEpoch(chainId: number, account: string): number
-	/** The probe-free validated pipeline (the service's strategy map). */
+	/** The validated pipeline (the service's strategy map). An `observer` reads an app-paid send's
+	 *  one validated run; it is never the fold's probe, so it cannot make a run stubbed. */
 	buildAndEstimateValidated(
 		inputOp: { networkId: string; accountAddress: string; actions: Action[]; fee?: FeeOptions },
 		feeSettings: FeeSettings,
@@ -176,6 +180,7 @@ export interface DappSendExecutorDeps extends SharedSendDeps {
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
 		onBuilt?: OnBuilt,
+		observer?: DiscoveryProbe,
 	): Promise<FeeEstimate>
 	/** The canonical SponsoredFPC's address on `chainId`, derived by the wallet, never read from a
 	 *  row; `undefined` when there is none to compare against. */
@@ -235,7 +240,7 @@ type StandardBuild = Pick<
 > & {
 	network: Network
 	nonce: { toString(): string }
-	/** Message hashes of the private authwits this build signs. */
+	/** The `listedKey` of each private authorization this build signs or consumes for another account. */
 	discoveredHashes: readonly string[]
 	/** The entry a reuse hit consumed. */
 	reused?: OperationEstimateReuseEntry
@@ -506,7 +511,7 @@ export class DappSendExecutor {
 		throwIfAborted(signal)
 
 		const identity = fingerprintInputFor(operation, feeSettings, detectedFee, preDiscoveryActions)
-		const discoveredHashes = discovered.map((d) => d.messageHash)
+		const discoveredHashes = discovered.map(listedKey)
 		const estimateId = lagging
 			? undefined
 			: await this.stashOperationEstimate(operation, identity, detectedFee, built, discoveredHashes, { sequenceEpoch, pendingHashes })
@@ -546,7 +551,8 @@ export class DappSendExecutor {
 	}
 
 	/** An embedded fee payment skips discovery, as its confirm does: the app's own fee calls conflict
-	 *  with the discovery simulation's dummy fee method. */
+	 *  with the discovery simulation's dummy fee method. Its validated run lists what another account's
+	 *  carried witness covers. */
 	private async buildForEstimate(
 		operation: Operation,
 		actions: Action[],
@@ -560,7 +566,9 @@ export class DappSendExecutor {
 			return this.deps.estimateWithDiscovery.estimate(operation, actions, detectedFee, feeSettings, fence, undefined, signal)
 		}
 		const op = { ...(operation as SendTransactionOperation), actions: [...actions], fee }
-		return { built: await this.deps.buildAndEstimateValidated(op, feeSettings, fence, undefined, signal), discovered: [] }
+		const probe = new CollectingDiscoveryProbe()
+		const built = await this.deps.buildAndEstimateValidated(op, feeSettings, fence, undefined, signal, undefined, probe)
+		return { built, discovered: consumedOf(probe) }
 	}
 
 	/**
@@ -577,15 +585,9 @@ export class DappSendExecutor {
 		const fence = await this.deps.captureExecutionFence()
 		const prepared = await this.prepareNoFrom(op, fence)
 		throwIfAborted(signal)
-		const discovered = await this.discoverNoFromAuthwits(prepared)
+		const records = listedRecords(await this.discoverNoFromAuthwits(prepared))
 		throwIfAborted(signal)
-		const records = discovered.map((d) => d.record)
-		const previewId = this.writePreview(
-			preview,
-			noFromFingerprint(op),
-			records.map((r) => r.messageHash),
-			undefined,
-		)
+		const previewId = this.writePreview(preview, noFromFingerprint(op), records.map(listedKey), undefined)
 		return { previewId, discoveredAuthwits: records }
 	}
 
@@ -1187,9 +1189,9 @@ export class DappSendExecutor {
 			}
 		}
 		if (fee?.embeddedFeePayment) {
-			// Embedded fee payments skip discovery entirely. Probe-free validated
-			// pipeline, as always.
+			// Embedded fee payments skip discovery; the probe reads the validated run.
 			checkCancelled()
+			const probe = new CollectingDiscoveryProbe()
 			const built = await this.deps.buildAndEstimateValidated(
 				{ ...op, actions: [...actions], fee },
 				op.feeSettings,
@@ -1197,8 +1199,9 @@ export class DappSendExecutor {
 				parentTask,
 				undefined,
 				onBuilt,
+				probe,
 			)
-			return { ...built, discoveredHashes: [] }
+			return { ...built, discoveredHashes: consumedOf(probe).map(listedKey) }
 		}
 		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(
 			op,
@@ -1214,7 +1217,7 @@ export class DappSendExecutor {
 			this.deps.logDebug(`[executeAztecSendTx] Discovered ${discovered.length} auth witness(es) via offchain effects`)
 		}
 		checkCancelled()
-		return { ...built, discoveredHashes: discovered.map((d) => d.messageHash) }
+		return { ...built, discoveredHashes: discovered.map(listedKey) }
 	}
 
 	/**
@@ -1341,30 +1344,34 @@ export class DappSendExecutor {
 	}
 
 	/**
-	 * Kernelless auth witness discovery for the NO_FROM path: stub the user's account so
-	 * verify_private_authwit doesn't fail on missing witnesses (the stub accepts any
-	 * authwit during simulation) and decode each CallAuthorizationRequest the run
-	 * emitted on behalf of that account. The discovery result is ONLY used to read offchain effects — never for
-	 * proving or gas estimation. `chainInfo` derives from the LIVE
-	 * node, rebound to the selected network, before constructing the authwit message hash.
+	 * Kernelless auth witness discovery for the NO_FROM path: stub the user's account and every
+	 * additional scope account so verify_private_authwit doesn't fail on missing witnesses (the stub
+	 * accepts any authwit during simulation), then decode each CallAuthorizationRequest the run
+	 * emitted: the account's to sign, another scope account's to list or refuse. The discovery
+	 * result is ONLY used to read offchain effects — never for proving or gas estimation.
+	 * `chainInfo` derives from the LIVE node, rebound to the selected network, before constructing
+	 * the authwit message hash.
 	 */
 	private async discoverNoFromAuthwits(
-		d: Pick<PreparedNoFrom, "pxe" | "node" | "network" | "account" | "txRequest" | "additionalScopes">,
-	): Promise<{ record: DiscoveredAuthwit; messageHash: Fr }[]> {
+		d: Pick<PreparedNoFrom, "pxe" | "node" | "network" | "account" | "txRequest" | "additionalScopes" | "scopesWithAccount">,
+	): Promise<Pick<DecodedAuthwits, "signable" | "consumed">> {
 		this.deps.logDebug(`executeNoFromSendTx: starting kernelless discovery simulation`)
 		const discoveryResult = await d.pxe.simulateTx(
 			d.txRequest,
 			{ simulatePublic: true, skipTxValidation: true, skipFeeEnforcement: true, scopes: d.additionalScopes },
-			[d.account.address.toString()],
+			d.scopesWithAccount.map((scope) => scope.toString()),
 		)
 
 		this.deps.logDebug(`executeNoFromSendTx: kernelless discovery completed`)
 		const effects = collectOffchainEffects(discoveryResult.privateExecutionResult)
 		this.deps.logDebug(`executeNoFromSendTx: offchain effects found: ${effects.length}`)
-		if (!effects.length) return []
+		if (!effects.length) return { signable: [], consumed: [] }
 		const nodeInfo2 = await d.node.getNodeInfo()
-		const { signable } = await decodeAuthwitEffects(effects, liveChainInfo(d.network, nodeInfo2), d.account.address)
-		return signable
+		return decodeAuthwitEffects(effects, liveChainInfo(d.network, nodeInfo2), {
+			signer: d.account.address,
+			scopes: d.scopesWithAccount,
+			carried: carriedHashes(d.txRequest),
+		})
 	}
 
 	/** Sign every discovered authorization into `txRequest.authWitnesses` — after
@@ -1376,15 +1383,21 @@ export class DappSendExecutor {
 		fingerprint: string | null,
 	): Promise<void> {
 		const discovered = await this.discoverNoFromAuthwits(d)
-		this.enforcePreview(
-			approval,
-			fingerprint,
-			discovered.map((x) => x.record.messageHash),
-		)
-		for (const { messageHash } of discovered) {
+		this.enforcePreview(approval, fingerprint, listedRecords(discovered).map(listedKey))
+		for (const { messageHash } of discovered.signable) {
 			d.txRequest.authWitnesses.push(await d.account.createAuthWit(messageHash))
 		}
 	}
+}
+
+/** What a NO_FROM window lists: the account's requests, then those another account already gave. */
+function listedRecords(decoded: Pick<DecodedAuthwits, "signable" | "consumed">): DiscoveredAuthwit[] {
+	return [...decoded.signable.map(({ record }) => record), ...decoded.consumed]
+}
+
+/** What an app-paid send lists: it signs nothing, so only what another account's carried witness covers. */
+function consumedOf(probe: CollectingDiscoveryProbe): DiscoveredAuthwit[] {
+	return probe.discovered.filter((record) => record.onBehalfOf !== undefined)
 }
 
 /** The journal's copy of a send's grants, scoped as the recorder writes them; none for a send that

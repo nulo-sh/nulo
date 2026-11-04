@@ -512,8 +512,8 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			lane: this.lane,
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
+			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt, observer) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt, observer),
 			protocolSponsorAddress: async (chainId) => (await this.fpcService.getOrComputeProtocolAddresses(chainId)).sponsored,
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
@@ -1189,6 +1189,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		probe?: DiscoveryProbe,
 		fpc?: Fpc,
 		onBuilt?: OnBuilt,
+		observer?: DiscoveryProbe,
 	): Promise<FeeEstimate> {
 		// Clone the op + its actions array. fjwc / fpc branches mutate
 		// `op.actions` (unshift / splice) to prepend fee payloads; leaking
@@ -1210,6 +1211,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			parentTask,
 			signal,
 			probe,
+			observer,
 			fpc,
 			onBuilt,
 		}

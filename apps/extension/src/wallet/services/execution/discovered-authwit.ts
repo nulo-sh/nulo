@@ -33,3 +33,10 @@ export function toDiscoveredAuthwit(
 		messageHash: messageHash.toString(),
 	}
 }
+
+/** What confirm holds a listed record to: its hash when the wallet signs it, the account and the
+ *  hash when another account's carried witness covers it, so a hash listed for one account never
+ *  licenses a signature as another. */
+export function listedKey(record: DiscoveredAuthwit): string {
+	return record.onBehalfOf === undefined ? record.messageHash : `${record.onBehalfOf}:${record.messageHash}`
+}

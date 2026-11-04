@@ -11,12 +11,15 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import SectionLabel from "@nulo/design/ui/SectionLabel.vue"
 import AddressDisplay from "@/components/AddressDisplay.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
+import { isValidAztecAddress } from "@/utils/aztec-address"
 import { GLOSSARY } from "@/utils/glossary"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { DecodedCall, DiscoveredAuthwit } from "@/wallet/services/execution/client"
 import {
 	AUTHWITS,
+	CONSUMED,
+	decodeConsumed,
 	decodeFixture,
 	feeEstimateWith,
 	field,
@@ -24,6 +27,7 @@ import {
 	HUB,
 	MAIN,
 	RECIPIENT,
+	SAVINGS,
 	stubTokenSelectors,
 	UNKNOWN,
 	USDC,
@@ -427,6 +431,59 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		const w = await mountCard({ isPreviewing: true, ...(await decodeFixture()) }, op)
 		expect(read(w, "execute-op-authwits-pending")).toEqual(["Checking authorizations…"])
 		expect(w.find('[data-testid="execute-op-details"]').exists()).toBe(false)
+	})
+})
+
+describe("OperationCard — an authorization another account of the profile already gave", () => {
+	beforeEach(() => {
+		lookups.accounts.push({ name: "Savings", address: SAVINGS })
+	})
+	const mountListing = async (listed: readonly DiscoveredAuthwit[], op: unknown = fixtureOp()) => {
+		const fixture = await decodeFixture()
+		fixture.decodedAuthwits.set(CONSUMED.messageHash, await decodeConsumed())
+		return mountCard({ feeEstimate: feeEstimateWith(listed), ...fixture }, op)
+	}
+	const rows = (w: VueWrapper) =>
+		w.findAll('[data-testid="execute-op-summary-authwit"]').map((row) => {
+			const line = row.find('[data-testid="execute-op-summary-authwit-on-behalf"]')
+			return {
+				hash: row.attributes("data-message-hash"),
+				onBehalf: row.attributes("data-on-behalf"),
+				line: line.exists() ? line.text().replace(/\s+/g, " ") : undefined,
+			}
+		})
+	const OWN = AUTHWITS[0]!
+	const OWN_ROW = { hash: OWN.messageHash, onBehalf: undefined, line: undefined }
+	const CONSUMED_ROW = { hash: CONSUMED.messageHash, onBehalf: SAVINGS, line: "Already authorized by Savings." }
+
+	test("at rest its row reads as the account's own and adds which account gave it; the account's own row adds nothing", async () => {
+		expect([SAVINGS, ...CONSUMED.args.slice(0, 2), CONSUMED.caller].every(isValidAztecAddress)).toBe(true)
+		const w = await mountListing([OWN, CONSUMED])
+		expect(read(w, "execute-discovered-authwit-line")).toEqual([
+			`Lets ${trimAddress(HUB)} move 25 USDC from Main to ${trimAddress(HUB)}`,
+			`Lets Main move 1 USDC from Savings to ${trimAddress(RECIPIENT)}`,
+		])
+		expect(rows(w)).toEqual([OWN_ROW, CONSUMED_ROW])
+	})
+
+	test("the details list it apart from what the wallet will sign, naming the account that gave it", async () => {
+		const w = await mountListing([OWN, CONSUMED])
+		await toggle(w).trigger("click")
+		const hashesIn = (group: string) =>
+			w
+				.findAll(`[data-testid="${group}"] [data-testid="execute-op-discovered-authwit"]`)
+				.map((row) => row.attributes("data-message-hash"))
+		expect(hashesIn("execute-op-discovered-authwits")).toEqual([OWN.messageHash])
+		expect(hashesIn("execute-op-consumed-authwits")).toEqual([CONSUMED.messageHash])
+		expect(read(w, "execute-discovered-authorized-by")).toEqual(["Savings"])
+	})
+
+	test("an app-paid send lists it, and only it", async () => {
+		const op = fixtureOp() as unknown as { exec: object }
+		const appPaid = { ...op, exec: { ...op.exec, feePayer: VAULT } }
+		expect(rows(await mountListing([CONSUMED], appPaid))).toEqual([CONSUMED_ROW])
+		expect(rows(await mountListing([OWN, CONSUMED], appPaid))).toEqual([CONSUMED_ROW])
+		expect(rows(await mountListing([OWN], appPaid))).toEqual([])
 	})
 })
 

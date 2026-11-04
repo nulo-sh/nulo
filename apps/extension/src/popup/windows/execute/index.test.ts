@@ -1637,10 +1637,16 @@ describe("execute window — a request the wallet refused", () => {
 		code: "SCOPE_VIOLATION",
 		message: "Scope violation: call name does not match selector's function",
 	})
+	const UNATTACHED = walletErrorFromPayload({
+		code: "SCOPE_VIOLATION",
+		message: "Scope violation: a transaction's authorization request names another account and carries no witness for it",
+	})
 	const REASON = {
 		registry:
 			"This transaction asks your account to change its public authorizations from inside another contract. Apps are never allowed to, so it can't be sent. Reject tells the app.",
 		call: "A call in this transaction does not run the function it names. Nulo never sends such a call, so it can't be sent. Reject tells the app.",
+		unattached:
+			"This transaction uses an authorization from another of your accounts, and the app did not include it. Nulo signs only for the account that sends, so it can't be sent. Reject tells the app.",
 	}
 
 	async function opened(op: object = send) {
@@ -1675,7 +1681,7 @@ describe("execute window — a request the wallet refused", () => {
 		}
 	}
 
-	async function expectRefused(kind: "registry" | "call", { vm, refused, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
+	async function expectRefused(kind: keyof typeof REASON, { vm, refused, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
 		await flushPromises()
 		expect(notice().attributes()).toMatchObject({ "data-kind": kind, role: "alert" })
 		expect(refused()).toBe(true)
@@ -1694,16 +1700,20 @@ describe("execute window — a request the wallet refused", () => {
 	test.each([
 		["registry", REGISTRY],
 		["call", BINDING],
+		["unattached", UNATTACHED],
 	] as const)("an estimate refused by the %s check: the notice in the fee's place, no toast, only Reject", async (kind, error) => {
 		const window = await opened()
 		feeMapInstances[0]!.opts.onError?.(0, error)
 		await expectRefused(kind, window)
 	})
 
-	test("a preview refused: the same notice", async () => {
+	test.each([
+		["registry", REGISTRY],
+		["unattached", UNATTACHED],
+	] as const)("a preview refused by the %s check: the same notice", async (kind, error) => {
 		const window = await opened({ ...send, executionMode: "default_entrypoint" })
-		feeMapInstances[1]!.opts.onError?.(0, REGISTRY)
-		await expectRefused("registry", window)
+		feeMapInstances[1]!.opts.onError?.(0, error)
+		await expectRefused(kind, window)
 	})
 
 	test("an approval the worker refuses: the same notice, never an error row", async () => {

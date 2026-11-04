@@ -1,5 +1,5 @@
 import type { Page } from "puppeteer"
-import type { AztecTestConfig } from "./aztec"
+import { type AztecTestConfig, mintPrivateTokensForAccount, mintPublicTokensForAccount } from "./aztec"
 import { clickByTestId, type ExtensionContext } from "./extension"
 import {
 	assertPgOk,
@@ -13,6 +13,25 @@ import {
 } from "./playground"
 import { approveExecute, approveVerify, waitForExecuteContent, waitForPopup } from "./popups"
 import type { FeeMethodSubtitle } from "./transfers"
+
+/**
+ * Readies `owner`, the first of two connected accounts, to authorize a send the other makes on its
+ * behalf: its first send, approved and waited for, initializes its account contract, whose
+ * `verify_private_authwit` reads the signing-key note the constructor writes; a private note of the
+ * fixture token lands for it meanwhile. The waited send's result, for a caller that reads its receipt.
+ */
+export async function readyAuthwitOwner(ctx: ExtensionContext, page: Page, config: AztecTestConfig, owner: string): Promise<PgResult> {
+	await mintPublicTokensForAccount(config, owner)
+	const delivered = mintPrivateTokensForAccount(config, owner, 10n ** 18n).then(
+		() => undefined,
+		(error: unknown) => ({ error }),
+	)
+	await setPgInputs(page, { tokenAddress: config.tokenAddress, recipient: config.minterAddress, amount: "1" })
+	const waited = await runApprovedPgCall(ctx, page, { button: "sendTx-wait", method: "sendTx", label: "owner:wait" })
+	const failed = await delivered
+	if (failed) throw failed.error
+	return waited
+}
 
 /**
  * Reconnect a playground page whose origin the wallet remembers, and
