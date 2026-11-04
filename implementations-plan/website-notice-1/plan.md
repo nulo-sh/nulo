@@ -115,12 +115,14 @@ budget: recon 1 explorer (sonnet); one Codex gpt-6.1-sol high audit, resumed unt
 - D4. § 3.2 waited on the owner, since the first approval named three changes. OA-1's answer (2026-11-04, "notice 3.2 ok.") replaces its first sentence only; line 66 keeps its wrap, so no other byte moves.
 - D5. No reply-to pin. The value lives in Resend, and the brief forbids inventing one. The PR body says so.
 - D6. No CI change: `build-landing` already checks the notice and its v1.0 page.
+- D7. The 1.1 date and the deploy checks are a `BEFORE-LAUNCH.md` § 4 step, the file every promote reads; the repo's other dated legal versions keep theirs there. Only the promote can make I3 and the post-deploy checks true.
 
 ## Audit verdicts
 
 - **Codex round 1** (Sol, high, `01a1a73c`): `conditional approve` on the history row's approval, a narrower D3 and repaired gate instructions. All six findings adopted (log: `lessons/phase-0.md`): the row's wording is an owner ask and no longer claims more than the change (OA-1); D3 drops the `:70` rewrite; the archive is restored from the base, not `git checkout`; the gate compares an exact expected file, names `dist/` paths and the version links, and runs `test:all` once; D2's reason names the renderer's version check; the deploy window carries no time bound. D4 confirmed: § 3.2 is ambiguous, not covered by the approval.
 - **Codex round 2** (resumed): `conditional approve` on one finding: the gate named a scratch script no step created. Adopted: the script is inline in the gate, written outside the repo before it runs; dry-run on the unedited base, every replacement is found once and the compare fails as it should. Codex also checked the line ranges and wrapping and rendered the four `dist/` strings through the real renderer.
 - **Codex round 3** (resumed): `approve`, no new material finding. It checked the validator against an independently built 1.1, the unedited base and a one-byte change.
+- **Arc 1, Codex round 1** (Sol, high, `01a1a752`) over `040334f53..e377326d6`: `approve`; one report-only nit (`infra/subscribe/README.md:70`, kept by the brief's report rule). **Opus review** beside it: `conditional approve`, four findings. Adopted: (1) the promote step (D7); (3) the archive test also holds the copy's own history to end at its version, which catches a later text with a hand-edited header (proved red); (4) status bookkeeping. Rejected (2): `broadcast-topic.ts`'s PATCH omits `reply_to`, and whether Resend resets it is unverified; D3's check runs before each send, after any draft write, and the script prints `reply_to` back. A script pin would break D5.
 - **Auto-continue**: not taken. OA-1 holds the history row's wording, which is copy on the page this arc edits, and the gate needs the signed row. The orchestrator relays OA-1 and spawns the arc.
 
 ## Delivery

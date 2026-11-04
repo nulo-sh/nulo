@@ -236,13 +236,15 @@ describe("the real documents", () => {
 		expect(rowEffective(noticeHeader.version)).toBe(noticeHeader.effective)
 	})
 
-	test("every superseded notice version has an archived copy whose own header carries its row's version and date", () => {
+	test("every superseded notice version has an archived copy dated by its row and ending its own history", () => {
 		const superseded = parseVersionHistory(noticeMarkdown).slice(0, -1)
 		expect(superseded.length).toBeGreaterThan(0)
 		for (const version of superseded) {
 			const file = resolve(legalDir, "archive", `website-privacy-${version}.md`)
 			expect(existsSync(file), version).toBe(true)
-			expect(parseDocumentHeader(readFileSync(file, "utf8"))).toEqual({ version, effective: rowEffective(version) })
+			const archived = readFileSync(file, "utf8")
+			expect(parseDocumentHeader(archived)).toEqual({ version, effective: rowEffective(version) })
+			expect(parseVersionHistory(archived).at(-1)).toBe(version)
 		}
 	})
 
