@@ -221,19 +221,6 @@
 	},
 	{
 		"bundled": false,
-		"reason": "follow-redirects 1.16.1 under axios, which the exact-pinned Aztec 6.0.0 line's @aztec-labs/aztec.js and @aztec-labs/stdlib depend on. Neither extension zip contains axios or follow-redirects (THIRD-PARTY-NOTICES.txt). The fix, 1.16.2, was published on 2026-10-25, so the seven-day age gate holds it.",
-		"revisit": "follow-redirects 1.16.2 clearing the age gate on 2026-11-01",
-		"advisories": [
-			{
-				"id": 1244003,
-				"package": "follow-redirects",
-				"severity": "high",
-				"vulnerable_versions": ">=1.16.0 <=1.16.1"
-			}
-		]
-	},
-	{
-		"bundled": false,
 		"reason": "glob 10.5.0 and minimatch 9.0.9 under js-beautify and its editorconfig, a dependency of @vue/test-utils; glob 13.0.6 and minimatch 10.2.6 under @aztec-foundation/noir-noir_codegen, which the exact-pinned Aztec 6.0.0 line depends on. The fixes are majors (glob 14, minimatch 11) outside each dependent's range. Neither extension zip contains either package (THIRD-PARTY-NOTICES.txt), and each matches only a developer's own patterns against their own files.",
 		"revisit": "the next @vue/test-utils or Aztec bump",
 		"advisories": [
