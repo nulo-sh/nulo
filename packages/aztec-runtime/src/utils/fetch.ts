@@ -24,6 +24,49 @@ export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000
 export const MAX_NODE_RESPONSE_BYTES = 32 * 1024 * 1024
 
 /**
+ * Why a node request failed, when the failure is the endpoint's and not the node's own answer:
+ * - `unreachable`: the request never got an answer (refused, DNS, TLS, CORS);
+ * - `timeout`: the per-attempt abort fired, while dispatching or reading the body;
+ * - `server`: a non-ok status outside 4xx (5xx in practice), whatever the body;
+ * - `malformed`: a body that is not JSON on any other status, an HTML 429 page included;
+ * - `overloaded`: HTTP 408, 425 or 429 with a JSON body;
+ * - `refused`: any other 4xx with a JSON body carrying no reserved JSON-RPC code, or a 200 whose
+ *   body is a single JSON-RPC error object with a non-reserved code (a provider gateway's refusal).
+ * A reply the node itself produced (a reserved code), a body over the byte budget or a success has no kind.
+ */
+export type TransportFailure = "unreachable" | "timeout" | "server" | "malformed" | "overloaded" | "refused"
+
+const TRANSPORT_FAILURE = Symbol("nulo.transportFailure")
+
+/** JSON-RPC 2.0 reserves −32768..−32000 for the server itself; the Aztec node answers only inside it,
+ *  and a provider gateway's own refusals (dRPC's 26, 30, 31, 35) fall outside. */
+export function isReservedRpcCode(code: unknown): boolean {
+	return typeof code === "number" && code >= -32768 && code <= -32000
+}
+
+function tagged<E extends Error>(error: E, kind: TransportFailure): E {
+	Object.defineProperty(error, TRANSPORT_FAILURE, { value: kind })
+	return error
+}
+
+function kindOn(value: unknown): TransportFailure | undefined {
+	return typeof value === "object" && value !== null
+		? (value as { [TRANSPORT_FAILURE]?: TransportFailure })[TRANSPORT_FAILURE]
+		: undefined
+}
+
+/**
+ * The kind of a fetch error, read from the error itself or, for a node client's caller, from the
+ * client's `cause.data`, where the SDK puts the fetch's own error object for every entry of a
+ * failed batch (so the entries of one failed request share it).
+ */
+export function transportFailureOf(error: unknown): TransportFailure | undefined {
+	const cause = typeof error === "object" && error !== null ? (error as { cause?: unknown }).cause : undefined
+	const data = typeof cause === "object" && cause !== null ? (cause as { data?: unknown }).data : undefined
+	return kindOn(error) ?? kindOn(data)
+}
+
+/**
  * JSON-RPC fetch signature expected by `createAztecNodeClient`.
  */
 type JsonRpcFetch = (
@@ -58,14 +101,16 @@ function fetchOnce(timeoutMs: number): JsonRpcFetch {
 				throw mapFetchDispatchFailure(err, host, timeoutMs)
 			}
 
-			let responseJson: { error?: { message?: string } } | undefined
+			let responseJson: unknown
 			try {
 				responseJson = JSON.parse(await readBodyCapped(resp, MAX_NODE_RESPONSE_BYTES))
 			} catch (err: unknown) {
-				throw mapBodyFailure(err, resp)
+				throw mapBodyFailure(err, resp, controller.signal.aborted)
 			}
 
 			if (!resp.ok) throw classifyRpcFailure(resp, host, responseJson, noRetry)
+			const refusal = gatewayRefusal(resp, host, responseJson)
+			if (refusal) throw refusal
 
 			return { response: responseJson, headers: resp.headers }
 		} finally {
@@ -78,30 +123,47 @@ function fetchOnce(timeoutMs: number): JsonRpcFetch {
  *  the SDK-compatible host-prefixed message. */
 function mapFetchDispatchFailure(err: unknown, host: string, timeoutMs: number): Error {
 	if (err instanceof DOMException && err.name === "AbortError") {
-		return new Error(`Request to ${host} timed out after ${timeoutMs}ms`)
+		return tagged(new Error(`Request to ${host} timed out after ${timeoutMs}ms`), "timeout")
 	}
-	return new Error(`Error fetching from host ${host}: ${err}`)
+	return tagged(new Error(`Error fetching from host ${host}: ${err}`), "unreachable")
 }
 
 /** An oversize body is terminal on any status, since a retry would read the same reply; any other
  *  read or parse failure keeps the SDK-compatible messages. */
-function mapBodyFailure(err: unknown, resp: Response): Error {
+function mapBodyFailure(err: unknown, resp: Response, aborted: boolean): Error {
 	if (err instanceof ResponseTooLargeError) return new NoRetryError(err.message)
-	if (!resp.ok) return new Error(resp.statusText)
-	return new Error(`Failed to parse body as JSON`)
+	const kind: TransportFailure = aborted ? "timeout" : resp.status >= 500 ? "server" : "malformed"
+	if (!resp.ok) return tagged(new Error(resp.statusText), kind)
+	return tagged(new Error(`Failed to parse body as JSON`), kind)
+}
+
+function rpcErrorOf(entry: unknown): { code?: unknown; message?: unknown } | undefined {
+	const error = typeof entry === "object" && entry !== null ? (entry as { error?: unknown }).error : undefined
+	return typeof error === "object" && error !== null ? error : undefined
 }
 
 /** Status classification for a non-ok response: 4xx (or an explicit noRetry)
  *  is terminal, everything else stays retryable. */
-function classifyRpcFailure(
-	resp: Response,
-	host: string,
-	responseJson: { error?: { message?: string } } | undefined,
-	noRetry: boolean,
-): Error {
-	const errorMessage = `Error ${resp.status} from server ${host}: ${responseJson?.error?.message ?? resp.statusText}`
-	if (noRetry || (resp.status >= 400 && resp.status < 500)) return new NoRetryError(errorMessage)
-	return new Error(errorMessage)
+function classifyRpcFailure(resp: Response, host: string, responseJson: unknown, noRetry: boolean): Error {
+	const message = Array.isArray(responseJson) ? undefined : rpcErrorOf(responseJson)?.message
+	const errorMessage = `Error ${resp.status} from server ${host}: ${typeof message === "string" ? message : resp.statusText}`
+	const is4xx = resp.status >= 400 && resp.status < 500
+	const error = noRetry || is4xx ? new NoRetryError(errorMessage) : new Error(errorMessage)
+	if (!is4xx) return tagged(error, "server")
+	if (resp.status === 408 || resp.status === 425 || resp.status === 429) return tagged(error, "overloaded")
+	const entries = Array.isArray(responseJson) ? responseJson : [responseJson]
+	return entries.some((entry) => isReservedRpcCode(rpcErrorOf(entry)?.code)) ? error : tagged(error, "refused")
+}
+
+/** A 200 whose body is one JSON-RPC error object with a non-reserved code: a provider gateway
+ *  refusing the whole request. The client fails every entry of such a reply without a retry, so
+ *  throwing it here as terminal changes nothing on one endpoint and lets a router see the refusal. */
+function gatewayRefusal(resp: Response, host: string, responseJson: unknown): Error | undefined {
+	if (Array.isArray(responseJson)) return undefined
+	const error = rpcErrorOf(responseJson)
+	if (error === undefined || typeof error.code !== "number" || isReservedRpcCode(error.code)) return undefined
+	const message = typeof error.message === "string" ? error.message : resp.statusText
+	return tagged(new NoRetryError(`Error ${resp.status} from server ${host}: ${message}`), "refused")
 }
 
 /**
