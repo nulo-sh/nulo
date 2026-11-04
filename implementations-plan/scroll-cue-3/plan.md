@@ -25,7 +25,7 @@ Part of #1658. One arc, one PR to `dev`. Recon: [recon.md](recon.md).
 The owner signed decision page 109 on 2026-11-04 (15:45 UTC, head `fa6913668`): **P109-01 = A**, "a round 'more below' button at the bottom right of the scroll area. It nudges twice when it first appears, lifts on hover, and a press scrolls to the next section (or to the end when a screen marks none); it hides once the end is in view. Under reduced motion: no nudge, no lift, and the press jumps instead of scrolling smoothly." **P109-02 = A**, "A, and if A does not include the three blocked today, please include the blocked ones too, obviously." P109-03 does not apply (no visible text).
 
 - The nine signed screens (Delete profile, Change password, New profile, Import profile, Import account, Unlock method, the three export pages): before, nothing marks the content below the footer. After, a 36 px round chevron button sits at the scroll area's bottom right while more than its 48 px footprint is left below. 28 px of empty room follows the last section (48 px with the section's own 20 px padding, D3), so a screen that fits today with less slack scrolls by that much blank room, with the button hidden.
-- Restore again (`restore-again.vue`), the tenth screen on the layout, stays as today until the owner answers OWNER-ASKS.md Q1.
+- Restore again (`restore-again.vue`), the tenth screen on the layout: the same button and room, on the owner's answer to OWNER-ASKS.md Q1 (2026-11-04, in chat): "restore yes". Before, with an encrypted backup picked and a wrong password refused, the Decryption Password field sits wholly under the fold; after, the button shows and one press brings it into view.
 - No other surface changes. Home's balance animation keeps its behaviour (D6 only moves its helper).
 
 ## Assumptions
@@ -43,7 +43,7 @@ The owner signed decision page 109 on 2026-11-04 (15:45 UTC, head `fa6913668`): 
 **Inferences**
 - I1: a press that lands each section under the header, and pages down within a section taller than the view, is the owner's "scrolls to the next section"; a screen with no marks goes to the end, as signed.
 
-**Asks**: Q1 in [OWNER-ASKS.md](OWNER-ASKS.md), Restore again. What ships now: Restore again unchanged.
+**Asks**: Q1 in [OWNER-ASKS.md](OWNER-ASKS.md), Restore again: answered "restore yes" (2026-11-04); it ships here (§ Follow-up).
 
 ## Architecture & Implementation
 
@@ -59,7 +59,7 @@ The owner signed decision page 109 on 2026-11-04 (15:45 UTC, head `fa6913668`): 
 
 | Id | Decision | Why |
 |---|---|---|
-| D1 | Opt-in `moreBelow` prop, passed by the nine signed pages; Restore again is the owner's call (Q1) | the signed list names nine; a visible change on a tenth surface is not ours to make, and opt-in pairs with each page marking its sections |
+| D1 | Opt-in `moreBelow` prop, passed by the nine signed pages and, on the owner's Q1 answer, Restore again | the signed list named nine; a visible change on a tenth surface was not ours to make. Every page on the layout now passes it; it stays opt-in so a new page gets the button only with its marks and a sign-off |
 | D2 | Button in a non-scrolling frame, offset by the measured gutter | absolute inside the scroller would scroll away; Firefox's panel scrollbar width differs |
 | D3 | Visible iff `remaining > FOOTPRINT` (48 px), and `.content` keeps 28 px of room, which with the last section's 20 px padding makes 48 | then "hidden" means only blank space is hidden, and at the end the button's footprint is blank; fixes Fact 7. Was 48 px of room until the Opus diff review showed the button showing over a just-revealed warning with only padding left |
 | D4 | `ResizeObserver` on the scroller and its children, no `MutationObserver` | `.content` is the scroller's persistent normal-flow child, so content growth past the fold resizes it; a subtree observer fires on every countdown tick. Premise: no fixed-height inner scroller on these pages (Codex Q5 found none) |
@@ -95,6 +95,10 @@ Validation gate (root commands from the repository root; `NULO_E2E_BROWSER` appl
 - `cd apps/extension && bun run test:e2e -- tests/e2e/security.test.ts tests/e2e/auth-flows.test.ts tests/e2e/type-roles.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`; all green at retry 0.
 - `bun run audit:vue`, `bun run --cwd apps/extension build-storybook`, `bun run lint:actions`, and `bun run test:e2e` (full smoke) on Chrome, then on Firefox; all green. Record each browser's smoke wall-clock before and after.
 - Screenshots: light theme, Chrome, first paint, before (base build) and after, for the ten screens, plus Delete profile after a press. The export pages are shown only at their password step. Commit them under `implementations-plan/scroll-cue-3/screenshots/`. No picture shows Manage networks, an `https://` node address or a recovery phrase.
+
+## Follow-up: Restore again (owner, 2026-11-04: "restore yes")
+
+Change map: `restore-again.vue` passes `moreBelow` and marks its intro block; `ImportFullBackupForm` already marks its sections, and its last section's 20 px bottom padding completes the room (D3). Test: the scan's page table gains Restore again (the prop and one mark) in place of the test that pinned it off. Screenshots: before, after and after one press, with an encrypted backup picked and a wrong password refused (the plain-backup form fits the fold). Gate: lint, `typecheck:all`, the touched component tests, `restore-outcome.test.ts` (the smoke file that reaches Restore again) on Chrome and Firefox at retry 0, `check:plans`, then the Codex loop on the follow-up diff (three rounds at most).
 
 ## Delivery
 

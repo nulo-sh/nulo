@@ -21,3 +21,8 @@
 
 - `bun run lint`, `typecheck:all`, `test:all` (3 min), `audit:vue` (3.5 min), `build-storybook`, `lint:actions`: green.
 - Full smoke on Chrome at retry 0, at the 48 px-room head: 276 passed, 28 skipped, 27.4 min. At the final head, `security.test.ts` and `auth-flows.test.ts` again: green.
+
+## Follow-up: Restore again (owner, 2026-11-04: "restore yes")
+
+- Measured (Chrome, 360 × 600): with a plain backup picked the form fits (0 px hidden), and with an encrypted one at the decrypt step 10 px of padding is hidden (38 with the room, so no button, as D3 intends). With a wrong password refused, 103 px are hidden and the Decryption Password section `[487, 604]` lies wholly below the 501 px fold; after, 131 px, the button shows, and one press clamps to the end with the section at `[356, 473]`.
+- `restore-outcome.test.ts` (the smoke file that reaches Restore again), retry 0: Chrome 3 passed in 46 s, Firefox 3 passed in 58 s.

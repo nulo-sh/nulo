@@ -4,3 +4,5 @@
 - 2026-11-04 16:26 phase 1 code in (b4 shots, unit + scan + 1 e2e green on Chrome); running full gates
 - 2026-11-04 17:11 gates green (lint, typecheck, test:all, audit:vue, storybook, lint:actions, Chrome smoke); Codex diff loop: r1 1 finding fixed, r2 clean, r3 clean; Opus review fixes in; Firefox smoke running
 - 2026-11-04 18:01 Firefox full smoke green (280 passed, 45.4 min); final-head typecheck, test:all, lint green; opening the PR
+- 2026-11-04 18:25 PR #1666 open, all checks green (5 required pass)
+- 2026-11-04 18:37 owner answered Q1 "restore yes"; Restore again wired (0be7c63e9): lint, typecheck:all, touched component tests, restore-outcome smoke on Chrome and Firefox at retry 0 green
