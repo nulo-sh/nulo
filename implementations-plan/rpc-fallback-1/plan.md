@@ -364,6 +364,7 @@ Round 1 merged the contradiction check into both legs (a deviation from the tier
 | arc 1, 3 | Codex `01a1a756` resumed | revise (1 major) | round 2's two confirmed closed; the major (a sync read re-sent to an endpoint that qualified while the failure had already handed the role to another) fixed after the round: the resend goes to the role's holder, and a sync dispatch refuses any endpoint but the active one. The three-round cap ended the loop, so this fix has no Codex verdict | none |
 | arc 2, 1 | Codex `01a1a7cb` | revise (3 majors, 1 minor) | all 4: D30 blind to a 429 or a refusal (now any transport failure withdraws the trust); S4 not proving the kill fired inside the proof (A active at arming, an anchored read reaching A after it); S5 not proving A kept serving (an uncached anchored control read reaches A, not B); S7b bypassing the dead pin (its receipt now reads `PENDING` through the route, asked nowhere else) | none |
 | arc 2, 1 | Opus 5.5, fresh | approve with changes (1 major) | 1 (S5, as Codex's); 2 (S7b's vacuous counter dropped, as Codex's); 3 (S3b waits out the probe spacing, so only the floor keeps B from the moved read); 4 (S3 seeds the floor after `createPXE`, from the store, as the wiring will); 5 (S6 asserts one attempt on A); 6 (`pickForSend`'s TSDoc); 7 (as Codex's 1); the redundant `SYNC_READS` check removed | none |
+| arc 2, 2 | Codex `01a1a7cb` resumed | approve | round 1's four confirmed closed, and the Opus changes consistent; no new finding | none |
 
 ## Seeds (not run; orchestrator-owned)
 

@@ -17,3 +17,5 @@
 - 2026-11-04: Phase 3 gate pass (lint, typecheck:all, scripts/e2e/rpc-relay 11/11). Deviation D29 in the ledger.
 - 2026-11-04: Phase 4 gate pass (lint, typecheck:all, relay 11/11, sandbox suite 8/8 twice at retry 0: 325.9 s and 330.3 s). Router fix D30 found by S4.
 - 2026-11-04: arc 2 review round 1: Codex revise (3 majors, 1 minor), Opus approve with changes; all fixed; sandbox suite 8/8 at retry 0 (303.4 s)
+- 2026-11-04: arc 2 review round 2: Codex approve, no new finding
+- 2026-11-04: arc 2 final gates on 260c90548: lint 0, typecheck:all 0, test:all 0 (aztec-runtime 538, extension 17466), relay 11/11, sandbox 8/8 (303.4 s)
