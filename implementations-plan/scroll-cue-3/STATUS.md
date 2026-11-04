@@ -6,3 +6,4 @@
 - 2026-11-04 18:01 Firefox full smoke green (280 passed, 45.4 min); final-head typecheck, test:all, lint green; opening the PR
 - 2026-11-04 18:25 PR #1666 open, all checks green (5 required pass)
 - 2026-11-04 18:37 owner answered Q1 "restore yes"; Restore again wired (0be7c63e9): lint, typecheck:all, touched component tests, restore-outcome smoke on Chrome and Firefox at retry 0 green
+- 2026-11-04 18:45 Codex follow-up review round 1: approve; one doc finding fixed

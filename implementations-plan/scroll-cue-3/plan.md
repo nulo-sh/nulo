@@ -126,6 +126,7 @@ Codex plan audit, `gpt-6.1-sol` at `high`, read-only.
 - **Round 3: approve**, no material findings (the capture run must still measure D9's geometry).
 - **Diff review round 1** (Codex, fresh session): one finding, demonstrated: a hide mid-nudge left `nudging` set, so the nudge replayed on a later show. Fixed with a test; two comments tightened. **Round 2: clean.**
 - **Opus diff review** (beside round 1), accepted: the button showed while only the last section's 20 px padding was left (trace: Import profile's error screen after its own reveal scroll leaves 68 px of blank, the button over the warning); fixed by cutting the room to 28 px (D3). Two listener tests could not fail (spies on `removeEventListener` added); the marks test missed marks with no label (per-file counts added); the nudge comment named the wrong cause; the Change password test now uses the measured geometry; CLAUDE.md's L2 list names the button.
+- **Follow-up diff review** (Restore again, Codex, fresh session): round 1 approve; one doc finding (OWNER-ASKS still read "left out" above the answer), fixed.
 - Kept as is: D3's room equal to the threshold equal to the threshold (Codex agreed; it discloses the near-fit effect in UI impact); `ResizeObserver` without `MutationObserver` (Codex Q5 found no case it misses); the composable in `src/composables/` exporting `leftToScroll`.
 
 ## Seeds

@@ -8,5 +8,5 @@
   - **B. No.** It stays as today. It follows #1658 after 1.2.0.
 - **What it would look like**: with a backup picked and an error or a warning showing, the button sits at the bottom right of the scroll area, as on Import profile.
 - **Recommendation**: A. Same layout and same form as Import profile; your P109-02 note reads "Afterwards, I'd to all the sweep list for after 1.2.0."
-- **What ships now**: Restore again is left out, pending your answer. The other nine screens do not depend on it.
+- **What shipped before the answer**: Restore again left out; the other nine screens did not depend on it.
 - **Answer (the owner, 2026-11-04, in chat)**: "restore yes". Option A: Restore again passes `moreBelow` and marks its intro; the shared form's sections were already marked. Shipped in this PR.
