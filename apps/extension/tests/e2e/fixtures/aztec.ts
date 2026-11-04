@@ -167,7 +167,7 @@ export async function createTestWallet(url = LOCAL_NODE_URL) {
  * setup tx with "maxFeesPerGas.feePerL2Gas must be >= gasFees.feePerL2Gas". 1e13 restores ~10x
  * headroom while staying under the SponsoredFPC fee-juice balance (cap × gasLimit). See implementations-plan/archive/aztec-5.0-upgrade/plan.md (Sponsor ceiling).
  */
-const E2E_FEE_GAS = { maxFeesPerGas: new GasFees(10n ** 13n, 10n ** 13n) }
+export const E2E_FEE_GAS = { maxFeesPerGas: new GasFees(10n ** 13n, 10n ** 13n) }
 
 /** Deploy a Token contract with a minter address. Returns the token contract address.
  *  `symbol` lets a test deploy several distinguishable tokens (Home and Holdings select by it). */
