@@ -1,7 +1,7 @@
 ---
 plan: legal-dating-2
 tier: light
-status: approved (Codex r3)
+status: completed
 issues: none (supersedes PR #1538)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at fa6913668
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-04. Planned and delivered as one arc, in one session.
+- **Status:** completed. The arc and this close-out ship as PR #1661 into `dev`; its merge archives this plan. #1538 is closed, superseded by #1661.
+- **Shipped:** Terms 1.2.1, privacy 1.2.8 and privacy 1.2.9 dated `4 November 2026` in `legal/terms.md`, `legal/privacy.md`, `legal/archive/privacy-1.2.8.md` and `packages/legal/src/manifest.ts`; the six `BEFORE-LAUNCH.md` § 4 boxes this completes ticked.
+- **Review loop:** plan: Codex r1 and r2 `conditional approve`, r3 `approve`. Diff: Codex r1 `clean`, Opus `clean` (one optional note, D2), Codex r2 `clean`.
+- **Gates:** G1 to G4 green at `eb8ef5477` (one host-saturation rerun of `test:all`) and on the merged head `c801fa546`. PR #1661's required checks are watched on the final head.
+- **Dropped:** a test pinning history-row dates (D3); a sentence in `legal/archive/README.md` naming the dating exception (Codex diff r2, D2).
+- **Known limits:** none.
+- **Open items:** `BEFORE-LAUNCH.md` § 4: the "After the deploy" boxes of Terms 1.2.1, privacy 1.2.8 and privacy 1.2.9, which include AMO's privacy field, and the Chrome `alarms` justification.
+- **Lessons:** none promoted. The one shell gotcha (a clean `git grep` exits 1; a `for` loop returns its last iteration's status) is the Agent tooling entry's "test each exit code".
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 # legal-dating-2: date Terms 1.2.1 and privacy 1.2.8 and 1.2.9 for the 1.2.0 promote
 
