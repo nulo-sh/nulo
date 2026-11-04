@@ -13,7 +13,9 @@
  * and imported accounts. Everything that needs a chain lives on a network added on the run's sandbox.
  *
  * On the sandbox it also pins the token, picks a Send fee payer and an app window's fee payer, so
- * the release's own maps meet the candidate's unlock, which seals them in place.
+ * the release's own maps meet the candidate's unlock, which seals them in place. The sandbox is a
+ * custom network, a chain that offers no sponsor, so the candidate deletes the canonical Sponsored
+ * fee payer there with its picks on its first fee read: the checks allow exactly that.
  *
  * A release that seals its rows is read through its own services, as it reads them, and ends on
  * Testnet with its second account selected: the popup opens there only on a selection it read,
@@ -82,7 +84,8 @@ import { type ReleaseTraits, releaseTraits } from "../fixtures/update/release"
 import { readRelease } from "../fixtures/update/read-release"
 import { isLoopbackUrl, loopbackOrigins, namedHostCount, type ReleasePreferences } from "../fixtures/update/release-reads"
 import { approveReleaseConnect } from "../fixtures/update/release-ui"
-import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "../fixtures/update/verify"
+import { storedRows } from "../fixtures/update/stored-rows"
+import { BARRIERS, missingFamilies, shownOverlays, unofferedSponsorIds, updateProblems } from "../fixtures/update/verify"
 import {
 	confirmImport,
 	exportAccountBody,
@@ -121,6 +124,8 @@ type Populated = {
 	preferences: ReleasePreferences
 	/** A sealing release's loopback origins, which the replay's recording names. */
 	dials?: string[]
+	/** The release's fee payer rows the candidate deletes by design ({@link unofferedSponsorIds}). */
+	unofferedSponsors: string[]
 }
 
 function randomAddress(): string {
@@ -269,7 +274,8 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 	const selection = sealed?.selection ?? before[LEGACY_SELECTED_ACCOUNT_KEY]
 	if (typeof selection !== "string") throw new Error(`the release stores no account selection: ${String(selection)}`)
 	const preferences = sealed?.preferences ?? plaintextPreferences(before, soleProfileId(before))
-	return { release, before, chainInfo, account, imported, incoming, selection, preferences, dials: sealed?.dials }
+	const unofferedSponsors = unofferedSponsorIds(sealed?.fpcs ?? storedRows(before, STORES.fpcs.ref.root))
+	return { release, before, chainInfo, account, imported, incoming, selection, preferences, dials: sealed?.dials, unofferedSponsors }
 }
 
 function soleProfileId(entries: Record<string, unknown>): string {
@@ -280,10 +286,13 @@ function soleProfileId(entries: Record<string, unknown>): string {
 
 /** Moves the release's endpoints onto this machine and selects its second Testnet account, each
  *  through its own UI or service, then reads the release through its own services: its selection,
- *  its preference maps and the loopback origins its rows name. */
-async function endOnSecondAccount(
-	ctx: ExtensionContext,
-): Promise<{ selection: string | undefined; preferences: ReleasePreferences; dials: string[] }> {
+ *  its preference maps, its fee payer rows and the loopback origins its rows name. */
+async function endOnSecondAccount(ctx: ExtensionContext): Promise<{
+	selection: string | undefined
+	preferences: ReleasePreferences
+	fpcs: Record<string, unknown>[]
+	dials: string[]
+}> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
 	const networks = await readNetworkRows(page)
@@ -299,7 +308,7 @@ async function endOnSecondAccount(
 		(row) => row.name === "Second" && row.chainId === reads.networks.find((n) => n.kind === "testnet")?.chainId,
 	)
 	if (!second || reads.selection !== second.address) throw new Error("the release does not read its second Testnet account as selected")
-	return { selection: reads.selection, preferences: reads.preferences, dials: loopbackOrigins({ reads, stored }) }
+	return { selection: reads.selection, preferences: reads.preferences, fpcs: reads.rows.fpcs, dials: loopbackOrigins({ reads, stored }) }
 }
 
 /** Pins the sandbox token and picks Send's fee payer for a private send, each through the release's
@@ -351,7 +360,8 @@ async function expectAccounts(page: Page, names: readonly string[]): Promise<voi
 }
 
 async function verify(ctx: ExtensionContext, populated: Populated): Promise<void> {
-	expect(await updateProblems(populated.before, await readLocalStorage(ctx), { balancesAsserted: true })).toEqual([])
+	const allowed = { balancesAsserted: true, unofferedSponsors: populated.unofferedSponsors } as const
+	expect(await updateProblems(populated.before, await readLocalStorage(ctx), allowed)).toEqual([])
 
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/auth", 30_000)
@@ -364,7 +374,6 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	if (populated.release.storage === "plaintext") expect(populated.selection, "the release's selection").toBe(populated.account)
 	expect(await getAccountAddress(page)).toBe(populated.selection)
 	await waitForShownAccount(page, populated.selection, "the header shows the release's selection")
-	await expectReleasePreferences(ctx, page, populated.preferences, await captureSoleProfileId(page))
 	if (populated.release.storage === "sealed") await switchToNetwork(page, SANDBOX)
 
 	await navigateToTokenDetail(page)
@@ -386,10 +395,12 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	expect(await previewImport(page, await exportImportedAccountBody(page, false))).toBe(populated.imported)
 	await navigateByHash(page, "#/popup/settings/contacts", 15_000)
 	for (const name of CONTACTS) await page.waitForSelector(contactRow(name), { visible: true, timeout: 15_000 })
+	// After the sandbox's fee reads, so a pick the candidate forgets beyond the deleted sponsor's shows.
+	await expectReleasePreferences(ctx, page, populated.preferences, await captureSoleProfileId(page), populated.unofferedSponsors)
 	expect(await shownOverlays(page)).toEqual([])
 	await page.close()
 
-	expect(await updateProblems(populated.before, await readLocalStorage(ctx), { balancesAsserted: true })).toEqual([])
+	expect(await updateProblems(populated.before, await readLocalStorage(ctx), allowed)).toEqual([])
 }
 
 test.skipIf(!process.env.NULO_E2E_UPDATE_FROM || !aztecConfig)(

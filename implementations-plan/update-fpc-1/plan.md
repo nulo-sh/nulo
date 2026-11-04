@@ -48,9 +48,9 @@ The release runbook's live update scenario (`tests/e2e/network/update-in-place.t
 **Data flow.** `populate` derives the list from the release's rows as the release reads them: a sealing release's from `readRelease` (`endOnSecondAccount` returns its `fpcs`), a plaintext one's parsed from `before` with `storedRows`. `Populated.unofferedSponsors` reaches both `updateProblems` calls and `expectReleasePreferences` in `verify`.
 
 **File-level change map** (all under `apps/extension/`):
-- `tests/e2e/helpers/fpc-seeds.ts`: export the canonical sponsor address from `PROTOCOL_FPCS`.
+- `tests/e2e/helpers/protocol-fpc-pins.ts` (new, pure): `PROTOCOL_FPCS` and `SPONSOR_FPC_ADDRESS`, moved out of `tests/e2e/helpers/fpc-seeds.ts`, which imports them (D4).
 - `tests/e2e/fixtures/update/verify.ts`: `unofferedSponsorIds`; the option.
-- `tests/e2e/fixtures/update/preferences.ts`: `allowedPicks` (pure, product code) and the parameter.
+- `tests/e2e/fixtures/update/release-reads.ts`: `allowedPicks` (pure, product code; D4). `tests/e2e/fixtures/update/preferences.ts`: the parameter.
 - `tests/e2e/fixtures/update/stored-rows.ts`: `storedRows(entries, root)`, moved from `tests/e2e/update-replay.test.ts` (`rowsOf`), which imports it.
 - `tests/e2e/network/update-in-place.test.ts`: `Populated.unofferedSponsors`; `endOnSecondAccount` returns `fpcs`; the three calls pass it; `expectReleasePreferences` moves after the sandbox visit; one header sentence.
 - `scripts/e2e/update-rows.test.ts`: the tests below.
@@ -58,7 +58,7 @@ The release runbook's live update scenario (`tests/e2e/network/update-in-place.t
 
 **Alternatives not taken.** Hardcoding the row id or the sandbox chain: the brief forbids it, and both differ per run. Adding the sandbox to the sponsor list, or populating the sponsor elsewhere: product changes, out of scope. Requiring the row's absence at the end: it would test `FpcService`, which `service-create.test.ts` covers, and tie the checker to which screen reads fees first.
 
-### Phase 1: the allowance and its tests
+### Phase 1: the allowance and its tests ✓ ([lessons/phase-1.md](lessons/phase-1.md))
 1. Make the changes in the map above. Comments state the invariant (the candidate deletes this row by design), never this lane or #1652.
 2. Tests in `scripts/e2e/update-rows.test.ts`, each refusal beside its success control:
    - `unofferedSponsorIds`: the canonical sponsor on a custom chain and on Alpha Mainnet (upper-case hex) are listed; on Testnet and chain 0, with a `0X` prefix, at another address, and the PrivateFPC are not.
@@ -97,6 +97,7 @@ None. Test fixtures only.
 | D1 | Ids from the release's rows, excused by key in `updateProblems` behind an opt-in option | a generic expected-deletions key list; a hardcoded id or chain | the option names the one product rule; a generic list invites other excuses; ids differ per run |
 | D2 | Picks compared at the end of `verify`: the release's, or forgotten for the listed rows already gone (`allowedPicks`) | leave the check where it is; compare both sides with the listed picks removed; add a second check | where it is, no check reads picks after the removal, so a faulty forget passes (Codex P1); both-sides removal hides a pick dropped with its row kept; one check at the later checkpoint suffices |
 | D3 | The replays and the arrival scenario keep the checker unchanged | wire the allowance into all three | they reach no fee read on an unlisted chain and pass; an unexercised allowance there is generality nobody asked for |
+| D4 | Deviation found at the Phase 1 gate: the pins and `allowedPicks` live in pure modules | keep them in `fpc-seeds.ts` and `preferences.ts` | `scripts/e2e/update-rows.test.ts` is type-checked by `tsconfig.scripts.json` (`chrome-types`), which refused the page-bound code those two files pull in (`typecheck:all` exit 2) |
 
 ## Review verdicts
 

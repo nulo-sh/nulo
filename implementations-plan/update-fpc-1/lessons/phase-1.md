@@ -1,0 +1,5 @@
+# update-fpc-1: phase 1 (the allowance and its tests)
+
+- 2026-11-04 first gate: `bun run lint` exit 1 (a formatter line break in the new test, fixed with `biome check --write`); `bun run typecheck:all` exit 2: `tsc -p tsconfig.scripts.json` checks what `scripts/e2e/update-rows.test.ts` imports, and the new imports of `fixtures/update/preferences.ts` and `helpers/fpc-seeds.ts` pulled page-bound e2e code (`chrome.storage.local.get(null)`, vitest `inject` keys) under `chrome-types`. Fix (D4): the pins move to the pure `helpers/protocol-fpc-pins.ts`, `allowedPicks` to the pure `fixtures/update/release-reads.ts`.
+- Gate rerun, all green: `bun run lint` 0; `bun run typecheck:all` 0; `bun --bun vitest run scripts/e2e/update-rows.test.ts scripts/e2e/update-recording.test.ts` 23 passed; `bun run test` 0 (991 files, 17363 tests passed); `bun run test:all` 0.
+- Red first: with the base copies of `verify.ts`, `preferences.ts` and `fpc-seeds.ts`, the three new tests fail (the excuse test on its assertion: two lost lines where one was expected).

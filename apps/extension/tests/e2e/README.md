@@ -173,9 +173,11 @@ uncommitted changes a build reads, is refused, so commit before you build it.
   record while any moved host is still held. It then ends on its second Testnet account, read back
   through its own service, so the update must keep a selection that is not the fallback. After the
   update it checks that no key was lost, no barrier shows, every key is registered and read by its
-  read code, the profile unlocks on the release's selection, the release's pins and fee picks are
-  sealed and read back through the service, the UI reads it all, the imported key opens and the
-  playground's stored session still answers. `NULO_E2E_UPDATE_RECORD=1` on Chrome also writes the
+  read code, the profile unlocks on the release's selection, the UI reads it all, the imported key
+  opens, the playground's stored session still answers, and, last, the release's pins and fee picks
+  are sealed and read back through the service. One loss is allowed: the canonical Sponsored fee
+  payer on a chain that offers none (the sandbox is a custom network), which the candidate deletes
+  on its first fee read there, forgetting its picks. `NULO_E2E_UPDATE_RECORD=1` on Chrome also writes the
   release's storage to `fixtures/update/<tag>.storage.json`, the replay's recording; a sealing
   release's names the loopback origins its rows point at (`dials`).
 - The replay writes that recording into the release, offline, and updates it. It reads a plaintext
