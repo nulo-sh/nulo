@@ -231,10 +231,10 @@
 				"vulnerable_versions": ">=9.0.0 <=14.0.1"
 			},
 			{
-				"id": 1244012,
+				"id": 1244623,
 				"package": "minimatch",
 				"severity": "moderate",
-				"vulnerable_versions": "<11.0.1"
+				"vulnerable_versions": ">=7.0.0 <11.0.1"
 			}
 		]
 	}
