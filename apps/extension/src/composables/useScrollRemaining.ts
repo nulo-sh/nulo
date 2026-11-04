@@ -5,11 +5,9 @@ import { onScopeDispose, type Ref, readonly, ref, watch } from "vue"
 export const leftToScroll = (el: Element): number => Math.max(0, el.scrollHeight - el.clientHeight - el.scrollTop)
 
 /**
- * How far a scroller's content runs past its visible bottom (`remaining`) and how wide its
- * scrollbar is (`gutter`), measured on every scroll and every resize of the scroller or of its
- * element children. A child's resize is the content-change signal: content that grows or shrinks
- * past the fold resizes the normal-flow child holding it. The listeners follow `el` and end with
- * the caller's scope.
+ * How far a scroller's content runs past its visible bottom, and its scrollbar's width. Content
+ * changes are heard as resizes of the scroller's children: content crossing the fold resizes the
+ * normal-flow child that holds it.
  */
 export function useScrollRemaining(el: Readonly<Ref<HTMLElement | null>>): {
 	remaining: Readonly<Ref<number>>

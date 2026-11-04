@@ -37,6 +37,14 @@ describe("ui/ScrollMoreButton", () => {
 		expect(down.defaultPrevented).toBe(true)
 	})
 
+	test("a nudge a hide interrupts, as under reduced motion where no animation ends, never replays", async () => {
+		const w = mount(ScrollMoreButton, { props: { shown: true } })
+		expect(isNudging(w)).toBe(true)
+		await w.setProps({ shown: false })
+		await w.setProps({ shown: true })
+		expect(isNudging(w)).toBe(false)
+	})
+
 	test("it nudges on its first show and never again once the nudge ends", async () => {
 		const w = mount(ScrollMoreButton, { props: { shown: false } })
 		await w.setProps({ shown: true })

@@ -20,6 +20,8 @@ let nudged = false
 watch(
 	() => props.shown,
 	(shown) => {
+		// Reduced motion runs no animation, so no `animationend` clears a nudge a hide interrupted.
+		if (!shown) nudging.value = false
 		if (!shown || nudged) return
 		nudged = true
 		nudging.value = true
@@ -98,7 +100,7 @@ watch(
 	transition: opacity 0.2s ease;
 }
 
-/* A click during the fade-out reaches the content underneath. */
+/* The fading button still covers content; a click there goes through to it. */
 .leaving {
 	pointer-events: none;
 }
