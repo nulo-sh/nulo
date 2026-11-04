@@ -11,7 +11,8 @@ vi.mock("@/wallet/services/profile/client", () => ({
 }))
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ query: {}, meta: {} }) }))
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+const openToast = vi.hoisted(() => vi.fn())
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast }) }))
 
 import { Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../../../tests/helpers/press-key"
@@ -95,6 +96,24 @@ describe("change password — Enter does what the focused control says", () => {
 		enterOn(w.get('[data-testid="new-password-repeat-input"] input').element)
 		await flushPromises()
 		expect(profileClient.changeProfilePassword).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("change password — the change says it happened", () => {
+	test("a change that lands toasts Password changed, then goes back", async () => {
+		const w = await mountWithValidFields()
+		submit(w).click()
+		await flushPromises()
+		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Password changed" })
+		expect(router.back).toHaveBeenCalledTimes(1)
+	})
+
+	test("(control) a refused change toasts nothing", async () => {
+		profileClient.changeProfilePassword.mockRejectedValueOnce(new Error("refused"))
+		const w = await mountWithValidFields()
+		submit(w).click()
+		await flushPromises()
+		expect(openToast).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "success" }))
 	})
 })
 

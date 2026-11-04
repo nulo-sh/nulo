@@ -462,7 +462,7 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 
 		test("the account, the three groups and the words of the shot", async () => {
 			await mountWindow(request)
-			expect(identity()).toBe("wants to connect on Aztec:1")
+			expect(identity()).toBe("asks for access")
 			expect(w!.findAll("h2").map((h) => [h.text(), h.attributes("data-count")])).toEqual([
 				["Account to share", "1"],
 				["Always asks you first", undefined],
@@ -502,7 +502,7 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 				chip: undefined,
 			})
 			expect(note().exists()).toBe(false)
-			expect(confirmLabel()).toBe("Connect")
+			expect(confirmLabel()).toBe("Grant access")
 		})
 
 		test("the answer grants what the window shows, with the switch On", async () => {

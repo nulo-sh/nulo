@@ -2,7 +2,8 @@ import { Flex, Icon, Input, Text } from "@nulo/design"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, it } from "vitest"
 import { defineComponent, h, ref } from "vue"
-import { nativeInput, pasteInto } from "../../../tests/helpers/credential-pins"
+import { nativeInput, pasteInto, typeNow } from "../../../tests/helpers/credential-pins"
+import { NEW_PASSWORD_HINTS } from "@/utils/password-hint"
 import FilePasswordSection from "./FilePasswordSection.vue"
 
 const wrappers: VueWrapper[] = []
@@ -41,11 +42,9 @@ describe("FilePasswordSection", () => {
 		expect(nativeInput(w, CONFIRM).placeholder).toBe("Repeat password")
 	})
 
-	it("labels the second field Repeat password only when the page asks", () => {
+	it("labels the second field Repeat password on every page that seals a file", () => {
 		const labels = (w: VueWrapper) => w.findAll(".export_section_label").map((label) => label.text())
-		expect(labels(mountOwned().w)).toEqual(["File password"])
-
-		const { w } = mountOwned({ labelRepeat: true })
+		const { w } = mountOwned()
 		expect(labels(w)).toEqual(["File password", "Repeat password"])
 		const repeat = w.findAll(".export_section_label")[1].element
 		const follows = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
@@ -65,6 +64,52 @@ describe("FilePasswordSection", () => {
 		pasteInto(nativeInput(w, FIELD), "z".repeat(200))
 		await flushPromises()
 		expect(password.value).toHaveLength(128)
+	})
+
+	it("each field writes its own model in the page", async () => {
+		const { w, password, repeated } = mountOwned()
+		typeNow(nativeInput(w, FIELD), "first-secret")
+		typeNow(nativeInput(w, CONFIRM), "second-secret")
+		await flushPromises()
+		expect([password.value, repeated.value]).toEqual(["first-secret", "second-secret"])
+	})
+
+	it("a model the page clears empties its field", async () => {
+		const { w, password, repeated } = mountOwned()
+		typeNow(nativeInput(w, FIELD), "first-secret")
+		typeNow(nativeInput(w, CONFIRM), "first-secret")
+		await flushPromises()
+		password.value = ""
+		repeated.value = ""
+		await flushPromises()
+		expect([nativeInput(w, FIELD).value, nativeInput(w, CONFIRM).value]).toEqual(["", ""])
+	})
+
+	it("one toggle reveals and hides both fields together", async () => {
+		const { w } = mountOwned()
+		const types = () => [nativeInput(w, FIELD).type, nativeInput(w, CONFIRM).type]
+		expect(types()).toEqual(["password", "password"])
+		await w.get('[data-testid="fp-input-visibility-toggle"]').trigger("click")
+		expect(types()).toEqual(["text", "text"])
+		await w.get('[data-testid="fp-input-visibility-toggle"]').trigger("click")
+		expect(types()).toEqual(["password", "password"])
+	})
+
+	it("the hint says when the repeat differs, and stops once it matches", async () => {
+		const { w } = mountOwned()
+		const hint = () => w.get('[data-testid="fp-hint"]').text()
+		typeNow(nativeInput(w, FIELD), "correct horse battery staple")
+		typeNow(nativeInput(w, CONFIRM), "correct horse battery")
+		await flushPromises()
+		expect(hint()).toBe(NEW_PASSWORD_HINTS.mismatch)
+		typeNow(nativeInput(w, CONFIRM), "correct horse battery staple")
+		await flushPromises()
+		expect(hint()).not.toBe(NEW_PASSWORD_HINTS.mismatch)
+	})
+
+	it("both fields ask for a new password, so a manager never fills the profile password", () => {
+		const { w } = mountOwned()
+		expect([nativeInput(w, FIELD).autocomplete, nativeInput(w, CONFIRM).autocomplete]).toEqual(["new-password", "new-password"])
 	})
 
 	it("every control is named after the page's testid", () => {

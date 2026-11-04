@@ -4,7 +4,6 @@ import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
 
 const props = defineProps({
 	testid: { type: String, required: true },
-	labelRepeat: { type: Boolean, default: false },
 })
 
 const password = defineModel("password", { default: "" })
@@ -27,7 +26,7 @@ const testids = computed(() => ({
 			:testids="testids"
 			placeholder="Enter password"
 			autofocus
-			:labelRepeat="labelRepeat"
+			labelRepeat
 		/>
 	</div>
 </template>

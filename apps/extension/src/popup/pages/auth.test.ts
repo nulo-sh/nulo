@@ -169,7 +169,7 @@ function mountAuth(provide: Record<string, unknown> = {}, selectedAtMount?: Prof
 			stubs: {
 				Input: InputStub,
 				Button: { template: `<button type="submit" v-bind="$attrs"><slot /></button>` },
-				Tooltip: { template: `<div><slot /></div>` },
+				Tooltip: { name: "Tooltip", template: `<div><slot /></div>` },
 				Flex: { template: `<div><slot /></div>` },
 				AuthProfilePill: true,
 				PasskeyCeremonyDialog: true,
@@ -214,6 +214,40 @@ describe("auth.vue — torn-import unlock refusal", () => {
 		await flushPromises()
 		await wrapper.vm.$nextTick()
 		expect(wrapper.find('[data-testid="auth-restore-torn"]').exists()).toBe(false)
+	})
+})
+
+describe("auth.vue — the recovery link asks the question the person has", () => {
+	const link = (wrapper: VueWrapper) => wrapper.get('[data-testid="auth-reset"]')
+
+	test.each([
+		["password", "Forgot your password?"],
+		["passkey", "Lost your passkey?"],
+	])("a %s profile's link reads %j and opens the recovery card", async (type, words) => {
+		const { wrapper, appStore } = mountAuth()
+		await flushPromises()
+		appStore.profile = { id: "p1", name: "P", type } as never
+		await flushPromises()
+		expect(link(wrapper).text()).toBe(words)
+		await link(wrapper).trigger("click")
+		expect(usePopupStore().open).toHaveBeenCalledWith("forgot_password")
+		expect(wrapper.findComponent({ name: "Tooltip" }).exists()).toBe(false)
+	})
+
+	test("an unfinished import's link reads Delete profile and opens the same card; another profile asks again", async () => {
+		unlockProfile.mockRejectedValue(new RestoreTornError(undefined, { profileId: "p1" }))
+		const { wrapper, appStore } = mountAuth()
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		expect(link(wrapper).text()).toBe("Delete profile")
+		await link(wrapper).trigger("click")
+		expect(usePopupStore().open).toHaveBeenCalledWith("forgot_password")
+
+		appStore.profile = { id: "p2", name: "Q", type: "password" } as never
+		await flushPromises()
+		expect(link(wrapper).text()).toBe("Forgot your password?")
 	})
 })
 
@@ -1112,8 +1146,7 @@ describe("auth.vue — the password field's controls, real Input", () => {
 				components: { Flex, Input, Text, Icon },
 				stubs: {
 					Button: { template: `<button type="submit" v-bind="$attrs"><slot /></button>` },
-					Tooltip: { template: `<div><slot /></div>` },
-					AuthProfilePill: true,
+					AuthProfilePill: { template: `<button type="button" data-testid="auth-profile-pill" />` },
 					PasskeyCeremonyDialog: true,
 					Transition: true,
 				},
@@ -1210,11 +1243,12 @@ describe("auth.vue — the password field's controls, real Input", () => {
 		expect(nativeInput(wrapper, FIELD).value).toBe("pass1234")
 	})
 
-	test("before the profile is known, the heading, its line and the form keep their place hidden and the field takes no focus", async () => {
+	test("before the profile is known, the heading, its line, the form and the recovery link keep their place hidden and the field takes no focus", async () => {
 		wrapper = mountReal({ known: false })
 		await flushPromises()
 		expect(hidden("auth-heading")).toBe(true)
 		expect(hidden("auth-form")).toBe(true)
+		expect(hidden("auth-reset")).toBe(true)
 		expect(document.activeElement).not.toBe(nativeInput(wrapper, FIELD))
 	})
 
@@ -1225,16 +1259,17 @@ describe("auth.vue — the password field's controls, real Input", () => {
 		await flushPromises()
 		expect(hidden("auth-heading")).toBe(false)
 		expect(hidden("auth-form")).toBe(false)
+		expect(hidden("auth-reset")).toBe(false)
 		expect(document.activeElement).toBe(nativeInput(wrapper, FIELD))
 		wrapper.unmount()
 
 		wrapper = mountReal({ known: false })
 		await flushPromises()
-		const reset = wrapper.get('[data-testid="auth-reset"]').element as HTMLButtonElement
-		reset.focus()
+		const pill = wrapper.get('[data-testid="auth-profile-pill"]').element as HTMLButtonElement
+		pill.focus()
 		useAppStore().profile = { id: "p1", name: "P", type: "password" } as never
 		await flushPromises()
-		expect(document.activeElement).toBe(reset)
+		expect(document.activeElement).toBe(pill)
 	})
 
 	test("a passkey profile known later shows the passkey form and never the password field", async () => {

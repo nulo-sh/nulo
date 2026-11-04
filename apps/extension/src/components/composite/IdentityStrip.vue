@@ -1,15 +1,8 @@
 <script setup lang="ts">
 /**
- * Presentation-only identity strip — the anti-phishing trust anchor rendered
- * at the top of every dApp interaction window (discover, capabilities,
- * execute, verify). ONE implementation of the skeleton (status dot · account
- * · network · brand mark) so a spacing/status/a11y fix can never leave the
- * windows visually inconsistent; callers own their labels and branching.
- *
- * `networkLabel` semantics (both shapes exist among callers and are
- * load-bearing): `undefined` omits the separator+network entirely (verify
- * with no network); an EMPTY STRING still renders the separator (the
- * discover/capabilities strip always shows "·").
+ * The anti-phishing strip atop every dApp interaction window; callers own its labels, which must
+ * be wallet-local. `networkLabel` undefined omits the separator and network (a strip naming the
+ * network alone); an empty string still draws the separator.
  */
 withDefaults(
 	defineProps<{

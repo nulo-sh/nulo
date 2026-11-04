@@ -507,7 +507,7 @@ const changePassword: Drivers["changePassword"] = async (s, p, _step, before) =>
 	const driven = await settle(
 		page,
 		[
-			{ label: "committed", text: "Profile password changed" },
+			{ label: "committed", text: "Password changed" },
 			{ label: "refused", testid: "error-text" },
 		],
 		{ committed: "committed", refused: "refused" },

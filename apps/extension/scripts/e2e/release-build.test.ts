@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto"
-import { describe, expect, test } from "vitest"
-import { RELEASE_DIGESTS, releaseProblem } from "../../tests/e2e/fixtures/update/release"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { afterEach, describe, expect, test, vi } from "vitest"
+import { RELEASE_DIGESTS, releaseBuild, releaseProblem } from "../../tests/e2e/fixtures/update/release"
 
 const zip = Buffer.from("a release zip")
 const digest = createHash("sha256").update(zip).digest("hex")
@@ -36,5 +39,34 @@ describe("releaseProblem", () => {
 			expect(Object.keys(byBrowser).sort(), tag).toEqual(["chrome", "firefox"])
 			for (const value of Object.values(byBrowser)) expect(value, tag).toMatch(/^[0-9a-f]{64}$/)
 		}
+	})
+})
+
+describe("releaseBuild", () => {
+	const roots: string[] = []
+	afterEach(() => {
+		vi.unstubAllEnvs()
+		for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+	})
+
+	function cache(tag: string, files: Record<string, string> = {}): { root: string; into: string } {
+		const root = mkdtempSync(path.join(tmpdir(), "nulo-release-build-test-"))
+		roots.push(root)
+		vi.stubEnv("NULO_E2E_RELEASE_CACHE", path.join(root, "releases"))
+		if (Object.keys(files).length > 0) mkdirSync(path.join(root, "releases", tag), { recursive: true })
+		for (const [name, body] of Object.entries(files)) writeFileSync(path.join(root, "releases", tag, name), body)
+		return { root, into: path.join(root, "into") }
+	}
+
+	test("refuses a tag with no reviewed traits before it downloads anything", () => {
+		const { root, into } = cache("v9.9.9")
+		expect(() => releaseBuild("v9.9.9", "chrome", into)).toThrow("no reviewed traits for v9.9.9")
+		expect(readdirSync(root)).toEqual([])
+		expect(existsSync(into)).toBe(false)
+	})
+
+	test("passes a tag with reviewed traits on to the digest check", () => {
+		const { into } = cache("v1.1.0", { "nulo-chrome-1.1.0.zip": "not the release", "SHASUMS256.txt": "" })
+		expect(() => releaseBuild("v1.1.0", "chrome", into)).toThrow("refusing v1.1.0's chrome build")
 	})
 })

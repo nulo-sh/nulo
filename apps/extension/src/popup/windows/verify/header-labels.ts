@@ -20,21 +20,22 @@ export interface VerifyHeaderInput {
 }
 
 export interface VerifyHeaderLabels {
-	account: string
-	/** The session's network, by the profile's name for it. */
-	network: string
+	/** The shared account, or the session's network when nothing is shared yet. */
+	lead: string
+	/** The session's network beside a shared account, by the profile's name for it. */
+	network?: string
 	/** A shared account sits on another chain than the session's. */
 	warn: boolean
 }
 
 export function verifyHeaderLabels(input: VerifyHeaderInput): VerifyHeaderLabels {
 	const chain = resolveDappChain(input.sessionChainId, input.networks, undefined)
-	if (input.sharedAccounts.length === 0) return { account: "No account shared", network: chain.name, warn: false }
+	if (input.sharedAccounts.length === 0) return { lead: chain.name, warn: false }
 	const onAnotherChain = input.sharedAccounts.some((caip) => {
 		const parsed = tryParse(caip)
 		return parsed !== undefined && parsed.chainId !== chain.chainId
 	})
-	return { account: sharedAccountLabel(input), network: chain.name, warn: onAnotherChain }
+	return { lead: sharedAccountLabel(input), network: chain.name, warn: onAnotherChain }
 }
 
 function sharedAccountLabel({ sharedAccounts, resolvedAccounts }: VerifyHeaderInput): string {

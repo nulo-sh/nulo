@@ -258,25 +258,30 @@ describe("applyFpcEdits", () => {
 
 describe("previewForPick", () => {
 	const loading = buildFeeMethods([])
+	const READ: RegisteredFpc[] = [{ ...SPONSOR, id: "spon", name: "Renamed" }]
 
-	test("a row that exists is the preview", () => {
-		expect(previewForPick({ type: "fj" }, loading)?.type).toBe("fj")
-		expect(previewForPick({ type: "private_fpc" }, loading)?.type).toBe("private_fpc")
+	test("a Fee Juice pick is its row, whatever the FPC list holds", () => {
+		expect(previewForPick({ type: "fj" }, loading, null)?.type).toBe("fj")
+		expect(previewForPick({ type: "private_fpc" }, loading, null)?.type).toBe("private_fpc")
 	})
 
-	test("a sponsor pick with no row yet is drawn from its label, and carries nothing to pay with", () => {
-		const preview = previewForPick({ type: "fpc", fpc: { id: "spon", name: "My sponsor" } }, loading)
-		expect(preview).toEqual({ type: "fpc", title: "My sponsor", subtitle: "sponsored" })
-		expect(previewForPick({ type: "fpc", fpc: { id: "spon" } }, loading)?.title).toBe("Sponsored")
+	test("a sponsor pick is the row the read FPC list holds, by its current name", () => {
+		const preview = previewForPick({ type: "fpc", fpc: { id: "spon", name: "My sponsor" } }, loading, READ)
+		expect(preview).toMatchObject({ type: "fpc", title: "Renamed", fpc: { id: "spon" } })
+	})
+
+	test("a sponsor pick shows nothing while the list is unread or without it", () => {
+		expect(previewForPick({ type: "fpc", fpc: { id: "spon", name: "My sponsor" } }, loading, null)).toBeUndefined()
+		expect(previewForPick({ type: "fpc", fpc: { id: "gone", name: "Sponsored" } }, loading, READ)).toBeUndefined()
 	})
 
 	test("nothing for no pick", () => {
-		expect(previewForPick(undefined, loading)).toBeUndefined()
+		expect(previewForPick(undefined, loading, READ)).toBeUndefined()
 	})
 })
 
 describe("recordOf", () => {
-	test("stores the semantic key, plus the sponsor's label for the loading preview", () => {
+	test("stores the semantic key, plus the sponsor's label", () => {
 		expect(recordOf(FJ)).toEqual({ type: "fj" })
 		expect(recordOf(PRIV)).toEqual({ type: "private_fpc" })
 		expect(recordOf(SPON)).toEqual({ type: "fpc", fpc: { id: "spon", name: SPON.fpc?.name } })

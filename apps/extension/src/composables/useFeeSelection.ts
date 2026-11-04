@@ -59,6 +59,9 @@ export interface FeeSelectionInput {
 	snapshot: CardSnapshot
 	verdicts: SponsorVerdicts
 	knownFpcs: Readonly<Ref<RegisteredFpc[]>>
+	/** The live identity's FPC list as read, null while unread, re-read or failed: what a sponsor shows
+	 *  as before the snapshot commits. */
+	readFpcs: Readonly<Ref<RegisteredFpc[] | null>>
 	methods: Readonly<Ref<FeeMethodOption[]>>
 	/** The profile's saved picks, each map re-parsed by the preference service. */
 	getFeePicks: (profileId: string) => Promise<FeePicks>
@@ -89,7 +92,7 @@ const awaitingSnapshot = (c: FeeSelectionInput) =>
 function sendSelection(c: SendCtx): SendSelection {
 	const pick = livePicks(c)?.[c.origin()]
 	if (awaitingSnapshot(c)) {
-		return { kind: "pending", preview: previewForPick(pick, c.methods.value) }
+		return { kind: "pending", preview: previewForPick(pick, c.methods.value, c.readFpcs.value) }
 	}
 	const know = { fpcs: c.knownFpcs.value, balances: c.snapshot.gasBalances.value }
 	const { shortSponsorIds, setAsideSponsorIds } = c.verdicts
@@ -210,7 +213,7 @@ function reconcileSelection(c: AppCtx, savedRecord: AppPick | undefined, baselin
 	}
 }
 
-/** Shows the last-used method while the fetch is in flight. */
+/** Selects the last-used method while the fetch is in flight; a sponsor shows only as `exposedForApp` allows. */
 function prefillSelection(c: AppCtx, saved: Record<string, AppPick>) {
 	if (c.lockedMethod()) c.selectedMethod.value = lockedOption(c)
 	// The stored record stands in for its row until the commit resolves it against fresh rows.
@@ -219,9 +222,9 @@ function prefillSelection(c: AppCtx, saved: Record<string, AppPick>) {
 	c.chosenUnasked = false
 }
 
-/** Pre-fills from the saved picks BEFORE the slow fetch, so the trigger shows the last-used method while it
- *  runs (the `isInitComplete` gate keeps the pre-fill out of settings derivation). Returns the saved
- *  map and the reconcile baseline, which a later pick moves off. A pick made during the read (an
+/** Pre-fills from the saved picks BEFORE the slow fetch (the `isInitComplete` gate keeps the pre-fill
+ *  out of settings derivation). Returns the saved map and the reconcile baseline, which a later pick
+ *  moves off. A pick made during the read (an
  *  early sponsor row) is newer than anything saved, so nothing is pre-filled over it and the
  *  baseline stays the one from before the read. Null when a newer run owns the card: re-applying
  *  the pre-fill would clobber that run's reconcile. */
@@ -303,6 +306,15 @@ function fpcUpdatedForApp(c: AppCtx, fpc: RegisteredFpc) {
 	}
 }
 
+/** What the app windows expose as their method. Before the live identity's snapshot commits, a
+ *  sponsor (a saved pick's pre-fill, or one kept across an identity switch) shows only as the row its
+ *  read FPC list holds, and so is neither drawn, named as the payer nor toasted when deleted before. */
+function exposedForApp(c: AppCtx): FeeMethodOption | undefined {
+	const m = c.selectedMethod.value
+	if (m?.type !== "fpc" || !awaitingSnapshot(c)) return m
+	return previewForPick({ type: "fpc", fpc: m.fpc }, c.methods.value, c.readFpcs.value)
+}
+
 /** The app windows' rule book: one pick per account, saved on an explicit pick, a dApp's lock
  *  over it. */
 export function useAppFeeSelection(
@@ -310,7 +322,7 @@ export function useAppFeeSelection(
 ): FeeSelection {
 	const c: AppCtx = { ...input, selectedMethod: ref(), chosenUnasked: false, pickSeq: 0 }
 	return {
-		effectiveMethod: computed(() => c.selectedMethod.value),
+		effectiveMethod: computed(() => exposedForApp(c)),
 		previewMethod: computed(() => undefined),
 		held: computed(() => false),
 		sponsorShort: computed(() => c.verdicts.droppedForVerdictId.value !== null),

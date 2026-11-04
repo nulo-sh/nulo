@@ -179,9 +179,9 @@ const STUBS = {
 			</button>
 		`,
 	},
-	DappStatusStrip: {
-		template: '<div data-testid="status-strip" :data-status="status" :data-network="networkName" />',
-		props: ["accountName", "networkName", "status"],
+	IdentityStrip: {
+		template: '<div data-testid="status-strip" :data-status="status" :data-lead="accountLabel" :data-network="networkLabel" />',
+		props: ["accountLabel", "networkLabel", "status", "warn"],
 	},
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" :data-action="actionLabel" />',
@@ -425,10 +425,11 @@ describe("discover popup — the line under the app names the app's network", ()
 	const approve = (w: ReturnType<typeof factory>) => (w.vm as unknown as { approve: () => Promise<void> }).approve()
 	const actionLine = (w: ReturnType<typeof factory>) => w.get('[data-testid="identity-block"]').attributes("data-action")
 
-	test("before Allow it names the app's chain while the strip keeps the wallet's network", async () => {
+	test("before Allow it names the app's chain while the strip names the wallet's network alone", async () => {
 		const w = await ready()
 		expect(actionLine(w)).toBe("wants to connect on Devnet")
-		expect(w.get('[data-testid="status-strip"]').attributes("data-network")).toBe("TestNet")
+		const strip = w.get('[data-testid="status-strip"]')
+		expect([strip.attributes("data-lead"), strip.attributes("data-network")]).toEqual(["TestNet", undefined])
 	})
 
 	test("a failed Allow keeps the request line", async () => {
@@ -449,6 +450,17 @@ describe("discover popup — the line under the app names the app's network", ()
 		const w = factory()
 		await flushPromises()
 		expect(actionLine(w)).toBe("wants to connect on this network")
+	})
+})
+
+describe("discover popup — what Allow grants", () => {
+	test("says what the site gets, above the trust line", () => {
+		const w = factory()
+		const scope = w.get('[data-testid="discover-scope"]')
+		expect(scope.text()).toBe(
+			"Allowing lets this site ask Nulo for things and know that Nulo is running. It sees no account or balance until you approve a request.",
+		)
+		expect(w.text().indexOf(scope.text())).toBeLessThan(w.text().indexOf("Make sure you trust the site"))
 	})
 })
 

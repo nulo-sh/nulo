@@ -25,41 +25,39 @@ const input = (over: Partial<VerifyHeaderInput> = {}): VerifyHeaderInput => ({
 
 describe("windows/verify/header-labels — the network", () => {
 	test("chain 0 names the seeded Local Network", () => {
-		expect(verifyHeaderLabels(input()).network).toBe("Local Network")
+		expect(verifyHeaderLabels(input()).lead).toBe("Local Network")
 	})
 
 	test("testnet's id names Testnet", () => {
-		expect(verifyHeaderLabels(input({ sessionChainId: String(CHAIN_IDS.TESTNET) })).network).toBe("Testnet")
+		expect(verifyHeaderLabels(input({ sessionChainId: String(CHAIN_IDS.TESTNET) })).lead).toBe("Testnet")
 	})
 
 	test("an unconfigured chain names its generic label", () => {
-		expect(verifyHeaderLabels(input({ sessionChainId: "424242", networks: [] })).network).toBe("Aztec:424242")
+		expect(verifyHeaderLabels(input({ sessionChainId: "424242", networks: [] })).lead).toBe("Aztec:424242")
 	})
 })
 
 describe("windows/verify/header-labels — the account", () => {
-	test("with nothing shared it says so beside the session's network, never in orange", () => {
-		expect(verifyHeaderLabels(input())).toEqual({ account: "No account shared", network: "Local Network", warn: false })
-		expect(verifyHeaderLabels(input({ sessionChainId: String(CHAIN_IDS.TESTNET) }))).toEqual({
-			account: "No account shared",
-			network: "Testnet",
-			warn: false,
-		})
+	test("with nothing shared the strip names the session's network alone, never in orange", () => {
+		expect(verifyHeaderLabels(input())).toStrictEqual({ lead: "Local Network", warn: false })
+		expect(verifyHeaderLabels(input({ sessionChainId: String(CHAIN_IDS.TESTNET) }))).toStrictEqual({ lead: "Testnet", warn: false })
 	})
 
-	test("once shared, one account is named, two are counted, and unresolved ones show the first address", () => {
+	test("once shared, one account is named, two are counted, and unresolved ones show the first address, beside the network", () => {
 		const shared = [onLocal(ADDRESS_A), onLocal(ADDRESS_B)]
-		expect(verifyHeaderLabels(input({ sharedAccounts: shared.slice(0, 1), resolvedAccounts: [{ name: "Savings" }] }))).toEqual({
-			account: "Savings",
+		expect(verifyHeaderLabels(input({ sharedAccounts: shared.slice(0, 1), resolvedAccounts: [{ name: "Savings" }] }))).toStrictEqual({
+			lead: "Savings",
 			network: "Local Network",
 			warn: false,
 		})
-		expect(verifyHeaderLabels(input({ sharedAccounts: shared, resolvedAccounts: [{ name: "Savings" }, { name: "Daily" }] }))).toEqual({
-			account: "2 accounts",
+		expect(
+			verifyHeaderLabels(input({ sharedAccounts: shared, resolvedAccounts: [{ name: "Savings" }, { name: "Daily" }] })),
+		).toStrictEqual({
+			lead: "2 accounts",
 			network: "Local Network",
 			warn: false,
 		})
-		expect(verifyHeaderLabels(input({ sharedAccounts: shared, resolvedAccounts: [] })).account).toBe("0x0a0a...0a0a")
+		expect(verifyHeaderLabels(input({ sharedAccounts: shared, resolvedAccounts: [] })).lead).toBe("0x0a0a...0a0a")
 	})
 
 	test("a shared account on another chain than the session's warns", () => {
@@ -67,6 +65,6 @@ describe("windows/verify/header-labels — the account", () => {
 			sharedAccounts: [onLocal(ADDRESS_A), onTestnet(ADDRESS_B)],
 			resolvedAccounts: [{ name: "Savings" }, { name: "Daily" }],
 		})
-		expect(verifyHeaderLabels(mixed)).toEqual({ account: "2 accounts", network: "Local Network", warn: true })
+		expect(verifyHeaderLabels(mixed)).toStrictEqual({ lead: "2 accounts", network: "Local Network", warn: true })
 	})
 })

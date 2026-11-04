@@ -66,6 +66,11 @@ const isRetired = computed(() => appStore.profile?.retired === true)
 // Opened before the service answered: the heading, its line and the form depend on the profile's
 // kind, so they keep their place hidden until it is known rather than show the wrong form.
 const isProfileKnown = computed(() => !!appStore.profile)
+// An unfinished import cannot be unlocked, so its link names the way out instead of the question.
+const recoveryLinkLabel = computed(() => {
+	if (isTornImport.value) return "Delete profile"
+	return isPasskeyProfile.value ? "Lost your passkey?" : "Forgot your password?"
+})
 
 // The shell's boot outcome. "failed" = an OPEN session whose activation bootstrap threw: the
 // banner's RETRY is the only true recovery, and a password typed here would unlock an already-
@@ -446,20 +451,14 @@ watch(
 		</Flex>
 
 		<Flex v-if="!isRetired" v-snack-footer justify="center" :class="$style.footer">
-			<Tooltip side="top" position="center" textAlign="center" maxWidth="220px">
-				<button
-					@click="popupStore.open('forgot_password')"
-					type="button"
-					data-testid="auth-reset"
-					:class="$style.reset_link"
-				>
-					Delete profile
-				</button>
-				<template #content>
-					{{ isPasskeyProfile ? "Lost your passkey?" : "Forgot your password?" }} Delete this profile and re-import it
-					with your recovery phrase.
-				</template>
-			</Tooltip>
+			<button
+				@click="popupStore.open('forgot_password')"
+				type="button"
+				data-testid="auth-reset"
+				:class="[$style.reset_link, !isProfileKnown && $style.unknown]"
+			>
+				{{ recoveryLinkLabel }}
+			</button>
 		</Flex>
 
 		<!-- Path A: in-page passkey ceremony. Mounts only while a ceremony is in

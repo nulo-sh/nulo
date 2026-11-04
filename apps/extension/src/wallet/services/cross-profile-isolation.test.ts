@@ -23,6 +23,7 @@ import { LoggerStore } from "@/wallet/logger"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { svc, tokenListStub } from "./composition-harness"
+import { UI_PREFERENCE_SERVICE_NAME } from "./ui-preference/spec"
 import { ContactService } from "./contact/service"
 import { FpcService } from "./fpc/service"
 import { AuthRegistryService } from "./auth-registry/service"
@@ -319,6 +320,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			const services = new ServiceCollection()
 			services.add(profile)
 			services.add(networkStub())
+			services.add(svc(UI_PREFERENCE_SERVICE_NAME, { saveFeePick: async () => true }))
 			fpc = new FpcService(mkLogger(), api)
 			services.add(fpc)
 			await services.start()

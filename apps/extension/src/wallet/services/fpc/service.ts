@@ -10,6 +10,8 @@ import { commitFencedCreate } from "@/wallet/services/create-fence"
 import type { ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
+import type { UiPreferenceService } from "@/wallet/services/ui-preference/service"
+import { UI_PREFERENCE_SERVICE_NAME } from "@/wallet/services/ui-preference/spec"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { nextRandomId } from "@/wallet/services/id-allocators"
@@ -20,11 +22,13 @@ import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { EventHandler } from "@nulo/wallet-core/utils"
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { Fpc } from "./fpc"
 import { getFpcHandler } from "./handlers"
 import { type Events, FPC_SERVICE_NAME, type FpcInfo, FpcType, type Methods } from "./spec"
 import { derivePrivateFpc, deriveSponsoredFpc, type ProtocolFpc } from "./protocol-fpcs"
+import { offersSponsoredFpc } from "./sponsored-fpc-chains"
 
 export * from "./fpc"
 export * from "./spec"
@@ -50,6 +54,10 @@ type WriteScope = {
 
 const hasRow = (rows: readonly StoredFpc[], type: FpcType, address: string) => rows.some((f) => f.type === type && f.address === address)
 
+/** In any letter case: a hand-typed address resolves to the same contract. */
+const isCanonicalSponsor = (f: StoredFpc, sponsored: string) =>
+	f.type === FpcType.DefaultSponsoredFpc && sameFieldAddress(f.address, sponsored)
+
 export class FpcService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("getFpcs", "getFpc", "addFpc", "updateFpc", "updateFpcAddress", "deleteFpc")
 	public static name = FPC_SERVICE_NAME
@@ -69,6 +77,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 	private pxeService: PxeServiceClient = null!
 	private profileService: ProfileService = null!
 	private networkService: NetworkService = null!
+	private uiPreference: UiPreferenceService = null!
 
 	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(FPC_SERVICE_NAME, logger)
@@ -79,6 +88,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		this.pxeService = new PxeServiceClient(this.logger)
 		this.profileService = services.get(ProfileService.name)
 		this.networkService = services.get(NetworkService.name)
+		this.uiPreference = services.get(UI_PREFERENCE_SERVICE_NAME)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networkService.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
 		sealOnRowKeysReady(
@@ -161,14 +171,70 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		}
 
 		const protocols = await this.getOrComputeProtocolAddresses(chainId)
-		const hasSponsoredFpc = hasRow(result, FpcType.DefaultSponsoredFpc, protocols.sponsored)
-		const hasPrivateFpc = hasRow(result, FpcType.PrivateFpc, protocols.private)
-		if (hasSponsoredFpc && hasPrivateFpc) return result.map((f) => this.decorate(f, protocols))
+		const rows = await this.withoutUnofferedSponsor(result, chainId, protocols.sponsored, fence)
+		// A chain the sponsor list leaves out never discovers one.
+		const hasSponsoredFpc = !offersSponsoredFpc(chainId) || hasRow(rows, FpcType.DefaultSponsoredFpc, protocols.sponsored)
+		const hasPrivateFpc = hasRow(rows, FpcType.PrivateFpc, protocols.private)
+		if (hasSponsoredFpc && hasPrivateFpc) return this.offeredOn(chainId, rows, protocols)
 
 		this.logInfo("Discovering missing protocol FPCs...")
 		await this.discoverProtocolFpcs(chainId, hasSponsoredFpc, hasPrivateFpc, fence, deletion)
 		// Re-read: a purge may have swept a row stored here, or a concurrent discovery stored one.
-		return (await this.rowsOn(fence.profileId, chainId)).map((f) => this.decorate(f, protocols))
+		return this.offeredOn(chainId, await this.rowsOn(fence.profileId, chainId), protocols)
+	}
+
+	/** On a chain with no sponsor, never its canonical row, even one a removal that stood down (its
+	 *  session or its lock moved on) left stored. */
+	private offeredOn(chainId: number, rows: StoredFpc[], protocols: ProtocolAddresses): FpcInfo[] {
+		const offered = offersSponsoredFpc(chainId) ? rows : rows.filter((f) => !isCanonicalSponsor(f, protocols.sponsored))
+		return offered.map((f) => this.decorate(f, protocols))
+	}
+
+	/** On a chain with no sponsor, a canonical Sponsored row stored earlier names a contract that pays
+	 *  nothing there: every fee list reads through here, so removing it here leaves none to offer it.
+	 *  A hand-added sponsor at another address stays. Returns the rows as they stand after. */
+	private async withoutUnofferedSponsor(
+		rows: StoredFpc[],
+		chainId: number,
+		sponsored: string,
+		fence: ExecutionFence,
+	): Promise<StoredFpc[]> {
+		if (offersSponsoredFpc(chainId)) return rows
+		const stale = rows.find((f) => isCanonicalSponsor(f, sponsored))
+		if (!stale) return rows
+		const removed = await this.lock.withLock((isCurrent) => this.removeSponsorRow(stale.id, chainId, sponsored, fence, isCurrent))
+		// Outside the lock, as Settings' delete does; nothing retries a forget that fails.
+		if (removed) await this.forgetFeePicks(fence.profileId, removed.id)
+		return this.rowsOn(fence.profileId, chainId)
+	}
+
+	/** Caller holds the lock every row writer holds. The row is read again so an address edit or a
+	 *  purge since the caller's read is never undone, and removed only while the reading session is
+	 *  live and the lock is still this caller's (its watchdog can hand it on mid-read). */
+	private async removeSponsorRow(
+		id: string,
+		chainId: number,
+		sponsored: string,
+		fence: ExecutionFence,
+		holdsLock: () => boolean,
+	): Promise<StoredFpc | undefined> {
+		const row = await this.storage.get(id)
+		if (!row || row.profileId !== fence.profileId || row.chainId !== chainId || !isCanonicalSponsor(row, sponsored)) return undefined
+		const removal = await this.storage.prepareDelete(id)
+		if (!holdsLock() || !this.profileService.isFenceLive(fence)) return undefined
+		await removal.commit()
+		this.emit("onFpcDeleted", this.decorate(row, this.protocolAddresses.get(chainId)))
+		return row
+	}
+
+	private async forgetFeePicks(profileId: string, fpcId: string): Promise<void> {
+		try {
+			if (!(await this.uiPreference.saveFeePick(profileId, { kind: "forgetFpc", fpcId }))) {
+				this.logDebug("The removed sponsor's fee picks were not forgotten: the session moved")
+			}
+		} catch (error) {
+			this.logDebug("Forgetting the removed sponsor's fee picks failed", { error })
+		}
 	}
 
 	/** Registers with no lock held: a cold runtime's registration waits on the node, and the
@@ -290,6 +356,12 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		const fence = await this.profileService.captureExecutionFence()
 		const deletion = this.profileService.getDeletionState()
 		const network = await this.networkService.getNetwork(networkId)
+		// No instance is published there, but a PXE that registered one before would answer for it, and
+		// the row would be a protocol row the next read removes.
+		if (type === FpcType.DefaultSponsoredFpc && !offersSponsoredFpc(network.chainId)) {
+			const { sponsored } = await this.getOrComputeProtocolAddresses(network.chainId)
+			if (sameFieldAddress(address, sponsored)) throw new Error("Contract instance not found")
+		}
 		const since = await this.networkService.captureLiveness(networkId)
 		if (since === undefined) {
 			throw new Error("network deleted")
