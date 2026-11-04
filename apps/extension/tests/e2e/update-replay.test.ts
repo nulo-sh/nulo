@@ -83,7 +83,7 @@ import {
 	readsProblems,
 	SESSION_MARGIN_MS,
 } from "./fixtures/update/release-reads"
-import { unreadRows } from "./fixtures/update/stored-rows"
+import { storedRows, unreadRows } from "./fixtures/update/stored-rows"
 import { BARRIERS, shownOverlays, updateProblems } from "./fixtures/update/verify"
 import { exportImportedAccountBody, previewImport } from "./helpers/account-io"
 import { type AccountRow, accountRows, accountScope, type NetworkRow, readNetworkRows } from "./helpers/identity-rows"
@@ -109,12 +109,6 @@ import {
 } from "./helpers/stale-network"
 
 type Row = Record<string, unknown>
-
-function rowsOf(entries: Record<string, unknown>, root: string): Row[] {
-	return Object.entries(entries)
-		.filter(([key, raw]) => key.startsWith(`${root}@`) && typeof raw === "string")
-		.map(([, raw]) => JSON.parse(raw as string) as Row)
-}
 
 function recordingFor(): Recording {
 	const tag = process.env.NULO_E2E_UPDATE_FROM as string
@@ -151,7 +145,7 @@ const PROFILES = `${STORES.profiles.ref.root}@`
 
 function plaintextExpected(recording: Recording): Expected {
 	const entries = offline(recording.entries)
-	const rows = (root: ExpectedRoot) => rowsOf(entries, STORES[root].ref.root)
+	const rows = (root: ExpectedRoot) => storedRows(entries, STORES[root].ref.root)
 	// The wallet drops an expired session before any check can read it.
 	for (const { expiry } of rows("dappSessions")) {
 		if ((expiry as number) < Date.now() + SESSION_MARGIN_MS) {
@@ -625,7 +619,7 @@ async function throughTheReset(
 	expect(await unreadRows(await readLocalStorage(ctx))).toEqual([])
 }
 
-const profileRows = (stored: Record<string, unknown>) => rowsOf(stored, STORES.profiles.ref.root)
+const profileRows = (stored: Record<string, unknown>) => storedRows(stored, STORES.profiles.ref.root)
 
 async function expectPasskeyOpening(
 	ctx: ExtensionContext,
