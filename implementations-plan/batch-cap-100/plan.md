@@ -1,7 +1,7 @@
 ---
 plan: batch-cap-100
 tier: light
-status: implementing
+status: completed
 issues: "refs #1609"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at fa6913668
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-04
+- **Status**: completed, in one PR to `dev`; that PR carries this close-out.
+- **Shipped**: refs #1609. Both `BATCH_CAPS` entries are 100, dRPC's free-plan limit. Their comment states that limit, and why each entry stays though it equals the client's default. The tests prove four things: both remote defaults cap at 100; 250 calls go out as 100, 100 and 50, through the wallet's factory and through the preflight client; a refused batch fails the seed after one request of 100; and three forwarding cases, with the lookup answering 3, prove each client uses the lookup. Each moved test was red on `origin/dev`. Each forwarding case was red with its client's cap dropped. `check:seeds` was live OK on Testnet and Alpha.
+- **Known limits**: #1659 (D6).
+- **Dispositions**: rejected, removing the entries (D1). The owner's "uncapped" stays the owner's call, and the brief's premise for it did not hold. Rejected, a pin on the upstream default (D3). Rejected, a timeout change (out of scope); the report stands in this plan.
+- **Lessons**: none promoted, because `lessons.md` holds 8174 of 8192 bytes. The candidate is in [lessons/phase-1.md](lessons/phase-1.md) and stated at the tests: a cap equal to a library default hides a dropped option from a split test, so prove the forwarding with a distinct value.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # batch-cap-100: the free dRPC endpoints' batch cap at 100
 
