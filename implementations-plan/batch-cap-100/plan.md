@@ -1,7 +1,7 @@
 ---
 plan: batch-cap-100
 tier: light
-status: planned
+status: implementing
 issues: "refs #1609"
 driver: claude-code
 claude_model: opus
