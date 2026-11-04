@@ -1,3 +1,5 @@
 - 2026-11-04 16:09 plan drafted (light); recon done
 - 2026-11-04 16:09 Codex plan audit round 1: revise, 4 findings accepted (marks, Restore again gated + Q1, tall-section step, button in @nulo/design)
 - 2026-11-04 16:15 Codex round 2: revise (repeat-field stop, rejected as D9); round 3: approve
+- 2026-11-04 16:26 phase 1 code in (b4 shots, unit + scan + 1 e2e green on Chrome); running full gates
+- 2026-11-04 17:11 gates green (lint, typecheck, test:all, audit:vue, storybook, lint:actions, Chrome smoke); Codex diff loop: r1 1 finding fixed, r2 clean, r3 clean; Opus review fixes in; Firefox smoke running
