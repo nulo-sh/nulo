@@ -22,6 +22,13 @@ export function failure(status: number, extra: Record<string, string> = {}): Res
 	return respond(status, '{"ok":false}', { "content-type": "application/json", ...extra })
 }
 
+const OK_BODY = '{"ok":true}'
+
+/** The JSON success answer; `/api/confirm` gives only this one, its one caller being a script. */
+export function okJson(): Response {
+	return respond(200, OK_BODY, { "content-type": "application/json" })
+}
+
 function wantsJson(request: Request): boolean {
 	return (request.headers.get("accept") ?? "").includes("application/json") || request.headers.get("sec-fetch-mode") === "cors"
 }
@@ -32,6 +39,6 @@ function wantsJson(request: Request): boolean {
  * static confirmation page.
  */
 export function success(request: Request): Response {
-	if (wantsJson(request)) return respond(200, '{"ok":true}', { "content-type": "application/json" })
+	if (wantsJson(request)) return okJson()
 	return respond(303, null, { location: SUCCESS_PATH })
 }

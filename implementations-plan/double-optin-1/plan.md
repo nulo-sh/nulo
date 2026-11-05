@@ -212,7 +212,7 @@ send key; a format prefix and a canonical-encoding check in the token; deriving 
 
 ## Phases
 
-**Phase 1 — the Worker** (`infra/subscribe`).
+**Phase 1 — the Worker** (`infra/subscribe`). ✓
 1. Add `src/token.ts` (`signToken`, `readToken`, `sendKey`, base64url) and `src/confirmation.ts`.
 2. Change `resend.ts`, `body.ts`, `worker.ts` as Interfaces says.
 3. Rewrite the README: purpose, threat model, the contract table for both paths, a checklist item
