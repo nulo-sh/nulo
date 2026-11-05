@@ -9,3 +9,4 @@
 - 2026-11-05: arc 1 phase 3 (notice 1.2) gate green: subscribe 91/91, landing 172/172 (+1 skip), test:all 0; deviation D12 recorded.
 - 2026-11-05: arc 1 phase 4: browser check 11/11 pass; 16 owner pictures in the scratch shots folder; OWNER-ASKS names them.
 - 2026-11-05: review loop round 1: Codex and Opus approve; nits applied; resuming Codex to verify.
+- 2026-11-05: review loop converged (round 2 approve); final gates green but test:release's 7 host-only zip failures; next draft PR.

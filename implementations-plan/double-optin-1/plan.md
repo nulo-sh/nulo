@@ -386,6 +386,9 @@ alignment (both readers know one placeholder marker; a missing row or unequal da
 | Between the two deploys a link opens the old home page (SPA fallback) | Opus | accepted as written in Security "Rollout"; `BEFORE-LAUNCH.md` now says to run the acceptance checks once both are live |
 | The plan had no `UI impact` line per surface | driver | accepted: added under Architecture, quoting the visible budget |
 
+**Fix loop, round 2** (the same Codex session resumed on `gpt-6.1-sol` over the fix commit): no
+finding, **`VERDICT: approve`**. The loop converged.
+
 ## Seeds
 
 ```
