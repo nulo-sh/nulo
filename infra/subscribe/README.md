@@ -85,7 +85,7 @@ The success answer of `/api/subscribe` is `200 {"ok":true}` for a `fetch` caller
 ## Known limits
 
 - **Honeypot timing.** A filled honeypot answers without calling Resend, so it is faster than a real submission, and it succeeds while the endpoint is failing; a bot that compares the two learns which field is the decoy. It learns nothing about any address.
-- **Residual timing.** A known address's second read and a new address's create are different calls; if Resend's create is much slower than its read, a known address still answers measurably faster.
+- **Residual timing.** A known address's second read and a new address's send (on `/api/subscribe`) or create (on `/api/confirm`) are different calls; if Resend's send or create is much slower than its read, a known address still answers measurably faster.
 - **Resend's duplicate semantics are undocumented.** If a duplicate create upserts, a create retried after a 5xx that had in fact committed, or the losing create of two concurrent first confirmations, rewrites the contact this same confirmation created a moment earlier, with the same values; a withdrawal you apply by hand (on a written request) inside those 2 s would be undone. If Resend's lookup were case-sensitive while its create upserted case-insensitively, a case variant of a withdrawn address could be confirmed over the withdrawal: the acceptance step above checks that.
 - **A preview build of the landing** can call the binding with any `Origin` and `CF-Connecting-IP`. That needs push access to the repository: an insider risk.
 - **Suppressed addresses without a contact.** An address on the suppression list but not among the contacts is created as a new contact; the suppression still blocks every send to it.

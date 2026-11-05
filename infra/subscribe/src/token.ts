@@ -4,6 +4,10 @@
 
 import { normalizeEmail } from "./email"
 
+/**
+ * Never shorter than Resend's 24 h idempotency window: a repeat inside it sends nothing, so the
+ * first link must still work.
+ */
 export const TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 /** Clock skew tolerated between the Worker that signed a token and the one reading it. */
 const MAX_SKEW_MS = 5 * 60 * 1000

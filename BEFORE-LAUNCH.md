@@ -252,7 +252,9 @@ promote's push to `main`, each by its own build:
 - [ ] The secret `CONFIRM_SECRET` is set on `nulo-subscribe` before the promote merges
       (`infra/subscribe/README.md`, owner checklist item 3); without it every signup answers 503
 - [ ] Both builds green after the push. If either fails, turn the kill switch on until both are; a
-      `nulo-subscribe` deploy resets the switch from `wrangler.jsonc`, so recheck it after each one
+      `nulo-subscribe` deploy resets the switch from `wrangler.jsonc`, so recheck it after each one.
+      Run the checks below once both are live: until the landing is, a link opens the home page (it
+      works afterwards, for its 24 h)
 - [ ] With a fresh address you control that Resend does not hold: one email arrives, its link
       unrewritten in the HTML and the text part (also once through a client that wraps links); a
       second submission inside 24 h sends nothing; the press on `/confirm` creates the contact with

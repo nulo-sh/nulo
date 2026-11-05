@@ -24,7 +24,7 @@ export function failure(status: number, extra: Record<string, string> = {}): Res
 
 const OK_BODY = '{"ok":true}'
 
-/** The JSON success answer; `/api/confirm` gives only this one, its one caller being a script. */
+/** The JSON success; `/api/confirm` never redirects, as only `/confirm`'s script posts to it. */
 export function okJson(): Response {
 	return respond(200, OK_BODY, { "content-type": "application/json" })
 }

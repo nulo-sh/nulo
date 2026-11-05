@@ -8,3 +8,4 @@
 - 2026-11-05: arc 1 phase 2 (landing) gate green: landing 172/172 (+1 skip), build, lint, typecheck:all, test:ci-gating, lint:actions 0; test:release 7 fails from the host's missing `zip` binary (unrelated).
 - 2026-11-05: arc 1 phase 3 (notice 1.2) gate green: subscribe 91/91, landing 172/172 (+1 skip), test:all 0; deviation D12 recorded.
 - 2026-11-05: arc 1 phase 4: browser check 11/11 pass; 16 owner pictures in the scratch shots folder; OWNER-ASKS names them.
+- 2026-11-05: review loop round 1: Codex and Opus approve; nits applied; resuming Codex to verify.

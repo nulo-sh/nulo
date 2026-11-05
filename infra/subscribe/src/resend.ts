@@ -49,7 +49,6 @@ function headersFor(config: ContactConfig, json: boolean, extra: Record<string, 
 	}
 }
 
-/** Whether a 409's body names a key conflict; the body is read for that one name and dropped. */
 async function isKeyConflict(response: Response): Promise<boolean> {
 	const name = await response.json().then(
 		(body: unknown) => (typeof body === "object" && body !== null ? (body as { name?: unknown }).name : undefined),
@@ -112,9 +111,9 @@ type Progress = { stage: Stage }
 
 /**
  * `"new"` for an address Resend does not hold; otherwise the outcome for a known one, which is never
- * written to. A new address costs a second round trip (its write), which can also fail on Resend's
- * shared rate limit; a known address makes a second read in its place, so neither its timing nor a
- * team-wide refusal tells the two apart.
+ * written to. A new address costs a second round trip (the send or create that follows), which can
+ * also fail on Resend's shared rate limit; a known address makes a second read in its place, so
+ * neither the count of calls nor a team-wide refusal tells the two apart. Their timing still can.
  */
 async function lookUp(up: Upstream, config: ContactConfig, email: string, progress: Progress): Promise<Outcome | "new"> {
 	progress.stage = "lookup"

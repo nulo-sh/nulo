@@ -93,7 +93,6 @@ export async function submitConfirm(view: ConfirmView, token: string, fetchImpl:
 	view.heading.focus()
 }
 
-/** Shows the state the hash allows and returns the press handler, or `null` when there is nothing to confirm. */
 export function startConfirm(view: ConfirmView, hash: string, fetchImpl: Fetch): (() => Promise<void>) | null {
 	const token = tokenFrom(hash)
 	show(view, token ? "ready" : "invalid")

@@ -146,6 +146,18 @@ Durable Object record per address; a Rate Limiting key on the address; a lowerca
 send key; a format prefix and a canonical-encoding check in the token; deriving the HMAC key from
 `RESEND_API_KEY`; direct creation while the secret is missing.
 
+**UI impact.** The orchestrator's no-ask record is the whole visible budget: "New copy on three
+surfaces: the confirmation email (subject and body), the form's reply after submit ("check your
+inbox" instead of "you're in"), and the confirmation page the link opens (success, expired,
+invalid). The privacy notice's "No confirmation email" section and its recipients line change
+too." Each surface waits for the owner's sign-off in `OWNER-ASKS.md`, before and after with
+pictures; the extension shows nothing new.
+- *UI impact: the confirmation email* (new): OA1.
+- *UI impact: the hero and footer forms' reply after submit* (status line and button label): OA2.
+- *UI impact: `/subscribed`*, the no-JavaScript answer (title, heading, line): OA3.
+- *UI impact: `/confirm`* (new page; ready, confirmed, invalid, retry, no-JavaScript): OA4.
+- *UI impact: the website privacy notice 1.2* (summary, § 3.1, § 3.3–3.6, § 6, history): OA5.
+
 ## Security & Adversarial Considerations
 
 - **Third-party mailing.** Anyone can still make the form send one email to an address not on the
@@ -360,6 +372,19 @@ subscribe deploy; Inference (e)'s first wording), then **`VERDICT: approve`**.
 | A create retried after a committed 5xx could undo a withdrawal | accepted as a conditional known limit (Inference (e), README): only if creates upsert and an owner-applied withdrawal lands in the ≤ 2 s window; resumed pass corrected an "unsupported conditions" first answer |
 | Phase 4 names Puppeteer; the owner's default runner is Playwright | rejected: the default is for new projects; this repo's runner is Puppeteer, already installed, and Playwright would be a new dependency for a scratch check |
 | OA2 omits Inference (c)'s consequence | accepted: OA2 |
+
+**Fix loop, round 1** (Codex `gpt-6.1-sol` high, the arc diff from `4291a8c98`; Opus review beside
+it): both **`VERDICT: approve`**, no blocker or material finding. Codex judged D12 a correct
+alignment (both readers know one placeholder marker; a missing row or unequal dates still fail).
+
+| Finding | From | Disposition |
+|---|---|---|
+| `lookUp`'s doc and the README's residual-timing limit still call a new address's second call a create; on `/api/subscribe` it is a send | both | accepted: both say send or create; the doc no longer claims timing is equal |
+| Two comments narrate the next lines (`startConfirm`'s doc, `isKeyConflict`'s doc) | Codex | accepted: deleted |
+| `TOKEN_TTL_MS` must never be shorter than Resend's 24 h key window, and nothing says so | Opus | accepted: one comment at the constant |
+| `okJson`'s comment names its caller | Opus | accepted: states the invariant |
+| Between the two deploys a link opens the old home page (SPA fallback) | Opus | accepted as written in Security "Rollout"; `BEFORE-LAUNCH.md` now says to run the acceptance checks once both are live |
+| The plan had no `UI impact` line per surface | driver | accepted: added under Architecture, quoting the visible budget |
 
 ## Seeds
 
