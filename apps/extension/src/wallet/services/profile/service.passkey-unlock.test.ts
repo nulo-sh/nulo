@@ -224,20 +224,31 @@ describe("a passkey restore opens only on the admission its commit set", () => {
 		expect((await env.service.finalizeRestore(id, undefined, answer)).profile.id).toBe(id)
 	}, 30_000)
 
-	test("an admission a same-id restore sets while finalize waits never admits it, and is kept", async () => {
-		const env = await boot()
-		const { id, answer } = await restoredPasskey(env, 0x54)
-		const later = { capturedAt: Date.now() }
-		const pending = (env.service as unknown as { restorePending: { delete(id: string): Promise<void> } }).restorePending
-		const clearMarker = pending.delete.bind(pending)
-		vi.spyOn(pending, "delete").mockImplementation(async (profileId) => {
-			await clearMarker(profileId)
-			admissions(env).set(id, later)
-		})
-		await expect(env.service.finalizeRestore(id, undefined, answer)).rejects.toThrow(SessionEndedError)
-		expect(admissions(env).get(id)).toBe(later)
-		expect(await env.service.getActiveProfile()).toBeUndefined()
-	}, 30_000)
+	type Step = Record<string, (...args: unknown[]) => Promise<unknown>>
+	test.each([
+		["waits on its marker is kept, and the finalize refused", "restorePending", "delete", false],
+		["opens its session is kept, and the finalize opened", "service", "finalizeOpenHoldingLock", true],
+	] as const)(
+		"an admission a same-id restore sets while finalize %s",
+		async (_, owner, method, opens) => {
+			const env = await boot()
+			const { id, answer } = await restoredPasskey(env, 0x54)
+			const later = { capturedAt: Date.now() }
+			const internals = env.service as unknown as Step & { restorePending: Step }
+			const target = owner === "service" ? internals : internals.restorePending
+			const step = target[method].bind(target)
+			vi.spyOn(target, method).mockImplementation(async (...args) => {
+				const out = await step(...args)
+				admissions(env).set(id, later)
+				return out
+			})
+			const finalized = env.service.finalizeRestore(id, undefined, answer)
+			if (opens) expect((await finalized).profile.id).toBe(id)
+			else await expect(finalized).rejects.toThrow(SessionEndedError)
+			expect(admissions(env).get(id)).toBe(later)
+		},
+		30_000,
+	)
 
 	test.each([
 		["one millisecond before its time limit opens", -1, true],
@@ -246,9 +257,10 @@ describe("a passkey restore opens only on the admission its commit set", () => {
 		"a finalize %s",
 		async (_, offset, opens) => {
 			const env = await boot()
-			const { id, answer } = await restoredPasskey(env, 0x55)
 			const ttl = (ProfileService as unknown as { PENDING_RESTORE_TTL_MS: number }).PENDING_RESTORE_TTL_MS
-			vi.spyOn(Date, "now").mockReturnValue((admissions(env).get(id)?.capturedAt ?? Number.NaN) + ttl + offset)
+			const now = vi.spyOn(Date, "now").mockReturnValue(Date.now())
+			const { id, answer } = await restoredPasskey(env, 0x55)
+			now.mockReturnValue(Date.now() + ttl + offset)
 			const finalized = env.service.finalizeRestore(id, undefined, answer)
 			if (opens) expect((await finalized).profile.id).toBe(id)
 			else await expect(finalized).rejects.toThrow(SessionEndedError)

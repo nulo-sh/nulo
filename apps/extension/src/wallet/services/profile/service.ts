@@ -2303,10 +2303,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// released this call.
 		const seenRewrap = this.pendingDekRewraps.get(id)
 		// Read before any await, as the rewrap context is: an admission a same-id successor's commit
-		// sets meanwhile never admits this call.
+		// sets meanwhile never admits this call, and this call's drop spares it.
 		const admission = this.restoreAdmissions.get(id)
 		try {
-			// Sweep stale entries, sparing this id's rewrap context; an expired admission goes too.
 			this.sweepStalePendingRestore(Date.now(), id)
 			// A tombstoned profile (SW died mid-delete) must not open a session. Gated here as well as
 			// at row-read so a delete that began mid-restore is caught.
