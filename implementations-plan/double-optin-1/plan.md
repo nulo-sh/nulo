@@ -248,7 +248,7 @@ send key; a format prefix and a canonical-encoding check in the token; deriving 
   with the bundle test green; `bun run lint` and `bun run typecheck:all` exit 0. Layers: lint,
   types, unit.
 
-**Phase 2 — the landing** (`apps/landing`).
+**Phase 2 — the landing** (`apps/landing`). ✓
 1. `src/worker.ts`: forward `/api/subscribe` and `/api/confirm`, nothing else, the request unchanged.
 2. Add `confirm.html` (bar, a `main` with heading, lead, button, status region, a `<noscript>`
    line, footer; noindex; not in the sitemap) and `src/confirm.ts`; call `mountConfirm()` from
