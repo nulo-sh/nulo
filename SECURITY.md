@@ -387,10 +387,10 @@ every call must name an Aztec node method; the body is capped while streaming; n
 retried, logged or followed through a redirect; and the request reaches the provider with a fresh
 `content-type` header only, so the caller's IP, cookies and user agent stay with Cloudflare. The
 bundle holds no dependency, Workers Logs, `workers.dev` and preview URLs are off, and it deploys
-from `main` on a build token narrowed to it. The spend ceiling is each key's daily cap at dRPC: a
-scripted caller from many addresses can spend a key up to it, denying the proxy to everyone until
-the next day. The handler contract, the owner's checklist and the rotation runbook are in
-`infra/rpc-proxy/README.md`.
+from `main` on a build token that can write Workers scripts and read account settings, nothing
+else. The spend ceiling is each key's daily cap at dRPC: a scripted caller from many addresses can
+spend a key up to it, denying the proxy to everyone until the next day. The handler contract, the
+owner's checklist and the rotation runbook are in `infra/rpc-proxy/README.md`.
 
 ## Storage privacy
 
