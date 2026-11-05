@@ -40,7 +40,7 @@ describe("entityListReducers", () => {
 		expect(list.value).toEqual(rows(["a", 5], ["b", 2], ["a", 3], ["z", 6]))
 	})
 
-	test("without appendUnlistedUpdate, an update for an unlisted id leaves the list; a listed one is still replaced in place", () => {
+	test("with appendUnlistedUpdate false, an update for an unlisted id leaves the list; a listed one is still replaced in place", () => {
 		const list = ref(rows(["a", 1], ["b", 2]))
 		const before = list.value
 		const on = entityListReducers(list, { appendUnlistedUpdate: false })

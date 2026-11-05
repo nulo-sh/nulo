@@ -33,8 +33,7 @@ const props = defineProps({
 
 let fpcService = null
 const fpcs = ref([])
-// The service announces every network's FPCs: an update for one this network's read did not
-// list stays out of the duplicate checks.
+// The service announces every network's FPCs; an update never adds a row the list lacks.
 const fpcList = entityListReducers(fpcs, { appendUnlistedUpdate: false })
 const fpcToEdit = ref(null)
 

@@ -280,7 +280,7 @@ describe("NewFpcPopup — the list under a held read", () => {
 })
 
 describe("NewFpcPopup — updates the service announces", () => {
-	// The service announces every network's FPCs; only a row this network's read listed is replaced.
+	// The service announces every network's FPCs; an update never adds a row the list lacks.
 	test("an update for an FPC the opened read did not list leaves its name free; a listed FPC's rename is checked", async () => {
 		fpcServiceMock.getFpcs.mockResolvedValue([{ id: "f1", name: "Sponsor", address: `0x${"1".repeat(64)}` }])
 		const w = await mountShown()

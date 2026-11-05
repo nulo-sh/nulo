@@ -33,7 +33,7 @@ export function forcedSide(token: SideCaps): SendSide | null {
 }
 
 /** Whether the origin may switch sides. It reads the transfer kinds, while the destination reads the
- *  balance kinds and its forced side the transfer kinds: the table test pins that asymmetry. */
+ *  balance kinds; the forced side of both reads the transfer kinds. */
 export function canSwitchSender(token: SideCaps): boolean {
 	return Boolean(token.hasPrivateTransfers && token.hasPublicTransfers)
 }

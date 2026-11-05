@@ -351,10 +351,17 @@ describe("EditFpcPopup — the list under a held read", () => {
 describe("EditFpcPopup — updates and deletes the service announces", () => {
 	const submitDisabled = (w: VueWrapper) => w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined
 
-	test("an update for an FPC the opened read did not list leaves its name free", async () => {
+	test("an update for an FPC the opened read did not list leaves its name free; a listed FPC's rename is checked", async () => {
+		fpcServiceMock.getFpcs.mockResolvedValue([{ ...FPC }, { ...FPC, id: "fpc-2", name: "Other", address: `0x0${"d".repeat(63)}` }])
 		const w = await mountShown()
 		fpcServiceMock.onFpcUpdated.invoke({ ...FPC, id: "fpc-9", name: "Elsewhere" })
 		await typeName(w, "Elsewhere")
+		expect(w.text()).not.toContain("Already exists")
+
+		fpcServiceMock.onFpcUpdated.invoke({ ...FPC, id: "fpc-2", name: "Renamed", address: `0x0${"d".repeat(63)}` })
+		await typeName(w, "Renamed")
+		expect(w.text()).toContain("Already exists")
+		await typeName(w, "Other")
 		expect(w.text()).not.toContain("Already exists")
 	})
 

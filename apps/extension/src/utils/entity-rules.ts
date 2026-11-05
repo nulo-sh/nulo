@@ -7,8 +7,8 @@ export const ALREADY_EXISTS = "Already exists"
 /** The warning an FPC address field shows for an address another FPC row holds. */
 export const ALREADY_ADDED = "Already added"
 
-/** The contact form's refusal of an address, which the FPC, sender and token forms reuse for a
- *  value outside the field. */
+/** The contact form's words for an address it refuses, which other address fields reuse; each
+ *  field keeps its own check. */
 export const INVALID_ADDRESS = "Invalid address"
 
 /** The shortest RPC URL a network or endpoint form submits. */
