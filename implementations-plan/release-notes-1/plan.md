@@ -105,6 +105,7 @@ Each finding's path and reproducer: `lessons/phase-0.md`.
 - **Final Codex pass** (same session, verification round): approve, no remaining material finding; Codex re-ran the archive's SHA-512 and both all-skipped cases and withdrew its finding 1.
 - **Fix loop, Codex round 1**: two Low findings, both accepted and fixed: setext headings now refused, two comments cut (`lessons/phase-2.md`).
 - **Fix loop, Opus 5.5 diff review**: four Low findings, all accepted and fixed: the skill's refusal list and its major-bump rule, `#` after a list marker, GitHub-style `Revert "…"` subjects (`lessons/phase-2.md`).
+- **Fix loop, Codex round 2** (same session, verification): clean. The loop converged.
 
 Implementation deviations (the tree won):
 - The AMO runner derives the notes path from `VERSION` (`notesPath`), so `release.yml` gains no `RELEASE_NOTES_PATH`: one input fewer that could disagree with the version.
