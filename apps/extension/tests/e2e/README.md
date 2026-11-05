@@ -158,16 +158,18 @@ uncommitted changes a build reads, is refused, so commit before you build it.
   `fixtures/update/release.ts`): whether it stores its rows in plaintext or seals them, whether its
   connect prompt replaces the popup's page or opens its own window, and whether a passkey profile it
   made is one the candidate retires (only Set up again) or one its passkey still unlocks, as the
-  candidate's `profile/profile-row.ts` classifies the row the release wrote, and the hostname alone of
-  the Testnet node it seeds, which the egress guard declares as a refusal. A tag with none is refused
-  before its zip is downloaded.
+  candidate's `profile/profile-row.ts` classifies the row the release wrote, the hostname alone of
+  the Testnet node it seeds, which the egress guard declares as a refusal, and whether it offers the
+  canonical Sponsored fee payer on every chain or only on the chains it lists, which leaves the
+  run's sandbox network none (from v1.2.0). A tag with none is refused before its zip is downloaded.
 - The live scenario populates the release through its own UI: a password profile with a second and
   an imported account and two contacts on Testnet (switched to first, as a release that seeds
   Mainnet opens there), then a network on the run's sandbox with a token it pins, a Send fee pick,
   a public and a private receipt, a connected playground and one send from the wallet whose fee
-  payer it picks. It requires every key family `HELD` names for the release's storage before it
-  updates: the legacy selection key for a plaintext release, the sealed selection row and the
-  seeding record for a sealing one. A sealing release first moves every outside endpoint onto a
+  payer it picks: the sponsor, or, on a release that offers none there, public Fee Juice the run
+  bridges to the account first. It requires every key family `HELD` names for the release's
+  storage before it updates: the legacy selection key for a plaintext release, the sealed
+  selection row and the seeding record for a sealing one. A sealing release first moves every outside endpoint onto a
   loopback node that reports that network's chain, through its own service, since its sealed rows
   cannot be rewritten offline and its recording names no outside endpoint; the scenario refuses to
   record while any moved host is still held. It then ends on its second Testnet account, read back
