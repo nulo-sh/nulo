@@ -31,7 +31,7 @@ import { TransferType } from "@/wallet/services/transaction/client"
 import { managers } from "@/utils/core"
 import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { contactListReducers } from "@/utils/entity-list"
+import { entityListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
 import { feeText } from "@/utils/fee-estimation"
@@ -206,7 +206,7 @@ const initReceiverType = (keepSide = false) => {
 
 const contacts = ref([])
 const contactService = new ContactServiceClient()
-const contactList = contactListReducers(contacts)
+const contactList = entityListReducers(contacts)
 contactService.onContactAdded.add(contactList.onAdded)
 contactService.onContactUpdated.add(contactList.onUpdated)
 contactService.onContactDeleted.add(contactList.onDeleted)

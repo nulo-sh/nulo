@@ -4,7 +4,7 @@
 import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { trimAddress } from "@/utils/string"
 import { addressChangeText, classifyImportRow, indexSavedContacts, planImportWrites } from "@/utils/contact-import-rows"
-import { contactListReducers } from "@/utils/entity-list"
+import { entityListReducers } from "@/utils/entity-list"
 import { INVALID_ADDRESS } from "@/utils/entity-rules"
 import { pluralize } from "@/utils/plural"
 
@@ -35,7 +35,7 @@ const props = defineProps({
 const contacts = ref([])
 
 const contactService = new ContactServiceClient()
-const contactList = contactListReducers(contacts)
+const contactList = entityListReducers(contacts)
 contactService.onContactAdded.add(contactList.onAdded)
 contactService.onContactUpdated.add(contactList.onUpdated)
 contactService.onContactDeleted.add(contactList.onDeleted)

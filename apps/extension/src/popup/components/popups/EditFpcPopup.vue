@@ -7,6 +7,7 @@ import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
 
 /** Utils */
 import { sameStoredName } from "@/utils/account-name"
+import { entityListReducers } from "@/utils/entity-list"
 import { ALREADY_ADDED, ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 import { copyWithToast } from "@/utils/clipboard"
 
@@ -32,6 +33,9 @@ const props = defineProps({
 
 let fpcService = null
 const fpcs = ref([])
+// The service announces every network's FPCs: an update for one this network's read did not
+// list stays out of the duplicate checks.
+const fpcList = entityListReducers(fpcs, { appendUnlistedUpdate: false })
 const fpcToEdit = ref(null)
 
 const form = useFormState({
@@ -148,12 +152,8 @@ const handleUpdateFpc = async () => {
 		isFpcUpdateInProgress.value = false
 	}
 }
-const onFpcAdded = (fpc) => {
-	fpcs.value.push(fpc)
-}
 const onFpcUpdated = (fpc) => {
-	const idx = fpcs.value.findIndex((f) => f.id === fpc.id)
-	if (idx !== -1) fpcs.value[idx] = fpc
+	fpcList.onUpdated(fpc)
 	if (fpcToEdit.value?.id === fpc.id) {
 		fpcToEdit.value = fpc
 	}
@@ -164,7 +164,7 @@ const onFpcDeleted = (fpc) => {
 		openToast({ kind: "success", label: "FPC was deleted" })
 		return
 	}
-	fpcs.value = fpcs.value.filter((f) => f.id !== fpc.id)
+	fpcList.onDeleted(fpc)
 }
 const handleCopyAddress = () => {
 	void copyWithToast(fpcToEdit.value.address, openToast, "FPC's address is copied")
@@ -176,7 +176,7 @@ usePopupEntity(
 		submit: handleUpdateFpc,
 		onShow: async () => {
 			fpcService = new FpcServiceClient()
-			fpcService.onFpcAdded.add(onFpcAdded)
+			fpcService.onFpcAdded.add(fpcList.onAdded)
 			fpcService.onFpcDeleted.add(onFpcDeleted)
 			fpcService.onFpcUpdated.add(onFpcUpdated)
 			fpcToEdit.value = await fpcService.getFpc(cacheStore.fpcToEditIdx)

@@ -4,6 +4,7 @@ import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { isFieldAddress, sameFieldAddress } from "@nulo/wallet-bridge"
 import { sameStoredName } from "@/utils/account-name"
+import { entityListReducers } from "@/utils/entity-list"
 import { ALREADY_ADDED, ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 import { isHex32 } from "@nulo/wallet-core/utils"
 
@@ -29,6 +30,9 @@ const props = defineProps({
 
 let fpcService = null
 const fpcs = ref([])
+// The service announces every network's FPCs: an update for one this network's read did not
+// list stays out of the duplicate checks.
+const fpcList = entityListReducers(fpcs, { appendUnlistedUpdate: false })
 
 const addressRefusal = (v) => {
 	if (!isHex32(v)) return "Invalid FPC address"
@@ -101,26 +105,15 @@ const handleAddFpc = async () => {
 		isLoading.value = false
 	}
 }
-const onFpcAdded = (fpc) => {
-	fpcs.value.push(fpc)
-}
-const onFpcUpdated = (fpc) => {
-	const idx = fpcs.value.findIndex((f) => f.id === fpc.id)
-	if (idx === -1) return
-	fpcs.value[idx] = fpc
-}
-const onFpcDeleted = (fpc) => {
-	fpcs.value = fpcs.value.filter((f) => f.id !== fpc.id)
-}
 usePopupEntity(
 	() => props.show,
 	{
 		submit: handleAddFpc,
 		onShow: async () => {
 			fpcService = new FpcServiceClient()
-			fpcService.onFpcAdded.add(onFpcAdded)
-			fpcService.onFpcDeleted.add(onFpcDeleted)
-			fpcService.onFpcUpdated.add(onFpcUpdated)
+			fpcService.onFpcAdded.add(fpcList.onAdded)
+			fpcService.onFpcDeleted.add(fpcList.onDeleted)
+			fpcService.onFpcUpdated.add(fpcList.onUpdated)
 			fpcs.value = await fpcService.getFpcs(appStore.network.chainId)
 		},
 		onHide: () => {

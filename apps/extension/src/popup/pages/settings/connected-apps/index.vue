@@ -17,7 +17,7 @@ import { DappSessionServiceClient } from "@/wallet/services/dapp-session/client"
 import { getSafeDisplay } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Utils */
-import { withoutId } from "@/utils/entity-list"
+import { entityListReducers } from "@/utils/entity-list"
 import { pluralize } from "@/utils/plural"
 
 /** Composables */
@@ -41,13 +41,14 @@ const appHost = (session) => {
 }
 
 const dappSessions = ref([])
+const sessionList = entityListReducers(dappSessions)
 
 const sortedSessions = computed(() => [...dappSessions.value].sort((a, b) => a.expiry - b.expiry))
 
 const dappSessionService = new DappSessionServiceClient()
 dappSessionService.onDappSessionAdded.add(onDappSessionAdded)
 dappSessionService.onDappSessionUpdated.add(onDappSessionUpdated)
-dappSessionService.onDappSessionDeleted.add(onDappSessionDeleted)
+dappSessionService.onDappSessionDeleted.add(sessionList.onDeleted)
 
 function hydrateLogo(session) {
 	if (!session.dappMetadata?.logo || session.dappMetadata.logoBlobUrl) return
@@ -55,24 +56,16 @@ function hydrateLogo(session) {
 }
 
 function onDappSessionAdded(session) {
-	dappSessions.value.push(session)
+	sessionList.onAdded(session)
 	hydrateLogo(session)
 }
 function onDappSessionUpdated(session) {
-	const idx = dappSessions.value.findIndex((ds) => ds.id === session.id)
-	if (idx !== -1) {
-		const prevBlob = dappSessions.value[idx].dappMetadata?.logoBlobUrl
-		dappSessions.value[idx] = session
-		if (prevBlob && session.dappMetadata) {
-			session.dappMetadata.logoBlobUrl = prevBlob
-		}
-	} else {
-		dappSessions.value.push(session)
+	const prevBlob = dappSessions.value.find((ds) => ds.id === session.id)?.dappMetadata?.logoBlobUrl
+	if (prevBlob && session.dappMetadata) {
+		session.dappMetadata.logoBlobUrl = prevBlob
 	}
+	sessionList.onUpdated(session)
 	hydrateLogo(session)
-}
-function onDappSessionDeleted(session) {
-	dappSessions.value = withoutId(dappSessions.value, session)
 }
 
 const rowIdBase = useId()
