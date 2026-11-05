@@ -1,7 +1,7 @@
 ---
 plan: e2e-flakes-3
 tier: light
-status: panel-approved
+status: completed
 issues: "#1667 (arc 1, phase 1); #1590 (arc 1, phase 2)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 4b250dfe4
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-05
+- **Status**: completed, one arc: the PR from `e2e-flakes-3-a1` closes #1667 and #1590.
+- **Shipped**: `onboarding-tab.test.ts` counts the setup tab through `chrome.tabs.query` from its control page, not Puppeteer `targets()`, with `FIREFOX.md`'s new-tab row and flake ledger rows 36 and 69 to match (D1, D8). `completeFeeOptions` defaults a simulation's cap to `predictedWorstMinFees(node)` × 1.5, as upstream `BaseWallet` pads its predicted minimum, pinned by a unit case red at base; ledger row 70 (D2). A throwaway control and probe proved each fix red at base and green after, on both browsers (lessons/phase-0.md, lessons/phase-2.md).
+- **Known limits**: #1681 (D5, NewTokenPopup's balance wait has no bound before the first balance row), #1682 (a provider that refuses `getPredictedMinFees` fails every default-cap simulation).
+- **Dispositions**: rejected, with reasons in Audit verdicts: the owner ask Codex raised twice on the availability and balance-band costs (D6); fixing D7's comments in a directory another lane held; tying the tab count to the tracked id; dropping the local shard runs.
+- **Lessons**: none promoted. `lessons.md` holds 18 bytes of budget and no line this plan supersedes; the fee gotcha lives where its readers meet it, `fee-options.ts`'s module doc and ledger row 70, and the tab-count rule in rows 36 and 69.
+- **Open items**: #1683 (D7, two comments in `services/execution/` still describe the old default).
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # e2e-flakes-3: count the setup tab through `chrome.tabs`; price simulations on the predicted fee
 
