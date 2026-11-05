@@ -78,6 +78,7 @@ One arc, one PR against `dev`, no behaviour change. Phase 1 gives Send's side ru
   - `useEntityCrud` and the other reducers outside the popups: other contracts.
 - D7. No new e2e: the move changes nothing a browser can see. The component tests are the witnesses. The smoke and network specs below reach Send, the FPC, network and endpoint forms, Edit profile, Select profile and the contact forms. Connected apps and New sender rest on their component tests (both legs).
 - D8. No untrimmed text assertion for the interpolated verdicts (Codex R1). Rejected: `" {{ X }} "` renders the same text as `" X "` (Opus R1), and the plan claims the same words, not the same whitespace.
+- D9. As built: the `git mv` went in its own commit, ahead of the helper's additions, so `git log --follow` keeps the file's history. `connected-apps/index.test.ts`'s mock captures the add and update handlers; no existing assertion changed. `tests/e2e/helpers/profile-chaos/model.ts` re-cites four lines the Select profile and backup-import edits moved (`test:all` red once on `profile-chaos-model.test.ts`; re-cited by a line diff from base, as `lessons.md` says). Mutation checks: New FPC with the default option and Edit FPC without `fpcList.onUpdated` each turn their pin red.
 
 ## Security & Adversarial Considerations
 
@@ -89,14 +90,14 @@ One arc, one PR against `dev`, no behaviour change. Phase 1 gives Send's side ru
 
 None. The Send From and To toggles, the token picker's row, New and Edit FPC, Import token, New sender, the contact forms, Import contacts, New and Edit endpoint, New network, Edit profile, the profile name field, Select profile and Connected apps render and accept what they did at the base. The orchestrator's lane brief: "UI impact: none; a behaviour difference the move uncovers is a bug fix named in the PR, and anything visible stops for the owner (OWNER-ASKS.md)".
 
-## Phase 1: Send's side rule (#1470)
+## Phase 1: Send's side rule (#1470) ✓
 
 - Commit 1: the `git mv`, the three functions and their table test, green. Run the scratch harness against the table (D3) and log the result.
 - Commit 2: route the five sites and the card, and delete `isTokenRestricted`. Edit no existing test.
 - **Assumptions**: F1–F3.
 - **Gate**: `bun run lint`, `bun run typecheck:all`: exit 0. From `apps/extension`: `bun --bun vitest run src/components/composite/send src/popup/pages/send src/popup/components/modules/send --retry=0`: green at both commits.
 
-## Phase 2: the entity forms' rules (#1449)
+## Phase 2: the entity forms' rules (#1449) ✓
 
 - Commit the component pins first. Each is green at the base and passes unedited after the move:
   - `NewFpcPopup.test.ts`: an update for an FPC the opened read did not list leaves its name free. Control: an update that renames a listed FPC makes that name "Already exists".
@@ -142,3 +143,6 @@ Seeds (not run): `/goal Implement implementations-plan/popup-dedupe-1/plan.md ar
 | Codex R2 (resumed) | approve with changes | unit tests land with the names they test; Edit FPC's delete pin also checks the early return; F2 says "production file"; recon's contract spelling corrected | a close-before-toast order assertion (both run in one synchronous handler; no consequence) |
 | Codex R3 (resumed) | approve | the R2 fixes verified; no new defect | none |
 | Opus R1 (Plan) | approve with changes | the two missed "Invalid address" displays; Edit FPC, connected-apps and reducer-option pins; smoke specs swapped (`accounts` out; `auth-flows`, `contacts`, `contacts-import` in); F2 restated; D6's issue items; verbatim preselect guard; registration order; header and comment updates | dropping #1449 for want of a record (A1 keeps it on the orchestrator's launch) |
+| Codex impl R1 | changes requested, comments only | the FPC comments' network claim; `INVALID_ADDRESS`'s comment; `send-sides.ts`'s test reference | none |
+| Opus diff review | clean, four small fixes | Edit FPC's update pin gains a listed-rename control (mutation-checked); a test title; two comment fixes; `ProfileNameField.vue`'s header order | none |
+| Codex impl R2 (resumed) | clean | the fixes and the re-cited lines verified | none |
