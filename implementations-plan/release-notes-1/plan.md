@@ -9,7 +9,29 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: 7eed331bb (origin/dev)
 issues: "#1668"
+status: completed
 ---
+
+## Outcome
+
+- **Date**: 2026-11-05
+- **Status**: completed in one arc. The PR from `release-notes-1-a1` closes #1668. Before the merge it waits for the owner's sign-off on A2–A5 (with A9–A11 riding on it), and on A10 (`Closes` or `Refs`).
+- **Shipped**:
+  - `release-notes/1.2.0.md` and `1.1.0.md`.
+  - The rules and the composer in `scripts/release/release-notes.ts`; `compose` in `release.yml`'s `release-notes` job and `check` in `pr-quick.yml`'s `launch-legal`.
+  - AMO `release_notes` (`en-US`).
+  - The `auto-unstick` and `tag-by-hand-run` refusals.
+  - `cliff.toml` trimmed to Breaking changes, Features, Bug Fixes, Performance and Reverts.
+  - Wiring pins, plus the docs in the release skill, `listing.md`, `CLAUDE.md` and `CI.md`.
+  - A local run of the job's step with git-cliff 2.14.2 reproduces the published v1.2.0 body (`lessons/phase-2.md`).
+- **Known limits**: #1692 (I1/A9: a CI store dispatch for v1.2.0 or an older tag fails, because those trees lack the composer).
+- **Dispositions**:
+  - Rejected, with reasons in Audit verdicts: an all-skipped range drops its header (refuted by a reproducer), refusing `::` lines, and an empty-`CLIFF` refusal.
+  - A8, pasting `release-notes/1.2.0.md` into AMO 1.2.0.0, is an optional owner step named in the PR body; nothing tracks it.
+  - The close-out landed before the first push, to save a second run of both smoke lanes.
+- **Lessons**: none promoted. `lessons.md` holds 8174 of its 8192 bytes and has no line this plan supersedes. AMO's Markdown gotchas live where their readers meet them: the rules in `release-notes.ts` and the release skill's § Release notes.
+- **Open items**: #1691 (A6: a changelog page on nulo.sh, `owner-decision`).
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # Release notes per version, on the GitHub Release and AMO from CI
 
