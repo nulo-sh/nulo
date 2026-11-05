@@ -4,7 +4,7 @@ import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { isFieldAddress, sameFieldAddress } from "@nulo/wallet-bridge"
 import { sameStoredName } from "@/utils/account-name"
-import { ALREADY_EXISTS } from "@/utils/entity-rules"
+import { ALREADY_ADDED, ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** Services */
@@ -33,7 +33,7 @@ const fpcs = ref([])
 const addressRefusal = (v) => {
 	if (!isHex32(v)) return "Invalid FPC address"
 	// Out of field range: the contact form's wording.
-	if (!isFieldAddress(v)) return "Invalid address"
+	if (!isFieldAddress(v)) return INVALID_ADDRESS
 	return null
 }
 
@@ -52,7 +52,7 @@ const form = useFormState({
 			if (!v) return null
 			const refusal = addressRefusal(v)
 			if (refusal) return refusal
-			if (fpcs.value.some((f) => sameFieldAddress(v, f.address ?? ""))) return "Already added"
+			if (fpcs.value.some((f) => sameFieldAddress(v, f.address ?? ""))) return ALREADY_ADDED
 			return null
 		},
 	},
@@ -62,7 +62,7 @@ const nameTerm = form.fields.name.value
 const fpcAddressTerm = form.fields.address.value
 
 const isAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS)
-const isAddressStored = computed(() => form.fields.address.error.value === "Already added")
+const isAddressStored = computed(() => form.fields.address.error.value === ALREADY_ADDED)
 const isValidAddress = computed(() => addressRefusal(fpcAddressTerm.value) === null)
 const isAvailableToAddFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
@@ -181,7 +181,7 @@ watch(
 			<template #right>
 				<Transition name="fade">
 					<FieldWarning v-if="!isValidAddress && fpcAddressTerm"> {{ addressRefusal(fpcAddressTerm) }} </FieldWarning>
-					<FieldWarning v-else-if="isAddressStored"> Already added </FieldWarning>
+					<FieldWarning v-else-if="isAddressStored"> {{ ALREADY_ADDED }} </FieldWarning>
 				</Transition>
 			</template>
 		</Input>

@@ -5,6 +5,7 @@ import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { trimAddress } from "@/utils/string"
 import { addressChangeText, classifyImportRow, indexSavedContacts, planImportWrites } from "@/utils/contact-import-rows"
 import { contactListReducers } from "@/utils/entity-list"
+import { INVALID_ADDRESS } from "@/utils/entity-rules"
 import { pluralize } from "@/utils/plural"
 
 /** Components */
@@ -46,7 +47,7 @@ const SECTIONS = [
 	{ key: "saved", label: "Already saved", kinds: ["unchanged"], warn: false },
 	{ key: "skipped", label: "Can't be imported", kinds: ["invalid", "conflict"], warn: false },
 ]
-const REASONS = { invalid: "Invalid address", conflict: "Matches two saved contacts" }
+const REASONS = { invalid: INVALID_ADDRESS, conflict: "Matches two saved contacts" }
 const REFUSALS = { invalid: "To select, correct the address first", conflict: "This contact matches two saved contacts" }
 
 const uid = useId()

@@ -7,7 +7,7 @@ import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
 
 /** Utils */
 import { sameStoredName } from "@/utils/account-name"
-import { ALREADY_EXISTS } from "@/utils/entity-rules"
+import { ALREADY_ADDED, ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 import { copyWithToast } from "@/utils/clipboard"
 
 /** Composables */
@@ -48,8 +48,8 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v) return null
-			if (!isFieldAddress(v)) return "Invalid address"
-			if (fpcs.value.some((f) => f.id !== fpcToEdit.value?.id && sameFieldAddress(v, f.address ?? ""))) return "Already added"
+			if (!isFieldAddress(v)) return INVALID_ADDRESS
+			if (fpcs.value.some((f) => f.id !== fpcToEdit.value?.id && sameFieldAddress(v, f.address ?? ""))) return ALREADY_ADDED
 			return null
 		},
 	},
@@ -88,7 +88,7 @@ const hasChanges = computed(() => nameChanged.value || addressChanged.value)
 
 const isAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS && nameChanged.value)
 // Only an edited address is checked, so a row that already shares its address can still be renamed.
-const isAddressStored = computed(() => form.fields.address.error.value === "Already added" && addressChanged.value)
+const isAddressStored = computed(() => form.fields.address.error.value === ALREADY_ADDED && addressChanged.value)
 const isAddressValid = computed(() => isFieldAddress(addressTerm.value))
 const isAvailableToUpdateFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
@@ -279,8 +279,8 @@ watch(
 		>
 			<template #right>
 				<Transition name="fade">
-					<FieldWarning v-if="!isAddressValid && addressTerm"> Invalid address </FieldWarning>
-					<FieldWarning v-else-if="isAddressStored"> Already added </FieldWarning>
+					<FieldWarning v-if="!isAddressValid && addressTerm"> {{ INVALID_ADDRESS }} </FieldWarning>
+					<FieldWarning v-else-if="isAddressStored"> {{ ALREADY_ADDED }} </FieldWarning>
 				</Transition>
 			</template>
 		</Input>
