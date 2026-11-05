@@ -7,6 +7,7 @@
 import {
 	InvalidPasswordError,
 	RetiredProfileError,
+	SessionEndedError,
 	StaleUnlockCredentialError,
 	UnlockMethodChangedError,
 } from "@nulo/extension-messaging/errors"
@@ -27,6 +28,7 @@ import type { ConfigProp, IConfig } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { PASSKEY_SERVICE_NAME } from "@/wallet/services/passkey/spec"
 import { svc } from "../composition-harness"
+import { RESTORE_PENDING_ROOT } from "./restore-pending-repository"
 import { ProfileService } from "./service"
 import type { SessionManager } from "./session-manager"
 import { PROFILE_STORAGE_ROOT, type UnlockCredential } from "./spec"
@@ -166,6 +168,105 @@ describe("a phrase import and a backup restore choose their unlock", () => {
 		)
 		expect(await env.api.storage.local.get(null)).toStrictEqual(before)
 	})
+})
+
+describe("a passkey restore opens only on the admission its commit set", () => {
+	type Admissions = Map<string, { capturedAt: number }>
+	const admissions = (env: Env) => (env.service as unknown as { restoreAdmissions: Admissions }).restoreAdmissions
+	const marker = async (env: Env, id: string) =>
+		(await env.api.storage.local.get(`${RESTORE_PENDING_ROOT}@${id}`))[`${RESTORE_PENDING_ROOT}@${id}`]
+
+	/** A passkey restore of the phrase of `fill`, written and not finalized. */
+	async function restoredPasskey(env: Env, fill: number) {
+		const answer = await newAnswer()
+		const restored = await env.service.restore(
+			{ id: "ignored", name: "R", type: "password" },
+			await backupBody(fill),
+			undefined,
+			false,
+			answer,
+		)
+		if ("restoreError" in restored && restored.restoreError) throw new Error(String(restored.restoreError))
+		return { id: restored.id, answer }
+	}
+
+	test("a lock after the commit refuses finalize, and the profile stays, unmarked, for its next unlock", async () => {
+		const env = await boot()
+		await env.service.createProfile("P", PASSWORD)
+		const handle = await env.service.getSessionHandle()
+		const { id, answer } = await restoredPasskey(env, 0x51)
+		await env.service.lockActiveProfile(handle)
+		await expect(env.service.finalizeRestore(id, undefined, answer)).rejects.toThrow(SessionEndedError)
+		expect(await env.service.getActiveProfile()).toBeUndefined()
+		expect((await env.service.getProfiles()).map((p) => p.id)).toContain(id)
+		expect(await marker(env, id)).toBeUndefined()
+		expect((await env.service.unlockPasskeyProfile(id, answer)).id).toBe(id)
+	}, 30_000)
+
+	test("with no lock, finalize opens it, and a second finalize opens nothing more", async () => {
+		const env = await boot()
+		await env.service.createProfile("P", PASSWORD)
+		const { id, answer } = await restoredPasskey(env, 0x52)
+		expect((await env.service.finalizeRestore(id, undefined, answer)).profile.id).toBe(id)
+		const handle = await env.service.getSessionHandle()
+		expect((await env.service.finalizeRestore(id, undefined, answer)).profile.id).toBe(id)
+		expect(await env.service.getSessionHandle()).toBe(handle)
+	}, 30_000)
+
+	test("a lock naming a session another unlock replaced ends no restore", async () => {
+		const env = await boot()
+		const profile = await env.service.createProfile("P", PASSWORD)
+		const replaced = await env.service.getSessionHandle()
+		await env.service.lockActiveProfile()
+		await env.service.unlockProfile(profile.id, PASSWORD)
+		const { id, answer } = await restoredPasskey(env, 0x53)
+		await env.service.lockActiveProfile(replaced)
+		expect((await env.service.finalizeRestore(id, undefined, answer)).profile.id).toBe(id)
+	}, 30_000)
+
+	test("an admission a same-id restore sets while finalize waits never admits it, and is kept", async () => {
+		const env = await boot()
+		const { id, answer } = await restoredPasskey(env, 0x54)
+		const later = { capturedAt: Date.now() }
+		const pending = (env.service as unknown as { restorePending: { delete(id: string): Promise<void> } }).restorePending
+		const clearMarker = pending.delete.bind(pending)
+		vi.spyOn(pending, "delete").mockImplementation(async (profileId) => {
+			await clearMarker(profileId)
+			admissions(env).set(id, later)
+		})
+		await expect(env.service.finalizeRestore(id, undefined, answer)).rejects.toThrow(SessionEndedError)
+		expect(admissions(env).get(id)).toBe(later)
+		expect(await env.service.getActiveProfile()).toBeUndefined()
+	}, 30_000)
+
+	test.each([
+		["one millisecond before its time limit opens", -1, true],
+		["at its time limit is refused", 0, false],
+	])(
+		"a finalize %s",
+		async (_, offset, opens) => {
+			const env = await boot()
+			const { id, answer } = await restoredPasskey(env, 0x55)
+			const ttl = (ProfileService as unknown as { PENDING_RESTORE_TTL_MS: number }).PENDING_RESTORE_TTL_MS
+			vi.spyOn(Date, "now").mockReturnValue((admissions(env).get(id)?.capturedAt ?? Number.NaN) + ttl + offset)
+			const finalized = env.service.finalizeRestore(id, undefined, answer)
+			if (opens) expect((await finalized).profile.id).toBe(id)
+			else await expect(finalized).rejects.toThrow(SessionEndedError)
+		},
+		30_000,
+	)
+
+	test("a restart before finalize refuses a passkey restore, which opens at its next unlock; a password restore still finalizes", async () => {
+		const env = await boot()
+		const { id, answer } = await restoredPasskey(env, 0x56)
+		const withPassword = await env.service.restore({ id: "ignored", name: "W", type: "password" }, await backupBody(0x57), PASSWORD)
+		if ("restoreError" in withPassword && withPassword.restoreError) throw new Error(String(withPassword.restoreError))
+		const rebooted = await boot({ api: env.api })
+		await expect(rebooted.service.finalizeRestore(id, undefined, answer)).rejects.toThrow(SessionEndedError)
+		expect((await rebooted.service.finalizeRestore(withPassword.id, PASSWORD)).profile.id).toBe(withPassword.id)
+		await rebooted.service.lockActiveProfile()
+		expect((await rebooted.service.unlockPasskeyProfile(id, answer)).id).toBe(id)
+	}, 60_000)
 })
 
 describe("changeUnlockMethod", () => {

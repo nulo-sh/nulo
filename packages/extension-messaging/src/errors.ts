@@ -444,8 +444,9 @@ export class TermsAcceptanceRequiredError extends WalletError {
 
 /**
  * The session that authorized an operation ended — a lock, an auto-lock, or another unlock, the same
- * profile's included — before the operation reached the network. Constant message and no details:
- * it rides the message-only operation-result channel, and names nothing a dApp could probe.
+ * profile's included — before the operation reached the network; or a passkey restore ended before
+ * it opened the profile it wrote. Constant message and no details: it rides the message-only
+ * operation-result channel, and names nothing a dApp could probe.
  */
 export class SessionEndedError extends WalletError {
 	public static readonly CODE = "SESSION_ENDED"

@@ -385,6 +385,10 @@ export type Methods = {
 	 * The fence is captured under the same lock hold that opened the session, so it can only
 	 * name this restore's profile, never a same-id successor.
 	 *
+	 * A passkey profile's restore ends, and this throws `SessionEndedError` with the profile kept
+	 * for its next unlock, once an explicit lock, its deletion, a worker restart or 30 minutes came
+	 * after `restore` wrote it.
+	 *
 	 * @param id Profile id (from the `restore` return value).
 	 * @param password The password `restore` sealed under, for a password profile.
 	 * @param credentialData The passkey answer `restore` sealed under, for a passkey profile.
