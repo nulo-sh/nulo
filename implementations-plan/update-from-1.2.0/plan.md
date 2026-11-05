@@ -1,7 +1,7 @@
 ---
 plan: update-from-1.2.0
 tier: light
-status: approved (arc 1 in progress)
+status: completed
 issues: "#1680 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ post_implementation_hardening: not scheduled
 base: origin/dev at c4767e8e7 (drafted at 5f95ea108)
 trunk: dev
 ---
+
+## Outcome
+
+- Date: 2026-11-05.
+- Status: completed, delivered as one PR against `dev`, awaiting the merge.
+- Shipped: `RELEASE_DIGESTS` and `RELEASE_TRAITS` pin v1.2.0 (zips checked four ways, F1); a required `sponsor` trait, `listed-chains` for v1.2.0, sends that release's live populate to Fee Juice bridged to the account (D2); `fixtures/update/v1.2.0.storage.json` is its Chrome recording; the README and the release skill name every trait. At `T` = `ba50b97f0` the live scenario and all four replay cases pass from v1.2.0 on both browsers, and the live scenario from v1.1.0 on Chrome. Closes #1680.
+- Did not hold: "pin and record" alone. A candidate from the planning base could not rise above v1.2.0 (F4, until #1677 merged), and v1.2.0's sandbox offers no sponsor (F5, demonstrated by the red control).
+- Lessons: none promoted; `lessons.md` holds 8174 of its 8192 bytes. The version precondition is the release runbook's: the post-release step's runs need `dev` to hold the sync PR first.
+- Known limits: none.
+- Open items: none.
+- Deadline: the v1.2.0 recording's dApp session expires about 2026-11-12 17:41 UTC; the replay refuses it from 17:31. Re-record before the next promote if that has passed.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # update-from-1.2.0: the update scenarios run from v1.2.0
 
@@ -42,7 +54,7 @@ v1.2.0 shipped on 2026-11-05, so the next promote updates from it (`.claude/skil
 
 Files: `apps/extension/tests/e2e/fixtures/update/release.ts`, `apps/extension/tests/e2e/network/update-in-place.test.ts`, `apps/extension/tests/e2e/fixtures/update/v1.2.0.storage.json` (new, written by the scenario), `apps/extension/tests/e2e/README.md`, `.claude/skills/release/SKILL.md`. No product file, no collision with the leads the lane brief names.
 
-### Phase 1: pins, the `sponsor` trait, docs
+### Phase 1: pins, the `sponsor` trait, docs ✓ (`37068fdc6`; gate as expected; review round 1 clean, two README nits in `3eb970086`: [lessons/phase-1.md](lessons/phase-1.md))
 1. `RELEASE_DIGESTS["v1.2.0"]` from F1; `RELEASE_TRAITS["v1.2.0"]` from F2 plus `sponsor: "listed-chains"`.
 2. `ReleaseTraits` gains `sponsor: "every-chain" | "listed-chains"`: whether the release offers the canonical Sponsored fee payer on every chain, the run's custom sandbox network included, or only on the chains it lists. v0.31.0, v1.0.0, v1.1.0 `every-chain` (D2). One TSDoc sentence beside the others.
 3. In the live scenario, under `listed-chains`: `receiveOnSandbox` also bridges public Fee Juice to the account (`fundPublicFeeJuice`, the existing fixture, before the Send pick so its Fee Juice row is enabled), and `pickPreferences` and `sendFromWallet` pick `"public"` (Fee Juice). One pure mapping from the trait to the method; `every-chain` keeps `"sponsored"` and needs no funding. The header says so; its runtime line gets the bridge's estimate here and the measured ranges in Phase 2 step 4.
@@ -51,7 +63,7 @@ Files: `apps/extension/tests/e2e/fixtures/update/release.ts`, `apps/extension/te
 - **Gate:** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e`. Pass: exit 0 except exactly one failure, `the committed v1.2.0 recording … no recording of v1.2.0` (F3), the red proof that the check covers the new tag.
 6. The review loop (§ Post-implementation), round 1 over `origin/dev...HEAD`, before any build, so its fixes cost no rerun.
 
-### Phase 2: record and run, retry 0, one e2e run at a time
+### Phase 2: record and run, retry 0, one e2e run at a time ✓ (the red control red as expected; the recording `8854b337e`; all five runs at `T` green: [lessons/phase-2.md](lessons/phase-2.md))
 Never set `NULO_E2E_BACKUP_RECORD`; never touch another tag's recording or the pinned backups. Each run goes through `e2e:agent` or `test:e2e`, from the commands #1650's PR body lists with `NULO_E2E_UPDATE_FROM=v1.2.0`, `NULO_E2E_RETRY=0` / `--retry=0`, its log polled in a bounded loop inside one tool call. Before each run: `git status --porcelain -- apps/extension` empty (except the new recording after step 3, and step 2's one edit), load1 < 150.
 1. Confirm `apps/extension/package.json` reads `1.2.0` (F4). Build both candidates (`build-update-candidate.sh chrome|firefox`): manifests `1.2.0.1`. Note the browser versions.
 2. Red control for D2: v1.2.0's `sponsor` set to `every-chain` in the working tree only (F7); `git diff` must show that one line and nothing else before the run. Live, Chrome. Expected: red with `selectFeeMethod: send-fee-method-sponsored was not selectable within 45000ms (now absent)` (`fixtures/transfers.ts:273`), and no other error first. Restore the file; `git diff --quiet` must hold.
@@ -60,7 +72,7 @@ Never set `NULO_E2E_BACKUP_RECORD`; never touch another tag's recording or the p
 5. Rebuild both candidates at that commit `T`, then, at retry 0: live Chrome, live Firefox, replay Chrome, replay Firefox, and the D3 control, live Chrome from `v1.1.0`.
 - **Gate:** step 2 red as expected; steps 3 and 5 pass, all four replay cases on both browsers (a skipped case is not a pass). A red that a pin, a trait or the populate answers returns to Phase 1: fix, commit, rebuild, restart at step 3. A red the candidate causes is reported, not patched: the arc stops with `ARC_FAILED`. A Chrome live run that did not pass leaves no recording: delete it.
 
-### Phase 3: delivery
+### Phase 3: delivery ✓ (`dev` merged before `T`; gates green at `T`; the close-out below)
 1. The review loop resumed over the delta since round 1 (the recording, the runtime line), to convergence. A fix outside `implementations-plan/` moves `T`: rebuild and rerun step 5.
 2. Merge `origin/dev`; if anything outside the plan moved (`git diff --stat T HEAD -- . ':(exclude)implementations-plan'` non-empty: a merged test change counts, since `source.ts` only says what a build reads), rebuild and rerun step 5 at the merged head, which becomes `T`. `lint`, `typecheck:all`, `test:all`, `check:plans` at the final head.
 3. The close-out commits (§ Post-implementation). The PR head then differs from `T` only in `implementations-plan/`, which the body shows with that same `git diff --stat`.
@@ -92,6 +104,8 @@ None. Test files and docs only; no screen changes. The orchestrator's no-ask bud
 - **Codex plan audit** (gpt-6.1-sol, high, read-only): conditional approve, high confidence in D2 (the first send's deploy pays from preexisting Fee Juice, `execution/fee/fee-juice-strategy.ts:37`; the Send row enables on a positive public balance, `fee-helpers.ts:287`; the funding adds nothing a check compares). P2: the final rerun rule excluded `apps/extension/tests`, so a merged test change could escape (Phase 3 step 2 fixed). P3: step 2 contradicted the clean-tree preflight (exempted, its diff checked). Both accepted.
 - **Opus Plan leg:** conditional approve; F5 and the Fee Juice path verified (`fee-methods.test.ts:330-349` pays an undeployed account's first Send from public Fee Juice). Accepted: the same rerun rule (P2-1); the runtime line measured before `T` (P2-2, Phase 2 steps 3-4); the review loop before the builds (P2-3, Phase 1 step 6); the exact expected red (P3-1); Mainnet's host by blob id (P3-2, F2); the like-for-like runtime and no-CI statement (P3-4); why the chaos start is not run (P3-5); the tag on `main` (F1). Moot: the wait's bound (P3-3), as #1677 merged.
 - **Final Codex pass** (fresh session, gpt-6.1-sol, high): **approve**, high confidence, no new findings.
+- **Arc review loop, round 1** (over `37068fdc6`): Codex `clean`; Opus `general-purpose` `clean` with two P3 README nits, accepted (`3eb970086`).
+- **Round 2** (resumed, over the recording and the measured runtime line, `8854b337e`): Codex `clean`. Converged. Deviation: Phase 3 step 1's resumed round ran before step 5, after the `dev` merge, so no fix could move `T`.
 
 ## Delivery
 
