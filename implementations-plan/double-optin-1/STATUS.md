@@ -6,3 +6,4 @@
 - 2026-11-05: final fresh Codex pass: approve after two resumes. Plan ready for commit.
 - 2026-11-05: arc 1 phase 1 (Worker) gate green: subscribe bun test 91/91, lint 0, typecheck:all 0.
 - 2026-11-05: arc 1 phase 2 (landing) gate green: landing 172/172 (+1 skip), build, lint, typecheck:all, test:ci-gating, lint:actions 0; test:release 7 fails from the host's missing `zip` binary (unrelated).
+- 2026-11-05: arc 1 phase 3 (notice 1.2) gate green: subscribe 91/91, landing 172/172 (+1 skip), test:all 0; deviation D12 recorded.

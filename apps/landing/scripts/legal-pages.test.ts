@@ -214,12 +214,16 @@ describe("the real documents", () => {
 	const noticeMarkdown = readFileSync(resolve(legalDir, "website-privacy.md"), "utf8")
 	const noticeHeader = parseDocumentHeader(noticeMarkdown)
 	const shipped = pageVersions([{ doc: "website-privacy", version: noticeHeader.version, markdown: noticeMarkdown }])
-	const rowEffective = (version: string) =>
-		noticeMarkdown
+	// Read as `parseDocumentHeader` reads the header: a placeholder date is no date yet. The notice may
+	// carry one on dev; the launch gate below refuses it before main publishes the notice.
+	const rowEffective = (version: string) => {
+		const cell = noticeMarkdown
 			.split("\n")
 			.find((line) => line.startsWith(`| ${version} |`))
 			?.split("|")[2]
 			?.trim()
+		return cell !== undefined && hasPlaceholders(cell) ? null : cell
+	}
 
 	test.each(["terms", "privacy", "website-privacy"] as const)("%s.md renders against the shipped versions", (doc) => {
 		const markdown = readFileSync(resolve(legalDir, `${doc}.md`), "utf8")

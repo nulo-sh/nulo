@@ -209,6 +209,7 @@ send key; a format prefix and a canonical-encoding check in the token; deriving 
 | D9 | Accessibility (owner's 2026-10-19 delegation): native `<button type="button">`, the `aria-disabled` lock signup uses, a `role="status"` region; on a final state the button is hidden and focus moves to the heading (`tabindex="-1"`) | for, show it in OA4 | for | focus never lands on a removed control |
 | D10 | Named 409s only | proposed | — | an unknown 409 proves nothing; reading the name is local to `call()` |
 | D11 | Token without a format prefix or canonical check | for the prefix | against both | tie on the prefix, so the simpler form: rotation already voids 24 h of links |
+| D12 | Notice 1.2 keeps `«FILL: effective date»`; `legal-pages.test.ts` reads its history row as `parseDocumentHeader` reads the header (a placeholder is no date yet) | (Codex loop) | — | deviation found in Phase 3: the test compared a parsed header (`null`) with a raw row; a blank is refused on a PR into `main` by the launch gate (proved red with `NULO_LAUNCH_GATE=1`), a placeholder date would not be |
 
 ## Phases
 
@@ -266,7 +267,7 @@ send key; a format prefix and a canonical-encoding check in the token; deriving 
   `bun run lint`, `bun run typecheck:all`, `bun run test:ci-gating`, `bun run test:release`,
   `bun run lint:actions` exit 0. Layers: lint, types, unit, build.
 
-**Phase 3 — the notice.**
+**Phase 3 — the notice.** ✓
 1. Copy `legal/website-privacy.md` byte for byte to `legal/archive/website-privacy-1.1.md`.
 2. Write 1.2 with OA5's recommended text; `Version 1.2 — effective «FILL: effective date»` (a draft
    on `dev`; `NULO_LAUNCH_GATE` refuses it on a PR into `main`).

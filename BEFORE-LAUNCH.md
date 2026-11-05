@@ -243,6 +243,26 @@ November 2026; the landing and `nulo-subscribe` both deploy from that promote's 
       shows the 1.0 text
 - [ ] `nulo-subscribe` deployed from the same push, so a new signup records `consent_version` 1.1
 
+**Due at the release that publishes website notice 1.2** (double opt-in, #1236): signups are
+confirmed by email before they join the list. The landing and `nulo-subscribe` both deploy from the
+promote's push to `main`, each by its own build:
+
+- [ ] The owner's answers to `implementations-plan/double-optin-1/OWNER-ASKS.md` (OA1–OA7) are in the PR
+- [ ] `legal/website-privacy.md` — the version line and the 1.2 history row carry the day the promote lands
+- [ ] The secret `CONFIRM_SECRET` is set on `nulo-subscribe` before the promote merges
+      (`infra/subscribe/README.md`, owner checklist item 3); without it every signup answers 503
+- [ ] Both builds green after the push. If either fails, turn the kill switch on until both are; a
+      `nulo-subscribe` deploy resets the switch from `wrangler.jsonc`, so recheck it after each one
+- [ ] With a fresh address you control that Resend does not hold: one email arrives, its link
+      unrewritten in the HTML and the text part (also once through a client that wraps links); a
+      second submission inside 24 h sends nothing; the press on `/confirm` creates the contact with
+      `consent_version` 1.2; a second press writes nothing
+- [ ] On a disposable contact you withdraw first: look up a case variant of it before creating
+      anything (absent: kill switch on, stop); submit the variant (no email, no write); create a
+      contact twice and record whether the second create upserts
+- [ ] After the deploy, `nulo.sh/website-privacy` shows 1.2 and `nulo.sh/website-privacy/v1.1/`
+      shows the 1.1 text
+
 **Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
 2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
 
