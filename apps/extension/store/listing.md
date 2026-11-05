@@ -28,7 +28,7 @@ PRIVATE BY DEFAULT
 
 YOURS ALONE
 • Your keys stay on your device, behind your password or passkey.
-• No account, no telemetry. Not audited. See the Privacy Policy for what leaves your device.
+• No account, no telemetry. See the Privacy Policy for what leaves your device.
 • Back up your profile whenever you want.
 
 APPS HAVE TO ASK
@@ -36,7 +36,7 @@ APPS HAVE TO ASK
 • Every transaction it proposes waits for your yes.
 • Settings → Connected Apps lists every permission and lets you take it back.
 
-Open source, Apache-2.0: https://github.com/nulo-sh/nulo
+Open source, Apache-2.0, not audited: https://github.com/nulo-sh/nulo
 
 ### Data inventory
 
