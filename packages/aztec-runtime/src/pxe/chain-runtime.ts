@@ -7,7 +7,7 @@ import { PrestoProver, type PrestoPhase } from "@alejoamiras/presto"
 import type { ProveBackend } from "@nulo/wallet-core/jobs"
 import { PxeStoreKeyMissingError } from "@nulo/extension-messaging/errors"
 import type { NodeFactory } from "../ports/node-factory-port"
-import { createSubmissionPins, type RouteEndpoint, type RoutedNode, type SubmissionPins } from "../routing/routed-node"
+import { createSubmissionPins, type Route, type RouteEndpoint, type RoutedNode, type SubmissionPins } from "../routing/routed-node"
 import { assertNodeServesChain } from "../utils/chain-identity"
 import type { RetryOptions } from "../utils/fetch"
 import { chainDataDir, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
@@ -158,6 +158,8 @@ export class ChainRuntime {
  *  encryption key (required by the production factory; fakes ignore it). */
 export interface PxeFactory {
 	createChainRuntime(network: NetworkInfo, storeKey?: Uint8Array, options?: RuntimeOptions): Promise<ChainRuntime>
+	/** A route over `network`'s endpoints alone, with no store and so no rollup to hold them to. */
+	createRoute(network: NetworkInfo, pins: SubmissionPins): Route
 }
 
 export class ProductionPxeFactory implements PxeFactory {
@@ -180,6 +182,11 @@ export class ProductionPxeFactory implements PxeFactory {
 		this.port = options?.port
 		this.httpsPort = options?.httpsPort
 		this.onProvePhase = options?.provingMode === "proverless" ? undefined : options?.onProvePhase
+	}
+
+	public createRoute(network: NetworkInfo, pins: SubmissionPins): Route {
+		const { chainId, l1ChainId, endpoints } = network
+		return this.nodeFactory.createRoutedNode({ chainId, l1ChainId, endpoints }, { pins }).route
 	}
 
 	public async createChainRuntime(network: NetworkInfo, storeKey?: Uint8Array, options?: RuntimeOptions): Promise<ChainRuntime> {
@@ -390,6 +397,14 @@ export class ChainRuntimeRegistry {
 	public peekMatching(network: NetworkInfo): ChainRuntime | undefined {
 		const existing = this.runtimes.get(this.key(network.profileId, network.chainId))
 		return existing && existing.endpointsKey === endpointsKey(network.endpoints) ? existing : undefined
+	}
+
+	/** The route a send on `network` is picked on: the runtime's when it was built for `network`'s
+	 *  endpoint list, else a new one over that list holding the pair's pins. Builds no runtime, so a
+	 *  pick never waits on a rebuild and never rebinds one to a stale list. */
+	public sendRoute(network: NetworkInfo): Route {
+		const runtime = this.peekMatching(network)
+		return runtime ? runtime.node.route : this.factory.createRoute(network, this.pinsFor(network.profileId, network.chainId))
 	}
 
 	/** Which endpoint carried each transaction submitted on `(profileId, chainId)`, kept for the

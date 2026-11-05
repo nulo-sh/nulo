@@ -64,6 +64,7 @@ export const PXE_METHOD_DESCRIPTORS = {
 	getPublicScanTips: { rpc: true, ipxe: false, requiresNetwork: true },
 	getLatestBlockNumber: { rpc: true, ipxe: false, requiresNetwork: true },
 	getPublicTokenClassStatus: { rpc: true, ipxe: false, requiresNetwork: true },
+	pickSendEndpoint: { rpc: true, ipxe: false, requiresNetwork: true },
 	clearChainState: { rpc: true, ipxe: false, requiresNetwork: false },
 	clearProfileState: { rpc: true, ipxe: false, requiresNetwork: false },
 	provisionChainStoreKey: { rpc: true, ipxe: false, requiresNetwork: false },

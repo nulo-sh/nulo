@@ -3,6 +3,10 @@ import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import { ChainRuntime, ChainRuntimeRegistry, endpointsKey, type NetworkInfo, type PxeFactory } from "@nulo/aztec-runtime/pxe"
 import { networkInfoFrom } from "@/wallet/services/network/spec"
 
+const noRoute = (): never => {
+	throw new Error("this test builds no send route")
+}
+
 const network = (profileId: string, chainId: number, ...urls: string[]): NetworkInfo => ({
 	profileId,
 	chainId,
@@ -20,6 +24,7 @@ const makeFactory = () => {
 	const creations: Array<{ network: NetworkInfo; runtime: ChainRuntime; stop: ReturnType<typeof vi.fn> }> = []
 	let nextId = 0
 	const factory: PxeFactory = {
+		createRoute: noRoute,
 		async createChainRuntime(net) {
 			const id = `pxe-${nextId++}-${net.profileId}-${net.chainId}`
 			const { pxe, stop } = makePxe(id)
@@ -157,6 +162,7 @@ describe("ChainRuntimeRegistry", () => {
 	test("factory failure leaves no binding, so a retry re-invokes the factory", async () => {
 		let callCount = 0
 		const factory: PxeFactory = {
+			createRoute: noRoute,
 			async createChainRuntime(net) {
 				callCount++
 				if (callCount === 1) throw new Error("first call fails")

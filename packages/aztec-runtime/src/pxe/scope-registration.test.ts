@@ -26,6 +26,7 @@ import type { ILogger } from "@nulo/wallet-core/logger"
 import { PxeScopeUnregisteredError } from "@nulo/extension-messaging/errors"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { type IProfileReader, PxeService } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const noopProfiles: IProfileReader = { connect: async () => {}, getProfiles: async () => [] }
@@ -94,6 +95,7 @@ function makeHarness(registered: string[]) {
 	const synced: Array<{ method: string; scopes: string[] }> = []
 	const record = (method: string, scopes: AztecAddress[]) => synced.push({ method, scopes: scopes.map((s) => s.toString()) })
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n) => {
 			const pxe = {
 				getRegisteredAccounts: async () => registered.map((a) => ({ address: AztecAddress.fromStringUnsafe(a) })),

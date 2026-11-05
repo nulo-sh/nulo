@@ -46,6 +46,7 @@ import { StoreErasedError } from "./lifecycle-coordinator"
 import { PxeService, type IProfileReader } from "./service"
 import { PXE_NOT_SYNCED_DIAGNOSTIC } from "./stale-anchor"
 import { LogLevel } from "@nulo/wallet-core/logger"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 
@@ -79,6 +80,7 @@ function makeFactory(opts: {
 	let nodeCalls = 0
 	let pxeCalls = 0
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n) => {
 			const pxe = {
 				getContractInstance: async () => {
@@ -441,6 +443,7 @@ describe("PxeService op-failure log classification", () => {
 		// before the SW has (re)provisioned the in-memory store key. Three of
 		// these painted error-level lines on every fresh unlock.
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async () => {
 				throw new Error("PXE_STORE_KEY_MISSING: no store key provisioned for profile p1")
 			},
@@ -453,6 +456,7 @@ describe("PxeService op-failure log classification", () => {
 
 	test("a fresh PXE's not-synced refusal of getSyncedBlockHeader logs at DEBUG: its callers fall back or defer", async () => {
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n) => {
 				const pxe = {
 					getSyncedBlockHeader: async () => {
@@ -470,6 +474,7 @@ describe("PxeService op-failure log classification", () => {
 
 	test("the not-synced text on any other op still logs at ERROR", async () => {
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async () => {
 				throw new Error(PXE_NOT_SYNCED_DIAGNOSTIC)
 			},
@@ -481,6 +486,7 @@ describe("PxeService op-failure log classification", () => {
 
 	test("a store a purge or an erase ended under the op logs at DEBUG: its caller's context went with it", async () => {
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async () => {
 				throw new StoreErasedError("getContractInstance: chain was purged mid-operation — refusing to re-create its runtime/store")
 			},
@@ -494,6 +500,7 @@ describe("PxeService op-failure log classification", () => {
 	test("any OTHER op failure still logs at ERROR (the downgrade is marker-scoped)", async () => {
 		const exploded = new Error("store exploded")
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async () => {
 				throw exploded
 			},
@@ -517,6 +524,7 @@ describe("PxeService.getLatestBlockNumber", () => {
 	test("serves the node's untagged block number", async () => {
 		const tags: unknown[] = []
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n) => {
 				const node = {
 					getBlockNumber: async (...args: unknown[]) => {
@@ -566,6 +574,7 @@ describe("PxeService teardown against an unreachable node", () => {
 	/** A runtime whose node goes through the production retrying fetch, or answers when told to. */
 	function serviceWithNode(kind: "refusing" | "answering"): PxeService {
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n, _storeKey, retries?: RetryOptions) => {
 				retryWhile = retries?.retryWhile
 				const fetchBlock = makeFetchWithTimeout(60_000, retries)

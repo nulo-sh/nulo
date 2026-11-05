@@ -99,6 +99,9 @@ export interface IProfileReader {
 	getProfiles(): Promise<Array<{ id: string }>>
 }
 
+const HASH32 = z.string().regex(/^0x[0-9a-fA-F]{64}$/)
+const SendPickSchema = z.object({ txHash: HASH32, anchorHash: HASH32 }).strict()
+
 export class PxeService extends Service<Methods, PxeEvents> implements ServiceSpec<Methods, PxeEvents> {
 	public static name = PXE_SERVICE_NAME
 	public readonly onProvePhase = new EventHandler<ProvePhaseEvent>()
@@ -127,6 +130,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		"getPublicScanTips",
 		"getLatestBlockNumber",
 		"getPublicTokenClassStatus",
+		"pickSendEndpoint",
 		"clearChainState",
 		"clearProfileState",
 		"provisionChainStoreKey",
@@ -704,6 +708,23 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		return this.withPxeRead("getPublicTokenClassStatus", network, (_pxe, node) =>
 			resolveTokenClassStatus(node, contract, checkpointHash, this.logPublicEvent),
 		)
+	}
+
+	/** Holds only the profile barrier's read side: a pick must not wait behind another operation's
+	 *  proof on the chain guard, and must not rebuild a runtime for an endpoint list. */
+	public async pickSendEndpoint(network: NetworkInfo, tx: { txHash: string; anchorHash: string }): Promise<{ rpcUrl: string }> {
+		const start = Date.now()
+		try {
+			const { txHash, anchorHash } = SendPickSchema.parse(tx)
+			return await this.getProfileBarrier(network.profileId).read(async () => {
+				this.assertGenerationCurrent(network)
+				const picked = await this.registry.sendRoute(network).pickForSend(txHash, anchorHash)
+				return { rpcUrl: picked.rpcUrl }
+			})
+		} catch (err) {
+			this.logOpFailure("READ", "pickSendEndpoint", start, err)
+			throw err
+		}
 	}
 
 	/**

@@ -52,6 +52,7 @@ import type { NodeFactory } from "../ports/node-factory-port"
 import { createSubmissionPins, type ConnectEndpoint, realTimer, routeNode, type RouteSpec } from "../routing/routed-node"
 import { withTransportFailure } from "../utils/fetch"
 import { initStoreVersionStamp, openChainStore, readStoreStamp } from "./opfs-store"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 // The injected encrypted store is unit-mocked (real OPFS needs a browser; the production-build
 // spike is the empirical proof). The factory only needs open/close handles and the stamp here.
@@ -457,7 +458,7 @@ describe("ChainRuntimeRegistry.disposeProfile — allSettled + AggregateError + 
 		const bad = runtimeWith(2, async () => {
 			throw new Error("close failed: lock leaked")
 		})
-		const factory: PxeFactory = { createChainRuntime: async (n) => (n.chainId === 1 ? ok : bad) }
+		const factory: PxeFactory = { createRoute: NO_ROUTE, createChainRuntime: async (n) => (n.chainId === 1 ? ok : bad) }
 		const reg = new ChainRuntimeRegistry(factory)
 		await reg.ensure(net(1))
 		await reg.ensure(net(2))
@@ -469,7 +470,7 @@ describe("ChainRuntimeRegistry.disposeProfile — allSettled + AggregateError + 
 	})
 
 	test("resolves cleanly + clears the registry when every close succeeds", async () => {
-		const factory: PxeFactory = { createChainRuntime: async (n) => runtimeWith(n.chainId, async () => {}) }
+		const factory: PxeFactory = { createRoute: NO_ROUTE, createChainRuntime: async (n) => runtimeWith(n.chainId, async () => {}) }
 		const reg = new ChainRuntimeRegistry(factory)
 		await reg.ensure(net(1))
 		await reg.ensure(net(2))
@@ -500,7 +501,7 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 
 	test("peekMatching returns the runtime only for the endpoint list it was built for; never mutates", async () => {
 		const rt = runtimeAt(netAt(1, A, B))
-		const reg = new ChainRuntimeRegistry({ createChainRuntime: async () => rt })
+		const reg = new ChainRuntimeRegistry({ createRoute: NO_ROUTE, createChainRuntime: async () => rt })
 		await reg.ensure(netAt(1, A, B))
 
 		expect(reg.peekMatching(netAt(1, A, B))).toBe(rt)
@@ -515,6 +516,7 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 	test("ensure rebinds on an endpoint-list edit: disposes the old runtime, binds the new list", async () => {
 		let closed = 0
 		const reg = new ChainRuntimeRegistry({
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n) =>
 				runtimeAt(n, async () => {
 					closed++
@@ -543,6 +545,7 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 			}) as never
 		let built = 0
 		const reg = new ChainRuntimeRegistry({
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n) => {
 				built++
 				const node = routeNode(
@@ -565,6 +568,7 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 	test("every runtime built for a (profile, chain) gets that pair's pins; another chain gets its own", async () => {
 		const pins: unknown[] = []
 		const reg = new ChainRuntimeRegistry({
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n, _key, options) => {
 				pins.push(options?.pins)
 				return runtimeAt(n)
@@ -580,7 +584,7 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 	})
 
 	test("a profile's erase drops its pins; another profile's stay", async () => {
-		const reg = new ChainRuntimeRegistry({ createChainRuntime: async (n) => runtimeAt(n) })
+		const reg = new ChainRuntimeRegistry({ createRoute: NO_ROUTE, createChainRuntime: async (n) => runtimeAt(n) })
 		const mine = reg.pinsFor(P, 1)
 		const theirs = reg.pinsFor("prof-2", 1)
 		mine.byTxHash.set("0x01", A)
@@ -596,6 +600,7 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 		})
 		let factoryCalls = 0
 		const reg = new ChainRuntimeRegistry({
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n) => {
 				factoryCalls++
 				return n.endpoints[0]?.id === "a" ? bad : runtimeAt(n)
@@ -619,6 +624,7 @@ describe("ChainRuntimeRegistry.stopRetries", () => {
 	async function registryWith(...keys: string[]) {
 		const retryWhile = new Map<string, () => boolean>()
 		const reg = new ChainRuntimeRegistry({
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n, _storeKey, retries) => {
 				retryWhile.set(`${n.profileId}:${n.chainId}`, retries?.retryWhile ?? (() => true))
 				return new ChainRuntime(n.chainId, {} as never, {} as never, endpointsKey(n.endpoints))

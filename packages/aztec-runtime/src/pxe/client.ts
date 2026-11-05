@@ -514,6 +514,12 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 		return await PublicTokenClassStatusSchema.parseAsync(result)
 	}
 
+	/** The endpoint the offscreen pinned `tx` to; the caller submits there and nowhere else. */
+	public async pickSendEndpoint(network: NetworkInfo, tx: { txHash: string; anchorHash: string }): Promise<{ rpcUrl: string }> {
+		const result = await this.request("pickSendEndpoint", network, tx)
+		return await z.object({ rpcUrl: z.string().url() }).strict().parseAsync(result)
+	}
+
 	/** Dispose the offscreen runtime for `(profileId, chainId)` and remove
 	 *  its OPFS store. SW-side cascade entry-point for `NetworkService.purgeChain`. */
 	public async clearChainState(profileId: string, chainId: number): Promise<void> {

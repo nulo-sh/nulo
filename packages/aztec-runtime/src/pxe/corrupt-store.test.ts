@@ -24,6 +24,7 @@ import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { chainDataDir } from "./chain-coordinates"
 import { PxeService, type IProfileReader } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const network: NetworkInfo = {
 	profileId: "p1",
@@ -69,6 +70,7 @@ function fakeDisk(...fresh: Fault[]) {
 		if (image.fault?.at === at) throw ERRORS[image.fault.error]()
 	}
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n) => {
 			const dir = chainDataDir(n)
 			const image = imageOf(n)

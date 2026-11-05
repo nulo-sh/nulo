@@ -26,6 +26,7 @@ import type { ILogger } from "@nulo/wallet-core/logger"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { StoreErasedError } from "./lifecycle-coordinator"
 import { PxeService, type IProfileReader } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const noopProfiles: IProfileReader = {
@@ -49,6 +50,7 @@ const net = (pxeGeneration?: string): NetworkInfo => ({
 function makeService(): { service: PxeService; disposeShouldFail: (v: boolean) => void } {
 	let failDispose = false
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n, storeKey) => {
 			// Mirror the production factory's fail-close (chain-runtime.ts): no provisioned key,
 			// no runtime. Without this the harness silently boots keyless runtimes and every
@@ -291,6 +293,7 @@ describe("incarnation fence", () => {
 		// rejecting is not enough, the mutation would already have landed.
 		let factoryCalls = 0
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n, storeKey) => {
 				factoryCalls += 1
 				if (!storeKey) throw new Error(`PXE_STORE_KEY_MISSING: no store key provisioned for profile ${n.profileId}`)

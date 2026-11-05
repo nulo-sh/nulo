@@ -23,6 +23,7 @@ import type { ILogger } from "@nulo/wallet-core/logger"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { PxeService, type IProfileReader } from "./service"
 import { isStaleAnchorMessage, withStaleAnchorRetry } from "./stale-anchor"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const REORG_TEXT =
 	"Block hash 0x12dc not found when resolving query. If the node API has been queried with anchor block hash possibly a reorg has occurred."
@@ -161,6 +162,7 @@ describe("PxeService.executeUtility runs through the helper", () => {
 		const executeUtility = vi.fn().mockRejectedValueOnce(new Error(REORG_TEXT)).mockResolvedValueOnce({ marker: "utility-result" })
 		const sync = vi.fn(async () => {})
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n) =>
 				new ChainRuntime(n.chainId, {} as never, { executeUtility, sync } as unknown as PXE, endpointsKey(n.endpoints)),
 		}

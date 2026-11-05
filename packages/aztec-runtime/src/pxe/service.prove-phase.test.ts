@@ -21,6 +21,7 @@ import type { ILogger } from "@nulo/wallet-core/logger"
 import { ChainRuntime, endpointsKey, type ActiveProve, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { createProvePhaseSink } from "./prove-phase-sink"
 import { PxeService, type IProfileReader } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const noopProfiles: IProfileReader = {
@@ -48,6 +49,7 @@ function harness(opts: { throws?: boolean } = {}) {
 		}),
 	} as unknown as PXE
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n) => {
 			runtime = new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints))
 			return runtime

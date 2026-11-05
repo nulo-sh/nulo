@@ -26,6 +26,10 @@ import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.t
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { RegistrationExecutor } from "./registration-executor"
 
+const noRoute = (): never => {
+	throw new Error("this test builds no send route")
+}
+
 /** One key for every profile, as an unlocked worker holds it. */
 const ROW_KEYS = await rowKeysForEveryProfile()
 
@@ -78,6 +82,7 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 		},
 	} as unknown as PXE
 	const pxeService = new PxeService({ connect: async () => {}, getProfiles: async () => [] }, noopLogger, {
+		createRoute: noRoute,
 		createChainRuntime: async (n) => new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints)),
 	})
 	;(pxeService as unknown as { initialized: boolean }).initialized = true

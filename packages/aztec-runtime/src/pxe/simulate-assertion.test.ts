@@ -25,6 +25,7 @@ import { TxContext, TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import { ContractAssertionError, PxeStaleAnchorError } from "@nulo/extension-messaging/errors"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { NO_ROUTE } from "./pxe-factory.testing"
 import { type IProfileReader, PxeService } from "./service"
 
 const noopLogger: ILogger = { log: () => {} }
@@ -68,6 +69,7 @@ function harness(errors: unknown[]) {
 			} as unknown as PXE
 			return new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints))
 		},
+		createRoute: NO_ROUTE,
 	}
 	const service = new PxeService(noopProfiles, noopLogger, factory)
 	;(service as unknown as { initialized: boolean }).initialized = true

@@ -39,6 +39,7 @@ import { TxContext, TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { PxeService, type IProfileReader } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const noopProfiles: IProfileReader = {
@@ -88,6 +89,7 @@ function makeHarness(opts?: { instanceMissing?: boolean }) {
 	const registered: unknown[] = []
 	const simulateCalls: { opts: Record<string, unknown> }[] = []
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n) => {
 			const pxe = {
 				getRegisteredAccounts: async () => [{ address: { toString: () => accountHex } }],

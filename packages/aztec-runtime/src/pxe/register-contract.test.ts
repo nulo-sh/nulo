@@ -19,6 +19,7 @@ import { FrozenSchnorrAccountArtifact } from "../account/frozen-artifact"
 import { NuloAccount } from "../account/nulo-account"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { type IProfileReader, PxeService } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const noopProfiles: IProfileReader = {
@@ -37,6 +38,7 @@ function makeHarness(stored = new Map<string, unknown>()) {
 	const writes: string[] = []
 	const registeredClasses: unknown[] = []
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n) => {
 			const pxe = {
 				getContractArtifact: async (id: Fr) => stored.get(id.toString()),
