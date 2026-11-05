@@ -31,15 +31,15 @@ export function notesProblems(text: string): string[] {
 	const problems: string[] = []
 	const chars = amoChars(notes)
 	if (chars > RELEASE_NOTES_MAX) problems.push(`the notes are ${chars} chars; AMO accepts at most ${RELEASE_NOTES_MAX}`)
-	// AMO's Markdown reads any line opening with `#` as a heading and drops it; the Release body supplies its own.
+	// GitHub shows headings and rules; AMO drops them, and reads any line opening with `#` as a heading.
 	if (/^ {0,3}#/m.test(notes)) problems.push("a line opens with #, which AMO reads as a heading")
+	if (/^ {0,3}(=+|-+)[ \t]*$/m.test(notes)) problems.push("a line of only = or - makes a heading or a rule, which AMO drops")
 	// The user-facing copy rule: no em dash joins two clauses; notes have no empty value to mark.
 	if (notes.includes("—")) problems.push("the notes hold an em dash")
 	if (notes.includes(SOURCE_COMMIT)) problems.push(`the notes hold ${SOURCE_COMMIT}`)
 	return problems
 }
 
-/** The stable Release body: the notes, then git-cliff's install, verify and change list. */
 export function composeBody(version: string, notes: string, cliff: string): string {
 	return `## What's new in ${version}\n\n${notes.trim()}\n\n---\n\n${cliff}`
 }

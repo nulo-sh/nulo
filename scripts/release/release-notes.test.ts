@@ -20,6 +20,10 @@ describe("notesProblems", () => {
 		])
 		expect(notesProblems(`${GOOD}\n## More\n`)).toEqual(["a line opens with #, which AMO reads as a heading"])
 		expect(notesProblems(`${GOOD}#1668 landed\n`)).toEqual(["a line opens with #, which AMO reads as a heading"])
+		for (const line of ["=======", "---"])
+			expect(notesProblems(`Changes\n${line}\n\n- One change.\n`), line).toEqual([
+				"a line of only = or - makes a heading or a rule, which AMO drops",
+			])
 		expect(notesProblems("Sends are faster — and cheaper.")).toEqual(["the notes hold an em dash"])
 		expect(notesProblems("Built from @SOURCE_COMMIT@.")).toEqual(["the notes hold @SOURCE_COMMIT@"])
 	})

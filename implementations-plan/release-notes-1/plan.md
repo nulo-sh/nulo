@@ -103,6 +103,7 @@ Each finding's path and reproducer: `lessons/phase-0.md`.
 - **Codex** (gpt-6.1-sol, high): conditional approve. Accepted: promote-check wording (2), `tag-by-hand-run` refusal (3), I1 narrowed and A9 (4), A10 (5), the breaking-commit parser (6), the `@SOURCE_COMMIT@` refusal (7), `- ` markers for 1.1.0 (8). Rejected: an all-skipped range drops its release header (1), refuted by a git-cliff 2.14.2 run in a scratch clone.
 - **Opus 5.5 Plan**: conditional approve. Accepted: A10 and the real reason for F7 (1), wiring pins and a YAML-driven rehearsal (2), `check` in the Phase 2 gate (3), the preview wording (4), filter wording (6), `no-cache: true` (7), F3/I2, A11 and A8's reason (8). Rejected: refusing `::` lines (4; commit subjects already reach the preview, no secret in the job) and an empty-`CLIFF` refusal (9; no path after Codex 1's reproducer).
 - **Final Codex pass** (same session, verification round): approve, no remaining material finding; Codex re-ran the archive's SHA-512 and both all-skipped cases and withdrew its finding 1.
+- **Fix loop, Codex round 1**: two Low findings, both accepted and fixed: setext headings now refused, two comments cut (`lessons/phase-2.md`).
 
 Implementation deviations (the tree won):
 - The AMO runner derives the notes path from `VERSION` (`notesPath`), so `release.yml` gains no `RELEASE_NOTES_PATH`: one input fewer that could disagree with the version.

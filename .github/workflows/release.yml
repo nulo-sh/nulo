@@ -491,8 +491,7 @@ jobs:
           bun-version-file: package.json
           token: ""
           no-cache: true
-      # A stable's body opens with its committed user-facing notes, read from the tag's tree: a stable
-      # without notes that can ship fails here, before attach-assets. A prerelease keeps git-cliff's alone.
+      # The tag's own composer and notes run, so every dispatch for a tag writes the same body.
       - name: Compose the release body
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
