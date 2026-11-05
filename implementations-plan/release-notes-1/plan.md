@@ -62,7 +62,7 @@ No extension screen changes. Drafted in the PR with before/after; the merge wait
 - **AMO version "Release notes"**: before, empty (1.2.0.0); after, the notes file, rendered as a list.
 - **rc and nightly bodies**: same layout, the kept groups only.
 
-## Phase 1: the notes module, the files and the gates
+## Phase 1: the notes module, the files and the gates ✓
 
 Change map:
 - Add `release-notes/1.2.0.md` (the v1.2.0 body's notes section, verbatim) and `release-notes/1.1.0.md` (`listing.md`'s block, same words, `- ` markers).
@@ -77,7 +77,7 @@ Tests (one per refused class, each with a success control):
 
 **Validation gate**: `bun run test:release && bun run lint && bun run typecheck:all`. Pass: exit 0, and the new tests appear in the output.
 
-## Phase 2: workflow wiring, `cliff.toml`, docs and the rehearsal
+## Phase 2: workflow wiring, `cliff.toml`, docs and the rehearsal ✓
 
 Change map:
 - `release.yml`: in `release-notes`, git-cliff's `OUTPUT` becomes `/tmp/cliff.md`; add the pinned `oven-sh/setup-bun` step; add `bun --no-install scripts/release/release-notes-run.ts compose` with env `VERSION: ${{ needs.resolve.outputs.version }}`, `CLIFF: /tmp/cliff.md`, `OUT: /tmp/release-notes.md`; keep the preview and the upload. In `publish-firefox-amo`, add env `RELEASE_NOTES_PATH: release-notes/${{ needs.resolve.outputs.version }}.md`.
