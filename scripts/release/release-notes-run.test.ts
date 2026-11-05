@@ -49,9 +49,9 @@ describe("compose", () => {
 		expect(r.written["/tmp/release-notes.md"]).toBe(CLIFF)
 	})
 
-	test("an empty git-cliff output or a missing input refuses", () => {
-		expect(compose("1.3.0", { "/tmp/cliff.md": "\n", "release-notes/1.3.0.md": NOTES }).exit).toBe(1)
-		const h = fakeIO({})
+	test("a missing git-cliff output or a missing input refuses and writes nothing", () => {
+		const h = fakeIO({ "release-notes/1.3.0.md": NOTES })
+		expect(main(["compose"], { VERSION: "1.3.0", CLIFF: "/tmp/none.md", OUT: "/tmp/release-notes.md" }, h.io)).toBe(1)
 		expect(main(["compose"], { VERSION: "1.3.0", CLIFF: "/tmp/cliff.md" }, h.io)).toBe(1)
 		expect(h.written).toEqual({})
 	})

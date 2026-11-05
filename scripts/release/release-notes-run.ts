@@ -30,7 +30,7 @@ export function runCompose(env: Record<string, string | undefined>, io: NotesIO)
 	const { VERSION: version = "", CLIFF: cliffPath = "", OUT: out = "" } = env
 	if (!version || !cliffPath || !out) return fail(io, "VERSION, CLIFF and OUT are required")
 	const cliff = io.read(cliffPath)
-	if (!cliff?.trim()) return fail(io, `${cliffPath} holds no git-cliff output`)
+	if (cliff === null) return fail(io, `${cliffPath} does not exist`)
 	let stable: boolean
 	try {
 		stable = needsNotes(version)
