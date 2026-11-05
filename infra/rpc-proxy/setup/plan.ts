@@ -6,7 +6,7 @@ const CHALLENGE_ACTIONS = new Set(["challenge", "managed_challenge", "js_challen
 
 export type DnsRecord = { type: string; name: string; content: string; proxied?: boolean }
 export type WorkerDomain = { hostname: string; service: string; cert_id?: string }
-export type Rule = { action: string; expression: string; description?: string; enabled?: boolean }
+export type Rule = { action: string; expression?: string; description?: string; enabled?: boolean }
 export type Ruleset = { phase: string; name?: string; rules: Rule[] }
 export type BuildConfig = {
 	git_repository?: { repo_name?: string; branch?: string }
@@ -58,7 +58,7 @@ function botSteps(inv: Inventory): string[] {
 	]
 }
 
-const namesEveryHost = (expression: string) => HOSTS.every((h) => expression.includes(h))
+const namesEveryHost = (expression: string | undefined) => HOSTS.every((h) => (expression ?? "").includes(h))
 
 function ruleSteps(inv: Inventory): string[] {
 	const placed = [
