@@ -27,6 +27,8 @@ const FIREFOX_MANIFEST = {
 	browser_specific_settings: { gecko: { id: GECKO_ID, data_collection_permissions: { required: ["financialAndPaymentInfo"] } } },
 }
 const LISTING = `# Listing\n${NOTES_START}\nTesting information for the reviewer.\n${NOTES_END}\n`
+const RELEASE_NOTES_PATH = "release-notes/0.27.0.md"
+const RELEASE_NOTES = "What changed for you.\n\n- One change.\n"
 
 type Step = ApiResponse | Error | ((req: ApiRequest) => ApiResponse)
 
@@ -37,6 +39,7 @@ interface Fixture {
 	/** The archived `apps/extension/package.json`'s version. */
 	treeVersion?: string
 	listing?: string
+	releaseNotes?: string
 	missing?: string[]
 	/** Paths whose `bytes()` throws. */
 	unreadable?: string[]
@@ -58,7 +61,7 @@ function harness(steps: Step[], fx: Fixture = {}) {
 			if (unreadable.has(p)) throw new Error(`EIO ${SECRET}`)
 			return new Uint8Array([0x50, 0x4b])
 		},
-		text: () => fx.listing ?? LISTING,
+		text: (p) => (p === RELEASE_NOTES_PATH ? (fx.releaseNotes ?? RELEASE_NOTES) : (fx.listing ?? LISTING)),
 		zipEntries: () => fx.sourceEntries ?? SOURCE_ENTRIES,
 		zipText: () => JSON.stringify({ name: "@nulo/extension", version: fx.treeVersion ?? "0.27.0" }),
 		zipManifest: (p) => {
@@ -175,6 +178,15 @@ describe("inputs", () => {
 		expect(h.output()).toContain("reviewer-notes")
 	})
 
+	test("missing or unshippable release notes are refused before any request", async () => {
+		for (const fx of [{ missing: [RELEASE_NOTES_PATH] }, { releaseNotes: "x".repeat(3001) }] satisfies Fixture[]) {
+			const h = harness([new Error("must not be called")], fx)
+			expect((await runPublishFirefoxAmo(env(), h.io)).exit).toBe(1)
+			expect(h.calls).toHaveLength(0)
+			expect(h.output()).toContain(RELEASE_NOTES_PATH)
+		}
+	})
+
 	test("a missing key pair fails after the inputs are checked, still with no request", async () => {
 		const h = harness([new Error("must not be called")])
 		expect((await runPublishFirefoxAmo(env({ AMO_JWT_SECRET: undefined }), h.io)).exit).toBe(1)
@@ -259,7 +271,11 @@ describe("publish flow", () => {
 		const up = h.calls[0].req
 		expect(up.kind === "multipart" && up.fields.channel).toBe("listed")
 		const version = h.calls[3].req
-		expect(version.kind === "json" && version.body).toEqual({ upload: "u-1", approval_notes: "Testing information for the reviewer." })
+		expect(version.kind === "json" && version.body).toEqual({
+			upload: "u-1",
+			approval_notes: "Testing information for the reviewer.",
+			release_notes: { "en-US": RELEASE_NOTES.trim() },
+		})
 		expect(h.calls[4].req.url).toContain("/versions/9001/")
 		expect(new Set(h.calls.map((c) => c.authorization)).size).toBe(5)
 		expect(h.output()).toContain("version 9001 (0.27.0.0, listed, file unreviewed); source attached; follow it in the Developer Hub")

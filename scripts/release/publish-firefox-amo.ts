@@ -52,11 +52,15 @@ export const uploadStatusRequest = (uuid: string): ApiRequest => ({
 	method: "GET",
 })
 
-export const versionRequest = (guid: string, uuid: string, approvalNotes: string): ApiRequest => ({
+/** The add-on's default locale on AMO: a translated field must carry a value in it. */
+export const AMO_LOCALE = "en-US"
+
+/** `release_notes` is a translated field, an object keyed by locale; `approval_notes` is plain text. */
+export const versionRequest = (guid: string, uuid: string, approvalNotes: string, releaseNotes: string): ApiRequest => ({
 	kind: "json",
 	url: `${AMO_API}/addons/addon/${encodeURIComponent(guid)}/versions/`,
 	method: "POST",
-	body: { upload: uuid, approval_notes: approvalNotes },
+	body: { upload: uuid, approval_notes: approvalNotes, release_notes: { [AMO_LOCALE]: releaseNotes } },
 })
 
 /** "Version source files cannot be uploaded as JSON": the source goes as multipart on a PATCH of the version. */

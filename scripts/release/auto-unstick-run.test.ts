@@ -14,6 +14,7 @@ function releasePr(overrides: Partial<MergedPrRef> = {}): MergedPrRef {
 
 const FILLED = "# Terms\n\n**Version 1.0 — effective 3 June 2027**\n"
 const BLANK = "# Terms\n\n**Version 1.0 — effective «FILL: effective date»**\n"
+const NOTES = "What changed for you.\n\n- One change.\n"
 
 interface Calls {
 	/** Every IO call by name, in the order the runner made them. */
@@ -25,8 +26,11 @@ interface Calls {
 	relabelPr: Array<{ prNumber: number; add: string; remove: string }>
 }
 
-/** A recording fake IO. `pr` / `tagSha` script what resolution returns; `files` what the merge commit holds. */
-function fakeIO(script: { pr?: MergedPrRef | null; tagSha?: string | null; files?: Record<string, string> } = {}): {
+/**
+ * A recording fake IO. `pr` / `tagSha` script what resolution returns; `files` what the merge commit
+ * holds; `notes` the text of any `release-notes/` file there (absent when null).
+ */
+function fakeIO(script: { pr?: MergedPrRef | null; tagSha?: string | null; files?: Record<string, string>; notes?: string | null } = {}): {
 	io: UnstickIO
 	calls: Calls
 } {
@@ -46,7 +50,8 @@ function fakeIO(script: { pr?: MergedPrRef | null; tagSha?: string | null; files
 		async readFileAt(sha, path) {
 			calls.order.push("readFileAt")
 			calls.readFileAt.push({ sha, path })
-			const text = files[path]
+			const notes = script.notes === undefined ? NOTES : (script.notes ?? undefined)
+			const text = path.startsWith("release-notes/") ? notes : files[path]
 			if (text === undefined) throw new Error(`no ${path} at ${sha}`)
 			return text
 		},
@@ -218,14 +223,23 @@ describe("runUnstick — no launch with a blank in the legal documents", () => {
 		expect(calls.relabelPr).toHaveLength(0)
 	})
 
-	test("it reads both documents at the merge commit before it writes anything", async () => {
+	test("it reads both documents and the release notes at the merge commit before it writes anything", async () => {
 		const { io, calls } = fakeIO({ pr: releasePr() })
 		expect((await runUnstick(opts({ io, version: "1.0.0" }))).action).toBe("create")
 		expect(calls.readFileAt).toEqual([
 			{ sha: MERGE, path: "legal/terms.md" },
 			{ sha: MERGE, path: "legal/privacy.md" },
+			{ sha: MERGE, path: "release-notes/1.0.0.md" },
 		])
-		expect(calls.order).toEqual(["resolveMergedPr", "resolveTagSha", "readFileAt", "readFileAt", "createTag", "relabelPr"])
+		expect(calls.order).toEqual([
+			"resolveMergedPr",
+			"resolveTagSha",
+			"readFileAt",
+			"readFileAt",
+			"readFileAt",
+			"createTag",
+			"relabelPr",
+		])
 	})
 
 	test("a filled 1.0.0 and a 0.x release with a «FILL» are tagged as before", async () => {
@@ -241,6 +255,18 @@ describe("runUnstick — no launch with a blank in the legal documents", () => {
 		const { io, calls } = fakeIO({ pr: releasePr(), files: { "legal/terms.md": FILLED } })
 		await expect(runUnstick(opts({ io, version: "1.0.0" }))).rejects.toThrow(/legal\/privacy\.md/)
 		expect(calls.createTag).toHaveLength(0)
+	})
+
+	test("a stable whose merge commit lacks its release notes, or holds notes that cannot ship, gets no tag", async () => {
+		for (const notes of [null, "## Heading\n"]) {
+			const { io, calls } = fakeIO({ pr: releasePr(), notes })
+			const r = await runUnstick(opts({ io, version: "1.3.0" }))
+			expect({ action: r.action, exitCode: r.exitCode }).toEqual({ action: "refused", exitCode: 1 })
+			expect(r.reason).toContain("release-notes/1.3.0.md")
+			expect(r.reason).toContain("No tag was created")
+			expect(calls.createTag).toHaveLength(0)
+			expect(calls.relabelPr).toHaveLength(0)
+		}
 	})
 
 	test("the job installs nothing, so the check is loaded by relative path from a file that imports nothing", () => {
