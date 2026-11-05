@@ -4,6 +4,9 @@
 # stores carry only stable releases, so only a stable release's notes link to them.
 # @SOURCE_COMMIT@ is the tag's commit, written in by scripts/release/attach-assets-run.ts: git-cliff's
 # own commit_id names the newest commit the include-path keeps, not the tagged one.
+# The list keeps what users and integrators need; a stable's user-facing summary is its
+# release-notes/X.Y.Z.md, which release.yml puts above this text. `<!-- n -->` orders the groups and
+# `striptags` hides it.
 
 [changelog]
 header = ""
@@ -49,7 +52,7 @@ The zips below are the same builds. Verify them with `shasum -a 256 -c SHASUMS25
 {% endif -%}
 
 {% for group, commits in commits | group_by(attribute="group") %}
-### {{ group | upper_first }}
+### {{ group | striptags | trim | upper_first }}
 
 {% for commit in commits -%}
 - {{ commit.message | split(pat="\\n") | first | upper_first }}\
@@ -71,15 +74,12 @@ skip_tags = "^v0\\..*-internal"
 sort_commits = "newest"
 
 commit_parsers = [
-  { message = "^feat", group = "Features" },
-  { message = "^fix", group = "Bug Fixes" },
-  { message = "^perf", group = "Performance" },
-  { message = "^refactor", group = "Refactor" },
-  { message = "^docs", group = "Documentation" },
-  { message = "^test", group = "Tests" },
-  { message = "^build|^ci", group = "Build / CI" },
-  { message = "^chore", group = "Chore" },
-  { message = "^revert", group = "Reverts" },
-  { message = "^style", group = "Style" },
-  { message = ".*", group = "Other" },
+  # First, so a breaking change of any type is listed, never skipped with its type.
+  { field = "breaking", pattern = "true", group = "<!-- 0 -->Breaking changes" },
+  { message = "^feat", group = "<!-- 1 -->Features" },
+  { message = "^fix", group = "<!-- 2 -->Bug Fixes" },
+  { message = "^perf", group = "<!-- 3 -->Performance" },
+  { message = "^revert", group = "<!-- 4 -->Reverts" },
+  # Refactors, tests, docs, CI, chores, style, release-please's own commits, promotes and merges.
+  { message = ".*", skip = true },
 ]
