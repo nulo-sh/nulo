@@ -1,4 +1,6 @@
 <script setup>
+import { PROFILE_NAME_MAX } from "@/utils/profile-name"
+
 /**
  * The profile-name input with its shake wrapper and alert line, rendered as two roots so each shell
  * keeps its own container and label. `focus()` is exposed for the name validation's focus return.
@@ -22,7 +24,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 			:modelValue="modelValue"
 			type="text"
 			placeholder="My Profile"
-			:maxLength="32"
+			:maxLength="PROFILE_NAME_MAX"
 			:error="!!error"
 			:ariaInvalid="!!error"
 			sanitize
