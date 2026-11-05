@@ -35,7 +35,7 @@ import z from "zod"
 import type { AccountService } from "@/wallet/services/account/service"
 import type { ContactService } from "@/wallet/services/contact/service"
 import { type NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
-import type { NetworkInfo } from "@/wallet/services/network/spec"
+import type { Network, NetworkInfo } from "@/wallet/services/network/spec"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -77,9 +77,6 @@ function isWithheldAccount(address: string, accounts: readonly { address: string
 	const same = (other: string) => other.toLowerCase() === key
 	return accounts.some((account) => same(account.address)) && !sessionAccounts.some(same)
 }
-
-/** The primary endpoint's URL: `networkInfoFrom` lists it first and throws when there is none. */
-const primaryUrl = (info: NetworkInfo): string => info.endpoints[0]?.rpcUrl ?? ""
 
 export class ViewExecutor {
 	public constructor(private readonly deps: ViewExecutorDeps) {}
@@ -164,7 +161,7 @@ export class ViewExecutor {
 	): Promise<{ isContractClassPubliclyRegistered: boolean; isArtifactRegistered: boolean }> {
 		const network = await this.deps.networkService.getNetwork(op.networkId)
 		const info = networkInfoFrom(network)
-		const node = await this.deps.networkService.getNodeForUrl(primaryUrl(info))
+		const node = await this.deps.networkService.getNodeFor(network)
 		const [artifact, publicClass] = await Promise.all([
 			this.deps.pxeService.getContractArtifact(info, op.id, { pxeOnly: true }),
 			node.getContractClass(await Fr.schema.parseAsync(op.id.toString())),
@@ -196,7 +193,7 @@ export class ViewExecutor {
 		const visible = stored && !isWithheldAccount(op.address.toString(), accounts, op.sessionAccounts) ? stored : undefined
 		// Simulation needs both the instance AND the artifact in the PXE.
 		const isLocallyRegistered = !!visible && (await this.hasLocalArtifact(info, visible))
-		const onChain = await this.nodeInstance(primaryUrl(info), op.address.toString())
+		const onChain = await this.nodeInstance(network, op.address.toString())
 		const isContractUpdated = !!onChain && !onChain.currentContractClassId.equals(onChain.originalContractClassId)
 
 		return {
@@ -217,10 +214,10 @@ export class ViewExecutor {
 	}
 
 	/** Best effort: the flags it feeds are hints, so a node failure answers "not published" rather than
-	 *  failing the call. Read from the dApp network's own endpoint, never the active profile's. */
-	private async nodeInstance(rpcUrl: string, address: string): Promise<ContractInstanceWithAddress | undefined> {
+	 *  failing the call. Read from the dApp network's own row, never the active profile's. */
+	private async nodeInstance(network: Network, address: string): Promise<ContractInstanceWithAddress | undefined> {
 		try {
-			const node = await this.deps.networkService.getNodeForUrl(rpcUrl)
+			const node = await this.deps.networkService.getNodeFor(network)
 			return await node.getContract(await AztecAddress.schema.parseAsync(address))
 		} catch {
 			// The category only: a node error message can carry the requested address.

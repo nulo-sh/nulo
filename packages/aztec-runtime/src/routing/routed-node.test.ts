@@ -2,7 +2,7 @@ import { BlockHash } from "@aztec-labs/stdlib/block"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { TxHash } from "@aztec-labs/stdlib/tx"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
-import { describe, expect, test, vi } from "vitest"
+import { describe, expect, test } from "vitest"
 import { type TransportFailure, withTransportFailure } from "../utils/fetch"
 import { ROUTE_TIMING } from "./endpoint-health"
 import { createSubmissionPins, type RouteSpec, type RoutedNode, routeNode, type SubmissionPins } from "./routed-node"
@@ -515,17 +515,37 @@ describe("races", () => {
 		expect(belowFloor).toEqual([])
 	})
 
-	test("singleAttempt with no active endpoint fails at once and leaves admission running for the caller's next try", async () => {
+	test("singleAttempt with no active endpoint admits one first, then makes its one attempt there", async () => {
 		const h = new Harness([A, B])
-		const gate = held()
-		h.endpoint(A).hold = (m) => (m === "getNodeInfo" ? gate.promise : undefined)
 		const read = () => h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
-		await expect(read()).rejects.toThrow(/No endpoint/)
-		gate.release()
-		await vi.waitFor(() => expect(h.node.route.active()?.id).toBe("e0"))
 		await expect(read()).resolves.toBe("getContract:ok")
 		expect(h.seen(A)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`, `getContract@${probeTimeoutMs}`])
 		expect(h.seen(B)).toEqual([])
+	})
+
+	test("admission and the attempt share the caller's budget: the attempt gets what admission left", async () => {
+		const h = new Harness([A, B])
+		h.endpoint(A).hold = (m) => {
+			if (m === "getNodeInfo") h.now += 2_000
+			return undefined
+		}
+		await expect(h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)).resolves.toBe("getContract:ok")
+		expect(h.seen(A).at(-1)).toBe(`getContract@${probeTimeoutMs - 2_000}`)
+	})
+
+	test("an admission that spends the budget fails the read and starts no probe past it; the next read admits the fallback", async () => {
+		const h = new Harness([A, B])
+		h.endpoint(A).fail = (method) => (method === "getNodeInfo" ? transport("timeout") : undefined)
+		h.endpoint(A).hold = (m) => {
+			if (m === "getNodeInfo") h.now += probeTimeoutMs
+			return undefined
+		}
+		const read = () => h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
+		await expect(read()).rejects.toThrow(/No endpoint/)
+		expect(h.seen(B)).toEqual([])
+		await expect(read()).resolves.toBe("getContract:ok")
+		expect(h.node.route.active()?.id).toBe("e1")
+		expect(h.seen(B)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`, `getContract@${probeTimeoutMs}`])
 	})
 })
 

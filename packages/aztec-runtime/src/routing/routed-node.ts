@@ -63,8 +63,8 @@ export function createSubmissionPins(): SubmissionPins {
 
 export interface Route {
 	active(): RouteEndpoint | undefined
-	/** A node whose every call is one attempt at the active endpoint within `timeoutMs`, fed into
-	 *  the same health and never moved. */
+	/** A node whose every call is one attempt at the active endpoint, fed into the same health and
+	 *  never moved. With no active endpoint, admission runs first; it and the attempt share `timeoutMs`. */
 	singleAttempt(timeoutMs: number): AztecNode
 	/** Raises the floor to a block number the caller has already synced. */
 	seedFloor(proposedBlockNumber: number): void
@@ -222,14 +222,15 @@ class Router implements Route {
 		const node = nodeOf(async (method, args) => {
 			const pinned = method === "getTxReceipt" ? this.pins.byTxHash.get(pinKey(args[0])) : undefined
 			if (pinned) return this.pinnedReceipt(pinned, args, timeoutMs, 1)
+			const start = this.deps.now()
+			if (this.health.active() === undefined) await this.admitFirst(start + timeoutMs)
 			const index = this.health.active()
 			const endpoint = index === undefined ? undefined : this.endpoints[index]
-			if (index === undefined || !endpoint) {
-				// Admission's probes would outlast the caller's budget: start them for its next try.
-				void this.admitFirst()
-				throw noEndpoint("the call")
-			}
-			const out = await this.attemptOn(index, this.client(endpoint.rpcUrl, timeoutMs), method, args, timeoutMs)
+			const left = timeoutMs - (this.deps.now() - start)
+			if (index === undefined || !endpoint || left <= 0) throw noEndpoint("the call")
+			// A budget cut by admission gets its own client; the full one is shared.
+			const client = left === timeoutMs ? this.client(endpoint.rpcUrl, timeoutMs) : this.connect(endpoint.rpcUrl, left)
+			const out = await this.attemptOn(index, client, method, args, left)
 			if (out.kind === "ok") return out.value
 			throw out.error
 		})
@@ -422,10 +423,11 @@ class Router implements Route {
 		}
 	}
 
-	/** With no active endpoint, probes every endpoint not on another chain in preference order until one takes the role. */
-	private async admitFirst(): Promise<void> {
+	/** With no active endpoint, probes every endpoint not on another chain in preference order until
+	 *  one takes the role; no probe starts at or past `deadline`. */
+	private async admitFirst(deadline = Number.POSITIVE_INFINITY): Promise<void> {
 		for (let index = 0; index < this.endpoints.length; index++) {
-			if (this.health.active() !== undefined) return
+			if (this.health.active() !== undefined || this.deps.now() >= deadline) return
 			if (this.health.state(index) === "wrong-chain" && !this.health.mayProbe(index, this.deps.now())) continue
 			if (this.health.mayProbe(index, this.deps.now()) || this.probes.has(index)) await this.probe(index)
 		}

@@ -28,7 +28,8 @@ import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
-import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
+import { FakeNodeFactory, transportFailure } from "@/core/testing/fake-node-factory"
+import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
@@ -191,7 +192,7 @@ describe("NetworkService — seedDefaultsForProfile (full-backup import reseeds 
 		const p1 = await h.service.getOrInitNetworks()
 		const p1Primary = p1.find((n) => n.chainId === CHAIN_IDS.MAINNET)!
 		const p1NodeBefore = await h.service.getNode(p1Primary.chainId)
-		const nodesBefore = new Map((h.service as unknown as { nodes: Map<number, unknown> }).nodes)
+		const routesBefore = new Map((h.service as unknown as { routes: Map<string, unknown> }).routes)
 
 		const seeded = await h.service.seedDefaultsForProfile("p2")
 
@@ -199,10 +200,10 @@ describe("NetworkService — seedDefaultsForProfile (full-backup import reseeds 
 		expect(seeded.every((n) => n.profileId === "p2")).toBe(true)
 		expect(new Set(seeded.map((n) => n.id)).size).toBe(seeded.length)
 		expect(seeded.some((n) => p1.some((m) => m.id === n.id))).toBe(false)
-		// The cache is keyed by chainId alone: p1 keeps exactly the node objects it had.
-		const nodesAfter = (h.service as unknown as { nodes: Map<number, unknown> }).nodes
-		expect(nodesAfter.size).toBe(nodesBefore.size)
-		for (const [chainId, node] of nodesBefore) expect(nodesAfter.get(chainId)).toBe(node)
+		// p1 keeps exactly the routes it had.
+		const routesAfter = (h.service as unknown as { routes: Map<string, unknown> }).routes
+		expect(routesAfter.size).toBe(routesBefore.size)
+		for (const [networkId, route] of routesBefore) expect(routesAfter.get(networkId)).toBe(route)
 		expect(await h.service.getNode(p1Primary.chainId)).toBe(p1NodeBefore)
 		// p2's pointer names p2's primary seed; p1's pointer is untouched.
 		const raw = (await h.browserApi.storage.local.get(null)) as Record<string, unknown>
@@ -310,7 +311,7 @@ describe("NetworkService NodeFactory seam", () => {
 		})
 		// Calls the private probe directly, past the lock and storage.
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		const chainId = await (service as any)._getChainId("https://rpc.example/1")
+		const chainId = (await (service as any)._probeChainIdentity("https://rpc.example/1")).chainId
 		expect(chainId).toBe(4138294185)
 		expect(factory.created.length).toBe(1)
 		expect(factory.created[0]!.rpcUrl).toBe("https://rpc.example/1")
@@ -321,7 +322,7 @@ describe("NetworkService NodeFactory seam", () => {
 			"http://localhost:8080": { l1ChainId: 99, rollupVersion: 77 },
 		})
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		const chainId = await (service as any)._getChainId("http://localhost:8080")
+		const chainId = (await (service as any)._probeChainIdentity("http://localhost:8080")).chainId
 		expect(chainId).toBe(0)
 	})
 
@@ -334,7 +335,7 @@ describe("NetworkService NodeFactory seam", () => {
 			"http://localhost:18080": { l1ChainId: 1, rollupVersion: 2 },
 		})
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		const chainId = await (service as any)._getChainId("http://localhost:18080", "local")
+		const chainId = (await (service as any)._probeChainIdentity("http://localhost:18080", "local")).chainId
 		expect(chainId).toBe(0)
 	})
 
@@ -346,7 +347,7 @@ describe("NetworkService NodeFactory seam", () => {
 			"http://LOCALHOST:8080/": { l1ChainId: 1, rollupVersion: 2 },
 		})
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		const chainId = await (service as any)._getChainId("http://LOCALHOST:8080/")
+		const chainId = (await (service as any)._probeChainIdentity("http://LOCALHOST:8080/")).chainId
 		expect(chainId).toBe(0)
 	})
 
@@ -355,7 +356,7 @@ describe("NetworkService NodeFactory seam", () => {
 			"https://bad.example": new Error("ECONNREFUSED"),
 		})
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		await expect((service as any)._getChainId("https://bad.example")).rejects.toThrow("Failed to fetch node info")
+		await expect((service as any)._probeChainIdentity("https://bad.example")).rejects.toThrow("Failed to fetch node info")
 	})
 
 	test("each getChainId call creates a fresh node — no global cache between URLs", async () => {
@@ -364,9 +365,9 @@ describe("NetworkService NodeFactory seam", () => {
 			"https://rpc.example/b": { l1ChainId: 2, rollupVersion: 3 },
 		})
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		await (service as any)._getChainId("https://rpc.example/a")
+		await (service as any)._probeChainIdentity("https://rpc.example/a")
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		await (service as any)._getChainId("https://rpc.example/b")
+		await (service as any)._probeChainIdentity("https://rpc.example/b")
 		expect(factory.created.length).toBe(2)
 		expect(factory.created[0]!.rpcUrl).toBe("https://rpc.example/a")
 		expect(factory.created[1]!.rpcUrl).toBe("https://rpc.example/b")
@@ -587,6 +588,22 @@ function setupServiceWithStorage(seeded: Record<string, NodeInfo | Error>): {
 
 /** Convenience: seed a single endpoint URL → chainId mapping for tests
  *  that only need one network. */
+/** A fake node whose every read a routed node makes fails in transport. */
+function deadNode(): Partial<AztecNode> {
+	const fail = async () => {
+		throw transportFailure("unreachable")
+	}
+	return { getNodeInfo: fail as never, getChainTips: fail as never, getBlockNumber: fail as never }
+}
+
+/** A fake node a routed node admits: it serves `chainId` at proposed block 5. */
+function routable(chainId: number): Partial<AztecNode> {
+	return {
+		getNodeInfo: (async () => nodeInfoForChain(chainId)) as unknown as AztecNode["getNodeInfo"],
+		getChainTips: (async () => ({ proposed: { number: 5 } })) as unknown as AztecNode["getChainTips"],
+	}
+}
+
 function nodeInfoForChain(chainId: number): NodeInfo {
 	// XOR-decompose chainId into l1ChainId + rollupVersion. Either
 	// direction works since `(a ^ b) >>> 0` is symmetric. For non-zero
@@ -754,18 +771,19 @@ describe("NetworkService public API", () => {
 
 			expect(changed.map((n) => n.id)).toEqual([row.id])
 			expect(factory.created.map((c) => c.rpcUrl)).not.toContain(SAVED_V6)
-			// A cache miss: the node primed for the old URL is gone.
-			await expect(service.getNode(42)).rejects.toThrow(/refused/)
+			// A cache miss: the route built for the old URL is gone, and the new one fails at its first read.
+			await expect((await service.getNode(42)).getBlockNumber()).rejects.toThrow(/refused/)
 			expect(await service.getNodeStatus(row.id)).toBe(NodeStatus.Inactive)
 		})
 
-		test("an unexpected factory error on an allowed URL still rejects the switch", async () => {
+		test("the switch builds no node: a factory error on an allowed URL surfaces at the first read", async () => {
 			const { service, factory, local } = setupServiceWithStorage({})
 			vi.spyOn(factory, "createNode").mockImplementation(() => {
 				throw new Error("factory exploded")
 			})
 			const row = storeRow(local, { id: "ok", chainId: 42, endpoints: [{ id: "e1", rpcUrl: "https://rpc.example" }] })
-			await expect(service.setActiveNetwork(row.id)).rejects.toThrow("factory exploded")
+			await expect(service.setActiveNetwork(row.id)).resolves.toMatchObject({ id: "ok" })
+			await expect((await service.getNode(42)).getBlockNumber()).rejects.toThrow("factory exploded")
 		})
 
 		test("the person replaces it: add a localhost endpoint, make it primary, delete the [::1] one", async () => {
@@ -1064,7 +1082,7 @@ describe("NetworkService public API", () => {
 			expect(transients.has(oldUrl)).toBe(false)
 		})
 
-		test("evicts the chain node cache ONLY when the edited endpoint is the primary", async () => {
+		test("evicts the network's route on any endpoint edit, the primary's or another's", async () => {
 			const { service } = setupServiceWithStorage({
 				"https://rpc.test/1": nodeInfoForChain(50),
 				"https://rpc.test/2": nodeInfoForChain(50),
@@ -1074,16 +1092,15 @@ describe("NetworkService public API", () => {
 			const ep = await service.addEndpoint(network.id, "Backup", "https://rpc.test/2")
 			await service.getNode(50)
 			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-			const nodes = (service as any).nodes as Map<number, unknown>
-			expect(nodes.has(50)).toBe(true)
+			const routes = (service as any).routes as Map<string, unknown>
+			expect(routes.has(network.id)).toBe(true)
 
-			// Non-primary edit: chain node cache retained.
 			await service.updateEndpoint(network.id, ep.id, "Moved", "https://rpc.test/3")
-			expect(nodes.has(50)).toBe(true)
+			expect(routes.has(network.id)).toBe(false)
 
-			// Primary edit: chain node cache evicted.
+			await service.getNode(50)
 			await service.updateEndpoint(network.id, network.primaryEndpointId, "Primary moved", "https://rpc.test/2")
-			expect(nodes.has(50)).toBe(false)
+			expect(routes.has(network.id)).toBe(false)
 		})
 
 		test("evictions happen BEFORE onNetworkUpdated fires (subscribers observe post-eviction caches)", async () => {
@@ -1122,7 +1139,7 @@ describe("NetworkService public API", () => {
 	})
 
 	describe("setPrimaryEndpoint", () => {
-		test("updates primary, emits event, evicts AztecNode cache for that chainId", async () => {
+		test("updates primary, emits event, evicts the network's route", async () => {
 			const { service, factory } = setupServiceWithStorage({
 				"https://rpc.test/1": nodeInfoForChain(7),
 				"https://rpc.test/2": nodeInfoForChain(7),
@@ -1130,11 +1147,7 @@ describe("NetworkService public API", () => {
 			const network = await service.addNetwork("X", "https://rpc.test/1")
 			const ep2 = await service.addEndpoint(network.id, "B", "https://rpc.test/2")
 
-			// Prime the AztecNode cache via getNode().
-			await service.getNode(7)
-			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-			expect(((service as any).nodes as Map<number, unknown>).has(7)).toBe(true)
-			const before = factory.created.length
+			const routeBefore = await service.getNode(7)
 
 			const events: { networkId: string; endpointId: string }[] = []
 			service.onPrimaryEndpointChanged.add((evt) => {
@@ -1144,14 +1157,18 @@ describe("NetworkService public API", () => {
 
 			await service.setPrimaryEndpoint(network.id, ep2.id)
 
-			// Cache evicted.
 			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-			expect(((service as any).nodes as Map<number, unknown>).has(7)).toBe(false)
-			// Event fired.
+			expect(((service as any).routes as Map<string, unknown>).has(network.id)).toBe(false)
 			expect(events).toEqual([{ networkId: network.id, endpointId: ep2.id }])
-			// Next getNode creates a fresh node bound to the new URL.
-			await service.getNode(7)
-			expect(factory.created.length).toBeGreaterThan(before)
+			// The next read routes over the new order, the new primary first.
+			const routeAfter = await service.getNode(7)
+			expect(routeAfter).not.toBe(routeBefore)
+			factory.setOverrides("https://rpc.test/2", {
+				...routable(7),
+				getBlockNumber: (async () => 3) as unknown as AztecNode["getBlockNumber"],
+			})
+			factory.setOverrides("https://rpc.test/1", routable(7))
+			expect(await routeAfter.getBlockNumber()).toBe(3)
 		})
 
 		test("no-op when endpointId already primary (no event)", async () => {
@@ -1981,29 +1998,41 @@ describe("NetworkService.probeNodeStatus (bounded probe)", () => {
 })
 
 describe("NetworkService.readChainTip", () => {
-	test("reads the network's primary endpoint through the one-attempt node, once per read; a refusal rejects", async () => {
+	test("reads the active endpoint in one attempt, once per read; a refusal rejects", async () => {
 		const { service, factory } = setupServiceWithStorage({})
-		for (const url of ["https://a.example", "https://a2.example"]) {
-			factory.setOverrides(url, {
-				getNodeInfo: vi.fn().mockResolvedValue(nodeInfoForChain(7)) as unknown as AztecNode["getNodeInfo"],
-			})
-		}
+		const getBlockNumber = vi.fn().mockResolvedValueOnce(48_190).mockRejectedValueOnce(new TypeError("Failed to fetch"))
+		factory.setOverrides("https://a.example", routable(7))
+		factory.setOverrides("https://a2.example", {
+			...routable(7),
+			getBlockNumber: getBlockNumber as unknown as AztecNode["getBlockNumber"],
+		})
 		const a = await service.addNetwork("A", "https://a.example")
 		const second = await service.addEndpoint(a.id, "Two", "https://a2.example")
 		await service.setPrimaryEndpoint(a.id, second.id)
-		const getBlockNumber = vi.fn().mockResolvedValueOnce(48_190).mockRejectedValueOnce(new TypeError("Failed to fetch"))
-		const single = vi.spyOn(factory, "createSingleAttemptNode").mockReturnValue({ getBlockNumber } as unknown as AztecNode)
 
 		expect(await service.readChainTip(a.id)).toBe(48_190)
 		await expect(service.readChainTip(a.id)).rejects.toThrow("Failed to fetch")
 
-		expect(single.mock.calls.map(([url]) => url)).toEqual(["https://a2.example"])
 		expect(getBlockNumber).toHaveBeenCalledTimes(2)
+		expect(factory.routedClients.filter((c) => c.timeoutMs === DEFAULT_REQUEST_TIMEOUT_MS).map((c) => c.rpcUrl)).toEqual([
+			"https://a2.example",
+		])
+	})
+
+	test("a dead primary: the tip comes from the endpoint that serves", async () => {
+		const { service, factory, local } = setupServiceWithStorage({})
+		factory.setOverrides("https://a.example", deadNode())
+		factory.setOverrides("https://a2.example", {
+			...routable(7),
+			getBlockNumber: (async () => 77) as unknown as AztecNode["getBlockNumber"],
+		})
+		const row = twoEndpointRow(local, "https://a.example", "https://a2.example")
+		expect(await service.readChainTip(row.id)).toBe(77)
 	})
 })
 
 describe("NetworkService.readPublicStorageOnce", () => {
-	test("reads at the passed row's primary endpoint, never another network's or the active profile's row for that chain", async () => {
+	test("reads at the passed row's active endpoint within the caller's budget, never another network's or the active profile's row for that chain", async () => {
 		const { service, factory } = setupServiceWithStorage({})
 		const chainOf: Record<string, number> = {
 			"https://a.example": 7,
@@ -2015,10 +2044,7 @@ describe("NetworkService.readPublicStorageOnce", () => {
 		for (const [i, [url, chainId]] of Object.entries(chainOf).entries()) {
 			const read = vi.fn(async () => new Fr(BigInt(100 + i)))
 			storageAt.set(url, read)
-			factory.setOverrides(url, {
-				getNodeInfo: vi.fn().mockResolvedValue(nodeInfoForChain(chainId)) as unknown as AztecNode["getNodeInfo"],
-				getPublicStorageAt: read as unknown as AztecNode["getPublicStorageAt"],
-			})
+			factory.setOverrides(url, { ...routable(chainId), getPublicStorageAt: read as unknown as AztecNode["getPublicStorageAt"] })
 		}
 		const a = await service.addNetwork("A", "https://a.example")
 		const second = await service.addEndpoint(a.id, "Two", "https://a2.example")
@@ -2032,20 +2058,104 @@ describe("NetworkService.readPublicStorageOnce", () => {
 			endpoints: [{ id: "ep-p2", rpcUrl: "https://p2.example" }],
 			primaryEndpointId: "ep-p2",
 		}
-		const once = vi.spyOn(factory, "readPublicStorageOnce")
 		const contract = AztecAddress.fromNumberUnsafe(5)
 		const slot = new Fr(9n)
 
 		expect((await service.readPublicStorageOnce(row, contract, slot, 5_000)).toBigInt()).toBe(101n)
 		expect((await service.readPublicStorageOnce(foreign, contract, slot, 5_000)).toBigInt()).toBe(103n)
 
-		expect(once.mock.calls).toEqual([
-			["https://a2.example", contract, slot, 5_000],
-			["https://p2.example", contract, slot, 5_000],
-		])
 		expect(storageAt.get("https://a2.example")).toHaveBeenCalledWith("latest", contract, slot)
+		expect(storageAt.get("https://p2.example")).toHaveBeenCalledWith("latest", contract, slot)
 		expect(storageAt.get("https://a.example")).not.toHaveBeenCalled()
 		expect(storageAt.get("https://b.example")).not.toHaveBeenCalled()
+		expect(factory.routedClients.filter((c) => c.timeoutMs === 5_000).map((c) => c.rpcUrl)).toEqual([
+			"https://a2.example",
+			"https://p2.example",
+		])
+	})
+
+	test("a read with no value rejects", async () => {
+		const { service, factory } = setupServiceWithStorage({})
+		factory.setOverrides("https://a.example", { ...routable(7), getPublicStorageAt: (async () => undefined) as never })
+		const row = await service.addNetwork("A", "https://a.example")
+		await expect(service.readPublicStorageOnce(row, AztecAddress.fromNumberUnsafe(5), new Fr(9n), 5_000)).rejects.toThrow(
+			/read no value/,
+		)
+	})
+})
+
+describe("NetworkService routes", () => {
+	test("one route per network row: two profiles' rows on one chain never share one, and an edited list builds anew", async () => {
+		const { service, factory } = setupServiceWithStorage({})
+		factory.setOverrides("https://a.example", routable(7))
+		const row = await service.addNetwork("A", "https://a.example")
+		const foreign: Network = {
+			...row,
+			id: "net-p2",
+			profileId: "p2",
+			endpoints: [{ id: "x", rpcUrl: "https://p2.example" }],
+			primaryEndpointId: "x",
+		}
+		const mine = await service.getNodeFor(row)
+		expect(await service.getNodeFor(row)).toBe(mine)
+		expect(await service.getNode(7)).toBe(mine)
+		expect(await service.getNodeFor(foreign)).not.toBe(mine)
+		// A caller holding a row whose endpoints differ from the cached route's gets a route for its row.
+		const edited = { ...row, endpoints: [...row.endpoints, { id: "z", rpcUrl: "https://z.example" }] }
+		expect(await service.getNodeFor(edited)).not.toBe(mine)
+	})
+
+	test.each<[string, (service: NetworkService, row: Network, extra: string) => Promise<unknown>]>([
+		["addEndpoint", (service, row) => service.addEndpoint(row.id, undefined, "https://c.example")],
+		["updateEndpoint on another endpoint", (service, row, extra) => service.updateEndpoint(row.id, extra, "x", "https://c.example")],
+		[
+			"updateEndpoint on the primary",
+			(service, row) => service.updateEndpoint(row.id, row.primaryEndpointId, "x", "https://c.example"),
+		],
+		["deleteEndpoint", (service, row, extra) => service.deleteEndpoint(row.id, extra)],
+		["setPrimaryEndpoint", (service, row, extra) => service.setPrimaryEndpoint(row.id, extra)],
+		["setActiveNetwork", (service, row) => service.setActiveNetwork(row.id)],
+	])("%s evicts the network's route", async (_name, mutate) => {
+		const { service, factory } = setupServiceWithStorage({})
+		for (const url of ["https://a.example", "https://b.example", "https://c.example"]) factory.setOverrides(url, routable(7))
+		const row = await service.addNetwork("A", "https://a.example")
+		const extra = await service.addEndpoint(row.id, undefined, "https://b.example")
+		const fresh = await service.getNetwork(row.id)
+		const before = await service.getNodeFor(fresh)
+		await mutate(service, fresh, extra.id)
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+		expect(((service as any).routes as Map<string, unknown>).has(row.id)).toBe(false)
+		expect(await service.getNodeFor(await service.getNetwork(row.id))).not.toBe(before)
+	})
+
+	test("renaming keeps the route", async () => {
+		const { service, factory } = setupServiceWithStorage({})
+		factory.setOverrides("https://a.example", routable(7))
+		const row = await service.addNetwork("A", "https://a.example")
+		const before = await service.getNodeFor(row)
+		await service.renameNetwork(row.id, "Renamed")
+		expect(await service.getNodeFor(await service.getNetwork(row.id))).toBe(before)
+	})
+
+	test("getSingleAttemptNodeFor reads in one attempt within the caller's budget, never moved", async () => {
+		const { service, factory, local } = setupServiceWithStorage({})
+		const getBlockNumber = vi.fn(async () => {
+			throw transportFailure("server")
+		})
+		factory.setOverrides("https://a.example", {
+			...routable(7),
+			getBlockNumber: getBlockNumber as unknown as AztecNode["getBlockNumber"],
+		})
+		factory.setOverrides("https://b.example", {
+			...routable(7),
+			getBlockNumber: (async () => 9) as unknown as AztecNode["getBlockNumber"],
+		})
+		const row = twoEndpointRow(local, "https://a.example", "https://b.example")
+		const node = await service.getSingleAttemptNodeFor(row, 1_234)
+		await expect(node.getBlockNumber()).rejects.toThrow(/server/)
+		expect(getBlockNumber).toHaveBeenCalledTimes(1)
+		// Admission's probes run first; the attempt gets what is left of the caller's budget.
+		expect(factory.routedClients.filter((c) => c.timeoutMs <= 1_234).map((c) => c.rpcUrl)).toEqual(["https://a.example"])
 	})
 })
 
@@ -2150,6 +2260,18 @@ function storeRow(local: FakeStorageArea, over: Partial<Network> & { id: string 
 	return row
 }
 
+/** A stored chain-7 row with two endpoints, `primary` first; storing it probes neither. */
+function twoEndpointRow(local: FakeStorageArea, primary: string, second: string): Network {
+	return storeRow(local, {
+		id: "two",
+		chainId: 7,
+		endpoints: [
+			{ id: "e1", rpcUrl: primary },
+			{ id: "e2", rpcUrl: second },
+		],
+	})
+}
+
 /** Both status methods on one network: which transport each used, and what each answered. */
 async function bothStatuses(service: NetworkService, factory: FakeNodeFactory, networkId: string) {
 	const probe = vi.spyOn(factory, "probeChainId")
@@ -2227,6 +2349,46 @@ describe("NetworkService node status: getNodeStatus and probeNodeStatus", () => 
 		expect(r).toMatchObject({ get: NodeStatus.Inactive, probed: NodeStatus.Inactive, getCreated: 0 })
 		expect(r.probeCalls).toEqual([])
 		expect(factory.created).toHaveLength(0)
+	})
+
+	describe("a network with two endpoints: Connected while any endpoint serves its chain", () => {
+		const dead = deadNode()
+		const other = { ...routable(9) }
+
+		test.each<[string, Partial<AztecNode>, Partial<AztecNode>, NodeStatus]>([
+			["the primary dead, the second serving", dead, routable(7), NodeStatus.Active],
+			["the primary on another chain, the second serving", other, routable(7), NodeStatus.Active],
+			["both on another chain", other, other, NodeStatus.InvalidChain],
+			["neither answering", dead, dead, NodeStatus.Inactive],
+		])("%s", async (_name, primary, second, expected) => {
+			const { service, factory, local } = setupServiceWithStorage({})
+			factory.setOverrides("https://a.example", primary)
+			factory.setOverrides("https://b.example", second)
+			twoEndpointRow(local, "https://a.example", "https://b.example")
+			const r = await bothStatuses(service, factory, "two")
+			expect([r.get, r.probed]).toEqual([expected, expected])
+		})
+
+		test("while the primary serves, the probe asks nothing else", async () => {
+			const { service, factory, local } = setupServiceWithStorage({})
+			factory.setOverrides("https://a.example", routable(7))
+			factory.setOverrides("https://b.example", routable(7))
+			twoEndpointRow(local, "https://a.example", "https://b.example")
+			const r = await bothStatuses(service, factory, "two")
+			expect(r.probed).toBe(NodeStatus.Active)
+			expect(r.probeCalls).toEqual([["https://a.example", 5_000]])
+		})
+
+		test("the probe asks the route's active endpoint first and shares one budget", async () => {
+			const { service, factory, local } = setupServiceWithStorage({})
+			factory.setOverrides("https://a.example", dead)
+			factory.setOverrides("https://b.example", routable(7))
+			twoEndpointRow(local, "https://a.example", "https://b.example")
+			expect(await service.getNodeStatus("two")).toBe(NodeStatus.Active)
+			const probe = vi.spyOn(factory, "probeChainId")
+			expect(await service.probeNodeStatus("two", 5_000)).toBe(NodeStatus.Active)
+			expect(probe.mock.calls).toEqual([["https://b.example", 5_000]])
+		})
 	})
 
 	test("a row another profile owns rejects on both: only the probe's failure reads Inactive", async () => {
@@ -2384,11 +2546,12 @@ describe("NetworkService chain 0: the local L1 on a loopback node", () => {
 		await expect(service.setPrimaryEndpoint("loc", "e2")).resolves.toMatchObject({ primaryEndpointId: "e2" })
 	})
 
-	test("a local row whose primary is a remote node is InvalidChain on both status methods", async () => {
+	test("a local row whose primary is a remote node is InvalidChain to the probe, and has no route to read", async () => {
 		const { service, factory, local } = setupServiceWithStorage({ [REMOTE]: LOCAL_ANSWER })
 		localRow(local, { endpoints: [{ id: "e1", rpcUrl: REMOTE }] })
 		const r = await bothStatuses(service, factory, "loc")
-		expect([r.get, r.probed]).toEqual([NodeStatus.InvalidChain, NodeStatus.InvalidChain])
+		// Chain 0's route keeps only loopback endpoints, so the row has none the wallet may read.
+		expect([r.get, r.probed]).toEqual([NodeStatus.Inactive, NodeStatus.InvalidChain])
 	})
 })
 
@@ -2909,15 +3072,15 @@ describe("NetworkService — a retired default", () => {
 			sealedFirst.push(!inTheClear())
 			return real(profileId, await synthetic())
 		})
-		await service.getNode(CHAIN_IDS.TESTNET)
-		const mainnetNode = {} as AztecNode
-		internals.nodes.set(CHAIN_IDS.MAINNET, mainnetNode)
+		const before = await service.getNode(CHAIN_IDS.TESTNET)
+		const mainnetRoute = { key: "", node: {} }
+		internals.routes.set("mn", mainnetRoute)
 		const updated: Network[] = []
 		service.onNetworkUpdated.add((network) => updated.push(network))
 		profiles.onRowKeysReady.invoke("p1")
 		await vi.waitFor(() => expect(updated.map((network) => network.id).sort()).toEqual(["mn", "tn"]))
-		// A rename moves no endpoint, so Mainnet's node stays.
-		expect(internals.nodes.get(CHAIN_IDS.MAINNET)).toBe(mainnetNode)
+		// A rename moves no endpoint, so Mainnet's route stays.
+		expect(internals.routes.get("mn")).toBe(mainnetRoute)
 		expect(sealedFirst).toEqual([true])
 		expect(inTheClear()).toBe(false)
 		expect(JSON.stringify(local.store.get("nulo:core:networks@mn"))).not.toContain("Alpha")
@@ -2926,8 +3089,10 @@ describe("NetworkService — a retired default", () => {
 		expect((await stored(local, "other-mn")).name).toBe("Alpha V6")
 		expect((await stored(local, "tn")).endpoints).toEqual([{ id: "seed1", rpcUrl: REPLACEMENT, label: "dRPC" }])
 		expect((await stored(local, "other")).endpoints[0]?.rpcUrl).toBe(RETIRED_URL)
-		await service.getNode(CHAIN_IDS.TESTNET)
-		expect(factory.created.map((c) => c.rpcUrl)).toEqual([RETIRED_URL, REPLACEMENT])
+		const rebuilt = await service.getNode(CHAIN_IDS.TESTNET)
+		expect(rebuilt).not.toBe(before)
+		expect(internals.routes.get("tn")?.key).toContain(REPLACEMENT)
+		expect(factory.created).toEqual([])
 	})
 
 	test("a network a reset journal holds keeps its endpoints as captured", async () => {

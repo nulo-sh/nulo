@@ -191,10 +191,10 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		}
 	}
 
-	/** The node for the operation's OWN network row. `getNode(chainId)` resolves the ACTIVE
-	 *  profile's endpoint, and a profile switch during the proof wait would send this
-	 *  profile's tx hash and registry reads to a provider it never selected. */
-	private async nodeFor(network: Network): Promise<AztecNode> {
+	/** The pinned client receipts are read through, for the operation's OWN network row:
+	 *  `getNode(chainId)` resolves the ACTIVE profile's endpoint, and a profile switch during the
+	 *  proof wait would send this profile's tx hash to a provider it never selected. */
+	private async receiptNodeFor(network: Network): Promise<AztecNode> {
 		const url = primaryEndpointUrl(network)
 		if (!url) throw new Error(`network ${network.id} has no primary endpoint`)
 		return this.networkService.getNodeForUrl(url)
@@ -404,14 +404,13 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 
 			await this.transactionService.waitForTx(txHash, fence.profileId, task)
 
-			const node = await this.nodeFor(network)
 			// `waitForTx` only confirms the tx left the pending queue (submitted),
 			// not that its PUBLIC effect is mined + visible. Poll the on-chain state
 			// so a fast (proverless) follow-up consume can't race a not-yet-mined
 			// revoke. See waitForOnChainState.
-			const revokeBlock = await this.waitForTxProven(node, txHash)
+			const revokeBlock = await this.waitForTxProven(await this.receiptNodeFor(network), txHash)
 			// No subtask past the send: a profile switch clears the registry, and the prune must still land.
-			await this.verifyRevoked(network, node, scope, authwits, revokeBlock)
+			await this.verifyRevoked(network, await this.networkService.getNodeFor(network), scope, authwits, revokeBlock)
 
 			task.completeIfTracked()
 		} catch (error) {
@@ -453,12 +452,11 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 
 			await this.transactionService.waitForTx(txHash, fence.profileId, task)
 
-			const node = await this.nodeFor(network)
 			// Ensure the registry toggle is mined + visible before returning, so a
 			// fast follow-up consume reads the new state (see waitForOnChainState).
-			await this.waitForTxProven(node, txHash)
+			await this.waitForTxProven(await this.receiptNodeFor(network), txHash)
 			// No subtask past the send: a profile switch clears the registry, and the status must still land.
-			await this.applyStatus(node, scope)
+			await this.applyStatus(await this.networkService.getNodeFor(network), scope)
 
 			task.completeIfTracked()
 		} catch (error) {
@@ -476,7 +474,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const scope: AuthwitScope = { profileId: network.profileId, chainId: network.chainId, account }
 		const task = this.taskService.startNewTask(new StepContent("Sync auth registry"))
 		try {
-			const node = await this.nodeFor(network)
+			const node = await this.networkService.getNodeFor(network)
 			await Promise.all([this.syncAuthwits(node, scope, task), this.syncStatus(node, scope, task)])
 			task.complete()
 		} catch (error) {

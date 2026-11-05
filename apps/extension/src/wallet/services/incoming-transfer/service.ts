@@ -653,13 +653,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (cached !== undefined) return { feeJuice: cached }
 		try {
 			const network = await this.networkService.getNetwork(record.networkId)
-			// Pin the fetch to the RECORD's own endpoint (getNodeForUrl), NOT the active profile's chainId
-			// node: a profile switch mid-call could otherwise route this tx hash to another profile's RPC
-			// provider (a cross-profile leak) — the same footgun the pending-tx poller avoids. A malformed
-			// network with no primary endpoint fails soft (dash) rather than falling back to that global node.
-			const rpcUrl = primaryEndpointUrl(network)
-			if (rpcUrl === undefined) return null
-			const node = await this.networkService.getNodeForUrl(rpcUrl)
+			// The RECORD's own network row, NOT the active profile's chainId node: a profile switch mid-call
+			// could otherwise route this tx hash to another profile's RPC provider (a cross-profile leak).
+			// A malformed network with no primary endpoint fails soft (dash) rather than falling back.
+			if (primaryEndpointUrl(network) === undefined) return null
+			const node = await this.networkService.getNodeFor(network)
 			const receipt = await node.getTxReceipt(TxHash.fromString(record.txHash))
 			const fee = receipt.transactionFee
 			if (fee === undefined) return null

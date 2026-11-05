@@ -220,6 +220,7 @@ async function makeHarness(opts: { node?: unknown; grantNode?: unknown; activePr
 		primaryEndpointId: "e",
 	}
 	const nodeForUrl = vi.fn(async (_url: string) => opts.node)
+	const nodeForNetwork = vi.fn(async (_network: unknown) => opts.node)
 	const grantNodeForUrl = vi.fn(async (_url: string) => opts.grantNode ?? receiptNode())
 	const services = new ServiceCollection()
 	const captureExecutionFence = vi.fn(async (): Promise<ExecutionFence> => {
@@ -238,7 +239,9 @@ async function makeHarness(opts: { node?: unknown; grantNode?: unknown; activePr
 	services.add(
 		svc(NETWORK_SERVICE_NAME, {
 			getNetwork,
-			// The node is resolved by the network's OWN endpoint, never the active profile's chain.
+			// Registry reads route over the network's OWN row and receipts stay on its pinned client,
+			// never the active profile's chain.
+			getNodeFor: nodeForNetwork,
 			getNodeForUrl: nodeForUrl,
 			getSingleAttemptNodeForUrl: grantNodeForUrl,
 			getNode: async () => {
@@ -268,6 +271,7 @@ async function makeHarness(opts: { node?: unknown; grantNode?: unknown; activePr
 		service,
 		txUpdated,
 		nodeForUrl,
+		nodeForNetwork,
 		grantNodeForUrl,
 		captureExecutionFence,
 		getNetwork,
@@ -554,8 +558,8 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		internals.transactionService.waitForTx = async (txHash: string) => {
 			log.push(`waitForTx:${txHash}`)
 		}
-		internals.nodeFor = async () => {
-			log.push("nodeFor")
+		internals.receiptNodeFor = async () => {
+			log.push("receiptNodeFor")
 			return {}
 		}
 		internals.singleAttemptNodeFor = async () => ({
@@ -650,7 +654,7 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 			`receipt:${TX1}`,
 			`send:${JSON.stringify(request)}:${JSON.stringify({ type: OriginType.UI })}:undefined:${fence}`,
 			"waitForTx:0xtx",
-			"nodeFor",
+			"receiptNodeFor",
 			"proven:0xtx",
 			`verify:${JSON.stringify(P1)}:1:2`,
 			"complete",
@@ -673,7 +677,7 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 			"task:StepContent",
 			`send:${JSON.stringify(request)}:${JSON.stringify({ type: OriginType.UI })}:undefined:${fence}`,
 			"waitForTx:0xtx",
-			"nodeFor",
+			"receiptNodeFor",
 			"proven:0xtx",
 			`applyStatus:${JSON.stringify(P1)}`,
 			"complete",
@@ -950,7 +954,8 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 
 		await h.service.syncRegistry("net-1", A)
 
-		expect(h.nodeForUrl).toHaveBeenCalledWith("http://n/1")
+		expect(h.nodeForNetwork).toHaveBeenCalledWith(expect.objectContaining({ id: "net-1" }))
+		expect(h.nodeForUrl).not.toHaveBeenCalled()
 		expect((await h.service.getAuthwits(1, A)).map((r) => r.hash)).toEqual(["0xpending"])
 		expect((await h.service.getAuthwits(2, A)).map((r) => r.hash)).toEqual(["0xother-chain"])
 		h.setActive({ id: "p2" })
