@@ -1,7 +1,7 @@
 ---
 plan: lows-1
 tier: mid
-status: approved by the panel (final Codex pass: conditional approve, conditions met); arc 1 next
+status: arc 1 implemented and reviewed (Codex loop converged in two rounds, Opus review folded); its PR next; arc 2 waits on OA-1 to OA-5
 issues: "none public; the findings are tracked privately, so no PR says `Closes #n`"
 driver: claude-code
 claude_model: opus
@@ -108,7 +108,7 @@ Out of scope, with the reason: the password profile's own flows (`handleContinue
 - **Input validation:** the pair is validated at the press, before any card; the service keeps re-checking every answer and file password (Fact 6).
 - **Stated consequence:** D7's cancel leaves a passkey on the authenticator; D5's restart refusal.
 
-## Phase 1 (arc 1): the restore admission
+## Phase 1 (arc 1): the restore admission ✓
 
 Steps:
 1. Make the service changes (Architecture, arc 1), then the doc and comment changes.
@@ -116,7 +116,7 @@ Steps:
    - (a) a passkey restore while a session is open, `lockActiveProfile(<that session's handle>)`, then finalize rejects `SessionEndedError`; no profile is active; the restored profile is listed; its restore marker is gone; `unlockPasskeyProfile` with the same answer opens it.
    - (b) control: the same with no lock opens; a second finalize returns without opening again.
    - (c) a lock whose handle names a replaced session leaves the restore to open (the boundary of D4).
-   - (d) a same-id successor's admission installed while finalize is parked at the marker delete (the injection of `service.integration.test.ts:4386`): finalize rejects `SessionEndedError` and the successor's admission is still the one stored.
+   - (d) a same-id successor's admission installed while finalize is parked at the marker delete (the injection of `service.integration.test.ts:4386`): finalize rejects `SessionEndedError` and the successor's admission is still the one stored; installed while finalize's open runs, finalize opens and the successor's admission is still stored.
    - (e) the TTL: finalize at 30 minutes after the commit is refused, one millisecond before it opens (`Date.now` mocked).
    - (f) a restart before finalize (`boot({ api })` over the same storage): finalize is refused and the next unlock opens the row; control: a password restore across the same restart still finalizes (OA-6 unchanged).
    - Extend, rather than duplicate: `service.integration.test.ts:1799` (the lock's sweep, even when the close fails) and `:1816` (a deletion) each also assert that no admission remains.
@@ -124,11 +124,13 @@ Steps:
 
 **Validation gate:**
 - `bun run lint` and `bun run typecheck:all`: exit 0.
-- `cd apps/extension && bun --bun vitest run src/wallet/services/profile/ src/composables/useFullBackupImport.test.ts src/composables/useFullBackupImport.stages.test.ts scripts/e2e/profile-chaos-model.test.ts --retry=0`: green. On the base copy of `service.ts` (from 7eed331bb, never `HEAD`), (a), (d), (e)'s refusal and (f)'s refusal fail, and (b), (c), (e)'s and (f)'s controls pass.
+- `cd apps/extension && bun --bun vitest run src/wallet/services/profile/ src/composables/useFullBackupImport.test.ts src/composables/useFullBackupImport.stages.test.ts scripts/e2e/profile-chaos-model.test.ts --retry=0`: green. On the base copy of `service.ts` (from 7eed331bb, never `HEAD`), (a), (d), (e)'s refusal and (f)'s refusal fail, and (b), (c), (e)'s and (f)'s controls pass. (f)'s control shares its test with its refusal, so on base the test fails as a whole.
 - `bun run test` and `bun run test:all`: exit 0.
 - Smoke, on each browser `<b>` (`chrome`, `firefox`): build the armed smoke build, `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<b>`, then `cd apps/extension && NULO_E2E_BROWSER=<b> NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/passkey-backup.test.ts tests/e2e/backup-roundtrip.test.ts tests/e2e/restore-outcome.test.ts --retry=0`: green on both. Every later smoke command means this build and these flags; a network run rebuilds `dist/<b>`, so rebuild after one.
 - `bun run check:plans`: exit 0.
 - Layers: lint, typecheck, unit with real crypto, smoke e2e on both browsers.
+
+**Gate outcome** (2026-11-05, at the round-1 fix commit): lint and typecheck:all exit 0; the unit command green (22 files, 891 tests); on base, 5 of the describe's 8 tests fail and (b), (c) and (e)'s control pass; replacing the identity-checked drop with an unconditional one fails (d)'s open seam; `bun run test` (17456 passed) and `bun run test:all` exit 0; smoke on Chrome 6/6; smoke on Firefox 6/6; `check:plans` exit 0.
 
 ## Phase 2 (arc 2): Unlock method
 
@@ -182,6 +184,13 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../README
 **Final fresh Codex pass, round 2** (resumed): **conditional approve**, conditions: (1) qualify the restore guarantee to the admission gate; (2) keep failure mechanics out of committed files. Both met in this revision; the identity capture, the gates, the tests and the proportion of D1-D11 were verified with no new finding.
 
 **Final fresh Codex pass, round 3** (resumed): **approve**. Both conditions verified on disk; no regression.
+
+**Arc 1 review loop, round 1** (2026-11-05; the diff c4f7767fc..5da0eb198; consult log in [lessons/phase-1.md](lessons/phase-1.md)).
+- **Codex (gpt-6.1-sol, high): clean (0 material).** One nit: `finalizeRestore`'s doc claimed a deletion keeps the profile, and named no exception for a lock the service skips or a session already open.
+- **Opus 5.5 (general-purpose): 2 material.** The same doc; (e)'s clock read the new admission, so its control could not run on base. Nits: the identity-checked drop had no test; a call-site comment repeated the sweep's doc, and the capture's comment did not cover the drop.
+- **Accepted, all:** the doc names the already-open and skipped-lock exceptions and drops deletion (a deleted row is refused as an unknown id, as before); (e) fixes the clock before the restore; (d) gains the open seam; the call-site comment goes and the capture's comment covers the drop.
+
+**Arc 1 review loop, round 2** (resumed, the diff 5da0eb198..6ff9aa4e3): **Codex clean.** Every fix verified, no regression; the loop converged.
 
 ## Seeds (not run; orchestrator-owned)
 
