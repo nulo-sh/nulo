@@ -279,6 +279,26 @@ describe("NewFpcPopup — the list under a held read", () => {
 	})
 })
 
+describe("NewFpcPopup — updates the service announces", () => {
+	// The service announces every network's FPCs; only a row this network's read listed is replaced.
+	test("an update for an FPC the opened read did not list leaves its name free; a listed FPC's rename is checked", async () => {
+		fpcServiceMock.getFpcs.mockResolvedValue([{ id: "f1", name: "Sponsor", address: `0x${"1".repeat(64)}` }])
+		const w = await mountShown()
+		const warnsFor = async (name: string) => {
+			await w.findAll("input")[0].setValue(name)
+			await flushPromises()
+			return w.text().includes("Already exists")
+		}
+
+		fpcServiceMock.onFpcUpdated.invoke({ id: "f9", name: "Elsewhere", address: `0x${"9".repeat(64)}` })
+		expect(await warnsFor("Elsewhere")).toBe(false)
+
+		fpcServiceMock.onFpcUpdated.invoke({ id: "f1", name: "Renamed", address: `0x${"1".repeat(64)}` })
+		expect(await warnsFor("Renamed")).toBe(true)
+		expect(await warnsFor("Sponsor")).toBe(false)
+	})
+})
+
 describe("NewFpcPopup — the field modulus", () => {
 	test.each([
 		["the last value below the modulus is added", BELOW_MODULUS, "", 1],

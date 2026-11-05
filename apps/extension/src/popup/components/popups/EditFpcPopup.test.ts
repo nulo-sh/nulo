@@ -348,6 +348,36 @@ describe("EditFpcPopup — the list under a held read", () => {
 	})
 })
 
+describe("EditFpcPopup — updates and deletes the service announces", () => {
+	const submitDisabled = (w: VueWrapper) => w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined
+
+	test("an update for an FPC the opened read did not list leaves its name free", async () => {
+		const w = await mountShown()
+		fpcServiceMock.onFpcUpdated.invoke({ ...FPC, id: "fpc-9", name: "Elsewhere" })
+		await typeName(w, "Elsewhere")
+		expect(w.text()).not.toContain("Already exists")
+	})
+
+	test("an update of the edited row refreshes it, though the opened read did not list it", async () => {
+		fpcServiceMock.getFpcs.mockResolvedValue([])
+		const w = await mountShown()
+		expect(submitDisabled(w)).toBe(true)
+		fpcServiceMock.onFpcUpdated.invoke({ ...FPC, name: "Renamed" })
+		await flushPromises()
+		// The field still reads the old name, which now differs from the refreshed row.
+		expect(submitDisabled(w)).toBe(false)
+	})
+
+	test("deleting the edited row closes the popup and leaves the list as it was", async () => {
+		const w = await mountShown()
+		fpcServiceMock.onFpcDeleted.invoke({ ...FPC })
+		await flushPromises()
+		expect(w.emitted("onClose")).toHaveLength(1)
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "success", label: "FPC was deleted" })
+		expect((w.vm as unknown as { fpcs: { id: string }[] }).fpcs.map((f) => f.id)).toEqual(["fpc-1"])
+	})
+})
+
 describe("EditFpcPopup — the field modulus", () => {
 	test.each([
 		["the last value below the modulus saves", BELOW_MODULUS, "", 1],
