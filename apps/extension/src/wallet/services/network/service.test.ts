@@ -2420,7 +2420,8 @@ describe("NetworkService missing-primary policies", () => {
 		await expect(service.getNetworkInfo(network.id)).resolves.toEqual({
 			profileId: "p1",
 			chainId: 7,
-			rpcUrl: "https://rpc.example.com",
+			l1ChainId: 0,
+			endpoints: [{ id: network.primaryEndpointId, rpcUrl: "https://rpc.example.com" }],
 		})
 	})
 

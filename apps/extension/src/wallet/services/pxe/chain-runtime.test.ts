@@ -1,12 +1,13 @@
 import { describe, test, expect, vi } from "vitest"
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
-import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
-import { ChainRuntime, ChainRuntimeRegistry, type NetworkInfo, type PxeFactory } from "@nulo/aztec-runtime/pxe"
+import { ChainRuntime, ChainRuntimeRegistry, endpointsKey, type NetworkInfo, type PxeFactory } from "@nulo/aztec-runtime/pxe"
+import { networkInfoFrom } from "@/wallet/services/network/spec"
 
-const network = (profileId: string, chainId: number, rpcUrl = `https://rpc-${chainId}.example`): NetworkInfo => ({
+const network = (profileId: string, chainId: number, ...urls: string[]): NetworkInfo => ({
 	profileId,
 	chainId,
-	rpcUrl,
+	l1ChainId: 1,
+	endpoints: (urls.length > 0 ? urls : [`https://rpc-${chainId}.example`]).map((rpcUrl, i) => ({ id: `e${i}`, rpcUrl })),
 })
 
 const makePxe = (id: string): { pxe: PXE; stop: ReturnType<typeof vi.fn> } => {
@@ -22,8 +23,8 @@ const makeFactory = () => {
 		async createChainRuntime(net) {
 			const id = `pxe-${nextId++}-${net.profileId}-${net.chainId}`
 			const { pxe, stop } = makePxe(id)
-			const node = { __id: `node-${id}` } as unknown as AztecNode
-			const runtime = new ChainRuntime(net.chainId, node, pxe, net.rpcUrl)
+			const node = { __id: `node-${id}` } as never
+			const runtime = new ChainRuntime(net.chainId, node, pxe, endpointsKey(net.endpoints))
 			creations.push({ network: net, runtime, stop })
 			return runtime
 		},
@@ -34,7 +35,7 @@ const makeFactory = () => {
 describe("ChainRuntime.dispose", () => {
 	test("calls pxe.stop() when present", async () => {
 		const { pxe, stop } = makePxe("a")
-		const runtime = new ChainRuntime(1, {} as AztecNode, pxe, "https://rpc")
+		const runtime = new ChainRuntime(1, {} as never, pxe, "[]")
 		await runtime.dispose()
 		expect(stop).toHaveBeenCalledTimes(1)
 	})
@@ -42,13 +43,13 @@ describe("ChainRuntime.dispose", () => {
 	test("swallows errors from pxe.stop()", async () => {
 		const stop = vi.fn().mockRejectedValue(new Error("stop failed"))
 		const pxe = { stop } as unknown as PXE
-		const runtime = new ChainRuntime(1, {} as AztecNode, pxe, "https://rpc")
+		const runtime = new ChainRuntime(1, {} as never, pxe, "[]")
 		await expect(runtime.dispose()).resolves.toBeUndefined()
 	})
 
 	test("no-op when pxe has no stop method", async () => {
 		const pxe = {} as unknown as PXE
-		const runtime = new ChainRuntime(1, {} as AztecNode, pxe, "https://rpc")
+		const runtime = new ChainRuntime(1, {} as never, pxe, "[]")
 		await expect(runtime.dispose()).resolves.toBeUndefined()
 	})
 })
@@ -85,16 +86,44 @@ describe("ChainRuntimeRegistry", () => {
 		expect(creations.length).toBe(2)
 	})
 
-	test("rebinding rpcUrl disposes the old runtime and creates a new one", async () => {
+	test("an edited endpoint list disposes the old runtime and creates a new one", async () => {
 		const { factory, creations } = makeFactory()
 		const registry = new ChainRuntimeRegistry(factory)
 		const r1 = await registry.ensure(network("p1", 1, "https://a"))
-		const r2 = await registry.ensure(network("p1", 1, "https://b"))
+		const r2 = await registry.ensure(network("p1", 1, "https://a", "https://b"))
 		expect(r1).not.toBe(r2)
-		expect(r1.rpcUrl).toBe("https://a")
-		expect(r2.rpcUrl).toBe("https://b")
+		expect(creations.map((c) => c.network.endpoints.map((e) => e.rpcUrl))).toEqual([["https://a"], ["https://a", "https://b"]])
 		expect(creations[0].stop).toHaveBeenCalledTimes(1)
 		expect(creations[1].stop).not.toHaveBeenCalled()
+	})
+
+	test("the runtime takes a network's endpoints primary first, then the rest as stored, labels left out", async () => {
+		const { factory, creations } = makeFactory()
+		const registry = new ChainRuntimeRegistry(factory)
+		const row = {
+			id: "n",
+			profileId: "p1",
+			chainId: 1,
+			l1ChainId: 1,
+			name: "Alpha",
+			primaryEndpointId: "c",
+			endpoints: [
+				{ id: "a", rpcUrl: "https://a", label: "First" },
+				{ id: "b", rpcUrl: "https://b" },
+				{ id: "c", rpcUrl: "https://c" },
+			],
+		}
+		await registry.ensure(networkInfoFrom(row))
+		expect(creations[0]?.network.endpoints).toEqual([
+			{ id: "c", rpcUrl: "https://c" },
+			{ id: "a", rpcUrl: "https://a" },
+			{ id: "b", rpcUrl: "https://b" },
+		])
+		// A new primary reorders the list, which rebuilds the runtime once.
+		await registry.ensure(networkInfoFrom({ ...row, primaryEndpointId: "a" }))
+		expect(creations).toHaveLength(2)
+		await registry.ensure(networkInfoFrom({ ...row, primaryEndpointId: "a", name: "Renamed" }))
+		expect(creations).toHaveLength(2)
 	})
 
 	test("peek does not initialize; returns undefined before ensure", () => {
@@ -132,7 +161,7 @@ describe("ChainRuntimeRegistry", () => {
 				callCount++
 				if (callCount === 1) throw new Error("first call fails")
 				const { pxe } = makePxe("ok")
-				return new ChainRuntime(net.chainId, {} as AztecNode, pxe, net.rpcUrl)
+				return new ChainRuntime(net.chainId, {} as never, pxe, endpointsKey(net.endpoints))
 			},
 		}
 		const registry = new ChainRuntimeRegistry(factory)

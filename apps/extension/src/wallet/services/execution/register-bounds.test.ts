@@ -15,7 +15,7 @@ import { computePartialAddress, type ContractInstanceWithAddress } from "@aztec-
 import { ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { FrozenSchnorrAccountArtifact, NuloAccount } from "@nulo/aztec-runtime/account"
-import { ChainRuntime, PxeService } from "@nulo/aztec-runtime/pxe"
+import { ChainRuntime, endpointsKey, PxeService } from "@nulo/aztec-runtime/pxe"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -78,7 +78,7 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 		},
 	} as unknown as PXE
 	const pxeService = new PxeService({ connect: async () => {}, getProfiles: async () => [] }, noopLogger, {
-		createChainRuntime: async (n) => new ChainRuntime(n.chainId, {} as never, pxe, n.rpcUrl),
+		createChainRuntime: async (n) => new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints)),
 	})
 	;(pxeService as unknown as { initialized: boolean }).initialized = true
 

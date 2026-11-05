@@ -22,11 +22,16 @@ import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
-import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { chainDataDir } from "./chain-coordinates"
 import { PxeService, type IProfileReader } from "./service"
 
-const network: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://localhost:8080" }
+const network: NetworkInfo = {
+	profileId: "p1",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [{ id: "primary", rpcUrl: "http://localhost:8080" }],
+}
 const siblings: NetworkInfo[] = [
 	{ ...network, chainId: 1 },
 	{ ...network, profileId: "p2" },
@@ -77,7 +82,7 @@ function fakeDisk(...fresh: Fault[]) {
 			}
 			const pxe = { getContractInstance: read, registerTaggingSecretSource: read } as unknown as PXE
 			const store = { close: async () => void events.push(`close ${dir}`) } as unknown as AztecSQLiteOPFSStore
-			return new ChainRuntime(n.chainId, {} as AztecNode, pxe, n.rpcUrl, store)
+			return new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints), store)
 		},
 	}
 	return { factory, events, imageOf }

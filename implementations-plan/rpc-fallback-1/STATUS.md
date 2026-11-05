@@ -21,3 +21,4 @@
 - 2026-11-04: arc 2 final gates on 260c90548: lint 0, typecheck:all 0, test:all 0 (aztec-runtime 538, extension 17466), relay 11/11, sandbox 8/8 (303.4 s)
 - 2026-11-04: #1669 CI green at 6a36c40af after one rerun of a Firefox smoke flake (onboarding-tab); sandbox suite 8/8 on CI Chrome (298.0 s)
 - 2026-11-04: post-sync CI: #1669 green at 90c9577; #1664 quality-status red on a re-issued minimatch advisory (stale ack on dev), network shard 2/5 flake rerun green
+- 2026-11-05: Phase 5 gate pass (lint, typecheck:all, aztec-runtime src/pxe 296/296, bun run test green on its second run after the two projection tests were updated).

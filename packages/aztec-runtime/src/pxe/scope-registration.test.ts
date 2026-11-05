@@ -24,12 +24,17 @@ import { GasSettings } from "@aztec-labs/stdlib/gas"
 import { TxContext, TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { PxeScopeUnregisteredError } from "@nulo/extension-messaging/errors"
-import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { type IProfileReader, PxeService } from "./service"
 
 const noopLogger: ILogger = { log: () => {} }
 const noopProfiles: IProfileReader = { connect: async () => {}, getProfiles: async () => [] }
-const network: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://localhost:8080" }
+const network: NetworkInfo = {
+	profileId: "p1",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [{ id: "primary", rpcUrl: "http://localhost:8080" }],
+}
 const ACCOUNT = "0x000000000000000000000000000000000000000000000000000000000000ab12"
 const TOKEN = "0x000000000000000000000000000000000000000000000000000000000000cd34"
 const OTHER = "0x000000000000000000000000000000000000000000000000000000000000ef56"
@@ -119,7 +124,7 @@ function makeHarness(registered: string[]) {
 					return []
 				},
 			} as unknown as PXE
-			return new ChainRuntime(n.chainId, {} as never, pxe, n.rpcUrl)
+			return new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints))
 		},
 	}
 	const service = new PxeService(noopProfiles, noopLogger, factory)

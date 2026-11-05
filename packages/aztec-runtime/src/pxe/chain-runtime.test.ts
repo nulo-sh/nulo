@@ -11,7 +11,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { PrestoConfig, PrestoPhase, PrestoStatus } from "@alejoamiras/presto"
 
 vi.mock("@aztec-labs/pxe/client/bundle", () => ({
-	createPXE: vi.fn(async () => ({}) as unknown),
+	createPXE: vi.fn(async () => ({
+		getSyncedBlockHeader: async () => {
+			throw new Error("Trying to get block header with a not-yet-synchronized PXE - this should never happen")
+		},
+	})),
 }))
 vi.mock("@aztec-labs/pxe/config", () => ({ getPXEConfig: () => ({}) }))
 vi.mock("@aztec-labs/simulator/client", () => ({ WASMSimulator: class {} }))
@@ -38,38 +42,58 @@ import {
 	advanceProve,
 	ChainRuntime,
 	ChainRuntimeRegistry,
+	endpointsKey,
+	type NetworkInfo,
 	ProductionPxeFactory,
 	type ProvePhaseEvent,
 	type PxeFactory,
 } from "./chain-runtime"
 import type { NodeFactory } from "../ports/node-factory-port"
-import { openChainStore } from "./opfs-store"
+import { createSubmissionPins, type ConnectEndpoint, routeNode, type RouteSpec } from "../routing/routed-node"
+import { withTransportFailure } from "../utils/fetch"
+import { initStoreVersionStamp, openChainStore, readStoreStamp } from "./opfs-store"
 
 // The injected encrypted store is unit-mocked (real OPFS needs a browser; the production-build
-// spike is the empirical proof). The factory only needs open/close handles here.
+// spike is the empirical proof). The factory only needs open/close handles and the stamp here.
 vi.mock("./opfs-store", () => ({
 	openChainStore: vi.fn(async () => ({ close: async () => {}, delete: async () => {} })),
+	readStoreStamp: vi.fn(async () => undefined),
+	initStoreVersionStamp: vi.fn(async () => {}),
 }))
 
 const createPXEMock = vi.mocked(createPXE)
 
+/** A routed node answering as a node of chain 31337 on rollup `0x…aa`; `seedFloor` is recorded. */
+function fakeRoutedNode(over: Record<string, unknown> = {}) {
+	return {
+		getNodeInfo: async () => ({ l1ChainId: 31337, rollupVersion: 0 }),
+		getL1ContractAddresses: async () => ({ rollupAddress: "0x00000000000000000000000000000000000000aa" }),
+		route: { seedFloor: vi.fn() },
+		...over,
+	}
+}
+
 const fakeNodeFactory: NodeFactory = {
-	createNode: () =>
-		({
-			getNodeInfo: async () => ({ l1ChainId: 31337, rollupVersion: 0 }),
-			getL1ContractAddresses: async () => ({ rollupAddress: undefined }),
-		}) as never,
+	createNode: () => {
+		throw new Error("a runtime's node is routed")
+	},
 	createSingleAttemptNode: () => ({}) as never,
 	probeChainId: async () => 0,
 	readPublicStorageOnce: async () => {
 		throw new Error("not read here")
 	},
-	createRoutedNode: () => {
-		throw new Error("not routed here")
-	},
+	createRoutedNode: () => fakeRoutedNode() as never,
 }
 
-const fakeNetwork = { profileId: "p", chainId: 31337, rpcUrl: "http://node.local" }
+const fakeNetwork: NetworkInfo = {
+	profileId: "p",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [
+		{ id: "a", rpcUrl: "http://node.local" },
+		{ id: "b", rpcUrl: "http://fallback.local" },
+	],
+}
 const fakeStoreKey = new Uint8Array(32)
 const available: PrestoStatus = { available: true, needsDownload: false, protocol: "http" }
 const fallbackClass = ["fallback", "denied", "secure-connection-unavailable", "version-mismatch"] as const
@@ -115,24 +139,126 @@ describe("ProductionPxeFactory default (production) mode", () => {
 })
 
 describe("ProductionPxeFactory store identity gate", () => {
-	test("refuses a node serving another chain before its store opens", async () => {
+	beforeEach(() => {
 		vi.mocked(openChainStore).mockClear()
+		vi.mocked(readStoreStamp).mockClear()
+		vi.mocked(initStoreVersionStamp).mockClear()
 		createPXEMock.mockClear()
-		const alpha = { getNodeInfo: async () => ({ l1ChainId: 1, rollupVersion: 4248422647 }), getL1ContractAddresses: vi.fn() }
-		const factory = new ProductionPxeFactory({ ...fakeNodeFactory, createNode: () => alpha as never })
-		const v6 = { ...fakeNetwork, chainId: (1 ^ 2070860440) >>> 0 }
+	})
+
+	/** A factory whose routed node is `node`, recording each step's order. */
+	function factoryRecording(node: ReturnType<typeof fakeRoutedNode>, order: string[] = []) {
+		const store = { close: vi.fn(async () => {}) }
+		vi.mocked(openChainStore).mockImplementationOnce(async () => {
+			order.push("open")
+			return store as never
+		})
+		vi.mocked(readStoreStamp).mockImplementationOnce(async () => {
+			order.push("stamp read")
+			return "0x00000000000000000000000000000000000000aa"
+		})
+		const createRoutedNode = vi.fn((spec: RouteSpec) => {
+			order.push("route")
+			return { ...node, spec } as never
+		})
+		return { factory: new ProductionPxeFactory({ ...fakeNodeFactory, createRoutedNode }), createRoutedNode, store }
+	}
+
+	test("opens the store and reads its stamp before the route is built, and gives the route that rollup", async () => {
+		const order: string[] = []
+		const node = fakeRoutedNode({
+			getNodeInfo: async () => {
+				order.push("node read")
+				return { l1ChainId: 31337, rollupVersion: 0 }
+			},
+		})
+		const { factory, createRoutedNode } = factoryRecording(node, order)
+		await factory.createChainRuntime(fakeNetwork, fakeStoreKey)
+		expect(order.slice(0, 4)).toEqual(["open", "stamp read", "route", "node read"])
+		expect(createRoutedNode.mock.calls[0]?.[0]).toEqual({
+			chainId: 31337,
+			l1ChainId: 31337,
+			endpoints: fakeNetwork.endpoints,
+			rollupAddress: "0x00000000000000000000000000000000000000aa",
+		})
+		expect(initStoreVersionStamp).toHaveBeenCalledWith(
+			expect.anything(),
+			"0x00000000000000000000000000000000000000aa",
+			expect.anything(),
+		)
+	})
+
+	test("refuses a node serving another chain, closing the store it opened, before the PXE is built", async () => {
+		const alpha = fakeRoutedNode({
+			getNodeInfo: async () => ({ l1ChainId: 1, rollupVersion: 4248422647 }),
+			getL1ContractAddresses: vi.fn(),
+		})
+		const { factory, store } = factoryRecording(alpha)
+		const v6 = { ...fakeNetwork, chainId: (1 ^ 2070860440) >>> 0, l1ChainId: 1 }
 		await expect(factory.createChainRuntime(v6, fakeStoreKey)).rejects.toThrow(/Refusing to open its PXE store/)
-		expect(openChainStore).not.toHaveBeenCalled()
+		expect(store.close).toHaveBeenCalledTimes(1)
 		expect(alpha.getL1ContractAddresses).not.toHaveBeenCalled()
+		expect(initStoreVersionStamp).not.toHaveBeenCalled()
+		expect(createPXEMock).not.toHaveBeenCalled()
+	})
+
+	test("a node read that fails after the open closes the store", async () => {
+		const down = fakeRoutedNode({
+			getNodeInfo: async () => {
+				throw withTransportFailure(new Error("fetch failed"), "unreachable")
+			},
+		})
+		const { factory, store } = factoryRecording(down)
+		await expect(factory.createChainRuntime(fakeNetwork, fakeStoreKey)).rejects.toThrow("fetch failed")
+		expect(store.close).toHaveBeenCalledTimes(1)
 		expect(createPXEMock).not.toHaveBeenCalled()
 	})
 
 	test("opens chain 0 without reading the node's identity", async () => {
 		const getNodeInfo = vi.fn()
-		const local = { getNodeInfo, getL1ContractAddresses: async () => ({ rollupAddress: undefined }) }
-		const factory = new ProductionPxeFactory({ ...fakeNodeFactory, createNode: () => local as never })
+		const { factory } = factoryRecording(fakeRoutedNode({ getNodeInfo }))
 		await expect(factory.createChainRuntime({ ...fakeNetwork, chainId: 0 }, fakeStoreKey)).resolves.toBeDefined()
 		expect(getNodeInfo).not.toHaveBeenCalled()
+	})
+})
+
+describe("ProductionPxeFactory floor seeding", () => {
+	const headerAt = (block: number) => ({ getBlockNumber: () => block })
+
+	test("raises the route's floor to the block the store has synced, before the runtime is returned", async () => {
+		const node = fakeRoutedNode()
+		createPXEMock.mockResolvedValueOnce({ getSyncedBlockHeader: async () => headerAt(42) } as never)
+		const runtime = await new ProductionPxeFactory({ ...fakeNodeFactory, createRoutedNode: () => node as never }).createChainRuntime(
+			fakeNetwork,
+			fakeStoreKey,
+		)
+		expect(runtime.node).toBe(node)
+		expect(node.route.seedFloor.mock.calls).toEqual([[42]])
+	})
+
+	test("keeps the genesis floor on a store that never synced", async () => {
+		const node = fakeRoutedNode()
+		await new ProductionPxeFactory({ ...fakeNodeFactory, createRoutedNode: () => node as never }).createChainRuntime(
+			fakeNetwork,
+			fakeStoreKey,
+		)
+		expect(node.route.seedFloor).not.toHaveBeenCalled()
+	})
+
+	test("any other error reading the synced block fails the build and stops the PXE it made", async () => {
+		const close = vi.fn(async () => {})
+		vi.mocked(openChainStore).mockResolvedValueOnce({ close } as never)
+		const stop = vi.fn(async () => {})
+		createPXEMock.mockResolvedValueOnce({
+			stop,
+			getSyncedBlockHeader: async () => {
+				throw new Error("disk I/O error")
+			},
+		} as never)
+		const factory = new ProductionPxeFactory(fakeNodeFactory, { provingMode: "proverless" })
+		await expect(factory.createChainRuntime(fakeNetwork, fakeStoreKey)).rejects.toThrow("disk I/O error")
+		expect(stop).toHaveBeenCalledTimes(1)
+		expect(close).toHaveBeenCalledTimes(1)
 	})
 })
 
@@ -312,13 +438,18 @@ describe("ProductionPxeFactory proverless mode (e2e-only)", () => {
 
 describe("ChainRuntimeRegistry.disposeProfile — allSettled + AggregateError + poisoned re-add", () => {
 	const P = "prof-1"
-	const net = (chainId: number) => ({ profileId: P, chainId, rpcUrl: `http://n/${chainId}` }) as never
+	const net = (chainId: number): NetworkInfo => ({
+		profileId: P,
+		chainId,
+		l1ChainId: 1,
+		endpoints: [{ id: "a", rpcUrl: `http://n/${chainId}` }],
+	})
 
 	function runtimeWith(chainId: number, close: () => Promise<void>): ChainRuntime {
 		const pxe = { stop: async () => {} } as never
 		const node = {} as never
 		const store = { close } as never
-		return new ChainRuntime(chainId, node, pxe, `http://n/${chainId}`, store)
+		return new ChainRuntime(chainId, node, pxe, endpointsKey(net(chainId).endpoints), store)
 	}
 
 	test("disposes all, throws AggregateError on a failed close, and re-adds ONLY the poisoned runtime", async () => {
@@ -351,65 +482,131 @@ describe("ChainRuntimeRegistry.disposeProfile — allSettled + AggregateError + 
 
 describe("ChainRuntimeRegistry peek/ensure split", () => {
 	const P = "prof-1"
-	const netAt = (chainId: number, rpcUrl: string) => ({ profileId: P, chainId, rpcUrl }) as never
+	const A = { id: "a", rpcUrl: "http://a" }
+	const B = { id: "b", rpcUrl: "http://b" }
+	const netAt = (chainId: number, ...endpoints: { id: string; rpcUrl: string }[]): NetworkInfo => ({
+		profileId: P,
+		chainId,
+		l1ChainId: 1,
+		endpoints,
+	})
 
-	function runtimeAt(chainId: number, rpcUrl: string, close: () => Promise<void> = async () => {}): ChainRuntime {
+	function runtimeAt(network: NetworkInfo, close: () => Promise<void> = async () => {}): ChainRuntime {
 		const pxe = { stop: async () => {} } as never
 		const node = {} as never
 		const store = { close } as never
-		return new ChainRuntime(chainId, node, pxe, rpcUrl, store)
+		return new ChainRuntime(network.chainId, node, pxe, endpointsKey(network.endpoints), store)
 	}
 
-	test("peekMatching returns the runtime only when the rpcUrl matches; never mutates", async () => {
-		const rt = runtimeAt(1, "http://a")
+	test("peekMatching returns the runtime only for the endpoint list it was built for; never mutates", async () => {
+		const rt = runtimeAt(netAt(1, A, B))
 		const reg = new ChainRuntimeRegistry({ createChainRuntime: async () => rt })
-		await reg.ensure(netAt(1, "http://a"))
+		await reg.ensure(netAt(1, A, B))
 
-		expect(reg.peekMatching(netAt(1, "http://a"))).toBe(rt)
-		// Endpoint switched: a read-path caller gets a miss (it escalates to
+		expect(reg.peekMatching(netAt(1, A, B))).toBe(rt)
+		// Endpoints edited: a read-path caller gets a miss (it escalates to
 		// ensure under the chain WRITE guard) — the live runtime is untouched.
-		expect(reg.peekMatching(netAt(1, "http://b"))).toBeUndefined()
+		expect(reg.peekMatching(netAt(1, B))).toBeUndefined()
+		expect(reg.peekMatching(netAt(1, B, A))).toBeUndefined()
+		expect(reg.peekMatching(netAt(1, A, { id: "b", rpcUrl: "http://b2" }))).toBeUndefined()
 		expect(reg.peek(P, 1)).toBe(rt)
 	})
 
-	test("ensure rebinds on endpoint switch: disposes the old runtime, binds the new URL", async () => {
+	test("ensure rebinds on an endpoint-list edit: disposes the old runtime, binds the new list", async () => {
 		let closed = 0
-		const made: ChainRuntime[] = []
+		const reg = new ChainRuntimeRegistry({
+			createChainRuntime: async (n) =>
+				runtimeAt(n, async () => {
+					closed++
+				}),
+		})
+		const first = await reg.ensure(netAt(1, A, B))
+		expect(await reg.ensure(netAt(1, A, B))).toBe(first) // idempotent on match
+
+		const reordered = await reg.ensure(netAt(1, B, A))
+		expect(reordered).not.toBe(first)
+		expect(closed).toBe(1) // the old runtime was disposed
+		expect(reg.peekMatching(netAt(1, B, A))).toBe(reordered)
+	})
+
+	test("a failover moves the route, never the runtime: the same list still matches and nothing is rebuilt", async () => {
+		const calls: string[] = []
+		const connect: ConnectEndpoint = (rpcUrl) =>
+			({
+				getL1ContractAddresses: async () => {
+					calls.push(rpcUrl)
+					if (rpcUrl === A.rpcUrl) throw withTransportFailure(new Error("fetch failed"), "unreachable")
+					return "addresses"
+				},
+				getNodeInfo: async () => ({ l1ChainId: 1, rollupVersion: 0 }),
+				getChainTips: async () => ({ proposed: { number: 5 } }),
+			}) as never
+		let built = 0
 		const reg = new ChainRuntimeRegistry({
 			createChainRuntime: async (n) => {
-				const rt = runtimeAt(n.chainId, n.rpcUrl, async () => {
-					closed++
-				})
-				made.push(rt)
-				return rt
+				built++
+				const node = routeNode(
+					connect,
+					{ chainId: 1, l1ChainId: 1, endpoints: n.endpoints },
+					{ now: () => 0, sleep: async () => {}, log: () => {} },
+				)
+				return new ChainRuntime(n.chainId, node, { stop: async () => {} } as never, endpointsKey(n.endpoints))
 			},
 		})
-		const first = await reg.ensure(netAt(1, "http://a"))
-		expect(await reg.ensure(netAt(1, "http://a"))).toBe(first) // idempotent on match
+		const runtime = await reg.ensure(netAt(1, A, B))
+		await expect(runtime.node.getL1ContractAddresses()).resolves.toBe("addresses")
+		expect(calls).toEqual([A.rpcUrl, B.rpcUrl])
 
-		const second = await reg.ensure(netAt(1, "http://b"))
-		expect(second).not.toBe(first)
-		expect(closed).toBe(1) // the old runtime was disposed
-		expect(reg.peekMatching(netAt(1, "http://b"))).toBe(second)
+		expect(reg.peekMatching(netAt(1, A, B))).toBe(runtime)
+		expect(await reg.ensure(netAt(1, A, B))).toBe(runtime)
+		expect(built).toBe(1)
+	})
+
+	test("every runtime built for a (profile, chain) gets that pair's pins; another chain gets its own", async () => {
+		const pins: unknown[] = []
+		const reg = new ChainRuntimeRegistry({
+			createChainRuntime: async (n, _key, options) => {
+				pins.push(options?.pins)
+				return runtimeAt(n)
+			},
+		})
+		await reg.ensure(netAt(1, A, B))
+		await reg.ensure(netAt(1, B))
+		await reg.ensure(netAt(2, A))
+		expect(pins[0]).toBeDefined()
+		expect(pins[1]).toBe(pins[0])
+		expect(pins[2]).not.toBe(pins[0])
+		expect(reg.pinsFor(P, 1)).toBe(pins[0])
+	})
+
+	test("a profile's erase drops its pins; another profile's stay", async () => {
+		const reg = new ChainRuntimeRegistry({ createChainRuntime: async (n) => runtimeAt(n) })
+		const mine = reg.pinsFor(P, 1)
+		const theirs = reg.pinsFor("prof-2", 1)
+		mine.byTxHash.set("0x01", A)
+		await reg.disposeProfile(P)
+		expect(reg.pinsFor(P, 1)).not.toBe(mine)
+		expect(reg.pinsFor("prof-2", 1)).toBe(theirs)
+		expect(createSubmissionPins().byTxHash.size).toBe(0)
 	})
 
 	test("ensure keeps the old runtime referenced when its dispose fails (retry handle, no double-open)", async () => {
-		const bad = runtimeAt(1, "http://a", async () => {
+		const bad = runtimeAt(netAt(1, A), async () => {
 			throw new Error("close failed: lock leaked")
 		})
 		let factoryCalls = 0
 		const reg = new ChainRuntimeRegistry({
 			createChainRuntime: async (n) => {
 				factoryCalls++
-				return n.rpcUrl === "http://a" ? bad : runtimeAt(n.chainId, n.rpcUrl)
+				return n.endpoints[0]?.id === "a" ? bad : runtimeAt(n)
 			},
 		})
-		await reg.ensure(netAt(1, "http://a"))
+		await reg.ensure(netAt(1, A))
 		expect(factoryCalls).toBe(1)
 
-		// The rebind's dispose throws: ensure must NOT init the new URL over a
+		// The rebind's dispose throws: ensure must NOT init the new list over a
 		// possibly-leaked SAH lock, and must keep the old reference for retry.
-		await expect(reg.ensure(netAt(1, "http://b"))).rejects.toThrow("close failed")
+		await expect(reg.ensure(netAt(1, B))).rejects.toThrow("close failed")
 		expect(factoryCalls).toBe(1)
 		expect(reg.peek(P, 1)).toBe(bad)
 	})
@@ -424,12 +621,12 @@ describe("ChainRuntimeRegistry.stopRetries", () => {
 		const reg = new ChainRuntimeRegistry({
 			createChainRuntime: async (n, _storeKey, retries) => {
 				retryWhile.set(`${n.profileId}:${n.chainId}`, retries?.retryWhile ?? (() => true))
-				return new ChainRuntime(n.chainId, {} as never, {} as never, n.rpcUrl)
+				return new ChainRuntime(n.chainId, {} as never, {} as never, endpointsKey(n.endpoints))
 			},
 		})
 		const ensure = async (key: string) => {
 			const [profileId, chainId] = key.split(":")
-			await reg.ensure({ profileId, chainId: Number(chainId), rpcUrl: "http://n" })
+			await reg.ensure({ profileId, chainId: Number(chainId), l1ChainId: 1, endpoints: [{ id: "a", rpcUrl: "http://n" }] })
 		}
 		for (const key of keys) await ensure(key)
 		const retrying = () => Object.fromEntries([...retryWhile].map(([key, allowed]) => [key, allowed()]))
@@ -471,10 +668,10 @@ describe("ChainRuntimeRegistry.stopRetries", () => {
 		expect(retrying()).toEqual({ "a:3": true })
 	})
 
-	test("the production factory builds its node with the registry's retry policy", async () => {
-		const createNode = vi.fn(fakeNodeFactory.createNode)
-		const retries = { retryWhile: () => false }
-		await new ProductionPxeFactory({ ...fakeNodeFactory, createNode }).createChainRuntime(fakeNetwork, fakeStoreKey, retries)
-		expect(createNode).toHaveBeenCalledWith(fakeNetwork.rpcUrl, retries)
+	test("the production factory builds its routed node with the registry's retry policy and pins", async () => {
+		const createRoutedNode = vi.fn(fakeNodeFactory.createRoutedNode)
+		const options = { retryWhile: () => false, pins: createSubmissionPins() }
+		await new ProductionPxeFactory({ ...fakeNodeFactory, createRoutedNode }).createChainRuntime(fakeNetwork, fakeStoreKey, options)
+		expect(createRoutedNode).toHaveBeenCalledWith(expect.objectContaining({ endpoints: fakeNetwork.endpoints }), options)
 	})
 })

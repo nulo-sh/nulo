@@ -41,7 +41,7 @@ import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import type { ReadWriteGuard } from "@nulo/wallet-core/utils"
 import { makeFetchWithTimeout, type RetryOptions } from "../utils/fetch"
-import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { StoreErasedError } from "./lifecycle-coordinator"
 import { PxeService, type IProfileReader } from "./service"
 import { PXE_NOT_SYNCED_DIAGNOSTIC } from "./stale-anchor"
@@ -59,7 +59,12 @@ const noopProfiles: IProfileReader = {
 	getProfiles: async () => [],
 }
 
-const network: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://localhost:8080" }
+const network: NetworkInfo = {
+	profileId: "p1",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [{ id: "primary", rpcUrl: "http://localhost:8080" }],
+}
 
 // `AztecAddress.schema` is a wire schema — it accepts hex strings or buffers,
 // not instances. Pass a hex string and let the function-under-test hydrate it.
@@ -89,7 +94,7 @@ function makeFactory(opts: {
 					return undefined
 				},
 			} as unknown as AztecNode
-			return new ChainRuntime(n.chainId, node, pxe, n.rpcUrl)
+			return new ChainRuntime(n.chainId, node as never, pxe, endpointsKey(n.endpoints))
 		},
 	}
 	return {
@@ -454,7 +459,7 @@ describe("PxeService op-failure log classification", () => {
 						throw new Error(PXE_NOT_SYNCED_DIAGNOSTIC)
 					},
 				} as unknown as PXE
-				return new ChainRuntime(n.chainId, {} as AztecNode, pxe, n.rpcUrl)
+				return new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints))
 			},
 		}
 		const { service, calls } = makeSpyLoggerService(factory)
@@ -519,7 +524,7 @@ describe("PxeService.getLatestBlockNumber", () => {
 						return 4242
 					},
 				} as unknown as AztecNode
-				return new ChainRuntime(n.chainId, node, {} as PXE, n.rpcUrl)
+				return new ChainRuntime(n.chainId, node as never, {} as PXE, endpointsKey(n.endpoints))
 			},
 		}
 		await expect(makeService(factory).getLatestBlockNumber(network)).resolves.toBe(4242)
@@ -567,12 +572,12 @@ describe("PxeService teardown against an unreachable node", () => {
 				const node = {
 					getBlockNumber: () =>
 						kind === "refusing"
-							? fetchBlock(n.rpcUrl, {}).then(() => 0)
+							? fetchBlock(n.endpoints[0]?.rpcUrl ?? "", {}).then(() => 0)
 							: new Promise<number>((resolve) => {
 									answer = resolve
 								}),
 				} as unknown as AztecNode
-				return new ChainRuntime(n.chainId, node, {} as PXE, n.rpcUrl)
+				return new ChainRuntime(n.chainId, node as never, {} as PXE, endpointsKey(n.endpoints))
 			},
 		}
 		return makeService(factory)

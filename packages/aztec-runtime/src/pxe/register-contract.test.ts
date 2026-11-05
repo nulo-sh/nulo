@@ -17,7 +17,7 @@ import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { FrozenSchnorrAccountArtifact } from "../account/frozen-artifact"
 import { NuloAccount } from "../account/nulo-account"
-import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { type IProfileReader, PxeService } from "./service"
 
 const noopLogger: ILogger = { log: () => {} }
@@ -25,7 +25,12 @@ const noopProfiles: IProfileReader = {
 	connect: async () => {},
 	getProfiles: async () => [],
 }
-const network: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://localhost:8080" }
+const network: NetworkInfo = {
+	profileId: "p1",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [{ id: "primary", rpcUrl: "http://localhost:8080" }],
+}
 const seed = Fr.fromHexString("0x0000000000000000000000000000000000000000000000000000000000000002")
 
 function makeHarness(stored = new Map<string, unknown>()) {
@@ -44,7 +49,7 @@ function makeHarness(stored = new Map<string, unknown>()) {
 					return instance.address
 				},
 			} as unknown as PXE
-			return new ChainRuntime(n.chainId, {} as never, pxe, n.rpcUrl)
+			return new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints))
 		},
 	}
 	const service = new PxeService(noopProfiles, noopLogger, factory)

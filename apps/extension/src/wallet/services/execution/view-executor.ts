@@ -78,6 +78,9 @@ function isWithheldAccount(address: string, accounts: readonly { address: string
 	return accounts.some((account) => same(account.address)) && !sessionAccounts.some(same)
 }
 
+/** The primary endpoint's URL: `networkInfoFrom` lists it first and throws when there is none. */
+const primaryUrl = (info: NetworkInfo): string => info.endpoints[0]?.rpcUrl ?? ""
+
 export class ViewExecutor {
 	public constructor(private readonly deps: ViewExecutorDeps) {}
 
@@ -161,7 +164,7 @@ export class ViewExecutor {
 	): Promise<{ isContractClassPubliclyRegistered: boolean; isArtifactRegistered: boolean }> {
 		const network = await this.deps.networkService.getNetwork(op.networkId)
 		const info = networkInfoFrom(network)
-		const node = await this.deps.networkService.getNodeForUrl(info.rpcUrl)
+		const node = await this.deps.networkService.getNodeForUrl(primaryUrl(info))
 		const [artifact, publicClass] = await Promise.all([
 			this.deps.pxeService.getContractArtifact(info, op.id, { pxeOnly: true }),
 			node.getContractClass(await Fr.schema.parseAsync(op.id.toString())),
@@ -193,7 +196,7 @@ export class ViewExecutor {
 		const visible = stored && !isWithheldAccount(op.address.toString(), accounts, op.sessionAccounts) ? stored : undefined
 		// Simulation needs both the instance AND the artifact in the PXE.
 		const isLocallyRegistered = !!visible && (await this.hasLocalArtifact(info, visible))
-		const onChain = await this.nodeInstance(info.rpcUrl, op.address.toString())
+		const onChain = await this.nodeInstance(primaryUrl(info), op.address.toString())
 		const isContractUpdated = !!onChain && !onChain.currentContractClassId.equals(onChain.originalContractClassId)
 
 		return {

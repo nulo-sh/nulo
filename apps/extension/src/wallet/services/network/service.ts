@@ -1075,7 +1075,10 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 *  PXE's chain guard, which would wait behind a proof, through a node that dials once and logs
 	 *  nothing. Background-only: not an RPC method. */
 	public async readChainTip(networkId: string): Promise<number> {
-		const node = await this.getSingleAttemptNodeForUrl(networkInfoFrom(await this.getNetwork(networkId)).rpcUrl)
+		const network = await this.getNetwork(networkId)
+		const url = primaryEndpointUrl(network)
+		if (!url) throw new Error(`Network ${network.id} has no primary endpoint`)
+		const node = await this.getSingleAttemptNodeForUrl(url)
 		return Number(await node.getBlockNumber())
 	}
 
@@ -1086,11 +1089,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		if (entry.failures >= 3) this.transientNodes.delete(url)
 	}
 
-	/**
-	 * Synthesizes the legacy NetworkInfo struct from a Network's primary
-	 * endpoint. PXE-facing callers (account-state, execution, etc.) consume
-	 * this without knowing about endpoints.
-	 */
+	/** The network as the offscreen PXE takes it: its identity and its endpoints in preference order. */
 	public async getNetworkInfo(networkId: string): Promise<NetworkInfo> {
 		await this.ensureInitialized()
 		return networkInfoFrom(await this.getNetwork(networkId))
