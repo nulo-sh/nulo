@@ -6,7 +6,7 @@ import { ProfileServiceClient } from "@/wallet/services/profile/client"
 
 /** Utils */
 import { ALREADY_EXISTS } from "@/utils/entity-rules"
-import { normalizeProfileName } from "@/utils/profile-name"
+import { PROFILE_NAME_MAX, profileNameTaken } from "@/utils/profile-name"
 
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
@@ -28,10 +28,8 @@ const props = defineProps({
 let profileService = null
 const nameTerm = ref("")
 const isStartedEditing = ref(false)
-// Names of OTHER profiles (excluding the one being edited), NFKC + lowercase
-// normalized, populated when the popup opens. Used to block updates that
-// would shadow another profile's name — same case-folded NFKC compare as
-// the F4 duplicate hard-block on Create/Import.
+// The other profiles' names, read when the popup opens: a rename `profileNameTaken` finds among
+// them would shadow another profile's name.
 const otherProfileNames = ref([])
 
 const handleFillFieldsWithDefaultValues = () => {
@@ -42,11 +40,11 @@ const handleFillFieldsWithDefaultValues = () => {
 
 /** The name a save stores: a profile name never keeps outer spaces. */
 const newName = computed(() => nameTerm.value.trim())
+// Letter case alone is no change, while an NFKC variant is, so a ligature name can be retyped plain.
 const isUnchanged = computed(() => appStore.profile.name.toLowerCase() === newName.value.toLowerCase() && isStartedEditing.value)
 const isCollision = computed(() => {
 	if (!nameTerm.value || !isStartedEditing.value) return false
-	const normalized = normalizeProfileName(nameTerm.value)
-	return otherProfileNames.value.includes(normalized)
+	return profileNameTaken(nameTerm.value, otherProfileNames.value)
 })
 const isAvailableToUpdateProfile = computed(() => {
 	// The single submit-validity source for BOTH the button and the Enter path.
@@ -79,10 +77,9 @@ const handleUpdateProfile = async () => {
 		const currentId = appStore.profile?.id
 		const name = newName.value
 		const freshList = await profileService.getProfiles()
-		const normalized = normalizeProfileName(name)
-		const collidesNow = freshList.some((p) => p.id !== currentId && normalizeProfileName(p.name) === normalized)
-		if (collidesNow) {
-			otherProfileNames.value = freshList.filter((p) => p.id !== currentId).map((p) => normalizeProfileName(p.name))
+		const others = freshList.filter((p) => p.id !== currentId).map((p) => p.name)
+		if (profileNameTaken(name, others)) {
+			otherProfileNames.value = others
 			isProfileUpdateInProgress.value = false
 			return
 		}
@@ -112,7 +109,7 @@ usePopupEntity(() => props.show, {
 		// inside its in-progress latch.
 		const currentId = appStore.profile?.id
 		const profiles = await profileService.getProfiles()
-		otherProfileNames.value = profiles.filter((p) => p.id !== currentId).map((p) => normalizeProfileName(p.name))
+		otherProfileNames.value = profiles.filter((p) => p.id !== currentId).map((p) => p.name)
 	},
 	onHide: () => {
 		profileService.disconnect()
@@ -151,7 +148,7 @@ usePopupEntity(() => props.show, {
 					v-model="nameTerm"
 					autofocus
 					sanitize
-					:maxLength="32"
+					:maxLength="PROFILE_NAME_MAX"
 					@input="isStartedEditing = true"
 					data-testid="profile-name-input"
 				>

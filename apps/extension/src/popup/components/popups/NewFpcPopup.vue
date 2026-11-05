@@ -4,7 +4,8 @@ import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { isFieldAddress, sameFieldAddress } from "@nulo/wallet-bridge"
 import { sameStoredName } from "@/utils/account-name"
-import { ALREADY_EXISTS } from "@/utils/entity-rules"
+import { entityListReducers } from "@/utils/entity-list"
+import { ALREADY_ADDED, ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** Services */
@@ -29,11 +30,13 @@ const props = defineProps({
 
 let fpcService = null
 const fpcs = ref([])
+// The service announces every network's FPCs; an update never adds a row the list lacks.
+const fpcList = entityListReducers(fpcs, { appendUnlistedUpdate: false })
 
 const addressRefusal = (v) => {
 	if (!isHex32(v)) return "Invalid FPC address"
 	// Out of field range: the contact form's wording.
-	if (!isFieldAddress(v)) return "Invalid address"
+	if (!isFieldAddress(v)) return INVALID_ADDRESS
 	return null
 }
 
@@ -52,7 +55,7 @@ const form = useFormState({
 			if (!v) return null
 			const refusal = addressRefusal(v)
 			if (refusal) return refusal
-			if (fpcs.value.some((f) => sameFieldAddress(v, f.address ?? ""))) return "Already added"
+			if (fpcs.value.some((f) => sameFieldAddress(v, f.address ?? ""))) return ALREADY_ADDED
 			return null
 		},
 	},
@@ -62,7 +65,7 @@ const nameTerm = form.fields.name.value
 const fpcAddressTerm = form.fields.address.value
 
 const isAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS)
-const isAddressStored = computed(() => form.fields.address.error.value === "Already added")
+const isAddressStored = computed(() => form.fields.address.error.value === ALREADY_ADDED)
 const isValidAddress = computed(() => addressRefusal(fpcAddressTerm.value) === null)
 const isAvailableToAddFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
@@ -101,26 +104,15 @@ const handleAddFpc = async () => {
 		isLoading.value = false
 	}
 }
-const onFpcAdded = (fpc) => {
-	fpcs.value.push(fpc)
-}
-const onFpcUpdated = (fpc) => {
-	const idx = fpcs.value.findIndex((f) => f.id === fpc.id)
-	if (idx === -1) return
-	fpcs.value[idx] = fpc
-}
-const onFpcDeleted = (fpc) => {
-	fpcs.value = fpcs.value.filter((f) => f.id !== fpc.id)
-}
 usePopupEntity(
 	() => props.show,
 	{
 		submit: handleAddFpc,
 		onShow: async () => {
 			fpcService = new FpcServiceClient()
-			fpcService.onFpcAdded.add(onFpcAdded)
-			fpcService.onFpcDeleted.add(onFpcDeleted)
-			fpcService.onFpcUpdated.add(onFpcUpdated)
+			fpcService.onFpcAdded.add(fpcList.onAdded)
+			fpcService.onFpcDeleted.add(fpcList.onDeleted)
+			fpcService.onFpcUpdated.add(fpcList.onUpdated)
 			fpcs.value = await fpcService.getFpcs(appStore.network.chainId)
 		},
 		onHide: () => {
@@ -181,7 +173,7 @@ watch(
 			<template #right>
 				<Transition name="fade">
 					<FieldWarning v-if="!isValidAddress && fpcAddressTerm"> {{ addressRefusal(fpcAddressTerm) }} </FieldWarning>
-					<FieldWarning v-else-if="isAddressStored"> Already added </FieldWarning>
+					<FieldWarning v-else-if="isAddressStored"> {{ ALREADY_ADDED }} </FieldWarning>
 				</Transition>
 			</template>
 		</Input>

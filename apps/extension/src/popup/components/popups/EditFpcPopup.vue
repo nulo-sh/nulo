@@ -7,7 +7,8 @@ import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
 
 /** Utils */
 import { sameStoredName } from "@/utils/account-name"
-import { ALREADY_EXISTS } from "@/utils/entity-rules"
+import { entityListReducers } from "@/utils/entity-list"
+import { ALREADY_ADDED, ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 import { copyWithToast } from "@/utils/clipboard"
 
 /** Composables */
@@ -32,6 +33,8 @@ const props = defineProps({
 
 let fpcService = null
 const fpcs = ref([])
+// The service announces every network's FPCs; an update never adds a row the list lacks.
+const fpcList = entityListReducers(fpcs, { appendUnlistedUpdate: false })
 const fpcToEdit = ref(null)
 
 const form = useFormState({
@@ -48,8 +51,8 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v) return null
-			if (!isFieldAddress(v)) return "Invalid address"
-			if (fpcs.value.some((f) => f.id !== fpcToEdit.value?.id && sameFieldAddress(v, f.address ?? ""))) return "Already added"
+			if (!isFieldAddress(v)) return INVALID_ADDRESS
+			if (fpcs.value.some((f) => f.id !== fpcToEdit.value?.id && sameFieldAddress(v, f.address ?? ""))) return ALREADY_ADDED
 			return null
 		},
 	},
@@ -88,7 +91,7 @@ const hasChanges = computed(() => nameChanged.value || addressChanged.value)
 
 const isAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS && nameChanged.value)
 // Only an edited address is checked, so a row that already shares its address can still be renamed.
-const isAddressStored = computed(() => form.fields.address.error.value === "Already added" && addressChanged.value)
+const isAddressStored = computed(() => form.fields.address.error.value === ALREADY_ADDED && addressChanged.value)
 const isAddressValid = computed(() => isFieldAddress(addressTerm.value))
 const isAvailableToUpdateFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
@@ -148,12 +151,8 @@ const handleUpdateFpc = async () => {
 		isFpcUpdateInProgress.value = false
 	}
 }
-const onFpcAdded = (fpc) => {
-	fpcs.value.push(fpc)
-}
 const onFpcUpdated = (fpc) => {
-	const idx = fpcs.value.findIndex((f) => f.id === fpc.id)
-	if (idx !== -1) fpcs.value[idx] = fpc
+	fpcList.onUpdated(fpc)
 	if (fpcToEdit.value?.id === fpc.id) {
 		fpcToEdit.value = fpc
 	}
@@ -164,7 +163,7 @@ const onFpcDeleted = (fpc) => {
 		openToast({ kind: "success", label: "FPC was deleted" })
 		return
 	}
-	fpcs.value = fpcs.value.filter((f) => f.id !== fpc.id)
+	fpcList.onDeleted(fpc)
 }
 const handleCopyAddress = () => {
 	void copyWithToast(fpcToEdit.value.address, openToast, "FPC's address is copied")
@@ -176,7 +175,7 @@ usePopupEntity(
 		submit: handleUpdateFpc,
 		onShow: async () => {
 			fpcService = new FpcServiceClient()
-			fpcService.onFpcAdded.add(onFpcAdded)
+			fpcService.onFpcAdded.add(fpcList.onAdded)
 			fpcService.onFpcDeleted.add(onFpcDeleted)
 			fpcService.onFpcUpdated.add(onFpcUpdated)
 			fpcToEdit.value = await fpcService.getFpc(cacheStore.fpcToEditIdx)
@@ -279,8 +278,8 @@ watch(
 		>
 			<template #right>
 				<Transition name="fade">
-					<FieldWarning v-if="!isAddressValid && addressTerm"> Invalid address </FieldWarning>
-					<FieldWarning v-else-if="isAddressStored"> Already added </FieldWarning>
+					<FieldWarning v-if="!isAddressValid && addressTerm"> {{ INVALID_ADDRESS }} </FieldWarning>
+					<FieldWarning v-else-if="isAddressStored"> {{ ALREADY_ADDED }} </FieldWarning>
 				</Transition>
 			</template>
 		</Input>

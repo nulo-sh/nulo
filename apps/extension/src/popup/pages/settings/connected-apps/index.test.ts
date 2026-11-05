@@ -7,7 +7,7 @@ import ConnectedApps from "./index.vue"
 type Session = {
 	id: string
 	expiry: number
-	dappMetadata: { name: string; url: string }
+	dappMetadata: { name: string; url: string; logo?: string; logoBlobUrl?: string }
 	verificationHash?: string
 	capabilityGrants?: Array<{ capability: { type: string } }>
 }
@@ -15,6 +15,8 @@ type Session = {
 const mocks = vi.hoisted(() => ({
 	getDappSessions: vi.fn(),
 	requestConfirm: vi.fn(),
+	added: [] as Array<(session: unknown) => void>,
+	updated: [] as Array<(session: unknown) => void>,
 	deleted: [] as Array<(session: unknown) => void>,
 }))
 
@@ -26,8 +28,8 @@ vi.mock("@/wallet/services/dapp-session/client", () => ({
 			getDappSessions: mocks.getDappSessions,
 			deleteDappSession: vi.fn(),
 			disconnect: vi.fn(),
-			onDappSessionAdded: { add: vi.fn() },
-			onDappSessionUpdated: { add: vi.fn() },
+			onDappSessionAdded: { add: (fn: (session: unknown) => void) => mocks.added.push(fn) },
+			onDappSessionUpdated: { add: (fn: (session: unknown) => void) => mocks.updated.push(fn) },
 			onDappSessionDeleted: { add: (fn: (session: unknown) => void) => mocks.deleted.push(fn) },
 		}
 	}),
@@ -44,6 +46,8 @@ beforeEach(() => {
 afterEach(() => {
 	vi.unstubAllGlobals()
 	vi.clearAllMocks()
+	mocks.added.length = 0
+	mocks.updated.length = 0
 	mocks.deleted.length = 0
 })
 
@@ -95,6 +99,41 @@ describe("Settings › Connected apps — session delete reducer", () => {
 		mocks.deleted[0](session("s9", "zeta", 9))
 		await flushPromises()
 		expect(w.findAll('[data-testid="connected-app-row"]')).toHaveLength(1)
+	})
+})
+
+describe("Settings › Connected apps — session add and update reducers", () => {
+	const withLogo = (s: Session, logo: string, logoBlobUrl?: string): Session => ({
+		...s,
+		dappMetadata: { ...s.dappMetadata, logo, logoBlobUrl },
+	})
+	const rows = (w: Awaited<ReturnType<typeof mountPage>>) => (w.vm as unknown as { dappSessions: Session[] }).dappSessions
+
+	test("an add appends the row and shows its logo", async () => {
+		const w = await mountPage([session("s1", "alpha", 1)])
+		mocks.added[0](withLogo(session("s2", "beta", 2), "data:beta"))
+		await flushPromises()
+		expect(rows(w).map((s) => [s.id, s.dappMetadata.logoBlobUrl])).toEqual([
+			["s1", undefined],
+			["s2", "data:beta"],
+		])
+	})
+
+	test("an update for an unlisted id appends the row and shows its logo", async () => {
+		const w = await mountPage([session("s1", "alpha", 1)])
+		mocks.updated[0](withLogo(session("s2", "beta", 2), "data:beta"))
+		await flushPromises()
+		expect(rows(w).map((s) => [s.id, s.dappMetadata.logoBlobUrl])).toEqual([
+			["s1", undefined],
+			["s2", "data:beta"],
+		])
+	})
+
+	test("an update for a listed id replaces the row and keeps the logo it shows", async () => {
+		const w = await mountPage([withLogo(session("s1", "alpha", 1), "data:old", "blob:shown")])
+		mocks.updated[0](withLogo(session("s1", "alpha renamed", 1), "data:new"))
+		await flushPromises()
+		expect(rows(w).map((s) => [s.dappMetadata.name, s.dappMetadata.logoBlobUrl])).toEqual([["alpha renamed", "blob:shown"]])
 	})
 })
 

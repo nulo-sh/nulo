@@ -326,7 +326,7 @@ const LOCK_DELETES_ROW = cite(SESSIONS, 428, "this.deletePersistedSession()")
 const STRICT_TOGGLE = cite(SESSIONS, 769, 'prop.key === "strictSecurityMode"')
 const STRICT_DEFAULT = cite("src/wallet/config/config.ts", 31, "strictSecurityMode: z.boolean().default(true)")
 const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 222, ':title="strictRow.title"')
-const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 67, "setLastActiveProfileId(profile.id)")
+const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 70, "setLastActiveProfileId(profile.id)")
 const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 255, "if (!appStore.profiles.length) {")
 const RESET_WHILE_LOCKED = cite("src/popup/pages/settings/security/reset.vue", 5, '"isAuthRequired": false')
 const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 122, "if (!ext.prf) throw new PasskeyPrfError(")
@@ -353,7 +353,7 @@ const RESTORE_ROLLS_BACK = cite(
 	946,
 	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
 )
-const RESTORE_FINALIZES = cite(IMPORT, 337, "restoreRun = await finalizeWithReminder(")
+const RESTORE_FINALIZES = cite(IMPORT, 338, "restoreRun = await finalizeWithReminder(")
 const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
 const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 373, "discoveryQueue.drain(")
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
@@ -379,7 +379,7 @@ const EARLIER_AT_DECRYPT = cite(SELECTION, 89, "refuse(selected, banner, EARLIER
 const EARLIER_SHAPE = cite(GATE, 75, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
 const IMPORT_FLOW = "src/composables/useProfileImportFlow.ts"
 const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 195, 'await deps.unlockFor(admitted, { step: "import", profileName: name }, existing)')
-const RESTORE_CARD = cite(IMPORT, 274, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
+const RESTORE_CARD = cite(IMPORT, 275, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
 const PASSKEY_IMPORT_SEALS = cite(SERVICE, 1879, "seal = await this.newRowSeal(password, credentialData)")
 const RESTORE_SEALS = cite(SERVICE, 2181, "seal = await this.newRowSeal(password, credentialData)")
 const DISCOVERS = cite("src/wallet/utils/passkey-ceremony.ts", 117, "credentialId === undefined ? buildDiscoverOptions(prfSalt)")
@@ -530,7 +530,7 @@ const result = (next: World, outcomes: Outcome[], writes: WriteScope[], settle: 
 
 const unchanged = (w: World, outcome: Outcome, sources: string[]): Expectation => result(clone(w), [outcome], [], "unchanged", sources)
 
-const PICKER_IMPORT = cite("src/popup/components/popups/SelectProfilePopup.vue", 163, "handleImportProfile")
+const PICKER_IMPORT = cite("src/popup/components/popups/SelectProfilePopup.vue", 150, "handleImportProfile")
 
 /** An import that does not commit: a later profile is imported from the lock screen only, so the
  *  open session, if any, was locked on the way in. */

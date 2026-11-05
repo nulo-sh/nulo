@@ -1,6 +1,6 @@
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
-import { ALREADY_EXISTS } from "@/utils/entity-rules"
+import { ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 
 // `c` and `v` keep the validators' own names, so a native error on a malformed row reads the same.
 
@@ -31,7 +31,7 @@ export function contactNameError<C extends { name: string }>(
 	return null
 }
 
-/** The address field's verdict: `null` while empty or free, `"Invalid address"`, or `ALREADY_EXISTS`
+/** The address field's verdict: `null` while empty or free, `INVALID_ADDRESS`, or `ALREADY_EXISTS`
  *  when a saved contact other than `isExcluded` holds it in any hex case. */
 export function contactAddressError<C extends { address: string }>(
 	v: string,
@@ -39,7 +39,7 @@ export function contactAddressError<C extends { address: string }>(
 	isExcluded?: (c: C) => boolean,
 ): string | null {
 	if (!v) return null // empty: pre-input, not an error to display
-	if (!isValidAztecAddress(v)) return "Invalid address"
+	if (!isValidAztecAddress(v)) return INVALID_ADDRESS
 	if (contacts.value.some((c) => sameContactAddress(c, v) && !isExcluded?.(c))) return ALREADY_EXISTS
 	return null
 }
