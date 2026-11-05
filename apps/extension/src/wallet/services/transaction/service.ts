@@ -574,31 +574,19 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 
 	private async updateTx(tx: Tx) {
 		this.logDebug(`Sync tx ${tx.hash.slice(0, 8)}`)
-		// Pin polling to the endpoint that submitted this tx: staying on the
-		// originating endpoint avoids transient receipt-not-yet-indexed issues
-		// when the user swaps the network's primary endpoint mid-pending, and —
-		// critically — keeps a pending tx's receipt fetch on ITS OWN profile's
-		// endpoint after a profile switch, instead of leaking the tx hash to the
-		// now-active profile's RPC. `getNodeForUrl` never falls back to the
-		// active profile. Legacy txs with no recorded endpoint have no URL to
-		// pin to, so they still resolve via the active profile's node.
+		// A recorded endpoint is read only through its own URL: a pending hash never reaches another
+		// endpoint or another profile's. Every due poll is awaited before the next tick, so one
+		// attempt bounds how long a dead endpoint holds the others. A row with no recorded endpoint
+		// has nothing to pin and reads through the network's route.
 		const node = tx.submittedEndpointUrl
-			? await this.networkService.getNodeForUrl(tx.submittedEndpointUrl)
+			? await this.networkService.getSingleAttemptNodeForUrl(tx.submittedEndpointUrl)
 			: await this.networkService.getNode(tx.chainId)
 		if (!node) {
 			this.logError("Unknown network")
 			return
 		}
 
-		let receipt: Awaited<ReturnType<typeof node.getTxReceipt>>
-		try {
-			receipt = await node.getTxReceipt(TxHash.fromString(tx.hash))
-		} catch (err) {
-			if (tx.submittedEndpointUrl) {
-				this.networkService.reportEndpointFailure(tx.submittedEndpointUrl)
-			}
-			throw err
-		}
+		const receipt = await node.getTxReceipt(TxHash.fromString(tx.hash))
 		const status = txStatusFromReceipt(receipt.status)
 		const executionResult = executionResultFromReceipt(receipt.executionResult)
 

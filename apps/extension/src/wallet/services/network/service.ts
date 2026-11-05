@@ -239,7 +239,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	/** One routed node per network row, with the endpoint list it was built for. */
 	private readonly routes = new Map<string, { key: string; node: RoutedNode }>()
 	/** URL-keyed transient cache for pending-tx polling pin. */
-	private readonly transientNodes = new Map<string, { node: AztecNode; failures: number }>()
+	private readonly transientNodes = new Map<string, AztecNode>()
 	/** Never evicted: the keys are only the endpoints failed sends went through. */
 	private readonly singleAttemptNodes = new Map<string, AztecNode>()
 	private readonly lock: Lock
@@ -1056,34 +1056,16 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * Returns a transient AztecNode bound to `url` — used by pending-tx
-	 * polling so receipt fetches ALWAYS stay on the endpoint the tx was
-	 * submitted to, even after the user swaps the primary OR switches profiles
-	 * while the tx is still pending.
-	 *
-	 * Polling is pinned to the submitted URL and NEVER falls back to the active
-	 * profile's node. The previous fallback routed one profile's tx hash to
-	 * another profile's RPC provider (a cross-profile isolation leak) whenever
-	 * the submitted endpoint wasn't the active profile's — on a profile switch,
-	 * or after the submitting endpoint was edited/deleted. `url` is internal:
-	 * captured at submit time from a configured (allowlist-validated) endpoint
-	 * and reused verbatim, so dialing it without consulting the active profile
-	 * is the correct ownership model for a pending tx. (The only trust this
-	 * places is in the persisted `submittedEndpointUrl`, a wallet-written
-	 * field; the active-profile fallback survives only for the legacy
-	 * no-recorded-endpoint path in `TransactionService.updateTx`, where there
-	 * is no URL to pin to.)
-	 *
-	 * Failures are reported via `reportEndpointFailure(url)`; after 3
-	 * reported failures, which a success does not reset, the cache entry is
-	 * evicted and the next poll rebuilds the same URL.
+	 * The retrying client for `url` alone, never the active profile's node: a submission and the
+	 * receipts read on its recorded endpoint stay there through a primary swap, a failover or a
+	 * profile switch. `url` is wallet-written, captured from an allowlisted endpoint at submit time.
 	 */
 	public async getNodeForUrl(url: string): Promise<AztecNode> {
 		await this.ensureInitialized()
-		const entry = this.transientNodes.get(url)
-		if (entry) return entry.node
+		const cached = this.transientNodes.get(url)
+		if (cached) return cached
 		const created = this.nodeFactory.createNode(url)
-		this.transientNodes.set(url, { node: created, failures: 0 })
+		this.transientNodes.set(url, created)
 		return created
 	}
 
@@ -1105,13 +1087,6 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	public async readChainTip(networkId: string): Promise<number> {
 		const node = await this.getSingleAttemptNodeFor(await this.getNetwork(networkId), DEFAULT_REQUEST_TIMEOUT_MS)
 		return Number(await node.getBlockNumber())
-	}
-
-	public reportEndpointFailure(url: string): void {
-		const entry = this.transientNodes.get(url)
-		if (!entry) return
-		entry.failures += 1
-		if (entry.failures >= 3) this.transientNodes.delete(url)
 	}
 
 	/** The network as the offscreen PXE takes it: its identity and its endpoints in preference order. */

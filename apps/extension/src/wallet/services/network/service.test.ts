@@ -385,9 +385,9 @@ describe("NetworkService transient-node cache", () => {
 		;(service as any).initialized = true
 		// Pre-seed the transient cache so the call is a pure cache hit.
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		const transient: Map<string, { node: unknown; failures: number }> = (service as any).transientNodes
+		const transient: Map<string, unknown> = (service as any).transientNodes
 		const stub = { __id: "first" }
-		transient.set("https://rpc.a", { node: stub as never, failures: 0 })
+		transient.set("https://rpc.a", stub)
 		const result = await service.getNodeForUrl("https://rpc.a")
 		expect(result).toBe(stub)
 		// No new factory call — cache hit.
@@ -469,24 +469,6 @@ describe("NetworkService transient-node cache", () => {
 		expect(factory.singleAttempt).toEqual(["https://rpc.deleted"])
 		expect(factory.created.find((c) => c.node === node)?.rpcUrl).toBe("https://rpc.deleted")
 		expect(factory.created.map((c) => c.rpcUrl)).not.toContain("https://rpc.b")
-	})
-
-	test("reportEndpointFailure increments + evicts at threshold 3", () => {
-		const { service } = harness({})
-		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		const transient: Map<string, { node: unknown; failures: number }> = (service as any).transientNodes
-		transient.set("https://rpc.x", { node: {} as never, failures: 0 })
-		service.reportEndpointFailure("https://rpc.x")
-		expect(transient.get("https://rpc.x")?.failures).toBe(1)
-		service.reportEndpointFailure("https://rpc.x")
-		expect(transient.get("https://rpc.x")?.failures).toBe(2)
-		service.reportEndpointFailure("https://rpc.x")
-		expect(transient.has("https://rpc.x")).toBe(false)
-	})
-
-	test("reportEndpointFailure for unknown URL is a no-op", () => {
-		const { service } = harness({})
-		expect(() => service.reportEndpointFailure("https://never-cached")).not.toThrow()
 	})
 })
 
@@ -1075,7 +1057,7 @@ describe("NetworkService public API", () => {
 			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 			const transients = (service as any).transientNodes as Map<string, unknown>
 			const oldUrl = ep.rpcUrl
-			transients.set(oldUrl, { node: {}, failures: 0 })
+			transients.set(oldUrl, {})
 
 			await service.updateEndpoint(network.id, ep.id, "Moved", "https://rpc.test/3")
 
@@ -1113,7 +1095,7 @@ describe("NetworkService public API", () => {
 			const ep = await service.addEndpoint(network.id, "Backup", "https://rpc.test/2")
 			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 			const transients = (service as any).transientNodes as Map<string, unknown>
-			transients.set(ep.rpcUrl, { node: {}, failures: 0 })
+			transients.set(ep.rpcUrl, {})
 
 			let transientAtEmit: boolean | undefined
 			service.onNetworkUpdated.add(() => {
