@@ -1,5 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
+import { canSwitchReceiver, canSwitchSender } from "./send-sides"
+
 const props = defineProps({
 	token: {
 		type: Object,
@@ -12,14 +14,14 @@ const selectedReceiverType = defineModel("receiverType")
 
 const handleSwitchSendType = () => {
 	if (!props.token) return
-	if (!props.token.hasPrivateTransfers || !props.token.hasPublicTransfers) return
+	if (!canSwitchSender(props.token)) return
 
 	selectedSendType.value = selectedSendType.value === "private" ? "public" : "private"
 }
 
 const handleSwitchReceiverType = () => {
 	if (!props.token) return
-	if (!props.token.hasPrivateBalances || !props.token.hasPublicBalances) return
+	if (!canSwitchReceiver(props.token)) return
 
 	selectedReceiverType.value = selectedReceiverType.value === "private" ? "public" : "private"
 }

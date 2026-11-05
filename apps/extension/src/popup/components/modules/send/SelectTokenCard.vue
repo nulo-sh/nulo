@@ -40,10 +40,6 @@ const state = computed(() => {
 	return props.failed ? "failed" : "empty"
 })
 
-const isTokenRestricted = computed(() => {
-	if (!props.token) return
-	return !props.token.hasPrivateTransfers || !props.token.hasPublicTransfers
-})
 const isTokenBlocked = computed(() => {
 	return !props.token.hasPrivateTransfers && !props.token.hasPublicTransfers
 })
