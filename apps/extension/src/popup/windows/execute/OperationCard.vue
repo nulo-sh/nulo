@@ -874,10 +874,17 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	}
 }
 
-/* A dApp names the call and its contract; a long unbroken name must break inside the card, not push the address out. */
+/* A dApp names the call; a long unbroken name must break inside the card, not push the address out. */
 .call_row > * {
 	min-width: 0;
 	overflow-wrap: anywhere;
+}
+
+/* The contract keeps its width, so a shortened address never breaks and the call's name takes the
+ * wrap; only a name wider than the row, less its 12 px gap, wraps. */
+.call_row > :last-child {
+	flex-shrink: 0;
+	max-width: calc(100% - 12px);
 }
 
 .payload {
@@ -927,6 +934,10 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 
 	.call_row > :first-child {
 		overflow-wrap: break-word;
+	}
+
+	.call_row > :last-child {
+		max-width: 100%;
 	}
 }
 </style>
