@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { openingSendSide } from "./send-sides"
+import { canSwitchReceiver, canSwitchSender, forcedSide, openingSendSide } from "./send-sides"
 
 describe("openingSendSide", () => {
 	test.each([
@@ -13,5 +13,42 @@ describe("openingSendSide", () => {
 		["a malformed private side", "private", { publicBalance: "1000", privateBalance: "-1" }],
 	])("%s opens on %s", (_, side, row) => {
 		expect(openingSendSide(row)).toBe(side)
+	})
+})
+
+// Every set of the four capability flags, as [private transfers, public transfers, private
+// balances, public balances] → [forced side, origin switches, destination switches]. The origin
+// and the forced side read transfers, the destination balances; with neither transfer, private.
+const T = true
+const F = false
+describe("forcedSide, canSwitchSender, canSwitchReceiver", () => {
+	test.each([
+		[F, F, F, F, "private", F, F],
+		[F, F, F, T, "private", F, F],
+		[F, F, T, F, "private", F, F],
+		[F, F, T, T, "private", F, T],
+		[F, T, F, F, "public", F, F],
+		[F, T, F, T, "public", F, F],
+		[F, T, T, F, "public", F, F],
+		[F, T, T, T, "public", F, T],
+		[T, F, F, F, "private", F, F],
+		[T, F, F, T, "private", F, F],
+		[T, F, T, F, "private", F, F],
+		[T, F, T, T, "private", F, T],
+		[T, T, F, F, null, T, F],
+		[T, T, F, T, null, T, F],
+		[T, T, T, F, null, T, F],
+		[T, T, T, T, null, T, T],
+	])("transfers %s/%s, balances %s/%s → forced %s, origin %s, destination %s", (privT, pubT, privB, pubB, forced, sender, receiver) => {
+		const token = { hasPrivateTransfers: privT, hasPublicTransfers: pubT, hasPrivateBalances: privB, hasPublicBalances: pubB }
+		expect(forcedSide(token)).toBe(forced)
+		expect(canSwitchSender(token)).toBe(sender)
+		expect(canSwitchReceiver(token)).toBe(receiver)
+	})
+
+	test("absent flags read as no capability", () => {
+		expect(forcedSide({})).toBe("private")
+		expect(canSwitchSender({})).toBe(false)
+		expect(canSwitchReceiver({})).toBe(false)
 	})
 })
