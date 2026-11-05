@@ -143,3 +143,16 @@ test("a kill armed on a method fires on the first request calling it, and the re
 	await r.restore()
 	expect((await rpc(r, ["getPublicStorageAt"])).status).toBe(200)
 })
+
+test("a hold parks only the requests carrying its text until release, and stops counting a client that gave up", async () => {
+	const r = await start()
+	r.fail({ carrying: "0xABC", fault: { kind: "hold" } })
+	expect((await rpc(r, ["getTxReceipt"], ["0x123"])).status).toBe(200)
+	const waiting = rpc(r, ["getTxReceipt"], ["0xabc"], 5_000)
+	await expect(rpc(r, ["getTxReceipt"], ["0xabc"], 300)).rejects.toThrow(/timed out/)
+	await expect.poll(() => r.held()).toBe(1)
+	await r.release()
+	expect(results((await waiting).text)).toEqual(["aztec_getTxReceipt:ok"])
+	expect(r.held()).toBe(0)
+	expect(r.arrivals()).toHaveLength(3)
+})

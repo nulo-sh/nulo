@@ -25,3 +25,5 @@
 - 2026-11-05: owner answers in: OA-1 B, OA-8 A, OA-2 the proposed text.
 - 2026-11-05: Phase 6 gate pass (lint, typecheck:all, pxe+routing 360, Phase 6 suites 936, bun run test green on its second run). Deviation D31 (singleAttempt admits within the caller's budget).
 - 2026-11-05: Phase 7 gate pass (lint, typecheck:all, pxe+routing+adapters, Phase 6 and 7 suites, test:all green on its second run). Deviation D33 (pick on the matching runtime, URL membership checks).
+- 2026-11-05: stack synced onto dev 4b250df after #1671 merged (one conflict, implementations-plan/index.md, kept the plan line); pushed a1 8a1ab62, a2 4065a28, a3 af65e6d
+- 2026-11-05: E1 green on Chrome (190 s) and Firefox (202 s), red with the offscreen pin removed; legal 1.2.10/1.2.2 and ARCHITECTURE § 15 committed.
