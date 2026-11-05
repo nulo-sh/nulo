@@ -33,3 +33,5 @@
 - E1 gained an assertion that the header reads connected while A is dead (OA-1 B), and opt-in shots of the header and Manage Networks (`NULO_E2E_SHOT_DIR`). Rerun: Chrome green, 194 s; peak per 10 s A 71, B 21.
 - GitHub never processed the stack sync's push of a2 (the ref moved, the PR head and CI did not). Rewinding the branch to the PR's recorded head and pushing the real head again, both with lease, made it sync.
 - E1 rerun (header check added): Firefox green, 203 s; peak per 10 s A 60, B 22.
+- Armed smoke loop (`endpoints.test.ts`, migration fixture, token seeds, CSP report): Chrome 7/7, Firefox 7/7, 98 s for both builds and runs.
+- Final head `6d29f3a1b`: `bun run test:all` green at retry 0 (185 s; aztec-runtime 559, extension 17564); `bun run audit:vue` green (192 s); `bun run check:plans` 0 findings.
