@@ -10,3 +10,6 @@ export const ALREADY_ADDED = "Already added"
 /** The contact form's refusal of an address, which the FPC, sender and token forms reuse for a
  *  value outside the field. */
 export const INVALID_ADDRESS = "Invalid address"
+
+/** The shortest RPC URL a network or endpoint form submits. */
+export const RPC_URL_MIN_LENGTH = 5

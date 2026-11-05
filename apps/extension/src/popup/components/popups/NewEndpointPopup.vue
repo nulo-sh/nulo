@@ -2,6 +2,7 @@
 import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { managers } from "@/utils/core"
+import { RPC_URL_MIN_LENGTH } from "@/utils/entity-rules"
 import { endpointErrorText } from "./endpoint-error-text"
 
 /** Composables */
@@ -33,7 +34,7 @@ const isAvailableToCreate = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isSubmitting.value) return false
-	if (urlTerm.value.length < 5) return false
+	if (urlTerm.value.length < RPC_URL_MIN_LENGTH) return false
 	if (errorText.value) return false
 	if (!network.value) return false
 	return true
