@@ -1,7 +1,7 @@
 ---
 plan: wallet-bugs-3
 tier: light
-status: arc 1 implemented, review loop converged; PR pending
+status: completed (PR open against dev; merge and #1653's sign-off pending)
 issues: "#1627, #1653, #1535 (arc 1 closes all three)"
 base: 4b250dfe46f99501e175c53316e30da0f89025ba
 driver: claude-code
@@ -12,6 +12,16 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 1 explorer (sonnet); Codex gpt-6.1-sol high audit round trip + Opus Plan leg
 ---
+
+## Outcome
+
+- Date: 2026-11-05.
+- Status: completed; the merge, and the owner's sign-off on #1653's pictures, are in the PR.
+- Shipped: the PR `fix(wallet): balance batch failures, the payload row's address wrap, the priority tablist` against `dev`. #1627: `failBatchOnProjectorError` fails every owned task before its first await and attempts every failure write, rethrowing the first refusal. #1653: the payload row's caption keeps its width up to the row less its gap, so a shortened address never splits. #1535: `FeePriorityRow` is the house roving tablist with the 2 px focus ring. Checks joined `type-roles-windows` and `send-keyboard`; pictures under [`screenshots/`](screenshots/).
+- Lessons: none promoted to `lessons.md` (at its budget); the Firefox focus difference went to `apps/extension/tests/e2e/FIREFOX.md`.
+- Known limits: #1675.
+- Open items: none.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # wallet-bugs-3: three small wallet defects
 
