@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.8 — effective 4 November 2026**
+**Version 1.2.8 — effective 5 November 2026**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -467,4 +467,4 @@ described in § 5.
 | 1.2.5 | 25 October 2026 | Only the default Testnet endpoint uses the Developer's provider account (§ 5.1). |
 | 1.2.6 | 27 October 2026 | Passkey profiles have a recovery phrase, and a passkey-profile backup restores with its file password alone (§§ 3, 5.4, 9). |
 | 1.2.7 | 27 October 2026 | The website and its mailing list are described in a separate Website Privacy Notice; § 5.5 keeps the hosts the wallet's functions involve. |
-| 1.2.8 | 4 November 2026 | Prices are requested for the price identifiers the signed token list names, and for AZTEC, which prices Fee Juice (§ 5.2). |
+| 1.2.8 | 5 November 2026 | Prices are requested for the price identifiers the signed token list names, and for AZTEC, which prices Fee Juice (§ 5.2). |
