@@ -15,7 +15,9 @@
  * On the sandbox it also pins the token, picks a Send fee payer and an app window's fee payer, so
  * the release's own maps meet the candidate's unlock, which seals them in place. The sandbox is a
  * custom network, a chain that offers no sponsor, so the candidate deletes the canonical Sponsored
- * fee payer there with its picks on its first fee read: the checks allow exactly that.
+ * fee payer there with its picks on its first fee read: the checks allow exactly that. A release
+ * that offers the sponsor only on the chains it lists has none there, so it pays from public Fee
+ * Juice bridged to the account, which an account's first send may spend while it deploys.
  *
  * A release that seals its rows is read through its own services, as it reads them, and ends on
  * Testnet with its second account selected: the popup opens there only on a selection it read,
@@ -27,7 +29,8 @@
  * (the egress guard blocks both).
  *
  * Runtime: estimated 6 min on Chrome, 9 min on Firefox; measured 102 to 162 s and 182 to 186 s, the
- * release's real proof of the account's deployment included.
+ * release's real proof of the account's deployment included. The Fee Juice bridge adds an estimated
+ * 30 to 60 s.
  */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
@@ -57,6 +60,7 @@ import {
 	contactRow,
 	createAccount,
 	ensureUnlocked,
+	type FeeMethodSubtitle,
 	getAccountAddress,
 	getTokenDetailBalances,
 	importToken,
@@ -207,11 +211,21 @@ async function addSandboxNetwork(page: Page, nodeUrl: string, chainInfo: ChainIn
 	) as Promise<string>
 }
 
-/** The minter, an outside account, sends `to` a public and a private transfer of the run's token. */
-async function receiveOnSandbox(cfg: AztecTestConfig, to: string): Promise<void> {
+/** The release's fee method on the sandbox: its sponsor, or the Fee Juice {@link receiveOnSandbox}
+ *  bridges where it offers no sponsor on a custom network. */
+const sandboxFeeMethod = (release: ReleaseTraits): FeeMethodSubtitle => (release.sponsor === "every-chain" ? "sponsored" : "public")
+
+/** The minter, an outside account, sends `to` a public and a private transfer of the run's token;
+ *  for a release that pays there from Fee Juice, `to` first gets public Fee Juice bridged from L1. */
+async function receiveOnSandbox(cfg: AztecTestConfig, to: string, release: ReleaseTraits): Promise<void> {
 	const fixtures = await import("../fixtures/aztec")
-	const { wallet, node, cleanup } = await fixtures.createTestWallet(cfg.nodeUrl)
+	const { wallet, node, accounts, cleanup } = await fixtures.createTestWallet(cfg.nodeUrl)
 	try {
+		if (sandboxFeeMethod(release) === "public") {
+			const scriptAccount = accounts[0]
+			if (!scriptAccount) throw new Error("expected at least one sandbox-deployed test account")
+			await fixtures.fundPublicFeeJuice(wallet, node, scriptAccount, cfg, to)
+		}
 		const fee = await fixtures.createSponsoredFeeOptions(wallet)
 		const minter = cfg.minterAddress
 		await fixtures.mintPublicTokens(wallet, cfg.tokenAddress, minter, PUBLIC, minter, fee)
@@ -248,7 +262,7 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 	await navigateByHash(page, "#/popup/general", 15_000)
 	const baseline = await captureBalanceBaseline(page, account, cfg.tokenAddress)
 	await importToken(page, cfg.tokenAddress)
-	await receiveOnSandbox(cfg, account)
+	await receiveOnSandbox(cfg, account, release)
 	await waitForFreshBalanceRow(page, {
 		account,
 		tokenContract: cfg.tokenAddress,
@@ -258,7 +272,7 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 		timeoutMs: 180_000,
 	})
 	const incoming = await incomingCards(page, 2)
-	await pickPreferences(page)
+	await pickPreferences(page, release)
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)
@@ -266,7 +280,7 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 		if (!ids.includes(account)) throw new Error(`the capabilities window offers ${ids.join(", ")}, not ${account}`)
 		return [account]
 	})
-	await sendFromWallet(ctx, dapp, cfg, account)
+	await sendFromWallet(ctx, dapp, cfg, account, release)
 	await dapp.close()
 	const sealed = release.storage === "sealed" ? await endOnSecondAccount(ctx) : undefined
 	const before = await readLocalStorage(ctx)
@@ -313,19 +327,25 @@ async function endOnSecondAccount(ctx: ExtensionContext): Promise<{
 
 /** Pins the sandbox token and picks Send's fee payer for a private send, each through the release's
  *  own UI, which saves both maps; the app window's pick is the send's below. */
-async function pickPreferences(page: Page): Promise<void> {
+async function pickPreferences(page: Page, release: ReleaseTraits): Promise<void> {
 	await navigateByHash(page, "#/popup/general", 15_000)
 	await navigateToTokenDetail(page)
 	await pinFromTokenPage(page)
 	await navigateByHash(page, "#/popup/general", 15_000)
 	await openSend(page)
-	await selectFeeMethod(page, "sponsored")
+	await selectFeeMethod(page, sandboxFeeMethod(release))
 	await navigateByHash(page, "#/popup/general", 15_000)
 }
 
 /** The account's first send, which deploys it and leaves the wallet's transaction row; its fee
  *  payer is picked by hand, which saves the app window's pick. */
-async function sendFromWallet(ctx: ExtensionContext, dapp: Page, cfg: AztecTestConfig, account: string): Promise<void> {
+async function sendFromWallet(
+	ctx: ExtensionContext,
+	dapp: Page,
+	cfg: AztecTestConfig,
+	account: string,
+	release: ReleaseTraits,
+): Promise<void> {
 	const popup = await openPopup(ctx)
 	await waitForHash(popup, "#/popup/general", 30_000)
 	const baseline = await captureBalanceBaseline(popup, account, cfg.tokenAddress)
@@ -336,7 +356,7 @@ async function sendFromWallet(ctx: ExtensionContext, dapp: Page, cfg: AztecTestC
 		method: "sendTx",
 		label: "update-in-place:send",
 		popupTimeoutMs: 180_000,
-		feeMethod: "sponsored",
+		feeMethod: sandboxFeeMethod(release),
 	})
 	const { waitForTxMined } = await import("../fixtures/aztec")
 	await waitForTxMined(cfg, txHashOf(sent.resultJson), 300_000)
