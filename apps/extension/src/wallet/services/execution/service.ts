@@ -104,7 +104,7 @@ import { TxRequestBuilder } from "./tx-request-builder"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps, OnBuilt } from "./fee/fee-strategy"
 import { appPriorityOf } from "./fee/fee-strategy"
 import { buildFeeStrategies } from "./fee/build-fee-strategies"
-import { ExecutionCoordinator } from "./execution-coordinator"
+import { ExecutionCoordinator, type PickedEndpoint } from "./execution-coordinator"
 import { type ProofGate, NOOP_PROOF_GATE } from "@/e2e/proof-gate"
 
 export * from "./spec"
@@ -404,6 +404,16 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		return { l1ChainId: info.l1ChainId, rollupVersion: info.rollupVersion }
 	}
 
+	/** Submits only through an endpoint the network lists: an offscreen answer naming any other URL is
+	 *  refused before anything is recorded or sent. */
+	private async pickSendEndpoint(network: Network, tx: { txHash: string; anchorHash: string }): Promise<PickedEndpoint> {
+		const { rpcUrl } = await this.pxeService.pickSendEndpoint(networkInfoFrom(network), tx)
+		if (!network.endpoints.some((endpoint) => endpoint.rpcUrl === rpcUrl)) {
+			throw new Error(`The endpoint picked for the send is not one of network ${network.id}'s`)
+		}
+		return { url: rpcUrl, node: await this.networkService.getNodeForUrl(rpcUrl) }
+	}
+
 	/** The lane and the builder come first: the executors and the fee strategies capture both eagerly. */
 	private wireExecutors(): void {
 		this.wireLaneAndBuilder()
@@ -415,6 +425,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			isFenceLive: (fence) => this.profileService.isFenceLive(fence),
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
+			pickSendEndpoint: (network, tx) => this.pickSendEndpoint(network, tx),
 			readPublicStorageOnce: (network, contract, slot, timeoutMs) =>
 				this.networkService.readPublicStorageOnce(network, contract, slot, timeoutMs),
 			getPXE: (network) => this.pxeService.getPXE(networkInfoFrom(network)),

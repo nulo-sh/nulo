@@ -24,3 +24,4 @@
 - 2026-11-05: Phase 5 gate pass (lint, typecheck:all, aztec-runtime src/pxe 296/296, bun run test green on its second run after the two projection tests were updated).
 - 2026-11-05: owner answers in: OA-1 B, OA-8 A, OA-2 the proposed text.
 - 2026-11-05: Phase 6 gate pass (lint, typecheck:all, pxe+routing 360, Phase 6 suites 936, bun run test green on its second run). Deviation D31 (singleAttempt admits within the caller's budget).
+- 2026-11-05: Phase 7 gate pass (lint, typecheck:all, pxe+routing+adapters, Phase 6 and 7 suites, test:all green on its second run). Deviation D33 (pick on the matching runtime, URL membership checks).

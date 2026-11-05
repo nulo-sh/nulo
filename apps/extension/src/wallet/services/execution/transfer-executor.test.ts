@@ -92,6 +92,9 @@ function makeReq(overrides: Partial<TransferRequest> = {}): TransferRequest {
 	}
 }
 
+const ANCHOR_HASH = `0x${"ab".repeat(32)}`
+const PICKED_URL = "http://picked"
+
 /** A real gate over `readTip`, on a clock frozen at 0 whose sleeps only yield a macrotask. */
 function tipGate(readTip: () => Promise<number>) {
 	const reads = { count: 0 }
@@ -124,10 +127,11 @@ function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 		nonce: { toString: () => "42" },
 		feePaymentMethod: { kind: "fee_juice" },
 	}
-	const proveAndSend = vi.fn(async (ctx: { recordTransaction: (h: string) => Promise<unknown>; onSent?: (h: string) => void }) => {
+	const proveAndSend = vi.fn(async (ctx: ProveAndSendContext) => {
+		const sentThrough = await ctx.pickSendEndpoint({ txHash: "0xhash", anchorHash: ANCHOR_HASH })
 		ctx.onSent?.("0xhash")
-		await ctx.recordTransaction("0xhash")
-		return { txHash: { toString: () => "0xhash" }, offchainOutput: undefined }
+		await ctx.recordTransaction("0xhash", sentThrough.url)
+		return { txHash: { toString: () => "0xhash" }, offchainOutput: undefined, sentThrough }
 	})
 	const deps: TransferExecutorDeps = {
 		tasks: { startNewTask: vi.fn(() => task) } as never,
@@ -163,6 +167,7 @@ function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 		isFenceLive: vi.fn(() => true),
 		getNetwork: vi.fn(async () => network),
 		getNode: vi.fn(async () => ({ kind: "node" }) as never),
+		pickSendEndpoint: vi.fn(async () => ({ url: PICKED_URL, node: { kind: "sent-node" } as never })),
 		getPXE: vi.fn(() => ({ kind: "pxe" }) as never),
 		getAccountContract: vi.fn(async () => ({ address: "0xacct-addr" }) as never),
 		getPendingForAccount: vi.fn(() => [{ hash: "0xpending" }] as never),
@@ -249,9 +254,9 @@ describe("TransferExecutor.execute", () => {
 		["control: its task stays tracked", false],
 	])("a send the node took resolves with its hash when %s (real TaskService)", async (_name, switches) => {
 		const { tasks, switchToProfile } = await startedTaskService("p1")
-		const proveAndSend = vi.fn(async (ctx: { recordTransaction: (h: string) => Promise<unknown> }) => {
+		const proveAndSend = vi.fn(async (ctx: ProveAndSendContext) => {
 			if (switches) switchToProfile("p2")
-			await ctx.recordTransaction("0xhash")
+			await ctx.recordTransaction("0xhash", PICKED_URL)
 			return { txHash: { toString: () => "0xhash" } }
 		})
 		const { executor, deps } = makeHarness({ tasks, coordinator: { proveAndSend } as never })
@@ -370,7 +375,7 @@ describe("TransferExecutor.execute", () => {
 		expect(proveAndSend).not.toHaveBeenCalled()
 	})
 
-	test("submitting is committed on the record with the primary endpoint, and a refused write rejects", async () => {
+	test("submitting is committed on the record with the picked endpoint, and a refused write rejects", async () => {
 		const refused = new Error("storage write failed")
 		const { executor, deps, proveAndSend } = makeHarness({
 			transitionJournal: vi.fn(async (_id: string, progress: { stage: string }) => {
@@ -380,15 +385,15 @@ describe("TransferExecutor.execute", () => {
 		})
 		proveAndSend.mockImplementationOnce(async (ctx) => {
 			const bound = ctx as unknown as ProveAndSendContext
-			expect(bound.submittedEndpointUrl).toBe("http://primary")
-			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl, expiry: EXPIRY })
+			const picked = await bound.pickSendEndpoint({ txHash: "0xhash", anchorHash: ANCHOR_HASH })
+			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: picked.url, expiry: EXPIRY })
 			throw new Error("unreachable: the refused write must reject")
 		})
 		await expect(executor.execute(makeReq(), undefined, FENCE)).rejects.toStrictEqual(new JournaledRejection(refused, "j1"))
 		expect(deps.transitionJournal).toHaveBeenCalledWith("j1", {
 			stage: "submitting",
 			txHash: "0xhash",
-			submittedEndpointUrl: "http://primary",
+			submittedEndpointUrl: PICKED_URL,
 			expiry: EXPIRY,
 		})
 		expect(deps.logError).not.toHaveBeenCalledWith("Failed to update journal operation", refused)
@@ -811,6 +816,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			network: { id: "net-built", chainId: 7, primaryEndpointId: "e1", endpoints: [{ id: "e1", rpcUrl: "http://submitted" }] },
 		})
 		await h.executor.execute(makeReq(), undefined, FENCE)
+		expect(h.deps.pickSendEndpoint).toHaveBeenCalledExactlyOnceWith(h.built.network, { txHash: "0xhash", anchorHash: ANCHOR_HASH })
 		expect(recordedTx(h.deps)).toStrictEqual({
 			origin: { type: OriginType.UI },
 			chainId: 7,
@@ -819,7 +825,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			nonce: "42",
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
-			submittedEndpointUrl: "http://submitted",
+			submittedEndpointUrl: PICKED_URL,
 			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
@@ -858,6 +864,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			} as never,
 		})
 		await h.executor.execute(makeReq(), "est-1", FENCE)
+		expect(h.deps.pickSendEndpoint).toHaveBeenCalledExactlyOnceWith(reusedNetwork, { txHash: "0xhash", anchorHash: ANCHOR_HASH })
 		expect(recordedTx(h.deps)).toStrictEqual({
 			origin: { type: OriginType.UI },
 			chainId: 9,
@@ -866,7 +873,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			nonce: "99",
 			feePaymentMethod: { kind: "reused" },
 			hash: "0xhash",
-			submittedEndpointUrl: "http://live",
+			submittedEndpointUrl: PICKED_URL,
 			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,

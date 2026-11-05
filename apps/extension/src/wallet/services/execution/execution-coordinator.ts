@@ -93,9 +93,17 @@ type ProveAndSendJournalPatch = { stage: "proving"; enteredProveAt: number } | {
 /** Everything `proveAndSend` needs. Per-path variation is DATA here —
  *  scopes, journal binding, activity-record shape, offchain extraction —
  *  never op-kind branches inside the coordinator. */
+/** The endpoint a send was submitted through: its URL, recorded, and the client that dials it. */
+export interface PickedEndpoint {
+	readonly url: string
+	readonly node: AztecNode
+}
+
 export interface ProveAndSendContext<TOffchain = unknown> {
 	pxe: IPXE
-	node: AztecNode
+	/** The endpoint to submit through, chosen once the tx exists and pinned to its hash for its
+	 *  receipts. A refusal ends the send before anything is recorded or broadcast. */
+	pickSendEndpoint: (tx: { txHash: string; anchorHash: string }) => Promise<PickedEndpoint>
 	txRequest: TxExecutionRequest
 	/** Proving scopes — per-path data. The four call sites differ
 	 *  (`[account.address]`, `+additionalScopes`, `scopesWithAccount`);
@@ -120,16 +128,13 @@ export interface ProveAndSendContext<TOffchain = unknown> {
 	markJournal: (patch: ProveAndSendJournalPatch) => Promise<unknown>
 	/** Writes `submitting`; rejects unless the row now durably holds it. The send never runs otherwise. */
 	commitSubmitting: (patch: { txHash: string; submittedEndpointUrl: string | undefined; expiry: SendExpiry | undefined }) => Promise<void>
-	/** The primary endpoint of the network the tx was built against, recorded with `submitting`. */
-	submittedEndpointUrl: string | undefined
 	/** Offchain-output extraction hook. Runs BETWEEN prove and `toTx()` —
 	 *  the only point where `provedTx` is reachable. dApp paths use it;
 	 *  transfer paths omit it. */
 	wantOffchainOutput?: (provedTx: TxProvingResult) => TOffchain
-	/** Persist the activity record after a successful send. Receives the
-	 *  txHash string; everything else the record needs is closed over.
+	/** Persist the activity record after a successful send, with the endpoint that carried it.
 	 *  Return value ignored (addTransaction returns the created record). */
-	recordTransaction: (txHash: string) => Promise<unknown>
+	recordTransaction: (txHash: string, submittedEndpointUrl: string) => Promise<unknown>
 	/** Called the moment the node accepts the tx, before any bookkeeping that could throw. */
 	onSent?: (txHash: string) => void
 	/** Build provenance: true iff the tx request wrapped the account ctor
@@ -351,7 +356,7 @@ export class ExecutionCoordinator {
 	 *  with no cancel, so neither replaces the other. */
 	public async proveAndSend<TOffchain = unknown>(
 		ctx: ProveAndSendContext<TOffchain>,
-	): Promise<{ txHash: TxHash; offchainOutput?: TOffchain }> {
+	): Promise<{ txHash: TxHash; offchainOutput?: TOffchain; sentThrough: PickedEndpoint }> {
 		ctx.checkCancelled()
 		await ctx.markJournal({ stage: "proving", enteredProveAt: Date.now() })
 		// A cancel that won the journal lock refused this mark and aborted before the refusal returned.
@@ -364,18 +369,22 @@ export class ExecutionCoordinator {
 		const offchainOutput = ctx.wantOffchainOutput?.(provedTx)
 		const tx = await provedTx.toTx()
 		const txHash = tx.getTxHash()
+		const anchorHash = (await tx.data.constants.anchorBlockHeader.hash()).toString()
+		const picked = await ctx.pickSendEndpoint({ txHash: txHash.toString(), anchorHash })
 		await ctx
-			.commitSubmitting({ txHash: txHash.toString(), submittedEndpointUrl: ctx.submittedEndpointUrl, expiry: sendExpiryOf(tx) })
+			.commitSubmitting({ txHash: txHash.toString(), submittedEndpointUrl: picked.url, expiry: sendExpiryOf(tx) })
 			.catch((error: unknown) => {
 				// A cancel that reached the journal first is what refused the write: report the cancel.
 				ctx.checkCancelled()
 				throw error
 			})
 		ctx.checkCancelled()
-		await this.sendTxTask(ctx.node, tx, ctx.assertLive, ctx.parentTask, ctx.initializesAccount, () => ctx.onSent?.(txHash.toString()))
-		await ctx.recordTransaction(txHash.toString())
+		await this.sendTxTask(picked.node, tx, ctx.assertLive, ctx.parentTask, ctx.initializesAccount, () =>
+			ctx.onSent?.(txHash.toString()),
+		)
+		await ctx.recordTransaction(txHash.toString(), picked.url)
 		await ctx.markJournal({ stage: "succeeded", txHash: txHash.toString() })
-		return { txHash, offchainOutput }
+		return { txHash, offchainOutput, sentThrough: picked }
 	}
 }
 

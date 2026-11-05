@@ -236,6 +236,14 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		return tx
 	}
 
+	/** The endpoint `hash` went out through, read from a row `profileId` owns: an ownerless row may be
+	 *  another profile's, so it names none. */
+	public async recordedEndpointOf(hash: string, profileId: string): Promise<string | undefined> {
+		await this.ensureInitialized()
+		const tx = await this.txs.get(hash, profileId)
+		return tx?.profileId === profileId ? tx.submittedEndpointUrl : undefined
+	}
+
 	/** The rows of `account` that `profileId` reads: its own, and the ownerless ones it may own. A
 	 *  read that named no profile would answer with whichever profiles' keys this worker holds. */
 	public async transactionsOf(account: string, profileId: string): Promise<Tx[]> {

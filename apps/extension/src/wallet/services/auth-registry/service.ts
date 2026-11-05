@@ -17,7 +17,9 @@ import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService } from "@/wallet/services/network/service"
-import { type Network, primaryEndpointUrl } from "@/wallet/services/network/spec"
+import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
+import type { Network } from "@/wallet/services/network/spec"
 import { AccountService } from "@/wallet/services/account/service"
 import { type AccountScope, accountScopeMatcher } from "@/wallet/services/account/spec"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
@@ -113,6 +115,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	private accountService: AccountService = null!
 	private executionService: ExecutionService = null!
 	private transactionService: TransactionService = null!
+	private operationJournal: OperationJournalService = null!
 	private taskService: TaskService = null!
 
 	public constructor(logger: ILogger, browserApi: BrowserApi) {
@@ -138,6 +141,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		this.accountService = services.get(AccountService.name)
 		this.executionService = services.get(EXECUTION_SERVICE_NAME)
 		this.transactionService = services.get(TransactionService.name)
+		this.operationJournal = services.get(OPERATION_JOURNAL_SERVICE_NAME)
 		this.taskService = services.get(TaskService.name)
 
 		// Authwit rows + registry-enabled flags are scoped by (profileId, chainId, account). Two
@@ -191,12 +195,25 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		}
 	}
 
-	/** The pinned client receipts are read through, for the operation's OWN network row:
-	 *  `getNode(chainId)` resolves the ACTIVE profile's endpoint, and a profile switch during the
-	 *  proof wait would send this profile's tx hash to a provider it never selected. */
-	private async receiptNodeFor(network: Network): Promise<AztecNode> {
-		const url = primaryEndpointUrl(network)
-		if (!url) throw new Error(`network ${network.id} has no primary endpoint`)
+	/**
+	 * The endpoint `txHash` went out through, found in `network`'s own profile: its journal row's,
+	 * else its activity row's. Only an endpoint the network still lists counts, since a restored row's
+	 * endpoint is backup data; with none, the caller reads nothing and fails closed.
+	 */
+	private async recordedEndpointOf(network: Network, txHash: string): Promise<string | undefined> {
+		const journaled = (await this.operationJournal.getOperations({ profileId: network.profileId })).find(
+			({ progress }) => (progress.stage === "submitting" || progress.stage === "failed") && progress.txHash === txHash,
+		)?.progress
+		const url =
+			(journaled && "submittedEndpointUrl" in journaled ? journaled.submittedEndpointUrl : undefined) ??
+			(await this.transactionService.recordedEndpointOf(txHash, network.profileId))
+		return url && network.endpoints.some((endpoint) => endpoint.rpcUrl === url) ? url : undefined
+	}
+
+	/** The retrying client of the endpoint `txHash` went out through. */
+	private async receiptNodeFor(network: Network, txHash: string): Promise<AztecNode> {
+		const url = await this.recordedEndpointOf(network, txHash)
+		if (!url) throw new Error(`transaction ${txHash} has no recorded endpoint on network ${network.id}`)
 		return this.networkService.getNodeForUrl(url)
 	}
 
@@ -408,7 +425,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 			// not that its PUBLIC effect is mined + visible. Poll the on-chain state
 			// so a fast (proverless) follow-up consume can't race a not-yet-mined
 			// revoke. See waitForOnChainState.
-			const revokeBlock = await this.waitForTxProven(await this.receiptNodeFor(network), txHash)
+			const revokeBlock = await this.waitForTxProven(await this.receiptNodeFor(network, txHash), txHash)
 			// No subtask past the send: a profile switch clears the registry, and the prune must still land.
 			await this.verifyRevoked(network, await this.networkService.getNodeFor(network), scope, authwits, revokeBlock)
 
@@ -454,7 +471,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 
 			// Ensure the registry toggle is mined + visible before returning, so a
 			// fast follow-up consume reads the new state (see waitForOnChainState).
-			await this.waitForTxProven(await this.receiptNodeFor(network), txHash)
+			await this.waitForTxProven(await this.receiptNodeFor(network, txHash), txHash)
 			// No subtask past the send: a profile switch clears the registry, and the status must still land.
 			await this.applyStatus(await this.networkService.getNodeFor(network), scope)
 
@@ -555,11 +572,11 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		})
 	}
 
-	/** The single-attempt client of the operation's own network, for reads the caller repeats itself. */
-	private async singleAttemptNodeFor(network: Network): Promise<AztecNode> {
-		const url = primaryEndpointUrl(network)
-		if (!url) throw new Error(`network ${network.id} has no primary endpoint`)
-		return this.networkService.getSingleAttemptNodeForUrl(url)
+	/** The single-attempt client of the endpoint a grant's transaction went out through, for reads the
+	 *  caller repeats itself; `undefined` when it has no recorded endpoint. */
+	private async grantNodeFor(network: Network, txHash: string): Promise<AztecNode | undefined> {
+		const url = await this.recordedEndpointOf(network, txHash)
+		return url ? this.networkService.getSingleAttemptNodeForUrl(url) : undefined
 	}
 
 	/** Waits until the grant of every selected `pending` row is in a block, so the revoke is not
@@ -572,10 +589,15 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const untracked = pending.find((authwit) => !authwit.txHash)
 		if (untracked) throw grantNotInBlock(untracked)
 		if (!pending.length) return
-		const node = await this.singleAttemptNodeFor(network)
 		const txHashes = [...new Set(pending.map((authwit) => authwit.txHash as string))]
+		const nodes = await Promise.all(txHashes.map((txHash) => this.grantNodeFor(network, txHash)))
 		const deadline = Date.now() + GRANT_BLOCK_WAIT_MS
-		const reads = await Promise.all(txHashes.map((txHash) => awaitGrantBlock(node, txHash, deadline)))
+		const reads = await Promise.all(
+			txHashes.map((txHash, i) => {
+				const node = nodes[i]
+				return node ? awaitGrantBlock(node, txHash, deadline) : undefined
+			}),
+		)
 		const unseen = new Set(txHashes.filter((_, i) => reads[i] === undefined))
 		const waiting = pending.find((authwit) => unseen.has(authwit.txHash as string))
 		if (waiting) throw grantNotInBlock(waiting)
@@ -591,13 +613,13 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		authwits: Authwit[],
 		revokeBlock: number,
 	): Promise<void> {
-		const grantNode = authwits.some((authwit) => authwit.pending) ? await this.singleAttemptNodeFor(network) : undefined
 		const outcomes = await Promise.allSettled(
 			authwits.map(async (authwit) => {
 				if (await isAuthwitConsumable(node, authwit.account, authwit.hash)) {
 					throw new Error(`Authwit #${authwit.id} is still authorized after the revoke`)
 				}
 				if (authwit.pending) {
+					const grantNode = authwit.txHash ? await this.grantNodeFor(network, authwit.txHash) : undefined
 					const grantBlock = grantNode && authwit.txHash ? await grantBlockOf(grantNode, authwit.txHash) : undefined
 					if (grantBlock === undefined || grantBlock > revokeBlock) throw grantNotInBlock(authwit)
 				}
