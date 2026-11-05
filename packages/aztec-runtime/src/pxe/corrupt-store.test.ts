@@ -20,7 +20,6 @@ vi.mock("./opfs-store", async (importOriginal) => ({
 import { type AztecSQLiteOPFSStore, SqliteCorruptionError } from "@aztec-labs/kv-store/sqlite-opfs"
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { chainDataDir } from "./chain-coordinates"

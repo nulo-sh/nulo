@@ -15,7 +15,6 @@ vi.mock("./note-schemas", () => ({
 }))
 
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
-import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import { jsonStringify } from "@aztec-labs/foundation/json-rpc"
 import type { ILogger } from "@nulo/wallet-core/logger"
