@@ -19,7 +19,7 @@ import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { NodeFactory } from "@nulo/aztec-runtime/ports"
-import { type RouteSpec, type RoutedNode, routeNode, type SubmissionPins } from "@nulo/aztec-runtime/routing"
+import { type RouteSpec, type RoutedNode, realTimer, routeNode, type SubmissionPins } from "@nulo/aztec-runtime/routing"
 import { type RetryOptions, type TransportFailure, withTransportFailure } from "@nulo/aztec-runtime/utils"
 import { walletChainId } from "@/utils/chain-ids"
 
@@ -88,6 +88,7 @@ export class FakeNodeFactory implements NodeFactory {
 			{
 				now: Date.now,
 				sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+				timer: realTimer,
 				log: () => {},
 				retryWhile: options.retryWhile,
 				pins: options.pins,

@@ -2,7 +2,7 @@ import { BlockHash } from "@aztec-labs/stdlib/block"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { TxHash } from "@aztec-labs/stdlib/tx"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
 import { type TransportFailure, withTransportFailure } from "../utils/fetch"
 import { ROUTE_TIMING } from "./endpoint-health"
 import { createSubmissionPins, type RouteSpec, type RoutedNode, routeNode, type SubmissionPins } from "./routed-node"
@@ -48,6 +48,8 @@ interface Request {
 class Harness {
 	public now = 0
 	public readonly sleeps: number[] = []
+	/** Deadlines a caller set; `advance` settles the ones it passes. */
+	private readonly timers: { at: number; fire: () => void }[] = []
 	public readonly requests: Request[] = []
 	public readonly endpoints = new Map<string, FakeEndpoint>()
 	public retryWhile: () => boolean = () => true
@@ -96,10 +98,29 @@ class Harness {
 				this.now += ms
 				await this.onSleep()
 			},
+			timer: (ms) => {
+				let fire = () => {}
+				const expired = new Promise<void>((resolve) => {
+					fire = resolve
+				})
+				const entry = { at: this.now + ms, fire }
+				this.timers.push(entry)
+				const cancel = () => {
+					const at = this.timers.indexOf(entry)
+					if (at >= 0) this.timers.splice(at, 1)
+				}
+				return { expired, cancel }
+			},
 			log: () => {},
 			retryWhile: () => this.retryWhile(),
 			pins,
 		})
+	}
+
+	/** Moves the clock and settles every deadline it reaches. */
+	public advance(ms: number): void {
+		this.now += ms
+		for (const timer of this.timers.filter((t) => t.at <= this.now)) timer.fire()
 	}
 
 	public endpoint(url: string): FakeEndpoint {
@@ -531,6 +552,57 @@ describe("races", () => {
 		}
 		await expect(h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)).resolves.toBe("getContract:ok")
 		expect(h.seen(A).at(-1)).toBe(`getContract@${probeTimeoutMs - 2_000}`)
+	})
+
+	test("a probe that outlives the caller's budget ends the caller's wait at its deadline and runs on for the next read", async () => {
+		const h = new Harness([A, B])
+		h.endpoint(A).fail = (method) => (method === "getNodeInfo" ? transport("timeout") : undefined)
+		h.endpoint(A).hold = (m) => {
+			if (m === "getNodeInfo") h.now += 4_000
+			return undefined
+		}
+		let release: () => void = () => {}
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		h.endpoint(B).hold = (m) => (m === "getNodeInfo" ? held : undefined)
+		const read = h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
+		const outcome = read.then(
+			() => "resolved",
+			(error: Error) => error.message,
+		)
+		await vi.waitFor(() => expect(h.seen(B)).toContain(`getNodeInfo@${probeTimeoutMs}`))
+		h.advance(probeTimeoutMs - 4_000 - 1)
+		await Promise.resolve()
+		expect(await Promise.race([outcome, Promise.resolve("waiting")])).toBe("waiting")
+		h.advance(1)
+		expect(await outcome).toMatch(/No endpoint/)
+		expect(h.now).toBe(probeTimeoutMs)
+
+		release()
+		await expect(h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)).resolves.toBe("getContract:ok")
+		expect(h.node.route.active()?.id).toBe("e1")
+		expect(h.seen(B).filter((r) => r.startsWith("getNodeInfo"))).toHaveLength(1)
+	})
+
+	test("a shorter budget joining a running admission leaves at its own deadline; the longer one is served when the probe lands", async () => {
+		const h = new Harness([A, B])
+		let release: () => void = () => {}
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		h.endpoint(A).hold = (m) => (m === "getNodeInfo" ? held : undefined)
+		const long = h.node.route.singleAttempt(60_000).getContract(undefined as never)
+		await vi.waitFor(() => expect(h.seen(A)).toContain(`getNodeInfo@${probeTimeoutMs}`))
+		const short = h.node.route.singleAttempt(1_000).getContract(undefined as never)
+		h.advance(1_000)
+		await expect(short).rejects.toThrow(/No endpoint/)
+
+		release()
+		await expect(long).resolves.toBe("getContract:ok")
+		expect(h.seen(A).filter((r) => r.startsWith("getNodeInfo"))).toHaveLength(1)
+		expect(h.seen(A).at(-1)).toBe(`getContract@${60_000 - 1_000}`)
+		expect(h.seen(B)).toEqual([])
 	})
 
 	test("an admission that spends the budget fails the read and starts no probe past it; the next read admits the fallback", async () => {

@@ -49,7 +49,7 @@ import {
 	type PxeFactory,
 } from "./chain-runtime"
 import type { NodeFactory } from "../ports/node-factory-port"
-import { createSubmissionPins, type ConnectEndpoint, routeNode, type RouteSpec } from "../routing/routed-node"
+import { createSubmissionPins, type ConnectEndpoint, realTimer, routeNode, type RouteSpec } from "../routing/routed-node"
 import { withTransportFailure } from "../utils/fetch"
 import { initStoreVersionStamp, openChainStore, readStoreStamp } from "./opfs-store"
 
@@ -548,7 +548,7 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 				const node = routeNode(
 					connect,
 					{ chainId: 1, l1ChainId: 1, endpoints: n.endpoints },
-					{ now: () => 0, sleep: async () => {}, log: () => {} },
+					{ now: () => 0, sleep: async () => {}, timer: realTimer, log: () => {} },
 				)
 				return new ChainRuntime(n.chainId, node, { stop: async () => {} } as never, endpointsKey(n.endpoints))
 			},

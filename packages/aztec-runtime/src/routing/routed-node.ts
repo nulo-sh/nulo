@@ -98,13 +98,30 @@ export type RouteLogEvent =
 			readonly method: string
 	  }
 
+/** A deadline that settles `expired` once `ms` pass, unless cancelled first. */
+export interface RouteTimer {
+	readonly expired: Promise<void>
+	cancel(): void
+}
+
 export interface RouteDeps {
 	now(): number
 	sleep(ms: number): Promise<void>
+	/** Bounds a caller's wait on work it shares with other callers, which keeps running past it. */
+	timer(ms: number): RouteTimer
 	log(event: RouteLogEvent): void
 	/** Asked before every move, before every sleep and after it; `false` ends the call with its last error. */
 	retryWhile?: () => boolean
 	pins?: SubmissionPins
+}
+
+/** {@link RouteDeps.timer} on the platform clock. */
+export function realTimer(ms: number): RouteTimer {
+	let handle: ReturnType<typeof setTimeout> | undefined
+	const expired = new Promise<void>((resolve) => {
+		handle = setTimeout(resolve, ms)
+	})
+	return { expired, cancel: () => clearTimeout(handle) }
 }
 
 /** Builds a client for one URL whose every call is a single attempt aborted at `timeoutMs`. */
@@ -223,7 +240,7 @@ class Router implements Route {
 			const pinned = method === "getTxReceipt" ? this.pins.byTxHash.get(pinKey(args[0])) : undefined
 			if (pinned) return this.pinnedReceipt(pinned, args, timeoutMs, 1)
 			const start = this.deps.now()
-			if (this.health.active() === undefined) await this.admitFirst(start + timeoutMs)
+			if (this.health.active() === undefined) await this.admitWithin(start + timeoutMs, timeoutMs)
 			const index = this.health.active()
 			const endpoint = index === undefined ? undefined : this.endpoints[index]
 			const left = timeoutMs - (this.deps.now() - start)
@@ -420,6 +437,17 @@ class Router implements Route {
 			const endpointId = this.endpoints[index]?.id ?? String(index)
 			if (!this.health.lone) this.deps.log({ event: "move", chainId: this.spec.chainId, endpointId, failure, method })
 			return { kind: "failed", error, spent: !countsTowardDown(failure) }
+		}
+	}
+
+	/** {@link admitFirst} for one caller's budget: the caller stops waiting once `budgetMs` pass,
+	 *  while a probe it joined runs on for the callers still waiting on it. */
+	private async admitWithin(deadline: number, budgetMs: number): Promise<void> {
+		const timer = this.deps.timer(budgetMs)
+		try {
+			await Promise.race([this.admitFirst(deadline), timer.expired])
+		} finally {
+			timer.cancel()
 		}
 	}
 
