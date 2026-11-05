@@ -37,7 +37,7 @@ import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/sen
 import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
-import { openingSendSide } from "@/popup/pages/send-sides"
+import { openingSendSide } from "@/components/composite/send/send-sides"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
 import { NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
