@@ -1,6 +1,6 @@
 import type { Ref } from "vue"
 import { computed, ref } from "vue"
-import { normalizeProfileName } from "@/utils/profile-name"
+import { PROFILE_NAME_MAX, profileNameTaken } from "@/utils/profile-name"
 
 /**
  * Options accepted by `useProfileNameField`. All fields are optional;
@@ -99,7 +99,7 @@ export interface ProfileNameField {
  */
 export function useProfileNameField(opts: ProfileNameFieldOptions = {}): ProfileNameField {
 	const min = opts.minLength ?? 1
-	const max = opts.maxLength ?? 32
+	const max = opts.maxLength ?? PROFILE_NAME_MAX
 	const emptyMsg = opts.emptyErrorMessage ?? "Profile name is required."
 	const maxMsg = opts.maxLengthErrorMessage ?? `Max ${max} characters.`
 	const duplicateMsg = opts.duplicateErrorMessage ?? "This name is already in use."
@@ -126,11 +126,6 @@ export function useProfileNameField(opts: ProfileNameFieldOptions = {}): Profile
 		})
 	}
 
-	function isDuplicate(candidate: string, existingNames: readonly string[]): boolean {
-		const normalized = normalizeProfileName(candidate)
-		return existingNames.some((existing) => normalizeProfileName(existing) === normalized)
-	}
-
 	function validate(checkOpts: ValidateOptions = {}): boolean {
 		const n = trimmedName.value
 		if (n.length < min) {
@@ -144,7 +139,7 @@ export function useProfileNameField(opts: ProfileNameFieldOptions = {}): Profile
 			triggerShake()
 			return false
 		}
-		if (checkOpts.existingNames && isDuplicate(n, checkOpts.existingNames)) {
+		if (checkOpts.existingNames && profileNameTaken(n, checkOpts.existingNames)) {
 			nameError.value = duplicateMsg
 			triggerShake()
 			nameInputRef.value?.focus()

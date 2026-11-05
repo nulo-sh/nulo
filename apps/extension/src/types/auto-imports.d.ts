@@ -11,6 +11,7 @@ declare global {
   const ACCOUNT_FILE_NOT_BACKUP: typeof import('../composables/full-backup-selection').ACCOUNT_FILE_NOT_BACKUP
   const ACTIVITY_FEED_KINDS: typeof import('../utils/journal-state').ACTIVITY_FEED_KINDS
   const ADDED_COALESCE: typeof import('../utils/coalesce').ADDED_COALESCE
+  const ALREADY_ADDED: typeof import('../utils/entity-rules').ALREADY_ADDED
   const ALREADY_EXISTS: typeof import('../utils/entity-rules').ALREADY_EXISTS
   const ARRIVALS_KEY: typeof import('../composables/useArrivals').ARRIVALS_KEY
   const ARRIVAL_WINDOW_MS: typeof import('../composables/useArrivals').ARRIVAL_WINDOW_MS
@@ -61,6 +62,7 @@ declare global {
   const IMPORT_REGISTRATION_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_REGISTRATION_BUDGET_MS
   const INIT_FETCH_TIMEOUT_MS: typeof import('../stores/balances.store').INIT_FETCH_TIMEOUT_MS
   const INIT_RETRY_BACKOFF_MS: typeof import('../stores/balances.store').INIT_RETRY_BACKOFF_MS
+  const INVALID_ADDRESS: typeof import('../utils/entity-rules').INVALID_ADDRESS
   const LAST_ACTIVE_PROFILE_KEY: typeof import('../utils/lastActiveProfile').LAST_ACTIVE_PROFILE_KEY
   const LEGAL_DECLINED_PATH: typeof import('../utils/legal-sheet').LEGAL_DECLINED_PATH
   const LEGAL_DISMISSED_KEY: typeof import('../utils/legal-sheet').LEGAL_DISMISSED_KEY
@@ -84,6 +86,7 @@ declare global {
   const PINNED_TOKENS_MAX_CHAINS: typeof import('../utils/pinned-tokens').PINNED_TOKENS_MAX_CHAINS
   const PINNED_TOKENS_ROOT: typeof import('../utils/profile-ui-keys').PINNED_TOKENS_ROOT
   const PROFILE_IMPORTED_ROOT: typeof import('../utils/profile-ui-keys').PROFILE_IMPORTED_ROOT
+  const PROFILE_NAME_MAX: typeof import('../utils/profile-name').PROFILE_NAME_MAX
   const PROFILE_NOT_FIRST_ROOT: typeof import('../utils/profile-ui-keys').PROFILE_NOT_FIRST_ROOT
   const PROFILE_UI_KEY_PREFIXES: typeof import('../utils/profile-ui-keys').PROFILE_UI_KEY_PREFIXES
   const RECOVERY_PHRASE_AUTO_CLOSE_MS: typeof import('../utils/recovery-phrase-warnings').RECOVERY_PHRASE_AUTO_CLOSE_MS
@@ -92,6 +95,7 @@ declare global {
   const RESTORE_OUTCOME_ROOT: typeof import('../utils/profile-ui-keys').RESTORE_OUTCOME_ROOT
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
   const ROW_AMOUNT_LENGTH: typeof import('../utils/snack-amount').ROW_AMOUNT_LENGTH
+  const RPC_URL_MIN_LENGTH: typeof import('../utils/entity-rules').RPC_URL_MIN_LENGTH
   const SEED_STATUS_RETRY_MS: typeof import('../composables/useSeedStatus').SEED_STATUS_RETRY_MS
   const SENDS_IN_PROGRESS_KEY: typeof import('../composables/useSendsInProgress').SENDS_IN_PROGRESS_KEY
   const SEND_FEE_PICKS_ROOT: typeof import('../utils/profile-ui-keys').SEND_FEE_PICKS_ROOT
@@ -174,7 +178,6 @@ declare global {
   const confirmationOf: typeof import('../composables/useStaleNetwork').confirmationOf
   const confirmationPolicies: typeof import('../utils/confirmation-policies').confirmationPolicies
   const contactAddressError: typeof import('../utils/contact-rules').contactAddressError
-  const contactListReducers: typeof import('../utils/entity-list').contactListReducers
   const contactNameError: typeof import('../utils/contact-rules').contactNameError
   const contactNameKey: typeof import('../utils/contact-name').contactNameKey
   const copyFor: typeof import('../utils/presto-ui-state').copyFor
@@ -203,6 +206,7 @@ declare global {
   const endLanding: typeof import('../utils/panel-handback').endLanding
   const endsSelection: typeof import('../utils/selection').endsSelection
   const ensureAccountClient: typeof import('../utils/core').ensureAccountClient
+  const entityListReducers: typeof import('../utils/entity-list').entityListReducers
   const errorLogWriters: typeof import('../composables/restore-error-log').errorLogWriters
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
   const exportsHeld: typeof import('../composables/useStaleNetwork').exportsHeld
@@ -402,6 +406,7 @@ declare global {
   const pricesUnavailable: typeof import('../utils/token-aggregate').pricesUnavailable
   const profileFileNameSegment: typeof import('../utils/files').profileFileNameSegment
   const profileImportedKey: typeof import('../utils/profile-ui-keys').profileImportedKey
+  const profileNameTaken: typeof import('../utils/profile-name').profileNameTaken
   const profileNotFirstKey: typeof import('../utils/profile-ui-keys').profileNotFirstKey
   const profileTypeLabel: typeof import('../utils/settings-labels').profileTypeLabel
   const profileUiKeys: typeof import('../utils/profile-ui-keys').profileUiKeys
@@ -935,6 +940,7 @@ declare module 'vue' {
     readonly ACCOUNT_FILE_NOT_BACKUP: UnwrapRef<typeof import('../composables/full-backup-selection')['ACCOUNT_FILE_NOT_BACKUP']>
     readonly ACTIVITY_FEED_KINDS: UnwrapRef<typeof import('../utils/journal-state')['ACTIVITY_FEED_KINDS']>
     readonly ADDED_COALESCE: UnwrapRef<typeof import('../utils/coalesce')['ADDED_COALESCE']>
+    readonly ALREADY_ADDED: UnwrapRef<typeof import('../utils/entity-rules')['ALREADY_ADDED']>
     readonly ALREADY_EXISTS: UnwrapRef<typeof import('../utils/entity-rules')['ALREADY_EXISTS']>
     readonly ARRIVALS_KEY: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVALS_KEY']>
     readonly ARRIVAL_WINDOW_MS: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVAL_WINDOW_MS']>
@@ -985,6 +991,7 @@ declare module 'vue' {
     readonly IMPORT_REGISTRATION_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_REGISTRATION_BUDGET_MS']>
     readonly INIT_FETCH_TIMEOUT_MS: UnwrapRef<typeof import('../stores/balances.store')['INIT_FETCH_TIMEOUT_MS']>
     readonly INIT_RETRY_BACKOFF_MS: UnwrapRef<typeof import('../stores/balances.store')['INIT_RETRY_BACKOFF_MS']>
+    readonly INVALID_ADDRESS: UnwrapRef<typeof import('../utils/entity-rules')['INVALID_ADDRESS']>
     readonly LAST_ACTIVE_PROFILE_KEY: UnwrapRef<typeof import('../utils/lastActiveProfile')['LAST_ACTIVE_PROFILE_KEY']>
     readonly LEGAL_DECLINED_PATH: UnwrapRef<typeof import('../utils/legal-sheet')['LEGAL_DECLINED_PATH']>
     readonly LEGAL_DISMISSED_KEY: UnwrapRef<typeof import('../utils/legal-sheet')['LEGAL_DISMISSED_KEY']>
@@ -1008,6 +1015,7 @@ declare module 'vue' {
     readonly PINNED_TOKENS_MAX_CHAINS: UnwrapRef<typeof import('../utils/pinned-tokens')['PINNED_TOKENS_MAX_CHAINS']>
     readonly PINNED_TOKENS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PINNED_TOKENS_ROOT']>
     readonly PROFILE_IMPORTED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_IMPORTED_ROOT']>
+    readonly PROFILE_NAME_MAX: UnwrapRef<typeof import('../utils/profile-name')['PROFILE_NAME_MAX']>
     readonly PROFILE_NOT_FIRST_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_NOT_FIRST_ROOT']>
     readonly PROFILE_UI_KEY_PREFIXES: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_UI_KEY_PREFIXES']>
     readonly RECOVERY_PHRASE_AUTO_CLOSE_MS: UnwrapRef<typeof import('../utils/recovery-phrase-warnings')['RECOVERY_PHRASE_AUTO_CLOSE_MS']>
@@ -1016,6 +1024,7 @@ declare module 'vue' {
     readonly RESTORE_OUTCOME_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['RESTORE_OUTCOME_ROOT']>
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
     readonly ROW_AMOUNT_LENGTH: UnwrapRef<typeof import('../utils/snack-amount')['ROW_AMOUNT_LENGTH']>
+    readonly RPC_URL_MIN_LENGTH: UnwrapRef<typeof import('../utils/entity-rules')['RPC_URL_MIN_LENGTH']>
     readonly SEED_STATUS_RETRY_MS: UnwrapRef<typeof import('../composables/useSeedStatus')['SEED_STATUS_RETRY_MS']>
     readonly SENDS_IN_PROGRESS_KEY: UnwrapRef<typeof import('../composables/useSendsInProgress')['SENDS_IN_PROGRESS_KEY']>
     readonly SEND_FEE_PICKS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['SEND_FEE_PICKS_ROOT']>
@@ -1098,7 +1107,6 @@ declare module 'vue' {
     readonly confirmationOf: UnwrapRef<typeof import('../composables/useStaleNetwork')['confirmationOf']>
     readonly confirmationPolicies: UnwrapRef<typeof import('../utils/confirmation-policies')['confirmationPolicies']>
     readonly contactAddressError: UnwrapRef<typeof import('../utils/contact-rules')['contactAddressError']>
-    readonly contactListReducers: UnwrapRef<typeof import('../utils/entity-list')['contactListReducers']>
     readonly contactNameError: UnwrapRef<typeof import('../utils/contact-rules')['contactNameError']>
     readonly contactNameKey: UnwrapRef<typeof import('../utils/contact-name')['contactNameKey']>
     readonly copyFor: UnwrapRef<typeof import('../utils/presto-ui-state')['copyFor']>
@@ -1127,6 +1135,7 @@ declare module 'vue' {
     readonly endLanding: UnwrapRef<typeof import('../utils/panel-handback')['endLanding']>
     readonly endsSelection: UnwrapRef<typeof import('../utils/selection')['endsSelection']>
     readonly ensureAccountClient: UnwrapRef<typeof import('../utils/core')['ensureAccountClient']>
+    readonly entityListReducers: UnwrapRef<typeof import('../utils/entity-list')['entityListReducers']>
     readonly errorLogWriters: UnwrapRef<typeof import('../composables/restore-error-log')['errorLogWriters']>
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
     readonly exportsHeld: UnwrapRef<typeof import('../composables/useStaleNetwork')['exportsHeld']>
@@ -1326,6 +1335,7 @@ declare module 'vue' {
     readonly pricesUnavailable: UnwrapRef<typeof import('../utils/token-aggregate')['pricesUnavailable']>
     readonly profileFileNameSegment: UnwrapRef<typeof import('../utils/files')['profileFileNameSegment']>
     readonly profileImportedKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileImportedKey']>
+    readonly profileNameTaken: UnwrapRef<typeof import('../utils/profile-name')['profileNameTaken']>
     readonly profileNotFirstKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileNotFirstKey']>
     readonly profileTypeLabel: UnwrapRef<typeof import('../utils/settings-labels')['profileTypeLabel']>
     readonly profileUiKeys: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileUiKeys']>

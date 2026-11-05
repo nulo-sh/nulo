@@ -31,13 +31,13 @@ import { TransferType } from "@/wallet/services/transaction/client"
 import { managers } from "@/utils/core"
 import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { contactListReducers } from "@/utils/entity-list"
+import { entityListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
 import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
-import { openingSendSide } from "@/popup/pages/send-sides"
+import { canSwitchReceiver, canSwitchSender, forcedSide, openingSendSide } from "@/components/composite/send/send-sides"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
 import { NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
@@ -187,36 +187,26 @@ const selectedSendType = ref("private")
 const selectedReceiverType = ref("private")
 const initSendType = (keepSide = false) => {
 	if (!activeToken.value) return
-	if (!keepSide && activeToken.value.hasPrivateTransfers && activeToken.value.hasPublicTransfers) {
+	if (!keepSide && canSwitchSender(activeToken.value)) {
 		selectedSendType.value = openingSendSide(tokenBalance.value)
 	}
 
-	if (!activeToken.value.hasPrivateTransfers) {
-		selectedSendType.value = "public"
-	}
-
-	if (!activeToken.value.hasPublicTransfers) {
-		selectedSendType.value = "private"
-	}
+	const forced = forcedSide(activeToken.value)
+	if (forced) selectedSendType.value = forced
 }
 const initReceiverType = (keepSide = false) => {
 	if (!activeToken.value) return
-	if (!keepSide && cacheStore.preselectedBalanceType && activeToken.value.hasPrivateBalances && activeToken.value.hasPublicBalances) {
+	if (!keepSide && cacheStore.preselectedBalanceType && canSwitchReceiver(activeToken.value)) {
 		selectedReceiverType.value = cacheStore.preselectedBalanceType
 	}
 
-	if (!activeToken.value.hasPrivateTransfers) {
-		selectedReceiverType.value = "public"
-	}
-
-	if (!activeToken.value.hasPublicTransfers) {
-		selectedReceiverType.value = "private"
-	}
+	const forced = forcedSide(activeToken.value)
+	if (forced) selectedReceiverType.value = forced
 }
 
 const contacts = ref([])
 const contactService = new ContactServiceClient()
-const contactList = contactListReducers(contacts)
+const contactList = entityListReducers(contacts)
 contactService.onContactAdded.add(contactList.onAdded)
 contactService.onContactUpdated.add(contactList.onUpdated)
 contactService.onContactDeleted.add(contactList.onDeleted)
@@ -622,10 +612,10 @@ watch(
 
 // A re-read of the same token can take away the transfer kind the page has selected; a kind it
 // still supports stays selected.
-watch([() => activeToken.value?.hasPrivateTransfers, () => activeToken.value?.hasPublicTransfers], ([canPrivate, canPublic]) => {
+watch([() => activeToken.value?.hasPrivateTransfers, () => activeToken.value?.hasPublicTransfers], () => {
 	if (!activeToken.value) return
-	if (!canPrivate) selectedSendType.value = selectedReceiverType.value = "public"
-	if (!canPublic) selectedSendType.value = selectedReceiverType.value = "private"
+	const forced = forcedSide(activeToken.value)
+	if (forced) selectedSendType.value = selectedReceiverType.value = forced
 })
 
 watch(

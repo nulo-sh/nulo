@@ -1,5 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { computed, ref, type Ref, type ShallowRef, shallowRef } from "vue"
+import { PROFILE_NAME_MAX } from "@/utils/profile-name"
 import { sanitizeString } from "@/utils/string"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
@@ -162,7 +163,7 @@ export interface UseFullBackupImportResult {
  *  so a name of spaces around a stripped character is no name at all. */
 function sanitizedBackupName(raw: unknown): string | null {
 	if (typeof raw !== "string" || raw.length === 0) return null
-	const cleaned = sanitizeString(raw, 32).trim()
+	const cleaned = sanitizeString(raw, PROFILE_NAME_MAX).trim()
 	return cleaned.length > 0 ? cleaned : null
 }
 
