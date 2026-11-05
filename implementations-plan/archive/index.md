@@ -538,3 +538,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [update-fpc-1](update-fpc-1/plan.md) — completed — the update test expects the canonical sponsor's removal, with its fee picks, on a chain that offers none (the run's custom sandbox network); all four update runs from v1.1.0 green
 - [scroll-cue-3](scroll-cue-3/plan.md) — completed — a "more below" button on the nine signed CollapsingHeroLayout screens and Restore again (part of #1658)
 - [popup-dedupe-1](popup-dedupe-1/plan.md) — completed — one helper for Send's side rule (#1470) and the entity forms' shared rules (#1449), no behaviour change (#1674)
+- [update-from-1.2.0](update-from-1.2.0/plan.md) — completed — the update scenarios run from v1.2.0: its pins, a `sponsor` trait that pays its sandbox send from bridged Fee Juice, and its Chrome recording; all five runs green (closes #1680)
