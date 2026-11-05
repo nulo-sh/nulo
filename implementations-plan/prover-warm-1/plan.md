@@ -1,7 +1,7 @@
 ---
 plan: prover-warm-1
 tier: light
-status: approved by the panel (Codex r3 approve); Phase 1 (the probe) next, Phase 2 (arc 1) only on D2's ship verdict
+status: probe done (2026-11-05), D2 verdict close; Phase 2 not built; numbers in recon.md § Probe
 issues: "#1623 (arc 1 says `Closes #1623` on ship; on close the orchestrator closes it as a known limit with the numbers; on hold it waits for the owner)"
 driver: claude-code
 claude_model: opus
@@ -76,6 +76,8 @@ post_implementation_hardening: not scheduled
 
 **Validation gate:** every send records `proved` after `fallback` (the browser proved), P4 and P5 are present, and the split is non-empty; `git status --porcelain` after removal shows only `implementations-plan/prover-warm-1/`. Medians and spreads go into recon.md § Probe and lessons/phase-1.md with each patch's sha256; D2's verdict goes into STATUS.md. A run that fails for a host reason is rerun once and said so.
 
+**Result (2026-11-05):** gate met; deviations in [recon.md](recon.md) § Probe: the fetch count moved to a counter in the fetch shim, because Resource Timing lists no extension-scheme fetch on Chrome; Chrome's A arm came from runs 5-6 after a probe bug; one Firefox launch was relaunched from setup. Over five pairs per browser, the median `C − H` was 970 ms on Chrome and −899 ms on Firefox, and the median `E_H − E_C` was 596 and 739 ms. D2 says **close**. The whole init measured on its own, 1.16-1.62 s, is under the issue's 2 s bar on both browsers, and R4 fails on both.
+
 ## Phase 2 (arc 1, only on D2's ship verdict): the warm-up
 
 **File map:**
@@ -87,7 +89,7 @@ post_implementation_hardening: not scheduled
 
 **Tests** (each with its success control): T1 the real `PrestoProver` with `setForceLocal(true)`, `vi.spyOn(Barretenberg, "initSingleton")` recording its argument and rejecting with a sentinel: the prover's call `toEqual(BROWSER_PROVER_BB_OPTIONS)`, and so does the factory's; T2 the factory warms nothing in `proverless`, `required` or uncached, and warms when cached; T3 `crsCached` is false and creates nothing with no database, false with a short or missing row or an open error, true with all three, and closes its connection; T4 each of the four methods warms once when admitted and ungated (a `default_entrypoint` preview included), never on invalid input, a locked wallet, a queued answer, a refused admission, `prestoReached`, a Presto last outcome or a non-proving stored operation, and its result and errors are unchanged when the warm-up rejects; `descriptors.test.ts` takes the new method.
 
-**Validation gate:** `bun run lint`, `bun run typecheck:all`, the touched files' unit tests (`bun run test` and `bun run --cwd packages/aztec-runtime test`), `bun run check:plans`, each green at retry 0; both canaries prover-ON on Chrome and Firefox, one run each (`cd apps/extension && NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts`, then with `NULO_E2E_BROWSER=firefox`); one fresh-page send per browser on the arc build with P2 alone (the product trigger warms it): its `proved.durationMs` falls in Phase 1's H range and its `E` in Phase 1's `E_H` range, or the arc stops.
+**Validation gate:** `bun run lint`, `bun run typecheck:all`, the touched files' unit tests (`bun run test` and `bun run --cwd packages/aztec-runtime test`), `bun run check:plans`, each green at retry 0; both canaries prover-ON on Chrome and Firefox, one run each (from the worktree root, `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts`, then with `NULO_E2E_BROWSER=firefox`); one fresh-page send per browser on the arc build with P2 alone (the product trigger warms it): its `proved.durationMs` falls in Phase 1's H range and its `E` in Phase 1's `E_H` range, or the arc stops.
 
 ## UI impact
 
