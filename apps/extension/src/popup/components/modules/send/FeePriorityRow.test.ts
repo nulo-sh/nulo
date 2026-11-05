@@ -17,7 +17,6 @@ afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
 })
 
-/** Mounts under a parent that owns the model, as `FeeSettingsCard` does. */
 function mountOwned(initial: Level) {
 	const level = ref<Level>(initial)
 	const emitted: Level[] = []
@@ -38,7 +37,6 @@ function mountOwned(initial: Level) {
 
 const tab = (w: VueWrapper, level: Level) => w.get(`[data-testid="send-fee-priority-${level}"]`).element as HTMLElement
 
-/** Focuses `from`, presses `key` on it and lets the host re-render; the event it sent. */
 async function press(w: VueWrapper, from: Level, key: string) {
 	tab(w, from).focus()
 	const event = sendEvent(tab(w, from), "keydown", { key })

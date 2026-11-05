@@ -441,7 +441,6 @@ export class BalanceJobQueue {
 		if (refused) throw refused.error
 	}
 
-	/** Fails the task if this batch still owns an unfinished one; whether it did. */
 	private failUnfinishedTask(taskId: string | undefined, message: string): boolean {
 		// A reset since batch-start may have cleared this batch's task record, and
 		// `getTaskSync` throws on an unknown id.

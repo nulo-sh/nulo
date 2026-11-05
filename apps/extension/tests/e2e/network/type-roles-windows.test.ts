@@ -342,8 +342,7 @@ async function stretchPayload(win: Page): Promise<void> {
 	})
 }
 
-/** Per payload row: the lines its contract's own text takes, and whether "on" shares its first line.
- *  Each font's text is measured alone: rects of mixed fonts on one line need not share a top. */
+/** Each font's text is measured alone: text on one line in two fonts can have different rect tops. */
 async function callCaptions(win: Page): Promise<{ lines: number; onBeside: boolean }[]> {
 	return win.evaluate(() =>
 		Array.from(document.querySelectorAll('[data-testid="execute-op-payload-row"]'), (row) => {
@@ -368,8 +367,6 @@ async function callCaptions(win: Page): Promise<{ lines: number; onBeside: boole
 	)
 }
 
-/** With the call's name at its longest, each contract stays on one line beside "on", at the window's
- *  width and the popup's; a contract wider than the row wraps inside the card. */
 async function expectCallCaptionsWhole(win: Page): Promise<void> {
 	const whole = async (label: string) => {
 		const captions = await callCaptions(win)

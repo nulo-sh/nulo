@@ -1,11 +1,5 @@
 <script setup>
-/**
- * Three-level priority selector ("Normal" / "Fast" / "Urgent") that
- * sits beneath the fee method readouts inside `FeeSettingsCard`.
- * Levels are static so the component owns the list (the parent only
- * needs the v-model'd selection). A roving tablist: one Tab stop, and
- * ←/→ switch the level and move focus to it.
- */
+/** A roving tablist: one Tab stop, and ←/→ switch the level and move focus to it. */
 import { nextTick } from "vue"
 
 const PRIORITY_LEVELS = [

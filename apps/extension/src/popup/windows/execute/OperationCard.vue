@@ -880,8 +880,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	overflow-wrap: anywhere;
 }
 
-/* The contract keeps its width, so a shortened address never breaks and the call's name takes the
- * wrap; only a name wider than the row, less its 12 px gap, wraps. */
+/* The caption stays whole unless it exceeds the row less its 12 px gap; the call's name absorbs the shrink. */
 .call_row > :last-child {
 	flex-shrink: 0;
 	max-width: calc(100% - 12px);
