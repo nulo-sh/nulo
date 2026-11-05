@@ -1,7 +1,7 @@
 ---
 plan: rpc-fallback-1
 tier: mega-deep (the orchestrator's spawn; above the common brief's `mid`)
-status: approved (Codex round 5: approve); arcs 1 and 2 built (draft PRs #1664, #1669); arc 3 in progress with OA-1, OA-2 and OA-8 answered
+status: approved (Codex round 5: approve); arcs 1 to 3 built (draft PRs #1664, #1669, #1687); arc 4 waits on OA-3 and OA-4, arc 5 on OA-5 to OA-7 and rpc-proxy-1
 issues: "#1624 (spec); context #1607 #1609"
 driver: claude-code
 claude_model: opus
