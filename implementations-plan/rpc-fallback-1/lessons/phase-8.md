@@ -16,3 +16,20 @@
 - 2026-11-05, Chrome, with the routed node's receipt pin removed in `call` (a one-line mutation, reverted with `git checkout`): red, as required. `B holding a hash read the background's one poll cannot account for: not within 90000 ms; last: 1`: the offscreen's receipt read went to A.
 - 2026-11-05, Firefox: green. Test 202 s, wall 294 s. Held 10 s, finished 240 ms after the release, the same kernel reason. Peak per 10 s: A 57, B 18; totals A 134, B 119 over 163 s.
 - The peak is a local lower bound for `rpc-proxy-1`: one wallet, one network, one send, an unlock's catch-up and an idle minute. The highest 10 s window was A's at 67 requests (Chrome), under the relay's 100 per 10 s.
+
+## The arc's diff review
+
+- Codex `01a1ac9c`, round 1: revise, two majors. The send's membership check read the build's row, so an endpoint removed while the proof ran could still carry the send; the registry checked its receipt endpoint against a row captured before an endpoint was added, failing a toggle sent through the new one.
+- Opus 5.5, fresh: approve with changes. The major: a revoke's effect was checked on the background route at `latest`, which may lag the endpoint whose proven tip the wait read, and so read a reverted revoke as unauthorized and prune a live grant's row. Also the stale-row send (as Codex), the background route's cache key without the chain identity, and stale comments. Its pending-grant finding (a grant whose endpoint was removed cannot be revoked) is kept fail-closed: known limit 7.
+- Fixes (`ee76fb80c`, D34): the send asks the pick over the live row and refuses a row that moved chain; the registry counts an endpoint the captured or the live row (same profile) lists; a revoke's and a toggle's check reads the endpoint the proven wait read; the route key carries the chain identity. Each new test was red with its fix reverted.
+- Codex round 2: approve.
+- The capture-order test indexed `getNetwork` calls across two operations; the revoke now reads the row once more, so the test checks each operation alone.
+
+## Gate (on `83069b357`, the E1 spec then gained the header check)
+
+- `bun run test:all` and `bun run audit:vue` green before the review fixes (162 s, 179 s); rerun on the final head below.
+- Chrome: E1 + `failed-send-check` 487 s wall; `tx-sendTx-default` + `endpoint-refused-recovery` + the sandbox suite 508 s; the prover-on canaries 407 s. All green at retry 0. The canary run started at load 164, over the 150 limit: the check printed the load but did not wait. Every later run waited for it.
+- Firefox: the same three sets green at retry 0 (the sandbox suite skips itself there); the canaries 186 s and 202 s of test time.
+- E1 gained an assertion that the header reads connected while A is dead (OA-1 B), and opt-in shots of the header and Manage Networks (`NULO_E2E_SHOT_DIR`). Rerun: Chrome green, 194 s; peak per 10 s A 71, B 21.
+- GitHub never processed the stack sync's push of a2 (the ref moved, the PR head and CI did not). Rewinding the branch to the PR's recorded head and pushing the real head again, both with lease, made it sync.
+- E1 rerun (header check added): Firefox green, 203 s; peak per 10 s A 60, B 22.

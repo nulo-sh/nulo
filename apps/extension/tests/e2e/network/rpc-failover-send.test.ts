@@ -24,6 +24,7 @@ import { afterEach, expect, inject } from "vitest"
 import { type AztecTestConfig, createTestWallet, fundPublicFeeJuice, waitForTxMined } from "../fixtures/aztec"
 import { ensureUnlocked, lockWallet } from "../fixtures/auth"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
+import { navigateToSettings } from "../fixtures/navigation"
 import { readSwLogTrail, waitForSendRecord } from "../fixtures/journal"
 import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
 import { rewriteActiveNetwork } from "../fixtures/networks"
@@ -43,6 +44,7 @@ import { type RpcRelay, startRpcRelay } from "../fixtures/rpc-relay"
 import { readSealedRows } from "../fixtures/sealed-rows"
 import { deployMinterToken } from "../fixtures/selfpay-phase"
 import { setDeveloperMode } from "../fixtures/settings"
+import { shotSend } from "../fixtures/shots"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -106,6 +108,18 @@ async function simulateFailure(wallet: Page, since: number): Promise<string | un
 	const lines = Array.isArray(read) ? (read as { source?: string; timestamp?: number; data?: unknown }[]) : []
 	const line = lines.find((l) => l.source === "pxe" && Number(l.timestamp) >= since)
 	return line ? JSON.stringify(line.data ?? []) : undefined
+}
+
+/** The header's network status once startup's syncs settle, read in the evaluation that sees it. */
+async function settledStatus(page: Page): Promise<string> {
+	const settled = await page.waitForFunction(
+		() => {
+			const status = document.querySelector('[data-testid="network-button"]')?.getAttribute("data-status")
+			return status && status !== "sync" ? status : false
+		},
+		{ timeout: 60_000 },
+	)
+	return (await settled.jsonValue()) as string
 }
 
 /** Whether the offscreen's router has logged `endpointId` taking the active role since `since`. */
@@ -206,6 +220,17 @@ test.skipIf(!hasConfig)(
 			expect(recorded?.submittedEndpointUrl, "the send is recorded on B").toBe(b.url)
 			expect(recorded?.status, "the mint is still pending").toBe(0)
 			expect(sendTxCount(b) - sendsOnB, "the submission went to B").toBe(1)
+
+			const header = await openPopup(ctx)
+			await waitForHash(header, "#/popup/general", 30_000)
+			expect(await settledStatus(header), "the network reads connected while the fallback serves").toBe("active")
+			await shotSend(header, "header-primary-down", "network-button")
+			if (process.env.NULO_E2E_SHOT_DIR) {
+				await navigateToSettings(header, "networks")
+				await header.waitForSelector('[data-testid="network-active-dot"]', { visible: true, timeout: 30_000 })
+				await shotSend(header, "manage-networks-primary-down", "network-row")
+			}
+			await header.close()
 			await a.restore()
 			const restoredAt = Date.now()
 
