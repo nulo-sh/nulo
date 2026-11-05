@@ -374,6 +374,7 @@ Round 1 merged the contradiction check into both legs (a deviation from the tier
 | arc 3 amendment, 3 | Codex `01a1ac45` resumed | revise (1 major) | the hold-and-release gate, A's zero hash count and the red run without the pin accepted; the witness control was not offscreen-only (the background's account build reads a nullifier witness, and the PXE's node cache can serve a repeated utility's witnesses). Fixed after the round: the control is the offscreen router's own `active` event naming A, stored under the `pxe` log source. The three-round cap ended the loop, so this fix has no Codex verdict; the arc's diff review reads E1 as built | none |
 | arc 3, 1 | Codex `01a1ac9c` | revise (2 majors) | both: the send's membership check read the build's row, so an endpoint removed while the proof ran could carry it; the registry's receipt read checked a row captured before an endpoint was added (D34) | none |
 | arc 3, 1 | Opus 5.5, fresh | approve with changes (1 major, 3 minor) | 1 (a revoke's effect read on the route, a lagging endpoint reading a reverted revoke as done: D34); 2 (Codex's first); 4 (the background route's cache key now carries the chain identity); the stale comments | 3 (a pending grant whose endpoint was removed cannot be revoked: kept by design, known limit 7) |
+| arc 3, 2 | Codex `01a1ac9c` resumed | approve | both majors and the Opus changes confirmed closed; a send refused after a profile switch confirmed fail-closed; no new finding | none |
 
 ## Seeds (not run; orchestrator-owned)
 
