@@ -40,7 +40,7 @@ One arc, one PR against `dev`, two phases. Recon: [recon.md](recon.md). Asks: [O
 
 ## Phases
 
-### Phase 1 — #1667: the setup-tab count reads `chrome.tabs`
+### Phase 1 — #1667: the setup-tab count reads `chrome.tabs` ✓
 
 1. Rewrite `oneSetupTab` as above; leave the rest of the test byte for byte.
 2. Rerun the control once on Firefox, never committed: `bidi-attach.ts` drops every BiDi event naming `src/onboarding/index.html`; the new count passes.
@@ -82,6 +82,7 @@ None. Phase 1 is test code. Phase 2 changes no screen, copy or shown figure: a t
 - D4. No fixture diagnostic on the toast wait: the popup's generic error would not name the fee; the node's line did.
 - D5. NewTokenPopup's balance wait has no bound before the first `onTokenBalanceAdded` (`NewTokenPopup.vue:116-130`). No trace ties it to these failures, and bounding it changes when the toast shows: left out; close-out files it as a closed `known-limit` issue.
 - D6. A failing `getPredictedMinFees` is not downgraded to `getCurrentMinFees`: that reopens the under-priced cap, and the committed path refuses the same way. Not an owner ask: no wallet screen, copy or figure changes, and each cost is either the send path's, a known limit, or upstream's behaviour under an app's opt-in (Audit verdicts).
+- D8. Phase 1 also updates `tests/e2e/FIREFOX.md`'s new-tab row, which named this spec's `targets()` wait "no failure seen" (the tree won over the change map).
 - D7. Two comments in `services/execution/` go stale (`view-executor.ts:337-338` names the old default; `batched-view-simulation.ts:364-365` says "byte-for-byte", while Nulo takes each fee's maximum and upstream the worst-L2 entry). That directory belongs to rpc-fallback-1 until its arc 3 lands: close-out files an issue to correct both.
 
 ## Audit verdicts

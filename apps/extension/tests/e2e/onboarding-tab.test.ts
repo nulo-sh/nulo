@@ -369,11 +369,14 @@ describe("onboarding tab", () => {
 				const id = (await chrome.storage.session.get("nulo:onboarding:tab-id"))["nulo:onboarding:tab-id"]
 				return typeof id === "number" ? { id, active: (await chrome.tabs.get(id)).active } : null
 			})
-		// Over BiDi a tab's URL arrives after the tab, so the count is polled.
+		// The browser's own tab list: Firefox's BiDi can leave a tab, or its URL, unannounced for good.
 		const oneSetupTab = () =>
 			pollUntil(
-				async () =>
-					extension.browser.targets().filter((t) => t.type() === "page" && t.url().includes("src/onboarding/index.html")).length,
+				() =>
+					control.evaluate(async () => {
+						const setupDocument = chrome.runtime.getURL("src/onboarding/index.html")
+						return (await chrome.tabs.query({})).filter((tab) => tab.url?.startsWith(setupDocument)).length
+					}),
 				(count) => count === 1,
 				{ label: "one setup tab", timeoutMs: 10_000, intervalMs: 100 },
 			)
