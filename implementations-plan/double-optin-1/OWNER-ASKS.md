@@ -7,7 +7,9 @@ notice's "No confirmation email" section and its recipients line change too." Ev
 needs your words before the PR leaves draft. **What ships now**: the arc builds each recommendation
 as written, so the draft PR shows exactly what you would approve; a different pick is a copy edit.
 
-Pictures: `~/.cache/nulo-backlog/double-optin-1/shots/` (filled in Phase 4; names below).
+Pictures: `~/.cache/nulo-backlog/double-optin-1/shots/`, named under each ask. The pages are the
+built site served with its CSP; "before" is `dev` at the plan's base. The email is drawn by Chrome; a
+mail client may draw it a little differently.
 
 ## OA1. The confirmation email (new)
 
@@ -26,7 +28,8 @@ so opening it tells no server anything.
 | Under the button | If the button doesn't work, open this link: (the link) |
 | Footer | If you didn't ask, ignore this email. Your address is not added. · Website privacy notice |
 
-Before: no email. Pictures: `email-600.png`, `email-390.png`, `email.html`, `email.txt`.
+The eyebrow, the heading and the footer are set in capitals by style, as pictured; the preview line
+is hidden in the body and shows only in the inbox list. Before: no email. Pictures: `email-600.png`, `email-390.png`, `email.html`, `email.txt`.
 Recommendation: sign as written.
 
 ## OA2. The form's reply after submit (changed)
@@ -44,7 +47,8 @@ Two cases get this reply and no email, so the form does not say who is on the li
 
 Option (b), worded for both cases and shown to everyone alike: "If you're not on the list yet, check
 your inbox to confirm." with the button "Sent". Recommendation: (a), the table above; nearly every
-visitor is new and submits once. Pictures: `form-before.png`, `form-after.png`.
+visitor is new and submits once. As today, the status line is read out by a screen reader but not
+shown after a success: what you see change is the button. Pictures: `form-before.png`, `form-after.png`.
 
 ## OA3. `/subscribed`, the answer without JavaScript (changed)
 
@@ -78,7 +82,7 @@ heading, so a screen reader reads the new state (an accessibility call under you
 delegation, shown here so you see it). One edge: someone who left the list and opens their link
 again within 24 hours sees "You're on the list." while staying off it. Pictures:
 `confirm-ready.png`, `confirm-done.png`, `confirm-invalid.png`, `confirm-retry.png`,
-`confirm-noscript.png`. Recommendation: sign.
+`confirm-noscript.png`, and `confirm-ready-390.png` on a phone. Recommendation: sign.
 
 ## OA5. Website privacy notice 1.2 (changed)
 

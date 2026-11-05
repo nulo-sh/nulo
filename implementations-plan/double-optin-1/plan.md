@@ -285,7 +285,7 @@ send key; a format prefix and a canonical-encoding check in the token; deriving 
 - *Gate*: Phase 1's `bun test`; `bun run --cwd apps/landing test`; `bun run test:all`;
   `scripts/check-no-local-paths.sh`; `bun run check:plans` after staging. Layers: lint, types, unit.
 
-**Phase 4 — the browser check and the owner's pictures** (scratch under
+**Phase 4 — the browser check and the owner's pictures** ✓ (scratch under
 `~/.cache/nulo-backlog/double-optin-1/`, nothing committed but `OWNER-ASKS.md`).
 1. Start the landing's dev server on a port claimed through `~/.agents/ports.md`; drive it with
    the Puppeteer `apps/extension` already installs (this repo's runner; adding Playwright for one
