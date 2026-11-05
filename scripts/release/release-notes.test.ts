@@ -9,6 +9,7 @@ const GOOD = "A lead line.\n\n- One change.\n- Another change.\n"
 describe("notesProblems", () => {
 	test("plain notes with a lead line and bullets pass, up to the cap", () => {
 		expect(notesProblems(GOOD)).toEqual([])
+		expect(notesProblems("A lead line.\n\n- Fixes #1668 and a - b - c case.\n")).toEqual([])
 		expect(notesProblems(`🦊${"x".repeat(RELEASE_NOTES_MAX - 1)}`)).toEqual([])
 	})
 
@@ -18,8 +19,8 @@ describe("notesProblems", () => {
 		expect(notesProblems(`🦊${"x".repeat(RELEASE_NOTES_MAX)}`)).toEqual([
 			`the notes are ${RELEASE_NOTES_MAX + 1} chars; AMO accepts at most ${RELEASE_NOTES_MAX}`,
 		])
-		expect(notesProblems(`${GOOD}\n## More\n`)).toEqual(["a line opens with #, which AMO reads as a heading"])
-		expect(notesProblems(`${GOOD}#1668 landed\n`)).toEqual(["a line opens with #, which AMO reads as a heading"])
+		for (const line of ["## More", "#1668 landed", "- #1668 landed", "2. #1668 landed"])
+			expect(notesProblems(`${GOOD}${line}\n`), line).toEqual(["a line or list item opens with #, which AMO reads as a heading"])
 		for (const line of ["=======", "---"])
 			expect(notesProblems(`Changes\n${line}\n\n- One change.\n`), line).toEqual([
 				"a line of only = or - makes a heading or a rule, which AMO drops",

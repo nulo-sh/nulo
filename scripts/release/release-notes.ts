@@ -31,8 +31,9 @@ export function notesProblems(text: string): string[] {
 	const problems: string[] = []
 	const chars = amoChars(notes)
 	if (chars > RELEASE_NOTES_MAX) problems.push(`the notes are ${chars} chars; AMO accepts at most ${RELEASE_NOTES_MAX}`)
-	// GitHub shows headings and rules; AMO drops them, and reads any line opening with `#` as a heading.
-	if (/^ {0,3}#/m.test(notes)) problems.push("a line opens with #, which AMO reads as a heading")
+	// GitHub shows headings and rules; AMO drops them, and reads a line or list item opening with `#` as one.
+	if (/^ {0,3}(?:[-*+][ \t]+|\d+[.)][ \t]+)?#/m.test(notes))
+		problems.push("a line or list item opens with #, which AMO reads as a heading")
 	if (/^ {0,3}(=+|-+)[ \t]*$/m.test(notes)) problems.push("a line of only = or - makes a heading or a rule, which AMO drops")
 	// The user-facing copy rule: no em dash joins two clauses; notes have no empty value to mark.
 	if (notes.includes("—")) problems.push("the notes hold an em dash")

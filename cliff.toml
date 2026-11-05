@@ -79,7 +79,7 @@ commit_parsers = [
   { message = "^feat", group = "<!-- 1 -->Features" },
   { message = "^fix", group = "<!-- 2 -->Bug Fixes" },
   { message = "^perf", group = "<!-- 3 -->Performance" },
-  { message = "^revert", group = "<!-- 4 -->Reverts" },
+  { message = "^[Rr]evert", group = "<!-- 4 -->Reverts" },
   # Refactors, tests, docs, CI, chores, style, release-please's own commits, promotes and merges.
   { message = ".*", skip = true },
 ]

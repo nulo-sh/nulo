@@ -104,11 +104,12 @@ Each finding's path and reproducer: `lessons/phase-0.md`.
 - **Opus 5.5 Plan**: conditional approve. Accepted: A10 and the real reason for F7 (1), wiring pins and a YAML-driven rehearsal (2), `check` in the Phase 2 gate (3), the preview wording (4), filter wording (6), `no-cache: true` (7), F3/I2, A11 and A8's reason (8). Rejected: refusing `::` lines (4; commit subjects already reach the preview, no secret in the job) and an empty-`CLIFF` refusal (9; no path after Codex 1's reproducer).
 - **Final Codex pass** (same session, verification round): approve, no remaining material finding; Codex re-ran the archive's SHA-512 and both all-skipped cases and withdrew its finding 1.
 - **Fix loop, Codex round 1**: two Low findings, both accepted and fixed: setext headings now refused, two comments cut (`lessons/phase-2.md`).
+- **Fix loop, Opus 5.5 diff review**: four Low findings, all accepted and fixed: the skill's refusal list and its major-bump rule, `#` after a list marker, GitHub-style `Revert "…"` subjects (`lessons/phase-2.md`).
 
 Implementation deviations (the tree won):
 - The AMO runner derives the notes path from `VERSION` (`notesPath`), so `release.yml` gains no `RELEASE_NOTES_PATH`: one input fewer that could disagree with the version.
 - One `notesRefusal(version, text)` serves `check`, `compose`, `auto-unstick` and `tag-by-hand-run`.
-- The heading rule refuses any line opening with `#` after up to three spaces: AMO's python-markdown reads `#1668` at a line's start as a heading.
+- The heading rule refuses any line or list item opening with `#` after up to three spaces, and any line of only `=` or `-`: AMO's python-markdown reads `#1668` at a line's or an item's start as a heading, and setext underlines too.
 
 ## Seeds
 
