@@ -1,5 +1,7 @@
 # rpc-fallback-1 owner asks
 
+**Answers, 2026-11-05** (the owner's whole message: "OA-1: B. OA-8: A. OA-2: ok, perfect."): OA-1 B; OA-8 A, the hold-down cap left at 30 minutes; OA-2 the proposed text, as privacy 1.2.10 and Terms 1.2.2 (1.2.0 ships privacy 1.2.9 and Terms 1.2.1, so option A no longer exists). OA-3 to OA-7 stay open for arcs 4 and 5.
+
 Eight asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA-2 and OA-8; arc 4 needs OA-3 and OA-4; arc 5 needs OA-5, OA-6 and OA-7 and `rpc-proxy-1`'s Worker. "Ships now" is what an arc builds if the ask is still open when it reaches it; an arc that changes a surface stops for the answer instead (§ UI changes need explicit owner sign-off).
 
 ## OA-1. What the network status means once a network has several endpoints (arc 3)
