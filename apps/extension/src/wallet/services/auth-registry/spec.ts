@@ -40,9 +40,11 @@ export type Authwit = {
 	content: AuthwitContent
 	/** Recording state. A `pending` row was written at the post-send tail but is
 	 *  not yet mine-confirmed; it is reconciled once its tx mines (→ confirmed,
-	 *  `pending` cleared) or drops (→ removed). Absent ⇒ confirmed/legacy. The
-	 *  pending row IS the durable record — recovery retries from it, never from
-	 *  on-chain enumeration (the registry can't discover authwits from chain). */
+	 *  `pending` cleared) or drops (→ removed); a row whose send has no History row
+	 *  stays pending, and a revoke that sees its grant's block prunes it. Absent ⇒
+	 *  confirmed/legacy. The pending row IS the durable record — recovery retries
+	 *  from it, never from on-chain enumeration (the registry can't discover
+	 *  authwits from chain). */
 	pending?: boolean
 	/** The tx that wrote this authwit on-chain — the reconcile key. */
 	txHash?: string

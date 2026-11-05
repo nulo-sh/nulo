@@ -10,7 +10,7 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS, MAINNET_L1_CHAIN_ID, MAINNET_ROLLUP_VERSION } from "@/utils/chain-ids"
-import { interceptRpc, isFirefox, stopBackground } from "./fixtures/browser"
+import { interceptRpc, isFirefox, setViewport, stopBackground } from "./fixtures/browser"
 import { MAINNET_NODE_HOST } from "./fixtures/egress-guard"
 import { waitForSelectedAccount } from "./fixtures/accounts"
 import { clickByTestId, type ExtensionContext, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
@@ -80,7 +80,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		await pointerClick(page, "legal-consent-checkbox")
 		await pointerClick(page, "legal-continue")
 		await page.waitForSelector(ARRIVAL, { visible: true, timeout: 15_000 })
-		expect(await textOf(page, "network-arrival-title")).toBe("Alpha V6 is in your wallet")
+		expect(await textOf(page, "network-arrival-title")).toBe("Alpha is in your wallet")
 		expect(await readSurfaceTrace(page)).toEqual({ shown: ["sheet", "arrival"], arrivals: 1 })
 
 		// Closed unanswered, it is back at the next open.
@@ -127,7 +127,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 				page = await openPopup(extension)
 				await unlockAfterBackgroundDeath(page)
 				await page.waitForSelector(`[data-testid="network-button"][data-status="${status}"]`, { visible: true, timeout: 30_000 })
-				expect(await textOf(page, "network-name")).toBe("Alpha V6")
+				expect(await textOf(page, "network-name")).toBe("Alpha")
 				expect(await page.$(ARRIVAL)).toBeNull()
 				await waitForSelectedAccount(page, (address) => address === onMainnet, "the same Mainnet account is selected", 30_000)
 
@@ -143,7 +143,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 describe.skipIf(!CAPTURES || isFirefox)("network arrival captures", () => {
 	test("the arrival over Home, dark and light", { timeout: 300_000, retry: 0 }, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
-		await page.setViewport(CAPTURE_VIEWPORT)
+		await setViewport(page, CAPTURE_VIEWPORT)
 		await waitForHash(page, "#/popup/general", 30_000)
 		await seedNetworkArrival(page)
 		await reloadWithLegalState(page, "current")
@@ -158,7 +158,7 @@ describe.skipIf(!CAPTURES || isFirefox)("network arrival captures", () => {
 	}) => {
 		await onMainnetRollup(ctx, ALPHA_ROLLUP_VERSION, async () => {
 			const page = await openPopup(ctx)
-			await page.setViewport(CAPTURE_VIEWPORT)
+			await setViewport(page, CAPTURE_VIEWPORT)
 			await waitForHash(page, "#/popup/general", 30_000)
 			await page.waitForSelector('[data-testid="network-button"][data-status="invalidchain"]', { visible: true, timeout: 30_000 })
 			await capture(page, "fresh-mainnet-home")

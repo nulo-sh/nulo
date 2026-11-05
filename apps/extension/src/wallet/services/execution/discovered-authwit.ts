@@ -12,6 +12,8 @@ import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
  *  structural, so the hash seams stay injectable in unit tests. */
 export interface DecodedAuthRequest {
 	readonly innerHash: { toString(): string }
+	/** The account whose signature the request asks for. */
+	readonly onBehalfOf: { toString(): string }
 	readonly msgSender: { toString(): string }
 	readonly functionSelector: { toString(): string }
 	readonly args: readonly { toString(): string }[]
@@ -30,4 +32,11 @@ export function toDiscoveredAuthwit(
 		innerHash: request.innerHash.toString(),
 		messageHash: messageHash.toString(),
 	}
+}
+
+/** What confirm holds a listed record to: its hash when the wallet signs it, the account and the
+ *  hash when another account's carried witness covers it, so a hash listed for one account never
+ *  licenses a signature as another. */
+export function listedKey(record: DiscoveredAuthwit): string {
+	return record.onBehalfOf === undefined ? record.messageHash : `${record.onBehalfOf}:${record.messageHash}`
 }

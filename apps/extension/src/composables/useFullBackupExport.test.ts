@@ -10,7 +10,7 @@ import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 import { type UseFullBackupExportOptions, useFullBackupExport } from "./useFullBackupExport"
 
 /**
- * The supersede table: a run discarded at any await of a create, encrypt or download publishes
+ * The supersede table: a run discarded at any await of a create or of the press that seals and saves it publishes
  * nothing, toasts nothing, releases no latch, opens no ceremony and leaves no client connected.
  * The assembler is real; the clients, the profile manager, the seal and the file write are fakes
  * the table holds at each await.
@@ -152,7 +152,6 @@ const SENTINELS = {
 	backupStatus: "encrypting",
 	isBusy: true,
 	isDownloading: true,
-	showRecommendation: false,
 	isWrongPassword: false,
 	dekReplaced: true,
 	chainStateOmitted: false,
@@ -190,18 +189,24 @@ function setup(type: ProfileType) {
 }
 
 /** What a later reader of the page could still get out of the run: the sealed file, and the text
- *  the next encrypt would seal. */
+ *  the next press would seal. */
 async function probeArtifacts(api: Api) {
 	api.isBusy.value = false
 	api.isDownloading.value = false
-	api.backupStatus.value = "encrypted"
 	api.password.value = "probe-pass"
 	api.repeatedPassword.value = "probe-pass"
 	m.downloadFile.mockClear()
 	m.seal.mockClear()
-	await api.downloadBackup()
-	await api.handleEncrypt()
-	return { downloads: m.downloadFile.mock.calls.length, sealedFrom: m.seal.mock.calls.map(([plaintext]) => plaintext) }
+	api.backupStatus.value = "encrypted"
+	await api.protectAndDownload()
+	const downloads = m.downloadFile.mock.calls.length
+	// A failed seal ends the press before it can save what it sealed.
+	const quiet = vi.spyOn(console, "error").mockImplementation(() => {})
+	m.seal.mockRejectedValueOnce(new Error("probe"))
+	api.backupStatus.value = "finished"
+	await api.protectAndDownload()
+	quiet.mockRestore()
+	return { downloads, sealedFrom: m.seal.mock.calls.map(([plaintext]) => plaintext) }
 }
 
 const exportCalls = () => h.state.exportFullBackupKeys.mock.calls.length
@@ -400,21 +405,20 @@ describe("useFullBackupExport — a create superseded at an await", () => {
 		api.isBusy.value = false
 		api.backupStatus.value = "finished"
 		await api.handleBackup()
-		await api.handleEncrypt()
-		await api.downloadBackup()
+		await api.protectAndDownload()
 		expect(m.captureRunFence).toHaveBeenCalledOnce()
 		expect(m.seal).not.toHaveBeenCalled()
 		expect(m.downloadFile).not.toHaveBeenCalled()
 	})
 })
 
-describe("useFullBackupExport — encrypt and download superseded", () => {
-	it.each(["resolves", "rejects"] as const)("an encrypt dropped while it seals, which then %s", async (settles) => {
+describe("useFullBackupExport — the press that seals and saves, superseded", () => {
+	it.each(["resolves", "rejects"] as const)("a press dropped while it seals, which then %s", async (settles) => {
 		const { api, opts } = setup("password")
 		await api.handleBackup()
 		const held = deferred<string>()
 		m.seal.mockReturnValueOnce(held.promise)
-		const encrypt = api.handleEncrypt()
+		const encrypt = api.protectAndDownload()
 		await flushPromises()
 
 		api.reset()
@@ -423,15 +427,42 @@ describe("useFullBackupExport — encrypt and download superseded", () => {
 		if (settles === "resolves") held.resolve("SEALED-LATE")
 		else held.reject(new Error("refused"))
 		await encrypt
+		expect(m.downloadFile).not.toHaveBeenCalled()
 		await expectNothingPublished(api, opts, at)
 	})
 
-	it.each(["resolves", "rejects"] as const)("an encrypt dropped while the seal's session check runs, which then %s", async (settles) => {
+	// The press outlives its own seal: a successor left at its sealed file by a failed download must
+	// not have that file saved again by the stale press.
+	it("a press overtaken by a reset while it seals saves nothing, even once a successor holds a sealed file", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {})
+		const { api } = setup("password")
+		await api.handleBackup()
+		const held = deferred<string>()
+		m.seal.mockReturnValueOnce(held.promise)
+		const stale = api.protectAndDownload()
+		await flushPromises()
+
+		api.reset()
+		api.isAgreed.value = true
+		api.password.value = "pw"
+		await api.handleBackup()
+		m.downloadFile.mockRejectedValueOnce(new Error("refused"))
+		await api.protectAndDownload()
+		expect(api.backupStatus.value).toBe("encrypted")
+
+		held.resolve("SEALED-LATE")
+		await stale
+		await flushPromises()
+		expect(m.downloadFile.mock.calls.map(([file]) => file.data)).toEqual(["SEALED"])
+		expect(api.backupStatus.value).toBe("encrypted")
+	})
+
+	it.each(["resolves", "rejects"] as const)("a press dropped while the seal's session check runs, which then %s", async (settles) => {
 		const { api, opts } = setup("password")
 		await api.handleBackup()
 		const held = deferred<void>()
 		m.assertRunFence.mockReturnValueOnce(held.promise)
-		const encrypt = api.handleEncrypt()
+		const encrypt = api.protectAndDownload()
 		await vi.waitFor(() => expect(m.assertRunFence).toHaveBeenCalledTimes(2))
 		expect(m.seal).toHaveBeenCalledOnce()
 
@@ -444,13 +475,12 @@ describe("useFullBackupExport — encrypt and download superseded", () => {
 		await expectNothingPublished(api, opts, at)
 	})
 
-	it.each(["resolves", "rejects"] as const)("a download dropped while its session check runs, which then %s", async (settles) => {
+	it.each(["resolves", "rejects"] as const)("a press dropped while its download's session check runs, which then %s", async (settles) => {
 		const { api, opts } = setup("password")
 		await api.handleBackup()
-		await api.handleEncrypt()
 		const held = deferred<void>()
-		m.assertRunFence.mockReturnValueOnce(held.promise)
-		const download = api.downloadBackup()
+		m.assertRunFence.mockResolvedValueOnce(undefined).mockReturnValueOnce(held.promise)
+		const download = api.protectAndDownload()
 		await vi.waitFor(() => expect(m.assertRunFence).toHaveBeenCalledTimes(3))
 
 		api.reset()
@@ -483,10 +513,9 @@ describe("useFullBackupExport — encrypt and download superseded", () => {
 	it("a password change heard while the download runs is said once the file has left", async () => {
 		const { api } = setup("password")
 		await api.handleBackup()
-		await api.handleEncrypt()
 		const saving = deferred<void>()
 		m.downloadFile.mockReturnValueOnce(saving.promise)
-		const download = api.downloadBackup()
+		const download = api.protectAndDownload()
 		await vi.waitFor(() => expect(m.downloadFile).toHaveBeenCalledOnce())
 		// The change commits after the download's own check: the follower's waits behind its reopen.
 		const reopened = deferred<void>()
@@ -505,11 +534,10 @@ describe("useFullBackupExport — encrypt and download superseded", () => {
 	it.each(["resolves", "rejects"] as const)("a requested download lands, and only its toast is dropped, when it %s", async (settles) => {
 		const { api, opts } = setup("password")
 		await api.handleBackup()
-		await api.handleEncrypt()
 		const held = deferred<void>()
 		m.downloadFile.mockReturnValueOnce(held.promise)
-		const download = api.downloadBackup()
-		await flushPromises()
+		const download = api.protectAndDownload()
+		await vi.waitFor(() => expect(m.downloadFile).toHaveBeenCalledOnce())
 
 		api.reset()
 		plantSentinels(api)
@@ -524,29 +552,27 @@ describe("useFullBackupExport — encrypt and download superseded", () => {
 })
 
 describe("useFullBackupExport — a current run", () => {
-	it("password profile: the file leaves only sealed, and the run's clients close", async () => {
+	it("password profile: one press seals under the profile password and saves only the sealed text", async () => {
 		const { api } = setup("password")
 		await api.handleBackup()
 		expect(readState(api)).toMatchObject({
 			backupStatus: "finished",
 			isBusy: false,
-			showRecommendation: true,
 			chainStateOmitted: true,
 			unopenedImportedKeys: 2,
 		})
 		for (const { kind, disconnect } of h.state.built) expect(disconnect, kind).toHaveBeenCalledOnce()
 		expect(m.assertRunFence).toHaveBeenCalledWith(FENCE)
 		expect(h.state.exportFullBackupKeys).toHaveBeenCalledExactlyOnceWith(FENCE, "pw")
-
-		await api.downloadBackup()
 		expect(m.downloadFile).not.toHaveBeenCalled()
-		await api.handleEncrypt()
-		expect(m.seal).toHaveBeenCalledWith(expect.stringContaining('"master-key":"mk"'), "pw")
-		expect(api.backupStatus.value).toBe("encrypted")
-		await api.downloadBackup()
-		expect(m.downloadFile).toHaveBeenCalledWith(
-			expect.objectContaining({ data: "SEALED", filename: expect.stringMatching(/^NuloEncryptedBackup_.+\.txt$/) }),
+
+		m.seal.mockResolvedValueOnce("SEALED-UNDER-PW")
+		await api.protectAndDownload()
+		expect(m.seal).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('"master-key":"mk"'), "pw")
+		expect(m.downloadFile).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({ data: "SEALED-UNDER-PW", filename: expect.stringMatching(/^nulo-backup-\d{4}-\d{2}-\d{2}\.txt$/) }),
 		)
+		expect(m.seal.mock.invocationCallOrder[0]).toBeLessThan(m.downloadFile.mock.invocationCallOrder[0])
 	})
 
 	// The file holds the recovery phrase, so a passkey profile's leaves only under a password typed
@@ -563,8 +589,6 @@ describe("useFullBackupExport — a current run", () => {
 		})
 		expect(h.state.exportFullBackupKeys).toHaveBeenCalledExactlyOnceWith(FENCE, undefined, CEREMONY_ANSWER)
 		expect(api.backupStatus.value).toBe("finished")
-		await api.downloadBackup()
-		expect(m.downloadFile).not.toHaveBeenCalled()
 
 		for (const [password, repeated] of [
 			["", ""],
@@ -574,59 +598,86 @@ describe("useFullBackupExport — a current run", () => {
 			api.password.value = password
 			api.repeatedPassword.value = repeated
 			expect(api.canEncrypt.value).toBe(false)
-			await api.handleEncrypt()
+			await api.protectAndDownload()
 		}
 		expect(m.seal).not.toHaveBeenCalled()
+		expect(m.downloadFile).not.toHaveBeenCalled()
 
 		api.password.value = "12345678"
 		api.repeatedPassword.value = "12345678"
 		expect(api.canEncrypt.value).toBe(true)
-		await api.handleEncrypt()
+		await api.protectAndDownload()
 		const [plaintext, filePassword] = m.seal.mock.calls[0]
 		expect(filePassword).toBe("12345678")
 		const body = JSON.parse(plaintext as string)
 		expect(body).toMatchObject({ "master-key": "mk", entropy: "ent", "imported-keys-dek": "ik" })
 		expect(body).not.toHaveProperty("backup-mac")
 		expect(body).not.toHaveProperty("imported-keys-dek-sealed")
-		await api.downloadBackup()
 		expect(m.downloadFile).toHaveBeenCalledExactlyOnceWith(
-			expect.objectContaining({ data: "SEALED", filename: expect.stringMatching(/^NuloEncryptedBackup_.+\.txt$/) }),
+			expect.objectContaining({ data: "SEALED", filename: expect.stringMatching(/^nulo-backup-\d{4}-\d{2}-\d{2}\.txt$/) }),
 		)
 	})
 
 	it("an accepted sealed download ends the run: done, with nothing left to download or seal", async () => {
 		const { api } = setup("password")
 		await api.handleBackup()
-		await api.handleEncrypt()
-		await api.downloadBackup()
+		await api.protectAndDownload()
 		expect(readState(api)).toMatchObject({
 			backupStatus: "downloaded",
 			isDownloading: false,
 			password: null,
 			repeatedPassword: null,
 		})
-		expect(api.canDownload.value).toBe(false)
 		expect(m.openToast).toHaveBeenCalledWith({ kind: "success", label: "Backup downloaded successfully" })
 		for (const { kind, disconnect } of h.state.built) expect(disconnect, kind).toHaveBeenCalled()
 		expect(await probeArtifacts(api)).toEqual({ downloads: 0, sealedFrom: [null] })
 	})
 
-	it("a refused sealed download keeps the sealed file and Download", async () => {
+	it("a refused download keeps the sealed file, and the next press saves it without sealing again", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {})
 		const { api } = setup("password")
 		await api.handleBackup()
-		await api.handleEncrypt()
 		m.downloadFile.mockRejectedValueOnce(new Error("refused"))
-		await api.downloadBackup()
+		await api.protectAndDownload()
 		expect(api.backupStatus.value).toBe("encrypted")
-		expect(api.canDownload.value).toBe(true)
-		await api.downloadBackup()
+		await api.protectAndDownload()
+		expect(m.seal).toHaveBeenCalledOnce()
 		expect(m.downloadFile.mock.calls.map(([file]) => file.data)).toEqual(["SEALED", "SEALED"])
 		expect(api.backupStatus.value).toBe("downloaded")
 	})
 
+	// The session a password profile's backup was made in is checked after the seal and again before
+	// the file leaves, so a change committed at any point of the press leaves no file.
+	it.each([
+		{ when: "before the press", hold: false, standsForSeal: false, label: "Failed to encrypt the backup" },
+		{ when: "while it seals", hold: true, standsForSeal: false, label: "Failed to encrypt the backup" },
+		{ when: "after the seal's check", hold: false, standsForSeal: true, label: "Failed to download backup" },
+	])("a password changed $when leaves no file and starts the page over", async ({ hold, standsForSeal, label }) => {
+		const { api } = setup("password")
+		await api.handleBackup()
+		const ended = () => m.assertRunFence.mockRejectedValue(new Error("Session ended"))
+		const sealing = deferred<string>()
+		if (hold) m.seal.mockReturnValueOnce(sealing.promise)
+		if (standsForSeal) m.assertRunFence.mockImplementationOnce(async () => void ended())
+		else if (!hold) ended()
+		const press = api.protectAndDownload()
+		if (hold) {
+			await vi.waitFor(() => expect(m.seal).toHaveBeenCalledOnce())
+			ended()
+			sealing.resolve("SEALED")
+		}
+		await press
+		expect(m.downloadFile).not.toHaveBeenCalled()
+		expect(api.backupStatus.value).toBe("")
+		expect(m.openToast).toHaveBeenLastCalledWith({ kind: "error", label })
+	})
+
 	// A new await is a new place a run can be superseded: add its row to the table, then this count.
 	it("every await in the composable has a row above", () => {
-		const code = readFileSync(resolve(__dirname, "useFullBackupExport.ts"), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
-		expect(code.match(/\bawait\b/g)).toHaveLength(16)
+		const awaits = (file: string) =>
+			readFileSync(resolve(__dirname, file), "utf8")
+				.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
+				.match(/\bawait\b/g)?.length
+		expect((awaits("useFullBackupExport.ts") ?? 0) + (awaits("../utils/profile-passkey.ts") ?? 0)).toBe(18)
 	})
 })

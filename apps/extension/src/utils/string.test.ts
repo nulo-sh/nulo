@@ -1,7 +1,7 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { describe, expect, test } from "vitest"
 import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
-import { dashIfBlank, getInitials, isBlank, trimAddress } from "./string"
+import { addressEnds, dashIfBlank, getInitials, isBlank, stripBidiAndZeroWidth, trimAddress } from "./string"
 
 describe("trimAddress", () => {
 	const ADDR = "0x1234567890abcdef1234567890abcdef12345678"
@@ -99,5 +99,47 @@ describe("dashIfBlank", () => {
 		expect(dashIfBlank(" A ")).toBe(" A ")
 		expect(dashIfBlank(`${ZWSP}USDC`)).toBe(`${ZWSP}USDC`)
 		expect(dashIfBlank("—")).toBe("—")
+	})
+})
+
+describe("stripBidiAndZeroWidth", () => {
+	const chars = (...codes: number[]) => String.fromCodePoint(...codes)
+
+	test.each([
+		["bidi embeddings and overrides", chars(0x202a, 0x202b, 0x202c, 0x202d, 0x202e)],
+		["bidi isolates", chars(0x2066, 0x2067, 0x2068, 0x2069)],
+		["directional marks", chars(0x200e, 0x200f, 0x061c)],
+		["zero-width space, word joiner and byte-order mark", chars(0x200b, 0x2060, 0xfeff)],
+		["soft hyphen", chars(0xad)],
+	])("removes the %s, wherever they sit", (_, removed) => {
+		const between = [...removed].join("x")
+		expect(stripBidiAndZeroWidth(`${removed}a${between}b${removed}`)).toBe(`a${"x".repeat([...removed].length - 1)}b`)
+	})
+
+	test("keeps joiners, variation selectors, tags, controls and every visible character", () => {
+		const kept = [
+			"Ali\u0301ce d\u00E9j\u00E0 vu",
+			"me\u200Cdan",
+			"\u{1F468}\u200D\u{1F469}\u200D\u{1F467}",
+			"\u2764\uFE0F",
+			"\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}",
+			"\u0600\u0661",
+			"tab\there",
+			"a\u00A0b 0-9 ._!?",
+		]
+		for (const text of kept) expect(stripBidiAndZeroWidth(text), JSON.stringify(text)).toBe(text)
+	})
+})
+
+describe("addressEnds", () => {
+	test("cuts a whole address where the header's short form does, losing nothing", () => {
+		const address = `0x22ee${"0".repeat(56)}c204`
+		const { head, middle, tail } = addressEnds(address)
+		expect([head, tail, `${head}${middle}${tail}`]).toEqual(["0x22ee", "c204", address])
+		expect(trimAddress(address, 6, 4, "...")).toBe(`${head}...${tail}`)
+	})
+
+	test("an address too short to cut is all head", () => {
+		expect(addressEnds("0x12")).toEqual({ head: "0x12", middle: "", tail: "" })
 	})
 })

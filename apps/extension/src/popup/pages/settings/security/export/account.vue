@@ -22,9 +22,13 @@ import { managers } from "@/utils/core"
 import { downloadFile, profileFileNameSegment } from "@/utils"
 import { trimAddress } from "@/utils/string"
 import { isNewPasswordValid } from "@/utils/password"
-import { closesOnFocusLoss } from "@/utils/browser-surface"
-import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
+import { isToolbarPopup } from "@/utils/browser-surface"
+import { logCredentialFailure } from "@/utils/credential-refusal"
+import { goBack } from "@/utils/page-back"
+import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
+import { askProfilePasskey } from "@/utils/profile-passkey"
 import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
+import { watchLockStart } from "@/popup/locked-state"
 
 /** Composables */
 import { createRunFence } from "@/composables/runFence"
@@ -72,6 +76,7 @@ const accounts = computed(() => {
 })
 
 const confirmPasskeyButton = useTemplateRef("confirmPasskeyButton")
+const closeButton = useTemplateRef("closeButton")
 const selectedAddress = ref("")
 const isAgreed = ref(false)
 const password = ref()
@@ -87,7 +92,7 @@ const approval = shallowRef(null)
 const isApproved = computed(() => approval.value !== null)
 const canSaveFile = computed(() => isNewPasswordValid(filePassword.value ?? "", repeatedFilePassword.value ?? ""))
 
-/** "" | "ready" | "protected" — the file stages, mirroring Full Backup's status machine. */
+/** "" | "ready" | "protected" | "downloaded" — the file stages, mirroring Full Backup's status machine. */
 const fileStatus = ref("")
 const payload = ref("")
 
@@ -107,6 +112,7 @@ const resetFlow = () => {
 	fileStatus.value = ""
 	payload.value = ""
 	dropApproval()
+	onCeremonyReject(new Error("The account file flow started over"))
 }
 
 function dropApproval() {
@@ -160,8 +166,18 @@ watch(
 		applyQueryPreselect()
 	},
 )
-// A passkey profile's file not made yet ends with a network switched from another window: its
-// approval and any pending export were given for the previous network. A made file is kept.
+// A lock can leave this page mounted (an unlock from another window supersedes it before the
+// landing): what was typed or approved belongs to the session that ended.
+watchLockStart(
+	() => appStore.isLogined,
+	() => {
+		resetFlow()
+		applyQueryPreselect()
+	},
+)
+// A passkey profile's file not made yet ends when this window's chain id changes or clears (its own
+// bootstrap clears it; another window's network switch never reaches it): its approval and any
+// pending export belong to the session or network before. A made file is kept.
 watch(
 	() => appStore.network?.chainId,
 	() => {
@@ -201,12 +217,17 @@ const handleConfirmPasskey = async () => {
 	const scope = approvalScope()
 	const { id: profileId, name } = appStore.profile
 	try {
-		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(profileId)
-		const answer = await runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile", profileName: name })
-		if (!isCurrent() || scope !== approvalScope()) return
+		const inScope = () => isCurrent() && scope === approvalScope()
+		const answer = await askProfilePasskey(
+			runCeremony,
+			managers.profile,
+			{ profileId, step: "accountFile", profileName: () => name },
+			inScope,
+		)
+		if (answer === undefined || !inScope()) return
 		// An answer that cannot open the profile is refused here, never held until Save.
 		await managers.profile.verifyExportCredential(profileId, { passkey: answer })
-		if (!isCurrent() || scope !== approvalScope()) return
+		if (!inScope()) return
 		approval.value = { answer, scope }
 	} catch (error) {
 		if (!isCurrent() || handleCancelOrUnconfirmed(error, openToast)) return
@@ -239,7 +260,7 @@ const handleSaveFile = async () => {
 		dropApproval()
 	} catch (error) {
 		if (!isCurrent()) return
-		console.error("[export/account] passkey file failed:", { error })
+		logCredentialFailure("[export/account] passkey file failed:", error)
 		// An answer a Save failed with is never reused: the page asks the passkey again, and the
 		// keyboard lands on that ask, as the removed Save took focus with it.
 		dropApproval()
@@ -311,6 +332,7 @@ const handleDownload = async () => {
 	try {
 		await downloadFile({ data: payload.value, filename: fileName.value })
 		if (!isCurrent()) return
+		fileStatus.value = "downloaded"
 		openToast({ kind: "success", label: "Account file downloaded" })
 	} catch (err) {
 		if (!isCurrent()) return
@@ -319,6 +341,11 @@ const handleDownload = async () => {
 	} finally {
 		if (isCurrent()) isDownloading.value = false
 	}
+}
+
+const handleClose = () => {
+	if (isToolbarPopup()) window.close()
+	else void goBack(router, "/popup/settings/security/export")
 }
 
 /** Enter advances the active stage, matching the flow's CTA (the popup this page replaced
@@ -331,13 +358,18 @@ const onKeydown = (e) => {
 	else if (isApproved.value && isPopupSubmitKey(e)) handleSaveFile()
 }
 watch(selectedAddress, () => dropApproval())
+watch(fileStatus, async (status) => {
+	if (status !== "downloaded") return
+	await nextTick()
+	closeButton.value?.$el?.focus()
+})
 
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey profile's
 // account file moves to its own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
-	if (!isPasskeyProfile.value || !closesOnFocusLoss()) return
+	if (!isPasskeyProfile.value) return
 	const address = typeof route.query.address === "string" ? `?address=${encodeURIComponent(route.query.address)}` : ""
-	void moveToOwnWindow(`${OWN_WINDOW_ROUTES.accountExport}${address}`)
+	void leavePanelFor(`${OWN_WINDOW_ROUTES.accountExport}${address}`)
 })
 onMounted(() => {
 	document.addEventListener("keydown", onKeydown)
@@ -356,10 +388,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<CollapsingHeroLayout heroMain="Account" heroSub="Backup" :collapsingLabel="collapsingLabel" backTo="/popup/settings/security/export">
+	<CollapsingHeroLayout heroMain="Account" heroSub="Backup" :collapsingLabel="collapsingLabel" backTo="/popup/settings/security/export" moreBelow>
 		<!-- Step 1: account picker (skipped when deep-linked with a preselected address) -->
 		<template v-if="!selectedAddress">
-			<div class="export_section_last">
+			<div class="export_section_last" data-scroll-section>
 				<span class="export_section_label type--label-section">Select account</span>
 				<ItemsContainer flat>
 					<SettingItem
@@ -382,7 +414,7 @@ onBeforeUnmount(() => {
 
 		<!-- Step 2: agree gate -->
 		<template v-else-if="!isAgreed">
-			<div class="export_section_last">
+			<div class="export_section_last" data-scroll-section>
 				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
 					<Text variant="body" height="150" color="body"> This file gives full control of one account. </Text>
@@ -411,9 +443,9 @@ onBeforeUnmount(() => {
 			@clearError="isWrongPassword = false"
 		/>
 
-		<!-- Steps 4/5: file ready / protected -->
+		<!-- Steps 4-6: file ready / protected / saved -->
 		<template v-else>
-			<div class="export_section_last">
+			<div class="export_section_last" data-scroll-section>
 				<span class="export_section_label type--label-section">File</span>
 				<Flex direction="column" gap="12">
 					<Banner v-if="fileStatus === 'ready'" variant="info" direction="vertical" data-testid="account-file-ready-banner">
@@ -427,7 +459,9 @@ onBeforeUnmount(() => {
 					</Banner>
 
 					<Banner v-else variant="done" direction="vertical" data-testid="account-file-protected-banner">
-						<template #title> Account file is protected </template>
+						<template #title>
+							{{ fileStatus === "downloaded" ? "Saved to your downloads" : "Account file is protected" }}
+						</template>
 						<template #description>
 							<Text color="secondary" height="140">
 								{{
@@ -505,8 +539,26 @@ onBeforeUnmount(() => {
 				</Button>
 			</Flex>
 
-			<Button v-else-if="fileStatus === 'protected'" @click="handleDownload" :disabled="isDownloading" variant="cta" data-testid="account-download-btn">
+			<Button
+				v-else-if="fileStatus === 'protected'"
+				@click="handleDownload"
+				@keydown.enter="refuseRepeatEnter"
+				:disabled="isDownloading"
+				variant="cta"
+				data-testid="account-download-btn"
+			>
 				Download File
+			</Button>
+
+			<Button
+				v-else-if="fileStatus === 'downloaded'"
+				ref="closeButton"
+				@click="handleClose"
+				@keydown.enter="refuseRepeatEnter"
+				variant="cta"
+				data-testid="account-close-btn"
+			>
+				Close
 			</Button>
 		</template>
 	</CollapsingHeroLayout>

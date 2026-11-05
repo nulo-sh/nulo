@@ -8,7 +8,11 @@
  * this composite is purely the visual treatment.
  */
 /** Components */
+import DisableAutoCloseLink from "@/components/composite/DisableAutoCloseLink.vue"
 import Button from "@/components/ui/Button.vue"
+
+/** Composables */
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 defineProps({
 	/** Display label like "2:00". Empty string hides the suffix. */
@@ -23,11 +27,25 @@ defineProps({
 })
 
 const emit = defineEmits(["close", "disableAutoClose"])
+
+const closeButton = useTemplateRef("closeButton")
+
+/** The link leaves with the countdown; focus goes to the Close it timed, not to the page. */
+function keepOpen() {
+	emit("disableAutoClose")
+	closeButton.value?.$el?.focus()
+}
 </script>
 
 <template>
 	<Flex direction="column" gap="8">
-		<Button variant="cta_outline" data-testid="close-btn" @click="emit('close')">
+		<Button
+			ref="closeButton"
+			variant="cta_outline"
+			data-testid="close-btn"
+			@keydown.enter="refuseRepeatEnter"
+			@click="emit('close')"
+		>
 			<span :class="$style.close_label">
 				Close<span v-if="!autoCloseDisabled && countdownLabel"> · {{ countdownLabel }}</span>
 			</span>
@@ -38,14 +56,7 @@ const emit = defineEmits(["close", "disableAutoClose"])
 			/>
 		</Button>
 
-		<button
-			v-if="!autoCloseDisabled"
-			@click="emit('disableAutoClose')"
-			type="button"
-			:class="$style.ghost_link"
-		>
-			Disable auto-close
-		</button>
+		<DisableAutoCloseLink v-if="!autoCloseDisabled" testid="disable-auto-close-btn" @click="keepOpen" />
 	</Flex>
 </template>
 
@@ -79,35 +90,5 @@ const emit = defineEmits(["close", "disableAutoClose"])
 	animation-name: shrink;
 	animation-timing-function: linear;
 	will-change: transform;
-}
-
-.ghost_link {
-	composes: type--label-section from global;
-	align-self: center;
-
-	color: var(--nulo-secondary);
-	background: transparent;
-	border: none;
-	cursor: pointer;
-
-	padding: 4px 0;
-	text-decoration: underline;
-	text-decoration-thickness: 1px;
-	text-underline-offset: 4px;
-
-	transition: color 0.2s var(--bezier);
-
-	&:hover {
-		color: var(--txt-primary);
-	}
-}
-
-:global([theme="light"]) {
-	.ghost_link {
-		color: var(--txt-secondary);
-	}
-	.ghost_link:hover {
-		color: var(--txt-primary);
-	}
 }
 </style>

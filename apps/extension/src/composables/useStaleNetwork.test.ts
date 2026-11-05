@@ -571,3 +571,68 @@ describe("runsUnattended", () => {
 		expect(runsUnattended(view({ accounts: [], switchToSeedNode: true }))).toBe(false)
 	})
 })
+
+describe("a resume whose session a lock ends", () => {
+	const refuseNextPendingRead = (w: ReturnType<typeof fakeWorker>) => {
+		let refuse!: (error: Error) => void
+		const read = new Promise<PendingReset | null>((_, reject) => (refuse = reject))
+		;(w.client.getPendingReset as ReturnType<typeof vi.fn>).mockImplementationOnce(() => read)
+		return refuse
+	}
+
+	test("the read it refuses resolves the resume, logged at debug", async () => {
+		const w = fakeWorker()
+		const refuse = refuseNextPendingRead(w)
+		const { stale } = harness(w)
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined)
+		const resumed = stale.resume("p1")
+		stale.clear()
+		const refusal = new Error("Profile locked")
+		refuse(refusal)
+		await expect(resumed).resolves.toBeUndefined()
+		expect(debug).toHaveBeenCalledExactlyOnceWith("stale-network resume ended with its session", { error: refusal })
+		debug.mockRestore()
+	})
+
+	test("control: a resume whose session lasts still rejects", async () => {
+		const w = fakeWorker()
+		const refuse = refuseNextPendingRead(w)
+		const { stale } = harness(w)
+		const resumed = stale.resume("p1")
+		const refusal = new Error("Profile locked")
+		refuse(refusal)
+		await expect(resumed).rejects.toBe(refusal)
+	})
+})
+
+describe("a refresh whose session a lock ends", () => {
+	/** A refresh of the stale active network, parked at its read until `refuse`. */
+	const refreshing = () => {
+		let refuse!: (error: Error) => void
+		const read = new Promise<null>((_, reject) => (refuse = reject))
+		const { stale } = harness(fakeWorker(), {
+			scope: () => ({ profileId: "p1", networkId: "tn" }),
+			staleActive: () => view(),
+			syncActive: vi.fn(() => read),
+		})
+		return { stale, refreshed: stale.refresh(), refuse }
+	}
+
+	test("the read it refuses resolves the refresh, logged at debug", async () => {
+		const { stale, refreshed, refuse } = refreshing()
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined)
+		stale.clear()
+		const refusal = new Error("Profile locked")
+		refuse(refusal)
+		await expect(refreshed).resolves.toBeUndefined()
+		expect(debug).toHaveBeenCalledExactlyOnceWith("stale-network refresh ended with its session", { error: refusal })
+		debug.mockRestore()
+	})
+
+	test("control: a refresh whose session lasts still rejects", async () => {
+		const { refreshed, refuse } = refreshing()
+		const refusal = new Error("Profile locked")
+		refuse(refusal)
+		await expect(refreshed).rejects.toBe(refusal)
+	})
+})

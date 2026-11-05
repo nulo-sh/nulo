@@ -1,9 +1,6 @@
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
-
-/** The validators' verdict when a name or address is already saved. Names compare by
- *  `sameContactName` in `contact-name.ts`. */
-export const CONTACT_EXISTS = "Already exist"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 
 // `c` and `v` keep the validators' own names, so a native error on a malformed row reads the same.
 
@@ -21,7 +18,7 @@ export function canonicalContactAddress(address: string): string {
 // reaches them, so a computed over them tracks only the refs its check reaches.
 type Handle<T> = { readonly value: T }
 
-/** The name field's verdict: `null` while empty or free, `CONTACT_EXISTS` when a saved contact other
+/** The name field's verdict: `null` while empty or free, `ALREADY_EXISTS` when a saved contact other
  *  than `isExcluded` (the row being edited) holds the name it would be stored as. */
 export function contactNameError<C extends { name: string }>(
 	v: string,
@@ -30,11 +27,11 @@ export function contactNameError<C extends { name: string }>(
 ): string | null {
 	if (isEmptyContactName(v)) return null // empty is "not yet valid", not an error to display
 	// The name as it would be stored: the cut can make a longer draft another contact's name.
-	if (contacts.value.some((c) => sameContactName(c.name, sanitizeContactName(v)) && !isExcluded?.(c))) return CONTACT_EXISTS
+	if (contacts.value.some((c) => sameContactName(c.name, sanitizeContactName(v)) && !isExcluded?.(c))) return ALREADY_EXISTS
 	return null
 }
 
-/** The address field's verdict: `null` while empty or free, `"Invalid address"`, or `CONTACT_EXISTS`
+/** The address field's verdict: `null` while empty or free, `"Invalid address"`, or `ALREADY_EXISTS`
  *  when a saved contact other than `isExcluded` holds it in any hex case. */
 export function contactAddressError<C extends { address: string }>(
 	v: string,
@@ -43,7 +40,7 @@ export function contactAddressError<C extends { address: string }>(
 ): string | null {
 	if (!v) return null // empty: pre-input, not an error to display
 	if (!isValidAztecAddress(v)) return "Invalid address"
-	if (contacts.value.some((c) => sameContactAddress(c, v) && !isExcluded?.(c))) return CONTACT_EXISTS
+	if (contacts.value.some((c) => sameContactAddress(c, v) && !isExcluded?.(c))) return ALREADY_EXISTS
 	return null
 }
 

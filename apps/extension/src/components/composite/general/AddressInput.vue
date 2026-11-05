@@ -8,9 +8,8 @@
  * `text-overflow: ellipsis`) and can't be dragged. While focused, scrolling is
  * allowed (you're editing).
  *
- * The native <input> stays mounted and its value is NEVER rewritten — paste,
- * selection, the `[data-testid] input` e2e selector, and screen readers are all
- * untouched. This is the extension-side affordance (NOT a `@nulo/design` change).
+ * The native <input> stays mounted, and the pinning changes `scrollLeft`, never
+ * the value. This is the extension-side affordance (NOT a `@nulo/design` change).
  */
 import { onBeforeUnmount, onMounted, ref } from "vue"
 
@@ -23,6 +22,7 @@ const emit = defineEmits(["blur", "focus"])
 const inputRef = ref<{ $el?: HTMLElement; focus?: () => void } | null>(null)
 let inputEl: HTMLInputElement | null = null
 let focused = false
+let pasteFrame = 0
 
 // Native listeners on the actual <input> (not the component's emit chain) so the
 // pinning is robust. `scrollLeft !== 0` guard bounds the scroll→reset→scroll loop.
@@ -36,6 +36,15 @@ const onNativeBlur = () => {
 	focused = false
 	pinStart()
 }
+// A paste shows the address's start; any later input keeps the caret in view. Chrome and Firefox
+// reveal the caret after a paste's `input` event, so the reset waits for the next frame.
+const onNativeInput = (event: Event) => {
+	cancelAnimationFrame(pasteFrame)
+	if ((event as InputEvent).inputType !== "insertFromPaste") return
+	pasteFrame = requestAnimationFrame(() => {
+		if (inputEl) inputEl.scrollLeft = 0
+	})
+}
 
 onMounted(() => {
 	inputEl = inputRef.value?.$el?.querySelector?.("input") ?? null
@@ -43,11 +52,14 @@ onMounted(() => {
 	inputEl.addEventListener("scroll", pinStart, { passive: true })
 	inputEl.addEventListener("focus", onNativeFocus)
 	inputEl.addEventListener("blur", onNativeBlur)
+	inputEl.addEventListener("input", onNativeInput)
 })
 onBeforeUnmount(() => {
 	inputEl?.removeEventListener("scroll", pinStart)
 	inputEl?.removeEventListener("focus", onNativeFocus)
 	inputEl?.removeEventListener("blur", onNativeBlur)
+	inputEl?.removeEventListener("input", onNativeInput)
+	cancelAnimationFrame(pasteFrame)
 })
 
 defineExpose({

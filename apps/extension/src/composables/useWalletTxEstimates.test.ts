@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { effectScope, ref } from "vue"
+import { useToast } from "@/composables/toast"
 import type { TransferFeeEstimate } from "@/wallet/services/execution/spec"
 import { useWalletTxEstimates } from "./useWalletTxEstimates"
 
@@ -28,11 +29,14 @@ function setup(initial: Record<number, P | undefined> = { 0: { network: "A", fee
 }
 
 const lands = () => vi.advanceTimersByTimeAsync(500)
+const { toast, openToast, closeToast } = useToast()
+const FAILURE = "Couldn't estimate fee. Try again."
 
 beforeEach(() => {
 	vi.useFakeTimers()
 })
 afterEach(() => {
+	closeToast()
 	vi.useRealTimers()
 })
 
@@ -42,7 +46,7 @@ describe("useWalletTxEstimates", () => {
 		estimates.refresh(0)
 		expect(estimate).not.toHaveBeenCalled()
 		await lands()
-		expect(estimate).toHaveBeenCalledWith({ network: "A", fee: 1 }, expect.any(String), expect.any(String))
+		expect(estimate).toHaveBeenCalledWith({ network: "A", fee: 1 }, expect.any(String), expect.any(String), expect.any(AbortSignal))
 		expect(estimates.results.value[0]?.maxFee).toBe("A:1")
 		expect(estimates.landed()).toBe(true)
 	})
@@ -132,14 +136,41 @@ describe("useWalletTxEstimates", () => {
 		expect(estimates.results.value[0]?.maxFee).toBe("B:1")
 	})
 
-	test("a failed estimate reaches onError and leaves the key unanswered", async () => {
-		const { estimate, onError, estimates } = setup()
-		const boom = new Error("node down")
-		estimate.mockRejectedValueOnce(boom)
+	test("a failure marks its key and opens one snack, which closes once no key stands failed", async () => {
+		const { estimate, onError, estimates } = setup({ 0: { network: "A", fee: 1 }, 1: { network: "A", fee: 2 } })
+		const down = new Error("node down")
+		const slow = new Error("node slow")
+		estimate.mockRejectedValueOnce(down).mockRejectedValueOnce(slow)
+		estimates.refreshAll()
+		await lands()
+		expect(estimates.failed.value).toEqual({ 0: true, 1: true })
+		expect(onError.mock.calls).toEqual([[down], [slow]])
+		expect(toast.value).toMatchObject({ kind: "error", label: FAILURE })
+		expect(estimates.landed()).toBe(false)
+
+		estimates.refresh(0)
+		expect(toast.value?.label).toBe(FAILURE)
+		estimates.refresh(1)
+		expect(toast.value).toBeNull()
+		await lands()
+		expect(estimates.landed()).toBe(true)
+	})
+
+	test("a snack opened after the failure survives its refresh; cancelAll closes the failure's own snack", async () => {
+		const { estimate, estimates } = setup()
+		estimate.mockRejectedValueOnce(new Error("node down")).mockRejectedValueOnce(new Error("node down"))
 		estimates.refresh(0)
 		await lands()
-		expect(onError).toHaveBeenCalledWith(boom)
-		expect(estimates.landed()).toBe(false)
+		const later = openToast({ kind: "info", label: "Another report" })
+		estimates.refresh(0)
+		expect(toast.value?.id).toBe(later)
+
+		closeToast()
+		await lands()
+		expect(toast.value?.label).toBe(FAILURE)
+		estimates.cancelAll()
+		expect(toast.value).toBeNull()
+		expect(estimates.failed.value).toEqual({})
 	})
 
 	test("cancelAll cancels a run in flight and clears every answer", async () => {

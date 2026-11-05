@@ -54,6 +54,7 @@ import {
 } from "./helpers/contacts"
 import { shotSend } from "./fixtures/send-page"
 import { pressEscape, SPACE } from "./helpers/pointer-probes"
+import { bringToFront } from "./fixtures/browser"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 
@@ -162,7 +163,7 @@ test("new contacts: Cancel and Escape change nothing, Import selected saves what
 		await pickContactsFile(page, file)
 		expect(await shownRows(page)).toEqual(allNew)
 		expect(await sectionCounts(page)).toEqual({ new: "4" })
-		expect(await senderLine(page)).toBe("1 sender will be registered on Alpha V6.")
+		expect(await senderLine(page)).toBe("1 sender will be registered on Alpha.")
 		await toastAfter(page, () => closeImportWith(page, "import-contacts-cancel"), "Contact import canceled")
 		expect(await storedContacts(page)).toEqual([])
 
@@ -246,7 +247,7 @@ test("changes to saved contacts apply only when chosen, by pointer or keyboard; 
 		expect(await book(page)).toEqual({ ...seeded, Erin: ADDR.f })
 
 		await pickContactsFile(page, changes)
-		await page.bringToFront()
+		await bringToFront(page)
 		// The first Tab enters the popup at its first row.
 		expect(await tabWalk(page, 1)).toEqual(["import-contact-target Alice"])
 		for (const [key, selected] of [

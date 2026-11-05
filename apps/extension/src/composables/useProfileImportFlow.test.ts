@@ -14,9 +14,16 @@ vi.mock("@/utils/core", () => {
 })
 
 vi.mock("@/utils", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/utils")>()), pickFile: vi.fn() }))
+// Spied, not replaced: the seed path's error surface keeps only the message, and this sees the error.
+vi.mock("@nulo/wallet-core/utils", async (importOriginal) => {
+	const original = await importOriginal<typeof import("@nulo/wallet-core/utils")>()
+	return { ...original, errorMessageFromUnknown: vi.fn(original.errorMessageFromUnknown) }
+})
 
 import { managers } from "@/utils/core"
 import { pickFile } from "@/utils"
+import { deferred, errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useProfileImportFlow, type UseProfileImportFlowOptions } from "./useProfileImportFlow"
 
 const profileApi = managers.profile as unknown as Record<string, ReturnType<typeof vi.fn>>
@@ -42,6 +49,9 @@ function makeFlow(overrides: Partial<UseProfileImportFlowOptions> = {}, onPasske
 
 /** A phrase the import accepts: 24 words on the wordlist with a valid checksum. */
 const SEED_24 = `${"abandon ".repeat(23)}art`
+/** Another phrase the import accepts. */
+const OTHER_SEED_24 = `${"zoo ".repeat(23)}vote`
+const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" } as unknown as PasskeyCredentialData
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
 /** Types a phrase and waits for its verdict, as a person sees the hint before pressing Import. */
@@ -197,7 +207,7 @@ describe("useProfileImportFlow", () => {
 
 		test("seed: a duplicate throws → dialog → confirm retries with allowDuplicate", async () => {
 			profileApi.importMnemonic
-				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileName: "Main" }))
+				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileNames: ["Main"] }))
 				.mockResolvedValueOnce({ id: "p2", name: "Dup", type: "password" })
 			const { flow, opts } = makeFlow()
 			flow.profileName.value = "MyProfile"
@@ -207,18 +217,23 @@ describe("useProfileImportFlow", () => {
 
 			const p = flow.handleImportSeed()
 			await tick()
+			flow.unlockMethod.value = "passkey"
+			flow.password.value = "typed after"
+			flow.seedPhrase.value = OTHER_SEED_24
 			const confirm = await confirmDialog()
 			// The dialog NAMES the colliding profile (never key material).
 			expect(String(confirm.description)).toContain("Main")
 			await p
 
-			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(2)
-			expect(profileApi.importMnemonic).toHaveBeenLastCalledWith("MyProfile", SEED_24.split(" "), "password123", true, undefined)
+			expect(profileApi.importMnemonic.mock.calls).toEqual([
+				["MyProfile", SEED_24.split(" "), "password123", false, undefined],
+				["MyProfile", SEED_24.split(" "), "password123", true, undefined],
+			])
 			expect(opts.completeImport).toHaveBeenCalledTimes(1)
 		})
 
 		test("seed: declining the dialog abandons the import (no retry, no completeImport)", async () => {
-			profileApi.importMnemonic.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileName: "Main" }))
+			profileApi.importMnemonic.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileNames: ["Main"] }))
 			const { flow, opts } = makeFlow()
 			flow.profileName.value = "MyProfile"
 			flow.password.value = "password123"
@@ -237,8 +252,8 @@ describe("useProfileImportFlow", () => {
 
 		test("seed: a second warning after a dismissed one carries its own request and retries on confirm", async () => {
 			profileApi.importMnemonic
-				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileName: "Main" }))
-				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileName: "Savings" }))
+				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileNames: ["Main"] }))
+				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileNames: ["Savings"] }))
 				.mockResolvedValueOnce({ id: "p2", name: "Dup", type: "password" })
 			const { flow, opts } = makeFlow()
 			flow.profileName.value = "MyProfile"
@@ -264,6 +279,44 @@ describe("useProfileImportFlow", () => {
 			expect(opts.completeImport).toHaveBeenCalledTimes(1)
 		})
 
+		const TAIL = "this recovery phrase. All of these profiles will hold the same accounts and funds. Add it anyway?"
+		test.each<[label: string, details: unknown, description: string]>([
+			[
+				"one name keeps today's words",
+				{ existingProfileNames: ["Main"] },
+				"“Main” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
+			],
+			[
+				"two names, A to Z whatever their case",
+				{ existingProfileNames: ["Savings", "main"] },
+				`“main” and “Savings” already use ${TAIL}`,
+			],
+			[
+				"three names, A to Z",
+				{ existingProfileNames: ["Work", "Savings", "Main"] },
+				`“Main”, “Savings” and “Work” already use ${TAIL}`,
+			],
+			[
+				"no usable name",
+				{ existingProfileNames: "Main" },
+				"Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
+			],
+			["a non-name among names", { existingProfileNames: ["Work", 7, "Main"] }, `“Main” and “Work” already use ${TAIL}`],
+		])("the warning words %s", async (_label, details, description) => {
+			profileApi.importMnemonic.mockRejectedValueOnce(new DuplicateWalletError(undefined, details as never))
+			const { flow } = makeFlow()
+			flow.profileName.value = "MyProfile"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			await typePhrase(flow, SEED_24)
+			const run = flow.handleImportSeed()
+			await tick()
+			const { useCacheStore } = await import("@/stores/cache.store")
+			expect((useCacheStore().confirm as { description?: string }).description).toBe(description)
+			await dismissDialog()
+			await run
+		})
+
 		test("a NON-duplicate error still routes to the generic error surface (no dialog)", async () => {
 			profileApi.importMnemonic.mockRejectedValueOnce(new Error("boom"))
 			const { flow } = makeFlow()
@@ -278,7 +331,6 @@ describe("useProfileImportFlow", () => {
 	})
 
 	describe("a phrase imported under a passkey", () => {
-		const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" } as unknown as PasskeyCredentialData
 		/** A flow on the Passkey tab with a 24-word phrase and a name, and no password typed. */
 		async function passkeyFlow() {
 			const made = makeFlow({}, true)
@@ -333,6 +385,20 @@ describe("useProfileImportFlow", () => {
 			expect(flow.isImporting.value).toBe(false)
 		})
 
+		test("a card with no PRF shows the page's copy, and the error it throws keeps the refusal as its cause", async () => {
+			const { flow } = await passkeyFlow()
+			const run = flow.handleImportSeed()
+			await vi.waitFor(() => expect(flow.ceremonyRequest.value).not.toBeNull())
+			const refusal = new PasskeyPrfError("Passkey PRF not available")
+			flow.onCeremonyReject(refusal)
+			await run
+			expect(flow.error.value).toMatchObject({ type: "unknown", tooltip: "This passkey can't unlock Nulo." })
+			expect(vi.mocked(errorMessageFromUnknown).mock.calls.at(-1)?.[0]).toMatchObject({
+				message: "This passkey can't unlock Nulo.",
+				cause: refusal,
+			})
+		})
+
 		test("a failed card reports and imports nothing", async () => {
 			const { flow } = await passkeyFlow()
 			const run = flow.handleImportSeed()
@@ -345,7 +411,7 @@ describe("useProfileImportFlow", () => {
 
 		test("the duplicate warning's confirm imports under the same answer, asking no second card", async () => {
 			profileApi.importMnemonic
-				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileName: "Main" }))
+				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileNames: ["Main"] }))
 				.mockResolvedValueOnce({ id: "p2", name: "Dup", type: "passkey" })
 			const { flow } = await passkeyFlow()
 			const run = flow.handleImportSeed()
@@ -397,6 +463,59 @@ describe("useProfileImportFlow", () => {
 			await flow.handleImportSeed()
 			expect(flow.ceremonyRequest.value).toBeNull()
 			expect(profileApi.importMnemonic).not.toHaveBeenCalled()
+		})
+	})
+
+	describe("a run seals the unlock and the phrase it was admitted with", () => {
+		/** Runs `submit` with the profile-name read held until `change` has edited the form. */
+		async function changeFormMidRun(submit: () => Promise<void>, change: () => void) {
+			const names = deferred<Array<{ name: string }>>()
+			profileApi.getProfiles.mockReturnValueOnce(names.promise)
+			const run = submit()
+			change()
+			names.resolve([])
+			return run
+		}
+
+		test.each([
+			["handleImportSeed", "create"],
+			["handleImportSeedWithExistingPasskey", "discover"],
+		] as const)("%s admitted on Passkey asks the card and imports the admitted phrase under its answer", async (handler, mode) => {
+			const { flow, opts } = makeFlow({}, true)
+			flow.profileName.value = "MyProfile"
+			await typePhrase(flow, SEED_24)
+			const run = changeFormMidRun(flow[handler], () => {
+				flow.unlockMethod.value = "password"
+				flow.password.value = "typed after"
+				flow.repeatedPassword.value = "typed after"
+				flow.seedPhrase.value = OTHER_SEED_24
+			})
+			await vi.waitFor(() => expect(flow.ceremonyRequest.value?.mode).toBe(mode))
+			flow.onCeremonyResolve(ANSWER)
+			await run
+			expect(profileApi.importMnemonic).toHaveBeenCalledExactlyOnceWith("MyProfile", SEED_24.split(" "), undefined, false, ANSWER)
+			expect(opts.completeImport).toHaveBeenCalledOnce()
+		})
+
+		test("admitted on Password, it asks no card and seals under the admitted password", async () => {
+			const { flow, opts } = makeFlow()
+			flow.profileName.value = "MyProfile"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			await typePhrase(flow, SEED_24)
+			await changeFormMidRun(flow.handleImportSeed, () => {
+				flow.unlockMethod.value = "passkey"
+				flow.password.value = "typed after"
+			})
+			expect(flow.ceremonyRequest.value).toBeNull()
+			expect(profileApi.importMnemonic).toHaveBeenCalledExactlyOnceWith(
+				"MyProfile",
+				SEED_24.split(" "),
+				"password123",
+				false,
+				undefined,
+			)
+			expect(opts.completeImport).toHaveBeenCalledOnce()
 		})
 	})
 

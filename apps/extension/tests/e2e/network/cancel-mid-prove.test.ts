@@ -20,7 +20,7 @@ const hasConfig = aztecConfig !== undefined
  *      to `new Error(JSON.stringify(response.error))` — the dApp receives
  *      a plain `Error` whose `.message` is the JSON payload.
  *
- * This end-to-end shape needs real integration coverage; a unit test on `background.ts` would miss the SDK collapse.
+ * This end-to-end shape needs real integration coverage; a unit test on `wallet-message.ts` would miss the SDK collapse.
  *
  * Assertions cover BOTH the raw `err.message` carrier (today's reality) AND
  * the parsed JSON shape (`code === 4001`, `data.walletErrorCode ===

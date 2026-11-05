@@ -22,7 +22,7 @@
  *    per-stage grace windows. Catches records that get stuck within
  *    a single SW lifetime — rare, but possible if a downstream call
  *    hangs without throwing. Error kind = `stuck_proving` (proving) /
- *    `stale_on_resume` (others).
+ *    `stuck_queued` (queued) / `stale_on_resume` (others).
  *
  * Either way, the popup observes the transition via the journal
  * client's `subscribeJob` and shows the user a real terminal state
@@ -72,7 +72,7 @@ export const REAP_PERIOD_MINUTES = 1
  */
 const STAGE_GRACE_MS: Readonly<Record<ActiveStage, number>> = {
 	// Matches the wallet-sdk dApp-interaction popup timeout (INTERACTION_TIMEOUT_MS).
-	// A queued record that survives 10 minutes means background.ts either crashed
+	// A queued record that survives 10 minutes means wallet-message.ts either crashed
 	// or somehow lost the handler — sweep it so the activity feed doesn't show a
 	// permanently-stuck "Queued..." card.
 	queued: 10 * 60_000,
@@ -83,6 +83,8 @@ const STAGE_GRACE_MS: Readonly<Record<ActiveStage, number>> = {
 }
 
 const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME
+
+export type JournalReaperOptions = { now?: () => number; bootCutoff?: number }
 
 /**
  * Watches the operation journal for non-terminal records that have
@@ -100,8 +102,6 @@ export class JournalReaper {
 	// bootCutoff}` args) and the periodic no-arg tick stay local — the two call
 	// shapes genuinely differ, so the wrapper deliberately doesn't own them.
 	private readonly dispatcher: AlarmDispatcher
-	/** Per-instance now-source. Real `Date.now()` in production; injectable
-	 *  via the optional 4th ctor arg for unit tests using fake clocks. */
 	private readonly now: () => number
 	/** The boot-sweep cutoff. When the composition root supplies it (captured
 	 *  BEFORE `services.start()`), it protects even ops created by a popup-RPC
@@ -112,12 +112,12 @@ export class JournalReaper {
 	/** The cutoff the boot sweep ran with, kept for the sweep of each profile unlocked later. */
 	private sweepCutoff: number | undefined
 
-	public constructor(journal: OperationJournalService, alarms: AlarmsPort, logger: ILogger, now?: () => number, bootCutoff?: number) {
+	public constructor(journal: OperationJournalService, alarms: AlarmsPort, logger: ILogger, options: JournalReaperOptions = {}) {
 		this.journal = journal
 		this.logger = logger
 		this.dispatcher = new AlarmDispatcher(JOURNAL_REAPER_ALARM_NAME, alarms)
-		this.now = now ?? (() => Date.now())
-		this.bootCutoff = bootCutoff
+		this.now = options.now ?? (() => Date.now())
+		this.bootCutoff = options.bootCutoff
 	}
 
 	/**
@@ -255,11 +255,12 @@ function shouldSkipRecord(op: OperationRecord, age: number, unconditional: boole
  *  uses `sw_restart_post_prove` for proving — the exact post-SW-restart-mid-prove
  *  case where the new SW can't deliver the offscreen's prove result (no matching
  *  requestId); periodic ticks use `stuck_proving` — the proving op exceeded its
- *  35-min sanity ceiling within THIS SW's lifetime. Queued records past their
- *  grace window are "stuck" rather than "stale-on-resume" — they never made it
- *  past the message-arrival surface — tagged distinctly for observability. */
+ *  35-min sanity ceiling within THIS SW's lifetime. A queued record the restart
+ *  ended is interrupted like every other stage it ends; one past its grace window
+ *  within a lifetime is "stuck" — it never made it past the message-arrival
+ *  surface — tagged distinctly for observability. */
 function classifyReapKind(stage: OperationRecord["progress"]["stage"], unconditional: boolean): string {
 	if (stage === "proving") return unconditional ? "sw_restart_post_prove" : "stuck_proving"
-	if (stage === "queued") return "stuck_queued"
+	if (stage === "queued" && !unconditional) return "stuck_queued"
 	return "stale_on_resume"
 }

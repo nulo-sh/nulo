@@ -1,0 +1,7 @@
+# Phase 5: arc 1228 (lock screen picks first by name)
+
+- A rule that falls back from last-active to first by name needs fixtures where the two differ; with one profile winning both, a dropped last-active read passes every test.
+- A screen that both settles its own pick and follows another window's pick must say which wins when they cross: here another window's pick beats the screen's automatic one, a person's pick beats both. A pick's storage event cannot be the fence, as the read it races can reject or answer the pointer it replaced (Firefox, `lastActiveProfile.ts`).
+- Mark the automatic pick by reference (the store's proxy read back), not by a counter: a counter says some settle ran, not that the current selection is still its own.
+- Codex round 1: two findings accepted (the newer-pick race; a redundant comment). Opus diff review: three accepted (fixtures that could not tell last-active from first by name; the e2e chooser helper's stale name; TSDoc wording). Round 2: one accepted (the race through a rejected or stale read). Round 3, the hard stop: one accepted (a person's later pick overwritten); fixed after the stop, its regression red-checked.
+- Gates at `2bc10631d`: `bun run typecheck:all` and `bun run lint` green; `bun run test` 15985 passed with one red, `auth-registry/service.test.ts` "Proven + Success…", the timing flake dev fixed in #1271; `bun run build` green; armed Chrome build; `security-reset.test.ts` and `auth-flows.test.ts` 8/8 on Chrome.

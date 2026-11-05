@@ -22,18 +22,20 @@ const PROPS = {
 /** Mounts under a parent that owns the model, as both hosts do. */
 function mountOwned(initial: Method = "passkey") {
 	const method = ref<Method>(initial)
+	const disabled = ref(false)
 	const Host = defineComponent(
 		() => () =>
 			h(AuthMethodTabs, {
 				...PROPS,
 				class: "root-x",
+				disabled: disabled.value,
 				modelValue: method.value,
 				"onUpdate:modelValue": (v: Method) => (method.value = v),
 			}),
 	)
 	const w = mount(Host, { attachTo: document.body })
 	wrappers.push(w)
-	return { w, method }
+	return { w, method, disabled }
 }
 
 const tab = (w: VueWrapper, method: Method) => w.get(`[data-testid="${method === "password" ? "pw-x" : "pk-x"}"]`)
@@ -122,6 +124,18 @@ describe("AuthMethodTabs", () => {
 		await flushPromises()
 		expect(method.value).toBe("password")
 		expect(document.activeElement).toBe(tab(w, "password").element)
+	})
+
+	test("disabled, both tabs carry the attribute and an arrow on the focused tab changes nothing", async () => {
+		const { w, method, disabled } = mountOwned("passkey")
+		focus(w, "passkey")
+		disabled.value = true
+		await flushPromises()
+		for (const t of w.findAll('[role="tab"]')) expect(t.attributes()).toHaveProperty("disabled")
+		expect(document.activeElement).toBe(tab(w, "passkey").element)
+		expect(press("ArrowRight").defaultPrevented).toBe(false)
+		await flushPromises()
+		expect(method.value).toBe("passkey")
 	})
 
 	test("the model is required", () => {

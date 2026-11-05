@@ -65,6 +65,19 @@ for (const c of cases) {
 			}))
 			expect(atRest.calls).toBeGreaterThanOrEqual(c.calls)
 			expect(atRest.rows).toBe(0)
+			// The decodes land after the window opens; the token is not in the wallet's list, so once
+			// they have, the summary names every call as one Nulo cannot check.
+			await execPopup.waitForFunction(
+				() =>
+					document.querySelector('[data-testid="execute-op-summary-call"]') !== null &&
+					document.querySelector('[data-testid="execute-op-summary-args-pending"]') === null,
+				{ timeout: 60_000, polling: 200 },
+			)
+			expect(
+				await execPopup.evaluate(
+					() => document.querySelector('[data-testid="execute-op-summary-unchecked"]')?.textContent?.trim() ?? null,
+				),
+			).toBe("Nulo can only check transfers and mints of tokens in your list, so it can't say what these calls do.")
 			await shotSend(execPopup, `multicall-${c.calls}-summary`, "execute-op-summary")
 
 			await approveExecute(execPopup)

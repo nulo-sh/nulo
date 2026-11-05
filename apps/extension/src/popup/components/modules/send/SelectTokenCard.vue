@@ -28,6 +28,8 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
+	/** Called with a token the picker's paste-to-add imported, for the page to pick. */
+	onTokenAdded: Function,
 })
 
 /** A token handed in is always drawn: the page passes one only once its tokens have loaded. */
@@ -54,7 +56,7 @@ let skeletonTimer
 const handleSelectToken = () => {
 	if (isLoading.value) return
 	if (props.token) {
-		popupStore.open("select_token")
+		popupStore.open("select_token", { onAdded: props.onTokenAdded })
 	} else if (props.failed) {
 		emit("retry")
 	} else {

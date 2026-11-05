@@ -1,3 +1,4 @@
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
@@ -156,6 +157,12 @@ function trustedRow(stored: IncomingTrustRecord, floor: { arrivalFloor: number |
 	return row
 }
 
+export type IncomingTransferServiceOptions = {
+	pollIntervalMs?: number
+	publicReader?: PublicEventReader
+	incomingPollGate?: IncomingPollGate
+}
+
 /**
  * IncomingTransferService — surfaces decrypted notes that arrived from known
  * fungible-token contracts as "Received" rows in the activity feed.
@@ -312,24 +319,16 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  key. In memory only: a restart forgets a strike, which only delays the delete by one scan. */
 	private readonly noteStrikes = new Map<string, string>()
 
-	/** E2E-only deterministic race lever. `undefined` in production (the ctor
-	 *  arg is only ever passed inside `if (E2E_PROVERLESS)` in runtime.ts), so
-	 *  every call site is a no-op `?.` in prod. */
+	/** E2E-only race lever; undefined in a production build, so each `?.` call is a no-op. */
 	private readonly incomingPollGate?: IncomingPollGate
 
-	public constructor(
-		logger: ILogger,
-		browserApi: BrowserApi,
-		pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
-		publicReader?: PublicEventReader,
-		incomingPollGate?: IncomingPollGate,
-	) {
+	public constructor(logger: ILogger, browserApi: BrowserApi, options: IncomingTransferServiceOptions = {}) {
 		super(INCOMING_TRANSFER_SERVICE_NAME, logger)
 		this.repo = new IncomingTransferRepository(browserApi, (profileId) => this.profileService.rowKeys(profileId))
-		this.pollIntervalMs = pollIntervalMs
-		this.injectedPublicReader = publicReader
+		this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
+		this.injectedPublicReader = options.publicReader
 		this.serviceLock = new Lock(INCOMING_TRANSFER_SERVICE_NAME, logger)
-		this.incomingPollGate = incomingPollGate
+		this.incomingPollGate = options.incomingPollGate
 		this.episodes = new ScanEpisodeStore(browserApi.storage.session, (error) =>
 			this.logDebug("scan episode persistence failed", { error }),
 		)
@@ -345,15 +344,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  only while its section still owns the lock and no deleter runs, as a receipt does, so a wipe
 	 *  that a watchdog handoff let in never finds a sealed copy it did not list. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.repo.sealLegacy(
-				profileId,
-				(fn) => this.withServiceLock(fn),
-				() => this.deletersRunning === 0,
-			)
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext incoming rows failed; the next worker retries", { error })
-		}
+		await this.repo.sealLegacy(
+			profileId,
+			(fn) => this.withServiceLock(fn),
+			() => this.deletersRunning === 0,
+		)
 	}
 
 	/** Bump the lifecycle epoch — call from clear / delete paths so any
@@ -402,7 +397,12 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			tasks: services.get<TaskService>(TaskService.name),
 			warn: (...data) => this.logWarn(...data),
 		})
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext incoming rows failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 
 		// Public-event scan arm: its own PXE client + the injected indexer collaborator.
 		// The reader curries `networkId → NetworkInfo` (via the same `networkInfoFrom` the note arm
@@ -2065,17 +2065,17 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (classStatus !== "standard") return notAtTip("failed")
 
 		const cursor = seedFreshCursor((await this.repo.getCursor(profileId, networkId, contract)) ?? this.freshCursor(0), tips)
+		const target: PublicTarget = { profileId, networkId, contract, chainId: network.chainId }
 
 		// Resume an in-progress reconciliation FIRST (crash / MV3-tick resume) — don't forward-scan
 		// the same tick.
-		if (cursor.reconciling)
-			return notAtTip(await this.stepReconciliation(profileId, networkId, contract, network.chainId, epochAtStart))
+		if (cursor.reconciling) return notAtTip(await this.stepReconciliation(target, epochAtStart))
 
 		// Resume a pending page (normal-scan record-before-cursor crash window).
 		if (cursor.pendingPage) {
 			const reorged = await this.pendingPageReorged(networkId, contract, cursor.pendingPage, checkpointHash)
 			if (reorged) {
-				await this.beginReconciliation(profileId, networkId, contract, network.chainId, cursor, tips, epochAtStart)
+				await this.beginReconciliation(target, cursor, tips, epochAtStart)
 				return notAtTip("failed")
 			}
 			// Clean fork — clear the marker; the forward scan below re-fetches from the un-advanced
@@ -2084,7 +2084,6 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 				return notAtTip("no-progress")
 		}
 
-		const target: PublicTarget = { profileId, networkId, contract, chainId: network.chainId }
 		let forward: { tick: PublicTick; pages: number }
 		try {
 			forward = await this.forwardScanOnce(target, { ...cursor, pendingPage: undefined }, tips, epochAtStart)
@@ -2168,14 +2167,14 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  transient node error; rewind + rescan is idempotent either way, so reconcile. Without one (first
 	 *  scan) there is nothing to reconcile and the next tick retries. */
 	private async handleScanFailure(
-		target: { profileId: string; networkId: string; contract: string; chainId: number },
+		target: PublicTarget,
 		cursor: PublicScanCursor,
 		tips: PublicScanTips,
 		epochAtStart: number,
 		err: unknown,
 	): Promise<ScanOutcome> {
 		if (cursor.lastSyncedBlockHash) {
-			await this.beginReconciliation(target.profileId, target.networkId, target.contract, target.chainId, cursor, tips, epochAtStart)
+			await this.beginReconciliation(target, cursor, tips, epochAtStart)
 		} else {
 			this.logDebug("public forward scan failed (no anchor)", { contract: target.contract }, err)
 		}
@@ -2348,17 +2347,25 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		}
 	}
 
-	/** Stage a resumable reconciliation marker over `[lastScanFinalized+1 .. checkpointed]`,
-	 *  pinned to `upperBoundHash`, then step it once. */
+	/** Steps in the same tick, unlike a restart, so a reorg the forward scan meets starts
+	 *  reconciling at once. */
 	private async beginReconciliation(
-		profileId: string,
-		networkId: string,
-		contract: string,
-		chainId: number,
+		target: PublicTarget,
 		cursor: PublicScanCursor,
 		tips: PublicScanTips,
 		epochAtStart: number,
 	): Promise<void> {
+		if (await this.stageReconciliation(target, cursor, tips, epochAtStart)) await this.stepReconciliation(target, epochAtStart)
+	}
+
+	/** Persist a resumable reconciliation marker over `[lastScanFinalized+1 .. checkpointed]`, pinned
+	 *  to the checkpoint hash. False when the epoch moved and nothing was written. */
+	private async stageReconciliation(
+		target: PublicTarget,
+		cursor: PublicScanCursor,
+		tips: PublicScanTips,
+		epochAtStart: number,
+	): Promise<boolean> {
 		const lowerBound = cursor.lastScanFinalized !== null ? cursor.lastScanFinalized + 1 : cursor.startBlock
 		const marker: PublicScanCursor = {
 			...cursor,
@@ -2371,20 +2378,14 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 				seen: [],
 			},
 		}
-		if (!(await this.persistCursorLocked(profileId, networkId, contract, marker, epochAtStart))) return
-		await this.stepReconciliation(profileId, networkId, contract, chainId, epochAtStart)
+		return this.persistCursorLocked(target.profileId, target.networkId, target.contract, marker, epochAtStart)
 	}
 
 	/** Advance a staged reconciliation by one budgeted batch: page the window pinned to
 	 *  `upperBoundHash`, re-insert canonical receipts, accumulate `seen`; on a mid-reconcile reorg
-	 *  discard + restart; when the window is exhausted, finish (deletions + marker clear). */
-	private async stepReconciliation(
-		profileId: string,
-		networkId: string,
-		contract: string,
-		chainId: number,
-		epochAtStart: number,
-	): Promise<ScanOutcome> {
+	 *  discard and restage for the next tick; when the window is exhausted, finish (deletions + marker clear). */
+	private async stepReconciliation(target: PublicTarget, epochAtStart: number): Promise<ScanOutcome> {
+		const { profileId, networkId, contract, chainId } = target
 		const cursorRow = await this.repo.getCursor(profileId, networkId, contract)
 		const marker = cursorRow?.reconciling
 		if (!cursorRow || !marker) return "no-progress"
@@ -2401,25 +2402,18 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 				afterCursor: marker.progress,
 				referenceBlock: marker.upperBoundHash,
 			})
-		} catch (err) {
-			// Mid-reconcile reorg (`upperBoundHash` gone) → discard staged seen/progress + RESTART
-			// against a fresh tip so `seen` can never mix two forks.
-			this.logWarn(`reconcile restart for ${contract}`, err)
+		} catch (error) {
+			// Mid-reconcile reorg (`upperBoundHash` gone) or a refused page → discard staged seen/progress
+			// and restage against a fresh tip so `seen` can never mix two forks. The restaged marker waits
+			// for the next tick: stepping it here would loop for as long as the node refuses pages.
+			this.logDebug("public reconcile restart", { contract, error })
 			let tips: PublicScanTips
 			try {
 				tips = await this.indexer.getTips(networkId)
 			} catch {
 				return "failed" // node down — retry next tick; the marker is still staged.
 			}
-			await this.beginReconciliation(
-				profileId,
-				networkId,
-				contract,
-				chainId,
-				{ ...cursorRow, reconciling: undefined },
-				tips,
-				epochAtStart,
-			)
+			await this.stageReconciliation(target, { ...cursorRow, reconciling: undefined }, tips, epochAtStart)
 			return "failed"
 		}
 
@@ -2434,7 +2428,6 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 		// Re-insert canonical receipts addressed to us (idempotent; updates a MOVED receipt's block).
 		const recipients = await this.recipientsFor(profileId, chainId)
-		const target = { profileId, networkId, contract, chainId }
 		const batch = this.indexer.filterToRecipients(result.events, recipients)
 		if (!(await this.commitAddressedEvents(target, batch, recipients, epochAtStart, { reconcile: true }))) return "no-progress"
 

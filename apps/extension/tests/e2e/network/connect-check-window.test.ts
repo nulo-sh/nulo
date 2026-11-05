@@ -2,7 +2,7 @@ import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
 import type { ConsoleMessage, Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { BROWSER, prepareKeys } from "../fixtures/browser"
+import { BROWSER, bringToFront, prepareKeys } from "../fixtures/browser"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import { switchToLocalNetwork } from "../fixtures/helpers"
 import { navigateByHash } from "../fixtures/navigation"
@@ -197,15 +197,13 @@ test.skipIf(!aztecConfig)(
 			const label = (testid: string) => document.querySelector(`[data-testid="${testid}"]`)?.textContent?.trim() ?? null
 			return {
 				grid: document.querySelector(grid)?.textContent?.replace(/\s/g, "") ?? "",
-				header: { account: label("identity-account"), network: label("identity-network") },
-				action: label("verify-action"),
+				header: { lead: label("identity-account"), network: label("identity-network") },
 				error: document.querySelector('[data-testid="error-text"]')?.textContent ?? null,
 			}
 		}, GRID)
 		expect(read).toEqual({
 			grid: hashToEmoji((await hash.jsonValue()) as string),
-			header: { account: "No account shared", network: "Local Network" },
-			action: "Connection established",
+			header: { lead: "Local Network", network: null },
 			error: null,
 		})
 		await check.waitForFunction(
@@ -280,7 +278,7 @@ test.skipIf(!aztecConfig)(
 		expect(await popupsOpen(control)).toBe(0)
 
 		const readFrom = Date.now()
-		await control.bringToFront()
+		await bringToFront(control)
 		await navigateByHash(control, "#/popup/settings/connected-apps", 15_000)
 		// A wallet of its own lists this one app, so the row's line is the only one.
 		await control.waitForSelector(row, { timeout: 5_000 })
@@ -293,15 +291,16 @@ test.skipIf(!aztecConfig)(
 		)
 		await shotSend(control, "connect-not-connected-app", "connected-app-not-connected")
 		const settingsMs = Date.now() - readFrom
-		await dapp.bringToFront()
+		await bringToFront(dapp)
 
 		const check = await checkP
 		const shown = await checkShown(check)
 		const read = await check.evaluate(async () => ({
 			window: (await chrome.windows.getCurrent()).id,
-			action: document.querySelector('[data-testid="verify-action"]')?.textContent?.trim() ?? null,
+			lead: document.querySelector('[data-testid="identity-account"]')?.textContent?.trim() ?? null,
+			network: document.querySelector('[data-testid="identity-network"]') !== null,
 		}))
-		expect(read.action).toBe("Connection established")
+		expect([read.lead, read.network]).toEqual(["Local Network", false])
 		await control.waitForFunction(
 			(sel: string) => document.querySelector(sel) === null,
 			{ timeout: 10_000, polling: 100 },

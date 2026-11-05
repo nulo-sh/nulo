@@ -58,7 +58,8 @@ import type { FpcIdentitySnapshot } from "@/wallet/services/fpc/spec"
 import type { IPXE } from "@/wallet/services/pxe/client"
 import { StepContent, type TaskService, type WrappedTask } from "@/wallet/services/task/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
-import type { DiscoveryProbe } from "../discovery-aware-estimator"
+import { carriedHashes } from "../decode-authwit-effects"
+import type { DiscoveryProbe, DiscoveryProbeContext } from "../discovery-aware-estimator"
 import { throwIfAborted } from "../rpc-cancel"
 import type { Action, FeeOptions, FeeSettings } from "../spec"
 import type { BuiltStandardTx, TxRequestBuilder } from "../tx-request-builder"
@@ -134,6 +135,7 @@ export type FeeStrategyContext = {
 		accountAddress: string
 		actions: Action[]
 		fee?: FeeOptions
+		opts?: { additionalScopes?: unknown }
 	}
 	/** The authorization every build in the strategy runs under. */
 	fence: ExecutionFence
@@ -154,6 +156,10 @@ export type FeeStrategyContext = {
 	 *  into one sim. Absent on every non-dApp path (transfer, send,
 	 *  embedded), which therefore keep byte-identical sim options. */
 	probe?: DiscoveryProbe
+	/** Reads an app-paid send's one validated simulation for the authorizations it consumes. Only
+	 *  the embedded strategy reads it, and it never makes a run stubbed, so no fee kind can turn it
+	 *  into a fold. */
+	observer?: DiscoveryProbe
 	/** The validated `fpc` row a caller ordered the send against: the build pays with it, never with a
 	 *  later read an edit may have moved. Absent, the strategy resolves the row itself. */
 	fpc?: Fpc
@@ -190,22 +196,33 @@ export interface FeeStrategy {
  *  validated sizing re-sim there regardless of discovered effects. */
 export function probedFirstSimOpts(
 	probe: DiscoveryProbe | undefined,
-	built: { account: { address: AztecAddress } },
+	built: { account: { address: AztecAddress }; scopes: AztecAddress[] },
 ): Parameters<SimulateTxFn>[2] {
-	const address = built.account.address
-	if (!probe) return validatedSimOpts(address)
+	if (!probe) return validatedSimOpts(built.scopes)
 	return {
 		simulatePublic: true,
 		skipFeeEnforcement: true,
 		skipTxValidation: true,
-		scopes: [address],
-		stubAccountAddresses: [address.toString()],
+		scopes: built.scopes,
+		stubAccountAddresses: [built.account.address.toString()],
 	}
 }
 
-/** Verifies witnesses and transaction validity while skipping fee enforcement; scope must match the simulated build. */
-export function validatedSimOpts(scope: AztecAddress): Parameters<SimulateTxFn>[2] {
-	return { simulatePublic: true, skipFeeEnforcement: true, scopes: [scope] }
+/** What a strategy hands its probe: the simulated build's node and network, the account it signs
+ *  as, the scopes it read and the witnesses its request carries. */
+export function probeContext(built: Pick<BuiltStandardTx, "node" | "network" | "account" | "scopes" | "txRequest">): DiscoveryProbeContext {
+	return {
+		node: built.node,
+		network: built.network,
+		signer: built.account.address,
+		scopes: built.scopes,
+		carried: carriedHashes(built.txRequest),
+	}
+}
+
+/** `scopes` must be the simulated build's: its proof reads the same set. */
+export function validatedSimOpts(scopes: AztecAddress[]): Parameters<SimulateTxFn>[2] {
+	return { simulatePublic: true, skipFeeEnforcement: true, scopes }
 }
 
 /** True when the build wraps the account's own deployment (first tx): the

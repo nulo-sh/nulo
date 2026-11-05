@@ -9,12 +9,13 @@ import { isRecord } from "@nulo/wallet-core/utils"
 export type FeePickType = "fj" | "private_fpc" | "fpc"
 export type FeeSide = "private" | "public"
 
-/** Send's pick for one transfer side. `fpc.name` only labels the loading preview; a pick is resolved
- *  by `fpc.id` against fresh rows, never by name. */
+/** Send's pick for one transfer side. `fpc.name` stays in the stored shape but nothing shows it: a
+ *  pick is resolved, and shown, by `fpc.id` against fresh rows, never by name. */
 export type SendPick = { type: FeePickType; fpc?: { id: string; name?: string } | null }
 export type SendSlots = { private?: SendPick; public?: SendPick }
 
-/** The app windows' one pick per account: the trigger shows its title while the card loads. */
+/** The app windows' one pick per account. While the card loads, a Fee Juice pick's title stands in
+ *  for its row; a sponsor shows only once the read FPC list holds it. */
 export type AppPick = { type: FeePickType; title?: string; subtitle?: string; fpc?: { id: string; isProtocol?: boolean } }
 
 export type FeePickUpdate =
@@ -28,7 +29,7 @@ type Blob = Record<string, unknown>
 const SIDES: readonly FeeSide[] = ["private", "public"]
 
 /** A label longer than any real FPC name is dropped from a Send pick, and cut on an app pick, whose
- *  title the trigger needs: both only feed a one-line preview. */
+ *  title can stand in for its row: both are one-line labels. */
 const MAX_LABEL = 64
 
 /** An Aztec address is 66 characters; the bound only keeps an absurd key out of storage. */

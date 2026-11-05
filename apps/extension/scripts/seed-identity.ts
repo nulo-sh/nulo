@@ -1,13 +1,14 @@
 /**
- * Live pin check: reads every remote default network's node identity and holds it to the assertion
- * each signing path runs. Exits 1 on any mismatch or failed read, so a stale pin cannot pass as a
- * printout.
+ * Live pin check: reads every remote default network's node identity, in one tick of the seed's
+ * batch cap or, where it has none, of dRPC's free-plan limit, and holds it to the assertion each
+ * signing path runs. Exits 1 on any mismatch or
+ * failed read, so a stale pin cannot pass as a printout.
  *
  * Run from apps/extension: bun run check:seeds
  */
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { assertLiveChainIdentity } from "@nulo/aztec-runtime/utils"
-import { DEFAULT_SEEDS, type DefaultSeed } from "../src/wallet/services/network/seeds"
+import { DEFAULT_SEEDS, DRPC_FREE_PLAN_BATCH_LIMIT, type DefaultSeed, maxBatchSizeFor } from "../src/wallet/services/network/seeds"
 import { createPreflightNodeClient } from "./seed-preflight-node"
 
 /** The seed's line: its name, the pair its node reported and its pins. Never the node's own words or
@@ -16,7 +17,10 @@ export async function checkSeed(seed: DefaultSeed, node: Pick<AztecNode, "getNod
 	const pinned = `pinned chainId=${seed.chainId} l1ChainId=${seed.l1ChainId}`
 	let info: { l1ChainId: number; rollupVersion: number }
 	try {
-		info = await node.getNodeInfo()
+		// One tick of the largest batch the wallet may send this seed: a provider that refuses the
+		// requests the client makes of it fails the seed here, before any send meets it.
+		const batch = Array.from({ length: maxBatchSizeFor(seed.rpcUrl) ?? DRPC_FREE_PLAN_BATCH_LIMIT }, () => node.getNodeInfo())
+		;[info] = await Promise.all(batch)
 	} catch {
 		return { ok: false, line: `${seed.name}: no node info (${pinned}) MISMATCH` }
 	}

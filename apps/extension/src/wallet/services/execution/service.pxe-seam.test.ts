@@ -16,7 +16,7 @@ import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { offscreenEpoch, onOffscreenRetired } from "@/wallet/utils/offscreen"
-import { ESTIMATE_JOB_TTL_MS } from "./estimate-cancel-registry"
+import { ESTIMATE_JOB_TTL_MS } from "./spec"
 import { DEFAULT_PXE_CLIENT_FACTORY } from "./service"
 
 vi.mock("@/wallet/utils/offscreen", async (importOriginal) => ({

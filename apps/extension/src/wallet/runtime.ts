@@ -47,6 +47,7 @@ import { answerSealedReads } from "@/e2e/sealed-read"
 import { FpcService } from "./services/fpc/service"
 import { LogViewerService } from "./services/log-viewer/service"
 import { LoggerService } from "./services/logger/service"
+import { createWalletNodeFactory } from "./services/network/node-factory"
 import { NetworkService } from "./services/network/service"
 import { NoteService } from "./services/note/service"
 import { OperationJournalService } from "./services/operation-journal/service"
@@ -481,11 +482,9 @@ function loadConfigAndBarretenberg(
 	onBarretenbergFailure: () => void,
 ): Promise<unknown> {
 	return Promise.all([
-		// Settle log retention the moment the real config is known: the LoggerStore was built
-		// at module scope on schema defaults, and rehydrate() has already restored the previous
-		// lifecycle's entries unconditionally. `finally` so a REJECTED load still settles it —
-		// the config is then defaults, retention reads off, and the safe action (purge) runs;
-		// the rejection still propagates and vetoes the boot exactly as before.
+		// The LoggerStore was built on schema defaults and imports the saved lines unconditionally:
+		// retention waits for that import and settles from the in-memory config, even when `load()`
+		// rejects, whose rejection still vetoes the boot.
 		config
 			.load()
 			.then(() => logger.log("wallet", LogLevel.Info, "Config loaded"))
@@ -542,7 +541,7 @@ function registerServices(
 	services.add(new FpcService(logger, browserApi))
 	services.add(new LogViewerService(logger))
 	services.add(new LoggerService(logger))
-	const networkService = new NetworkService(logger, browserApi)
+	const networkService = new NetworkService(logger, browserApi, createWalletNodeFactory())
 	services.add(networkService)
 	registerPxeScopeRegistrar(createScopeRegistrar(accountService, networkService))
 	registerPxeChainGuard((profileId, chainId) => networkService.isChainQuarantined(profileId, chainId))
@@ -572,9 +571,11 @@ function registerServices(
 	}
 	const tokenSeeds = E2E_TOKEN_SEEDS ? new ChromeStorageTokenSeeds() : undefined
 	const seederOverrides = tokenSeeds ? { getSeeds: () => tokenSeeds.get() } : undefined
-	services.add(new TokenService(logger, browserApi, undefined, seederOverrides))
+	services.add(new TokenService(logger, browserApi, { seederOverrides }))
 	// E2E_PROVERLESS injects the projection gate; tree-shaken from prod like the proof gate.
-	services.add(new TokenBalanceService(logger, browserApi, undefined, E2E_PROVERLESS ? new ChromeStorageProjectionGate() : undefined))
+	services.add(
+		new TokenBalanceService(logger, browserApi, { projectionGate: E2E_PROVERLESS ? new ChromeStorageProjectionGate() : undefined }),
+	)
 	// The stamp is the release grep's handle on the e2e wallet clocks passed below.
 	if (E2E_WALLET_CLOCKS_BUILD_STAMP) {
 		;(globalThis as { __NULO_E2E_WALLET_CLOCKS_BUILD_STAMP__?: string }).__NULO_E2E_WALLET_CLOCKS_BUILD_STAMP__ =
@@ -584,13 +585,10 @@ function registerServices(
 	// E2E_PROVERLESS injects the incoming-poll gate (same tree-shaken-in-prod
 	// pattern + negative-grep as the proof gate above).
 	services.add(
-		new IncomingTransferService(
-			logger,
-			browserApi,
-			E2E_WALLET_CLOCKS?.incomingPollMs,
-			undefined, // publicReader (production uses the built-in PXE reader)
-			E2E_PROVERLESS ? new ChromeStorageIncomingPollGate() : undefined,
-		),
+		new IncomingTransferService(logger, browserApi, {
+			pollIntervalMs: E2E_WALLET_CLOCKS?.incomingPollMs,
+			incomingPollGate: E2E_PROVERLESS ? new ChromeStorageIncomingPollGate() : undefined,
+		}),
 	)
 	services.add(new PasskeyService(logger, windowManager, armPopupReturn))
 	// Started LAST (declares dependencies on every service it purges) — finding D.
@@ -691,7 +689,7 @@ export function armPostStartWork(
 	const profileService = services.get(ProfileService.name) as ProfileService
 
 	const journalService = services.get(OperationJournalService.name) as OperationJournalService
-	const reaper = new JournalReaper(journalService, browserApi.alarms, logger, undefined, journalBootCutoff)
+	const reaper = new JournalReaper(journalService, browserApi.alarms, logger, { bootCutoff: journalBootCutoff })
 	reaper.start().catch((error) => logger.log("wallet", LogLevel.Error, "JournalReaper start failed", error))
 	profileService.onRowKeysReady.add((profileId) => void reaper.reapUnlocked(profileId))
 
@@ -700,6 +698,7 @@ export function armPostStartWork(
 		network: services.get(NetworkService.name) as NetworkService,
 		profile: profileService,
 		balances: services.get(TokenBalanceService.name) as TokenBalanceService,
+		authwits: services.get(AuthRegistryService.name) as AuthRegistryService,
 		logger,
 		clock,
 	})

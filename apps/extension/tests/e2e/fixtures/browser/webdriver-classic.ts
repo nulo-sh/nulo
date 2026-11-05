@@ -2,9 +2,10 @@
  * WebDriver classic against geckodriver's HTTP port.
  *
  * Puppeteer drives Firefox over BiDi, and BiDi has neither a WebAuthn module nor window handles.
- * The two capabilities this suite cannot do without — a virtual authenticator that answers a PRF
- * ceremony, and a handle on a window the extension opened itself — exist only on this channel, so
- * both channels stay open against the same session for the life of a launch.
+ * The capabilities this suite cannot do without — a virtual authenticator that answers a PRF
+ * ceremony, a handle on a window the extension opened itself, and, from Firefox 157, a file set on an
+ * extension page's input — exist only on this channel, so both channels stay open against the same
+ * session for the life of a launch.
  */
 
 import { pollUntil } from "../poll"
@@ -104,6 +105,11 @@ export class WebDriverSession {
 		const run = this.queue.then(work, work)
 		this.queue = run.catch(() => {})
 		return run
+	}
+
+	/** Selects the tab and focuses its window, in turn with every other switch. */
+	selectWindow(handle: string): Promise<void> {
+		return this.exclusive(() => this.switchToWindow(handle))
 	}
 
 	/** The handle list, read in turn: inside `chromeScript`'s switch it would list Firefox's own windows. */

@@ -1,11 +1,13 @@
 import { computed, ref } from "vue"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import type { ToastOptions } from "@/composables/toast"
+import type { AdmittedUnlock } from "@/composables/useNewProfilePasskey"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
 import { managers } from "@/utils/core"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
+import { logCredentialFailure } from "@/utils/credential-refusal"
 import { classifyPasskeyFailure, handleCancelOrUnconfirmed, PASSKEY_COPY } from "@/utils/passkey-copy"
 import {
 	type CreatePasskeyProfileDeps,
@@ -14,13 +16,13 @@ import {
 } from "@/wallet/utils/create-passkey-profile"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
-import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
+import { isNewPasswordValid } from "@/utils/password"
 
 /**
  * Shared orchestration for the profile-CREATE flow, consumed by both the popup
  * (`popup/pages/profile/new.vue`) and onboarding (`onboarding/pages/create.vue`)
- * shells. Owns name + password validation, the strength hint, the passkey
- * create-with-retry ceremony, and the submit handler up to activation.
+ * shells. Owns name + password validation, the passkey create-with-retry
+ * ceremony, and the submit handler up to activation.
  *
  * The activation tail is INJECTED via `onCreated`: the popup runs its manual
  * post-create sequence (it relies on `popup/app.vue`'s `onActiveProfileChanged`
@@ -34,9 +36,10 @@ import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
  */
 export interface UseProfileCreateFlowOptions {
 	/** Per-shell activation + routing. Popup: manual sequence (listener-based). Onboarding: `bootstrapActiveProfile` then route.
-	 *  An in-page passkey create also hands over the answer it was made from, which opens the new
-	 *  profile's recovery phrase once; the shell drops it after. */
-	onCreated: (profile: ProfileInfo, credentialData?: PasskeyCredentialData) => Promise<void> | void
+	 *  An in-page passkey create also hands over the answer it was made from, and a password create the
+	 *  password it sealed under, either of which opens the new profile's recovery phrase once; the
+	 *  shell drops it after. */
+	onCreated: (profile: ProfileInfo, credentialData?: PasskeyCredentialData, password?: string) => Promise<void> | void
 	/** Per-shell create-failure notification. `isPasskey` selects the description/note copy; the page owns `notificationStore.create`. */
 	notifyCreateFailed: (isPasskey: boolean) => void
 	/** The page's toast, for a passkey prompt that was dismissed or timed out. */
@@ -99,10 +102,6 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 	const repeatedPassword = ref("")
 	const isCreating = ref(false)
 
-	const strengthHint = computed(() =>
-		authMethod.value === "passkey" ? "" : newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""),
-	)
-
 	// Name check is excluded on purpose — name is validated at submit time so an
 	// empty name shakes the input instead of silently disabling the button.
 	const isAllowedToContinue = computed(
@@ -112,7 +111,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 	const passkeyCreate = passkeyProfileCreator(runCeremony)
 	let disposed = false
 
-	function reportCreateFailure(e: unknown) {
+	function reportCreateFailure(e: unknown, method: AdmittedUnlock["method"]) {
 		// A create that fails after its page left reports to nobody: the step ended with the page.
 		if (disposed) return
 		if (handleCancelOrUnconfirmed(e, opts.openToast)) return
@@ -121,19 +120,21 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 			opts.openToast({ kind: "error", label: PASSKEY_COPY.noPrf })
 			return
 		}
-		opts.notifyCreateFailed(authMethod.value === "passkey")
-		console.error("Failed to create profile:", e)
+		opts.notifyCreateFailed(method === "passkey")
+		logCredentialFailure("Failed to create profile:", e)
 	}
 
 	/** `existing`: the profile takes a passkey the person already has. */
 	async function submit(existing: boolean) {
 		if (isCreating.value) return
 		if (!isAllowedToContinue.value) return
+		// The run seals what its gate judged, whatever the form does while it waits.
+		const admitted: AdmittedUnlock = { method: authMethod.value, password: password.value }
 		// Latch FIRST, before the async getProfiles() fetch, so two rapid clicks
 		// can't both race past the validate check before the lock is set.
 		isCreating.value = true
 
-		let created: { profile: ProfileInfo; credentialData?: PasskeyCredentialData }
+		let created: { profile: ProfileInfo; credentialData?: PasskeyCredentialData; password?: string }
 		let name: string | null = null
 		try {
 			name = await resolveName()
@@ -142,12 +143,12 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 				return
 			}
 			created =
-				authMethod.value === "passkey"
+				admitted.method === "passkey"
 					? await passkeyCreate.create(name, existing)
-					: { profile: await managers.profile.createProfile(name, password.value) }
+					: { profile: await managers.profile.createProfile(name, admitted.password), password: admitted.password }
 		} catch (e) {
 			if (name !== null) passkeyCreate.remember(e, name)
-			reportCreateFailure(e)
+			reportCreateFailure(e, admitted.method)
 			isCreating.value = false
 			return
 		}
@@ -158,7 +159,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		// If it fails the latch stays set: the profile exists, so another Create
 		// would make a second one.
 		try {
-			await opts.onCreated(created.profile, created.credentialData)
+			await opts.onCreated(created.profile, created.credentialData, created.password)
 		} catch {
 			console.warn("profile activation failed")
 			return
@@ -191,7 +192,6 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		password,
 		repeatedPassword,
 		isCreating,
-		strengthHint,
 		isAllowedToContinue,
 		handleCreate,
 		handleCreateWithExistingPasskey,

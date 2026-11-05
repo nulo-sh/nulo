@@ -337,8 +337,8 @@ describe("retry — a fresh round for a failed default", () => {
 		const { seeder, deps } = makeSeeder()
 		await failedMarker()
 		expect(await seeder.retry(CHAIN_ID, CONTRACT)).toBe(true)
-		await vi.waitFor(() => expect(deps.persist).toHaveBeenCalledTimes(1))
-		expect((await readMarker())[KEY]).toMatchObject({ attempts: 1, outcome: "seeded" })
+		await vi.waitFor(async () => expect((await readMarker())[KEY]).toMatchObject({ attempts: 1, outcome: "seeded" }))
+		expect(deps.persist).toHaveBeenCalledTimes(1)
 	})
 
 	test("refused: tombstone, seeded, pending, non-member, other chain — and nothing is written", async () => {

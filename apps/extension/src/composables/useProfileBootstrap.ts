@@ -11,9 +11,8 @@
  */
 
 import { shallowReactive } from "vue"
-import { managers, initTransactionService } from "@/utils/core"
-import { AccountServiceClient } from "@/wallet/services/account/client"
-import { NetworkServiceClient } from "@/wallet/services/network/client"
+import { managers, initTransactionService, replaceAccountClient, replaceNetworkClient } from "@/utils/core"
+import type { NetworkServiceClient } from "@/wallet/services/network/client"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { useAppStore } from "@/stores/app.store"
 import { createRunFence } from "@/composables/runFence"
@@ -126,21 +125,33 @@ async function settleActiveNetwork(
 	await appStore.syncStaleNetwork(networkId)
 }
 
+/** `run` plus `settled`, which rethrows its failure. It attaches to the run at once, so a failure
+ *  that lands before the caller awaits it is never an unhandled rejection; one nobody awaits is dropped. */
+function awaitLater<Run extends { promise: Promise<void> }>(run: Run): Run & { settled: () => Promise<void> } {
+	const failure = run.promise.then(
+		() => undefined,
+		(error: unknown) => ({ error }),
+	)
+	const settled = async () => {
+		const failed = await failure
+		if (failed) throw failed.error
+	}
+	return { ...run, settled }
+}
+
 export function useProfileBootstrap() {
 	const appStore = useAppStore()
 
 	/** Replaces the inline `initNetworks` in popup/app.vue. `isCurrent` is
 	 *  checked after every await and before every shared-state mutation so a
 	 *  superseded bootstrap stops instead of replacing the winner's `managers.network`
-	 *  (read dynamically here) or writing stale networks. Standalone callers omit it. */
+	 *  or writing stale networks. Standalone callers omit it. */
 	const initNetworks = async (isCurrent: () => boolean = () => true) => {
 		if (!isCurrent()) return
 		appStore.networks = []
 		appStore.network = undefined
 
-		managers.network?.disconnect()
-		const network = new NetworkServiceClient()
-		managers.network = network
+		const network = replaceNetworkClient()
 
 		const nets = await network.getOrInitNetworks()
 		if (!isCurrent()) return // a newer activation took over — don't write stale networks
@@ -181,9 +192,7 @@ export function useProfileBootstrap() {
 		if (!isCurrent() || !appStore.profile || !appStore.network) return
 		const profileId = appStore.profile.id
 		const { id: networkId, chainId } = appStore.network
-		managers.account?.disconnect()
-		const account = new AccountServiceClient()
-		managers.account = account
+		const account = replaceAccountClient()
 		if (appStore.staleNetwork?.networkId === networkId) return clearQuarantinedAccounts(appStore)
 		await ensureDefaultAccountOrWait(account, profileId, chainId, () => isCurrent() && appStore.markNetworkInactive(networkId))
 		if (!isCurrent()) return
@@ -237,14 +246,15 @@ export function useProfileBootstrap() {
 		// — an older bootstrap is fenced immediately, not only once control reaches
 		// runBootstrapCore after the await. (No await between the profile assignment
 		// and this call, so no other activation can interleave in that window.)
-		const core = runBootstrapCore(profile.id)
+		const core = awaitLater(runBootstrapCore(profile.id))
 
 		// Refresh the in-memory list so the profile switcher + any other
 		// consumer sees adds (backup-import activates a restored profile)
 		// and updates (rename).
 		appStore.profiles = await managers.profile.getProfiles()
 
-		await core.promise
+		// Settled after the list lands, so a lock's supersede still turns the core's failure into `false`.
+		await core.settled()
 
 		// The lock must win. The re-read sees a lock that completed before it ran; the fence covers
 		// the one that ran right after it: the service mutex orders the calls, not when the popup

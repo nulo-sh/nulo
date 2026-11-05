@@ -8,6 +8,7 @@
 
 import { flushPromises, mount } from "@vue/test-utils"
 import { createTestingPinia } from "@pinia/testing"
+import { EventHandler } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
@@ -15,6 +16,7 @@ let deletedHandler: ((tb: unknown) => void) | undefined
 let addedHandler: ((tb: unknown) => void) | undefined
 let updatedHandler: ((tb: unknown) => void) | undefined
 let configHandler: ((prop: { key: string; value: unknown }) => void) | undefined
+let configConnected: (() => void) | undefined
 let connectedHandler: (() => void) | undefined
 let quotesHandler: ((snapshot: unknown) => void) | undefined
 
@@ -75,19 +77,28 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 	}),
 }))
 
-// Controllable fiat kill-switch.
+// Controllable fiat kill-switch. A read answers the value stored when it was asked; a case that
+// parks the read replaces `answerShowFiat`. The first read opens the port, as the real client's does.
 let mockShowFiat = true
+let answerShowFiat: (stored: boolean) => Promise<boolean> = async (stored) => stored
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: vi.fn(function () {
+		const onUpdate = new EventHandler<{ key: string; value: unknown }>()
+		const onConnected = new EventHandler<void>()
+		let opened = false
+		configHandler = (prop) => onUpdate.invoke(prop)
+		configConnected = () => onConnected.invoke()
 		return {
 			disconnect: vi.fn(),
-			onUpdate: {
-				add: vi.fn((fn: (prop: { key: string; value: unknown }) => void) => {
-					configHandler = fn
-				}),
-				remove: vi.fn(),
-			},
-			getValue: vi.fn().mockImplementation(async () => mockShowFiat),
+			onUpdate,
+			onConnected,
+			getValue: vi.fn().mockImplementation(() => {
+				if (!opened) {
+					opened = true
+					onConnected.invoke()
+				}
+				return answerShowFiat(mockShowFiat)
+			}),
 		}
 	}),
 }))
@@ -218,6 +229,8 @@ afterEach(() => {
 	addedHandler = undefined
 	updatedHandler = undefined
 	configHandler = undefined
+	configConnected = undefined
+	answerShowFiat = async (stored) => stored
 	connectedHandler = undefined
 	quotesHandler = undefined
 	mockQuotes = {}
@@ -276,6 +289,38 @@ describe("BalanceView — Home aggregate", () => {
 		mockShowFiat = false
 		const { wrapper } = await mountView()
 
+		expect(wrapper.find('[data-testid="balance-amount"]').exists()).toBe(false)
+	})
+
+	test("a reconnect reads the fiat switch again: one turned off while the port was down hides the slot", async () => {
+		const { wrapper } = await mountView()
+		expect(wrapper.find('[data-testid="balance-amount"]').exists()).toBe(true)
+
+		mockShowFiat = false
+		configConnected?.()
+		await flushPromises()
+		expect(wrapper.find('[data-testid="balance-amount"]').exists()).toBe(false)
+	})
+
+	test("a fiat change during the mount's read wins over the read's older answer", async () => {
+		const read = Promise.withResolvers<boolean>()
+		answerShowFiat = () => read.promise
+		const { wrapper } = await mountView()
+
+		configHandler?.({ key: "showFiatValues", value: false })
+		read.resolve(true)
+		await flushPromises()
+		expect(wrapper.find('[data-testid="balance-amount"]').exists()).toBe(false)
+	})
+
+	test("another key's change during the mount's read leaves the read to land", async () => {
+		const read = Promise.withResolvers<boolean>()
+		answerShowFiat = () => read.promise
+		const { wrapper } = await mountView()
+
+		configHandler?.({ key: "theme", value: "dark" })
+		read.resolve(false)
+		await flushPromises()
 		expect(wrapper.find('[data-testid="balance-amount"]').exists()).toBe(false)
 	})
 
@@ -373,8 +418,9 @@ describe("BalanceView — Home aggregate", () => {
 		expect(calls).toBe(1)
 		expect(wrapper.find('[data-testid="balance-amount"]').text()).toBe("")
 
-		// The client rejects the pending request and reconnects synchronously, before the rejection settles.
+		// The drop rejects the request in flight; the new port's Ready, and so the connect, come in a later task.
 		rejectFirst?.(new Error("port closed"))
+		await flushPromises()
 		connectedHandler?.()
 		await flushPromises()
 		expect(calls).toBe(2)

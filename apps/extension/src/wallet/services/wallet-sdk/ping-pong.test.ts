@@ -51,7 +51,7 @@ function makeHandler() {
 	return { handler, sendToTab, listener }
 }
 
-/** Deliver an envelope the way background.ts's wrapper does: validate first,
+/** Deliver an envelope the way content-admission.ts's wrapper does: validate first,
  *  forward only when the verdict is `valid`. The sender must carry a tab id —
  *  the upstream handleMessage drops non-tab senders before its type switch. */
 function deliverThroughValidator(listener: CapturedListener, envelope: unknown) {

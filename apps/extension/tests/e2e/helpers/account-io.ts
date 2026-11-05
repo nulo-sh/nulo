@@ -101,6 +101,12 @@ export async function exportAccountBody(
 	encrypt: boolean,
 	password: string = TEST_PASSWORD,
 ): Promise<string> {
+	await openAccountExport(page, accountName)
+	return runExportStages(page, encrypt, password)
+}
+
+/** The export page on the account named `accountName`, picked from its list: the agree gate shows. */
+export async function openAccountExport(page: Page, accountName: string): Promise<void> {
 	await closeStuckPopup(page)
 	await waitForRouteStability(page)
 	// Route via the backup landing first: navigating to a hash the page is ALREADY on is a no-op,
@@ -123,7 +129,6 @@ export async function exportAccountBody(
 		if (!row) throw new Error(`no export row named ${name}`)
 		row.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 	}, accountName)
-	return runExportStages(page, encrypt, password)
 }
 
 /** Export the IMPORTED account via the Manage Accounts row deep-link — the row is found by its

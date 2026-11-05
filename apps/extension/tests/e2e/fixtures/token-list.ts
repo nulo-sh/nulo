@@ -4,7 +4,7 @@
  * write saw no acceptance. A launch that needs the list's entries (a priced token, the defaults)
  * holds one from its first boot instead: `launchExtension({ tokenList: "held" })`.
  *
- * A source run holds and serves a fixed two-token list that also flags one pair, signed with a
+ * A source run holds and serves a fixed two-token list that also flags two pairs, signed with a
  * per-process key that the armed build reads from `nulo:e2e:token-list`, so no spec depends on what
  * the owner lists. An artifact run holds the published envelope, the only list a release build's
  * pinned keys accept.
@@ -21,6 +21,7 @@ import {
 	selectEntries,
 	parsePayload,
 	type PinnedKey,
+	type PriceFeeds,
 	type TokenListEntry,
 	type TokenListPair,
 } from "@nulo/token-list"
@@ -53,8 +54,27 @@ const fixtureToken = (byte: string, symbol: string, priceId: string): TokenListE
 /** The source run's list: two Testnet tokens, the first priced as USDC. */
 export const E2E_LIST_TOKENS: readonly TokenListEntry[] = [fixtureToken("a1", "USDC", "usd-coin"), fixtureToken("a2", "USDT", "tether")]
 
-/** The pair the source run's list flags as a scam: a row shows the warning only where a spec seeds it. */
-export const E2E_LIST_FLAGGED: readonly TokenListPair[] = [{ chainId: CHAIN_IDS.TESTNET, address: `0x${"0".repeat(62)}f1` }]
+/** The feeds of the source run's price ids, at today's Testnet stable bands. */
+export const E2E_PRICE_FEEDS: PriceFeeds = {
+	"usd-coin": { min: 0.2, max: 5, ticker: "USDC" },
+	tether: { min: 0.2, max: 5, ticker: "USDT" },
+}
+
+/** A source of `tokens`, with the feed of each price id they name: strict refuses a record no entry names. */
+function sourceOf(tokens: readonly unknown[], flagged?: readonly TokenListPair[]): string {
+	const ids = new Set(
+		tokens.flatMap((t) => ((t as Partial<TokenListEntry>).priceId === undefined ? [] : [(t as TokenListEntry).priceId])),
+	)
+	const named = Object.entries(E2E_PRICE_FEEDS).filter(([id]) => ids.has(id))
+	return JSON.stringify({ tokens, ...(flagged && { flagged }), ...(named.length > 0 && { priceFeeds: Object.fromEntries(named) }) })
+}
+
+/** The pairs the source run's list flags as a scam; the published list flags none. Each is a curve point
+ *  (`…f2` is not), so a pasted one gets an add row, and no spec seeds the second. */
+export const E2E_LIST_FLAGGED: readonly TokenListPair[] = [
+	{ chainId: CHAIN_IDS.TESTNET, address: `0x${"0".repeat(62)}f1` },
+	{ chainId: CHAIN_IDS.TESTNET, address: `0x${"0".repeat(62)}f3` },
+]
 
 type Signer = { seedHex: string; pinned: PinnedKey }
 let signer: Promise<Signer> | undefined
@@ -75,7 +95,7 @@ export async function signTestList(
 	opts: { tokens?: readonly unknown[]; flagged?: readonly TokenListPair[]; nowMs?: number } = {},
 ): Promise<string> {
 	const { seedHex, pinned } = await e2eSigner()
-	const sourceText = JSON.stringify({ tokens: opts.tokens ?? E2E_LIST_TOKENS, flagged: opts.flagged ?? E2E_LIST_FLAGGED })
+	const sourceText = sourceOf(opts.tokens ?? E2E_LIST_TOKENS, opts.flagged ?? E2E_LIST_FLAGGED)
 	const signed = await signList({ sourceText, seedHex, keyId: pinned.keyId, nowMs: opts.nowMs ?? Date.now(), keys: [pinned] })
 	return signed.envelopeText
 }
@@ -85,7 +105,7 @@ export async function signForgedList(): Promise<string> {
 	const { pinned } = await e2eSigner()
 	const seedHex = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex")
 	const forger = { keyId: pinned.keyId, publicKey: await publicKeyOf(await importSeed(seedHex)) }
-	const sourceText = JSON.stringify({ tokens: E2E_LIST_TOKENS })
+	const sourceText = sourceOf(E2E_LIST_TOKENS)
 	return (await signList({ sourceText, seedHex, keyId: forger.keyId, nowMs: Date.now(), keys: [forger] })).envelopeText
 }
 
@@ -148,7 +168,7 @@ export async function serveTokenList(): Promise<ListHost> {
 }
 
 /**
- * The daily refresh, brought forward: the stored deadline moved to now, then the worker's refresh
+ * The scheduled refresh, brought forward: the stored deadline moved to now, then the worker's refresh
  * alarm fired from an extension page. A tick before the deadline fetches nothing.
  */
 export async function requestListRefresh(page: Page): Promise<void> {
@@ -202,11 +222,12 @@ function publishedEnvelope(): string {
  * wallet verified it, and a spec only needs to know which tokens it names.
  */
 export function heldListEntries(): TokenListEntry[] {
-	if (!isArtifactRun()) return selectEntries(E2E_LIST_TOKENS)
+	if (!isArtifactRun()) return selectEntries(E2E_LIST_TOKENS, E2E_PRICE_FEEDS)
 	const { payload } = JSON.parse(publishedEnvelope()) as { payload: string }
 	const bytes = decodeBase64Url(payload)
 	if (!bytes) throw new Error("the published token list's payload is not base64url")
-	return selectEntries(parsePayload(bytes, "wallet").tokens)
+	const published = parsePayload(bytes, "wallet")
+	return selectEntries(published.tokens, published.priceFeeds ?? {})
 }
 
 /** Skips a test that asserts a fiat figure when an artifact run's published list prices no Testnet

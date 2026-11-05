@@ -1,13 +1,18 @@
+import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { EnvelopeError, MAX_ENVELOPE_BYTES, PINNED_KEYS, readTokenList, type VerifiedTokenList } from "@nulo/token-list"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
-import { AlarmDispatcher, EventHandler, ResponseTooLargeError, readBodyCapped } from "@nulo/wallet-core/utils"
-import type { IService, ServiceCollection } from "@/wallet/base"
+import { ValueDecodeError } from "@nulo/wallet-core/storage"
+import { AlarmDispatcher, EventHandler, ResponseTooLargeError, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
+import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import { LegalAcceptanceService, type LegalStatus } from "@/wallet/services/legal/service"
 import type { ValueStorage } from "@/wallet/storage"
 import { valueStorage } from "@/wallet/storage/stores"
 import {
+	type Events,
+	type Methods,
 	type RefreshOutcome,
+	type RefreshResult,
 	TOKEN_LIST_REFRESH_ALARM_NAME,
 	TOKEN_LIST_SERVICE_NAME,
 	TOKEN_LIST_URL,
@@ -19,9 +24,13 @@ export * from "./spec"
 
 const HOUR_MS = 3_600_000
 const DAY_MS = 24 * HOUR_MS
-const JITTER_MS = 2 * HOUR_MS
+const REFRESH_MS = 6 * HOUR_MS
+const JITTER_MS = REFRESH_MS / 12
 /** The wait after the Nth consecutive failure; the last step repeats. */
 export const FAILURE_BACKOFF_MS: readonly number[] = [5 * 60_000, 30 * 60_000, 2 * HOUR_MS, 6 * HOUR_MS, DAY_MS]
+/** Past every deadline any build has written, the earlier daily cadence's two-hour jitter included,
+ *  so a row stored before an update reads as written. */
+export const DEADLINE_CEILING_MS = DAY_MS + 2 * HOUR_MS
 const FETCH_TIMEOUT_MS = 10_000
 
 const FAILED: ReadonlySet<RefreshOutcome> = new Set(["older-sequence", "refused", "oversize", "http-status", "network"])
@@ -32,11 +41,11 @@ export type TokenListStoredState = { envelope?: string; lastSuccessAt?: number; 
 type StoredState = TokenListStoredState
 
 /** Storage is writable by every extension page: a malformed field reads as absent, and a deadline
- *  past the longest one this service writes reads as due, so a planted value cannot stop refreshes. */
+ *  past {@link DEADLINE_CEILING_MS} reads as due, so a planted value cannot stop refreshes. */
 export function decodeTokenListState(raw: unknown, now: number): TokenListStoredState {
 	if (!raw || typeof raw !== "object") return { failures: 0 }
 	const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw as Record<string, unknown>
-	const latest = now + DAY_MS + JITTER_MS
+	const latest = now + DEADLINE_CEILING_MS
 	return {
 		envelope: typeof envelope === "string" ? envelope : undefined,
 		lastSuccessAt: Number.isFinite(lastSuccessAt) ? (lastSuccessAt as number) : undefined,
@@ -55,9 +64,9 @@ export type TokenListServiceOptions = {
 	random?: () => number
 }
 
-/** The one deadline rule: a day plus up to two hours of jitter after a usable answer, the backoff after a failure. */
+/** The one deadline rule: six hours plus up to half an hour of jitter after a usable answer, the backoff after a failure. */
 export function nextAttemptAt(outcome: RefreshOutcome, failures: number, now: number, random: () => number): number {
-	if (!FAILED.has(outcome)) return now + DAY_MS + Math.floor(random() * JITTER_MS)
+	if (!FAILED.has(outcome)) return now + REFRESH_MS + Math.floor(random() * JITTER_MS)
 	return now + FAILURE_BACKOFF_MS[Math.min(failures, FAILURE_BACKOFF_MS.length) - 1]
 }
 
@@ -69,13 +78,14 @@ class DownloadError extends Error {
 
 /**
  * Keeps the signed token list the default tokens and prices come from. Nothing is requested before
- * the Terms acceptance is current; after that, at boot when due, on each acceptance, and at the
- * persisted deadline. A list replaces the kept one only when it verifies against a pinned key and
- * carries a higher sequence, so a host can withhold an update but never swap or roll one back.
+ * the Terms acceptance is current; after that, at boot when due, on each acceptance, at the
+ * persisted deadline, and when an extension page asks. A list replaces the kept one only when it
+ * verifies against a pinned key and carries a higher sequence, so a host can withhold an update but
+ * never swap or roll one back.
  */
-export class TokenListService implements IService {
+export class TokenListService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
+	protected readonly rpcMethods = defineRpcMethods<Methods>()("refresh")
 	public static readonly name = TOKEN_LIST_SERVICE_NAME
-	public readonly name = TOKEN_LIST_SERVICE_NAME
 	public readonly dependencies = [LegalAcceptanceService.name] as const
 
 	public readonly onListChanged = new EventHandler<TokenListSnapshot>()
@@ -94,13 +104,10 @@ export class TokenListService implements IService {
 
 	private legal!: LegalAcceptanceService
 	private snapshot: TokenListSnapshot | undefined
-	private inflight: Promise<void> | undefined
+	private inflight: Promise<RefreshResult> | undefined
 
-	public constructor(
-		private readonly logger: ILogger,
-		browserApi: BrowserApi,
-		options: TokenListServiceOptions = {},
-	) {
+	public constructor(logger: ILogger, browserApi: BrowserApi, options: TokenListServiceOptions = {}) {
+		super(TOKEN_LIST_SERVICE_NAME, logger)
 		this.storage = valueStorage<StoredState>("tokenList", browserApi.storage.local)
 		this.dispatcher = new AlarmDispatcher(TOKEN_LIST_REFRESH_ALARM_NAME, browserApi.alarms)
 		this.getSource = options.getSource ?? (async () => ({ url: TOKEN_LIST_URL, keys: PINNED_KEYS }))
@@ -109,7 +116,7 @@ export class TokenListService implements IService {
 		this.random = options.random ?? Math.random
 	}
 
-	public async start(services: ServiceCollection): Promise<void> {
+	protected async init(services: ServiceCollection): Promise<void> {
 		this.legal = services.get(LegalAcceptanceService.name)
 		this.legal.onAcceptanceChanged.add(this.onAcceptanceChanged)
 		this.snapshot = await this.loadStored()
@@ -126,10 +133,14 @@ export class TokenListService implements IService {
 		return this.refreshIfDue()
 	}
 
-	/** Single-flight. Never rejects: the outcome and the next deadline are stored, or the failure logged. */
-	public refresh(): Promise<void> {
+	/** Single-flight: a caller that joins a running refresh gets its result. Never rejects: the outcome
+	 *  and the next deadline are stored, or the failure is logged and the result is `"error"`. */
+	public refresh(): Promise<RefreshResult> {
 		this.inflight ??= this.doRefresh()
-			.catch((error) => this.log(LogLevel.Warn, "token list refresh failed", { error }))
+			.catch((error): RefreshResult => {
+				this.log(LogLevel.Warn, "token list refresh failed", { error })
+				return "error"
+			})
 			.finally(() => {
 				this.inflight = undefined
 			})
@@ -147,27 +158,53 @@ export class TokenListService implements IService {
 		await this.refresh()
 	}
 
-	/** A stored list that no longer verifies, its key unpinned by a release included, is dropped and refetched. */
+	/** A failed read starts with no list: the first refresh reads again and adopts the stored one
+	 *  before it compares, so the stored sequence still bounds what it accepts. */
 	private async loadStored(): Promise<TokenListSnapshot | undefined> {
-		const state = await this.readState()
 		const source = await this.getSource()
-		if (state.envelope === undefined || !source) return undefined
+		if (!source) return undefined
+		let state: StoredState
 		try {
-			return toSnapshot(await readTokenList(state.envelope, source.keys))
+			state = await this.readState()
+		} catch (error) {
+			this.log(LogLevel.Warn, "stored token list unreadable", { error })
+			return undefined
+		}
+		return (await this.adoptStored(state, source)).list
+	}
+
+	/** The list `state` keeps, verified against `source`, and the state as stored after it. A list
+	 *  that no longer verifies, its key unpinned by a release included, is dropped and refetched. */
+	private async adoptStored(state: StoredState, source: TokenListSource): Promise<{ list?: TokenListSnapshot; state: StoredState }> {
+		if (state.envelope === undefined) return { state }
+		try {
+			return { list: toSnapshot(await readTokenList(state.envelope, source.keys)), state }
 		} catch (error) {
 			const outcome = refusalOutcome(error)
 			this.log(LogLevel.Warn, "stored token list discarded", { outcome })
-			if (outcome !== "verify-unsupported") await this.storage.set({ ...state, envelope: undefined, nextAttemptAt: undefined })
-			return undefined
+			if (outcome === "verify-unsupported") return { state }
+			const dropped: StoredState = { ...state, envelope: undefined, nextAttemptAt: undefined }
+			await this.storage.set(dropped)
+			return { state: dropped }
 		}
 	}
 
-	private async doRefresh(): Promise<void> {
-		if ((await this.legal.getStatus()) !== "current") return
+	private async doRefresh(): Promise<RefreshResult> {
+		if ((await this.legal.getStatus()) !== "current") return "terms-not-current"
 		const source = await this.getSource()
-		if (!source) return
+		if (!source) return "off"
+		// Read before the fetch: a failed read fetches and writes nothing. With no list held (the boot
+		// read failed), the stored one is adopted first, so a replayed older list cannot pass.
+		let state = await this.readState()
+		if (!this.snapshot) {
+			const stored = await this.adoptStored(state, source)
+			state = stored.state
+			if (stored.list) {
+				this.snapshot = stored.list
+				this.onListChanged.invoke(stored.list)
+			}
+		}
 		const { outcome, list, envelope } = await this.fetchList(source)
-		const state = await this.readState()
 		const now = this.now()
 		const failures = FAILED.has(outcome) ? state.failures + 1 : 0
 		const usable = outcome === "accepted" || outcome === "unchanged"
@@ -180,9 +217,11 @@ export class TokenListService implements IService {
 		await this.storage.set(next)
 		await this.dispatcher.create({ when: next.nextAttemptAt })
 		this.log(SUSPECT.has(outcome) ? LogLevel.Warn : LogLevel.Debug, "token list refresh", { outcome, failures })
-		if (!list) return
-		this.snapshot = list
-		this.onListChanged.invoke(list)
+		if (list) {
+			this.snapshot = list
+			this.onListChanged.invoke(list)
+		}
+		return outcome
 	}
 
 	private async fetchList(source: TokenListSource): Promise<{ outcome: RefreshOutcome; list?: TokenListSnapshot; envelope?: string }> {
@@ -208,14 +247,7 @@ export class TokenListService implements IService {
 		const controller = new AbortController()
 		const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 		try {
-			const response = await this.fetchFn(url, {
-				credentials: "omit",
-				referrerPolicy: "no-referrer",
-				redirect: "error",
-				// No request carries a cache validator: "no-cache" would revalidate with the stored one.
-				cache: "no-store",
-				signal: controller.signal,
-			})
+			const response = await this.fetchFn(url, privateFetchInit(controller.signal))
 			if (!response.ok) throw new DownloadError("http-status")
 			return await readBodyCapped(response, MAX_ENVELOPE_BYTES).catch((error: unknown) => {
 				throw error instanceof ResponseTooLargeError ? new DownloadError("oversize") : error
@@ -225,11 +257,13 @@ export class TokenListService implements IService {
 		}
 	}
 
+	/** A stored value that does not decode reads as empty; a failed read rejects. */
 	private async readState(): Promise<StoredState> {
 		let raw: unknown
 		try {
 			raw = await this.storage.get()
-		} catch {
+		} catch (error) {
+			if (!(error instanceof ValueDecodeError)) throw error
 			return { failures: 0 }
 		}
 		return decodeTokenListState(raw, this.now())
@@ -240,8 +274,8 @@ export class TokenListService implements IService {
 	}
 }
 
-function toSnapshot({ sequence, keyId, entries, flagged }: VerifiedTokenList): TokenListSnapshot {
-	return { sequence, keyId, entries, flagged }
+function toSnapshot({ sequence, keyId, entries, flagged, priceFeeds }: VerifiedTokenList): TokenListSnapshot {
+	return { sequence, keyId, entries, flagged, priceFeeds }
 }
 
 function refusalOutcome(error: unknown): RefreshOutcome {

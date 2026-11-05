@@ -9,9 +9,9 @@
  */
 
 import { lookupActiveProfileWithBackoff } from "./auth-guard"
-import { lockScreenProfile } from "./lock-screen-profile"
+import { type LockScreenCandidate, lockScreenProfile } from "./lock-screen-profile"
 
-export interface BootSessionDeps<P extends { id: string }> {
+export interface BootSessionDeps<P extends LockScreenCandidate> {
 	getProfiles: () => Promise<P[]>
 	getActiveProfile: () => Promise<P | undefined>
 	/** The activation bootstrap; resolves whether the session survived it. */
@@ -30,14 +30,14 @@ export type BootSessionResult<P> =
 	 *  profile when the list was readable (so the password path stays reachable); undefined
 	 *  when even the list was not. */
 	| { kind: "unreachable"; profiles: P[]; candidate: P | undefined }
-	/** A clean lock: no open session. `candidate` = the last active profile, else the first. */
+	/** A clean lock: no open session. `candidate` = the lock screen's profile. */
 	| { kind: "locked"; profiles: P[]; candidate: P | undefined }
 	/** An OPEN session whose activation bootstrap threw — not a lock; re-entering a password
 	 *  cannot repair it. The shell offers a retry. */
 	| { kind: "failed"; profiles: P[]; profile: P }
 	| { kind: "active"; profiles: P[]; profile: P; stillActive: boolean }
 
-export async function resolveBootSession<P extends { id: string }>(deps: BootSessionDeps<P>): Promise<BootSessionResult<P>> {
+export async function resolveBootSession<P extends LockScreenCandidate>(deps: BootSessionDeps<P>): Promise<BootSessionResult<P>> {
 	const opts = { deadlineMs: deps.deadlineMs }
 	const list = await lookupActiveProfileWithBackoff(deps.getProfiles, opts)
 	if (!deps.isCurrent()) return { kind: "superseded" }
@@ -67,7 +67,7 @@ export async function resolveBootSession<P extends { id: string }>(deps: BootSes
 /** The profile the lock screen unlocks (`lockScreenProfile`). The last-active read is a storage
  *  facade that can reject during a worker restart — that is a preference, never a reason to leave
  *  the session check undecided. */
-async function lockScreenCandidate<P extends { id: string }>(
+async function lockScreenCandidate<P extends LockScreenCandidate>(
 	profiles: P[],
 	lastActiveProfileId: () => Promise<string | undefined>,
 ): Promise<P | undefined> {

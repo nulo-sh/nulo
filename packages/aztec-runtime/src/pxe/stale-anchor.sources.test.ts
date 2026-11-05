@@ -8,6 +8,7 @@ import { createRequire } from "node:module"
 import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { describe, expect, test } from "vitest"
+import { PXE_NOT_SYNCED_DIAGNOSTIC } from "./stale-anchor"
 
 const require = createRequire(import.meta.url)
 
@@ -16,7 +17,7 @@ describe("stale-anchor message sources", () => {
 		const bundleEntry = require.resolve("@aztec-labs/pxe/client/bundle")
 		const dest = join(dirname(bundleEntry), "..", "..", "..")
 		const source = readFileSync(join(dest, "storage", "anchor_block_store", "anchor_block_store.js"), "utf8")
-		expect(source).toContain("not-yet-synchronized PXE")
+		expect(source).toContain(PXE_NOT_SYNCED_DIAGNOSTIC)
 	})
 
 	test("the HandshakeRegistry artifact still carries the RewindableRegister assertion", () => {

@@ -43,6 +43,27 @@ describe("useFeeEstimationMap — remote cancellation + handoff", () => {
 		scope.stop()
 	})
 
+	it("hands the estimator its attempt's signal, aborted once a newer attempt on the key supersedes it", async () => {
+		const signals: AbortSignal[] = []
+		const scope = effectScope()
+		const composable = scope.run(() =>
+			useFeeEstimationMap<number, number, number>({
+				estimate: (_n, _token, _flowKey, signal) => {
+					signals.push(signal)
+					return new Promise(() => {})
+				},
+			}),
+		)!
+		composable.estimate(0, 1)
+		await vi.advanceTimersByTimeAsync(500)
+		composable.estimate(0, 2)
+		await vi.advanceTimersByTimeAsync(500)
+		expect(signals).toHaveLength(2)
+		expect(signals[0]!.aborted).toBe(true)
+		expect(signals[1]!.aborted).toBe(false)
+		scope.stop()
+	})
+
 	it("refire on the same key supersedes its completed estimate: remote cancel fires for the old token only", async () => {
 		const { scope, composable, cancelRemote, calls } = make()
 		composable.estimate(0, 1)
@@ -308,7 +329,7 @@ describe("useFeeEstimationMap", () => {
 		await vi.advanceTimersByTimeAsync(100)
 		await flush()
 		expect(estimator).toHaveBeenCalledTimes(1)
-		expect(estimator).toHaveBeenCalledWith(3, expect.any(String), expect.stringMatching(/^op:[a-z0-9]+:0$/))
+		expect(estimator).toHaveBeenCalledWith(3, expect.any(String), expect.stringMatching(/^op:[a-z0-9]+:0$/), expect.any(AbortSignal))
 		expect(result.results.value[0]).toBe(6)
 		scope.stop()
 	})
@@ -407,7 +428,7 @@ describe("useFeeEstimationMap", () => {
 		await vi.advanceTimersByTimeAsync(200)
 		await flush()
 		expect(estimator).toHaveBeenCalledTimes(1)
-		expect(estimator).toHaveBeenCalledWith(2, expect.any(String), expect.stringMatching(/^op:[a-z0-9]+:1$/))
+		expect(estimator).toHaveBeenCalledWith(2, expect.any(String), expect.stringMatching(/^op:[a-z0-9]+:1$/), expect.any(AbortSignal))
 		scope.stop()
 	})
 
@@ -505,6 +526,53 @@ describe("useFeeEstimationMap", () => {
 		await vi.advanceTimersByTimeAsync(1)
 		await flush()
 		expect(estimator).toHaveBeenCalledOnce()
+		scope.stop()
+	})
+
+	it("marks a key failed on a real error until it is asked again or cancelled; a superseded attempt's rejection marks nothing", async () => {
+		const attempts: { resolve: (n: number) => void; reject: (e: Error) => void }[] = []
+		const onError = vi.fn()
+		const scope = effectScope()
+		const map = scope.run(() =>
+			useFeeEstimationMap<number, number, number>({
+				estimate: () => new Promise((resolve, reject) => attempts.push({ resolve, reject })),
+				debounceMs: 0,
+				onError,
+			}),
+		)!
+		const failNext = async (key: number) => {
+			map.estimate(key, 1)
+			await vi.advanceTimersByTimeAsync(0)
+			attempts.at(-1)!.reject(new Error("node down"))
+			await flush()
+		}
+
+		await failNext(0)
+		await failNext(1)
+		expect(map.failed.value).toEqual({ 0: true, 1: true })
+		expect(onError).toHaveBeenCalledTimes(2)
+		map.estimate(0, 1)
+		expect(map.failed.value[0]).toBe(false)
+		map.cancel(1)
+		expect(map.failed.value[1]).toBe(false)
+
+		await vi.advanceTimersByTimeAsync(0)
+		const superseded = attempts.at(-1)!
+		map.estimate(0, 2)
+		await vi.advanceTimersByTimeAsync(0)
+		superseded.reject(new Error("late"))
+		await flush()
+		expect(map.failed.value[0]).toBe(false)
+		attempts.at(-1)!.resolve(4)
+		await flush()
+		expect(map.results.value[0]).toBe(4)
+		expect(map.failed.value[0]).toBe(false)
+		expect(onError).toHaveBeenCalledTimes(2)
+
+		await failNext(1)
+		expect(map.failed.value[1]).toBe(true)
+		map.cancelAll()
+		expect(map.failed.value).toEqual({})
 		scope.stop()
 	})
 })

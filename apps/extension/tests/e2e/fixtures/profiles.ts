@@ -292,6 +292,27 @@ export async function readRecoveryWords(page: Page, grid = "reveal-content"): Pr
 	return page.$$eval(`[data-testid="${grid}-word"]`, (words) => words.map((word) => word.textContent?.trim() ?? ""))
 }
 
+/** Pass the onboarding phrase check that I saved it opens: at each question, the choice holding the
+ *  word `words` has at its position, then Confirm. */
+export async function passPhraseCheck(page: Page, words: readonly string[]): Promise<void> {
+	const question = '[data-testid="onboarding-phrase-check-question"]'
+	await page.waitForSelector(question, { visible: true, timeout: 15_000 })
+	const positions = await page.$$eval(question, (all) => all.map((q) => Number(q.getAttribute("data-position"))))
+	for (const position of positions) {
+		const picked = await page.$$eval(
+			`${question}[data-position="${position}"] [data-testid="onboarding-phrase-check-choice"]`,
+			(choices, word) => {
+				const choice = (choices as HTMLInputElement[]).find((c) => c.value === word)
+				choice?.click()
+				return choice?.checked === true
+			},
+			words[position - 1],
+		)
+		if (!picked) throw new Error(`the phrase check offers no choice for word ${position}`)
+	}
+	await clickByTestId(page, "onboarding-phrase-check-confirm")
+}
+
 /** Drive the seed-phrase reveal flow on `/popup/settings/security/export/seed` and return its words. */
 export async function revealSeedPhrase(page: Page, password: string): Promise<string[]> {
 	await navigateByHash(page, "#/popup/settings/security/export/seed")

@@ -32,7 +32,7 @@ export function getChainName(chainId: number): string {
 		case CHAIN_IDS.TESTNET:
 			return "Testnet"
 		case CHAIN_IDS.MAINNET:
-			return "Alpha V6"
+			return "Alpha"
 		case CHAIN_IDS.SANDBOX:
 			return "Sandbox"
 		default:

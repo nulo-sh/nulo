@@ -148,7 +148,7 @@ export interface DispatchHooks {
 	 */
 	onExecutionEnqueued?: () => void
 	/**
-	 * Pre-allocated journal id from `background.ts:onWalletMessage`. When
+	 * Pre-allocated journal id from `wallet-message.ts:onWalletMessage`. When
 	 * present, the handler should TRANSITION this record (queued → pending
 	 * → ...) instead of creating a new one. Lets the activity feed surface
 	 * the request immediately on message arrival.

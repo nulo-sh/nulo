@@ -20,16 +20,28 @@ import SignerIdentityStrip from "../execute/SignerIdentityStrip.vue"
 
 /** Utils */
 import { type FeeDisplay, feeDisplay, feeFigure, formatGasBalance } from "@/utils/fee-estimation"
-import { authwitDisplayCall, grantContentsOf, undecodedAll } from "../execute/display-calls"
-import { grantRefusalRow, readableGrants } from "../execute/call-surface"
-import { decodeOperationArguments, followKnownTokens, resolveOperations } from "../execute/operation-display"
+import { openJsonWindow } from "@/utils/json-window"
+import {
+	authwitDisplayCall,
+	awaitsGrantDecode,
+	decodeCallsOrUnavailable,
+	decodeGrantsOrUnavailable,
+	grantContentsOf,
+} from "../execute/display-calls"
+import { grantRefusalRow } from "../execute/call-surface"
+import {
+	WrongProfileError,
+	assertRequestProfile,
+	decodeOperationArguments,
+	followKnownTokens,
+	requestEnd,
+	resolveForProfile,
+} from "../execute/operation-display"
 import { uniqueSignerAccounts, uniqueSignerNetworks } from "../execute/signers"
 import type { DraftUIOperation } from "../execute/types"
 
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
-import { NetworkServiceClient } from "@/wallet/services/network/client"
-import { AccountServiceClient } from "@/wallet/services/account/client"
 import { type DecodedCall, type DecodedGrant, ExecutionServiceClient } from "@/wallet/services/execution/client"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
 import { DappInteractionServiceClient, type FeeQuestionPayload, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
@@ -100,11 +112,11 @@ const {
 		tokenService.disconnect()
 	},
 	init: () => init(),
-	reject: (end) => reject(end),
+	reject: (end) => reject(requestEnd(end, isWrongProfile.value, profile.value)),
 })
 
 const question = computed(() => payload.value?.feeQuestion)
-const grantsPending = computed(() => !!operation.value && grantContentsOf(operation.value).length > 0 && !decodedGrants.value)
+const grantsPending = computed(() => !!operation.value && awaitsGrantDecode(operation.value, !!decodedGrants.value))
 const grantRefusal = computed(() => grantRefusalRow(decodedGrants.value ?? []))
 /** Read from the question, so it needs no quote and names the fee before the card mounts. */
 const confirmLabel = computed(() => (question.value ? `Send for ${feeFigure(feeDisplay(question.value.fee, undefined))}` : "Send for FJ"))
@@ -116,19 +128,12 @@ const setByApp = computed(() => question.value?.feeSettings?.paymentMethod.kind 
 const priority = computed(() => (setByApp.value ? undefined : (question.value?.feeSettings?.priorityLevel ?? "normal")))
 
 const init = async () => {
-	let accountService: AccountServiceClient | undefined
-	let networkService: NetworkServiceClient | undefined
 	try {
 		profile.value = await profileService.getActiveProfile()
 		await loadInteractionPayload()
 		if (!payload.value) return
-		if (profile.value?.id !== payload.value.session.profileId) {
-			isWrongProfile.value = true
-			throw new Error("Sign in with another profile")
-		}
-		accountService = new AccountServiceClient()
-		networkService = new NetworkServiceClient()
-		const resolved = await resolveOperations([payload.value.operation], accountService, networkService, profile.value.id)
+		assertRequestProfile(profile.value, payload.value.session.profileId)
+		const resolved = await resolveForProfile([payload.value.operation], profile.value.id)
 		const op = resolved.operations[0]
 		operation.value = op
 		void decodeOperationArguments(resolved.operations, executionService, (_, decoded) => {
@@ -139,11 +144,9 @@ const init = async () => {
 		void decodeAuthwits(op)
 		void decodeGrants(op)
 	} catch (error) {
+		if (error instanceof WrongProfileError) isWrongProfile.value = true
 		console.error("Failed to initialize the fee question", { error })
 		setError("Something went wrong")
-	} finally {
-		accountService?.disconnect()
-		networkService?.disconnect()
 	}
 }
 
@@ -151,13 +154,7 @@ const init = async () => {
 async function decodeAuthwits(op: DraftUIOperation | undefined): Promise<void> {
 	const listed = question.value?.discoveredAuthwits ?? []
 	if (!op || !listed.length) return
-	let decoded: DecodedCall[]
-	try {
-		decoded = await executionService.decodeCallsForDisplay(op.networkId, listed.map(authwitDisplayCall))
-	} catch (error) {
-		console.warn("[Fee] Authorization decode failed", { error })
-		decoded = undecodedAll(listed.length)
-	}
+	const decoded = await decodeCallsOrUnavailable(executionService, op.networkId, listed.map(authwitDisplayCall))
 	decodedAuthwits.value = new Map(listed.map((a, i) => [a.messageHash, decoded[i] ?? { kind: "undecoded", reason: "unavailable" }]))
 }
 
@@ -166,13 +163,7 @@ async function decodeAuthwits(op: DraftUIOperation | undefined): Promise<void> {
 async function decodeGrants(op: DraftUIOperation | undefined): Promise<void> {
 	const count = op ? grantContentsOf(op).length : 0
 	if (!count) return
-	let decoded: readonly DecodedGrant[] = []
-	try {
-		decoded = await executionService.decodeQuestionGrantsForDisplay(requestId.value!)
-	} catch (error) {
-		console.warn("[Fee] Grant decode failed", { error })
-	}
-	decodedGrants.value = readableGrants(decoded, count)
+	decodedGrants.value = await decodeGrantsOrUnavailable(() => executionService.decodeQuestionGrantsForDisplay(requestId.value!), count)
 }
 
 /** The payer's balance as the readout prints it, read past the cache, which can predate a deposit
@@ -215,11 +206,13 @@ const signerAccounts = computed(() => (operation.value ? uniqueSignerAccounts([o
 const signerNetworks = computed(() => (operation.value ? uniqueSignerNetworks([operation.value]) : []))
 
 const showJson = () => {
-	if (!requestId.value) return
-	const url = new URL(chrome.runtime.getURL("src/popup/index.html#/windows/json"))
-	url.searchParams.set("requestId", requestId.value)
-	chrome.windows.create({ type: "popup", url: url.toString(), height: 700, width: 900 })
+	if (requestId.value) openJsonWindow(requestId.value)
 }
+
+// The notice's OK ends another profile's request as the lock or switch that made it, with the same
+// wait as Reject, so the window's close cannot reach the request first.
+const dismissWrongProfile = () =>
+	requestId.value && !isInteractionCancelled.value ? reject(requestEnd("close", true, profile.value)) : closeWindow()
 
 profileService.onActiveProfileChanged.add(onActiveProfileChanged)
 
@@ -301,7 +294,7 @@ onUnmounted(() => {
 		<DappCancelledOverlay
 			v-if="isWrongProfile"
 			message="You are signed in to a different profile. Please switch profiles and resend your request."
-			@dismiss="closeWindow()"
+			@dismiss="dismissWrongProfile"
 		/>
 		<DappCancelledOverlay
 			v-else-if="isInteractionCancelled"

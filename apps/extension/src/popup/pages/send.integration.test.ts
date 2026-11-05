@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
 	getTokenBalances: vi.fn(),
 	getContacts: vi.fn(async () => []),
 	openToast: vi.fn(),
+	closeToast: vi.fn(),
 	routerBack: vi.fn(),
 	routerReplace: vi.fn(),
 	legalStatus: vi.fn(async () => "current"),
@@ -43,6 +44,15 @@ const mocks = vi.hoisted(() => ({
 const fpcEvents = await vi.hoisted(async () => {
 	const { EventHandler } = await import("@nulo/wallet-core/utils")
 	return { onFpcDeleted: new EventHandler<unknown>(), onFpcUpdated: new EventHandler<unknown>() }
+})
+/** The one snack on screen, with ids that grow on every open, as the design package keeps it. */
+const snack = await vi.hoisted(async () => {
+	const { ref } = await import("vue")
+	return ref<{ id: number; kind: string; label: string } | null>(null)
+})
+const estimateEvents = await vi.hoisted(async () => {
+	const { EventHandler } = await import("@nulo/wallet-core/utils")
+	return { onEstimateStarted: new EventHandler<{ estimateToken: string }>() }
 })
 
 vi.mock("@/wallet/services/execution/client", () => ({
@@ -55,6 +65,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 			cancelEstimate: mocks.cancelEstimate,
 			getGasBalances: mocks.getGasBalances,
 			peekGasBalances: vi.fn(async () => null),
+			onEstimateStarted: estimateEvents.onEstimateStarted,
 		}
 	}),
 }))
@@ -132,7 +143,7 @@ vi.mock("@/utils/core", () => ({
 	},
 }))
 vi.mock("@/composables/toast.js", () => ({
-	useToast: () => ({ openToast: mocks.openToast }),
+	useToast: () => ({ openToast: mocks.openToast, closeToast: mocks.closeToast, toast: snack }),
 }))
 const route = reactive({ name: "popup-send", path: "/popup/send", query: {} as Record<string, string>, meta: {} })
 vi.mock("vue-router", () => ({
@@ -151,6 +162,7 @@ import { usePopupStore } from "@/stores/popup.store"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
+import { sendEvent } from "../../../tests/helpers/send-event"
 import Send from "./send.vue"
 
 const STUBS = {
@@ -319,6 +331,15 @@ beforeEach(() => {
 	mocks.executeTransfer.mockResolvedValue(undefined)
 	mocks.estimateTransferFee.mockResolvedValue(LANDED)
 	mocks.legalStatus.mockResolvedValue("current")
+	snack.value = null
+	let snackId = 0
+	mocks.openToast.mockImplementation((options) => {
+		snack.value = { ...options, id: ++snackId }
+		return snackId
+	})
+	mocks.closeToast.mockImplementation(() => {
+		snack.value = null
+	})
 	vi.spyOn(console, "error").mockImplementation(() => {})
 	vi.spyOn(console, "debug").mockImplementation(() => {})
 })
@@ -433,6 +454,20 @@ describe("send page — the caveat under the strip for a token outside the valid
 		w.unmount()
 	})
 
+	test("the strip and the caveat sit in the page above the fee card; the pinned footer holds only Confirm", async () => {
+		mocks.getTokens.mockResolvedValue([{ ...TOKEN, classId: undefined }])
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		const footer = w.get('[data-testid="send-footer"]').element
+		const feeCard = w.get('[data-testid="fee-settings-card"]').element
+		for (const testid of ["send-publish-strip", "send-token-caveat"]) {
+			const el = w.get(`[data-testid="${testid}"]`).element
+			expect(footer.contains(el)).toBe(false)
+			expect(el.compareDocumentPosition(feeCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		}
+		expect([...footer.children].map((el) => el.getAttribute("data-testid"))).toEqual(["send-submit"])
+		w.unmount()
+	})
+
 	test("a token that cannot send has no strip and no caveat", async () => {
 		mocks.getTokens.mockResolvedValue([{ ...TOKEN, hasPrivateTransfers: false, hasPublicTransfers: false }])
 		const { w } = await mountSend(FUNDING["public Fee Juice only"])
@@ -512,6 +547,29 @@ describe("send page with the real fee card — transitions", () => {
 		expect(mocks.getGasBalances).toHaveBeenCalledTimes(2)
 		expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(false)
 		expect(settled(w)).toMatchObject({ you: "exposed", action: "review" })
+		w.unmount()
+	})
+
+	test("a balance read that recovers after a failed estimate asks the estimate again, with the sponsor paying throughout", async () => {
+		mocks.getGasBalances.mockRejectedValueOnce(new Error("boom"))
+		mocks.estimateTransferFee.mockRejectedValueOnce(new Error("node down"))
+		const { w } = await mountSend(FUNDING["no gas, a sponsor"], { realFeeRow: true })
+		await fillForm(w)
+		await estimateLands()
+		expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+
+		await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0])
+		await estimateLands()
+		expect(mocks.getGasBalances).toHaveBeenCalledTimes(2)
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
+		const payers = mocks.estimateTransferFee.mock.calls.map((call) => (call[7] as { paymentMethod: unknown }).paymentMethod)
+		expect(payers).toEqual([
+			{ kind: "fpc", fpcId: "s1" },
+			{ kind: "fpc", fpcId: "s1" },
+		])
+		expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(false)
+		expect(w.find('[data-testid="fee-estimate"]').exists()).toBe(true)
 		w.unmount()
 	})
 
@@ -818,6 +876,30 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		w.unmount()
 	})
 
+	test("once the wallet reports this estimate's run, the row leaves queued and its cap, and Send waits for the fee", async () => {
+		const { w } = await queuedPrivately(FUNDING["private Fee Juice only"])
+		expect(capShown(w)).toBe("4.47228")
+		const run = deferred<unknown>()
+		mocks.estimateTransferFee.mockReturnValueOnce(run.promise)
+		await vi.advanceTimersByTimeAsync(2_000)
+		await flushPromises()
+		const calls = mocks.estimateTransferFee.mock.calls
+		const token = (calls.at(-1) as unknown[])[8] as string
+		expect((calls.at(-2) as unknown[])[8]).toBe(token)
+		estimateEvents.onEstimateStarted.invoke({ estimateToken: "another-window" })
+		await flushPromises()
+		expect(queuedRow(w)).toBe(true)
+		estimateEvents.onEstimateStarted.invoke({ estimateToken: token })
+		await flushPromises()
+		expect(queuedRow(w)).toBe(false)
+		expect(capShown(w)).toBeUndefined()
+		expect(sendDisabled(w)).toBe(true)
+		run.resolve({ maxFee: "1000", gasDetails: {} })
+		await flushPromises()
+		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+
 	test("Nulo's sponsor paying: the answered row and Queue send, which sends no cap and no estimate to reuse", async () => {
 		// The answer carries a cap, as one for a self-paid shape would: a send nobody caps must not take it.
 		const { w } = await queuedPrivately(FUNDING["no gas, a sponsor"])
@@ -844,7 +926,8 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		const { w } = await queuedPrivately(FUNDING["no gas, a hand-added sponsor picked"])
 		expect(queuedRow(w)).toBe(true)
 		expect(w.get('[data-testid="stub-fee-cost"]').attributes("data-payer")).toBe("unvouched")
-		expect(submit(w).text()).toBe("Confirm Transaction")
+		// The held estimate is still the one the button waits for.
+		expect(submit(w).text()).toBe("Estimating fee")
 		expect(sendDisabled(w)).toBe(true)
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
@@ -887,9 +970,72 @@ describe("send page — an estimate queued behind an earlier send", () => {
 	})
 })
 
+describe("send page — an estimate that runs long", () => {
+	const PRIVATE_FJ = FUNDING["both Fee Juices"]
+	const slowRow = (w: W) => w.find('[data-testid="fee-estimate-slow"]')
+	const neverAnswers = () => mocks.estimateTransferFee.mockImplementation(() => new Promise(() => {}))
+
+	test("Confirm reads Estimating fee; at 20 s the bar gives way to the sentence and Try again, which asks again and restarts the clock", async () => {
+		neverAnswers()
+		const { w } = await mountSend(PRIVATE_FJ, { realFeeRow: true })
+		await fillForm(w)
+		expect(submit(w).text()).toBe("Estimating fee")
+		await vi.advanceTimersByTimeAsync(19_900)
+		expect(slowRow(w).exists()).toBe(false)
+		await vi.advanceTimersByTimeAsync(100)
+		expect(slowRow(w).text()).toBe("You payTaking longer than usual.Try again")
+		expect(submit(w).text()).toBe("Estimating fee")
+
+		await w.get('[data-testid="fee-estimate-retry"]').trigger("click")
+		expect(slowRow(w).exists()).toBe(false)
+		await vi.advanceTimersByTimeAsync(800)
+		const [first, retry] = mocks.estimateTransferFee.mock.calls
+		expect(retry?.slice(0, 8)).toEqual(first?.slice(0, 8))
+		expect(retry?.[8]).not.toBe(first?.[8])
+		await vi.advanceTimersByTimeAsync(19_000)
+		expect(slowRow(w).exists()).toBe(false)
+		await vi.advanceTimersByTimeAsync(200)
+		expect(slowRow(w).exists()).toBe(true)
+		w.unmount()
+	})
+
+	test("an estimate that lands first shows its figure and Confirm, and its clock never fires", async () => {
+		const held = deferred<unknown>()
+		mocks.estimateTransferFee.mockReturnValueOnce(held.promise)
+		const { w } = await mountSend(PRIVATE_FJ, { realFeeRow: true })
+		await fillForm(w)
+		await vi.advanceTimersByTimeAsync(5_000)
+		held.resolve(LANDED)
+		await flushPromises()
+		await vi.advanceTimersByTimeAsync(30_000)
+		expect(slowRow(w).exists()).toBe(false)
+		expect(w.find('[data-testid="fee-estimate"]').exists()).toBe(true)
+		expect(submit(w).text()).toBe("Confirm Transaction")
+		w.unmount()
+	})
+
+	test("the review sheet: Send now reads Estimating fee, and at 20 s its fee line says so with Try again", async () => {
+		neverAnswers()
+		const { w } = await mountSend(PRIVATE_FJ, { realFeeRow: true })
+		await fillForm(w)
+		await strip(w).trigger("click")
+		const fee = () => w.get('[data-testid="send-review-fee"]')
+		expect(w.get('[data-testid="send-review-submit"]').text()).toBe("Estimating fee")
+		expect(fee().text()).toContain("Fee · —")
+		await vi.advanceTimersByTimeAsync(20_000)
+		expect(fee().text()).toContain("Fee · Taking longer than usual. Try again")
+		await w.get('[data-testid="send-review-fee-retry"]').trigger("click")
+		await vi.advanceTimersByTimeAsync(800)
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
+		expect(fee().text()).toContain("Fee · —")
+		w.unmount()
+	})
+})
+
 describe("send page — Confirm waits for the current input's estimate", () => {
 	const sendDisabled = (w: W) => submit(w).attributes("disabled") !== undefined
 	const PUBLIC_FJ = FUNDING["public Fee Juice only"]
+	const failedRow = (w: W) => w.find('[data-testid="fee-estimate-failed"]')
 
 	test("off until the estimate lands; a press during the debounce sends nothing; a new input turns it off again", async () => {
 		const { w } = await mountSend(FUNDING["both Fee Juices"])
@@ -909,18 +1055,63 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		w.unmount()
 	})
 
-	test("a failed estimate keeps it off and says so; the next input estimates again", async () => {
+	test("two presses of Send in one task send once", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"])
+		await fillForm(w)
+		await estimateLands()
+		expect(sendDisabled(w)).toBe(false)
+		expect(sendEvent(submit(w).element, "click")).toBeDefined()
+		expect(sendEvent(submit(w).element, "click")).toBeDefined()
+		await flushPromises()
+		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
+		w.unmount()
+	})
+
+	test("a failed estimate keeps it off and says so; the next input estimates again, and an emptied amount reads the hint", async () => {
 		mocks.estimateTransferFee.mockRejectedValueOnce(new Error("node down"))
-		const { w } = await mountSend(PUBLIC_FJ)
+		const { w } = await mountSend(PUBLIC_FJ, { realFeeRow: true })
 		await fillForm(w)
 		await estimateLands()
 		expect(mocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		expect(failedRow(w).exists()).toBe(true)
 		expect(sendDisabled(w)).toBe(true)
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 
+		// A later snack is someone else's: the next question leaves it on screen.
+		mocks.openToast({ kind: "success", label: "Address is copied" })
 		await w.get('[data-testid="stub-amount"]').setValue("2")
+		expect(snack.value?.label).toBe("Address is copied")
 		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
+		expect(sendDisabled(w)).toBe(false)
+
+		mocks.estimateTransferFee.mockRejectedValueOnce(new Error("node down"))
+		await w.get('[data-testid="stub-amount"]').setValue("3")
+		await estimateLands()
+		expect(failedRow(w).exists()).toBe(true)
+		await w.get('[data-testid="stub-amount"]').setValue("")
+		expect(failedRow(w).exists()).toBe(false)
+		expect(w.getComponent({ name: "FeeCostReadout" }).text()).toBe("Fee estimated after simulation")
+		w.unmount()
+	})
+
+	test("a failed estimate offers Try again on the fee row, which asks the same estimate and closes the failure's snack", async () => {
+		mocks.estimateTransferFee.mockRejectedValueOnce(new Error("node down"))
+		const { w } = await mountSend(PUBLIC_FJ, { realFeeRow: true })
+		await fillForm(w)
+		await estimateLands()
+		expect(snack.value).toMatchObject({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		expect(failedRow(w).text()).toBe("You payCouldn't estimate fee.Try again")
+		expect(sendDisabled(w)).toBe(true)
+
+		await w.get('[data-testid="fee-estimate-retry"]').trigger("click")
+		expect(snack.value).toBeNull()
+		await estimateLands()
+		const [first, retry] = mocks.estimateTransferFee.mock.calls
+		expect(retry?.slice(0, 8)).toEqual(first?.slice(0, 8))
+		expect(retry?.[8]).not.toBe(first?.[8])
+		expect(w.find('[data-testid="fee-estimate"]').exists()).toBe(true)
 		expect(sendDisabled(w)).toBe(false)
 		w.unmount()
 	})

@@ -58,12 +58,9 @@ const estimates = useWalletTxEstimates({
 			: undefined,
 	keys: () => [0],
 	scope: () => appStore.scopeEpoch,
-	onError: (err) => {
-		console.error("Registry toggle fee estimate failed", { error: err })
-		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
-	},
+	onError: (err) => console.error("Registry toggle fee estimate failed", { error: err }),
 })
-const { results: feeEstimates, estimating: estimatingFees } = estimates
+const { results: feeEstimates, estimating: estimatingFees, failed: failedFees } = estimates
 
 const isAllowedToExecute = computed(() => Boolean(feeSettings.value) && estimates.landed() && !estimates.short())
 
@@ -155,8 +152,10 @@ onBeforeUnmount(() => {
 					:account="appStore.account"
 					:feeEstimate="feeEstimates[0] ?? null"
 					:isEstimating="!!estimatingFees[0]"
+					:estimateFailed="!!failedFees[0]"
 					fallsBack
 					v-model="feeSettings"
+					@retryEstimate="estimates.refresh(0)"
 				/>
 
 				<Flex v-snack-footer align="center" direction="column" gap="12">
@@ -196,6 +195,6 @@ onBeforeUnmount(() => {
 
 <style module>
 .wrapper {
-	composes: body from "./popup-shared.module.css";
+	composes: body from "@/components/Popup/popup-shared.module.css";
 }
 </style>

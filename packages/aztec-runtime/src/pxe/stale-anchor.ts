@@ -2,6 +2,10 @@ import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import { PxeStaleAnchorError } from "@nulo/extension-messaging/errors"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 
+/** What the PXE's anchor block store throws when it is read before its first sync (`@aztec-labs/pxe`,
+ *  pinned by `stale-anchor.sources.test.ts`). */
+export const PXE_NOT_SYNCED_DIAGNOSTIC = "Trying to get block header with a not-yet-synchronized PXE - this should never happen"
+
 /**
  * The upstream diagnostics that mean "the PXE's anchor block and the node's chain disagree": the
  * node no longer knows the anchor's hash (a reorg, or nodes behind one endpoint disagreeing on

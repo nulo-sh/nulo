@@ -89,7 +89,7 @@ const switchedTo = ref<number>()
 
 const isLoading = ref(false)
 
-// Flips once init() has the payload AND the rows: before that, Connect would grant an empty set.
+// Flips once init() has the payload AND the rows: before that, the confirm would grant an empty set.
 const initComplete = ref(false)
 
 // The banner's "as is" is only offered where the footer's button can act: not before init lands
@@ -211,9 +211,8 @@ const newGroups = computed(() => groupsOf(rows.value.filter((row) => row.isNew))
 const heldGroups = computed(() => groupsOf(rows.value.filter((row) => !row.isNew)))
 const heldCount = computed(() => rows.value.filter((row) => !row.isNew).length)
 
-/** An app that already holds a row asks for more: "Allow" what's new, not "Connect". */
 const asksForMore = computed(() => heldCount.value > 0)
-const confirmWord = computed(() => (asksForMore.value ? "Allow" : "Connect"))
+const confirmWord = computed(() => (asksForMore.value ? "Allow" : "Grant access"))
 
 const setSwitch = (key: string, on: boolean) => {
 	const row = rows.value.find((candidate) => candidate.isNew && candidate.entry.key === key)
@@ -379,7 +378,7 @@ onUnmounted(disposeWindow)
 			<DappIdentityBlock
 				:dapp="dapp"
 				hostnameTestId="capabilities-hostname"
-				:actionLabel="asksForMore ? `wants more permissions on ${chainName}` : `wants to connect on ${chainName}`"
+				:actionLabel="asksForMore ? `wants more permissions on ${chainName}` : 'asks for access'"
 			/>
 
 			<Flex direction="column" gap="20" :class="$style.sections">
@@ -387,6 +386,7 @@ onUnmounted(disposeWindow)
 					v-if="chainBannerState && dappChain"
 					data-testid="cap-chain-banner"
 					:data-state="chainBannerState"
+					:class="$style.chain_banner"
 					:variant="chainBannerState === 'switched' ? 'done' : 'info'"
 					direction="vertical"
 					wide
@@ -486,6 +486,12 @@ onUnmounted(disposeWindow)
 
 .sections {
 	padding: 16px;
+}
+
+/* A typed network name can be one word wider than the banner, and the action repeats it on a line
+ * of its own, so the whole banner breaks such a word; the action's shorter words still fit whole. */
+.chain_banner {
+	overflow-wrap: anywhere;
 }
 
 .note {

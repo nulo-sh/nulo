@@ -10,7 +10,7 @@
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { isFirefox } from "./fixtures/browser"
+import { isFirefox, setViewport } from "./fixtures/browser"
 import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
 import {
 	closeStuckPopup,
@@ -49,7 +49,7 @@ async function text(page: Page, needle: string, timeout = 60_000): Promise<void>
 	await page.waitForFunction((t: string) => document.body.textContent?.includes(t), { timeout, polling: 100 }, needle)
 }
 
-/** Locks from wherever the popup is: the takeover replaces the Header and carries its own LOCK. */
+/** Locks from wherever the popup is: the takeover replaces the Header and carries its own Lock chip. */
 async function lockAnywhere(page: Page): Promise<void> {
 	if (await page.$('[data-testid="stale-network-lock"]')) {
 		await clickByTestId(page, "stale-network-lock")
@@ -83,7 +83,7 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		}
 
 		const page = await openPopup(ctx)
-		await page.setViewport(CAPTURE_VIEWPORT)
+		await setViewport(page, CAPTURE_VIEWPORT)
 		await waitForHash(page, "#/popup/general", 30_000)
 		// A new profile starts on Mainnet; every takeover below is Testnet's.
 		await switchToNetwork(page, "Testnet")

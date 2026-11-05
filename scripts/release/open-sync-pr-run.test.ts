@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { NEEDS_RESOLUTION_LABEL } from "./open-sync-pr"
-import { type RunSyncOpts, runSync, type SyncIO } from "./open-sync-pr-run"
+import { fakeGh } from "./fake-gh"
+import { type RunSyncOpts, realSyncIO, runSync, type SyncIO } from "./open-sync-pr-run"
 
 const SHA = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 
@@ -16,6 +17,7 @@ interface Calls {
 function fakeIO(
 	script: {
 		releaseSha?: string | null
+		lookupError?: Error
 		openPr?: number | null
 		mergeable?: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
 		prNumber?: number
@@ -32,6 +34,7 @@ function fakeIO(
 	const io: SyncIO = {
 		async resolveReleasePrMergeSha(headSha) {
 			calls.resolveReleasePrMergeSha.push(headSha)
+			if (script.lookupError) throw script.lookupError
 			return script.releaseSha === undefined ? headSha : script.releaseSha
 		},
 		async findOpenSyncPr(branch) {
@@ -86,6 +89,14 @@ describe("runSync — eligibility gate (zero-API on the common path)", () => {
 		expect(calls.prepareSyncBranch).toHaveLength(0)
 	})
 
+	test("push+stable but GitHub cannot say which PR HEAD merged → rejects with that error, opening nothing", async () => {
+		const lookupError = new Error("gh api commits/f00/pulls failed (exit 4): HTTP 502")
+		const { io, calls } = fakeIO({ lookupError })
+		await expect(runSync(opts({ io }))).rejects.toBe(lookupError)
+		expect(calls.findOpenSyncPr).toHaveLength(0)
+		expect(calls.prepareSyncBranch).toHaveLength(0)
+	})
+
 	test("push+stable but resolved merge sha != HEAD (old-tag push) → skip", async () => {
 		const { io } = fakeIO({ releaseSha: "0000000000000000000000000000000000000000" })
 		const r = await runSync(opts({ io }))
@@ -132,5 +143,34 @@ describe("runSync — opening the sync PR", () => {
 		const { io, calls } = fakeIO({ mergeable: "MERGEABLE" })
 		await runSync(opts({ io, version: "1.2.3" }))
 		expect(calls.prepareSyncBranch).toEqual([{ branch: "sync/main-to-dev-v1.2.3", baseSha: SHA, version: "1.2.3" }])
+	})
+})
+
+describe("the gh lookup", () => {
+	const lookup = (sha: string) => `api repos/o/r/commits/${sha}/pulls --jq .[]`
+
+	test("a failed lookup and an unreadable answer each reject, and the release PR is picked past an unrelated one, reading no further", async () => {
+		const unrelated = JSON.stringify({ merged_at: "2026-11-01T00:00:00Z", base: { ref: "dev" }, labels: [], merge_commit_sha: "u00" })
+		const release = JSON.stringify({
+			merged_at: "2026-11-01T00:00:00Z",
+			base: { ref: "main" },
+			labels: [{ name: "autorelease: tagged" }],
+			merge_commit_sha: "m00",
+		})
+		const gh = fakeGh([
+			{ args: lookup("f00"), stderr: "HTTP 502\n", exit: 4 },
+			{ args: lookup("b00"), stdout: "not json\n" },
+			{ args: lookup("m00"), stdout: `${unrelated}\n${release}\nnot json\n` },
+		])
+		try {
+			const io = realSyncIO("o/r")
+			expect(await io.resolveReleasePrMergeSha("f00").catch((e: Error) => e.message)).toBe(
+				"gh api commits/f00/pulls failed (exit 4): HTTP 502",
+			)
+			expect(await io.resolveReleasePrMergeSha("b00").catch((e: Error) => e.name)).toBe("SyntaxError")
+			expect(await io.resolveReleasePrMergeSha("m00")).toBe("m00")
+		} finally {
+			gh.restore()
+		}
 	})
 })

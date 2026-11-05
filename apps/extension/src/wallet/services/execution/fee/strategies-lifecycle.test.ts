@@ -37,16 +37,20 @@ type Built = ReturnType<typeof makeBuilt>
 let buildSeq = 0
 function makeBuilt(opts: BuildOpts) {
 	const n = ++buildSeq
+	const address = { toString: () => "0xaccount", build: n }
 	return {
 		txRequest: {
 			origin: { toString: () => (opts.initWrapped ? "0xentrypoint" : "0xaccount") },
+			authWitnesses: [{ requestHash: { toString: () => `0xcarried-${n}` } }],
 			txContext: {
 				gasSettings: new GasSettings(new Gas(11_000, 22_000), new Gas(3_300, 4_400), new GasFees(555n, 666n), new GasFees(7n, 8n)),
 			},
 		},
 		node: { getCurrentMinFees: vi.fn(async () => new GasFees(555n, 666n)) },
 		pxe: { build: n },
-		account: { address: { toString: () => "0xaccount", build: n } },
+		account: { address },
+		// An additional scope per build: a simulation that rebuilt its own list from the account drops it.
+		scopes: [address, { toString: () => "0xsecond", build: n }],
 		network: { chainId: opts.chainId },
 		nonce: { toString: () => `nonce-${n}` },
 		txCalls: [],
@@ -80,6 +84,8 @@ type HarnessOpts = {
 	fpcChainId?: number
 	twoPassRow?: TwoPassRow
 	effects?: Action[]
+	/** Whether the probe reports a request; defaults to whether it returns any action. */
+	requested?: boolean
 	probe?: boolean
 	abortOnFirstSim?: boolean
 	/** Aborts the estimate while the nth build runs. */
@@ -127,7 +133,9 @@ function harness(path: PathName, opts: HarnessOpts = {}) {
 		tasks,
 		logger: { log: () => {} },
 	} as unknown as FeeStrategyDeps
-	const probe = { extractEffects: vi.fn(async () => opts.effects ?? []) }
+	const probe = {
+		extractEffects: vi.fn(async () => ({ actions: opts.effects ?? [], requested: opts.requested ?? (opts.effects ?? []).length > 0 })),
+	}
 	const ctx = makeCtx(path, opts.probe ? probe : undefined, controller.signal)
 	return { deps, ctx, builds, buildStandard, simulateTxTask, tasks, created, log, fpc, probe, strategy: strategyFor(path, deps) }
 }
@@ -173,26 +181,26 @@ async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
 
 const estimateTasks = (created: Task[]) => created.filter((t) => t.content.label === "Estimating fee")
 
-/** Every simulation's options, exactly: `stub` or `valid`, scoped to the account of the build whose `pxe` it ran on. */
+/** Every simulation's options, exactly: `stub` or `valid`, under the scopes of the build whose `pxe` it ran on. */
 function expectSimOpts(h: ReturnType<typeof harness>, kinds: Array<"stub" | "valid">) {
 	const calls = h.simulateTxTask.mock.calls as unknown[][]
 	expect(calls.map((c) => ((c[2] as { skipTxValidation?: boolean }).skipTxValidation ? "stub" : "valid"))).toEqual(kinds)
 	for (const call of calls) {
 		const built = h.builds.find((b) => b.pxe === call[0])
 		expect(built).toBeDefined()
-		const address = built?.account.address
+		const scopes = built?.scopes
 		const expected =
 			(call[2] as { skipTxValidation?: boolean }).skipTxValidation === true
 				? {
 						simulatePublic: true,
 						skipFeeEnforcement: true,
 						skipTxValidation: true,
-						scopes: [address],
+						scopes,
 						stubAccountAddresses: ["0xaccount"],
 					}
-				: { simulatePublic: true, skipFeeEnforcement: true, scopes: [address] }
+				: { simulatePublic: true, skipFeeEnforcement: true, scopes }
 		expect(call[2]).toStrictEqual(expected)
-		expect((call[2] as { scopes: unknown[] }).scopes[0]).toBe(address)
+		expect((call[2] as { scopes: unknown[] }).scopes).toBe(scopes)
 	}
 }
 
@@ -317,7 +325,8 @@ describe("validated simulation options", () => {
 
 type FoldRow = {
 	path: PathName
-	cell: "none" | "effects" | "init" | "both"
+	/** `dropped`: the run asked only another account, so the probe returns no action. */
+	cell: "none" | "effects" | "dropped" | "init" | "both"
 	methods: AccountFeePaymentMethodOptions[]
 	sims: Array<"stub" | "valid">
 	actions: Action[]
@@ -328,14 +337,17 @@ const E = EXTERNAL
 const FOLD_MATRIX: FoldRow[] = [
 	{ path: "fj", cell: "none", methods: [P], sims: ["stub"], actions: [ORIGINAL] },
 	{ path: "fj", cell: "effects", methods: [P, P], sims: ["stub", "valid"], actions: [ORIGINAL, DISCOVERED] },
+	{ path: "fj", cell: "dropped", methods: [P, P], sims: ["stub", "valid"], actions: [ORIGINAL] },
 	{ path: "fj", cell: "init", methods: [P, P], sims: ["stub", "valid"], actions: [ORIGINAL] },
 	{ path: "fj", cell: "both", methods: [P, P], sims: ["stub", "valid"], actions: [ORIGINAL, DISCOVERED] },
 	{ path: "fpc fast path", cell: "none", methods: [E], sims: ["stub"], actions: [PAYLOAD, ORIGINAL] },
 	{ path: "fpc fast path", cell: "effects", methods: [E, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL, DISCOVERED] },
+	{ path: "fpc fast path", cell: "dropped", methods: [E, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL] },
 	{ path: "fpc fast path", cell: "init", methods: [E, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL] },
 	{ path: "fpc fast path", cell: "both", methods: [E, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL, DISCOVERED] },
 	{ path: "fpc two-pass", cell: "none", methods: [P, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL] },
 	{ path: "fpc two-pass", cell: "effects", methods: [P, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL, DISCOVERED] },
+	{ path: "fpc two-pass", cell: "dropped", methods: [P, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL] },
 	{ path: "fpc two-pass", cell: "init", methods: [P, P, E], sims: ["stub", "valid", "valid"], actions: [PAYLOAD, ORIGINAL] },
 	{
 		path: "fpc two-pass",
@@ -349,6 +361,7 @@ const FOLD_MATRIX: FoldRow[] = [
 const foldOpts = (cell: FoldRow["cell"], extra: HarnessOpts = {}): HarnessOpts => ({
 	probe: true,
 	effects: cell === "effects" || cell === "both" ? [DISCOVERED] : [],
+	requested: cell !== "none" && cell !== "init",
 	build: { initWrapped: cell === "init" || cell === "both" },
 	...extra,
 })
@@ -362,10 +375,16 @@ describe("probe fold", () => {
 			expect(h.buildStandard.mock.calls.map((c) => c[2])).toEqual(methods)
 			expectSimOpts(h, sims)
 			expect(h.probe.extractEffects).toHaveBeenCalledTimes(1)
-			const [sim, chain] = h.probe.extractEffects.mock.calls[0] as unknown as [unknown, { node: unknown; network: unknown }]
+			const [sim, chain] = h.probe.extractEffects.mock.calls[0] as unknown as [
+				unknown,
+				{ node: unknown; network: unknown; signer: unknown; scopes: unknown; carried: unknown },
+			]
 			expect(sim).toBe(await h.simulateTxTask.mock.results[0]?.value)
 			expect(chain.node).toBe(h.builds[0]?.node)
 			expect(chain.network).toBe(h.builds[0]?.network)
+			expect(chain.signer).toBe(h.builds[0]?.account.address)
+			expect(chain.scopes).toBe(h.builds[0]?.scopes)
+			expect(chain.carried).toEqual(new Set(h.builds[0]?.txRequest.authWitnesses.map((w) => w.requestHash.toString())))
 			expect(h.ctx.op.actions).toEqual(actions)
 		},
 	)
@@ -578,19 +597,19 @@ describe("an app's fee settings against the wallet's", () => {
 	})
 })
 
-describe("account reads at V2 and V3", () => {
+describe("scope reads at V2 and V3", () => {
 	const ORDER: Record<"fjwc" | "embedded", string[]> = {
-		fjwc: ["built.account", "gasSettings set", "account.address", "simulate"],
-		embedded: ["built.account", "gasSettings set", "getCurrentMinFees", "gasSettings set", "account.address", "simulate"],
+		fjwc: ["built.scopes", "gasSettings set", "simulate"],
+		embedded: ["built.scopes", "gasSettings set", "getCurrentMinFees", "gasSettings set", "simulate"],
 	}
 
 	test.each(["fjwc", "embedded"] as const)(
-		"%s: the account is taken before the gas limits, its address at the simulation",
+		"%s: the build's scopes are taken before the gas limits and reach the simulation",
 		async (path) => {
 			const h = harness(path)
 			const order: string[] = []
 			const built = makeBuilt({})
-			const { address } = built.account
+			const { scopes } = built
 			const txContext = built.txRequest.txContext
 			let gasSettings = txContext.gasSettings
 			Object.defineProperty(txContext, "gasSettings", {
@@ -600,17 +619,11 @@ describe("account reads at V2 and V3", () => {
 					gasSettings = next
 				},
 			})
-			const account = {
-				get address() {
-					order.push("account.address")
-					return address
-				},
-			}
-			Object.defineProperty(built, "account", {
+			Object.defineProperty(built, "scopes", {
 				enumerable: true,
 				get: () => {
-					order.push("built.account")
-					return account
+					order.push("built.scopes")
+					return scopes
 				},
 			})
 			built.node.getCurrentMinFees.mockImplementation(async () => {
@@ -618,8 +631,9 @@ describe("account reads at V2 and V3", () => {
 				return new GasFees(555n, 666n)
 			})
 			h.buildStandard.mockResolvedValueOnce(built)
-			h.simulateTxTask.mockImplementationOnce(async () => {
+			h.simulateTxTask.mockImplementationOnce(async (...args: unknown[]) => {
 				order.push("simulate")
+				expect((args[2] as { scopes: unknown }).scopes).toBe(scopes)
 				return sentinelSim()
 			})
 			const op = h.ctx.op as { fee?: Record<string, unknown> }

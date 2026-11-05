@@ -44,8 +44,12 @@ export class EventHandler<T> implements IEventHandler<T> {
 		}
 	}
 
+	/** Calls each callback subscribed when the dispatch starts and still subscribed at its turn: a
+	 *  removal never skips a sibling still subscribed, and a callback added mid-dispatch waits for the
+	 *  next event. */
 	public invoke(payload: T) {
-		for (const callback of this.#callbacks) {
+		for (const callback of [...this.#callbacks]) {
+			if (!this.#callbacks.includes(callback)) continue
 			try {
 				callback(payload)
 			} catch (err) {

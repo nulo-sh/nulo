@@ -16,7 +16,7 @@ export type SignInput = {
 	keyId: string
 	nowMs: number
 	keys: readonly PinnedKey[]
-	/** The `listSha256` digest the approver was shown; signing refuses any other tokens or flags. */
+	/** The `listSha256` digest the approver was shown; signing refuses any other tokens, flags or price feeds. */
 	expectTokensSha256?: string
 }
 
@@ -28,9 +28,10 @@ export async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string>
 	return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("")
 }
 
-/** The digest of the tokens and the flags as the payload serializes them. `prepare` shows it; `sign` checks it. */
-export function listSha256({ tokens, flagged }: Pick<TokenListPayload, "tokens" | "flagged">): Promise<string> {
-	return sha256Hex(new TextEncoder().encode(JSON.stringify({ tokens, flagged })))
+/** The digest of the tokens, the flags and the price feeds as the payload serializes them. `prepare`
+ *  shows it; `sign` checks it. Without feeds it hashes exactly what it hashed before they existed. */
+export function listSha256({ tokens, flagged, priceFeeds }: Pick<TokenListPayload, "tokens" | "flagged" | "priceFeeds">): Promise<string> {
+	return sha256Hex(new TextEncoder().encode(JSON.stringify({ tokens, flagged, priceFeeds })))
 }
 
 /** The sequence of the published envelope, read without verifying: it only sets a floor, and a key
@@ -56,17 +57,17 @@ async function signingKey(input: SignInput): Promise<CryptoKey> {
 }
 
 export async function signList(input: SignInput): Promise<SignResult> {
-	const { tokens, flagged = [] } = checkSource(JSON.parse(input.sourceText))
-	const digest = await listSha256({ tokens, flagged })
+	const { tokens, flagged = [], priceFeeds } = checkSource(JSON.parse(input.sourceText))
+	const digest = await listSha256({ tokens, flagged, priceFeeds })
 	if (input.expectTokensSha256 !== undefined && input.expectTokensSha256 !== digest) {
-		throw new Error("the tokens and flags differ from the ones the approver was shown")
+		throw new Error("the tokens, flags and price feeds differ from the ones the approver was shown")
 	}
 	const sequence = Math.floor(input.nowMs / 1000)
 	if (sequence <= publishedSequence(input.publishedText)) {
 		throw new Error("the signing clock is not above the published sequence")
 	}
 	const issuedAt = new Date(sequence * 1000).toISOString()
-	const payload: TokenListPayload = { format: PAYLOAD_FORMAT, sequence, issuedAt, tokens, flagged }
+	const payload: TokenListPayload = { format: PAYLOAD_FORMAT, sequence, issuedAt, tokens, flagged, ...(priceFeeds && { priceFeeds }) }
 	const bytes = new TextEncoder().encode(JSON.stringify(payload))
 	parsePayload(bytes, "strict")
 	const envelope = await signEnvelope(bytes, await signingKey(input), input.keyId)

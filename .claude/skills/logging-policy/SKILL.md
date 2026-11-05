@@ -28,6 +28,10 @@ to log something sensitive.
   (aliasing and indirection defeat it), stated in its own header. Its denied names are imported
   FROM `REDACTED_KEYS`/`URL_KEYS`, so the two lists cannot drift; an arity read
   (`authWitnesses.length`) is deliberately allowed, being the idiom this policy asks for.
+- **An error's message is a finished string.** `trim` keeps up to 200 characters of it
+  (`MAX_ERROR_MESSAGE_CHARS`), and a message can quote its input (`JSON.parse`'s does): where that
+  input can hold anything this policy never logs, log a fixed category, never the error
+  (`implementations-plan/archive/backup-log-hygiene/plan.md#error-text`).
 - **Log the identifier, not the payload — chosen per site.** There is no single right identifier:
   a `txHash` links private activity, an unsalted origin hash is dictionary-reversible, a bare row
   id is useless without the database. Prefer note type + content arity, function name + return
@@ -56,6 +60,14 @@ to log something sensitive.
   user with every toggle off**, and land in the buffer the log viewer renders and exports. `debug`
   is the only level that costs nothing when nobody asked for it. A line you would not want in a
   stranger's bug report belongs at `debug` or nowhere.
+- **An expected refusal logs at `debug`; a real failure on the same path stays at `error`.** Key
+  the demotion on a type or constant the wallet owns (a typed `WalletError`, `StoreErasedError`,
+  `isClientDisconnectRejection`), or on an upstream text pinned whole on the one op whose callers
+  recover, never on text a dApp or a node can shape, and pair each with an `error` control in its
+  test. The shared rules: a client disconnect (`logCallFailure`, and `forwardVueError` as both
+  apps' Vue `errorHandler`); a wrong credential the page words (`logCredentialFailure`); a run a
+  lock superseded resolves at debug (`createNetworkSwitchHandler`). An unhandled rejection is a
+  missing handler, not a level: hold the promise at the call that makes it.
 - **Two flags, not one — don't conflate them.** `debugMode` gates the LEVEL (and grows the ring
   buffer 1,000 → 10,000); `developerMode` gates PERSISTENCE to `chrome.storage.session`. Debug
   lines are dropped without `debugMode` even when `developerMode` is on.

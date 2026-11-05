@@ -12,41 +12,46 @@ import type { Page } from "puppeteer"
 
 type CaptureWindow = { __downloadCapture?: Promise<string>; __downloadFile?: { name: string; base64: string } }
 
-export async function armDownloadCapture(page: Page, { gzip }: { gzip: boolean }): Promise<void> {
-	await page.evaluate((gunzip: boolean) => {
-		const w = window as unknown as CaptureWindow
-		w.__downloadCapture = new Promise<string>((resolve, reject) => {
-			const timer = setTimeout(() => reject(new Error("download was not captured within 30s")), 30_000)
-			const c = chrome as unknown as {
-				downloads: { download: (opts: { url: string; filename: string }, cb: (id: number) => void) => void }
-			}
-			c.downloads = {
-				download: (opts, cb) => {
-					fetch(opts.url)
-						.then((r) => r.blob())
-						.then(async (blob) => {
-							const bytes = new Uint8Array(await blob.arrayBuffer())
-							w.__downloadFile = {
-								name: opts.filename,
-								base64: btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join("")),
-							}
-							const text = gunzip
-								? await new Response(blob.stream().pipeThrough(new DecompressionStream("gzip"))).text()
-								: await blob.text()
-							clearTimeout(timer)
-							resolve(text)
-							cb(1)
-						})
-						.catch((err) => {
-							clearTimeout(timer)
-							reject(err instanceof Error ? err : new Error(String(err)))
-						})
-				},
-			}
-		})
-		// Swallow the (test-only) unhandled rejection if the click never fires.
-		w.__downloadCapture.catch(() => {})
-	}, gzip)
+/** `withinMs` counts from the arming, so it covers whatever the press runs before the download. */
+export async function armDownloadCapture(page: Page, { gzip, withinMs = 30_000 }: { gzip: boolean; withinMs?: number }): Promise<void> {
+	await page.evaluate(
+		(gunzip: boolean, within: number) => {
+			const w = window as unknown as CaptureWindow
+			w.__downloadCapture = new Promise<string>((resolve, reject) => {
+				const timer = setTimeout(() => reject(new Error(`download was not captured within ${within} ms`)), within)
+				const c = chrome as unknown as {
+					downloads: { download: (opts: { url: string; filename: string }, cb: (id: number) => void) => void }
+				}
+				c.downloads = {
+					download: (opts, cb) => {
+						fetch(opts.url)
+							.then((r) => r.blob())
+							.then(async (blob) => {
+								const bytes = new Uint8Array(await blob.arrayBuffer())
+								w.__downloadFile = {
+									name: opts.filename,
+									base64: btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join("")),
+								}
+								const text = gunzip
+									? await new Response(blob.stream().pipeThrough(new DecompressionStream("gzip"))).text()
+									: await blob.text()
+								clearTimeout(timer)
+								resolve(text)
+								cb(1)
+							})
+							.catch((err) => {
+								clearTimeout(timer)
+								reject(err instanceof Error ? err : new Error(String(err)))
+							})
+					},
+				}
+			})
+			// Swallow the (test-only) unhandled rejection if the click never fires.
+			w.__downloadCapture.catch(() => {})
+		},
+		gzip,
+		withinMs,
+	)
 }
 
 export async function readCapturedDownload(page: Page): Promise<string> {

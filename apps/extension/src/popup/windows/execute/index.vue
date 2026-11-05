@@ -21,17 +21,32 @@ import { createScopeFollow, selectionWriter } from "./scope-follow"
 import { managers, requireNetwork } from "@/utils/core"
 import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
-import { type FeePayerPick, personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
-import { authwitDisplayCall, grantContentsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
+import { type FeePayerPick, holdsConfirm, personPaysAppPayment } from "./fee-figure"
+import { approvalDeltas } from "./approval-deltas"
+import {
+	authwitDisplayCall,
+	awaitsGrantDecode,
+	decodeCallsOrUnavailable,
+	decodeGrantsOrUnavailable,
+	grantContentsOf,
+	pendingAuthwitDecodes,
+} from "./display-calls"
 import { REFUSAL_REASON, REFUSAL_TITLE, type RefusalKind, refusalKind } from "./refusal"
-import { grantRefusalRow, readableGrants } from "./call-surface"
-import { decodeOperationArguments, followKnownTokens, resolveOperations } from "./operation-display"
+import { grantRefusalRow } from "./call-surface"
+import {
+	WrongProfileError,
+	assertRequestProfile,
+	decodeOperationArguments,
+	followKnownTokens,
+	requestEnd,
+	resolveForProfile,
+} from "./operation-display"
+import { openJsonWindow } from "@/utils/json-window"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
-import { NetworkServiceClient } from "@/wallet/services/network/client"
-import { type Account, AccountServiceClient } from "@/wallet/services/account/client"
+import type { Account } from "@/wallet/services/account/client"
 import {
 	type DecodedCall,
 	type DecodedGrant,
@@ -46,7 +61,6 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import {
 	DappInteractionServiceClient,
 	type ExecutionPayload,
-	type OperationApprovalDelta,
 	type ShownTokenMetadata,
 	type WindowEnd,
 } from "@/wallet/services/dapp-interaction/client"
@@ -56,10 +70,11 @@ import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
+import { estimateWhenClear } from "@/utils/estimate-when-clear"
 import { useTokenFlags } from "@/composables/usePrices"
 import { useToast } from "@/composables/toast"
 
-const { openToast } = useToast()
+const { openToast, toast, closeToast } = useToast()
 
 // Local alias — kept for diff minimality. The honest type lives in `./types.ts`
 // (DraftUIOperation) so send-like `feeSettings` is optional during user editing.
@@ -157,7 +172,7 @@ const tokenFollow = followKnownTokens(tokenService, knownTokens)
  *  Unlike a call's decode, a grant's gates Confirm: what the card shows is what the wallet signs. */
 const decodedGrants = ref<Map<number, readonly DecodedGrant[]>>(new Map())
 const grantsPending = computed(() =>
-	operations.value.some((op, i) => grantContentsOf(op as unknown as UIOperation).length > 0 && !decodedGrants.value.has(i)),
+	operations.value.some((op, i) => awaitsGrantDecode(op as unknown as UIOperation, decodedGrants.value.has(i))),
 )
 /** The footer's error row for a grant the wallet cannot read. Its own state, so the `clearError()` of
  *  a fee change never lifts it. */
@@ -176,10 +191,24 @@ const {
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
 
+/** Per operation, whether its estimate or preview waits behind another send; cleared once its run
+ *  starts, a new fee setting asks again, or neither is in flight. */
+const queuedOps = ref<Record<number, boolean>>({})
+const queueWatch = (index: number, estimateToken: string, signal: AbortSignal) => ({
+	onQueued: () => {
+		if (!signal.aborted) queuedOps.value[index] = true
+	},
+	start: { events: executionService.onEstimateStarted, estimateToken, onStarted: () => (queuedOps.value[index] = false) },
+})
+
+/** The snack that reported a failed estimate: closed once none it reported stands, unless replaced. */
+let feeFailureSnackId: number | undefined
 const {
 	results: feeEstimates,
 	estimating: estimatingOps,
+	failed: failedFeeEstimates,
 	estimate: scheduleFeeEstimate,
+	cancel: cancelFeeEstimate,
 	handoffAll: handoffFeeEstimates,
 	rearm: rearmFeeEstimates,
 	cancelAll: cancelAllFeeEstimates,
@@ -187,19 +216,31 @@ const {
 } = useFeeEstimationMap<number, { index: number; feeSettings: FeeSettings }, TransferFeeEstimate>({
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
-	estimate: ({ index, feeSettings }, estimateToken, flowKey) =>
-		executionService.estimateOperationFee(requestId.value!, index, feeSettings, estimateToken, flowKey),
+	estimate: (params, estimateToken, flowKey, signal) =>
+		estimateWhenClear(
+			() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
+			signal,
+			queueWatch(params.index, estimateToken, signal),
+		),
 	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 500,
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
-		console.error(`[Execute] Fee estimation failed for op ${key}:`, err)
-		// An app-paid operation's estimate only checks the app's fee contract, so its other failures are
-		// unknown, never a verdict. A payment the person makes all the same keeps Confirm waiting on a retry.
-		const op = operations.value[key] as unknown as UIOperation
-		if (!isAppPaid(op) || personPaysAppPayment(op)) openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		console.error("[Execute] Fee estimation failed", { op: key, error: err })
+		if (reportsEstimateFailure(operations.value[key] as unknown as UIOperation)) {
+			feeFailureSnackId = openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		}
 	},
 })
+
+/** An app-paid operation's estimate only checks the app's fee contract, so its other failures are
+ *  unknown, never a verdict. A payment the person makes all the same keeps Confirm waiting on a retry. */
+const reportsEstimateFailure = (op: UIOperation): boolean => !isAppPaid(op) || personPaysAppPayment(op)
+const retireFeeFailureSnack = () => {
+	if (operations.value.some((op, i) => failedFeeEstimates.value[i] && reportsEstimateFailure(op as unknown as UIOperation))) return
+	if (feeFailureSnackId !== undefined && toast.value?.id === feeFailureSnackId) closeToast()
+	feeFailureSnackId = undefined
+}
 
 /** The wallet's refusal of the request, met by an estimate, a preview or an approval. The worker keeps
  *  it too, so it never clears: Reject is the one way on, and it answers the dApp with the refusal. */
@@ -212,11 +253,6 @@ const holdRefusal = (error: unknown): boolean => {
 
 /** A send whose fee the app pays through its own payload. */
 const isAppPaid = (op: UIOperation | undefined): boolean => carriesFeeSettings(op) && isEmbeddedFeePayment(op)
-
-/** The figure an approval carries is on screen before Confirm; a failed estimate keeps Confirm off. */
-const awaitsFeeFigure = computed(() =>
-	operations.value.some((op, i) => waitsForFeeFigure(op as unknown as UIOperation, feePayers.value[i]) && !feeEstimates.value[i]),
-)
 
 /** An estimate whose payer the node would refuse at submission: an app's fee contract proven unable
  *  to pay, or the account's own Fee Juice below the fee. Confirm stays off, so nothing is proven. */
@@ -233,19 +269,24 @@ const payerShort = computed(() =>
 )
 
 // A `default_entrypoint` operation never gets a fee estimate (the dApp pays), so
-// the authorizations the wallet would sign are previewed through their own slot
+// the authorizations it uses are previewed through their own slot
 // of the same engine: same attempt token, flow key, cancel and handoff rules.
 const {
 	results: authwitPreviews,
 	estimating: previewingOps,
+	failed: failedAuthwitPreviews,
 	estimate: scheduleAuthwitPreview,
 	handoffAll: handoffAuthwitPreviews,
 	rearm: rearmAuthwitPreviews,
 	cancelAll: cancelAllAuthwitPreviews,
 	dispose: disposeAuthwitPreviews,
 } = useFeeEstimationMap<number, { index: number }, OperationAuthwitPreview>({
-	estimate: ({ index }, estimateToken, flowKey) =>
-		executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey),
+	estimate: ({ index }, estimateToken, flowKey, signal) =>
+		estimateWhenClear(
+			() => executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey),
+			signal,
+			queueWatch(index, estimateToken, signal),
+		),
 	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 0,
 	onError: (key, err) => {
@@ -254,6 +295,17 @@ const {
 		openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
 	},
 })
+
+const retryAuthwitPreview = (index: number) => scheduleAuthwitPreview(index, { index })
+
+const awaitsEstimates = computed(() =>
+	operations.value.some((op, i) =>
+		holdsConfirm(op as unknown as UIOperation, feePayers.value[i], {
+			landed: !!feeEstimates.value[i],
+			inFlight: estimatingOps.value[i] === true || previewingOps.value[i] === true,
+		}),
+	),
+)
 
 // init/reject/services are referenced lazily (thunks): they are declared below
 // and only invoked by start()/dispose()/the guard at runtime.
@@ -286,32 +338,19 @@ const {
 		tokenFlags.dispose()
 	},
 	init: () => init(),
-	// A request of another profile than the active one was ended by that lock or switch, not by the
-	// person, whatever then closes its window.
-	reject: (end) => reject(isWrongProfile.value && end === "close" ? (profile.value ? "switch" : "lock") : end),
+	reject: (end) => reject(requestEnd(end, isWrongProfile.value, profile.value)),
 })
 
 const init = async () => {
-	// Disconnect the locally-constructed account/network clients on EVERY
-	// exit path. They were disconnected only on the success path (after the ops
-	// loop), so any throw in the loop — e.g. "Account no longer exists" — leaked
-	// both live SW ports for the failed popup's lifetime.
-	let accountService: AccountServiceClient | undefined
-	let networkService: NetworkServiceClient | undefined
 	try {
 		profile.value = await profileService.getActiveProfile()
 		await loadInteractionPayload()
 		if (!payload.value) return
 
-		if (profile.value?.id !== payload.value.session.profileId) {
-			// TODO: redirect to sign in page with preconfigured profile id
-			isWrongProfile.value = true
-			throw new Error("Sign in with another profile")
-		}
+		// TODO: redirect to sign in page with preconfigured profile id
+		assertRequestProfile(profile.value, payload.value.session.profileId)
 
-		accountService = new AccountServiceClient()
-		networkService = new NetworkServiceClient()
-		const resolved = await resolveOperations(payload.value.params.operations, accountService, networkService, profile.value!.id)
+		const resolved = await resolveForProfile(payload.value.params.operations, profile.value.id)
 		session.value = payload.value.session
 		operations.value = resolved.operations
 		accounts.value = resolved.accounts
@@ -328,7 +367,7 @@ const init = async () => {
 		// vocabulary reading or "Reading arguments…", and a failed one falls back to the raw fields.
 		void decodeOperationArguments(resolved.operations, executionService, (index, decoded) => decodedCalls.value.set(index, decoded))
 		void decodeOperationGrants(resolved.operations)
-		void tokenFollow.start(resolved.operations, profile.value!.id)
+		void tokenFollow.start(resolved.operations, profile.value.id)
 
 		// Pre-fetch token metadata for any `register_token` ops so the
 		// OperationCard renders name/symbol/decimals before Allow. The Allow
@@ -342,13 +381,9 @@ const init = async () => {
 			})
 		}
 	} catch (error) {
-		console.error("Failed to initialize execution", error)
+		if (error instanceof WrongProfileError) isWrongProfile.value = true
+		console.error("Failed to initialize execution", { error })
 		setError("Something went wrong")
-	} finally {
-		// Both are idle after the ops loop; disconnect on success, throw, or
-		// early-return alike (undefined when init returned before constructing them).
-		accountService?.disconnect()
-		networkService?.disconnect()
 	}
 }
 
@@ -394,13 +429,8 @@ async function decodeOperationGrants(ops: UIOperation[]): Promise<void> {
 		ops.map(async (op, index) => {
 			const count = grantContentsOf(op).length
 			if (!count) return
-			let decoded: readonly DecodedGrant[] = []
-			try {
-				decoded = await executionService.decodeGrantsForDisplay(requestId.value!, index)
-			} catch (error) {
-				console.warn("[Execute] Grant decode failed", { index, error })
-			}
-			decodedGrants.value.set(index, readableGrants(decoded, count))
+			const read = () => executionService.decodeGrantsForDisplay(requestId.value!, index)
+			decodedGrants.value.set(index, await decodeGrantsOrUnavailable(read, count))
 		}),
 	)
 }
@@ -418,13 +448,7 @@ function decodeDiscoveredAuthwits(): void {
 }
 
 async function decodeAuthwitBatch(networkId: string, fresh: DiscoveredAuthwit[]): Promise<void> {
-	let decoded: DecodedCall[]
-	try {
-		decoded = await executionService.decodeCallsForDisplay(networkId, fresh.map(authwitDisplayCall))
-	} catch (error) {
-		console.warn("[Execute] Authorization decode failed", { error })
-		decoded = undecodedAll(fresh.length)
-	}
+	const decoded = await decodeCallsOrUnavailable(executionService, networkId, fresh.map(authwitDisplayCall))
 	for (const [i, a] of fresh.entries()) {
 		decodedAuthwits.value.set(a.messageHash, decoded[i] ?? { kind: "undecoded", reason: "unavailable" })
 		authwitDecodesInFlight.delete(a.messageHash)
@@ -438,26 +462,24 @@ const handleFeeUpdate = (index: number, value: FeeSettings | undefined) => {
 	if (!carriesFeeSettings(op)) return
 	;(op as { feeSettings?: FeeSettings }).feeSettings = value
 	clearError()
-	if (value) scheduleFeeEstimate(index, { index, feeSettings: value })
+	// Settings the card withdrew are asked no more, so their failure stands no longer either.
+	if (!value) cancelFeeEstimate(index)
+	else {
+		queuedOps.value[index] = false
+		scheduleFeeEstimate(index, { index, feeSettings: value })
+	}
+	retireFeeFailureSnack()
 }
 
+const retryFeeEstimate = (index: number) =>
+	handleFeeUpdate(index, (operations.value[index] as { feeSettings?: FeeSettings } | undefined)?.feeSettings)
+
 const approve = async () => {
-	if (isInteractionCancelled.value || isLoading.value) return
-	// Block approval until init() has finished and at least one operation
-	// exists. Without this guard, a fast click before payload materialization
-	// would approve an empty operations list.
-	if (!initComplete.value || operations.value.length === 0) return
-	if (tokenMetadataUnread.value) return
-	// UX gate: any send-like op still missing user-picked fee?
-	// Cast to DraftOperation works around a pre-existing AztecAddress/Fr
-	// structural mismatch between popup-resolved Operation and wallet-bridge's
-	// — runtime semantics are unaffected (discriminant + feeSettings checks).
-	if (operations.value.some((op) => requiresFeeSelection(op as unknown as import("./types").DraftOperation))) {
+	if (isLoading.value || refusal.value || confirmBlocked.value) return
+	if (needsFeeSelection.value) {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
 	}
-	if (payerShort.value || awaitsFeeFigure.value || tokenFlagHold.value) return
-	if (grantsPending.value || grantRefusal.value || refusal.value) return
 	try {
 		isLoading.value = true
 		// Ownership handoff: approval transfers the completed estimates and previews to
@@ -465,20 +487,12 @@ const approve = async () => {
 		// eviction would race the execution out of its reuse hits and preview snapshots.
 		handoffFeeEstimates()
 		handoffAuthwitPreviews()
-		// The SW executes the dApp's stored request; per operation the popup
-		// contributes only its fee choice, the ids the SW minted for it, and the
-		// token details its card showed.
-		const deltas: OperationApprovalDelta[] = operations.value.map((op, index) => {
-			const estimate = feeEstimates.value[index] ?? undefined
-			const feeSettings = carriesFeeSettings(op) ? op.feeSettings : undefined
-			return {
-				feeSettings,
-				estimateId: estimate?.estimateId,
-				previewId: estimate?.previewId ?? authwitPreviews.value[index]?.previewId,
-				feeCeiling: estimate?.maxFee,
-				tokenMetadata: op.kind === "register_token" ? tokenMetadata.value.get(op.address) : undefined,
-			}
-		})
+		const deltas = approvalDeltas(
+			operations.value as unknown as UIOperation[],
+			feeEstimates.value,
+			authwitPreviews.value,
+			tokenMetadata.value,
+		)
 		const stillOurs = scopeFollow.capture()
 		await interactionService.approveInteraction(requestId.value!, deltas)
 		// A removed window runs no unmount, so the approval itself ends every estimate it did not
@@ -523,7 +537,7 @@ const reject = async (end: WindowEnd) => {
 // The notice's OK ends another profile's request as the lock or switch that made it, with the same
 // wait as Reject, so the window's close cannot reach the request first.
 const dismissWrongProfile = () =>
-	requestId.value && !isInteractionCancelled.value ? reject(profile.value ? "switch" : "lock") : closeWindow()
+	requestId.value && !isInteractionCancelled.value ? reject(requestEnd("close", true, profile.value)) : closeWindow()
 
 const signerAccounts = computed(() => uniqueSignerAccounts(operations.value))
 const signerNetworks = computed(() => uniqueSignerNetworks(operations.value))
@@ -555,21 +569,28 @@ const scopeFollow = createScopeFollow({
 		(profileId, address) => managers.uiPreference.setSelectedAccount(profileId, address),
 	),
 })
-// Mirrors the `requiresFeeSelection` early-return inside approve(): a send-like op
-// with no chosen fee can't execute yet. Gating the Confirm button's disabled state
-// on it (not just approve()'s guard) makes the button authoritative — a click while
-// the fee is still auto-selecting can no longer no-op into the "select a fee"
-// warning. e2e clicks wait for the button to enable, so this also removes the race
-// where approval is clicked before the default fee resolves (slow PXE / cold start).
+// The cast bridges a structural AztecAddress/Fr mismatch with wallet-bridge's type; only the kind
+// and the fee settings are read.
 const needsFeeSelection = computed(() =>
 	operations.value.some((op) => requiresFeeSelection(op as unknown as import("./types").DraftOperation)),
 )
+/** Every hold on Confirm but the fee pick, which approve() answers with a warning instead. */
+const confirmBlocked = computed(
+	() =>
+		isInteractionCancelled.value ||
+		!initComplete.value ||
+		operations.value.length === 0 ||
+		tokenMetadataUnread.value ||
+		payerShort.value ||
+		awaitsEstimates.value ||
+		tokenFlagHold.value ||
+		grantsPending.value ||
+		grantRefusal.value !== undefined ||
+		processingError.value?.type === "error",
+)
 
 const showJson = () => {
-	if (!requestId.value) return
-	const url = new URL(chrome.runtime.getURL("src/popup/index.html#/windows/json"))
-	url.searchParams.set("requestId", requestId.value)
-	chrome.windows.create({ type: "popup", url: url.toString(), height: 700, width: 900 })
+	if (requestId.value) openJsonWindow(requestId.value)
 }
 
 const profileService = new ProfileServiceClient()
@@ -588,6 +609,13 @@ watch(
 )
 
 watch([feeEstimates, authwitPreviews], decodeDiscoveredAuthwits, { deep: true })
+watch(
+	[estimatingOps, previewingOps],
+	([estimating, previewing]) => {
+		for (const i of Object.keys(queuedOps.value).map(Number)) if (!estimating[i] && !previewing[i]) queuedOps.value[i] = false
+	},
+	{ deep: true },
+)
 // Synchronous, so a result cleared in the tick it landed still leaves its verdict behind.
 watch(
 	feeEstimates,
@@ -622,6 +650,7 @@ onUnmounted(() => {
 					v-if="scopeBanner"
 					data-testid="execute-scope-banner"
 					:data-state="scopeBanner.state"
+					:class="$style.scope_banner"
 					variant="info"
 					direction="vertical"
 					wide
@@ -653,8 +682,11 @@ onUnmounted(() => {
 						:dapp="dapp ?? undefined"
 						:feeEstimate="feeEstimates[i] ?? undefined"
 						:isEstimating="!!estimatingOps[i]"
+						:estimateFailed="!!failedFeeEstimates[i]"
 						:authwitPreview="authwitPreviews[i] ?? undefined"
 						:isPreviewing="!!previewingOps[i]"
+						:previewFailed="!!failedAuthwitPreviews[i]"
+						:isQueued="!!queuedOps[i]"
 						:decodedCalls="decodedCalls.get(i)"
 						:decodedAuthwits="decodedAuthwits"
 						:decodedGrants="decodedGrants.get(i)"
@@ -666,6 +698,8 @@ onUnmounted(() => {
 						:tokenFlagAcknowledged="flagAcknowledged.has(i)"
 						:refused="refusal !== undefined"
 						@updateFeeSettings="handleFeeUpdate"
+						@retryEstimate="retryFeeEstimate"
+						@retryPreview="retryAuthwitPreview"
 						@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
 						@acknowledgeTokenFlag="acknowledgeTokenFlag"
 					>
@@ -700,19 +734,7 @@ onUnmounted(() => {
 			:confirm-hidden="refusal !== undefined"
 			:confirm-label="isLoading ? 'EXECUTING' : 'Confirm'"
 			:confirm-loading="isLoading"
-			:confirm-disabled="
-				processingError?.type === 'error' ||
-				tokenMetadataUnread ||
-				!initComplete ||
-				operations.length === 0 ||
-				needsFeeSelection ||
-				payerShort ||
-				awaitsFeeFigure ||
-				tokenFlagHold ||
-				grantsPending ||
-				grantRefusal !== undefined ||
-				isInteractionCancelled
-			"
+			:confirm-disabled="confirmBlocked || needsFeeSelection"
 			@reject="reject('reject')"
 			@approve="approve"
 		/>
@@ -741,6 +763,12 @@ onUnmounted(() => {
 
 .sections {
 	padding: 16px;
+}
+
+/* The action repeats a typed name on a line of its own, so the whole banner breaks a word wider
+ * than it. */
+.scope_banner {
+	overflow-wrap: anywhere;
 }
 
 .refusal {

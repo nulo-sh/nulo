@@ -15,6 +15,9 @@
  * a run that has no page yet — the initial boot, a RETRY, or a reconnect whose mount-time boot was
  * lost before the router resolved (a disconnect that rejected the route guard's first read). An own
  * window (`utils/own-window.ts`) is established from its first boot: its page is the flow it opened for.
+ *
+ * A flow past the moment it opened its profile runs over that session, so once a restart drops the
+ * session the flow is over: its page would otherwise show the wallet with nothing behind it.
  */
 
 export interface LockLandingState {
@@ -28,6 +31,10 @@ export interface LockLandingState {
 	hasCandidate: boolean
 	/** A reconnect run over a route that already resolved, or an own window: the page owns its flow. */
 	pageEstablished: boolean
+	/** The shell marks a session open (`isLogined`), whatever the worker now holds. */
+	holdsSession: boolean
+	/** The current route's flow opens a profile's session: an import or a profile create. */
+	onOpeningRoute: boolean
 }
 
 export type LockLandingAction =
@@ -37,6 +44,8 @@ export type LockLandingAction =
 	| "select-and-auth"
 	/** The shell renders an authenticated page over a worker with no session: enter the locked state. */
 	| "lock"
+	/** A flow that opened its profile's session lost it: end the flow, then enter the locked state. */
+	| "end-flow"
 	/** Nothing to change; only mark the session as checked. */
 	| "settle"
 
@@ -51,6 +60,7 @@ export function isEstablishedAtDecision(establishedAtStart: boolean, pathAtStart
 export function decideLockLanding(state: LockLandingState): LockLandingAction {
 	if (state.isPasskeyRoute && !state.hasProfile) return "passkey-hold"
 	if (!state.hasProfile) return state.hasCandidate && !state.pageEstablished ? "select-and-auth" : "settle"
+	if (state.holdsSession && state.onOpeningRoute) return "end-flow"
 	return state.onAuthRequiredRoute ? "lock" : "settle"
 }
 

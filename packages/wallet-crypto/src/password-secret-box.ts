@@ -16,8 +16,6 @@
  *   - `unlockProfile`           → `throw new InvalidPasswordError()`
  *   - `changeProfilePassword`   → `throw new Error("Invalid profile old password")`
  *   - `exportPlain` (password)  → `throw new InvalidPasswordError()`
- *                                 (then wrapped by the method's own
- *                                 catch block into a generic Error)
  *   - `exportMnemonic`          → `throw new Error("Invalid profile old password")`
  *   - `restorePasswordSession`  → silent close (SessionManager owns this)
  *

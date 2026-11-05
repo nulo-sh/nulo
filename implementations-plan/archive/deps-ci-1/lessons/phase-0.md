@@ -1,0 +1,7 @@
+# deps-ci-1 phase 0: planning consults
+
+- 2026-10-31, Codex r1 (gpt-6.1-sol, high, plan audit): `conditional approve`. Five findings, all accepted: the Docker probe ran `aztec` outside the runner's PATH; `git diff --stat` cannot prove a one-package change (use a keyed compare); the reachability wording conflated the `networkStats(iface)` argument with real interfaces; `^5.33.16` admits minors too; D1 is scoped maintenance, not a security fix. D2 in-place, D3 heredoc, D4 known limit: agreed.
+- 2026-10-31, Opus Plan leg (opus): `reject`. Blocking: (1) `cli/package.json` matches the audit gate's `**/package.json`, so the PR enforces `bun audit`, and `dev` has 12 unacknowledged `bun.lock` advisories (verified by a local enforce run; #1414 clears them); (2) the owner's 2026-10-28 dismissals of the same package on this lockfile (verified via the Dependabot API). Six smaller findings accepted.
+- 2026-10-31, Codex r2 (resumed): `conditional approve`. Leave the gate unchanged (D5); open the PR blocked on #1414, then merge dev and push after it lands; keep the dismissal rule verbatim; `audit-gate.ts mode` prints `audit mode: …`. Applied.
+- 2026-10-31, Codex r3 (resumed, verify only): `approve`.
+- 2026-10-31, implementation review: Codex r1 (fresh session) `findings` (1, accepted); Opus diff review `findings` (4: 1, 2 and 4 accepted, 3 rejected as needing an npm alias the tree lacks); Codex r2 (resumed) `clean`.

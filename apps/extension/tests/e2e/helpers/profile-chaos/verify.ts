@@ -1,7 +1,7 @@
 /**
  * `verifyAll`: every live profile in model order is refused a wrong secret with no write, opens with
- * its own, and shows its accounts; a password profile also re-exports each imported account. The
- * lock screen then goes back to the model's selection.
+ * its own, shows its accounts and re-exports each imported account. The lock screen then goes back
+ * to the model's selection.
  */
 import { RetiredProfileError } from "@nulo/extension-messaging/errors"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
@@ -10,17 +10,34 @@ import { answerWithCredential } from "../../fixtures/passkey"
 import { derivedAddresses, reexportImported } from "./accounts-io"
 import type { RETIRED_REFUSALS, VerifyReading } from "./checkers"
 import { readCensus } from "./collect"
-import { live, type ModelProfile, type World } from "./model"
+import { type CredentialRef, live, type ModelFile, type ModelProfile, otherCredentials, type World } from "./model"
 import { expireRelease } from "./pre-update"
-import { type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
-import { authSubmitReady, firstSignal, HOME, openRoute, pickOnLockScreen, timed, typePasswordAndSubmit } from "./ui"
+import { credentialId, type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
+import { authSubmitReady, dismissNotices, firstSignal, HOME, openRoute, pickOnLockScreen, timed, typePasswordAndSubmit } from "./ui"
 import { waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId } from "../../fixtures/dom"
 
 const STEP_MS = 60_000
 
-/** A wrong secret for `p`: another password, or another live profile's passkey, else a refused
- *  prompt. Resolves whether the lock screen refused it. */
+const REFUSED = [PASSKEY_COPY.unlockFailed, PASSKEY_COPY.noPrf, PASSKEY_COPY.notConfirmed].map((text) => ({
+	label: "refused",
+	text,
+	hash: "/popup/auth",
+}))
+
+async function otherRefused(s: RunState, other: CredentialRef): Promise<boolean> {
+	const page = s.anchor
+	// The last attempt's refusal toast would read as this one's.
+	await dismissNotices(page)
+	await authSubmitReady(page)
+	await answerWithCredential(page, credentialId(s, other))
+	await clickByTestId(page, "auth-submit")
+	return (await firstSignal(page, [...REFUSED, HOME], STEP_MS)).label === "refused"
+}
+
+/** Wrong secrets for `p`: another password, or each passkey the authenticator holds other than
+ *  `p`'s own, a replaced or a declined one included, else a refused prompt. Resolves whether the
+ *  lock screen refused every one. */
 async function wrongAttempt(s: RunState, p: ModelProfile, w: World): Promise<boolean> {
 	const page = s.anchor
 	if (p.method === "password") {
@@ -29,24 +46,15 @@ async function wrongAttempt(s: RunState, p: ModelProfile, w: World): Promise<boo
 			(await firstSignal(page, [{ label: "refused", testid: "error-text", hash: "/popup/auth" }, HOME], STEP_MS)).label === "refused"
 		)
 	}
+	const others = otherCredentials(w, p.ref)
+	for (const other of others) if (!(await otherRefused(s, other))) return false
+	if (others.length || !s.auth) return true
 	await authSubmitReady(page)
-	const other = live(w).find((x) => x.ref !== p.ref && x.credential && s.credentials.has(x.credential))
-	if (other?.credential) {
-		await answerWithCredential(page, s.credentials.get(other.credential) as string)
-		await clickByTestId(page, "auth-submit")
-	} else if (s.auth) {
-		const allow = await s.auth.refuseNextStep(page)
-		await clickByTestId(page, "auth-submit")
-		await firstSignal(page, [{ label: "refused", text: PASSKEY_COPY.notConfirmed }], STEP_MS)
-		await allow()
-		return (await page.evaluate(() => location.hash)).includes("/popup/auth")
-	}
-	const refusals = [PASSKEY_COPY.unlockFailed, PASSKEY_COPY.noPrf, PASSKEY_COPY.notConfirmed].map((text) => ({
-		label: "refused",
-		text,
-		hash: "/popup/auth",
-	}))
-	return (await firstSignal(page, [...refusals, HOME], STEP_MS)).label === "refused"
+	const allow = await s.auth.refuseNextStep(page)
+	await clickByTestId(page, "auth-submit")
+	await firstSignal(page, [{ label: "refused", text: PASSKEY_COPY.notConfirmed }], STEP_MS)
+	await allow()
+	return (await page.evaluate(() => location.hash)).includes("/popup/auth")
 }
 
 async function rightAttempt(s: RunState, p: ModelProfile): Promise<boolean> {
@@ -132,9 +140,10 @@ async function verifyOne(s: RunState, p: ModelProfile, w: World): Promise<Verify
 	const lost = opened ? await expireRelease(s, id, census) : []
 	const { addresses, chainId } = opened ? await derivedAddresses(page, id) : { addresses: [], chainId: 0 }
 	const sentinels: VerifyReading["sentinels"] = []
-	if (opened && p.method === "password") {
+	if (opened) {
 		for (const file of p.imported) {
-			sentinels.push({ file, now: await reexportImported(s, p, file), imported: s.files.get(file)?.signingKey ?? "" })
+			const held = w.files.find((f) => f.ref === file) as ModelFile
+			sentinels.push({ file, now: await reexportImported(s, p, held), imported: s.files.get(file)?.signingKey ?? "" })
 		}
 	}
 	await lockFromAnotherWindow(page)

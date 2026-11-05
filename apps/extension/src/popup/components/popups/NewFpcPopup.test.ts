@@ -13,6 +13,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
+import { ABOVE_MODULUS, BELOW_MODULUS, DIGITS_63, MODULUS } from "../../../../tests/helpers/field-modulus"
 
 const fpcServiceMock = {
 	addFpc: vi.fn(),
@@ -64,7 +65,7 @@ const STUBS = {
 import NewFpcPopup from "./NewFpcPopup.vue"
 import ProcessingErrorNote from "@/components/composite/ProcessingErrorNote.vue"
 
-const VALID_HEX = `0x${"b".repeat(64)}`
+const VALID_HEX = `0x0${"b".repeat(63)}`
 
 function pressEnterOnInput() {
 	const el = document.createElement("input")
@@ -191,7 +192,7 @@ describe("NewFpcPopup — duplicate names", () => {
 		await w.findAll("input")[0].setValue(name)
 		await flushPromises()
 		return {
-			warns: w.text().includes("Already exist"),
+			warns: w.text().includes("Already exists"),
 			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
 		}
 	}
@@ -264,7 +265,7 @@ describe("NewFpcPopup — the list under a held read", () => {
 		const warns = async () => {
 			await w.findAll("input")[0].setValue("Alice")
 			await flushPromises()
-			return w.text().includes("Already exist")
+			return w.text().includes("Already exists")
 		}
 
 		fpcServiceMock.onFpcAdded.invoke(alice)
@@ -275,5 +276,25 @@ describe("NewFpcPopup — the list under a held read", () => {
 
 		fpcServiceMock.onFpcAdded.invoke(alice)
 		expect(await warns()).toBe(true)
+	})
+})
+
+describe("NewFpcPopup — the field modulus", () => {
+	test.each([
+		["the last value below the modulus is added", BELOW_MODULUS, "", 1],
+		["the modulus reads as the contact form", MODULUS, "Invalid address", 0],
+		["a value above the modulus reads as the contact form", ABOVE_MODULUS, "Invalid address", 0],
+		["63 digits keep this form's words", DIGITS_63, "Invalid FPC address", 0],
+	])("%s", async (_, address, warning, adds) => {
+		const w = await mountShown()
+		await w.findAll("input")[0].setValue("Mine")
+		const input = w.find('input[data-input-label="Address"]')
+		await input.setValue(address)
+		await flushPromises()
+		expect(input.element.parentElement?.textContent?.trim()).toBe(warning)
+		expect(w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined).toBe(adds === 0)
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.addFpc).toHaveBeenCalledTimes(adds)
 	})
 })

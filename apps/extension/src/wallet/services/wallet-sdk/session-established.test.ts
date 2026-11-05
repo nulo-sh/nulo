@@ -541,15 +541,18 @@ describe("handleSessionEstablished — the check on every connection", () => {
 	})
 
 	test.each([
-		["a new connection", () => makeDeps({ pendingVerification: new Map([["sess-1", marker()]]) }), "false"],
-		["a reconnect", () => makeDeps({ dappSessionService: remembered(false) }), "true"],
-		["a reconnect whose row stores trustedVerification: true", () => makeDeps({ dappSessionService: remembered(true) }), "true"],
-		["a reconnect to a row no connection reached", () => makeDeps({ dappSessionService: remembered(false, false) }), "false"],
-	])("%s shows the check", async (_, made, isReconnect) => {
+		["a new connection", () => makeDeps({ pendingVerification: new Map([["sess-1", marker()]]) })],
+		["a reconnect", () => makeDeps({ dappSessionService: remembered(false) })],
+		["a reconnect whose row stores trustedVerification: true", () => makeDeps({ dappSessionService: remembered(true) })],
+		["a reconnect to a row no connection reached", () => makeDeps({ dappSessionService: remembered(false, false) })],
+	])("%s shows the check, its URL naming the row and this session's hash alone", async (_, made) => {
 		const { deps, create, terminate } = made()
-		expect(await handleSessionEstablished(makeSession(), deps)).toBe(true)
+		const session = makeSession()
+		expect(await handleSessionEstablished(session, deps)).toBe(true)
 		expect(create).toHaveBeenCalledTimes(1)
-		expect(create.mock.calls[0][0].url).toContain(`isReconnect=${isReconnect}`)
+		expect(create.mock.calls[0][0].url).toMatch(
+			new RegExp(`#/windows/verify\\?sessionId=[^&]+&verificationHash=${encodeURIComponent(session.verificationHash)}$`),
+		)
 		expect(terminate).not.toHaveBeenCalled()
 	})
 })

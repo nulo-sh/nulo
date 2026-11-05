@@ -1,6 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { valueStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
+import { ValueDecodeError } from "@nulo/wallet-core/storage"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { type Config, type ConfigKey, type ConfigProp, ConfigSchema, defaultConfig } from "./config"
 import type { IConfigStore } from "."
@@ -20,14 +21,11 @@ export class ConfigStore implements IConfigStore {
 		let storedConfig: Config | undefined
 		try {
 			storedConfig = await this.storage.get()
-		} catch (err) {
-			// `ValueStorage.get()` is fail-closed (throws on a malformed /
-			// undecodable value and PRESERVES it for a repair path). A corrupt
-			// `nulo:config` must NOT poison startup — this `load()` runs inside the
-			// runtime's `Promise.all`, so a propagating throw aborts the whole boot.
-			// Swallow it and continue on defaults; the bad value stays in storage
-			// for diagnosis / a future migration.
-			console.error("ConfigStore.load: undecodable config, booting on defaults", err)
+		} catch (error) {
+			// A failed or undecodable read must not veto the boot (this runs inside the runtime's
+			// `Promise.all`): memory stays on defaults and nothing is written, since `set()` builds each
+			// write on what storage holds.
+			console.error("ConfigStore.load: undecodable config, booting on defaults", { error })
 			return
 		}
 		if (storedConfig && typeof storedConfig === "object") {
@@ -56,15 +54,26 @@ export class ConfigStore implements IConfigStore {
 		}
 		const validated = parsed.data as Config[TKey]
 		await this.lock.withLock(async () => {
-			if (this.config[key] === validated) {
-				return
-			}
-			// Persist first: a failed write leaves memory and every listener on the stored value,
-			// so the caller sees the error and a retry of the same value writes again.
-			await this.storage.set({ ...this.config, [key]: validated })
+			// Built on what storage holds, not on memory (defaults after a failed boot read); memory then
+			// takes only `key`, since another prop's `onUpdate` can run a screen's action. Persist first:
+			// a failed read or write leaves memory and every listener as they were.
+			const stored = await this.readStored()
+			if (stored[key] !== validated) await this.storage.set({ ...stored, [key]: validated })
+			if (this.config[key] === validated) return
 			this.config[key] = validated
 			this.onUpdate.invoke({ key, value: validated } as ConfigProp)
 		})
+	}
+
+	/** The stored config as `load()` decodes it; an undecodable value reads as the defaults, and a
+	 *  failed read rejects. */
+	private async readStored(): Promise<Config> {
+		try {
+			return decodeStoredConfig(await this.storage.get())
+		} catch (error) {
+			if (error instanceof ValueDecodeError) return defaultConfig()
+			throw error
+		}
 	}
 
 	public async reset() {

@@ -30,37 +30,29 @@ import { BlockHeader, GlobalVariables } from "@aztec-labs/stdlib/tx"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { JobCancelledError, JournaledRejection, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { FakeBrowserApi, MockClock } from "@nulo/wallet-core/testing"
+import { MockClock } from "@nulo/wallet-core/testing"
 import { buildJournalTerminalCardProps, sendOutcome } from "@/utils/journal-state"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
-import { ServiceCollection } from "@/wallet/base"
-import { ProfileService } from "@/wallet/services/profile/service"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
-import { NetworkService } from "@/wallet/services/network/service"
-import { AccountService } from "@/wallet/services/account/service"
-import { ContactService } from "@/wallet/services/contact/service"
-import { TokenService } from "@/wallet/services/token/service"
-import { PriceService } from "@/wallet/services/price/service"
-import { FpcService } from "@/wallet/services/fpc/service"
-import { DROPPED_RESURRECTION_WINDOW_MS, TransactionService, TransferType } from "@/wallet/services/transaction/service"
+import { DROPPED_RESURRECTION_WINDOW_MS, TransferType } from "@/wallet/services/transaction/service"
 import { OriginType } from "@/wallet/services/transaction/spec"
-import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
-import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
-import { LegalAcceptanceService } from "@/wallet/services/legal/service"
 import {
 	InvalidWalletArgumentsError,
 	TermsAcceptanceRequiredError,
 	TooManyPendingError,
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
-import { OperationJournalService, type OperationRecord } from "@/wallet/services/operation-journal/service"
+import type { OperationRecord } from "@/wallet/services/operation-journal/service"
+import { JournalReaper } from "@/wallet/services/operation-journal/reaper"
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
-import { TaskService } from "@/wallet/services/task/service"
+import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
-import type { ProofGate } from "@/e2e/proof-gate"
+import { makeControllableGate, startExecutionGraph, waitFor } from "../../../../tests/helpers/execution-graph"
+import { ServiceCollection } from "@/wallet/base"
+import { profileKeysStub } from "../composition-harness"
 import type { ExecutionLane } from "./execution-lane"
 import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
 import { EmbeddedStrategy } from "./fee/embedded-strategy"
@@ -74,30 +66,8 @@ import type { PreviewSnapshots } from "./preview-snapshots"
 import type { QueuedFeeAnswers } from "./queued-fee-cap"
 import type { SendSequencer } from "./send-sequencer"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
-import { ExecutionService } from "./service"
 import { assertSelectorBinding, CALL_BINDING } from "./contract-resolver"
 import type { FeeSettings } from "./models"
-
-// ── Controllable proof gate: holds proveTxTask until release() ──────────────
-function makeControllableGate() {
-	let resolveGate: () => void = () => {}
-	let entered = false
-	const gate: ProofGate = {
-		wait: () => {
-			entered = true
-			return new Promise<void>((r) => {
-				resolveGate = r
-			})
-		},
-	}
-	return {
-		gate,
-		release: () => resolveGate(),
-		get entered() {
-			return entered
-		},
-	}
-}
 
 const MIN_FEES = { feePerDaGas: 1n, feePerL2Gas: 1n }
 const ACCOUNT = AztecAddress.fromNumberUnsafe(0x1234)
@@ -112,10 +82,6 @@ const NETWORK = {
 }
 
 const SPONSOR = { id: "fpc-1", type: 1, isProtocol: true, chainId: NETWORK.chainId, address: "0xsponsor" }
-
-function svc(name: string, methods: Record<string, unknown>) {
-	return { name, dependencies: [], async start() {}, ...methods } as never
-}
 
 /** A proven tx as `proveAndSend` reads it: its hash, and the expiry part of its kernel outputs. */
 function provenTx(hash: string) {
@@ -144,13 +110,92 @@ async function makeHarness() {
 	const fakeIPXE = { proveTx } as unknown as ReturnType<PxeServiceClient["getPXE"]>
 	const fakePxeClient = { getPXE: () => fakeIPXE, onProvePhase: { add: () => {} } } as unknown as PxeServiceClient
 
-	const logger = new LoggerStore(new ConfigStore())
 	const ctrl = makeControllableGate()
+	const legalAssertCurrent = vi.fn(async () => {})
+	// One shared ProfileDeletionState so Execution's captureFence + Transaction's
+	// addTransaction assert against the SAME epoch map (fence wiring).
+	const deletionState = new ProfileDeletionState()
+	// Real handler so the facade's profile-switch invalidation is both
+	// subscribable by the service and firable by tests.
+	const profileChanged = new EventHandler<unknown>()
+	// The published session. Every `setActive` starts a new one with a fresh serial, as a lock, a
+	// switch or a re-unlock does; `fireChanged` is separate so a checkpoint case can run without
+	// the change subscribers.
+	let lastSerial = 1
+	let live: { profileId: string; serial: number } | undefined = { profileId: "p1", serial: lastSerial }
+	const captureExecutionFence = async (): Promise<ExecutionFence> => {
+		if (!live) throw new Error("Wallet locked")
+		return { profileId: live.profileId, epoch: deletionState.capture(live.profileId), session: live.serial }
+	}
+	const isFenceLive = (fence: ExecutionFence) =>
+		live?.serial === fence.session && live.profileId === fence.profileId && deletionState.isCurrent(fence.profileId, fence.epoch)
+	const session = {
+		setActive: (profileId: string | undefined) => {
+			lastSerial += 1
+			live = profileId ? { profileId, serial: lastSerial } : undefined
+		},
+		fireChanged: () => profileChanged.invoke(live ? { id: live.profileId } : undefined),
+	}
+	let expiryDeferral: ((profileId: string) => Promise<boolean>) | undefined
+	const getNetwork = vi.fn(async () => NETWORK)
+	const addTransaction = vi.fn()
+	const recordPendingAuthwits = vi.fn(async (..._args: unknown[]) => {})
+	// The profiles that hold ACCOUNT; a lookup under any other profile misses.
+	const accountOwners = new Set(["p1"])
+	const getAccountContract = vi.fn(async (profileId: string) => {
+		if (!accountOwners.has(profileId)) throw new Error(`no such account under ${profileId}`)
+		return { address: ACCOUNT }
+	})
+	// `cancel` is part of the real WrappedTask surface — classifyOperationCatch
+	// calls task.cancel() on a user-cancel before returning the cancelled result.
+	const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn(), startSubtask: vi.fn() }
+	fakeTask.startSubtask.mockReturnValue(fakeTask)
 
 	// REAL journal (FakeBrowserApi-backed) so the actual FSM + transition lock run.
-	const api = new FakeBrowserApi()
-	api.reset()
-	const journal = new OperationJournalService(logger, api)
+	const { service, journal, api } = await startExecutionGraph(
+		{
+			profile: {
+				getActiveProfile: async () => (live ? { id: live.profileId } : undefined),
+				// The journal's create fence checks membership here — the fake must
+				// list the profile the flow files under or every create is refused.
+				getProfiles: async () => [{ id: "p1" }, { id: "p2" }],
+				getDeletionState: () => deletionState,
+				captureExecutionFence,
+				assertFence: async (fence: ExecutionFence) => {
+					if (live?.serial !== fence.session || live.profileId !== fence.profileId) throw new SessionEndedError()
+					deletionState.assertCurrent(fence.profileId, fence.epoch)
+				},
+				isFenceLive,
+				peekLiveSerial: () => live?.serial,
+				setExpiryDeferral: (predicate: (profileId: string) => Promise<boolean>) => {
+					expiryDeferral = predicate
+				},
+				onActiveProfileChanged: profileChanged,
+			},
+			network: { getNetwork, getNode: async () => fakeNode },
+			account: { getAccountContract },
+			transactions: {
+				getPendingForAccount: () => [],
+				// One mined tx: the account is initialized, so concurrent transfers here share no chain state.
+				transactionsOf: async () => [{ chainId: NETWORK.chainId, status: 2, executionResult: 0, calls: [] }],
+				addTransaction,
+				onTransactionUpdated: { add: () => {} },
+			},
+			token: { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) },
+			fpc: {
+				onFpcUpdated: { add: () => {} },
+				onFpcDeleted: { add: () => {} },
+				getFpc: async () => ({ ...SPONSOR }),
+				getFpcImpl: async () => ({ infoData: { ...SPONSOR } }),
+			},
+			authRegistry: { assertWithinCap: async () => {}, recordPendingAuthwits },
+			legal: { assertCurrent: legalAssertCurrent },
+			task: { startNewTask: () => fakeTask },
+			price: { getUsableQuote: async () => undefined },
+		},
+		ctrl.gate,
+		fakePxeClient,
+	)
 	let journalId = ""
 	journal.onOperationAdded.add((rec) => {
 		journalId = rec.id
@@ -180,97 +225,6 @@ async function makeHarness() {
 		})
 		return { isParked: () => parked, release: () => release() }
 	}
-
-	const legalAssertCurrent = vi.fn(async () => {})
-	const collection = new ServiceCollection()
-	// One shared ProfileDeletionState so Execution's captureFence + Transaction's
-	// addTransaction assert against the SAME epoch map (fence wiring).
-	const deletionState = new ProfileDeletionState()
-	// Real handler so the facade's profile-switch invalidation is both
-	// subscribable by the service and firable by tests.
-	const profileChanged = new EventHandler<unknown>()
-	// The published session. Every `setActive` starts a new one with a fresh serial, as a lock, a
-	// switch or a re-unlock does; `fireChanged` is separate so a checkpoint case can run without
-	// the change subscribers.
-	let lastSerial = 1
-	let live: { profileId: string; serial: number } | undefined = { profileId: "p1", serial: lastSerial }
-	const captureExecutionFence = async (): Promise<ExecutionFence> => {
-		if (!live) throw new Error("Wallet locked")
-		return { profileId: live.profileId, epoch: deletionState.capture(live.profileId), session: live.serial }
-	}
-	const isFenceLive = (fence: ExecutionFence) =>
-		live?.serial === fence.session && live.profileId === fence.profileId && deletionState.isCurrent(fence.profileId, fence.epoch)
-	const session = {
-		setActive: (profileId: string | undefined) => {
-			lastSerial += 1
-			live = profileId ? { profileId, serial: lastSerial } : undefined
-		},
-		fireChanged: () => profileChanged.invoke(live ? { id: live.profileId } : undefined),
-	}
-	let expiryDeferral: ((profileId: string) => Promise<boolean>) | undefined
-	collection.add(
-		svc(ProfileService.name, {
-			getActiveProfile: async () => (live ? { id: live.profileId } : undefined),
-			// The journal's create fence checks membership here — the fake must
-			// list the profile the flow files under or every create is refused.
-			getProfiles: async () => [{ id: "p1" }, { id: "p2" }],
-			...(await rowKeysForEveryProfile()),
-			getDeletionState: () => deletionState,
-			captureExecutionFence,
-			assertFence: async (fence: ExecutionFence) => {
-				if (live?.serial !== fence.session || live.profileId !== fence.profileId) throw new SessionEndedError()
-				deletionState.assertCurrent(fence.profileId, fence.epoch)
-			},
-			isFenceLive,
-			peekLiveSerial: () => live?.serial,
-			setExpiryDeferral: (predicate: (profileId: string) => Promise<boolean>) => {
-				expiryDeferral = predicate
-			},
-			onActiveProfileChanged: profileChanged,
-		}),
-	)
-	const getNetwork = vi.fn(async () => NETWORK)
-	collection.add(svc(NetworkService.name, { getNetwork, getNode: async () => fakeNode }))
-	// The profiles that hold ACCOUNT; a lookup under any other profile misses.
-	const accountOwners = new Set(["p1"])
-	const getAccountContract = vi.fn(async (profileId: string) => {
-		if (!accountOwners.has(profileId)) throw new Error(`no such account under ${profileId}`)
-		return { address: ACCOUNT }
-	})
-	collection.add(svc(AccountService.name, { getAccountContract }))
-	collection.add(
-		svc(TransactionService.name, {
-			getPendingForAccount: () => [],
-			// One mined tx: the account is initialized, so concurrent transfers here share no chain state.
-			transactionsOf: async () => [{ chainId: NETWORK.chainId, status: 2, executionResult: 0, calls: [] }],
-			addTransaction: vi.fn(),
-			onTransactionUpdated: { add: () => {} },
-		}),
-	)
-	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) }))
-	collection.add(
-		svc(FpcService.name, {
-			onFpcUpdated: { add: () => {} },
-			onFpcDeleted: { add: () => {} },
-			getFpc: async () => ({ ...SPONSOR }),
-			getFpcImpl: async () => ({ infoData: { ...SPONSOR } }),
-		}),
-	)
-	collection.add(svc(ContactService.name, {}))
-	collection.add(svc(AuthRegistryService.name, { assertWithinCap: async () => {} }))
-	collection.add(svc(DAPP_SESSION_SERVICE_NAME, {}))
-	collection.add(svc(LegalAcceptanceService.name, { assertCurrent: legalAssertCurrent }))
-	collection.add(journal)
-	// `cancel` is part of the real WrappedTask surface — classifyOperationCatch
-	// calls task.cancel() on a user-cancel before returning the cancelled result.
-	const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn(), startSubtask: vi.fn() }
-	fakeTask.startSubtask.mockReturnValue(fakeTask)
-	collection.add(svc(TaskService.name, { startNewTask: () => fakeTask }))
-	collection.add(svc(PriceService.name, { getUsableQuote: async () => undefined }))
-
-	const service = new ExecutionService(logger, ctrl.gate, () => fakePxeClient)
-	collection.add(service)
-	await collection.start()
 
 	// Seed the reuse cache so executeTransfer takes the fast path (skips build).
 	const feeSettings: FeeSettings = { paymentMethod: { kind: "fpc", fpcId: SPONSOR.id } }
@@ -343,22 +297,17 @@ async function makeHarness() {
 		getAccountContract,
 		proveTx,
 		parkJournalWrite,
+		api,
 		storedJournalRow: async (id: string) => (await api.storage.local.get(`nulo:journal@${id}`))[`nulo:journal@${id}`],
 		legalAssertCurrent,
+		addTransaction,
+		recordPendingAuthwits,
 		lane: (service as unknown as { lane: ExecutionLane }).lane,
 		expiryDeferral: () => expiryDeferral,
 	}
 }
 
 type Harness = Awaited<ReturnType<typeof makeHarness>>
-
-const waitFor = async (pred: () => boolean, timeoutMs = 2000) => {
-	const deadline = Date.now() + timeoutMs
-	while (!pred()) {
-		if (Date.now() > deadline) throw new Error("waitFor timeout")
-		await new Promise((r) => setTimeout(r, 5))
-	}
-}
 
 describe("ExecutionService composition — cancel-mid-prove (in-process, no sandbox)", () => {
 	test("cancel while proving: real journal → cancelled, proof dropped before submit, never sent", async () => {
@@ -402,10 +351,8 @@ describe("ExecutionService composition — cancel-mid-prove (in-process, no sand
 // mid-wait, must end terminally `cancelled` WITHOUT ever advancing to
 // simulating/proving/submitting — and must not wedge the slot for the next job.
 //
-// The slot holder is acquired directly via `lane.acquireSlot` — the SAME
-// primitive a live dapp-send holds while simulating/proving. `executeTransfer`
-// can't stand in: only the dapp-send path (dapp-send-executor.ts) touches the
-// per-(profile, chain) execution mutex, so a transfer never contends this slot.
+// The slot holder is acquired directly via `lane.acquireSlot`, which takes the same
+// (profile, chain) slot every live send holds while simulating or proving.
 describe("ExecutionService composition — cancel during queued-wait (in-process)", () => {
 	test("cancel a queued dapp-send waiting on the held slot → cancelled, never advances, slot not wedged", async () => {
 		const { service, journal, captureExecutionFence } = await makeHarness()
@@ -418,7 +365,7 @@ describe("ExecutionService composition — cancel during queued-wait (in-process
 		// its controller (acquireSlot:230) and is parked on the mutex (acquireSlot:246).
 		const controllers = (lane as unknown as { activeControllers: Map<string, unknown> }).activeControllers
 
-		// Pre-allocate a QUEUED dapp_execute record (what background.ts allocates on
+		// Pre-allocate a QUEUED dapp_execute record (what wallet-message.ts allocates on
 		// message arrival, before the silent/popup path claims it). queued is gated on
 		// kind=dapp_execute + origin="dapp" + non-empty sessionId (NewOperationInputSchema).
 		const queued = await journal.createOperation({
@@ -778,6 +725,34 @@ describe("ExecutionService composition — work runs only while the session that
 		expect(h.stages).not.toContain("submitting")
 		expect(h.proveTx).toHaveBeenCalledTimes(1)
 		expect(h.sendTx).not.toHaveBeenCalled()
+	}, 15_000)
+
+	test("a cancel holding the journal lock when the send reaches `proving` commits first; the send stops before its proof", async () => {
+		const h = await makeHarness()
+		const cancelWrite = h.parkJournalWrite((record) => record.progress.stage === "cancelled")
+		const transitions = vi.spyOn(h.journal, "transitionOperation")
+		// The account lookup runs after `simulating` is written, before the send's `proving` mark.
+		h.getAccountContract.mockImplementationOnce(async () => {
+			void h.service.cancelJob(h.getJournalId())
+			await waitFor(cancelWrite.isParked)
+			return { address: ACCOUNT }
+		})
+		let ended: unknown
+		const run = transfer(h).then((outcome) => {
+			ended = outcome
+		})
+		// The `proving` transition is queued behind the parked cancel on the transition lock.
+		await waitFor(() => transitions.mock.calls.some(([, progress]) => progress.stage === "proving"))
+		cancelWrite.release()
+		await waitFor(() => ended !== undefined || h.ctrl.entered)
+		const proofStarted = h.ctrl.entered
+		h.ctrl.release()
+		await run
+
+		expect(proofStarted).toBe(false)
+		expect(ended).toBeInstanceOf(JobCancelledError)
+		expect((await h.journal.getOperation(h.getJournalId()))?.progress.stage).toBe("cancelled")
+		expect(h.proveTx).not.toHaveBeenCalled()
 	}, 15_000)
 
 	test("a session that ends while `node.sendTx` is pending does not undo the send: the record succeeds", async () => {
@@ -1279,28 +1254,223 @@ describe("ExecutionService composition — a dApp send names its call before sim
 	}, 15_000)
 })
 
-describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
-	/** A running send check over the harness's journal, reading the chain from `node`. */
-	async function startCheck(h: Harness, node: { getTxReceipt: (hash: { toString(): string }) => Promise<unknown> }) {
-		const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => node as never) }
-		const balances = { refreshAccountBalances: vi.fn(async (_account: string) => {}) }
-		const clock = new MockClock(Date.now())
-		const check = new SendCheck({
-			journal: h.journal,
-			network,
-			profile: {
-				captureExecutionFence: h.captureExecutionFence,
-				isFenceLive: h.isFenceLive,
-				onRowKeysReady: new EventHandler<string>(),
-			},
-			balances,
-			logger: new LoggerStore(new ConfigStore()),
-			clock,
+/** A receipt as the node answers a tx mined in block 42. */
+const minedAt = (hash: string, blockHash: string, executionResult = "success", status = "proven") => ({
+	txHash: hash,
+	status,
+	executionResult,
+	transactionFee: 1234n,
+	blockHash: BlockHash.fromString(blockHash),
+	blockNumber: 42,
+})
+
+/** A running send check over `journal` (the harness's unless given), reading the chain from `node`. */
+async function startCheck(
+	h: Harness,
+	node: { getTxReceipt: (hash: { toString(): string }) => Promise<unknown> },
+	journal: OperationJournalService = h.journal,
+) {
+	const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => node as never) }
+	const balances = { refreshAccountBalances: vi.fn(async (_account: string) => {}) }
+	const clock = new MockClock(Date.now())
+	const check = new SendCheck({
+		journal,
+		network,
+		profile: {
+			captureExecutionFence: h.captureExecutionFence,
+			isFenceLive: h.isFenceLive,
+			onRowKeysReady: new EventHandler<string>(),
+		},
+		balances,
+		authwits: { recordPendingAuthwits: h.recordPendingAuthwits as never },
+		logger: new LoggerStore(new ConfigStore()),
+		clock,
+	})
+	await check.start()
+	return { check, network, balances, clock }
+}
+
+describe("ExecutionService composition — a dApp send's public authwits are indexed once the network took the send", () => {
+	// Both below the field modulus: the check reads HASH's receipt, and the journal refuses a grant hash above it.
+	const HASH = `0x${"2f".repeat(32)}`
+	const GRANT = { hash: `0x${"1a".repeat(32)}`, content: { kind: "call" } }
+	const BLOCK_HASH = `0x${"0d".repeat(32)}`
+	const SCOPE = { profileId: "p1", chainId: NETWORK.chainId, account: ACCOUNT.toString() }
+	const STORED = { chainId: NETWORK.chainId, account: ACCOUNT.toString(), items: [GRANT] }
+	const rowOf = async (journal: OperationJournalService, id: string) => journal.getOperation(id)
+	const checkOf = async (journal: OperationJournalService, id: string) => {
+		const progress = (await rowOf(journal, id))?.progress
+		return progress?.stage === "failed" ? progress.check : undefined
+	}
+	const grantOp = {
+		kind: "send_transaction",
+		networkId: NETWORK.id,
+		accountAddress: ACCOUNT.toString(),
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "add_public_authwit", content: GRANT.content }],
+	} as never
+
+	/** A granted send from Settings, its build canned past `buildStandard` (no tx request is built),
+	 *  then proved and sent through the real coordinator, lane and journal. */
+	async function sendGrant(h: Harness) {
+		h.toTx.mockResolvedValueOnce(provenTx(HASH))
+		const internals = h.service as unknown as {
+			buildAndEstimateTxRequest: (...args: unknown[]) => Promise<unknown>
+			dappSendExecutor: { executeSendTransaction: (...args: unknown[]) => Promise<string> }
+		}
+		vi.spyOn(internals, "buildAndEstimateTxRequest").mockResolvedValue({
+			txRequest: h.entry.txRequest,
+			node: { sendTx: h.sendTx },
+			pxe: { proveTx: h.proveTx },
+			account: { address: ACCOUNT },
+			network: NETWORK,
+			nonce: { toString: () => "0" },
+			txCalls: [],
+			feePaymentMethod: "EXTERNAL",
+			pendingPublicAuthwits: [GRANT],
+			initializesAccount: false,
 		})
-		await check.start()
-		return { check, network, balances, clock }
+		const fence = await h.captureExecutionFence()
+		const run = internals.dappSendExecutor
+			.executeSendTransaction(grantOp, { type: OriginType.UI }, undefined, fence)
+			.catch((error: unknown) => error)
+		await waitFor(() => h.ctrl.entered)
+		h.ctrl.release()
+		return run
 	}
 
+	test("an activity record that rejects after the node accepted the send: the grant is indexed once with its hash", async () => {
+		const h = await makeHarness()
+		const failure = new Error("history write refused")
+		h.addTransaction.mockRejectedValueOnce(failure)
+
+		expect(await sendGrant(h)).toBe(failure)
+
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		expect(h.addTransaction).toHaveBeenCalledWith(expect.objectContaining({ hash: HASH }))
+		expect(h.recordPendingAuthwits.mock.calls).toEqual([
+			[{ profileId: "p1", chainId: NETWORK.chainId, account: ACCOUNT.toString() }, [GRANT], HASH, 0],
+		])
+		expect(h.recordPendingAuthwits.mock.invocationCallOrder[0]).toBeGreaterThan(h.sendTx.mock.invocationCallOrder[0])
+		const row = await h.journal.getOperation(h.getJournalId())
+		expect(row?.progress).toMatchObject({ stage: "failed", from: "submitting", txHash: HASH })
+		expect(row?.publicAuthwits).toBeUndefined()
+	}, 15_000)
+
+	test("a send the node refuses indexes nothing", async () => {
+		const h = await makeHarness()
+		const refusal = new Error("Invalid tx: insufficient fee")
+		h.sendTx.mockRejectedValueOnce(refusal)
+
+		expect(await sendGrant(h)).toBe(refusal)
+
+		expect(h.addTransaction).not.toHaveBeenCalled()
+		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
+	}, 15_000)
+
+	test("the node took the send and its answer was lost: the grant is listed once the check reads the send", async () => {
+		const h = await makeHarness()
+		const { check, clock } = await startCheck(h, { getTxReceipt: async () => minedAt(HASH, BLOCK_HASH) })
+		const lost = new TypeError("fetch failed")
+		h.sendTx.mockRejectedValueOnce(lost)
+
+		expect(await sendGrant(h)).toBe(lost)
+		const id = h.getJournalId()
+		expect(await rowOf(h.journal, id)).toMatchObject({
+			progress: { stage: "failed", from: "submitting", txHash: HASH },
+			publicAuthwits: STORED,
+		})
+		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
+
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await checkOf(h.journal, id)) === "sent")
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await rowOf(h.journal, id))?.publicAuthwits === undefined)
+
+		expect(h.recordPendingAuthwits.mock.calls).toEqual([[SCOPE, [GRANT], HASH, 0]])
+		expect(h.addTransaction).not.toHaveBeenCalled()
+		check.stop()
+	}, 15_000)
+
+	test("a send the network reverted lists nothing, and its row keeps the grant", async () => {
+		const h = await makeHarness()
+		const reverted = minedAt(HASH, BLOCK_HASH, "reverted", "finalized")
+		const { check, clock } = await startCheck(h, { getTxReceipt: async () => reverted })
+		h.sendTx.mockRejectedValueOnce(new TypeError("fetch failed"))
+		await sendGrant(h)
+		const id = h.getJournalId()
+		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
+
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await checkOf(h.journal, id)) === "reverted")
+		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
+		// A final answer leaves the row nothing to read: once it is unwatched, nothing more can list it.
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => (check as unknown as { watches: Map<string, unknown> }).watches.size === 0)
+
+		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
+		expect((await rowOf(h.journal, id))?.publicAuthwits).toEqual(STORED)
+		check.stop()
+	}, 15_000)
+
+	test("the worker stops between the broadcast and the record: the next one lists the grant once its check reads the send", async () => {
+		const h = await makeHarness()
+		h.addTransaction.mockImplementationOnce(() => new Promise(() => {}))
+		void sendGrant(h)
+		await waitFor(() => h.addTransaction.mock.calls.length > 0)
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		const id = h.getJournalId()
+
+		// The next worker: a journal over the same storage and row keys, its boot sweep, its check.
+		const next = new OperationJournalService(new LoggerStore(new ConfigStore()), h.api)
+		const services = new ServiceCollection()
+		services.add(await profileKeysStub("p1"))
+		services.add(next)
+		await services.start()
+		// Started as the runtime starts them, with no await between: the check may scan before the sweep.
+		const reaper = new JournalReaper(next, h.api.alarms, new LoggerStore(new ConfigStore()), { bootCutoff: Date.now() + 1 })
+		const sweeping = reaper.start()
+		const { check, clock } = await startCheck(h, { getTxReceipt: async () => minedAt(HASH, BLOCK_HASH) }, next)
+		await sweeping
+		expect(await rowOf(next, id)).toMatchObject({
+			progress: { stage: "failed", from: "submitting", txHash: HASH },
+			publicAuthwits: STORED,
+		})
+
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await checkOf(next, id)) === "sent")
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await rowOf(next, id))?.publicAuthwits === undefined)
+
+		expect(h.recordPendingAuthwits.mock.calls).toEqual([[SCOPE, [GRANT], HASH, 0]])
+		check.stop()
+		await reaper.stop()
+	}, 15_000)
+
+	test("an index write that fails after the activity record landed is written again once the check reads the send", async () => {
+		const h = await makeHarness()
+		const { check, clock } = await startCheck(h, { getTxReceipt: async () => minedAt(HASH, BLOCK_HASH) })
+		const indexFailure = new Error("index refused")
+		h.recordPendingAuthwits.mockRejectedValueOnce(indexFailure)
+
+		expect(await sendGrant(h)).toBe(indexFailure)
+		const id = h.getJournalId()
+		expect(await rowOf(h.journal, id)).toMatchObject({ progress: { stage: "failed", from: "submitting" }, publicAuthwits: STORED })
+
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await checkOf(h.journal, id)) === "sent")
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await rowOf(h.journal, id))?.publicAuthwits === undefined)
+
+		expect(h.recordPendingAuthwits.mock.calls).toEqual([
+			[SCOPE, [GRANT], HASH, 0],
+			[SCOPE, [GRANT], HASH, 0],
+		])
+		check.stop()
+	}, 15_000)
+})
+
+describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
 	/** A transfer whose `sendTx` throws `error`, run to its failed row. */
 	async function sendFailing(h: Harness, hash: string, error: Error) {
 		h.toTx.mockResolvedValueOnce(provenTx(hash))
@@ -1335,14 +1505,6 @@ describe("ExecutionService composition — a send whose answer was lost is check
 	/** As the SDK client throws a node's per-call JSON-RPC error: an HTTP 200, so never retried itself. */
 	const nodeRefusal = (message: string) => new Error(message, { cause: { code: -32702, message } })
 	const dropped = (hash: string) => ({ txHash: hash, status: "dropped" })
-	const minedAt = (hash: string, blockHash: string) => ({
-		txHash: hash,
-		status: "proven",
-		executionResult: "success",
-		transactionFee: 1234n,
-		blockHash: BlockHash.fromString(blockHash),
-		blockNumber: 42,
-	})
 	const cardOf = (op: OperationRecord | undefined) => op && buildJournalTerminalCardProps(op, { tokenById: () => undefined, tokens: [] })
 
 	test("sendTx reached the node, its answer did not: the row fails from submitting, then the check reads it sent", async () => {
@@ -1519,13 +1681,18 @@ describe("ExecutionService composition — a send queued against a fee cap asks 
 	test.each([
 		{ label: "× then accept", cancelFirst: true },
 		{ label: "accept then ×", cancelFirst: false },
-	])("$label in the same tick ends cancelled, never proved", async ({ cancelFirst }) => {
+	])("$label in the same tick while another send holds the slot ends cancelled, never proved", async ({ cancelFirst }) => {
 		const h = await makeHarness()
 		const run = queuedTransfer(h)
 		const id = await asking(h)
+		// While the slot is held, an accepted send cannot reach `proving` before the cancel lands; a
+		// cancel after its `proving` mark is the mid-prove cancel, which proves and drops.
+		const slot = await h.lane.takeEstimateSlot("p1", NETWORK.chainId)
+		expect(slot).toBeDefined()
 		const cancel = () => h.service.cancelJob(id)
 		const accept = () => h.service.acceptQueuedFee(id, FEE)
 		await Promise.all(cancelFirst ? [cancel(), accept()] : [accept(), cancel()])
+		slot?.()
 		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
 		expect(await stageOf(h, id)).toBe("cancelled")
 		expect(h.proveTx).not.toHaveBeenCalled()

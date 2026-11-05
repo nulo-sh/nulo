@@ -215,6 +215,39 @@ describe("TransactionService — a mined row until its block is final", () => {
 		})
 	})
 
+	test("a receipt whose write fails stays unapplied, so the next poll stores it and releases the watch", async () => {
+		getTxReceipt.mockResolvedValue({ ...minedIn(), status: "finalized" })
+		await add()
+		const updated = vi.fn()
+		service.onTransactionUpdated.add(updated)
+		const set = vi.spyOn(api.storage.local, "set").mockRejectedValueOnce(new Error("disk full"))
+		await tick(1_000)
+		expect(set).toHaveBeenCalledTimes(1)
+		expect((await service.getTransaction(HASH)).status).toBe(TxStatus.Pending)
+		expect(updated).not.toHaveBeenCalled()
+
+		await tick(1_000)
+		expect(await service.getTransaction(HASH)).toMatchObject({ status: TxStatus.Finalized, block: BLOCK, fee: "123" })
+		expect(updated).toHaveBeenCalledTimes(1)
+		expect(service.getPendingForAccount(ACCOUNT)).toEqual([])
+	})
+
+	test("a prune whose write fails keeps the row on the finality watch, and the next read stores Pending", async () => {
+		await minedAndMarked()
+		getBlockData.mockResolvedValue(finalizedAt(BLOCK.number))
+		findLeavesIndexes.mockResolvedValue(archiveLeaf())
+		getTxReceipt.mockResolvedValue({ status: "pending" })
+		vi.spyOn(api.storage.local, "set").mockRejectedValueOnce(new Error("disk full"))
+		await tick(FINALITY_READ_INTERVAL_MS)
+		expect(await service.getTransaction(HASH)).toMatchObject({ status: TxStatus.Proposed, block: BLOCK, awaitingFinality: true })
+		expect(service.getPendingForAccount(ACCOUNT)).toEqual([])
+
+		await tick(FINALITY_READ_INTERVAL_MS)
+		const pruned = await service.getTransaction(HASH)
+		expect([pruned.status, pruned.block]).toEqual([TxStatus.Pending, undefined])
+		expect(service.getPendingForAccount(ACCOUNT).map((tx) => tx.hash)).toEqual([HASH])
+	})
+
 	test("a block found pruned with the tx mined elsewhere moves the row there and keeps watching", async () => {
 		await minedAndMarked()
 		getBlockData.mockResolvedValue(finalizedAt(BLOCK.number))
@@ -269,6 +302,24 @@ describe("TransactionService — a mined row until its block is final", () => {
 		await service.restore([storedRow({ hash: chosen, feeChoice: "app_protocol_sponsor" })], "p1")
 		const exported = await service.backup()
 		expect(exported?.find((tx) => tx.hash === chosen)?.feeChoice).toBe("app_protocol_sponsor")
+	})
+
+	test("a backup taken while a send is Pending carries only rows its own restore accepts", async () => {
+		const mined = `0x${"44".repeat(32)}`
+		await add()
+		await service.restore([storedRow({ hash: mined })], "p1")
+		expect((await service.getTransaction(HASH)).status).toBe(TxStatus.Pending)
+
+		const exported = (await service.backup()) ?? []
+		expect(exported.map((tx) => tx.hash)).toEqual([mined])
+
+		api = new FakeBrowserApi()
+		api.reset()
+		const fresh = await buildService()
+		const restored = await fresh.restore(exported, "p1")
+		expect(restored).toHaveLength(1)
+		expect(restored[0]).not.toHaveProperty("restoreError")
+		expect((await fresh.getTransaction(mined)).status).toBe(TxStatus.Proposed)
 	})
 
 	test("a purge ends the watch", async () => {

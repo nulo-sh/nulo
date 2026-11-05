@@ -13,7 +13,7 @@ import type { TxSimulationResult } from "@aztec-labs/stdlib/tx"
 import { callsFeeJuice } from "../sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./embedded-fpc-cap"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
-import { buildFor, finalizeGasLimits, startEstimateTask, suggestGasLimits, validatedSimOpts } from "./fee-strategy"
+import { buildFor, finalizeGasLimits, probeContext, startEstimateTask, suggestGasLimits, validatedSimOpts } from "./fee-strategy"
 
 /** The app's own fee contract, as the final simulation's kernel names it. A claim to the sender
  *  (`fjwc`) is the sender paying itself: no contract of the app's pays. */
@@ -40,10 +40,11 @@ export class EmbeddedStrategy implements FeeStrategy {
 
 		try {
 			const built = await buildFor(this.deps.txBuilder, ctx, embeddedMethod, task)
-			const { txRequest, node, pxe, account } = built
+			const { txRequest, node, pxe, scopes } = built
 			suggestGasLimits(txRequest, ctx.op.fee)
 			await applyEmbeddedFpcGasCap(txRequest, ctx.op.fee, node)
-			const simulatedTx = await this.deps.simulateTxTask(pxe, txRequest, validatedSimOpts(account.address), task)
+			const simulatedTx = await this.deps.simulateTxTask(pxe, txRequest, validatedSimOpts(scopes), task)
+			await ctx.observer?.extractEffects(simulatedTx, probeContext(built))
 			// `feeMultiplier` is inert: an embedded payment commits the cap set above.
 			await finalizeGasLimits(node, txRequest, simulatedTx, {
 				gasPadding: ctx.gasPadding,

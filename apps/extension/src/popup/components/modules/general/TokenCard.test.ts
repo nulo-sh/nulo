@@ -55,6 +55,9 @@ const tokenInfo = {
 	hasDecimals: true,
 }
 
+/** The split line's two figures, private then public. */
+const splitSides = (w: ReturnType<typeof factory>) => w.get('[data-testid="token-split"]').text().trim().split(/\s+/)
+
 const factory = (overrides: Record<string, unknown> = {}, tokenOverrides: Record<string, unknown> = {}) => {
 	const tokenBalance = {
 		id: 42,
@@ -242,6 +245,49 @@ describe("TokenCard — the row is a link", () => {
 	})
 })
 
+describe("TokenCard — a picker's option", () => {
+	async function mountOption(selected: boolean) {
+		const router = makeRouter()
+		await router.push("/popup/send")
+		const push = vi.spyOn(router, "push")
+		const w = mount(TokenCard, {
+			props: {
+				tokenBalance: { id: 42, token: tokenInfo, account: "0xacct", publicBalance: "0", privateBalance: "0", updatedAt: 1 },
+				pickPrefix: "select-token",
+				selected,
+			} as never,
+			global: { stubs: STUBS, plugins: [router] },
+		})
+		return { w, push, row: w.find('[data-testid="select-token-row"]') }
+	}
+
+	test("a native button that picks the token id and never navigates", async () => {
+		const { w, push, row } = await mountOption(false)
+		expect(row.element.tagName).toBe("BUTTON")
+		expect(row.attributes("type")).toBe("button")
+		expect(w.find("a").exists()).toBe(false)
+		await row.trigger("click")
+		await flushPromises()
+		expect(w.emitted("pick")).toEqual([[1]])
+		expect(push).not.toHaveBeenCalled()
+		const space = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })
+		row.element.dispatchEvent(space)
+		await flushPromises()
+		expect(space.defaultPrevented).toBe(false)
+		expect(push).not.toHaveBeenCalled()
+	})
+
+	test("the current token says so, the others do not", async () => {
+		const current = (await mountOption(true)).row
+		expect(current.attributes("data-selected")).toBe("true")
+		expect(current.attributes("aria-current")).toBe("true")
+		expect(current.attributes("data-symbol")).toBe("TST")
+		const other = (await mountOption(false)).row
+		expect(other.attributes("data-selected")).toBe("false")
+		expect(other.attributes("aria-current")).toBeUndefined()
+	})
+})
+
 describe("TokenCard — hostile rows", () => {
 	test("a malformed balance renders a dash with no split and never throws", async () => {
 		const w = factory({ updatedAt: 1, publicBalance: "1.5", privateBalance: "0" })
@@ -324,7 +370,7 @@ describe("TokenCard — R5 layout (subtitle left, private/public split right)", 
 		expect(w.text()).toContain("Test Token")
 	})
 
-	test("a holding too long for the row keeps every whole digit: the total at 10 characters, each side at 6", async () => {
+	test("a holding too long for the row keeps every whole digit: the total and each side at 10 characters", async () => {
 		mockQuotes = {}
 		const w = factory({
 			updatedAt: 1,
@@ -333,10 +379,28 @@ describe("TokenCard — R5 layout (subtitle left, private/public split right)", 
 		})
 		await flushPromises()
 		// 123,458,023.62 in total, 123,456,789.12 private, 1,234.5 public.
-		expect(w.text()).toContain("123.45M")
-		expect(w.text()).toContain("123.4M")
-		expect(w.text()).toContain("1,234")
-		expect(w.text()).not.toContain("1,234.")
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("123.45M")
+		expect(splitSides(w)).toEqual(["123.45M", "1,234.5"])
+	})
+
+	test("each side shows the total's decimals: 999.999 all public reads 999.999 on its line", async () => {
+		mockQuotes = {}
+		const w = factory({ updatedAt: 1, publicBalance: (999_999n * 10n ** 15n).toString() })
+		await flushPromises()
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("999.999")
+		expect(splitSides(w)).toEqual(["0", "999.999"])
+	})
+
+	test("sides that differ keep their own digits, cut and never rounded up, as the total is", async () => {
+		mockQuotes = {}
+		const w = factory({
+			updatedAt: 1,
+			privateBalance: (5n * 10n ** 14n).toString(),
+			publicBalance: (9_999_985n * 10n ** 14n).toString(),
+		})
+		await flushPromises()
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("999.999")
+		expect(splitSides(w)).toEqual(["0.0005", "999.9985"])
 	})
 
 	test("a row the signed list flags reads 'Flagged as a scam' in place of its name; an unflagged row keeps its name", async () => {

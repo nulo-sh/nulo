@@ -58,8 +58,9 @@ describe("the e2e Decide gate", () => {
 		expect(decided({ BASE: "dev" })).toBe("run=false")
 	})
 
-	test("main force-runs regardless of the filter", () => {
-		expect(decided({ BASE: "main" })).toBe("run=true")
+	test("a pull request into main takes the filter like any other: a promote that leaves the surface alone skips", () => {
+		expect(decided({ BASE: "main" })).toBe("run=false")
+		expect(decided({ BASE: "main", SURFACE: "true" })).toBe("run=true")
 	})
 
 	test("the label force-runs regardless of base or filter", () => {

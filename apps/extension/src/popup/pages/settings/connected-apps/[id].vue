@@ -47,6 +47,8 @@ const router = useRouter()
 
 const session = ref()
 const accounts = ref([])
+// A read that settles around the unmount resumes after it: it must neither navigate nor open a port.
+let unmounted = false
 
 const sessionParams = computed(() => parseSessionParams(session.value?.permissions))
 const methods = computed(() => sessionParams.value.methods)
@@ -89,52 +91,54 @@ const authorizationsLine = computed(() => {
 })
 
 const fetchSession = async () => {
+	let read
 	try {
-		session.value = await dappSessionService.getDappSession(route.params.id)
+		read = await dappSessionService.getDappSession(route.params.id)
 	} catch {
-		// Session missing / expired — the service throws instead of returning null
+		// Missing or expired: the service throws rather than answer empty.
+	}
+	if (unmounted) return
+	if (!read) {
 		router.push("/popup/settings/connected-apps")
 		return
 	}
 
-	if (!session.value) {
-		router.push("/popup/settings/connected-apps")
-		return
-	}
-
+	session.value = read
 	if (session.value.dappMetadata.logo) {
 		session.value.dappMetadata.logoBlobUrl = session.value.dappMetadata.logo
 	}
 }
 
-async function fetchAccounts() {
-	const networkServiceClient = new NetworkServiceClient()
-	const accMap = new Map()
-
-	for (const account of session.value.accounts) {
+/** Own keys, not a Map, so the chains are read, and their rows listed, in ascending id order. */
+function addressesByChain(caipAccounts) {
+	const byChain = {}
+	for (const account of caipAccounts) {
 		let parsed
 		try {
 			parsed = parseCaipAccount(account)
 		} catch {
 			continue
 		}
-		if (!accMap[parsed.chainId]) {
-			accMap[parsed.chainId] = []
+		if (!byChain[parsed.chainId]) {
+			byChain[parsed.chainId] = []
 		}
-		accMap[parsed.chainId].push(parsed.address)
+		byChain[parsed.chainId].push(parsed.address)
 	}
+	return byChain
+}
 
-	for (const chainId of Object.keys(accMap)) {
-		const networks = await networkServiceClient.getNetworks(+chainId)
-		if (networks.length) {
-			const network = networks[0]
-			const accountServiceClient = new AccountServiceClient()
+async function fetchAccounts() {
+	for (const [chainId, addresses] of Object.entries(addressesByChain(session.value.accounts))) {
+		const networks = await networkService.getNetworks(+chainId)
+		if (unmounted) return
+		if (!networks.length) continue
+		const network = networks[0]
 
-			for (const address of accMap[chainId]) {
-				const account = await accountServiceClient.getAccount(appStore.profile.id, network.chainId, address)
-				if (account) {
-					accounts.value.push(account)
-				}
+		for (const address of addresses) {
+			const account = await accountService.getAccount(appStore.profile.id, network.chainId, address)
+			if (unmounted) return
+			if (account) {
+				accounts.value.push(account)
 			}
 		}
 	}
@@ -177,6 +181,8 @@ const setAuthorizations = async (on) => {
 }
 
 const dappSessionService = new DappSessionServiceClient()
+const networkService = new NetworkServiceClient()
+const accountService = new AccountServiceClient()
 function onDappSessionUpdated(ds) {
 	if (ds.id !== session.value?.id) return
 	const prevBlob = session.value.dappMetadata?.logoBlobUrl
@@ -195,12 +201,15 @@ dappSessionService.onDappSessionDeleted.add(onDappSessionDeleted)
 
 onMounted(async () => {
 	await fetchSession()
-	if (!session.value) return
+	if (!session.value || unmounted) return
 	await fetchAccounts()
 })
 
 onBeforeUnmount(() => {
+	unmounted = true
 	dappSessionService.disconnect()
+	networkService.disconnect()
+	accountService.disconnect()
 })
 </script>
 

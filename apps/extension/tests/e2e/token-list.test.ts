@@ -8,11 +8,12 @@ import type { Page } from "puppeteer"
 import { describe, expect, inject } from "vitest"
 import { TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
 import { extensionUrl, isFirefox, newPage, openScratchPage, stopBackground } from "./fixtures/browser"
-import { type ExtensionContext, clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
-import { navigateByHash, openHoldings, switchToNetwork, unlockAfterBackgroundDeath } from "./fixtures/helpers"
+import { type ExtensionContext, clickByTestId, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
+import { navigateByHash, navigateToSettings, openHoldings, switchToNetwork, unlockAfterBackgroundDeath } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
 import {
 	E2E_LIST_FLAGGED,
+	E2E_LIST_TOKENS,
 	type ListHost,
 	e2eSigner,
 	heldListEntries,
@@ -52,12 +53,17 @@ async function openHomeHoldingFlagged(ctx: ExtensionContext): Promise<Page> {
 	const [pair] = E2E_LIST_FLAGGED
 	if (identity.chainId !== pair.chainId)
 		throw new Error(`the profile is on chain ${identity.chainId}, the flagged pair on ${pair.chainId}`)
-	// Transfer functions, so the token page and Send read as for any sendable token.
+	// Transfer functions, so the token page and Send read as for any sendable token; balance
+	// functions, so a refresh asks the refused node: a token without one reads that side as 0.
 	const transfers = Object.fromEntries(
-		["transferPublicFn", "transferPrivateFn", "transferPublicToPrivateFn", "transferPrivateToPublicFn"].map((key) => [
-			key,
-			{ name: key, impl: 0 },
-		]),
+		[
+			"transferPublicFn",
+			"transferPrivateFn",
+			"transferPublicToPrivateFn",
+			"transferPrivateToPublicFn",
+			"balanceOfPublicFn",
+			"balanceOfPrivateFn",
+		].map((key) => [key, { name: key, impl: 0 }]),
 	)
 	const scope = { ...identity, token: { contract: pair.address, name: "Scam Token", symbol: "SCAM", decimals: 6, ...transfers } }
 	await seedTokenRow(seeder, scope, 1)
@@ -91,7 +97,7 @@ async function seedRowSymbols(page: Page): Promise<string[]> {
 }
 
 describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
-	test("accepting the Terms fetches the list, whose defaults show as placeholders; a forged list and an older one change nothing; no request carries a cookie, a referrer or a cache validator", {
+	test("accepting the Terms fetches the list, whose defaults show as placeholders; a forged list and an older one change nothing; Settings → Tokens' refresh takes a newer one; no request carries a cookie, a referrer or a cache validator", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ freshExtensionPerTest: ctx }) => {
@@ -132,7 +138,15 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 			expect((await waitForStoredList(control, (state) => state.failures === 2)).envelope).toBe(first)
 			expect(await seedRowSymbols(popup)).toEqual(shown)
 
-			expect(host.requests()).toHaveLength(3)
+			// The page's control reaches the worker's service over its port and reads back what it did.
+			const newer = await signTestList()
+			host.serve(newer)
+			await navigateToSettings(popup, "tokens")
+			await clickByTestId(popup, "token-list-refresh")
+			await popup.waitForSelector(`${sel("token-list-refresh-result")}[data-state="updated"]`, VISIBLE)
+			expect((await waitForStoredList(control, (state) => state.envelope === newer)).failures).toBe(0)
+
+			expect(host.requests()).toHaveLength(4)
 			for (const request of host.requests()) {
 				expect(request.cookie, "a list request carried a cookie").toBeUndefined()
 				expect(request.referer, "a list request carried a referrer").toBeUndefined()
@@ -144,7 +158,7 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 		}
 	})
 
-	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner", {
+	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner; a pasted flagged address carries it on the picker's add row", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ listedExtensionPerTest: ctx }) => {
@@ -177,6 +191,20 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 			await clickByTestId(page, "send-token-trigger")
 			await page.waitForSelector(`${sel("select-token-row")}[data-symbol="SCAM"] ${sel("select-token-flagged")}`, VISIBLE)
 			await shotSend(page, "flagged-send-picker", "select-token-flagged")
+
+			const [, unheld] = E2E_LIST_FLAGGED
+			await replaceInputValue(page, sel("select-token-search"), unheld.address.toUpperCase().replace("0X", "0x"))
+			await page.waitForSelector(sel("select-token-add-token-flagged"), VISIBLE)
+			expect(await page.$eval(sel("select-token-add-token"), (el) => (el as HTMLButtonElement).disabled)).toBe(false)
+			await shotSend(page, "send-picker-flagged", "select-token-add-token")
+			// A listed token nothing holds: its add row carries no flag.
+			await replaceInputValue(page, sel("select-token-search"), E2E_LIST_TOKENS[1].address)
+			await page.waitForFunction(
+				(s: string) => document.querySelector(s) === null,
+				{ timeout: 5_000 },
+				sel("select-token-add-token-flagged"),
+			)
+			expect(await page.$(sel("select-token-add-token"))).not.toBeNull()
 		} finally {
 			await refusal.stop()
 		}

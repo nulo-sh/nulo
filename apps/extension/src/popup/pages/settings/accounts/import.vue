@@ -20,6 +20,7 @@ import { managers } from "@/utils/core"
 /** Utils */
 import { FileTooLargeError, pickFile } from "@/utils"
 import { sameStoredName } from "@/utils/account-name"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { listOwnAccountRow } from "@/utils/account-rows"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, isCardWindow, leavePanelFor, ownWindowRoute, returnToPanel } from "@/utils/own-window"
 import { showSnack } from "@/utils/snack"
@@ -227,12 +228,12 @@ const collapsingLabel = "Import Account"
 
 <template>
 	<HandoffCard v-if="showCard" title="Pick the account file" @choose="handlePickFile" @cancel="closeOwnWindow" />
-	<CollapsingHeroLayout v-else heroMain="Import" heroSub="Account" :collapsingLabel="collapsingLabel" backTo="/popup/settings/accounts">
+	<CollapsingHeroLayout v-else heroMain="Import" heroSub="Account" :collapsingLabel="collapsingLabel" backTo="/popup/settings/accounts" moreBelow>
 		<!-- Step 1: the file (the full-backup restore's picker pattern). The section divider only
 		     exists when the password section actually follows — `export_section`'s border-bottom
 		     separates it from a NEXT section, and a plain file has none. -->
 		<template v-if="!needsConfirm">
-			<div :class="isProtectedFile ? 'export_section' : 'export_section_last'">
+			<div :class="isProtectedFile ? 'export_section' : 'export_section_last'" data-scroll-section>
 				<span class="export_section_label type--label-section">Account file</span>
 				<ItemsContainer flat>
 					<SettingItem
@@ -251,7 +252,7 @@ const collapsingLabel = "Import Account"
 			</div>
 
 			<!-- Step 2 (protected files only): the file password -->
-			<div v-if="isProtectedFile" class="export_section_last">
+			<div v-if="isProtectedFile" class="export_section_last" data-scroll-section>
 				<span class="export_section_label type--label-section">Protected file</span>
 				<Input
 					label="File password"
@@ -266,7 +267,7 @@ const collapsingLabel = "Import Account"
 
 		<!-- Step 3: preview + confirm -->
 		<template v-else>
-			<div class="export_section">
+			<div class="export_section" data-scroll-section>
 				<span class="export_section_label type--label-section">You are importing</span>
 				<ItemsContainer flat>
 					<SettingItem
@@ -285,7 +286,7 @@ const collapsingLabel = "Import Account"
 				</ItemsContainer>
 			</div>
 
-			<div class="export_section_last">
+			<div class="export_section_last" data-scroll-section>
 				<span class="export_section_label type--label-section">Account name</span>
 				<Input
 					label="Name"
@@ -296,12 +297,12 @@ const collapsingLabel = "Import Account"
 					v-model="accountName"
 				>
 					<template v-if="nameTaken" #right>
-						<FieldWarning> Already exist </FieldWarning>
+						<FieldWarning> {{ ALREADY_EXISTS }} </FieldWarning>
 					</template>
 				</Input>
 			</div>
 
-			<div class="export_section_last">
+			<div class="export_section_last" data-scroll-section>
 				<Flex direction="column" gap="8">
 					<Text variant="body" height="150" color="tertiary">
 						The address is recomputed from the file. Confirm it matches the account you expect.

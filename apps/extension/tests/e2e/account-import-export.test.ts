@@ -30,6 +30,7 @@ import {
 } from "./fixtures/extension"
 import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, gotoAccounts, previewImport } from "./helpers/account-io"
 import { writeBackupToTemp } from "./helpers/import-drivers"
+import { setViewport } from "./fixtures/browser"
 
 test("account export → import into a SECOND profile (plaintext + encrypted round-trips)", { timeout: 240_000 }, async ({
 	registeredExtension,
@@ -66,7 +67,7 @@ test("account export → import into a SECOND profile (plaintext + encrypted rou
 		// head span. The marker, the 4-char tail, the line, and the wrapper must all fit — a
 		// second (wrapper-level) ellipsis is exactly the double-truncation bug. The marker sits on
 		// its own line above the address, which leaves the head room to show.
-		await targetPage.setViewport({ width: 360, height: 600 })
+		await setViewport(targetPage, { width: 360, height: 600 })
 		const fit = await targetPage.evaluate(() => {
 			const badge = document.querySelector('[data-testid="account-imported-badge"]') as HTMLElement | null
 			const row = badge?.closest('[data-testid="manage-accounts-row"]')

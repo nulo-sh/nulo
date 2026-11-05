@@ -81,7 +81,7 @@ const reminders = computed(() =>
 	}),
 )
 // Token funds can raise the card before the gas read lands, which can still check the Fee Juice step.
-const remindersSettled = computed(() => reminders.value !== null && feeJuice.value !== "unknown")
+const remindersSettled = computed(() => reminders.value !== null && !reminders.value.pending && feeJuice.value !== "unknown")
 
 async function readPrestoReached() {
 	try {
@@ -148,7 +148,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
+	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper" data-testid="home-page">
 		<div :class="$style.hero" data-testid="home-hero">
 			<BackupReminderBanner v-if="reminders?.banner" :class="$style.reminder" @save="openPhrase" />
 			<BalanceView
@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
 			<div aria-hidden="true" :class="[$style.scroll_shadow, scrolled && $style.scroll_shadow_visible]" data-testid="home-scroll-shadow" />
 		</div>
 
-		<!-- The card waits for its reads, so it can mount after the rows have and move them down. -->
+		<!-- The card waits for the profile's own reads, so it can mount after the rows have and move them down. -->
 		<div :class="$style.scroller" data-testid="home-scroller" :data-reminders-settled="remindersSettled" @scroll.passive="onScroll">
 			<Flex direction="column" gap="16" :class="$style.content">
 				<RecoveryModeBanner />
@@ -169,6 +169,7 @@ onBeforeUnmount(() => {
 					v-if="reminders?.steps.length"
 					:steps="reminders.steps"
 					:canHide="reminders.canHide"
+					:pending="reminders.pending === true"
 					@select="onGetStartedSelect"
 					@hide="getStarted.mark('hidden')"
 				/>
@@ -206,5 +207,22 @@ onBeforeUnmount(() => {
 
 .content {
 	padding: 16px 24px var(--nav-clearance) 24px;
+}
+
+/* A narrow window cannot spare the hero's height: the whole page scrolls, the hero with it. The
+ * shadow follows only the middle's own scroll, so it would stick after a resize. */
+@media (width < 359px) {
+	.wrapper {
+		overflow-y: auto;
+	}
+
+	.scroller {
+		flex: none;
+		overflow: visible;
+	}
+
+	.scroll_shadow {
+		display: none;
+	}
 }
 </style>

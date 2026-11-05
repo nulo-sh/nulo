@@ -9,8 +9,8 @@ const hasConfig = aztecConfig !== undefined
 /**
  * Test #40 — concurrent rapid-fire silent calls settle in FIFO order.
  *
- * background.ts:148-156 + :172-180 implement per-session message + decrypt
- * queues to prevent reordering. Fire 5 silent calls without awaiting and
+ * `onWalletMessage` (`wallet-message.ts`) and `serializeDecryption` (`background.ts`) keep
+ * per-session message and decrypt queues to prevent reordering. Fire 5 silent calls without awaiting and
  * verify all settle in their issuance order (data-result-seq ascending).
  */
 test.skipIf(!hasConfig)(

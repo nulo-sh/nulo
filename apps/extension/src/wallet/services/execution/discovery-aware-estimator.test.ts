@@ -217,6 +217,25 @@ describe("DiscoveryAwareEstimator (fold routing)", () => {
 		expect(buildAndEstimateValidated).toHaveBeenCalledTimes(1)
 	})
 
+	test("an fj send that reads another account's notes keeps the classic choreography; one naming only its sender folds", async () => {
+		const sender = `0x${"0".repeat(63)}1`
+		const other = `0x${"0".repeat(63)}2`
+		const withScopes = (additionalScopes: string[]) =>
+			({ kind: "aztec_sendTx", networkId: "net-1", accountAddress: sender, opts: { additionalScopes } }) as never
+		const FJ = { paymentMethod: { kind: "fj" } } as never
+
+		const reading = makeEstimator()
+		await reading.estimator.estimate(withScopes([other]), [CALL], undefined, FJ, FENCE)
+		expect(reading.buildAndEstimateFolded).not.toHaveBeenCalled()
+		expect(reading.authwit.discoverPrivateAuthwits).toHaveBeenCalledTimes(1)
+		expect(reading.buildAndEstimateValidated).toHaveBeenCalledTimes(1)
+
+		const own = makeEstimator()
+		await own.estimator.estimate(withScopes([sender]), [CALL], undefined, FJ, FENCE)
+		expect(own.buildAndEstimateFolded).toHaveBeenCalledTimes(1)
+		expect(own.authwit.discoverPrivateAuthwits).not.toHaveBeenCalled()
+	})
+
 	test("fj payment folds too (probed pipeline, no standalone discovery)", async () => {
 		const { estimator, authwit, buildAndEstimateValidated, buildAndEstimateFolded } = makeEstimator()
 

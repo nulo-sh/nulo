@@ -1,7 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import "@/utils/zod-jitless"
 import { recordCspViolationsInPage } from "@/e2e/csp-report"
-import { installConsoleForwarding } from "@/wallet/logger/console-forwarding"
+import { forwardVueError, installConsoleForwarding } from "@/wallet/logger/console-forwarding"
 
 if (import.meta.env.VITE_NULO_E2E_CSP_REPORT === "1") recordCspViolationsInPage()
 
@@ -91,7 +91,9 @@ router.afterEach((_to, from, failure) => {
 	if (!failure) scrollMemory.leave(pageScroller(from))
 })
 
-createApp(App).provide(START_GRACE_KEY, startGrace).use(router).use(createPinia()).mount("#app")
+const app = createApp(App)
+app.config.errorHandler = forwardVueError
+app.provide(START_GRACE_KEY, startGrace).use(router).use(createPinia()).mount("#app")
 
 if (landing) {
 	const appStore = useAppStore()

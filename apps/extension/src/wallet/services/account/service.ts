@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { z } from "zod"
 import { assertRestoreEpoch, captureRestoreEpochs, restoreRowProfileId } from "@/wallet/services/restore-fence"
@@ -211,19 +212,19 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// NOT a fire-and-forget `onProfileDeleted` subscriber.
 		this.networkService = services.get(NetworkService.name) as NetworkService
 		this.networkService.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
-		this.profileService.onRowKeysReady.add((profileId) => void this.onRowKeysReady(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"converting or sweeping the profile's accounts failed; the next worker retries",
+			(profileId) => this.onRowKeysReady(profileId),
+		)
 	}
 
 	/** Converts the profile's plaintext rows, then sweeps its orphan key rows: both need the row
-	 *  keys, so both wait for the profile's unlock. A failure is logged; the next worker retries,
-	 *  since a later unlock in this one finds the keys held and announces nothing. */
+	 *  keys, so both wait for the profile's unlock. */
 	private async onRowKeysReady(profileId: string): Promise<void> {
-		try {
-			await this.sealLegacyRows(profileId)
-			await this.sweepOrphanImportedKeys(profileId)
-		} catch (error) {
-			this.logWarn("converting or sweeping the profile's accounts failed; the next worker retries", { error })
-		}
+		await this.sealLegacyRows(profileId)
+		await this.sweepOrphanImportedKeys(profileId)
 	}
 
 	/** Seals the profile's plaintext accounts, one row lock per row, each with its plaintext key row
@@ -236,18 +237,21 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		await this.importedKeys.sealLegacy(profileId, rowLock)
 	}
 
-	/** Deletes the profile's imported-key rows whose account is gone (a torn import that wrote the
-	 *  key but crashed before the account). An account counts in either form, sealed or plaintext,
-	 *  readable or not, so no hideable view feeds this delete; each candidate is checked again under
-	 *  its row's lock, the lock an import holds across its key-first pair of writes. */
+	/** Deletes the profile's imported-key rows whose account is gone: a torn import that wrote the
+	 *  key but crashed before the account, or a failed import whose rollback could not check its row. */
 	private async sweepOrphanImportedKeys(profileId: string): Promise<void> {
-		for (const row of await this.importedKeys.forProfile(profileId)) {
-			const rowId = accountRowIdOf(row)
-			await this.tupleLocks.withLock(rowId, async () => {
-				if (await this.storage.occupied(rowId)) return
-				await this.importedKeys.delete(row.profileId, row.chainId, row.address)
-			})
-		}
+		for (const row of await this.importedKeys.forProfile(profileId)) await this.deleteKeyIfOrphan(row)
+	}
+
+	/** Deletes an imported key only while no account row stands at its address. An account counts in
+	 *  either form, sealed or plaintext, readable or not, so no hideable view feeds this delete; the
+	 *  check runs under the row's lock, the lock an import holds across its key-first pair of writes. */
+	private async deleteKeyIfOrphan(key: Pick<Account, "profileId" | "chainId" | "address">): Promise<void> {
+		const rowId = accountRowIdOf(key)
+		await this.tupleLocks.withLock(rowId, async () => {
+			if (await this.storage.occupied(rowId)) return
+			await this.importedKeys.delete(key.profileId, key.chainId, key.address)
+		})
 	}
 
 	/**
@@ -818,8 +822,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	/**
 	 * The duplicate check and both writes share one hold of the row's lock, the lock a create of the
 	 * same address takes, so neither can land between the other's check and write. Key row first:
-	 * a crash between the two writes leaves an orphan key (swept at the next unlock), never an account that
-	 * cannot sign. A failure after the key write removes it; the duplicate refusal writes nothing.
+	 * a crash between the two writes leaves an orphan key (swept once a worker holds the profile's row
+	 * keys), never an account that cannot sign. A failure after the key write removes the key once the
+	 * account row is gone; the duplicate refusal writes nothing.
 	 */
 	private async commitImportedAccount(account: Account, sealed: string, epoch: number): Promise<void> {
 		const { profileId, chainId, address } = account
@@ -843,8 +848,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			await this.assertStillLive(account)
 			if (!deletion.isCurrent(profileId, epoch)) await this.unwrite(account, profileDeletedError(profileId))
 		} catch (rowErr) {
-			// Imports of one (profile, chain) serialise, so this key is this import's or already gone.
-			if (keyWritten) await this.importedKeys.delete(profileId, chainId, address).catch(() => {})
+			// A row a failed compensation left standing keeps its key, and so does any row the check cannot
+			// read: an orphan key is swept later, an account without its key can never sign.
+			if (keyWritten) await this.deleteKeyIfOrphan(account).catch(() => {})
 			throw rowErr
 		}
 		this.emit("onAccountAdded", account)

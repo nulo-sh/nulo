@@ -4,9 +4,8 @@
 
 <script setup>
 /**
- * Received-transfer detail page (`/popup/received/:id`, D5). The receiver-side mirror of the
- * transaction-detail page (`tx/[id].vue`) — same layout system, reversed: an amount hero, a
- * From/To pair, an explorer link at the top, and a Details box. It states the receiver-honest kind
+ * Received-transfer detail page (`/popup/received/:id`), the receiver-side mirror of `tx/[id].vue`.
+ * It states the receiver-honest kind
  * (real sender only for pub→pub; "From private" for priv→pub; redacted for note kinds — never the
  * MAGIC/zero sentinel raw) and, for PUBLIC receipts only, the network fee the sender paid.
  *
@@ -16,12 +15,17 @@
  * The fee lookup names the transaction to the node, so under privacy mode it runs only on a press of
  * "Show fee". A mode not yet read, unreadable, or lost with the config port counts as on: nothing is
  * looked up without a tap until a read says the mode is off.
+ *
+ * A push to another receipt's link reuses this instance, so the shown receipt is cleared before the
+ * next one is read. A failed receipt read never reads as "not found": one the worker's restart dropped
+ * reads again on the reconnect, and any other, with nothing yet on screen, offers Retry.
  */
 
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
-import AddressCardLink from "@/popup/components/modules/tx/AddressCardLink.vue"
+import DetailAddressCard from "@/popup/components/modules/tx/DetailAddressCard.vue"
 import DetailHeroMeta from "@/popup/components/modules/tx/DetailHeroMeta.vue"
+import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
 import FeeAmount from "@/components/composite/FeeAmount.vue"
 
 /** Vendor */
@@ -39,9 +43,11 @@ import { useToast } from "@/composables/toast"
 import { usePrices } from "@/composables/usePrices"
 import { useConfigRead } from "@/composables/useConfigRead"
 import { useReceiptFee } from "@/composables/useReceiptFee"
+import { createReconnectRead } from "@/composables/reconnectRead"
 
 /** Utils */
-import { DETAIL_TIME_FORMAT } from "../detail-page"
+import { isClientDisconnectRejection, RpcDisconnectedError } from "@nulo/extension-messaging/errors"
+import { DETAIL_AMOUNT_LENGTH, DETAIL_TIME_FORMAT } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
 import { copyReceivedValue } from "./received-copy"
 import { endsSelection } from "@/utils/selection"
@@ -63,7 +69,11 @@ const route = useRoute()
 
 /** Reactive state */
 const received = ref(null)
+/** A read of this route's receipt resolved: with no receipt shown, "not found" holds. */
 const loaded = ref(false)
+/** The newest receipt read failed with nothing on screen, on a port that stayed up: no reconnect
+ *  follows to read again. */
+const readFailed = ref(false)
 const tokens = ref([])
 /** The RECORD's own chainId (resolved from its networkId) — NOT the active network's. Token
  *  decimals/symbol + the explorer URL must follow the record, so a deep-linked or off-network record
@@ -82,28 +92,31 @@ const priceService = new PriceServiceClient()
 const networkService = new NetworkServiceClient()
 const prices = usePrices(priceService)
 const modeRead = useConfigRead(configService, () => configService.getValue("privacyMode"), landPrivacyMode)
-const { state: feeState, feeJuice: feeJuiceRaw, load: loadFee, show: showFee, dispose: disposeFee } = useReceiptFee(incomingTransferService)
+const {
+	state: feeState,
+	feeJuice: feeJuiceRaw,
+	load: loadFee,
+	show: showFee,
+	reset: resetFee,
+	dispose: disposeFee,
+} = useReceiptFee(incomingTransferService)
+const receiptRead = createReconnectRead(incomingTransferService, readReceipt)
 
-/** If a reorg/reconcile removes THIS receipt while the page is open, drop to the not-found state rather
- *  than keep showing an orphaned receipt. `deletedIds` tombstones the delete so one that races the initial
- *  load (fired while getIncomingTransferById is still awaiting, when `received` is still null) still wins —
- *  the post-load check in onMounted honors it. An Updated that races the load is held and wins over the
- *  record the load returns, which may predate it; a delete still wins over both. */
-const deletedIds = new Set()
-let heldUpdate = null
-/** Set once the mode's first read settled and the mount looked the fee up: an Updated before then
- *  only replaces the record. */
+/** The mount's mode read; a landed receipt's fee waits for it. */
+let modeSettled = null
+/** Set once the shown receipt's fee was looked up: an Updated before then only replaces the record. */
 let feeArmed = false
-const onReceiptDeleted = (rec) => {
-	deletedIds.add(rec.id)
+/** The route's events while the newest run's receipt read is in flight. The read's snapshot may
+ *  predate them, so it yields to the last: an Updated replaces a found receipt, a Deleted wins. */
+let eventsDuringRead = null
+function onReceiptDeleted(rec) {
+	if (rec.id !== route.params.id) return
+	if (eventsDuringRead) eventsDuringRead.last = { deleted: true }
 	if (received.value?.id === rec.id) received.value = null
 }
-const onReceiptUpdated = (rec) => {
-	if (rec.id !== route.params.id || deletedIds.has(rec.id)) return
-	if (!loaded.value) {
-		heldUpdate = rec
-		return
-	}
+function onReceiptUpdated(rec) {
+	if (rec.id !== route.params.id) return
+	if (eventsDuringRead) eventsDuringRead.last = { record: rec }
 	if (received.value?.id !== rec.id) return
 	received.value = rec
 	if (feeArmed) void loadFee(rec, tapOnly.value)
@@ -120,7 +133,7 @@ const formattedAmount = computed(() => {
 	const inc = received.value
 	const decimals = knownDecimals(token.value)
 	if (!inc || decimals === null) return null
-	return balanceFormatted(inc.amountRaw, decimals, 8, { compact: true }).value
+	return balanceFormatted(inc.amountRaw, decimals, DETAIL_AMOUNT_LENGTH, { compact: true }).value
 })
 const amountFiat = computed(() => {
 	const inc = received.value
@@ -161,8 +174,6 @@ const fromUrl = computed(() =>
 const toUrl = computed(() =>
 	received.value ? getAccountExplorerUrl(recordChainId.value, appStore.defaultExplorer, received.value.accountAddress) : null,
 )
-const fromLabelId = useId()
-const toLabelId = useId()
 
 /** Derived — fee at today's rate (mirrors tx/[id].vue's fee valuation). */
 const fee = computed(() => (feeJuiceRaw.value ? feeDisplay(feeJuiceRaw.value, prices.feeJuiceQuote.value?.usd) : null))
@@ -186,40 +197,99 @@ function onConfigDisconnected() {
 	privacyMode.value = null
 }
 
-/** Lifecycle */
-onMounted(async () => {
-	// The mode read is the page's first request on `config`, so the port it opens is the mount's own.
-	const modeSettled = modeRead.read()
-	// Resolve the record FIRST; `loaded` gates the not-found state, so flip it as soon as we know.
-	received.value = (await incomingTransferService.getIncomingTransferById(route.params.id).catch(() => null)) ?? null
-	if (received.value && heldUpdate) received.value = heldUpdate
-	// A delete that fired WHILE this load was in flight tombstoned the id — honor it so the just-loaded
-	// (now stale) record can't paint over a deletion that already happened.
-	if (received.value && deletedIds.has(received.value.id)) received.value = null
-	loaded.value = true
-	const inc = received.value
-	if (!inc) return
+/** The worker dropped the port: the client reconnects, and its `onConnected` reads again. */
+function portDropped(error) {
+	return isClientDisconnectRejection(error) || error instanceof RpcDisconnectedError
+}
 
-	// The record's own chain drives the token catalogue + explorer URL (NOT the active network).
-	const net = await networkService.getNetwork(inc.networkId).catch(() => null)
-	recordChainId.value = net?.chainId ?? null
+/** The fee is cached per block, and a re-mine moves it. An armed row for the same block keeps its fee,
+ *  its tap or its lookup in flight; one whose lookup failed looks again. */
+function sameBlock(shown, next) {
+	return Boolean(shown && next && shown.id === next.id && shown.blockHash === next.blockHash)
+}
 
-	// Aux data loads INDEPENDENTLY (allSettled): a token failure must not skip the fee fetch, and
-	// none of these may escape the async mounted hook as an unhandled rejection. The fee is PUBLIC-only
-	// (the service also gates on kind server-side) and fails soft to the dash.
-	const tasks = []
-	// Use the RECORD's profileId (it was already verified == active at load), not the mutable
-	// appStore.profile.id, so a concurrent profile switch can't point the token lookup at another profile.
-	if (recordChainId.value !== null) {
-		tasks.push(tokenService.getTokens(inc.profileId, recordChainId.value).then((t) => (tokens.value = t)))
-	}
-	tasks.push(
-		modeSettled.then(() => {
-			feeArmed = true
-			if (received.value) return loadFee(received.value, tapOnly.value)
-		}),
+/** One run of the receipt read: resolves `false` when a read failed, so the next connect reads again. */
+async function readReceipt(isCurrent) {
+	const events = { last: null }
+	eventsDuringRead = events
+	readFailed.value = false
+	const outcome = await incomingTransferService.getIncomingTransferById(route.params.id).then(
+		(record) => ({ record: record ?? null }),
+		(error) => ({ error }),
 	)
-	await Promise.allSettled(tasks)
+	if (eventsDuringRead === events) eventsDuringRead = null
+	if (!isCurrent()) return true
+	if ("error" in outcome) {
+		if (!received.value && !loaded.value && !portDropped(outcome.error)) readFailed.value = true
+		return false
+	}
+	const last = events.last
+	const record = last?.deleted ? null : outcome.record && (last?.record ?? outcome.record)
+	const keepFee = feeArmed && feeState.value !== "none" && sameBlock(received.value, record)
+	if (!keepFee) {
+		feeArmed = false
+		resetFee()
+	}
+	received.value = record
+	loaded.value = true
+	return record ? loadDetails(record, isCurrent, keepFee) : true
+}
+
+/** The receipt's own chain drives its token catalogue and explorer links, never the active network's.
+ *  A failed network or token read keeps what the page has and resolves `false`; neither skips the fee. */
+async function loadDetails(record, isCurrent, keepFee) {
+	const network = await networkService.getNetwork(record.networkId).then(
+		(net) => ({ chainId: net?.chainId ?? null }),
+		() => null,
+	)
+	if (!isCurrent()) return true
+	if (network) recordChainId.value = network.chainId
+	// Not awaited: the lookup may wait for the incoming port to reopen, and that reopening reads again
+	// only if this run has already reported its failure.
+	if (!keepFee) void modeSettled.then(() => armFee(isCurrent))
+	if (recordChainId.value === null) return network !== null
+	// The record's profile, which the service matched to the active one, not the mutable store's.
+	const list = await tokenService.getTokens(record.profileId, recordChainId.value).then(
+		(t) => t,
+		() => null,
+	)
+	if (!isCurrent()) return true
+	if (list) tokens.value = list
+	return network !== null && list !== null
+}
+
+function armFee(isCurrent) {
+	if (!isCurrent()) return
+	feeArmed = true
+	if (received.value) void loadFee(received.value, tapOnly.value)
+}
+
+function retryReceipt() {
+	void receiptRead.read()
+}
+
+/** Watchers */
+// The default `pre` flush clears A before B renders, and leaving the route unmounts the page before
+// this could read another route's id.
+watch(
+	() => route.params.id,
+	() => {
+		received.value = null
+		loaded.value = false
+		readFailed.value = false
+		recordChainId.value = null
+		tokens.value = []
+		feeArmed = false
+		resetFee()
+		void receiptRead.read()
+	},
+)
+
+/** Lifecycle */
+onMounted(() => {
+	// The mode read is the page's first request on `config`, so the port it opens is the mount's own.
+	modeSettled = modeRead.read()
+	void receiptRead.read()
 })
 onBeforeUnmount(() => {
 	incomingTransferService.onIncomingTransferDeleted.remove(onReceiptDeleted)
@@ -227,6 +297,7 @@ onBeforeUnmount(() => {
 	configService.onUpdate.remove(onConfigUpdate)
 	configService.onDisconnected.remove(onConfigDisconnected)
 	incomingTransferService.disconnect()
+	receiptRead.dispose()
 	disposeFee()
 	tokenService.disconnect()
 	configService.disconnect()
@@ -263,83 +334,42 @@ onBeforeUnmount(() => {
 			<div :class="$style.transfer_type_chip" data-testid="tx-incoming-kind-chip">{{ kindLabel }}</div>
 
 			<Flex wide gap="8" :class="$style.address_pair">
-				<Flex
-					wide
-					direction="column"
-					gap="4"
-					:class="[$style.address_card, !fromClickable && $style.card_static]"
+				<DetailAddressCard
+					label="From"
+					:address="fromDisplay.address"
+					addressTestid="received-from-address"
+					:explorerUrl="fromUrl"
+					:explorerName="explorerName"
+					linkTestid="received-from-explorer-link"
 					data-testid="received-from-card"
-					@click="fromClickable && !endsSelection($event) && copy(fromDisplay.address, 'From address')"
+					@copy="(address) => copy(address, 'From address')"
 				>
-					<AddressDisplay
-						v-if="fromDisplay.kind === 'address'"
-						static
-						data-testid="received-from-address"
-						lead
-						:address="fromDisplay.address"
-						:formatter="(addr) => trimAddress(addr, 6, 4)"
-					/>
-					<Text v-else-if="fromDisplay.kind === 'private'" variant="name" color="primary" :class="$style.from_name" data-testid="from-private">Private</Text>
+					<Text v-if="fromDisplay.kind === 'private'" variant="name" color="primary" :class="$style.from_name" data-testid="from-private">Private</Text>
 					<Text v-else-if="fromDisplay.kind === 'mint'" variant="name" color="primary" :class="$style.from_name" data-testid="from-mint">Mint</Text>
 					<Text v-else variant="name" color="primary" :class="$style.from_name" data-testid="from-redacted">Private</Text>
-					<span :id="fromLabelId" :class="$style.address_label">From</span>
-					<AddressCardLink
-						v-if="fromUrl"
-						:href="fromUrl"
-						:label="`View on ${explorerName}`"
-						:aria-describedby="fromLabelId"
-						data-testid="received-from-explorer-link"
-					/>
-				</Flex>
-
-				<Flex
-					wide
-					direction="column"
-					gap="4"
-					:class="$style.address_card"
-					@click="endsSelection($event) || copy(received.accountAddress, 'Account address')"
-				>
-					<AddressDisplay
-						static
-						data-testid="received-to-address"
-						lead
-						:address="received.accountAddress"
-						:formatter="(addr) => trimAddress(addr, 6, 4)"
-					/>
-					<span :id="toLabelId" :class="$style.address_label">To</span>
-					<AddressCardLink
-						v-if="toUrl"
-						:href="toUrl"
-						:label="`View on ${explorerName}`"
-						:aria-describedby="toLabelId"
-						data-testid="received-to-explorer-link"
-					/>
-				</Flex>
+				</DetailAddressCard>
+				<DetailAddressCard
+					label="To"
+					:address="received.accountAddress"
+					addressTestid="received-to-address"
+					:explorerUrl="toUrl"
+					:explorerName="explorerName"
+					linkTestid="received-to-explorer-link"
+					@copy="(address) => copy(address, 'Account address')"
+				/>
 			</Flex>
 
 			<Flex wide direction="column" gap="10">
 				<SectionLabel label="Details" />
 
 				<Flex wide direction="column" gap="10" :class="$style.details_box">
-					<Flex wide justify="between" align="center" gap="12">
-						<span :class="$style.detail_key">Tx hash</span>
-						<a
-							v-if="explorerUrl"
-							:href="explorerUrl"
-							target="_blank"
-							rel="noopener noreferrer"
-							data-testid="tx-explorer-link"
-							:class="[$style.detail_value_mono, $style.detail_link]"
-							>{{ trimAddress(received.txHash, 6, 4) }}</a
-						>
-						<span
-							v-else
-							@click="endsSelection($event) || copy(received.txHash, 'Tx hash')"
-							:class="[$style.detail_value_mono, 'copyable']"
-							data-testid="tx-hash-copy"
-							>{{ trimAddress(received.txHash, 6, 4) }}</span
-						>
-					</Flex>
+					<TxHashRow
+						:hash="received.txHash"
+						:explorerUrl="explorerUrl"
+						linkTestid="tx-explorer-link"
+						copyTestid="tx-hash-copy"
+						@copy="(hash) => copy(hash, 'Tx hash')"
+					/>
 
 					<Flex v-if="isPublic" wide justify="between" align="center" gap="12">
 						<Flex direction="column" gap="2">
@@ -404,6 +434,20 @@ onBeforeUnmount(() => {
 			</Flex>
 		</Flex>
 
+		<Flex v-else-if="readFailed" wide direction="column" :class="$style.content" data-testid="received-read-failed">
+			<Flex direction="column" align="center" gap="12" :class="$style.failed_banner">
+				<Icon name="history" :size="32" color="secondary" />
+				<span :class="$style.failed_title">Couldn't load this receipt</span>
+				<span :class="$style.failed_description">Try again, or open History to find it there.</span>
+				<Flex wide gap="10" :class="$style.failed_actions">
+					<Button wide variant="primary" size="medium" data-testid="received-retry" @click="retryReceipt">Retry</Button>
+					<Button wide variant="primary_outline" size="medium" link="/popup/activity" data-testid="received-open-history"
+						>Open History</Button
+					>
+				</Flex>
+			</Flex>
+		</Flex>
+
 		<Flex v-else-if="loaded" wide direction="column" align="center" gap="12" :class="$style.content">
 			<span :class="$style.empty_headline">RECEIPT NOT FOUND</span>
 			<span :class="$style.empty_sub">This receipt isn't in your current account history.</span>
@@ -438,23 +482,6 @@ onBeforeUnmount(() => {
 
 .address_pair {
 	composes: address_pair from "../detail-page.module.css";
-}
-
-.address_card {
-	composes: address_card from "../detail-page.module.css";
-}
-
-/* Outranks shared card rules reintroduced by later-loaded detail chunks. */
-.address_card.card_static {
-	cursor: default;
-
-	&:hover {
-		background: transparent;
-	}
-}
-
-.address_label {
-	composes: caption from "../detail-page.module.css";
 }
 
 .from_name {
@@ -547,5 +574,22 @@ onBeforeUnmount(() => {
 
 .empty_sub {
 	composes: empty_sub from "../detail-page.module.css";
+}
+
+.failed_banner {
+	composes: banner from "../empty-state.module.css";
+}
+
+.failed_title {
+	composes: title from "../empty-state.module.css";
+	color: var(--txt-danger);
+}
+
+.failed_description {
+	composes: description from "../empty-state.module.css";
+}
+
+.failed_actions {
+	margin-top: 8px;
 }
 </style>

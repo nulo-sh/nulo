@@ -29,6 +29,7 @@ import { downloadEncryptedBackup, downloadPasskeyBackup, FILE_PASSWORD, openEncr
 import { CANONICAL_SEED_24, importSeed, ONBOARDING_IMPORT_SHELL, readActiveAccount, TEST_PASSWORD } from "./helpers/import-drivers"
 import {
 	acceptOnboardingTerms,
+	answerUpdatedTerms,
 	isContinueDisabled,
 	isSheetPresent,
 	pointerClick,
@@ -41,6 +42,7 @@ import {
 	waitForToastLayer,
 } from "./helpers/legal-drivers"
 import { expectFitsNarrow } from "./fixtures/type-roles"
+import { LEGAL_ACCEPTANCE_KEY, legalSeedValue } from "./fixtures/legal"
 
 const CURRENT_TERMS = LEGAL_MANIFEST.terms.at(-1)?.version
 const CURRENT_PRIVACY = LEGAL_MANIFEST.privacy.at(-1)?.version
@@ -260,7 +262,7 @@ describe("popup: declining never locks a person out", () => {
 		await waitForSheet(page, "changed")
 		expect(await textOf(page, "legal-sheet-title")).toBe("The terms have changed")
 		expect(await page.$$eval('[data-testid="legal-change"]', (rows) => rows.map((row) => row.textContent?.trim()))).toEqual(
-			LEGAL_MANIFEST.terms.flatMap((version) => version.changes),
+			LEGAL_MANIFEST.terms.filter((version) => version.material).flatMap((version) => version.changes),
 		)
 		expect(await textOf(page, "legal-consent-label")).toBe(`I agree to the Terms of Use, version ${CURRENT_TERMS}.`)
 		expect(await isContinueDisabled(page)).toBe(true)
@@ -277,6 +279,13 @@ describe("popup: declining never locks a person out", () => {
 		await navigateByHash(page, "#/popup/send", 15_000)
 		await page.waitForSelector('[data-testid="send-submit"]', { visible: true, timeout: 15_000 })
 		expect(await page.$('[data-testid="send-legal-banner"]')).toBeNull()
+
+		// The stale reload is the control: told the acceptance is current, the answer must refuse.
+		const current = { [LEGAL_ACCEPTANCE_KEY]: legalSeedValue("current") }
+		await reloadWithLegalState(page, "current")
+		await answerUpdatedTerms(page, current)
+		await reloadWithLegalState(page, "stale")
+		await expect(answerUpdatedTerms(page, current)).rejects.toThrow("raised the Terms sheet over a current acceptance")
 		await page.close()
 	}, 120_000)
 

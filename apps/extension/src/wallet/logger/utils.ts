@@ -116,6 +116,13 @@ export const REDACTED_KEYS: ReadonlySet<string> = new Set([
 	"plainSecret",
 	"mnemonic",
 	"seedPhrase",
+	// The onboarding phrase check: its answers, the phrase words offered beside them, and the picks.
+	"phraseWord",
+	"phrase-word",
+	"phraseChoices",
+	"phrase-choices",
+	"phrasePicks",
+	"phrase-picks",
 	// Authentication material.
 	"password",
 	"passhash",

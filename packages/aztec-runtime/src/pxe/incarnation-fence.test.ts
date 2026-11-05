@@ -24,6 +24,7 @@ import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { StoreErasedError } from "./lifecycle-coordinator"
 import { PxeService, type IProfileReader } from "./service"
 
 const noopLogger: ILogger = { log: () => {} }
@@ -191,6 +192,7 @@ describe("incarnation fence", () => {
 		// purge bumps it before the op's guard body runs, so its fence must reject.
 		svc.lifecycle.bump(key)
 		await expect(stale).rejects.toThrow(/purged mid-operation/)
+		await expect(stale).rejects.toBeInstanceOf(StoreErasedError)
 		expect(ran).toBe(false)
 	})
 
@@ -252,6 +254,7 @@ describe("incarnation fence", () => {
 		await service.clearProfileState("p1", GEN_1)
 
 		await expect(read.call(service, "t", net(GEN_1), async () => "ok")).rejects.toThrow(/capture is stale/)
+		await expect(read.call(service, "t", net(GEN_1), async () => "ok")).rejects.toBeInstanceOf(StoreErasedError)
 		await expect(read.call(service, "t", net(GEN_1), async () => "ok")).rejects.not.toThrow(/PXE_STORE_KEY_MISSING/)
 	})
 
@@ -270,6 +273,7 @@ describe("incarnation fence", () => {
 		await service.clearProfileState("p1", GEN_1)
 		await service.provisionChainStoreKey("p1", KEY_B64, GEN_2)
 		await expect(read.call(service, "t", net(GEN_1), async () => "ok")).rejects.toThrow(/stale/)
+		await expect(read.call(service, "t", net(GEN_1), async () => "ok")).rejects.toBeInstanceOf(StoreErasedError)
 		await expect(read.call(service, "t", net(GEN_1), async () => "ok")).rejects.not.toThrow(/PXE_STORE_KEY_MISSING/)
 	})
 
@@ -307,7 +311,9 @@ describe("incarnation fence", () => {
 			return undefined
 		})
 
-		await expect(svc.withPxeRead.call(service, "t", net(GEN_1), async () => "ok")).rejects.toThrow(/stale/)
+		const stale = svc.withPxeRead.call(service, "t", net(GEN_1), async () => "ok")
+		await expect(stale).rejects.toThrow(/superseded\) — the capture is stale/)
+		await expect(stale).rejects.toBeInstanceOf(StoreErasedError)
 		expect(factoryCalls).toBe(0)
 	})
 

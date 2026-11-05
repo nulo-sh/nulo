@@ -38,7 +38,7 @@
  *
  * `buildStandard` returns a `BuiltStandardTx`; `buildNoFrom` returns a
  * `BuiltNoFromTx` (same fields minus `nonce`, since `DefaultEntrypoint`
- * doesn't use one). These feed the fee-strategy branches.
+ * doesn't use one, and minus `scopes`, since that path keeps its own sets). These feed the fee-strategy branches.
  */
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
@@ -84,6 +84,8 @@ export interface BuiltStandardTx {
 	pxe: IPXE
 	account: IAccountContract
 	network: Network
+	/** The private-state scopes every simulation and the proof of this build run under (`sendScopes`). */
+	scopes: AztecAddress[]
 	/** The EXACT chain-identity pair the build asserted and signed under —
 	 *  consumers snapshotting chain identity must use THIS, never refetch
 	 *  (a refetch after an endpoint flip would bind the snapshot to a chain
@@ -109,7 +111,19 @@ export interface BuiltStandardTx {
 }
 
 /** NO_FROM (DefaultEntrypoint) variant — no account nonce exists on that path. */
-export type BuiltNoFromTx = Omit<BuiltStandardTx, "nonce">
+export type BuiltNoFromTx = Omit<BuiltStandardTx, "nonce" | "scopes">
+
+/** The account, then each additional scope once. The bridge has admitted each as a session account,
+ *  so the parse trusts it; discovery, sizing and proving read this one set, or a note one needs is
+ *  missing from another. */
+export function sendScopes(account: AztecAddress, additionalScopes: unknown): AztecAddress[] {
+	const scopes = new Map([[account.toString(), account]])
+	for (const scope of Array.isArray(additionalScopes) ? additionalScopes : []) {
+		const address = AztecAddress.fromStringUnsafe(String(scope))
+		if (!scopes.has(address.toString())) scopes.set(address.toString(), address)
+	}
+	return [...scopes.values()]
+}
 
 export class TxRequestBuilder {
 	public constructor(
@@ -117,7 +131,7 @@ export class TxRequestBuilder {
 		private readonly profileService: ProfileService,
 		private readonly networkService: NetworkService,
 		private readonly accountService: AccountService,
-		private readonly authRegistryService: AuthRegistryService,
+		private readonly authRegistryService: Pick<AuthRegistryService, "assertWithinCap">,
 		private readonly taskService: TaskService,
 		private readonly resolver: ContractResolver,
 		private readonly authwit: AuthwitDiscoverer,
@@ -129,7 +143,7 @@ export class TxRequestBuilder {
 	 *  contract's entrypoint. The account is the fence's profile's, never the
 	 *  active one's. */
 	public async buildStandard(
-		op: { networkId: string; accountAddress: string; actions: Action[] },
+		op: { networkId: string; accountAddress: string; actions: Action[]; opts?: { additionalScopes?: unknown } },
 		fence: ExecutionFence,
 		feePaymentMethod: AccountFeePaymentMethodOptions,
 		parentTask?: WrappedTask,
@@ -220,7 +234,9 @@ export class TxRequestBuilder {
 				}
 			}
 
-			const result = await this.finalizeStandardBuild(ctx, feePaymentMethod, gasSettings, collected)
+			const scopes = sendScopes(account.address, op.opts?.additionalScopes)
+			await this.registerScopeContracts(fence, ctx.network.chainId, ctx.pxe, account.address, scopes)
+			const result = { ...(await this.finalizeStandardBuild(ctx, feePaymentMethod, gasSettings, collected)), scopes }
 			task.complete()
 			return result
 		} catch (error) {
@@ -254,6 +270,22 @@ export class TxRequestBuilder {
 			onRegister: () => this.log("Register contract"),
 		})
 		return { network, account, node, pxe, nodeInfo, instances, artifacts }
+	}
+
+	/** Discovery stubs every scope account, and a stub runs on the account's registered contract
+	 *  instance; the sender's is registered by its own build. */
+	private async registerScopeContracts(
+		fence: ExecutionFence,
+		chainId: number,
+		pxe: IPXE,
+		sender: AztecAddress,
+		scopes: readonly AztecAddress[],
+	): Promise<void> {
+		for (const scope of scopes) {
+			if (scope.toString() === sender.toString()) continue
+			const account = await this.resolveAccount(fence, chainId, scope.toString())
+			await account.ensureContractRegistered(pxe)
+		}
 	}
 
 	/** Account lookups read the keys of whichever session is live when they run, so the fence is
@@ -295,7 +327,7 @@ export class TxRequestBuilder {
 		feePaymentMethod: AccountFeePaymentMethodOptions,
 		gasSettings: PartialGasSettingsRPC | undefined,
 		collected: CollectedActions,
-	): Promise<BuiltStandardTx> {
+	): Promise<Omit<BuiltStandardTx, "scopes">> {
 		const { node, pxe, account, network, nodeInfo } = ctx
 		const { nonce, txCalls, pendingPublicAuthwits } = collected
 		// Per-BUILD cap (pre-send gate): block a grant that would push the account past the
@@ -412,9 +444,16 @@ export class TxRequestBuilder {
 
 			// Register account in PXE (needed for scopes)
 			await account.ensureRegistered(pxe)
-			// Discovery stubs this account, and the run executes it to check any authorization, both by
-			// its registered instance, which otherwise only a standard build registers.
+			// Discovery stubs this account and each scope account, and the run executes them to check any
+			// authorization, each by its registered instance, which otherwise only a standard build registers.
 			await account.ensureContractRegistered(pxe)
+			await this.registerScopeContracts(
+				fence,
+				network.chainId,
+				pxe,
+				account.address,
+				sendScopes(account.address, op.opts?.additionalScopes),
+			)
 			this.log("buildNoFrom: account registered in PXE")
 
 			// Register contracts referenced in the payload (same pattern as buildStandard)
@@ -535,7 +574,12 @@ function assertKnownAuthwitKind(content: AuthwitContent): void {
 }
 
 function newCapsule(action: Extract<Action, { kind: "add_capsule" }>): Capsule {
-	return new Capsule(AztecAddress.fromStringUnsafe(action.contract), Fr.fromString(action.storageSlot), action.capsule.map(Fr.fromString))
+	return new Capsule(
+		AztecAddress.fromStringUnsafe(action.contract),
+		Fr.fromString(action.storageSlot),
+		action.capsule.map(Fr.fromString),
+		action.scope === undefined ? undefined : AztecAddress.fromStringUnsafe(action.scope),
+	)
 }
 
 /** Collect for POST-send recording (pending → reconcile). Build stays PURE:

@@ -18,8 +18,10 @@ import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 import { createBalanceCount } from "./balance-count"
 import { FULL_SIZE, fiatHeroCandidates, fitHero, holdHeroFit, tokenHeroCandidates } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
+import { isCalm } from "@/utils/motion"
 
 /** Composables */
+import { useConfigRead } from "@/composables/useConfigRead"
 import { usePrices } from "@/composables/usePrices"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 
@@ -91,9 +93,14 @@ configService.onUpdate.add(onConfigUpdate)
 function onConfigUpdate(prop) {
 	if (prop.key === "showFiatValues") showFiatValues.value = prop.value !== false
 }
-configService.getValue("showFiatValues").then((v) => {
-	showFiatValues.value = v !== false
-})
+const fiatRead = useConfigRead(
+	configService,
+	() => configService.getValue("showFiatValues"),
+	(v, updatedSince) => {
+		if (!updatedSince("showFiatValues")) showFiatValues.value = v !== false
+	},
+)
+void fiatRead.read()
 
 /** Secondary line for the token hero: `≈ $x.xx`, or undefined (hidden, also for a malformed row). */
 const displayedTokenFiat = computed(() => {
@@ -120,8 +127,6 @@ const balanceCount = createBalanceCount({
 		countMicro.value = micro
 	},
 })
-const isCalm = () =>
-	window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.classList.contains("noanimations")
 /** Home's arrival chip: none on the token hero, and none while the fiat hero is hidden. */
 const chip = computed(() => (!tokenToDisplay.value && showFiatValues.value && props.arrival?.label ? props.arrival : null))
 const chipCalm = ref(false)
@@ -260,6 +265,7 @@ onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
 	configService.disconnect()
+	fiatRead.dispose()
 })
 </script>
 

@@ -15,6 +15,7 @@
 import { beforeEach, describe, expect, test } from "vitest"
 import { accountRowId } from "@/wallet/services/account/spec"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { ServiceCollection, type IService } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
@@ -22,6 +23,7 @@ import { LoggerStore } from "@/wallet/logger"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { svc, tokenListStub } from "./composition-harness"
+import { UI_PREFERENCE_SERVICE_NAME } from "./ui-preference/spec"
 import { ContactService } from "./contact/service"
 import { FpcService } from "./fpc/service"
 import { AuthRegistryService } from "./auth-registry/service"
@@ -279,7 +281,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			services.add(svc(TransactionService.name, { onTransactionUpdated: new EventHandler() }))
 			services.add(svc(ExecutionService.name, {}))
 			services.add(svc(TaskService.name, {}))
-			tbal = new TokenBalanceService(mkLogger(), api, noopTicker)
+			tbal = new TokenBalanceService(mkLogger(), api, { ticker: noopTicker })
 			services.add(tbal)
 			await services.start()
 			// p1 owns token 1, p2 owns token 2 (balances are FK'd via `token`, no profileId).
@@ -318,6 +320,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			const services = new ServiceCollection()
 			services.add(profile)
 			services.add(networkStub())
+			services.add(svc(UI_PREFERENCE_SERVICE_NAME, { saveFeePick: async () => true }))
 			fpc = new FpcService(mkLogger(), api)
 			services.add(fpc)
 			await services.start()
@@ -346,7 +349,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			profile.setActiveProfile(p1)
 			const services = new ServiceCollection()
 			services.add(profile)
-			network = new NetworkService(mkLogger(), api)
+			network = new NetworkService(mkLogger(), api, new FakeNodeFactory())
 			services.add(network)
 			await services.start()
 			await seedRow(api, "nulo:core:networks", "net-p2", {

@@ -9,8 +9,10 @@
 import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
+import { stageSubtitle } from "@/utils/card-subtitle"
+import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { dashIfBlank } from "@/utils/string"
-import { knownDecimals } from "@/utils/token-amount"
+import { knownDecimals, parseSide } from "@/utils/token-amount"
 import type { ListedToken } from "@/utils/tx-amount"
 import { DAPP_LABEL, callTitle, formatTransferType, settledCallTitle } from "@/utils/tx-enrichment"
 import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
@@ -32,6 +34,57 @@ import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent
  * than silently inheriting whichever default the next consumer assumes.
  */
 export const ACTIVITY_FEED_KINDS: ReadonlySet<OperationKind> = new Set(["transfer", "dapp_execute"])
+
+/** In flight and of a kind the activity feed lists. */
+export function isInFlightActivityOp(op: Pick<OperationRecord, "terminalAt" | "kind">): boolean {
+	return op.terminalAt === null && ACTIVITY_FEED_KINDS.has(op.kind)
+}
+
+/** A send held behind an earlier one, which names that wait rather than the queue's stage word. */
+export function isQueuedTransfer(
+	op: OperationRecord | null | undefined,
+): op is OperationRecord & { progress: Extract<OperationRecord["progress"], { stage: "queued" }> } {
+	return op?.kind === "transfer" && op.progress?.stage === "queued"
+}
+
+/** The progress word the record alone proves: a held send's wait, or its stage, naming where a proof runs once known. */
+export function journalProgressWord(op: OperationRecord): string {
+	if (isQueuedTransfer(op)) return "Waiting for your earlier send"
+	const { progress } = op
+	return progress.stage === "proving" ? stageSubtitle("proving", progress.backend) : stageSubtitle(progress.stage)
+}
+
+type CardToken = { symbol?: string; decimals?: unknown; hasDecimals?: boolean }
+
+/**
+ * A transfer record's stored amount and its token's decimals: null for a dApp operation, a missing or
+ * empty `amountRaw` (it would format as "0", a fake "0 USDC") and a token whose decimals the wallet
+ * does not know. The string comes back as stored, so a caller that must refuse a malformed one parses it.
+ */
+export function journalTransferAmount(
+	op: Pick<OperationRecord, "kind" | "amountRaw">,
+	token: CardToken | null | undefined,
+): { raw: string; decimals: number } | null {
+	if (op.kind !== "transfer") return null
+	const decimals = knownDecimals(token)
+	return op.amountRaw && decimals !== null ? { raw: op.amountRaw, decimals } : null
+}
+
+/** An in-flight send's amount: null for a dApp operation, an empty or unreadable `amountRaw`, and a
+ *  token whose decimals the wallet does not know. */
+export function journalCardAmount(op: OperationRecord, tokenById: (id: number) => CardToken | undefined): string | null {
+	if (op.kind !== "transfer" || op.tokenId === undefined) return null
+	const amount = journalTransferAmount(op, tokenById(op.tokenId))
+	const units = amount ? parseSide(amount.raw) : undefined
+	if (!amount || units === undefined) return null
+	return balanceFormatted(units, amount.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
+}
+
+/** An in-flight send's symbol, set whenever its token is known, amount or not. */
+export function journalCardAmountSymbol(op: OperationRecord, tokenById: (id: number) => CardToken | undefined): string | null {
+	if (op.kind !== "transfer" || op.tokenId === undefined) return null
+	return tokenById(op.tokenId)?.symbol || null
+}
 
 export type JournalTerminalVisualState = "cancelled" | "interrupted" | "failed" | "checking" | "sent" | "unconfirmed"
 
@@ -401,12 +454,11 @@ type JournalCardFields = Pick<
 function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): JournalCardFields {
 	const token = op.tokenId !== undefined ? ctx.tokenById(op.tokenId) : undefined
 
-	// An empty or missing `amountRaw` would format as "0", a fake "0 USDC" on the card.
 	let amount: string | null = null
 	let amountSymbol: string | null = null
-	const decimals = knownDecimals(token)
-	if (op.amountRaw && token && decimals !== null) {
-		amount = balanceFormatted(op.amountRaw, decimals, 8, { compact: true }).value
+	const stored = journalTransferAmount(op, token)
+	if (stored && token) {
+		amount = balanceFormatted(stored.raw, stored.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
 		amountSymbol = token.symbol ?? null
 	}
 

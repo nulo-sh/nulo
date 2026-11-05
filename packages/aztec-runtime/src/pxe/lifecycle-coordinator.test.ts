@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { PxeLifecycleCoordinator } from "./lifecycle-coordinator"
+import { PxeLifecycleCoordinator, StoreErasedError } from "./lifecycle-coordinator"
 
 describe("PxeLifecycleCoordinator", () => {
 	test("current is 0 for an unseen key", () => {
@@ -31,6 +31,7 @@ describe("PxeLifecycleCoordinator", () => {
 		expect(() => c.assertUnchanged("k", captured, "myLabel")).toThrow(
 			"myLabel: chain was purged mid-operation — refusing to re-create its runtime/store",
 		)
+		expect(() => c.assertUnchanged("k", captured, "myLabel")).toThrow(StoreErasedError)
 	})
 
 	test("assertUnchanged fences a capture from BEFORE a double-bump", () => {

@@ -22,7 +22,7 @@ import { CHAIN_IDS, TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION } from "@/utils/
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { ACCOUNT_STATE_SKIP_DEADLINE } from "@/wallet/services/account-state/normalize"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { type ArmedInterception, interceptRpc } from "../fixtures/browser"
+import { type ArmedInterception, bringToFront, interceptRpc } from "../fixtures/browser"
 import {
 	clickByTestId,
 	type ExtensionContext,
@@ -182,7 +182,7 @@ test.skipIf(!hasConfig)(
 			// Soft, so wrong error rows still report whether the local network restored.
 			expect.soft(await localNetworkListsSender(ctx2, sender), "the local network's restored sender, before Continue").toBe(true)
 			expectOnlyStalledDeadline(firstLog, testnetId)
-			await page.bringToFront()
+			await bringToFront(page)
 
 			// Testnet still hangs, so the Retry runs out of time again and leaves the same one row.
 			// Refuse the first pass's held calls before it, or its identity probe can queue behind them.

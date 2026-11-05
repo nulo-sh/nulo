@@ -8,8 +8,9 @@ import { TokenListService } from "@/wallet/services/token-list/service"
 import type { ValueStorage } from "@/wallet/storage"
 import { valueStorage } from "@/wallet/storage/stores"
 import { flaggedKeysOf } from "@/utils/token-flag"
-import { AlarmDispatcher, EventHandler, createSerialQueue, readBodyCapped } from "@nulo/wallet-core/utils"
-import { allCoingeckoIds, getSanityBand, pricedTokensOf } from "./price-map"
+import { AlarmDispatcher, EventHandler, createSerialQueue, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
+import { isFeedId } from "@nulo/token-list"
+import { inBand, type PriceTable, priceIdsOf, priceTableOf, pricedTokensOf } from "./price-map"
 import {
 	MAX_CLOCK_SKEW_MS,
 	PRICE_FETCH_TIMEOUT_MS,
@@ -38,13 +39,20 @@ const API_BASE = "https://api.coingecko.com/api/v3"
 const BACKOFF_BASE_MS = 30_000
 const BACKOFF_CAP_MS = QUOTE_TTL_MS
 
-/** A real reply for the full id set is about 300 bytes; anything near this is not a price reply. */
+/** A real reply for the largest id set (32 list feeds and Fee Juice) is under 5 KiB; anything near
+ *  this is not a price reply. */
 const MAX_PRICE_RESPONSE_BYTES = 16 * 1024
 
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>
 
-export function isValidQuote(id: string, quote: unknown, now: number): quote is PriceQuote {
-	if (!quote || typeof quote !== "object") return false
+/** Each id escaped on its own, so a list-supplied id can never add a query parameter. */
+export function priceRequestUrl(ids: readonly string[]): string {
+	return `${API_BASE}/simple/price?ids=${ids.map(encodeURIComponent).join(",")}&vs_currencies=usd&include_last_updated_at=true`
+}
+
+/** A quote's own checks, with no band: what a stored row must pass to be read at all. */
+export function isWellFormedQuote(id: string, quote: unknown, now: number): quote is PriceQuote {
+	if (!isFeedId(id) || !quote || typeof quote !== "object") return false
 	const q = quote as Partial<PriceQuote>
 	if (q.coingeckoId !== id) return false
 	if (typeof q.usd !== "number" || !Number.isFinite(q.usd) || q.usd <= 0) return false
@@ -54,30 +62,38 @@ export function isValidQuote(id: string, quote: unknown, now: number): quote is 
 	// monotonic merge, so an attacker-planted cache row could never be
 	// repaired by refreshes.
 	if (q.fetchedAt > now + MAX_CLOCK_SKEW_MS) return false
-	if (q.providerUpdatedAt !== null && (typeof q.providerUpdatedAt !== "number" || !Number.isFinite(q.providerUpdatedAt))) return false
-	const band = getSanityBand(id)
-	if (!band) return false
-	return q.usd >= band.min && q.usd <= band.max
+	return q.providerUpdatedAt === null || (typeof q.providerUpdatedAt === "number" && Number.isFinite(q.providerUpdatedAt))
 }
 
-/** The quotes of a stored cache that validate and are fresh at `now`; anything else reads as absent. */
-export function usableQuotes(stored: unknown, now: number): PriceState {
+export function isValidQuote(id: string, quote: unknown, now: number, table: PriceTable): quote is PriceQuote {
+	return isWellFormedQuote(id, quote, now) && Object.hasOwn(table, id) && inBand(quote.usd, table[id])
+}
+
+/** The quotes of a stored cache that are well-formed and fresh at `now`; anything else reads as absent.
+ *  No band: which band applies depends on the list held when the quote is used (`withinTable`). */
+export function freshQuotes(stored: unknown, now: number): PriceState {
 	if (!stored || typeof stored !== "object") return {}
-	const usable: PriceState = {}
+	const fresh: PriceState = {}
 	for (const [id, quote] of Object.entries(stored)) {
-		if (!isValidQuote(id, quote, now)) continue
+		if (!isWellFormedQuote(id, quote, now)) continue
 		if (!isQuoteFresh(quote, now)) continue
-		usable[id] = quote
+		fresh[id] = quote
 	}
-	return usable
+	return fresh
+}
+
+export function withinTable(quotes: PriceState, table: PriceTable): PriceState {
+	return Object.fromEntries(Object.entries(quotes).filter(([id, quote]) => Object.hasOwn(table, id) && inBand(quote.usd, table[id])))
 }
 
 /**
- * Background price feed. ONE batched CoinGecko request per refresh, always
- * for the full static id set (`price-map.ts`) — the query never varies with
- * holdings. Quotes are validated at write AND read time (shape + per-id
- * sanity bands), cached in `chrome.storage.local`, and treated as absent
- * after `QUOTE_TTL_MS`.
+ * Background price feed. ONE batched CoinGecko request per refresh, for every
+ * id of the held list's table (`price-map.ts`) — the query never varies with
+ * holdings. Quotes are validated at write AND read time (shape + the band of
+ * the feed the held list names), cached in `chrome.storage.local`, and
+ * treated as absent after `QUOTE_TTL_MS`. Every answer takes its table from
+ * the list held after its last await, so a quote never travels with another
+ * list's band or mapping.
  *
  * Privacy posture: a fetch starts only while a profile session is open
  * (`doRefresh`, which every refresh path reaches, checks it last); the alarm
@@ -182,7 +198,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		await this.ensureInitialized()
 		if (!(await this.isEnabled())) return {}
 		const usable = await this.readUsable()
-		if (allCoingeckoIds().every((id) => id in usable)) return usable
+		if (priceIdsOf(this.priceTable()).every((id) => Object.hasOwn(usable, id))) return usable
 		// Incomplete cache: refetch only if we haven't completed a fetch
 		// within the refresh period — a permanently-missing id must not turn
 		// every component mount into a network request.
@@ -200,7 +216,8 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	public async getUsableQuote(coingeckoId: string): Promise<PriceQuote | undefined> {
 		await this.ensureInitialized()
 		if (!(await this.isEnabled())) return undefined
-		return (await this.readUsable())[coingeckoId]
+		const usable = await this.readUsable()
+		return Object.hasOwn(usable, coingeckoId) ? usable[coingeckoId] : undefined
 	}
 
 	/** Alarm tick entry point — dispatched by the SW shell's module-scope
@@ -229,7 +246,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 	// ── Session / config / list wiring ──────────────────────────────────
 
-	/** A new list moves the mapping, not the quotes: the full id table is always requested. */
+	/** A new list moves the mapping and the bands; an id it adds is fetched by the next refresh. */
 	private readonly onListChanged = (): void => {
 		void this.usableIfEnabled()
 			.then((quotes) => this.emit("onQuotesUpdated", this.snapshotOf(quotes)))
@@ -295,15 +312,21 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		return (await this.isEnabled()) ? this.readUsable() : {}
 	}
 
-	/** Reads the list as each answer is built, after any price await, so a slow refresh never carries
-	 *  an older list's mapping or flags. */
+	/** Reads the list as each answer is built, after any price await, and filters the quotes against
+	 *  that list's bands in the same step, so no answer pairs a quote with another list's band,
+	 *  mapping or flags. */
 	private snapshotOf(quotes: PriceState): PriceSnapshot {
 		const list = this.tokenList.getSnapshot()
+		const table = priceTableOf(list?.priceFeeds ?? {})
 		return {
-			quotes,
-			pricedTokens: pricedTokensOf(list?.entries ?? []),
+			quotes: withinTable(quotes, table),
+			pricedTokens: pricedTokensOf(list?.entries ?? [], table),
 			flaggedTokens: flaggedKeysOf(list?.flagged ?? []),
 		}
+	}
+
+	private priceTable(): PriceTable {
+		return priceTableOf(this.tokenList.getSnapshot()?.priceFeeds ?? {})
 	}
 
 	private async ensureAlarm(): Promise<void> {
@@ -320,11 +343,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		} catch {
 			return {}
 		}
-		return usableQuotes(stored, this.now())
-	}
-
-	private isValidQuote(id: string, quote: unknown): quote is PriceQuote {
-		return isValidQuote(id, quote, this.now())
+		return withinTable(freshQuotes(stored, this.now()), this.priceTable())
 	}
 
 	/** Serialized refresh: concurrent callers share one in-flight request.
@@ -355,8 +374,8 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			return this.answerLocked(gen)
 		}
 
-		const ids = allCoingeckoIds()
-		const url = `${API_BASE}/simple/price?ids=${ids.join(",")}&vs_currencies=usd&include_last_updated_at=true`
+		const table = this.priceTable()
+		const url = priceRequestUrl(priceIdsOf(table))
 		const apiKey = import.meta.env.VITE_COINGECKO_API_KEY as string | undefined
 		const headers: Record<string, string> = apiKey ? { "x-cg-demo-api-key": apiKey } : {}
 
@@ -370,14 +389,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		this.abortController = controller
 		const timeout = setTimeout(() => controller.abort(), PRICE_FETCH_TIMEOUT_MS)
 		try {
-			const response = await this.fetchFn(url, {
-				signal: controller.signal,
-				headers,
-				// No request carries a cache validator: "no-cache" would revalidate with the stored one.
-				cache: "no-store",
-				credentials: "omit",
-				referrerPolicy: "no-referrer",
-			})
+			const response = await this.fetchFn(url, privateFetchInit(controller.signal, { headers }))
 			if (!response.ok) {
 				throw new Error(`price fetch failed: HTTP ${response.status}`)
 			}
@@ -385,12 +397,12 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			if (gen !== this.generation) return {}
 
 			const fetchedAt = this.now()
-			const incoming = this.parseResponse(body, fetchedAt)
+			const incoming = this.parseResponse(body, fetchedAt, table)
 			if (Object.keys(incoming).length === 0) {
 				throw new Error("price fetch returned no valid quotes")
 			}
 
-			const merged = await this.mergeMonotonic(incoming)
+			const merged = await this.mergeMonotonic(incoming, table)
 			if (gen !== this.generation) return {}
 			await this.cache.set(merged)
 			// A kill-switch flip DURING the cache write invalidates this run: don't
@@ -442,10 +454,11 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	}
 
 	/** Validate the provider response per-id; invalid entries are dropped, never stored. */
-	private parseResponse(body: unknown, fetchedAt: number): PriceState {
+	private parseResponse(body: unknown, fetchedAt: number, table: PriceTable): PriceState {
 		const out: PriceState = {}
 		if (!body || typeof body !== "object") return out
-		for (const id of allCoingeckoIds()) {
+		for (const id of priceIdsOf(table)) {
+			if (!Object.hasOwn(body, id)) continue
 			const row = (body as Record<string, unknown>)[id]
 			if (!row || typeof row !== "object") continue
 			const usd = (row as Record<string, unknown>).usd
@@ -457,7 +470,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 				fetchedAt,
 				providerUpdatedAt,
 			}
-			if (this.isValidQuote(id, quote)) {
+			if (isValidQuote(id, quote, this.now(), table)) {
 				out[id] = quote
 			}
 		}
@@ -466,7 +479,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 	/** Merge incoming quotes over stored ones; a newer stored entry is never
 	 *  overwritten by an older response (late-arriving fetches). */
-	private async mergeMonotonic(incoming: PriceState): Promise<PriceState> {
+	private async mergeMonotonic(incoming: PriceState, table: PriceTable): Promise<PriceState> {
 		let stored: PriceState | undefined
 		try {
 			stored = await this.cache.get()
@@ -475,7 +488,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		}
 		const merged: PriceState = {}
 		for (const [id, quote] of Object.entries(stored ?? {})) {
-			if (this.isValidQuote(id, quote)) merged[id] = quote
+			if (isValidQuote(id, quote, this.now(), table)) merged[id] = quote
 		}
 		for (const [id, quote] of Object.entries(incoming)) {
 			const existing = merged[id]

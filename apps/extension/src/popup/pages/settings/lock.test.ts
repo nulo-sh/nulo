@@ -1,5 +1,5 @@
 import { createTestingPinia } from "@pinia/testing"
-import { Flex, Icon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
@@ -19,10 +19,11 @@ const fakes = vi.hoisted(() => ({
 		disconnect: vi.fn(),
 	},
 	profile: { refreshSession: vi.fn(), disconnect: vi.fn() },
+	openToast: vi.fn(),
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile: fakes.managerProfile } }))
 vi.mock("@/composables/useLockWallet", () => ({ useLockWallet: vi.fn(() => fakes.lockWallet) }))
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: fakes.openToast }) }))
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: vi.fn(function () {
 		return fakes.config
@@ -37,6 +38,7 @@ vi.mock("@/wallet/services/profile/client", () => ({
 import { useLockWallet } from "@/composables/useLockWallet"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
 import SettingItem from "@/components/ui/Settings/SettingItem.vue"
 import LockPage from "./lock.vue"
@@ -49,7 +51,7 @@ beforeEach(() => {
 	installChromeStorage({}, { persist: false })
 })
 
-async function mountLock(type: "password" | "passkey" = "password") {
+async function mountLock(type: "password" | "passkey" = "password", { realInput = false } = {}) {
 	const wrapper = mount(LockPage, {
 		global: {
 			plugins: [
@@ -59,14 +61,14 @@ async function mountLock(type: "password" | "passkey" = "password") {
 					initialState: { app: { isLogined: true, profile: { id: "p1", name: "Primary", type } } },
 				}),
 			],
-			components: { Flex, ItemsContainer, SettingItem, Text, Icon },
+			components: { Flex, ItemsContainer, SettingItem, Text, Icon, Input },
 			stubs: {
 				SettingsPageShell: { props: ["title"], template: '<div :data-title="title"><slot /></div>' },
 				LoadingState: { template: '<div data-testid="loading" />' },
 				Toggle: true,
 				Tooltip: true,
 				Icon: true,
-				Input: true,
+				...(realInput ? {} : { Input: true }),
 			},
 		},
 	})
@@ -92,7 +94,7 @@ describe("settings/lock", () => {
 		async (type) => {
 			const w = await mountLock(type)
 			const strict = w.get('[data-testid="setting-strict-security-mode"]')
-			expect(strict.text()).toContain("More secure, asks you to unlock more often on this device. Recommended.")
+			expect(strict.text()).toContain("Locks whenever Nulo restarts in the background, as well as after the timeout.")
 			expect(w.find('[data-testid="auto-lock-input"]').exists()).toBe(true)
 			;(w.getComponent('[data-testid="strict-security-toggle"]') as VueWrapper).vm.$emit("update:modelValue", false)
 			expect(useCacheStore().confirm).toMatchObject({
@@ -134,12 +136,12 @@ describe("settings/lock", () => {
 		await debounced()
 		const field = () => w.findComponent('[data-testid="auto-lock-input"]') as VueWrapper
 
-		field().vm.$emit("update:modelValue", "0")
+		field().vm.$emit("update:modelValue", "15")
 		await debounced()
-		expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 0)
+		expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 900_000)
 		expect(field().attributes("modelvalue")).toBe("30")
 
-		field().vm.$emit("update:modelValue", "0")
+		field().vm.$emit("update:modelValue", "15")
 		await debounced()
 		expect(fakes.config.setValue).toHaveBeenCalledTimes(2)
 	})
@@ -167,7 +169,7 @@ describe("settings/lock", () => {
 		await debounced()
 		const field = () => w.findComponent('[data-testid="auto-lock-input"]') as VueWrapper
 
-		field().vm.$emit("update:modelValue", "0")
+		field().vm.$emit("update:modelValue", "45")
 		await debounced()
 		field().vm.$emit("update:modelValue", "15")
 		fail(new Error("persist failed"))
@@ -176,6 +178,133 @@ describe("settings/lock", () => {
 
 		await debounced()
 		expect(fakes.config.setValue).toHaveBeenLastCalledWith("sessionTtl", 900_000)
+	})
+
+	describe("never locking asks first", () => {
+		const debounced = () => new Promise((resolve) => setTimeout(resolve, 350)).then(flushPromises)
+		const confirm = () =>
+			useCacheStore().confirm as { title?: string; description?: string; confirm_text?: string; callback?: () => void }
+		async function mountSettled() {
+			const w = await mountLock()
+			await debounced()
+			const field = () => w.findComponent('[data-testid="auto-lock-input"]') as VueWrapper
+			return { w, field }
+		}
+
+		test("a typed 0 asks and writes nothing; a typed 15 writes with no question", async () => {
+			const { field } = await mountSettled()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			expect(confirm()).toMatchObject({
+				title: "Never lock automatically?",
+				description:
+					"Nulo will stay unlocked until you lock it yourself. Anyone who can use this browser can use your wallet meanwhile.",
+				confirm_text: "Never lock",
+			})
+			expect(fakes.config.setValue).not.toHaveBeenCalled()
+
+			useCacheStore().confirm = {}
+			await flushPromises()
+			field().vm.$emit("update:modelValue", "15")
+			await debounced()
+			expect(confirm()).toEqual({})
+			expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 900_000)
+		})
+
+		test("an emptied field, which the int field emits as the number 0, asks too", async () => {
+			const { field } = await mountSettled()
+			field().vm.$emit("update:modelValue", 0)
+			await debounced()
+			expect(confirm().title).toBe("Never lock automatically?")
+			expect(fakes.config.setValue).not.toHaveBeenCalled()
+		})
+
+		test("Never lock writes 0", async () => {
+			const { field } = await mountSettled()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			confirm().callback?.()
+			await flushPromises()
+			expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 0)
+			expect(field().attributes("modelvalue")).toBe("0")
+		})
+
+		test("any other answer puts the stored minutes back and writes nothing", async () => {
+			const { field } = await mountSettled()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			useCacheStore().confirm = {}
+			await debounced()
+			expect(field().attributes("modelvalue")).toBe("30")
+			expect(fakes.config.setValue).not.toHaveBeenCalled()
+		})
+
+		test("an answer after the field moved leaves the newer edit alone", async () => {
+			const { field } = await mountSettled()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			const ask = confirm()
+			field().vm.$emit("update:modelValue", "45")
+			await debounced()
+			ask.callback?.()
+			await flushPromises()
+			expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 2_700_000)
+			expect(field().attributes("modelvalue")).toBe("45")
+		})
+
+		test("a 0 typed again while the question is open asks nothing new; its answer still writes the 0", async () => {
+			const { field } = await mountSettled()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			const ask = confirm()
+			field().vm.$emit("update:modelValue", "15")
+			await debounced()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			expect(confirm()).toBe(ask)
+			ask.callback?.()
+			await flushPromises()
+			expect(fakes.config.setValue).toHaveBeenLastCalledWith("sessionTtl", 0)
+			expect(field().attributes("modelvalue")).toBe("0")
+		})
+
+		test("a page that opens with 0 stored never asks", async () => {
+			fakes.config.getValue.mockImplementation(async (key: string) => (key === "sessionTtl" ? 0 : true))
+			const { field } = await mountSettled()
+			await debounced()
+			expect(field().attributes("modelvalue")).toBe("0")
+			expect(confirm()).toEqual({})
+			expect(fakes.config.setValue).not.toHaveBeenCalled()
+		})
+
+		test("a 0 that settles after the page closed neither asks nor writes", async () => {
+			const { w, field } = await mountSettled()
+			field().vm.$emit("update:modelValue", "0")
+			await flushPromises()
+			w.unmount()
+			await debounced()
+			expect(confirm()).toEqual({})
+			expect(fakes.config.setValue).not.toHaveBeenCalled()
+		})
+
+		test("closing the page while it asks closes the question", async () => {
+			const { w, field } = await mountSettled()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			w.unmount()
+			await flushPromises()
+			expect(usePopupStore().close).toHaveBeenCalledWith("confirm")
+		})
+
+		test("a Never lock whose answer lands after the page closed writes nothing", async () => {
+			const { w, field } = await mountSettled()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			confirm().callback?.()
+			w.unmount()
+			await flushPromises()
+			expect(fakes.config.setValue).not.toHaveBeenCalled()
+		})
 	})
 
 	describe("a port that drops under the mounted page", () => {
@@ -239,6 +368,46 @@ describe("settings/lock", () => {
 			reread.resolve(true)
 			await flushPromises()
 			expect(strict(w)).toBe("false")
+		})
+	})
+
+	describe("the auto-lock field, as the browser edits it", () => {
+		const debounced = () => new Promise((resolve) => setTimeout(resolve, 350)).then(flushPromises)
+		/** One edit as a browser raises it: `beforeinput` on the text as it stands, the new text, `input`. */
+		async function edit(w: VueWrapper, value: string, inputType = "insertText") {
+			const input = w.get('[data-testid="auto-lock-input"] input')
+			await input.trigger("beforeinput", { inputType })
+			;(input.element as HTMLInputElement).value = value
+			await input.trigger("input", { inputType })
+		}
+		const mountField = async () => {
+			const w = await mountLock("password", { realInput: true })
+			await debounced()
+			// An earlier test's page stays mounted, and its pending write can land in that wait.
+			fakes.config.setValue.mockClear()
+			fakes.openToast.mockClear()
+			const el = w.get('[data-testid="auto-lock-input"] input').element as HTMLInputElement
+			return { w, el }
+		}
+
+		test("1.5 pasted over the minutes saves nothing and says nothing", async () => {
+			const { w, el } = await mountField()
+			el.setSelectionRange(0, el.value.length)
+			await edit(w, "1.5", "insertFromPaste")
+			await debounced()
+			expect([el.value, fakes.config.setValue.mock.calls, fakes.openToast.mock.calls]).toEqual(["30", [], []])
+		})
+
+		test("1 typed, then e within the wait, saves the 1 the field shows, with its toast", async () => {
+			const { w, el } = await mountField()
+			el.setSelectionRange(0, el.value.length)
+			await edit(w, "1")
+			el.setSelectionRange(1, 1)
+			await edit(w, "1e")
+			await debounced()
+			expect(el.value).toBe("1")
+			expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 60_000)
+			expect(fakes.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Auto-lock timeout updated" })
 		})
 	})
 

@@ -2,6 +2,7 @@ import { expect } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, clickSelector, replaceInputValue } from "./fixtures/extension"
 import { closeStuckPopup, navigateToSettings, selectedAccount, waitForToast } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
+import { bringToFront } from "./fixtures/browser"
 
 test("accounts page shows initial account", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
@@ -176,7 +177,7 @@ test("header address button copies the address in one click (toast, no popup det
 	// The success toast only fires AFTER navigator.clipboard.writeText resolves, and the async
 	// clipboard API requires a FOCUSED document (CDP can't overridePermissions on the
 	// chrome-extension:// origin — "opaque origin"). The real click below supplies the gesture.
-	await page.bringToFront()
+	await bringToFront(page)
 
 	await clickByTestId(page, "account-address-copy")
 	await waitForToast(page, "Address is copied")

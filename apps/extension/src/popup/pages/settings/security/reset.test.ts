@@ -4,7 +4,7 @@
  */
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { Flex, Text } from "@nulo/design"
 
@@ -550,5 +550,127 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		await deleteButton(w).trigger("click")
 		await flushPromises()
 		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
+	})
+})
+
+describe("Delete Profile's checks say what they ask", () => {
+	const MISMATCH = '[data-testid="reset-confirm-mismatch"]'
+
+	function mountChecks(profile: ProfileInfo | null = main) {
+		const pinia = createTestingPinia({ createSpy: vi.fn, initialState: { app: { profile, profiles: [main, other] } } })
+		const w = mount(Reset, {
+			global: {
+				plugins: [pinia],
+				provide: { checkSelection },
+				components: { Flex, Text },
+				stubs: {
+					CollapsingHeroLayout: { template: "<div><slot /><slot name='bottom' /></div>" },
+					ItemsContainer: { template: "<div><slot /></div>" },
+					SettingItem: true,
+					Checkbox: { template: "<label><input type='checkbox' /><slot /></label>" },
+					Input: {
+						props: ["ariaInvalid"],
+						emits: ["update:modelValue"],
+						template:
+							"<input :aria-invalid=\"ariaInvalid ? 'true' : null\" @input=\"$emit('update:modelValue', $event.target.value)\" />",
+					},
+					Button: { template: "<button><slot /></button>" },
+				},
+			},
+		})
+		const type = (text: string) => w.get('[data-testid="reset-confirm-input"]').setValue(text)
+		const line = () => w.find(MISMATCH)
+		const invalid = () => w.get('[data-testid="reset-confirm-input"]').attributes("aria-invalid")
+		return { w, app: useAppStore(pinia), type, line, invalid }
+	}
+
+	beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }))
+	afterEach(() => vi.useRealTimers())
+
+	test.each([
+		["a live profile", main],
+		["a profile made before 1.1", { ...main, retired: true }],
+	])("%s: the third box asks for the recovery phrase or a full backup", (_, profile) => {
+		const { w } = mountChecks(profile as ProfileInfo)
+		expect(w.get('[data-testid="reset-checkbox-sure"]').text()).toBe("I have my recovery phrase or a full backup")
+	})
+
+	test.each([["Mian"], ["Mainn"], ["Main "], ["main"]])(
+		"%j shows Doesn't match Main after a 500 ms pause, as an alert",
+		async (typed) => {
+			const { type, line, invalid } = mountChecks()
+			await type(typed)
+			await vi.advanceTimersByTimeAsync(499)
+			expect(line().exists()).toBe(false)
+			expect(invalid()).toBeUndefined()
+			await vi.advanceTimersByTimeAsync(1)
+			expect(line().text()).toBe("Doesn't match Main")
+			expect(line().attributes("role")).toBe("alert")
+			expect(invalid()).toBe("true")
+		},
+	)
+
+	test.each([[""], ["M"], ["Mai"], ["Main"]])(
+		"(control) %j can still become the name: no line, however long the pause",
+		async (typed) => {
+			const { type, line } = mountChecks()
+			await type(typed)
+			await vi.advanceTimersByTimeAsync(5_000)
+			expect(line().exists()).toBe(false)
+		},
+	)
+
+	test("another wrong key restarts a pending pause", async () => {
+		const { type, line } = mountChecks()
+		await type("Mx")
+		await vi.advanceTimersByTimeAsync(400)
+		await type("Mxy")
+		await vi.advanceTimersByTimeAsync(400)
+		expect(line().exists()).toBe(false)
+		await vi.advanceTimersByTimeAsync(100)
+		expect(line().exists()).toBe(true)
+	})
+
+	test("a shown line stays through further wrong keys, goes on the key that makes it a prefix, and a new mistake waits again", async () => {
+		const { type, line, invalid } = mountChecks()
+		await type("Mx")
+		await vi.advanceTimersByTimeAsync(500)
+		const shown = line().element
+		await type("Mxy")
+		expect(line().element).toBe(shown)
+		await type("Ma")
+		expect(line().exists()).toBe(false)
+		expect(invalid()).toBeUndefined()
+		await vi.advanceTimersByTimeAsync(5_000)
+		expect(line().exists()).toBe(false)
+		await type("Max")
+		expect(line().exists()).toBe(false)
+		await vi.advanceTimersByTimeAsync(500)
+		expect(line().exists()).toBe(true)
+	})
+
+	test("a move of the selection clears the field and its line; a page left mid-pause leaves no timer", async () => {
+		const shown = mountChecks()
+		await shown.type("Mx")
+		await vi.advanceTimersByTimeAsync(500)
+		shown.app.profile = other
+		await flushPromises()
+		expect(shown.line().exists()).toBe(false)
+
+		const pending = mountChecks()
+		const set = vi.spyOn(globalThis, "setTimeout")
+		const clear = vi.spyOn(globalThis, "clearTimeout")
+		await pending.type("Mx")
+		const pause = set.mock.results[set.mock.calls.findIndex(([, ms]) => ms === 500)]?.value
+		expect(pause).toBeDefined()
+		pending.w.unmount()
+		expect(clear).toHaveBeenCalledWith(pause)
+	})
+
+	test("a page opened with no profile shows no line", async () => {
+		const { type, line } = mountChecks(null)
+		await type("anything")
+		await vi.advanceTimersByTimeAsync(5_000)
+		expect(line().exists()).toBe(false)
 	})
 })

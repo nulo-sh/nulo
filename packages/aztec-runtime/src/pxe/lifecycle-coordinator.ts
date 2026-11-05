@@ -1,3 +1,9 @@
+/** An op whose captured store a chain purge or a profile erase ended while it ran: the op's
+ *  result is moot, as its caller's context went with the store. */
+export class StoreErasedError extends Error {
+	public readonly isStoreErased = true as const
+}
+
 /**
  * The per-chain purge-epoch fence, extracted from `PxeService`'s
  * god-class. Owns the epoch counter and the fence operations that were
@@ -38,7 +44,7 @@ export class PxeLifecycleCoordinator {
 	 */
 	public assertUnchanged(key: string, captured: number, label: string): void {
 		if (this.current(key) !== captured) {
-			throw new Error(`${label}: chain was purged mid-operation — refusing to re-create its runtime/store`)
+			throw new StoreErasedError(`${label}: chain was purged mid-operation — refusing to re-create its runtime/store`)
 		}
 	}
 }

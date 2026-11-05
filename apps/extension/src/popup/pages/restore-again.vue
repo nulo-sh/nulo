@@ -126,11 +126,12 @@ onBeforeUnmount(() => {
 		heroSub="Again"
 		collapsingLabel="Restore again"
 		backTo="/popup/general"
+		moreBelow
 		data-testid="restore-again-page"
 		@keydown="onKeydown"
 	>
-		<div v-if="networkNames.length" :class="$style.intro">
-			<Text variant="body" height="150" color="secondary" data-testid="restore-again-intro">
+		<div v-if="networkNames.length" :class="$style.intro" data-scroll-section>
+			<Text variant="body" height="150" color="secondary" :class="$style.names" data-testid="restore-again-intro">
 				{{ restoreAgainIntroText(networkNames) }}
 			</Text>
 		</div>
@@ -176,6 +177,7 @@ onBeforeUnmount(() => {
 					variant="body"
 					height="120"
 					color="txt-warning"
+					:class="$style.names"
 					data-testid="restore-again-retry-result"
 				>
 					{{ retryResult }}
@@ -216,5 +218,9 @@ onBeforeUnmount(() => {
 <style module>
 .intro {
 	padding-bottom: 12px;
+}
+
+.names {
+	overflow-wrap: anywhere;
 }
 </style>

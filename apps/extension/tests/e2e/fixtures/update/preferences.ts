@@ -8,7 +8,7 @@ import type { ExtensionContext } from "../extension"
 import { pollUntil } from "../poll"
 import { callService } from "../session"
 import { readLocalStorage } from "./in-place"
-import type { ReleasePreferences } from "./release-reads"
+import { allowedPicks, type ReleasePreferences } from "./release-reads"
 import { isEnvelope } from "./verify"
 
 /** `profileId`'s maps as a release that keeps them in plaintext stored them in `before`. */
@@ -30,14 +30,16 @@ export async function readPreferences(page: Page, profileId: string): Promise<Re
 
 /**
  * `profileId`'s pins and fee picks as the release held them, `release`: once the unlock has
- * converted them each key holds an envelope, and the service returns the release's maps. Send from
- * a page unlocked on that profile.
+ * converted them each key holds an envelope, and the service returns the release's maps, but for
+ * the picks {@link allowedPicks} lets the candidate forget with a fee payer of `unofferedSponsors`.
+ * Send from a page unlocked on that profile.
  */
 export async function expectReleasePreferences(
 	ctx: ExtensionContext,
 	page: Page,
 	release: ReleasePreferences,
 	profileId: string,
+	unofferedSponsors: readonly string[] = [],
 ): Promise<void> {
 	const keys = { pins: pinnedTokensKey(profileId), app: feePicksKey(profileId), send: sendFeePicksKey(profileId) }
 	expect(
@@ -50,5 +52,6 @@ export async function expectReleasePreferences(
 		{ label: "the release's pins and fee picks sealed", timeoutMs: 30_000, intervalMs: 500 },
 	)
 	expect(await callService(page, UI_PREFERENCE_SERVICE_NAME, "getPinnedTokens", [profileId])).toEqual(release.pins)
-	expect(await callService(page, UI_PREFERENCE_SERVICE_NAME, "getFeePicks", [profileId])).toEqual(release.picks)
+	const picks = await callService<FeePicks>(page, UI_PREFERENCE_SERVICE_NAME, "getFeePicks", [profileId])
+	expect(allowedPicks(release.picks, unofferedSponsors, await readLocalStorage(ctx))).toContainEqual(picks)
 }

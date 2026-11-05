@@ -65,7 +65,10 @@ const STUBS = {
 	SectionLabel: { props: ["label"], template: "<div />" },
 	Toggle: { props: ["modelValue"], template: "<div />" },
 	EmojiGrid: { props: ["emojis"], template: '<div data-testid="emoji-grid-stub">{{ emojis }}</div>' },
-	DappIdentityBlock: { props: ["dapp", "actionLabel"], template: "<div />" },
+	DappIdentityBlock: {
+		props: ["dapp", "actionLabel"],
+		template: '<div data-testid="identity-block" :data-action-label="actionLabel" />',
+	},
 	// As the real primitive: only `disabled` sets the attribute, and listeners reach the button.
 	Button: { props: ["disabled", "loading"], template: '<button :disabled="disabled"><slot /></button>' },
 }
@@ -82,7 +85,7 @@ const newConnectionRow = (over: Record<string, unknown> = {}) => ({
 
 const wrappers: Array<ReturnType<typeof mount>> = []
 async function mountCheck(query: Record<string, string> = {}) {
-	routeQuery = { sessionId: "row-1", verificationHash: URL_HASH, isReconnect: "false", ...query }
+	routeQuery = { sessionId: "row-1", verificationHash: URL_HASH, ...query }
 	const w = mount(Verify, { global: { stubs: STUBS, components: { IdentityStrip } }, attachTo: document.body })
 	wrappers.push(w)
 	await flushPromises()
@@ -104,33 +107,41 @@ afterEach(() => {
 })
 
 describe("windows/verify — the header names who and where", () => {
-	test("a new connection's check says no account is shared and names the session's network, never the dApp's name", async () => {
+	const SHARED = `aztec:0:${ADDRESS}`
+
+	test("a new connection's check names the session's network alone, never the dApp's name, and no line under the app", async () => {
 		const w = await mountCheck()
 		const text = header(w)
-		expect(text).toContain("No account shared")
 		expect(text).toContain("Local Network")
+		expect(text).not.toContain("No account shared")
 		expect(text).not.toContain("Account 1")
+		expect(w.find('[data-testid="identity-sep"]').exists()).toBe(false)
 		for (const part of ["Phishy", "Dapp", "Vault", "‮", "​", "⁦", "‍"]) expect(text).not.toContain(part)
+		expect(w.get('[data-testid="identity-block"]').attributes("data-action-label")).toBeUndefined()
 	})
 
-	test("a new connection on another network than the active one names that network, not in orange", async () => {
+	test("a new connection on another network than the active one names that network alone, not in orange", async () => {
 		sessionRow = newConnectionRow({ chainId: String(CHAIN_IDS.TESTNET) })
 		const w = await mountCheck()
-		expect(w.findComponent(IdentityStrip).props()).toMatchObject({
-			accountLabel: "No account shared",
-			networkLabel: "Testnet",
-			warn: false,
-		})
+		expect(w.findComponent(IdentityStrip).props()).toMatchObject({ accountLabel: "Testnet", networkLabel: undefined, warn: false })
 	})
 
-	test("a reconnect's check names the shared account and the network's name", async () => {
+	test("a reconnect's check names the shared account beside the network's name, and no line under the app", async () => {
 		accountsByAddress[ADDRESS] = { name: "Savings", chainId: 0, address: ADDRESS }
-		sessionRow = newConnectionRow({ accounts: [`aztec:0:${ADDRESS}`] })
-		const w = await mountCheck({ isReconnect: "true" })
+		sessionRow = newConnectionRow({ accounts: [SHARED] })
+		const w = await mountCheck()
 		const text = header(w)
 		expect(text).toContain("Savings")
 		expect(text).toContain("Local Network")
 		expect(text).not.toContain("chain 0")
+		expect(w.get('[data-testid="identity-network"]').attributes("data-warn")).toBeUndefined()
+		expect(w.get('[data-testid="identity-block"]').attributes("data-action-label")).toBeUndefined()
+	})
+
+	test("a shared account on another chain than the session's paints the network in the warning colour", async () => {
+		sessionRow = newConnectionRow({ accounts: [SHARED, `aztec:${CHAIN_IDS.TESTNET}:${ADDRESS}`] })
+		const w = await mountCheck()
+		expect(w.get('[data-testid="identity-network"]').attributes("data-warn")).toBe("true")
 	})
 })
 
@@ -187,15 +198,16 @@ describe("windows/verify — the check is announced as it opens", () => {
 		w.unmount()
 	}
 	const CHECKS = [
-		["a new connection's", "false"],
-		["a reconnect's", "true"],
+		["a new connection's", []],
+		["a reconnect's", [`aztec:0:${ADDRESS}`]],
 	] as const
 
 	test.each(CHECKS)(
 		"%s polite region mounts empty, and 300 ms after the grid shows it reads the window's own words; nothing takes the focus",
-		async (_, isReconnect) => {
+		async (_, accounts) => {
 			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
-			const w = await mountCheck({ isReconnect })
+			sessionRow = newConnectionRow({ accounts })
+			const w = await mountCheck()
 			expect(region(w).attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
 			expect(said(w)).toBe("")
 
@@ -210,10 +222,10 @@ describe("windows/verify — the check is announced as it opens", () => {
 
 	test.each(CHECKS)(
 		"on %s check, a look-alike hostname adds the window's warning to the announcement, still naming nothing of the app",
-		async (_, isReconnect) => {
+		async (_, accounts) => {
 			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
-			sessionRow = newConnectionRow({ dappMetadata: { name: HOSTILE_NAME, url: "https://xn--exmple-cua.com" } })
-			const w = await mountCheck({ isReconnect })
+			sessionRow = newConnectionRow({ accounts, dappMetadata: { name: HOSTILE_NAME, url: "https://xn--exmple-cua.com" } })
+			const w = await mountCheck()
 			await vi.advanceTimersByTimeAsync(300)
 			expect(said(w)).toBe(`${CHECK_ANNOUNCEMENT} ${LOOKALIKE_WARNING}`)
 			expect(leaksTheApp(said(w) ?? "")).toEqual([])

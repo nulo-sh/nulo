@@ -52,8 +52,9 @@
  * - Two-pass P1 is FPC-payload-FREE, so stubbing it never stubs a
  *   payload-inclusive sim for a non-canonical row (the hard limit); Pass 2
  *   stays validated and verifies the freshly signed witnesses.
- * - Fast path (canonical Sponsored only): no effects ⇒ done in one stubbed
- *   sim; effects ⇒ validated rebuild + re-sim before any estimate leaves.
+ * - Fast path (canonical Sponsored only): no authorization request ⇒ done in
+ *   one stubbed sim; any request, signed or not ⇒ validated rebuild + re-sim
+ *   before any estimate leaves.
  * - Ops carrying pre-attached authwits never reach a probed run (guarded
  *   upstream): a stub would mask a broken supplied witness.
  *
@@ -91,6 +92,7 @@ import {
 	DEFAULT_FEE_MULTIPLIER,
 	finalizeGasLimits,
 	isInitWrapped,
+	probeContext,
 	probedFirstSimOpts,
 	startEstimateTask,
 	suggestGasLimits,
@@ -165,20 +167,21 @@ export class FpcStrategy implements FeeStrategy {
 			}
 			suggestGasLimits(built.txRequest, ctx.op.fee)
 			let simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, probedFirstSimOpts(ctx.probe, built), task)
-			// Folded discovery: the probed sim doubles as the discovery pass. A
-			// no-effects op on a DEPLOYED account is done in ONE sim (stub gas ==
-			// validated gas). Discovered effects OR an init-wrapped build force a
-			// validated rebuild+re-sim: effects so the fresh witnesses are VERIFIED;
-			// init-wrap because the stub's constructor gas is untrustworthy there.
+			// Folded discovery: the probed sim doubles as the discovery pass, and a run with no
+			// authorization request on a DEPLOYED account ends there (stub gas == validated gas).
+			// The stub answered every check of the signer's witness, so any request, even one
+			// dropped unsigned, needs a validated rebuild+re-sim; so does an init-wrapped build,
+			// whose stub constructor gas is untrustworthy.
 			let discovered: Action[] = []
 			if (ctx.probe) {
-				discovered = await ctx.probe.extractEffects(simulatedTx, { node: built.node, network: built.network })
-				if (discovered.length || isInitWrapped(built)) {
+				const extracted = await ctx.probe.extractEffects(simulatedTx, probeContext(built))
+				discovered = extracted.actions
+				if (extracted.requested || isInitWrapped(built)) {
 					if (discovered.length) ctx.op.actions.push(...discovered)
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
 					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.EXTERNAL, task)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
-					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
+					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.scopes), task)
 				}
 			}
 			const baseFees = await feeCapFor(built.node, capRuleOf(fpc, multiplier, ctx.op.fee))
@@ -231,7 +234,7 @@ export class FpcStrategy implements FeeStrategy {
 			// seed Pass-2's envelope, so re-derive it from a validated Pass-1.
 			let discovered: Action[] = []
 			if (ctx.probe) {
-				discovered = await ctx.probe.extractEffects(simulatedTx, { node: built.node, network: built.network })
+				discovered = (await ctx.probe.extractEffects(simulatedTx, probeContext(built))).actions
 				if (discovered.length) {
 					ctx.op.actions.push(...discovered)
 				}
@@ -244,7 +247,7 @@ export class FpcStrategy implements FeeStrategy {
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
 					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
-					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
+					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.scopes), task)
 				}
 			}
 			const baseFees = await feeCapFor(built.node, capRuleOf(fpc, multiplier, ctx.op.fee))
@@ -263,7 +266,7 @@ export class FpcStrategy implements FeeStrategy {
 				baseFees,
 				built.txRequest.txContext.gasSettings.maxPriorityFeesPerGas,
 			)
-			simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
+			simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.scopes), task)
 			maxFee = simulatedTx.gasUsed.totalGas.mul(ctx.gasPadding).computeFee(baseFees)
 			ctx.op.actions.splice(
 				0,

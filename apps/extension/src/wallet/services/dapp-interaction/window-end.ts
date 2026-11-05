@@ -1,8 +1,8 @@
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
 
 /** How an approval window ended its request before any approval: its Reject button, its own close
- *  (the X, or an overlay dismissed), a lock, or a switch to another profile. */
-export const WINDOW_ENDS = ["reject", "close", "lock", "switch"] as const
+ *  (the X, or an overlay dismissed), a lock, a switch to another profile, or the app's disconnect. */
+export const WINDOW_ENDS = ["reject", "close", "lock", "switch", "disconnect"] as const
 export type WindowEnd = (typeof WINDOW_ENDS)[number]
 
 export function isWindowEnd(value: unknown): value is WindowEnd {

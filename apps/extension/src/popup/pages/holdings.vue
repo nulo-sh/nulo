@@ -17,26 +17,28 @@ import TokenList from "../components/modules/holdings/TokenList.vue"
 /** Services */
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
+import { TaskServiceClient } from "@/wallet/services/task/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 
 /** Utils */
 import { managers } from "@/utils/core"
+import { pluralize } from "@/utils/plural"
 import { aggregateFiat, awaitingFirstPriceAnswer, pricesUnavailable } from "@/utils/token-aggregate"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
 
 /** Composables */
+import { useBalanceTasks } from "@/composables/useBalanceTasks"
+import { useConfigRead } from "@/composables/useConfigRead"
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
 import { type TokenBalanceSnapshotState, useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
-const cacheStore = useCacheStore()
 const popupStore = usePopupStore()
 
 const activeChainId = () => appStore.network?.chainId
@@ -58,10 +60,22 @@ tokenBalanceService.onTokenBalanceUpdated.add((tb) => balances.inActiveScope(tb)
 tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
 void balances.fetchTokenBalances()
 
+const taskService = new TaskServiceClient()
+const balanceTasks = useBalanceTasks({ client: taskService, account: () => appStore.account?.address })
+taskService.onTaskCreated.add(balanceTasks.onTaskCreated)
+taskService.onTaskUpdated.add(balanceTasks.onTaskUpdated)
+taskService.onTaskDeleted.add(balanceTasks.onTaskDeleted)
+/** A refused read costs only the refresh dot; a reconnect or a scope change reads again. */
+const readTasks = () => void balanceTasks.snapshot().catch(() => undefined)
+taskService.onConnected.add(readTasks)
+readTasks()
+const refreshing = computed(() => rows.value.some((tb) => balanceTasks.isUpdating(tb.id)))
+
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const fiatOf = prices.fiatOfRow
 const usdRateOf = (tb: TokenBalanceInfo) => prices.quoteFor(tb.token.chainId, tb.token.contract)?.usd
+const isFlaggedAddress = (address: string) => prices.isFlagged({ chainId: activeChainId(), contract: address })
 
 const showFiatValues = ref(true)
 const dustThresholdUsd = ref(0)
@@ -71,24 +85,23 @@ function onConfigUpdate(prop: { key: string; value: unknown }) {
 	if (prop.key === "showFiatValues") showFiatValues.value = prop.value !== false
 	if (prop.key === "incomingDustUsdThreshold") dustThresholdUsd.value = Number(prop.value) || 0
 }
-// Leaving the page rejects any read still in flight; the defaults stand in that case. A reconnect
-// may have dropped an update, so the values are read again on every connect.
-function readConfig() {
-	configService
-		.getValue("showFiatValues")
-		.then((v) => {
-			showFiatValues.value = v !== false
-		})
-		.catch(() => undefined)
-	configService
-		.getValue("incomingDustUsdThreshold")
-		.then((v) => {
-			dustThresholdUsd.value = Number(v) || 0
-		})
-		.catch(() => undefined)
-}
-readConfig()
-configService.onConnected.add(readConfig)
+// One reader per key, so a dust read that hangs or fails never holds the fiat switch back.
+const fiatRead = useConfigRead(
+	configService,
+	() => configService.getValue("showFiatValues"),
+	(v, updatedSince) => {
+		if (!updatedSince("showFiatValues")) showFiatValues.value = v !== false
+	},
+)
+const dustRead = useConfigRead(
+	configService,
+	() => configService.getValue("incomingDustUsdThreshold"),
+	(v, updatedSince) => {
+		if (!updatedSince("incomingDustUsdThreshold")) dustThresholdUsd.value = Number(v) || 0
+	},
+)
+void fiatRead.read()
+void dustRead.read()
 
 const pins = usePinnedTokens({
 	preferences: managers.uiPreference,
@@ -108,10 +121,7 @@ const awaitingPrices = computed(
 	() => showFiatValues.value && !error.value && (isLoading.value || awaitingFirstPriceAnswer(rows.value, prices)),
 )
 
-const openAddToken = (address: string) => {
-	cacheStore.preselectedTokenAddressToAdd = address
-	popupStore.open("new_token")
-}
+const openAddToken = (address: string) => popupStore.open("new_token", { address })
 
 const summary = useTemplateRef<ComponentPublicInstance>("summary")
 const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
@@ -120,7 +130,7 @@ const metaRuler = useTemplateRef<HTMLElement>("metaRuler")
 const summaryMeta = computed(() => {
 	if (isLoading.value || error.value) return ""
 	if (unavailable.value) return "Prices unavailable"
-	return `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial && !awaitingPrices.value ? " · priced assets only" : ""}`
+	return `${rows.value.length} ${pluralize(rows.value.length, "token", "tokens")}${showFiatValues.value && aggregate.value.partial && !awaitingPrices.value ? " · priced assets only" : ""}`
 })
 /** The total's type as a fraction of its 26 px: full size while it fits beside the meta line
  *  wrapped to its narrowest, then the largest that does, with no floor, so no digit is ever hidden. */
@@ -165,6 +175,7 @@ watch(
 		rows.value = []
 		balancesState.value = "loading"
 		void balances.fetchTokenBalances()
+		readTasks()
 		void pins.refresh()
 	},
 )
@@ -179,10 +190,13 @@ onBeforeUnmount(() => {
 	document.fonts?.removeEventListener("loadingdone", fitTotal)
 	balances.dispose()
 	tokenBalanceService.disconnect()
+	balanceTasks.dispose()
+	taskService.disconnect()
 	prices.dispose()
 	priceService.disconnect()
-	configService.onConnected.remove(readConfig)
 	configService.disconnect()
+	fiatRead.dispose()
+	dustRead.dispose()
 	pins.dispose()
 })
 </script>
@@ -220,6 +234,8 @@ onBeforeUnmount(() => {
 				:fiatOf="fiatOf"
 				:usdRateOf="usdRateOf"
 				:dustThresholdUsd="dustThresholdUsd"
+				:isFlagged="isFlaggedAddress"
+				:refreshing="refreshing"
 				@addToken="openAddToken"
 			/>
 		</Flex>

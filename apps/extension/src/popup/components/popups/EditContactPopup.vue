@@ -2,7 +2,8 @@
 <script setup>
 /** Utils */
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { CONTACT_EXISTS, canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError } from "@/utils/contact-rules"
+import { canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError } from "@/utils/contact-rules"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { sanitizeContactName } from "@/utils/contact-name"
 import { contactListReducers } from "@/utils/entity-list"
 
@@ -66,7 +67,7 @@ const isEditedContact = (c) => c.id === (contactToEdit.value?.id ?? contactToEdi
  *  store it, so an edit never saves a name other than the one on screen. */
 const storedNameOf = (contact) => sanitizeContactName(contact?.name ?? "")
 
-/** Name + address managed by useFormState. The "already exist" check
+/** Name + address managed by useFormState. The "Already exists" check
  *  filters out the contact-being-edited so saving with the SAME name/
  *  address it already has doesn't trip the duplicate guard. */
 const form = useFormState({
@@ -79,7 +80,7 @@ const contactAddressTerm = form.fields.address.value
 
 // Per-field dirty: name/address are "edited" if value differs from the
 // loaded contact. Used to gate the Update button's "anything changed?"
-// check and the "Already exist" warnings, which stay hidden on the
+// check and the "Already exists" warnings, which stay hidden on the
 // unchanged row.
 const isStartedEditingName = computed(
 	() => Boolean(contactToEdit.value) && sanitizeContactName(nameTerm.value ?? "") !== storedNameOf(contactToEdit.value),
@@ -89,8 +90,8 @@ const isStartedEditing = computed(() => isStartedEditingName.value || isStartedE
 
 // Either field's duplicate blocks the save, so once anything is edited both warnings show: an
 // unchanged name can clash with a stored spaced twin, an unchanged address with a mixed-case copy.
-const isAlreadyExistName = computed(() => form.fields.name.error.value === CONTACT_EXISTS && isStartedEditing.value)
-const isAlreadyExistAddress = computed(() => form.fields.address.error.value === CONTACT_EXISTS && isStartedEditing.value)
+const isAlreadyExistName = computed(() => form.fields.name.error.value === ALREADY_EXISTS && isStartedEditing.value)
+const isAlreadyExistAddress = computed(() => form.fields.address.error.value === ALREADY_EXISTS && isStartedEditing.value)
 const isValidAddress = computed(() => isValidAztecAddress(contactAddressTerm.value))
 const isAvailableToUpdateContact = computed(() =>
 	canSubmitContact({

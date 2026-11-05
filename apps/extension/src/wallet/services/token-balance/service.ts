@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { assertRestoreEpoch, captureRestoreEpochs, requireRestoreProfileId } from "@/wallet/services/restore-fence"
@@ -9,7 +10,7 @@ import { EventHandler, Lock } from "@nulo/wallet-core/utils"
 import { reconcilePlan } from "./reconcile-pairs"
 import { isLegacyBalanceRow, rowMatchesItsToken, rowMatchesToken } from "./balance-identity"
 import { AccountService, type Account } from "@/wallet/services/account/service"
-import { type AccountScope, accountScopeKey } from "@/wallet/services/account/spec"
+import { type AccountScope, accountScopeMatcher } from "@/wallet/services/account/spec"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
@@ -37,6 +38,8 @@ import {
 } from "./spec"
 
 export * from "./spec"
+
+export type TokenBalanceServiceOptions = { ticker?: BackgroundTickerPort; projectionGate?: ProjectionGate }
 
 export class TokenBalanceService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("getTokenBalance", "getTokenBalances", "refreshTokenBalance")
@@ -107,13 +110,13 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		if (id !== undefined) this.invalidatedBalanceIds.add(id)
 	}
 
-	public constructor(
-		logger: ILogger,
-		browserApi: BrowserApi,
-		private readonly ticker: BackgroundTickerPort = new ClockTickerAdapter(new SystemClock(), logger, TOKEN_BALANCE_SERVICE_NAME),
-		private readonly projectionGate?: ProjectionGate,
-	) {
+	private readonly ticker: BackgroundTickerPort
+	private readonly projectionGate?: ProjectionGate
+
+	public constructor(logger: ILogger, browserApi: BrowserApi, options: TokenBalanceServiceOptions = {}) {
 		super(TOKEN_BALANCE_SERVICE_NAME, logger)
+		this.ticker = options.ticker ?? new ClockTickerAdapter(new SystemClock(), logger, TOKEN_BALANCE_SERVICE_NAME)
+		this.projectionGate = options.projectionGate
 		this.repo = new BalanceRepository(browserApi, (profileId) => this.profileService.rowKeys(profileId))
 	}
 
@@ -161,7 +164,12 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		this.tokenService.onTokenDeleted.add(this.onTokenDeleted)
 		this.tokenService.onTokenUpdated.add(this.onTokenUpdated)
 		this.transactionService.onTransactionUpdated.add(this.onTransactionUpdated)
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext balances failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 
 		// Subscriptions are already live above, so a profile switch can land during
 		// these awaits: capture the generation first and commit only if it — and the
@@ -194,15 +202,11 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	 *  row never comes back. The queue's unlocked writers can still lose one refresh to an older
 	 *  value in the read-to-commit window; the next refresh rewrites it. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.repo.sealLegacy(
-				profileId,
-				(fn) => this.lock.withLock(fn),
-				(id) => this.invalidatedBalanceIds.has(id),
-			)
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext balances failed; the next worker retries", { error })
-		}
+		await this.repo.sealLegacy(
+			profileId,
+			(fn) => this.lock.withLock(fn),
+			(id) => this.invalidatedBalanceIds.has(id),
+		)
 	}
 
 	public async getTokenBalance(id: number): Promise<TokenBalanceInfo> {
@@ -312,8 +316,8 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		// A profile switch during allocation or sealing makes this write belong to a departed
 		// context — skip it (the id isn't persisted, so it's reused by the next call).
 		if (gen !== this.profileGeneration) return false
-		// Token ids are `max+1`, so deleting the highest token frees its id for a
-		// successor: `tokens.has(id)` would pass for a DIFFERENT token. Compare the
+		// A lost token-id high-water mark lets a successor take a deleted token's
+		// id: `tokens.has(id)` would pass for a DIFFERENT token. Compare the
 		// stable identity instead, so a creation for a token deleted mid-flight
 		// cannot attach to whatever now holds its id.
 		if (!this.isSameTokenLive(token)) return false
@@ -440,8 +444,8 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		return await this.ensurePairsHoldingLock(plan.missing, gen, existing)
 	}
 
-	/** Whether the map still holds THIS token rather than a successor that reused
-	 *  its id (`token/service.ts` warns about exactly that reuse). */
+	/** Whether the map still holds THIS token rather than a successor that reused its id, which a
+	 *  lost token-id high-water mark allows. */
 	private isSameTokenLive(token: Token): boolean {
 		const live = this.tokens.get(token.id)
 		return (
@@ -541,9 +545,9 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		// not await subscribers, so one added later would queue behind this hold
 		// rather than re-enter it.
 		await this.lock.withLock(async () => {
-			// Full-identity filter, not id-only: token ids are max+1-reallocatable,
-			// so a successor context can re-mint this id — its rows must not be
-			// deleted by the departed token's handler.
+			// Full-identity filter, not id-only: a lost token-id high-water mark lets
+			// a successor re-mint this id, and its rows must not be deleted by the
+			// departed token's handler.
 			for (const tb of (await this.repo.getAll()).filter((x) => rowMatchesToken(x, token))) {
 				await this.invalidateAndDelete(tb.id)
 				this.emit("onTokenBalanceDeleted", this.getTokenBalanceInfo(tb, token))
@@ -552,10 +556,10 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	}
 
 	/** Awaited balance purge for a SET of token ids WITHIN one profile — called by
-	 *  the deletion coordinator with the tombstone's token snapshot (finding D).
-	 *  Profile-scoped because a resumed deletion can run AFTER a crash let a
-	 *  successor profile reuse a purged id (`max+1` allocation): an unscoped purge
-	 *  would erase the successor's rows and evict its live-map entry. Idempotent. */
+	 *  the deletion coordinator with the tombstone's token snapshot. Profile-scoped
+	 *  because a resumed deletion can run AFTER a successor profile reused a purged
+	 *  id (a lost token-id high-water mark allows it): an unscoped purge would erase
+	 *  the successor's rows and evict its live-map entry. Idempotent. */
 	public async purgeForTokens(tokenIds: readonly number[], profileId: string): Promise<void> {
 		await this.ensureInitialized()
 		const set = new Set(tokenIds)
@@ -598,28 +602,13 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	}
 
 	/** Awaited balance purge for account scopes within ONE profile — registered with
-	 *  AccountService and invoked BEFORE the Account rows are deleted. Scope is the
-	 *  full (profileId, chainId, address) tuple: a bare-address match would destroy a
-	 *  sibling profile's rows (shared addresses are a supported state), and an
-	 *  address+profile match would destroy this profile's rows on ANOTHER chain.
-	 *  Idempotent. */
+	 *  AccountService and invoked BEFORE the Account rows are deleted. Idempotent. */
 	public async purgeForAccounts(scopes: ReadonlyArray<AccountScope>, profileId: string): Promise<void> {
 		await this.ensureInitialized()
 		if (scopes.length === 0) return
-		const keys = new Set(scopes.map((s) => accountScopeKey(s.chainId, s.address)))
+		const match = accountScopeMatcher(profileId, scopes)
 		// One hold with the creators, fence before every delete — mirrors purgeForTokens.
-		await this.lock.withLock(() =>
-			this.purgeScopeHoldingLock(
-				(row) => row.profileId === profileId && keys.has(accountScopeKey(row.chainId, row.account)),
-				// Old-shape rows carry no profileId/chainId (unattributable) and are
-				// DELIBERATELY left to the init legacy sweep.
-				(raw) =>
-					raw.profileId === profileId &&
-					typeof raw.chainId === "number" &&
-					typeof raw.account === "string" &&
-					keys.has(accountScopeKey(raw.chainId, raw.account)),
-			),
-		)
+		await this.lock.withLock(() => this.purgeScopeHoldingLock(match.row, match.raw))
 	}
 
 	private readonly onTransactionUpdated = async (tx: Tx) => {

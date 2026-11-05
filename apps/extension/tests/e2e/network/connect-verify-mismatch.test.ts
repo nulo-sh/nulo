@@ -6,6 +6,7 @@ import { navigateByHash, switchToLocalNetwork } from "../fixtures/helpers"
 import { openPlayground } from "../fixtures/playground"
 import { approveConnect, approveVerify, waitForPopup } from "../fixtures/popups"
 import { shotSend } from "../fixtures/send-page"
+import { bringToFront } from "../fixtures/browser"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -77,13 +78,13 @@ test.skipIf(!hasConfig)(
 		// The app's page shows the last connection's grid. On Chrome the playground's tab hides the
 		// wallet's, and a hidden tab draws no frame to photograph; the dApp is fronted again after, so
 		// the rest of the case runs in the order it always has.
-		await wallet.bringToFront()
+		await bringToFront(wallet)
 		await listConnectedApps(wallet)
 		await clickByTestId(wallet, "connected-app-row")
 		await wallet.waitForSelector('[data-testid="connected-app-verification"]', { visible: true, timeout: 15_000 })
 		await shotSend(wallet, "verify-mismatch-settings-row", "connected-app-verification")
 
-		await dapp.bringToFront()
+		await bringToFront(dapp)
 		await clickByTestId(dapp, "pg-btn-disconnect")
 		await dapp.waitForSelector(DISCONNECTED, { timeout: 10_000 })
 		await listConnectedApps(wallet)

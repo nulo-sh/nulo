@@ -97,7 +97,7 @@ describe("onTransactionUpdated pins", () => {
 		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
 		services.add(svc(EXECUTION_SERVICE_NAME, {}))
 		services.add(svc(TASK_SERVICE_NAME, {}))
-		service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
+		service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, { ticker: noopTicker })
 		services.add(service)
 		await services.start()
 

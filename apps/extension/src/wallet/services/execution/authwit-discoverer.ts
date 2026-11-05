@@ -54,10 +54,11 @@ import type { IPXE } from "@nulo/aztec-runtime/pxe"
 import { chainInfoFrom, liveChainInfo, type SelectedNetworkChainInfo } from "@nulo/aztec-runtime/utils"
 import type { Action, AddPrivateAuthwitAction, CallAuthwitContent, EncodedCallAuthwitContent, IntentAuthwitContent } from "./spec"
 import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
-import { decodeAuthwitEffects } from "./decode-authwit-effects"
+import { carriedHashes, decodeAuthwitEffects } from "./decode-authwit-effects"
 
 /** What one discovery simulation found: the wire actions to splice into the
- *  build, and the decoded authorization behind each (same order). */
+ *  build, and the decoded authorization behind each (same order), then each
+ *  one another account of the send already gave, which no action signs. */
 export type DiscoveredPrivateAuthwits = {
 	actions: AddPrivateAuthwitAction[]
 	discovered: DiscoveredAuthwit[]
@@ -71,6 +72,7 @@ export type DiscoverContext = {
 	node: AztecNode
 	pxe: IPXE
 	account: IAccountContract
+	scopes: AztecAddress[]
 	/** Stored chain identity for the user-selected network. Used to rebind
 	 *  the live node's `getNodeInfo()` before deriving the authwit
 	 *  `chainInfo`. */
@@ -80,7 +82,7 @@ export type DiscoverContext = {
 /** Callback provided by the caller so the discoverer can run its
  *  kernelless simulation without reaching into facade state. */
 export type BuildTxRequestFn = (
-	op: { networkId: string; accountAddress: string; actions: Action[] },
+	op: { networkId: string; accountAddress: string; actions: Action[]; opts?: { additionalScopes?: unknown } },
 	paymentMethod: AccountFeePaymentMethodOptions,
 ) => Promise<DiscoverContext>
 
@@ -96,18 +98,20 @@ export async function encodeAuthwitCall(fn: FunctionAbi, args: unknown[]): Promi
 export class AuthwitDiscoverer {
 	public constructor(readonly _logger: ILogger) {}
 
-	/** Runs a simulation with `skipTxValidation: true` + `skipFeeEnforcement: true`
-	 *  and `scopes: [account.address]`, inspects the `privateExecutionResult`'s
-	 *  offchain effects for `CallAuthorizationRequest`s, and emits one
-	 *  `AddPrivateAuthwitAction { kind: "message_hash" }` per authorization
-	 *  the tx proved it needs. */
+	/** One `message_hash` action per authorization request on behalf of the build's account that a
+	 *  simulation stubbing every account of the build's scopes emits, and a listed record per request
+	 *  another of those accounts' carried witness covers; the validated simulation verifies the
+	 *  witnesses. */
 	public async discoverPrivateAuthwits(
-		op: { networkId: string; accountAddress: string; actions: Action[] },
+		op: Parameters<BuildTxRequestFn>[0],
 		buildTxRequest: BuildTxRequestFn,
 	): Promise<DiscoveredPrivateAuthwits> {
-		const { txRequest, node, pxe, account, network } = await buildTxRequest(op, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE)
+		const { txRequest, node, pxe, account, scopes, network } = await buildTxRequest(
+			op,
+			AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
+		)
 
-		// Kernelless simulation: stub the caller's account contract so its
+		// Kernelless simulation: stub every scope account's contract so its
 		// `verify_private_authwit` returns true unconditionally. Otherwise any
 		// tx that requires an authwit (e.g., an AMM swap where the Token
 		// transfer macro emits a CallAuthorizationRequest) aborts the
@@ -117,16 +121,17 @@ export class AuthwitDiscoverer {
 		// (bundled by @aztec-labs/noir-contracts.js) is the canonical stub;
 		// PxeService.simulateTx wraps it into a `SimulationOverrides` when
 		// `stubAccountAddresses` is passed. Mirrors the demo-wallet's
-		// kernelless-sim pattern.
+		// kernelless-sim pattern. Stubbing another account lets its request reach the decoder whether or
+		// not the dApp attached its witness; the build registered each one's contract for the stub.
 		const simulationResult = await pxe.simulateTx(
 			txRequest,
 			{
 				simulatePublic: true,
 				skipTxValidation: true,
 				skipFeeEnforcement: true,
-				scopes: [account.address],
+				scopes,
 			},
-			[account.address.toString()],
+			scopes.map((scope) => scope.toString()),
 		)
 
 		const effects = collectOffchainEffects(simulationResult.privateExecutionResult)
@@ -136,13 +141,17 @@ export class AuthwitDiscoverer {
 
 		const nodeInfo = await node.getNodeInfo()
 		// Refuse to derive a hash from a drifted node.
-		const decoded = await decodeAuthwitEffects(effects, liveChainInfo(network, nodeInfo))
+		const { signable, consumed } = await decodeAuthwitEffects(effects, liveChainInfo(network, nodeInfo), {
+			signer: account.address,
+			scopes,
+			carried: carriedHashes(txRequest),
+		})
 		return {
-			actions: decoded.map(({ record }) => ({
+			actions: signable.map(({ record }) => ({
 				kind: "add_private_authwit",
 				content: { kind: "message_hash", messageHash: record.messageHash },
 			})),
-			discovered: decoded.map(({ record }) => record),
+			discovered: [...signable.map(({ record }) => record), ...consumed],
 		}
 	}
 

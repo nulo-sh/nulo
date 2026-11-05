@@ -11,6 +11,7 @@ const DIR = join(ROOT, ".github/actions/setup-aztec")
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8")
 
 interface LockEntry {
+	version?: string
 	resolved?: string
 	integrity?: string
 	inBundle?: boolean
@@ -29,6 +30,14 @@ function unhashedSources(lock: Lockfile): string[] {
 	return Object.entries(lock.packages)
 		.filter(([path, entry]) => path !== "" && !entry.inBundle)
 		.filter(([, entry]) => !entry.resolved?.startsWith("https://registry.npmjs.org/") || !entry.integrity?.startsWith("sha512-"))
+		.map(([path]) => path)
+}
+
+/** Locked copies of systeminformation below 5.33.16, the first release past all its known advisories. */
+function vulnerableSysteminformation(lock: Lockfile): string[] {
+	return Object.entries(lock.packages)
+		.filter(([path]) => path === "node_modules/systeminformation" || path.endsWith("/node_modules/systeminformation"))
+		.filter(([, entry]) => !entry.version || !Bun.semver.satisfies(entry.version, ">=5.33.16"))
 		.map(([path]) => path)
 }
 
@@ -51,6 +60,19 @@ describe("the CLI's npm tree", () => {
 		expect(Object.keys(lock.packages).length).toBeGreaterThan(1000)
 		expect(unhashedSources(lock)).toEqual([])
 	})
+
+	test("no locked systeminformation is below 5.33.16", () => {
+		expect(vulnerableSysteminformation(lock)).toEqual([])
+	})
+
+	test.each(["node_modules/systeminformation", "node_modules/@opentelemetry/host-metrics/node_modules/systeminformation"])(
+		"a lockfile copy with systeminformation 5.33.15 at %s is refused",
+		(target) => {
+			const copy: Lockfile = structuredClone(lock)
+			copy.packages[target] = { ...copy.packages["node_modules/systeminformation"], version: "5.33.15" }
+			expect(vulnerableSysteminformation(copy)).toEqual([target])
+		},
+	)
 
 	test.each([
 		["a git source", { resolved: "git+https://github.com/example/pkg.git#0123456" }],

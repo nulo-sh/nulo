@@ -1,21 +1,27 @@
 import { describe, expect, test } from "vitest"
-import { isNewPasswordValid, newPasswordHint } from "./password"
+import { isNewPasswordValid } from "./password"
 
 describe("new-password rule", () => {
-	test("short, mismatched, long and strong pairs", () => {
+	test("short and mismatched pairs are refused, a long matching one accepted", () => {
 		expect(isNewPasswordValid("short", "short")).toBe(false)
-		expect(newPasswordHint("short", "short")).toBe("At least 8 characters")
 		expect(isNewPasswordValid("longenough", "longenougx")).toBe(false)
-		expect(newPasswordHint("longenough", "longenougx")).toBe("Passwords don't match")
-		const long = "a".repeat(25)
-		expect(isNewPasswordValid(long, long)).toBe(true)
-		expect(newPasswordHint(long, long)).toBe("Long enough. Don't forget it.")
 		expect(isNewPasswordValid("longenough", "longenough")).toBe(true)
-		expect(newPasswordHint("longenough", "longenough")).toBe("Strong password")
 	})
 	test("an empty repeat never validates, whatever the password", () => {
 		expect(isNewPasswordValid("", "")).toBe(false)
 		expect(isNewPasswordValid("longenough", "")).toBe(false)
-		expect(newPasswordHint("", "")).toBe("At least 8 characters")
+	})
+	test("a weak matching pair is accepted: strength is advice, not a rule", () => {
+		expect(isNewPasswordValid("aaaaaaaa", "aaaaaaaa")).toBe(true)
+	})
+
+	// Each glyph below is one character to a person but two or more UTF-16 units or code points.
+	test.each([
+		["emoji", "😀"],
+		["accented letters", "e\u0301"],
+		["ZWJ families", "👨‍👩‍👧"],
+	])("seven %s are fewer than 8 characters, eight are enough", (_name, glyph) => {
+		expect(isNewPasswordValid(glyph.repeat(7), glyph.repeat(7))).toBe(false)
+		expect(isNewPasswordValid(glyph.repeat(8), glyph.repeat(8))).toBe(true)
 	})
 })

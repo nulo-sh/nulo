@@ -121,9 +121,9 @@ const stubs = {
 }
 
 let mounted: VueWrapper | undefined
-const mountCard = async (op: unknown, dapp?: { name: string }) => {
+const mountCard = async (op: unknown, dapp?: { name: string }, props: Record<string, unknown> = {}) => {
 	const w = mount(OperationCard, {
-		props: { op: op as never, index: 0, profile: { id: "p1", name: "Main" } as never, feeEstimate: ESTIMATE, dapp },
+		props: { op: op as never, index: 0, profile: { id: "p1", name: "Main" } as never, feeEstimate: ESTIMATE, dapp, ...props },
 		global: { stubs },
 	})
 	mounted = w
@@ -203,6 +203,18 @@ describe("OperationCard — who pays a wire-shaped transaction's fee", () => {
 		expect(fee(w).text()).not.toContain("Nothing")
 		expect(fee(w).text()).not.toContain("3.577824")
 		expect(spokenText(fee(w).element)).toContain("Nulo can't tell what this fee contract charges you.")
+	})
+})
+
+describe("OperationCard — a wire-shaped transaction whose estimate failed", () => {
+	test("the fee card offers Try again, which the card hands the window with its index; without the failure the row is gone", async () => {
+		const w = await mountCard(sendTx({ feePayer: OWNER }), undefined, { feeEstimate: undefined, estimateFailed: true, index: 2 })
+		const row = w.find('[data-testid="fee-estimate-failed"]')
+		expect(row.exists()).toBe(true)
+		await row.get('[data-testid="fee-estimate-retry"]').trigger("click")
+		expect(w.emitted("retryEstimate")).toEqual([[2]])
+		await w.setProps({ estimateFailed: false })
+		expect(w.find('[data-testid="fee-estimate-failed"]').exists()).toBe(false)
 	})
 })
 
@@ -296,7 +308,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 	})
 	const mountWith = async (
 		feeEstimate: unknown,
-		state: { isEstimating?: boolean; op?: unknown; isPreviewing?: boolean; dapp?: { name?: string } } = {},
+		state: { isEstimating?: boolean; estimateFailed?: boolean; op?: unknown; isPreviewing?: boolean; dapp?: { name?: string } } = {},
 	) => {
 		const w = mount(OperationCard, {
 			props: {
@@ -305,11 +317,13 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 				profile: { id: "p1", name: "Main" } as never,
 				feeEstimate: feeEstimate as never,
 				isEstimating: state.isEstimating ?? false,
+				estimateFailed: state.estimateFailed ?? false,
 				isPreviewing: state.isPreviewing ?? false,
 				dapp: state.dapp ?? { name: "Swap" },
 			},
 			// The real term, so the test reads its markup: the key, the Tab stop, the hidden definition.
 			global: { stubs, components: { DottedTerm, Skeleton } },
+			attachTo: document.body,
 		})
 		mounted = w
 		await flushPromises()
@@ -344,20 +358,63 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		expect(w.findAllComponents(DottedTerm)).toHaveLength(0)
 	})
 
-	test("after a failed estimate, and while an operation the wallet never estimates runs its preview: the legend alone, and no price read", async () => {
-		const failed = await mountWith(undefined)
-		expect(row(failed).text()).toBe("Fee payment method set by Swap")
-		expect(legend(failed).text()).toBe("Fee payment method set by Swap")
-		expect(waiting(failed).exists()).toBe(false)
-		expect(row(failed).attributes("aria-busy")).toBeUndefined()
-		failed.unmount()
-
+	test("while an operation the wallet never estimates runs its preview: the legend alone, and no price read", async () => {
 		const noFrom = { ...appPaid(), executionMode: "default_entrypoint" }
 		const previewing = await mountWith(undefined, { op: noFrom, isPreviewing: true })
 		expect(row(previewing).text()).toBe("Fee payment method set by Swap")
 		expect(waiting(previewing).exists()).toBe(false)
 		expect(row(previewing).attributes("aria-busy")).toBeUndefined()
 		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
+	})
+
+	describe("after a failed estimate: the fee card's failed state, whoever pays", () => {
+		const sponsored = () => ({ ...appPaid(), opts: { from: OWNER } })
+		const privatePaid = () => ({ ...appPaid(), exec: { ...appPaid().exec, feePayer: PRIVATE_FPC_ADDRESS } })
+		const failedBlock = (w: VueWrapper) => w.get('[data-testid="execute-op-app-fee-failed"]')
+		const retry = (w: VueWrapper) => w.get('[data-testid="fee-estimate-retry"]')
+
+		test.each([
+			["its own cap", appPaid, "FeeSet by SwapSwap paysCouldn't estimate fee.Try again"],
+			[
+				"Private Fee Juice, which the person pays",
+				privatePaid,
+				"FeePrivate Fee Juice · set by SwapYou payCouldn't estimate fee.Try again",
+			],
+			["a sponsor and no cap of its own", sponsored, "FeeSet by SwapSwap paysCouldn't estimate fee.Try again"],
+		])("an app paying through %s: the method over the failed readout, and Try again asks the estimate again", async (_, op, text) => {
+			const w = await mountWith(undefined, { op: op(), estimateFailed: true })
+			expect(failedBlock(w).text()).toBe(text)
+			expect([legend(w).exists(), figure(w).exists(), waiting(w).exists()]).toEqual([false, false, false])
+			expect(row(w).find('[name="square-check"]').exists()).toBe(false)
+			expect(row(w).attributes("aria-busy")).toBeUndefined()
+
+			await retry(w).trigger("click")
+			expect(w.emitted("retryEstimate")).toEqual([[0]])
+		})
+
+		test("a keyboard press keeps its place on the row, whose button leaves with the failure; a pointer press leaves focus", async () => {
+			const w = await mountWith(undefined, { estimateFailed: true })
+			await retry(w).trigger("click")
+			expect(document.activeElement).not.toBe(row(w).element)
+
+			const destination = row(w).element
+			vi.spyOn(retry(w).element, "matches").mockImplementation((selector) => selector === ":focus-visible")
+			await retry(w).trigger("click")
+			expect(w.emitted("retryEstimate")).toEqual([[0], [0]])
+			await w.setProps({ estimateFailed: false, isEstimating: true })
+			expect(w.find('[data-testid="execute-op-app-fee-failed"]').exists()).toBe(false)
+			expect([row(w).element, document.activeElement]).toEqual([destination, destination])
+			expect(row(w).attributes("tabindex")).toBe("-1")
+		})
+
+		test("asked again, the row runs its estimate; the failure no longer reads once it is cleared", async () => {
+			const w = await mountWith(undefined, { estimateFailed: true })
+			await w.setProps({ isEstimating: true })
+			expect(w.find('[data-testid="execute-op-app-fee-failed"]').exists()).toBe(false)
+			expect(waiting(w).text()).toBe("About ; payment method set by Swap.")
+			await w.setProps({ isEstimating: false, estimateFailed: false })
+			expect(legend(w).text()).toBe("Fee payment method set by Swap")
+		})
 	})
 
 	test("the app's line and the fee card price from the cache, and neither a mount nor a reconnect asks for a refresh", async () => {
@@ -433,15 +490,15 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			expect(notice(w).find('[name="info"]').attributes("aria-hidden")).toBe("true")
 		})
 
-		test("estimating and after a failed estimate: the notice in both, the loading bar or the legend, and no check", async () => {
+		test("estimating and after a failed estimate: the notice in both, the loading bar or the failed readout, and no check", async () => {
 			const estimating = await mountWith(undefined, { op: privatePaid(), isEstimating: true })
 			expect(waiting(estimating).findComponent(Skeleton).exists()).toBe(true)
 			expect(shownText(waiting(estimating).element)).toBe("You pay about from Private Fee Juice method set by Swap")
 			expect([check(estimating).exists(), notice(estimating).text()]).toEqual([false, NOTICE])
 			estimating.unmount()
 
-			const failed = await mountWith(undefined, { op: privatePaid() })
-			expect(legend(failed).text()).toBe("Fee payment method set by Swap")
+			const failed = await mountWith(undefined, { op: privatePaid(), estimateFailed: true })
+			expect(failed.get('[data-testid="execute-op-app-fee-failed"]').text()).toContain("You payCouldn't estimate fee.")
 			expect([check(failed).exists(), notice(failed).text()]).toEqual([false, NOTICE])
 		})
 

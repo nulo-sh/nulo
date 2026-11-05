@@ -64,7 +64,7 @@ export function prBody(input: PublishInput, keyId: string, sequence: number, rai
 		`Publishes token list sequence ${sequence}, signed with \`${keyId}\` by ${input.runUrl}.`,
 		"",
 		`- payload sha256: \`${input.payloadSha256}\``,
-		`- tokens and flags sha256: \`${input.tokensSha256}\` (the set the approver was shown)`,
+		`- tokens, flags and price feeds sha256: \`${input.tokensSha256}\` (the set the approver was shown)`,
 		"",
 		...(raisedBy.length > 0 ? floor : []),
 		"The tree tests in `quality-status` verify this envelope against the pinned keys and parse it strictly.",

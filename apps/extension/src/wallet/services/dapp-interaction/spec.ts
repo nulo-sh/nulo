@@ -53,6 +53,14 @@ export type {
 export const DAPP_INTERACTION_SERVICE_NAME = "dapp-interaction"
 
 /**
+ * Hard timeout for an approval popup, counted from its opening. Bounds the worst case when neither
+ * the user interacts nor `chrome.windows.onRemoved` fires (eg. extension reload, popup crash, MV3
+ * suspension races). Longer than the longest realistic prove+approve flow so legitimate users
+ * aren't surprised.
+ */
+export const INTERACTION_TIMEOUT_MS = 10 * 60 * 1000
+
+/**
  * Execution-side hooks carried across the popup handoff.
  *
  * The user-approval popup splits the request handling into two phases:

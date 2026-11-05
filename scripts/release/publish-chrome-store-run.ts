@@ -34,17 +34,12 @@ import {
 	truncate,
 	uploadRequest,
 } from "./publish-chrome-store"
+import { type ApiResponse, readApiResponse, requestFailure, unreadableAnswer } from "./store-http"
 import { command, plain } from "./workflow-command"
 
 export const REQUEST_TIMEOUT_MS = 15_000
 export const UPLOAD_DEADLINE_MS = 3 * 60_000
 export const POLL_INTERVAL_MS = 5_000
-
-export interface ApiResponse {
-	status: number
-	/** Parsed JSON body, or null when the body is not JSON. */
-	json: unknown
-}
 
 export interface ZipReader {
 	/** The zip's `manifest.json`, parsed. Throws if absent or unreadable. */
@@ -209,13 +204,10 @@ async function call(io: RunIO, req: ApiRequest, keep4xx = false): Promise<CallRe
 	try {
 		res = await io.fetch(req, REQUEST_TIMEOUT_MS)
 	} catch (e) {
-		const name = e instanceof Error ? e.name : "Error"
-		return {
-			ok: false,
-			reason: `${what}: request failed (${name === "TimeoutError" || name === "AbortError" ? `timed out after ${REQUEST_TIMEOUT_MS / 1000}s` : name})`,
-		}
+		return { ok: false, reason: requestFailure(what, e, REQUEST_TIMEOUT_MS) }
 	}
-	if (res.json === null || typeof res.json !== "object") return { ok: false, reason: `${what}: HTTP ${res.status} with a non-JSON body` }
+	const unreadable = unreadableAnswer(what, res)
+	if (unreadable) return { ok: false, reason: unreadable }
 	if (res.status >= 400 && !(keep4xx && res.status < 500))
 		return { ok: false, reason: `${what}: HTTP ${res.status} — ${apiError(res.json)}` }
 	return { ok: true, status: res.status, json: res.json }
@@ -265,15 +257,9 @@ export const unzipReader: ZipReader = {
 }
 
 export async function realFetch(req: ApiRequest, timeoutMs: number): Promise<ApiResponse> {
-	const res = await fetch(req.url, { method: req.method, headers: req.headers, body: req.body, signal: AbortSignal.timeout(timeoutMs) })
-	const text = await res.text()
-	let json: unknown = null
-	try {
-		json = JSON.parse(text)
-	} catch {
-		json = null
-	}
-	return { status: res.status, json }
+	return readApiResponse(
+		await fetch(req.url, { method: req.method, headers: req.headers, body: req.body, signal: AbortSignal.timeout(timeoutMs) }),
+	)
 }
 
 if (import.meta.main) {

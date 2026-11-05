@@ -19,9 +19,11 @@ import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
+import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { createFailedNotice } from "@/utils/profile-flow-notices"
-import { doneRoute } from "../steps"
+import { buildPhraseCheck, type PhraseQuestion } from "../phrase-check"
+import { clearFlowPath, doneRoute, markFlowPath } from "../steps"
 
 /** Stores */
 import { useNotificationStore } from "@/stores/notification.store"
@@ -29,8 +31,10 @@ import { useNotificationStore } from "@/stores/notification.store"
 /** Components — the passkey ceremony dialog teleports to #popup, which the onboarding
 	shell declares too. */
 import AuthMethodTabs from "@/components/composite/AuthMethodTabs.vue"
+import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 import PasskeyReuseLink from "@/components/composite/PasskeyReuseLink.vue"
+import OnboardingPhraseCheck from "../components/OnboardingPhraseCheck.vue"
 import OnboardingPhraseStep from "../components/OnboardingPhraseStep.vue"
 
 const router = useRouter()
@@ -38,12 +42,12 @@ const notificationStore = useNotificationStore()
 const { openToast } = useToast()
 const { bootstrapActiveProfile } = useProfileBootstrap()
 
-const maxPasswordLength = 128
-
-// The words live only in this ref, for this page's life. `closed` renders nothing while the route
-// to Ready settles, so neither the words nor a second Create stand meanwhile.
-const stage = ref<"form" | "phrase" | "closed">("form")
+// The words live only in this ref, for this page's life, and the check holds only its questions.
+// `closed` renders nothing while the route to Ready settles, so neither the words nor a second
+// Create stand meanwhile.
+const stage = ref<"form" | "phrase" | "check" | "closed">("form")
 const words = ref<string[]>([])
+const questions = shallowRef<PhraseQuestion[]>([])
 let createdId = ""
 // One generation for the page's life: a Create that settles after the person left publishes
 // nothing, since bootstrap writes shared stores and the tab may already show another page.
@@ -60,8 +64,12 @@ let stopSessionWatch: (() => void) | undefined
 function loseSession() {
 	if (sessionLost || !isMounted()) return
 	sessionLost = true
-	if (stage.value !== "phrase") return
+	if (stage.value === "phrase" || stage.value === "check") leavePhrase()
+}
+
+function leavePhrase() {
 	words.value = []
+	questions.value = []
 	stage.value = "closed"
 	router.push(doneRoute(path.value))
 }
@@ -77,7 +85,7 @@ async function watchSession(profileId: string) {
 
 async function readPhrase(
 	profile: ProfileInfo,
-	typed: string,
+	typed: string | undefined,
 	credentialData: PasskeyCredentialData | undefined,
 ): Promise<string[] | undefined> {
 	if (profile.type === "passkey" && !credentialData) return undefined
@@ -105,19 +113,19 @@ const {
 	password,
 	repeatedPassword: confirm,
 	isCreating,
-	strengthHint: passwordStrengthHint,
 	isAllowedToContinue,
 	handleCreate: handleSubmit,
 	handleCreateWithExistingPasskey,
 	dispose,
 } = useProfileCreateFlow({
 	// Onboarding has no popup app.vue listener, so it bootstraps the freshly created profile itself.
-	// The words open with the typed password, or with the passkey answer the create was made from,
-	// so they are read before either is dropped; a failed read still reaches Ready, where Home's
-	// reminder stays until the phrase is saved.
-	onCreated: async (profile, credentialData) => {
+	// The words open with the password the profile was created under, or with the passkey answer it
+	// was made from; a failed read still reaches Ready, where Home's reminder stays until the phrase
+	// is saved.
+	onCreated: async (profile, credentialData, typed) => {
 		if (!isMounted()) return
-		const typed = password.value
+		// The profile exists from here on, so a reload resumes at Ready: Create would make a second one.
+		markFlowPath(profile.type)
 		await watchSession(profile.id)
 		if (!isMounted()) return
 		const phrase = await readPhrase(profile, typed, credentialData)
@@ -147,17 +155,26 @@ const {
 
 const submitLabel = computed(() => {
 	if (isCreating.value) return "Creating..."
-	return authMethod.value === "passkey" ? "Create with passkey" : "Create wallet"
+	return authMethod.value === "passkey" ? "Create with passkey" : "Create profile"
 })
 
-async function onPhraseSaved() {
-	await markGetStarted(createdId, "phraseSaved")
-	if (isMounted()) router.push(doneRoute(path.value))
+function openCheck() {
+	questions.value = buildPhraseCheck(words.value)
+	words.value = []
+	stage.value = "check"
 }
 
-function onPhraseLater() {
-	router.push(doneRoute(path.value))
+// Confirm stays pressable while the mark is written: a second press marks and routes nothing more.
+let isMarking = false
+
+async function onCheckPassed() {
+	if (isMarking) return
+	isMarking = true
+	await markGetStarted(createdId, "phraseSaved")
+	if (isMounted()) leavePhrase()
 }
+
+onMounted(clearFlowPath)
 
 onBeforeUnmount(() => {
 	lifetime.invalidate()
@@ -169,18 +186,20 @@ onBeforeUnmount(() => {
 	password.value = ""
 	confirm.value = ""
 	words.value = []
+	questions.value = []
 })
 </script>
 
 <template>
-	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" :path="path" @saved="onPhraseSaved" @later="onPhraseLater" />
+	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" :path="path" @saved="openCheck" @later="leavePhrase" />
+	<OnboardingPhraseCheck v-else-if="stage === 'check'" :questions="questions" :path="path" @passed="onCheckPassed" @later="leavePhrase" />
 	<OnboardingPage v-else-if="stage === 'form'" data-testid="onboarding-create-page" :data-name-field="nameFieldState">
 		<OnboardingStepHeader
 			current="wallet"
 			:path="authMethod"
 			back="onboarding-create-back"
 			main="Create"
-			sub="Wallet"
+			sub="Profile"
 			:class="$style.hero"
 		/>
 
@@ -204,44 +223,34 @@ onBeforeUnmount(() => {
 					:activeClass="$style.tabActive"
 					passwordTestid="onboarding-method-password"
 					passkeyTestid="onboarding-method-passkey"
+					:disabled="isCreating"
 				/>
 			</Flex>
 
-			<Flex v-if="authMethod === 'password'" direction="column" gap="12">
-				<Flex direction="column" gap="8">
-					<Text variant="label-section" color="secondary">Password</Text>
-					<Input
-						v-model="password"
-						type="password"
-						placeholder="Strong password"
-						autocomplete="new-password"
-						:maxLength="maxPasswordLength"
-						autofocus
-						data-testid="onboarding-password-input"
-					/>
-				</Flex>
-				<Flex direction="column" gap="8">
-					<Text variant="label-section" color="secondary">Confirm password</Text>
-					<Input
-						v-model="confirm"
-						type="password"
-						placeholder="Repeat password"
-						autocomplete="new-password"
-						:maxLength="maxPasswordLength"
-						data-testid="onboarding-password-confirm"
-						inputTestid="onboarding-password-confirm-input"
-					/>
-				</Flex>
-				<Text v-if="passwordStrengthHint && !isCreating" variant="body" color="secondary" height="150">
-					{{ passwordStrengthHint }}
-				</Text>
+			<!-- The create empties both fields before the profile boots; hiding the hint keeps it from judging the emptied pair. -->
+			<Flex v-if="authMethod === 'password'" direction="column" gap="8">
+				<Text variant="label-section" color="secondary">Password</Text>
+				<NewPasswordPair
+					v-model:password="password"
+					v-model:repeatedPassword="confirm"
+					:testids="{
+						input: 'onboarding-password-input',
+						confirm: 'onboarding-password-confirm',
+						confirmInput: 'onboarding-password-confirm-input',
+						toggle: 'onboarding-password-input-visibility-toggle',
+					}"
+					placeholder="Strong password"
+					autofocus
+					:hideHint="isCreating"
+				>
+					<template #repeatLabel="{ id }">
+						<Text :id="id" variant="label-section" color="secondary">Confirm password</Text>
+					</template>
+				</NewPasswordPair>
 			</Flex>
 
 			<div v-else :class="$style.passkeyInfo">
-				<Text variant="body" color="secondary" height="150">
-					Your passkey replaces a password. Touch ID, Windows Hello, or
-					a hardware key, whichever your device supports.
-				</Text>
+				<Text variant="body" color="secondary" height="150" data-testid="onboarding-passkey-info">{{ PASSKEY_COPY.choice }}</Text>
 			</div>
 
 			<Button

@@ -24,7 +24,7 @@ export function knownDecimals(token: { decimals?: unknown; hasDecimals?: boolean
 }
 
 /** Absent → 0n (a side the row never had); a non-negative integer literal → its bigint; anything else → undefined. */
-function parseSide(s: string | undefined): bigint | undefined {
+export function parseSide(s: string | undefined): bigint | undefined {
 	if (s === undefined || s === null) return 0n
 	if (typeof s !== "string" || !/^\d{1,80}$/.test(s)) return undefined
 	return BigInt(s)

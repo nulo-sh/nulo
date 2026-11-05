@@ -137,7 +137,7 @@ async function world(opts: WorldOptions = {}) {
 	services.add(svc(EXECUTION_SERVICE_NAME, {}))
 	services.add(svc(TASK_SERVICE_NAME, opts.task ?? { createNewTask: () => ({ id: "t1" }) }))
 	const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-	const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
+	const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, { ticker: noopTicker })
 	services.add(service)
 	return { api, repo, service, bus, rowKeysReady, start: () => services.start() }
 }
@@ -261,8 +261,8 @@ describe("TokenBalanceService.onTokenDeleted purge cascade", () => {
 	})
 
 	test("a successor's rows at a RE-MINTED token id survive the departed token's handler (identity filter)", async () => {
-		// Numeric token ids are max+1-reallocatable: after A→B, B can re-mint
-		// this very id for a DIFFERENT token. The delete filter is identity-exact
+		// A lost token-id high-water mark lets a later token re-mint this very
+		// id for a DIFFERENT token. The delete filter is identity-exact
 		// (profileId + chainId + contract, not just the id), so the departed
 		// handler must delete only its own rows and leave the successor's.
 		await seedRepo.set(balance(1, 1))

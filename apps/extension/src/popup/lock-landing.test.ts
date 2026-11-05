@@ -1,7 +1,15 @@
 import { describe, expect, test } from "vitest"
 import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision } from "./lock-landing"
 
-const base = { hasProfile: false, onAuthRequiredRoute: false, isPasskeyRoute: false, hasCandidate: true, pageEstablished: false }
+const base = {
+	hasProfile: false,
+	onAuthRequiredRoute: false,
+	isPasskeyRoute: false,
+	hasCandidate: true,
+	pageEstablished: false,
+	holdsSession: false,
+	onOpeningRoute: false,
+}
 
 describe("decideLockLanding", () => {
 	test("a passkey-interaction route with no profile owns its ceremony: hold", () => {
@@ -31,6 +39,27 @@ describe("decideLockLanding", () => {
 		expect(decideLockLanding({ ...base, pageEstablished: true })).toBe("settle")
 		// The restart lock itself is unaffected.
 		expect(decideLockLanding({ ...base, pageEstablished: true, hasProfile: true, onAuthRequiredRoute: true })).toBe("lock")
+	})
+
+	test("an import or a profile create whose session a restart dropped ends its flow", () => {
+		const opened = { ...base, hasProfile: true, onOpeningRoute: true, holdsSession: true }
+		expect(decideLockLanding(opened)).toBe("end-flow")
+		// Established (a reconnect over the page, or an own window): the flow is over all the same.
+		expect(decideLockLanding({ ...opened, pageEstablished: true })).toBe("end-flow")
+	})
+
+	test("an import or a profile create that opened no session keeps its flow, own window included", () => {
+		const unopened = { ...base, hasProfile: true, onOpeningRoute: true }
+		expect(decideLockLanding(unopened)).toBe("settle")
+		expect(decideLockLanding({ ...unopened, pageEstablished: true })).toBe("settle")
+		// No profile selected yet (the first create before its bootstrap): the no-profile rule decides.
+		expect(decideLockLanding({ ...base, onOpeningRoute: true, holdsSession: true, pageEstablished: true })).toBe("settle")
+	})
+
+	test("a page that needs no session and opens none settles while the shell holds one", () => {
+		expect(decideLockLanding({ ...base, hasProfile: true, holdsSession: true })).toBe("settle")
+		// An auth-required page that held a session still locks.
+		expect(decideLockLanding({ ...base, hasProfile: true, holdsSession: true, onAuthRequiredRoute: true })).toBe("lock")
 	})
 
 	test("a reconnect whose mount-time boot was lost (no route resolved yet) still lands on auth", () => {

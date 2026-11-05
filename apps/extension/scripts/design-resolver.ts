@@ -27,6 +27,7 @@ export const NULO_DESIGN_COMPONENTS = new Set([
 	"Input",
 	"Skeleton",
 	"RowAction",
+	"ScrollMoreButton",
 ])
 
 export function nuloDesignResolver(): ComponentResolver {

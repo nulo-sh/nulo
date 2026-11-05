@@ -21,7 +21,6 @@ import { useToast } from "@/composables/toast"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 
 /** Utils */
-import { AccountServiceClient } from "@/wallet/services/account/client"
 import { isInvalidProfileIdError } from "@/wallet/services/profile/client"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { getLastActiveProfileId, onLastActiveProfileChanged, setLastActiveProfileId } from "@/utils/lastActiveProfile"
@@ -29,7 +28,8 @@ import { lockScreenProfile } from "@/popup/lock-screen-profile"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { postAuthRoute } from "@/utils/own-window"
 import { PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
-import { initTransactionService, managers, refreshBalances } from "@/utils/core"
+import { askProfilePasskey } from "@/utils/profile-passkey"
+import { ensureAccountClient, initTransactionService, managers, refreshBalances } from "@/utils/core"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -66,6 +66,11 @@ const isRetired = computed(() => appStore.profile?.retired === true)
 // Opened before the service answered: the heading, its line and the form depend on the profile's
 // kind, so they keep their place hidden until it is known rather than show the wrong form.
 const isProfileKnown = computed(() => !!appStore.profile)
+// An unfinished import cannot be unlocked, so its link names the way out instead of the question.
+const recoveryLinkLabel = computed(() => {
+	if (isTornImport.value) return "Delete profile"
+	return isPasskeyProfile.value ? "Lost your passkey?" : "Forgot your password?"
+})
 
 // The shell's boot outcome. "failed" = an OPEN session whose activation bootstrap threw: the
 // banner's RETRY is the only true recovery, and a password typed here would unlock an already-
@@ -121,10 +126,13 @@ const unlockActiveProfile = async (attemptId) => {
 	const moved = () => appStore.profile?.id !== attemptId
 	if (isPasskeyProfile.value) {
 		if (closesOnFocusLoss()) return managers.profile.unlockPasskeyProfile(attemptId)
-		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(attemptId)
-		if (moved()) return
-		const credData = await runCeremony({ mode: "get", credentialId, prfSalt, step: "unlock", profileName: appStore.profile.name })
-		if (moved()) return
+		const credData = await askProfilePasskey(
+			runCeremony,
+			managers.profile,
+			{ profileId: attemptId, step: "unlock", profileName: () => appStore.profile.name },
+			() => !moved(),
+		)
+		if (credData === undefined || moved()) return
 		return managers.profile.unlockPasskeyProfile(attemptId, credData)
 	}
 	return managers.profile.unlockProfile(attemptId, password.value)
@@ -229,9 +237,7 @@ const handleUnlockWallet = async () => {
 		// Second identity check: the await above is its own drift window — a
 		// resumed continuation must not replace the winner's managers.
 		if (!appStore.isLogined || appStore.profile?.id !== activeProfile.id) return
-		// Keep an existing client: replacing it abandoned a connected port, and disconnecting it
-		// would reject the calls of any flow still holding it (the network-switch handler does).
-		managers.account ??= new AccountServiceClient()
+		ensureAccountClient()
 
 		initTransactionService(appStore.onTxAdded, appStore.onTxUpdated)
 
@@ -244,23 +250,23 @@ const handleUnlockWallet = async () => {
 	}
 }
 
-/** Selects the profile this screen opens on (`lockScreenProfile`). A selected profile that no
- *  longer exists, with none to presume, leaves the choice to the person in the profile chooser. The
- *  lookup waits for the service, so it can outlast this page or lose to an activation: a profile
- *  selected or opened meanwhile stands, as in the route guard. */
+/** Selects the profile this screen opens on (`lockScreenProfile`); with no last active profile in
+ *  the list, a selection the list still holds stays. The lookup waits for the service, so it can
+ *  outlast this page or lose to an activation: a profile selected or opened meanwhile stands, as in
+ *  the route guard. So does a listed selection that the last pick heard during the reads names: that
+ *  pick may be newer than the pointer they read, and a newer write still sends its own event. */
 const settleProfile = async () => {
 	const selectedAtStart = appStore.profile?.id
+	const followsAtStart = follows
 	const lastActiveProfileId = await getLastActiveProfileId().catch(() => undefined)
 	const profiles = await managers.profile.getProfiles().catch(() => undefined)
 	if (!profiles || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart || heldBack()) return
+	if (follows !== followsAtStart && lastHeard === selectedAtStart && profiles.some((p) => p.id === lastHeard)) return
+	if (!profiles.some((p) => p.id === lastActiveProfileId) && profiles.some((p) => p.id === selectedAtStart)) return
 	const profile = lockScreenProfile(profiles, lastActiveProfileId)
-	if (profile) {
-		appStore.profile = profile
-	} else if (!profiles.some((p) => p.id === selectedAtStart)) {
-		appStore.profile = undefined
-		if (profiles.length) popupStore.open("select_profile")
-		else router.push("/popup/register")
-	}
+	appStore.profile = profile
+	settled = appStore.profile
+	if (!profile) router.push("/popup/register")
 }
 
 /** An unlock here, or any profile's activation, holds the selection: the unlock's steps read it, and
@@ -277,15 +283,19 @@ const heldBack = () => {
 }
 
 /** Another window's pick moves this screen too, so every window shows the profile an unlock opens.
- *  A selection made here during the lookup stands. */
+ *  A selection made here during the lookup stands, unless it is still the screen's automatic one
+ *  (`settled`), whose storage read may have answered the pointer this pick replaced. */
 let follows = 0
+let lastHeard
+let settled
 const followPick = async (id) => {
 	const follow = ++follows
+	lastHeard = id
 	const selectedAtStart = appStore.profile?.id
 	if (!id || id === selectedAtStart || appStore.isLogined || heldBack()) return
 	const profile = (await managers.profile.getProfiles().catch(() => undefined))?.find((p) => p.id === id)
-	if (!profile || follow !== follows || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart || heldBack())
-		return
+	const selectedHere = appStore.profile?.id !== selectedAtStart && appStore.profile !== settled
+	if (!profile || follow !== follows || isUnmounted || appStore.isLogined || selectedHere || heldBack()) return
 	appStore.profile = profile
 }
 const stopFollowingPicks = onLastActiveProfileChanged(followPick)
@@ -307,11 +317,11 @@ onUnmounted(() => {
 	managers.profile.onProfileDeleted.remove(onProfileDeleted)
 })
 // Delete Profile clears the selection when its purge returns, which can be after this screen
-// settled, so a cleared selection settles again. An open chooser means this screen cleared it.
+// settled, so a cleared selection settles again.
 watch(
 	() => appStore.profile,
 	(profile) => {
-		if (!profile && !appStore.isLogined && !popupStore.isOpened("select_profile") && !heldBack()) void settleProfile()
+		if (!profile && !appStore.isLogined && !heldBack()) void settleProfile()
 	},
 )
 watch(selectionHeld, (held) => {
@@ -319,10 +329,16 @@ watch(selectionHeld, (held) => {
 	missedWhileHeld = false
 	if (!appStore.isLogined && appStore.profile?.id === selectedWhenMissed) void settleProfile()
 })
+// What was typed belongs to the profile it was typed for. A screen opened before the service
+// answered keeps its field when the first profile arrives: nothing was typed for another.
 watch(
 	() => appStore.profile?.id,
-	() => {
+	(_id, previousId) => {
 		isTornImport.value = false
+		if (previousId === undefined) return
+		password.value = ""
+		isWrongPassword.value = false
+		isPasswordType.value = true
 	},
 )
 // The mount's focus for a profile that became known later; never taken from a control the person
@@ -435,20 +451,14 @@ watch(
 		</Flex>
 
 		<Flex v-if="!isRetired" v-snack-footer justify="center" :class="$style.footer">
-			<Tooltip side="top" position="center" textAlign="center" maxWidth="220px">
-				<button
-					@click="popupStore.open('forgot_password')"
-					type="button"
-					data-testid="auth-reset"
-					:class="$style.reset_link"
-				>
-					Delete profile
-				</button>
-				<template #content>
-					{{ isPasskeyProfile ? "Lost your passkey?" : "Forgot your password?" }} Delete this profile and re-import it
-					with your recovery phrase.
-				</template>
-			</Tooltip>
+			<button
+				@click="popupStore.open('forgot_password')"
+				type="button"
+				data-testid="auth-reset"
+				:class="[$style.reset_link, !isProfileKnown && $style.unknown]"
+			>
+				{{ recoveryLinkLabel }}
+			</button>
 		</Flex>
 
 		<!-- Path A: in-page passkey ceremony. Mounts only while a ceremony is in

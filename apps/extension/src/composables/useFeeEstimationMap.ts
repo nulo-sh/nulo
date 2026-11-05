@@ -7,8 +7,9 @@ export interface UseFeeEstimationMapOptions<TKey extends string | number, TParam
 	 * plus the caller-minted cancellation token and the per-key flow key —
 	 * thread both into `estimateOperationFee` so the SW can abort + evict on
 	 * remote cancel and coalesce overflow admissions per operation slot.
+	 * `signal` aborts once this attempt is superseded, cancelled or disposed.
 	 */
-	estimate: (params: TParams, estimateToken: string, flowKey: string) => Promise<TResult>
+	estimate: (params: TParams, estimateToken: string, flowKey: string, signal: AbortSignal) => Promise<TResult>
 	/**
 	 * Debounce window per key before the estimator actually fires. Default: 500ms,
 	 * matching the prior inline debounce in the execute window. Send-page-style
@@ -29,6 +30,8 @@ export interface UseFeeEstimationMapResult<TKey extends string | number, TParams
 	results: Ref<Record<TKey, TResult | null>>
 	/** Per-key true-from-call-until-resolve flag. */
 	estimating: Ref<Record<TKey, boolean>>
+	/** Per-key: its last attempt failed with a real error, until the key is asked again or cancelled. */
+	failed: Ref<Record<TKey, boolean>>
 	/** Schedule a debounced estimation for `key`. Cancels any in-flight one for the same key. */
 	estimate: (key: TKey, params: TParams) => void
 	/** Cancel the pending estimation for `key` (if any) and clear its result. Safe to call repeatedly. */
@@ -59,6 +62,7 @@ export function useFeeEstimationMap<TKey extends string | number, TParams, TResu
 
 	const results = ref({}) as Ref<Record<TKey, TResult | null>>
 	const estimating = ref({}) as Ref<Record<TKey, boolean>>
+	const failed = ref({}) as Ref<Record<TKey, boolean>>
 
 	// Scopes the SW-side coalescing slot to THIS composable instance: two
 	// concurrent approval windows both estimating op 0 must never share a
@@ -67,7 +71,7 @@ export function useFeeEstimationMap<TKey extends string | number, TParams, TResu
 	const instanceId = Math.random().toString(36).slice(2, 8)
 
 	const engine = createFeeEstimationEngine<TKey, TParams, TResult>({
-		run: (params, estimateToken, key) => estimate(params, estimateToken, `op:${instanceId}:${String(key)}`),
+		run: (params, estimateToken, key, signal) => estimate(params, estimateToken, `op:${instanceId}:${String(key)}`, signal),
 		debounceMs,
 		onResult: (key, r) => {
 			results.value[key] = r
@@ -75,7 +79,10 @@ export function useFeeEstimationMap<TKey extends string | number, TParams, TResu
 		onEstimating: (key, e) => {
 			estimating.value[key] = e
 		},
-		onError,
+		onError: (key, err) => {
+			failed.value[key] = true
+			onError?.(key, err)
+		},
 		cancelRemote,
 	})
 
@@ -92,9 +99,19 @@ export function useFeeEstimationMap<TKey extends string | number, TParams, TResu
 	return {
 		results,
 		estimating,
-		estimate: engine.schedule,
-		cancel: engine.cancel,
-		cancelAll: engine.cancelAll,
+		failed,
+		estimate: (key, params) => {
+			failed.value[key] = false
+			engine.schedule(key, params)
+		},
+		cancel: (key) => {
+			failed.value[key] = false
+			engine.cancel(key)
+		},
+		cancelAll: () => {
+			failed.value = {} as Record<TKey, boolean>
+			engine.cancelAll()
+		},
 		handoffAll,
 		rearm: engine.rearm,
 		dispose: engine.dispose,

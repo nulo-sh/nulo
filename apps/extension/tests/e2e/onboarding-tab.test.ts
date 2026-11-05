@@ -1,14 +1,47 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { extensionUrl, gotoExtensionPage, isFirefox, newPage, openScratchPage, prepareKeys, waitForTarget } from "./fixtures/browser"
-import { waitForOpenPanel } from "./fixtures/browser/firefox-action-popup"
-import { clickByTestId, expectNoNameField, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
-import { readProfileNames, readRecoveryWords, revealSeedPhrase, selectedAccount } from "./fixtures/helpers"
+import {
+	type AnsweredRequests,
+	extensionUrl,
+	gotoExtensionPage,
+	isFirefox,
+	newPage,
+	openScratchPage,
+	prepareKeys,
+	reloadExtensionPage,
+	setViewport,
+	viewportOf,
+} from "./fixtures/browser"
+import {
+	actionPopupShows,
+	clickInActionPopup,
+	evaluateInActionPopup,
+	openActionPopup,
+	waitForOpenPanel,
+} from "./fixtures/browser/firefox-action-popup"
+import {
+	clickByTestId,
+	type ExtensionContext,
+	expectNoNameField,
+	openOnboarding,
+	openPopup,
+	replaceInputValue,
+	test,
+	waitForHash,
+} from "./fixtures/extension"
+import { passPhraseCheck, readProfileNames, readRecoveryWords, revealSeedPhrase, selectedAccount } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
+import { pollUntil } from "./fixtures/poll"
 import { waitForPopupClosed } from "./fixtures/popups"
 import { shotSend } from "./fixtures/send-page"
 import { focusRing, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
-import { interceptHealth, PRESTO_HTTPS_HEALTH_URL, PRESTO_MINIMAL_HEALTH } from "./fixtures/presto"
+import {
+	interceptHealth,
+	PRESTO_DETAILED_HEALTH,
+	PRESTO_HTTP_HEALTH_URL,
+	PRESTO_HTTPS_HEALTH_URL,
+	PRESTO_MINIMAL_HEALTH,
+} from "./fixtures/presto"
 
 const TEST_PASSWORD = "OnboardingTest_!23"
 
@@ -22,8 +55,56 @@ const phraseSavedFlags = (page: Page) =>
 			.map(([, value]) => value),
 	)
 
+async function readyPhraseLine(page: Page): Promise<{ unsaved: string; line: string | null }> {
+	const settled = await page.waitForFunction(
+		() => document.querySelector('[data-testid="onboarding-done-page"]')?.getAttribute("data-phrase-unsaved") ?? null,
+		{ timeout: 10_000, polling: 100 },
+	)
+	const line = await page.evaluate(
+		() => document.querySelector('[data-testid="onboarding-done-phrase-unsaved"]')?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+	)
+	return { unsaved: (await settled.jsonValue()) as string, line }
+}
+
 const onboardingCompleted = (control: Page) =>
 	control.evaluate(async () => (await chrome.storage.local.get("nulo:onboarding:completed"))["nulo:onboarding:completed"])
+
+/** The popup over a wallet whose setup waits in its tab, its sentence and button shown: a tab on
+ *  Chrome, the toolbar panel on Firefox. */
+async function openSetupPopup(extension: ExtensionContext) {
+	const button = "register-setup-tab-btn"
+	if (isFirefox) {
+		await openActionPopup(extension.browser)
+		await pollUntil(
+			() =>
+				evaluateInActionPopup<boolean>(extension.browser, `return !!content.document.querySelector('[data-testid="${button}"]');`),
+			(shown) => shown,
+			{ label: "the panel's Go to the tab", timeoutMs: 15_000, intervalMs: 200 },
+		)
+		return {
+			isOpen: () => actionPopupShows(extension.browser),
+			press: () => clickInActionPopup(extension.browser, button),
+			closed: () =>
+				pollUntil(
+					() => actionPopupShows(extension.browser),
+					(open) => !open,
+					{
+						label: "the panel closed",
+						timeoutMs: 10_000,
+						intervalMs: 100,
+					},
+				),
+		}
+	}
+	const page = await newPage(extension.browser)
+	await gotoExtensionPage(page, extensionUrl(extension.extensionId, "/src/popup/index.html"))
+	await page.waitForSelector(`[data-testid="${button}"]`, { visible: true, timeout: 15_000 })
+	return {
+		isOpen: async () => !page.isClosed(),
+		press: () => clickByTestId(page, button),
+		closed: () => waitForPopupClosed(page, 10_000),
+	}
+}
 
 describe("onboarding tab", () => {
 	test("welcome screen renders both CTAs", async ({ freshExtensionPerTest: extension }) => {
@@ -68,8 +149,8 @@ describe("onboarding tab", () => {
 	}) => {
 		const page = await openOnboarding(extension)
 		// Short enough that the create step scrolls, so a step that kept its offset would show it.
-		const viewport = page.viewport()
-		await page.setViewport({ width: 1280, height: 480 })
+		const viewport = viewportOf(page)
+		await setViewport(page, { width: 1280, height: 480 })
 
 		// Click create on welcome
 		await clickByTestId(page, "onboarding-welcome-create")
@@ -92,16 +173,35 @@ describe("onboarding tab", () => {
 		// A password wallet sees its words before Ready, from the top of the step.
 		await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 30_000 })
 		expect(await page.evaluate(() => document.scrollingElement?.scrollTop)).toBe(0)
-		if (viewport) await page.setViewport(viewport)
+		await setViewport(page, viewport)
 		expect(await readProfileNames(page)).toEqual(["Main"])
 		const words = await readRecoveryWords(page, "onboarding-phrase")
 		expect(words).toHaveLength(24)
 
+		// I saved it opens the check, which asks three of those words by their position.
 		await clickByTestId(page, "onboarding-phrase-saved")
+		await page.waitForSelector('[data-testid="onboarding-phrase-check-page"]', { visible: true, timeout: 10_000 })
+		expect(await page.$('[data-testid="onboarding-phrase-word"]')).toBeNull()
+		expect(await phraseSavedFlags(page)).toEqual([])
+		await passPhraseCheck(page, words)
 		await waitForHash(page, "#/onboarding/done", 10_000)
 		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
 		// Read before any Settings reveal, which sets the same flag.
 		expect(await phraseSavedFlags(page)).toEqual([true])
+		expect(await readyPhraseLine(page)).toEqual({ unsaved: "false", line: null })
+
+		// Back on Ready stays there: Create would offer a second profile.
+		await page.evaluate(
+			() =>
+				new Promise<void>((resolve) => {
+					window.addEventListener("popstate", () => resolve(), { once: true })
+					history.back()
+				}),
+		)
+		await waitForHash(page, "#/onboarding/done", 10_000)
+		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
+		expect(await page.$('[data-testid="onboarding-create-page"]')).toBeNull()
+		expect(await readProfileNames(page)).toEqual(["Main"])
 
 		// Onboarding opens beside a person's own tabs, so Open wallet closes it, then opens the popup.
 		const control = await openScratchPage(extension.browser, extension.extensionId)
@@ -118,7 +218,7 @@ describe("onboarding tab", () => {
 		// A toolbar popup in headless Chrome is beyond what a test can find.
 		if (isFirefox) await waitForOpenPanel(control)
 
-		// "I saved it" reached Home: its card opens with the phrase step checked.
+		// The passed check reached Home: its card opens with the phrase step checked.
 		const popup = await openPopup(extension)
 		await waitForHash(popup, "#/popup/general", 15_000)
 		await popup.waitForSelector('[data-testid="get-started-aztec"]', { visible: true, timeout: 30_000 })
@@ -126,6 +226,31 @@ describe("onboarding tab", () => {
 
 		// The step showed the wallet's own words: Settings reveals the same ones.
 		expect(await revealSeedPhrase(popup, TEST_PASSWORD)).toEqual(words)
+	})
+
+	// A real reload must keep the mark the flow wrote on its history entry, or the tab would offer
+	// Create again over the wallet it just made; the reloaded Ready then reads the stored flags afresh.
+	// jsdom cannot reload a document.
+	test("a reload on the phrase step resumes at Ready with the one wallet and its phrase unsaved", async ({
+		freshExtensionPerTest: extension,
+	}) => {
+		const page = await openOnboarding(extension)
+		await clickByTestId(page, "onboarding-welcome-create")
+		await waitForHash(page, "#/onboarding/create", 10_000)
+		await clickByTestId(page, "onboarding-method-password")
+		await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
+		await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
+		await clickByTestId(page, "onboarding-submit-create")
+		await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 30_000 })
+
+		await reloadExtensionPage(page)
+		await waitForHash(page, "#/onboarding/done")
+		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
+		expect(await readProfileNames(page)).toEqual(["Main"])
+		expect(await readyPhraseLine(page)).toEqual({
+			unsaved: "true",
+			line: "Your recovery phrase is not saved yet. Save it from Get started on Home.",
+		})
 	})
 
 	test("create + passkey shows the phrase stage, and the passkey unlocks the same wallet after a lock", async ({
@@ -144,8 +269,10 @@ describe("onboarding tab", () => {
 			await clickByTestId(page, "onboarding-submit-create")
 
 			await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 60_000 })
-			expect(await readRecoveryWords(page, "onboarding-phrase")).toHaveLength(24)
+			const words = await readRecoveryWords(page, "onboarding-phrase")
+			expect(words).toHaveLength(24)
 			await clickByTestId(page, "onboarding-phrase-saved")
+			await passPhraseCheck(page, words)
 			await waitForHash(page, "#/onboarding/done", 10_000)
 			expect(await phraseSavedFlags(page)).toEqual([true])
 
@@ -199,38 +326,84 @@ describe("onboarding tab", () => {
 		expect(page.isClosed()).toBe(false)
 	})
 
-	test("the harness can answer the HTTPS health probe before any TLS handshake", async ({ freshExtensionPerTest: extension }) => {
+	test("the harness answers each page's health probes as that page armed them, before any TLS handshake", async ({
+		freshExtensionPerTest: extension,
+	}) => {
 		const page = await openOnboarding(extension)
-		await interceptHealth(page, { https: { status: 200, body: PRESTO_MINIMAL_HEALTH }, http: "refused" })
-		const body = await page.evaluate(async (url) => (await fetch(url)).json(), PRESTO_HTTPS_HEALTH_URL)
-		expect(body).toEqual(PRESTO_MINIMAL_HEALTH)
+		const other = await openScratchPage(extension.browser, extension.extensionId)
+		const answered = await interceptHealth(page, { https: { status: 200, body: PRESTO_MINIMAL_HEALTH }, http: "refused" })
+		// A body outside ASCII proves both drivers send the bytes `JSON.stringify` names, as UTF-8.
+		const otherBody = { ...PRESTO_DETAILED_HEALTH, note: "präsent ✓" }
+		const otherAnswered = await interceptHealth(other, { https: { status: 200, body: otherBody }, http: "refused" })
+		const bodyOf = (from: Page) => from.evaluate(async (url) => (await fetch(url)).json(), PRESTO_HTTPS_HEALTH_URL)
+
+		expect(await bodyOf(page)).toEqual(PRESTO_MINIMAL_HEALTH)
+		expect(await bodyOf(other)).toEqual(otherBody)
+		const refused = await page.evaluate(
+			async (url) =>
+				fetch(url).then(
+					() => "answered",
+					(err: unknown) => (err instanceof TypeError ? "rejected" : String(err)),
+				),
+			PRESTO_HTTP_HEALTH_URL,
+		)
+		expect(refused).toBe("rejected")
+		const hitsOf = async (of: AnsweredRequests) => [await of.hits(PRESTO_HTTPS_HEALTH_URL), await of.hits(PRESTO_HTTP_HEALTH_URL)]
+		expect(await hitsOf(answered)).toEqual([1, 1])
+		expect(await hitsOf(otherAnswered)).toEqual([1, 0])
+		await other.close()
 		await page.close()
 	})
 
-	test("popup with onboardingCompleted=false redirects to tab", async ({ freshExtensionPerTest: extension }) => {
-		// Reset the flag so the redirect predicate fires.
-		const setupPage = await newPage(extension.browser)
-		await gotoExtensionPage(setupPage, extensionUrl(extension.extensionId, "/src/popup/index.html"))
-		await setupPage.evaluate(async () => {
-			await chrome.storage.local.set({ "nulo:onboarding:completed": false })
-		})
-		await setupPage.close()
-		// Open the popup explicitly — should trigger redirect to onboarding tab.
-		const popup = await newPage(extension.browser)
-		const tabPromise = waitForTarget(
-			extension.browser,
-			(target) => target.type() === "page" && target.url().includes("src/onboarding/index.html"),
-			10_000,
-		)
-		await gotoExtensionPage(popup, extensionUrl(extension.extensionId, "/src/popup/index.html"))
+	// Only a real browser closes a popup and moves tab focus: the component layer stubs both. The first
+	// press finds no setup tab and opens one; the second, with another tab active in the setup tab's
+	// window and the setup tab away from the closing popup's neighbour, brings that tab forward. Chrome
+	// keeps the popup document in a tab; Firefox drives the toolbar panel itself.
+	test("before setup is finished the popup stays open on the setup tab's button, which brings that tab forward", async ({
+		freshExtensionPerTest: extension,
+	}) => {
+		const control = await openScratchPage(extension.browser, extension.extensionId)
+		await control.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": false }))
+		const trackedTab = () =>
+			control.evaluate(async () => {
+				const id = (await chrome.storage.session.get("nulo:onboarding:tab-id"))["nulo:onboarding:tab-id"]
+				return typeof id === "number" ? { id, active: (await chrome.tabs.get(id)).active } : null
+			})
+		// Over BiDi a tab's URL arrives after the tab, so the count is polled.
+		const oneSetupTab = () =>
+			pollUntil(
+				async () =>
+					extension.browser.targets().filter((t) => t.type() === "page" && t.url().includes("src/onboarding/index.html")).length,
+				(count) => count === 1,
+				{ label: "one setup tab", timeoutMs: 10_000, intervalMs: 100 },
+			)
+		const press = async (what: string) => {
+			const popup = await openSetupPopup(extension)
+			// A popup that closes itself as it renders reads as a crash.
+			await new Promise((resolve) => setTimeout(resolve, 1_000))
+			expect(await popup.isOpen(), `the popup closed by itself before the press that ${what}`).toBe(true)
+			await popup.press()
+			await popup.closed()
+			return pollUntil(trackedTab, (tab) => tab?.active === true, {
+				label: `the setup tab the press ${what}, active`,
+				timeoutMs: 10_000,
+				intervalMs: 100,
+			})
+		}
 
-		// The redirect in register.vue's onBeforeMount opens the onboarding tab, then closes this popup;
-		// both browsers honour that close.
-		const tabTarget = await tabPromise
-		expect(tabTarget).toBeDefined()
+		const opened = await press("opens the tab")
+		await oneSetupTab()
 
-		const tabPage = await tabTarget.page()
-		await tabPage?.close()
-		if (!popup.isClosed()) await popup.close()
+		const activeBefore = await control.evaluate(async (id: number) => {
+			await chrome.tabs.move(id, { index: 0 })
+			// Firefox opens the setup tab in a window of its own, where the control page's tab is not.
+			const { windowId } = await chrome.tabs.get(id)
+			await chrome.tabs.create({ windowId, url: "about:blank", active: true })
+			return (await chrome.tabs.get(id)).active
+		}, opened?.id as number)
+		expect(activeBefore).toBe(false)
+		const focused = await press("brings it forward")
+		expect(focused?.id).toBe(opened?.id)
+		await oneSetupTab()
 	})
 })

@@ -11,6 +11,7 @@ import { RowAction } from "@nulo/design"
 import ItemsContainer from "./ItemsContainer.vue"
 import SettingItem from "./SettingItem.vue"
 import SettingField from "./SettingField.vue"
+import { declarationsOf, parseSource } from "../../../../scripts/type-roles/source-scan"
 
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
@@ -167,6 +168,27 @@ describe("ui/Settings — SettingItem", () => {
 		w.unmount()
 	})
 
+	test("click mode names its target by the title alone, unless the row is external: then by its title, description and value, as an outside link's text names it", async () => {
+		const spoken = (w: Awaited<ReturnType<typeof mountItem>>["w"]) =>
+			(w.get("[data-row-target]").attributes("aria-labelledby") ?? "")
+				.split(" ")
+				.map((id) => w.get(`#${id}`).text())
+				.join(" ")
+		const inner = await mountItem({ title: "Manage", description: "Three keys", value: "On" }, { onClick: vi.fn() })
+		expect(spoken(inner.w)).toBe("Manage")
+		inner.w.unmount()
+		const outside = await mountItem(
+			{ title: "How it works", description: "A short read", value: "1 min", external: true, chevron: true },
+			{ onClick: vi.fn() },
+		)
+		expect(spoken(outside.w)).toBe("How it works A short read 1 min")
+		expect(outside.w.get('[data-testid="stub-icon"]').attributes("data-name")).toBe("open")
+		outside.w.unmount()
+		const bare = await mountItem({ title: "Docs", external: true }, { onClick: vi.fn() })
+		expect(spoken(bare.w)).toBe("Docs")
+		bare.w.unmount()
+	})
+
 	test("click mode with a nested RowAction: the action fires and the row handler does not", async () => {
 		const onClick = vi.fn()
 		const onCopy = vi.fn()
@@ -181,6 +203,60 @@ describe("ui/Settings — SettingItem", () => {
 		await action.trigger("click")
 		expect(onCopy).toHaveBeenCalledTimes(1)
 		expect(onClick).not.toHaveBeenCalled()
+		w.unmount()
+	})
+
+	/** A CSS module class's local name, without the test build's `_name_hash` decoration. */
+	const localNames = (classes: string[]) => classes.map((name) => name.replace(/^_(.+)_[0-9a-z]+$/i, "$1")).sort()
+
+	test("link mode without controls keeps its shape: the root is the link with the row's classes and attributes, its first child the row body", async () => {
+		const { w } = await mountItem({ title: "X", to: "/popup/general" }, { "data-testid": "row", class: "extra" })
+		expect(w.element.tagName).toBe("A")
+		expect(w.attributes("href")).toBe("/popup/general")
+		expect(w.attributes("data-testid")).toBe("row")
+		expect(localNames(w.classes())).toEqual(["extra", "interactive", "medium", "wrapper"])
+		expect(w.element.firstElementChild?.matches("[data-row-target]")).toBe(false)
+		expect(localNames([...(w.element.firstElementChild?.classList ?? [])])).toEqual(["main"])
+		w.unmount()
+	})
+
+	test("link mode with controls: a div root keeps the class and style; the stretched link alone carries the other attributes and the title's name; a control beside it presses once and never navigates", async () => {
+		const onPress = vi.fn()
+		const { w, router, push } = await mountItem(
+			{ title: "Testnet", to: "/popup/settings/networks/tn", controls: true },
+			{ "data-testid": "row", "data-network-id": "tn", class: "extra", style: "color: red" },
+			// No stopPropagation, unlike RowAction: a press that bubbles must still not navigate.
+			{ right: () => h("button", { type: "button", "data-testid": "control", onClick: onPress }, "Switch") },
+		)
+		expect(w.element.tagName).toBe("DIV")
+		expect(w.classes()).toContain("extra")
+		expect(w.attributes("style")).toBe("color: red;")
+		expect(document.querySelectorAll('[data-testid="row"]')).toHaveLength(1)
+		const link = w.get("[data-row-target]")
+		expect(link.element.tagName).toBe("A")
+		expect(link.attributes()).toMatchObject({ "data-testid": "row", "data-network-id": "tn", href: "/popup/settings/networks/tn" })
+		expect(link.classes()).not.toContain("extra")
+		expect(link.attributes("style")).toBeUndefined()
+		expect(w.find(`#${link.attributes("aria-labelledby")}`).text()).toBe("Testnet")
+
+		const control = w.get('[data-testid="control"]')
+		expect(link.element.contains(control.element)).toBe(false)
+		expect(link.element.compareDocumentPosition(control.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		await control.trigger("click")
+		await flushPromises()
+		expect(onPress).toHaveBeenCalledTimes(1)
+		expect(push).not.toHaveBeenCalled()
+
+		await link.trigger("click")
+		await flushPromises()
+		expect(push).toHaveBeenCalledTimes(1)
+		expect(router.currentRoute.value.path).toBe("/popup/settings/networks/tn")
+
+		await router.push("/start")
+		push.mockClear()
+		link.element.dispatchEvent(space())
+		await flushPromises()
+		expect(push).toHaveBeenCalledTimes(1)
 		w.unmount()
 	})
 
@@ -287,6 +363,18 @@ describe("ui/Settings — SettingItem", () => {
 		const { w } = await mountItem({ title: "Alice", description: "0x12...cdef", ...props })
 		expect(w.get('[data-testid="setting-description"]').attributes("variant")).toBe(role)
 		w.unmount()
+	})
+
+	test("wrapDescription lets the description wrap at every width; without it the line is cut", async () => {
+		const wraps = async (props: Record<string, unknown>) => {
+			const { w } = await mountItem({ title: "Full Backup", description: "Everything in this profile.", ...props })
+			const classes = w.get('[data-testid="setting-description"]').classes()
+			w.unmount()
+			return classes.some((name) => /description_wrap/.test(name))
+		}
+		expect([await wraps({}), await wraps({ wrapDescription: true })]).toEqual([false, true])
+		const parsed = parseSource("apps/extension/src/components/ui/Settings/SettingItem.vue")
+		expect(declarationsOf(parsed, ".description_wrap")).toEqual({ "white-space": "normal", "overflow-wrap": "break-word" })
 	})
 
 	test("the trailing value carries value", async () => {

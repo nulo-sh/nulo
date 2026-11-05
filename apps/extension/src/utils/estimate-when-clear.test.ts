@@ -1,4 +1,6 @@
 import { describe, expect, test, vi } from "vitest"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import type { EstimateStarted } from "@/wallet/services/execution/spec"
 import { EstimateRequeue, estimateWhenClear } from "./estimate-when-clear"
 
 const ESTIMATE = { maxFee: "1" }
@@ -44,5 +46,34 @@ describe("estimateWhenClear", () => {
 		const onQueued = vi.fn()
 		await expect(estimateWhenClear(() => Promise.reject(failure), new AbortController().signal, { onQueued })).rejects.toBe(failure)
 		expect(onQueued).not.toHaveBeenCalled()
+	})
+
+	test("the start of this attempt's run reaches onStarted while it is live; another token's never does, and the watch ends with the call", async () => {
+		const events = new EventHandler<EstimateStarted>()
+		const onStarted = vi.fn()
+		let answer: (value: object) => void = () => {}
+		const running = estimateWhenClear(() => new Promise<object>((resolve) => (answer = resolve)), new AbortController().signal, {
+			start: { events, estimateToken: "mine", onStarted },
+		})
+		events.invoke({ estimateToken: "other" })
+		expect(onStarted).not.toHaveBeenCalled()
+		events.invoke({ estimateToken: "mine" })
+		expect(onStarted).toHaveBeenCalledOnce()
+		answer(ESTIMATE)
+		await running
+		events.invoke({ estimateToken: "mine" })
+		expect(onStarted).toHaveBeenCalledOnce()
+	})
+
+	test("a superseded attempt whose call is still pending ignores its own run's start", async () => {
+		const events = new EventHandler<EstimateStarted>()
+		const onStarted = vi.fn()
+		const controller = new AbortController()
+		void estimateWhenClear(() => new Promise<object>(() => {}), controller.signal, {
+			start: { events, estimateToken: "old", onStarted },
+		})
+		controller.abort()
+		events.invoke({ estimateToken: "old" })
+		expect(onStarted).not.toHaveBeenCalled()
 	})
 })

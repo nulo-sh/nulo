@@ -150,6 +150,12 @@ defineExpose({ inputEl, focus })
 // `text` is intentionally a string|number|null union — the original binds modelValue ([String,Number])
 // and assigns numbers/null in the int/clear branches. Casts at string-op sites preserve that.
 const text = ref<string | number | null | undefined>(props.modelValue ? props.modelValue : "")
+/** The `int` field refused an edit: its error state shows until it takes one, is left or is written. */
+const refused = ref(false)
+type EditStart = { text: string; start: number; end: number }
+/** Text and selection at the `int` field's last `beforeinput`; an `input`, blur or write ends it. */
+let editStart: EditStart | null = null
+
 const warning = ref({
 	show: false,
 	text: "",
@@ -175,6 +181,8 @@ watch(
 	() => props.modelValue,
 	() => {
 		text.value = props.modelValue
+		refused.value = false
+		editStart = null
 	},
 )
 
@@ -217,24 +225,73 @@ function emitParsedValue(event?: Event) {
 			Number.isNaN(Number.parseFloat(text.value as string)) ? text.value : Number.parseFloat(text.value as string),
 		)
 	} else if (props.subtype === "int") {
-		const value = (event!.target as HTMLInputElement).value.replace(/[^\d]/g, "")
-		// Parsed from the digits the field keeps, never the raw text, so a typed sign or separator
-		// cannot make the emitted number differ from the one shown.
-		let res = value ? Number.parseInt(value, 10) : 0
-		text.value = value ? value : 0
-
-		if (props.max) {
-			const max = Number(props.max)
-			if (res > max) {
-				res = max
-				text.value = max
-			}
-		}
-
-		emit("update:modelValue", res)
+		takeIntEdit(event!)
 	} else {
 		emit("update:modelValue", text.value)
 	}
+}
+
+const handleBeforeInput = (e: InputEvent) => {
+	if (props.subtype !== "int" || e.isComposing) return
+	const el = e.target as HTMLInputElement
+	editStart = { text: el.value, start: el.selectionStart ?? el.value.length, end: el.selectionEnd ?? el.value.length }
+}
+
+/**
+ * What the edit put over the recorded selection, or null when the new text no longer keeps the text
+ * around it: a Backspace from a caret, a no-op Delete's left-over record, a drop away from the caret.
+ */
+function framedSlice(raw: string, start: EditStart): string | null {
+	const head = start.text.slice(0, start.start)
+	const tail = start.text.slice(start.end)
+	const framed = raw.length >= head.length + tail.length && raw.startsWith(head) && raw.endsWith(tail)
+	return framed ? raw.slice(head.length, raw.length - tail.length) : null
+}
+
+/** New text less the head and tail it shares with the old; a character retyped in place escapes. */
+function insertedText(before: string, raw: string): string {
+	let head = 0
+	while (head < before.length && head < raw.length && before[head] === raw[head]) head++
+	let tail = 0
+	const room = Math.min(before.length, raw.length) - head
+	while (tail < room && before[before.length - 1 - tail] === raw[raw.length - 1 - tail]) tail++
+	return raw.slice(head, raw.length - tail)
+}
+
+/**
+ * Refuses whole an edit that inserts a non-digit. Only the inserted text is judged, so a caller's
+ * `1.5` still takes a digit, and the strip below joins it (`1.52` emits 152).
+ */
+function takeIntEdit(event: Event) {
+	// Vue re-fires `input` once a composition ends; that edit is the one judged.
+	if ((event as InputEvent).isComposing) return
+	const el = event.target as HTMLInputElement
+	const start = editStart
+	editStart = null
+	const shown = start?.text ?? String(props.modelValue ?? "")
+	if (/\D/.test((start && framedSlice(el.value, start)) ?? insertedText(shown, el.value))) {
+		// The value first: assigning it moves the caret to the end.
+		el.value = shown
+		if (start) el.setSelectionRange(start.start, start.end)
+		text.value = shown
+		refused.value = true
+		return
+	}
+	refused.value = false
+	const value = el.value.replace(/[^\d]/g, "")
+	// Parsed from the digits written back to the field, so the number emitted is the one shown.
+	let res = value ? Number.parseInt(value, 10) : 0
+	text.value = value ? value : 0
+
+	if (props.max) {
+		const max = Number(props.max)
+		if (res > max) {
+			res = max
+			text.value = max
+		}
+	}
+
+	emit("update:modelValue", res)
 }
 
 const handleKeydown = (e: KeyboardEvent) => {
@@ -255,6 +312,8 @@ const handleFocus = () => {
 
 const handleBlur = () => {
 	isFocused.value = false
+	refused.value = false
+	editStart = null
 	emit("blur")
 }
 
@@ -333,7 +392,7 @@ const handleClear = () => {
 			@click="handleClick"
 			gap="12"
 			:data-input-size="size"
-			:class="[$style.base, isFocused && $style.focused, disabled && $style.disabled, error && $style.error, $style[size]]"
+			:class="[$style.base, isFocused && $style.focused, disabled && $style.disabled, (error || refused) && $style.error, $style[size]]"
 		>
 			<Flex align="center" gap="6" wide :class="$style.left">
 				<Icon v-if="icon" :name="icon" size="16" color="tertiary" />
@@ -345,6 +404,7 @@ const handleClear = () => {
 					:type="getInputType"
 					:max="max"
 					v-model="text"
+					@beforeinput="handleBeforeInput"
 					@input="handleInput"
 					@focus="handleFocus"
 					@blur="handleBlur"
@@ -357,7 +417,7 @@ const handleClear = () => {
 					:autocorrect="autocorrect"
 					:role="role"
 					:aria-labelledby="ariaLabelledby"
-					:aria-invalid="ariaInvalid"
+					:aria-invalid="ariaInvalid ?? (refused || undefined)"
 					:aria-expanded="ariaExpanded"
 					:aria-autocomplete="ariaAutocomplete"
 					:aria-activedescendant="ariaActivedescendant"

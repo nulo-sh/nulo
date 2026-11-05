@@ -2,6 +2,7 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick, ref } from "vue"
+import { boundAttr, declarationsOf, elementByTestid, parseSource } from "../../../scripts/type-roles/source-scan"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 
 const fakes = vi.hoisted(() => ({
@@ -170,6 +171,17 @@ describe("restore again — the hand-off window", () => {
 		await flushPromises()
 		expect(fakes.closeOwnWindow).toHaveBeenCalledTimes(1)
 		expect(fakes.pickBackupFile).not.toHaveBeenCalled()
+	})
+})
+
+/** A network name here can be one word of up to 25 characters, as the person typed it. */
+describe("restore again — a long name stays inside its texts", () => {
+	const parsed = parseSource("apps/extension/src/popup/pages/restore-again.vue")
+
+	test.each(["restore-again-intro", "restore-again-retry-result"])("%s breaks a word wider than itself anywhere", (testid) => {
+		const text = elementByTestid(parsed, testid)?.node
+		expect(text && boundAttr(text, "class")).toBe("$style.names")
+		expect(declarationsOf(parsed, ".names")).toMatchObject({ "overflow-wrap": "anywhere" })
 	})
 })
 

@@ -1,11 +1,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
-import {
-	ESTIMATE_JOB_TTL_MS,
-	EstimateCancelRegistry,
-	MAX_ACTIVE_ESTIMATES_PER_PROFILE,
-	SETTLED_STASH_TTL_MS,
-} from "./estimate-cancel-registry"
+import { EstimateCancelRegistry, MAX_ACTIVE_ESTIMATES_PER_PROFILE, SETTLED_STASH_TTL_MS } from "./estimate-cancel-registry"
+import { ESTIMATE_JOB_TTL_MS } from "./spec"
 
 const makeRegistry = () => {
 	let clock = 1_000_000
@@ -217,6 +213,17 @@ describe("TTL sweeps", () => {
 		await registry.admit("t2", "p1", "send") // sweep fires
 		expect(evicted).toEqual(["stash-1"])
 		// A later cancel of the expired token is a no-op (single eviction).
+		registry.cancel("t1", "p1")
+		expect(evicted).toEqual(["stash-1"])
+	})
+
+	test("a settled token can still evict its stash for as long as an authorization snapshot lives", async () => {
+		const { registry, evicted, advance } = makeRegistry()
+		await registry.admit("t1", "p1", "send")
+		registry.settle("t1", "stash-1")
+		advance(9 * 60_000)
+		await registry.admit("t2", "p1", "send") // sweep fires
+		expect(evicted).toEqual([])
 		registry.cancel("t1", "p1")
 		expect(evicted).toEqual(["stash-1"])
 	})

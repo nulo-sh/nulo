@@ -1,0 +1,20 @@
+# fu2-home-1: phase 2 (arc 2)
+
+- Base `b21fcdac8` (`origin/dev`, arc 1 merged as #1545). Three later picks joined the arc: P96-02 F, P96-03 D, P99-02 G; issues #1563, #1564, #1565 filed (none existed).
+- Codex consult on the amended plan (gpt-6.1-sol, high, fresh): conditional approve, five findings, all folded but one (plan, audit verdicts). The one that changed the design: the header's copy glyph is revealed 6 to 18 px past the address, so OA-2 A's 8 px gap would put it up to 4 px on the chip; revealed 2 px past, it ends where the gap does, as it did at the old 12 px gap.
+- Red first: 21 unit and component cases failed on their assertions at the base (new modules as base-behaviour stubs); the new e2e assertions failed on the base build too (Firefox: the 240 px sweep, `home-page`; Chrome: the onboarding walk at 240 px, its welcome page 320 px wide).
+- A smoke run reads each e2e file when its worker starts it, not at launch: e2e files edited during a timing run change what that run measures. The first Firefox base read 665 s with two new scenarios in it; the base was rerun with the base e2e files checked out.
+- `TokensView.test.ts` mocks `@/wallet/services/task/client` without `ContentKind`: the shared composable takes the enum from `task/spec`, so the Home suite stays unchanged.
+- Chrome after, first run (11 files, retry 0): 6 red, 377 s. Rerun 2 (three files): 4 red. Causes, each fixed at its cause: the header's `@container` rule came before `.name_slot { display: flex }`, which won by source order; "WELCOME" at 56 px and "RECOVERY" at 48 px wider than 240 px (D9); a new font size was refused by the type-role ban, whose baseline only shrinks, so the hero's existing 56 px rule moved under `@media (width >= 359px)` and the phrase title takes a soft hyphen; the four-column phrase grid overlapped from 320 px down (reflow by container query); the sweep's whole-address check included the copy glyph drawn past the address's box; the Receive sheet at 360 × 600 scrolls 33 px with the whole address and arc 1's network line, so the two snack cases' premises moved (the snack sits 12 px above where Close stops).
+- Chrome after, final (11 files, retry 0): green, 413 s. Firefox (two batches, retry 0): green, 269 s + 322 s.
+- Firefox refuses `captureScreenshot` on an extension page (FIREFOX.md, #1329); the header capture drew the tab's `<browser>` with `drawSnapshot` from `session.chromeScript`, as FIREFOX.md does for the toolbar panel, in the scratch spec only.
+- `e2e:agent` proverless booted, ran one capture spec and tore down in 96 to 107 s; the network type-role sweep took 245 s. Nothing of the run stayed alive after it.
+- The identifier inventory needs a site's selector to name its own element: the review's address sat inside a `<template v-if>`, so it gained its own `type--meta` span with a testid.
+
+## Codex fix loop (gpt-6.1-sol, high) and the Opus diff review
+
+- Round 1, approve: one pre-existing Home defect (#1574) and the visible extras for the PR. Opus beside it: no high or medium finding, seven lows; six folded, one a closed known limit (#1575).
+- The first round 2 resume passed the worktree as `resume-codex.sh`'s third argument, which is the session's output directory, not a cwd: the script wrote its trailer files into the worktree and, finding no `model` file there, resumed on its default model and effort. The files were moved out before any commit and that answer discarded; round 2 ran again from the round 1 directory on `gpt-6.1-sol`, high.
+- Round 2, conditional approve: the column by testid, a case name that claimed more than it showed. Round 3: approve.
+- The fold's new Holdings case passed vitest and lint but not `typecheck:all` (an `EventHandler.invoke` with no argument): run the typecheck after every test edit, not only after source edits.
+- Merging `dev` brought #1567's phrase check, which the 240 px walk then crossed: its four chips per row ran 41 px past the view in Chrome, 16 in Firefox; reflowed to two columns below 333 px.

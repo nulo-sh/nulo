@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { describe, expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { FIREFOX_ONLY, isFirefox, waitForTarget } from "../fixtures/browser"
+import { FIREFOX_ONLY, isFirefox, viewportOf, waitForTarget } from "../fixtures/browser"
 import {
 	clickByTestId,
 	type ExtensionContext,
@@ -174,7 +174,7 @@ async function finalClick(page: Page, testid: string): Promise<void> {
 async function expectTopRightOf(ctx: PlacementContext, label: string, page: Page, anchorId: number): Promise<Placed> {
 	const outer = await settledWindow(page, null)
 	const inner = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }))
-	const placed = { outer, inner, viewport: page.viewport() }
+	const placed = { outer, inner, viewport: viewportOf(page) }
 	const anchor = await settledWindow(ctx.control, anchorId)
 	const why = `${label}: ${JSON.stringify({ placed, anchor, windows: await census(ctx.control) })}`
 	expect({ right: outer.left + outer.width, top: outer.top, height: outer.height }, why).toEqual({

@@ -50,15 +50,43 @@ vi.mock("@/wallet/services/price/client", () => ({
 		}
 	}),
 }))
-const configEvents = { update: new EventHandler(), connected: new EventHandler() }
-let configValues: Record<string, unknown> = { showFiatValues: true, incomingDustUsdThreshold: 0 }
-vi.mock("@/wallet/services/config/client", () => ({
-	ConfigServiceClient: vi.fn(function () {
+const taskEvents = { created: new EventHandler(), updated: new EventHandler(), deleted: new EventHandler(), connected: new EventHandler() }
+let seedTasks: unknown[] = []
+vi.mock("@/wallet/services/task/client", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/wallet/services/task/client")>()),
+	TaskServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
-			onUpdate: configEvents.update,
-			onConnected: configEvents.connected,
-			getValue: vi.fn().mockImplementation(async (key: string) => configValues[key]),
+			onTaskCreated: taskEvents.created,
+			onTaskUpdated: taskEvents.updated,
+			onTaskDeleted: taskEvents.deleted,
+			onConnected: taskEvents.connected,
+			getTasks: vi.fn(async () => seedTasks),
+		}
+	}),
+}))
+/** The newest page's config events: a page an earlier case left mounted hears none of them. */
+let configEvents = { update: new EventHandler(), connected: new EventHandler() }
+let configValues: Record<string, unknown> = { showFiatValues: true, incomingDustUsdThreshold: 0 }
+/** A read answers the value stored when it was asked; a case that parks reads replaces this. */
+let answerConfig: (key: string, stored: unknown) => Promise<unknown> = async (_key, stored) => stored
+vi.mock("@/wallet/services/config/client", () => ({
+	ConfigServiceClient: vi.fn(function () {
+		const events = { update: new EventHandler(), connected: new EventHandler() }
+		configEvents = events
+		let opened = false
+		return {
+			disconnect: vi.fn(),
+			onUpdate: events.update,
+			onConnected: events.connected,
+			// The first read opens the port, as the real client's does.
+			getValue: vi.fn().mockImplementation((key: string) => {
+				if (!opened) {
+					opened = true
+					events.connected.invoke(undefined as never)
+				}
+				return answerConfig(key, configValues[key])
+			}),
 		}
 	}),
 }))
@@ -73,11 +101,12 @@ vi.mock("@/utils/hero-ruler", () => ({
 }))
 
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { ContentKind } from "@/wallet/services/task/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
 import Holdings from "./holdings.vue"
+import TokenList from "../components/modules/holdings/TokenList.vue"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 
 const STUBS = {
@@ -124,9 +153,11 @@ afterEach(() => {
 	seedRows = []
 	fetchError = undefined
 	readGate = undefined
+	seedTasks = []
 	mockQuotes = {}
 	answerQuotes = ANSWER
 	configValues = { showFiatValues: true, incomingDustUsdThreshold: 0 }
+	answerConfig = async (_key, stored) => stored
 	vi.clearAllMocks()
 })
 
@@ -147,6 +178,43 @@ describe("holdings page", () => {
 		expect(summary).toContain("$1,250.00")
 		expect(summary).toContain("2 tokens")
 		expect(summary).toContain("priced assets only") // BBB is unpriced
+	})
+
+	test("one row being refreshed shows one grey dot beside All holdings and no mark on any row, until its task finishes", async () => {
+		installChromeStorage()
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET), row("b2", "BBB", CHAIN_IDS.TESTNET)]
+		const refresh = { id: "t1", content: { kind: ContentKind.BalanceUpdate, tbId: "b2", account: "0xacct" } }
+		seedTasks = [refresh]
+		const w = await mountPage()
+		const marks = () => w.findAll('[data-testid$="refreshing"]').map((el) => el.attributes("data-testid"))
+
+		expect(marks()).toEqual(["holdings-refreshing"])
+		expect(w.get('[data-testid="holdings-refreshing"]').attributes("aria-hidden")).toBe("true")
+		const label = w.get('[data-testid="holdings-count"]').element.parentElement
+		expect(label?.nextElementSibling).toBe(w.get('[data-testid="holdings-refreshing"]').element)
+		taskEvents.updated.invoke({ ...refresh, finishedAt: 2 })
+		await flushPromises()
+		expect(marks()).toEqual([])
+
+		// Success control: another account's refresh lights nothing.
+		taskEvents.created.invoke({ id: "t2", content: { kind: ContentKind.BalanceUpdate, tbId: "b1", account: "0xother" } })
+		await flushPromises()
+		expect(marks()).toEqual([])
+		taskEvents.created.invoke({ id: "t3", content: { kind: ContentKind.BalanceUpdate, tbId: "b1", account: "0xacct" } })
+		await flushPromises()
+		expect(marks()).toEqual(["holdings-refreshing"])
+	})
+
+	test("a reconnect reads the tasks again, so a finish missed while the worker was gone puts the dot out", async () => {
+		installChromeStorage()
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET)]
+		seedTasks = [{ id: "t1", content: { kind: ContentKind.BalanceUpdate, tbId: "b1", account: "0xacct" } }]
+		const w = await mountPage()
+		expect(w.find('[data-testid="holdings-refreshing"]').exists()).toBe(true)
+		seedTasks = []
+		taskEvents.connected.invoke(undefined)
+		await flushPromises()
+		expect(w.find('[data-testid="holdings-refreshing"]').exists()).toBe(false)
 	})
 
 	test("a live add for another chain is ignored; one for this chain lands", async () => {
@@ -175,6 +243,64 @@ describe("holdings page", () => {
 		expect(w.find('[data-testid="holdings-summary"]').text()).not.toContain("$")
 	})
 
+	describe("a change during the mount's reads wins over their older answers", () => {
+		function parkReads() {
+			const reads: Record<string, PromiseWithResolvers<unknown>> = {}
+			answerConfig = (key) => {
+				reads[key] = Promise.withResolvers<unknown>()
+				return reads[key].promise
+			}
+			return reads
+		}
+		const fiatShown = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="holdings-summary"]').text().includes("$")
+		const dustThreshold = (w: Awaited<ReturnType<typeof mountPage>>) => w.getComponent(TokenList).props("dustThresholdUsd")
+
+		test("a fiat change wins, and the dust read lands what was stored", async () => {
+			installChromeStorage()
+			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+			const reads = parkReads()
+			const w = await mountPage()
+
+			configEvents.update.invoke({ key: "showFiatValues", value: false })
+			reads.showFiatValues.resolve(true)
+			reads.incomingDustUsdThreshold.resolve(5)
+			await flushPromises()
+			expect(fiatShown(w)).toBe(false)
+			expect(dustThreshold(w)).toBe(5)
+		})
+
+		test("a dust change wins, and the fiat read lands what was stored", async () => {
+			installChromeStorage()
+			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+			const reads = parkReads()
+			const w = await mountPage()
+
+			configEvents.update.invoke({ key: "incomingDustUsdThreshold", value: 7 })
+			reads.incomingDustUsdThreshold.resolve(0)
+			reads.showFiatValues.resolve(false)
+			await flushPromises()
+			expect(dustThreshold(w)).toBe(7)
+			expect(fiatShown(w)).toBe(false)
+		})
+
+		test("each key settles alone: the fiat read lands while the dust read hangs, then fails", async () => {
+			installChromeStorage()
+			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+			const reads = parkReads()
+			const w = await mountPage()
+
+			reads.showFiatValues.resolve(false)
+			await flushPromises()
+			expect(fiatShown(w)).toBe(false)
+			reads.incomingDustUsdThreshold.reject(new Error("port closed"))
+			await flushPromises()
+			expect(dustThreshold(w)).toBe(0)
+		})
+	})
+
 	test("rejected config reads keep the defaults and never surface as an error", async () => {
 		installChromeStorage()
 		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET)]
@@ -183,7 +309,7 @@ describe("holdings page", () => {
 
 		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(false)
 		expect(w.findAll('[data-testid="token-symbol"]')).toHaveLength(1)
-		expect(w.find('[data-testid="holdings-summary"]').text()).toContain("1 tokens")
+		expect(w.get('[data-testid="holdings-meta"]').text()).toMatch(/^1 token( · |$)/)
 	})
 
 	test("the add row opens the New token popup with the pasted address handed over", async () => {
@@ -195,8 +321,8 @@ describe("holdings page", () => {
 		await w.find('[data-testid="holdings-search"]').setValue(address)
 		await w.find('[data-testid="holdings-add-token"]').trigger("click")
 
-		expect(useCacheStore().preselectedTokenAddressToAdd).toBe(address)
 		expect(usePopupStore().isOpened("new_token")).toBe(true)
+		expect(usePopupStore().getPayload("new_token")).toEqual({ address })
 	})
 
 	test("live events: a delete from any chain removes its row, an add replaces a listed row, an update for an unseen row waits for the next read", async () => {
@@ -475,7 +601,7 @@ describe("holdings page — before the first price answer", () => {
 		expect(skeleton(w).exists()).toBe(false)
 		expect(total(w).attributes("aria-busy")).toBeUndefined()
 		expect(total(w).text()).toBe("$0.00")
-		expect(meta(w)).toBe("1 tokens · priced assets only")
+		expect(meta(w)).toBe("1 token · priced assets only")
 	})
 })
 

@@ -37,10 +37,10 @@ const id = (part: string) => `${props.testidPrefix}-${part}`
 	<Flex direction="column" :class="$style.screen" :data-testid="id('takeover')">
 		<div :class="$style.top_bar">
 			<button type="button" :class="$style.chip" :data-testid="id('chip')" @click="emit('chip')">
-				{{ chip }}<span v-if="flagged" :class="$style.chip_square" />
+				<span :class="$style.chip_label">{{ chip }}</span><span v-if="flagged" :class="$style.chip_square" />
 			</button>
-			<button type="button" :class="$style.chip" :data-testid="id('lock')" aria-label="Lock wallet" @click="emit('lock')">
-				<Icon name="lock" :size="12" aria-hidden="true" />LOCK
+			<button type="button" :class="[$style.chip, $style.lock]" :data-testid="id('lock')" aria-label="Lock wallet" @click="emit('lock')">
+				<Icon name="lock" :size="15" aria-hidden="true" />
 			</button>
 		</div>
 
@@ -112,6 +112,7 @@ const id = (part: string) => `${props.testidPrefix}-${part}`
 	display: flex;
 	align-items: center;
 	gap: 8px;
+	min-width: 0;
 	max-width: 60%;
 	padding: 7px 10px;
 	color: var(--txt-primary);
@@ -120,11 +121,25 @@ const id = (part: string) => `${props.testidPrefix}-${part}`
 	cursor: pointer;
 }
 
+/* With no text of its own, it takes the height of the network chip beside it. */
+.lock {
+	align-self: stretch;
+	padding-block: 0;
+}
+
 .chip:focus-visible,
 .primary:focus-visible,
 .secondary:focus-visible {
 	outline: 2px solid var(--nulo-accent);
 	outline-offset: 2px;
+}
+
+/* The chip shares its row with the Lock button, so a long name ends in an ellipsis. */
+.chip_label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .chip_square {
@@ -142,6 +157,8 @@ const id = (part: string) => `${props.testidPrefix}-${part}`
 	gap: 14px;
 	padding: 22px 20px 0;
 	overflow-y: auto;
+	/* Text only: a button added here would inherit mid-word breaks. */
+	overflow-wrap: anywhere;
 }
 
 .content.dense_notice {
@@ -171,7 +188,6 @@ const id = (part: string) => `${props.testidPrefix}-${part}`
 	font-size: 26px;
 	line-height: 1.15;
 	color: var(--txt-primary);
-	overflow-wrap: anywhere;
 }
 
 .body {
@@ -246,9 +262,16 @@ const id = (part: string) => `${props.testidPrefix}-${part}`
 	padding-top: 14px;
 }
 
+/* A long network name wraps and grows the button; a label of one or two lines keeps its 48px. */
+.primary,
+.secondary {
+	min-height: 48px;
+	padding-block: 5px;
+	overflow-wrap: anywhere;
+}
+
 .primary {
 	composes: type--button from global;
-	height: 48px;
 	cursor: pointer;
 	color: var(--txt-inverse);
 	background: var(--nulo-accent);
@@ -262,7 +285,6 @@ const id = (part: string) => `${props.testidPrefix}-${part}`
 
 .secondary {
 	composes: type--button from global;
-	height: 48px;
 	cursor: pointer;
 	color: var(--txt-primary);
 	background: transparent;

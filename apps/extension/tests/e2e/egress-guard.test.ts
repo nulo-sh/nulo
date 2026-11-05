@@ -10,6 +10,7 @@ import {
 	EGRESS_PROBE_HOST,
 	type EgressCanary,
 	type EgressGuard,
+	LIVE_NODE_HOST,
 	canaryUrl,
 	guardArmed,
 	listenClaimed,
@@ -262,7 +263,9 @@ describe("a node request the stand-in's interception does not see", () => {
 			if (isFirefox) await closing
 			else
 				await expect(closing).rejects.toThrow(
-					/^egress guard: egress-guard\.test\.ts: chrome sent lb\.drpc\.live:443 to the guard \d+ time\(s\) while the launch's stand-in held its origin: [^\n]*cannot fix this\.$/,
+					new RegExp(
+						`^egress guard: egress-guard\\.test\\.ts: chrome sent ${LIVE_NODE_HOST.replaceAll(".", "\\.")}:443 to the guard \\d+ time\\(s\\) while the launch's stand-in held its origin: [^\\n]*cannot fix this\\.$`,
+					),
 				)
 		} finally {
 			if (!closing) await leaky.close().catch(() => {})

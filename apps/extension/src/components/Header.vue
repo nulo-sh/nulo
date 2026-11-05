@@ -14,6 +14,7 @@ import { managers } from "@/utils/core"
 import { copyAddressToClipboard } from "./header-copy-address"
 import { endsSelection } from "@/utils/selection"
 import { isCardWindow } from "@/utils/own-window"
+import { networkStatusWord } from "@/utils/network-status"
 import { accountStateOf } from "./header-account"
 
 /** Store */
@@ -47,6 +48,7 @@ const showNodeRead = useConfigRead(
 	},
 )
 const networkStatusKey = computed(() => appStore.networkStatus?.toLowerCase())
+const networkStatusText = computed(() => networkStatusWord(appStore.networkStatus))
 const accountState = computed(() => accountStateOf(appStore))
 
 const HEADER_INDICATION_DURATION = 5_000
@@ -169,10 +171,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<header v-if="!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && !isCardWindow()" :class="$style.wrapper">
-		<!-- The switcher owns TWO explicit affordances (avatar + name) while the address is a
-		     one-click copy target — no popup detour. `account-selector` stays on the name button so
-		     every existing e2e switching flow passes unchanged (testid-preservation contract). -->
+	<header
+		v-if="!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && !isCardWindow()"
+		:class="[$style.wrapper, showNode && $style.name_first]"
+	>
+		<!-- The avatar and the name both open the switcher; the address is a one-click copy target. -->
 		<Flex v-if="appStore.isLogined && accountState === 'shown'" align="center" gap="10" :class="$style.account_group">
 			<button
 				type="button"
@@ -183,7 +186,7 @@ onBeforeUnmount(() => {
 			>
 				<AccountAvatar :name="appStore.account?.name || 'Primary Account'" :address="appStore.account?.address" :size="32" />
 			</button>
-			<Flex direction="column" gap="2" :class="$style.account_col">
+			<Flex direction="column" gap="2" :class="$style.account_col" data-testid="account-column">
 				<div :class="$style.name_slot">
 					<button
 						type="button"
@@ -204,7 +207,7 @@ onBeforeUnmount(() => {
 				>
 					<span :class="$style.address_text" data-testid="account-address-text">
 						{{ appStore.account?.address ? trimAddress(appStore.account.address, 6, 4, "...") : "" }}
-						<span :class="$style.copy_reveal"><Icon name="copy" size="12" /></span>
+						<span :class="$style.copy_reveal" data-testid="account-copy-glyph"><Icon name="copy" size="12" /></span>
 					</span>
 				</button>
 			</Flex>
@@ -231,7 +234,7 @@ onBeforeUnmount(() => {
 				@click="handleOpenNetworks"
 				data-testid="network-button"
 				:data-status="networkStatusKey"
-				:aria-label="`Manage networks (currently ${appStore.network.name})`"
+				:aria-label="`Manage networks (currently ${appStore.network.name}, ${networkStatusText})`"
 				:class="$style.network_chip"
 			>
 				<span v-if="showNode" data-testid="network-name" :class="$style.network_label">{{ appStore.network.name }}</span>
@@ -248,7 +251,6 @@ onBeforeUnmount(() => {
 				:class="$style.lock_chip"
 			>
 				<Icon name="lock" :size="15" color="primary" />
-				<span :class="$style.lock_label">Lock</span>
 			</button>
 
 		</Flex>
@@ -260,12 +262,12 @@ onBeforeUnmount(() => {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
+	gap: 8px;
 
 	height: 64px;
 	min-height: 64px;
 
-	padding: 0 16px 0 24px;
+	padding: 0 6px 0 24px;
 	background: var(--app-bg);
 }
 
@@ -361,7 +363,7 @@ onBeforeUnmount(() => {
 
 .copy_reveal {
 	position: absolute;
-	left: calc(100% + 6px);
+	left: calc(100% + 2px);
 	top: 50%;
 	transform: translateY(-50%);
 
@@ -392,15 +394,13 @@ onBeforeUnmount(() => {
 	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: 6px;
 
-	max-width: 120px;
 	flex-shrink: 1;
 	min-width: 0;
 	min-height: calc(1lh + 14px);
 
-	/* At the popup's width, 3px sides and the 4px gap hold "ALPHA V6", the default's name, whole. */
-	padding: 6px 3px;
+	padding: 6px 8px;
 	background: transparent;
 	border: 1px solid var(--nulo-border);
 	cursor: pointer;
@@ -426,11 +426,10 @@ onBeforeUnmount(() => {
 	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
-	gap: 5px;
 	flex-shrink: 0;
 
 	min-height: calc(1lh + 14px);
-	padding: 0 9px 0 7px;
+	padding: 0 6px;
 
 	background: transparent;
 	border: 1px solid var(--nulo-border);
@@ -452,24 +451,35 @@ onBeforeUnmount(() => {
 	}
 }
 
-.lock_label {
-	composes: type--label-section from global;
-	color: var(--nulo-secondary);
-}
-
-/* Below the popup's width the row tightens and the Lock chip keeps only its icon, its name still "Lock
- * wallet", so the address stays whole and both chips stay inside the row. */
+/* Below the popup's width the row tightens, so the address stays whole and both chips stay inside it.
+ * At 240px only these sides and gap keep the chip's dot, or its name, inside its border. */
 @media (width < 359px) {
 	.wrapper {
-		gap: 8px;
 		padding: 0 12px 0 16px;
 	}
 
-	.lock_chip {
-		padding: 0 6px;
+	.network_chip {
+		gap: 4px;
+		padding: 6px 3px;
 	}
 
-	.lock_label {
+	/* With the name shown, the account column claims no width of its own: the chips take theirs
+	 * first, and the column gives up its name and address once they no longer fit beside them. */
+	.name_first .account_group {
+		flex: 1 1 0;
+	}
+
+	.name_first .account_col {
+		container: account / inline-size;
+	}
+}
+
+/* Below 117 px of column, 15 of the address's 7.8 px characters, the shortened address and its copy
+ * glyph no longer clear the chip, so the name and the address leave together. Placed after their
+ * own rules, which set a display. */
+@container account (width < 117px) {
+	.name_slot,
+	.account_address {
 		display: none;
 	}
 }

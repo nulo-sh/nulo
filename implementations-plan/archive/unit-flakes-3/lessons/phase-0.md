@@ -1,0 +1,15 @@
+# Phase 0: planning consults and evidence
+
+## Evidence gathered
+
+- CI logs of #1122's three failures (runs 40139222310, 40414519299, 40543798176; attempt 1, job `Unit tests / Vitest`): two 5 s timeouts of `× then accept` with `cancelled → proving` logged, and one 11 ms failure where `proveTx` was called once. The sibling `accept then ×` passed in 12-17 ms each time. The annotated line 1532 is the `test.each` registration frame.
+- Scratch reproducer (not committed): a `cancelled` write parked in the journal lock, the cancel started from `getAccountContract` after `simulating`, release once the `proving` move queues. Red 1/1 at `78f5f9171` (`cancelled → proving` logged, gate entered); green 10/10 with `ctx.checkCancelled()` after the `proving` mark. That patch reds exactly two coordinator order pins.
+- Scratch same-tick run with the cancel's first `getOperation` held until the gate is entered: red without a held slot (`proveTx` called once), green with `tryTakeSlot` held across the answers.
+
+## Consults
+
+- **Recon (Explore, sonnet):** reuse map in [recon.md](../recon.md). It confirmed `awaitedBus`, `parkJournalWrite`, `tryTakeSlot`, the marker-wait pattern and the empty-stub precedent, and the purge order (TokenService first).
+- **Codex round 1** (gpt-6.1-sol, high, read-only): `conditional approve`. Accepted: the third count pin at `execution-coordinator.test.ts:344`; narrow the invariant to "a cancel that wins the lock before `proving` prevents the proof" (the mid-prove cancel at `service.composition.test.ts:364` still proves, by design); "decrypts" qualified (decode accepts legacy plaintext, but the cancel writes a sealed row); I2 labelled a hypothesis; the `retry` fact limited to unit configs; rename the same-tick case and check the slot grant. Rejected: releasing the slot in `finally` (per-test harness and mutex, nothing leaks).
+- **Opus Plan leg** (opus, Plan): `conditional approve`. Accepted: the `:344` pin; make the new F1 case red by assertion, not timeout; the self-delivered abort is an add-on to D1 and a second abort owner, so reworded; cite the `markJournal(simulating); checkCancelled()` precedent; `flushPromises()` after `clearChain`; one red control per fix; the stale "a transfer never contends the slot" header (`service.composition.test.ts:405-408`).
+- **Note on the F2 scratch run:** it ran without the F1 checkpoint. The cancel's first read was held until the gate was entered, so the send's `proving` transition had landed before the cancel: the mid-prove order, not F1. Phase 3 repeats it with the checkpoint applied.
+- **Codex verification 1** (resume): `conditional approve`. The F2 green control was circular: with the slot held, the gate cannot be entered, so a read held until gate entry only resumes at its wait's deadline. Confirmed: the scratch run's slot-held "green" had passed through the 1.5 s fallback. The control now releases the held read once the resumed send queues behind the slot. Lesson: a control's release trigger must be reachable in the variant it controls, or its green proves nothing.

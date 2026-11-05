@@ -11,7 +11,7 @@
 import { describe, expect, inject } from "vitest"
 import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { isFirefox } from "../fixtures/browser"
+import { isFirefox, setViewport } from "../fixtures/browser"
 import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash } from "../fixtures/extension"
 import {
 	fillSendForm,
@@ -43,7 +43,7 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox || aztecConfig === undefined)("st
 		try {
 			await registerProfile(ctx)
 			const page = await openPopup(ctx)
-			await page.setViewport(CAPTURE_VIEWPORT)
+			await setViewport(page, CAPTURE_VIEWPORT)
 			await waitForHash(page, "#/popup/general", 30_000)
 			await switchToLocalNetwork(page)
 			expect(await previewImport(page, accountFile)).toBe(source.accountAddress)

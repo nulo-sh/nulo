@@ -1,0 +1,12 @@
+# Phase 4: the seam's Firefox route (spike, #1111)
+
+## 2026-10-28 · Spike (Firefox 153.0.4 and 158.0, a scratch spec, retry 0)
+
+- Both revisions resize the same way: `_updateNavigableViewport` sets the tab `<browser>`'s `style.width`/`height` (`null` removes both, so the size becomes the parent's), calls `synchronouslyUpdateRemoteBrowserDimensions(true)`, then awaits the content's size. 158 adds `skipPrivilegeCheck` to that wait only; the command itself still calls `_getNavigable` without `supportsPrivilegedScope`.
+- Control on 158: Puppeteer's `bringToFront` and `setViewport` on an extension page throw "does not support browsing contexts in privileged scope"; `bringToFront` on a dApp page passes. On 153 both pass. `loadPopup`'s `setViewport(360×600)` runs on `about:blank`, before the extension URL loads, which is why it does not throw on 158.
+- Classic `POST /window` to the popup tab and to a dApp tab on loopback: no refusal on either revision, `document.hasFocus()` true there and false on the other page.
+- Route A (`chromeScript` + `NavigableManager.getBrowserById`): resizes the popup tab, a window the wallet opened and a dApp tab on both revisions, keeps the size across a reload, leaves the other page alone. It takes focus: a second page focused before the resize reads `hasFocus()` false after it, on both revisions (`chromeScript` switches to the first window handle).
+- Route B (BiDi `browsingContext.getTree` with `moz:scope: "chrome"`, then `script.callFunction` on the first chrome context running the same body): the same results, and the focused second page keeps `hasFocus()` on both revisions. 17-67 ms from the call to `innerWidth`/`innerHeight` reading the size. Needs geckodriver's `--allow-system-access`, which the suite already passes.
+- `null` gives the page the window's size, 1366×682 for a tab and 380×659 for the 380×660 popup window. A page whose last size came from an earlier call (the popup's 360×600, `newPage`'s 800×600) does not go back to that size, which is Puppeteer's own `null` too. `viewportOf` keeps a recorded `null` apart from "never set"; the seam's unit test pins that.
+- 153, popup Home at 240×600: route B and Puppeteer's `setViewport` give the same boxes for all 46 testids. `expectFits` passes for both, and both report a 400 px element planted in `body` (`past` holds it). The first plant went into `main`, shrank to its text in the flex column and was reported by neither: a plant needs `flex: none` and a `min-width`.
+- Gate: route B passes every check on both revisions. Chosen (D7).

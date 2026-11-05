@@ -160,8 +160,8 @@ or passkey.
   force-lock) but the `bearer` is removed from BOTH `chrome.storage.session`
   AND the in-memory `activeSession.session` object (so a subsequent `refresh()`
   cannot re-write it). The removal is best effort: a bearer can be left behind
-  by a failed storage write (logged, not retried) or by a toggle that lands
-  while a restarting worker is restoring the session. A bearer left behind
+  by a failed storage read or write (logged, not retried), or by a worker that
+  stops before the removal completes. A bearer left behind
   stays readable until the session record is rewritten without it or deleted,
   or the browser exits, and `restore()` refuses it while strict mode is on.
 - **Toggle OFF mid-session**: no immediate effect. The next session open
@@ -375,6 +375,23 @@ explicit and per-Network.
   the wire).
 - Trigger storage writes outside the network/endpoint surface.
 
+### Provider keys and the RPC proxy
+
+No wallet build holds a provider key: the default endpoints are dRPC's keyless ones. The paid
+dRPC endpoints, whose key sits in the URL path, are reached only through `nulo-rpc-proxy`
+(`infra/rpc-proxy/`, at `rpc.nulo.sh` and `testnet.rpc.nulo.sh`), which no wallet build
+references yet. The keys are Worker secrets set by the owner in the dashboard, in no file, CI
+job or agent. Each hostname is bound to one secret, so no caller picks the upstream; a web
+page's Origin is refused server-side (only Chrome and Firefox extension origins, or none, pass);
+every call must name an Aztec node method; the body is capped while streaming; nothing is
+retried, logged or followed through a redirect; and the request reaches the provider with a fresh
+`content-type` header only, so the caller's IP, cookies and user agent stay with Cloudflare. The
+bundle holds no dependency, Workers Logs, `workers.dev` and preview URLs are off, and it deploys
+from `main` on a build token narrowed to it. The spend ceiling is each key's daily cap at dRPC: a
+scripted caller from many addresses can spend a key up to it, denying the proxy to everyone until
+the next day. The handler contract, the owner's checklist and the rotation runbook are in
+`infra/rpc-proxy/README.md`.
+
 ## Storage privacy
 
 Encrypted at rest:
@@ -415,7 +432,8 @@ read without a row key in `apps/extension/src/wallet/storage/root-census.test.ts
 which fails on a family that is neither sealed nor reviewed:
 - Profile rows (name, type, the sealed master and its supporting key
   material), config, the storage version and the migration engine's state,
-  cached prices, the signed token list, the Terms-acceptance record.
+  cached prices, the signed token list, the Terms-acceptance record, and the
+  highest token id the device ever reserved.
 - Per-profile records the pre-unlock gates read: the active network's id, the
   default network kinds a profile was offered, the stale-network record and
   the integrity stamp (network and chain ids and the keyed digest), and the
@@ -438,7 +456,9 @@ What sealing does not hide or prevent:
   is a local sequence number; an account, imported-key or authwit-flag key
   shows its profile and chain (so per-chain account counts), an incoming key
   its profile and network (so per-network row counts) and an outbox key its
-  local token id (known limit #1056).
+  local token id (known limit #1056). The token-id high-water mark outlives
+  every profile's deletion and chain purge, so it keeps how many token ids the
+  device ever reserved after their rows are gone.
 - A profile's rows written before this build stay plaintext until that
   profile's next unlock seals them; until then they read as before (known
   limit #1060). The browser may keep the replaced plaintext in its storage
@@ -483,11 +503,13 @@ While a profile session is unlocked (and `showFiatValues` is on — the default,
 toggleable in Settings → Privacy), the wallet fetches USD quotes from
 CoinGecko's keyless public API every ~3 minutes. Privacy posture:
 
-- The request is ONE batched query for the FIXED id table compiled into the
-  build (`PRICE_IDS` in `@nulo/token-list`) — it never varies with the user's
-  holdings, accounts, activity or the token list, so nothing user-specific is
-  inferable from the query string. The signed list only says which token an id
-  prices.
+- The request is ONE batched query for the price feeds the held signed list
+  names, plus Fee Juice's, the one feed compiled into the build
+  (`FEE_JUICE_PRICE_FEED` in `@nulo/token-list`). It varies with the list, so
+  every wallet holding one list sequence sends the same ids, and never with the
+  user's holdings, accounts, activity or network, so nothing user-specific is
+  inferable from the query string. Each id is charset-checked by the list parser
+  and escaped on its own in the URL.
 - No fetch is ever triggered by transaction activity (fee-USD reads are
   cache-or-nothing), so request timing does not correlate with transactions.
 - What CoinGecko (and any on-path observer) does learn: an IP address running
@@ -547,8 +569,19 @@ or publish refuse them. A fresh clone refuses the same way until
 
 **Dependabot** updates the GitHub Actions that the workflows and composite
 actions use: one grouped pull request a week, after a 7-day cooldown
-(`.github/dependabot.yml`). It cannot read Bun's lockfile, so npm
-dependencies are updated by hand, under the age gate above.
+(`.github/dependabot.yml`). npm dependencies are updated by hand, as
+policy. Each update is held to the age gate above and read with
+`bun pm diff` (the review workflow below). The CVE-on-Friday runbook and
+the exact-pinned Aztec line, bumped through the `aztec-update` skill, both
+further down this file, are exceptions to the age gate. GitHub's
+[supported-ecosystems page for
+Dependabot](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories),
+read 2026-10-27, lists version updates for Bun ≥ 1.1.39 (the text-format
+`bun.lock`) as supported and security updates as not supported. Whether
+Dependabot reads this repository's `lockfileVersion: 2` lockfile, or
+resolves under the age gate (a frozen install never re-gates a locked
+version), is untested. Turning on its Bun version updates is the owner's
+decision.
 
 **`bun audit`** runs at every severity in `_lint-and-typecheck.yml`, through
 `scripts/ci-cd/audit-gate.ts`. Each advisory it reports must have an entry in
@@ -573,21 +606,23 @@ rather than a clean result.
   user is acknowledged, in a reviewed PR. A bundled one needs a reason that
   says why the extension cannot reach it; without one it is not acknowledged.
 
-What is acknowledged today (24 advisories; the ack file holds each one):
+What is acknowledged today (34 advisories; the ack file holds each one):
 
 | Package | Advisories | Comes in through | Reopens at |
 |---|---|---|---|
 | `uuid` 9.0.1 | 1 | `@aztec-labs/stdlib`'s Google Cloud Storage client | the next Aztec bump |
-| `@opentelemetry/core`, `@opentelemetry/propagator-jaeger` 1.x, `systeminformation` 5.23.8 | 7 (6 high) | `@aztec-labs/telemetry-client`, which nothing here imports | the next Aztec bump |
-| `undici` 7.29.0, `sharp` 0.35.2 | 15 (5 high) | miniflare, wrangler's local simulator (`apps/landing`, `infra/passkey-rp`, `infra/subscribe`, `infra/token-list`) | the next wrangler bump |
+| `@opentelemetry/core`, `@opentelemetry/propagator-jaeger` 1.x, `systeminformation` 5.23.8 | 10 (7 high) | `@aztec-labs/telemetry-client`, which nothing here imports | the next Aztec bump |
+| `undici` 7.29.0, `sharp` 0.35.2 | 20 (8 high) | miniflare, wrangler's local simulator (`apps/landing`, `infra/passkey-rp`, `infra/rpc-proxy`, `infra/subscribe`, `infra/token-list`) | the next wrangler bump |
 | `elliptic` 6.6.1 | 1 (low) | `vite-plugin-node-polyfills`' crypto-browserify | a fixed release (none exists) |
+| `glob` 10.5.0 and 13.0.6, `minimatch` 9.0.9 and 10.2.6 | 2 | js-beautify (`@vue/test-utils`) and `@aztec-foundation/noir-noir_codegen` | the next `@vue/test-utils` or Aztec bump |
 
 None of them is in either extension zip.
 
-**Bun pinned** to a specific patch version in `package.json#packageManager`
-and in `setup-bun/action.yml`, plus the five `bun-version:` literals in jobs
-that skip that composite (listed in `CLAUDE.md`, Dependency policy). Cache
-keys include the Bun version so a bump invalidates stale state. Local
+**Bun pinned** to a specific patch version in `package.json#packageManager`,
+which the `setup-bun` composite and every inline `oven-sh/setup-bun` step read
+(`bun-version-file`); the composite's install cache is keyed on the version it
+installed, though its last restore key still seeds a new version's cache from
+the previous one. Local
 development requires bun ≥1.4 (`bun run --parallel` scripts), and
 `bun.lock` is `lockfileVersion: 2`, unreadable by Bun ≤1.3.
 
@@ -618,6 +653,66 @@ development requires bun ≥1.4 (`bun run --parallel` scripts), and
 
 **Lockfile is text (`bun.lock`)** — reviewable in PR diffs, no binary
 opacity.
+
+**CVE-on-Friday runbook.** When an advisory drops for a package newer than
+the 7-day gate window:
+1. Identify the patched version from the advisory.
+2. Confirm `bun audit` flags it.
+3. Open a hand PR:
+   - Edit `bunfig.toml`: temporarily add the package name to
+     `minimumReleaseAgeExcludes`.
+   - Run `bun update <pkg>` (or `bun add <pkg>@<version>`).
+   - Run `bun run audit:vue` + `bun run test:e2e`.
+   - Commit the lockfile + bunfig change.
+4. **Remove the exclude in the same PR, once `bun.lock` holds the patched
+   version.** The gate applies whenever `bun install` RESOLVES a version.
+   A frozen install never resolves, so CI and deploys need no exclude:
+   prove it before committing, with the exclude deleted,
+   `bun install --frozen-lockfile --force` must still succeed. An exclude
+   left in place "until the window passes" exempts every FUTURE version of
+   that name for days, which is the exposure the gate exists to prevent.
+
+   **What removing it costs, until the version is 7 days old:** editing the
+   `package.json` of a workspace re-resolves that workspace's dependency
+   tree, and a young version in it is gated again even though it is locked
+   — the install fails with `was published within minimum release age`
+   (verified on Bun 1.4.2 with a one-line edit to
+   `apps/extension/package.json` while a dependency was three days old). Workspaces that do not reach
+   the young version are unaffected, and so is an install that changes
+   nothing. So for that week, a dependency change in an affected workspace
+   either waits, or is resolved with the exclude added **locally and not
+   committed**: the lockfile it writes is the same, and the frozen install
+   proves it. Commit an exclude across PRs only when a later PR of the same
+   series must re-resolve the young version; date it, and remove it there.
+5. PR description must cite the CVE and link the advisory.
+
+**Bun bug oven-sh/bun#25305 — closed on Bun 1.4.** On 1.3.x, `bun update --latest`
+did not apply `minimumReleaseAge` to transitive deps (workaround was
+deleting `bun.lock` first). Verified fixed on 1.4.0 with a
+positive-control mock-registry probe: when a gated update actually
+re-resolves, direct AND transitive candidates are both held to the gate
+(matrix: `implementations-plan/archive/bun-1.4-bump/plan.md#age-gate-probe`). One
+nuance remains by design: update never re-gates versions already in
+`bun.lock` — evicting an already-locked too-young version takes a
+deliberate lockfile regeneration.
+
+**`bun pm scan`** is a plugin system for third-party scanners (Socket,
+Snyk, etc.), not a built-in tool. Not configured today; revisit if/when
+we pick a scanner.
+
+**`@aztec-labs/*` and `@aztec-foundation/*` outside this policy.** Exact-pinned, bumped manually with
+the class-id + address invariant fixtures (`CLAUDE.md`, Account-address
+freeze).
+
+**Bun-version sync.** Every CI setup step reads `package.json#packageManager`,
+so a bump moves CI with it. The files that restate the version (the
+`@types/bun` pins, the Docker runner's pins, the reviewer's instructions in
+`SOURCE-BUILD.md`, the Workers Builds READMEs) fail
+`scripts/ci-cd/bun-version.test.ts` and `docker-ci-like-pins.test.ts` until
+their versions match. The archive hashes are copied by hand from the release's
+`SHASUMS256.txt`: CI checks only that the two x86_64 copies agree. The Workers
+Builds' `BUN_VERSION` dashboard variables stay manual too (the list is in
+`CLAUDE.md`, Dependency policy).
 
 ## GitHub Actions
 
@@ -658,14 +753,14 @@ One path makes an extension release: `release.yml`'s `attach-assets` job, and `n
 - **Tags.** `auto-unstick` is the only workflow that creates a stable tag, through the REST API with its own App token, and only at the merge commit of the Release PR the run was triggered by; release-please runs with `skip-github-release: true`. One tag ruleset (`release tags: no deletion or update`, no bypass actor) stops anyone from deleting or moving a `v*` tag, and a second (`release tags: creation by the release app only`, whose one bypass actor is the release App) stops anyone else from creating a stable or rc tag; nightly tags are outside both. The App's id and private key are secrets of the `release-app` environment, whose deployment branches are `main` and `dev` and which has no reviewer, so `auto-unstick` and the sync PR never wait. GitHub opens the environment only to runs from those branches, so only workflow code that has reached `main` or `dev` can mint the App token; `release-integrity.test.ts` keeps the environment on exactly the jobs that mint it, a repository check rather than a GitHub rule. An rc tag, or a stable tag pushed by hand, goes through `scripts/release/tag-by-hand-run.ts`, which adds the owner as a bypass actor for that one push and puts the App back alone after it, whether or not the push succeeded; only a killed helper or an unreachable GitHub leaves that close to the owner by hand. Neither stops an admin, who can edit or disable them, or a stolen owner credential.
 - **Store copies are compared with the release.** `verify-store-copies.yml` (weekly, and on dispatch) downloads what the Chrome Web Store and Firefox Add-ons serve to the public, takes the version from its `manifest.json`, verifies that version's release zip and `SHASUMS256.txt` through the publish path's own digest and attestation checks, and compares the two file for file. Each store may add only its own exact entries (Chrome's `_metadata/verified_contents.json` and `update_url`, AMO's `META-INF/` signature); anything else, a missing copy, a served version with no release, or a failed check, reds the run. `v0.30.2` predates attestations and is checked by digest and `SHASUMS256.txt` only. It samples what a store serves once a week; it cannot see what one served to a single user.
 
-- **Immutable releases** are planned but not yet applied. Once on, a published release's assets and tag can no longer change, and each release gets a GitHub release attestation, checked with `gh release verify vX.Y.Z --repo nulo-sh/nulo`; no release carries one yet. Titles and notes stay editable, which is why the check is the attestation and not the notes.
-- **The jobs that tag or publish** install no dependency, check out the workflow's own revision without persisted credentials, set `GH_TOKEN` per step and run no third-party action but `oven-sh/setup-bun`, which gets no token; git-cliff, whose action downloads its binary at run time, runs in read-only notes jobs. Every App token names its permission set, so a permission later granted to the App reaches no token, and is minted only in a job that declares `release-app`. `scripts/ci-cd/release-integrity.test.ts` pins all of it. Accepted residuals: a compromised `oven-sh/setup-bun`; a workflow change merged into `dev`, which needs no approving review, or into `main` runs with the App's key on its next run there; `GITHUB_TOKEN` keeps `contents: write` in the two publish jobs; and a release published before this path stays mutable, and a dispatch with such a tag as `--ref` runs that tag's old workflow, which replaces assets. Only accounts with write access can dispatch, and the runbook forbids it.
+- **Immutable releases** are on since 2026-10-29 (`gh api repos/nulo-sh/nulo/immutable-releases` reads `{"enabled":true,"enforced_by_owner":false}`). A published release's assets and tag can no longer change, and each release published from then on gets a GitHub release attestation, checked with `gh release verify vX.Y.Z --repo nulo-sh/nulo`; releases up to v1.1.0 carry none, so the check applies from the next stable release. Titles and notes stay editable, which is why the check is the attestation and not the notes.
+- **The jobs that tag or publish** install no dependency, check out the workflow's own revision without persisted credentials, set `GH_TOKEN` per step and run no third-party action but `oven-sh/setup-bun`, which gets no token; git-cliff, whose action downloads its binary at run time, runs in read-only notes jobs. Every job that holds a write scope, an App token or a stored secret, and every build of release bytes, sets up Bun with the shared Actions cache off (`no-cache: true` inline, `cache: "false"` on the composite), so setup-bun neither restores nor saves its binary there; `behavior-gating.test.ts` pins the composite's mapping and the builds' input. Every App token names its permission set, so a permission later granted to the App reaches no token, and is minted only in a job that declares `release-app`. `scripts/ci-cd/release-integrity.test.ts` pins all of it. Accepted residuals: a compromised `oven-sh/setup-bun`; a workflow change merged into `dev`, which needs no approving review, or into `main` runs with the App's key on its next run there; `GITHUB_TOKEN` keeps `contents: write` in the two publish jobs; and a release published before this path stays mutable, and a dispatch with such a tag as `--ref` runs that tag's old workflow, which replaces assets. Only accounts with write access can dispatch, and the runbook forbids it.
 
 ## Token list signing
 
 The wallet's default tokens come from `https://tokens.nulo.sh/v1/list.json`, an Ed25519-signed list (format: `infra/token-list/FORMAT.md`). A wallet accepts a list only when its signature verifies against a key pinned in `packages/token-list/src/keys.ts`, its sequence is above the last list it accepted, and it is at or above the floor its release compiles; DNS, Cloudflare, the deploy and the host are not trusted.
 
-- **The signer is the asset.** A forged list can seed a real standard Token deployed with the attacker's supply, named "USDC" and priced as `usd-coin`. What bounds it: an entry must run a Token class the wallet bundles; its price id must be in the compiled table, under that id's sanity band; at most 16 entries per chain; the wallet names an entry as known only after the seeder verified its class, symbol and decimals on chain; a list carries no endpoint, chain, fee payer or code. Delisting stops seeding but keeps rows a user already has, by owner decision, so rows a sequence of forged lists seeded stay until each user deletes them. A forged list can also flag a real token as a scam. The approver's digest covers the tokens and the flags, so `sign` refuses a flag set the approver was not shown.
+- **The signer is the asset.** A forged list can seed a real standard Token deployed with the attacker's supply, named "USDC" and priced as `usd-coin`. What bounds it: an entry must run a Token class the wallet bundles; it is priced only through the feed the list names, and every quote must sit inside that feed's band, which the format bounds to $0.0001 to $1,000,000 a unit and at most 1000 times wide, so a forged "WETH" can read at up to $1,000,000 a unit, or a cheap feed can make Send's dollar amount buy more tokens and the incoming dust filter hide a real arrival (the token amount stays on screen beside the dollar figure); no list can re-band Fee Juice, whose feed is compiled; at most 16 entries per chain; the wallet names an entry as known only after the seeder verified its class, symbol and decimals on chain; a list carries no endpoint, chain, fee payer or code. Delisting stops seeding but keeps rows a user already has, by owner decision, so rows a sequence of forged lists seeded stay until each user deletes them. A forged list can also flag a real token as a scam. The approver's digest covers the tokens, the flags and the price feeds, so `sign` refuses a flag or feed set the approver was not shown.
 - **Custody.** Both keys are 32-byte seeds generated by 1Password in `Keyed-Runs/Nulo-TokenList` and installed by a keyed run (`infra/token-list/keys.env.example`): the CI seed becomes the `token-list` environment secret over stdin, and only public keys are printed. `nulo-recovery-1` never leaves 1Password. No agent and no file holds either. Keeping the CI key in an environment secret is an owner decision (2026-10-13) that bends the keyed-run rule.
 - **Signer code.** The `token-list` environment (owner reviewer, branch `dev`) approves a run, not its code, and `dev` needs no approving review, so a merged change to the workflow or the signer runs on the next approval. `publish-token-list.yml`'s `prepare` job shows, before that approval, a summary of the signing-relevant changes since the parent of the commit that first carried the list before the served one (a squash-merged publish's parent is the trunk at merge time, not the commit its run signed; a commit that restores or re-touches envelope bytes moves nothing; a first publish shows every such commit, and a shallow clone is refused). The summary is produced by the candidate revision and is informational only; GitHub's compare view of the range is the authoritative review. The tree check holds the envelope to the signer's exact key order; `sign` installs nothing, runs `bun --no-install` over a signer whose import closure `packages/token-list/src/import-closure.test.ts` pins, and holds the secret in one step; `scripts/ci-cd/release-integrity.test.ts` counts any job that reads a custom secret as credentialed and pins it, and `behavior-gating.test.ts` pins the command. The trust root is the owner's GitHub account and that approval, as for the store-publish environments.
 - **Rotation.** Delete the `TOKEN_LIST_SIGNING_KEY` secret; sign the current source with the recovery key as a keyed run (`infra/token-list/recovery.env.example`) and publish it; install a new CI key; release the wallet with the leaked key removed from `keys.ts`. A stored list signed by a key no longer pinned is discarded at the next start, so a forged maximum sequence cannot freeze updates after that release. **Until the release, the leaked key verifies.**
@@ -824,62 +919,3 @@ back, and the third-party notices build refuses AGPL outright). The
 build/test tool and never distributes: check its own release for the
 licence that applies to it before shipping it anywhere. This is not legal
 advice.
-
-**CVE-on-Friday runbook.** When an advisory drops for a package newer than
-the 7-day gate window:
-1. Identify the patched version from the advisory.
-2. Confirm `bun audit` flags it.
-3. Open a hand PR:
-   - Edit `bunfig.toml`: temporarily add the package name to
-     `minimumReleaseAgeExcludes`.
-   - Run `bun update <pkg>` (or `bun add <pkg>@<version>`).
-   - Run `bun run audit:vue` + `bun run test:e2e`.
-   - Commit the lockfile + bunfig change.
-4. **Remove the exclude in the same PR, once `bun.lock` holds the patched
-   version.** The gate applies whenever `bun install` RESOLVES a version.
-   A frozen install never resolves, so CI and deploys need no exclude:
-   prove it before committing, with the exclude deleted,
-   `bun install --frozen-lockfile --force` must still succeed. An exclude
-   left in place "until the window passes" exempts every FUTURE version of
-   that name for days, which is the exposure the gate exists to prevent.
-
-   **What removing it costs, until the version is 7 days old:** editing the
-   `package.json` of a workspace re-resolves that workspace's dependency
-   tree, and a young version in it is gated again even though it is locked
-   — the install fails with `was published within minimum release age`
-   (verified on Bun 1.4.2 with a one-line edit to
-   `apps/extension/package.json` while a dependency was three days old). Workspaces that do not reach
-   the young version are unaffected, and so is an install that changes
-   nothing. So for that week, a dependency change in an affected workspace
-   either waits, or is resolved with the exclude added **locally and not
-   committed**: the lockfile it writes is the same, and the frozen install
-   proves it. Commit an exclude across PRs only when a later PR of the same
-   series must re-resolve the young version; date it, and remove it there.
-5. PR description must cite the CVE and link the advisory.
-
-**Bun bug oven-sh/bun#25305 — closed on Bun 1.4.** On 1.3.x, `bun update --latest`
-did not apply `minimumReleaseAge` to transitive deps (workaround was
-deleting `bun.lock` first). Verified fixed on 1.4.0 with a
-positive-control mock-registry probe: when a gated update actually
-re-resolves, direct AND transitive candidates are both held to the gate
-(matrix: `implementations-plan/archive/bun-1.4-bump/plan.md#age-gate-probe`). One
-nuance remains by design: update never re-gates versions already in
-`bun.lock` — evicting an already-locked too-young version takes a
-deliberate lockfile regeneration.
-
-**`bun pm scan`** is a plugin system for third-party scanners (Socket,
-Snyk, etc.), not a built-in tool. Not configured today; revisit if/when
-we pick a scanner.
-
-**`@aztec-labs/*` and `@aztec-foundation/*` outside this policy.** Exact-pinned, bumped manually with
-the class-id + address invariant fixtures (`CLAUDE.md`, Account-address
-freeze).
-
-**Bun-version sync trap.** Bumping `package.json#packageManager` (the
-Bun version) does NOT touch the versions the workflows pin themselves:
-`.github/actions/setup-bun/action.yml` and the `bun-version:` literals
-in a few jobs. CI still passes, because those jobs run their own pinned
-Bun, NOT the new `packageManager` version. The discrepancy is silent:
-there's no CI step that verifies the pinned values match. Move every pin
-site together on a Bun bump (the list is in `CLAUDE.md`, Dependency
-policy) until a consistency-check script lands as a CI step.

@@ -8,7 +8,8 @@ import { TokenServiceClient } from "@/wallet/services/token/client"
 import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 
 /** Utils */
-import { isValidHex } from "@/utils/string"
+import { isFieldAddress } from "@nulo/wallet-bridge"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -19,9 +20,9 @@ const { openToast } = useToast()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
-const cacheStore = useCacheStore()
+const popupStore = usePopupStore()
 const { order, depth } = usePopupStack("new_token")
 
 const props = defineProps({
@@ -41,9 +42,9 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v?.length) return null
-			if (!isValidHex(v)) return "Invalid address"
+			if (!isFieldAddress(v)) return "Invalid address"
 			// Hex is case-insensitive: another spelling of a listed contract is that token.
-			if (tokens.value.some((t) => t.contract.toLowerCase() === v.toLowerCase())) return "Already exist"
+			if (tokens.value.some((t) => t.contract.toLowerCase() === v.toLowerCase())) return ALREADY_EXISTS
 			return null
 		},
 	},
@@ -51,7 +52,7 @@ const form = useFormState({
 
 const contractTerm = form.fields.contract.value
 
-const isAlreadyExist = computed(() => form.fields.contract.error.value === "Already exist")
+const isAlreadyExist = computed(() => form.fields.contract.error.value === ALREADY_EXISTS)
 const isInvalidAddress = computed(() => form.fields.contract.error.value === "Invalid address")
 const isAvailableToCreateToken = computed(() => {
 	if (!contractTerm.value?.length) return false
@@ -80,6 +81,16 @@ const BALANCE_WAIT_TIMEOUT_MS = 30_000
 
 // Holds the active wait so popup-close can abort it.
 let activeBalanceWait = null
+
+/** The opener's `{ address, onAdded }`, kept on show: closing a popup deletes its payload. */
+let request
+
+const closeAdded = (token, label, submittingEpoch) => {
+	const onAdded = request?.onAdded
+	openToast({ kind: "success", label })
+	emit("onClose")
+	if (appStore.scopeEpoch === submittingEpoch) onAdded?.(token)
+}
 
 /**
  * Subscribe to the two service streams BEFORE addToken is called, so we
@@ -177,6 +188,7 @@ const handleAddToken = async () => {
 	const submittingNetworkId = appStore.network.id
 	const submittingChainId = appStore.network.chainId
 	const submittingAccount = appStore.account.address
+	const submittingEpoch = appStore.scopeEpoch
 
 	let balanceWait = null
 
@@ -221,8 +233,7 @@ const handleAddToken = async () => {
 		const existing = await tokenBalanceService.getTokenBalances(newToken.id, submittingAccount)
 		if (existing.length > 0 && (existing[0].updatedAt ?? 0) > 0) {
 			balanceWait.abort()
-			openToast({ kind: "success", label: "Token added" })
-			emit("onClose")
+			closeAdded(newToken, "Token added", submittingEpoch)
 			return
 		}
 
@@ -238,16 +249,13 @@ const handleAddToken = async () => {
 
 		switch (outcome) {
 			case "success":
-				openToast({ kind: "success", label: "Token added" })
-				emit("onClose")
+				closeAdded(newToken, "Token added", submittingEpoch)
 				break
 			case "timeout":
-				openToast({ kind: "success", label: "Token added. Balance will appear in a moment" })
-				emit("onClose")
+				closeAdded(newToken, "Token added. Balance will appear in a moment", submittingEpoch)
 				break
 			case "error":
-				openToast({ kind: "success", label: "Token added. Couldn't load balance. We'll retry automatically." })
-				emit("onClose")
+				closeAdded(newToken, "Token added. Couldn't load balance. We'll retry automatically.", submittingEpoch)
 				break
 			case "aborted":
 				// Popup was dismissed by the user mid-wait. Bg keeps refreshing.
@@ -266,6 +274,11 @@ const handleAddToken = async () => {
 	}
 }
 
+// A refusal judged the address it was given, so a new address ends it.
+watch(contractTerm, () => {
+	error.value = null
+})
+
 usePopupEntity(
 	() => props.show,
 	{
@@ -274,13 +287,12 @@ usePopupEntity(
 			// Cleared again on open: a disconnect rejection can repopulate the error after hide reset it.
 			error.value = null
 			phase.value = "idle"
+			request = popupStore.getPayload("new_token")
 			tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
-			if (cacheStore.preselectedTokenAddressToAdd) {
-				contractTerm.value = cacheStore.preselectedTokenAddressToAdd
-				cacheStore.preselectedTokenAddressToAdd = ""
-			}
+			if (request?.address) contractTerm.value = request.address
 		},
 		onHide: () => {
+			request = undefined
 			activeBalanceWait?.abort()
 			activeBalanceWait = null
 			form.reset()
@@ -320,13 +332,13 @@ usePopupEntity(
 			:disabled="isBusy"
 		>
 			<template #suffix>
-				<Icon v-if="isAvailableToCreateToken" name="square-check" size="14" color="green" />
+				<Icon v-if="isAvailableToCreateToken && !error" name="square-check" size="14" color="green" />
 			</template>
 			<template #right>
 				<Transition name="fade">
 					<Flex v-if="isAlreadyExist" align="center" gap="4" role="alert" data-testid="error-text">
 						<Icon name="warning" size="12" color="orange" />
-						<Text variant="body" color="primary"> Already exist </Text>
+						<Text variant="body" color="primary"> {{ ALREADY_EXISTS }} </Text>
 					</Flex>
 					<Flex v-else-if="isInvalidAddress" align="center" gap="4" role="alert" data-testid="error-text">
 						<Icon name="square-cross" size="12" color="red" />

@@ -25,7 +25,7 @@ import type { Page } from "puppeteer"
 import { afterEach, expect } from "vitest"
 import { queuedFeeCap } from "@/wallet/services/execution/queued-fee-cap"
 import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
-import { stopBackground } from "../fixtures/browser"
+import { bringToFront, stopBackground } from "../fixtures/browser"
 import { type Burst, aztecConfig, burstTest as test, expectLedger, raw, reopen, settle } from "../fixtures/burst-account"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import {
@@ -36,6 +36,7 @@ import {
 	grantCapBundle,
 	openPopup,
 	registerProfile,
+	replaceInputValue,
 	waitForHash,
 } from "../fixtures/extension"
 import { pinnedFeeText, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
@@ -458,7 +459,7 @@ test.skipIf(!hasConfig)(
 			await startSend(burst.page, b)
 			expect(await waitForEstimate(burst.page)).toBe("ready")
 
-			await playground.bringToFront()
+			await bringToFront(playground)
 			await setPgInput(playground, "tokenAddress", config.tokenAddress)
 			await setPgInput(playground, "recipient", config.minterAddress)
 			await setPgInput(playground, "amount", "1")
@@ -480,6 +481,56 @@ test.skipIf(!hasConfig)(
 				await releaseProofGate(burst.page)
 			}
 			await assertPgOk(playground, await waitForPgResult(playground, "sendTx", seq, 300_000), "dApp send beside a queued transfer")
+			const row = await waitForTransferStage(burst.page, raw(b.amount), ["succeeded", "failed"], 300_000)
+			expect([row.stage, row.error]).toEqual(["succeeded", undefined])
+			await waitForTxsMined(burst.page, [row.txHash as string])
+			await settle(burst, [b])
+			burst.ledger.TST.publicRaw -= 1n
+			await expectLedger(burst, ["TST"])
+		} finally {
+			await playground.close()
+		}
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"a Send-page estimate asked while a PrivateFPC dApp send proves reads queued, then lands, and both succeed",
+	{ timeout: 600_000, retry: 0 },
+	async ({ burst }) => {
+		const config = aztecConfig as AztecTestConfig
+		await reopen(burst)
+		const playground = await matrixPlayground(burst)
+		try {
+			// Both pay through the PrivateFPC, as #1336's swap and transfer did: B waits for the slot while
+			// the dApp send proves, then for its block, since the two spend the same fee notes.
+			const b: BurstSend = { token: "TST", from: "public", to: "public", amount: "34", destination: to(), fee: "private" }
+			await waitForEmptyMempool(config.nodeUrl)
+			await startSend(burst.page, { ...b, amount: "35" })
+			expect(await waitForEstimate(burst.page)).toBe("ready")
+
+			await bringToFront(playground)
+			await setPgInput(playground, "tokenAddress", config.tokenAddress)
+			await setPgInput(playground, "recipient", config.minterAddress)
+			await setPgInput(playground, "amount", "1")
+			const seq = await snapshotResultSeq(playground)
+			const approvalP = waitForPopup(burst.ctx, "execute", { timeout: 60_000 })
+			await clickByTestId(playground, "pg-btn-sendTx-default")
+			const approval = await approvalP
+			await waitForExecuteContent(approval, 60_000)
+			await holdProofGate(burst.page)
+			try {
+				await approveExecute(approval, { feeMethod: "private", approvableTimeoutMs: 120_000 })
+				await waitForDappExecuteStagesPresent(burst.page, ["proving"], { timeout: 60_000 })
+				await bringToFront(burst.page)
+				await replaceInputValue(burst.page, '[data-testid="send-amount-input"]', b.amount)
+				// The proof gate releases itself after 20 s.
+				await expectEstimateQueued(burst.page, 3_000)
+			} finally {
+				await releaseProofGate(burst.page)
+			}
+			expect(await waitForEstimate(burst.page, 240_000), "B's estimate lands once the dApp send is mined").toBe("ready")
+			await assertPgOk(playground, await waitForPgResult(playground, "sendTx", seq, 300_000), "dApp send ahead of a queued estimate")
+			await confirmSend(burst.page)
 			const row = await waitForTransferStage(burst.page, raw(b.amount), ["succeeded", "failed"], 300_000)
 			expect([row.stage, row.error]).toEqual(["succeeded", undefined])
 			await waitForTxsMined(burst.page, [row.txHash as string])
@@ -525,7 +576,7 @@ test.skipIf(!hasConfig)(
 			const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "33", destination: to(), fee: "sponsored" }
 			const aHash = await fireIntoHeldWindow(burst, a)
 
-			await playground.bringToFront()
+			await bringToFront(playground)
 			await setPgInput(playground, "tokenAddress", config.tokenAddress)
 			await setPgInput(playground, "recipient", config.minterAddress)
 			await setPgInput(playground, "amount", "1")
@@ -638,8 +689,8 @@ type Asking = TransferRow & { reask: { fee: string; cap: string } }
 const BEFORE_PROOF = new Set(["pending", "queued", "simulating"])
 
 /** Waits for a re-ask held to `cap` (any, before the first accept) or, after an accept, for proof
- *  progress; fails on a terminal failure, or on proof progress before any accept. */
-async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string): Promise<Asking | "sent"> {
+ *  progress; fails on a terminal failure, or on proof progress before any accept, ending with `context`. */
+async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string, context = ""): Promise<Asking | "sent"> {
 	const asking = (row: TransferRow | undefined) =>
 		row?.stage === "queued" && row.reask !== undefined && (cap === undefined || row.reask.cap === cap)
 	const sent = (row: TransferRow | undefined) => row?.stage !== undefined && !BEFORE_PROOF.has(row.stage)
@@ -647,7 +698,7 @@ async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string): Pr
 		async () => {
 			const read = (await readTransferRows(page)).find((r) => r.amount === amountRaw)
 			if (!asking(read) && sent(read) && (cap === undefined || !["proving", "submitting", "succeeded"].includes(read?.stage ?? ""))) {
-				throw new Error(`transfer ${amountRaw} left the queue without an accept: ${JSON.stringify(read)}`)
+				throw new Error(`transfer ${amountRaw} left the queue without an accept: ${JSON.stringify(read)}${context}`)
 			}
 			return read
 		},
@@ -710,7 +761,24 @@ test.skipIf(!hasConfig)(
 		await waitForReviewReady(page)
 		expect(await page.$eval('[data-testid="send-review-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
 		await shotSend(page, "4-review-queued-cap", "send-review-fee")
+		// Send replaces the queued cap on every answer until the submit, so the line is kept at the press.
+		await page.evaluate(() => {
+			const keep = () => {
+				const line = document.querySelector('[data-testid="send-review-fee-cap"]')?.textContent?.replace(/\s+/g, " ").trim()
+				;(window as Window & { e2eReviewedCap?: string }).e2eReviewedCap = line
+			}
+			document
+				.querySelector('[data-testid="send-review-submit"]')
+				?.addEventListener("pointerdown", keep, { capture: true, once: true })
+		})
 		await pointerClick(page, "send-review-submit")
+		// Bounded, so a stalled page still meets the 30 s gate below.
+		const reviewed = await Promise.race([
+			page.evaluate(() => (window as Window & { e2eReviewedCap?: string }).e2eReviewedCap).catch(() => "<unreadable>"),
+			new Promise<string>((done) => setTimeout(() => done("<unanswered in 2 s>"), 2_000)),
+		])
+		const seededCap = queuedFeeCap(basis)
+		const context = `; B's review read ${JSON.stringify(reviewed)} at the press, and the seeded basis caps at ${seededCap === undefined ? "nothing" : pinnedFeeText(seededCap)}`
 		await waitForSendGone(page, 30_000)
 
 		await expectStageHeld(page, raw(b.amount), "queued", HELD_MS)
@@ -722,7 +790,7 @@ test.skipIf(!hasConfig)(
 		let accepted: string | undefined
 		const caps: string[] = []
 		for (let asks = 1; ; asks++) {
-			const asking = await waitForAskOrSent(burst.page, raw(b.amount), accepted)
+			const asking = await waitForAskOrSent(burst.page, raw(b.amount), accepted, context)
 			if (asking === "sent") break
 			if (asks > MAX_ASKS) throw new Error(`asked again ${asks} times: ${JSON.stringify(asking)}`)
 			caps.push(asking.reask.cap)

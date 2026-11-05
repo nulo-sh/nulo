@@ -10,7 +10,7 @@
  * whole preflight — later attempts only get the remainder.
  */
 
-import { sleep } from "@nulo/wallet-core/utils"
+import { raceTimeout, sleep } from "@nulo/wallet-core/utils"
 import { NodeStatus } from "@/wallet/services/network/spec"
 
 export type PreflightVerdict = "go" | "unreachable" | "wrong-network"
@@ -37,16 +37,14 @@ async function probeOneNetwork(networkId: string, opts: Pick<PreflightOptions, "
 		if (remaining < MIN_ATTEMPT_MS) return "unreachable"
 		const budget = Math.min(PREFLIGHT_ATTEMPT_TIMEOUT_MS, remaining)
 
-		let timer: ReturnType<typeof setTimeout> | undefined
-		const outcome = await Promise.race([
+		const outcome = await raceTimeout(
 			opts
 				.probe(networkId, budget)
 				.then((status) => ({ kind: "status" as const, status }))
 				.catch(() => ({ kind: "failed" as const })),
-			new Promise<{ kind: "timeout" }>((resolve) => {
-				timer = setTimeout(() => resolve({ kind: "timeout" }), budget)
-			}),
-		]).finally(() => clearTimeout(timer))
+			budget,
+			() => ({ kind: "timeout" as const }),
+		)
 
 		if (outcome.kind === "status") {
 			// Only a node that answers WITH THE RIGHT CHAIN is a go. InvalidChain

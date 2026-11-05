@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import { TxHash, type TxReceipt } from "@aztec-labs/stdlib/tx"
 import { assertRestoreEpoch, captureRestoreEpochs, requireRestoreProfileId } from "@/wallet/services/restore-fence"
 import { restoreRows } from "@/wallet/services/restore-rows"
@@ -157,7 +158,12 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		for (const tx of await this.txs.getValues()) {
 			if (tx.profileId === undefined || this.profileService.rowKeys(tx.profileId)) this.arm(tx)
 		}
-		this.profileService.onRowKeysReady.add((profileId) => void this.onRowKeysReady(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing or arming the profile's transactions failed; the next worker retries",
+			(profileId) => this.onRowKeysReady(profileId),
+		)
 
 		this.runWorker()
 	}
@@ -180,16 +186,12 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	private async onRowKeysReady(profileId: string): Promise<void> {
 		const epoch = this.deletionState.capture(profileId)
 		const live = () => !this.deletionState.isReserved(profileId) && this.deletionState.isCurrent(profileId, epoch)
-		try {
-			await this.txs.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-			await this.adoptOwnerless(profileId, live)
-			await this.lock.withLock(async () => {
-				if (!live()) return
-				for (const tx of await this.txs.getValues()) if (tx.profileId === profileId) this.arm(tx)
-			})
-		} catch (error) {
-			this.logWarn("sealing or arming the profile's transactions failed; the next worker retries", { error })
-		}
+		await this.txs.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		await this.adoptOwnerless(profileId, live)
+		await this.lock.withLock(async () => {
+			if (!live()) return
+			for (const tx of await this.txs.getValues()) if (tx.profileId === profileId) this.arm(tx)
+		})
 	}
 
 	/** An ownerless row becomes the profile's when the profile holds its account on its chain and no
@@ -620,8 +622,9 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		await this.lock.withLock(async () => {
 			const key = watchKey(tx)
 			if (this.pending.get(key) !== tx && this.droppedWatch.get(key) !== tx) return
-			applyReceipt(tx, receipt)
-			await this.commit(tx)
+			const next = { ...tx }
+			applyReceipt(next, receipt)
+			await this.commit(next)
 			this.logDebug(`Tx ${tx.hash.slice(0, 8)} ${receipt.status}`)
 		})
 	}
@@ -640,17 +643,19 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		if (proof.kind === "unsettled" || proof.kind === "unknown") return
 		await this.lock.withLock(async () => {
 			if (!watched()) return
-			if (proof.kind === "final") tx.status = TxStatus.Finalized
-			else if (proof.kind === "moved") applyReceipt(tx, proof.receipt)
-			else clearInclusion(tx)
-			await this.commit(tx)
+			const next = { ...tx }
+			if (proof.kind === "final") next.status = TxStatus.Finalized
+			else if (proof.kind === "moved") applyReceipt(next, proof.receipt)
+			else clearInclusion(next)
+			await this.commit(next)
 			this.logDebug("Tx finality settled", { outcome: proof.kind })
 		})
 	}
 
 	/** Persists a row the worker moved and files it under the one watch its new status needs:
 	 *  Pending every tick, Dropped on the resurrection cadence, mined below Finalized until its
-	 *  block is final. Under the tx lock. */
+	 *  block is final. Under the tx lock. `tx` is a copy of the watched row: a rejected write leaves
+	 *  the watch on the unchanged row, so the next read sees the change again. */
 	private async commit(tx: Tx): Promise<void> {
 		const now = Date.now()
 		tx.updatedAt = now
@@ -735,9 +740,10 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 
 /** Is this row OURS to export? The fetch is by address, which two same-seed profiles
  *  share, so a row naming another profile is not ours. A row marked unattributable is
- *  nobody's — restore would hand it to whichever profile imported the backup. */
+ *  nobody's — restore would hand it to whichever profile imported the backup. A Pending
+ *  row is one restore refuses, so the backup would fail its own import. */
 function exportableTx(tx: Tx, profileId: string, chainId: number): boolean {
-	if (tx.ambiguous) return false
+	if (tx.ambiguous || tx.status === TxStatus.Pending) return false
 	if (tx.profileId !== undefined && tx.profileId !== profileId) return false
 	return tx.chainId === chainId
 }

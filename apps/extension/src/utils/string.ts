@@ -16,6 +16,13 @@ export const trimAddress = (address: string, start = 8, end = 4, separator = "..
 	return `${address.substring(0, start)}${separator}${address.substring(address.length - end)}`
 }
 
+/** A whole address split where the header's short form, `trimAddress(address, 6, 4)`, cuts it, so a
+ *  screen showing all of it can mark the two ends a person compares. Too short to cut: all head. */
+export function addressEnds(address: string): { head: string; middle: string; tail: string } {
+	if (address.length <= 10) return { head: address, middle: "", tail: "" }
+	return { head: address.slice(0, 6), middle: address.slice(6, -4), tail: address.slice(-4) }
+}
+
 /**
  * Initials for an entity name: first letters of the first two words, or the
  * first 1–2 characters of a single word, uppercased. Empty/whitespace → "".
@@ -26,11 +33,6 @@ export function getInitials(name: string): string {
 	if (words.length === 0) return ""
 	if (words.length === 1) return words[0].substring(0, Math.min(words[0].length, 2)).toUpperCase()
 	return (words[0][0] + words[1][0]).toUpperCase()
-}
-
-export function isValidHex(hex: string, length = 64): boolean {
-	const regex = new RegExp(`^0x[a-fA-F0-9]{${length}}$`)
-	return regex.test(hex)
 }
 
 export function sanitizeString(s: string, length = 0): string {
@@ -49,6 +51,14 @@ export function sanitizeString(s: string, length = 0): string {
 export function sentenceName(name: string, fallback: string): string {
 	return sanitizeString(name, 32).trim() || fallback
 }
+
+const BIDI_AND_ZERO_WIDTH = /[\p{Bidi_Control}\u00AD\u200B\u2060\uFEFF]/gu
+
+/** Text a person types or pastes, without the bidi controls (they reorder what the field shows) or
+ *  the zero-width space, word joiner, BOM and soft hyphen (they draw nothing on one line), so none of
+ *  these hides in what a field keeps. Joiners, variation selectors and tags stay: emoji sequences and joined
+ *  scripts are drawn from them. A dApp's strings take `stripWireControl` instead. */
+export const stripBidiAndZeroWidth = (text: string): string => text.replace(BIDI_AND_ZERO_WIDTH, "")
 
 /** Absent, or only whitespace once the wire sanitizer's strip has run. */
 export const isBlank = (s: string | null | undefined): boolean => stripWireControl(s ?? "").trim() === ""

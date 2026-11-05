@@ -29,6 +29,13 @@ describe("new-profile/NewProfileMethodTabs (roving tablist)", () => {
 		expect(pwTab(w).attributes("tabindex")).toBe("-1")
 	})
 
+	test("disabled, both tabs carry the attribute and an arrow switches nothing", async () => {
+		const w = mount(NewProfileMethodTabs, { props: { type: "password", disabled: true } })
+		for (const t of [pwTab(w), pkTab(w)]) expect(t.attributes()).toHaveProperty("disabled")
+		await tablist(w).trigger("keydown", { key: "ArrowRight" })
+		expect(w.emitted("update:type")).toBeUndefined()
+	})
+
 	test("clicking a tab emits update:type", async () => {
 		const w = mountTabs("password")
 		await pkTab(w).trigger("click")

@@ -8,6 +8,7 @@ import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { changePassword, lockWallet, navigateByHash, selectedAccount, waitForToast } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
+import { activeTestId, coveredAt } from "./helpers/pointer-probes"
 
 const ORIGINAL_PASSWORD = TEST_PASSWORD
 const NEW_PASSWORD = "NewTestPassword456!"
@@ -54,7 +55,7 @@ test("change password succeeds and unlocks with new password", { timeout: 120_00
 	await waitForHash(page, "#/popup/general", 15_000)
 
 	await changePassword(page, ORIGINAL_PASSWORD, NEW_PASSWORD)
-	await waitForToast(page, "Profile password changed")
+	await waitForToast(page, "Password changed", 5_000, { kind: "success" })
 
 	// router.back() returns to whatever was previous; we just need to end up
 	// somewhere outside the change-password page. With longer timeout because
@@ -133,6 +134,46 @@ test("the unlock method changes to a passkey and back to a password", { timeout:
 		await auth.cleanup()
 		await page.close()
 	}
+})
+
+// The more-below button needs a real layout: the 360 x 600 fold, the hit test over the scroll
+// area, the press that keeps focus where it was. jsdom lays nothing out.
+test("Delete profile's more-below press brings the name field into view and keeps focus", async ({ registeredExtension }) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	await navigateByHash(page, "#/popup/settings/security/reset")
+	await page.waitForSelector('[data-testid="scroll-more"]', { visible: true, timeout: 5_000 })
+	const fieldInView = () => {
+		const field = document.querySelector('[data-testid="reset-confirm-input"]')?.getBoundingClientRect()
+		const scroller = document.querySelector<HTMLElement>('[data-testid="collapsing-hero-scroller"]')
+		const bar = document.querySelector('[data-testid="collapsing-hero-header"]')?.getBoundingClientRect().bottom
+		if (!field || !scroller || bar === undefined) return false
+		return field.top >= bar && field.bottom <= scroller.getBoundingClientRect().top + scroller.clientHeight
+	}
+	expect(await page.evaluate(fieldInView)).toBe(false)
+	expect(await coveredAt(page, "scroll-more")).toBeNull()
+
+	await page.$eval('[data-testid="reset-checkbox-permanent"]', (el) => (el as HTMLElement).focus())
+	expect(await activeTestId(page)).toBe("reset-checkbox-permanent")
+	const centre = (testid: string) =>
+		page.$eval(`[data-testid="${testid}"]`, (el) => {
+			const box = el.getBoundingClientRect()
+			return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+		})
+	const more = await centre("scroll-more")
+	await page.mouse.click(more.x, more.y)
+	await page.waitForFunction(fieldInView, { timeout: 5_000 })
+	await page.waitForFunction(() => !document.querySelector('[data-testid="scroll-more"]'), { timeout: 5_000 })
+	expect(await activeTestId(page)).toBe("reset-checkbox-permanent")
+
+	expect(await coveredAt(page, "reset-confirm-input")).toBeNull()
+	const field = await centre("reset-confirm-input")
+	await page.mouse.click(field.x, field.y)
+	expect(await activeTestId(page)).toBe("reset-confirm-input")
+
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
+	await page.close()
 })
 
 test("auto-lock TTL change persists across navigation", async ({ registeredExtensionPerTest }) => {
@@ -215,7 +256,10 @@ test("a web page can fetch no extension file, the injected content script includ
 // step that rewrote it would widen `connect-src` past what `src/manifest.test.ts` pins.
 test("the loaded manifest carries the source's extension-page policy", async ({ extension }) => {
 	const popup = await openPopup(extension)
-	const loaded = await popup.evaluate(() => chrome.runtime.getManifest().content_security_policy)
+	const loaded = await popup.evaluate(() => chrome.runtime.getManifest().content_security_policy as Record<string, unknown>)
 	await popup.close()
-	expect(loaded).toEqual((manifest as { content_security_policy: unknown }).content_security_policy)
+	const source = (manifest as { content_security_policy: Record<string, unknown> }).content_security_policy
+	// Firefox 158's schema adds an optional `sandbox` and reports it unset as `null`.
+	const { sandbox, ...named } = loaded
+	expect(sandbox === null && !("sandbox" in source) ? named : loaded).toEqual(source)
 })

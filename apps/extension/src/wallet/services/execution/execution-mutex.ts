@@ -95,6 +95,9 @@ export class ExecutionMutex {
 	 *  unambiguous — and ASCII, unlike a NUL separator which makes git treat the
 	 *  source as binary). */
 	private readonly originDepth = new Map<string, number>()
+	/** Per-lane entries holding or waiting in the chain, and per-(lane, origin) for capped ones; a
+	 *  place `keep` holds outside the slot is not in the chain. */
+	private readonly inChain = new Map<string, number>()
 	private readonly keepers = new WeakMap<ExecutionMutexRelease, () => SlotReservation>()
 	/** Each reservation not yet re-entered or dropped, with the place it holds. */
 	private readonly reservations = new WeakMap<SlotReservation, DepthClaim>()
@@ -131,12 +134,19 @@ export class ExecutionMutex {
 		// `mine` resolves when WE release. The next acquirer will await it.
 		const { promise: mine, resolve: resolveMine } = deferred()
 		this.tails.set(key, mine)
+		const chainKeys = caps ? [key, `${key}|${caps.originKey}`] : [key]
+		for (const k of chainKeys) this.inChain.set(k, (this.inChain.get(k) ?? 0) + 1)
 
 		let released = false
 		const handOn = (): void => {
 			released = true
 			// GC the key if no one enqueued behind us (tail still points at mine).
 			if (this.tails.get(key) === mine) this.tails.delete(key)
+			for (const k of chainKeys) {
+				const n = (this.inChain.get(k) ?? 1) - 1
+				if (n <= 0) this.inChain.delete(k)
+				else this.inChain.set(k, n)
+			}
 			resolveMine()
 		}
 		const release: ExecutionMutexRelease = () => {
@@ -263,5 +273,11 @@ export class ExecutionMutex {
 	/** Is `key` currently held or has waiters enqueued. */
 	public isLocked(key: string): boolean {
 		return this.tails.has(key)
+	}
+
+	/** Whether a request outside `originKey`'s bucket holds or waits for `key`. An aborted waiter
+	 *  counts until the holder ahead of it releases, as it does for `isLocked`. */
+	public isLockedOutside(key: string, originKey: string): boolean {
+		return (this.inChain.get(key) ?? 0) > (this.inChain.get(`${key}|${originKey}`) ?? 0)
 	}
 }

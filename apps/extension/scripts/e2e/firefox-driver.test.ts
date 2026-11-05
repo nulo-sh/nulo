@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { runInNewContext } from "node:vm"
-import * as puppeteer from "puppeteer"
+import type * as puppeteer from "puppeteer"
 import { describe, expect, test, vi } from "vitest"
 import {
 	type BackgroundStopper,
@@ -12,13 +12,17 @@ import {
 	capabilities,
 	egressGuardPrefs,
 	firefoxDirFor,
+	firefoxDriver,
 	permissionRequestPrefs,
 	silentlyClosed,
 	stopBackgroundWith,
+	tabSize,
 	uuidFromPrefs,
+	viewportRecord,
 	withInventory,
 } from "../../tests/e2e/fixtures/browser/firefox"
 import { trackContexts } from "../../tests/e2e/fixtures/browser/bidi-attach"
+import { filePickerSlot, pickWithStandIn } from "../../tests/e2e/fixtures/browser/firefox-file-picker"
 import { E2E_FIREFOX_REVISION } from "../../tests/e2e/fixtures/browser/firefox-revision"
 import {
 	RELAY_HELPERS,
@@ -125,11 +129,10 @@ describe("firefox cache directory selection", () => {
 })
 
 describe("the pinned Firefox", () => {
-	test("is the one launched, with Puppeteer's own revision installed beside it", () => {
-		const own = (puppeteer as unknown as { PUPPETEER_REVISIONS: { firefox: string } }).PUPPETEER_REVISIONS.firefox
+	test("is the one launched, with a newer revision installed beside it", () => {
 		const cache = mkdtempSync(path.join(tmpdir(), "nulo-firefox-pin-test-"))
 		try {
-			for (const revision of [E2E_FIREFOX_REVISION, own]) {
+			for (const revision of [E2E_FIREFOX_REVISION, "stable_999.0"]) {
 				mkdirSync(path.join(cache, "firefox", `linux-${revision}`, "firefox"), { recursive: true })
 				writeFileSync(path.join(cache, "firefox", `linux-${revision}`, "firefox", "firefox"), "")
 			}
@@ -274,11 +277,54 @@ describe("an add-on page's URL in targets()", () => {
 		expect(trackContexts(late, open, closed)).toEqual([late])
 	})
 
+	test("a tree read opens its tabs, never Firefox's own windows nor a tab already closed", () => {
+		const tree = (...contexts: { context: string; "moz:scope": string }[]) =>
+			JSON.stringify({ type: "success", id: 7, result: { contexts } })
+		const open = new Set<string>()
+		trackContexts(tree({ context: "t", "moz:scope": "content" }, { context: "c", "moz:scope": "chrome" }), open, new Set(["gone"]))
+		trackContexts(tree({ context: "gone", "moz:scope": "content" }), open, new Set(["gone"]))
+		expect([...open]).toEqual(["t"])
+	})
+
 	test("a real destroy arriving after the one the driver reported is not handed on", () => {
 		const open = new Set(["w"])
 		const destroyed = event("browsingContext.contextDestroyed", { context: "w", parent: null })
 		expect(trackContexts(destroyed, open, new Set(["w"]))).toEqual([])
 		expect(trackContexts(destroyed, new Set(["v"]), new Set())).toEqual([destroyed])
+	})
+})
+
+/** Firefox resizes a tab around Puppeteer, so the seam answers for the size it set, a reset included. */
+describe("the viewport seam", () => {
+	const pageAt = (viewport: puppeteer.Viewport | null) => ({ viewport: () => viewport }) as unknown as puppeteer.Page
+
+	test("reads Puppeteer's size until the seam sets one, and a reset as null", () => {
+		const record = viewportRecord()
+		const page = pageAt({ width: 800, height: 600 })
+		expect(record.of(page)).toEqual({ width: 800, height: 600 })
+		record.set(page, { width: 240, height: 600 })
+		expect(record.of(page)).toEqual({ width: 240, height: 600 })
+		record.set(page, null)
+		expect(record.of(page)).toBeNull()
+		expect(record.of(pageAt({ width: 800, height: 600 }))).toEqual({ width: 800, height: 600 })
+	})
+
+	test("refuses by name a field a tab's size cannot carry", () => {
+		expect(tabSize(null)).toBeNull()
+		expect(tabSize({ width: 240, height: 600, deviceScaleFactor: undefined })).toEqual({ width: 240, height: 600 })
+		expect(() => tabSize({ width: 390, height: 844, deviceScaleFactor: 2, hasTouch: true })).toThrow(
+			"setViewport: Firefox's resize sets no deviceScaleFactor, hasTouch",
+		)
+	})
+
+	test("a classic switch to a closed window reads as the window gone, a refusal does not", () => {
+		expect(firefoxDriver.targetGone?.test("POST /window → no such window: Unable to locate window")).toBe(true)
+		expect(firefoxDriver.targetGone?.test("Browsing Context with id 12 not found")).toBe(true)
+		expect(
+			firefoxDriver.targetGone?.test(
+				"POST /window → unknown error: The command does not support browsing contexts in privileged scope",
+			),
+		).toBe(false)
 	})
 })
 
@@ -587,6 +633,105 @@ describe("the page-error relay", () => {
 				verdict: "its state could not be read (no such window)",
 				exceptions: [],
 			})
+		})
+	})
+})
+
+describe("the file picker stand-in", () => {
+	const OK = 0
+	const CANCEL = 1
+	const slotFor = () => filePickerSlot(OK, CANCEL, (path) => `file:${path}`)
+	const pick = () => {
+		const picker: { file: unknown } = { file: null }
+		const done = vi.fn()
+		return { picker, callback: { done }, done }
+	}
+
+	test("serialised alone, it cancels a pick nobody asked for", () => {
+		const call =
+			"(() => { const results = []; filePickerSlot(0, 1, String).open({}, 7, { done: (r) => results.push(r) }); return results })()"
+		expect(runSerialised(String(filePickerSlot), call, {})).toEqual([1])
+	})
+
+	test("holds the armed page's pick until it is answered with the path, once, and cancels another page's", () => {
+		const slot = slotFor()
+		expect(slot.arm(7, "/picks/contacts.json")).toBe("armed")
+		const other = pick()
+		slot.open(other.picker, 8, other.callback)
+		expect(other.done).toHaveBeenCalledTimes(1)
+		expect(other.done).toHaveBeenCalledWith(CANCEL)
+		const own = pick()
+		slot.open(own.picker, 7, own.callback)
+		expect(own.done).not.toHaveBeenCalled()
+		expect(slot.answer()).toBe("answered")
+		expect(own.picker.file).toBe("file:/picks/contacts.json")
+		expect(slot.answer()).toBe("not held")
+		expect(slot.release()).toBe("idle")
+		expect(own.done).toHaveBeenCalledTimes(1)
+		expect(own.done).toHaveBeenCalledWith(OK)
+	})
+
+	test("refuses a second arm until a release, which cancels the held pick once and leaves the next pick unasked", () => {
+		const slot = slotFor()
+		slot.arm(7, "/picks/a.json")
+		expect(slot.arm(7, "/picks/b.json")).toBe("busy")
+		const held = pick()
+		slot.open(held.picker, 7, held.callback)
+		expect(slot.arm(7, "/picks/b.json")).toBe("busy")
+		expect(slot.release()).toBe("released")
+		expect(held.done).toHaveBeenCalledTimes(1)
+		expect(held.done).toHaveBeenCalledWith(CANCEL)
+		expect(held.picker.file).toBeNull()
+		const next = pick()
+		slot.open(next.picker, 7, next.callback)
+		expect(next.done).toHaveBeenCalledTimes(1)
+		expect(next.done).toHaveBeenCalledWith(CANCEL)
+		expect(slot.arm(7, "/picks/b.json")).toBe("armed")
+	})
+
+	test("a release before any pick disarms the page, so its late pick is cancelled", () => {
+		const slot = slotFor()
+		slot.arm(7, "/picks/a.json")
+		expect(slot.release()).toBe("idle")
+		const late = pick()
+		slot.open(late.picker, 7, late.callback)
+		expect(late.done).toHaveBeenCalledTimes(1)
+		expect(late.done).toHaveBeenCalledWith(CANCEL)
+		expect(slot.answer()).toBe("not held")
+	})
+
+	describe("a pick through it", () => {
+		const standIn = (outcomes: Record<string, string[] | Error>) => {
+			const sent: string[] = []
+			const call = async (_declaration: string, args: string[]) => {
+				const op = args[1]
+				sent.push(op)
+				const answer = outcomes[op]
+				if (answer instanceof Error) throw answer
+				return answer.length > 1 ? answer.shift() : answer[0]
+			}
+			return { call, sent }
+		}
+
+		test("answers once the click's pick is held, then finds nothing left to release", async () => {
+			const { call, sent } = standIn({ arm: ["armed"], answer: ["not held", "answered"], release: ["idle"] })
+			await pickWithStandIn(call, "ctx-1", async () => {}, "/picks/a.json")
+			expect(sent).toEqual(["arm", "answer", "answer", "release"])
+		})
+
+		test("a failed step still releases, and its own error survives a release that fails too", async () => {
+			const opened = new Error("the click found no control")
+			const { call, sent } = standIn({ arm: ["armed"], answer: ["answered"], release: new Error("the window closed") })
+			const step = pickWithStandIn(
+				call,
+				"ctx-1",
+				async () => {
+					throw opened
+				},
+				"/picks/a.json",
+			)
+			await expect(step).rejects.toBe(opened)
+			expect(sent).toEqual(["arm", "release"])
 		})
 	})
 })

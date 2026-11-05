@@ -7,7 +7,7 @@ import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
 import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test, vi } from "vitest"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
-import { createNetworkSwitchHandler, type NetworkSwitchDeps, type NetworkSwitchScope } from "./network-switch"
+import { createNetworkSwitchHandler, type NetworkSwitchDeps, type NetworkSwitchScope, settleLatestRun } from "./network-switch"
 
 const ACCOUNT = { address: "0xa" }
 
@@ -309,5 +309,182 @@ describe("createNetworkSwitchHandler", () => {
 		gate.resolve([ACCOUNT])
 		await run
 		expect(h.setAccounts).not.toHaveBeenCalled()
+	})
+})
+
+describe("a lock that supersedes the run", () => {
+	test("the read it refuses resolves the run at debug, and nothing after it runs", async () => {
+		const h = makeDeps()
+		const read = deferred<StaleNetworkView | null>()
+		h.syncStaleNetwork.mockReturnValueOnce(read.promise)
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined)
+		const handler = createNetworkSwitchHandler(h.deps)
+		const run = handler()
+		handler.supersede()
+		const refusal = new Error("Profile locked")
+		read.reject(refusal)
+		await expect(run).resolves.toBeUndefined()
+		expect(debug).toHaveBeenCalledExactlyOnceWith("network switch superseded", { error: refusal })
+		expect(h.deps.replaceAccountClient).not.toHaveBeenCalled()
+		debug.mockRestore()
+	})
+
+	test("control: a live run's failure still rejects", async () => {
+		const h = makeDeps()
+		const refusal = new Error("Profile locked")
+		h.syncStaleNetwork.mockRejectedValueOnce(refusal)
+		await expect(createNetworkSwitchHandler(h.deps)()).rejects.toBe(refusal)
+	})
+})
+
+describe("settleLatestRun: what a switch's announcement waits for", () => {
+	const flush = () => new Promise((r) => setTimeout(r, 0))
+
+	test("waits for the run the tick leaves in flight, and is true once that same run settles, failed or not", async () => {
+		for (const fail of [false, true]) {
+			const first = deferred()
+			const second = deferred()
+			let current = first.promise
+			const tick = async () => {
+				// The watcher that starts the target's run fires within the tick.
+				current = second.promise
+			}
+			let out: boolean | undefined
+			void settleLatestRun(
+				() => current,
+				tick,
+				() => 0,
+			).then((latest) => (out = latest))
+			first.resolve()
+			await flush()
+			expect(out).toBeUndefined()
+			if (fail) second.reject(new Error("run failed"))
+			else second.resolve()
+			await flush()
+			expect(out).toBe(true)
+		}
+	})
+
+	test("follows a run of the same scope that replaces it, as an unattended reset's reload starts", async () => {
+		const run = deferred()
+		const reload = deferred()
+		let current = run.promise
+		let out: boolean | undefined
+		void settleLatestRun(
+			() => current,
+			async () => {},
+			() => 0,
+		).then((latest) => (out = latest))
+		await flush()
+		current = reload.promise
+		run.resolve()
+		await flush()
+		expect(out).toBeUndefined()
+		reload.resolve()
+		await flush()
+		expect(out).toBe(true)
+	})
+
+	test("is false once the scope changed, though B → A → B ends where it began before the superseded run settles", async () => {
+		const run = deferred()
+		let changes = 0
+		let current = run.promise
+		const out = settleLatestRun(
+			() => current,
+			async () => {},
+			() => changes,
+		)
+		await flush()
+		// The superseded run's read is still out while A's and B's runs begin and finish.
+		changes += 2
+		current = Promise.resolve()
+		await flush()
+		run.resolve()
+		await expect(out).resolves.toBe(false)
+	})
+})
+
+describe("settleLatestRun over the real handler", () => {
+	const flush = () => new Promise((r) => setTimeout(r, 0))
+	const B = { profileId: "p1", networkId: "nB", chainId: 2 }
+	const A = { profileId: "p1", networkId: "nA", chainId: 1 }
+
+	test("B → A → B while B's first read is out: the first wait ends false", async () => {
+		const h = makeDeps()
+		const handler = createNetworkSwitchHandler(h.deps)
+		const at = (scope: NetworkSwitchScope) => {
+			h.setScope(scope)
+			h.setLive(scope)
+		}
+		const held = deferred<StaleNetworkView | null>()
+		h.syncStaleNetwork.mockImplementationOnce(() => held.promise)
+		at(B)
+		let current = handler()
+		const out = settleLatestRun(
+			() => current,
+			async () => {},
+			handler.scopeChanges,
+		)
+		await flush()
+		at(A)
+		current = handler()
+		await current
+		at(B)
+		current = handler()
+		await current
+		held.resolve(null)
+		await expect(out).resolves.toBe(false)
+	})
+
+	test("an unattended reset's reload of the same network is followed to the run that loads its account", async () => {
+		const h = makeDeps()
+		const handler = createNetworkSwitchHandler(h.deps)
+		h.setScope(B)
+		h.setLive(B)
+		h.syncStaleNetwork.mockResolvedValueOnce(staleView({ networkId: "nB", accounts: [] }))
+		let current: Promise<void> = Promise.resolve()
+		h.resetUnattended.mockImplementationOnce(async () => {
+			current = handler()
+		})
+		current = handler()
+		await expect(
+			settleLatestRun(
+				() => current,
+				async () => {},
+				handler.scopeChanges,
+			),
+		).resolves.toBe(true)
+		expect(h.setupActiveAccount).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("createNetworkSwitchHandler: scopeChanges", () => {
+	test("moves on another profile or network, a missing scope and a supersede; a same-scope run leaves it", async () => {
+		const h = makeDeps()
+		const handler = createNetworkSwitchHandler(h.deps)
+		const reads: number[] = []
+		await handler()
+		reads.push(handler.scopeChanges())
+		await handler()
+		reads.push(handler.scopeChanges())
+		h.setScope({ profileId: "p1", networkId: "n2", chainId: 2 })
+		h.setLive({ profileId: "p1", networkId: "n2", chainId: 2 })
+		await handler()
+		reads.push(handler.scopeChanges())
+		h.setScope({ profileId: "p2", networkId: "n2", chainId: 2 })
+		h.setLive({ profileId: "p2", networkId: "n2", chainId: 2 })
+		await handler()
+		reads.push(handler.scopeChanges())
+		h.setScope(undefined)
+		await handler()
+		reads.push(handler.scopeChanges())
+		h.setScope({ profileId: "p2", networkId: "n2", chainId: 2 })
+		await handler()
+		reads.push(handler.scopeChanges())
+		handler.supersede()
+		reads.push(handler.scopeChanges())
+		await handler()
+		reads.push(handler.scopeChanges())
+		expect(reads).toEqual([1, 1, 2, 3, 4, 5, 6, 7])
 	})
 })

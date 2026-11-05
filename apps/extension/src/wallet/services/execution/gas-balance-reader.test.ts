@@ -281,12 +281,47 @@ describe("GasBalanceReader failed-leg retry + degraded caching (cold-start recov
 		const reader = new GasBalanceReader(makeDeps({ logError }))
 		expect(await reader.get("net-1", "0xacc")).toEqual({ publicFeeJuice: null, privateFeeJuice: null })
 		expect(logError).toHaveBeenCalledTimes(1)
+		expect(logError).toHaveBeenCalledWith("Failed to get public FeeJuice balance", { error: new Error("node down") })
 		// Degraded snapshot is peekable (dimmed last-known) but already stale.
 		expect(reader.peek("net-1", "0xacc")).toEqual({ balances: { publicFeeJuice: null, privateFeeJuice: null }, stale: true })
 		// The transport recovers — the very next get recomputes and repairs.
 		fail = false
 		expect(await reader.get("net-1", "0xacc")).toEqual({ publicFeeJuice: "100", privateFeeJuice: null })
 		expect(reader.peek("net-1", "0xacc")).toEqual({ balances: { publicFeeJuice: "100", privateFeeJuice: null }, stale: false })
+	})
+
+	test("an eviction (a lock, delete or switch) before the retry skips it: one read, a debug line, no error", async () => {
+		const logDebug = vi.fn()
+		const logError = vi.fn()
+		const reader = new GasBalanceReader(makeDeps({ logDebug, logError }))
+		bvsMock.mockReset().mockImplementation(() => {
+			reader.evictAll()
+			throw new Error("node down")
+		})
+		expect(await reader.get("net-1", "0xacc")).toEqual({ publicFeeJuice: null, privateFeeJuice: null })
+		expect(bvsMock).toHaveBeenCalledTimes(1)
+		expect(logError).not.toHaveBeenCalled()
+		expect(logDebug).toHaveBeenCalledWith("getGasBalances: public FeeJuice leg not retried: its profile context was evicted")
+	})
+
+	test("a retry an eviction overtakes fails at debug, not error", async () => {
+		const logDebug = vi.fn()
+		const logError = vi.fn()
+		const reader = new GasBalanceReader(makeDeps({ logDebug, logError }))
+		const fenced = new Error("pxe op rejected: profile p1 has no current incarnation (deleted or tombstoned)")
+		let calls = 0
+		bvsMock.mockReset().mockImplementation(() => {
+			calls += 1
+			if (calls === 1) throw new Error("node down")
+			reader.evictAll()
+			throw fenced
+		})
+		expect(await reader.get("net-1", "0xacc")).toEqual({ publicFeeJuice: null, privateFeeJuice: null })
+		expect(calls).toBe(2)
+		expect(logError).not.toHaveBeenCalled()
+		expect(logDebug).toHaveBeenCalledWith("getGasBalances: public FeeJuice retry failed after its profile context was evicted", {
+			error: fenced,
+		})
 	})
 
 	test("a structural null (no PrivateFPC registered) is NOT degraded: no retry, cached fresh", async () => {

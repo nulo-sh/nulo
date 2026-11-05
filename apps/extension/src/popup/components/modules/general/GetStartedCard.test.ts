@@ -1,4 +1,4 @@
-import { Flex, Icon, Text } from "@nulo/design"
+import { Flex, Icon, SectionLabel, Text } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
@@ -14,8 +14,8 @@ const open = (...items: GetStartedItem[]): GetStartedStep[] => items.map((item) 
 const steps = (items: GetStartedItem[], done: GetStartedItem[] = []): GetStartedStep[] =>
 	items.map((item) => ({ item, done: done.includes(item) }))
 
-const mountCard = (list: GetStartedStep[] = open(...ALL), canHide = true) =>
-	mount(GetStartedCard, { props: { steps: list, canHide }, global: { components: COMPONENTS } })
+const mountCard = (list: GetStartedStep[] = open(...ALL), canHide = true, pending?: boolean) =>
+	mount(GetStartedCard, { props: { steps: list, canHide, pending }, global: { components: COMPONENTS } })
 const row = (w: ReturnType<typeof mountCard>, item: GetStartedItem) => w.get(`[data-testid="get-started-${item}"]`)
 const mark = (w: ReturnType<typeof mountCard>, item: GetStartedItem) => row(w, item).get('[aria-hidden="true"]')
 const title = (w: ReturnType<typeof mountCard>, item: GetStartedItem) => row(w, item).get('[data-testid="setting-title"]').text()
@@ -30,13 +30,31 @@ describe("general/GetStartedCard", () => {
 		)
 	})
 
-	test("each open step carries the drawn copy and a chevron", () => {
+	test("each open step carries the drawn copy and a chevron, but How Aztec works and Get Fee Juice, which open a website, carry the outside-link mark", () => {
 		const w = mountCard()
 		expect(row(w, "phrase").text()).toBe("1Save your recovery phraseThe 24 words that restore this wallet")
-		expect(row(w, "aztec").text()).toBe("2How Aztec works1 min")
-		expect(row(w, "feeJuice").text()).toBe("3Get Fee Juice")
+		expect(row(w, "aztec").text()).toBe("2How Aztec works1 min · website")
+		expect(row(w, "feeJuice").text()).toBe("3Get Fee JuiceFee Juice pays network fees.website")
 		expect(row(w, "presto").text()).toBe("4Make proofs fasterOptional")
-		for (const item of ALL) expect(row(w, item).findAll("svg"), item).toHaveLength(1)
+		const glyphs = (item: GetStartedItem) =>
+			w
+				.findAllComponents(Icon)
+				.filter((icon) => row(w, item).element.contains(icon.element))
+				.map((icon) => icon.props("name"))
+		expect(ALL.map(glyphs)).toEqual([["chevron"], ["open"], ["open"], ["chevron"]])
+	})
+
+	test("How Aztec works says 1 min · website on its second line, as the first row's words are drawn, and its spoken name says website", () => {
+		const w = mountCard()
+		expect(row(w, "aztec").get('[data-testid="setting-description"]').text()).toBe("1 min · website")
+		expect(row(w, "aztec").find('[data-testid="setting-value"]').exists()).toBe(false)
+		const spoken = (item: GetStartedItem) =>
+			(row(w, item).get("[data-row-target]").attributes("aria-labelledby") ?? "")
+				.split(" ")
+				.map((id) => w.get(`#${id}`).text())
+				.join(" ")
+		expect(spoken("aztec")).toBe("How Aztec works 1 min · website")
+		expect(spoken("phrase")).toBe("Save your recovery phrase")
 	})
 
 	test("steps are numbered in the given order; the first open one is the next, filled", () => {
@@ -105,7 +123,46 @@ describe("general/GetStartedCard", () => {
 		expect(w.emitted("select")).toBeUndefined()
 	})
 
+	test("while pending the card keeps its place greyed: every row inert, the label and count dimmed, the list busy; Hide still works", async () => {
+		const w = mountCard(steps(ALL, ["aztec"]), true, true)
+		const dimmed = (el: { classes: () => string[] }) => el.classes().some((name) => /disabled|pending/.test(name))
+		for (const item of ALL) {
+			expect(row(w, item).find("button").exists(), item).toBe(false)
+			expect(dimmed(row(w, item)), item).toBe(true)
+			await row(w, item).trigger("click")
+		}
+		expect(w.emitted("select")).toBeUndefined()
+		expect(w.get('[role="list"]').attributes("aria-busy")).toBe("true")
+		expect(dimmed(w.findComponent(SectionLabel))).toBe(true)
+		expect(dimmed(w.get('[data-testid="get-started-count"]'))).toBe(true)
+		const hide = w.get('[data-testid="get-started-hide"]')
+		expect(dimmed(hide)).toBe(false)
+		await hide.trigger("click")
+		expect(w.emitted("hide")).toEqual([[]])
+
+		await w.setProps({ pending: false })
+		expect(w.get('[role="list"]').attributes("aria-busy")).toBeUndefined()
+		expect(dimmed(w.findComponent(SectionLabel))).toBe(false)
+		await row(w, "phrase").get("button").trigger("click")
+		expect(w.emitted("select")).toEqual([["phrase"]])
+	})
+
 	test("no Hide without canHide", () => {
 		expect(mountCard(open("phrase"), false).find('[data-testid="get-started-hide"]').exists()).toBe(false)
+	})
+
+	test("Get Fee Juice says what Fee Juice is, on a line that wraps, and is marked as a website in the chevron's place", async () => {
+		const w = mountCard()
+		const fee = row(w, "feeJuice")
+		expect(fee.get('[data-testid="setting-description"]').text()).toBe("Fee Juice pays network fees.")
+		expect(fee.get('[data-testid="setting-value"]').text()).toBe("website")
+		const glyphs = w
+			.findAllComponents(Icon)
+			.filter((icon) => fee.element.contains(icon.element))
+			.map((icon) => icon.props("name"))
+		expect(glyphs).toEqual(["open"])
+		expect(w.findAllComponents(SettingItem).map((item) => item.props("wrapDescription"))).toEqual([true, true, true, true])
+		await fee.get("button").trigger("click")
+		expect(w.emitted("select")).toEqual([["feeJuice"]])
 	})
 })

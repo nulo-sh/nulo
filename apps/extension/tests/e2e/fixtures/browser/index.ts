@@ -1,5 +1,5 @@
 import { basename } from "node:path"
-import type { Browser, Page, Target } from "puppeteer"
+import type { Browser, Page, Target, Viewport } from "puppeteer"
 import { acceptLists, PENDING_FILE_INPUT } from "../file-accept"
 import { chromeDriver } from "./chrome"
 import { firefoxDriver } from "./firefox"
@@ -60,6 +60,17 @@ export interface HeldInterception extends ArmedInterception {
 	/** Whether the launch's own interception is armed now: false while a kill or a spec's interception
 	 *  has the origin, while it re-arms, after a failed re-arm and after `stop()`. */
 	holding: () => boolean
+}
+
+/** How `answerRequests` answers a request: a JSON body with its status, or a refused connection. */
+export type RequestAnswer = { status: number; body: unknown } | "refused"
+
+export interface AnsweredRequests {
+	/**
+	 * How many requests for `url` the page has sent since the answer was armed, answered or not.
+	 * Rejects once any answer has failed, or once the count can no longer be read.
+	 */
+	hits(url: string): Promise<number>
 }
 
 /**
@@ -126,8 +137,8 @@ export interface BrowserDriver {
 	reloadExtensionPage(page: Page): Promise<void>
 	/**
 	 * An extension page with `chrome.*` for the launch fixture to settle the extension through, whose
-	 * lifetime no onboarding state decides: both browsers honour the `window.close()` that the popup
-	 * and the onboarding page call when they redirect. Both drivers load the setup page, static text
+	 * lifetime no onboarding state decides: both browsers honour the `window.close()` the popup and the
+	 * onboarding page call as they hand over to a tab. Both drivers load the setup page, static text
 	 * that no product code opens, so deleting it as dead code fails every launch.
 	 */
 	openScratchPage(browser: Browser, extensionId: string): Promise<Page>
@@ -157,6 +168,25 @@ export interface BrowserDriver {
 		mode: RpcInterception,
 		backgroundDown?: boolean,
 	): Promise<ArmedInterception>
+	/**
+	 * Answer the requests `page` itself sends for each exact URL in `answers`, before any connection
+	 * starts; every other request goes out. Lives as long as the page, once per page. Firefox 157 and
+	 * later refuse Puppeteer's page interception on an extension page.
+	 */
+	answerRequests(page: Page, answers: ReadonlyMap<string, RequestAnswer>): Promise<AnsweredRequests>
+	/**
+	 * Select `page`'s tab and focus its window. Firefox 157 and later refuse Puppeteer's
+	 * `bringToFront` on an extension page.
+	 */
+	bringToFront(page: Page): Promise<void>
+	/**
+	 * Size `page`'s viewport, or with `null` give it its window's size. Firefox 157 and later refuse
+	 * Puppeteer's `setViewport` on an extension page; Firefox's resize resolves once the page reads
+	 * the size, and refuses `deviceScaleFactor`, `isMobile`, `isLandscape` and `hasTouch` by name.
+	 */
+	setViewport(page: Page, viewport: Viewport | null): Promise<void>
+	/** The viewport last set on `page`, by `setViewport` or by Puppeteer's `newPage`; `null` once reset, or never set. */
+	viewportOf(page: Page): Viewport | null
 	/**
 	 * Runs before every scripted click. The suite clicks from inside the page, which — unlike a
 	 * person's click — neither focuses the window nor, on every browser, counts as a user gesture.
@@ -313,7 +343,12 @@ export const holdRpcInterception = (
 	fromOrigin: string,
 	mode: RpcInterception,
 ): Promise<HeldInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
+export const answerRequests = (page: Page, answers: ReadonlyMap<string, RequestAnswer>): Promise<AnsweredRequests> =>
+	driver.answerRequests(page, answers)
 export const openScratchPage = (browser: Browser, extensionId: string): Promise<Page> => driver.openScratchPage(browser, extensionId)
+export const bringToFront = (page: Page): Promise<void> => driver.bringToFront(page)
+export const setViewport = (page: Page, viewport: Viewport | null): Promise<void> => driver.setViewport(page, viewport)
+export const viewportOf = (page: Page): Viewport | null => driver.viewportOf(page)
 export const prepareClick = (page: Page): Promise<void> => driver.prepareClick(page)
 export const prepareKeys = (page: Page): Promise<void> => driver.prepareKeys(page)
 export const doubleClick = (page: Page, x: number, y: number, gapMs: number): Promise<void> => driver.doubleClick(page, x, y, gapMs)

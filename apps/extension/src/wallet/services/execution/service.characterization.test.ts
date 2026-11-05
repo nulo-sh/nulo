@@ -76,11 +76,10 @@ describe("slot-for-executeSendTransaction", () => {
 		// concurrent send_transaction ops interleave simulate/prove against the
 		// same PXE + account. It now runs through the shared runInSlot scaffold
 		// like the other two dApp-send paths — acquireSlot + release, and
-		// claimOrCreateJournal instead of the old un-slotted beginJournal.
+		// claimOrCreateJournal.
 		const releaseSlot = vi.fn()
 		const acquireSlot = vi.fn(async () => ({ release: releaseSlot, preController: undefined }))
 		const claimOrCreateJournal = vi.fn(async () => ({ journalId: "job-1", controller: new AbortController() }))
-		const beginJournal = vi.fn(async () => "job-1")
 		const proveAndSendCtxs: unknown[] = []
 		// Deferred prove: the slot must stay held until the prove PROMISE SETTLES,
 		// not merely until proveAndSend is invoked — a `p = prove(); release();
@@ -110,10 +109,10 @@ describe("slot-for-executeSendTransaction", () => {
 				deleteController: vi.fn(),
 				acquireSlot: acquireSlot as never,
 				claimOrCreateJournal: claimOrCreateJournal as never,
-				beginJournal: beginJournal as never,
 				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
+				clearJournalAuthwits: vi.fn(async () => {}),
 				parkSlot: vi.fn() as never,
 				joinOriginLine: vi.fn(() => ({ behind: () => false, earlierDone: async () => true, leave: () => {} })),
 				failUnclaimed: vi.fn(async () => {}),
@@ -179,11 +178,9 @@ describe("slot-for-executeSendTransaction", () => {
 		const result = await pending
 
 		expect(result).toBe("0xhash")
-		// THE FIX: the slot is acquired, the journal claimed via the scaffold (not
-		// the old un-slotted beginJournal), and the slot released only AFTER the
-		// prove promise settled.
+		// THE FIX: the slot is acquired, the journal claimed via the scaffold, and
+		// the slot released only AFTER the prove promise settled.
 		expect(claimOrCreateJournal).toHaveBeenCalledTimes(1)
-		expect(beginJournal).not.toHaveBeenCalled()
 		expect(releaseSlot).toHaveBeenCalledTimes(1)
 		const acquireOrder = acquireSlot.mock.invocationCallOrder[0]!
 		const proveOrder = proveAndSend.mock.invocationCallOrder[0]!

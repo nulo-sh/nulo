@@ -10,6 +10,46 @@ export type GlossaryEntry = {
 }
 
 export const GLOSSARY = {
+	profile: {
+		term: "Profile",
+		definition: "Your wallet on this device: its accounts and keys, behind one password or passkey.",
+		where: "Lock screen · Settings",
+	},
+	account: {
+		term: "Account",
+		definition: "An address inside a profile, with its own balances and history.",
+		where: "Home · Settings",
+	},
+	network: {
+		term: "Network",
+		definition: "The Aztec chain Nulo talks to; each network keeps its own balances and history.",
+		where: "Header · Settings",
+	},
+	alpha: {
+		term: "Alpha",
+		definition: "Aztec's main network, also called Mainnet; Testnet and local networks are for trying things out.",
+		where: "Network menu",
+	},
+	"recovery-phrase": {
+		term: "Recovery phrase",
+		definition: "The 24 words that restore your accounts, except the ones you imported.",
+		where: "Get started · Backup",
+	},
+	"full-backup": {
+		term: "Full backup",
+		definition: "Your accounts, imported keys, tokens, contacts and history, in one password-protected file.",
+		where: "Backup",
+	},
+	passkey: {
+		term: "Passkey",
+		definition: "It unlocks Nulo on this device. Your recovery phrase is what restores it.",
+		where: "Lock screen · Create profile",
+	},
+	"strict-mode": {
+		term: "Strict security mode",
+		definition: "Locks whenever Nulo restarts in the background, as well as after the timeout.",
+		where: "Lock settings",
+	},
 	"private-balance": {
 		term: "Private balance",
 		definition: "Only you can see it. Marked with a shield.",
@@ -45,6 +85,11 @@ export const GLOSSARY = {
 		definition: "An extra the app asks you to pay the network for faster inclusion, up to the cap shown.",
 		where: "Approval window",
 	},
+	fpc: {
+		term: "FPC",
+		definition: "A Fee Payment Contract: it settles the network fee, from a sponsor or from your Private Fee Juice.",
+		where: "Fee Payments",
+	},
 	authorization: {
 		term: "Authorization",
 		definition: "Lets a contract do one specific thing for you, once.",
@@ -60,6 +105,11 @@ export const GLOSSARY = {
 		definition: "A contract's interface names a call's arguments; without it Nulo shows the raw values.",
 		where: "Approval window",
 	},
+	proof: {
+		term: "Proof",
+		definition: "What your device builds to show a transaction is valid without revealing what's in it.",
+		where: "Proving",
+	},
 	proving: {
 		term: "Proving",
 		definition:
@@ -71,8 +121,12 @@ export const GLOSSARY = {
 export type GlossaryKey = keyof typeof GLOSSARY
 
 export const GLOSSARY_SECTIONS = [
+	{
+		title: "Your wallet",
+		keys: ["profile", "account", "network", "alpha", "recovery-phrase", "full-backup", "passkey", "strict-mode"],
+	},
 	{ title: "Balances", keys: ["private-balance", "public-balance"] },
-	{ title: "Fees", keys: ["fee-juice", "public-fee-juice", "private-fee-juice", "sponsored", "priority-fee"] },
+	{ title: "Fees", keys: ["fee-juice", "public-fee-juice", "private-fee-juice", "sponsored", "priority-fee", "fpc"] },
 	{ title: "Apps", keys: ["authorization", "name-for-this-app", "interface"] },
-	{ title: "Transactions", keys: ["proving"] },
+	{ title: "Transactions", keys: ["proof", "proving"] },
 ] as const satisfies ReadonlyArray<{ title: string; keys: ReadonlyArray<GlossaryKey> }>

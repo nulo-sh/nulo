@@ -1,6 +1,6 @@
 /**
- * Test doubles for wallet-core's port interfaces. Import from
- * `@nulo/wallet-core/testing` in colocated `.test.ts` files.
+ * Test doubles for wallet-core's port interfaces, plus abort-listener and rejection probes.
+ * Import from `@nulo/wallet-core/testing` in colocated `.test.ts` files.
  *
  * `FakeNodeFactory` does NOT live here — it depends on `@aztec-labs/stdlib`'s
  * `AztecNode` type and `wallet-core` is Aztec-free. It lives in
@@ -11,3 +11,5 @@ export { MockClock } from "./mock-clock"
 export { FakeBrowserApi } from "./fake-browser-api"
 export { FakeBackgroundTicker } from "./fake-background-ticker"
 export { createListenerBag, type ListenerBag } from "./listener-bag"
+export { trackAbortListeners } from "./abort-listeners"
+export { collectUnhandledRejections } from "./unhandled-rejections"

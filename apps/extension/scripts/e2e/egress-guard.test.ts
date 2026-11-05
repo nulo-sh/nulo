@@ -10,6 +10,8 @@ import {
 	type EgressCanary,
 	type EgressGuard,
 	type HeldNode,
+	LIVE_NODE_HOST,
+	MAINNET_NODE_HOST,
 	MALFORMED,
 	guardArmed,
 	ownGuardedLaunch,
@@ -18,6 +20,7 @@ import {
 	startEgressGuard,
 	undeclared,
 } from "../../tests/e2e/fixtures/egress-guard"
+import { RELEASE_TRAITS } from "../../tests/e2e/fixtures/update/release"
 
 const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-egress-guard-test-"))
 const REGISTRY = path.join(ROOT, "ports.md")
@@ -25,6 +28,9 @@ const REGISTRY = path.join(ROOT, "ports.md")
 process.env.NULO_E2E_PORT_REGISTRY = REGISTRY
 
 afterAll(() => rmSync(ROOT, { recursive: true, force: true }))
+
+/** The Testnet node's host as a pattern: a host name's only metacharacter is the dot. */
+const LIVE_HOST = LIVE_NODE_HOST.replaceAll(".", "\\.")
 
 const running: Array<EgressGuard | EgressCanary> = []
 afterEach(async () => {
@@ -195,7 +201,13 @@ describe("undeclared", () => {
 	const ownHosts = new Map([["update.googleapis.com", "the component updater"]])
 
 	test("a declared wallet host and a listed browser host pass", () => {
-		expect(undeclared([attempt("lb.drpc.live"), attempt("update.googleapis.com")], ownHosts)).toEqual([])
+		expect(undeclared([attempt(LIVE_NODE_HOST), attempt("update.googleapis.com")], ownHosts)).toEqual([])
+	})
+
+	test("every pinned release's Testnet host passes", () => {
+		const hosts = Object.values(RELEASE_TRAITS).map(({ testnetHost }) => attempt(testnetHost))
+		expect(hosts.length).toBeGreaterThan(0)
+		expect(undeclared(hosts, ownHosts)).toEqual([])
 	})
 
 	test("an unlisted host under a listed host's domain fails, and so does a malformed request", () => {
@@ -265,7 +277,7 @@ describe("a guarded launch", () => {
 	test("success control: a launch that tried only declared and listed hosts closes cleanly, once", async () => {
 		const { deps, send, closeBrowser, stopped } = rig()
 		const launch = await ownGuardedLaunch(deps)
-		send("lb.drpc.live")
+		send(LIVE_NODE_HOST)
 		send("update.googleapis.com")
 		await launch.close()
 		expect(stopped()).toEqual([true, true])
@@ -275,16 +287,16 @@ describe("a guarded launch", () => {
 
 	test("a live launch routes its live host direct, and fails its close if the guard records that host", async () => {
 		const { deps, send, closeBrowser } = rig()
-		const launch = await ownGuardedLaunch({ ...deps, liveHosts: ["lb.drpc.live"] })
-		expect(deps.launch).toHaveBeenCalledWith({ guardPort: 1, liveHosts: ["lb.drpc.live"] })
-		send("lb.drpc.live")
-		await expect(launch.close()).rejects.toThrow(/spec\.test\.ts: chrome sent lb\.drpc\.live to the guard/)
+		const launch = await ownGuardedLaunch({ ...deps, liveHosts: [LIVE_NODE_HOST] })
+		expect(deps.launch).toHaveBeenCalledWith({ guardPort: 1, liveHosts: [LIVE_NODE_HOST] })
+		send(LIVE_NODE_HOST)
+		await expect(launch.close()).rejects.toThrow(new RegExp(`spec\\.test\\.ts: chrome sent ${LIVE_HOST} to the guard`))
 		expect(closeBrowser).toHaveBeenCalled()
 	})
 
 	test("success control: a live launch whose live host never reached the guard closes cleanly", async () => {
 		const { deps, send } = rig()
-		const launch = await ownGuardedLaunch({ ...deps, liveHosts: ["lb.drpc.live"] })
+		const launch = await ownGuardedLaunch({ ...deps, liveHosts: [LIVE_NODE_HOST] })
 		send("api.coingecko.com")
 		await launch.close()
 	})
@@ -360,7 +372,7 @@ describe("a guarded launch", () => {
 	})
 
 	/** A stand-in node whose failures and stop are logged beside the browser's close. */
-	function heldNode(failures: string[], order: string[], holding = () => true, host = "lb.drpc.live"): HeldNode {
+	function heldNode(failures: string[], order: string[], holding = () => true, host = LIVE_NODE_HOST): HeldNode {
 		return {
 			host,
 			holding,
@@ -384,9 +396,11 @@ describe("a guarded launch", () => {
 		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode(["a target could not be armed"], order)] })
 		send("unlisted.test")
 		await expect(launch.close()).rejects.toThrow(
-			/spec\.test\.ts: chrome tried 1 host.*unlisted\.test:443[\s\S]*a stand-in node's interception reported: lb\.drpc\.live: a target could not be armed/,
+			new RegExp(
+				`spec\\.test\\.ts: chrome tried 1 host.*unlisted\\.test:443[\\s\\S]*a stand-in node's interception reported: ${LIVE_HOST}: a target could not be armed`,
+			),
 		)
-		expect(order).toEqual(["lb.drpc.live failures read", "browser closed", "lb.drpc.live stopped"])
+		expect(order).toEqual([`${LIVE_NODE_HOST} failures read`, "browser closed", `${LIVE_NODE_HOST} stopped`])
 	})
 
 	test("a stand-in node whose failures cannot be read fails the close", async () => {
@@ -404,7 +418,7 @@ describe("a guarded launch", () => {
 		const order: string[] = []
 		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode([], order)] })
 		await launch.close()
-		expect(order).toEqual(["lb.drpc.live failures read", "lb.drpc.live stopped"])
+		expect(order).toEqual([`${LIVE_NODE_HOST} failures read`, `${LIVE_NODE_HOST} stopped`])
 	})
 
 	test("with two nodes held, each is watched and read by its own host, and both stop", async () => {
@@ -416,15 +430,19 @@ describe("a guarded launch", () => {
 		await expect(launch.close()).rejects.toThrow(
 			/sent aztec-mainnet\.drpc\.org:443 to the guard 1 time\(s\)[\s\S]*interception reported: aztec-mainnet\.drpc\.org: a reply failed/,
 		)
-		expect(order.filter((step) => step.endsWith("stopped")).sort()).toEqual(["aztec-mainnet.drpc.org stopped", "lb.drpc.live stopped"])
+		expect(order.filter((step) => step.endsWith("stopped")).sort()).toEqual(
+			[`${MAINNET_NODE_HOST} stopped`, `${LIVE_NODE_HOST} stopped`].sort(),
+		)
 	})
 
 	test("a node request that reaches the guard while the stand-in holds its origin fails the close, naming it", async () => {
 		const { deps, send, closeBrowser } = rig()
 		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode([], [])] })
-		send("lb.drpc.live")
+		send(LIVE_NODE_HOST)
 		await expect(launch.close()).rejects.toThrow(
-			/spec\.test\.ts: chrome sent lb\.drpc\.live:443 to the guard 1 time\(s\) while the launch's stand-in held its origin/,
+			new RegExp(
+				`spec\\.test\\.ts: chrome sent ${LIVE_HOST}:443 to the guard 1 time\\(s\\) while the launch's stand-in held its origin`,
+			),
 		)
 		expect(closeBrowser).toHaveBeenCalled()
 	})
@@ -432,9 +450,11 @@ describe("a guarded launch", () => {
 	test("a held node request and an undeclared host in one launch are both named", async () => {
 		const { deps, send } = rig()
 		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode([], [])] })
-		send("lb.drpc.live")
+		send(LIVE_NODE_HOST)
 		send("unlisted.test")
-		await expect(launch.close()).rejects.toThrow(/sent lb\.drpc\.live:443 to the guard[\s\S]*tried 1 host.*unlisted\.test:443/)
+		await expect(launch.close()).rejects.toThrow(
+			new RegExp(`sent ${LIVE_HOST}:443 to the guard[\\s\\S]*tried 1 host.*unlisted\\.test:443`),
+		)
 	})
 
 	test("success control: node requests before the hold, while it is released, and from the browser's close pass", async () => {
@@ -443,15 +463,15 @@ describe("a guarded launch", () => {
 		const launch = await ownGuardedLaunch({
 			...deps,
 			holdNodes: async () => {
-				send("lb.drpc.live")
+				send(LIVE_NODE_HOST)
 				return [heldNode([], [], () => holding)]
 			},
 		})
 		holding = false
-		send("lb.drpc.live")
+		send(LIVE_NODE_HOST)
 		holding = true
 		closeBrowser.mockImplementation(async () => {
-			send("lb.drpc.live")
+			send(LIVE_NODE_HOST)
 		})
 		await launch.close()
 	})

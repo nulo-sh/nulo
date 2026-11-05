@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from "pinia"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { defineComponent, h } from "vue"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto } from "../../../../tests/helpers/credential-pins"
+import { sendEvent } from "../../../../tests/helpers/send-event"
 
 vi.mock("@/utils/core", () => ({ managers: { profile: { getProfiles: vi.fn(async () => []) } } }))
 
@@ -209,6 +210,17 @@ describe("ImportSecretForm — credential controls, real Input", () => {
 			drives: PAIR,
 			others: [SEED],
 		})
+	})
+
+	it("a revealed password stays revealed when the method switches away and back", async () => {
+		const w = mountReal()
+		sendEvent(w.get('[data-testid="import-password-input-visibility-toggle"]').element, "click")
+		await flushPromises()
+		expect(PAIR.map((id) => nativeInput(w, id).type)).toEqual(["text", "text"])
+		await w.setProps({ unlockMethod: "passkey" })
+		expect(w.find('[data-testid="import-password-input"]').exists()).toBe(false)
+		await w.setProps({ unlockMethod: "password" })
+		expect(PAIR.map((id) => nativeInput(w, id).type)).toEqual(["text", "text"])
 	})
 
 	it("native attributes per field, and nothing is focused on mount", () => {

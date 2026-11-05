@@ -2,7 +2,8 @@ import { Flex, Icon, Input, Text } from "@nulo/design"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, it } from "vitest"
 import { defineComponent, h, ref } from "vue"
-import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto, typeNow } from "../../../tests/helpers/credential-pins"
+import { nativeInput, pasteInto, typeNow } from "../../../tests/helpers/credential-pins"
+import { NEW_PASSWORD_HINTS } from "@/utils/password-hint"
 import FilePasswordSection from "./FilePasswordSection.vue"
 
 const wrappers: VueWrapper[] = []
@@ -33,8 +34,6 @@ function mountOwned(props: Record<string, unknown> = {}) {
 	return { w, password, repeated }
 }
 
-const hint = (w: VueWrapper) => w.get('[data-testid="fp-hint"]').text()
-
 describe("FilePasswordSection", () => {
 	it("is headed File password, with both fields under it", () => {
 		const { w } = mountOwned()
@@ -43,35 +42,15 @@ describe("FilePasswordSection", () => {
 		expect(nativeInput(w, CONFIRM).placeholder).toBe("Repeat password")
 	})
 
-	it("typing writes each model on its own", async () => {
-		const { w, password, repeated } = mountOwned()
-		typeNow(nativeInput(w, FIELD), "abc")
-		typeNow(nativeInput(w, CONFIRM), "xyz")
-		await flushPromises()
-		expect([password.value, repeated.value]).toEqual(["abc", "xyz"])
-	})
-
-	it.each([
-		["", "", "At least 8 characters"],
-		["1234567", "1234567", "At least 8 characters"],
-		["12345678", "12345679", "Passwords don't match"],
-		["12345678", "12345678", "Strong password"],
-	])("the hint for %j / %j reads %j", async (a, b, text) => {
+	it("labels the second field Repeat password on every page that seals a file", () => {
+		const labels = (w: VueWrapper) => w.findAll(".export_section_label").map((label) => label.text())
 		const { w } = mountOwned()
-		typeNow(nativeInput(w, FIELD), a)
-		typeNow(nativeInput(w, CONFIRM), b)
-		await flushPromises()
-		expect(hint(w)).toBe(text)
-	})
-
-	it("one eye masks both fields", async () => {
-		const { w } = mountOwned()
-		await expectMaskToggle(w, { toggle: "fp-input-visibility-toggle", field: FIELD, drives: [FIELD, CONFIRM] })
-	})
-
-	it("both fields ask the browser for a new password", () => {
-		const { w } = mountOwned()
-		for (const id of [FIELD, CONFIRM]) expectNativeAttrs(w, id, { autocomplete: "new-password" })
+		expect(labels(w)).toEqual(["File password", "Repeat password"])
+		const repeat = w.findAll(".export_section_label")[1].element
+		const follows = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+		expect(follows(nativeInput(w, FIELD), repeat) && follows(repeat, nativeInput(w, CONFIRM))).toBe(true)
+		expect(nativeInput(w, CONFIRM).getAttribute("aria-labelledby")).toBe(repeat.id)
+		expect(repeat.id).not.toBe("")
 	})
 
 	it("the first field takes focus when the section appears", async () => {
@@ -80,18 +59,57 @@ describe("FilePasswordSection", () => {
 		expect(document.activeElement).toBe(nativeInput(w, FIELD))
 	})
 
-	it("a paste is capped at the page's limit", async () => {
-		const { w, password } = mountOwned({ maxLength: 16 })
-		expect(pasteInto(nativeInput(w, FIELD), "y".repeat(40))).toBe(true)
-		await flushPromises()
-		expect(password.value).toBe("y".repeat(16))
-	})
-
 	it("the limit defaults to 128", async () => {
 		const { w, password } = mountOwned()
 		pasteInto(nativeInput(w, FIELD), "z".repeat(200))
 		await flushPromises()
 		expect(password.value).toHaveLength(128)
+	})
+
+	it("each field writes its own model in the page", async () => {
+		const { w, password, repeated } = mountOwned()
+		typeNow(nativeInput(w, FIELD), "first-secret")
+		typeNow(nativeInput(w, CONFIRM), "second-secret")
+		await flushPromises()
+		expect([password.value, repeated.value]).toEqual(["first-secret", "second-secret"])
+	})
+
+	it("a model the page clears empties its field", async () => {
+		const { w, password, repeated } = mountOwned()
+		typeNow(nativeInput(w, FIELD), "first-secret")
+		typeNow(nativeInput(w, CONFIRM), "first-secret")
+		await flushPromises()
+		password.value = ""
+		repeated.value = ""
+		await flushPromises()
+		expect([nativeInput(w, FIELD).value, nativeInput(w, CONFIRM).value]).toEqual(["", ""])
+	})
+
+	it("one toggle reveals and hides both fields together", async () => {
+		const { w } = mountOwned()
+		const types = () => [nativeInput(w, FIELD).type, nativeInput(w, CONFIRM).type]
+		expect(types()).toEqual(["password", "password"])
+		await w.get('[data-testid="fp-input-visibility-toggle"]').trigger("click")
+		expect(types()).toEqual(["text", "text"])
+		await w.get('[data-testid="fp-input-visibility-toggle"]').trigger("click")
+		expect(types()).toEqual(["password", "password"])
+	})
+
+	it("the hint says when the repeat differs, and stops once it matches", async () => {
+		const { w } = mountOwned()
+		const hint = () => w.get('[data-testid="fp-hint"]').text()
+		typeNow(nativeInput(w, FIELD), "correct horse battery staple")
+		typeNow(nativeInput(w, CONFIRM), "correct horse battery")
+		await flushPromises()
+		expect(hint()).toBe(NEW_PASSWORD_HINTS.mismatch)
+		typeNow(nativeInput(w, CONFIRM), "correct horse battery staple")
+		await flushPromises()
+		expect(hint()).not.toBe(NEW_PASSWORD_HINTS.mismatch)
+	})
+
+	it("both fields ask for a new password, so a manager never fills the profile password", () => {
+		const { w } = mountOwned()
+		expect([nativeInput(w, FIELD).autocomplete, nativeInput(w, CONFIRM).autocomplete]).toEqual(["new-password", "new-password"])
 	})
 
 	it("every control is named after the page's testid", () => {

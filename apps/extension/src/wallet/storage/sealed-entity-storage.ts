@@ -77,9 +77,24 @@ export function commitSealedTogether(area: MinimalStorageArea, writes: readonly 
 	if (sealed.some((write) => write === undefined)) return Promise.reject(new Error("only sealed writes commit together"))
 	if (sealed.some((write) => !write?.held())) return Promise.reject(new WalletLockedError())
 	const items = Object.assign({}, ...writes.map((write) => write.items)) as Record<string, string>
-	const removals = sealed.flatMap((write) => write?.removals ?? [])
-	const written = area.set(items)
-	return removals.length > 0 ? written.then(() => area.remove(removals)) : written
+	return setThenRemove(
+		area,
+		items,
+		sealed.flatMap((write) => write?.removals ?? []),
+	)
+}
+
+/** Writes `items`, dispatched in the call, then removes `removals` once the write lands: a
+ *  rejected write leaves every original, and an interrupted pair leaves both copies, which reads
+ *  dedupe and the next pass resolves. */
+async function setThenRemove(area: MinimalStorageArea, items: Record<string, string>, removals: string[]): Promise<void> {
+	if (Object.keys(items).length > 0) await area.set(items)
+	if (removals.length > 0) await area.remove(removals)
+}
+
+/** What a keyed root seals: the natural id, which its storage id hides, and the row text verbatim. */
+function keyedRowText(naturalId: string, text: string): string {
+	return JSON.stringify({ k: naturalId, r: text })
 }
 
 /** A lock section for one row's conversion, given the row's natural id for a root whose writers
@@ -99,7 +114,7 @@ export type Companions = (naturalId: string) => Promise<LegacySeal[]>
 /**
  * Commits prepared legacy conversions, of any sealed roots, as one: only while every legacy key
  * still holds the text it was sealed from, every profile its keys and `isCurrent()` holds, all
- * read after the last read and before the dispatch. Then ONE `set` of every sealed copy and, once
+ * read after the last read and before the dispatch. Then at most ONE `set` of every sealed copy and, once
  * it lands, ONE `remove` of every plaintext key a keyed root leaves behind; a crash between leaves
  * both forms of each row, which reads dedupe and the next pass finishes. Returns whether it did.
  */
@@ -111,9 +126,11 @@ export async function commitLegacyTogether(
 	const stored = await area.get(seals.map((seal) => seal.legacyKey))
 	if (!isCurrent() || seals.some((seal) => !seal.current(stored[seal.legacyKey]))) return false
 	const items = Object.assign({}, ...seals.map((seal) => seal.items)) as Record<string, string>
-	const removals = seals.flatMap((seal) => seal.removals)
-	if (Object.keys(items).length > 0) await area.set(items)
-	if (removals.length > 0) await area.remove(removals)
+	await setThenRemove(
+		area,
+		items,
+		seals.flatMap((seal) => seal.removals),
+	)
 	return true
 }
 
@@ -206,11 +223,11 @@ export class SealedEntityStorage<T> {
 			return { items, commit: () => this.whileHeld(owner, keys, () => this.area.set(items)), sealed: { removals: [], held } }
 		}
 		const storageKey = this.prefix + (await this.physicalId(id, owner, keys))
-		const items = { [storageKey]: await this.envelope(keys, owner, storageKey, JSON.stringify({ k: id, r: text })) }
+		const items = { [storageKey]: await this.envelope(keys, owner, storageKey, keyedRowText(id, text)) }
 		const legacyTwin = (await this.legacyOwner(id)) === owner ? [this.prefix + id] : []
 		return {
 			items,
-			commit: () => this.whileHeld(owner, keys, () => this.commitWithRemovals(items, legacyTwin)),
+			commit: () => this.whileHeld(owner, keys, () => setThenRemove(this.area, items, legacyTwin)),
 			sealed: { removals: legacyTwin, held },
 		}
 	}
@@ -416,10 +433,7 @@ export class SealedEntityStorage<T> {
 		}
 		const sealedKey = this.prefix + (await this.physicalId(naturalId, owner, keys))
 		const twin = (await this.area.get(sealedKey))[sealedKey]
-		const items =
-			twin === undefined
-				? { [sealedKey]: await this.envelope(keys, owner, sealedKey, JSON.stringify({ k: naturalId, r: text })) }
-				: {}
+		const items = twin === undefined ? { [sealedKey]: await this.envelope(keys, owner, sealedKey, keyedRowText(naturalId, text)) } : {}
 		return { items, legacyKey, removals: [legacyKey], current }
 	}
 
@@ -441,7 +455,7 @@ export class SealedEntityStorage<T> {
 
 	/**
 	 * Gives the ownerless legacy row at `naturalId` to `profileId`: seals it, stamped with the
-	 * profile, under the profile's keyed id and removes the plaintext original in the same dispatch,
+	 * profile, under the profile's keyed id, then removes the plaintext original once that lands,
 	 * only while the original still holds `text` and the profile the keys it was sealed under. A
 	 * sealed row the profile already holds at that id is kept and only the original removed: an
 	 * unauthenticated row never replaces an authenticated one. The caller decides the profile owns it
@@ -457,19 +471,10 @@ export class SealedEntityStorage<T> {
 		const sealedKey = this.prefix + (await this.physicalId(naturalId, profileId, keys))
 		const twin = (await this.area.get(sealedKey))[sealedKey]
 		const items =
-			twin === undefined
-				? { [sealedKey]: await this.envelope(keys, profileId, sealedKey, JSON.stringify({ k: naturalId, r: adopted })) }
-				: {}
+			twin === undefined ? { [sealedKey]: await this.envelope(keys, profileId, sealedKey, keyedRowText(naturalId, adopted)) } : {}
 		if ((await this.area.get(legacyKey))[legacyKey] !== text || this.keysFor(profileId) !== keys) return false
-		await this.commitWithRemovals(items, [legacyKey])
+		await setThenRemove(this.area, items, [legacyKey])
 		return true
-	}
-
-	/** The write is dispatched at once; the removal waits for it, so a rejected write leaves the
-	 *  original, and an interrupted pair leaves both copies, which the next pass resolves. */
-	private async commitWithRemovals(items: Record<string, string>, removals: string[]): Promise<void> {
-		if (Object.keys(items).length > 0) await this.area.set(items)
-		if (removals.length > 0) await this.area.remove(removals)
 	}
 
 	private async envelope(keys: RowKeys, profileId: string, storageKey: string, text: string): Promise<string> {

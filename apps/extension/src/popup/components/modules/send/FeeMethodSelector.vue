@@ -3,6 +3,7 @@
 import { Dropdown } from "@/components/ui/Dropdown"
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { menuOrder } from "./fee-helpers"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 const props = defineProps({
 	modelValue: { type: Object, default: null },
@@ -15,7 +16,10 @@ const props = defineProps({
 })
 
 const emit = defineEmits(["update:modelValue", "open", "close"])
+/** Focuses the trigger without opening the menu. */
+defineExpose({ focus: () => trigger.value?.$el.focus() })
 
+const trigger = ref(null)
 const menu = computed(() => menuOrder(props.methods))
 
 /** A checking row answers nothing yet; the click stops here so the menu stays open. */
@@ -41,9 +45,12 @@ const onRowClick = (method, event) => {
 		</Flex>
 		<Dropdown @onOpen="emit('open')" @onClose="emit('close')">
 			<template #trigger>
+				<!-- A retry below hands focus here mid-keypress: its held Enter must not open the menu. -->
 				<Flex
+					ref="trigger"
 					tag="button"
 					type="button"
+					@keydown.enter="refuseRepeatEnter"
 					align="center"
 					justify="between"
 					class="clickable"

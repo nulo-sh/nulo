@@ -59,6 +59,21 @@ describe("FeeCostReadout", () => {
 		expect(drawn(landed)).toBe("You pay ~3.577824 FJ ($0.215)")
 	})
 
+	test("a failed estimate reads as such with its retry, unless the card is still reading what can pay", async () => {
+		const w = factory({ failed: true, pending: true, amountTyped: true })
+		expect(w.text()).toBe("You pay")
+		expect(w.findComponent(Skeleton).exists()).toBe(true)
+		expect(w.find('[data-testid="fee-estimate-failed"]').exists()).toBe(false)
+
+		await w.setProps({ pending: false })
+		expect(w.get('[data-testid="fee-estimate-failed"]').text()).toBe("You payCouldn't estimate fee.Try again")
+		await w.get('[data-testid="fee-estimate-retry"]').trigger("click")
+		expect(w.emitted("retry")).toHaveLength(1)
+
+		await w.setProps({ label: "Swap pays" })
+		expect(w.get('[data-testid="fee-estimate-failed"]').text()).toBe("Swap paysCouldn't estimate fee.Try again")
+	})
+
 	test("pending with no amount typed, the row reads the hint, whatever estimate or queue is still on the props", async () => {
 		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
 		const stale = factory({ pending: true, estimate: ESTIMATE, isEstimating: true, isQueued: true, queuedCap })
@@ -102,6 +117,15 @@ describe("FeeCostReadout", () => {
 		const handAdded = factory({ isEstimating: true, isQueued: true, payer: "unvouched" })
 		expect(handAdded.find('[data-testid="fee-estimate-queued-sponsored"]').exists()).toBe(false)
 		expect(drawn(handAdded)).toBe(`You pay ${QUEUED_FEE_COPY}`)
+	})
+
+	test("a surface that holds a queued send shows only the queued line, whoever pays and whatever cap", () => {
+		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
+		for (const props of [{ payer: "sponsor" }, { queuedCap }, { payer: "self" }]) {
+			const w = factory({ isEstimating: true, isQueued: true, offersQueue: false, ...props })
+			expect(w.find('[data-testid="fee-estimate-queued"]').exists()).toBe(true)
+			expect(drawn(w)).toBe(`You pay ${QUEUED_FEE_COPY}`)
+		}
 	})
 
 	test("a queued estimate shows the queued line in place of the skeleton; the estimate replaces it", () => {

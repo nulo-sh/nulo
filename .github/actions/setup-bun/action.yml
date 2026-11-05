@@ -4,14 +4,15 @@ description: |
   is "false".
   Callers must check out the repository before invoking this action.
 
-  Bun version is pinned (matches `packageManager` in root package.json).
-  Cache key includes the Bun version so a Bun bump invalidates stale state.
+  The Bun version is root package.json's `packageManager`. The install cache is keyed on the
+  version setup installed; on a bump its last restore key still seeds the new key from the old one.
 
 inputs:
   cache:
     description: |
-      "true" restores and saves the Bun install cache. A build that produces release bytes, and a
-      job that holds a write token, pass "false" and install from the registry against bun.lock:
+      "true" restores and saves the Bun install cache and setup-bun's cached Bun binary; "false"
+      skips both. A build that produces release bytes, and a job that holds a write scope, an App
+      token or a stored secret, pass "false" and install from the registry against bun.lock:
       Bun never re-checks cached files against the lockfile, and the install runs trusted
       packages' lifecycle scripts, so a poisoned cache would ship in the zips or run beside the
       token.
@@ -27,20 +28,22 @@ inputs:
 runs:
   using: composite
   steps:
-    # An exact version resolves without the GitHub API, so the action gets no token; its
-    # default is the job's, which in a publishing job can write releases.
-    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+    # `packageManager` names an exact version, which resolves without the GitHub API, so the
+    # action gets no token; its default is the job's, which in a publishing job can write releases.
+    - id: bun
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       with:
-        bun-version: 1.4.2
+        bun-version-file: package.json
         token: ""
+        no-cache: ${{ inputs.cache != 'true' }}
 
     - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       if: inputs.cache == 'true'
       with:
         path: ~/.bun/install/cache
-        key: ${{ runner.os }}-bun-1.4.2-${{ hashFiles('bun.lock') }}
+        key: ${{ runner.os }}-bun-${{ steps.bun.outputs.bun-version }}-${{ hashFiles('bun.lock') }}
         restore-keys: |
-          ${{ runner.os }}-bun-1.4.2-
+          ${{ runner.os }}-bun-${{ steps.bun.outputs.bun-version }}-
           ${{ runner.os }}-bun-
 
     - if: inputs.install == 'true'

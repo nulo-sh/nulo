@@ -7,6 +7,7 @@ import { navigateToSettings, waitForToast } from "./fixtures/helpers"
 import { pointerClick } from "./helpers/legal-drivers"
 import { activeTestId, focusInPopupOf } from "./helpers/pointer-probes"
 import { shotSend } from "./fixtures/send-page"
+import { bringToFront } from "./fixtures/browser"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const SNACK = sel("snackbar")
@@ -264,6 +265,15 @@ async function snackAboveEnd(page: Page, testid: string): Promise<AboveEnd> {
 	return (await handle.jsonValue()) as AboveEnd
 }
 
+/** Scrolls the container that scrolls `testid` to its end. */
+async function scrollToEnd(page: Page, testid: string): Promise<void> {
+	await page.$eval(sel(testid), (control) => {
+		let scroller = control.parentElement
+		while (scroller && getComputedStyle(scroller).overflowY !== "auto") scroller = scroller.parentElement
+		scroller?.scrollTo(0, scroller.scrollHeight)
+	})
+}
+
 /** Scrolls `testid` into view and hit-tests its centre in the same task, as a pointer click does. */
 async function hitAfterScroll(page: Page, testid: string): Promise<{ hit: string; covered: boolean }> {
 	return page.evaluate(
@@ -361,7 +371,7 @@ test("a replacement never shows two cards: two copies 50 ms apart, then a succes
 test("the pointer resting on the snack keeps it; after leaving, it goes within its remaining time", async ({ registeredExtension }) => {
 	const page = await openHome(registeredExtension)
 	await stubClipboard(page, "resolve")
-	await page.bringToFront()
+	await bringToFront(page)
 
 	await clickByTestId(page, COPY)
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })
@@ -385,17 +395,17 @@ test("a success that opens under a still pointer closes itself after 2 s, though
 	await stubClipboard(page, "resolve")
 	await clickByTestId(page, "actions-receive")
 	await sheetAtRest(page, "receive-address")
-	await page.bringToFront()
+	await bringToFront(page)
 	await recordSnackLife(page)
 	await countCardEvents(page)
 
-	const at = await page.$eval(sel("receive-address"), (el) => {
+	// The snack opens above where Close stops, over the address's last line, so the pointer rests there.
+	const at = await page.$eval(sel("receive-address-text"), (el) => {
 		const box = el.getBoundingClientRect()
-		return { x: Math.round(box.left + box.width / 2), y: Math.round(box.bottom - 3) }
+		return { x: Math.round(box.left + box.width / 2), y: Math.round(box.bottom - 6) }
 	})
 	await page.mouse.move(at.x, at.y, { steps: 5 })
-	await page.mouse.down()
-	await page.mouse.up()
+	await clickByTestId(page, "receive-address")
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })
 	await settledSnack(page)
 	const under = await page.evaluate(
@@ -438,7 +448,7 @@ test("an error on a page without the nav sits 12px up, stays, and closes from th
 	await pageClockPast(page, appeared[0] ?? 0, 10_000)
 	expect(await cardCount(page)).toBe(1)
 
-	await page.bringToFront()
+	await bringToFront(page)
 	const last = await focusLastPageControl(page)
 	console.log(`[snackbar] the last page control is ${last}`)
 	await page.keyboard.press("Tab")
@@ -460,7 +470,7 @@ test("an error raised inside a popup: Tab reaches its × after the popup's contr
 	await pointerClick(page, "account-item-copy")
 	await waitForToast(page, "Couldn't copy", 5_000, { kind: "error" })
 
-	await page.bringToFront()
+	await bringToFront(page)
 	const { visited, escaped } = await tabUntil(page, "snackbar-close", "account-item", 24)
 	console.log(`[snackbar] the Tab walk visited ${visited.join(" → ")}`)
 	expect(visited.at(-1)).toBe("snackbar-close")
@@ -488,7 +498,7 @@ test("over the accounts sheet, which covers the nav, an error sits 12px up and g
 	const over = await settledSnack(page)
 	expect(over.bottom).toBeCloseTo(over.innerHeight - 12, 0)
 
-	await page.bringToFront()
+	await bringToFront(page)
 	await page.keyboard.press("Escape")
 	await page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 5_000 }, sel("accounts-popup"))
 	await snackInsetIs(page, 76)
@@ -498,12 +508,14 @@ test("over the accounts sheet, which covers the nav, an error sits 12px up and g
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 60_000)
 
-test("in the Receive sheet a copy's snack sits 12px above the sheet's Close button", async ({ registeredExtension }) => {
+test("in the Receive sheet a copy's snack sits 12px above where the sheet's Close button stops", async ({ registeredExtension }) => {
 	const page = await openHome(registeredExtension)
 	await stubClipboard(page, "resolve")
 	await clickByTestId(page, "actions-receive")
 	await sheetAtRest(page, "receive-close")
 	await shotSend(page, "sheet-receive", "receive-close")
+	// At the popup's size the whole address and the network line make the sheet scroll a little.
+	await scrollToEnd(page, "receive-close")
 
 	await clickByTestId(page, "receive-address")
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })

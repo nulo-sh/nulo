@@ -1,13 +1,17 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { ProfileService } from "@/wallet/services/profile/service"
-import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { commitFencedCreate } from "@/wallet/services/create-fence"
+import type { ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
+import type { UiPreferenceService } from "@/wallet/services/ui-preference/service"
+import { UI_PREFERENCE_SERVICE_NAME } from "@/wallet/services/ui-preference/spec"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { nextRandomId } from "@/wallet/services/id-allocators"
@@ -18,11 +22,13 @@ import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { EventHandler } from "@nulo/wallet-core/utils"
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { Fpc } from "./fpc"
 import { getFpcHandler } from "./handlers"
 import { type Events, FPC_SERVICE_NAME, type FpcInfo, FpcType, type Methods } from "./spec"
 import { derivePrivateFpc, deriveSponsoredFpc, type ProtocolFpc } from "./protocol-fpcs"
+import { offersSponsoredFpc } from "./sponsored-fpc-chains"
 
 export * from "./fpc"
 export * from "./spec"
@@ -40,13 +46,17 @@ type StoredFpc = Omit<FpcInfo, "isProtocol">
  *  since the liveness mark `since`, and for a write no user action asked for, the session. */
 type WriteScope = {
 	fence: ExecutionFence
-	deletion: ReturnType<ProfileService["getDeletionState"]>
+	deletion: ProfileDeletionState
 	networkId: string
 	since: number
 	background: boolean
 }
 
 const hasRow = (rows: readonly StoredFpc[], type: FpcType, address: string) => rows.some((f) => f.type === type && f.address === address)
+
+/** In any letter case: a hand-typed address resolves to the same contract. */
+const isCanonicalSponsor = (f: StoredFpc, sponsored: string) =>
+	f.type === FpcType.DefaultSponsoredFpc && sameFieldAddress(f.address, sponsored)
 
 export class FpcService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("getFpcs", "getFpc", "addFpc", "updateFpc", "updateFpcAddress", "deleteFpc")
@@ -67,6 +77,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 	private pxeService: PxeServiceClient = null!
 	private profileService: ProfileService = null!
 	private networkService: NetworkService = null!
+	private uiPreference: UiPreferenceService = null!
 
 	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(FPC_SERVICE_NAME, logger)
@@ -77,19 +88,21 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		this.pxeService = new PxeServiceClient(this.logger)
 		this.profileService = services.get(ProfileService.name)
 		this.networkService = services.get(NetworkService.name)
+		this.uiPreference = services.get(UI_PREFERENCE_SERVICE_NAME)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networkService.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext fee payers failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 	}
 
 	/** Seals the profile's plaintext fee payers under the lock every fee-payer writer holds, so no
 	 *  write lands between a row's read and its sealed commit. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext fee payers failed; the next worker retries", { error })
-		}
+		await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
 	}
 
 	/**
@@ -158,14 +171,70 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		}
 
 		const protocols = await this.getOrComputeProtocolAddresses(chainId)
-		const hasSponsoredFpc = hasRow(result, FpcType.DefaultSponsoredFpc, protocols.sponsored)
-		const hasPrivateFpc = hasRow(result, FpcType.PrivateFpc, protocols.private)
-		if (hasSponsoredFpc && hasPrivateFpc) return result.map((f) => this.decorate(f, protocols))
+		const rows = await this.withoutUnofferedSponsor(result, chainId, protocols.sponsored, fence)
+		// A chain the sponsor list leaves out never discovers one.
+		const hasSponsoredFpc = !offersSponsoredFpc(chainId) || hasRow(rows, FpcType.DefaultSponsoredFpc, protocols.sponsored)
+		const hasPrivateFpc = hasRow(rows, FpcType.PrivateFpc, protocols.private)
+		if (hasSponsoredFpc && hasPrivateFpc) return this.offeredOn(chainId, rows, protocols)
 
 		this.logInfo("Discovering missing protocol FPCs...")
 		await this.discoverProtocolFpcs(chainId, hasSponsoredFpc, hasPrivateFpc, fence, deletion)
 		// Re-read: a purge may have swept a row stored here, or a concurrent discovery stored one.
-		return (await this.rowsOn(fence.profileId, chainId)).map((f) => this.decorate(f, protocols))
+		return this.offeredOn(chainId, await this.rowsOn(fence.profileId, chainId), protocols)
+	}
+
+	/** On a chain with no sponsor, never its canonical row, even one a removal that stood down (its
+	 *  session or its lock moved on) left stored. */
+	private offeredOn(chainId: number, rows: StoredFpc[], protocols: ProtocolAddresses): FpcInfo[] {
+		const offered = offersSponsoredFpc(chainId) ? rows : rows.filter((f) => !isCanonicalSponsor(f, protocols.sponsored))
+		return offered.map((f) => this.decorate(f, protocols))
+	}
+
+	/** On a chain with no sponsor, a canonical Sponsored row stored earlier names a contract that pays
+	 *  nothing there: every fee list reads through here, so removing it here leaves none to offer it.
+	 *  A hand-added sponsor at another address stays. Returns the rows as they stand after. */
+	private async withoutUnofferedSponsor(
+		rows: StoredFpc[],
+		chainId: number,
+		sponsored: string,
+		fence: ExecutionFence,
+	): Promise<StoredFpc[]> {
+		if (offersSponsoredFpc(chainId)) return rows
+		const stale = rows.find((f) => isCanonicalSponsor(f, sponsored))
+		if (!stale) return rows
+		const removed = await this.lock.withLock((isCurrent) => this.removeSponsorRow(stale.id, chainId, sponsored, fence, isCurrent))
+		// Outside the lock, as Settings' delete does; nothing retries a forget that fails.
+		if (removed) await this.forgetFeePicks(fence.profileId, removed.id)
+		return this.rowsOn(fence.profileId, chainId)
+	}
+
+	/** Caller holds the lock every row writer holds. The row is read again so an address edit or a
+	 *  purge since the caller's read is never undone, and removed only while the reading session is
+	 *  live and the lock is still this caller's (its watchdog can hand it on mid-read). */
+	private async removeSponsorRow(
+		id: string,
+		chainId: number,
+		sponsored: string,
+		fence: ExecutionFence,
+		holdsLock: () => boolean,
+	): Promise<StoredFpc | undefined> {
+		const row = await this.storage.get(id)
+		if (!row || row.profileId !== fence.profileId || row.chainId !== chainId || !isCanonicalSponsor(row, sponsored)) return undefined
+		const removal = await this.storage.prepareDelete(id)
+		if (!holdsLock() || !this.profileService.isFenceLive(fence)) return undefined
+		await removal.commit()
+		this.emit("onFpcDeleted", this.decorate(row, this.protocolAddresses.get(chainId)))
+		return row
+	}
+
+	private async forgetFeePicks(profileId: string, fpcId: string): Promise<void> {
+		try {
+			if (!(await this.uiPreference.saveFeePick(profileId, { kind: "forgetFpc", fpcId }))) {
+				this.logDebug("The removed sponsor's fee picks were not forgotten: the session moved")
+			}
+		} catch (error) {
+			this.logDebug("Forgetting the removed sponsor's fee picks failed", { error })
+		}
 	}
 
 	/** Registers with no lock held: a cold runtime's registration waits on the node, and the
@@ -176,7 +245,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		hasSponsoredFpc: boolean,
 		hasPrivateFpc: boolean,
 		fence: ExecutionFence,
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
+		deletion: ProfileDeletionState,
 	): Promise<void> {
 		const network = await resolveNetworkByChainId(this.networkService, chainId)
 		const since = await this.networkService.captureLiveness(network.id)
@@ -196,6 +265,11 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 				// A lock, a switch or a deletion since the discovery began makes the rest of it moot.
 				if (!this.profileService.isFenceLive(fence)) {
 					this.logDebug("Protocol FPC discovery stopped: its session ended")
+					return
+				}
+				// So does a reset or a removal of its network since the mark; a failed read leaves the failure logged.
+				if (!(await this.networkService.isNetworkLive(network.id, since).catch(() => true))) {
+					this.logDebug("Protocol FPC discovery stopped: its network was reset or removed")
 					return
 				}
 				this.logWarn(`getFpcs: Failed to discover FPC ${item.instance.address.toString()}:`, err)
@@ -244,22 +318,16 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 	 *  and a background write's session a lock or a switch, which leave the row keys in the worker. */
 	private async writeFencedRow(fpc: StoredFpc, scope: WriteScope): Promise<void> {
 		const { fence, deletion } = scope
-		const assertLive = () => {
-			deletion.assertCurrent(fence.profileId, fence.epoch)
+		const assertSession = () => {
 			if (scope.background && !this.profileService.isFenceLive(fence)) throw new SessionEndedError()
 		}
-		assertLive()
+		deletion.assertCurrent(fence.profileId, fence.epoch)
+		assertSession()
 		const write = await this.storage.prepare(fpc.id, fpc)
 		if (!(await this.networkService.isNetworkLive(scope.networkId, scope.since))) {
 			throw new Error("network deleted")
 		}
-		assertLive()
-		await write.commit()
-		// The set awaits — compensate before the row becomes observable.
-		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-			await this.storage.delete(fpc.id)
-			throw profileDeletedError(fence.profileId)
-		}
+		await commitFencedCreate(deletion, fence, write, () => this.storage.delete(fpc.id), { admit: assertSession })
 	}
 
 	private async rowsOn(profileId: string, chainId: number): Promise<StoredFpc[]> {
@@ -288,6 +356,12 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		const fence = await this.profileService.captureExecutionFence()
 		const deletion = this.profileService.getDeletionState()
 		const network = await this.networkService.getNetwork(networkId)
+		// No instance is published there, but a PXE that registered one before would answer for it, and
+		// the row would be a protocol row the next read removes.
+		if (type === FpcType.DefaultSponsoredFpc && !offersSponsoredFpc(network.chainId)) {
+			const { sponsored } = await this.getOrComputeProtocolAddresses(network.chainId)
+			if (sameFieldAddress(address, sponsored)) throw new Error("Contract instance not found")
+		}
 		const since = await this.networkService.captureLiveness(networkId)
 		if (since === undefined) {
 			throw new Error("network deleted")
@@ -394,7 +468,10 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		}
 
 		return await this.lock.withLock(async () => {
-			const next: StoredFpc = { ...existing, address }
+			// The row's writers take this lock, and a profile's last keyless sweep follows its locked
+			// purge: a rename since the checks stays, and a row removed since them is not written back.
+			const current = requireOwnedRow(await this.storage.get(id), profile.id)
+			const next: StoredFpc = { ...current, address }
 			await this.storage.set(id, next)
 			const decorated = this.decorate(next, protocols)
 			this.emit("onFpcUpdated", decorated)

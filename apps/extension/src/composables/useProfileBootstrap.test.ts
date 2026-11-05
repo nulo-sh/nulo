@@ -1,8 +1,10 @@
 import { createPinia, setActivePinia } from "pinia"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 
-vi.mock("@/utils/core", () => {
+vi.mock("@/utils/core", async () => {
+	const { AccountServiceClient } = await import("@/wallet/services/account/client")
+	const { NetworkServiceClient } = await import("@/wallet/services/network/client")
 	const profileMock = {
 		getProfiles: vi.fn(async () => []),
 		getActiveProfile: vi.fn(async () => null),
@@ -40,11 +42,18 @@ vi.mock("@/utils/core", () => {
 	}
 	return {
 		managers,
-		// app.store reads the lazy clients via require*()/get*(). initNetworks/
-		// initAccount REASSIGN `managers.network`/`.account` to the mocked
-		// `new NetworkServiceClient()`/`new AccountServiceClient()` (which carry
-		// getNodeStatus etc.), so these MUST read the CURRENT `managers.X` — close
-		// over `managers`, not the original *Mock consts (matching the real impl).
+		// The replace writers install fresh mocked clients (which carry getNodeStatus etc.), so the
+		// accessors read the current `managers.X`, never the original *Mock consts, as the real ones do.
+		replaceNetworkClient: () => {
+			managers.network.disconnect()
+			managers.network = new NetworkServiceClient() as never
+			return managers.network
+		},
+		replaceAccountClient: () => {
+			managers.account.disconnect()
+			managers.account = new AccountServiceClient() as never
+			return managers.account
+		},
 		requireNetwork: () => managers.network,
 		requireAccount: () => managers.account,
 		getNetwork: () => managers.network,
@@ -481,6 +490,66 @@ describe("useProfileBootstrap", () => {
 		await expect(current).rejects.toThrow("timed out")
 	})
 
+	describe("a core that fails while the profile list is in flight", () => {
+		const unhandled = vi.fn()
+		const settleTimers = () => new Promise((resolve) => setTimeout(resolve, 0))
+		beforeEach(() => {
+			unhandled.mockClear()
+			process.on("unhandledRejection", unhandled)
+		})
+		afterEach(() => {
+			process.off("unhandledRejection", unhandled)
+		})
+
+		test("is never an unhandled rejection, and the lock that caused it still resolves the activation false", async () => {
+			let answerProfiles!: (profiles: unknown[]) => void
+			;(managers.profile.getProfiles as ReturnType<typeof vi.fn>).mockImplementationOnce(
+				() => new Promise((resolve) => (answerProfiles = resolve)),
+			)
+			netMock.getOrInitNetworks.mockRejectedValueOnce(new Error("Wallet locked"))
+			const { bootstrapActiveProfile } = useProfileBootstrap()
+			const activation = bootstrapActiveProfile(fakeProfile)
+			await vi.waitFor(() => expect(netMock.getOrInitNetworks).toHaveBeenCalledTimes(1))
+			await settleTimers()
+
+			supersedeProfileActivations()
+			answerProfiles([fakeProfile])
+			expect(await activation).toBe(false)
+			await settleTimers()
+			expect(unhandled).not.toHaveBeenCalled()
+		})
+
+		test("control: one no lock supersedes still reports its failure, after the list lands", async () => {
+			let answerProfiles!: (profiles: unknown[]) => void
+			;(managers.profile.getProfiles as ReturnType<typeof vi.fn>).mockImplementationOnce(
+				() => new Promise((resolve) => (answerProfiles = resolve)),
+			)
+			netMock.getOrInitNetworks.mockRejectedValueOnce(new Error("Wallet locked"))
+			const { bootstrapActiveProfile } = useProfileBootstrap()
+			const appStore = useAppStore()
+			const activation = bootstrapActiveProfile(fakeProfile)
+			await vi.waitFor(() => expect(netMock.getOrInitNetworks).toHaveBeenCalledTimes(1))
+			await settleTimers()
+
+			answerProfiles([fakeProfile])
+			await expect(activation).rejects.toThrow("Wallet locked")
+			expect(appStore.profiles).toEqual([fakeProfile])
+			expect(unhandled).not.toHaveBeenCalled()
+		})
+
+		test("a list read that fails first leaves the core's later failure observed", async () => {
+			let failCore!: (err: Error) => void
+			netMock.getOrInitNetworks.mockImplementationOnce(() => new Promise((_resolve, reject) => (failCore = reject)))
+			;(managers.profile.getProfiles as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("Profile locked"))
+			const { bootstrapActiveProfile } = useProfileBootstrap()
+			await expect(bootstrapActiveProfile(fakeProfile)).rejects.toThrow("Profile locked")
+
+			failCore(new Error("Wallet locked"))
+			await settleTimers()
+			expect(unhandled).not.toHaveBeenCalled()
+		})
+	})
+
 	test("a hydration superseded by a lock commits nothing and reports no active profile", async () => {
 		const answers = deferredReads()
 		const { hydrateKnownProfile } = useProfileBootstrap()
@@ -566,7 +635,6 @@ describe("useProfileBootstrap", () => {
 			select: () => undefined,
 			readLastActiveId: async () => undefined,
 			routeName: () => undefined,
-			openChooser: () => undefined,
 		})
 		const lockEvent = lockedState.onLockEvent(
 			() =>

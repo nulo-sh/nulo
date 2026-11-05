@@ -21,6 +21,7 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import type { ConfigProp, IConfig } from "@/wallet/config"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { LoggerStore } from "@/wallet/logger"
+import { LogLevel } from "@nulo/wallet-core/logger"
 import { ServiceCollection } from "@/wallet/base"
 import { Service } from "@nulo/extension-messaging/background"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -28,6 +29,7 @@ import {
 	AccountAddressInconsistencyError,
 	DuplicateWalletError,
 	InvalidPasswordError,
+	PasskeyNotOpenedError,
 	RestoreTornError,
 	RecoveryModeError,
 	RetiredProfileError,
@@ -375,10 +377,14 @@ describe("ProfileService integration", () => {
 			expect(exported.length).toBeGreaterThan(0)
 		}, 30_000)
 
-		test("exportPlain with wrong password throws with InvalidPasswordError's legacy message", async () => {
-			const { service } = await makeService()
+		test("exportPlain refuses a wrong password as InvalidPasswordError, with its legacy message and no error line", async () => {
+			const { logger, service } = await makeService()
 			const profile = await service.createProfile("P", "pass1234")
-			await expect(service.exportPlain(profile.id, "wrong")).rejects.toThrow(/Invalid profile password/)
+			const log = vi.spyOn(logger, "log")
+			const refusal = service.exportPlain(profile.id, "wrong")
+			await expect(refusal).rejects.toBeInstanceOf(InvalidPasswordError)
+			await expect(refusal).rejects.toThrow(/Invalid profile password/)
+			expect(log.mock.calls.filter(([, level]) => level === LogLevel.Error)).toEqual([])
 		}, 30_000)
 
 		test("exportPlain + exportMnemonic REJECT a tombstoned profile — no secret exfil mid-delete", async () => {
@@ -430,7 +436,7 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 
 		test("exportPlain refuses another credential's answer, even one carrying this credential's output, and the same credential's at another input", async () => {
-			const { service } = await makeService()
+			const { logger, service } = await makeService()
 			const profile = await service.createPasskeyProfile("PK")
 			const { credentialId, prfSalt } = await service.getPasskeyUnlockParams(profile.id)
 			const ownOutput = await fakePasskeyAnswer(credentialId, prfSalt)
@@ -439,7 +445,12 @@ describe("ProfileService integration", () => {
 				{ ...ownOutput, id: asBase64CredentialId("cred-OTHER") },
 				await fakePasskeyAnswer(credentialId, freshPrfSalt()),
 			]) {
-				await expect(service.exportPlain(profile.id, undefined, answer)).rejects.toThrow("Passkey did not open this profile")
+				const log = vi.spyOn(logger, "log")
+				const refusal = service.exportPlain(profile.id, undefined, answer)
+				await expect(refusal).rejects.toBeInstanceOf(PasskeyNotOpenedError)
+				await expect(refusal).rejects.toThrow("Passkey did not open this profile")
+				expect(log.mock.calls.filter(([, level]) => level === LogLevel.Error)).toEqual([])
+				log.mockRestore()
 			}
 			expect(await service.exportPlain(profile.id, undefined, ownOutput)).toMatch(/\S/)
 		}, 30_000)
@@ -600,6 +611,19 @@ describe("ProfileService integration", () => {
 			// And change-password refuses too — it must NOT reseal + rewrite the MAC into a
 			// bearer-valid-but-unrecoverable profile.
 			await expect(service.changeProfilePassword(a.id, "shared-pass1", "new-pass12")).rejects.toThrow()
+		}, 30_000)
+
+		test("control: exportPlain still flattens a transplanted row's failure and logs it at error", async () => {
+			const { api, logger, service } = await makeService()
+			const a = await service.createProfile("A", "shared-pass1")
+			await service.lockActiveProfile()
+			const b = await service.createProfile("B", "shared-pass1")
+			await service.lockActiveProfile()
+			await writeRow(api, a.id, { ...(await readRow(api, a.id)), entropy: (await readRow(api, b.id)).entropy })
+			const log = vi.spyOn(logger, "log")
+			const failure = await service.exportPlain(a.id, "shared-pass1").catch((e: unknown) => e)
+			expect((failure as Error).constructor).toBe(Error)
+			expect(log.mock.calls.filter(([, level]) => level === LogLevel.Error)).toHaveLength(1)
 		}, 30_000)
 
 		test("a WHOLE-envelope swap between same-password profiles is rejected at unlock (identity binding)", async () => {
@@ -904,6 +928,29 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 	})
 
+	describe("a new password profile is never sealed under an empty password", () => {
+		const seals = {
+			createProfile: (service: ProfileService, password: string) => service.createProfile("P", password),
+			importMnemonic: async (service: ProfileService, password: string) =>
+				service.importMnemonic("P", await wordsForFill(0x2e), password),
+		}
+
+		test.each(Object.keys(seals) as (keyof typeof seals)[])(
+			"%s refuses it and writes nothing; a password seals",
+			async (path) => {
+				const { api, service } = await makeService()
+				await service.getProfiles()
+				const before = await api.storage.local.get(null)
+				await expect(seals[path](service, "")).rejects.toThrow("Password is required for password profile")
+				expect(await api.storage.local.get(null)).toStrictEqual(before)
+
+				expect((await seals[path](service, "pass1234")).type).toBe("password")
+				expect(await service.getProfiles()).toHaveLength(1)
+			},
+			30_000,
+		)
+	})
+
 	describe("recovery-phrase round trip (NULO-ACCOUNT-KDF v2)", () => {
 		test("create → export words → re-import → the SAME master secret", async () => {
 			const { service } = await makeService()
@@ -1154,6 +1201,7 @@ describe("ProfileService integration", () => {
 			const { api, service, passkeys } = await makeService()
 			const profile = await service.createPasskeyProfile("PK")
 			await service.lockActiveProfile()
+			passkeys.outcomes.length = 0
 			const realGetKey = passkeys.getKey.bind(passkeys)
 			vi.spyOn(passkeys, "getKey").mockImplementation(async (id, prfSalt, display) => {
 				await writeRawRow(api, profile.id, { ...(await readRawRow(api, profile.id)), prfSalt: freshPrfSalt() })
@@ -1162,6 +1210,7 @@ describe("ProfileService integration", () => {
 
 			await expect(service.unlockPasskeyProfile(profile.id)).rejects.toThrow(/Invalid profile id/)
 			expect(await service.getActiveProfile()).toBeUndefined()
+			expect(passkeys.outcomes).toEqual(["failed"])
 		}, 30_000)
 
 		test("unlock refuses an answer at another input and tells the window", async () => {
@@ -1680,6 +1729,71 @@ describe("ProfileService integration", () => {
 			await service.finalizeRestore(out.id, "file-pass1")
 			expect((await service.getActiveProfile())?.id).toBe(out.id)
 			expect(await service.exportMnemonic(out.id, "file-pass1")).toEqual(await wordsForFill(11))
+		}, 30_000)
+
+		/** A passkey restore of `fills[0]`'s backup holds its commit inside the facade lock, at its input
+		 *  check, while a password restore of `fills[1]`'s starts. The hold opens once the second asks
+		 *  for the lock, or, with the lock `bypassed`, once its duplicate check has passed: released
+		 *  earlier, the first's row could land before that check and refuse it with no lock at all. */
+		async function raceRestores(fills: [number, number], lock: "held" | "bypassed") {
+			const { service } = await makeService()
+			type Locked = (...args: never[]) => Promise<unknown>
+			const facade = service as unknown as Record<
+				"runExclusive" | "assertNotDuplicateWallet" | "assertPrfSaltUnusedHoldingLock",
+				Locked
+			>
+			const held = Promise.withResolvers<void>()
+			const open = Promise.withResolvers<void>()
+			let holding = false
+			const saltCheck = facade.assertPrfSaltUnusedHoldingLock.bind(service)
+			vi.spyOn(facade, "assertPrfSaltUnusedHoldingLock").mockImplementationOnce(async (...args) => {
+				holding = true
+				held.resolve()
+				await open.promise
+				return saltCheck(...args)
+			})
+			const exclusive = facade.runExclusive.bind(service)
+			vi.spyOn(facade, "runExclusive").mockImplementation(async (...args) => {
+				if (lock === "bypassed") return (args[0] as (isCurrent: () => boolean) => Promise<unknown>)(() => true)
+				if (holding) open.resolve()
+				return exclusive(...args)
+			})
+			const duplicateCheck = facade.assertNotDuplicateWallet.bind(service)
+			vi.spyOn(facade, "assertNotDuplicateWallet").mockImplementation(async (...args) => {
+				const fingerprint = await duplicateCheck(...args)
+				if (holding) open.resolve()
+				return fingerprint
+			})
+
+			const passkey = service.restore(
+				{ id: "ignored", name: "P", type: "passkey" },
+				await restoreSecretFor(fills[0]),
+				undefined,
+				false,
+				await newPasskeyAnswer("cred-restore"),
+			)
+			await held.promise
+			const password = service.restore({ id: "ignored", name: "P", type: "password" }, await restoreSecretFor(fills[1]), "pass1234")
+			const outcomes = (await Promise.allSettled([passkey, password])).map((r) => {
+				if (r.status === "fulfilled")
+					return "restoreError" in r.value && r.value.restoreError ? String(r.value.restoreError) : "restored"
+				return r.reason instanceof DuplicateWalletError ? "duplicate" : String(r.reason)
+			})
+			return { outcomes: outcomes.sort(), rows: (await service.getProfiles()).length }
+		}
+
+		test("two restores of one backup, one under a passkey, commit one profile and refuse the other", async () => {
+			expect(await raceRestores([21, 21], "held")).toEqual({ outcomes: ["duplicate", "restored"], rows: 1 })
+		}, 30_000)
+
+		test("two restores of two backups under the same hold both commit", async () => {
+			expect(await raceRestores([21, 22], "held")).toEqual({ outcomes: ["restored", "restored"], rows: 2 })
+		}, 30_000)
+
+		// Without the lock, the duplicate check alone admits one backup twice. A guard added at the
+		// write would turn this red; retire the test then.
+		test("with the facade lock bypassed and the hold opened after the second's check, one backup commits twice", async () => {
+			expect(await raceRestores([21, 21], "bypassed")).toEqual({ outcomes: ["restored", "restored"], rows: 2 })
 		}, 30_000)
 
 		test("an explicit lock wipes and drops every pending rewrap context, even when the close fails", async () => {
@@ -2258,6 +2372,133 @@ describe("ProfileService — deletion coordinator integration (finding D)", () =
 		expect(purged).toEqual([])
 		expect((await boot2.getProfiles()).map((x) => x.id)).toContain(named.id)
 		expect(state.isReserved("other")).toBe(true)
+	})
+})
+
+describe("the boot resume finishes only the deletions a dead worker left", () => {
+	const NO_ROWS = { addresses: [], tokenIds: [], networkIds: [] }
+	const stored = async (api: FakeBrowserApi, key: string) => (await api.storage.local.get(key))[key]
+	const tombstoneKey = (id: string) => `${PROFILE_TOMBSTONE_ROOT}@${id}`
+
+	/** Worker 1 leaves A's deletion pending and holds B, restored under a kept id. Worker 2 starts
+	 *  deleting B and holds its purge, then starts the resume; every purge records its id and waits
+	 *  for its profile's gate. */
+	async function aPendingAndBDeleting() {
+		const { api, service: boot1 } = await makeService()
+		boot1.setDeletionDelegate({
+			snapshot: async () => NO_ROWS,
+			runFor: async () => {
+				throw new Error("interrupted")
+			},
+		})
+		const a = await boot1.createProfile("A", "password123")
+		await expect(boot1.deleteProfile(a.id)).rejects.toThrow("interrupted")
+		const b = await boot1.restore({ id: "abc12345", name: "B", type: "password" }, await restoreSecretFor(11), "pass1234")
+		expect(b.id).toBe("abc12345")
+
+		const { service: boot2 } = await makeServiceFromExistingApi(api)
+		const purges: string[] = []
+		const gates = { [a.id]: Promise.withResolvers<void>(), [b.id]: Promise.withResolvers<void>() }
+		const reached = { [a.id]: Promise.withResolvers<void>(), [b.id]: Promise.withResolvers<void>() }
+		const bResumed = Promise.withResolvers<void>()
+		boot2.setDeletionDelegate({
+			snapshot: async () => NO_ROWS,
+			runFor: async (id: string) => {
+				purges.push(id)
+				if (id === b.id && purges.filter((p) => p === b.id).length === 2) bResumed.resolve()
+				reached[id].resolve()
+				await gates[id].promise
+			},
+		})
+		const deletingB = boot2.deleteProfile(b.id)
+		await reached[b.id].promise
+		const resuming = boot2.resumePendingDeletions()
+		const openAll = () => {
+			for (const g of Object.values(gates)) g.resolve()
+		}
+		return { api, boot2, a, b, purges, gates, reached, bResumed, deletingB, resuming, openAll }
+	}
+
+	test("a profile restored under the id of a deletion begun in this worker survives the resume", async () => {
+		const { api, boot2, a, b, purges, gates, reached, deletingB, resuming, openAll } = await aPendingAndBDeleting()
+		try {
+			await reached[a.id].promise
+			// Storage lists A's tombstone first, so a resume that also listed B's reaches it after this.
+			expect(purges).toEqual([b.id, a.id])
+			gates[b.id].resolve()
+			await deletingB
+			const restored = await boot2.restore({ id: b.id, name: "B", type: "password" }, await restoreSecretFor(11), "pass1234")
+			expect(restored.id).toBe(b.id)
+			gates[a.id].resolve()
+			await resuming
+
+			expect(await stored(api, `nulo:core:profiles@${b.id}`)).toBeDefined()
+			expect(await stored(api, `${RESTORE_PENDING_ROOT}@${b.id}`)).toBeDefined()
+			expect(purges.filter((id) => id === b.id)).toHaveLength(1)
+			expect(await stored(api, tombstoneKey(a.id))).toBeUndefined()
+			expect(boot2.getDeletionState().isReserved(a.id)).toBe(false)
+		} finally {
+			openAll()
+		}
+	})
+
+	test("the resume never purges a deletion this worker began, even while that deletion is still running", async () => {
+		const { api, boot2, a, b, purges, gates, bResumed, deletingB, resuming, openAll } = await aPendingAndBDeleting()
+		try {
+			gates[a.id].resolve()
+			const outcome = await Promise.race([resuming.then(() => "resume ended"), bResumed.promise.then(() => "resume purged B")])
+			expect(outcome).toBe("resume ended")
+			expect(purges).toEqual([b.id, a.id])
+			expect(await stored(api, tombstoneKey(a.id))).toBeUndefined()
+			gates[b.id].resolve()
+			await deletingB
+			expect(await stored(api, tombstoneKey(b.id))).toBeUndefined()
+			expect(boot2.getDeletionState().isReserved(b.id)).toBe(false)
+		} finally {
+			openAll()
+		}
+	})
+
+	test("an inherited tombstone never erases a stored row of another incarnation", async () => {
+		const { api, service } = await makeService()
+		const kept = await service.createProfile("Kept", "password123")
+		const planted: Tombstone = { profileId: kept.id, ...NO_ROWS, epoch: 1, pxeGeneration: "0".repeat(32) }
+		const orphan: Tombstone = { profileId: "deadbeef", ...NO_ROWS, epoch: 1, pxeGeneration: "1".repeat(32) }
+		await api.storage.local.set({
+			[tombstoneKey(kept.id)]: JSON.stringify(planted),
+			[tombstoneKey(orphan.profileId)]: JSON.stringify(orphan),
+		})
+
+		const { service: boot2 } = await makeServiceFromExistingApi(api)
+		const purges: string[] = []
+		boot2.setDeletionDelegate({ snapshot: async () => NO_ROWS, runFor: async (id: string) => void purges.push(id) })
+		await boot2.resumePendingDeletions()
+
+		expect(await stored(api, `nulo:core:profiles@${kept.id}`)).toBeDefined()
+		expect(await stored(api, tombstoneKey(kept.id))).toBeDefined()
+		expect(boot2.getDeletionState().isReserved(kept.id)).toBe(true)
+		expect(purges).toEqual([orphan.profileId])
+		expect(await stored(api, tombstoneKey(orphan.profileId))).toBeUndefined()
+	})
+
+	test("a second resume in the same worker runs no deletion again", async () => {
+		const { api, service: boot1 } = await makeService()
+		boot1.setDeletionDelegate({
+			snapshot: async () => NO_ROWS,
+			runFor: async () => {
+				throw new Error("interrupted")
+			},
+		})
+		const a = await boot1.createProfile("A", "password123")
+		await expect(boot1.deleteProfile(a.id)).rejects.toThrow("interrupted")
+
+		const { service: boot2 } = await makeServiceFromExistingApi(api)
+		const purges: string[] = []
+		boot2.setDeletionDelegate({ snapshot: async () => NO_ROWS, runFor: async (id: string) => void purges.push(id) })
+		await boot2.resumePendingDeletions()
+		await boot2.resumePendingDeletions()
+
+		expect(purges).toEqual([a.id])
 	})
 })
 
@@ -3316,6 +3557,18 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			await expect(service.importMnemonic("Second", words, "pass1234")).rejects.toBeInstanceOf(DuplicateWalletError)
 			const dup = await service.importMnemonic("Second", words, "pass1234", true)
 			expect(dup.id).toBeDefined()
+		})
+
+		test("(g) a third import of one phrase names both profiles already on it", async () => {
+			const { service } = await makeService()
+			const words = await wordsForFill(0x32)
+			await service.importMnemonic("Savings", words, "pass1234")
+			await service.importMnemonic("Main", words, "pass1234", true)
+			await service.importMnemonic("Other", await wordsForFill(0x33), "pass1234")
+			const refused = await service.importMnemonic("Third", words, "pass1234").catch((err: unknown) => err)
+			expect(refused).toBeInstanceOf(DuplicateWalletError)
+			const names = ((refused as DuplicateWalletError).details as { existingProfileNames?: string[] }).existingProfileNames
+			expect([...(names ?? [])].sort()).toEqual(["Main", "Savings"])
 		})
 
 		// (h) clone divergence: a fresh destination dek — B cannot equal A's session dek.
@@ -4485,10 +4738,10 @@ describe("ProfileService — a retired passkey profile", () => {
 	test("the slot opener and the row-key fill refuse a retired row themselves", async () => {
 		const { service } = await withRetired()
 		const internals = service as unknown as {
-			openSlots(row: unknown, key: { password: string }): Promise<unknown>
+			codec: { openSlots(row: unknown, key: { password: string }): Promise<unknown> }
 			fillRowKeysHoldingLock(row: unknown, master: Uint8Array): Promise<void>
 		}
-		await expect(internals.openSlots(retiredRow(), { password: "pass1234" })).rejects.toBeInstanceOf(RetiredProfileError)
+		await expect(internals.codec.openSlots(retiredRow(), { password: "pass1234" })).rejects.toBeInstanceOf(RetiredProfileError)
 		await expect(internals.fillRowKeysHoldingLock(retiredRow(), new Uint8Array(32).fill(7))).rejects.toBeInstanceOf(RetiredProfileError)
 	}, 30_000)
 })

@@ -1,3 +1,5 @@
+import { pluralize } from "@/utils/plural"
+
 /** An imported account a restore kept for a network the new profile lacks, its name cleaned. */
 export type HeldAccount = { name: string; chainId: number }
 
@@ -21,7 +23,7 @@ function listed(items: readonly string[], more: (count: number) => string): stri
 function heldSubject(names: readonly string[]): string {
 	if (names.length === 1) return `The imported account ${names[0]}`
 	if (names.length <= MAX_LISTED) return `The imported accounts ${joinNames(names)}`
-	return listed(names, (count) => `${count} more imported account${count === 1 ? "" : "s"}`)
+	return listed(names, (count) => `${count} more imported ${pluralize(count, "account", "accounts")}`)
 }
 
 function heldAccountsText(held: readonly HeldAccount[]): string {

@@ -21,9 +21,9 @@
 				}
 			],
 			"digests": {
-				"apps/extension/src/wallet/services/auth-registry/service.ts": "f7e7cc5fbacfba22652cd192c3ce2c12577b1228bd33343ac6cd967a72bb0d26",
-				"apps/extension/src/wallet/services/execution/operation-planner.ts": "bbcaf06f67030ba2a7b26bc54a4671db80d11059f0b0b50ce0142a7cf16b5185",
-				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
+				"apps/extension/src/wallet/services/auth-registry/service.ts": "196e310a3dacf05241f53a666bb3b70c4de2f9d3b06ee6bd284ec04515d90f9d",
+				"apps/extension/src/wallet/services/execution/operation-planner.ts": "3bdb4c1538359fe7d11572c82d19fa07677be5b74a40429ea7cb64e02d47d1ec",
+				"packages/wallet-bridge/src/dispatcher.ts": "8a520b3c0d21001f9227eef0057336c061b2f953f002ae63859886b6a69fd4ea"
 			},
 			"evidence": [
 				{
@@ -53,7 +53,7 @@
 				}
 			],
 			"digests": {
-				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
+				"packages/wallet-bridge/src/dispatcher.ts": "8a520b3c0d21001f9227eef0057336c061b2f953f002ae63859886b6a69fd4ea"
 			},
 			"evidence": [
 				{
@@ -87,7 +87,7 @@
 				}
 			],
 			"digests": {
-				"packages/wallet-bridge/src/dispatcher.ts": "078a3db852a84faef2b28c7874ba0de05084ac0cfe72e88cd603a1b127a8914c"
+				"packages/wallet-bridge/src/dispatcher.ts": "8a520b3c0d21001f9227eef0057336c061b2f953f002ae63859886b6a69fd4ea"
 			},
 			"evidence": [
 				{
@@ -339,13 +339,35 @@
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/send/SendReviewSheet.vue",
-			"expression": "toLine",
-			"branch": "",
+			"expression": "recipientEnds.head",
+			"branch": "recipientAddress",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "popup-send",
+			"state": "",
+			"why": "an end of the whole address, in full ink inside the element its middle's entry reads"
+		},
+		{
+			"file": "apps/extension/src/popup/components/modules/send/SendReviewSheet.vue",
+			"expression": "recipientEnds.middle",
+			"branch": "recipientAddress",
 			"ordinal": 0,
 			"role": "meta",
-			"selector": "[data-testid=\"send-review-recipient\"]",
+			"selector": "[data-testid=\"send-review-recipient-address\"]",
 			"surface": "popup-send",
 			"state": "recipient and amount typed, review sheet open (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/components/modules/send/SendReviewSheet.vue",
+			"expression": "recipientEnds.tail",
+			"branch": "recipientAddress",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "popup-send",
+			"state": "",
+			"why": "an end of the whole address, in full ink inside the element its middle's entry reads"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -569,13 +591,35 @@
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/ReceivePopup.vue",
-			"expression": "account.address.slice(0, 6)",
+			"expression": "addressParts.head",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data-lead",
+			"role": "none",
+			"selector": "",
+			"surface": "popup:receive",
+			"state": "",
+			"why": "an end of the whole address, in full ink inside the element its middle's entry reads"
+		},
+		{
+			"file": "apps/extension/src/popup/components/popups/ReceivePopup.vue",
+			"expression": "addressParts.middle",
+			"branch": "",
+			"ordinal": 0,
+			"role": "input-data",
 			"selector": "[data-testid=\"receive-address-text\"]",
 			"surface": "popup:receive",
 			"state": ""
+		},
+		{
+			"file": "apps/extension/src/popup/components/popups/ReceivePopup.vue",
+			"expression": "addressParts.tail",
+			"branch": "",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "popup:receive",
+			"state": "",
+			"why": "an end of the whole address, in full ink inside the element its middle's entry reads"
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/TokenMetadataPopup.vue",
@@ -637,46 +681,6 @@
 			"surface": "popup-legal-declined",
 			"state": "",
 			"why": "the Terms version label: a document version, not an identifier"
-		},
-		{
-			"file": "apps/extension/src/popup/pages/received/[id].vue",
-			"expression": "fromDisplay.address",
-			"branch": "received && fromDisplay.kind === 'address'",
-			"ordinal": 0,
-			"role": "data-lead",
-			"selector": "[data-testid=\"received-from-address\"]",
-			"surface": "popup-received-id",
-			"state": "a seedReceipt note from an address"
-		},
-		{
-			"file": "apps/extension/src/popup/pages/received/[id].vue",
-			"expression": "received.accountAddress",
-			"branch": "received",
-			"ordinal": 0,
-			"role": "data-lead",
-			"selector": "[data-testid=\"received-to-address\"]",
-			"surface": "popup-received-id",
-			"state": "a seedReceipt note"
-		},
-		{
-			"file": "apps/extension/src/popup/pages/received/[id].vue",
-			"expression": "trimAddress(received.txHash, 6, 4)",
-			"branch": "received && explorerUrl",
-			"ordinal": 0,
-			"role": "meta",
-			"selector": "[data-testid=\"tx-explorer-link\"]",
-			"surface": "popup-received-id",
-			"state": "a seedReceipt note on the testnet chain with an explorer"
-		},
-		{
-			"file": "apps/extension/src/popup/pages/received/[id].vue",
-			"expression": "trimAddress(received.txHash, 6, 4)",
-			"branch": "received && !(explorerUrl)",
-			"ordinal": 1,
-			"role": "meta",
-			"selector": "[data-testid=\"tx-hash-copy\"]",
-			"surface": "popup-received-id",
-			"state": "a seedReceipt note without an explorer"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/received/[id].vue",
@@ -819,22 +823,12 @@
 			"state": "an imported account"
 		},
 		{
-			"file": "apps/extension/src/popup/pages/tx/[id].vue",
-			"expression": "transfer.from",
-			"branch": "tx && transfer",
+			"file": "apps/extension/src/popup/components/modules/tx/DetailAddressCard.vue",
+			"expression": "address",
+			"branch": "hasAddress",
 			"ordinal": 0,
 			"role": "data-lead",
-			"selector": "[data-testid=\"tx-from-address\"]",
-			"surface": "popup-tx-id",
-			"state": "the seedTransaction row"
-		},
-		{
-			"file": "apps/extension/src/popup/pages/tx/[id].vue",
-			"expression": "transfer.to",
-			"branch": "tx && transfer",
-			"ordinal": 0,
-			"role": "data-lead",
-			"selector": "[data-testid=\"tx-to-address\"]",
+			"selector": "[data-testid=\"tx-from-address\"], [data-testid=\"tx-to-address\"]",
 			"surface": "popup-tx-id",
 			"state": "the seedTransaction row"
 		},
@@ -1123,7 +1117,7 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "a.consumer",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-consumer\"]",
@@ -1133,7 +1127,7 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "a.caller",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-caller\"]",
@@ -1142,8 +1136,18 @@
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
+			"expression": "a.onBehalfOf",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && a.onBehalfOf",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"execute-discovered-authorized-by\"]",
+			"surface": "windows-execute",
+			"state": "a send consuming another account's authwit, all details open (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "trimAddress(safeWire(a.innerHash, 80), 10, 6)",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && authwits.kind === 'list' && authwits.authwits.length && isAuthwitOpen(a)",
+			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && isAuthwitOpen(a)",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-inner-hash\"]",
@@ -1410,6 +1414,16 @@
 			"selector": "[data-testid=\"execute-discovered-line-consumer\"]",
 			"surface": "windows-execute",
 			"state": "a send with a discovered authwit (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"expression": "a.onBehalfOf",
+			"branch": "authwitRows.length && a.onBehalfOf",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"execute-op-summary-authwit-on-behalf-account\"]",
+			"surface": "windows-execute",
+			"state": "a send consuming another account's authwit (network)"
 		}
 	]
 }

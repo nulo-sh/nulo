@@ -137,7 +137,7 @@ describe("EditAccountPopup — the name", () => {
 
 	function formState(w: VueWrapper) {
 		return {
-			warns: w.text().includes("Already exist"),
+			warns: w.text().includes("Already exists"),
 			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
 		}
 	}

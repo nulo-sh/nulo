@@ -31,9 +31,24 @@ const recording = (entries: Record<string, unknown>, extra: Partial<Recording> =
 	...extra,
 })
 
+/** Whether `host` is a hostname alone; parsed, never printed, since more could be a keyed URL. */
+function bareHostname(host: string): boolean {
+	try {
+		return new URL(`https://${host}`).hostname === host && !host.endsWith(".")
+	} catch {
+		return false
+	}
+}
+
 describe("release traits", () => {
 	test("every release with reviewed digests has reviewed traits, and none has traits alone", () => {
 		expect(Object.keys(RELEASE_TRAITS).sort()).toEqual(Object.keys(RELEASE_DIGESTS).sort())
+	})
+
+	test("every release's Testnet host is a hostname alone, with no scheme, port, path or trailing dot", () => {
+		expect(bareHostname("lb.drpc.live")).toBe(true)
+		expect(["lb.drpc.live/x", "lb.drpc.live:443", "lb.drpc.live."].filter(bareHostname)).toEqual([])
+		expect(Object.keys(RELEASE_TRAITS).filter((tag) => !bareHostname(releaseTraits(tag).testnetHost))).toEqual([])
 	})
 
 	test("refuses a tag with no reviewed traits", () => {
@@ -60,11 +75,15 @@ describe("recordingProblems", () => {
 		])
 	})
 
-	test("the committed v1.0.0 recording replays as a sealing release's, and names no URL off this machine", () => {
-		const v100 = readRecording("v1.0.0") as Recording
-		expect(recordingProblems(v100, "v1.0.0", "sealed")).toEqual([])
-		// Counted, never listed: an outside endpoint may carry a provider's key.
-		const urls = JSON.stringify(v100).match(/\bhttps?:\/\/[^"\s\\]+/g) ?? []
+	const sealing = Object.keys(RELEASE_TRAITS).filter((tag) => releaseTraits(tag).storage === "sealed")
+
+	test.each(sealing)("the committed %s recording replays as a sealing release's, and names no URL off this machine", (tag) => {
+		const committed = readRecording(tag)
+		expect(committed, `no recording of ${tag}`).toBeDefined()
+		expect(recordingProblems(committed as Recording, tag, "sealed")).toEqual([])
+		// Counted, never listed: an outside endpoint may carry a provider's key. Sealed rows are opaque, so
+		// only plaintext URLs are counted.
+		const urls = JSON.stringify(committed).match(/\bhttps?:\/\/[^"\s\\]+/g) ?? []
 		expect(urls.length).toBeGreaterThan(0)
 		expect(urls.filter((url) => !isLoopbackUrl(url)).length).toBe(0)
 	})

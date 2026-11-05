@@ -18,6 +18,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { SessionEndedError, TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { trackAbortListeners } from "@nulo/wallet-core/testing"
 import { deferred } from "@nulo/wallet-core/utils"
 import { journalCallTitle } from "@/utils/journal-state"
 import { getTxTitle } from "@/utils/tx-enrichment"
@@ -263,22 +264,42 @@ describe("ExecutionLane.acquireTransferSlot", () => {
 		;(await dapp).release()
 	})
 
-	test("tryTakeSlot takes a free slot ahead of any later acquirer, and refuses a held or awaited one", async () => {
+	test("takeEstimateSlot waits behind an estimate, and refuses while a send holds or waits for the slot", async () => {
 		const { lane } = makeLane()
-		const slot = lane.tryTakeSlot("p1", 7)
-		expect(slot).toBeDefined()
-		expect(lane.tryTakeSlot("p1", 7)).toBeUndefined()
+		const first = lane.takeEstimateSlot("p1", 7) as Promise<() => void>
+		expect(lane.isSlotBusy("p1", 7)).toBe(true)
+		expect(lane.isSendInSlot("p1", 7)).toBe(false)
+		let secondGranted = false
+		const second = (lane.takeEstimateSlot("p1", 7) as Promise<() => void>).then((release) => {
+			secondGranted = true
+			return release
+		})
 		let dappGranted = false
 		const dapp = lane.acquireSlot("net-1", undefined, FENCE, undefined, "https://dapp.example").then((s) => {
 			dappGranted = true
 			return s
 		})
-		const release = await (slot as Promise<() => void>)
+		await vi.waitFor(() => expect(lane.isSendInSlot("p1", 7)).toBe(true))
+		expect(lane.takeEstimateSlot("p1", 7)).toBeUndefined()
+		expect(secondGranted).toBe(false)
+		;(await first)()
+		const releaseSecond = await second
 		await Promise.resolve()
 		expect(dappGranted).toBe(false)
-		release()
+		releaseSecond()
 		;(await dapp).release()
-		expect(lane.tryTakeSlot("p1", 8)).toBeDefined()
+		expect(lane.isSlotBusy("p1", 7)).toBe(false)
+	})
+
+	test("an estimate's abort while it waits ends the wait as the cancel sentinel", async () => {
+		const { lane } = makeLane()
+		const first = lane.takeEstimateSlot("p1", 7) as Promise<() => void>
+		const controller = new AbortController()
+		const waiting = lane.takeEstimateSlot("p1", 7, controller.signal)
+		controller.abort()
+		await expect(waiting).rejects.toBeInstanceOf(JobCancelledSentinel)
+		;(await first)()
+		await vi.waitFor(() => expect(lane.isSlotBusy("p1", 7)).toBe(false))
 	})
 
 	test("an ended session refuses before keying or waiting", async () => {
@@ -691,8 +712,11 @@ describe("ExecutionLane: the call a record reads by", () => {
 describe("ExecutionLane.commitJournal", () => {
 	test("writes like markJournal, but a refused write or a missing id rejects instead of logging", async () => {
 		const { lane, transitions, deps } = makeLane()
-		await lane.commitJournal("j1", { stage: "submitting", txHash: "0xh", submittedEndpointUrl: "https://rpc" })
-		expect(transitions).toEqual([["j1", { stage: "submitting", txHash: "0xh", submittedEndpointUrl: "https://rpc" }]])
+		const authwits = { chainId: 1, account: "0xa", items: [{ hash: "0x1", content: { kind: "call" } as never }] }
+		await lane.commitJournal("j1", { stage: "submitting", txHash: "0xh", submittedEndpointUrl: "https://rpc" }, authwits)
+		expect(transitions).toEqual([
+			["j1", { stage: "submitting", txHash: "0xh", submittedEndpointUrl: "https://rpc" }, undefined, undefined, authwits],
+		])
 		const refused = new Error("storage write failed")
 		;(deps.operationJournal.transitionOperation as ReturnType<typeof vi.fn>).mockRejectedValueOnce(refused)
 		await expect(lane.commitJournal("j1", { stage: "submitting", txHash: "0xh" })).rejects.toBe(refused)
@@ -891,6 +915,24 @@ describe("ExecutionLane.joinOriginLine", () => {
 		abort.abort()
 		expect(await waited).toBe(false)
 		expect(second.behind()).toBe(true)
+		first.leave()
+		second.leave()
+	})
+
+	test.each([
+		["the earlier sends finish", false],
+		["it is aborted", true],
+	])("the wait for earlier sends leaves no abort listener once %s", async (_label, abortIt) => {
+		const { lane } = makeLane()
+		const first = lane.joinOriginLine(FENCE, 7, ORIGIN)
+		const second = lane.joinOriginLine(FENCE, 7, ORIGIN)
+		const abort = new AbortController()
+		const listeners = trackAbortListeners(abort.signal)
+		const waited = second.earlierDone(abort.signal)
+		if (abortIt) abort.abort()
+		else first.leave()
+		expect(await waited).toBe(!abortIt)
+		expect(listeners()).toBe(0)
 		first.leave()
 		second.leave()
 	})

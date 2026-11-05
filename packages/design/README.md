@@ -61,8 +61,7 @@ Pick a role by the job the text does, from the last column. G is Space Grotesk (
 I Inter (`--font-body`), M JetBrains Mono (`--font-mono`). "Site" leaves the size to the element,
 which sets it in its own rule (at least the floors). Tracking is in em. A dagger marks tabular
 figures. `segment`'s selected item takes weight 700 through the component's own compound rule;
-Send's publish facts and the header's network and lock chips keep 10 px / 600 / 0.08 em in
-`label-section` the same way, and Manage accounts' address lines keep 11 px in `meta` (each an
+Send's publish facts keep 10 px / 600 / 0.08 em in `label-section` the same way, and Manage accounts' address lines keep 11 px in `meta` (each an
 `OVERRIDES` entry in the extension's type-role exceptions).
 
 | Role | Face | Size | Weight | Case | Tracking | For |

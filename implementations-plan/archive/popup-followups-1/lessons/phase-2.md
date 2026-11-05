@@ -1,0 +1,6 @@
+# Phase 2 and the arc's review loop
+
+- **D9.** `vue-tsc` skips a `<script setup>` without `lang="ts"`, so TS `create.vue` saw no slots on `NewPasswordPair` and failed with TS2339 on `#repeatLabel`. Typing the pair's script fixed the cause; it was the pair's only TS caller.
+- **Captures.** The smoke config reads only `tests/e2e/*.test.ts`, so the scratch spec was copied in for each run and removed after. The base build came from `git checkout 67c1ac545 -- <the three files>`, built, then `git checkout HEAD -- <files>`. That restore also dropped two uncommitted comment edits in those files, which were re-applied: commit before swapping files in. A shot taken right after typing caught the CTA mid-fade; a 0.8 s settle with the pointer moved away fixed it.
+- **Arc Codex R1** (gpt-6.1-sol, high, read-only, diff from `67c1ac545`): approve; one low comment finding (the pair's slot comment restated spacing and named a caller; `parkReads`'s comment narrated). Accepted.
+- **Arc Opus review** (beside R1): approve; the hint counted once on Create (accepted); two comment nits (accepted); while "Creating..." shows, the hidden hint row now sits between the fields, so the confirm field moves up. Captured on both revisions and filed as OA-1; the as-built behaviour ships.

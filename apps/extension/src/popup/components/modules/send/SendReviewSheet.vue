@@ -5,7 +5,6 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
 import { vSnackFooter } from "@/composables/snackInset"
-import { maskAddress } from "@/components/composite/send/masked-address"
 import {
 	type FactCell,
 	factWord,
@@ -21,6 +20,7 @@ import {
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { fitHero, HERO_MIN_SCALE } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
+import { addressEnds } from "@/utils/string"
 import { FEE_JUICE_BRIDGE_URL } from "./fee-helpers"
 
 const props = defineProps<{
@@ -46,8 +46,12 @@ const props = defineProps<{
 	queuedSponsored?: boolean
 	/** Set for a queued send whose fee came out above the cap the person accepted. */
 	reask?: { now: string; cap: string }
+	/** The page's estimate is running: a button that cannot send yet says so. */
+	estimating?: boolean
+	/** The running estimate has run long: the fee line offers to ask again, as `retry`. */
+	slow?: boolean
 }>()
-const emit = defineEmits<{ close: []; send: [] }>()
+const emit = defineEmits<{ close: []; send: []; retry: [] }>()
 
 const ROWS: { cell: FactCell; id: string; name: string }[] = [
 	{ cell: "you", id: "you", name: "Your address" },
@@ -55,17 +59,14 @@ const ROWS: { cell: FactCell; id: string; name: string }[] = [
 	{ cell: "amount", id: "amount", name: "Amount" },
 ]
 
-const masked = computed(() => maskAddress(props.recipientAddress))
-const toLine = computed(() => {
-	const address = masked.value || "—"
-	return props.recipientName ? `to ${props.recipientName} · ${address}` : `to ${address}`
-})
+const recipientEnds = computed(() => addressEnds(props.recipientAddress ?? ""))
 const paid = computed(() => paidBy(props.payerKind, props.payerType))
 const sendable = computed(() => props.show && props.canSend && props.ready && !props.sending)
 const submitLabel = computed(() => {
 	// The re-asked figure stays on the fee line above: in the label it clips at 360 px.
 	if (props.reask) return "Send"
-	return props.queuedCapText || props.queuedSponsored ? "Queue send" : "Send now"
+	if (props.queuedCapText || props.queuedSponsored) return "Queue send"
+	return props.estimating ? "Estimating fee" : "Send now"
 })
 
 const rows = computed(() =>
@@ -128,7 +129,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<span aria-hidden="true" :class="$style.amount_ruler">
 							<span ref="amountRuler" :class="$style.amount"><span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol" class="type--meta">{{ symbol }}</small></span>
 						</span>
-						<span :class="$style.to" data-testid="send-review-recipient">{{ toLine }}</span>
+						<span :class="$style.to" data-testid="send-review-recipient">to <template v-if="recipientName">{{ recipientName }} · </template><span v-if="recipientAddress" class="type--meta" data-testid="send-review-recipient-address"><span :class="$style.address_end">{{ recipientEnds.head }}</span>{{ recipientEnds.middle }}<span :class="$style.address_end">{{ recipientEnds.tail }}</span></span><template v-else>—</template></span>
 					</div>
 
 					<div :class="$style.rows">
@@ -166,6 +167,10 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<span v-else-if="reask" data-testid="send-review-fee-reask">Fee is now {{ reask.now }}, above the {{ reask.cap }} you accepted.</span>
 						<span v-else-if="queuedCapText" data-testid="send-review-fee-cap">Fee up to {{ queuedCapText }}, based on your last send. If it comes out higher, we ask again.</span>
 						<span v-else-if="queuedSponsored" data-testid="send-review-fee-queued">Fee · {{ QUEUED_SPONSORED_COPY }}</span>
+						<span v-else-if="estimating && slow && !feeText" :class="$style.fee_slow" data-testid="send-review-fee-slow">
+							Fee · Taking longer than usual.
+							<button type="button" :class="$style.retry" data-testid="send-review-fee-retry" @click="emit('retry')">Try again</button>
+						</span>
 						<span v-else>Fee · {{ feeText || "—" }}</span>
 						<b v-if="paid" class="type--meta">{{ paid }}</b>
 					</div>
@@ -251,6 +256,11 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 .to {
 	composes: type--meta from global;
 	color: var(--nulo-secondary);
+	overflow-wrap: anywhere;
+}
+
+.address_end {
+	color: var(--txt-primary);
 }
 
 .rows {
@@ -339,6 +349,17 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 
 .visually_hidden {
 	composes: visually_hidden from "./fee-shared.module.css";
+}
+
+.fee_slow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px;
+}
+
+.retry {
+	composes: retry from "./fee-shared.module.css";
 }
 
 .fee b {

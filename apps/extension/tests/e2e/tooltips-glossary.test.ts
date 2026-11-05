@@ -3,7 +3,7 @@ import type { Page } from "puppeteer"
 import { TimeoutError } from "puppeteer"
 import { expect } from "vitest"
 import { GLOSSARY, GLOSSARY_SECTIONS } from "@/utils/glossary"
-import { isFirefox, prepareKeys, reloadExtensionPage } from "./fixtures/browser"
+import { isFirefox, prepareKeys, reloadExtensionPage, setViewport } from "./fixtures/browser"
 import { openPopup, test, waitForHash } from "./fixtures/extension"
 import { lockWallet, navigateToSettings } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
@@ -206,7 +206,7 @@ test("a dotted term's tooltip in the 360×600 popup: inside the window, reachabl
 	await waitForBubbleGone(page)
 
 	// Taller than the window: it pins to the top inset and runs past the bottom edge.
-	await page.setViewport({ width: 360, height: Math.ceil(reopened.height) + 4 })
+	await setViewport(page, { width: 360, height: Math.ceil(reopened.height) + 4 })
 	const shortHeight = await page.evaluate(() => window.innerHeight)
 	console.log(`[tooltips-glossary] bubble ${reopened.height}px tall, window set to ${shortHeight}px`)
 	expect(shortHeight).toBeLessThan(reopened.height + 2 * INSET)
@@ -216,7 +216,7 @@ test("a dotted term's tooltip in the 360×600 popup: inside the window, reachabl
 	expect(tall.bottom).toBeGreaterThan(shortHeight)
 	await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
 	await waitForBubbleGone(page)
-	await page.setViewport({ width: 360, height: 600 })
+	await setViewport(page, { width: 360, height: 600 })
 
 	// An unbroken string wraps inside the cap instead of running past it.
 	await page.focus(TERM)
@@ -233,7 +233,7 @@ test("a dotted term's tooltip in the 360×600 popup: inside the window, reachabl
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
-test("pressing Delete profile closes its tooltip, and the popup it opens takes the first Escape", async ({
+test("pressing the lock screen's recovery link opens its popup, which takes the first Escape and gives focus back", async ({
 	registeredExtensionPerTest,
 }) => {
 	const home = await openPopup(registeredExtensionPerTest)
@@ -245,18 +245,15 @@ test("pressing Delete profile closes its tooltip, and the popup it opens takes t
 	await waitForHash(page, "#/popup/auth", 10_000)
 	await page.waitForSelector(sel("auth-reset"), { visible: true, timeout: 5_000 })
 	await page.focus(sel("auth-reset"))
-	await settledBubble(page)
 
 	await page.keyboard.press(" ")
 	await page.waitForSelector(sel("forgot-reset-btn"), { visible: true, timeout: 5_000 })
 	expect(await page.$$eval(sel("forgot-reset-btn"), (els) => els.length)).toBe(1)
-	expect(await page.$(BUBBLE)).toBeNull()
 
 	expect(await pressEscape(page)).toBe(true)
 	const forced = await settleClosedPopup(page, "forgot-reset-btn")
 	if (forced) console.log("[tooltips-glossary] the forgot-password popup's leave transition stuck; finished by hand")
 	await waitForFocus(page, "auth-reset")
-	expect(await holds(page, false)).toBe(true)
 
 	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])

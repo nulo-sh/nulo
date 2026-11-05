@@ -27,7 +27,7 @@ type Internals = {
 	profileService: unknown
 	networkService: unknown
 	accountService: unknown
-	executionService: { executeOperations: ReturnType<typeof vi.fn> }
+	executionService: { executeOperations: ReturnType<typeof vi.fn>; claimPreviews: ReturnType<typeof vi.fn> }
 	dappSessionService: unknown
 	windowManager: { cancel: ReturnType<typeof vi.fn>; settle: ReturnType<typeof vi.fn> }
 }
@@ -46,7 +46,7 @@ function makeService(activeProfile: { id: string } | undefined = { id: "p1" }) {
 	}
 	internals.networkService = { getNetworks: vi.fn(async () => [NETWORK]) }
 	internals.accountService = { getAccount: vi.fn(async () => ACCOUNT) }
-	internals.executionService = { executeOperations: vi.fn(async () => []) }
+	internals.executionService = { executeOperations: vi.fn(async () => []), claimPreviews: vi.fn(() => () => {}) }
 	internals.dappSessionService = { tryGetDappSession: async () => ({ profileId: "p1" }) }
 	return { svc, internals, windowManager: internals.windowManager }
 }
@@ -156,6 +156,62 @@ describe("approveInteraction — the popup cannot substitute what executes", () 
 			{ interactionId: "i-9", index: 0, estimateId: "est", previewId: "prev", feeCeiling: undefined },
 			{ interactionId: "i-9", index: 1, estimateId: undefined, previewId: undefined, feeCeiling: undefined },
 		])
+	})
+
+	test("the snapshots an approval names are claimed as its record is taken, before any await, and released once it ends", async () => {
+		const { svc, internals } = makeService()
+		const release = vi.fn()
+		const seen: { stored?: boolean; fenced?: boolean } = {}
+		let fenced = false
+		const profile = internals.profileService as { captureExecutionFence: () => Promise<unknown> }
+		const capture = profile.captureExecutionFence
+		profile.captureExecutionFence = async () => {
+			fenced = true
+			return await capture()
+		}
+		internals.executionService.claimPreviews.mockImplementation(() => {
+			seen.stored = internals.storage.has("i-7")
+			seen.fenced = fenced
+			return release
+		})
+		let finish = (_: unknown[]) => {}
+		internals.executionService.executeOperations.mockImplementation(() => new Promise<unknown[]>((r) => (finish = r)))
+		store(internals, "i-7", execPayload([sendTxRequest({ calls: [] }), sendTxRequest({ calls: [] })]))
+		await svc.approveInteraction("i-7", [
+			{ feeSettings: { paymentMethod: { kind: "fj" } }, estimateId: "e0", previewId: "e0" },
+			{ feeSettings: { paymentMethod: { kind: "fj" } } },
+		])
+		await flush()
+		expect(internals.executionService.claimPreviews).toHaveBeenCalledExactlyOnceWith(["e0", undefined])
+		expect(seen).toEqual({ stored: false, fenced: false })
+		expect(release).not.toHaveBeenCalled()
+		finish([])
+		await flush()
+		expect(release).toHaveBeenCalledTimes(1)
+	})
+
+	test("a null delta claims nothing and executes as an empty one", async () => {
+		const { svc, internals } = makeService()
+		store(internals, "i-6", execPayload([{ kind: "register_token", account: `aztec:1:${OWNER}`, address: "0xt" }]))
+		await svc.approveInteraction("i-6", [null as never])
+		await flush()
+		expect(internals.executionService.claimPreviews).toHaveBeenCalledExactlyOnceWith([undefined])
+		expect(internals.executionService.executeOperations).toHaveBeenCalledTimes(1)
+	})
+
+	test("an approval refused after its claim releases what it claimed", async () => {
+		const { svc, internals } = makeService()
+		const release = vi.fn()
+		internals.executionService.claimPreviews.mockImplementation(() => release)
+		;(internals.profileService as { captureExecutionFence: () => Promise<unknown> }).captureExecutionFence = async () => {
+			throw new Error("Wallet locked")
+		}
+		store(internals, "i-8", execPayload([sendTxRequest({ calls: [] })]))
+		await svc.approveInteraction("i-8", [{ feeSettings: { paymentMethod: { kind: "fj" } }, estimateId: "e0", previewId: "e0" }])
+		await flush()
+		expect(internals.executionService.executeOperations).not.toHaveBeenCalled()
+		expect(internals.windowManager.cancel).toHaveBeenCalledTimes(1)
+		expect(release).toHaveBeenCalledTimes(1)
 	})
 
 	test("the figure the window showed reaches the envelope; a malformed one is refused before the claim", async () => {

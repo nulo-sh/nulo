@@ -112,14 +112,10 @@ import {
 	settleHeldAccounts,
 } from "./full-backup-restore"
 import { deferred } from "@nulo/wallet-core/utils"
-import {
-	DECRYPTION_FAILED,
-	EARLIER_PASSKEY_BACKUP,
-	errorLogWriters,
-	refusedAsEarlierPasskey,
-	useFullBackupImport,
-	validateAndMigrateBackup,
-} from "./useFullBackupImport"
+import { DECRYPTION_FAILED } from "./full-backup-selection"
+import { errorLogWriters } from "./restore-error-log"
+import { useFullBackupImport } from "./useFullBackupImport"
+import { EARLIER_PASSKEY_BACKUP, refusedAsEarlierPasskey, validateAndMigrateBackup } from "@/wallet/services/backup/trust-gate"
 import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { collectRestoreErrors, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"

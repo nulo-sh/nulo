@@ -40,6 +40,7 @@ export interface HarnessProfile {
 export interface HarnessNetwork {
 	id: string
 	chainId: number
+	name?: string
 }
 
 /** Settled chain-tx row shape the feed reads (`hash`, `account`, `updatedAt`,

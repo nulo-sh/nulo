@@ -2,18 +2,24 @@ import { describe, expect, test } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
-import type { DecodedGrant, DecodedValue } from "@/wallet/services/execution/client"
+import type { DecodedCall, DecodedGrant, DecodedValue } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
+import { MAIN, RECIPIENT, USDC as USDC_AT, VAULT } from "./execute.fixture"
 import {
+	type CallSurface,
+	type TransferSender,
+	accountOutflows,
 	amountLabel,
 	authwitLine,
 	authwitTitle,
 	callSurface,
 	nonceValue,
 	rawRows,
+	rawToggleLabel,
 	readableGrants,
 	rowTitle,
 	tokenAt,
+	uncheckedCallsLine,
 	valueText,
 	valueTitle,
 } from "./call-surface"
@@ -408,6 +414,22 @@ describe("rowTitle, authwitTitle and authwitLine: the wallet's words only on wha
 	})
 })
 
+describe("a decode holding a string the card cannot print whole", () => {
+	test("reads as the raw fields under its decoded name, never the dApp's label", () => {
+		const call = { name: "claim_rewards", to: TOKEN, selector: "0x1234abcd", args: [field(1n)] }
+		const decoded: DecodedCall = {
+			kind: "decoded",
+			contract: "Vault",
+			fn: "drain",
+			params: [{ name: "memo", value: { kind: "string", value: "x\u202e" } }],
+		}
+		const surface = callSurface(ctx, call, decoded)
+		expect(surface).toMatchObject({ kind: "raw", reason: "arguments", fn: "drain" })
+		expect(rowTitle(call, surface)).toBe(rowTitle(call, { kind: "decoded", fn: "drain", params: [] }))
+		expect(rowTitle(call, surface)).not.toBe(rowTitle(call, { kind: "raw", reason: "arguments", rows: [], hidden: 0 }))
+	})
+})
+
 describe("readableGrants", () => {
 	const TOKEN = `0x${"2f".repeat(32)}`
 	const grantWith = (...params: { name: string; value: DecodedValue }[]): DecodedGrant => ({
@@ -427,6 +449,7 @@ describe("readableGrants", () => {
 		for (const grant of [
 			memo("pay\u0000alice"),
 			memo(`ab${String.fromCharCode(0x202e)}cd`),
+			memo(String.fromCharCode(...new TextEncoder().encode("pay\u202eevil"))),
 			memo("\ud800"),
 			memo("x".repeat(4097)),
 			nested,
@@ -435,8 +458,117 @@ describe("readableGrants", () => {
 		}
 	})
 
+	test("a grant reads its strings as a call does: the padding and UTF-8 text no longer refuse it", () => {
+		/** A decoded `str<N>` holds one character per field: here the UTF-8 bytes of the text, then the padding. */
+		const wire = (text: string, length: number) =>
+			String.fromCharCode(...new TextEncoder().encode(text), ...Array<number>(length).fill(0)).slice(0, length)
+		for (const grant of [memo(wire("pay alice", 12)), memo(wire("Total 5 €", 12))]) {
+			expect(readableGrants([grant], 1)).toEqual([grant])
+		}
+	})
+
+	test("the grant gate hands the decoder's string on, so the card reads it once", () => {
+		const grant = memo(String.fromCharCode(...new TextEncoder().encode("5 €")))
+		const [kept] = readableGrants([grant], 1)
+		expect(kept).toBe(grant)
+		if (kept?.kind !== "decoded") throw new Error("unreachable")
+		expect(callSurface(undefined, kept.call, kept.decoded)).toEqual({
+			kind: "decoded",
+			fn: "set",
+			params: [{ name: "memo", value: { kind: "string", value: "5 €" } }],
+		})
+	})
+
 	test("a grant the batch left out is unavailable, so a short batch cannot read as complete", () => {
 		const shown = memo("ok")
 		expect(readableGrants([shown], 2)).toEqual([shown, { kind: "undecoded", reason: "unavailable" }])
+	})
+})
+
+describe("uncheckedCallsLine", () => {
+	const read: CallSurface = { kind: "transfer", fn: "transfer", to: TO, amount: "5", sender: { kind: "account", address: OWNER } }
+	const minted: CallSurface = { kind: "mint", fn: "mint_to_public", to: TO, amount: "5" }
+	const named: CallSurface = { kind: "decoded", fn: "exit_to_l1", params: [] }
+	const claimed: CallSurface = { kind: "decoded", fn: "transfer", params: [], labels: "unchecked" }
+	const pending: CallSurface = { kind: "pending" }
+	const raw: CallSurface = { kind: "raw", reason: "unknown-contract", rows: [], hidden: 0 }
+
+	test.each([
+		["no call", [], undefined],
+		["every call read", [read, minted], undefined],
+		["calls still being read or unreadable", [pending, raw], undefined],
+		[
+			"a one-call transaction",
+			[named],
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what this call does.",
+		],
+		[
+			"every call in the list",
+			[named, claimed],
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what these calls do.",
+		],
+		[
+			"one call among several",
+			[read, raw, named],
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what call 3 does.",
+		],
+		[
+			"two of three",
+			[named, minted, claimed],
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what calls 1 and 3 do.",
+		],
+		[
+			"three of four",
+			[named, read, named, claimed],
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what calls 1, 3 and 4 do.",
+		],
+	] as const)("%s", (_, surfaces, line) => {
+		expect(uncheckedCallsLine(surfaces)).toBe(line)
+	})
+})
+
+describe("rawToggleLabel", () => {
+	test("counts one raw value in the singular and more in the plural; open, it reads Hide", () => {
+		expect(rawToggleLabel(1, false)).toBe("Show 1 raw value")
+		expect(rawToggleLabel(4, false)).toBe("Show 4 raw values")
+		expect(rawToggleLabel(1, true)).toBe("Hide raw values")
+	})
+})
+
+// `sameFieldAddress` refuses the `0xaa…` constants above (beyond the field), so these use valid ones.
+describe("accountOutflows: the direct transfers this account sends to another address, per token", () => {
+	const TST = { id: 2, chainId: 1, contract: VAULT, name: "Test", symbol: "TST", decimals: 18 } as TokenInfo
+	const USDC_TOKEN = { ...USDC, contract: USDC_AT }
+	const units = (n: bigint, decimals: number) => (n * 10n ** BigInt(decimals)).toString()
+	const fromAccount = { kind: "account", address: MAIN } as const
+	const send = (to: string, contract: string, amount: string, sender: TransferSender) => ({
+		call: { to: contract },
+		surface: { kind: "transfer", fn: "transfer_in_public", to, amount, sender } as CallSurface,
+	})
+	const shouting = `0x${MAIN.slice(2).toUpperCase()}`
+
+	test("sums each token's sends; another sender, a send to the account, a mint and a call it cannot read add nothing", () => {
+		const rows = [
+			send(RECIPIENT, VAULT, units(4n, 18), fromAccount),
+			send(RECIPIENT, VAULT, units(2n, 18), { kind: "explicit", address: shouting }),
+			send(RECIPIENT, USDC_AT, units(10n, 6), fromAccount),
+			{ call: { to: VAULT }, surface: { kind: "decoded", fn: "swap", params: [] } as CallSurface },
+			send(RECIPIENT, VAULT, units(7n, 18), { kind: "explicit", address: RECIPIENT }),
+			send(MAIN, USDC_AT, units(3n, 6), fromAccount),
+			{ call: { to: VAULT }, surface: { kind: "mint", fn: "mint_to_public", to: RECIPIENT, amount: units(9n, 18) } as CallSurface },
+			{ call: { to: USDC_AT }, surface: { kind: "raw", reason: "unknown-function", rows: [], hidden: 0 } as CallSurface },
+		]
+		expect(accountOutflows(rows, MAIN, [TST, USDC_TOKEN], 1)).toEqual([
+			{ contract: VAULT, count: 2, amount: { text: "6 TST", baseUnits: false } },
+			{ contract: USDC_AT, count: 1, amount: { text: "10 USDC", baseUnits: false } },
+		])
+	})
+
+	test("a default-entrypoint send names no sender and adds nothing; a token with no usable symbol keeps base units", () => {
+		expect(accountOutflows([send(RECIPIENT, VAULT, units(1n, 18), { kind: "none" })], MAIN, [TST], 1)).toEqual([])
+		const blank = { ...TST, symbol: BEL }
+		expect(accountOutflows([send(RECIPIENT, VAULT, "5000000", fromAccount)], MAIN, [blank], 1)).toEqual([
+			{ contract: VAULT, count: 1, amount: { text: "5000000", baseUnits: true } },
+		])
 	})
 })

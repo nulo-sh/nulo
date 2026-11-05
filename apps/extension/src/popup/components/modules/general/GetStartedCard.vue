@@ -6,13 +6,15 @@ const props = defineProps({
 	/** `GetStartedStep[]` from `@/utils/get-started`, in the drawn order. */
 	steps: { type: Array, required: true },
 	canHide: { type: Boolean, required: true },
+	/** The funds are unread: the card holds its place greyed, its steps inert; Hide stays live. */
+	pending: { type: Boolean, default: false },
 })
 const emit = defineEmits(["select", "hide"])
 
 const ROWS = {
 	phrase: { title: "Save your recovery phrase", description: "The 24 words that restore this wallet" },
-	aztec: { title: "How Aztec works", value: "1 min" },
-	feeJuice: { title: "Get Fee Juice" },
+	aztec: { title: "How Aztec works", description: "1 min · website", external: true },
+	feeJuice: { title: "Get Fee Juice", description: "Fee Juice pays network fees.", value: "website", external: true },
 	presto: { title: "Make proofs faster", value: "Optional" },
 }
 
@@ -23,14 +25,14 @@ const doneCount = computed(() => props.steps.filter((step) => step.done).length)
 <template>
 	<Flex direction="column" gap="12" data-testid="get-started">
 		<Flex align="end" justify="between" :class="$style.header">
-			<SectionLabel label="Get started" />
+			<SectionLabel label="Get started" :class="pending && $style.pending" />
 			<Flex align="end" gap="16">
-				<span v-if="steps.length > 1" role="status" :class="$style.count" data-testid="get-started-count">{{ doneCount }} of {{ steps.length }} done</span>
+				<span v-if="steps.length > 1" role="status" :class="[$style.count, pending && $style.pending]" data-testid="get-started-count">{{ doneCount }} of {{ steps.length }} done</span>
 				<button v-if="canHide" type="button" :class="$style.hide" data-testid="get-started-hide" @click="emit('hide')">Hide</button>
 			</Flex>
 		</Flex>
 		<!-- The list carries each step's position to assistive tech, so the drawn number and check are hidden from it. -->
-		<ItemsContainer role="list">
+		<ItemsContainer role="list" :aria-busy="pending || undefined">
 			<SettingItem
 				v-for="(step, index) in steps"
 				:key="step.item"
@@ -38,9 +40,12 @@ const doneCount = computed(() => props.steps.filter((step) => step.done).length)
 				:aria-current="step === next ? 'step' : undefined"
 				:title="ROWS[step.item].title"
 				:description="step.done ? undefined : ROWS[step.item].description"
+				wrapDescription
 				:value="step.done ? undefined : ROWS[step.item].value"
 				:chevron="!step.done"
+				:external="ROWS[step.item].external"
 				:class="step.done && $style.done"
+				:disabled="pending"
 				:data-testid="`get-started-${step.item}`"
 				:data-done="step.done"
 				v-on="step.done ? {} : { click: () => emit('select', step.item) }"
@@ -70,6 +75,10 @@ const doneCount = computed(() => props.steps.filter((step) => step.done).length)
 .count {
 	composes: type--label-section from global;
 	color: var(--nulo-secondary);
+}
+
+.pending {
+	opacity: 0.5;
 }
 
 .hide {

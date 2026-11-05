@@ -236,16 +236,16 @@ watch(
 
 <style module>
 .wrapper {
-	composes: body from "./popup-shared.module.css";
+	composes: body from "@/components/Popup/popup-shared.module.css";
 }
 .header {
-	composes: header from "./popup-shared.module.css";
+	composes: header from "@/components/Popup/popup-shared.module.css";
 }
 .pre_title {
-	composes: pre_title from "./popup-shared.module.css";
+	composes: pre_title from "@/components/Popup/popup-shared.module.css";
 }
 .title {
-	composes: title from "./popup-shared.module.css";
+	composes: title from "@/components/Popup/popup-shared.module.css";
 	max-width: 280px;
 }
 .contract_row {

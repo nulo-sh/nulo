@@ -71,9 +71,9 @@ export interface SessionEstablishedDeps {
 
 /** The emoji check's page for one session. Its grid is drawn from `verificationHash` as given here,
  *  never read back from the shared row. */
-export function verifyWindowUrl(dappSessionId: string, verificationHash: string, isReconnect: boolean): string {
+export function verifyWindowUrl(dappSessionId: string, verificationHash: string): string {
 	return chrome.runtime.getURL(
-		`src/popup/index.html#/windows/verify?sessionId=${dappSessionId}&verificationHash=${encodeURIComponent(verificationHash)}&isReconnect=${isReconnect}`,
+		`src/popup/index.html#/windows/verify?sessionId=${dappSessionId}&verificationHash=${encodeURIComponent(verificationHash)}`,
 	)
 }
 
@@ -95,7 +95,6 @@ export async function handleSessionEstablished(
 	// any await, and termination before the stamp and the final settlement check the map still holds
 	// this very object.
 	const marker = deps.pendingVerification.get(session.sessionId)
-	const isNewConnection = marker !== undefined
 	const reservation = deps.reservations.reservation(session.sessionId)
 	let stamped = false
 	// Before the stamp, a reused id may name another attempt's approval, which ending this session
@@ -156,9 +155,6 @@ export async function handleSessionEstablished(
 		// A window without a reserved slot would be one the origin's budget never counted: admission
 		// at discovery is the only place the cap is enforced, so fail closed.
 		if (!reservation) throw new Error("verify window has no reserved slot")
-		// A row no key exchange has reached was allowed but never connected: its check reads as a
-		// first connection's. Read before the write below gives it a hash.
-		const firstCheck = isNewConnection || dappSession.verificationHash === undefined
 		// The row's hash is what Settings reads as connected, so a refusal known before it is written
 		// comes above. The verify window reads its own snapshot from its URL.
 		await deps.dappSessionService.setVerificationHash(dappSession.id, session.verificationHash)
@@ -186,7 +182,7 @@ export async function handleSessionEstablished(
 		deps.stampSessionProfile(session.sessionId, dappSession.profileId)
 		stamped = true
 
-		const url = verifyWindowUrl(dappSession.id, session.verificationHash, !firstCheck)
+		const url = verifyWindowUrl(dappSession.id, session.verificationHash)
 		await openVerifyWindow(url, session.sessionId, reservation, deps)
 		established = true
 		return true

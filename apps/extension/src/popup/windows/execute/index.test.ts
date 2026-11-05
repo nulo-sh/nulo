@@ -15,6 +15,7 @@ import { JobCancelledError, walletErrorFromPayload } from "@nulo/extension-messa
 import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, ref, type Ref } from "vue"
+import { type ToastOptions, useToast } from "@/composables/toast"
 import { END_ACK_TIMEOUT_MS } from "@/composables/useDappApprovalWindow"
 import {
 	approval,
@@ -30,6 +31,7 @@ import {
 	windowsRemoveMock,
 } from "../../../../tests/helpers/approval-window-harness"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
+import { sendEvent } from "../../../../tests/helpers/send-event"
 
 const approveInteractionMock = vi.fn(async () => undefined)
 const executionServiceConnectMock = vi.fn(() => callLog.push("execution.connect"))
@@ -58,24 +60,33 @@ const { accountServiceCtorMock, networkServiceCtorMock } = vi.hoisted(() => ({
  *  [0] fee estimates, [1] authorization previews. */
 const feeMapInstances: Array<{
 	opts: {
-		estimate: (params: unknown, token: string, flowKey: string) => Promise<unknown>
+		estimate: (params: unknown, token: string, flowKey: string, signal: AbortSignal) => Promise<unknown>
 		onError?: (key: number, err: unknown) => void
 		cancelRemote?: (token: string) => unknown
 	}
 	api: {
 		results: Ref<Record<number, unknown>>
+		estimating: Ref<Record<number, boolean>>
+		failed: Ref<Record<number, boolean>>
 		estimate: ReturnType<typeof vi.fn>
+		cancel: ReturnType<typeof vi.fn>
 		handoffAll: ReturnType<typeof vi.fn>
 		dispose: ReturnType<typeof vi.fn>
 	}
 }> = []
 vi.mock("@/composables/useFeeEstimationMap", () => ({
 	useFeeEstimationMap: vi.fn((opts: unknown) => {
+		const failed = ref<Record<number, boolean>>({})
+		// As the real map: asking a key again, or cancelling it, ends its failure at once.
+		const settle = (key: number) => {
+			failed.value[key] = false
+		}
 		const api = {
 			results: ref({}),
 			estimating: ref({}),
-			estimate: vi.fn(),
-			cancel: vi.fn(),
+			failed,
+			estimate: vi.fn(settle),
+			cancel: vi.fn(settle),
 			cancelAll: vi.fn(),
 			handoffAll: vi.fn(() => ({})),
 			rearm: vi.fn(),
@@ -88,12 +99,28 @@ vi.mock("@/composables/useFeeEstimationMap", () => ({
 const estimateOperationFeeMock = vi.fn(async () => undefined)
 const cancelEstimateMock = vi.fn(async (_token: string): Promise<void> => undefined)
 const decodeGrantsForDisplayMock = vi.fn(async (): Promise<unknown[]> => [])
+const decodeCallsForDisplayMock = vi.fn(async (): Promise<unknown[]> => [])
 const previewOperationAuthwitsMock = vi.fn(async () => undefined)
 
 const toastMocks = vi.hoisted(() => ({ openToast: vi.fn() }))
-vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: toastMocks.openToast }),
-}))
+const estimateEvents = await vi.hoisted(async () => {
+	const { EventHandler } = await import("@nulo/wallet-core/utils")
+	return { onEstimateStarted: new EventHandler<{ estimateToken: string }>() }
+})
+// The real snack, so a test reads what is on screen; every open is also recorded.
+vi.mock("@/composables/toast", async (importOriginal) => {
+	const real = await importOriginal<typeof import("@/composables/toast")>()
+	return {
+		useToast: () => {
+			const live = real.useToast()
+			const openToast = (options: ToastOptions) => {
+				toastMocks.openToast(options)
+				return live.openToast(options)
+			}
+			return { ...live, openToast }
+		},
+	}
+})
 
 vi.mock("@/wallet/services/execution/client", () => ({
 	ExecutionServiceClient: vi.fn(function () {
@@ -102,9 +129,10 @@ vi.mock("@/wallet/services/execution/client", () => ({
 			disconnect: executionServiceDisconnectMock,
 			estimateOperationFee: estimateOperationFeeMock,
 			previewOperationAuthwits: previewOperationAuthwitsMock,
-			decodeCallsForDisplay: vi.fn(async () => []),
+			decodeCallsForDisplay: decodeCallsForDisplayMock,
 			decodeGrantsForDisplay: decodeGrantsForDisplayMock,
 			cancelEstimate: cancelEstimateMock,
+			onEstimateStarted: estimateEvents.onEstimateStarted,
 		}
 	}),
 }))
@@ -168,6 +196,7 @@ afterEach(() => {
 	w = undefined
 	resetWindowHarness()
 	feeMapInstances.length = 0
+	useToast().closeToast()
 })
 
 // ── Stubs (children flattened; overlay stub re-emits dismiss on click) ──
@@ -191,7 +220,10 @@ const STUBS = {
 		`,
 	},
 	SectionLabel: { template: "<div />" },
-	OperationCard: { props: ["refused", "tokenFlagged", "tokenFlagAcknowledged"], template: '<div><slot name="fee" /></div>' },
+	OperationCard: {
+		props: ["refused", "tokenFlagged", "tokenFlagAcknowledged", "isQueued", "estimateFailed", "previewFailed", "decodedCalls"],
+		template: '<div><slot name="fee" /></div>',
+	},
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
@@ -213,6 +245,7 @@ const factory = () => mount(Execute, { global: { stubs: STUBS } })
 type ExecVm = {
 	reject: (end: "reject" | "close" | "lock" | "switch") => Promise<void>
 	approve: () => Promise<void>
+	setError: (title: string, tooltip?: string, type?: string) => void
 	closeWindow: (interactionCompleted?: boolean) => void
 	isWrongProfile: boolean
 	initComplete: boolean
@@ -800,10 +833,144 @@ describe("execute window — approval envelope", () => {
 		expect(previews!.api.estimate).toHaveBeenCalledExactlyOnceWith(1, { index: 1 })
 		expect(fees!.api.estimate).not.toHaveBeenCalled()
 
-		await fees!.opts.estimate({ index: 0, feeSettings: { paymentMethod: { kind: "fj" } } }, "tok-a", "flow-a")
+		const signal = new AbortController().signal
+		await fees!.opts.estimate({ index: 0, feeSettings: { paymentMethod: { kind: "fj" } } }, "tok-a", "flow-a", signal)
 		expect(estimateOperationFeeMock).toHaveBeenCalledExactlyOnceWith("req-123", 0, { paymentMethod: { kind: "fj" } }, "tok-a", "flow-a")
-		await previews!.opts.estimate({ index: 1 }, "tok-b", "flow-b")
+		await previews!.opts.estimate({ index: 1 }, "tok-b", "flow-b", signal)
 		expect(previewOperationAuthwitsMock).toHaveBeenCalledExactlyOnceWith("req-123", 1, "tok-b", "flow-b")
+	})
+
+	test("an estimate behind another send asks again with its token, its operation reading queued until it settles", async () => {
+		resolvable()
+		approval.payloadToLoad = payload()
+		w = factory()
+		await completeInit()
+		const [fees] = feeMapInstances
+		const queued = () => w!.findAllComponents(STUBS.OperationCard)[0]!.props("isQueued")
+		const params = { index: 0, feeSettings: { paymentMethod: { kind: "fj" } } }
+		estimateOperationFeeMock
+			.mockResolvedValueOnce({ queued: true, tokenSpent: false } as never)
+			.mockResolvedValueOnce({ maxFee: "800" } as never)
+		vi.useFakeTimers()
+		try {
+			fees!.api.estimating.value = { 0: true }
+			let settled = false
+			const answer = fees!.opts.estimate(params, "tok-a", "flow-a", new AbortController().signal).finally(() => {
+				settled = true
+			})
+			await vi.advanceTimersByTimeAsync(0)
+			expect(settled).toBe(false)
+			expect(queued()).toBe(true)
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(await answer).toEqual({ maxFee: "800" })
+			expect(estimateOperationFeeMock.mock.calls).toEqual([
+				["req-123", 0, params.feeSettings, "tok-a", "flow-a"],
+				["req-123", 0, params.feeSettings, "tok-a", "flow-a"],
+			])
+			fees!.api.estimating.value = { 0: false }
+			await nextTick()
+			expect(queued()).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a preview behind another send reads queued until the wallet reports its run, whose token alone clears it", async () => {
+		resolvable()
+		approval.payloadToLoad = payload()
+		w = factory()
+		await completeInit()
+		const [, previews] = feeMapInstances
+		const queued = () => w!.findAllComponents(STUBS.OperationCard)[1]!.props("isQueued")
+		previewOperationAuthwitsMock
+			.mockResolvedValueOnce({ queued: true, tokenSpent: false } as never)
+			.mockReturnValueOnce(new Promise(() => {}) as never)
+		vi.useFakeTimers()
+		try {
+			previews!.api.estimating.value = { 1: true }
+			void previews!.opts.estimate({ index: 1 }, "tok-b", "flow-b", new AbortController().signal)
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(queued()).toBe(true)
+			estimateEvents.onEstimateStarted.invoke({ estimateToken: "tok-other" })
+			await nextTick()
+			expect(queued()).toBe(true)
+			estimateEvents.onEstimateStarted.invoke({ estimateToken: "tok-b" })
+			await nextTick()
+			expect(queued()).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a fee method switched while queued reads estimating until the wallet answers again, and Confirm holds as before", async () => {
+		resolvable()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = payload()
+		w = factory()
+		await completeInit()
+		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+		const [fees] = feeMapInstances
+		const card = () => w!.findAllComponents(STUBS.OperationCard)[0]!
+		const queued = () => card().props("isQueued")
+		const confirmOff = () => w!.find('[data-testid="execute-confirm-btn"]').attributes("disabled") !== undefined
+		const FJ = { paymentMethod: { kind: "fj" } }
+		const SPONSOR = { paymentMethod: { kind: "fpc", fpcId: "s1" } }
+		// What the engine's `schedule` does at once: abort the attempt it supersedes, clear the result,
+		// keep the operation estimating.
+		let live = new AbortController()
+		fees!.api.estimate.mockImplementation(() => {
+			live.abort()
+			live = new AbortController()
+			fees!.api.results.value = { 0: null }
+			fees!.api.estimating.value = { 0: true }
+		})
+		const QUEUED = { queued: true, tokenSpent: false }
+		let answerOld: (answer: unknown) => void = () => {}
+		let answerNew: (answer: unknown) => void = () => {}
+		estimateOperationFeeMock
+			.mockResolvedValueOnce(QUEUED as never)
+			.mockReturnValueOnce(new Promise((resolve) => (answerOld = resolve)) as never)
+			.mockReturnValueOnce(new Promise((resolve) => (answerNew = resolve)) as never)
+		vi.useFakeTimers()
+		try {
+			vm.handleFeeUpdate(0, FJ)
+			// The engine drops a superseded attempt's rejection.
+			void fees!.opts.estimate({ index: 0, feeSettings: FJ }, "tok-a", "flow-a", live.signal).catch(() => {})
+			await vi.advanceTimersByTimeAsync(0)
+			expect(queued()).toBe(true)
+			expect(confirmOff()).toBe(true)
+			await vi.advanceTimersByTimeAsync(2_000)
+
+			// The send is gone and another estimate holds the slot: the replacement gets no answer yet.
+			vm.handleFeeUpdate(0, SPONSOR)
+			card().vm.$emit("updatePayer", 0, { type: "fpc" })
+			expect(fees!.api.estimate).toHaveBeenLastCalledWith(0, { index: 0, feeSettings: SPONSOR })
+			void fees!.opts.estimate({ index: 0, feeSettings: SPONSOR }, "tok-b", "flow-b", live.signal).catch(() => {})
+			await vi.advanceTimersByTimeAsync(0)
+			expect(queued()).toBe(false)
+			expect(confirmOff()).toBe(true)
+
+			answerOld(QUEUED)
+			await vi.advanceTimersByTimeAsync(0)
+			expect(queued()).toBe(false)
+
+			answerNew(QUEUED)
+			await vi.advanceTimersByTimeAsync(0)
+			expect(queued()).toBe(true)
+			estimateEvents.onEstimateStarted.invoke({ estimateToken: "tok-a" })
+			await nextTick()
+			expect(queued()).toBe(true)
+			expect(confirmOff()).toBe(true)
+
+			fees!.api.results.value = { 0: { maxFee: "800" } }
+			fees!.api.estimating.value = { 0: false }
+			await nextTick()
+			expect(queued()).toBe(false)
+			expect(confirmOff()).toBe(false)
+		} finally {
+			live.abort()
+			vi.useRealTimers()
+		}
 	})
 })
 
@@ -994,6 +1161,42 @@ describe("execute window — an operation the app pays for", () => {
 		expect(confirm().attributes("disabled")).toBeUndefined()
 	})
 
+	test("two presses of Confirm in one task approve once", async () => {
+		const { fees, confirm } = await opened()
+		fees.api.results.value = verdict(false)
+		await flushPromises()
+		approveInteractionMock.mockImplementationOnce(() => new Promise<undefined>(() => {}))
+		expect(sendEvent(confirm().element, "click")).toBeDefined()
+		expect(sendEvent(confirm().element, "click")).toBeDefined()
+		await flushPromises()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test.each([
+		["error", true],
+		["warning", false],
+	])("with every other hold clear, a processing %s holds Confirm: %s", async (type, held) => {
+		const { vm, fees, confirm } = await opened()
+		fees.api.results.value = verdict(false)
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		vm.setError("Processing error.", "The node refused the request", type)
+		await flushPromises()
+		expect(confirm().attributes("disabled") !== undefined).toBe(held)
+	})
+
+	test.each([
+		["error", 0],
+		["warning", 1],
+	])("approve() under a processing %s sends %i approvals", async (type, sent) => {
+		const { vm, fees } = await opened()
+		fees.api.results.value = verdict(false)
+		await flushPromises()
+		vm.setError("Processing error.", "The node refused the request", type)
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(sent)
+	})
+
 	test("a short read the transaction could still fund leaves Confirm as today", async () => {
 		const { vm, fees, confirm } = await opened()
 		fees.api.results.value = verdict(false)
@@ -1066,14 +1269,39 @@ describe("execute window — an operation the app pays for", () => {
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 	})
 
-	test("an app that set nothing: Confirm never waits for the figure", async () => {
+	test("an app that set nothing: Confirm waits while its estimate runs, then never for the figure", async () => {
 		const { vm, fees, confirm } = await opened()
 		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
 		api.estimating.value = { 0: true }
 		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: null }
+		api.estimating.value = { 0: false }
+		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
 		await vm.approve()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("a default-entrypoint operation: Confirm waits while its authorization preview runs, then carries it", async () => {
+		const { vm, confirm } = await opened({ ...appPaid, executionMode: "default_entrypoint" })
+		const previews = feeMapInstances[1]!.api as (typeof feeMapInstances)[number]["api"] & { estimating: Ref<Record<number, boolean>> }
+		previews.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		previews.results.value = { 0: { previewId: "pv-0", discoveredAuthwits: [] } }
+		previews.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		const deltas = (approveInteractionMock.mock.calls[0] as unknown[] | undefined)?.[1] as Array<{ previewId?: string }>
+		expect(deltas[0]?.previewId).toBe("pv-0")
 	})
 
 	// The app's own payment claiming Fee Juice to the account, as the wire carries the claim call.
@@ -1132,7 +1360,30 @@ describe("execute window — an operation the app pays for", () => {
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
 
-	test("a sponsor picked in the window pays, not the person: Confirm does not wait, and a failed estimate leaves it on", async () => {
+	test("a sponsor picked in the window: Confirm waits while its estimate runs, then approval carries the estimate's ids", async () => {
+		const { vm, fees, confirm } = await opened({ ...appPaid, exec: { calls: [] } })
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		const card = w!.findComponent(STUBS.OperationCard)
+		;(vm as unknown as { handleFeeUpdate: (index: number, value: unknown) => void }).handleFeeUpdate(0, {
+			paymentMethod: { kind: "fpc", fpcId: "s1" },
+		})
+		card.vm.$emit("updatePayer", 0, { type: "fpc" })
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "0", estimateId: "est-0", previewId: "est-0" } }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		const deltas = (approveInteractionMock.mock.calls[0] as unknown[] | undefined)?.[1] as Array<{ previewId?: string }>
+		expect(deltas[0]?.previewId).toBe("est-0")
+	})
+
+	test("a sponsor picked in the window pays, not the person: Confirm never waits for its figure, and a failed estimate leaves it on", async () => {
 		const { vm, fees, confirm } = await opened({ ...appPaid, exec: { calls: [] } })
 		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
 		const card = w!.findComponent(STUBS.OperationCard)
@@ -1339,6 +1590,20 @@ describe("execute window — a public grant", () => {
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 	})
 
+	const memoGrant = (value: string) => ({
+		...DECODED,
+		decoded: { kind: "decoded", contract: "Memos", fn: "set_memo", params: [{ name: "memo", value: { kind: "string", value } }] },
+	})
+	test.each([
+		["UTF-8 text with a euro sign reads and enables", String.fromCharCode(...new TextEncoder().encode("5 €")), false],
+		["U+202E inside refuses and holds", "pay\u202eevil", true],
+	])("a grant whose memo holds %s Confirm", async (_, memo, held) => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([memoGrant(memo)])
+		const { confirm, error } = await opened()
+		expect(confirm().attributes("disabled") !== undefined).toBe(held)
+		expect(error().exists()).toBe(held)
+	})
+
 	test("a batch that comes back short refuses the grant it left out", async () => {
 		decodeGrantsForDisplayMock.mockResolvedValueOnce([])
 		const { vm, confirm, error } = await opened()
@@ -1372,10 +1637,16 @@ describe("execute window — a request the wallet refused", () => {
 		code: "SCOPE_VIOLATION",
 		message: "Scope violation: call name does not match selector's function",
 	})
+	const UNATTACHED = walletErrorFromPayload({
+		code: "SCOPE_VIOLATION",
+		message: "Scope violation: a transaction's authorization request names another account and carries no witness for it",
+	})
 	const REASON = {
 		registry:
 			"This transaction asks your account to change its public authorizations from inside another contract. Apps are never allowed to, so it can't be sent. Reject tells the app.",
 		call: "A call in this transaction does not run the function it names. Nulo never sends such a call, so it can't be sent. Reject tells the app.",
+		unattached:
+			"This transaction uses an authorization from another of your accounts, and the app did not include it. Nulo signs only for the account that sends, so it can't be sent. Reject tells the app.",
 	}
 
 	async function opened(op: object = send) {
@@ -1410,7 +1681,7 @@ describe("execute window — a request the wallet refused", () => {
 		}
 	}
 
-	async function expectRefused(kind: "registry" | "call", { vm, refused, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
+	async function expectRefused(kind: keyof typeof REASON, { vm, refused, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
 		await flushPromises()
 		expect(notice().attributes()).toMatchObject({ "data-kind": kind, role: "alert" })
 		expect(refused()).toBe(true)
@@ -1429,16 +1700,20 @@ describe("execute window — a request the wallet refused", () => {
 	test.each([
 		["registry", REGISTRY],
 		["call", BINDING],
+		["unattached", UNATTACHED],
 	] as const)("an estimate refused by the %s check: the notice in the fee's place, no toast, only Reject", async (kind, error) => {
 		const window = await opened()
 		feeMapInstances[0]!.opts.onError?.(0, error)
 		await expectRefused(kind, window)
 	})
 
-	test("a preview refused: the same notice", async () => {
+	test.each([
+		["registry", REGISTRY],
+		["unattached", UNATTACHED],
+	] as const)("a preview refused by the %s check: the same notice", async (kind, error) => {
 		const window = await opened({ ...send, executionMode: "default_entrypoint" })
-		feeMapInstances[1]!.opts.onError?.(0, REGISTRY)
-		await expectRefused("registry", window)
+		feeMapInstances[1]!.opts.onError?.(0, error)
+		await expectRefused(kind, window)
 	})
 
 	test("an approval the worker refuses: the same notice, never an error row", async () => {
@@ -1456,5 +1731,204 @@ describe("execute window — a request the wallet refused", () => {
 		expect(notice().exists()).toBe(false)
 		expect(refused()).toBe(false)
 		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+})
+
+// ── A failed fee estimate: the card offers Try again, which asks the same estimate through the
+//    window's own path, and the failure's snack closes once no failure it reported stands. ──
+describe("execute window — a failed fee estimate's retry", () => {
+	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
+	const OWNER = `0x${"0a".repeat(32)}`
+	const APP_FPC = `0x${"0f".repeat(32)}`
+	// A call as the wire carries it: 32-byte fields, never friendly test values.
+	const CALL = {
+		name: "transfer_in_private",
+		to: `0x${"1c".repeat(32)}`,
+		selector: "0x9a3b2c1d",
+		type: "private",
+		isStatic: false,
+		hideMsgSender: false,
+		args: [OWNER, `0x${"2d".repeat(32)}`, `0x${"00".repeat(31)}05`, `0x${"00".repeat(32)}`],
+		returnTypes: [],
+	}
+	const send = { kind: "aztec_sendTx", account: `aztec:1:${OWNER}`, exec: { calls: [CALL] }, opts: { from: OWNER } }
+	const ownCap = {
+		kind: "aztec_sendTx",
+		account: `aztec:1:${OWNER}`,
+		exec: { calls: [CALL], feePayer: APP_FPC },
+		opts: { from: OWNER, fee: { gasSettings: { maxFeesPerGas: { feePerDaGas: "1200000000", feePerL2Gas: "1200000000" } } } },
+	}
+	const FJ = { paymentMethod: { kind: "fj" } }
+	const FAILURE = "Couldn't estimate fee. Try again."
+	const { toast, openToast } = useToast()
+
+	async function opened(ops: object[]) {
+		accountServiceCtorMock.mockImplementationOnce(function () {
+			return {
+				getAccount: vi.fn(async (_p: string, _c: number, address: string) => ({ address, chainId: 1, name: "Main" })),
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+			}
+		})
+		networkServiceCtorMock.mockImplementationOnce(function () {
+			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
+		} as never)
+		approval.payloadToLoad = {
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: { operations: ops },
+		}
+		w = factory()
+		await completeInit()
+		const fees = feeMapInstances[0]!
+		// As the real map's transitions: a schedule clears the result and runs, a cancel clears both.
+		fees.api.estimate.mockImplementation((key: number) => {
+			fees.api.failed.value[key] = false
+			fees.api.results.value[key] = null
+			fees.api.estimating.value[key] = true
+		})
+		fees.api.cancel.mockImplementation((key: number) => {
+			fees.api.failed.value[key] = false
+			fees.api.results.value[key] = null
+			fees.api.estimating.value[key] = false
+		})
+		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+		const cards = () => w!.findAllComponents(STUBS.OperationCard)
+		/** Each estimate the map would run, settled as a real error: marked before `onError`, as the map does. */
+		const fail = async (...keys: number[]) => {
+			for (const key of keys) {
+				fees.api.failed.value[key] = true
+				fees.opts.onError?.(key, new Error("node down"))
+			}
+			fees.api.results.value = Object.fromEntries(keys.map((key) => [key, null]))
+			fees.api.estimating.value = Object.fromEntries(keys.map((key) => [key, false]))
+			await flushPromises()
+		}
+		return { vm, fees, cards, fail, confirm: () => w!.find('[data-testid="execute-confirm-btn"]') }
+	}
+
+	test("a call whose string the card cannot print whole reaches the card as decoded, and Confirm still turns on", async () => {
+		const unreadable = {
+			kind: "decoded",
+			contract: "Memos",
+			fn: "set_memo",
+			params: [{ name: "memo", value: { kind: "string", value: "pay\u202eevil" } }],
+		}
+		decodeCallsForDisplayMock.mockResolvedValueOnce([unreadable])
+		const { vm, fees, cards, confirm } = await opened([send])
+		vm.handleFeeUpdate(0, FJ)
+		fees.api.results.value = { 0: { maxFee: "800" } }
+		fees.api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(cards()[0]!.props("decodedCalls")).toEqual([unreadable])
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("Try again asks the same estimate once more; the snack closes once neither failure stands; Confirm turns on once both land", async () => {
+		const { vm, fees, cards, fail, confirm } = await opened([send, send])
+		vm.handleFeeUpdate(0, FJ)
+		vm.handleFeeUpdate(1, FJ)
+		await fail(0, 1)
+		expect(cards().map((c) => c.props("estimateFailed"))).toEqual([true, true])
+		expect(toast.value).toMatchObject({ kind: "error", label: FAILURE })
+		expect(confirm().attributes("disabled")).toBeDefined()
+
+		fees.api.estimate.mockClear()
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(fees.api.estimate.mock.calls).toEqual([[0, { index: 0, feeSettings: FJ }]])
+		expect(toast.value?.label).toBe(FAILURE)
+		cards()[1]!.vm.$emit("retryEstimate", 1)
+		await flushPromises()
+		expect(fees.api.estimate.mock.calls).toHaveLength(2)
+		expect(toast.value).toBeNull()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		fees.api.results.value = { 0: { maxFee: "1" }, 1: { maxFee: "2" } }
+		fees.api.estimating.value = { 0: false, 1: false }
+		await flushPromises()
+		expect(cards().map((c) => c.props("estimateFailed"))).toEqual([false, false])
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("a failure that opened no snack does not hold it: an app's own cap stays failed, and Confirm stays off", async () => {
+		const { vm, fees, cards, fail, confirm } = await opened([send, ownCap])
+		vm.handleFeeUpdate(0, FJ)
+		toastMocks.openToast.mockClear()
+		await fail(0, 1)
+		expect(toastMocks.openToast).toHaveBeenCalledOnce()
+
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(toast.value).toBeNull()
+		expect(fees.api.failed.value[1]).toBe(true)
+		fees.api.results.value = { 0: { maxFee: "1" }, 1: null }
+		fees.api.estimating.value = { 0: false, 1: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("an app-paid row's Try again asks the estimate the window asked at load, with the app's own payment", async () => {
+		const { fees, cards, fail, confirm } = await opened([ownCap])
+		const atLoad = fees.api.estimate.mock.calls
+		expect(atLoad).toEqual([[0, { index: 0, feeSettings: { paymentMethod: { kind: "embedded" } } }]])
+		const asked = atLoad[0]
+		await fail(0)
+		expect(cards()[0]!.props("estimateFailed")).toBe(true)
+
+		fees.api.estimate.mockClear()
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(fees.api.estimate.mock.calls).toEqual([asked])
+		expect(fees.api.cancel).not.toHaveBeenCalled()
+		expect(cards()[0]!.props("estimateFailed")).toBe(false)
+		expect(confirm().attributes("disabled")).toBeDefined()
+	})
+
+	test("a failed authorization preview reaches the card, whose Try again asks the preview once more; the snack stays", async () => {
+		const { cards } = await opened([{ ...send, executionMode: "default_entrypoint" }])
+		const previews = feeMapInstances[1]!
+		expect(previews.api.estimate.mock.calls).toEqual([[0, { index: 0 }]])
+		previews.api.failed.value[0] = true
+		previews.opts.onError?.(0, new Error("node down"))
+		await flushPromises()
+		expect(cards()[0]!.props("previewFailed")).toBe(true)
+		const snack = { kind: "error", label: "Couldn't preview authorizations. Try again." }
+		expect(toast.value).toMatchObject(snack)
+
+		previews.api.estimate.mockClear()
+		cards()[0]!.vm.$emit("retryPreview", 0)
+		await flushPromises()
+		expect(previews.api.estimate.mock.calls).toEqual([[0, { index: 0 }]])
+		expect(cards()[0]!.props("previewFailed")).toBe(false)
+		expect(toast.value).toMatchObject(snack)
+	})
+
+	test("settings the card withdraws end the failure: the estimate is cancelled and the snack closes", async () => {
+		const { vm, fees, cards, fail } = await opened([send])
+		vm.handleFeeUpdate(0, FJ)
+		await fail(0)
+		cards()[0]!.vm.$emit("updateFeeSettings", 0, undefined)
+		await flushPromises()
+		expect(fees.api.cancel).toHaveBeenCalledWith(0)
+		expect(cards()[0]!.props("estimateFailed")).toBe(false)
+		expect(toast.value).toBeNull()
+	})
+
+	test("a snack opened after the failure is not the window's to close", async () => {
+		const { vm, cards, fail } = await opened([send])
+		vm.handleFeeUpdate(0, FJ)
+		await fail(0)
+		const later = openToast({ kind: "info", label: "Another report" })
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(toast.value?.id).toBe(later)
 	})
 })

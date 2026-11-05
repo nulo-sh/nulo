@@ -11,8 +11,9 @@
  *   for every op the fold rules exclude.
  * - FOLDED (strategy's first sim runs stubbed with a `CollectingDiscoveryProbe`
  *   and doubles as discovery) — measured at 0.00% stub-vs-validated gas delta
- *   on live testnet; discovered effects force a validated rebuild so fresh
- *   witnesses are verified before any estimate leaves the pipeline.
+ *   on live testnet; any authorization request, signed or not, forces a
+ *   validated rebuild so the run's witness checks are verified before any
+ *   estimate leaves the pipeline.
  *
  * `DiscoveryProbe` is deliberately CHAIN-BOUND (this exact one-argument
  * "pure extractor" was proven impossible twice — message hashing needs live
@@ -24,24 +25,30 @@
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AuthwitDiscoverer, BuildTxRequestFn } from "./authwit-discoverer"
+import type { AuthwitSend } from "./decode-authwit-effects"
 import { CollectingDiscoveryProbe } from "./discovery-probe"
-import type { FeeEstimate, OnBuilt } from "./fee/fee-strategy"
+import type { FeeEstimate, FeeStrategyContext, OnBuilt } from "./fee/fee-strategy"
 import { throwIfAborted } from "./rpc-cancel"
-import type { Action, AddPrivateAuthwitAction, FeeOptions, FeeSettings, Operation, SendTransactionOperation } from "./spec"
+import type { Action, AddPrivateAuthwitAction, FeeOptions, FeeSettings, Operation } from "./spec"
 import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
 
-/** Chain-bound extraction capability handed to folded strategies (unused by
- *  any strategy in the inert shape). `built` carries the live node + network
- *  the hashing must be asserted against. */
+/** The simulated build a probe reads: the live node and network the hashing is asserted against,
+ *  and the send the decoder reads (its signer, its scopes and the witnesses it carries). */
+export type DiscoveryProbeContext = { node: FeeEstimate["node"]; network: FeeEstimate["network"] } & AuthwitSend
+
+/** Chain-bound extraction capability handed to fee strategies: a folded strategy's stubbed first
+ *  run, or an app-paid send's one validated run. `requested` is true when the run emitted any
+ *  authorization request, signed or not: the stub answered every check of the signer's witness,
+ *  so only a validated simulation shows what the run needs. */
 export interface DiscoveryProbe {
-	extractEffects(sim: unknown, ctx: { node: FeeEstimate["node"]; network: FeeEstimate["network"] }): Promise<AddPrivateAuthwitAction[]>
+	extractEffects(sim: unknown, ctx: DiscoveryProbeContext): Promise<{ actions: AddPrivateAuthwitAction[]; requested: boolean }>
 }
 
 export interface DiscoveryAwareEstimatorDeps {
 	authwit: AuthwitDiscoverer
 	/** The probe-free validated pipeline (the service's strategy map). */
 	buildAndEstimateValidated(
-		inputOp: { networkId: string; accountAddress: string; actions: Action[]; fee?: FeeOptions },
+		inputOp: FeeStrategyContext["op"],
 		feeSettings: FeeSettings,
 		fence: ExecutionFence,
 		parentTask?: WrappedTask,
@@ -52,7 +59,7 @@ export interface DiscoveryAwareEstimatorDeps {
 	 *  probe-aware strategy runs its first sim stubbed and discovery collapses
 	 *  into it. Reached only through the fold routing below. */
 	buildAndEstimateFolded(
-		inputOp: { networkId: string; accountAddress: string; actions: Action[]; fee?: FeeOptions },
+		inputOp: FeeStrategyContext["op"],
 		feeSettings: FeeSettings,
 		fence: ExecutionFence,
 		probe: DiscoveryProbe,
@@ -75,7 +82,8 @@ export interface DiscoveryEstimateResult {
 	/** Actions discovery added — surfaced so the executor keeps its existing
 	 *  splice/record bookkeeping unchanged. */
 	discoveredActions: AddPrivateAuthwitAction[]
-	/** The decoded authorization behind each discovered action, same order. */
+	/** The decoded authorization behind each discovered action, same order, then each one another
+	 *  account of the send already gave. */
 	discovered: DiscoveredAuthwit[]
 }
 
@@ -99,6 +107,10 @@ export class DiscoveryAwareEstimator {
 	 *   rule): a stubbed sim accepts every witness unconditionally, so it
 	 *   would mask a broken pre-supplied witness that the validated pipeline
 	 *   fails loudly on — intent-authwit-carrying ops NEVER take a fold.
+	 * - NO other account in the send's scopes: discovery stubs every scope
+	 *   account so that account's request reaches the decoder, and a stub in
+	 *   the fold's run would answer that account's checks in a run that can
+	 *   size the fee.
 	 */
 	public async estimate(
 		operation: Operation,
@@ -113,8 +125,8 @@ export class DiscoveryAwareEstimator {
 		const hasPreAttachedAuthwit = actions.some((a) => a.kind === "add_private_authwit")
 		const foldableKind = feeSettings.paymentMethod.kind === "fpc" || feeSettings.paymentMethod.kind === "fj"
 		const withActions = (acts: readonly Action[]) =>
-			({ ...operation, actions: [...acts], ...(detectedFee ? { fee: detectedFee } : {}) }) as SendTransactionOperation
-		if (foldableKind && !hasPreAttachedAuthwit) {
+			({ ...operation, actions: [...acts], ...(detectedFee ? { fee: detectedFee } : {}) }) as FeeStrategyContext["op"]
+		if (foldableKind && !hasPreAttachedAuthwit && !readsAnotherAccount(operation)) {
 			const probe = new CollectingDiscoveryProbe()
 			const built = await this.deps.buildAndEstimateFolded(
 				withActions(actions),
@@ -139,4 +151,13 @@ export class DiscoveryAwareEstimator {
 		const built = await this.deps.buildAndEstimateValidated(withActions(finalActions), feeSettings, fence, parentTask, signal, onBuilt)
 		return { built, discoveredActions, discovered }
 	}
+}
+
+/** Whether the send's scopes name an account other than the sender. A scope spelling the sender
+ *  differently reads as another account, which only routes the send to the classic choreography. */
+function readsAnotherAccount(operation: Operation): boolean {
+	if (operation.kind !== "aztec_sendTx") return false
+	const scopes: unknown = operation.opts?.additionalScopes
+	const sender = operation.accountAddress.toLowerCase()
+	return Array.isArray(scopes) && scopes.some((scope) => String(scope).toLowerCase() !== sender)
 }

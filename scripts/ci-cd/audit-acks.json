@@ -58,12 +58,30 @@
 				"package": "systeminformation",
 				"severity": "high",
 				"vulnerable_versions": "<5.31.0"
+			},
+			{
+				"id": 1243663,
+				"package": "systeminformation",
+				"severity": "high",
+				"vulnerable_versions": "<5.33.16"
+			},
+			{
+				"id": 1243616,
+				"package": "systeminformation",
+				"severity": "low",
+				"vulnerable_versions": "<5.33.14"
+			},
+			{
+				"id": 1243617,
+				"package": "systeminformation",
+				"severity": "moderate",
+				"vulnerable_versions": "<5.33.13"
 			}
 		]
 	},
 	{
 		"bundled": false,
-		"reason": "Exact pins inside miniflare 5.20260907.0-alpha, the local Workers simulator of wrangler 4.129.1, a dev dependency of apps/landing, infra/passkey-rp, infra/subscribe and infra/token-list. They run in a developer's `wrangler dev`; no deployed Worker and no extension zip contains them.",
+		"reason": "Exact pins inside miniflare 5.20260907.0-alpha, the local Workers simulator of wrangler 4.129.1, a dev dependency of apps/landing, infra/passkey-rp, infra/rpc-proxy, infra/subscribe and infra/token-list. They run in a developer's `wrangler dev`; no deployed Worker and no extension zip contains them.",
 		"revisit": "the next wrangler bump",
 		"advisories": [
 			{
@@ -155,6 +173,36 @@
 				"package": "undici",
 				"severity": "high",
 				"vulnerable_versions": ">=7.18.0 <7.30.1"
+			},
+			{
+				"id": 1243473,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": ">=7.0.0 <7.30.1"
+			},
+			{
+				"id": 1243475,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": ">=7.0.0 <7.30.1"
+			},
+			{
+				"id": 1243478,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": ">=7.0.0 <7.30.1"
+			},
+			{
+				"id": 1243481,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.0.0 <7.30.1"
+			},
+			{
+				"id": 1243484,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.15.0 <7.30.1"
 			}
 		]
 	},
@@ -168,6 +216,25 @@
 				"package": "elliptic",
 				"severity": "low",
 				"vulnerable_versions": "<=6.6.1"
+			}
+		]
+	},
+	{
+		"bundled": false,
+		"reason": "glob 10.5.0 and minimatch 9.0.9 under js-beautify and its editorconfig, a dependency of @vue/test-utils; glob 13.0.6 and minimatch 10.2.6 under @aztec-foundation/noir-noir_codegen, which the exact-pinned Aztec 6.0.0 line depends on. The fixes are majors (glob 14, minimatch 11) outside each dependent's range. Neither extension zip contains either package (THIRD-PARTY-NOTICES.txt), and each matches only a developer's own patterns against their own files.",
+		"revisit": "the next @vue/test-utils or Aztec bump",
+		"advisories": [
+			{
+				"id": 1244013,
+				"package": "glob",
+				"severity": "moderate",
+				"vulnerable_versions": ">=9.0.0 <=14.0.1"
+			},
+			{
+				"id": 1244623,
+				"package": "minimatch",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.0.0 <11.0.1"
 			}
 		]
 	}

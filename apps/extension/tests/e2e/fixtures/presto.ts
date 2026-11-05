@@ -1,6 +1,7 @@
-import type { HTTPRequest, Page } from "puppeteer"
+import type { Page } from "puppeteer"
 import { PRESTO_HOST, PRESTO_HTTPS_PORT, PRESTO_PORT } from "@/presto/config"
 import packageJson from "../../../package.json"
+import { type AnsweredRequests, type RequestAnswer, answerRequests } from "./browser"
 
 /** The release `__BB_VERSION__` bakes in; Presto reports "available" only when it serves this one. */
 const BB_VERSION = packageJson.dependencies["@aztec-foundation/bb.js"]
@@ -23,18 +24,12 @@ export const PRESTO_DETAILED_HEALTH = {
 /** What Presto serves an origin it has not approved yet. */
 export const PRESTO_MINIMAL_HEALTH = { status: "ok", api_version: 1 }
 
-export type HealthAnswer = { status: number; body: unknown } | "refused"
-
-/** Answer the two health probes per scheme; every other request passes through. */
-export async function interceptHealth(page: Page, answers: { https: HealthAnswer; http: HealthAnswer }): Promise<void> {
-	await page.setRequestInterception(true)
-	const answer = (req: HTTPRequest, how: HealthAnswer) => {
-		if (how === "refused") return req.abort("connectionrefused")
-		return req.respond({ status: how.status, contentType: "application/json", body: JSON.stringify(how.body) })
-	}
-	page.on("request", (req) => {
-		if (req.url() === PRESTO_HTTPS_HEALTH_URL) return answer(req, answers.https)
-		if (req.url() === PRESTO_HTTP_HEALTH_URL) return answer(req, answers.http)
-		return req.continue()
-	})
-}
+/** Answer the page's two health probes per scheme; every other request goes out. */
+export const interceptHealth = (page: Page, answers: { https: RequestAnswer; http: RequestAnswer }): Promise<AnsweredRequests> =>
+	answerRequests(
+		page,
+		new Map([
+			[PRESTO_HTTPS_HEALTH_URL, answers.https],
+			[PRESTO_HTTP_HEALTH_URL, answers.http],
+		]),
+	)

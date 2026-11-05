@@ -8,6 +8,7 @@ import AuthMethodTabs from "@/components/composite/AuthMethodTabs.vue"
 defineProps({
 	passwordTestid: { type: String, required: true },
 	passkeyTestid: { type: String, required: true },
+	disabled: { type: Boolean, default: false },
 })
 
 const method = defineModel({ type: String, default: "passkey" })
@@ -23,6 +24,7 @@ const method = defineModel({ type: String, default: "passkey" })
 		:activeClass="$style.tabActive"
 		:passwordTestid="passwordTestid"
 		:passkeyTestid="passkeyTestid"
+		:disabled="disabled"
 	/>
 	<slot v-if="method === 'password'" />
 	<div v-else :class="$style.passkeyInfo" data-testid="unlock-method-passkey-note">

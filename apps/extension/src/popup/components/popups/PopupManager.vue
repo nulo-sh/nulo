@@ -3,7 +3,7 @@
 /** Components */
 import AccountsPopup from "./AccountsPopup.vue"
 import ChangeAuthwitsRegistryPopup from "./ChangeAuthwitsRegistryPopup.vue"
-import ConfirmPopup from "./ConfirmPopup.vue"
+import ConfirmPopup from "@/components/ConfirmPopup.vue"
 import DataViewerPopup from "./DataViewerPopup.vue"
 import EditAccountPopup from "./EditAccountPopup.vue"
 import EditContactPopup from "./EditContactPopup.vue"

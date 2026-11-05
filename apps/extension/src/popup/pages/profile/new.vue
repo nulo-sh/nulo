@@ -17,8 +17,10 @@ import { useProfileCreateFlow } from "@/composables/useProfileCreateFlow"
 /** Utils */
 import { createFailedNotice } from "@/utils/profile-flow-notices"
 import { capitalize } from "@/utils/string"
-import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
+import { PASSKEY_COPY } from "@/utils/passkey-copy"
+import { setupWaitsInTab } from "@/wallet/utils/onboarding-tab"
 import { activateCreatedProfile, makeCreateKeydownHandler } from "./new-profile-helpers"
+import { openingFlowLive } from "@/popup/opening-flow"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -40,14 +42,14 @@ const { openToast } = useToast()
 const route = useRoute()
 const router = useRouter()
 
-// Deep-link bypass: redirect to onboarding tab when no profile exists AND
-// onboarding hasn't been completed. Same predicate as register + import.
-onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
+// Before setup is finished in its tab, register is the popup's one page: it says where setup goes on.
+onBeforeMount(async () => {
+	if (await setupWaitsInTab(appStore)) router.replace("/popup/register")
+})
 
 const backTo = computed(() => String(route.query.from || "/popup/register"))
 const selectedOnEntry = appStore.profile?.id
-
-const maxPasswordLength = 128
+const flowLive = openingFlowLive()
 
 const {
 	nameFieldState,
@@ -63,7 +65,6 @@ const {
 	password,
 	repeatedPassword,
 	isCreating,
-	strengthHint,
 	isAllowedToContinue,
 	handleCreate,
 	handleCreateWithExistingPasskey,
@@ -72,7 +73,7 @@ const {
 	// Popup activation is listener-based (app.vue's onActiveProfileChanged runs
 	// the bootstrap); this manual tail waits for it, loads accounts, persists
 	// the active account, and routes. Extracted to a testable page helper.
-	onCreated: (profile) => activateCreatedProfile(profile, { appStore, router, openToast, selectedOnEntry }),
+	onCreated: (profile) => activateCreatedProfile(profile, { appStore, router, openToast, selectedOnEntry, flowLive }),
 	openToast,
 	notifyCreateFailed: (isPasskey) => notificationStore.create(createFailedNotice(isPasskey)),
 })
@@ -91,11 +92,12 @@ onBeforeUnmount(() => {
 		heroSub="Profile"
 		collapsingLabel="Create Profile"
 		:backTo="backTo"
+		moreBelow
 		data-testid="register-page"
 		:data-name-field="nameFieldState"
 		@keydown="onKeydown"
 	>
-		<div v-if="nameFieldState === 'shown'" :class="$style.section_last">
+		<div v-if="nameFieldState === 'shown'" :class="$style.section_last" data-scroll-section>
 			<span :class="$style.section_label">Profile name</span>
 			<ProfileNameField
 				ref="nameInputRef"
@@ -107,22 +109,18 @@ onBeforeUnmount(() => {
 			/>
 		</div>
 
-		<NewProfileMethodTabs v-model:type="type" />
+		<NewProfileMethodTabs v-model:type="type" :disabled="isCreating" />
 
 		<NewProfileCredentials
 			v-if="type === 'password'"
 			v-model:password="password"
 			v-model:repeatedPassword="repeatedPassword"
-			:maxPasswordLength="maxPasswordLength"
-			:strengthHint="strengthHint"
 		/>
 
 		<!-- Passkey info -->
-		<div v-else :class="$style.section_last">
+		<div v-else :class="$style.section_last" data-scroll-section>
 			<span :class="$style.section_label">Passkey</span>
-			<Text variant="body" height="150" color="body">
-				No password required. Your new profile will be linked to your passkey, so you can sign in securely and effortlessly. No memorizing, no typing, just one tap.
-			</Text>
+			<Text variant="body" height="150" color="body" data-testid="register-passkey-info">{{ PASSKEY_COPY.choice }}</Text>
 		</div>
 
 		<template #bottom>

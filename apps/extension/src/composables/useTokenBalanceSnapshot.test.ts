@@ -38,7 +38,7 @@ describe("useTokenBalanceSnapshot", () => {
 	test("the active chain's rows land through mapRow and the state becomes loaded", async () => {
 		const s = setup({ mapRow: (r) => ({ ...r, mapped: true }) as never })
 		s.client.getTokenBalances.mockResolvedValue([row(1), row(2, 2)])
-		await s.snap.fetchTokenBalances()
+		expect(await s.snap.fetchTokenBalances()).toBe(true)
 		expect(s.client.getTokenBalances).toHaveBeenCalledWith(undefined, "0xa")
 		expect(s.rows.value).toEqual([{ ...row(1), mapped: true }])
 		expect(s.state.value).toBe("loaded")
@@ -83,7 +83,7 @@ describe("useTokenBalanceSnapshot", () => {
 		const p2 = s.snap.fetchTokenBalances()
 		current = false
 		bad.reject(new Error("port closed"))
-		await p2
+		expect(await p2).toBe(true)
 		expect(s.state.value).toBe("loading")
 		expect(vi.getTimerCount()).toBe(0)
 	})
@@ -103,7 +103,7 @@ describe("useTokenBalanceSnapshot", () => {
 	test("a first rejection reads unavailable and retries once; the retry's rejection arms none", async () => {
 		const s = setup()
 		s.client.getTokenBalances.mockRejectedValue(new Error("port closed"))
-		await s.snap.fetchTokenBalances()
+		expect(await s.snap.fetchTokenBalances()).toBe(false)
 		expect(s.state.value).toBe("unavailable")
 		await vi.advanceTimersByTimeAsync(2_000)
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(2)
@@ -144,6 +144,21 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
 	})
 
+	test("a later connect while a read is out leaves that read to settle the run; once it has, a connect refetches", async () => {
+		const s = setup()
+		s.connect()
+		const out = deferred<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(out.promise).mockResolvedValue([row(2)])
+		const p = s.snap.fetchTokenBalances()
+		s.connect()
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
+		out.reject(new Error("refused"))
+		expect(await p).toBe(false)
+		expect(s.state.value).toBe("unavailable")
+		s.connect()
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(2)
+	})
+
 	test("an update replaces its row by id, scoped or not, and marks a run stale only in scope", async () => {
 		const s = setup()
 		s.client.getTokenBalances.mockResolvedValue([row(1)])
@@ -167,6 +182,14 @@ describe("useTokenBalanceSnapshot", () => {
 		stale.resolve([row(1)])
 		await p2
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(4)
+	})
+
+	test("an update for a listed id lands through mapRow", async () => {
+		const s = setup({ mapRow: (r) => ({ ...r, mapped: true }) as never })
+		s.client.getTokenBalances.mockResolvedValue([row(1)])
+		await s.snap.fetchTokenBalances()
+		s.snap.onBalanceUpdated({ ...row(1), marker: "moved" } as never)
+		expect(s.rows.value).toEqual([{ ...row(1), marker: "moved", mapped: true }])
 	})
 
 	test("an update for an unseen id waits for the next read, in scope or not", async () => {

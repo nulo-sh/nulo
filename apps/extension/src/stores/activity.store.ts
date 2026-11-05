@@ -159,8 +159,9 @@ export const useActivityStore = defineStore("activity", () => {
 		return (key && slices.value.get(key)) || EMPTY_SLICE
 	})
 
-	/** Newest first. The store keeps insertion order; ordering is a read concern. */
-	const transactions = computed<Tx[]>(() => [...activeSlice.value.transactions].sort((a, b) => b.updatedAt - a.updatedAt))
+	/** Newest sent first, so a status change never moves a row. The store keeps insertion order;
+	 *  ordering is a read concern. */
+	const transactions = computed<Tx[]>(() => [...activeSlice.value.transactions].sort((a, b) => b.createdAt - a.createdAt))
 	const awaitingTransactions = computed<AwaitingTx[]>(() => activeSlice.value.awaiting)
 
 	/**

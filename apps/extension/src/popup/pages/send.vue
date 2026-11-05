@@ -25,7 +25,6 @@ import { OperationJournalServiceClient } from "@/wallet/services/operation-journ
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
-import { proxyTickerFor } from "@/wallet/services/price/price-map"
 import { TransferType } from "@/wallet/services/transaction/client"
 
 /** Utils */
@@ -38,7 +37,9 @@ import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/sen
 import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
+import { openingSendSide } from "@/popup/pages/send-sides"
 import { submitTransfer } from "@/popup/pages/send-submit"
+import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
 import { NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
 import { isValidatedTokenClass } from "@/utils/token-class"
 import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
@@ -53,7 +54,7 @@ import { vSnackFooter } from "@/composables/snackInset"
 import { useSendReview } from "@/composables/useSendReview"
 import { useTicker } from "@/composables/ticker"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
-const { openToast } = useToast()
+const { openToast, toast, closeToast } = useToast()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -184,10 +185,10 @@ const tokenBalanceByType = computed(() => {
 
 const selectedSendType = ref("private")
 const selectedReceiverType = ref("private")
-const initSendType = () => {
+const initSendType = (keepSide = false) => {
 	if (!activeToken.value) return
-	if (cacheStore.preselectedBalanceType && activeToken.value.hasPrivateTransfers && activeToken.value.hasPublicTransfers) {
-		selectedSendType.value = cacheStore.preselectedBalanceType
+	if (!keepSide && activeToken.value.hasPrivateTransfers && activeToken.value.hasPublicTransfers) {
+		selectedSendType.value = openingSendSide(tokenBalance.value)
 	}
 
 	if (!activeToken.value.hasPrivateTransfers) {
@@ -198,9 +199,9 @@ const initSendType = () => {
 		selectedSendType.value = "private"
 	}
 }
-const initReceiverType = () => {
+const initReceiverType = (keepSide = false) => {
 	if (!activeToken.value) return
-	if (cacheStore.preselectedBalanceType && activeToken.value.hasPrivateBalances && activeToken.value.hasPublicBalances) {
+	if (!keepSide && cacheStore.preselectedBalanceType && activeToken.value.hasPrivateBalances && activeToken.value.hasPublicBalances) {
 		selectedReceiverType.value = cacheStore.preselectedBalanceType
 	}
 
@@ -250,6 +251,14 @@ const amountValidation = computed(() =>
 	}),
 )
 
+/** A never-synced row holds placeholder zeroes; a failed refresh keeps the last balance it read. */
+const balanceState = computed(() => {
+	const row = tokenBalance.value
+	if (row && row.updatedAt !== 0) return "read"
+	if (row ? row.syncFailure : balancesState.value === "unavailable") return "unavailable"
+	return "loading"
+})
+
 /** The line under the amount names only a balance the wallet read: a row never synced holds a zero
  *  placeholder, which the token card draws as loading. */
 const exceedsBalance = computed(() => amountValidation.value.reason === "exceedsBalance" && tokenBalance.value?.updatedAt !== 0)
@@ -274,7 +283,9 @@ const legalBannerAction = {
 	callback: () => chrome.storage.session.remove(LEGAL_DISMISSED_KEY),
 }
 const liveQuote = computed(() => prices.quoteFor(activeToken.value?.chainId, activeToken.value?.contract) ?? null)
-const proxyTicker = computed(() => (liveQuote.value ? (proxyTickerFor(liveQuote.value.coingeckoId) ?? null) : null))
+const proxyTicker = computed(() =>
+	liveQuote.value ? (prices.priceEntryFor(activeToken.value?.chainId, activeToken.value?.contract)?.ticker ?? null) : null,
+)
 
 const fiatMode = ref(false)
 const fiatGuard = ref(null)
@@ -302,34 +313,41 @@ const handleRequote = (e) => {
 	if (liveQuote.value && e.currentTarget.matches(":focus-visible")) amountCardRef.value?.focusAmount()
 }
 
-/** The wallet answered that an earlier send holds this transfer's chain state; set until a real
- *  estimate lands, fails or stops, so nothing the person pays goes out on a fee they have not seen. */
+/** The wallet answered that an earlier send holds this transfer's chain state; set until the
+ *  estimate's run starts, lands, fails or stops, so nothing the person pays goes out on a fee they
+ *  have not seen. */
 const feeQueued = ref(false)
 /** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
 const queuedCap = ref(null)
+const estimateFailed = ref(false)
+/** The snack that reported the failure: the next question closes it unless another replaced it. */
+let failureSnackId
+const clearEstimateFailure = () => {
+	estimateFailed.value = false
+	if (failureSnackId !== undefined && toast.value?.id === failureSnackId) closeToast()
+	failureSnackId = undefined
+}
 const clearQueued = () => {
 	feeQueued.value = false
 	queuedCap.value = null
 }
-/** Queued against the cap: only a fee the person pays, and nothing goes out above the cap shown. */
-const queueCap = computed(() => (feeQueued.value && feePayerOf(payer.value) === "self" ? queuedCap.value : null))
-/** Queued with Nulo's sponsor paying: the person pays nothing, so there is no cap to hold it to. A
- *  sponsor added by hand can charge the account, so it never queues. */
-const queuedSponsored = computed(() => feeQueued.value && feePayerOf(payer.value) === "sponsor")
-const queueMode = computed(() => Boolean(queueCap.value) || queuedSponsored.value)
+const feeState = computed(() => ({
+	queued: feeQueued.value,
+	queuedCap: queuedCap.value,
+	payer: feePayerOf(payer.value),
+	estimate: feeEstimate.value,
+}))
+const queueCap = computed(() => queueCapOf(feeState.value))
+const queuedSponsored = computed(() => queuedSponsoredOf(feeState.value))
+const queueMode = computed(() => queueModeOf(feeState.value))
 
 const isAllowedToSend = computed(() => {
 	if (!legal.isCurrent.value) return false
-	if (feeQueued.value && !queueMode.value) return false
+	if (!feeAllowsSend(feeState.value)) return false
 	if (!amountTerm.value) return false
 	if (isBlockedTransfer.value) return false
 	if (!isValidAddress.value) return false
 	if (!feeSettings.value) return false
-	// Nothing goes out on a fee the person has not seen: a failed estimate leaves this off too. A
-	// queued send's figure is the cap the card shows, and nothing goes out above it; Nulo's sponsor
-	// charges the person nothing.
-	if (!queueMode.value && !feeEstimate.value) return false
-	if (feeEstimate.value?.feeJuiceShortfall) return false
 	if (fiatQuoteBlocked.value) return false
 	return amountValidation.value.valid
 })
@@ -433,6 +451,7 @@ const {
 					// A spent token's answer carries no cap; the requeue's own answer will.
 					if (!answer.tokenSpent) queuedCap.value = answer.cap ?? null
 				},
+				start: { events: executionService.onEstimateStarted, estimateToken, onStarted: clearQueued },
 			},
 		)
 	},
@@ -445,7 +464,8 @@ const {
 		clearQueued()
 		if (err instanceof ImportedAccountUnusableError) return leaveUnusable()
 		console.error(`[send:${sendInstanceId}] estimateTransferFee failed:`, err)
-		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		estimateFailed.value = true
+		failureSnackId = openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 	},
 })
 const isSending = ref(false)
@@ -502,10 +522,7 @@ function snapshotTransfer() {
 	// Only when a consumable id exists: handing off a still-in-flight
 	// estimate would orphan its eventual stash (nobody consumes, nobody can
 	// cancel) for the full TTL.
-	const feeCap = queueCap.value?.cap
-	const precomputedEstimateId = feeCap ? undefined : feeEstimate.value?.estimateId
-	// A send the person pays is held to the figure the page showed: the queued cap, or the estimate.
-	const shownFee = feeCap || feePayerOf(payer.value) !== "self" ? undefined : feeEstimate.value?.maxFee
+	const { feeCap, precomputedEstimateId, shownFee } = sendFeeHandoff(feeState.value)
 	if (precomputedEstimateId) handoffFeeEstimate()
 	return {
 		networkId: appStore.network.id,
@@ -556,14 +573,50 @@ watch(isEstimating, (estimating) => {
 	if (!estimating) clearQueued()
 })
 
+/** How long one question may run before the fee card and the review say so and offer to ask again. */
+const ESTIMATE_SLOW_MS = 20_000
+const estimateSlow = ref(false)
+let estimateSlowTimer
+/** Every new question restarts it: a reschedule leaves `isEstimating` true, so the watch alone misses it. */
+function restartSlowClock() {
+	clearTimeout(estimateSlowTimer)
+	estimateSlow.value = false
+	if (isEstimating.value) estimateSlowTimer = setTimeout(() => (estimateSlow.value = true), ESTIMATE_SLOW_MS)
+}
+watch(isEstimating, restartSlowClock)
+
+/** A send that can go out while its estimate runs keeps its word; otherwise the disabled button says why. */
+const submitLabel = computed(() => {
+	if (isSending.value) return "CONFIRMING"
+	if (isEstimating.value && !queueMode.value) return "Estimating fee"
+	if (facts.value.requiresReview) return "Review send"
+	return queueMode.value ? "Queue send" : "Confirm Transaction"
+})
+
+/** An imported token's id: the token watch's next run keeps the amount and each side the token
+ *  supports. */
+let keepFormFor
+async function pickAddedToken(token) {
+	const epoch = appStore.scopeEpoch
+	const current = cacheStore.activeTokenIdx
+	const listed = () => tokens.value.some((t) => t.id === token.id)
+	if (!listed()) await reloadTokens().catch(onReadFailed)
+	// Only a token the list holds can be active: any other leaves the card with no token. A token
+	// picked while the list was read is the later choice, and keeps its own form.
+	if (cancelled || appStore.scopeEpoch !== epoch || cacheStore.activeTokenIdx !== current || !listed() || current === token.id) return
+	keepFormFor = token.id
+	cacheStore.activeTokenIdx = token.id
+}
+
 watch(
 	() => cacheStore.activeTokenIdx,
-	() => {
+	(id) => {
 		closeReview()
-		initSendType()
-		initReceiverType()
-
-		amountTerm.value = null
+		const keep = id === keepFormFor
+		keepFormFor = undefined
+		initSendType(keep)
+		initReceiverType(keep)
+		if (!keep) amountTerm.value = null
 	},
 )
 
@@ -587,6 +640,7 @@ watch(
 )
 
 function requestEstimate() {
+	clearEstimateFailure()
 	// An estimate simulates against the node: no work for a send the wall would refuse.
 	if (!legal.isCurrent.value) {
 		cancelFeeEstimate()
@@ -615,6 +669,7 @@ function requestEstimate() {
 		amount: amountValidation.value.integerized,
 		settings: feeSettings.value,
 	})
+	restartSlowClock()
 }
 
 // Every input the estimate is asked with is a source here, so a landed estimate is always the
@@ -683,11 +738,7 @@ async function refetchIdentityScopedState() {
 	tokensLoading.value = true
 	tokensChangedDuringLoad = false
 	try {
-		const [first, tb, c] = await Promise.all([
-			tokenService.getTokens(profileId, chainId),
-			tokenBalanceService.getTokenBalances(undefined, appStore.account.address),
-			contactService.getContacts(),
-		])
+		const [first, , c] = await Promise.all([tokenService.getTokens(profileId, chainId), readBalances(), contactService.getContacts()])
 		let t = first
 		while (tokensChangedDuringLoad && isCurrent()) {
 			tokensChangedDuringLoad = false
@@ -695,8 +746,6 @@ async function refetchIdentityScopedState() {
 		}
 		if (!isCurrent()) return
 		tokens.value = t
-		// A reconnect's read that began after this fetch and has landed is the newer one.
-		if (balancesState.value !== "loaded") tokenBalances.value = tb
 		contacts.value = c
 		// The tokens watch makes the first token added to an empty list the active one. A refused
 		// load must not arm it, or the Retry's list would lose the active or requested token.
@@ -714,6 +763,12 @@ async function refetchIdentityScopedState() {
 	} finally {
 		if (isCurrent()) tokensLoading.value = false
 	}
+}
+
+/** Through the snapshot, so an event that outlives the read is never overwritten by it. A refused
+ *  read fails the identity fetch at once, as a refused token or contact read does. */
+async function readBalances() {
+	if (!(await balances.fetchTokenBalances())) throw new Error("token balance read refused")
 }
 
 /** The token card's Retry: all three reads again, since the page cannot send without any of them. */
@@ -753,6 +808,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
 	console.debug(`[send:${sendInstanceId}] unmounting`)
 	cancelled = true
+	// A load still out ends here: its late reads must not write the shared token selection.
+	identityFetchSeq++
 	closeReview()
 
 	contactService.disconnect()
@@ -767,6 +824,7 @@ onBeforeUnmount(() => {
 	if (!submitInFlight) disconnectExecution()
 
 	cancelFeeEstimate()
+	clearTimeout(estimateSlowTimer)
 
 	amountTerm.value = null
 
@@ -812,7 +870,13 @@ onBeforeUnmount(() => {
 				<div :class="$style.section">
 					<span :class="$style.section_label">Select Asset</span>
 					<FlaggedTokenBanner v-if="prices.isFlagged(activeToken)" />
-					<SelectTokenCard :token="activeToken" :loading="tokensLoading" :failed="tokensFailed" @retry="retryTokens" />
+					<SelectTokenCard
+						:token="activeToken"
+						:loading="tokensLoading"
+						:failed="tokensFailed"
+						:onTokenAdded="pickAddedToken"
+						@retry="retryTokens"
+					/>
 				</div>
 
 				<!-- Section: Transaction Amount -->
@@ -827,6 +891,7 @@ onBeforeUnmount(() => {
 						:token="activeToken"
 						:tokenBalanceByType
 						:balanceRawByType="balanceRaw ?? null"
+						:balanceState
 						:liveQuote
 						:proxyTicker
 						:exceedsBalance
@@ -842,6 +907,12 @@ onBeforeUnmount(() => {
 					</Flex>
 				</div>
 
+				<!-- In the page, not the pinned footer, so it never covers the amount's balance, its refusal or the fee. -->
+				<Flex v-if="!isBlockedTransfer" direction="column" gap="10" :class="$style.publish">
+					<PublishStrip :facts="facts" @open="openReview" />
+					<Text v-if="showsTokenCaveat" variant="body" color="secondary" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
+				</Flex>
+
 				<!-- Section: Fee Summary -->
 				<div :class="$style.section_last">
 					<FeeSettingsCard
@@ -853,6 +924,8 @@ onBeforeUnmount(() => {
 						:isQueued="feeQueued"
 						:queuedCap="queueCap"
 						:amountTyped="Boolean(amountTerm)"
+						:estimateFailed="estimateFailed"
+						:estimateSlow="estimateSlow"
 						:originPrivacy="selectedSendType"
 						:payerNoticeShape="facts.noticeShape"
 						:txShape="feeTxShape"
@@ -862,13 +935,12 @@ onBeforeUnmount(() => {
 						v-model:feeDisplay="feeDisplay"
 						v-model:queuedCapText="queuedCapText"
 						v-model:accountUnusable="accountUnusable"
+						@retryEstimate="requestEstimate"
 					/>
 				</div>
 			</Flex>
 
 			<Flex v-snack-footer direction="column" gap="10" :class="$style.bottom" data-testid="send-footer">
-				<PublishStrip v-if="!isBlockedTransfer" :facts="facts" @open="openReview" />
-				<Text v-if="showsTokenCaveat" variant="body" color="secondary" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
 				<Button
 					v-if="needsFeeJuice"
 					@click="openFeeJuiceBridge"
@@ -888,7 +960,7 @@ onBeforeUnmount(() => {
 					:disabled="!isAllowedToSend || isSending"
 					:loading="isSending"
 				>
-					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : queueMode ? "Queue send" : "Confirm Transaction" }}
+					{{ submitLabel }}
 				</Button>
 			</Flex>
 		</Flex>
@@ -910,7 +982,10 @@ onBeforeUnmount(() => {
 			:ready="reviewReady"
 			:queuedCapText="queueCap ? queuedCapText : undefined"
 			:queuedSponsored="queuedSponsored"
+			:estimating="isEstimating"
+			:slow="estimateSlow"
 			@close="closeReview"
+			@retry="requestEstimate"
 			@send="submit('review')"
 		/>
 	</Flex>
@@ -955,12 +1030,16 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
+.publish {
+	padding-top: 14px;
+}
+
 .bottom {
 	position: sticky;
 	bottom: 0;
 	z-index: 5;
 
-	padding: 20px 24px;
+	padding: 12px 24px;
 	background: var(--app-bg);
 	border-top: 1px solid var(--nulo-border);
 }

@@ -11,10 +11,11 @@
  * that step this guard would never run on a PR and the whole mechanism would be hollow.
  */
 import { describe, expect, test } from "bun:test"
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { MOVE_APPROVED_LABEL } from "../complexity-baseline/scan"
+import { runStep } from "./gh-step-harness"
 
 const ROOT = join(import.meta.dir, "..", "..")
 // apps/ vs packages/ split (FLAT layout): deployable leaves live under apps/, libs under packages/.
@@ -45,17 +46,22 @@ function transitiveDeps(target: string): string[] {
 
 /** Parse a workflow's dorny `changes` filters — TWO-LEVEL (workflow YAML → the `with.filters` string), never regex. */
 function filtersOf(workflow: string): Record<string, string[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-	const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", workflow), "utf8")) as any
+	const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", workflow), "utf8")) as GateWorkflow
+	return dornyFilters(wf, workflow)
+}
+
+type GateStep = { id?: string; if?: unknown; uses?: string; run?: string; env?: Record<string, string>; with?: Record<string, string> }
+type GateWorkflow = { jobs: Record<string, { outputs?: Record<string, string>; steps?: GateStep[] }> }
+
+function dornyFilters(wf: GateWorkflow, label: string): Record<string, string[]> {
 	for (const job of Object.values(wf.jobs)) {
-		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-		for (const step of (job as any).steps ?? []) {
-			if (typeof step.uses === "string" && step.uses.includes("dorny/paths-filter") && step.with?.filters) {
+		for (const step of job.steps ?? []) {
+			if (step.uses?.includes("dorny/paths-filter") && step.with?.filters) {
 				return Bun.YAML.parse(step.with.filters) as Record<string, string[]>
 			}
 		}
 	}
-	throw new Error(`no dorny/paths-filter step found in ${workflow}`)
+	throw new Error(`no dorny/paths-filter step found in ${label}`)
 }
 
 /** A gate's pattern set must whole-package the target and src+manifest every transitive dep lib. */
@@ -303,6 +309,46 @@ describe("network suite job names", () => {
 		expect(produced.length, "the PR lane calls the suite").toBeGreaterThan(0)
 		expect([...expected].sort()).toEqual([...produced].sort())
 		expect(script, "the list is checked against the PR lane's runs").toContain(`if [ "$WF" = "${workflowOf(PR_LANE).name}" ]; then`)
+	})
+})
+
+describe("commitlint", () => {
+	const step = workflowOf("pr-quick.yml").jobs.commitlint.steps.find((s: { name?: string }) => s.name === "Lint PR commits")
+	// A failing lint, so a PR that reaches it goes red and one that skips it stays green.
+	const LOG_AND_FAIL = `#!/bin/sh\necho "$(basename "$0") $*" >> "$(dirname "$0")/calls"\nexit 1\n`
+	const run = (base: string, head: string, author: string) =>
+		runStep(step, {
+			shim: LOG_AND_FAIL,
+			bound: {
+				"${{ github.base_ref }}": base,
+				"${{ github.head_ref }}": head,
+				"${{ github.event.pull_request.base.sha }}": "base-sha",
+				"${{ github.event.pull_request.head.sha }}": "head-sha",
+				"${{ github.event.pull_request.user.login }}": author,
+			},
+			setup: (dir) => {
+				writeFileSync(join(dir, "bunx"), LOG_AND_FAIL)
+				chmodSync(join(dir, "bunx"), 0o755)
+			},
+		})
+
+	test.each([
+		["a human's PR into dev", "dev", "feat/x", "alice"],
+		["a human's PR from a branch named like Dependabot's", "dev", "dependabot/github_actions/actions-1", "alice"],
+	])("%s lints every commit in base..head", (_, base, head, author) => {
+		const { code, calls } = run(base, head, author)
+		expect(calls).toEqual(["bunx commitlint --from base-sha --to head-sha --verbose"])
+		expect(code).toBe(1)
+	})
+
+	test.each([
+		["Dependabot's PR", "dev", "dependabot/github_actions/actions-1", "dependabot[bot]"],
+		["a PR into main", "main", "dev", "alice"],
+		["the main → dev sync PR", "dev", "sync/main-to-dev-1.2.0", "nulo-release[bot]"],
+	])("%s is not linted", (_, base, head, author) => {
+		const { code, calls } = run(base, head, author)
+		expect(calls).toEqual([])
+		expect(code).toBe(0)
 	})
 })
 
@@ -610,7 +656,7 @@ describe("CI behavior-gating guard", () => {
 	})
 
 	test("needs-extension-build (pr-quick filter union) covers the extension graph", () => {
-		const union = [...quick["core-foundation"], ...quick["aztec-runtime"], ...quick["wallet-bridge"], ...quick.extension]
+		const union = extensionBuildFilters(workflowOf("pr-quick.yml")).filters.flatMap((name) => quick[name])
 		assertGraphCovered(union, "extension", "needs-extension-build")
 	})
 
@@ -674,20 +720,13 @@ describe("CI behavior-gating guard", () => {
 		expect(JSON.stringify(wf.jobs.status.steps)).toContain("needs.build-landing.result")
 	})
 
-	test("each e2e lane's filter covers the gate scripts it runs", () => {
-		for (const file of Object.keys(E2E_LANES)) {
-			const [patterns] = Object.values(filtersOf(file))
-			for (const script of GATE_SCRIPTS) expect(patterns, `${file} → ${script}`).toContain(script)
-		}
-	})
-
 	test("cross-cutting inputs (patches + root build inputs) gate the e2e suites", () => {
 		for (const [label, pats] of [
 			["smoke", smoke],
 			["network", network],
 		] as const) {
 			expect(pats, `${label}: patches/** rewrites installed deps`).toContain("patches/**")
-			for (const root of ["package.json", "bun.lock", "bunfig.toml", "tsconfig.json"]) {
+			for (const root of ["package.json", "bun.lock", "bunfig.toml", "tsconfig.json", "tsconfig.base.json"]) {
 				expect(pats, `${label}: root input ${root}`).toContain(root)
 			}
 		}
@@ -732,6 +771,398 @@ describe("CI behavior-gating guard", () => {
 		const run = smoke.jobs.smoke.steps.find((step: any) => step.name === "Run smoke e2e")
 		expect(run.env.NULO_E2E_RETRY).toBe("${{ inputs.retry }}")
 		expect(network.jobs["network-e2e"].env.NULO_E2E_RETRY).toBe("${{ inputs.retry }}")
+	})
+})
+
+const NO_GH = "#!/bin/sh\nexit 1\n"
+/** The one shape a compute-step input may take: the dispatch override, else one filter's output. */
+const COMPUTE_INPUT = /^\$\{\{ steps\.override\.outputs\.full \|\| steps\.filter\.outputs\.([\w-]+) \}\}$/
+
+const FLAG = "needs-extension-build="
+
+/**
+ * What pr-quick's compute step, given only `on` true (no input, for `undefined`), sets the flag to.
+ * `undefined` unless it writes the flag exactly once, as a boolean: the runner keeps the last write.
+ */
+function computeFlag(step: GateStep, on?: string): "true" | "false" | undefined {
+	const dir = mkdtempSync(join(tmpdir(), "compute-"))
+	try {
+		const output = join(dir, "output")
+		writeFileSync(output, "")
+		const env = step.env ?? {}
+		const bound = Object.fromEntries(Object.entries(env).map(([key, value]) => [value, String(key === on)]))
+		const run = runStep({ run: step.run ?? "", env }, { shim: NO_GH, bound, overrides: { GITHUB_OUTPUT: output } })
+		if (run.code !== 0) throw new Error(`compute step failed: ${run.stderr}`)
+		const writes = readFileSync(output, "utf8")
+			.split("\n")
+			.filter((line) => line.startsWith(FLAG))
+		const value = writes.length === 1 ? writes[0].slice(FLAG.length) : undefined
+		return value === "true" || value === "false" ? value : undefined
+	} finally {
+		rmSync(dir, { recursive: true, force: true })
+	}
+}
+
+/** The compute step must always run, and the job must publish its flag as the one the builds read. */
+function computeWiringFindings(wf: GateWorkflow, step: GateStep): string[] {
+	const published = wf.jobs.changes.outputs?.["needs-extension-build"]
+	return [
+		...(step.id === "compute" ? [] : ["no compute step in the changes job"]),
+		...(step.if === undefined ? [] : [`the compute step runs only if ${step.if}`]),
+		...(published === "${{ steps.compute.outputs.needs-extension-build }}" ? [] : [`changes publishes the flag as ${published}`]),
+	]
+}
+
+/**
+ * The pr-quick filters whose change builds the extension, read off its compute step by running it
+ * with each input alone true. An input in any other shape is refused: bound to a plain boolean, it
+ * would credit a filter the real expression might not pass on.
+ */
+function extensionBuildFilters(wf: GateWorkflow): { filters: string[]; findings: string[] } {
+	const step = wf.jobs.changes.steps?.find((candidate) => candidate.id === "compute") ?? {}
+	const defined = Object.keys(dornyFilters(wf, "pr-quick.yml"))
+	const inputs = Object.entries(step.env ?? {}).map(([key, value]) => ({ key, value, name: COMPUTE_INPUT.exec(value)?.[1] }))
+	const findings = [
+		...computeWiringFindings(wf, step),
+		...inputs
+			.filter(({ name }) => name === undefined || !defined.includes(name))
+			.map(({ key, value }) => `compute input ${key} reads ${value}, not the override or one defined filter`),
+	]
+	if (findings.length > 0) return { filters: [], findings }
+	const probes = [undefined, ...inputs.map(({ key }) => key)].map((on) => ({ on, flag: computeFlag(step, on) }))
+	findings.push(
+		...probes.filter(({ flag }) => flag === undefined).map(({ on }) => `with ${on ?? "no input"} true, the flag is not one boolean`),
+	)
+	if (probes[0].flag === "true") findings.push("the compute step builds the extension with every input false")
+	const builds = new Set(probes.filter(({ flag }) => flag === "true").map(({ on }) => on))
+	return { filters: inputs.filter(({ key }) => builds.has(key)).map(({ name }) => name ?? ""), findings }
+}
+
+const QUICK = "pr-quick.yml"
+const [SMOKE, SMOKE_FIREFOX, NETWORK, NETWORK_FIREFOX] = [
+	"pr-extension-smoke-e2e.yml",
+	"pr-extension-smoke-e2e-firefox.yml",
+	"pr-extension-network-e2e.yml",
+	"pr-extension-network-e2e-firefox.yml",
+]
+/**
+ * Entries naming the CI files a lane runs differ by lane by design and stay out of the comparison;
+ * "each e2e lane's filter names the CI files it runs" derives them instead.
+ */
+const LANE_INFRASTRUCTURE = /^(\.github|scripts\/ci-cd)\//
+const PR_QUICK_ROOT_CONFIG = "root config that no build reads; pr-quick's `root-config` filter is one net over the root files"
+const POST_BUILD_CHECK = "read only by `_build-extension.yml`'s post-build check, and on a pull request only pr-quick's builds run it"
+/** The build-surface patterns that only some PR lanes hold: which ones, and why. */
+const SURFACE_EXCEPTIONS: Record<string, { holders: string[]; reason: string }> = {
+	"packages/third-party-notices/bin/**": { holders: [QUICK], reason: POST_BUILD_CHECK },
+	"packages/third-party-notices/expected-minimum.txt": { holders: [QUICK], reason: POST_BUILD_CHECK },
+	"biome.json": { holders: [QUICK], reason: PR_QUICK_ROOT_CONFIG },
+	".commitlintrc.json": { holders: [QUICK], reason: PR_QUICK_ROOT_CONFIG },
+	".githooks/**": { holders: [QUICK], reason: PR_QUICK_ROOT_CONFIG },
+	"apps/playground/**": { holders: [NETWORK, NETWORK_FIREFOX], reason: "the dApp the network suite drives" },
+}
+
+/** Each PR lane's build surface: the patterns that start its extension build, lane infrastructure aside. */
+function buildSurfaces(quick: GateWorkflow): Record<string, string[]> {
+	const quickFilters = dornyFilters(quick, QUICK)
+	const surfaceOf = (patterns: string[]) => patterns.filter((pattern) => !LANE_INFRASTRUCTURE.test(pattern))
+	const lanes = [SMOKE, SMOKE_FIREFOX, NETWORK, NETWORK_FIREFOX].map((file) => [file, surfaceOf(Object.values(filtersOf(file))[0])])
+	return {
+		[QUICK]: surfaceOf(extensionBuildFilters(quick).filters.flatMap((name) => quickFilters[name])),
+		...Object.fromEntries(lanes),
+	}
+}
+
+/** Every pattern whose holders are neither all the lanes nor exactly its exception's. */
+function surfaceFindings(surfaces: Record<string, string[]>, exceptions = SURFACE_EXCEPTIONS): string[] {
+	const lanes = Object.keys(surfaces)
+	const patterns = new Set([...Object.values(surfaces).flat(), ...Object.keys(exceptions)])
+	return [...patterns].flatMap((pattern) => {
+		const held = lanes.filter((lane) => surfaces[lane].includes(pattern))
+		const expected = exceptions[pattern]?.holders ?? lanes
+		const agree = held.length === expected.length && expected.every((lane) => held.includes(lane))
+		return agree ? [] : [`${pattern}: held by ${held.join(", ") || "no lane"}; expected ${expected.join(", ")}`]
+	})
+}
+
+describe("one extension build surface", () => {
+	const quick: GateWorkflow = workflowOf(QUICK)
+	const live = buildSurfaces(quick)
+	const withSurface = (lane: string, edit: (patterns: string[]) => string[]) => ({ ...live, [lane]: edit(live[lane]) })
+	const TEXTS = "packages/third-party-notices/texts/**"
+	const BIN = "packages/third-party-notices/bin/**"
+	const computeCopy = (edit: (step: GateStep) => void): GateWorkflow => {
+		const copy: GateWorkflow = structuredClone(quick)
+		const step = copy.jobs.changes.steps?.find((candidate) => candidate.id === "compute")
+		if (step) edit(step)
+		return copy
+	}
+
+	test("pr-quick builds the extension on exactly the filters its compute step reads", () => {
+		expect(extensionBuildFilters(quick)).toEqual({
+			filters: ["core-foundation", "aztec-runtime", "wallet-bridge", "extension", "workflows", "root-config"],
+			findings: [],
+		})
+	})
+
+	test("the five PR lanes gate on one build surface, apart from the reviewed exceptions", () => {
+		expect(Object.keys(live)).toEqual([QUICK, SMOKE, SMOKE_FIREFOX, NETWORK, NETWORK_FIREFOX])
+		for (const lane of Object.keys(live)) expect(live[lane], lane).toContain(TEXTS)
+		expect(surfaceFindings(live)).toEqual([])
+	})
+
+	test.each([
+		["a network lane without the licence texts", withSurface(NETWORK, (p) => p.filter((x) => x !== TEXTS)), SURFACE_EXCEPTIONS, TEXTS],
+		["a smoke lane with the post-build check's script", withSurface(SMOKE, (p) => [...p, BIN]), SURFACE_EXCEPTIONS, BIN],
+		[
+			"an exception no lane holds",
+			live,
+			{ ...SURFACE_EXCEPTIONS, "packages/gone/**": { holders: [QUICK], reason: "" } },
+			"packages/gone/**",
+		],
+	])("a copy with %s is refused", (_, surfaces, exceptions, pattern) => {
+		expect(surfaceFindings(surfaces, exceptions).map((finding) => finding.split(":")[0])).toEqual([pattern])
+	})
+
+	test("a compute step that stops reading root-config drops the root build inputs from pr-quick", () => {
+		const extensionClause = / \|\| \[ "\$ROOT" = "true" \](; then\s+echo "needs-extension-build=true")/
+		const copy = computeCopy((step) => {
+			step.run = step.run?.replace(extensionClause, "$1")
+		})
+		expect(extensionBuildFilters(copy).filters).toEqual(["core-foundation", "aztec-runtime", "wallet-bridge", "extension", "workflows"])
+		expect(surfaceFindings(buildSurfaces(copy))).toContain(
+			`package.json: held by ${[SMOKE, SMOKE_FIREFOX, NETWORK, NETWORK_FIREFOX].join(", ")}; expected ${Object.keys(live).join(", ")}`,
+		)
+	})
+
+	test("a compute input in any other shape is refused, and the step is not run", () => {
+		const copy = computeCopy((step) => {
+			if (step.env) step.env.CORE = "${{ steps.override.outputs.full || steps.filter.outputs.core-foundation == 'false' }}"
+		})
+		expect(extensionBuildFilters(copy)).toEqual({
+			filters: [],
+			findings: [
+				"compute input CORE reads ${{ steps.override.outputs.full || steps.filter.outputs.core-foundation == 'false' }}, not the override or one defined filter",
+			],
+		})
+	})
+
+	test.each([
+		[
+			"a later write of the flag",
+			(step: GateStep) => Object.assign(step, { run: `${step.run}\necho "${FLAG}false" >> "$GITHUB_OUTPUT"\n` }),
+		],
+		["a condition", (step: GateStep) => Object.assign(step, { if: "github.event_name == 'push'" })],
+	])("a compute step with %s is refused", (_, edit) => {
+		expect(extensionBuildFilters(computeCopy(edit)).findings.length).toBeGreaterThan(0)
+	})
+
+	test("a changes job that publishes another flag as the extension's is refused", () => {
+		const copy: GateWorkflow = structuredClone(quick)
+		const outputs = copy.jobs.changes.outputs ?? {}
+		outputs["needs-extension-build"] = "${{ steps.compute.outputs.needs-landing-build }}"
+		expect(extensionBuildFilters(copy)).toEqual({
+			filters: [],
+			findings: ["changes publishes the flag as ${{ steps.compute.outputs.needs-landing-build }}"],
+		})
+	})
+})
+
+type Inputs = Record<string, unknown>
+type Declared = Record<string, { default?: unknown } | null>
+type WalkStep = { uses?: string; if?: unknown; run?: unknown; with?: Record<string, unknown> }
+type WalkFile = {
+	on?: { workflow_call?: { inputs?: Declared } }
+	jobs?: Record<string, WalkStep & { steps?: WalkStep[] }>
+	inputs?: Declared
+	runs?: { steps?: WalkStep[] }
+}
+type ReadFile = (path: string) => WalkFile
+
+const readRepoYaml: ReadFile = (path) => {
+	if (!existsSync(join(ROOT, path))) throw new Error(`${path} does not exist`)
+	return Bun.YAML.parse(readFileSync(join(ROOT, path), "utf8")) as WalkFile
+}
+const LOCAL_WORKFLOW = "./.github/workflows/"
+const LOCAL_ACTION = "./.github/actions/"
+const CI_SCRIPT = /(?<![\w.-])scripts\/ci-cd\/[\w./-]+/g
+const DECIDABLE = /^inputs\.(\w+) (==|!=) '([^']*)'$/
+
+/**
+ * A condition comparing one input to a literal, decided as GitHub does (strings case-insensitively)
+ * when the input is bound to a literal string; undefined for anything else, which the walk counts as
+ * reached, so an undecidable step can only add a trigger, never drop one.
+ */
+function decided(condition: unknown, inputs: Inputs | undefined): boolean | undefined {
+	if (condition === undefined) return true
+	if (typeof condition !== "string") return undefined
+	const text = condition.trim()
+	const bare = text.startsWith("${{") && text.endsWith("}}") ? text.slice(3, -2).trim() : text
+	const match = DECIDABLE.exec(bare)
+	const bound = match ? inputs?.[match[1]] : undefined
+	if (!match || typeof bound !== "string" || bound.includes("${{")) return undefined
+	return (bound.toLowerCase() === match[3].toLowerCase()) === (match[2] === "==")
+}
+
+/** A callee's inputs: its declared defaults, overridden by what the caller hands it, bound in the caller's scope. */
+function calleeInputs(
+	declared: Declared | undefined,
+	handed: Record<string, unknown> | undefined,
+	scope: Inputs | undefined,
+	at: string,
+): Inputs {
+	const inputs: Inputs = Object.fromEntries(Object.entries(declared ?? {}).map(([key, spec]) => [key, spec?.default]))
+	for (const [key, value] of Object.entries(handed ?? {})) inputs[key] = bind(value, { inputs: scope }, at)
+	return inputs
+}
+
+/**
+ * The `scripts/ci-cd/` files a step's command lines name, however the path is prefixed; a mention
+ * the walk cannot read as one file (an expression in the name, a directory) throws.
+ */
+function ciScripts(run: unknown, at: string): string[] {
+	return commandLines(run).flatMap((line) => {
+		const scripts = line.match(CI_SCRIPT) ?? []
+		const unread = (line.match(/scripts\/ci-cd\//g) ?? []).length !== scripts.length
+		const missing = scripts.find((script) => !statSync(join(ROOT, script), { throwIfNoEntry: false })?.isFile())
+		if (unread || missing) throw new Error(`${at} runs a scripts/ci-cd path the walk cannot read: ${line}`)
+		return scripts
+	})
+}
+
+function laneInfrastructure(lane: string, read: ReadFile = readRepoYaml): string[] {
+	const reached = new Set<string>()
+	const visitSteps = (steps: WalkStep[] | undefined, inputs: Inputs | undefined, at: string): void => {
+		for (const step of steps ?? []) {
+			if (decided(step.if, inputs) === false) continue
+			for (const script of ciScripts(step.run, at)) reached.add(script)
+			if (step.uses?.startsWith(LOCAL_ACTION)) visitAction(step.uses.slice(2), step.with, inputs, at)
+		}
+	}
+	const visitAction = (dir: string, handed: Record<string, unknown> | undefined, scope: Inputs | undefined, at: string): void => {
+		const action = read(`${dir}/action.yml`)
+		reached.add(`${dir}/**`)
+		visitSteps(action.runs?.steps, calleeInputs(action.inputs, handed, scope, at), dir)
+	}
+	const visitWorkflow = (path: string, inputs: Inputs | undefined): void => {
+		reached.add(path)
+		for (const [id, job] of Object.entries(read(path).jobs ?? {})) {
+			if (decided(job.if, inputs) === false) continue
+			if (job.uses?.startsWith(LOCAL_WORKFLOW)) {
+				const callee = job.uses.slice(2)
+				visitWorkflow(callee, calleeInputs(read(callee).on?.workflow_call?.inputs, job.with, inputs, `${path} → ${id}`))
+			}
+			visitSteps(job.steps, inputs, `${path} → ${id}`)
+		}
+	}
+	visitWorkflow(`.github/workflows/${lane}`, undefined)
+	return [...reached].sort()
+}
+
+/** Every CI entry of the lane's filter that it does not run (`dead`), and every CI file it runs that the filter lacks (`missing`). */
+function infrastructureFindings(lane: string, read: ReadFile = readRepoYaml): string[] {
+	const [patterns] = Object.values(dornyFilters(read(`.github/workflows/${lane}`) as GateWorkflow, lane))
+	const listed = patterns.filter((pattern) => LANE_INFRASTRUCTURE.test(pattern))
+	const runs = laneInfrastructure(lane, read)
+	return [
+		...runs.filter((path) => !listed.includes(path)).map((path) => `${lane}: missing ${path}`),
+		...listed.filter((path) => !runs.includes(path)).map((path) => `${lane}: dead ${path}`),
+	]
+}
+
+/**
+ * An edit to a CI file a lane runs must run the lane, and an edit to one it never runs must not, so
+ * each lane's CI entries are exactly: its workflow, every local reusable workflow and action it
+ * reaches (an `if:` decided on bound literal inputs, any other counted as reached), and every
+ * `scripts/ci-cd/` file a reached `run:` names. What such a script imports or reads is not derived.
+ */
+describe("each e2e lane's filter names the CI files it runs", () => {
+	const LANES = Object.keys(E2E_LANES)
+	const live = Object.fromEntries(LANES.map((lane) => [lane, infrastructureFindings(lane)]))
+	const overlay =
+		(copies: Record<string, WalkFile>): ReadFile =>
+		(path) =>
+			copies[path] ?? readRepoYaml(path)
+	const added = (read: ReadFile): string[] =>
+		LANES.flatMap((lane) => infrastructureFindings(lane, read).filter((line) => !live[lane].includes(line)))
+	const stepsOf = (file: WalkFile): WalkStep[] => Object.values(file.jobs ?? {}).flatMap((job) => job.steps ?? [])
+	const withPatterns = (lane: string, edit: (patterns: string[]) => string[], editSteps?: (steps: WalkStep[]) => void): ReadFile => {
+		const path = `.github/workflows/${lane}`
+		const copy = structuredClone(readRepoYaml(path))
+		const step = stepsOf(copy).find((candidate) => candidate.uses?.includes("dorny/paths-filter"))
+		const [[name, patterns]] = Object.entries(dornyFilters(copy as GateWorkflow, lane))
+		if (step?.with) step.with.filters = JSON.stringify({ [name]: edit(patterns) })
+		editSteps?.(stepsOf(copy))
+		return overlay({ [path]: copy })
+	}
+	const withGeckodriverIf = (condition: string): ReadFile => {
+		const copies: Record<string, WalkFile> = {}
+		for (const suite of [".github/workflows/_extension-smoke-e2e.yml", `.github/workflows/${NETWORK_SUITE}`]) {
+			const copy = structuredClone(readRepoYaml(suite))
+			for (const step of stepsOf(copy)) if (step.uses === `${LOCAL_ACTION}setup-geckodriver`) step.if = condition
+			copies[suite] = copy
+		}
+		return overlay(copies)
+	}
+	const SETUP_BUN = ".github/actions/setup-bun/action.yml"
+	const setupBun = readRepoYaml(SETUP_BUN)
+
+	test("every lane's filter names exactly the CI files it runs", () => {
+		expect(live).toEqual(Object.fromEntries(LANES.map((lane) => [lane, []])))
+	})
+
+	test.each([
+		[
+			"a network filter without an action the lane runs",
+			withPatterns(NETWORK, (patterns) => patterns.filter((pattern) => pattern !== ".github/actions/setup-bun/**")),
+			[`${NETWORK}: missing .github/actions/setup-bun/**`],
+		],
+		[
+			"a smoke filter naming a workflow the lane never runs",
+			withPatterns(SMOKE, (patterns) => [...patterns, `.github/workflows/${NETWORK_SUITE}`]),
+			[`${SMOKE}: dead .github/workflows/${NETWORK_SUITE}`],
+		],
+		[
+			"a composite that calls another local action",
+			overlay({
+				[SETUP_BUN]: {
+					...setupBun,
+					runs: { ...setupBun.runs, steps: [...(setupBun.runs?.steps ?? []), { uses: `${LOCAL_ACTION}setup-x` }] },
+				},
+				".github/actions/setup-x/action.yml": { runs: { steps: [] } },
+			}),
+			LANES.map((lane) => `${lane}: missing .github/actions/setup-x/**`),
+		],
+		[
+			"a browser condition the walk cannot decide",
+			withGeckodriverIf("inputs.browser == inputs.other"),
+			[SMOKE, NETWORK].map((lane) => `${lane}: missing .github/actions/setup-geckodriver/**`),
+		],
+		[
+			"a wrapped, inverted, upper-case browser condition",
+			withGeckodriverIf("${{ inputs.browser != 'FIREFOX' }}"),
+			[
+				`${SMOKE}: missing .github/actions/setup-geckodriver/**`,
+				`${SMOKE_FIREFOX}: dead .github/actions/setup-geckodriver/**`,
+				`${NETWORK}: missing .github/actions/setup-geckodriver/**`,
+				`${NETWORK_FIREFOX}: dead .github/actions/setup-geckodriver/**`,
+			],
+		],
+		[
+			"a gate script run by a relative path, missing from the filter",
+			withPatterns(
+				SMOKE,
+				(patterns) => patterns.filter((pattern) => pattern !== "scripts/ci-cd/live-labels.sh"),
+				(steps) => {
+					for (const step of steps)
+						if (typeof step.run === "string")
+							step.run = step.run.replace("bash scripts/ci-cd/live-labels.sh", "bash ./scripts/ci-cd/live-labels.sh")
+				},
+			),
+			[`${SMOKE}: missing scripts/ci-cd/live-labels.sh`],
+		],
+	])("a copy with %s is refused", (_, read, expected) => {
+		expect(added(read)).toEqual(expected)
 	})
 })
 
@@ -1381,7 +1812,8 @@ describe("token-list publish", () => {
 	})
 
 	// The node URL is part of the pinned line: a keyed endpoint would leak at commit, before any run.
-	test("prepare's live check runs after the summary, advisory and bounded, against the keyless public node", () => {
+	// The price check's URL is compiled in its script, which sends no header, so no key reaches it.
+	test("prepare's live and price feed checks run after the summary, advisory and bounded, keyless", () => {
 		const steps = wf.jobs.prepare.steps
 		const at = steps.findIndex((step: { id?: string }) => step.id === "summary")
 		expect(steps.slice(at + 1)).toEqual([
@@ -1390,6 +1822,12 @@ describe("token-list publish", () => {
 				"continue-on-error": true,
 				"timeout-minutes": 5,
 				run: 'bun infra/token-list/scripts/live-check.ts https://aztec-testnet.drpc.org >> "$GITHUB_STEP_SUMMARY"',
+			},
+			{
+				name: "Price feed check (advisory)",
+				"continue-on-error": true,
+				"timeout-minutes": 2,
+				run: 'bun infra/token-list/scripts/price-check.ts >> "$GITHUB_STEP_SUMMARY"',
 			},
 		])
 	})
@@ -1423,11 +1861,14 @@ describe("Bun's install cache", () => {
 		(typeof permissions === "object" && permissions !== null && Object.values(permissions).includes("write")) ||
 		stepsOf(job).some((step) => step.uses?.startsWith("actions/create-github-app-token@"))
 
-	test("the composite restores it only when asked", () => {
+	test("the composite restores it, and Bun's own binary cache, only when asked", () => {
 		const action = parse(".github/actions/setup-bun/action.yml")
 		expect(action.inputs.cache.default).toBe("true")
-		const caches = (action.runs.steps as Step[]).filter((step) => step.uses?.startsWith("actions/cache@"))
+		const steps = action.runs.steps as Step[]
+		const caches = steps.filter((step) => step.uses?.startsWith("actions/cache@"))
 		expect(caches.map((step) => step.if)).toEqual(["inputs.cache == 'true'"])
+		const setups = steps.filter((step) => step.uses?.startsWith("oven-sh/setup-bun@"))
+		expect(setups.map((step) => step.with?.["no-cache"])).toEqual(["${{ inputs.cache != 'true' }}"])
 	})
 
 	test("the extension build takes it on pull requests only", () => {

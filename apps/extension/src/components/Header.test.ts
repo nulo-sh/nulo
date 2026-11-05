@@ -191,10 +191,10 @@ describe("Header — avatar/name/address split", () => {
 })
 
 describe("Header — lock", () => {
-	test("is a chip: the padlock and the word Lock, named for what it does", () => {
+	test("is a chip: the padlock alone, named for what it does", () => {
 		const lock = mountHeader().get('[data-testid="header-lock"]')
 		expect(lock.get('[data-testid="stub-icon"]').attributes("data-name")).toBe("lock")
-		expect(lock.text()).toBe("Lock")
+		expect(lock.text()).toBe("")
 		expect(lock.attributes("aria-label")).toBe("Lock wallet")
 		expect(lock.attributes("type")).toBe("button")
 	})
@@ -232,6 +232,18 @@ describe("Header — network status", () => {
 		H.app.networkStatus = "InvalidChain"
 		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("invalidchain")
 	})
+
+	test("the chip's accessible name says the dot's word, and follows the status", async () => {
+		const w = mountHeader()
+		const label = () => w.get('[data-testid="network-button"]').attributes("aria-label")
+		expect(label()).toBe("Manage networks (currently Alpha V5, Connected)")
+		H.app.networkStatus = "Inactive"
+		await nextTick()
+		expect(label()).toBe("Manage networks (currently Alpha V5, Cannot reach the network)")
+		H.app.networkStatus = "sync"
+		await nextTick()
+		expect(label()).toBe("Manage networks (currently Alpha V5, Waiting for the network)")
+	})
 })
 
 describe("Header — Show network name", () => {
@@ -245,13 +257,13 @@ describe("Header — Show network name", () => {
 		H.config.showNode = false
 		const w = mountHeader()
 		await flushPromises()
-		expect(chip(w)).toEqual({ name: null, dot: true, label: "Manage networks (currently Alpha V5)" })
+		expect(chip(w)).toEqual({ name: null, dot: true, label: "Manage networks (currently Alpha V5, Connected)" })
 	})
 
 	test("on shows the name beside the dot", async () => {
 		const w = mountHeader()
 		await flushPromises()
-		expect(chip(w)).toEqual({ name: "Alpha V5", dot: true, label: "Manage networks (currently Alpha V5)" })
+		expect(chip(w)).toEqual({ name: "Alpha V5", dot: true, label: "Manage networks (currently Alpha V5, Connected)" })
 	})
 
 	test("a change made while the mount's read is in flight outlives that read's older value", async () => {
@@ -271,6 +283,20 @@ describe("Header — Show network name", () => {
 		for (const fn of H.configListeners) fn({ key: "showNode", value: false })
 		await nextTick()
 		expect(chip(w).name).toBeNull()
+	})
+
+	test("on, the narrow row puts the name before the account; off, the row is as it was", async () => {
+		const nameFirst = (w: ReturnType<typeof mountHeader>) =>
+			w
+				.get("header")
+				.classes()
+				.some((name) => name.includes("name_first"))
+		const w = mountHeader()
+		await flushPromises()
+		expect(nameFirst(w)).toBe(true)
+		for (const fn of H.configListeners) fn({ key: "showNode", value: false })
+		await nextTick()
+		expect(nameFirst(w)).toBe(false)
 	})
 })
 

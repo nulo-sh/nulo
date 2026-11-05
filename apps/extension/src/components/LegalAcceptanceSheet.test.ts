@@ -89,7 +89,10 @@ describe("LegalAcceptanceSheet", () => {
 		const changed = await mountSheet()
 		expect(sheet(changed).attributes("data-variant")).toBe("changed")
 		expect(changed.get('[data-testid="stub-consent"]').attributes("data-changes")).toBe(
-			LEGAL_MANIFEST.terms.flatMap((v) => v.changes).join("|"),
+			LEGAL_MANIFEST.terms
+				.filter((v) => v.material)
+				.flatMap((v) => v.changes)
+				.join("|"),
 		)
 
 		legal.getStatus.mockResolvedValue("missing")

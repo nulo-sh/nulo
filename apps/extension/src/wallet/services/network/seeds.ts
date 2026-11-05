@@ -1,5 +1,6 @@
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import type { RetiredEndpoint } from "./retired-endpoints"
 import type { ChainKind } from "./spec"
 
 /** Immutable L1 identities for the seeded kinds — the trust root `getL1ChainIdStored` validates
@@ -58,7 +59,7 @@ export const DEFAULT_SEEDS: DefaultSeed[] = [
 		isPrimaryActive: false,
 	},
 	{
-		name: "Alpha V6",
+		name: "Alpha",
 		rpcUrl: MAINNET_RPC_URL,
 		chainId: CHAIN_IDS.MAINNET,
 		l1ChainId: MAINNET_L1_CHAIN_ID,
@@ -74,6 +75,14 @@ export function isSeedChain(chainId: number): boolean {
 	return DEFAULT_SEEDS.some((seed) => seed.chainId === chainId)
 }
 
+/** Defaults an earlier build seeded, by the digest of the exact URL it stored, each with the URL the
+ *  unlock moves such an endpoint to. Entries stay for good: a profile last unlocked on an older
+ *  build may unlock on this one at any time. */
+export const RETIRED_DEFAULT_ENDPOINTS: readonly RetiredEndpoint[] = [
+	// The keyed Testnet endpoint earlier builds seeded.
+	{ sha256: "8c97d123e13121add8218c0240ca5f9af70cd57e2e50b9cfd1f9d5ef882f4ec5", replacement: TESTNET_RPC_URL },
+]
+
 /** The one seed marked `isPrimaryActive` (Mainnet). Single source
  *  for the primary/default network — consumed by `getOrInitNetworks` (fresh seed) AND
  *  `getPrimaryNetwork` (the import/bootstrap fallback), so the two can't disagree. */
@@ -83,4 +92,26 @@ export const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)
  *  this build carries. */
 export function seedForKind(kind: ChainKind | undefined): DefaultSeed | undefined {
 	return kind === undefined ? undefined : DEFAULT_SEEDS.find((s) => s.kind === kind)
+}
+
+/** dRPC's free plan refuses a JSON-RPC batch of more entries whole (HTTP 400, seen 2026-11). A
+ *  provider's documented limit, not a client cap: no client reads it. */
+export const DRPC_FREE_PLAN_BATCH_LIMIT = 100
+
+/** The largest JSON-RPC batch a provider endpoint allows, by origin, for a provider whose limit is
+ *  below the client's own default of 100 entries per request. dRPC's free-plan limit equals that
+ *  default, so its origins take no entry; `seeds.test.ts` reds if an Aztec bump raises the default
+ *  past it. Keyed by literal origin, not read off the seeds, so a row seeded on such a host keeps its
+ *  cap after a later build moves the seed. */
+const BATCH_CAPS: Readonly<Record<string, number>> = {}
+
+/** The batch cap for `rpcUrl`'s origin; `undefined` leaves the client's own default. */
+export function maxBatchSizeFor(rpcUrl: string): number | undefined {
+	let origin: string
+	try {
+		origin = new URL(rpcUrl).origin
+	} catch {
+		return undefined
+	}
+	return Object.hasOwn(BATCH_CAPS, origin) ? BATCH_CAPS[origin] : undefined
 }

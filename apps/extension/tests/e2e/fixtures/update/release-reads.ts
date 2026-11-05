@@ -1,4 +1,6 @@
+import { applyFeePickUpdate, readAppPicks, readSendPicks } from "@/utils/fee-picks"
 import type { PinMap } from "@/utils/pinned-tokens"
+import { FPC_STORAGE_ROOT } from "@/wallet/services/fpc/spec"
 import type { FeePicks } from "@/wallet/services/ui-preference/spec"
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
 import { shapeOfKey } from "./stored-rows"
@@ -16,6 +18,22 @@ export function firstAccount<A extends ReadAccount>(accounts: readonly A[]): A |
 
 /** A profile's pins and fee picks, as the release holds them. */
 export type ReleasePreferences = { pins: PinMap; picks: FeePicks }
+
+/**
+ * The fee picks the candidate may read for a release's `picks`, given `stored`, read after them: the
+ * release's, or, for the rows of `unofferedSponsors` gone from `stored`, the release's with their
+ * picks forgotten. The wallet deletes such a row before it forgets its picks, and a forget can fail,
+ * so a row gone with its picks kept passes too.
+ */
+export function allowedPicks(picks: FeePicks, unofferedSponsors: readonly string[], stored: Record<string, unknown>): FeePicks[] {
+	const gone = unofferedSponsors.filter((id) => !(`${FPC_STORAGE_ROOT}@${id}` in stored))
+	if (gone.length === 0) return [picks]
+	const forgotten = gone.reduce<FeePicks>((held, fpcId) => {
+		const next = applyFeePickUpdate(held, { kind: "forgetFpc", fpcId })
+		return { app: readAppPicks(next.app), send: readSendPicks(next.send) }
+	}, picks)
+	return [picks, forgotten]
+}
 
 /** The roots a release that seals them is read back from, each as its service returns it. */
 export type ReadRoot =

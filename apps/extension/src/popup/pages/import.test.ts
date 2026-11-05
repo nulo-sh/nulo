@@ -23,11 +23,15 @@ vi.mock("@/composables/useProfileImportFlow", () => ({
 vi.mock("@/composables/completeImportWithRecovery", () => ({ completeImportWithRecovery: vi.fn(async () => "active") }))
 const boot = vi.hoisted(() => ({ hydrate: vi.fn() }))
 vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile: boot.hydrate }) }))
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+const toast = vi.hoisted(() => ({ open: vi.fn() }))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: toast.open }) }))
 vi.mock("@/utils/lastActiveProfile", () => ({ setLastActiveProfileId: vi.fn(async () => undefined) }))
-vi.mock("@/wallet/utils/onboarding-tab", () => ({ redirectToOnboardingTabIfNeeded: vi.fn() }))
-const nav = vi.hoisted(() => ({ query: {} as Record<string, string>, push: vi.fn(), back: vi.fn() }))
-vi.mock("vue-router", () => ({ useRoute: () => ({ query: nav.query }), useRouter: () => ({ push: nav.push, back: nav.back }) }))
+vi.mock("@/wallet/utils/onboarding-tab", () => ({ setupWaitsInTab: vi.fn(async () => false) }))
+const nav = vi.hoisted(() => ({ query: {} as Record<string, string>, push: vi.fn(), back: vi.fn(), replace: vi.fn() }))
+vi.mock("vue-router", () => ({
+	useRoute: () => ({ query: nav.query }),
+	useRouter: () => ({ push: nav.push, back: nav.back, replace: nav.replace }),
+}))
 const surface = vi.hoisted(() => ({
 	needsOwnWindow: vi.fn(() => false),
 	move: vi.fn(async (_route: string) => true),
@@ -52,7 +56,10 @@ import JsonViewer from "@/components/JsonViewer/JsonViewer.vue"
 import ImportMethodPicker from "@/components/composite/import/ImportMethodPicker.vue"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { completeImportWithRecovery } from "@/composables/completeImportWithRecovery"
+import { endOpeningFlows } from "@/popup/opening-flow"
 import { useAppStore } from "@/stores/app.store"
+import { deferred } from "@nulo/wallet-core/utils"
+import { setupWaitsInTab } from "@/wallet/utils/onboarding-tab"
 import ImportPage from "./import.vue"
 
 /** The flow's surface with a decrypted password-profile backup chosen, its name in the field, and a
@@ -77,6 +84,7 @@ function makeFlow() {
 		repeatedPassword: ref("password123"),
 		unlockMethod: ref("password"),
 		maxPasswordLength: 128,
+		isImporting: ref(false),
 		error: ref({ type: "", title: "", tooltip: "" }),
 		isCopied: ref(false),
 		isAllowedToImportBySeedPhrase: ref(false),
@@ -192,6 +200,24 @@ afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
 	for (const c of cleanups.splice(0)) c()
 	document.body.innerHTML = ""
+})
+
+describe("popup import — the phrase form while an import runs", () => {
+	test("the unlock choice takes no input while the import runs, and takes it again after", async () => {
+		holder.flow.selectedImportOption.value = "seed"
+		const w = await mountImport()
+		const disabled = () =>
+			["import-method-passkey", "import-method-password"].map(
+				(id) => w.get(`[data-testid="${id}"]`).attributes("disabled") !== undefined,
+			)
+		expect(disabled()).toEqual([false, false])
+		holder.flow.isImporting.value = true
+		await flushPromises()
+		expect(disabled()).toEqual([true, true])
+		holder.flow.isImporting.value = false
+		await flushPromises()
+		expect(disabled()).toEqual([false, false])
+	})
 })
 
 describe("popup import — full backup, a restore ready", () => {
@@ -396,6 +422,51 @@ describe("popup import — in its own window", () => {
 	})
 })
 
+describe("popup import — a completion the shell took over", () => {
+	async function startHeld() {
+		const wait = deferred<Awaited<ReturnType<typeof completeImportWithRecovery>>>()
+		vi.mocked(completeImportWithRecovery).mockReturnValueOnce(wait.promise)
+		const w = await mountImport()
+		const done = holder.opts.completeImport({ id: "p1" })
+		await flushPromises()
+		return { w, wait, done }
+	}
+
+	test("a flow the shell ended while the page still shows releases no window, toasts nothing and routes nowhere", async () => {
+		const { wait, done } = await startHeld()
+		endOpeningFlows()
+		wait.resolve("active")
+		await done
+
+		expect(surface.release).not.toHaveBeenCalled()
+		expect(toast.open).not.toHaveBeenCalled()
+		expect(nav.push).not.toHaveBeenCalled()
+	})
+
+	test("a page that went before its wait ended does nothing either", async () => {
+		const { w, wait, done } = await startHeld()
+		wrappers.splice(wrappers.indexOf(w), 1)
+		w.unmount()
+		wait.resolve("active")
+		await done
+
+		expect(surface.release).not.toHaveBeenCalled()
+		expect(toast.open).not.toHaveBeenCalled()
+		expect(nav.push).not.toHaveBeenCalled()
+	})
+
+	test("a page opened after the shell ended a flow completes as usual", async () => {
+		endOpeningFlows()
+		const { wait, done } = await startHeld()
+		wait.resolve("active")
+		await done
+
+		expect(surface.release).toHaveBeenCalledTimes(1)
+		expect(toast.open).toHaveBeenCalledWith({ kind: "success", label: "Profile imported" })
+		expect(nav.push).toHaveBeenCalledWith("/popup/general")
+	})
+})
+
 describe("popup import — the activation wait", () => {
 	async function startImport() {
 		const real = await vi.importActual<typeof import("@/composables/completeImportWithRecovery")>(
@@ -436,6 +507,17 @@ describe("popup import — the activation wait", () => {
 
 		expect(boot.hydrate).not.toHaveBeenCalled()
 		expect(nav.push).toHaveBeenCalledWith("/popup/general")
+	})
+
+	test("a page that went before the 30 s bound recovers nothing and routes nowhere", async () => {
+		const { done } = await startImport()
+		const w = wrappers.pop() as VueWrapper
+		w.unmount()
+		await vi.advanceTimersByTimeAsync(30_000)
+		await done
+
+		expect(boot.hydrate).not.toHaveBeenCalled()
+		expect(nav.push).not.toHaveBeenCalled()
 	})
 
 	test("with no signal the wait holds to its 30 s bound, then recovers", async () => {
@@ -548,7 +630,7 @@ const IMPORT_MAIN_OFF: PopupCta = ["Import Main", "import-full-backup-submit-btn
 const IMPORTING: PopupCta = ["Importing…", "import-full-backup-submit-btn", true, null, "cta"]
 const CONTINUE: PopupCta = ["Continue", "import-full-backup-continue-btn", false, null, "cta"]
 const VIEW_ERRORS: PopupCta = ["View Errors", "import-full-backup-view-errors-btn", false, null, "cta_outline"]
-const REUSE = (testid: string, disabled = false): PopupCta => ["Use a passkey I already have", testid, disabled, null, null]
+const REUSE = (testid: string, disabled = false): PopupCta => ["Use a Nulo passkey I already have", testid, disabled, null, null]
 
 type Flow = ReturnType<typeof makeFlow>
 type FlowPatch = (f: Flow) => void
@@ -886,5 +968,19 @@ describe("popup import — the CTA predicates read only what each branch reaches
 		const log = logCtaReads(holder.flow)
 		await mountImport()
 		expect(log).toEqual(expected)
+	})
+})
+
+describe("popup import before setup is finished", () => {
+	test("goes to register, which says where setup goes on", async () => {
+		vi.mocked(setupWaitsInTab).mockResolvedValueOnce(true)
+		await mountImport()
+		expect(nav.replace).toHaveBeenCalledExactlyOnceWith("/popup/register")
+	})
+
+	test("stays once setup is done", async () => {
+		await mountImport()
+		expect(setupWaitsInTab).toHaveBeenCalledOnce()
+		expect(nav.replace).not.toHaveBeenCalled()
 	})
 })

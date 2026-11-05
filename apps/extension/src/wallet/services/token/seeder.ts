@@ -1,4 +1,5 @@
 import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { tokenKey } from "@nulo/token-list"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import { createSerialQueue } from "@nulo/wallet-core/utils"
 import type { ILogger } from "@/wallet/logger"
@@ -203,7 +204,7 @@ export class TokenSeeder {
 	 *  new trigger may be for a DIFFERENT profile/network. Run once more after
 	 *  the pass so the coalesced context is never silently skipped. */
 	private rerunRequested = false
-	/** `${profileId}|${seedKey}` of every attempt currently running. */
+	/** `${profileId}|${tokenKey}` of every attempt currently running. */
 	private readonly attempting = new Set<string>()
 	/** Accepted retries whose pass has not reached the seed yet — what makes a
 	 *  second retry of the same default a no-op instead of a second counter reset. */
@@ -292,7 +293,7 @@ export class TokenSeeder {
 	 */
 	public async retry(chainId: number, contract: string): Promise<boolean> {
 		const epoch = this.epoch
-		const key = seedKey(chainId, contract)
+		const key = tokenKey(chainId, contract)
 		const accepted = await this.withMarkerLock(async () => {
 			const profile = await this.deps.getActiveProfile()
 			const network = await this.deps.getActiveNetwork()
@@ -300,7 +301,7 @@ export class TokenSeeder {
 			const flight = flightKey(profile.id, key)
 			if (this.reserved.has(flight)) return undefined
 			const entries = await this.statusFor(profile.id, chainId)
-			if (entries.find((e) => seedKey(e.chainId, e.contract) === key)?.status !== "failed") return undefined
+			if (entries.find((e) => tokenKey(e.chainId, e.contract) === key)?.status !== "failed") return undefined
 			if (this.epoch !== epoch) return undefined
 			const state = await this.readMarkerState(profile.id)
 			state[key] = { attempts: 0 }
@@ -328,7 +329,7 @@ export class TokenSeeder {
 	/** User deleted a token → permanent tombstone (survives chain purges). Written for every
 	 *  delete, listed or not, so a later list that names the token cannot bring it back. */
 	public async markDeletedByUser(profileId: string, chainId: number, contract: string): Promise<void> {
-		await this.updateMarker(profileId, seedKey(chainId, contract), () => ({ attempts: 0, outcome: "deleted" }))
+		await this.updateMarker(profileId, tokenKey(chainId, contract), () => ({ attempts: 0, outcome: "deleted" }))
 		await this.announce(profileId, chainId)
 	}
 
@@ -350,9 +351,9 @@ export class TokenSeeder {
 		const epoch = this.epoch
 		const seeds = (await this.deps.getSeeds()).filter((s) => s.chainId === chainId)
 		if (seeds.length === 0) return []
-		const state = await this.readMarkerState(profileId)
+		const state = await this.readMarkerStateOrEmpty(profileId)
 		if (this.epoch !== epoch) return []
-		return seeds.filter((seed) => state[seedKey(chainId, seed.contract)]?.verifiedPins === seedPins(seed))
+		return seeds.filter((seed) => state[tokenKey(chainId, seed.contract)]?.verifiedPins === seedPins(seed))
 	}
 
 	/**
@@ -433,7 +434,7 @@ export class TokenSeeder {
 		if (!ctx) return
 		const now = Date.now()
 		for (const seed of ctx.seeds) {
-			const key = seedKey(seed.chainId, seed.contract)
+			const key = tokenKey(seed.chainId, seed.contract)
 			const stored = ctx.state[key]
 			if (stored !== undefined && awaitsCheck(stored, seed, ctx.version)) {
 				if ((await this.verifySeeded(ctx, seed, key)) === "abort") return
@@ -678,10 +679,10 @@ export class TokenSeeder {
 		const seeds = (await this.deps.getSeeds()).filter((s) => s.chainId === chainId)
 		const version = this.getVersion()
 		if (seeds.length === 0) return []
-		const state = await this.readMarkerState(profileId)
+		const state = await this.readMarkerStateOrEmpty(profileId)
 		const entries: SeedStatusEntry[] = []
 		for (const seed of seeds) {
-			const key = seedKey(chainId, seed.contract)
+			const key = tokenKey(chainId, seed.contract)
 			const status = deriveSeedStatus(state[key] ?? { attempts: 0 }, version, this.attempting.has(flightKey(profileId, key)))
 			if (!status) continue
 			entries.push({ chainId, contract: seed.contract, symbol: seed.expectedSymbol, displayName: seed.displayName, status })
@@ -738,7 +739,7 @@ export class TokenSeeder {
 		const state = await this.readMarkerState(profile.id)
 		let due: number | undefined
 		for (const seed of seeds) {
-			const entry = state[seedKey(seed.chainId, seed.contract)]
+			const entry = state[tokenKey(seed.chainId, seed.contract)]
 			if (entry?.nextAttemptAt === undefined) continue
 			if (deriveSeedStatus(entry, version, false) !== "pending") continue
 			due = Math.min(due ?? entry.nextAttemptAt, entry.nextAttemptAt)
@@ -766,25 +767,21 @@ export class TokenSeeder {
 	 * silently DROPPED by JSON.stringify) or a corrupt entry must neither
 	 * throw (that would block token deletion from writing its tombstone) nor
 	 * eat a tombstone write. Corrupt state resets to empty; corrupt entries
-	 * are dropped.
+	 * are dropped. A failed read rejects: every marker write is built on this
+	 * read, and an empty stand-in would erase the profile's tombstones.
 	 */
 	private async readMarkerState(profileId: string): Promise<SeedMarkerState> {
-		let stored: unknown
-		try {
-			stored = await this.markers.get(profileId)
-		} catch {
-			return {}
-		}
-		return decodeSeedMarkers(stored, Date.now())
+		return decodeSeedMarkers(await this.markers.get(profileId), Date.now())
+	}
+
+	/** For an answer that writes nothing: a failed read answers as if no marker were stored. */
+	private readMarkerStateOrEmpty(profileId: string): Promise<SeedMarkerState> {
+		return this.readMarkerState(profileId).catch(() => ({}))
 	}
 
 	private log(level: LogLevel, ...args: unknown[]): void {
 		this.logger.log(LOG_SOURCE, level, ...args)
 	}
-}
-
-function seedKey(chainId: number, contract: string): string {
-	return `${chainId}:${contract.toLowerCase()}`
 }
 
 function scopeKey(profileId: string, chainId: number): string {

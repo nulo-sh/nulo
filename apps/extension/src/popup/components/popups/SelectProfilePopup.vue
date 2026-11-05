@@ -172,15 +172,15 @@ watch(
 
 <style module>
 .wrapper {
-	composes: body from "./popup-shared.module.css";
+	composes: body from "@/components/Popup/popup-shared.module.css";
 }
 
 .header {
-	composes: header from "./popup-shared.module.css";
+	composes: header from "@/components/Popup/popup-shared.module.css";
 	padding-bottom: 4px;
 }
 
 .title {
-	composes: title from "./popup-shared.module.css";
+	composes: title from "@/components/Popup/popup-shared.module.css";
 }
 </style>

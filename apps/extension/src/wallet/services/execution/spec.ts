@@ -15,9 +15,18 @@ import type {
 
 export const EXECUTION_SERVICE_NAME = "execution"
 
-/** An estimate that did not run: a send sharing its chain state is in flight. A spent token was
- *  admitted and cannot be sent again. `cap` holds the last fee of this token's like sends and the cap a
- *  send may be queued against above it (`queued-fee-cap.ts`); absent when there is none. */
+/** How long an estimate may run, its wait for the slot behind other estimates included: the
+ *  registry reaps a runner still unsettled past it as dead, and the popup's estimate calls end at
+ *  it. MUST stay comfortably above the worst-case estimate transport chain (~5 sequential PXE RPCs
+ *  × their 90 s timeouts). It is a dead-man bound, not a ceiling on the work: a held entry whose
+ *  simulation still waits offscreen behind queued proofs is reaped too, and its place admits the
+ *  next estimate. */
+export const ESTIMATE_JOB_TTL_MS = 15 * 60 * 1000
+
+/** An estimate that did not run: a send sharing its chain state, or holding or awaiting the slot it
+ *  needs, is in flight. A spent token was admitted and cannot be sent again. `cap` holds the last fee
+ *  of this token's like sends and the cap a send may be queued against above it
+ *  (`queued-fee-cap.ts`); absent when there is none. */
 export type TransferFeeQueued = {
 	readonly queued: true
 	readonly tokenSpent: boolean
@@ -102,7 +111,8 @@ export type Methods = {
 	 * by reference: the SW re-materializes the request at `(interactionId,
 	 * index)` and applies `feeSettings` after validating its fee path. The
 	 * result's `previewId` names the snapshot of discovered authorizations the
-	 * confirm of that operation is held to.
+	 * confirm of that operation is held to. Answers queued, its token free to ask
+	 * again, while a send holds or awaits the slot of the request's chain.
 	 */
 	estimateOperationFee(
 		interactionId: string,
@@ -110,7 +120,7 @@ export type Methods = {
 		feeSettings: FeeSettings,
 		estimateToken?: string,
 		flowKey?: string,
-	): TransferFeeEstimate
+	): TransferFeeEstimate | TransferFeeQueued
 
 	/**
 	 * Discovers, without signing, the private authorizations a stored
@@ -118,7 +128,12 @@ export type Methods = {
 	 * token and flow-key contract as {@link estimateOperationFee}; its
 	 * `previewId` participates in {@link cancelEstimate} the same way.
 	 */
-	previewOperationAuthwits(interactionId: string, index: number, estimateToken?: string, flowKey?: string): OperationAuthwitPreview
+	previewOperationAuthwits(
+		interactionId: string,
+		index: number,
+		estimateToken?: string,
+		flowKey?: string,
+	): OperationAuthwitPreview | TransferFeeQueued
 
 	/**
 	 * Decodes calls for the approval card against the artifacts the PXE holds on
@@ -188,4 +203,12 @@ export type Methods = {
 	 *  approval denial (`denial`, cleared by the next native proof). Hints only:
 	 *  both reset on SW restart; the journal is the record. */
 	getLastProveOutcome(): LastProveOutcome
+}
+
+/** The estimate asked with `estimateToken` holds the slot and runs. An admission or a queued answer
+ *  emits nothing, and nothing replays an event a dropped port lost: display only. */
+export type EstimateStarted = { readonly estimateToken: string }
+
+export type Events = {
+	onEstimateStarted: EstimateStarted
 }

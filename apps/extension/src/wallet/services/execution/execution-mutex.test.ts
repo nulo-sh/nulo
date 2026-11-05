@@ -384,3 +384,36 @@ describe("ExecutionMutex.keep: a parked holder keeps its place under the caps", 
 		expect(() => m.keep(first)).toThrow(/once/)
 	})
 })
+
+describe("ExecutionMutex.isLockedOutside", () => {
+	const caps = (originKey: string) => ({ originKey, maxOriginDepth: 8, maxLaneDepth: 32 })
+
+	test("counts holders and waiters outside the bucket, never a place kept outside the slot", async () => {
+		const m = new ExecutionMutex()
+		const estimate = await m.acquire("L", undefined, caps("e"))
+		expect(m.isLockedOutside("L", "e")).toBe(false)
+		expect(m.isLockedOutside("L", "s")).toBe(true)
+		const send = m.acquire("L", undefined, caps("s"))
+		expect(m.isLockedOutside("L", "e")).toBe(true)
+		estimate()
+		const kept = m.keep(await send)
+		expect(m.isLockedOutside("L", "e")).toBe(false)
+		const back = await m.acquire("L", undefined, caps("s"), kept)
+		expect(m.isLockedOutside("L", "e")).toBe(true)
+		back()
+		expect(m.isLockedOutside("L", "e")).toBe(false)
+	})
+
+	test("an aborted waiter leaves with the holder ahead of it", async () => {
+		const m = new ExecutionMutex()
+		const estimate = await m.acquire("L", undefined, caps("e"))
+		const controller = new AbortController()
+		const send = m.acquire("L", controller.signal, caps("s"))
+		controller.abort()
+		await expect(send).rejects.toBeInstanceOf(ExecutionMutexAbortError)
+		expect(m.isLockedOutside("L", "e")).toBe(true)
+		estimate()
+		await tick()
+		expect(m.isLockedOutside("L", "e")).toBe(false)
+	})
+})

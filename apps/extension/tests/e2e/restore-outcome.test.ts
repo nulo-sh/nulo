@@ -19,6 +19,7 @@ import { interceptRpc, type RpcInterception } from "./fixtures/browser"
 import { clickByTestId, type ExtensionContext, launchExtension, openPopup, pickFileByTestId, test, waitForHash } from "./fixtures/extension"
 import { expectFitsNarrow } from "./fixtures/type-roles"
 import { ensureUnlocked, readSessionRow } from "./fixtures/helpers"
+import { LONG_NETWORK_NAME } from "./fixtures/networks"
 import { readNetworkRows } from "./helpers/identity-rows"
 import {
 	buildSyntheticBackup,
@@ -182,27 +183,27 @@ test("SE1: the banner follows renames and other pages; Restore again refuses ano
 			[bannerSentence("Local Network", "Testnet"), bannerSentence("Testnet", "Local Network")].some((s) => first.includes(s)),
 		).toBe(true)
 
-		await renameNetwork(page, "Testnet", "Old Testnet")
-		await waitForText(page, "restore-outcome-banner", "Old Testnet")
-		expect(await bannerNames()).not.toMatch(/(?<!Old )Testnet/)
+		await renameNetwork(page, "Testnet", LONG_NETWORK_NAME)
+		await waitForText(page, "restore-outcome-banner", LONG_NETWORK_NAME)
+		expect(await bannerNames()).not.toContain("Testnet")
 		await expectFitsNarrow(page, "the restore outcome banner")
 
 		const second = await openPopup(ctx)
-		await waitForText(second, "restore-outcome-banner", "Old Testnet")
+		await waitForText(second, "restore-outcome-banner", LONG_NETWORK_NAME)
 		await clickByTestId(second, "restore-outcome-dismiss")
 		await waitForGone(page, "restore-outcome-banner")
 		expect(await readRecord(page, profileId)).toBeUndefined()
 		await second.close()
 
 		await writeRecord(page, profileId, seeded)
-		await waitForText(page, "restore-outcome-banner", "Old Testnet")
+		await waitForText(page, "restore-outcome-banner", LONG_NETWORK_NAME)
 		await clickByTestId(page, "restore-outcome-restore")
 		await waitForHash(page, "#/popup/restore-again", 5_000)
 		const intro = await textOf(page, "restore-again-intro")
 		expect(
 			[
-				["Local Network", "Old Testnet"],
-				["Old Testnet", "Local Network"],
+				["Local Network", LONG_NETWORK_NAME],
+				[LONG_NETWORK_NAME, "Local Network"],
 			].map(restoreAgainIntroText),
 		).toContain(intro)
 		await expectFitsNarrow(page, "Restore again")

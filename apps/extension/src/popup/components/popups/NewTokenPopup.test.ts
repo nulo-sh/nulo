@@ -6,9 +6,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { flushPromises, mount } from "@vue/test-utils"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
 import { ChainNotSupportedError, ContractNotFoundError, WalletError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import { ABOVE_MODULUS, BELOW_MODULUS, DIGITS_63, MODULUS } from "../../../../tests/helpers/field-modulus"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -71,19 +72,19 @@ vi.mock("@/wallet/services/task/spec", () => ({
 	ContentKind: { Step: 0, BalanceUpdate: 1, ExecuteOperation: 2, Transfer: 3, RevokeAuthwits: 4 },
 }))
 
+const appState = {
+	profile: { id: "p1" },
+	network: { id: "net-1", chainId: 1 },
+	account: { address: "0xacct" },
+	scopeEpoch: 0,
+}
 vi.mock("@/stores/app.store", () => ({
-	useAppStore: () => ({
-		profile: { id: "p1" },
-		network: { id: "net-1", chainId: 1 },
-		account: { address: "0xacct" },
-	}),
+	useAppStore: () => appState,
 }))
-const cacheStoreState = { preselectedTokenAddressToAdd: "" }
-vi.mock("@/stores/cache.store", () => ({
-	useCacheStore: () => cacheStoreState,
-}))
+// As the real store does, a close deletes the popup's payload.
+const payloads = new Map<string, unknown>()
 vi.mock("@/stores/popup.store", () => ({
-	usePopupStore: () => ({ popups: { new_token: { order: 1 } } }),
+	usePopupStore: () => ({ popups: { new_token: { order: 1 } }, getPayload: (target: string) => payloads.get(target) }),
 }))
 
 vi.mock("@/composables/toast", () => ({
@@ -135,7 +136,7 @@ const STUBS = {
 			</div>
 		`,
 	},
-	Icon: { template: "<i />" },
+	Icon: { props: ["name"], template: '<i :data-icon="name" />' },
 	Text: { template: "<span><slot /></span>" },
 	Flex: { template: "<div><slot /></div>" },
 	Transition: { template: "<div><slot /></div>" },
@@ -146,7 +147,7 @@ import NewTokenPopup from "./NewTokenPopup.vue"
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-const validHex = `0x${"a".repeat(64)}`
+const validHex = `0x0${"a".repeat(63)}`
 
 function defaultTokenInfo(overrides: Record<string, unknown> = {}) {
 	return { id: 7, chainId: 1, contract: validHex, name: "Test", symbol: "TST", decimals: 18, ...overrides }
@@ -176,9 +177,18 @@ function makeBalanceUpdateTask(tbId: number, opts: { finished?: boolean; error?:
 	}
 }
 
+/** The order the close and the opener's report arrive in. */
+const seen: string[] = []
+
 async function mountAndOpen(showRef = ref(false)) {
 	const w = mount(NewTokenPopup, {
-		props: { show: showRef.value },
+		props: {
+			show: showRef.value,
+			onOnClose: () => {
+				seen.push("close")
+				payloads.delete("new_token")
+			},
+		},
 		global: { stubs: STUBS },
 	})
 	// Trigger the watcher by flipping show=false → true so the popup
@@ -205,6 +215,9 @@ function submitBtn(w: ReturnType<typeof mount>) {
 
 // ── Lifecycle ────────────────────────────────────────────────────────
 
+// A mounted popup keeps its document Enter listener, so one left from an earlier test would submit too.
+enableAutoUnmount(afterEach)
+
 beforeEach(() => {
 	balanceAddedHandlers.splice(0)
 	taskUpdatedHandlers.splice(0)
@@ -218,7 +231,9 @@ beforeEach(() => {
 	taskServiceMock.connect.mockReset().mockResolvedValue(undefined)
 	taskServiceMock.disconnect.mockReset()
 	openToastMock.mockReset()
-	cacheStoreState.preselectedTokenAddressToAdd = ""
+	payloads.clear()
+	seen.splice(0)
+	appState.scopeEpoch = 0
 	vi.useRealTimers()
 })
 
@@ -237,7 +252,7 @@ describe("NewTokenPopup", () => {
 		expect(submitBtn(w).attributes("disabled")).toBeDefined()
 	})
 
-	test("duplicate contract surfaces 'Already exist'", async () => {
+	test("duplicate contract surfaces 'Already exists'", async () => {
 		tokenServiceMock.getTokens.mockReset().mockResolvedValue([defaultTokenInfo({ contract: validHex })])
 		const w = mount(NewTokenPopup, {
 			props: { show: false },
@@ -246,16 +261,16 @@ describe("NewTokenPopup", () => {
 		await w.setProps({ show: true })
 		await flushPromises()
 		await typeAddress(w, validHex)
-		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exist")
+		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exists")
 	})
 
-	test("a listed contract typed in upper case is the same token: 'Already exist', button off", async () => {
+	test("a listed contract typed in upper case is the same token: 'Already exists', button off", async () => {
 		tokenServiceMock.getTokens.mockReset().mockResolvedValue([defaultTokenInfo({ contract: validHex })])
 		const w = mount(NewTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
 		await w.setProps({ show: true })
 		await flushPromises()
-		await typeAddress(w, `0x${"A".repeat(64)}`)
-		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exist")
+		await typeAddress(w, `0x0${"A".repeat(63)}`)
+		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exists")
 		expect(submitBtn(w).attributes("disabled")).toBeDefined()
 	})
 
@@ -512,5 +527,173 @@ describe("NewTokenPopup", () => {
 		await flushPromises()
 		expect(taskServiceMock.connect.mock.calls.length).toBe(connectCallsAfterFirst)
 		expect(tokenServiceMock.addToken).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("NewTokenPopup — a refusal belongs to the address it judged", () => {
+	const listedHex = `0x0${"b".repeat(63)}`
+	const check = (w: ReturnType<typeof mount>) => w.find('[data-icon="square-check"]').exists()
+	const refusalLine = (w: ReturnType<typeof mount>) => w.find('[data-testid="new-token-error"]')
+
+	async function refusedAt(address: string) {
+		tokenServiceMock.getTokens.mockReset().mockResolvedValue([defaultTokenInfo({ contract: listedHex })])
+		const w = mount(NewTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await w.setProps({ show: true })
+		await flushPromises()
+		tokenServiceMock.parseTokenInterface.mockRejectedValueOnce(walletErrorFromPayload(new ContractNotFoundError().toPayload()))
+		await typeAddress(w, address)
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+		return w
+	}
+
+	test("while the address stays, the refusal stays and no check sits beside it", async () => {
+		const w = await refusedAt(validHex)
+		expect(refusalLine(w).text()).toBe("There is no token at this address on this network.")
+		expect(check(w)).toBe(false)
+	})
+
+	test("a listed token's address then reads only its own verdict", async () => {
+		const w = await refusedAt(validHex)
+		await typeAddress(w, listedHex)
+		expect(w.get('[data-testid="error-text"]').text()).toContain("Already exists")
+		expect(refusalLine(w).exists()).toBe(false)
+	})
+
+	test("another unlisted address clears the refusal and brings the check back", async () => {
+		const w = await refusedAt(validHex)
+		await typeAddress(w, `0x0${"c".repeat(63)}`)
+		expect(refusalLine(w).exists()).toBe(false)
+		expect(check(w)).toBe(true)
+	})
+})
+
+describe("NewTokenPopup — the opener's payload", () => {
+	const onAdded = vi.fn((token: unknown) => {
+		seen.push("added")
+		return token
+	})
+	beforeEach(() => {
+		onAdded.mockClear()
+	})
+
+	async function openWithPayload() {
+		payloads.set("new_token", { address: validHex, onAdded })
+		const w = await mountAndOpen()
+		tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true, contract: validHex, chainId: 1 })
+		tokenServiceMock.addToken.mockResolvedValueOnce(defaultTokenInfo())
+		return w
+	}
+	/** Submits and lands the balance row; the task's outcome is the caller's. */
+	async function submitToWait(w: ReturnType<typeof mount>) {
+		tokenBalanceServiceMock.getTokenBalances.mockResolvedValueOnce([])
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+		for (const h of balanceAddedHandlers) h(makeTb({ id: 100, account: "0xacct" }))
+	}
+	const finish = (error?: string) => {
+		for (const h of taskUpdatedHandlers) h(makeBalanceUpdateTask(100, { finished: true, error }))
+	}
+
+	test("the payload's address fills the field, ready to import", async () => {
+		payloads.set("new_token", { address: validHex })
+		const w = await mountAndOpen()
+		const input = w.findAll('[data-testid="token-address-input"]').find((el) => el.element.tagName === "INPUT")
+		expect((input?.element as HTMLInputElement | undefined)?.value).toBe(validHex)
+		expect(submitBtn(w).attributes("disabled")).toBeUndefined()
+	})
+
+	test.each([
+		["the balance read", (_w: ReturnType<typeof mount>) => finish()],
+		["a balance read that failed", (_w: ReturnType<typeof mount>) => finish("PXE down")],
+		[
+			"the wait timing out",
+			async () => {
+				await vi.advanceTimersByTimeAsync(30_000)
+			},
+		],
+	])("after %s the opener hears of the token once, after the close", async (_, outcome) => {
+		vi.useFakeTimers()
+		const w = await openWithPayload()
+		await submitToWait(w)
+		await outcome(w)
+		await flushPromises()
+		expect(onAdded.mock.calls).toEqual([[defaultTokenInfo()]])
+		expect(seen).toEqual(["close", "added"])
+	})
+
+	test("a token already synced is reported at once, after the close", async () => {
+		const w = await openWithPayload()
+		tokenBalanceServiceMock.getTokenBalances.mockResolvedValueOnce([makeTb({ updatedAt: 1700_000_000_000 })])
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+		expect(onAdded.mock.calls).toEqual([[defaultTokenInfo()]])
+		expect(seen).toEqual(["close", "added"])
+	})
+
+	test("a refusal reports nothing", async () => {
+		payloads.set("new_token", { address: validHex, onAdded })
+		const w = await mountAndOpen()
+		tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: false })
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+		expect(onAdded).not.toHaveBeenCalled()
+	})
+
+	test("a close mid wait reports nothing, then or later", async () => {
+		const w = await openWithPayload()
+		await submitToWait(w)
+		await w.setProps({ show: false })
+		await flushPromises()
+		finish()
+		await flushPromises()
+		expect(onAdded).not.toHaveBeenCalled()
+	})
+
+	test("a token added on another chain reports nothing", async () => {
+		payloads.set("new_token", { address: validHex, onAdded })
+		const w = await mountAndOpen()
+		tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true, contract: validHex, chainId: 999 })
+		tokenServiceMock.addToken.mockResolvedValueOnce(defaultTokenInfo({ chainId: 999 }))
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+		expect(w.emitted("onClose")).toBeTruthy()
+		expect(onAdded).not.toHaveBeenCalled()
+	})
+
+	test("a scope that moved during the wait gets no report, though the add still closes", async () => {
+		const w = await openWithPayload()
+		await submitToWait(w)
+		appState.scopeEpoch += 1
+		finish()
+		await flushPromises()
+		expect(w.emitted("onClose")).toBeTruthy()
+		expect(onAdded).not.toHaveBeenCalled()
+	})
+})
+
+describe("NewTokenPopup — the field modulus", () => {
+	function pressEnterOnInput() {
+		const el = document.createElement("input")
+		document.body.appendChild(el)
+		el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+		el.remove()
+	}
+
+	test.each([
+		["the last value below the modulus goes to the wallet", BELOW_MODULUS, "", 1],
+		["the modulus reads as the contact form", MODULUS, "Invalid address", 0],
+		["a value above the modulus reads as the contact form", ABOVE_MODULUS, "Invalid address", 0],
+		["63 digits read as before", DIGITS_63, "Invalid address", 0],
+	])("%s", async (_, address, warning, reads) => {
+		tokenServiceMock.parseTokenInterface.mockResolvedValue({ isComplete: false })
+		const w = await mountAndOpen()
+		await typeAddress(w, address)
+		const errorText = w.find('[data-testid="error-text"]')
+		expect(errorText.exists() ? errorText.text() : "").toBe(warning)
+		expect(submitBtn(w).attributes("disabled") !== undefined).toBe(reads === 0)
+		pressEnterOnInput()
+		await flushPromises()
+		expect(tokenServiceMock.parseTokenInterface).toHaveBeenCalledTimes(reads)
 	})
 })

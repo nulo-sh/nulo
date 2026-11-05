@@ -5,19 +5,21 @@ import type { TokenInfo } from "@/wallet/services/token/client"
 import {
 	type CallSurface,
 	type WireCall,
-	amountLabel,
+	amountOf,
 	authwitLine,
 	authwitTitle,
 	RAW_ADVICE,
 	RAW_LINE,
 	RAW_TITLE,
 	rowTitle,
+	uncheckedCallsLine,
 } from "./call-surface"
 import ArgsNotice from "./ArgsNotice.vue"
 
 const props = defineProps<{
 	calls: readonly { call: WireCall; surface: CallSurface }[]
-	/** The authorizations the wallet will sign, each with its reading; absent while none are listed. */
+	/** The authorizations the transaction uses, each with its reading: the wallet signs each with no
+	 *  `onBehalfOf`; absent while none are listed. */
 	authwits?: readonly { authwit: DiscoveredAuthwit; surface: CallSurface }[]
 	/** The wallet is still finding the authorizations. */
 	checkingAuthwits?: boolean
@@ -25,16 +27,24 @@ const props = defineProps<{
 	tokens?: readonly TokenInfo[]
 	/** The window's closing advice follows the list of calls. */
 	advice?: boolean
+	previewFailed?: boolean
 }>()
+
+const emit = defineEmits<{ retryPreview: [event: MouseEvent] }>()
 
 const callRows = computed(() =>
 	props.calls.map(({ call, surface }) => ({
 		call,
 		surface,
 		title: rowTitle(call, surface),
-		amount: surface.kind === "transfer" || surface.kind === "mint" ? amountOf(call.to, surface.amount) : undefined,
+		amount:
+			surface.kind === "transfer" || surface.kind === "mint"
+				? amountOf(props.tokens, props.chainId, call.to, surface.amount)
+				: undefined,
 	})),
 )
+
+const uncheckedLine = computed(() => uncheckedCallsLine(callRows.value.map(({ surface }) => surface)))
 
 const authwitRows = computed(() =>
 	(props.authwits ?? []).map(({ authwit, surface }) => {
@@ -43,16 +53,10 @@ const authwitRows = computed(() =>
 			authwit,
 			surface,
 			line,
-			amount: line.kind === "move" ? amountOf(authwit.consumer, line.amount) : undefined,
+			amount: line.kind === "move" ? amountOf(props.tokens, props.chainId, authwit.consumer, line.amount) : undefined,
 		}
 	}),
 )
-
-/** An amount in the token's units with its symbol, or the raw integer in base units. */
-const amountOf = (contract: unknown, amount: string): { text: string; baseUnits: boolean } => {
-	const { text, symbol } = amountLabel(props.tokens, props.chainId, contract, amount)
-	return symbol ? { text: `${text} ${symbol}`, baseUnits: false } : { text, baseUnits: true }
-}
 </script>
 
 <template>
@@ -70,7 +74,7 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 				<Text variant="meta" color="secondary" :class="$style.marker">{{ j + 1 }}</Text>
 				<Flex direction="column" gap="4" :class="$style.item_body">
 					<Text data-testid="execute-op-summary-call-head" variant="body" color="primary" height="130">
-						<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text> on <AddressDisplay :address="row.call.to" data-testid="execute-op-summary-call-to" /><template v-if="row.amount">:</template><template v-else-if="row.surface.kind === 'decoded'">. <Text variant="caption" color="secondary" data-testid="execute-op-call-named">Named by the app.</Text></template>
+						<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text> on <AddressDisplay :address="row.call.to" data-testid="execute-op-summary-call-to" /><template v-if="row.amount">:</template>
 					</Text>
 					<Text
 						v-if="row.amount && (row.surface.kind === 'transfer' || row.surface.kind === 'mint')"
@@ -97,6 +101,7 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 				</Flex>
 			</li>
 		</ol>
+		<Text v-if="uncheckedLine" data-testid="execute-op-summary-unchecked" variant="caption" color="secondary" height="130">{{ uncheckedLine }}</Text>
 		<Text v-if="advice" data-testid="execute-op-summary-unverified-advice" variant="body" color="tertiary">{{ RAW_ADVICE }}</Text>
 	</Flex>
 
@@ -110,6 +115,7 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 				data-testid="execute-op-summary-authwit"
 				:data-message-hash="a.messageHash"
 				:data-line-kind="line.kind"
+				:data-on-behalf="a.onBehalfOf"
 				:class="$style.item"
 			>
 				<Text variant="body" color="secondary" aria-hidden="true" :class="$style.marker">•</Text>
@@ -121,6 +127,9 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 						<template v-if="line.kind === 'move'"> from <AddressDisplay :address="line.from" data-testid="execute-discovered-line-from" /> to <AddressDisplay :address="line.to" data-testid="execute-discovered-line-to" /></template>
 						<template v-else> call <Text variant="meta" data-testid="execute-discovered-line-function">{{ line.fn }}</Text> on <AddressDisplay :address="a.consumer" data-testid="execute-discovered-line-consumer" /></template>
 					</Text>
+					<Text v-if="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf" variant="body" color="secondary" height="130">
+						Already authorized by <AddressDisplay :address="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf-account" />.
+					</Text>
 					<Flex v-if="surface.kind === 'raw'" data-testid="execute-op-summary-authwit-unverified-args" :data-reason="surface.reason" direction="column" gap="4">
 						<ArgsNotice :title="RAW_TITLE" :body="RAW_LINE[surface.reason]" prefix="execute-op-summary-authwit" kind="unverified" />
 					</Flex>
@@ -130,6 +139,12 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 	</Flex>
 	<Flex v-else-if="checkingAuthwits" :class="$style.section">
 		<Text variant="body" color="secondary" data-testid="execute-op-authwits-pending">Checking authorizations…</Text>
+	</Flex>
+	<Flex v-else-if="previewFailed" direction="column" gap="8" :class="$style.section" data-testid="execute-op-authwits-preview-failed">
+		<Flex justify="between" gap="12" wide :class="$style.collapsed">
+			<span :class="[$style.collapsed_text, 'color--txt-danger']">Authorizations couldn't be previewed</span>
+			<button type="button" :class="$style.retry" data-testid="execute-op-authwits-preview-retry" @click="emit('retryPreview', $event)">Try again</button>
+		</Flex>
 	</Flex>
 </template>
 
@@ -156,6 +171,23 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 
 .marker {
 	flex: 0 0 10px;
+}
+
+.collapsed {
+	padding: 10px 12px;
+	border: 1px solid var(--nulo-border);
+	background: var(--nulo-surface-low);
+}
+
+.collapsed_text {
+	composes: type--body from global;
+	min-width: 0;
+}
+
+.retry {
+	composes: retry from "@/popup/components/modules/send/fee-shared.module.css";
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 
 /* A dApp names each call and supplies its addresses; a long unbroken one breaks inside the card. */

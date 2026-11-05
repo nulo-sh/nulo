@@ -24,7 +24,7 @@ import { APP_REGISTRATIONS_PER_CHAIN, RegistrationAllowance } from "@/wallet/ser
 import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
-import { ExecutionService } from "./service"
+import { RegistrationExecutor } from "./registration-executor"
 
 /** One key for every profile, as an unlocked worker holds it. */
 const ROW_KEYS = await rowKeysForEveryProfile()
@@ -82,34 +82,33 @@ function makeService(senders: AztecAddress[], accounts: AztecAddress[]) {
 	})
 	;(pxeService as unknown as { initialized: boolean }).initialized = true
 
-	const service = new ExecutionService(new LoggerStore(new ConfigStore()))
-	const internals = service as unknown as {
-		networkService: unknown
-		pxeService: unknown
-		dappSessionService: unknown
-		executeAztecRegisterSender(op: unknown, registrant: unknown): Promise<unknown>
-		executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<unknown>
-	}
 	const allowance = new RegistrationAllowance(sealedEntityStorage("dappRegistrations", new MemoryStorageArea(), ROW_KEYS.rowKeys))
-	internals.networkService = { getNetwork: async () => NETWORK }
-	internals.dappSessionService = {
-		admitDappRegistration: (origin: string, fence: { profileId: string }, chainId: number) =>
-			allowance.admit(fence.profileId, chainId, origin),
-	}
-	internals.pxeService = {
+	const networkService = { getNetwork: async () => NETWORK }
+	const wirePxe = {
 		registerSender: overTheWire(pxeService.registerSender.bind(pxeService)),
 		registerAccount: overTheWire(pxeService.registerAccount.bind(pxeService)),
 		registerContract: overTheWire(pxeService.registerContract.bind(pxeService)),
 		getContractArtifact: async () => FrozenSchnorrAccountArtifact,
 	}
+	const executor = new RegistrationExecutor({
+		networkService,
+		pxeService: wirePxe,
+		dappSessionService: {
+			admitDappRegistration: (origin: string, fence: { profileId: string }, chainId: number) =>
+				allowance.admit(fence.profileId, chainId, origin),
+		},
+	} as never) as unknown as {
+		executeAztecRegisterSender(op: unknown, registrant: unknown): Promise<unknown>
+		executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<unknown>
+	}
 	const accountState = new AccountStateService(new LoggerStore(new ConfigStore()))
-	Object.assign(accountState, { initialized: true, networkService: internals.networkService, pxeService: internals.pxeService })
+	Object.assign(accountState, { initialized: true, networkService, pxeService: wirePxe })
 	const dapp = { origin: "https://app.example", fence: { profileId: NETWORK.profileId, epoch: 0, session: 1 } }
 	const dappSender = (address: AztecAddress) =>
-		internals.executeAztecRegisterSender({ kind: "aztec_registerSender", networkId: NETWORK.id, address: address.toString() }, dapp)
+		executor.executeAztecRegisterSender({ kind: "aztec_registerSender", networkId: NETWORK.id, address: address.toString() }, dapp)
 	const dappContract = (keyed: Awaited<ReturnType<typeof keyedInstance>>, withKey = true) => {
 		accountAddressOf.set(keyed.partialAddress, keyed.address)
-		return internals.executeAztecRegisterContract(
+		return executor.executeAztecRegisterContract(
 			{
 				kind: "aztec_registerContract",
 				networkId: NETWORK.id,

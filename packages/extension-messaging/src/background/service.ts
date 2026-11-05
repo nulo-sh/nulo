@@ -1,6 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { ILogger } from "@nulo/wallet-core/logger"
 import type { EventsMap, MethodsMap } from "@nulo/wallet-core/base"
+import { raceTimeout } from "@nulo/wallet-core/utils"
 import { BaseService } from "../core/base-service"
 import { isTrustedInternalSender } from "../core/sender-auth"
 import { summarizeMessage } from "../core/envelope-summary"
@@ -63,12 +64,8 @@ export abstract class Service<TRequests extends MethodsMap, TEvents extends Even
 	 * never finishes leaves no port open.
 	 */
 	private async announceReady(client: chrome.runtime.Port): Promise<void> {
-		let timer: ReturnType<typeof setTimeout> | undefined
-		const bound = new Promise<"bound">((resolve) => {
-			timer = setTimeout(() => resolve("bound"), DEFAULT_INIT_TIMEOUT_MS)
-		})
-		const outcome = await Promise.race([this.whenCollectionStarted().then(() => "started" as const), bound])
-		clearTimeout(timer)
+		const started = this.whenCollectionStarted().then(() => "started" as const)
+		const outcome = await raceTimeout(started, DEFAULT_INIT_TIMEOUT_MS, () => "bound" as const)
 		if (!this.clients.includes(client)) return
 		if (outcome === "started") {
 			try {

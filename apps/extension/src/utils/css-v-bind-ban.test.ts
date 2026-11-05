@@ -38,7 +38,11 @@ type Reviewed = Finding & { why: string }
 const REVIEWED: Reviewed[] = []
 
 function scan(file: string, source: string): Finding[] {
-	const calls = callsTo(file, source, HAND_CALL).map(() => ({ file, text: "useCssVars(…)" }))
+	// Only a file spelling `useCssVars`, or a template hiding one of its letters behind a `&#`
+	// reference (no named reference decodes to one), can call it. Styles get no such check: Vue
+	// reads `v-/**/bind` as a `v-bind`.
+	const mayCall = source.includes("useCssVars") || source.includes("&#")
+	const calls = mayCall ? callsTo(file, source, HAND_CALL).map(() => ({ file, text: "useCssVars(…)" })) : []
 	if (!file.endsWith(".vue")) return calls
 	const vars = parse(source, { filename: file, sourceMap: false }).descriptor.cssVars
 	return [...vars.map((expression) => ({ file, text: `v-bind(${expression})` })), ...calls]
@@ -84,11 +88,23 @@ describe("css vars ban (static)", () => {
 			"<template><span /></template><style module>.e { &:hover { color: v-bind(x); } }</style>",
 			["v-bind(x)"],
 		],
+		[
+			"a v-bind a CSS comment splits",
+			"x.vue",
+			"<template><span /></template><style>.e { color: v-/**/bind(x); }</style>",
+			["v-bind(x)"],
+		],
 		["a hand-written call in a component", "x.vue", "<script setup>useCssVars(() => ({ x: 1 }))</script>", ["useCssVars(…)"]],
 		[
 			"a hand-written call in a composable, a comment before its arguments",
 			"x.ts",
 			'import { useCssVars } from "vue"\nexport const use = () => useCssVars /* why */ (() => ({}))',
+			["useCssVars(…)"],
+		],
+		[
+			"a hand-written call a template spells with a character reference",
+			"x.vue",
+			'<template><span :title="&#117;seCssVars(f)" /></template>',
 			["useCssVars(…)"],
 		],
 		["a comment and a string naming it", "x.ts", '// useCssVars()\nexport const hint = "useCssVars()"', []],

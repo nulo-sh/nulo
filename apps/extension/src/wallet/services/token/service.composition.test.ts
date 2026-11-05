@@ -33,7 +33,7 @@ import { makeShallowPxeFake, type ShallowPxeFakeConfig } from "@/wallet/services
 import { svc } from "@/wallet/services/composition-harness"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { fakeBrowser } from "@webext-core/fake-browser"
-import { TokenService } from "./service"
+import { TokenService, type TokenServiceOptions } from "./service"
 import { PinMismatchError, TokenSeeder, type TokenSeederDeps } from "./seeder"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
 import type { Token, TokenInterface } from "./spec"
@@ -57,6 +57,7 @@ const FIXTURE_LIST: TokenListSnapshot = {
 	sequence: 1,
 	keyId: "nulo-ci-1",
 	flagged: [],
+	priceFeeds: {},
 	entries: [
 		{
 			chainId: FIXTURE_SEED.chainId,
@@ -121,7 +122,7 @@ async function makeHarness(fakeConfig?: ShallowPxeFakeConfig) {
 	collection.add(svc(TaskService.name, { startNewTask }))
 	collection.add(svc(OperationJournalService.name, {}))
 	collection.add(svc(TOKEN_LIST_SERVICE_NAME, { getSnapshot: () => undefined, onListChanged: new EventHandler() }))
-	const tokenService = new TokenService(logger, api, () => fake.client)
+	const tokenService = new TokenService(logger, api, { pxeClientFactory: () => fake.client })
 	collection.add(tokenService)
 	await collection.start()
 	return { tokenService, fake, api, fakeTask, startNewTask }
@@ -202,11 +203,19 @@ describe("TokenService.restore — shared numeric cursor (nextNumericId + restor
 		expect((await tokenService.getTokensRaw("p1")).map((t) => t.id).sort((a, b) => a - b)).toEqual(ids)
 	})
 
-	test("a failed write records a restoreError STRING; the cursor skips it (no id consumed)", async () => {
+	test("a failed row write records a restoreError STRING; its reserved id stays consumed", async () => {
 		const { tokenService, api } = await makeHarness()
-		// Fail only the first persisted write (restore's writes are the only sets and
-		// run in row order), so the surviving rows must still restore.
-		vi.spyOn(api.storage.local, "set").mockRejectedValueOnce(new Error("disk full"))
+		// Fail only the first row's write, after its id reservation landed; the surviving rows must
+		// still restore.
+		const set = api.storage.local.set.bind(api.storage.local)
+		let failed = false
+		vi.spyOn(api.storage.local, "set").mockImplementation(async (items: Record<string, unknown>) => {
+			if (!failed && Object.keys(items).some((key) => key.startsWith("nulo:core:tokens@"))) {
+				failed = true
+				throw new Error("disk full")
+			}
+			await set(items)
+		})
 
 		const [a, b, c] = await tokenService.restore([mkToken("0xa"), mkToken("0xb"), mkToken("0xc")])
 
@@ -214,8 +223,8 @@ describe("TokenService.restore — shared numeric cursor (nextNumericId + restor
 		expect(typeof a.restoreError).toBe("string")
 		expect(b.restoreError).toBeUndefined()
 		expect(c.restoreError).toBeUndefined()
-		// `a` failed → its id was not consumed → `b`/`c` are consecutive from the cursor start.
-		expect(c.id).toBe(b.id + 1)
+		expect([b.id, c.id]).toEqual([2, 3])
+		expect((await tokenService.getTokensRaw("p1")).map((t) => t.contract).sort()).toEqual(["0xb", "0xc"])
 	})
 })
 
@@ -229,7 +238,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 	/** Chains the harness's network service reports quarantined. */
 	const quarantined = new Set<number>()
 
-	async function seedHarness(seederOverrides?: ConstructorParameters<typeof TokenService>[3]) {
+	async function seedHarness(seederOverrides?: TokenServiceOptions["seederOverrides"]) {
 		const fake = makeShallowPxeFake({
 			instances: new Map([[AztecAddress.fromStringUnsafe(CONTRACT).toString(), fakeTokenInstance()]]),
 			artifacts: new Map([[CLASS_ID, TokenContractArtifact]]),
@@ -278,7 +287,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		collection.add(svc(TaskService.name, { startNewTask: () => fakeTask }))
 		collection.add(svc(OperationJournalService.name, journal))
 		collection.add(svc(TOKEN_LIST_SERVICE_NAME, { getSnapshot: () => FIXTURE_LIST, onListChanged }))
-		const tokenService = new TokenService(logger, api, () => fake.client, seederOverrides)
+		const tokenService = new TokenService(logger, api, { pxeClientFactory: () => fake.client, seederOverrides })
 		collection.add(tokenService)
 		await collection.start()
 		return { tokenService, fake, api, journal, onActiveProfileChanged, onActiveNetworkChanged, onAccountAdded, onListChanged }

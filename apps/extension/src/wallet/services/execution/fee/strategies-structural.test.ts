@@ -36,6 +36,7 @@ function sentinelTxRequest() {
 		// (the multicall-wrapped shape carries the entrypoint address instead,
 		// and must never be stubbed — pinned below).
 		origin: { toString: () => "0xaccount" },
+		authWitnesses: [],
 		txContext: {
 			gasSettings: new GasSettings(new Gas(11_000, 22_000), new Gas(3_300, 4_400), new GasFees(555n, 666n), PRIORITY),
 		},
@@ -56,11 +57,13 @@ const fakeTask = { complete: vi.fn(), fail: vi.fn(), startSubtask: vi.fn() }
 /** Distinct identities per passthrough slot — a node/pxe/account swap
  *  shows up as a failed identity assertion. */
 function makeBuilt() {
+	const address = { toString: () => "0xaccount" }
 	return {
 		txRequest: sentinelTxRequest(),
 		node: { getCurrentMinFees: async () => new GasFees(555n, 666n), marker: "node" },
 		pxe: { marker: "pxe" },
-		account: { address: { toString: () => "0xaccount" }, marker: "account" },
+		account: { address, marker: "account" },
+		scopes: [address],
 		network: { marker: "network" },
 		nonce: { toString: () => "nonce-1" },
 		txCalls: [{ contract: "0xc", method: "m", args: [] }],
@@ -167,7 +170,6 @@ describe("FeeJuiceStrategy structural parity", () => {
 		expect(buildStandard).toHaveBeenCalledTimes(1)
 		expect((buildStandard.mock.calls[0] as unknown[])[2]).toBe(AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE)
 		expect(simulateTxTask).toHaveBeenCalledTimes(1)
-		// Sim opts: scopes = [account.address] exactly.
 		expect((simulateTxTask.mock.calls[0] as unknown[])[2]).toEqual({
 			simulatePublic: true,
 			skipFeeEnforcement: true,
@@ -206,6 +208,24 @@ describe("EmbeddedStrategy structural parity", () => {
 		const ctx = makeCtx({ fee: { embeddedFeePayment: "fjwc" } as never })
 		const result = await new EmbeddedStrategy(deps).buildAndEstimate(ctx)
 		expect(result.feePaymentMethod).toBe(AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM)
+	})
+
+	test("with an observer, it hands the observer its one validated simulation, unstubbed", async () => {
+		const { deps, simulateTxTask, built } = makeDeps()
+		const probe = { extractEffects: vi.fn(async () => ({ actions: [], requested: false })) }
+		const ctx = { ...makeCtx({ fee: { embeddedFeePayment: "fpc" } as never }), observer: probe } as FeeStrategyContext
+		await new EmbeddedStrategy(deps).buildAndEstimate(ctx)
+
+		expect(simulateTxTask).toHaveBeenCalledTimes(1)
+		expect((simulateTxTask.mock.calls[0] as unknown[] | undefined)?.[2]).toEqual({
+			simulatePublic: true,
+			skipFeeEnforcement: true,
+			scopes: built.scopes,
+		})
+		expect(probe.extractEffects).toHaveBeenCalledTimes(1)
+		const [sim, chain] = probe.extractEffects.mock.calls[0] as unknown as [unknown, { signer: unknown; scopes: unknown }]
+		expect(sim).toBe(await simulateTxTask.mock.results[0]?.value)
+		expect(chain).toMatchObject({ signer: built.account.address, scopes: built.scopes })
 	})
 
 	test("missing embeddedFeePayment throws the frozen message", async () => {
@@ -438,7 +458,7 @@ describe("FeeJuiceStrategy folded (probed) runs", () => {
 			tasks: { startNewTask: () => fakeTask },
 			logger: { log: () => {} },
 		} as unknown as FeeStrategyDeps
-		const probe = { extractEffects: vi.fn(async () => []), collected: [] }
+		const probe = { extractEffects: vi.fn(async () => ({ actions: [], requested: false })), collected: [] }
 		const original = { kind: "call", contract: "0xtoken", method: "transfer", args: [] } as unknown as Action
 		const ctx = fjFoldedCtx(probe, [original])
 
@@ -470,7 +490,7 @@ describe("FeeJuiceStrategy folded (probed) runs", () => {
 			tasks: { startNewTask: () => fakeTask },
 			logger: { log: () => {} },
 		} as unknown as FeeStrategyDeps
-		const probe = { extractEffects: vi.fn(async () => [DISCOVERED_FJ]), collected: [DISCOVERED_FJ] }
+		const probe = { extractEffects: vi.fn(async () => ({ actions: [DISCOVERED_FJ], requested: true })), collected: [DISCOVERED_FJ] }
 		const original = { kind: "call", contract: "0xtoken", method: "transfer", args: [] } as unknown as Action
 		const ctx = fjFoldedCtx(probe, [original])
 
@@ -508,7 +528,7 @@ describe("FeeJuiceStrategy folded (probed) runs", () => {
 			tasks: { startNewTask: () => fakeTask },
 			logger: { log: () => {} },
 		} as unknown as FeeStrategyDeps
-		const probe = { extractEffects: vi.fn(async () => []), collected: [] }
+		const probe = { extractEffects: vi.fn(async () => ({ actions: [], requested: false })), collected: [] }
 		const ctx = fjFoldedCtx(probe, [])
 
 		await new FeeJuiceStrategy(deps).buildAndEstimate(ctx)
@@ -546,7 +566,7 @@ describe("FpcStrategy folded (probed) runs — discovery collapses into the firs
 	const DISCOVERED = { kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "0xm" } } as unknown as Action
 
 	function makeProbe(discovered: Action[] = []) {
-		return { extractEffects: vi.fn(async () => discovered), collected: discovered }
+		return { extractEffects: vi.fn(async () => ({ actions: discovered, requested: discovered.length > 0 })), collected: discovered }
 	}
 
 	function stubbedOpts(address: unknown) {
@@ -832,7 +852,7 @@ describe("FeeJuiceStrategy folded + INIT-WRAPPED with discovery", () => {
 			tasks: { startNewTask: () => fakeTask },
 			logger: { log: () => {} },
 		} as unknown as FeeStrategyDeps
-		const probe = { extractEffects: vi.fn(async () => [DISCOVERED_IW]), collected: [DISCOVERED_IW] }
+		const probe = { extractEffects: vi.fn(async () => ({ actions: [DISCOVERED_IW], requested: true })), collected: [DISCOVERED_IW] }
 		const ctx = makeCtx({ actions: [{ kind: "call", contract: "0xtoken", method: "transfer", args: [] } as unknown as Action] })
 		;(ctx as { probe?: unknown }).probe = probe
 

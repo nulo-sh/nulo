@@ -851,6 +851,59 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 
 	const live = () => true
 
+	const AUTHWITS = { chainId: 7, account: "0xacct", items: [{ hash: `0x${"1a".repeat(32)}`, content: { kind: "call" } as never }] }
+
+	/** The send's journal row at `submitting`, holding its authwits as the commit the broadcast waits for writes them. */
+	async function submittedWithAuthwits(): Promise<string> {
+		const id = await atStage("proving")
+		await service.transitionOperation(
+			id,
+			{ stage: "submitting", txHash: HASH, submittedEndpointUrl: URL },
+			undefined,
+			undefined,
+			AUTHWITS,
+		)
+		return id
+	}
+
+	test("the submitting commit stores a send's authwits, its failure keeps them and its success drops them", async () => {
+		const failing = await submittedWithAuthwits()
+		expect((await service.getOperation(failing))?.publicAuthwits).toEqual(AUTHWITS)
+		await service.transitionOperation(failing, { stage: "failed" }, LOST)
+		expect(await service.getOperation(failing)).toMatchObject({
+			progress: { stage: "failed", from: "submitting" },
+			publicAuthwits: AUTHWITS,
+		})
+		const succeeding = await submittedWithAuthwits()
+		await service.transitionOperation(succeeding, { stage: "succeeded", txHash: HASH })
+		expect((await service.getOperation(succeeding))?.publicAuthwits).toBeUndefined()
+	})
+
+	test("authwits with any stage but submitting are refused and nothing is written", async () => {
+		const id = await atStage("simulating")
+		const before = await service.getOperation(id)
+		await expect(
+			service.transitionOperation(id, { stage: "proving", enteredProveAt: 1 }, undefined, undefined, AUTHWITS),
+		).rejects.toBeInstanceOf(ValidationError)
+		expect(await service.getOperation(id)).toEqual(before)
+	})
+
+	test("clearPublicAuthwits drops them from a submitting or failed row with its hash, and from no other", async () => {
+		const atSubmitting = await submittedWithAuthwits()
+		const failed = await submittedWithAuthwits()
+		await service.transitionOperation(failed, { stage: "failed" }, LOST)
+		const kept = await submittedWithAuthwits()
+		const before = await service.getOperation(kept)
+		expect(await service.clearPublicAuthwits(kept, `0x${"cd".repeat(32)}`, live)).toBe(false)
+		expect(await service.clearPublicAuthwits(kept, HASH, () => false)).toBe(false)
+		expect(await service.getOperation(kept)).toEqual(before)
+		expect(await service.clearPublicAuthwits(atSubmitting, HASH, live)).toBe(true)
+		expect(await service.clearPublicAuthwits(failed, HASH, live)).toBe(true)
+		expect((await service.getOperation(atSubmitting))?.publicAuthwits).toBeUndefined()
+		expect(await service.getOperation(failed)).toMatchObject({ progress: { stage: "failed", txHash: HASH } })
+		expect((await service.getOperation(failed))?.publicAuthwits).toBeUndefined()
+	})
+
 	test("setSendCheck writes an answer over the one the caller read, emits it, and never touches the stage", async () => {
 		const id = await failedFromSubmitting()
 		const seen = vi.fn()

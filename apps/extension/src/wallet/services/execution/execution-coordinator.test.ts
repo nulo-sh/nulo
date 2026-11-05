@@ -2,7 +2,7 @@
  * `ExecutionCoordinator.proveAndSend` contract tests.
  *
  * The frozen sequence:
- *   checkCancelled → journal(proving) → prove → checkCancelled →
+ *   checkCancelled → journal(proving) → checkCancelled → prove → checkCancelled →
  *   assertAuthorization → [offchain hook] → toTx → journal(submitting) →
  *   checkCancelled → assertLive + send → record → journal(succeeded)
  *
@@ -100,12 +100,13 @@ function makeHarness(overrides: Partial<ProveAndSendContext> = {}) {
 }
 
 describe("proveAndSend: frozen sequence", () => {
-	test("ordering: cancel → proving → prove → cancel → toTx → submitting → cancel → send → record → succeeded", async () => {
+	test("ordering: cancel → proving → cancel → prove → cancel → toTx → submitting → cancel → send → record → succeeded", async () => {
 		const { ctx, calls } = makeHarness()
 		const result = await makeCoordinator().proveAndSend(ctx)
 		expect(calls).toEqual([
 			"checkCancelled",
 			"journal:proving",
+			"checkCancelled",
 			"prove",
 			"checkCancelled",
 			"toTx",
@@ -151,11 +152,12 @@ describe("proveAndSend: frozen sequence", () => {
 			checkCancelled: vi.fn(() => {
 				checks += 1
 				calls.push("checkCancelled")
-				// First check (pre-prove) passes; second (post-prove) cancels.
-				if (checks === 2) throw new Error("cancelled-sentinel")
+				// The two checks before the proof pass; the third (post-prove) cancels.
+				if (checks === 3) throw new Error("cancelled-sentinel")
 			}),
 		})
 		await expect(makeCoordinator().proveAndSend(ctx)).rejects.toThrow("cancelled-sentinel")
+		expect(calls).toContain("prove")
 		expect((node.sendTx as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0)
 		expect(calls).not.toContain("record")
 		expect(calls).not.toContain("journal:succeeded")
@@ -168,10 +170,11 @@ describe("proveAndSend: frozen sequence", () => {
 			checkCancelled: vi.fn(() => {
 				checks += 1
 				calls.push("checkCancelled")
-				if (checks === 3) throw new Error("cancelled-sentinel")
+				if (checks === 4) throw new Error("cancelled-sentinel")
 			}),
 		})
 		await expect(makeCoordinator().proveAndSend(ctx)).rejects.toThrow("cancelled-sentinel")
+		expect(calls).toContain("journal:submitting")
 		expect((node.sendTx as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0)
 		expect(calls).not.toContain("send")
 	})
@@ -309,6 +312,7 @@ describe("proveAndSend: the session checks", () => {
 		expect(calls).toEqual([
 			"checkCancelled",
 			"journal:proving",
+			"checkCancelled",
 			"prove",
 			"checkCancelled",
 			"assertAuthorization",
@@ -338,13 +342,14 @@ describe("proveAndSend: the session checks", () => {
 
 	test("a cancel committed before the submitting write still stops at its own check; the session check never runs", async () => {
 		let checks = 0
-		const { ctx, node } = makeHarness({
+		const { ctx, node, calls } = makeHarness({
 			checkCancelled: vi.fn(() => {
 				checks += 1
-				if (checks === 3) throw new Error("cancelled-sentinel")
+				if (checks === 4) throw new Error("cancelled-sentinel")
 			}),
 		})
 		await expect(makeCoordinator().proveAndSend(ctx)).rejects.toThrow("cancelled-sentinel")
+		expect(calls).toContain("journal:submitting")
 		expect(ctx.assertLive).not.toHaveBeenCalled()
 		expect(node.sendTx).not.toHaveBeenCalled()
 	})

@@ -7,21 +7,25 @@ import StaleNetworkTakeover from "@/components/stale-network/StaleNetworkTakeove
 import NetworkArrival from "@/components/network-arrival/NetworkArrival.vue"
 
 /** Utils */
-import { managers, isServiceReady } from "@/utils/core"
+import { managers, isServiceReady, replaceAccountClient } from "@/utils/core"
+import { legalSheetMayCover } from "@/utils/legal-sheet"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { pointToolbarAtSidebar } from "@/utils/browser-surface"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { ownWindowRoute, postAuthRoute } from "@/utils/own-window"
+import { ownWindowRoute, postAuthRoute, releaseOwnWindow } from "@/utils/own-window"
 import { shouldAdvanceToGeneral } from "./should-advance-to-general"
 import { resolveBootSession } from "./boot-session"
 import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision } from "./lock-landing"
+import { endOpeningFlows, isOpeningRoute } from "./opening-flow"
 import { reconcileLockedBoot } from "./reconcile-locked-boot"
 import { applyBootOutcome } from "./apply-boot-outcome"
 import { applyRootFlags } from "./root-flags"
 import { defaultConfig } from "@/wallet/config"
+import { logCallFailure } from "@/wallet/logger/console-forwarding"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { followAccountRows } from "@/utils/account-rows"
-import { createNetworkSwitchHandler } from "@/popup/network-switch"
+import { activeAccountScope } from "@/utils/active-scope"
+import { createNetworkSwitchHandler, SWITCH_SETTLED_KEY, settleLatestRun } from "@/popup/network-switch"
 import { createResetCompletion } from "@/popup/reset-completion"
 import { runFencedBootstrap } from "@/popup/profile-bootstrap"
 import { createScopeEpochHandlers } from "@/popup/scope-epoch"
@@ -33,12 +37,14 @@ import { networkArrivalView } from "@/popup/network-arrival"
 import { readyToast } from "@/components/stale-network/copy"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
+import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Composables */
 import { supersedeProfileActivations, useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { ARRIVALS_KEY, useArrivals } from "@/composables/useArrivals"
+import { SENDS_IN_PROGRESS_KEY, useSendsInProgress } from "@/composables/useSendsInProgress"
 import { runUnattended, STALE_NETWORK_KEY, useStaleNetwork } from "@/composables/useStaleNetwork"
 import { NETWORK_ARRIVAL_KEY, useNetworkArrival } from "@/composables/useNetworkArrival"
 
@@ -50,7 +56,7 @@ const appStore = useAppStore()
 const popupStore = usePopupStore()
 const notificationStore = useNotificationStore()
 const { bootstrapActiveProfile } = useProfileBootstrap()
-const { openToast, closeToast, toast } = useToast()
+const { openToast, updateToast, closeToast, toast } = useToast()
 const { onScopeChanged, onLocked } = createScopeEpochHandlers({
 	bumpEpoch: () => {
 		appStore.scopeEpoch++
@@ -91,10 +97,7 @@ const arrivals = useArrivals({
 	incomingTransferService: arrivalsIncoming,
 	configService,
 	priceService: arrivalsPrices,
-	scope: () =>
-		appStore.isLogined && appStore.profile?.id && appStore.network?.id && appStore.account?.address
-			? { profileId: appStore.profile.id, networkId: appStore.network.id, account: appStore.account.address }
-			: undefined,
+	scope: () => (appStore.isLogined ? activeAccountScope(appStore) : undefined),
 	epoch: () => appStore.scopeEpoch,
 	routeName: () => route.name,
 	lookupToken: async (record) => {
@@ -109,6 +112,27 @@ const arrivals = useArrivals({
 const { seeded: arrivalsSeeded } = arrivals
 provide(ARRIVALS_KEY, arrivals)
 
+const sendsJournal = new OperationJournalServiceClient()
+void sendsJournal.connect()
+const sends = useSendsInProgress({
+	journalService: sendsJournal,
+	// A dApp window's document reads nothing: its sends are the popup's to show.
+	scope: () => {
+		const scope = appStore.isLogined ? activeAccountScope(appStore) : undefined
+		return scope && route.name && !isDappWindow(route.name) ? scope : undefined
+	},
+	lookupToken: async (tokenId) => {
+		const { symbol, decimals, hasDecimals } = await arrivalsTokens.getToken(tokenId)
+		return { symbol, decimals, hasDecimals }
+	},
+	tokenEvents: arrivalsTokens,
+	toast,
+	openToast,
+	updateToast,
+	closeToast,
+})
+provide(SENDS_IN_PROGRESS_KEY, sends)
+
 // Its own client: `managers.account` is replaced on every activation and network switch, and an
 // account another window adds or edits must reach this window's lists whichever is current.
 const accountRows = new AccountServiceClient()
@@ -118,6 +142,16 @@ void accountRows.connect()
 const intervalId = ref(null)
 /** The Terms sheet's verdict; undefined while it has none. */
 const legalSheetShown = ref(undefined)
+/** Marked only where the sheet may cover the page: anywhere else it is hidden whatever the acceptance. */
+const legalSheetMark = computed(() => {
+	const coverable = legalSheetMayCover({
+		routeName: route.name,
+		routePath: route.path,
+		isAuthRequired: route.meta.isAuthRequired === true,
+	})
+	if (!coverable || legalSheetShown.value === undefined) return undefined
+	return legalSheetShown.value ? "shown" : "hidden"
+})
 
 const settingHandlers = {
 	theme(value) {
@@ -162,7 +196,8 @@ watch(
 	},
 )
 
-// The switch handler's latest run, which a completed reset awaits before it routes and announces.
+// The switch handler's latest run, which a completed reset awaits before it routes and announces, as
+// a Settings switch does before its toast.
 let switchRun = Promise.resolve()
 const { reloadNetwork, completeReset } = createResetCompletion({
 	activeNetworkId: () => appStore.network?.id,
@@ -208,7 +243,7 @@ const takeover = computed(() =>
 )
 watch(
 	() => appStore.networks,
-	() => void stale.refresh(),
+	() => void stale.refresh().catch((error) => logCallFailure("stale-network refresh failed", error)),
 )
 
 const networkArrival = useNetworkArrival({
@@ -234,11 +269,13 @@ watch(
 	[() => appStore.isLogined && appStore.profile?.id, () => appStore.network?.id, () => appStore.networks],
 	() => void networkArrival.refresh(),
 )
+/** No caller awaits a resume, so its failure is reported here. */
+const resumeStale = (profileId) => stale.resume(profileId).catch((error) => logCallFailure("stale-network resume failed", error))
 watch(
 	() => appStore.isLogined && appStore.profile?.id,
 	(active) => {
 		stale.clear()
-		if (active && !isDappWindow(route.name)) void stale.resume(active)
+		if (active && !isDappWindow(route.name)) void resumeStale(active)
 	},
 )
 
@@ -255,11 +292,7 @@ const switchNetwork = createNetworkSwitchHandler({
 		appStore.profile?.id === scope.profileId && appStore.network?.id === scope.networkId && appStore.network?.chainId === scope.chainId,
 	syncNetworkStatus: () => appStore.syncNetworkStatus(),
 	markNetworkInactive: (networkId) => appStore.markNetworkInactive(networkId),
-	replaceAccountClient: () => {
-		managers.account?.disconnect()
-		managers.account = new AccountServiceClient()
-		return managers.account
-	},
+	replaceAccountClient,
 	setAccounts: (accounts) => {
 		appStore.accounts = accounts
 	},
@@ -282,12 +315,20 @@ watch(
 	() => appStore.network,
 	() => {
 		switchRun = switchNetwork()
+		// Only a completed reset awaits a run's failure, so it is reported here.
+		switchRun.catch((error) => logCallFailure("network switch failed", error))
 	},
 )
+provide(SWITCH_SETTLED_KEY, () => settleLatestRun(() => switchRun, nextTick, switchNetwork.scopeChanges))
 
 // `flush: "sync"`: a send settling in the next microtask must already see the new epoch.
 watch([() => appStore.profile?.id, () => appStore.network?.id, () => appStore.account?.address], onScopeChanged, { flush: "sync" })
-watchLockStart(() => appStore.isLogined, onLocked)
+/** Both lock paths run this: a lock control's at once, a lock event's under its seal. */
+const endScopeOnLock = () => {
+	onLocked()
+	switchNetwork.supersede()
+}
+watchLockStart(() => appStore.isLogined, endScopeOnLock)
 
 /** The popup's locked state, entered from the lock event and from a boot-time session check
  *  that finds no session under an authenticated page (a worker restart). */
@@ -296,7 +337,7 @@ const lockedState = createLockedState({
 		popupStore.closeAll()
 		notificationStore.clear()
 	},
-	onLocked,
+	onLocked: endScopeOnLock,
 	markLocked: () => {
 		supersedeProfileActivations()
 		appStore.isLogined = false
@@ -316,7 +357,6 @@ const lockedState = createLockedState({
 	},
 	readLastActiveId: getLastActiveProfileId,
 	routeName: () => route.name,
-	openChooser: () => popupStore.open("select_profile"),
 })
 
 /** Sequence token for profile events. Handlers await service round-trips, and under load a
@@ -416,14 +456,16 @@ const settleUndecidedBoot = (outcome, candidate, pageEstablished) => {
 }
 
 /** No open session. Which way the shell goes is `decideLockLanding` over the shell's state at
- *  action time; `reconcileLockedBoot` fences the `lock` action against an unlock that landed
- *  through the event path while the lookup was in flight. */
+ *  action time; `reconcileLockedBoot` fences the `lock` and `end-flow` actions against an unlock
+ *  that landed through the event path while the lookup was in flight. */
 const lockLandingState = (result, pageEstablished) => ({
 	hasProfile: !!appStore.profile,
 	onAuthRequiredRoute: !!route.meta.isAuthRequired,
 	isPasskeyRoute: !!route.meta.isPasskeyInteraction,
 	hasCandidate: !!result.candidate,
 	pageEstablished,
+	holdsSession: appStore.isLogined,
+	onOpeningRoute: isOpeningRoute(route.name),
 })
 const lockLandingActions = {
 	selectAndAuth: (result) => {
@@ -434,6 +476,12 @@ const lockLandingActions = {
 	lock: (result) => {
 		appStore.isSessionChecked = true
 		lockedState.enter(result.profiles)
+	},
+	// Kept, an own window's flow would survive the lock screen and its unlock would reopen the form.
+	endFlow: (result) => {
+		endOpeningFlows()
+		void releaseOwnWindow()
+		lockLandingActions.lock(result)
 	},
 	settle: () => {
 		appStore.isSessionChecked = true
@@ -482,7 +530,7 @@ const loadProfile = async ({ reconnect = false } = {}) => {
 	if (!isCurrent()) return
 	applyBootOutcome(result, bootOutcomeShell(establishedNow()))
 	// A worker restart drops a running reset without a word; its journal resumes here.
-	if (reconnect && appStore.isLogined && appStore.profile && !isDappWindow(route.name)) void stale.resume(appStore.profile.id)
+	if (reconnect && appStore.isLogined && appStore.profile && !isDappWindow(route.name)) void resumeStale(appStore.profile.id)
 }
 
 /** The shell as `applyBootOutcome` drives it. */
@@ -591,9 +639,11 @@ onBeforeUnmount(() => {
 	arrivalsIncoming.disconnect()
 	arrivalsTokens.disconnect()
 	arrivalsPrices.disconnect()
+	sendsJournal.disconnect()
 	stopAccountRows()
 	accountRows.disconnect()
 	arrivals.dispose()
+	sends.dispose()
 	stale.dispose()
 	networkArrival.dispose()
 })
@@ -609,6 +659,7 @@ onBeforeUnmount(() => {
 		:data-service-ready="isServiceReady ? 'true' : undefined"
 		:data-arrivals-seeded="arrivalsSeeded ? 'true' : undefined"
 	>
+		<div hidden data-testid="legal-sheet-verdict" :data-verdict="legalSheetMark" />
 		<!-- Popup Teleport -->
 		<div id="popup" />
 		<div id="tooltip" />

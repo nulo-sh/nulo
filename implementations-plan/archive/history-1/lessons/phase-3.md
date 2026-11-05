@@ -1,0 +1,7 @@
+# Phase 3: full gate, e2e, pictures, review loop
+
+- First pass (before the review fixes): `test:all` exit 0 (2:34); smoke Chrome 5 files / 20 tests (2:37), Firefox (4:08); network `transfers`, `send-amount-exact`, `snack-placement` 3 files / 6 tests, Chrome (7:20), Firefox (8:12). All at retry 0.
+- Final head (after `cb0371fa2` and the `origin/dev` merge, which brought AmountCard changes): lint 0, `typecheck:all` 0, `test:all` exit 0 (2:29); smoke Chrome (2:34), Firefox (3:55); network Chrome (6:15), Firefox (7:31). All at retry 0. No e2e scenario added, so no before/after suite timing.
+- Pictures: scratch specs under the lane's cache, copied into `tests/e2e/` and deleted after. The base build came from `git checkout 13bb2133c -- <the six source files>`, restored with `git checkout HEAD --` after. The fee spec refused the node's calls from the start, which reproduced the lab's pair on the base (sponsor, the read's "Retrying in the background" line, the idle hint, the snack) and on the head (the same line above the failed row). On the head, Tab reached Try again right after the method trigger (`send-token-trigger → send-amount-input → send-amount-max → send-fee-method-trigger → fee-estimate-retry`), and after Enter focus sat on the trigger.
+- The History picture ran just after local midnight, so the two seeded sends fell on two days: the day header follows the send, as D1 intends.
+- Review loop: Codex round 1 `findings: 2`, Opus `1 low, 2 nits`; fixed in `cb0371fa2`; Codex round 2 `clean`.

@@ -11,7 +11,8 @@ vi.mock("@/wallet/services/profile/client", () => ({
 }))
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ query: {}, meta: {} }) }))
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+const openToast = vi.hoisted(() => vi.fn())
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast }) }))
 
 import { Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../../../tests/helpers/press-key"
@@ -25,6 +26,7 @@ import {
 } from "../../../../../tests/helpers/credential-pins"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { useAppStore } from "@/stores/app.store"
+import { NEW_PASSWORD_HINTS } from "@/utils/password-hint"
 import ChangePassword from "./change-password.vue"
 
 const wrappers: VueWrapper[] = []
@@ -94,6 +96,24 @@ describe("change password — Enter does what the focused control says", () => {
 		enterOn(w.get('[data-testid="new-password-repeat-input"] input').element)
 		await flushPromises()
 		expect(profileClient.changeProfilePassword).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("change password — the change says it happened", () => {
+	test("a change that lands toasts Password changed, then goes back", async () => {
+		const w = await mountWithValidFields()
+		submit(w).click()
+		await flushPromises()
+		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Password changed" })
+		expect(router.back).toHaveBeenCalledTimes(1)
+	})
+
+	test("(control) a refused change toasts nothing", async () => {
+		profileClient.changeProfilePassword.mockRejectedValueOnce(new Error("refused"))
+		const w = await mountWithValidFields()
+		submit(w).click()
+		await flushPromises()
+		expect(openToast).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "success" }))
 	})
 })
 
@@ -196,6 +216,31 @@ describe("change password — the credential fields' controls", () => {
 		await flushPromises()
 		expect(w.find('[data-testid="error-text"]').exists()).toBe(false)
 		expect(shaker().className).not.toMatch(/shake/)
+	})
+})
+
+describe("change password — the hint under the new password", () => {
+	test.each([
+		["aaaaaaaa", NEW_PASSWORD_HINTS.repeat],
+		["12345678", NEW_PASSWORD_HINTS.common],
+		["qwertyuiop", NEW_PASSWORD_HINTS.common],
+		["😀".repeat(12), NEW_PASSWORD_HINTS.repeat],
+		["😀😃😄😁😆😅🤣😂🙂🙃😉😊", NEW_PASSWORD_HINTS.strong],
+		["silver-otter-lamp", NEW_PASSWORD_HINTS.strong],
+	])("a matching %j reads %j, and Change Password stays enabled", async (password, line) => {
+		const w = await mountWithValidFields()
+		await w.get('[data-testid="new-password-input"] input').setValue(password)
+		await w.get('[data-testid="new-password-repeat-input"] input').setValue(password)
+		expect(w.get('[data-testid="new-password-input"]').text()).toContain(line)
+		expect(submit(w).hasAttribute("disabled")).toBe(false)
+	})
+
+	test("(control) a short new password still disables Change Password", async () => {
+		const w = await mountWithValidFields()
+		await w.get('[data-testid="new-password-input"] input').setValue("short")
+		await w.get('[data-testid="new-password-repeat-input"] input').setValue("short")
+		expect(w.get('[data-testid="new-password-input"]').text()).toContain(NEW_PASSWORD_HINTS.short)
+		expect(submit(w).hasAttribute("disabled")).toBe(true)
 	})
 })
 

@@ -52,9 +52,12 @@ export async function replaceBackground(s: RunState): Promise<void> {
 	)
 }
 
-export async function restartBackground(s: RunState, next: World): Promise<Driven> {
+/** `flowOpened`: the anchor's import or create already opened its profile's session. */
+export async function restartBackground(s: RunState, next: World, flowOpened = false): Promise<Driven> {
 	// A page the restart outlives keeps a route that needs no session, whatever the session and the
 	// profiles left (`decideLockLanding` settles an established page, `src/popup/lock-landing.ts`).
+	// A flow that opened its session is over once the restart drops it, unless the shell had not yet
+	// marked that session open: the lock screen, or the page kept.
 	const kept = s.caps.restartUnderOpenPage ? NO_SESSION_PAGES.find((hash) => s.anchor.url().includes(`#${hash}`)) : undefined
 	await replaceBackground(s)
 	const t0 = Date.now()
@@ -63,7 +66,8 @@ export async function restartBackground(s: RunState, next: World): Promise<Drive
 	// An open session keeps the page where it stood: any page showing the account selector, or any
 	// Settings page, which a locked wallet leaves for the lock screen, reads as open. O1 judges which.
 	const open: Signal[] = [HOME, { label: "open", testid: "account-selector" }, { label: "open", hash: "/popup/settings/" }]
-	const wants = kept ? [{ label: "kept", hash: kept }] : next.session.kind === "open" ? open : [locked]
+	const keptPage: Signal[] = kept ? [{ label: "kept", hash: kept }] : []
+	const wants = kept ? (flowOpened ? [locked, ...keptPage] : keptPage) : next.session.kind === "open" ? open : [locked]
 	const driven = await settle(s.anchor, wants, Object.fromEntries(wants.map((w) => [w.label, "committed"])), RESTART_MS)
 	driven.settle.elapsedMs = Date.now() - t0
 	return driven

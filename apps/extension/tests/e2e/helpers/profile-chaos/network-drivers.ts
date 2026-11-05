@@ -141,7 +141,8 @@ async function compete(
 	deleted: ReadonlySet<ProfileRef>,
 ): Promise<{ done: Promise<unknown> }> {
 	if (p.competing === "restart") {
-		await restartBackground(s, next)
+		// Finalize opened the restored profile's session before the account state.
+		await restartBackground(s, next, p.stage === "account-state")
 		return { done: Promise.resolve() }
 	}
 	let call: Promise<unknown>

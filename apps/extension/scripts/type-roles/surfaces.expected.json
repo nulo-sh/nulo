@@ -655,7 +655,7 @@
 			"id": "popup:confirm",
 			"name": "Confirm",
 			"kind": "popup",
-			"source": "apps/extension/src/popup/components/popups/ConfirmPopup.vue",
+			"source": "apps/extension/src/components/ConfirmPopup.vue",
 			"reach": "open 'confirm' from composables/useLockWallet.ts, composables/useProfileImportFlow.ts, popup/pages/settings/developer/account-state/senders/index.vue, popup/pages/settings/connected-apps/[id].vue, popup/pages/settings/connected-apps/index.vue, popup/pages/settings/contacts/index.vue, popup/pages/settings/fpcs/index.vue, popup/pages/settings/lock.vue, popup/pages/settings/networks/[id].vue, popup/pages/settings/tokens/index.vue, popup/pages/tokens/[id].vue",
 			"states": ["default"],
 			"suite": "smoke"

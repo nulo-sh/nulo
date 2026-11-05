@@ -25,11 +25,11 @@ tree wins — fix the skill in the same PR.
 Every suite runs on Chrome (default) and on Firefox (`NULO_E2E_BROWSER=firefox`). The reference for Firefox — the geckodriver + BiDi hybrid, each behaviour that differs and where it is absorbed, the debugging order — is [`apps/extension/tests/e2e/FIREFOX.md`](../../../apps/extension/tests/e2e/FIREFOX.md). What this skill needs you to hold:
 
 - **A browser difference goes on `BrowserDriver`** (`fixtures/browser/index.ts`), with a Chrome implementation next to the Firefox one. `scripts/e2e/browser-seam.test.ts` rejects a scheme literal, a direct `browser.close()` / `newPage()` / `waitForTarget()`, and any `isFirefox`/`BROWSER` branch under `fixtures/**` or `helpers/**`. A test file may use `isFirefox` to skip itself whole (`describe.skipIf(isFirefox)(CHROME_ONLY.<reason>, …)`), to keep a test headless Chrome cannot set up off Chrome (`describe.skipIf(!isFirefox)(FIREFOX_ONLY.<reason>, …)`), or to state a real difference in an expectation.
-- **Open, navigate, reload and click through the helpers**: `newPage`, `gotoExtensionPage`, `reloadExtensionPage`, `clickByTestId`/`clickSelector`, `pickFileByTestId`. Each hides a Firefox failure mode that does not look like its cause (a page in a window the wallet opened, a stranded context, a missing user gesture, an unfocused window).
+- **Open, navigate, reload, focus, size and click through the helpers**: `newPage`, `gotoExtensionPage`, `reloadExtensionPage`, `bringToFront`, `setViewport`/`viewportOf`, `clickByTestId`/`clickSelector`, `pickFileByTestId`. Each hides a Firefox failure mode that does not look like its cause (a page in a window the wallet opened, a stranded context, a command Firefox refuses on an extension page, a missing user gesture, an unfocused window).
 - **A Chrome-only file is a capability statement, not a quarantine.** The set is two files: `backup-restore-sw-restart` kills the background under an open extension page (Firefox leaves an event page running while one is open), and `import-dead-rpc` redirects over CDP Fetch. The two execution canaries run on both browsers — the passkey one moves its post-kill ceremony to a fresh popup where the driver's `credentialOutlivesPage` says the credential survives the anchor page. Adding a Chrome-only file is the owner's call.
 - **`bun run typecheck` checks the e2e tree** (`apps/extension/tsconfig.e2e.json`): it loads Node's types and no Bun types, so a `Bun` global is an error, as it would be at run time. A call form chrome-types leaves out goes in `tests/e2e/chrome-api.d.ts`, never under a `@ts-` directive. Types prove no timing: a spec still has to run.
 - **Red on Firefox only?** Read `document.visibilityState` and `document.hasFocus()` in the page before touching a fixture.
-- **Extension-page errors reach `pageErrors` and `consoleErrors` on Firefox through the driver's relay** (`fixtures/browser/firefox-page-errors.ts`, FIREFOX.md), proved on Firefox 153.0.4 by `page-error-capture.test.ts`. It calls two Firefox internals and fails the launch when either is gone. **A Firefox bump whose arming check or capture test fails is a hold on the bump**, never a `skipIf`, a soft-fail or a removed assertion. An error Firefox now records is a real failure: read its stack URL and text, never filter it.
+- **Extension-page errors reach `pageErrors` and `consoleErrors` on Firefox through the driver's relay** (`fixtures/browser/firefox-page-errors.ts`, FIREFOX.md), proved on Firefox 153.0.4 and 158.0 by `page-error-capture.test.ts`. It calls two Firefox internals and fails the launch when either is gone. **A Firefox bump whose arming check or capture test fails is a hold on the bump**, never a `skipIf`, a soft-fail or a removed assertion. An error Firefox now records is a real failure: read its stack URL and text, never filter it.
 - **Never navigate away from an extension page while it loads a route.** Firefox rejects the departing document's in-flight import (or the CSS preload before it) and the relay records it; Chrome recorded nothing for a cut import. So `waitForLockScreen` observes the popup's own redirect and never reloads (FIREFOX.md).
 - **The toolbar panel is drivable on Firefox only** (`fixtures/browser/firefox-action-popup.ts`): `openActionPopup` opens the real panel, `evaluateInActionPopup` reads and clicks in it, and `armPanelDeath` makes it die as a Mac's does when anything else takes focus, recording any WebAuthn call or file picker opened in it. Each panel call is privileged and focuses a browser window, which refuses a passkey prompt starting in another window at that moment: while a passkey window is up, read the outcome from a control page opened beforehand (`toolbar-panel.test.ts`). A passkey-window step that succeeds reopens the panel by itself on the window it started from (`armPopupReturn`), so a spec reads that panel rather than opening one; to count panels without moving focus, ask another extension page for `chrome.extension.getViews({ type: "popup" })`, which lists a preloading document too: the panel is open once that document has focus.
 
@@ -77,9 +77,10 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
 ### Hazards that mass-fail a run
 
 - **Both global setups `pkill` every Chrome loaded from THIS dist path**, at setup and at teardown.
-  Parallel worktrees are safe; smoke and network on ONE worktree are not, nor two `e2e:agent`
-  runs there (each rebuilds `dist/<browser>` and owns the worktree's `.e2e-state/`). Tell a
-  reviewer running locally not to invoke any e2e config.
+  Parallel worktrees are safe. On ONE worktree, smoke beside network is safe only when smoke
+  loads a copy of the armed build through `EXTENSION_PATH`, and two `e2e:agent` runs never are
+  (each rebuilds `dist/<browser>` and owns the worktree's `.e2e-state/`). Tell a reviewer running
+  locally not to invoke any e2e config.
 - **Heavy suites run alone on the host.** A concurrent `audit:vue`, a proving run, or a second
   suite starves the sandbox and the browsers; the signature is timeouts across unrelated files.
   Rerun before triage. Shard for wall-clock (`--shard=N/M` across agents), never overlap.
@@ -216,7 +217,7 @@ runtime env var can never arm a build-time flag.
 | `NULO_E2E_PROVERLESS=1` | `agent.sh` arms the proverless build pair |
 | `NULO_E2E_MIGRATION_FIXTURE=1` | runtime declaration that the dist carries the migration fixture |
 | `NULO_E2E_CSP_REPORT=1` | runtime declaration that the dist carries the CSP violation recorder: every launch's `close` fails on a missing record or any entry (README § CSP violations) |
-| `NULO_E2E_SHOT_DIR` | capture mode: `shotSend` writes light and dark PNGs there; CI never sets it. The shot page must be shown: Chrome's `newPage` opens a tab, which hides the tab before it, and a hidden page draws no frame, so `shotSend` refuses it; bring the page to front where the spec acts on it. A wallet whose token arrives untrusted (a backup import) opens the first-receive sheet over Home's middle, so a frame of Home's card comes from a fixture that imports its token through the UI (`tokenReadyExtension`) |
+| `NULO_E2E_SHOT_DIR` | capture mode: `shotSend` writes light and dark PNGs there; CI never sets it. The shot page must be shown: Chrome's `newPage` opens a tab, which hides the tab before it, and a hidden page draws no frame, so `shotSend` refuses it; bring the page to front where the spec acts on it. A wallet whose token arrives untrusted (a backup import) opens the first-receive sheet over Home's middle, so a frame of Home's card comes from a fixture that imports its token through the UI (`tokenReadyExtension`). The approval window decodes its calls after `waitForExecuteContent` returns, so a shot of its summary first waits until no `execute-op-summary-args-pending` shows, or it pictures "Reading arguments…" (`network/tx-sendTx-multicall.test.ts`) |
 | `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): guarded with the node stand-in like a source run, skips the encrypted `backup-roundtrip` spec and the armed-dist check, and provides `liveLeg`, which runs `shipped-token-list.test.ts`, the one launch that reaches the live Testnet node; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
 | `EXTENSION_PATH` | smoke: load this unpacked dir instead of `dist/chrome` |
 | `NULO_E2E_DATA_ROOT` | sandbox run-dir root (default `~/.cache/nulo-e2e`); short enough that `<run dir>/tmp` plus the node's 28-byte socket names fits `sun_path`, which setup checks |
@@ -307,6 +308,9 @@ then measured runtime, with each browser's suite wall-clock before and after in 
   teardown, so it is not vitest's test time. Report a cancelled, timed-out or rerun attempt apart,
   never folded in: a later attempt's envelope spans the gap between attempts.
 - **Scenario runtime** is the per-file duration vitest's reporter prints for the file.
+- **A local run reads each spec when its worker starts it, not at launch**, so an e2e file edited
+  while a timing run goes changes what that run measures: leave the e2e files alone until it ends,
+  and time a base on the base's own e2e files.
 - **What a launch costs** (one host, medians of five, 2026-10): a fresh launch + `registerProfile` +
   close is 5.0 s on Chrome (the worker's liveness 2.0 of it) and 9.2 s on Firefox (the driver 3.2).
   A stored onboarded profile per worker saves 0.7 s / 1.1 s per registered launch on smoke and
@@ -391,6 +395,13 @@ redirect.
 `clickByTestId` calls `el.click()` in the page (`fixtures/dom.ts`), which an SVG element
 does not have, so an icon-only `<Icon>` target throws inside the wait and times out: press it with
 `pointerClick`.
+
+A field that judges an edit on `beforeinput` (the design `Input`'s `int` subtype) needs the edit
+raised as a browser raises it: `document.execCommand("insertText")` raises no `beforeinput` on
+Chrome. `page.keyboard.sendCharacter(text)` does (`insertText`, the pre-edit selection), but Firefox's
+BiDi `sendCharacter` takes one character, so a multi-character insertion there is a real paste:
+`navigator.clipboard.writeText(text)`, then Control+V (`insertFromPaste`). (puppeteer-core 25.14,
+2026-10.)
 
 **`waitForFunction` with page-function arguments needs a non-empty options object.** `patchPagePolling`
 finds the options argument by looking for a `timeout` or `polling` key. A bare `{}` has neither, so the
@@ -612,7 +623,9 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
 - **Passkeys: the virtual authenticator is per FrameTreeNode**, not per browser context, and PRF
   state is not serialisable over CDP. Register, lock/unlock, the phrase reveal and the full backup are
   drivable in the SAME popup (`fixtures/passkey.ts` `setupPasskeyVirtualAuth`); cross-popup and cross-authenticator flows
-  are not (`apps/extension/tests/e2e/PRF-NON-PORTABLE.md`). Keep the anchor popup open. Firefox's
+  are not (`apps/extension/tests/e2e/PRF-NON-PORTABLE.md`). Keep the anchor popup open; across an
+  in-place update, which closes every extension page, park that tab on `about:blank` and bring it back
+  (`update-replay.test.ts`, the release-made passkey case). Firefox's
   authenticator is session-scoped (`credentialOutlivesPage`), and only there does the toolbar panel
   hand a passkey step to the passkey window (`toolbar-panel.test.ts`). A step that must stay
   in the page says so: `watchPasskeySurface` / `readPasskeySurface` record whether the card mounted and
@@ -622,7 +635,12 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   verification has failed, and CDP's `isBadUV` / `isBadUP` response bits fail nothing, so on Chrome
   the page answers that one request with Chrome's `NotAllowedError`. Both authenticators answer in
   milliseconds, so to read the page while a step waits on its passkey, hold the request with
-  `holdNextPasskeyRequest` and release it once read (`passkey-retry.test.ts`).
+  `holdNextPasskeyRequest` and release it once read (`passkey-retry.test.ts`). A page opened
+  mid-test takes focus, and Chrome then fails a passkey prompt from the page it left as not
+  confirmed: `bringToFront` the page that asks first (`raceMethodChangeElsewhere` in
+  `helpers/profile-chaos/unlock-method.ts`).
+- **A popup page opened while a session is open lands on Home once its bootstrap ends**, over any
+  route set before that: wait for `#/popup/general`, then route it (`secondWindow`, `raceMethodChangeElsewhere`).
 - **A mid-restore kill is two deliberately gated scenarios**, each enforcing its own contract: a
   kill at `service-restore` must roll back, a kill at `account-state` must recover. The
   `restore-gate` rendezvous anchors the kill at the named phase; a torn refusal is the failure
@@ -682,6 +700,14 @@ the pattern.
   left in its inputs, so a grant after `consumeAuthwit` asks under that request's owner and opens no
   window. Each request sets, or clears with `""`, every input an earlier request in its test
   changed (`requests` in `network/type-roles-windows.test.ts`).
+- **A new identifier site in a network window needs a sweep that reaches it.** Every
+  `AddressDisplay`, hash or id a template renders is an entry of
+  `scripts/type-roles/identifier-sites.expected.json` (`inventory.test.ts` prints a missing one as
+  `TODO`), keyed by its `branch`, which a template change that re-wraps it moves. A network-owned
+  entry (`state` ending `(network)`) must also be read by a state `type-roles-windows.test.ts`
+  renders, or that file's last test fails: budget the sweep as an e2e scenario. An `AddressDisplay`
+  paints its name only once its contact lookup returns; wait on `[data-address-shows="name"]`
+  before reading it (`implementations-plan/archive/authwit-window-1/lessons/phase-1.md`).
 - **The dApp never sees the wallet's real error.** A failed `simulateTx` / `sendTx` reaches the feed
   as `"The wallet could not process the request."` (the scrubbed envelope, by design). The reason
   is in the worker's log trail, retained only with Developer Mode on: toggle
@@ -730,16 +756,16 @@ the pattern.
 - **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a
   glyph's middle and about half a pixel right of it, and a drag of one single move leaves a bare
   caret: press a quarter in from a character's outer edge and move in steps
-  (`navigation.test.ts`'s `textEdge` and `dragSelect`). Firefox 153 keeps the text a drag ends on
-  even inside a `user-select: none` control, so a selection test bans only the controls a drag
-  crosses (`FIREFOX.md`).
+  (`navigation.test.ts`'s `textEdge` and `dragSelect`). Firefox 153 and 158 keep the text a drag
+  ends on even inside a `user-select: none` control, so a selection test bans only the controls a
+  drag crosses (`FIREFOX.md`).
 - **Chrome's created windows keep the launch size.** The launch passes `--window-size=400,600`
   (`fixtures/browser/chrome.ts:40`); under it `windows.create` honours `left` and `top` but not
   `width` or `height` (popups 400×600, normal windows 500×600), while `windows.update` honours
   sizes. A spec that measures a created window launches with `fixedWindowSize: false`
   (`network/window-placement.test.ts:46`). Headless Chrome also moves focus only when it creates a
-  window: `windows.update({ focused: true })` and `bringToFront()` fire no `onFocusChanged`. Firefox
-  honours sizes and focus.
+  window: `windows.update({ focused: true })` and the seam's `bringToFront` fire no
+  `onFocusChanged`. Firefox honours sizes and focus.
 - **An approval window's page can have no viewport.** `waitForPopup` wraps approval windows with
   `target.asPage()` (`fixtures/popups.ts:62`). On that path the page is created by
   `CdpTarget.asPage`'s fallback with a `null` viewport (puppeteer-core 25.8.0, `cdp/Target.js:54-70`;
@@ -792,8 +818,10 @@ the pattern.
   `patchPagePolling` swaps it for a `waitForFunction` poll (`fixtures/dom.ts`),
   so a probe that reads a box from its result reads nothing: take the element with `page.$`
   after the wait.
-- **The e2e price seed covers `usd-coin` only**, while the wallet also asks for `aztec`
-  (`allCoingeckoIds`), so wherever CoinGecko answers, `refreshIfStale` or the 3-minute alarm
+- **The e2e price seed covers `usd-coin` only**, while the wallet also asks for `aztec` and every
+  other feed the held list names (`priceIdsOf`; the e2e signers name `tether` beside `usd-coin`,
+  from `E2E_PRICE_FEEDS` in `fixtures/token-list.ts`, and only for the tokens a list carries), so
+  wherever CoinGecko answers, `refreshIfStale` or the 3-minute alarm
   replaces the $1 seed mid-test and every fiat figure moves. Wait for a priced figure, never
   for an exact one carried across a remount
   (`implementations-plan/archive/hygiene/plan.md#price-settle`).
@@ -1058,6 +1086,10 @@ the sanctioned response.
 | 62 | `"restoreError": "Skipped: couldn't reach the network"` where `StringContaining "Skipped: ran out of time reaching the network"` was expected, after the Retry (`network/backup-import-stalled-network.test.ts`, Firefox network shard 5/5 of run 39348656493, #911) | the stub holds every Testnet call but the identity probe, and a browser opens six connections per host over HTTP/1.1. `dropUnanswered` reset the held calls' sockets, but a browser re-sends at once a request whose connection closes before any reply (both browsers on a reused connection, Firefox also on some new ones), so six copies refilled the pool and the Retry's probe timed out three times. Forced: red 2 of 3 on Firefox; a probe holding six calls on reused connections starved the next call 3/3 on each browser | `refuseUnanswered()` answers the held calls with the node stand-in's 400 (`refuseNodeCall`), which neither the transport nor the node client re-sends: 10/10 Firefox, 5/5 Chrome, forced green on both. Rule: end a held call with a terminal 4xx and a JSON-RPC body, never a reset (`implementations-plan/archive/stalled-retry-flake-1/`). Known limits #917, #918 | fixed, `stalled-retry-flake-1` |
 | 63 | `viewers-csp` on Firefox smoke under load (#849): "a selection at the end holds the view" or the search case moves 36-72 px (`expectHeld`), or the follow case reds `scrolledAway` with no button shown | three causes. P1, product: the viewer's own follow scroll, landing after a selection or search-field stop, read as the reader scrolling back down and resumed the follow; Chrome masks it, since its `selectionchange` from CodeMirror's next selection rewrite re-stops the follow before that scroll lands, and Firefox's comes after CodeMirror's measure. T1: the follow latch read the gap in a capture listener, before CodeMirror's own listener landed a follow still due. T2: the hold's baseline was read before the drag, while the viewer still followed as it must | T1, the latch listens after the viewer, and the button's observer no longer stops it mid-dispatch; T2, the line is read two frames after the test's `selectionchange` sees the selection; P1, the follow leaves a reference no scroll exceeds until its own scroll event resets it, reading no geometry (a geometric pin forced a layout per followed line, +42.7% on Firefox's 500-line burst). Rule: a check reads the state where the component judges it, after its listeners | fixed, `viewer-flake-1` |
 | 64 | `viewers-csp`'s search case: `expected 18 to be less than 10` (18-83) at its `gapToEnd` read after the refocus (#922; natural on Firefox in 1 of 8 runs) | the case scrolled back to the end itself and read the gap after refocusing the search field. A wallet line between that scroll and its event was held (F3's focus had stopped the follow), and the event then resumed the follow in the end band without scrolling, 18 px off the end. A wallet line after the refocus was held below the view. Both, forced, red 8/8 per browser on a correct viewer | the case holds one line, resumes the follow with the viewer's own scroll-to-end button (`clickByTestId`), reads the gap while it follows, then refocuses the field and measures the hold from two frames later. Rule: reach a precondition through the component's own control, and read it while the component's rule makes it certain | fixed, `viewer-followups-1` |
+| 65 | `TimeoutError: Waiting failed: 15000ms exceeded` in `reopen`'s `waitForHash(page, "#/popup/general")` (`fixtures/burst-account.ts`), then `transfer 10000000000000000000 left the queue without an accept` in the Urgent re-ask case, the row at `proving` (`network/same-token-concurrent-sends.test.ts`, Firefox heavy concurrent-confirm shard, run 40609217178, retry 0; its rerun passed; #1300) | not reproduced. Ten shard runs at retry 0 on four CPUs of a loaded host, with a route trajectory and a 100 ms stall sampler in every reopened popup and B's queued cap read at the press, were all green: no reopen took over 1.6 s to Home, no visible gap passed 200 ms, and B's queued cap was the seed's every time (`implementations-plan/archive/e2e-followups-1/lessons/phase-3.md`) | both failures now name what they saw: a `waitForHash` timeout the hash the page was at, the Urgent case the cap its review showed at the press beside the seed's | **open**: rerun once; on a second first-attempt failure of either, reopen #1300 with the new message. Another route or an overlay at the reopen is H3, a stall with a stack is H1, a reviewed cap that is not the seed's is H2b, the seed's cap with a built fee inside it is H2a (that plan's D7) |
+| 66 | `TimeoutError: Waiting failed: 15000ms exceeded` at `token-list.test.ts`'s wait for the flagged `SCAM` row in the Send picker (Firefox smoke, 2 of 5 local runs at retry 0) | the spec seeded a token row with transfer functions and no balance functions, and the projector fills a side with no `balanceOf` function with "0" without asking any node, so the Testnet refusal could not hold the seeded balance: a background sync mid-test wrote a read zero, and the picker, which folds empty rows behind "N empty", hid the row | the seed names `balanceOfPublicFn` and `balanceOfPrivateFn`, so a refresh asks the refused node and keeps the seed; 4 of 4 Firefox runs of the file passed after, then both browsers' smoke gate. Rule: a seeded token row whose balance a spec relies on names both balance functions | fixed |
+| 67 | `TimeoutError: Waiting failed: 15000ms exceeded` at `send-picker-add.test.ts`'s wait for the flagged add row (`select-token-add-token-flagged`), both `smoke-against-artifact` jobs, Chrome and Firefox (nightly of 2026-10-29) | deterministic, not a flake: an artifact run holds the published token list, which flags no pair, and the add row's flag has one source, the verified list, so the fixture pair the source run's list flags is never flagged there. Row 44's class: a smoke assertion that holds only for the source run's data | the flag-on-paste check runs in source runs only, in `token-list.test.ts`'s source-run `describe`; the Send picker spec keeps its flow in both modes (#1352). Before, red on both browsers against a release build at retry 0; after, green in both modes on both browsers. Rule: a smoke spec that needs the held list to flag a pair runs in that `describe` (`tests/e2e/README.md`, held list) | fixed, `nightly-smoke-1` |
+| 68 | `PollTimeoutError: the picker's input clicked and cancelled: not within 10000 ms; last: {"type":"file","connected":true,"active":true}` at `toolbar-panel.test.ts`'s contacts card step (Firefox smoke, retry 0, #1222) | headless Firefox answers its native file picker by window focus: an unfocused window's pick is cancelled at once, a focused one's never answered. The step waited on the cancel, `pickFile` on the hold, and the suite controls neither; with the card window focused before its click the base missed 3 of 3 on Firefox 158 | each Firefox launch registers a stand-in for `@mozilla.org/filepicker;1` (`fixtures/browser/firefox-file-picker.ts`): a pick nobody armed is cancelled at once, the one `pickFile` arms for its page is held and answered with the file; Firefox's `prepareClick` renews the page's activation, since a picker consumes the one activation Puppeteer's evaluates share. Forced focus 3 of 3 and normal 10 of 10 green after, then the whole smoke, chaos and network suites on Firefox at retry 0. Rule: no Firefox pick reaches the native picker (`FIREFOX.md`) | fixed, `flake-1` |
 
 ## 6. Editing the harness
 

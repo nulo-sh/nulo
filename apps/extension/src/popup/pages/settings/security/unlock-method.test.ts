@@ -58,6 +58,7 @@ vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.pan
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
 	moveToOwnWindow: (route: string) => surface.move(route),
+	leavePanelFor: async (route: string) => surface.panel && (await surface.move(route)),
 }))
 
 import { useAppStore } from "@/stores/app.store"
@@ -278,6 +279,20 @@ describe("a passkey profile", () => {
 		expect(w.text()).toContain("At least 8 characters")
 		await typePassword(w, "unlock-method-new-password-input", "new-password")
 		expect(w.text()).toContain("Passwords don't match")
+	})
+
+	test("a revealed new password stays revealed when the step closes and opens again", async () => {
+		const w = await atPasskey()
+		await click(w, "unlock-method-use-password")
+		await click(w, "unlock-method-new-password-input-visibility-toggle")
+		const types = () =>
+			["unlock-method-new-password-input", "unlock-method-new-password-confirm-input"].map((id) => nativeInput(w, id).type)
+		expect(types()).toEqual(["text", "text"])
+		useAppStore().profile = { id: "p2", name: "Other", type: "passkey" } as never
+		await flushPromises()
+		expect(has(w, "unlock-method-new-password-input")).toBe(false)
+		await click(w, "unlock-method-use-password")
+		expect(types()).toEqual(["text", "text"])
 	})
 
 	test("a switch to another profile drops the held answer: Save then changes nothing", async () => {

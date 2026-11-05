@@ -8,6 +8,7 @@
  * is a display vocabulary, not proof of the contract's semantics.
  */
 
+import { isHex32 } from "@nulo/wallet-core/utils"
 import { findMintSignature, findTransferSignature } from "./token-transfer-vocabulary"
 
 export type TransferIntent =
@@ -74,9 +75,6 @@ function readMint(args: unknown[], params: readonly string[]): TransferIntent {
 	return to === undefined || amount === undefined ? { kind: "unverified" } : { kind: "mint", to, amount }
 }
 
-/** Canonical 32-byte hex form — what an Aztec address serializes to. */
-const HEX_ADDRESS_RE = /^0x[0-9a-fA-F]{64}$/
-
 /** Canonical numeric form — pure decimal, or `0x`-prefixed hex up to one field. No exponent, whitespace or Unicode digits. */
 const CANONICAL_NUMBER_RE = /^(0x[0-9a-fA-F]{1,64}|\d+)$/
 
@@ -85,7 +83,7 @@ const CANONICAL_NUMBER_RE = /^(0x[0-9a-fA-F]{1,64}|\d+)$/
 function canonicalAddress(arg: unknown): string | undefined {
 	const projected = projectToString(arg)
 	if (projected === undefined) return undefined
-	return HEX_ADDRESS_RE.test(projected) ? projected : undefined
+	return isHex32(projected) ? projected : undefined
 }
 
 /** Amounts read as decimal integers whatever their wire spelling: an `Fr` arrives as 32-byte hex, and
@@ -104,7 +102,7 @@ export function projectArgument(arg: unknown): ProjectedArgument {
 	if (typeof arg === "bigint") return { kind: "text", value: arg.toString() }
 	const projected = projectToString(arg)
 	if (projected === undefined) return { kind: "opaque" }
-	return HEX_ADDRESS_RE.test(projected) ? { kind: "field", value: projected } : { kind: "text", value: projected }
+	return isHex32(projected) ? { kind: "field", value: projected } : { kind: "text", value: projected }
 }
 
 /** A field below 2^64 is a count or an amount far more often than a hash, and reads better as a decimal. */

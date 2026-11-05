@@ -165,7 +165,7 @@ watch(
 
 <style module>
 .wrapper {
-	composes: body from "./popup-shared.module.css";
+	composes: body from "@/components/Popup/popup-shared.module.css";
 }
 
 /* Below the popup's width a capability's mark goes under its key, at the right, when the two do not

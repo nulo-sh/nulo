@@ -103,12 +103,12 @@ Then:
       public page only once it has published it). Both did on 2026-10-19 and on 2026-10-24 (AMO's
       page answers a script with a challenge; its API reads the add-on public)
 - [x] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green
-- [ ] After the deploy and before the Release PR merges, `nulo.sh/terms` shows **no DRAFT banner**
+- [x] After the deploy and before the Release PR merges, `nulo.sh/terms` shows **no DRAFT banner**
       and no `noindex` meta, and the current version's permalink (`nulo.sh/terms/v<version>/`)
-      shows no DRAFT banner. A permalink always carries `noindex`: it duplicates the canonical page
+      shows no DRAFT banner. A permalink always carries `noindex`: it duplicates the canonical page (verified 2026-10-30: no DRAFT banner, no `noindex` on `nulo.sh/terms`; the permalink `nulo.sh/terms/v1.2/` shows none)
 - [ ] Chrome (owner): set the listing to Public before the 1.0.0 store dispatch; an approved staged
       submission locks every dashboard field ([`release` skill](./.claude/skills/release/SKILL.md),
-      troubleshooting)
+      troubleshooting) (2026-10-30: the listing is unlisted until the release announcement, the owner's call)
 - [ ] AMO (owner): remove the "This add-on is experimental" flag
 - [x] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten to the
       owner's picks (2026-10-19, decision page 68)
@@ -148,9 +148,9 @@ promote publishes it, so until then it reads `«FILL: effective date»`:
 
 - [x] `legal/privacy.md` — the version line and the 1.2.2 history row, dated the day it is published
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.2 (25 October 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.2/` show no DRAFT banner, and
+- [x] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.2/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.2 text (`apps/extension/store/listing.md` § Privacy
-      policy text)
+      policy text) (verified 2026-10-30: no DRAFT banner; AMO's field carries the 1.2.7 text, which supersedes 1.2.2)
 
 **Due at the release that publishes privacy 1.2.3:** § 3 says which data is stored encrypted. The
 version is archived and in place, and its effective date, like 1.2.2's, is the day the promote
@@ -159,11 +159,11 @@ publishes it. A promote that publishes both dates both, and the archived
 
 - [x] `legal/privacy.md` — the version line and the 1.2.3 history row, dated the day it is published
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.3 (25 October 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.3/` show no DRAFT banner, and
+- [x] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.3/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.3 text (`apps/extension/store/listing.md` § Privacy
-      policy text)
-- [ ] The Chrome Web Store's `storage` justification is re-pasted from `apps/extension/store/listing.md`
-      § Permissions, which now says the data is encrypted
+      policy text) (verified 2026-10-30: no DRAFT banner; AMO's field carries the 1.2.7 text, which supersedes 1.2.3)
+- [x] The Chrome Web Store's `storage` justification is re-pasted from `apps/extension/store/listing.md`
+      § Permissions, which now says the data is encrypted (done 2026-10-30; Chrome reviews it with the next upload)
 
 **Due at the release that publishes privacy 1.2.4:** § 3 drops pinned tokens, fee-payer choices
 and the last-selected account from its exceptions. Its effective date, like 1.2.3's, is the day the
@@ -172,9 +172,9 @@ promote publishes it. A promote that publishes both dates both, and the archived
 
 - [x] `legal/privacy.md` — the version line and the 1.2.4 history row, dated the day it is published
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.4 (25 October 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.4/` show no DRAFT banner, and
+- [x] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.4/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.4 text (`apps/extension/store/listing.md` § Privacy
-      policy text)
+      policy text) (verified 2026-10-30: no DRAFT banner; AMO's field carries the 1.2.7 text, which supersedes 1.2.4)
 
 **Due at the release that publishes privacy 1.2.5:** § 5.1 names the Testnet endpoint as the one on
 the Developer's provider account. Its effective date, like 1.2.4's, is the day the promote publishes
@@ -183,9 +183,9 @@ them:
 
 - [x] `legal/privacy.md` — the version line and the 1.2.5 history row, dated the day it is published
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.5 (25 October 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.5/` show no DRAFT banner, and
+- [x] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.5/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.5 text (`apps/extension/store/listing.md` § Privacy
-      policy text)
+      policy text) (verified 2026-10-30: no DRAFT banner; AMO's field carries the 1.2.7 text, which supersedes 1.2.5)
 
 **Due at the release that publishes Terms 1.2 and privacy 1.2.6:** both say that a passkey profile
 has a recovery phrase. Terms 1.2 is material, so every install that accepted 1.1 meets the
@@ -194,9 +194,54 @@ re-acceptance sheet. Both effective dates are the day the promote publishes them
 - [x] `legal/terms.md` and `legal/privacy.md` — the version lines and the 1.2 and 1.2.6 history
       rows, dated the day they are published (27 October 2026)
 - [x] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.2 and `privacy` 1.2.6, same date
-- [ ] After the deploy, `nulo.sh/terms`, `nulo.sh/terms/v1.2/`, `nulo.sh/privacy` and
+- [x] After the deploy, `nulo.sh/terms`, `nulo.sh/terms/v1.2/`, `nulo.sh/privacy` and
       `nulo.sh/privacy/v1.2.6/` show no DRAFT banner, and AMO's Privacy policy field carries the
-      1.2.6 text (`apps/extension/store/listing.md` § Privacy policy text)
+      1.2.6 text (`apps/extension/store/listing.md` § Privacy policy text) (verified 2026-10-30: no DRAFT banner on either page or permalink; AMO's field carries the 1.2.7 text)
+
+**Due at the release that publishes Terms 1.2.1:** the summary box names the default network as
+Nulo shows it, Alpha. A patch, so nobody is asked to accept again. The version is archived and in
+place; its effective date is the day the promote publishes it, so until then it reads
+`«FILL: effective date»`:
+
+- [x] `legal/terms.md` — the version line and the 1.2.1 history row, dated the day it is published (5 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.2.1 (5 November 2026), same date
+- [ ] After the deploy, `nulo.sh/terms` and `nulo.sh/terms/v1.2.1/` show no DRAFT banner
+
+**Due at the release that publishes privacy 1.2.8:** § 5.2 says prices are requested for the price
+identifiers the signed token list names, and for AZTEC. A patch, so nobody is asked to accept again.
+The version is archived and in place; its effective date is the day the promote publishes it, so
+until then it reads `«FILL: effective date»`:
+
+- [x] `legal/privacy.md` — the version line and the 1.2.8 history row, dated the day it is published (5 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.8 (5 November 2026), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.8/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.8 text (`apps/extension/store/listing.md`
+      § Privacy policy text)
+
+**Due at the release that publishes privacy 1.2.9:** §§ 5.11 and 6 say the token list is downloaded
+about every six hours, retried within minutes then less often after a failure, and on request in
+Settings → Tokens. A patch, so nobody is asked to accept again. The version is archived and in
+place; its effective date is the day the promote publishes it, so until then it reads
+`«FILL: effective date»`. A promote that publishes both 1.2.8 and 1.2.9 dates both, and the archived
+`legal/archive/privacy-1.2.8.md` with them, since it was archived before its date was known:
+
+- [x] `legal/privacy.md` — the version line and the 1.2.9 history row, dated the day it is published (5 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.9 (5 November 2026), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.9/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.9 text (`apps/extension/store/listing.md`
+      § Privacy policy text)
+- [ ] The Chrome Web Store's `alarms` justification is re-pasted from `apps/extension/store/listing.md`
+      § Permissions, which now says the token list refreshes about every six hours
+
+**Due at the release that publishes website notice 1.1:** the notice drops the email at store
+launch and says replies reach hello@nulo.sh. It is dated for the promote that publishes it, 5
+November 2026; the landing and `nulo-subscribe` both deploy from that promote's push to `main`:
+
+- [x] `legal/website-privacy.md` — the version line and the 1.1 history row carry the day the
+      promote lands (5 November 2026); on any other day, both move to it before the promote merges
+- [ ] After the deploy, `nulo.sh/website-privacy` shows 1.1 and `nulo.sh/website-privacy/v1.0/`
+      shows the 1.0 text
+- [ ] `nulo-subscribe` deployed from the same push, so a new signup records `consent_version` 1.1
 
 **Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
 2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
@@ -205,6 +250,16 @@ re-acceptance sheet. Both effective dates are the day the promote publishes them
       until it is, an rc.3 update shows a store-installed V6 account the integrity barrier. #485,
       #486 and #487 merged on 2026-10-15, and #497 promoted them before 0.31.0 went to the stores
       that day
+
+**Due at the release that carries the store's audit note** (owner's pick, 2026-11-02, decision
+page 93, P93-46 C): the long description's "No account, no telemetry." is followed by "Not audited.
+See the Privacy Policy for what leaves your device.", and screenshot 4's caption carries the same
+two sentences. The dashboards are filled by hand, after the promote lands:
+
+- [ ] Chrome (owner): paste `apps/extension/store/listing.md` § Long description and replace
+      screenshot 4 with `apps/extension/store/screenshot-4-1280x800.png`, before the release's
+      store dispatch (an approved staged submission locks every dashboard field)
+- [ ] AMO (owner): the same description and screenshot 4
 
 The owner's live-Testnet send moved to § 3: from the 1.0.0 candidate, before the promote (owner's
 call, 2026-10-19, decision page 68).

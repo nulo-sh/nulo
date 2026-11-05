@@ -6,6 +6,7 @@ import SettingItem from "@/components/ui/Settings/SettingItem.vue"
 /** Utils */
 import { isComposing } from "@nulo/design/composables/keys.ts"
 import { searchSettings, settingsResultTo, visibleSettingsRows } from "@/utils/settings-search"
+import { stripBidiAndZeroWidth } from "@/utils/string"
 
 const props = defineProps({
 	/** The `SettingsContext` that decides which rows exist. */
@@ -71,6 +72,7 @@ function onKeydown(e) {
 		<Input
 			ref="field"
 			v-model="query"
+			:normalize="stripBidiAndZeroWidth"
 			icon="search"
 			clearable
 			placeholder="Search settings"

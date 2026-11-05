@@ -39,7 +39,6 @@ export interface RunState {
 	bindings: Bindings
 	secrets: Map<SecretRef, string>
 	phrases: Map<PhraseRef, string[]>
-	credentials: Map<CredentialRef, string>
 	files: Map<FileRef, HeldFile>
 	/** The run's own directory: downloads and corrupted copies land here. */
 	dir: string
@@ -75,14 +74,17 @@ export interface RunState {
 	/** The rows a release wrote plain in roots sealed since, by key: they stay plain until their
 	 *  profile next opens, and only these bytes are exempt. */
 	legacyPlain: Record<string, string>
-	/** What an update leaves for the first open of the release's profile, answered between steps
-	 *  once a step ends with it open, then cleared. */
-	afterUpdate?: { ref: ProfileRef; answer: (s: RunState) => Promise<void> }
+	/** What an update leaves for the first open of each release profile, answered between steps
+	 *  once a step ends with that profile open, then dropped. */
+	afterUpdate: Map<ProfileRef, FirstOpen>
 	/** Present on a run with a node. */
 	network?: NetworkRun
 }
 
 export type Drive = (s: RunState, params: unknown, step: PlannedStep, before: World) => Promise<Driven>
+
+/** Answers what an update left for one profile's first open, on the anchor. */
+export type FirstOpen = (s: RunState) => Promise<void>
 
 /** What a run with a node adds: the network file's own drivers, and the move that puts a profile a
  *  step opened for the first time on the node's network, before the step's checks read it. */
@@ -103,7 +105,6 @@ type Derived =
 	| "bindings"
 	| "secrets"
 	| "phrases"
-	| "credentials"
 	| "files"
 	| "extras"
 	| "logs"
@@ -115,6 +116,7 @@ type Derived =
 	| "prf"
 	| "salts"
 	| "legacyPlain"
+	| "afterUpdate"
 
 export function newRunState(init: Omit<RunState, Derived>): RunState {
 	return {
@@ -123,7 +125,6 @@ export function newRunState(init: Omit<RunState, Derived>): RunState {
 		bindings: emptyBindings(),
 		secrets: new Map(),
 		phrases: new Map(),
-		credentials: new Map(),
 		files: new Map(),
 		logs: { lastId: 0, carried: [], seen: [], searched: new Set(), gaps: [] },
 		errorMark: 0,
@@ -134,6 +135,7 @@ export function newRunState(init: Omit<RunState, Derived>): RunState {
 		prf: new Set(),
 		salts: new Map(),
 		legacyPlain: {},
+		afterUpdate: new Map(),
 	}
 }
 
@@ -152,5 +154,12 @@ export const wrongSecret = (): string => `Wrong-${randomBytes(9).toString("base6
 export function profileId(s: RunState, ref: ProfileRef): string {
 	const id = s.bindings.profiles.get(ref)
 	if (!id) throw new Error(`${ref} is not bound to a profile yet`)
+	return id
+}
+
+/** The id the wallet stores for `ref`, bound from the answer that minted it. */
+export function credentialId(s: RunState, ref: CredentialRef | undefined): string {
+	const id = ref && s.bindings.credentials.get(ref)
+	if (!id) throw new Error(`${ref ?? "no credential"} is not bound to a credential yet`)
 	return id
 }

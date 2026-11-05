@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
@@ -25,7 +26,8 @@ import { batchedViewSimulation } from "@/wallet/services/execution/helpers/batch
 import type { PreparedWrite, SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { tokenKey } from "@nulo/token-list"
+import { EventHandler, raceTimeout } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { feeJuiceAddress, feeJuiceName, feeJuiceSymbol } from "@/wallet/utils/fee-juice"
 import { buildViewCall, type ViewFn } from "@/wallet/utils/fn"
@@ -41,8 +43,10 @@ import {
 	type TokenUpdated,
 	type SeedScope,
 	type SeedStatusSnapshot,
+	TOKEN_ID_HIGH_WATER_KEY,
 	TOKEN_SERVICE_NAME,
 	TokenSchema,
+	decodeTokenIdHighWater,
 	type TokenInterface,
 	type Methods,
 	type Events,
@@ -119,6 +123,8 @@ type SeederOverrides = {
 	getSeeds?: () => Promise<readonly DefaultTokenSeed[] | undefined>
 }
 
+export type TokenServiceOptions = { pxeClientFactory?: ShallowPxeClientFactory; seederOverrides?: SeederOverrides }
+
 export class TokenService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getTokens",
@@ -152,6 +158,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	 *  watchdog released keeps running, so every admission waits for these before it reads. */
 	private readonly pendingWrites = new Set<Promise<unknown>>()
 	private readonly browserApi: BrowserApi
+	private readonly pxeClientFactory: ShallowPxeClientFactory
 	private readonly seederOverrides?: SeederOverrides
 	private seeder: TokenSeeder = null!
 
@@ -165,15 +172,11 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	/** Stateless; the execution service owns another. Depending on that service for it would be a cycle. */
 	private readonly contractResolver: ContractResolver
 
-	public constructor(
-		logger: ILogger,
-		browserApi: BrowserApi,
-		private readonly pxeClientFactory: ShallowPxeClientFactory = DEFAULT_SHALLOW_PXE_CLIENT_FACTORY,
-		seederOverrides?: SeederOverrides,
-	) {
+	public constructor(logger: ILogger, browserApi: BrowserApi, options: TokenServiceOptions = {}) {
 		super(TOKEN_SERVICE_NAME, logger)
 		this.browserApi = browserApi
-		this.seederOverrides = seederOverrides
+		this.pxeClientFactory = options.pxeClientFactory ?? DEFAULT_SHALLOW_PXE_CLIENT_FACTORY
+		this.seederOverrides = options.seederOverrides
 		this.contractResolver = new ContractResolver(logger)
 		this.tokens = sealedEntityStorage("tokens", browserApi.storage.local, (profileId) => this.profiles?.rowKeys(profileId))
 	}
@@ -188,7 +191,12 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		this.tokenList = services.get(TokenListService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networks.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
-		this.profiles.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profiles,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext tokens failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 
 		// Default-token seeding: lazy, single-flight, TOFU-pinned (see
 		// default-tokens.ts + seeder.ts). Triggered on unlock, on active-network
@@ -231,17 +239,13 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	 * write would otherwise be undone.
 	 */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.tokens.sealLegacy(profileId, (fn) =>
-				this.withTokenLock((ownsLock) => {
-					const sweeps = this.chainSweepEpoch
-					return fn(() => ownsLock() && this.chainSweeps === 0 && this.chainSweepEpoch === sweeps)
-				}),
-			)
-			await this.seeder.sealLegacyMarker(profileId)
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext tokens failed; the next worker retries", { error })
-		}
+		await this.tokens.sealLegacy(profileId, (fn) =>
+			this.withTokenLock((ownsLock) => {
+				const sweeps = this.chainSweepEpoch
+				return fn(() => ownsLock() && this.chainSweeps === 0 && this.chainSweepEpoch === sweeps)
+			}),
+		)
+		await this.seeder.sealLegacyMarker(profileId)
 	}
 
 	private readonly onActiveProfileChangedSeed = (profile: ProfileInfo | undefined): void => {
@@ -504,7 +508,9 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		const existing = await this.findToken(input.profileId, input.tokenInterface.chainId, input.tokenInterface.contract)
 		if (existing) return attempt.ownsLock() ? await this.journalSucceeded(attempt, existing) : carried
 		const metadata = carried.stage === "fetched" ? carried.metadata : await this.addMetadata(attempt)
-		const token = buildToken(input.profileId, input.tokenInterface, metadata, await nextNumericId(this.tokens))
+		const id = await this.reserveTokenId(attempt.ownsLock, attempt.track)
+		if (id === undefined) return { stage: "fetched", metadata }
+		const token = buildToken(input.profileId, input.tokenInterface, metadata, id)
 		const write = await this.tokens.prepare(`${token.id}`, token)
 		// Assert authority flush against the write: the metadata fetch
 		// can span a profile deletion or the network's purge cascade —
@@ -624,6 +630,21 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		const settled = () => this.pendingWrites.delete(tracked)
 		void tracked.then(settled, settled)
 		return tracked
+	}
+
+	/**
+	 * Reserves the next token id: the mark lands before the row that takes the id, so while the mark is
+	 * intact and below the top of the id space neither a delete nor a crash between the two frees one.
+	 * `undefined` once the ticket is lost, since a released holder's mark would land over a successor's.
+	 */
+	private async reserveTokenId(ownsLock: () => boolean, track: (write: Promise<void>) => Promise<void>): Promise<number | undefined> {
+		const area = this.browserApi.storage.local
+		const mark = decodeTokenIdHighWater((await area.get(TOKEN_ID_HIGH_WATER_KEY))[TOKEN_ID_HIGH_WATER_KEY])
+		const id = await nextNumericId(this.tokens, mark)
+		if (!ownsLock()) return undefined
+		// At the top of the id space the allocator walks down, below the mark.
+		await track(area.set({ [TOKEN_ID_HIGH_WATER_KEY]: Math.max(mark, id) }))
+		return id
 	}
 
 	/** Test/SW-internal trigger for a seed pass (also driven by the unlock and
@@ -892,8 +913,8 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	private async findToken(profileId: string, chainId: number, contract: string): Promise<Token | undefined> {
 		const tokens = await this.tokens.getValues()
 		// A row stored or restored in another spelling is still this contract.
-		const key = contract.toLowerCase()
-		return tokens.find((token) => token.profileId === profileId && token.chainId === chainId && token.contract.toLowerCase() === key)
+		const key = tokenKey(chainId, contract)
+		return tokens.find((token) => token.profileId === profileId && tokenKey(token.chainId, token.contract) === key)
 	}
 
 	/** Token ids harvested from RAW rows (codec-hidden included) owned by
@@ -939,7 +960,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 				// SILENT (emit=false): the deletion coordinator awaits token-balance +
 				// incoming-transfer purges DIRECTLY, so re-emitting onTokenDeleted here is
 				// redundant and its fire-and-forget consumer could clobber a successor
-				// that reuses the highest token id.
+				// at a reused id, which a lost high-water mark allows.
 				await this._deleteTokenByIdHoldingLock(token.id, ownsLock, false)
 			}
 			// Raw second pass — a validation-failed row this profile owns is
@@ -1047,7 +1068,8 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		// guarantee — incrementing past it could land on (and overwrite)
 		// an occupied key. Each successful write is visible to the next
 		// row's allocation, so the batch still sequences.
-		const id = await nextNumericId(this.tokens)
+		const id = await this.reserveTokenId(ownsLock, (write) => this.track(write))
+		if (id === undefined) throw tokenLockLost()
 		// Validate the persisted shape BEFORE writing: a token with e.g.
 		// `chainId: "1:"` would otherwise "succeed", have a balance
 		// relinked to it, then be rejected by the read codec — leaving an
@@ -1105,11 +1127,7 @@ async function settleBy<T>(
 	)
 	const remaining = deadlineAt - Date.now()
 	if (!(remaining > 0)) return { kind: "late" }
-	let timer: ReturnType<typeof setTimeout> | undefined
-	const late = new Promise<{ kind: "late" }>((resolve) => {
-		timer = setTimeout(() => resolve({ kind: "late" }), remaining)
-	})
-	return await Promise.race([outcome, late]).finally(() => clearTimeout(timer))
+	return await raceTimeout(outcome, remaining, () => ({ kind: "late" as const }))
 }
 
 /** A token's name and symbol are contract or backup text: every row and import title stores them

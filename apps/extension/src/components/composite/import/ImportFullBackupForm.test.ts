@@ -1,7 +1,9 @@
 import { Flex, Icon, Input, Text } from "@nulo/design"
-import { mount, type VueWrapper } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto } from "../../../../tests/helpers/credential-pins"
+import { boundAttr, declarationsOf, elementByTestid, parseSource } from "../../../../scripts/type-roles/source-scan"
+import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto, typeNow } from "../../../../tests/helpers/credential-pins"
+import { sendEvent } from "../../../../tests/helpers/send-event"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import ImportFullBackupForm from "./ImportFullBackupForm.vue"
 
@@ -246,6 +248,23 @@ describe("ImportFullBackupForm", () => {
 	})
 })
 
+/** A typed network name can be one word of up to 25 characters. */
+describe("ImportFullBackupForm — a long name stays inside the warning", () => {
+	it("the warning carries the whole name, and its block breaks a word wider than itself anywhere", () => {
+		const finished = { restoreStatus: "finished", isRestoreHasErrors: true }
+		const network = mount(ImportFullBackupForm, {
+			props: baseProps({ ...finished, unrestoredNetworks: ["W".repeat(25)] }),
+			global: { stubs },
+		})
+		expect(network.get("[data-testid=import-full-backup-warning]").text()).toContain(`${"W".repeat(25)} didn't answer in time`)
+
+		const parsed = parseSource("apps/extension/src/components/composite/import/ImportFullBackupForm.vue")
+		const block = elementByTestid(parsed, "import-full-backup-warning")?.node
+		expect(block && boundAttr(block, "class")).toBe("$style.warning_block")
+		expect(declarationsOf(parsed, ".warning_block")).toMatchObject({ "overflow-wrap": "anywhere" })
+	})
+})
+
 describe("ImportFullBackupForm — credential controls, real Input", () => {
 	const mounted: VueWrapper[] = []
 	afterEach(() => {
@@ -286,5 +305,18 @@ describe("ImportFullBackupForm — credential controls, real Input", () => {
 		expect(pasteInto(nativeInput(w, PAIR[1]), "z".repeat(130))).toBe(true)
 		expect(w.emitted("update:repeatedPassword")?.at(-1)).toEqual(["z".repeat(128)])
 		await expectMaskToggle(w, { toggle: "import-full-backup-password-input-visibility-toggle", field: PAIR[0], drives: PAIR })
+	})
+
+	it("a revealed pair stays revealed when the method switches away and back; a keystroke in either field emits passwordInput once", async () => {
+		const w = mountReal(PASSWORD)
+		sendEvent(w.get('[data-testid="import-full-backup-password-input-visibility-toggle"]').element, "click")
+		await flushPromises()
+		expect(PAIR.map((id) => nativeInput(w, id).type)).toEqual(["text", "text"])
+		await w.setProps({ unlockMethod: "passkey" })
+		expect(w.find(`[data-testid="${PAIR[0]}"]`).exists()).toBe(false)
+		await w.setProps({ unlockMethod: "password" })
+		expect(PAIR.map((id) => nativeInput(w, id).type)).toEqual(["text", "text"])
+		for (const id of PAIR) typeNow(nativeInput(w, id), "x")
+		expect(w.emitted("passwordInput")).toHaveLength(2)
 	})
 })

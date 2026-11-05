@@ -13,6 +13,7 @@ import { sameFieldAddress } from "@nulo/wallet-bridge"
 
 /** Utils */
 import { managers } from "@/utils/core"
+import { offersSponsoredFpc } from "@/wallet/services/fpc/sponsored-fpc-chains"
 
 /** Services */
 import { FpcServiceClient } from "@/wallet/services/fpc/client"
@@ -50,6 +51,8 @@ const props = defineProps({
 	feeEstimate: { type: Object, default: null },
 	isEstimating: { type: Boolean, default: false },
 	isQueued: { type: Boolean, default: false },
+	/** Passed to the cost row: whether a queued send can still go out from this surface. */
+	offersQueue: { type: Boolean, default: true },
 	/** When mounted inside another bordered container (e.g. execute window's
 	 *  operation card), the outer wrapper's own border + overflow:hidden
 	 *  clash with the parent's border. Passing embedded=true strips the root
@@ -75,7 +78,13 @@ const props = defineProps({
 	queuedCap: { type: Object, default: null },
 	/** Send's amount field holds an amount; read only while the card reads what can pay. */
 	amountTyped: { type: Boolean, default: false },
+	/** The current input's estimate failed: the cost row offers `retryEstimate`. */
+	estimateFailed: { type: Boolean, default: false },
+	/** The running estimate has run long: the cost row offers `retryEstimate` beside its bar's place. */
+	estimateSlow: { type: Boolean, default: false },
 })
+
+const emit = defineEmits(["retryEstimate"])
 
 const settings = defineModel()
 
@@ -113,6 +122,8 @@ const { shortSponsorIds, setAsideSponsorIds, lastVerdict, verifyingSponsorId } =
  *  and back to is served the store's retained list, and an id only ever names its own row. */
 const fpcEdits = reactive(new Map())
 const knownFpcs = computed(() => applyFpcEdits(registeredFpcs.value, fpcEdits))
+const methodSelector = ref(null)
+const lockedRow = ref(null)
 
 /** The FPC list the store has read for the live identity. That read is never forced, so it usually
  *  lands well before the forced balance read lets the snapshot commit: the sponsor rows answer early. */
@@ -145,6 +156,7 @@ const menuMethods = computed(() => {
 		setAsideSponsorIds,
 		balancesPending: snapshotPending.value,
 		fpcsPending: snapshotPending.value && !early,
+		offersSponsor: props.network?.chainId !== undefined && offersSponsoredFpc(props.network.chainId),
 	})
 })
 
@@ -156,6 +168,7 @@ const selectionInput = {
 	snapshot,
 	verdicts,
 	knownFpcs,
+	readFpcs: earlyFpcs,
 	methods,
 	getFeePicks: (profileId) => managers.uiPreference.getFeePicks(profileId),
 	saveFeePick: (profileId, update) => managers.uiPreference.saveFeePick(profileId, update),
@@ -282,6 +295,15 @@ watch(
 	{ immediate: true },
 )
 
+/** The retry's button leaves with the failure, so a keyboard press keeps its place on the trigger
+ *  above, or on the locked method's row, which has no trigger. */
+const onRetryEstimate = (event) => {
+	emit("retryEstimate")
+	if (!event.currentTarget.matches(":focus-visible")) return
+	if (methodSelector.value) methodSelector.value.focus()
+	else lockedRow.value?.$el.focus()
+}
+
 const handleMethodPicked = (m) => {
 	// A loading row is inert in the menu; this keeps it so for any other path a pick arrives on.
 	if (m.checking) return
@@ -378,13 +400,15 @@ onBeforeUnmount(() => {
 		data-testid="fee-settings-card"
 		:data-origin="originPrivacy"
 		:data-sponsor-funding="sponsorFunding"
+		:data-read-pending="readPending || undefined"
 	>
 		<!-- A method the dApp asked for: shown, never a choice. -->
-		<Flex v-if="lockedMethod" align="center" justify="between" :class="$style.card" data-testid="send-fee-locked">
+		<Flex v-if="lockedMethod" ref="lockedRow" tabindex="-1" align="center" justify="between" :class="[$style.card, $style.locked]" data-testid="send-fee-locked">
 			<Text variant="label-section" color="primary">Fee</Text>
 			<Text variant="name" color="primary" :class="$style.method_size">Public Fee Juice · set by the app</Text>
 		</Flex>
 		<FeeMethodSelector
+			ref="methodSelector"
 			v-else
 			:modelValue="displayMethod"
 			@update:modelValue="handleMethodPicked"
@@ -473,8 +497,12 @@ onBeforeUnmount(() => {
 			:estimate="estimatedFeeDisplay"
 			:isEstimating="isEstimating"
 			:isQueued="isQueued"
+			:offersQueue="offersQueue"
 			:payer="feePayer"
 			:queuedCap="queuedCapDisplay"
+			:failed="estimateFailed"
+			:slow="estimateSlow"
+			@retry="onRetryEstimate"
 		/>
 
 		<FeePriorityRow v-if="showsCostRows" v-model="selectedPriority" />
@@ -493,6 +521,12 @@ onBeforeUnmount(() => {
 
 .card {
 	padding: 12px;
+}
+
+/* Inset: the card's `overflow: hidden` would clip a ring drawn outside the row. */
+.locked:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: -2px;
 }
 
 .method_size {

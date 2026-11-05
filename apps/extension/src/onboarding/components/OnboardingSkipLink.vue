@@ -3,10 +3,12 @@ defineProps({
 	testid: { type: String, required: true },
 })
 const emit = defineEmits(["click"])
+const button = useTemplateRef("button")
+defineExpose({ focus: () => button.value?.focus() })
 </script>
 
 <template>
-	<button type="button" :class="$style.skipLink" :data-testid="testid" @click="emit('click')">
+	<button ref="button" type="button" :class="$style.skipLink" :data-testid="testid" @click="emit('click')">
 		<slot />
 	</button>
 </template>

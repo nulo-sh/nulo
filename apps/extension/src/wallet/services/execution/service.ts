@@ -1,21 +1,9 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { type IntentInnerHash, type CallIntent, computeAuthWitMessageHash } from "@aztec-labs/aztec.js/authorization"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
-import {
-	type ContractArtifact,
-	ContractArtifactSchema,
-	FunctionSelector,
-	FunctionCall,
-	getFunctionReturnType,
-} from "@aztec-labs/stdlib/abi"
+import { type ContractArtifact, FunctionSelector, FunctionCall, getFunctionReturnType } from "@aztec-labs/stdlib/abi"
 import type { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import {
-	CompleteAddress,
-	computeContractAddressFromInstance,
-	ContractInstanceWithAddressSchema,
-	computePartialAddress,
-} from "@aztec-labs/stdlib/contract"
 import z from "zod"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
 import type { Network } from "@/wallet/services/network/spec"
@@ -26,7 +14,8 @@ import { ContactService } from "@/wallet/services/contact/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
-import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
+import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
+import { AUTH_REGISTRY_SERVICE_NAME } from "@/wallet/services/auth-registry/spec"
 import { TokenService } from "@/wallet/services/token/service"
 import { FpcService, FpcType } from "@/wallet/services/fpc/service"
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
@@ -34,7 +23,6 @@ import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { TransactionService, OriginType, type TransferType, type LocalTxOrigin, TxStatus } from "@/wallet/services/transaction/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
-import type { OperationContext } from "@/wallet/services/operation-journal/spec"
 import { isApprovedSendInFlight } from "@/utils/in-flight-send"
 import { abortableSleep } from "@/utils/abortable-sleep"
 import { DAPP_INTERACTION_SERVICE_NAME, type ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
@@ -45,7 +33,7 @@ import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { type CancelOrFailResult, classifyOperationCatch } from "./rpc-cancel"
-import { ESTIMATE_JOB_TTL_MS, EstimateCancelRegistry } from "./estimate-cancel-registry"
+import { EstimateCancelRegistry } from "./estimate-cancel-registry"
 import {
 	ContractNotRegisteredError,
 	InvalidWalletArgumentsError,
@@ -57,9 +45,8 @@ import {
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
-import { getErrorMessage } from "@nulo/wallet-core/utils"
+import { EventHandler, getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
-import { assertArtifactClassId, assertInstanceArtifactClassId } from "@nulo/aztec-runtime/pxe"
 import {
 	type DraftOperation,
 	type FeeSettingsReaders,
@@ -68,19 +55,14 @@ import {
 	refuseUnknownPriorities,
 } from "@nulo/wallet-bridge"
 import {
+	ESTIMATE_JOB_TTL_MS,
 	EXECUTION_SERVICE_NAME,
 	type Methods,
 	type Operation,
-	type RegisterSenderOperation,
-	type RegisterContractOperation,
 	type SendTransactionOperation,
 	type OperationResult,
-	type Action,
 	type FeeSettings,
-	type AztecRegisterSenderOperation,
-	type AztecRegisterContractOperation,
 	type AztecCreateAuthWitOperation,
-	type FeeOptions,
 	type GasBalances,
 	type FeeQuestion,
 	type OperationApprovalEnvelope,
@@ -88,9 +70,10 @@ import {
 	type DecodedCall,
 	type DecodedGrant,
 	type DisplayCallInput,
-	type RegisterTokenOperation,
 	type TransferFeeEstimate,
 	type TransferFeeQueued,
+	type EstimateStarted,
+	type Events,
 } from "./spec"
 import type { LastProveOutcome } from "./models"
 import { SendSequencer } from "./send-sequencer"
@@ -104,11 +87,13 @@ import { TransferEstimateReuse } from "./transfer-estimate-reuse"
 import { type ChainIdentity, type EstimateReuseDeps, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
-import { TransferExecutor, type TransferSequence } from "./transfer-executor"
+import { TransferExecutor, type TransferExecutorDeps, type TransferSequence } from "./transfer-executor"
 import { DappSendExecutor } from "./dapp-send-executor"
 import { DiscoveryAwareEstimator, type DiscoveryProbe } from "./discovery-aware-estimator"
 import { ViewExecutor } from "./view-executor"
+import { RegistrationExecutor } from "./registration-executor"
 import { ExecutionLane } from "./execution-lane"
+import type { SharedSendDeps } from "./shared-send-deps"
 import { GasBalanceReader } from "./gas-balance-reader"
 import { AUTHWIT_CALL_BINDING, ContractResolver, assertSelectorBinding, findFunctionBySelector } from "./contract-resolver"
 import { type ArtifactLookup, decodeCallForDisplay, decodeGrantForDisplay } from "./call-decoder"
@@ -161,9 +146,6 @@ const MAX_DISPLAY_CALLS = 64
  *  wallet's own views run through `executeOperations` too. */
 const BROADCASTING_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set(["send_transaction", "aztec_sendTx"])
 
-/** The app a dApp registration is counted against, and the session it was captured under. */
-type Registrant = { origin: string; fence: ExecutionFence }
-
 /** The operations that run under the authorizing session's fence. The wallet-sdk dispatcher sends
  *  every dApp op under the wire handler's admission fence; of its reads, registrations and
  *  simulations only a registration reads it, to count against that session (`registrant`). */
@@ -200,7 +182,7 @@ const FEE_SETTINGS_OF = {
 		Array.isArray(operations) ? operations.flatMap((op) => (carriesFeeSettings(op) ? [op.feeSettings] : [])) : [],
 } satisfies FeeSettingsReaders<Methods>
 
-export class ExecutionService extends Service<Methods> implements ServiceSpec<Methods> {
+export class ExecutionService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"executeTransfer",
 		"executeOperations",
@@ -219,6 +201,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	)
 	public static name = EXECUTION_SERVICE_NAME
 
+	public readonly onEstimateStarted = new EventHandler<EstimateStarted>()
+
 	private pxeService: PxeServiceClient = null!
 	private profileService: ProfileService = null!
 	private networkService: NetworkService = null!
@@ -227,7 +211,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private tokenService: TokenService = null!
 	private fpcService: FpcService = null!
 	private transactionService: TransactionService = null!
-	private authRegistryService: AuthRegistryService = null!
+	private authRegistryService: Pick<AuthRegistryService, "assertWithinCap" | "recordPendingAuthwits"> = null!
 	private taskService: TaskService = null!
 	private operationJournal: OperationJournalService = null!
 	private legal: LegalAcceptanceService = null!
@@ -288,6 +272,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	})
 	private dappSendExecutor: DappSendExecutor = null!
 	private viewExecutor: ViewExecutor = null!
+	private registration: RegistrationExecutor = null!
 	private lane: ExecutionLane = null!
 
 	public constructor(
@@ -321,7 +306,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		this.tokenService = services.get(TokenService.name)
 		this.fpcService = services.get(FpcService.name)
 		this.transactionService = services.get(TransactionService.name)
-		this.authRegistryService = services.get(AuthRegistryService.name)
+		this.authRegistryService = services.get<AuthRegistryService>(AUTH_REGISTRY_SERVICE_NAME)
 		this.taskService = services.get(TaskService.name)
 		this.operationJournal = services.get(OperationJournalService.name)
 		this.legal = services.get(LegalAcceptanceService.name)
@@ -418,42 +403,11 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		return { l1ChainId: info.l1ChainId, rollupVersion: info.rollupVersion }
 	}
 
+	/** The lane and the builder come first: the executors and the fee strategies capture both eagerly. */
 	private wireExecutors(): void {
-		this.wireLaneAndTransferExecutor()
-		this.wireDappSendAndViewExecutors()
-	}
-
-	private wireLaneAndTransferExecutor(): void {
-		this.lane = new ExecutionLane({
-			operationJournal: this.operationJournal,
-			getActiveProfile: () => this.profileService.getActiveProfile(),
-			captureProfileEpoch: (profileId) => this.profileService.getDeletionState().capture(profileId),
-			assertFence: (fence) => this.profileService.assertFence(fence),
-			peekLiveSerial: () => this.profileService.peekLiveSerial(),
-			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
-			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
-			logInfo: (msg, ...rest) => this.logInfo(msg, ...rest),
-			logError: (msg, ...rest) => this.logError(msg, ...rest),
-		})
-		this.transferExecutor = new TransferExecutor({
-			tasks: this.taskService,
-			planner: this.planner,
-			estimateReuse: this.estimateReuse,
-			coordinator: this.coordinator,
-			lane: {
-				registerInFlight: (journalId, serial, controller) => this.lane.registerInFlight(journalId, serial, controller),
-				deleteController: (journalId) => this.lane.deleteController(journalId),
-				beginQueuedWait: (journalId) => this.lane.beginQueuedWait(journalId),
-				endQueuedWait: (journalId) => this.lane.endQueuedWait(journalId),
-				isSlotBusy: (profileId, chainId) => this.lane.isSlotBusy(profileId, chainId),
-				tryTakeSlot: (profileId, chainId) => this.lane.tryTakeSlot(profileId, chainId),
-				acquireTransferSlot: (networkId, journalId, fence, signal, onWait) =>
-					this.lane.acquireTransferSlot(networkId, journalId, fence, signal, onWait),
-			},
-			sequencer: this.sendSequencer,
-			chainTip: this.chainTipGate,
-			getFpcImpl: (fpcId) => this.fpcService.getFpcImpl(fpcId),
-			transactionsOf: (account, profileId) => this.transactionService.transactionsOf(account, profileId),
+		this.wireLaneAndBuilder()
+		// `satisfies`, not an annotation, so each read keeps the width the transfer executor narrows to.
+		const shared = {
 			getActiveProfile: () => this.profileService.getActiveProfile(),
 			captureExecutionFence: () => this.captureFence(),
 			assertFence: (fence) => this.profileService.assertFence(fence),
@@ -466,12 +420,28 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
-			buildAndEstimate: (op, feeSettings, fence, parentTask, signal, fpc) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, fpc),
-			createJournalOperation: (input) => this.operationJournal.createOperation(input),
-			transitionJournal: (journalId, progress, error) => this.operationJournal.transitionOperation(journalId, progress, error),
-			answers: this.queuedFeeAnswers,
+		} satisfies SharedSendDeps
+		this.wireTransferExecutor(shared)
+		this.wireDappSendAndViewExecutors(shared)
+		this.registration = new RegistrationExecutor({
+			networkService: this.networkService,
+			pxeService: this.pxeService,
+			tokenService: this.tokenService,
+			profileService: this.profileService,
+			dappSessionService: this.dappSessionService,
+		})
+	}
+
+	private wireLaneAndBuilder(): void {
+		this.lane = new ExecutionLane({
+			operationJournal: this.operationJournal,
+			getActiveProfile: () => this.profileService.getActiveProfile(),
+			captureProfileEpoch: (profileId) => this.profileService.getDeletionState().capture(profileId),
+			assertFence: (fence) => this.profileService.assertFence(fence),
+			peekLiveSerial: () => this.profileService.peekLiveSerial(),
+			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
+			logInfo: (msg, ...rest) => this.logInfo(msg, ...rest),
 			logError: (msg, ...rest) => this.logError(msg, ...rest),
 		})
 		this.txBuilder = new TxRequestBuilder(
@@ -487,7 +457,29 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		)
 	}
 
-	private wireDappSendAndViewExecutors(): void {
+	private wireTransferExecutor(shared: SharedSendDeps & Pick<TransferExecutorDeps, "getActiveProfile">): void {
+		this.transferExecutor = new TransferExecutor({
+			...shared,
+			tasks: this.taskService,
+			planner: this.planner,
+			estimateReuse: this.estimateReuse,
+			coordinator: this.coordinator,
+			lane: this.lane,
+			sequencer: this.sendSequencer,
+			chainTip: this.chainTipGate,
+			getFpcImpl: (fpcId) => this.fpcService.getFpcImpl(fpcId),
+			transactionsOf: (account, profileId) => this.transactionService.transactionsOf(account, profileId),
+			buildAndEstimate: (op, feeSettings, fence, parentTask, signal, fpc) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, fpc),
+			createJournalOperation: (input) => this.operationJournal.createOperation(input),
+			transitionJournal: (journalId, progress, error) => this.operationJournal.transitionOperation(journalId, progress, error),
+			answers: this.queuedFeeAnswers,
+			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
+			logError: (msg, ...rest) => this.logError(msg, ...rest),
+		})
+	}
+
+	private wireDappSendAndViewExecutors(shared: SharedSendDeps): void {
 		const estimateWithDiscovery = new DiscoveryAwareEstimator({
 			authwit: this.authwit,
 			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
@@ -497,60 +489,31 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			buildForDiscovery: async (op, method, fence, onBuilt) => {
 				const sendOp = op as SendTransactionOperation
 				// An app's private call may read its gas settings, so discovery simulates with its priority too.
-				const { txRequest, node, pxe, account, network, txCalls } = await this.txBuilder.buildStandard(
-					sendOp,
+				const { txRequest, node, pxe, account, scopes, network, txCalls } = await this.txBuilder.buildStandard(
+					op,
 					fence,
 					method,
 					undefined,
 					appPriorityOf(sendOp.fee),
 				)
 				await onBuilt?.(txCalls)
-				return { txRequest, node, pxe, account, network }
+				return { txRequest, node, pxe, account, scopes, network }
 			},
 		})
 		this.dappSendExecutor = new DappSendExecutor({
+			...shared,
 			planner: this.planner,
 			txBuilder: this.txBuilder,
 			coordinator: this.coordinator,
 			estimateWithDiscovery,
 			operationEstimateReuse: this.operationEstimateReuse,
 			previewSnapshots: this.previewSnapshots,
-			getActiveProfile: () => this.profileService.getActiveProfile(),
-			captureExecutionFence: () => this.captureFence(),
-			assertFence: (fence) => this.profileService.assertFence(fence),
-			isFenceLive: (fence) => this.profileService.isFenceLive(fence),
-			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
-			getNode: (chainId) => this.networkService.getNode(chainId),
-			readPublicStorageOnce: (network, contract, slot, timeoutMs) =>
-				this.networkService.readPublicStorageOnce(network, contract, slot, timeoutMs),
-			getPXE: (network) => this.pxeService.getPXE(networkInfoFrom(network)),
-			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
-			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
-			lane: {
-				deleteController: (journalId) => this.lane.deleteController(journalId),
-				acquireSlot: (networkId, queuedJournalId, fence, onEnqueued, originKey) =>
-					this.lane.acquireSlot(networkId, queuedJournalId, fence, onEnqueued, originKey),
-				claimOrCreateJournal: (networkId, accountAddress, origin, calls, hooks, reuseController, fence) =>
-					this.lane.claimOrCreateJournal(networkId, accountAddress, origin, calls, hooks, reuseController, fence),
-				beginJournal: (networkId, accountAddress, origin, calls, fence) =>
-					this.lane.beginJournal(networkId, accountAddress, origin, calls, fence),
-				recordBuiltCall: (journalId, txCalls) => this.lane.recordBuiltCall(journalId, txCalls),
-				markJournal: (journalId, progress, error, retitle) => this.lane.markJournal(journalId, progress, error, retitle),
-				commitJournal: (journalId, progress) => this.lane.commitJournal(journalId, progress),
-				parkSlot: (release, networkId, queuedJournalId, fence, preController, originKey, wait) =>
-					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),
-				joinOriginLine: (fence, chainId, originKey) => this.lane.joinOriginLine(fence, chainId, originKey),
-				failUnclaimed: (journalId, error) => this.lane.failUnclaimed(journalId, error),
-				reclaimParked: (journalId) => this.lane.reclaimParked(journalId),
-				beginQueuedWait: (journalId) => this.lane.beginQueuedWait(journalId),
-				endQueuedWait: (journalId) => this.lane.endQueuedWait(journalId),
-			},
+			lane: this.lane,
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
-			addTransaction: (...args) => this.transactionService.addTransaction(...args),
+			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt, observer) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt, observer),
 			protocolSponsorAddress: async (chainId) => (await this.fpcService.getOrComputeProtocolAddresses(chainId)).sponsored,
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
@@ -660,7 +623,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		const sequence = await this.transferExecutor.sequence(req, profile.id)
 		// A send holding the slot is proving: the PXE runs one operation at a time, so this estimate
 		// would wait behind that proof anyway, past its RPC deadline on a real prover.
-		const slotBusy = this.lane.isSlotBusy(profile.id, sequence.scope.chainId)
+		const slotBusy = this.lane.isSendInSlot(profile.id, sequence.scope.chainId)
 		const lagging = this.chainTipGate.unconfirmed(sequence.scope, sequence.keys, networkId)
 		// The popup asks again every 2 s; the read it starts is what lets that answer change.
 		if (lagging) void this.chainTipGate.refresh(networkId)
@@ -668,7 +631,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			const cap = await this.queuedFeeCapFor(req, profile.id, sequence)
 			return { queued: true, tokenSpent: false, ...(cap ? { cap } : {}) }
 		}
-		return this.withEstimateAdmission(estimateToken, "send", (signal) => this.transferExecutor.estimateFee(req, signal, sequence))
+		return this.withEstimateAdmission(estimateToken, "send", (signal, started) =>
+			this.transferExecutor.estimateFee(req, signal, sequence, started),
+		)
 	}
 
 	/** The cap a queued transfer is offered, read from stored rows only: nothing on the network. */
@@ -691,7 +656,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private async withEstimateAdmission<T extends { estimateId?: string; previewId?: string } | TransferFeeQueued>(
 		estimateToken: string | undefined,
 		flowKey: string,
-		run: (signal?: AbortSignal) => Promise<T>,
+		run: (signal?: AbortSignal, started?: () => void) => Promise<T>,
 	): Promise<T> {
 		if (!estimateToken) return run()
 		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
@@ -703,7 +668,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			// throws the internal sentinel too, and it must cross the RPC
 			// boundary as the structured error like every other cancel.
 			admission = await this.estimateCancel.admit(estimateToken, profile.id, flowKey)
-			const result = await run(admission)
+			const result = await run(admission, () => this.emit("onEstimateStarted", { estimateToken }))
 			// One id evicts every cache: a standard estimate's preview id IS its
 			// estimate id, and a preview-only result has nothing else stashed.
 			if (!("queued" in result)) estimateId = result.previewId ?? result.estimateId
@@ -734,6 +699,11 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		const profile = await this.profileService.getActiveProfile()
 		if (!profile) return
 		this.estimateCancel.cancel(estimateToken, profile.id)
+	}
+
+	/** In-process only, never in `rpcMethods`: no port reaches the claimed set. */
+	public claimPreviews(previewIds: readonly (string | undefined)[]): () => void {
+		return this.previewSnapshots.claim(previewIds)
 	}
 
 	public async getLastProveOutcome(): Promise<LastProveOutcome> {
@@ -791,15 +761,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		feeSettings: FeeSettings,
 		estimateToken?: string,
 		flowKey?: string,
-	): Promise<TransferFeeEstimate> {
+	): Promise<TransferFeeEstimate | TransferFeeQueued> {
 		await this.ensureInitialized()
-		// Admitted before the stored request is read: a cancel then either finds the estimate or comes
-		// after the approval that deleted the request, which the read then refuses.
 		return this.refusalBound(interactionId, () =>
-			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
-				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
-				return this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index })
-			}),
+			this.withStoredRequestSlot(interactionId, index, feeSettings, estimateToken, flowKey ?? "op", (operation, signal) =>
+				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
+			),
 		)
 	}
 
@@ -808,15 +775,45 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		index: number,
 		estimateToken?: string,
 		flowKey?: string,
-	): Promise<OperationAuthwitPreview> {
+	): Promise<OperationAuthwitPreview | TransferFeeQueued> {
 		await this.ensureInitialized()
-		// Admitted before the read, as `estimateOperationFee` is.
 		return this.refusalBound(interactionId, () =>
-			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
-				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
-				return this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal)
-			}),
+			this.withStoredRequestSlot(interactionId, index, undefined, estimateToken, flowKey ?? "op", (operation, signal) =>
+				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
+			),
 		)
+	}
+
+	/**
+	 * Runs a stored request's estimate or preview holding the slot of its chain, as a transfer's
+	 * estimate does: the PXE runs one operation at a time, so a simulation behind a proof outlasts its
+	 * request deadline. Admitted before the request is read, so a cancel either finds it or follows
+	 * the approval that deleted the request, which the read then refuses. Behind an estimate it waits
+	 * its turn; while a send holds or awaits the slot it answers queued, settled with nothing stashed,
+	 * so the same token can ask again.
+	 */
+	private withStoredRequestSlot<T extends { estimateId?: string; previewId?: string }>(
+		interactionId: string,
+		index: number,
+		feeSettings: FeeSettings | undefined,
+		estimateToken: string | undefined,
+		flowKey: string,
+		run: (operation: Operation, signal?: AbortSignal) => Promise<T>,
+	): Promise<T | TransferFeeQueued> {
+		return this.withEstimateAdmission<T | TransferFeeQueued>(estimateToken, flowKey, async (signal, started) => {
+			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
+			const profile = await requireActiveProfile(this.profileService, "Wallet locked")
+			const { chainId } = await this.networkService.getNetwork(operation.networkId)
+			const slot = this.lane.takeEstimateSlot(profile.id, chainId, signal)
+			if (!slot) return { queued: true, tokenSpent: false }
+			const release = await slot
+			try {
+				started?.()
+				return await run(operation, signal)
+			} finally {
+				release()
+			}
+		})
 	}
 
 	/** A refusal is the request's, not one attempt's: the attempt that met it may be one the window
@@ -1005,13 +1002,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	): Promise<unknown> {
 		switch (operation.kind) {
 			case "register_contract": {
-				return this.executeRegisterContract(operation)
+				return this.registration.executeRegisterContract(operation)
 			}
 			case "register_sender": {
-				return this.executeRegisterSender(operation)
+				return this.registration.executeRegisterSender(operation)
 			}
 			case "register_token": {
-				return this.executeRegisterToken(operation, origin, operationTask, authorizedFence, approval)
+				return this.registration.executeRegisterToken(operation, origin, operationTask, authorizedFence, approval)
 			}
 			case "send_transaction": {
 				// Forward hooks so the slot buckets per-origin (grantPublicAuthwit
@@ -1040,13 +1037,16 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				return this.viewExecutor.executeAztecGetChainInfo(operation)
 			}
 			case "aztec_registerSender": {
-				return this.executeAztecRegisterSender(operation, await this.registrant(origin, authorizedFence))
+				return this.registration.executeAztecRegisterSender(operation, await this.registration.registrant(origin, authorizedFence))
 			}
 			case "aztec_getAddressBook": {
 				return this.viewExecutor.executeAztecGetAddressBook(operation)
 			}
 			case "aztec_registerContract": {
-				return this.executeAztecRegisterContract(operation, await this.registrant(origin, authorizedFence))
+				return this.registration.executeAztecRegisterContract(
+					operation,
+					await this.registration.registrant(origin, authorizedFence),
+				)
 			}
 			case "aztec_simulateTx": {
 				return this.viewExecutor.executeAztecSimulateTx(operation)
@@ -1072,106 +1072,6 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		}
 	}
 
-	// Nulo base:
-
-	private async executeRegisterContract(op: RegisterContractOperation): Promise<void> {
-		const addressNum = AztecAddress.fromStringUnsafe(op.address).toBigInt()
-		if (addressNum >= 0 && addressNum <= 6) {
-			// ignore protocol contracts registration,
-			// because we cannot validate it due to hardcoded addresses
-			return
-		}
-
-		const network = await this.networkService.getNetwork(op.networkId)
-
-		const providedInstance = await ContractInstanceWithAddressSchema.optional().parseAsync(op.instance)
-		const instance =
-			providedInstance ??
-			(await this.pxeService.getContractInstance(networkInfoFrom(network), AztecAddress.fromStringUnsafe(op.address)))
-		if (!instance) {
-			throw new ContractNotRegisteredError("Contract instance not found")
-		}
-
-		const providedArtifact = await ContractArtifactSchema.optional().parseAsync(op.artifact)
-		const artifact =
-			providedArtifact ?? (await this.pxeService.getContractArtifact(networkInfoFrom(network), instance.currentContractClassId))
-		if (!artifact) {
-			throw new ContractNotRegisteredError("Contract artifact not found")
-		}
-
-		await assertArtifactClassId(artifact, instance.currentContractClassId)
-
-		const contractAddress = await computeContractAddressFromInstance(instance)
-		if (contractAddress.toString() !== op.address) {
-			throw new Error("Contract address doesn't match instance address")
-		}
-
-		await this.pxeService.registerContract(networkInfoFrom(network), { instance, artifact })
-	}
-
-	private async executeRegisterSender(op: RegisterSenderOperation): Promise<void> {
-		const network = await this.networkService.getNetwork(op.networkId)
-		await this.pxeService.registerSender(networkInfoFrom(network), AztecAddress.fromStringUnsafe(op.address))
-	}
-
-	private async executeRegisterToken(
-		op: RegisterTokenOperation,
-		origin: LocalTxOrigin,
-		parentTask?: WrappedTask,
-		authorizedFence?: ExecutionFence,
-		approval?: OperationApprovalEnvelope,
-	): Promise<void> {
-		// The deletion fence anchors the whole approval→commit chain: the dApp
-		// path threads the capture made AT the interaction's session
-		// re-validation (upstream of the refreshSession park); popup-origin
-		// dispatches capture here, where dispatch IS the authorization. A
-		// deletion (or a delete + same-id re-import) landing anywhere after the
-		// capture moves the epoch, so the commit's assert against it fails
-		// closed. Token ops are not switch-blocked (not a SENDING kind), so
-		// every identity below must derive from this one capture plus the
-		// ownership-checked network row — never a live re-read. The capture's
-		// only throw is the locked gate; re-thrown under the pinned message.
-		let fence: ExecutionFence
-		if (authorizedFence) {
-			fence = authorizedFence
-		} else {
-			try {
-				fence = await this.profileService.captureExecutionFence()
-			} catch {
-				throw new Error("Wallet locked")
-			}
-		}
-		// A dApp's add stores the details its window showed, so a window that showed none approves nothing.
-		const shown = approval?.tokenMetadata
-		if (origin.type === OriginType.DAPP && shown === undefined) throw new Error("Token details were not shown for approval")
-		const network = await this.networkService.getNetwork(op.networkId)
-		// `getNetwork` anchors the row to the ACTIVE profile; tying it to the
-		// fence makes the write identity and the commit assert one chain.
-		if (network.profileId !== fence.profileId) throw new Error("unauthorized profile")
-
-		// Always parsed here: a popup-supplied interface would carry function
-		// mappings nothing authenticated, and they are what gets persisted. Pinned
-		// to the class the window read: an interface of another class refuses before any record.
-		const ti = await this.tokenService.parseTokenInterface(op.networkId, op.address, parentTask, shown?.classId)
-
-		if (
-			ti.getNameFn === undefined ||
-			ti.getSymbolFn === undefined ||
-			ti.getDecimalsFn === undefined ||
-			(ti.balanceOfPrivateFn === undefined && ti.balanceOfPublicFn === undefined)
-		) {
-			throw new Error("Couldn't find necessary methods in the contract interface. Try to add token manually.")
-		}
-		// Thread the dApp origin into the journal entry so the tokens-view
-		// TokenImportRow can render "Requested by <origin>" for dapp imports.
-		// Anonymous-DApp fallback matches the repo convention used in
-		// tx-enrichment.ts and tx-detail-helpers.ts.
-		const opContext: OperationContext =
-			origin.type === OriginType.DAPP ? { origin: "dapp", dappOrigin: origin.name ?? "dApp" } : { origin: "popup" }
-		const expected = shown && { name: shown.name, symbol: shown.symbol, decimals: shown.decimals }
-		await this.tokenService.addTokenAuthorized(fence, fence.profileId, op.networkId, op.accountAddress, ti, opContext, expected)
-	}
-
 	/** `fence` absent ⇒ captured now, which is right only for a caller that
 	 *  awaited nothing between the user's action and this call. */
 	public async executeSendTransaction(
@@ -1188,16 +1088,6 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		return this.dappSendExecutor.executeSendTransaction(op, origin, parentTask, authorized, hooks, approval)
 	}
 
-	/**
-	 * Claim a pre-allocated queued journal record (transition queued → pending)
-	 * OR create a new in-flight record if no queued id was provided.
-	 *
-	 * Decision tree + invariants live in `./claim-helper.ts` so they're
-	 * unit-testable without spinning up the full ExecutionService harness.
-	 * This thin wrapper just binds `this.*` dependencies into the helper's
-	 * dependency injection shape.
-	 */
-
 	public async getGasBalances(networkId: string, accountAddress: string, forceRefresh?: boolean): Promise<GasBalances> {
 		await this.ensureInitialized()
 		return this.gasBalances.get(networkId, accountAddress, forceRefresh)
@@ -1206,89 +1096,6 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	public async peekGasBalances(networkId: string, accountAddress: string): Promise<{ balances: GasBalances; stale: boolean } | null> {
 		await this.ensureInitialized()
 		return this.gasBalances.peek(networkId, accountAddress)
-	}
-
-	// Aztec.js interface:
-
-	/** The app a dApp registration is counted against, and the session it runs under, captured before
-	 *  the executor's first await. The app is the origin the wallet-sdk dispatcher stamps, the only
-	 *  builder of the two registration kinds; the person's own registrations are not counted. */
-	private async registrant(origin: LocalTxOrigin, authorizedFence?: ExecutionFence): Promise<Registrant | undefined> {
-		if (origin.type !== OriginType.DAPP) return undefined
-		if (!origin.name) throw new Error("a dApp registration needs the app's origin")
-		return { origin: origin.name, fence: authorizedFence ?? (await this.captureFence()) }
-	}
-
-	/** Before anything is written (`dapp-session/registration-allowance.ts`). */
-	private async admitDappRegistration(registrant: Registrant | undefined, network: Network): Promise<void> {
-		if (!registrant) return
-		if (registrant.fence.profileId !== network.profileId) throw new SessionEndedError()
-		await this.dappSessionService.admitDappRegistration(registrant.origin, registrant.fence, network.chainId)
-	}
-
-	private async executeAztecRegisterSender(op: AztecRegisterSenderOperation, registrant?: Registrant): Promise<AztecAddress> {
-		const network = await this.networkService.getNetwork(op.networkId)
-		await this.admitDappRegistration(registrant, network)
-		return this.pxeService.registerSender(networkInfoFrom(network), op.address)
-	}
-
-	// Resolves to void: the 5.0.1 wallet-sdk WalletSchema declares
-	// `registerContract(): Promise<void>`, and the dApp-side proxy validates the
-	// response with z.void() — any non-undefined result rejects the whole call
-	// on the dApp even though registration succeeded wallet-side.
-	private async executeAztecRegisterContract(op: AztecRegisterContractOperation, registrant?: Registrant): Promise<void> {
-		const instance = await ContractInstanceWithAddressSchema.parseAsync(op.instance)
-		const network = await this.networkService.getNetwork(op.networkId)
-
-		const addressNum = instance.address.toBigInt()
-		if (addressNum >= 0 && addressNum <= 6) {
-			return
-		}
-
-		let providedArtifact: ContractArtifact | undefined
-		try {
-			providedArtifact = await ContractArtifactSchema.optional().parseAsync(op.artifact)
-		} catch {
-			// artifact parse failed — will fall back to lookup below
-		}
-
-		// Smart-tighten: if the dApp didn't pass an artifact, the wallet can
-		// still resolve it via the chain's PXE (already-registered) or the
-		// compiled-in known bundle (Aztec/Wonderland tokens, FPCs, NFTs,
-		// etc.). When neither has it, fail loudly with a message telling
-		// the dApp to pass `artifact` — there is no remote registry fallback.
-		const classId = instance.originalContractClassId
-		const artifact = providedArtifact ?? (await this.pxeService.getContractArtifact(networkInfoFrom(network), classId))
-		if (!artifact) {
-			throw new ContractNotRegisteredError(
-				`Contract artifact not found for class ${classId}. ` +
-					"The wallet only ships artifacts for the standard bundled contracts; " +
-					"pass the artifact in aztec_registerContract({ instance, artifact }) for custom contracts.",
-			)
-		}
-
-		await assertInstanceArtifactClassId(instance, artifact)
-
-		// A secret key registers the instance's own account or nothing: one that derives another
-		// address or other keys would add an account the dApp's contract grant never named, or one
-		// whose contract the PXE then refuses.
-		const account = op.secretKey
-			? await CompleteAddress.fromSecretKeyAndPartialAddress(
-					await Fr.schema.parseAsync(op.secretKey),
-					await computePartialAddress(instance),
-				)
-			: undefined
-		if (account && !(account.address.equals(instance.address) && account.publicKeys.equals(instance.publicKeys))) {
-			throw InvalidWalletArgumentsError.forMethod("registerContract")
-		}
-
-		// Admitted before the account, so a refused keyed call registers neither the account nor the contract.
-		if (op.secretKey && account) {
-			await this.admitDappRegistration(registrant, network)
-			await this.pxeService.registerAccount(networkInfoFrom(network), op.secretKey, account.partialAddress)
-		}
-
-		await this.pxeService.registerContract(networkInfoFrom(network), { instance, artifact })
 	}
 
 	public async executeAztecCreateAuthWit(op: AztecCreateAuthWitOperation, authorizedFence?: ExecutionFence): Promise<AuthWitness> {
@@ -1374,12 +1181,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	 *  4-way switch from the pre-strategy era. Thin delegator only —
 	 *  collaborators own the actual logic. */
 	private async buildAndEstimateTxRequest(
-		inputOp: {
-			networkId: string
-			accountAddress: string
-			actions: Action[]
-			fee?: FeeOptions
-		},
+		inputOp: FeeStrategyContext["op"],
 		feeSettings: FeeSettings,
 		fence: ExecutionFence,
 		parentTask?: WrappedTask,
@@ -1387,6 +1189,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		probe?: DiscoveryProbe,
 		fpc?: Fpc,
 		onBuilt?: OnBuilt,
+		observer?: DiscoveryProbe,
 	): Promise<FeeEstimate> {
 		// Clone the op + its actions array. fjwc / fpc branches mutate
 		// `op.actions` (unshift / splice) to prepend fee payloads; leaking
@@ -1408,6 +1211,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			parentTask,
 			signal,
 			probe,
+			observer,
 			fpc,
 			onBuilt,
 		}

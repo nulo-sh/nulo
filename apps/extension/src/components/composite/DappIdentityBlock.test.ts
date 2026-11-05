@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { describe, expect, test } from "vitest"
 import { mount } from "@vue/test-utils"
 import postcss, { type ChildNode, type Rule } from "postcss"
+import { boundAttr, parseSource, type TemplateNode, walkElements } from "../../../scripts/type-roles/source-scan"
 import DappIdentityBlock from "./DappIdentityBlock.vue"
 
 const STUBS = {
@@ -103,8 +104,33 @@ describe("composite/DappIdentityBlock", () => {
 		expect(w.find('[data-testid="discover-dapp-name"]').exists()).toBe(true)
 	})
 
+	test("a network name wider than the action line breaks at its edge", () => {
+		const parsed = parseSource("apps/extension/src/components/composite/DappIdentityBlock.vue")
+		const actions: TemplateNode[] = []
+		if (parsed.template) {
+			walkElements(parsed.template, (node) => {
+				if (boundAttr(node, "data-testid") === "actionTestId") actions.push(node)
+			})
+		}
+		expect(actions.map((node) => boundAttr(node, "class"))).toEqual(["$style.dapp_action"])
+		const line = declarationsOf(".dapp_action")
+		expect(line).toMatchObject({ "overflow-wrap": "anywhere" })
+		expect(line).not.toHaveProperty("text-overflow")
+		expect(line).not.toHaveProperty("white-space")
+	})
+
 	test("actionTestId prop is forwarded to the action line", () => {
 		const w = factory({ actionLabel: "wants to connect on Testnet", actionTestId: "discover-action" })
 		expect(w.find('[data-testid="discover-action"]').text()).toBe("wants to connect on Testnet")
+	})
+
+	test("a block given no action line draws none, its name still under the origin", () => {
+		const w = mount(DappIdentityBlock, {
+			props: { dapp: { url: "https://dapp.example", name: "Playground" }, actionTestId: "dapp-action" },
+			global: { stubs: STUBS },
+		})
+		expect(w.find('[data-testid="dapp-action"]').exists()).toBe(false)
+		expect(w.find(".dapp_action, [class*='dapp_action']").exists()).toBe(false)
+		expect(w.text()).toContain("Playground")
 	})
 })

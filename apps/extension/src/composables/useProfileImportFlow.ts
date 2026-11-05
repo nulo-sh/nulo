@@ -3,7 +3,6 @@ import { computed, type Ref, readonly, ref, watch } from "vue"
 import { DuplicateWalletError } from "@nulo/extension-messaging/errors"
 import type { ToastOptions } from "@/composables/toast"
 import { useConfirm } from "@/composables/useConfirm"
-import { usePopupStore } from "@/stores/popup.store"
 import { type RestoreErrorNetworks, useFullBackupImport } from "@/composables/useFullBackupImport"
 import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
@@ -13,10 +12,11 @@ import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
 import { managers } from "@/utils/core"
 import { canonicalizeMnemonic, errorMessageFromUnknown, getEntropy } from "@nulo/wallet-core/utils"
 import { zeroize } from "@nulo/wallet-crypto"
-import { isNewPasswordValid } from "@/utils/password"
+import { isNewPasswordValid, MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { PHRASE_WORD_COUNT, type PhraseVerdict, readPhraseVerdict } from "@/utils/recovery-phrase"
+import { stringCompare } from "@/utils/string"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
-import { type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
+import { type AdmittedUnlock, type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
 import type { NewPasskeyDisplay } from "@/wallet/services/passkey/spec"
 
@@ -91,10 +91,28 @@ export function useImportErrorState(openToast: UseProfileImportFlowOptions["open
 	return { error, isCopied, fillError, clearError, fillUnknownImportError, handleCopyError, handlePasswordInput, handleSecretInput }
 }
 
+/** The profiles a `DuplicateWalletError` names, A to Z as the chooser lists them. Its wire details
+ *  are unvalidated. */
+function duplicateNames(details: unknown): string[] {
+	const names = (details as { existingProfileNames?: unknown } | undefined)?.existingProfileNames
+	return Array.isArray(names) ? names.filter((name): name is string => typeof name === "string").sort(stringCompare) : []
+}
+
+function duplicateDescription(names: readonly string[]): string {
+	const quoted = names.map((name) => `“${name}”`)
+	if (quoted.length === 0) {
+		return "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?"
+	}
+	if (quoted.length === 1) {
+		return `${quoted[0]} already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
+	}
+	const list = `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`
+	return `${list} already use this recovery phrase. All of these profiles will hold the same accounts and funds. Add it anyway?`
+}
+
 /** The duplicate-recovery-phrase warn-and-confirm, shared by every import path. */
 function useDuplicateConfirm() {
-	const popupStore = usePopupStore()
-	const { requestConfirm } = useConfirm()
+	const { askConfirm } = useConfirm()
 	/** Set once the user confirms the duplicate-recovery-phrase warning; the retry passes it to
 	 *  the service. Reset per attempt so a confirm never leaks into a later, unrelated import. */
 	const allowDuplicate = ref(false)
@@ -110,31 +128,10 @@ function useDuplicateConfirm() {
 			return await run()
 		} catch (err) {
 			if (!(err instanceof DuplicateWalletError)) throw err
-			const existing = (err.details as { existingProfileName?: string } | undefined)?.existingProfileName
-			const confirmed = await new Promise<boolean>((resolve) => {
-				let settled = false
-				const settle = (value: boolean) => {
-					if (settled) return
-					settled = true
-					stop()
-					resolve(value)
-				}
-				// A close without the callback is the dialog's only cancel signal; a confirm closes it
-				// too, after `settle(true)`, which `settled` keeps final.
-				const stop = watch(
-					() => popupStore.isOpened("confirm"),
-					(isOpen, wasOpen) => {
-						if (wasOpen && !isOpen) settle(false)
-					},
-				)
-				requestConfirm({
-					title: "You already have this wallet",
-					description: existing
-						? `“${existing}” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
-						: "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
-					confirm_text: "Add anyway",
-					callback: () => settle(true),
-				})
+			const confirmed = await askConfirm({
+				title: "You already have this wallet",
+				description: duplicateDescription(duplicateNames(err.details)),
+				confirm_text: "Add anyway",
 			})
 			if (!confirmed) return undefined
 			allowDuplicate.value = true
@@ -154,8 +151,8 @@ interface ImportHandlerDeps {
 	isAllowedToImportBySeedPhrase: Ref<boolean>
 	resolveName: () => Promise<string | null>
 	seedPhrase: Ref<string | undefined>
-	unlockMethod: Ref<UnlockMethod>
-	chooseUnlock: (display: NewPasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
+	admitUnlock: () => AdmittedUnlock
+	unlockFor: (admitted: AdmittedUnlock, display: NewPasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
 	allowDuplicate: Ref<boolean>
 	withDuplicateConfirm: <T>(run: () => Promise<T>) => Promise<T | undefined>
 	fillUnknownImportError: (err: unknown) => void
@@ -170,12 +167,15 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 	// `existing`: the profile takes a passkey the person already has.
 	const importSeed = async (existing: boolean) => {
 		if (!deps.isAllowedToImportBySeedPhrase.value || deps.isImporting.value) return
-		if (existing && deps.unlockMethod.value !== "passkey") return
+		// The run seals what its gate judged, whatever the form does while it waits.
+		const admitted = deps.admitUnlock()
+		if (existing && admitted.method !== "passkey") return
+		const words = canonicalizeMnemonic(deps.seedPhrase.value ?? "")
 		deps.isImporting.value = true
 		try {
 			const name = await deps.resolveName()
 			if (name === null) return
-			const profile = await importNamed(name, existing)
+			const profile = await importNamed(name, words, admitted, existing)
 			// `undefined` = the passkey card was cancelled or the duplicate warning declined; stay on
 			// the form.
 			if (!profile) return
@@ -187,13 +187,12 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 		}
 	}
 
-	async function importNamed(name: string, existing: boolean) {
+	async function importNamed(name: string, words: string[], admitted: AdmittedUnlock, existing: boolean) {
 		// The import's own phrase checks run before the passkey card, so a phrase it refuses leaves no
 		// new passkey behind.
-		const words = canonicalizeMnemonic(deps.seedPhrase.value ?? "")
 		if (words.length !== PHRASE_WORD_COUNT) throw new Error("Invalid mnemonic length")
 		zeroize(await getEntropy(words))
-		const unlock = await deps.chooseUnlock({ step: "import", profileName: name }, existing)
+		const unlock = await deps.unlockFor(admitted, { step: "import", profileName: name }, existing)
 		if (unlock === null) return undefined
 		// A passkey answer is held across the duplicate confirm only: the next Import asks again.
 		return deps.withDuplicateConfirm(() =>
@@ -233,24 +232,29 @@ function useImportUnlock(unlockMethod: Ref<UnlockMethod>, password: Ref<string>,
 	const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
 	const newPasskey = useNewProfilePasskey(runCeremony)
 
-	/** The new password, or the passkey answer the page's card returns; `null` when the card was
+	/** The admitted password, or the passkey answer the page's card returns; `null` when the card was
 	 *  cancelled, which leaves the form as it was. */
-	async function chooseUnlock(display: NewPasskeyDisplay, existing: boolean): Promise<NewProfileUnlock | null> {
-		if (unlockMethod.value === "password") return { password: password.value }
+	async function unlockFor(admitted: AdmittedUnlock, display: NewPasskeyDisplay, existing: boolean): Promise<NewProfileUnlock | null> {
+		if (admitted.method === "password") return { password: admitted.password }
 		try {
 			return { credentialData: await newPasskey.ask(display, existing) }
 		} catch (err) {
 			if (handleCancelOrUnconfirmed(err, opts.openToast)) return null
-			throw new Error(passkeyFailureCopy(err, errorMessageFromUnknown(err)))
+			throw new Error(passkeyFailureCopy(err, errorMessageFromUnknown(err)), { cause: err })
 		}
 	}
+
+	const admitUnlock = (): AdmittedUnlock => ({ method: unlockMethod.value, password: password.value })
+	/** Restore's: it reads the form at its own step, which holds because a restore hides the unlock
+	 *  choice and the password fields for its whole run. */
+	const chooseUnlock = (display: NewPasskeyDisplay, existing: boolean) => unlockFor(admitUnlock(), display, existing)
 
 	const completeImport: UseProfileImportFlowOptions["completeImport"] = (profile) => {
 		newPasskey.forget()
 		return opts.completeImport(profile)
 	}
 
-	return { ceremonyRequest, onCeremonyResolve, onCeremonyReject, chooseUnlock, completeImport }
+	return { ceremonyRequest, onCeremonyResolve, onCeremonyReject, admitUnlock, unlockFor, chooseUnlock, completeImport }
 }
 
 async function listProfileNames(): Promise<string[]> {
@@ -305,12 +309,11 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 	const { seedPhrase, phraseVerdict } = usePhraseVerdict()
 	const password = ref("")
 	const repeatedPassword = ref("")
-	const maxPasswordLength = 128
 	const isImporting = ref(false)
 	// A phrase opens on Passkey, as Create does; a backup opens on the unlock it was made with.
 	const unlockMethod = ref<UnlockMethod>("passkey")
 
-	const { ceremonyRequest, onCeremonyResolve, onCeremonyReject, chooseUnlock, completeImport } = useImportUnlock(
+	const { ceremonyRequest, onCeremonyResolve, onCeremonyReject, admitUnlock, unlockFor, chooseUnlock, completeImport } = useImportUnlock(
 		unlockMethod,
 		password,
 		opts,
@@ -328,8 +331,8 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 		isAllowedToImportBySeedPhrase,
 		resolveName: () => nameDefault.resolveName(),
 		seedPhrase,
-		unlockMethod,
-		chooseUnlock,
+		admitUnlock,
+		unlockFor,
 		allowDuplicate,
 		withDuplicateConfirm,
 		fillUnknownImportError,
@@ -374,7 +377,7 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 		password,
 		repeatedPassword,
 		unlockMethod,
-		maxPasswordLength,
+		maxPasswordLength: MAX_PASSWORD_LENGTH,
 		isImporting,
 		error,
 		isCopied,

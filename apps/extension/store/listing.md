@@ -28,7 +28,7 @@ PRIVATE BY DEFAULT
 
 YOURS ALONE
 • Your keys stay on your device, behind your password or passkey.
-• No account, no telemetry.
+• No account, no telemetry. Not audited. See the Privacy Policy for what leaves your device.
 • Back up your profile whenever you want.
 
 APPS HAVE TO ASK
@@ -53,7 +53,7 @@ destination the user chooses (the node) or installs (the local prover) is still 
 | Proving inputs (witnesses) | Process memory | Only with the optional local prover installed | `127.0.0.1` (`legal/privacy.md` § 5.8) |
 | Public proving parameters | Browser cache | Downloaded, never uploaded | `crs.aztec-cdn.foundation`, fallback `crs.aztec-labs.com` (§ 5.9) |
 | Token prices | Extension local storage (cache) | A request naming the tokens, no address | CoinGecko, unless fiat display is off (§ 5.2) |
-| Token list (default tokens, their price ids) | Extension local storage, device-wide, outside every backup | Downloaded, never uploaded; the request carries no address, cookie or referrer | `tokens.nulo.sh`, once the Terms are accepted, then about daily (§ 5.11) |
+| Token list (default tokens, their price ids) | Extension local storage, device-wide, outside every backup | Downloaded, never uploaded; the request carries no address, cookie or referrer | `tokens.nulo.sh`, once the Terms are accepted, then about every six hours, and when the user asks in Settings → Tokens (§ 5.11) |
 | Contacts (name, address), profile names | Extension local storage, `wallet/services/contact/spec.ts:11-19` | Only when the user exports contacts, a backup file or an account file, whose file name carries the profile name, and, for a passkey profile, in its passkey label (the row above) | The file the user saves (`downloads`) |
 | Connected-app origins, names, icons, URLs, grants | Extension local storage, `wallet/services/dapp-session/spec.ts:47-70` | Only an app's name, which each transaction it sent records, in a backup file the user exports; app names and origins can also appear in diagnostic logs the user exports | The file the user saves (`downloads`) |
 | Diagnostic logs | Memory; session storage with Developer Mode on | Only when the user exports them | The file the user saves |
@@ -78,9 +78,9 @@ private file system and grows with use; the default quota would evict it.
 #### `alarms`
 
 Schedules four jobs: the token-price refresh while the wallet is unlocked and fiat display is on,
-the token list's daily refresh once the Terms are accepted, the session auto-lock timer, and the
+the token list's refresh about every six hours once the Terms are accepted, the session auto-lock timer, and the
 activity journal's upkeep, which settles operations left in flight and prunes old records
-(`wallet/index.ts:99-102`, `wallet/services/token-list/service.ts:143-146`,
+(`wallet/index.ts:99-102`, `wallet/services/token-list/service.ts:154-159`,
 `wallet/services/profile/session-manager.ts:200`, `wallet/runtime.ts:694`, `:711`).
 
 #### `offscreen`
@@ -238,8 +238,8 @@ The block between the two markers is sent as `approval_notes` with every version
 
 <!-- reviewer-notes:start -->
 Testing without funds: install, choose "Create profile", set a password. The wallet opens on Aztec
-Alpha V6 with a zero balance. The Alpha V6 upgrade is executable on L1 from 2026-10-26; until it runs,
-the wallet shows Alpha V6 as unavailable. To try a send with sponsored fees, switch to the Aztec
+Alpha with a zero balance. The Alpha V6 upgrade is executable on L1 from 2026-10-26; until it runs,
+the wallet shows Alpha as unavailable. To try a send with sponsored fees, switch to the Aztec
 testnet under Networks. Every screen is reachable without a transaction.
 
 Build: the add-on is bundled (Vite). Source is attached to this version as a `git archive` of the

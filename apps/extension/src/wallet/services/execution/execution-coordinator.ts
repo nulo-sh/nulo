@@ -33,6 +33,8 @@ import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { Tx, TxExecutionRequest, TxHash, TxProvingResult, TxSimulationResult } from "@aztec-labs/stdlib/tx"
 import z from "zod"
 import { type ILogger, LogLevel } from "@/wallet/logger"
+import type { IAccountContract } from "@nulo/aztec-runtime/account"
+import type { Network } from "@/wallet/services/network/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { IPXE } from "@/wallet/services/pxe/client"
 import { StepContent, type TaskService, type WrappedTask } from "@/wallet/services/task/service"
@@ -42,6 +44,7 @@ import { DuplicateInitializationError, SessionEndedError } from "@nulo/extension
 import type { ProveBackend, SendExpiry } from "@nulo/wallet-core/jobs"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import type { LastProveOutcome, ProveOutcomeHint, ProvePhaseName } from "./models"
+import type { SharedSendDeps } from "./shared-send-deps"
 
 const PROVE_PHASES = [
 	"detect",
@@ -147,6 +150,24 @@ export function fenceChecks(
 			if (!profile.isFenceLive(fence)) throw new SessionEndedError()
 		},
 	}
+}
+
+/** The network, node, PXE and account a reused estimate sends with, resolved live, never cached. The
+ *  fence is asserted after the network reads and before the account lookup, which reads whichever
+ *  session is live, then re-checked before the account's keys are used. */
+export async function resolveLiveHandles(
+	deps: Pick<SharedSendDeps, "getNetwork" | "getNode" | "getPXE" | "assertFence" | "getAccountContract" | "isFenceLive">,
+	fence: ExecutionFence,
+	networkId: string,
+	accountAddress: string,
+): Promise<{ network: Network; node: AztecNode; pxe: IPXE; account: IAccountContract }> {
+	const network = await deps.getNetwork(networkId)
+	const node = await deps.getNode(network.chainId)
+	const pxe = deps.getPXE(network)
+	await deps.assertFence(fence)
+	const account = await deps.getAccountContract(fence.profileId, network.chainId, accountAddress)
+	fenceChecks(deps, fence).assertLive()
+	return { network, node, pxe, account }
 }
 
 /** The send-time validator text for a nullifier-tree membership collision —
@@ -316,7 +337,7 @@ export class ExecutionCoordinator {
 	 *  per-path and is preserved verbatim) and their slot/claim handling.
 	 *
 	 *  Sequence (frozen):
-	 *    checkCancelled → journal(proving) → prove → checkCancelled →
+	 *    checkCancelled → journal(proving) → checkCancelled → prove → checkCancelled →
 	 *    assertAuthorization → [offchain hook] → toTx → commit(submitting) →
 	 *    checkCancelled → assertLive + send → record → journal(succeeded)
 	 *
@@ -333,6 +354,8 @@ export class ExecutionCoordinator {
 	): Promise<{ txHash: TxHash; offchainOutput?: TOffchain }> {
 		ctx.checkCancelled()
 		await ctx.markJournal({ stage: "proving", enteredProveAt: Date.now() })
+		// A cancel that won the journal lock refused this mark and aborted before the refusal returned.
+		ctx.checkCancelled()
 		const provedTx = await this.proveTxTask(ctx.pxe, ctx.txRequest, ctx.scopes, ctx.parentTask, ctx.journalId)
 		// Key checkpoint: if cancel fired during prove, this prevents
 		// submission. The proof artifact is dropped silently when this throws.

@@ -19,10 +19,11 @@
  */
 
 import { type JobError, type JobProgress, type JobStage, NORMALIZED_RAW_MAX_CHARS } from "@nulo/wallet-core/jobs"
-import { isFieldAddress } from "@nulo/wallet-bridge"
+import { type AuthwitContent, isFieldAddress } from "@nulo/wallet-bridge"
 import { z } from "zod"
 import { isFeeAmount } from "@nulo/wallet-core/jobs"
 import { boundedString } from "@/utils/bounded-string"
+import { MAX_TRACKED_AUTHWITS_PER_ACCOUNT } from "@/wallet/services/auth-registry/spec"
 import { TransferType } from "@/wallet/services/transaction/spec"
 
 export const OPERATION_JOURNAL_SERVICE_NAME = "operation-journal"
@@ -137,6 +138,26 @@ export const JournalRetitleSchema = z.object({ title: z.string(), call: JournalC
 
 export type JournalRetitle = z.infer<typeof JournalRetitleSchema>
 
+/** A send's public authwits and the scope the authwit index files them under. Stored by the commit
+ *  the broadcast depends on, so a send the network took can still list them after a worker stop. */
+export type JournalAuthwits = { chainId: number; account: string; items: { hash: string; content: AuthwitContent }[] }
+
+export const JournalAuthwitsSchema: z.ZodType<JournalAuthwits> = z.object({
+	chainId: z.number(),
+	account: z.string(),
+	items: z
+		.array(
+			z.object({
+				hash: z.string().refine(isFieldAddress).describe("0x-hex below the field modulus"),
+				content: z
+					.custom<AuthwitContent>((v) => typeof v === "object" && v !== null)
+					.describe("any non-null object, kept as stored"),
+			}),
+		)
+		.min(1)
+		.max(MAX_TRACKED_AUTHWITS_PER_ACCOUNT),
+})
+
 export interface OperationRecord extends JournalMetadata {
 	/** Random 16-hex id assigned at `createOperation`. */
 	id: string
@@ -159,6 +180,9 @@ export interface OperationRecord extends JournalMetadata {
 	error: JobError | null
 	/** Set when the record enters a terminal stage; `null` otherwise. */
 	terminalAt: number | null
+	/** Written with `submitting`; dropped once the authwit index holds the grants, which `succeeded`
+	 *  implies. */
+	publicAuthwits?: JournalAuthwits
 	/** Attempt counter for the retry policy; starts at 0. */
 	attempts: number
 	createdAt: number
@@ -195,7 +219,7 @@ export type NewOperationInput = {
 	 * Optional initial-stage override. Defaults to `{ stage: "pending" }`.
 	 * Restricted to non-terminal pre-execution stages so callers can't
 	 * mint impossible terminal-stage records by accident. Used by
-	 * `background.ts:onWalletMessage` (via `tryCreateQueuedJournal`) to
+	 * `wallet-message.ts:onWalletMessage` (via `tryCreateQueuedJournal`) to
 	 * surface incoming dApp sendTx requests in the activity feed before
 	 * the handler claims them, and by a popup transfer that must wait for
 	 * an earlier send.
@@ -342,6 +366,7 @@ export const OperationRecordSchema: z.ZodType<OperationRecord> = z.object({
 	progress: JobProgressSchema,
 	error: JobErrorSchema.nullable(),
 	terminalAt: z.number().nullable(),
+	publicAuthwits: JournalAuthwitsSchema.optional(),
 	attempts: z.number().int().nonnegative(),
 	createdAt: z.number(),
 	updatedAt: z.number(),
@@ -424,7 +449,13 @@ export const OperationJournalMethodSchemas = {
 	 * other stages it MUST be `null` (or omitted). The service throws on mismatch.
 	 */
 	transitionOperation: {
-		params: z.tuple([z.string().min(1), JobProgressSchema, JobErrorSchema.nullable().optional(), JournalRetitleSchema.optional()]),
+		params: z.tuple([
+			z.string().min(1),
+			JobProgressSchema,
+			JobErrorSchema.nullable().optional(),
+			JournalRetitleSchema.optional(),
+			JournalAuthwitsSchema.optional(),
+		]),
 		result: OperationRecordSchema,
 	},
 	/**

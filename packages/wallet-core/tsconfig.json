@@ -1,13 +1,7 @@
 {
+	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
-		"target": "ESNext",
-		"module": "ESNext",
-		"moduleResolution": "Bundler",
-		"strict": true,
-		"noEmit": true,
 		"lib": ["ESNext", "DOM", "WebWorker"],
-		"isolatedModules": true,
-		"skipLibCheck": true,
 		"types": ["node"],
 		"paths": {
 			"@/*": ["./src/*"]

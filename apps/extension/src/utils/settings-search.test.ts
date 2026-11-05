@@ -28,6 +28,15 @@ describe("matching", () => {
 		expect(find("full", NO_SIDE_SURFACE)).toEqual([])
 	})
 
+	test('"secure" and "unlock" find Strict security mode, whose description names neither', () => {
+		expect(find("secure")).toEqual([["Lock", ["lock-strict-mode"]]])
+		expect(find("unlock")).toEqual([
+			["Safety", ["hub-unlock-method"]],
+			["Lock", ["lock-now", "lock-strict-mode"]],
+			["Privacy", ["privacy-fiat-values"]],
+		])
+	})
+
 	test("case and accents fold: THÉME finds Theme", () => {
 		expect(find("THÉME")).toEqual([
 			["Preferences", ["hub-display"]],

@@ -378,30 +378,25 @@ export async function rejectCapabilities(page: Page): Promise<void> {
 	await clickByTestId(page, "cap-reject-btn")
 }
 
+const EXECUTE_APPROVABLE_TIMEOUT_MS = 120_000
+
 /**
  * Wait for the execute popup to be APPROVABLE: the confirm button's native
  * `disabled` aggregates ALL its gates (`windows/execute/index.vue` — payload
- * init, register_token metadata, fee selection), so reading the live attribute
- * is drift-proof; the pointer-events clause additionally covers the CSS-only
- * `loading` state the design Button never reflects into `disabled`. Deliberately
- * does NOT wait for fee ESTIMATES to settle — they don't gate the button and
- * `approve()` treats them as optional.
+ * init, register_token metadata, fee selection, and every operation's fee
+ * estimate and authorization preview, which must settle first), so reading the
+ * live attribute is drift-proof; the pointer-events clause additionally covers
+ * the CSS-only `loading` state the design Button never reflects into `disabled`.
  *
- * `waitForExecuteContent` (op rows rendered) is a strictly weaker signal: the
- * fee-selection settle happens after rows render, and on a cold shard that gap
- * alone historically blew the generic 10s click wait (see implementations-plan/archive/e2e-deflake/plan.md, Flake ledger).
- * Budget rationale: the DEFAULT stays 10s — the suite's prior latency tolerance,
- * now on the correct signal (don't widen every caller without
- * per-caller evidence). The two historically-cold callers pass 120s explicitly —
- * the budget the sibling Send flow uses for the same FeeSettingsCard gate. The
- * telemetry below accumulates the evidence for any future per-caller change.
+ * `waitForExecuteContent` (op rows rendered) is a strictly weaker signal. The
+ * default is the budget for an estimate-gated button, as on Send.
  *
  * Every wait appends `content_ready→approvable` timing to
  * `.e2e-state/exec-approvable-timings.log` (worktree-local; uploaded with the CI
  * failure artifact) — passing runs produce evidence too, since vitest swallows
  * console output for passing tests.
  */
-export async function waitForExecuteApprovable(page: Page, timeout = 10_000): Promise<void> {
+export async function waitForExecuteApprovable(page: Page, timeout = EXECUTE_APPROVABLE_TIMEOUT_MS): Promise<void> {
 	const t0 = Date.now()
 	try {
 		await page.waitForFunction(
@@ -450,9 +445,7 @@ function recordApprovableTiming(line: string): void {
  * `send-fee-method-trigger` / `send-fee-method-{kind}`. Two-step override:
  * first click trigger, then click the chosen method.
  *
- * `approvableTimeoutMs` — cold-path callers (the FIRST execute popups of a fresh
- * browser/account) pass 120s, matching the sendTransfer precedent for the same
- * gate; everyone else keeps the suite's prior 10s tolerance.
+ * `approvableTimeoutMs` overrides the approvable wait's 120s default.
  */
 export async function approveExecute(
 	page: Page,
@@ -466,7 +459,7 @@ export async function approveExecute(
 	// exactly what a cold shard breaks. The final click stays delegated to
 	// clickByTestId for its target-detach swallow (the popup self-closes on the
 	// click that resolves the interaction).
-	await waitForExecuteApprovable(page, opts.approvableTimeoutMs ?? 10_000)
+	await waitForExecuteApprovable(page, opts.approvableTimeoutMs)
 	await clickByTestId(page, "execute-confirm-btn")
 }
 

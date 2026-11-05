@@ -2,9 +2,10 @@
 <script setup>
 import { FieldWarning } from "@nulo/design"
 /** Utils */
-import { sameFieldAddress } from "@nulo/wallet-bridge"
+import { isFieldAddress, sameFieldAddress } from "@nulo/wallet-bridge"
 import { sameStoredName } from "@/utils/account-name"
-import { isValidHex } from "@/utils/string"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
+import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** Services */
 import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
@@ -29,12 +30,19 @@ const props = defineProps({
 let fpcService = null
 const fpcs = ref([])
 
+const addressRefusal = (v) => {
+	if (!isHex32(v)) return "Invalid FPC address"
+	// Out of field range: the contact form's wording.
+	if (!isFieldAddress(v)) return "Invalid address"
+	return null
+}
+
 const form = useFormState({
 	name: {
 		initial: "",
 		validate: (v) => {
 			if (!v.replace(/\s/g, "").length) return null
-			if (fpcs.value.some((f) => sameStoredName(f.name, v))) return "Already exist"
+			if (fpcs.value.some((f) => sameStoredName(f.name, v))) return ALREADY_EXISTS
 			return null
 		},
 	},
@@ -42,7 +50,8 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v) return null
-			if (!isValidHex(v)) return "Invalid FPC address"
+			const refusal = addressRefusal(v)
+			if (refusal) return refusal
 			if (fpcs.value.some((f) => sameFieldAddress(v, f.address ?? ""))) return "Already added"
 			return null
 		},
@@ -52,9 +61,9 @@ const form = useFormState({
 const nameTerm = form.fields.name.value
 const fpcAddressTerm = form.fields.address.value
 
-const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist")
+const isAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS)
 const isAddressStored = computed(() => form.fields.address.error.value === "Already added")
-const isValidAddress = computed(() => isValidHex(fpcAddressTerm.value))
+const isValidAddress = computed(() => addressRefusal(fpcAddressTerm.value) === null)
 const isAvailableToAddFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
@@ -157,7 +166,7 @@ watch(
 			data-testid="fpc-name-input"
 		>
 			<template v-if="isAlreadyExist" #right>
-				<FieldWarning> Already exist </FieldWarning>
+				<FieldWarning> {{ ALREADY_EXISTS }} </FieldWarning>
 			</template>
 		</Input>
 
@@ -171,7 +180,7 @@ watch(
 		>
 			<template #right>
 				<Transition name="fade">
-					<FieldWarning v-if="!isValidAddress && fpcAddressTerm"> Invalid FPC address </FieldWarning>
+					<FieldWarning v-if="!isValidAddress && fpcAddressTerm"> {{ addressRefusal(fpcAddressTerm) }} </FieldWarning>
 					<FieldWarning v-else-if="isAddressStored"> Already added </FieldWarning>
 				</Transition>
 			</template>

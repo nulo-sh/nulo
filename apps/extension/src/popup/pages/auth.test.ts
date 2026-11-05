@@ -1,10 +1,11 @@
 import { createTestingPinia } from "@pinia/testing"
-import { flushPromises, mount } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { Flex, Icon, Input, Text } from "@nulo/design"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, typeNow } from "../../../tests/helpers/credential-pins"
+import { sendEvent } from "../../../tests/helpers/send-event"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
@@ -22,6 +23,7 @@ const unlockPasskeyProfile = vi.fn()
 const getPasskeyUnlockParams = vi.fn()
 const runCeremony = vi.fn()
 const initTransactionServiceMock = vi.fn()
+const ensureAccountClientMock = vi.fn()
 const setLastActiveProfileIdMock = vi.fn(async () => undefined)
 const openToastMock = vi.fn()
 // Controllable activation wait: defaults to the REAL implementation; the
@@ -53,7 +55,7 @@ const elsewhere = vi.hoisted(() => {
 	return {
 		picks,
 		deletions,
-		pick: (id: string) => {
+		pick: (id: string | undefined) => {
 			for (const listener of picks) listener(id)
 		},
 		delete: (id: string) => {
@@ -73,8 +75,8 @@ vi.mock("@/utils/core", () => ({
 				remove: (listener: (profile: { id: string }) => void) => elsewhere.deletions.delete(listener),
 			},
 		},
-		account: undefined,
 	},
+	ensureAccountClient: () => ensureAccountClientMock(),
 	initTransactionService: (...args: unknown[]) => initTransactionServiceMock(...(args as [])),
 	refreshBalances: vi.fn(async () => undefined),
 }))
@@ -128,16 +130,24 @@ beforeEach(() => {
 	openToastMock.mockReset()
 	useToast().closeToast()
 	initTransactionServiceMock.mockReset()
+	ensureAccountClientMock.mockReset()
 	setLastActiveProfileIdMock.mockReset()
 	setLastActiveProfileIdMock.mockResolvedValue(undefined)
 	waitHolder.mock.mockReset().mockImplementation((...a: unknown[]) => waitHolder.real(...a))
+	vi.mocked(managers.profile.getProfiles).mockReset().mockResolvedValue([])
+	vi.mocked(getLastActiveProfileId).mockReset().mockResolvedValue(undefined)
 	vi.stubGlobal("chrome", {
 		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
 	installChromeStorage({}, { persist: false })
 })
-afterEach(() => vi.unstubAllGlobals())
+// A page left mounted still hears picks and deletions, and its reads would take a later test's answers.
+const mounted: VueWrapper[] = []
+afterEach(() => {
+	for (const wrapper of mounted.splice(0)) wrapper.unmount()
+	vi.unstubAllGlobals()
+})
 
 /** Minimal Input stub that keeps v-model wiring alive so the submit gate
  *  (`isAllowedToContinue`) opens once a password is typed. */
@@ -149,15 +159,17 @@ const InputStub = {
 	template: `<input :value="modelValue" data-stub-input @input="$emit('update:modelValue', $event.target.value); $emit('input', $event)" />`,
 }
 
-function mountAuth(provide: Record<string, unknown> = {}) {
+/** `selectedAtMount` is the selection the page mounts with; without it, `p1` is selected just after. */
+function mountAuth(provide: Record<string, unknown> = {}, selectedAtMount?: ProfileInfo) {
+	const initialState = selectedAtMount ? { app: { profile: selectedAtMount } } : {}
 	const wrapper = mount(Auth, {
 		global: {
 			provide,
-			plugins: [createTestingPinia({ createSpy: vi.fn, stubActions: false })],
+			plugins: [createTestingPinia({ createSpy: vi.fn, stubActions: false, initialState })],
 			stubs: {
 				Input: InputStub,
 				Button: { template: `<button type="submit" v-bind="$attrs"><slot /></button>` },
-				Tooltip: { template: `<div><slot /></div>` },
+				Tooltip: { name: "Tooltip", template: `<div><slot /></div>` },
 				Flex: { template: `<div><slot /></div>` },
 				AuthProfilePill: true,
 				PasskeyCeremonyDialog: true,
@@ -165,8 +177,9 @@ function mountAuth(provide: Record<string, unknown> = {}) {
 			},
 		},
 	})
+	mounted.push(wrapper)
 	const appStore = useAppStore()
-	appStore.profile = { id: "p1", name: "P", type: "password" } as never
+	if (!selectedAtMount) appStore.profile = { id: "p1", name: "P", type: "password" } as never
 	return { wrapper, appStore }
 }
 
@@ -201,6 +214,40 @@ describe("auth.vue — torn-import unlock refusal", () => {
 		await flushPromises()
 		await wrapper.vm.$nextTick()
 		expect(wrapper.find('[data-testid="auth-restore-torn"]').exists()).toBe(false)
+	})
+})
+
+describe("auth.vue — the recovery link asks the question the person has", () => {
+	const link = (wrapper: VueWrapper) => wrapper.get('[data-testid="auth-reset"]')
+
+	test.each([
+		["password", "Forgot your password?"],
+		["passkey", "Lost your passkey?"],
+	])("a %s profile's link reads %j and opens the recovery card", async (type, words) => {
+		const { wrapper, appStore } = mountAuth()
+		await flushPromises()
+		appStore.profile = { id: "p1", name: "P", type } as never
+		await flushPromises()
+		expect(link(wrapper).text()).toBe(words)
+		await link(wrapper).trigger("click")
+		expect(usePopupStore().open).toHaveBeenCalledWith("forgot_password")
+		expect(wrapper.findComponent({ name: "Tooltip" }).exists()).toBe(false)
+	})
+
+	test("an unfinished import's link reads Delete profile and opens the same card; another profile asks again", async () => {
+		unlockProfile.mockRejectedValue(new RestoreTornError(undefined, { profileId: "p1" }))
+		const { wrapper, appStore } = mountAuth()
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		expect(link(wrapper).text()).toBe("Delete profile")
+		await link(wrapper).trigger("click")
+		expect(usePopupStore().open).toHaveBeenCalledWith("forgot_password")
+
+		appStore.profile = { id: "p2", name: "Q", type: "password" } as never
+		await flushPromises()
+		expect(link(wrapper).text()).toBe("Forgot your password?")
 	})
 })
 
@@ -440,15 +487,16 @@ describe("auth.vue — the mount's last-active lookup", () => {
 		expect(appStore.profile).toBeUndefined()
 	})
 
-	test("after the last active profile was deleted, several left: none is presumed and the chooser opens", async () => {
+	test("after the last active profile was deleted, several left: the first by name is selected and no chooser opens", async () => {
 		vi.mocked(getLastActiveProfileId).mockResolvedValueOnce("deleted")
 		vi.mocked(managers.profile.getProfiles).mockResolvedValueOnce([B, A])
 		const { appStore } = mountAuth()
+		const selected = () => appStore.profile?.id
 		appStore.profile = undefined
 		await flushPromises()
 
-		expect(appStore.profile).toBeUndefined()
-		expect(usePopupStore().isOpened("select_profile")).toBe(true)
+		expect(selected()).toBe("pA")
+		expect(usePopupStore().isOpened("select_profile")).toBe(false)
 	})
 })
 
@@ -535,11 +583,11 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 
 		vi.mocked(getLastActiveProfileId).mockResolvedValue(undefined)
 		const deleted = await unlockThatFails(A, () => {
-			vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+			vi.mocked(managers.profile.getProfiles).mockResolvedValue([C, B])
 			elsewhere.delete("pA")
 		})
-		expect(deleted.appStore.profile).toBeUndefined()
-		expect(usePopupStore().isOpened("select_profile")).toBe(true)
+		expect(deleted.appStore.profile?.id).toBe("pB")
+		expect(usePopupStore().isOpened("select_profile")).toBe(false)
 	})
 
 	test("a pick elsewhere waits out an activation running here, and applies only if that activation leaves the page locked", async () => {
@@ -585,20 +633,18 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		expect(appStore.profile?.id).toBe("pC")
 	})
 
-	test("its profile deleted elsewhere: several left opens the chooser with none selected; the only one left is selected", async () => {
+	test("its profile deleted elsewhere: several left select the first by name; the only one left is selected", async () => {
 		const { appStore } = mountAuth()
 		appStore.profile = A
 		await flushPromises()
 		const popups = usePopupStore()
 
-		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([C, B])
 		elsewhere.delete("pA")
 		await flushPromises()
-		expect(appStore.profile).toBeUndefined()
-		expect(popups.isOpened("select_profile")).toBe(true)
+		expect(appStore.profile?.id).toBe("pB")
+		expect(popups.isOpened("select_profile")).toBe(false)
 
-		popups.closeAll()
-		appStore.profile = B
 		vi.mocked(managers.profile.getProfiles).mockResolvedValue([C])
 		elsewhere.delete("pB")
 		await flushPromises()
@@ -606,7 +652,7 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		expect(popups.isOpened("select_profile")).toBe(false)
 	})
 
-	test("its selection cleared from outside while locked: the only profile left is selected, several open the chooser", async () => {
+	test("its selection cleared from outside while locked: the only profile left is selected, else the first by name", async () => {
 		const { appStore } = mountAuth()
 		appStore.profile = A
 		await flushPromises()
@@ -618,11 +664,150 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		await flushPromises()
 		expect(selected()).toBe("pB")
 
-		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([C, B])
 		appStore.profile = undefined
 		await flushPromises()
-		expect(selected()).toBeUndefined()
+		expect(selected()).toBe("pB")
+		expect(popups.isOpened("select_profile")).toBe(false)
+	})
+
+	test("a selection cleared while the person has the chooser open still settles behind it, and the chooser stays", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		const popups = usePopupStore()
+		popups.open("select_profile")
+		const selected = () => appStore.profile?.id
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([C, B])
+		appStore.profile = undefined
+		await flushPromises()
+		expect(selected()).toBe("pB")
 		expect(popups.isOpened("select_profile")).toBe(true)
+	})
+
+	test("a pick another window makes while an automatic settle reads is the one that stands", async () => {
+		const { appStore } = mountAuth()
+		await flushPromises()
+		const selected = () => appStore.profile?.id
+		let releaseSettle!: () => void
+		let releasePick!: () => void
+		vi.mocked(managers.profile.getProfiles)
+			.mockReturnValueOnce(new Promise((resolve) => (releaseSettle = () => resolve([C, B]))))
+			.mockReturnValueOnce(new Promise((resolve) => (releasePick = () => resolve([C, B]))))
+		appStore.profile = undefined
+		await flushPromises()
+
+		// On Firefox a read can still answer the pointer the pick replaced: the settle never sees "pC".
+		elsewhere.pick("pC")
+		await flushPromises()
+		releaseSettle()
+		await flushPromises()
+		releasePick()
+		await flushPromises()
+		expect(selected()).toBe("pC")
+	})
+
+	test("a profile picked here after an automatic settle stands over another window's pick still loading", async () => {
+		const { appStore } = mountAuth()
+		await flushPromises()
+		const selected = () => appStore.profile?.id
+		let releaseSettle!: () => void
+		let releasePick!: () => void
+		vi.mocked(managers.profile.getProfiles)
+			.mockReturnValueOnce(new Promise((resolve) => (releaseSettle = () => resolve([C, B]))))
+			.mockReturnValueOnce(new Promise((resolve) => (releasePick = () => resolve([C, B]))))
+		appStore.profile = undefined
+		await flushPromises()
+
+		elsewhere.pick("pC")
+		await flushPromises()
+		releaseSettle()
+		await flushPromises()
+		expect(selected()).toBe("pB")
+		// The chooser's pick, before its pointer write is heard: no newer follow supersedes the old one.
+		appStore.profile = { ...A }
+		releasePick()
+		await flushPromises()
+		expect(selected()).toBe("pA")
+	})
+
+	test("a pick of the selected profile another window makes while a settle reads keeps it", async () => {
+		vi.mocked(getLastActiveProfileId).mockResolvedValueOnce("pB")
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (release = () => resolve([A, B]))))
+		const { appStore } = mountAuth({}, A)
+		await flushPromises()
+
+		// The settle read the pointer this pick replaced.
+		elsewhere.pick("pA")
+		release()
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pA")
+	})
+
+	test("a pick of the selected profile heard before a settle began does not stop it", async () => {
+		let fail!: () => void
+		unlockProfile.mockReturnValueOnce(new Promise((_resolve, reject) => (fail = () => reject(new Error("refused")))))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+
+		elsewhere.pick("pB")
+		elsewhere.pick("pA")
+		// The replayed settle reads a newer write whose event is still on its way.
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pC")
+		fail()
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pC")
+	})
+
+	test("a stale pick naming a deleted selection does not stop the settle that follows the deletion", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValueOnce("pB")
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (release = () => resolve([B, C]))))
+		elsewhere.delete("pA")
+		await flushPromises()
+		elsewhere.pick("pA")
+		release()
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+	})
+
+	test("with nothing selected, a pointer event with no id does not stop the settle", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		const selected = () => appStore.profile?.id
+
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (release = () => resolve([C, B]))))
+		appStore.profile = undefined
+		await flushPromises()
+		elsewhere.pick(undefined)
+		release()
+		await flushPromises()
+		expect(selected()).toBe("pB")
+	})
+
+	test("with no last active profile in the list, a selection it still holds stays; a last active one is selected", async () => {
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([A, B, C])
+		const kept = mountAuth({}, C)
+		await flushPromises()
+		expect(kept.appStore.profile?.id).toBe("pC")
+		kept.wrapper.unmount()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+		const lastActive = mountAuth({}, C)
+		await flushPromises()
+		expect(lastActive.appStore.profile?.id).toBe("pB")
 	})
 
 	test("a deletion of another profile changes nothing here", async () => {
@@ -640,9 +825,7 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 })
 
 describe("auth.vue — the account client survives an unlock", () => {
-	test("a successful unlock keeps the account client the wallet already holds and still runs its continuation", async () => {
-		const existing = { getAccounts: vi.fn() }
-		managers.account = existing as never
+	test("a successful unlock ensures the account client, never replacing it, and still runs its continuation", async () => {
 		unlockProfile.mockResolvedValue({ id: "p1", name: "P", type: "password" })
 		const { wrapper, appStore } = mountAuth()
 		await wrapper.find("[data-stub-input]").setValue("pw")
@@ -650,8 +833,8 @@ describe("auth.vue — the account client survives an unlock", () => {
 		appStore.isLogined = true
 		await flushPromises()
 
+		expect(ensureAccountClientMock).toHaveBeenCalledTimes(1)
 		expect(AccountServiceClient).not.toHaveBeenCalled()
-		expect(managers.account).toBe(existing)
 		expect(initTransactionServiceMock).toHaveBeenCalled()
 	})
 })
@@ -679,6 +862,37 @@ describe("auth.vue — passkey unlock", () => {
 			profileName: "P",
 		})
 		expect(unlockPasskeyProfile).toHaveBeenCalledWith("p1", { id: "cred-1", prfSalt: "c2FsdA==" })
+	})
+
+	test("the prompt names the profile as the store names it once the lookup settles", async () => {
+		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
+		getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
+		runCeremony.mockResolvedValue({ id: "cred-1", prfSalt: "c2FsdA==" })
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+		await flushPromises()
+		await wrapper.find("form").trigger("submit")
+		appStore.profile = { id: "p1", name: "Renamed", type: "passkey" } as never
+		answerLookup({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+		await flushPromises()
+		expect(runCeremony).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ step: "unlock", profileName: "Renamed" }))
+	})
+
+	test("a lookup that settles on another selection asks nothing, though the selection is back before the page resumes", async () => {
+		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
+		getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+		await flushPromises()
+		await wrapper.find("form").trigger("submit")
+		appStore.profile = { id: "p2", name: "Q", type: "passkey" } as never
+		answerLookup({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+		queueMicrotask(() => {
+			appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+		})
+		await flushPromises()
+		expect(runCeremony).not.toHaveBeenCalled()
+		expect(unlockPasskeyProfile).not.toHaveBeenCalled()
 	})
 
 	test("in Firefox's toolbar panel, the background runs the step and the page runs no ceremony", async () => {
@@ -932,8 +1146,7 @@ describe("auth.vue — the password field's controls, real Input", () => {
 				components: { Flex, Input, Text, Icon },
 				stubs: {
 					Button: { template: `<button type="submit" v-bind="$attrs"><slot /></button>` },
-					Tooltip: { template: `<div><slot /></div>` },
-					AuthProfilePill: true,
+					AuthProfilePill: { template: `<button type="button" data-testid="auth-profile-pill" />` },
 					PasskeyCeremonyDialog: true,
 					Transition: true,
 				},
@@ -984,11 +1197,58 @@ describe("auth.vue — the password field's controls, real Input", () => {
 		expect(shaker().className).toMatch(/shake/)
 	})
 
-	test("before the profile is known, the heading, its line and the form keep their place hidden and the field takes no focus", async () => {
+	const P1 = { id: "p1", name: "P", type: "password" } as never
+	const P2 = { id: "p2", name: "Q", type: "password" } as never
+	const submit = () => (wrapper as NonNullable<typeof wrapper>).get('[data-testid="auth-submit"]').element as HTMLButtonElement
+
+	test("a switch to another profile and back leaves the field empty and masked, and Continue off", async () => {
+		wrapper = mountReal()
+		await flushPromises()
+		typeNow(nativeInput(wrapper, FIELD), "pass1234")
+		sendEvent(wrapper.get('[data-testid="auth-password-input-visibility-toggle"]').element, "click")
+		await flushPromises()
+		expect(nativeInput(wrapper, FIELD).type).toBe("text")
+		expect(submit().disabled).toBe(false)
+
+		useAppStore().profile = P2
+		await flushPromises()
+		useAppStore().profile = P1
+		await flushPromises()
+		expect(nativeInput(wrapper, FIELD).value).toBe("")
+		expect(nativeInput(wrapper, FIELD).type).toBe("password")
+		expect(submit().disabled).toBe(true)
+	})
+
+	test("a switch clears a wrong password's error", async () => {
+		unlockProfile.mockRejectedValue(new InvalidPasswordError())
+		wrapper = mountReal()
+		await flushPromises()
+		typeNow(nativeInput(wrapper, FIELD), "wrong-pass")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		expect(wrapper.find('[data-testid="error-text"]').exists()).toBe(true)
+
+		useAppStore().profile = P2
+		await flushPromises()
+		expect(wrapper.find('[data-testid="error-text"]').exists()).toBe(false)
+		expect(nativeInput(wrapper, FIELD).value).toBe("")
+	})
+
+	test("(control) the first profile a screen learns keeps what the field holds", async () => {
+		wrapper = mountReal({ known: false })
+		await flushPromises()
+		typeNow(nativeInput(wrapper, FIELD), "pass1234")
+		useAppStore().profile = P1
+		await flushPromises()
+		expect(nativeInput(wrapper, FIELD).value).toBe("pass1234")
+	})
+
+	test("before the profile is known, the heading, its line, the form and the recovery link keep their place hidden and the field takes no focus", async () => {
 		wrapper = mountReal({ known: false })
 		await flushPromises()
 		expect(hidden("auth-heading")).toBe(true)
 		expect(hidden("auth-form")).toBe(true)
+		expect(hidden("auth-reset")).toBe(true)
 		expect(document.activeElement).not.toBe(nativeInput(wrapper, FIELD))
 	})
 
@@ -999,16 +1259,17 @@ describe("auth.vue — the password field's controls, real Input", () => {
 		await flushPromises()
 		expect(hidden("auth-heading")).toBe(false)
 		expect(hidden("auth-form")).toBe(false)
+		expect(hidden("auth-reset")).toBe(false)
 		expect(document.activeElement).toBe(nativeInput(wrapper, FIELD))
 		wrapper.unmount()
 
 		wrapper = mountReal({ known: false })
 		await flushPromises()
-		const reset = wrapper.get('[data-testid="auth-reset"]').element as HTMLButtonElement
-		reset.focus()
+		const pill = wrapper.get('[data-testid="auth-profile-pill"]').element as HTMLButtonElement
+		pill.focus()
 		useAppStore().profile = { id: "p1", name: "P", type: "password" } as never
 		await flushPromises()
-		expect(document.activeElement).toBe(reset)
+		expect(document.activeElement).toBe(pill)
 	})
 
 	test("a passkey profile known later shows the passkey form and never the password field", async () => {

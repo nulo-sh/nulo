@@ -2,6 +2,7 @@ import { type PinnedKey, verifyEnvelope } from "./envelope"
 import floor from "./floor.json"
 import { PINNED_KEYS } from "./keys"
 import { PayloadError, parsePayload, selectEntries, type TokenListEntry, type TokenListPair } from "./parse"
+import type { PriceFeeds } from "./price-feeds"
 
 export { BUNDLED_TOKEN_CLASS_IDS, TOKEN_METADATA_SLOTS, type TokenMetadataSlots } from "./class-ids"
 export {
@@ -16,16 +17,28 @@ export {
 export { PINNED_KEYS, PLACEHOLDER_PUBLIC_KEY } from "./keys"
 export {
 	BN254_FR_MODULUS,
+	checkPriceFeeds,
 	isFieldHex,
 	MAX_ENTRIES_PER_CHAIN,
 	PayloadError,
 	parsePayload,
 	selectEntries,
+	tokenKey,
 	type TokenListEntry,
 	type TokenListPair,
 	type TokenListPayload,
 } from "./parse"
-export { isPriceId, PRICE_IDS, type PriceId } from "./price-ids"
+export {
+	FEE_JUICE_PRICE_FEED,
+	FEE_JUICE_PRICE_ID,
+	isFeedId,
+	MAX_BAND_RATIO,
+	MAX_FEED_USD,
+	MAX_PRICE_FEEDS,
+	MIN_FEED_USD,
+	type PriceFeed,
+	type PriceFeeds,
+} from "./price-feeds"
 
 /**
  * The sequence of the last list that delisted or flagged a token, as of this build: a list below it
@@ -40,6 +53,8 @@ export type VerifiedTokenList = {
 	entries: TokenListEntry[]
 	/** Every flagged pair, of any class: a flag warns about a token whoever added it. */
 	flagged: TokenListPair[]
+	/** The accepted feed of each price id an entry keeps, and no other. */
+	priceFeeds: PriceFeeds
 }
 
 /**
@@ -54,5 +69,8 @@ export async function readTokenList(
 	const { keyId, payload } = await verifyEnvelope(text, keys)
 	const parsed = parsePayload(payload, "wallet")
 	if (parsed.sequence < floor) throw new PayloadError("payload.sequence")
-	return { keyId, sequence: parsed.sequence, issuedAt: parsed.issuedAt, entries: selectEntries(parsed.tokens), flagged: parsed.flagged }
+	const feeds = parsed.priceFeeds ?? {}
+	const entries = selectEntries(parsed.tokens, feeds)
+	const priceFeeds = Object.fromEntries(entries.flatMap((e) => (e.priceId === undefined ? [] : [[e.priceId, feeds[e.priceId]]])))
+	return { keyId, sequence: parsed.sequence, issuedAt: parsed.issuedAt, entries, flagged: parsed.flagged, priceFeeds }
 }

@@ -37,13 +37,13 @@ const KAT = {
 }
 
 const CHAIN = { l1ChainId: 31337, rollupVersion: 1 }
+const ACCOUNT = AztecAddress.fromFieldUnsafe(new Fr(0xacc0n))
 
 /** The preimage the Noir `CallAuthwit` macro emits: [selector, innerHash, onBehalfOf, msgSender,
  *  functionSelector, argsHash, ...args]. Built with the real hashes so `fromFields` validation passes. */
-async function realAuthorizationFields() {
+async function realAuthorizationFields(onBehalfOf: AztecAddress) {
 	const selector = await CallAuthorizationRequest.getSelector()
 	const msgSender = AztecAddress.fromFieldUnsafe(new Fr(0x1234n))
-	const onBehalfOf = AztecAddress.fromFieldUnsafe(new Fr(0xabcdn))
 	const functionSelector = FunctionSelector.fromField(new Fr(0x11223344n))
 	const args = [new Fr(7n), new Fr(9n)]
 	const argsHash = await computeVarArgsHash(args)
@@ -69,12 +69,13 @@ function executionResult(consumer: AztecAddress, authorization: Fr[]) {
 
 describe("AuthwitDiscoverer.discoverPrivateAuthwits — a real CallAuthorizationRequest", () => {
 	test("decodes the real preimage into the full record and the wire action, skipping non-authorization effects", async () => {
-		const { fields, msgSender, functionSelector, args, innerHash } = await realAuthorizationFields()
+		const { fields, msgSender, functionSelector, args, innerHash } = await realAuthorizationFields(ACCOUNT)
 		const consumer = AztecAddress.fromFieldUnsafe(new Fr(0x5555n))
-		const account = AztecAddress.fromFieldUnsafe(new Fr(0xacc0n))
+		const account = ACCOUNT
 		const simulateTx = async () => ({ privateExecutionResult: executionResult(consumer, fields) })
 		const ctx = {
-			txRequest: {},
+			txRequest: { authWitnesses: [] },
+			scopes: [ACCOUNT],
 			node: { getNodeInfo: async () => CHAIN },
 			pxe: { simulateTx },
 			account: { address: account },
@@ -108,13 +109,32 @@ describe("AuthwitDiscoverer.discoverPrivateAuthwits — a real CallAuthorization
 		expect(result.discovered[0]?.selector).toBe("0x11223344")
 	})
 
+	test("a valid request on behalf of another account decodes but yields nothing to sign", async () => {
+		const { fields } = await realAuthorizationFields(AztecAddress.fromFieldUnsafe(new Fr(0xabcdn)))
+		const consumer = AztecAddress.fromFieldUnsafe(new Fr(0x5555n))
+		const ctx = {
+			txRequest: { authWitnesses: [] },
+			scopes: [ACCOUNT],
+			node: { getNodeInfo: async () => CHAIN },
+			pxe: { simulateTx: async () => ({ privateExecutionResult: executionResult(consumer, fields) }) },
+			account: { address: ACCOUNT },
+			network: { chainId: 0, ...CHAIN },
+		}
+		const result = await new AuthwitDiscoverer(fakeLogger()).discoverPrivateAuthwits(
+			{ networkId: "net", accountAddress: ACCOUNT.toString(), actions: [] as Action[] },
+			async () => ctx as never,
+		)
+		expect(result).toEqual({ actions: [], discovered: [] })
+	})
+
 	test("a tampered preimage (inner hash not matching its fields) is refused by validation and yields nothing", async () => {
-		const { fields } = await realAuthorizationFields()
+		const { fields } = await realAuthorizationFields(ACCOUNT)
 		const forged = [...fields]
 		forged[1] = new Fr(0xdeadbeefn) // innerHash no longer matches [msgSender, selector, argsHash]
 		const consumer = AztecAddress.fromFieldUnsafe(new Fr(0x5555n))
 		const ctx = {
-			txRequest: {},
+			txRequest: { authWitnesses: [] },
+			scopes: [ACCOUNT],
 			node: { getNodeInfo: async () => CHAIN },
 			pxe: { simulateTx: async () => ({ privateExecutionResult: executionResult(consumer, forged) }) },
 			account: { address: AztecAddress.fromFieldUnsafe(new Fr(0xacc0n)) },
@@ -199,10 +219,11 @@ describe("AuthwitDiscoverer — the live chain binding", () => {
 		return {
 			simulateTx,
 			run: async () => {
-				const { fields } = await realAuthorizationFields()
+				const { fields } = await realAuthorizationFields(ACCOUNT)
 				simulateTx.mockResolvedValue({ privateExecutionResult: executionResult(consumer, fields) } as never)
 				const ctx = {
-					txRequest: {},
+					txRequest: { authWitnesses: [] },
+					scopes: [ACCOUNT],
 					node: { getNodeInfo: async () => nodeInfo },
 					pxe: { simulateTx },
 					account: { address: AztecAddress.fromFieldUnsafe(new Fr(0xacc0n)) },

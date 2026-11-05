@@ -3,6 +3,7 @@
 import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { sameStoredName, storedNameKey } from "@/utils/account-name"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -29,7 +30,7 @@ const form = useFormState({
 	name: {
 		initial: "",
 		validate: (v) =>
-			appStore.accounts.some((a) => a.address !== accountToEdit.value?.address && sameStoredName(a.name, v)) ? "Already exist" : null,
+			appStore.accounts.some((a) => a.address !== accountToEdit.value?.address && sameStoredName(a.name, v)) ? ALREADY_EXISTS : null,
 	},
 	address: { initial: "" },
 })
@@ -39,7 +40,7 @@ const addressTerm = form.fields.address.value
 
 const isStartedEditing = computed(() => Boolean(accountToEdit.value) && nameTerm.value !== accountToEdit.value?.name)
 
-const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist")
+const isAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS)
 const isAvailableToUpdateAccount = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
@@ -109,7 +110,7 @@ usePopupEntity(() => props.show, {
 			data-testid="account-name-input"
 		>
 			<template v-if="isAlreadyExist" #right>
-				<FieldWarning> Already exist </FieldWarning>
+				<FieldWarning> {{ ALREADY_EXISTS }} </FieldWarning>
 			</template>
 		</Input>
 

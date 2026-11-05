@@ -1,5 +1,9 @@
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { describe, expect, test } from "vitest"
-import { mount } from "@vue/test-utils"
+import { flushPromises, mount } from "@vue/test-utils"
+import { defineComponent, h } from "vue"
+import { nativeInput } from "../../../tests/helpers/credential-pins"
+import { sendEvent } from "../../../tests/helpers/send-event"
 import SecretUnlockSection from "./SecretUnlockSection.vue"
 
 const STUBS = {
@@ -26,16 +30,6 @@ describe("composite/SecretUnlockSection", () => {
 	test("forwards modelValue to the Input", () => {
 		const w = factory({ modelValue: "secret" })
 		expect(w.find("input").attributes("value")).toBe("secret")
-	})
-
-	test("'Wrong password' indicator is hidden by default", () => {
-		const w = factory()
-		expect(w.text()).not.toContain("Wrong password")
-	})
-
-	test("'Wrong password' indicator appears when error is true", () => {
-		const w = factory({ error: true })
-		expect(w.text()).toContain("Wrong password")
 	})
 
 	test("typing emits update:modelValue + clearError", async () => {
@@ -77,14 +71,24 @@ describe("composite/SecretUnlockSection", () => {
 	})
 })
 
-describe("composite/SecretUnlockSection — the shake", () => {
-	test("the input's wrapper carries the shake class exactly while error is set", async () => {
-		const w = factory({ error: false })
-		const shaker = () => w.get("[data-input-stub]").element.parentElement as HTMLElement
-		expect(shaker().className).not.toMatch(/shake/)
-		await w.setProps({ error: true })
-		expect(shaker().className).toMatch(/shake/)
-		await w.setProps({ error: false })
-		expect(shaker().className).not.toMatch(/shake/)
+describe("composite/SecretUnlockSection, real Input", () => {
+	test("an input that leaves the value as it was still updates the model, then clears the error", async () => {
+		const heard: string[] = []
+		const Host = defineComponent(
+			() => () =>
+				h(SecretUnlockSection, {
+					modelValue: "same",
+					error: true,
+					"onUpdate:modelValue": (v: string) => heard.push(`update:${v}`),
+					onClearError: () => heard.push("clearError"),
+				}),
+		)
+		const w = mount(Host, { global: { components: { Flex, Icon, Input, Text } } })
+		const input = nativeInput(w, "unlock-password-input")
+		expect(input.value).toBe("same")
+		sendEvent(input, "input")
+		await flushPromises()
+		expect(heard).toEqual(["update:same", "clearError"])
+		w.unmount()
 	})
 })

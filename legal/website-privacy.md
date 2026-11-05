@@ -1,6 +1,6 @@
 # Website Privacy Notice
 
-**Version 1.0 — effective 27 October 2026**
+**Version 1.1 — effective 5 November 2026**
 
 This notice explains what happens to information when you visit `nulo.sh` or join its mailing list.
 The Nulo wallet itself is covered by the [Privacy Policy](privacy.md); this notice adds nothing to
@@ -9,8 +9,7 @@ what the wallet does.
 > **The short version.** The website runs no analytics, no tracking and no third-party scripts, and
 > sets no cookies of mine. If you join the mailing list, I keep your email address, the time you
 > joined and the version of this notice then in effect. Resend stores the list and sends the emails.
-> You get one email when Nulo is on the stores, then occasional product updates, and you can leave in
-> one click.
+> You get occasional product updates, and you can leave in one click.
 >
 > *This box is a summary. The sections below are the notice.*
 
@@ -62,7 +61,7 @@ address.
 
 ### 3.2 Why, and on what basis
 
-To tell you when Nulo is available and to send occasional product updates. **Legal basis (GDPR):**
+To send occasional product updates. **Legal basis (GDPR):**
 your consent, under Article 6(1)(a). You can withdraw it at any time by leaving the list; leaving
 does not affect what was sent before.
 
@@ -77,9 +76,8 @@ your address, for 30 days.
 
 ### 3.4 What you receive
 
-One email when Nulo is available on the Chrome Web Store and Firefox Add-ons, then occasional
-product updates, from `hello@news.nulo.sh`. Nothing is sent when you sign up. Replies to these
-emails are not received; write to hello@nulo.sh instead.
+Occasional product updates, from `hello@news.nulo.sh`. Nothing is sent when you sign up.
+Replies reach hello@nulo.sh.
 
 Open and click tracking are turned off: the emails carry no tracking pixel, and their links are not
 rewritten.
@@ -88,7 +86,7 @@ rewritten.
 
 I do not send a confirmation email when you sign up, so I cannot check that the address belongs to
 the person who entered it. If someone enters your address, the first email you receive says why you
-received it and lets you leave in one click. Before the launch email I review the list and remove
+received it and lets you leave in one click. Before each send I review the list and remove
 entries that are plainly not real.
 
 ### 3.6 Leaving the list, and how long I keep your address
@@ -151,3 +149,4 @@ describe, I will ask for your consent.
 | Version | Effective | Change |
 |---|---|---|
 | 1.0 | 27 October 2026 | First published version. |
+| 1.1 | 5 November 2026 | Drops the one-time email at store launch (summary, §§ 3.2 and 3.4); replies reach hello@nulo.sh (§ 3.4); the list is reviewed before each send (§ 3.5). |

@@ -26,13 +26,13 @@
  */
 
 import { JobCancelledSentinel, type JobError, type JobProgress, normalizeError } from "@nulo/wallet-core/jobs"
-import { deferred } from "@nulo/wallet-core/utils"
+import { deferred, raceAbort } from "@nulo/wallet-core/utils"
 import { SessionEndedError, TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { pickPrimaryIndex } from "@/utils/primary-method"
 import type { LocalTxOrigin } from "@/wallet/services/transaction/service"
 import type { TxCall } from "@/wallet/services/transaction/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
+import { type JournalAuthwits, type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import type { ProfileInfo } from "@/wallet/services/profile/service"
@@ -71,6 +71,8 @@ const PRE_SUBMIT_STAGES = ["queued", "pending", "simulating", "proving"] as cons
 const POPUP_ORIGIN_KEY = "__popup__"
 /** Keeps an unexpected absent dApp origin capped under one bucket rather than bypassing the cap. */
 const NO_ORIGIN_KEY = "__no_origin__"
+/** Popup estimates' bucket: an estimate waits behind another, and queues only behind a send. */
+const ESTIMATE_ORIGIN_KEY = "__estimate__"
 
 /**
  * A dApp send's place among its origin's sends in one lane, from its first grant until it starts
@@ -397,7 +399,9 @@ export class ExecutionLane {
 		return {
 			behind: () => !left && line.indexOf(entry) > 0,
 			earlierDone: (signal) =>
-				untilOrAborted(Promise.all(line.slice(0, Math.max(0, line.indexOf(entry))).map((e) => e.done)), signal),
+				raceAbort(Promise.all(line.slice(0, Math.max(0, line.indexOf(entry))).map((e) => e.done)), signal).then(
+					(outcome) => outcome === "settled",
+				),
 			leave: () => {
 				if (left) return
 				left = true
@@ -471,19 +475,27 @@ export class ExecutionLane {
 		return { originKey, maxOriginDepth: ExecutionLane.EXECUTION_ORIGIN_CAP, maxLaneDepth: ExecutionLane.EXECUTION_LANE_CAP }
 	}
 
-	/** Whether a send holds (or waits for) the `(profileId, chainId)` slot right now. */
+	/** Whether a send or an estimate holds (or waits for) the `(profileId, chainId)` slot right now. */
 	public isSlotBusy(profileId: string, chainId: number): boolean {
 		return this.executionMutex.isLocked(`${profileId}:${chainId}`)
 	}
 
+	/** Whether a send holds (or waits for) the `(profileId, chainId)` slot right now. */
+	public isSendInSlot(profileId: string, chainId: number): boolean {
+		return this.executionMutex.isLockedOutside(`${profileId}:${chainId}`, ESTIMATE_ORIGIN_KEY)
+	}
+
 	/**
-	 * The slot for a popup estimate, only if nobody holds or waits for it. Nothing can take it in
-	 * between: the mutex installs its tail synchronously, so the grant follows on the next microtask.
+	 * The slot for a popup estimate, in line behind the estimates ahead of it; `undefined` while a send
+	 * holds or waits for it. No send can join in between: the mutex installs its tail synchronously.
+	 * An abort of `signal` while waiting ends the wait as the cancel sentinel.
 	 */
-	public tryTakeSlot(profileId: string, chainId: number): Promise<ExecutionMutexRelease> | undefined {
-		const key = `${profileId}:${chainId}`
-		if (this.executionMutex.isLocked(key)) return undefined
-		return this.executionMutex.acquire(key, undefined, this.capsFor(POPUP_ORIGIN_KEY))
+	public takeEstimateSlot(profileId: string, chainId: number, signal?: AbortSignal): Promise<ExecutionMutexRelease> | undefined {
+		if (this.isSendInSlot(profileId, chainId)) return undefined
+		return this.executionMutex.acquire(`${profileId}:${chainId}`, signal, this.capsFor(ESTIMATE_ORIGIN_KEY)).catch((error: unknown) => {
+			if (error instanceof ExecutionMutexAbortError) throw new JobCancelledSentinel("")
+			throw error
+		})
 	}
 
 	/**
@@ -684,21 +696,15 @@ export class ExecutionLane {
 	}
 
 	/** {@link markJournal} for a write the caller depends on: a refused write or a missing id rejects. */
-	public async commitJournal(journalId: string | undefined, progress: JobProgress): Promise<void> {
+	public async commitJournal(journalId: string | undefined, progress: JobProgress, publicAuthwits?: JournalAuthwits): Promise<void> {
 		if (!journalId) throw new Error("journal write refused: the operation has no record")
-		await this.deps.operationJournal.transitionOperation(journalId, progress)
+		await this.deps.operationJournal.transitionOperation(journalId, progress, undefined, undefined, publicAuthwits)
 	}
-}
 
-/** `true` once `promise` fulfills, `false` if `signal` aborts first. */
-function untilOrAborted(promise: Promise<unknown>, signal: AbortSignal): Promise<boolean> {
-	if (signal.aborted) return Promise.resolve(false)
-	return new Promise<boolean>((resolve) => {
-		const onAbort = () => resolve(false)
-		signal.addEventListener("abort", onAbort, { once: true })
-		promise.then(() => {
-			signal.removeEventListener("abort", onAbort)
-			resolve(true)
-		})
-	})
+	/** Drops the record's copy of the send's authwits once the index holds them. With no session check:
+	 *  a lock after the send must not leave them for a second listing. */
+	public async clearJournalAuthwits(journalId: string | undefined, txHash: string): Promise<void> {
+		if (!journalId) return
+		await this.deps.operationJournal.clearPublicAuthwits(journalId, txHash, () => true)
+	}
 }

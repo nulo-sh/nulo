@@ -100,6 +100,22 @@ describe("composables/useSecretCountdown", () => {
 		scope.stop()
 	})
 
+	test("start() after disable() arms a countdown that is not disabled, and it fires", () => {
+		const onTimeout = vi.fn()
+		const scope = effectScope()
+		scope.run(() => {
+			const c = useSecretCountdown({ autoCloseMs: 120_000, onTimeout })
+			c.start()
+			c.disable()
+			c.start()
+			expect(c.isAutoCloseDisabled.value).toBe(false)
+			expect(c.countdownLabel.value).toBe("2:00")
+			vi.advanceTimersByTime(120_000)
+		})
+		expect(onTimeout).toHaveBeenCalledTimes(1)
+		scope.stop()
+	})
+
 	test("scope dispose clears pending timeout", () => {
 		const onTimeout = vi.fn()
 		const scope = effectScope()

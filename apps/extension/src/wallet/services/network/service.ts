@@ -1,14 +1,16 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { runSealing, type SealWarn, sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { assertRestoreEpoch, captureRestoreEpochs } from "@/wallet/services/restore-fence"
-import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { commitFencedCreate, type DeletionFence } from "@/wallet/services/create-fence"
+import { type ProfileDeletionState, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
-import { AztecNodeFactoryAdapter, isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
+import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { NodeFactory } from "@nulo/aztec-runtime/ports"
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
 import type { ILogger } from "@/wallet/logger"
@@ -29,7 +31,17 @@ import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
 import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { ERR_NOT_RESETTABLE, ERR_RESET_PENDING, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
 import type { RawRowState } from "@/wallet/utils/raw-row"
-import { DEFAULT_SEEDS, type DefaultSeed, isSeedChain, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND, seedForKind } from "./seeds"
+import {
+	DEFAULT_SEEDS,
+	type DefaultSeed,
+	isSeedChain,
+	LOCAL_NETWORK_RPC_URL,
+	PRIMARY_SEED,
+	RETIRED_DEFAULT_ENDPOINTS,
+	SEED_L1_BY_KIND,
+	seedForKind,
+} from "./seeds"
+import { type RetiredEndpoint, retireEndpoints } from "./retired-endpoints"
 import { readSeedOffers, type SeedOffers, sameSeedOffers, seedOffersKey, seedsToOffer, writeSeedOffers } from "./seed-offers"
 import {
 	type ChainKind,
@@ -237,7 +249,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	public constructor(
 		logger: ILogger,
 		private readonly browserApi: BrowserApi,
-		nodeFactory?: NodeFactory,
+		nodeFactory: NodeFactory,
 	) {
 		super(NETWORK_SERVICE_NAME, logger)
 		this.storage = sealedEntityStorage("networks", browserApi.storage.local, (profileId) => this.profileService?.rowKeys(profileId))
@@ -248,13 +260,24 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		// admit a concurrent network mutator into the middle of that cascade;
 		// queueing behind it is the correct semantic.
 		this.lock = new Lock("network", logger, null)
-		this.nodeFactory = nodeFactory ?? new AztecNodeFactoryAdapter()
+		this.nodeFactory = nodeFactory
 	}
 
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		const warn: SealWarn = (...data) => this.logWarn(...data)
+		sealOnRowKeysReady(
+			this.profileService,
+			warn,
+			"sealing the profile's plaintext networks failed; the next worker retries",
+			async (profileId) => {
+				await this.sealLegacyRows(profileId)
+				await runSealing(warn, "moving the profile's endpoints off a retired default failed; the next worker retries", () =>
+					this.retireDefaultEndpoints(profileId),
+				)
+			},
+		)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.pxeServiceClient = new PxeServiceClient(this.logger)
 	}
@@ -262,11 +285,30 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	/** Seals the profile's plaintext networks under the lock every network writer holds, so no write
 	 *  lands between a row's read and its sealed commit. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext networks failed; the next worker retries", { error })
-		}
+		await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+	}
+
+	/** Moves the profile's endpoints off a default an earlier build seeded and this one retired, as
+	 *  `updateEndpoint` would. A network a reset journal holds keeps its endpoints as captured, since
+	 *  the reset's resume matches its primary against the captured URL. */
+	private async retireDefaultEndpoints(
+		profileId: string,
+		retired: readonly RetiredEndpoint[] = RETIRED_DEFAULT_ENDPOINTS,
+	): Promise<void> {
+		await this.lock.withLock(async () => {
+			const held = (await this.staleNetworks.getJournal(profileId))?.networkId
+			for (const network of await this.storage.getValues()) {
+				if (network.profileId !== profileId || network.id === held) continue
+				const moved = await retireEndpoints(network, retired)
+				if (moved === undefined) continue
+				await this.storage.set(moved.id, moved)
+				network.endpoints.forEach((endpoint, i) => {
+					if (endpoint.rpcUrl !== moved.endpoints[i]?.rpcUrl) this.transientNodes.delete(endpoint.rpcUrl)
+				})
+				if (findPrimaryEndpoint(network)?.rpcUrl !== findPrimaryEndpoint(moved)?.rpcUrl) this.nodes.delete(moved.chainId)
+				this.emit("onNetworkUpdated", moved)
+			}
+		})
 	}
 
 	// ── Read paths ───────────────────────────────────────────────────────
@@ -302,8 +344,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	private async offerDefaultsLocked(
 		profileId: string,
 		rows: Network[],
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
+		fence: DeletionFence,
+		deletion: ProfileDeletionState,
 	): Promise<DefaultsOffer> {
 		const record = await readSeedOffers(this.browserApi.storage.local, profileId)
 		const offer = seedsToOffer(DEFAULT_SEEDS, record, rows)
@@ -340,8 +382,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		profileId: string,
 		record: RawRowState<SeedOffers>,
 		next: SeedOffers,
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
+		fence: DeletionFence,
+		deletion: ProfileDeletionState,
 	): Promise<void> {
 		if (record.kind === "valid" && sameSeedOffers(record.value, next)) return
 		await writeSeedOffers(this.browserApi.storage.local, profileId, next)
@@ -388,8 +430,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	private async seedOneNetworkLocked(
 		profileId: string,
 		seed: (typeof DEFAULT_SEEDS)[number],
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
+		fence: DeletionFence,
+		deletion: ProfileDeletionState,
 	): Promise<Network> {
 		const network = await this._buildNetwork(
 			profileId,
@@ -401,12 +443,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			seed.endpointLabel,
 		)
 		const write = await this.storage.prepare(network.id, network)
-		deletion.assertCurrent(fence.profileId, fence.epoch)
-		await write.commit()
-		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-			await this.storage.delete(network.id)
-			throw profileDeletedError(fence.profileId)
-		}
+		await commitFencedCreate(deletion, fence, write, () => this.storage.delete(network.id))
 		return network
 	}
 
@@ -416,8 +453,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		profileId: string,
 		seeded: Network[],
 		primaryActiveId: string | undefined,
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
+		fence: DeletionFence,
+		deletion: ProfileDeletionState,
 	): Promise<void> {
 		const activeId = primaryActiveId ?? (seeded.length ? seeded[0]!.id : undefined)
 		if (!activeId) return
@@ -583,14 +620,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			}
 			const network = await this._buildNetwork(fence.profileId, name, rpcUrl, chainId, l1ChainId, "custom")
 			const write = await this.storage.prepare(network.id, network)
-			deletion.assertCurrent(fence.profileId, fence.epoch)
-			await write.commit()
-			// The set awaits — compensate before the row becomes observable.
-			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-				await this.storage.delete(network.id)
-				throw profileDeletedError(fence.profileId)
-			}
-			this.emit("onNetworkAdded", network)
+			await commitFencedCreate(deletion, fence, write, () => this.storage.delete(network.id), {
+				landed: () => this.emit("onNetworkAdded", network),
+			})
 			return network
 		})
 	}
@@ -631,15 +663,15 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			this.deletingNetworks.add(id)
 			this.reservations.set(id, (this.reservations.get(id) ?? 0) + 1)
 			try {
-				// The way out of a reset that cannot finish: its journal and verdict go with the row.
+				await this.purgeChain(profile.id, network.chainId, network.id)
+				// The way out of a reset that cannot finish: its journal and verdict go with the row, and
+				// only after the purge, so a failed purge leaves the chain quarantined for the retry.
 				await this.staleNetworks.withLock(profile.id, async () => {
 					if ((await this.staleNetworks.getJournal(profile.id))?.networkId === id) {
 						await this.staleNetworks.deleteJournalLocked(profile.id)
 					}
 					await this.staleNetworks.removeEntryLocked(profile.id, id)
 				})
-				// Purge chain-scoped state via the awaited coordinator
-				await this.purgeChain(profile.id, network.chainId, network.id)
 				await this.storage.delete(id)
 			} finally {
 				this.deletingNetworks.delete(id)
@@ -747,11 +779,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	/** Drops the network's kind from the announced ones, fenced and compensated as the pass writes
 	 *  the record. Caller holds the network lock. */
-	private async answerArrivalLocked(
-		network: Network,
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
-	): Promise<void> {
+	private async answerArrivalLocked(network: Network, fence: DeletionFence, deletion: ProfileDeletionState): Promise<void> {
 		const record = await readSeedOffers(this.browserApi.storage.local, network.profileId)
 		if (record.kind !== "valid" || network.kind === undefined || !record.value.announce?.includes(network.kind)) return
 		const announce = record.value.announce.filter((kind) => kind !== network.kind)

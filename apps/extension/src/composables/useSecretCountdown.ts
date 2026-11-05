@@ -1,7 +1,7 @@
 import { computed, onScopeDispose, ref } from "vue"
 
 export interface UseSecretCountdownOptions {
-	/** Auto-close window in ms. Each export page picks its own (key=2min, seed=5min). */
+	/** Auto-close window in ms. */
 	autoCloseMs: number
 	/** Called when the countdown reaches zero. The page wires its close handler here. */
 	onTimeout: () => void
@@ -25,9 +25,11 @@ export function useSecretCountdown(options: UseSecretCountdownOptions) {
 	})
 
 	// A second start replaces the first countdown: a leftover close timer would fire after "keep open".
+	// It also re-enables a disabled one, or its timer would close the page under a hidden countdown.
 	const start = () => {
 		clear()
 		if (disposed) return
+		isAutoCloseDisabled.value = false
 		closeDeadline.value = Date.now() + options.autoCloseMs
 		now.value = Date.now()
 		closeTimeout = setTimeout(() => {

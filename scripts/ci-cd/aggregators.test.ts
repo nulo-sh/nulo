@@ -623,7 +623,7 @@ test.each(E2E_LANES)("$file decides from the live label and base, and refuses a 
 	expect(decided(file, prWorld(surface))).toBe("run=false")
 	expect(decided(file, prWorld(surface, { [surfaceOf(surface)]: "true" })), "the paths filter runs it").toBe("run=true")
 	for (const value of ["", "yes", "True"]) expect(decide(file, prWorld(surface, { [LABEL_HIT]: value })).code, `'${value}'`).not.toBe(0)
-	expect(decided(file, prWorld(surface, { [BASE]: "main" })), "the live base forces main's run").toBe("run=true")
+	expect(decided(file, prWorld(surface, { [BASE]: "main" })), "a promote takes the filter like any other base").toBe("run=false")
 	expect(decide(file, prWorld(surface, { [BASE]: "" })).code, "an empty base").not.toBe(0)
 })
 

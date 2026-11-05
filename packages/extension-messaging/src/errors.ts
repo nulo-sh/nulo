@@ -240,6 +240,18 @@ export class OwnAccountIntentRefusalError extends ScopeViolationError {
 	}
 }
 
+const UNATTACHED_AUTHORIZATION_VIOLATION_MESSAGE =
+	"Scope violation: a transaction's authorization request names another account and carries no witness for it"
+
+/** The wallet signs only as the sending account, so another account's authorization a transaction
+ *  needs must arrive with it. It shares `SCOPE_VIOLATION`; its constant message rebuilds it across RPC. */
+export class UnattachedAuthorizationRefusalError extends ScopeViolationError {
+	public constructor() {
+		super(UNATTACHED_AUTHORIZATION_VIOLATION_MESSAGE)
+		this.name = "UnattachedAuthorizationRefusalError"
+	}
+}
+
 /**
  * Raised when a dApp's sendTx is refused because the per-(profileId, chainId)
  * execution lane is at capacity — either the dApp's own per-origin pending cap
@@ -536,13 +548,13 @@ export class RestoreTornError extends WalletError {
  * on this device. Thrown by `importMnemonic` / `restore` unless the caller
  * passes `allowDuplicate: true` — the UI catches this, shows the warn-and-confirm dialog, and
  * retries with the override (duplicates are a warned choice, never a hard block — owner policy).
- * `details.existingProfileName` names the colliding profile for the dialog copy; the error NEVER
+ * `details.existingProfileNames` names every colliding profile for the dialog copy; the error NEVER
  * carries key material.
  */
 export class DuplicateWalletError extends WalletError {
 	public static readonly CODE = "DUPLICATE_WALLET"
 
-	public constructor(message = "A profile with this recovery phrase already exists", details?: { existingProfileName?: string }) {
+	public constructor(message = "A profile with this recovery phrase already exists", details?: { existingProfileNames?: string[] }) {
 		super(DuplicateWalletError.CODE, message, details, "DuplicateWalletError")
 	}
 }
@@ -588,6 +600,30 @@ export class StaleUnlockCredentialError extends WalletError {
 
 	public constructor(message: string = StaleUnlockCredentialError.MESSAGE, details?: unknown) {
 		super(StaleUnlockCredentialError.CODE, message, details, "StaleUnlockCredentialError")
+	}
+}
+
+/**
+ * A passkey answer opened no slot of the profile it was asked for: another passkey, or a slot
+ * changed in storage. The passkey's refusal, which no screen may read as a wrong password.
+ */
+export class PasskeyNotOpenedError extends WalletError {
+	public static readonly CODE = "PASSKEY_NOT_OPENED"
+	public static readonly MESSAGE = "Passkey did not open this profile"
+
+	public constructor(message: string = PasskeyNotOpenedError.MESSAGE, details?: unknown) {
+		super(PasskeyNotOpenedError.CODE, message, details, "PasskeyNotOpenedError")
+	}
+}
+
+/** A change of unlock method asked a password profile for a new password, which only a password
+ *  change sets. Nothing was written. */
+export class SameUnlockMethodError extends WalletError {
+	public static readonly CODE = "SAME_UNLOCK_METHOD"
+	public static readonly MESSAGE = "A password profile changes its password, not its unlock method"
+
+	public constructor(message: string = SameUnlockMethodError.MESSAGE, details?: unknown) {
+		super(SameUnlockMethodError.CODE, message, details, "SameUnlockMethodError")
 	}
 }
 
@@ -642,6 +678,8 @@ const REBUILT_AS = [
 	RetiredProfileError,
 	UnlockMethodChangedError,
 	StaleUnlockCredentialError,
+	PasskeyNotOpenedError,
+	SameUnlockMethodError,
 	DuplicateWalletError,
 	DuplicateInitializationError,
 	UnsupportedMethodError,
@@ -675,6 +713,9 @@ export function walletErrorFromPayload(payload: WalletErrorPayload): WalletError
 	if (ctor === CapabilityNotGrantedError) return CapabilityNotGrantedError.fromPayload(payload)
 	if (ctor === ScopeViolationError && isAuthRegistryRefusalMessage(payload.message)) return new AuthRegistryRefusalError(payload.message)
 	if (ctor === ScopeViolationError && payload.message === OWN_ACCOUNT_INTENT_VIOLATION_MESSAGE) return new OwnAccountIntentRefusalError()
+	if (ctor === ScopeViolationError && payload.message === UNATTACHED_AUTHORIZATION_VIOLATION_MESSAGE) {
+		return new UnattachedAuthorizationRefusalError()
+	}
 	// The wire `details` is unvalidated. Constant-message constructors ignore both arguments, and
 	// `ScopeViolationError` ignores the details.
 	return new ctor(payload.message, payload.details as never)

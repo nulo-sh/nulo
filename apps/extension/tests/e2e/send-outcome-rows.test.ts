@@ -10,6 +10,7 @@ import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } fr
 import { navigateByHash, navigateToSettings, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { settleThemeTransitions, shotSend } from "./fixtures/send-page"
 import { type ActivityScope, readActivityScope, seedJournalRecord, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
+import { bringToFront } from "./fixtures/browser"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const hex = (byte: string) => `0x${byte.repeat(32)}`
@@ -78,7 +79,7 @@ async function openSeeded(ctx: ExtensionContext): Promise<{ page: Page; scope: A
 		at: now - 5_000,
 	})
 	await seedUsdQuoteAndReload(page)
-	await page.bringToFront()
+	await bringToFront(page)
 	// The reload's own start-up navigation lands on Home; a hash set before it settles is overridden.
 	await readCards(page, 5)
 	return { page, scope }

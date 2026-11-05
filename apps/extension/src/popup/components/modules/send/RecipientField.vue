@@ -17,8 +17,9 @@
  * would move whatever the press is on before its click lands.
  */
 import { isComposing } from "@/composables/usePopupEntity"
-import { trimAddress } from "@/utils/string"
-import { isValidAztecAddress } from "@/utils/aztec-address"
+import { pluralize } from "@/utils/plural"
+import { stripBidiAndZeroWidth, trimAddress } from "@/utils/string"
+import { bareAztecAddress, isValidAztecAddress } from "@/utils/aztec-address"
 import { matchRecipients } from "./recipient-search"
 
 const props = defineProps({
@@ -57,7 +58,7 @@ const shownContacts = computed(() => filteredContacts.value.slice(0, MAX_SHOWN))
 const moreCount = computed(() => filteredContacts.value.length - shownContacts.value.length)
 const moreSentence = computed(() => {
 	const n = moreCount.value
-	return `Keep typing to narrow ${n.toLocaleString("en-US")} more ${n === 1 ? "match" : "matches"}.`
+	return `Keep typing to narrow ${n.toLocaleString("en-US")} more ${pluralize(n, "match", "matches")}.`
 })
 
 const showSuggestions = computed(() => Boolean(filteredContacts.value?.length && isSearchInputFocused.value && !dismissed.value))
@@ -65,6 +66,11 @@ const activeIndex = computed(() => (showSuggestions.value ? shownContacts.value.
 const activeId = computed(() => (activeIndex.value >= 0 ? optionId(activeIndex.value) : undefined))
 /** Keyed by candidate and address, so a row a held press is on is never rebound to another destination. */
 const rowKey = (c) => (c.id === undefined ? `account:${c.address}` : `contact:${c.id}:${c.address}`)
+/** An address keeps nothing at its two ends; any other text keeps its spaces, as a name may hold one. */
+const normalizeRecipient = (text) => {
+	const kept = stripBidiAndZeroWidth(text)
+	return bareAztecAddress(kept) ?? kept
+}
 const showInvalidHint = computed(() => !isSearchInputFocused.value && !isValidAztecAddress(searchTerm.value) && searchTerm.value.length > 0)
 
 const handleSelectContact = (contact) => {
@@ -248,6 +254,7 @@ onBeforeUnmount(() => {
 			<template v-else>
 				<AddressInput
 					v-model="searchTerm"
+					:normalize="normalizeRecipient"
 					:autofocus="justCleared"
 					role="combobox"
 					:ariaLabelledby="labelId"

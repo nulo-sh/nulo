@@ -1,6 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { type ConsoleMessage, type Page, TimeoutError } from "puppeteer"
-import { extensionUrl, gotoExtensionPage, newPage } from "./browser"
+import { bringToFront, extensionUrl, gotoExtensionPage, newPage, setViewport } from "./browser"
 import { isFrameDetachError, patchPagePolling } from "./dom"
 import type { ExtensionContext } from "./extension"
 import { type LegalSeed, LEGAL_ACCEPTANCE_KEY, legalSeedValue } from "./legal"
@@ -35,8 +35,7 @@ export async function seedLegalAcceptance(page: Page, seed: Exclude<LegalSeed, "
 
 /** Open the onboarding tab directly. Use in tests that exercise the tab
  *  flow; complementary to `openPopup` which targets the popup HTML.
- *  Clears the `onboardingCompleted` flag first so the redirect predicates
- *  in register/import/profile-new behave as they would on a fresh install. */
+ *  Clears the `onboardingCompleted` flag first, as on a fresh install. */
 export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Exclude<LegalSeed, "keep"> } = {}): Promise<Page> {
 	// Reset onboardingCompleted=false so the onboarding flow runs as on
 	// fresh install (launchExtension seeded it to true by default).
@@ -45,9 +44,6 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 	await gotoExtensionPage(setupPage, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
 	// A real fresh install has no acceptance; specs that are about the gate ask for that. Left alone,
 	// the launch's `current` seed stands and a spec about a later step can still jump to it.
-	// Seeded BEFORE the flag flips: the popup reads the flag while it mounts, and on a profile with
-	// no wallet a `false` makes it open the onboarding tab and close itself — so the flip is the
-	// last thing evaluated in it, and it may already be gone when this closes it.
 	if (opts.legal) await seedLegalAcceptance(setupPage, opts.legal)
 	await setupPage.evaluate(async () => {
 		await chrome.storage.local.set({ "nulo:onboarding:completed": false })
@@ -56,8 +52,8 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 
 	const page = await newPage(ctx.browser)
 	patchPagePolling(page)
-	await page.setViewport({ width: 720, height: 900 })
-	await page.bringToFront()
+	await setViewport(page, { width: 720, height: 900 })
+	await bringToFront(page)
 
 	ctx.consoleErrors = []
 	ctx.pageErrors = []
@@ -135,14 +131,14 @@ export function recordPageErrors(ctx: ExtensionContext, page: Page): void {
 }
 
 /** Loads the popup into `page` and records its errors, leaving the arrays as they are. */
-async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
+export async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
 	patchPagePolling(page)
-	await page.setViewport({ width: 360, height: 600 })
+	await setViewport(page, { width: 360, height: 600 })
 	// Bring the new page to the front so the tab is "focused" — defense in
 	// depth against rAF throttling. Combined with `--disable-renderer-
 	// backgrounding` it prevents Chrome from suspending the offscreen
 	// renderer.
-	await page.bringToFront()
+	await bringToFront(page)
 	recordPageErrors(ctx, page)
 	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
 }

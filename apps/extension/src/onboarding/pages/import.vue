@@ -6,15 +6,17 @@
 <script setup lang="ts">
 /** Composables */
 import { completeImportWithRecovery } from "@/composables/completeImportWithRecovery"
+import { createRunFence } from "@/composables/runFence"
 import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { useProfileImportFlow } from "@/composables/useProfileImportFlow"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useToast } from "@/composables/toast"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Utils */
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { doneRoute } from "../steps"
+import { clearFlowPath, doneRoute, markFlowPath } from "../steps"
 import { restoreNoticeText, retryResultText } from "@/components/composite/import/restore-warning"
 
 /** Stores */
@@ -34,6 +36,11 @@ const notificationStore = useNotificationStore()
 const { openToast } = useToast()
 const { bootstrapActiveProfile, hydrateKnownProfile } = useProfileBootstrap()
 
+// One generation for the page's life: an import that settles after the person left completes
+// silently, since the history entry, the bootstrap's shared stores and the route are no longer its.
+const lifetime = createRunFence()
+const isMounted = lifetime.snapshot()
+
 // Onboarding has no popup app.vue `onActiveProfileChanged` listener, so it
 // bootstraps the freshly activated profile itself — its "wait for active" IS the
 // direct bootstrap. If that bootstrap doesn't activate (an MV3 worker restart
@@ -42,14 +49,19 @@ const { bootstrapActiveProfile, hydrateKnownProfile } = useProfileBootstrap()
 // moves on with no success snack, unlike the popup's import: no later onboarding page
 // needs the session, and a profile left locked meets the popup's unlock screen.
 async function completeImport(profile: unknown) {
+	if (!isMounted()) return
+	// Before the bootstrap: the profile exists already, so a reload during it resumes at Ready.
+	markFlowPath("import")
 	const p = profile as { id: string; name: string; type: "password" | "passkey" }
-	await setLastActiveProfileId(p.id)
+	await setLastActiveProfileId(p.id, { unless: () => !isMounted() })
+	if (!isMounted()) return
 	await completeImportWithRecovery({
 		waitForActive: async () => {
 			if (!(await bootstrapActiveProfile(p))) throw new Error("bootstrap did not activate")
 		},
-		recover: async () => (await hydrateKnownProfile())?.id === p.id && appStore.isLogined,
+		recover: async () => isMounted() && (await hydrateKnownProfile())?.id === p.id && appStore.isLogined,
 	})
+	if (!isMounted()) return
 	router.push(doneRoute("import"))
 }
 
@@ -125,7 +137,16 @@ const fullBackupCta = readonly({
 	isRetrying: isRetryingAccountState,
 })
 
+// The restored profile holds the session from this stage on, before Continue or the account-state
+// tail ends, so a reload from here resumes at Ready.
+watch(restoreStage, (stage) => {
+	if (stage === "restoring:account-state") markFlowPath("import")
+})
+
+onMounted(clearFlowPath)
+
 onBeforeUnmount(() => {
+	lifetime.invalidate()
 	dispose()
 	notificationStore.clear()
 	// Defense-in-depth: zero out secret material on unmount.
@@ -137,7 +158,7 @@ onBeforeUnmount(() => {
 
 <template>
 	<OnboardingPage :gap="24" data-testid="onboarding-import-page" :data-name-field="nameFieldState" :data-restore-stage="restoreStage">
-		<OnboardingStepHeader current="wallet" path="import" back="onboarding-import-back" main="Import" sub="Wallet" :class="$style.hero">
+		<OnboardingStepHeader current="wallet" path="import" back="onboarding-import-back" main="Import" sub="Profile" :class="$style.hero">
 			<Text variant="body" color="secondary" height="150">Restore from a recovery phrase or a full backup.</Text>
 		</OnboardingStepHeader>
 
@@ -187,6 +208,7 @@ onBeforeUnmount(() => {
 			:error="error"
 			:phraseVerdict="phraseVerdict"
 			:maxPasswordLength="maxPasswordLength"
+			:importing="isImporting"
 			@secretInput="handleSecretInput"
 			@passwordInput="handlePasswordInput"
 		/>
@@ -200,6 +222,7 @@ onBeforeUnmount(() => {
 					:disabled="!decryptionPassword"
 					data-testid="onboarding-submit-import"
 					@click="decryptBackup"
+					@keydown.enter="refuseRepeatEnter"
 				>
 					Decrypt backup
 				</Button>
@@ -211,6 +234,7 @@ onBeforeUnmount(() => {
 						:loading="restoreStatus === 'progress'"
 						data-testid="onboarding-submit-import"
 						@click="restoreBackup"
+						@keydown.enter="refuseRepeatEnter"
 					>
 						{{ restoreStatus === "progress" ? "Importing..." : "Import profile" }}
 					</Button>
@@ -248,6 +272,7 @@ onBeforeUnmount(() => {
 					:disabled="isRetryingAccountState"
 					data-testid="import-full-backup-continue-btn"
 					@click="continueImport"
+					@keydown.enter="refuseRepeatEnter"
 				>
 					Continue
 				</Button>

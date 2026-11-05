@@ -21,9 +21,10 @@ import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vu
 import { managers } from "@/utils/core"
 
 /** Utils */
-import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
-import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
+import { isToolbarPopup } from "@/utils/browser-surface"
+import { OWN_WINDOW_ROUTES, leavePanelFor, ownWindowRoute } from "@/utils/own-window"
 import { goBack } from "@/utils/page-back"
+import { pluralize } from "@/utils/plural"
 import { backupNotice } from "@/components/stale-network/copy"
 
 /** Composables */
@@ -48,30 +49,41 @@ const {
 	backupStatus,
 	isBusy,
 	isDownloading,
-	showRecommendation,
 	isWrongPassword,
 	dekReplaced,
 	chainStateOmitted,
 	unopenedImportedKeys,
 	importsOnAddedNetworks,
 	isPasskeyProfile,
-	canDownload,
 	canEncrypt,
 	handleBackup,
-	handleEncrypt,
-	downloadBackup,
+	protectAndDownload,
 	reset,
 	followProfileUpdate,
 	dispose,
 } = useFullBackupExport({ runCeremony, leaveAfterPasskeyFailure })
-
-const maxPasswordLength = 128
 
 const addedNetworksText = computed(() => {
 	const { accounts, networks } = importsOnAddedNetworks.value
 	const count = accounts === 1 ? "1 imported account is" : `${accounts} imported accounts are`
 	const one = networks === 1
 	return `${count} on ${one ? "a network" : "networks"} you added. A restore re-creates only the default networks, so add ${one ? "that network" : "those networks"} again to restore ${accounts === 1 ? "it" : "them"}.`
+})
+
+const showsBackupBanner = computed(
+	() =>
+		dekReplaced.value ||
+		unopenedImportedKeys.value > 0 ||
+		importsOnAddedNetworks.value.accounts > 0 ||
+		chainStateOmitted.value ||
+		backupStatus.value === "encrypted" ||
+		backupStatus.value === "downloaded",
+)
+
+const downloadLabel = computed(() => {
+	if (backupStatus.value === "progress") return "Creating Backup…"
+	if (backupStatus.value === "encrypting") return "Encrypting…"
+	return "Download protected backup"
 })
 
 /** A reset in progress: its journal holds accounts a backup made now would miss. */
@@ -113,10 +125,8 @@ const onKeydown = (e) => {
 			handleBackup()
 			break
 		case "finished":
-			handleEncrypt()
-			break
 		case "encrypted":
-			downloadBackup()
+			protectAndDownload()
 			break
 		default:
 			// "progress" / "encrypting" hold a run in flight and "downloaded" has nothing left: Enter
@@ -153,7 +163,7 @@ watch(
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey export moves
 // to its own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
-	if (isPasskeyProfile.value && closesOnFocusLoss()) void moveToOwnWindow(OWN_WINDOW_ROUTES.export)
+	if (isPasskeyProfile.value) void leavePanelFor(OWN_WINDOW_ROUTES.export)
 })
 
 onBeforeUnmount(() => {
@@ -169,6 +179,7 @@ onBeforeUnmount(() => {
 		heroSub="Backup"
 		collapsingLabel="Full Backup"
 		backTo="/popup/settings/security/export"
+		moreBelow
 		@keydown="onKeydown"
 	>
 		<!-- Agreement gate -->
@@ -182,17 +193,16 @@ onBeforeUnmount(() => {
 				:class="pendingReset && $style.agreement_blocked"
 				:data-blocked="pendingReset ? 'true' : 'false'"
 				data-testid="full-backup-agreement"
+				data-scroll-section
 			>
 				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
 					<Text variant="body" height="150" color="body">
-						Backup provides direct, unrestricted access to your entire profile.
+						This file restores everything in this profile, spending included.
 					</Text>
+					<Text variant="body" height="150" color="body">You protect it with a password next.</Text>
 					<Text variant="body" height="150" color="body">
-						Ensure that your backup is stored securely and never shared with anyone.
-					</Text>
-					<Text variant="body" height="150" color="body">
-						By continuing you agree to all risks and responsibilities.
+						Anyone with the file and its password can spend your funds.
 					</Text>
 				</Flex>
 			</div>
@@ -218,6 +228,7 @@ onBeforeUnmount(() => {
 				<div
 					v-if="backupStatus === 'progress' || backupStatus === 'encrypting'"
 					class="export_section_last"
+					data-scroll-section
 				>
 					<StatusCard
 						:title="backupStatus === 'encrypting' ? 'Encrypting your backup' : 'Creating your backup'"
@@ -230,8 +241,8 @@ onBeforeUnmount(() => {
 					/>
 				</div>
 
-				<div v-else class="export_section">
-					<span class="export_section_label type--label-section">Backup</span>
+				<div v-else class="export_section" data-scroll-section>
+					<span v-if="showsBackupBanner" class="export_section_label type--label-section">Backup</span>
 					<Banner v-if="dekReplaced" variant="warning" direction="vertical" data-testid="backup-keys-lost-banner">
 						<template #title> Imported keys are not in this backup </template>
 						<template #description>
@@ -251,7 +262,7 @@ onBeforeUnmount(() => {
 						<template #title> Some imported accounts are not in this backup </template>
 						<template #description>
 							<Text color="secondary" height="140">
-								{{ unopenedImportedKeys === 1 ? "1 imported account" : `${unopenedImportedKeys} imported accounts` }}
+								{{ unopenedImportedKeys }} imported {{ pluralize(unopenedImportedKeys, "account", "accounts") }}
 								could not be opened, so {{ unopenedImportedKeys === 1 ? "it" : "they" }} will not be restored. Import
 								their keys again after the restore.
 							</Text>
@@ -278,19 +289,6 @@ onBeforeUnmount(() => {
 							</Text>
 						</template>
 					</Banner>
-					<Banner v-if="showRecommendation" variant="info" direction="vertical" data-testid="backup-ready-banner">
-						<template #title> {{ isPasskeyProfile ? "Backup is ready" : "Protect your backup" }} </template>
-						<template #description>
-							<Text v-if="isPasskeyProfile" height="140">
-								Choose a password for this file. You'll need it to restore the backup.
-							</Text>
-							<Text v-else height="140">
-								Encrypt the file with your profile password before you download it. Without a password, anyone
-								who opens the file controls this profile.
-							</Text>
-						</template>
-					</Banner>
-
 					<Banner
 						v-if="backupStatus === 'encrypted' || backupStatus === 'downloaded'"
 						variant="done"
@@ -316,7 +314,6 @@ onBeforeUnmount(() => {
 					v-model:password="password"
 					v-model:repeatedPassword="repeatedPassword"
 					testid="backup-encrypt-password"
-					:maxLength="maxPasswordLength"
 				/>
 			</template>
 		</template>
@@ -324,7 +321,7 @@ onBeforeUnmount(() => {
 		<!-- Bottom CTAs -->
 		<template #bottom>
 			<Button v-if="!isAgreed" @click="handleAgree" variant="cta" :disabled="!!pendingReset" data-testid="agree-continue-btn">
-				Agree &amp; Continue
+				Continue
 			</Button>
 
 			<Button
@@ -344,16 +341,6 @@ onBeforeUnmount(() => {
 				gap="8"
 			>
 				<Button
-					v-if="backupStatus === 'finished' || backupStatus === 'encrypting'"
-					@click="handleEncrypt()"
-					@keydown.enter="refuseRepeatEnter"
-					:disabled="backupStatus === 'encrypting' || isDownloading || !canEncrypt"
-					variant="cta"
-					data-testid="protect-password-btn"
-				>
-					{{ backupStatus === 'encrypting' ? 'Encrypting…' : 'Protect with Password' }}
-				</Button>
-				<Button
 					v-if="backupStatus === 'downloaded'"
 					ref="closeButton"
 					@click="handleClose"
@@ -365,13 +352,13 @@ onBeforeUnmount(() => {
 				</Button>
 				<Button
 					v-else
-					@click="downloadBackup()"
+					@click="protectAndDownload()"
 					@keydown.enter="refuseRepeatEnter"
-					:disabled="!canDownload || isDownloading"
-					:variant="backupStatus !== 'encrypted' ? 'cta_outline' : 'cta'"
+					:disabled="isBusy || isDownloading || !canEncrypt"
+					variant="cta"
 					data-testid="download-backup-btn"
 				>
-					{{ backupStatus === 'progress' ? 'Creating Backup…' : 'Download Backup' }}
+					{{ downloadLabel }}
 				</Button>
 			</Flex>
 		</template>
@@ -402,6 +389,8 @@ onBeforeUnmount(() => {
 	padding: 14px 12px;
 	background: color-mix(in srgb, var(--yellow) 7%, transparent);
 	border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
+	/* Text only: a button added here would inherit mid-word breaks. */
+	overflow-wrap: anywhere;
 }
 
 .reset_notice_label {

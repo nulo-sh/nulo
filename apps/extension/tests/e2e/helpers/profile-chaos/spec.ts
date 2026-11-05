@@ -10,6 +10,7 @@ import type { BrowserKind } from "../../fixtures/browser"
 import { chaosSeed } from "../../fixtures/chaos-seed"
 import { type ExtensionContext, test } from "../../fixtures/extension"
 import { inPlaceUpdate, updateBuilds } from "../../fixtures/update/in-place"
+import { releaseTraits } from "../../fixtures/update/release"
 import { evidenceGaps } from "./checkers"
 import { type Caps, describePlan, type ListedStep, type Plan, plan, planFromList, type StartState, startWorld } from "./model"
 import { bindPreUpdate, populateRelease, type Released } from "./pre-update"
@@ -49,9 +50,9 @@ interface SeedRun {
 	browser: string
 	caps: Caps
 	network?: NetworkRun
-	/** Set on the `pre-update` start: what the release left before the update. */
+	/** Set on a `pre-update-*` start: what the release left before the update. */
 	released?: Released
-	/** Set on the `pre-update` start: the release tag and the candidate's directory. */
+	/** Set on a `pre-update-*` start: the release tag and the candidate's directory. */
 	update?: { tag: string; to: string }
 }
 
@@ -69,7 +70,7 @@ async function runSeed(ctx: ExtensionContext, r: SeedRun): Promise<void> {
 	const records = process.env.NULO_E2E_CHAOS_SESSION ?? join(process.cwd(), ".e2e-state")
 	const record = recordTarget(records, r.browser, seed)
 	const files = `${record.path}.files`
-	const run = await startRun(ctx, r.caps, files, r.network)
+	const run = await startRun(ctx, r.caps, files, r.network, r.released?.held)
 	record.provenance = {
 		browserVersion: await ctx.browser.version(),
 		extensionVersion: await run.anchor.evaluate(() => chrome.runtime.getManifest().version),
@@ -82,7 +83,9 @@ async function runSeed(ctx: ExtensionContext, r: SeedRun): Promise<void> {
 	}
 	let missed: string[] = []
 	try {
-		const start = r.released ? [...(await bindPreUpdate(run, r.released)), ...(await checkStartStorage(run, startWorld(p.start)))] : []
+		const start = r.released
+			? [...(await bindPreUpdate(run, r.released, p.start)), ...(await checkStartStorage(run, startWorld(p.start)))]
+			: []
 		const verdict = await runPlan(run, p, record, start)
 		console.log(
 			`[profile-chaos] seed ${seed}: ${verdict.kind} in ${verdict.elapsedMs} ms; ${verdict.coverageLine}; needles[phrases=${run.phrases.size} prf=${run.prf.size}]; record ${verdict.recordPath}`,
@@ -103,9 +106,9 @@ async function runSeed(ctx: ExtensionContext, r: SeedRun): Promise<void> {
 }
 
 /** One test per selected seed, each on a fresh launch, skipped unless `armed`; `browser` names
- *  the records. With `NULO_E2E_UPDATE_FROM` set, each seed starts `pre-update`: the release makes
- *  its profiles, the candidate `NULO_E2E_UPDATE_TO` names replaces it in place, and the run starts
- *  on the candidate. */
+ *  the records. With `NULO_E2E_UPDATE_FROM` set, each seed starts `pre-update-<passkey>`, named by
+ *  the release's reviewed passkey trait: the release makes its profiles, the candidate
+ *  `NULO_E2E_UPDATE_TO` names replaces it in place, and the run starts on the candidate. */
 export function describeProfileChaos(
 	title: string,
 	opts: { armed: boolean; browser: BrowserKind; caps: Caps; network?: NetworkRun },
@@ -115,18 +118,20 @@ export function describeProfileChaos(
 	const runs = armed ? runCount(process.env.NULO_E2E_CHAOS_RUNS) : 0
 	const list = armed ? listed(process.env.NULO_E2E_CHAOS_ACTIONS) : undefined
 	const seeds = list ? [first] : Array.from({ length: runs }, (_, i) => first + i)
-	const start: StartState = armed && process.env.NULO_E2E_UPDATE_FROM ? "pre-update" : "empty"
-	if (start === "pre-update" && network) throw new Error("the pre-update start runs in the smoke file only")
+	const from = armed ? process.env.NULO_E2E_UPDATE_FROM : undefined
+	const passkey = from ? releaseTraits(from).passkey : undefined
+	const start: StartState = passkey ? `pre-update-${passkey}` : "empty"
+	if (passkey && network) throw new Error("the pre-update start runs in the smoke file only")
 	const planOf = (seed: number): Plan => (list ? planFromList(list, start, caps, seed) : plan(seed, start, caps))
 	describe.skipIf(!armed)(title, () => {
 		for (const seed of seeds) {
-			if (start === "pre-update")
+			if (passkey)
 				test(`seed ${seed} from the release`, { retry: 0, timeout: SEED_TIMEOUT_MS }, async () => {
 					const builds = updateBuilds(browser)
 					if (!builds) throw new Error("NULO_E2E_UPDATE_FROM names no release")
 					await inPlaceUpdate({
 						builds,
-						populate: populateRelease,
+						populate: (ctx) => populateRelease(ctx, passkey),
 						verify: (ctx, released) =>
 							runSeed(ctx, { seed, plan: planOf(seed), browser, caps, released, update: { tag: builds.tag, to: builds.to } }),
 					})

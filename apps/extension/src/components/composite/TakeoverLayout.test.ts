@@ -1,5 +1,14 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test, vi } from "vitest"
+import {
+	boundAttr,
+	declarationsOf,
+	isElement,
+	NODE,
+	parseSource,
+	type TemplateNode,
+	walkElements,
+} from "../../../scripts/type-roles/source-scan"
 import type { TakeoverContent } from "./takeover"
 import TakeoverLayout from "./TakeoverLayout.vue"
 
@@ -18,7 +27,7 @@ function mountLayout(content: TakeoverContent, props: Record<string, unknown> = 
 		global: {
 			stubs: {
 				Flex: { template: "<div><slot /></div>" },
-				Icon: { template: '<i :data-icon="name" :data-color="color" />', props: ["name", "color"] },
+				Icon: { template: '<i :data-icon="name" :data-color="color" :data-size="size" />', props: ["name", "color", "size"] },
 			},
 		},
 	})
@@ -113,20 +122,20 @@ describe("TakeoverLayout", () => {
 	test("the chip shows its label, a square only when flagged, and reports a press", async () => {
 		const plain = mountLayout(base())
 		expect(byId(plain, "x-chip").text()).toBe("TESTNET")
-		expect(byId(plain, "x-chip").find("span").exists()).toBe(false)
+		expect(byId(plain, "x-chip").findAll("span")).toHaveLength(1)
 		await byId(plain, "x-chip").trigger("click")
 		expect(plain.emitted("chip")).toHaveLength(1)
-		expect(
-			byId(mountLayout(base(), { flagged: true }), "x-chip")
-				.find("span")
-				.exists(),
-		).toBe(true)
+		expect(byId(mountLayout(base(), { flagged: true }), "x-chip").findAll("span")).toHaveLength(2)
 	})
 
-	test("the lock button is labelled for assistive tech and reports a press", async () => {
+	test("the lock chip is the padlock alone, named for what it does, and reports a press", async () => {
 		const w = mountLayout(base())
-		expect(byId(w, "x-lock").attributes("aria-label")).toBe("Lock wallet")
-		await byId(w, "x-lock").trigger("click")
+		const lock = byId(w, "x-lock")
+		expect(lock.get("[data-icon]").attributes()).toMatchObject({ "data-icon": "lock", "data-size": "15" })
+		expect(lock.text()).toBe("")
+		expect(lock.attributes("aria-label")).toBe("Lock wallet")
+		expect(lock.attributes("type")).toBe("button")
+		await lock.trigger("click")
 		expect(w.emitted("lock")).toHaveLength(1)
 	})
 
@@ -143,5 +152,55 @@ describe("TakeoverLayout", () => {
 			global: { stubs: { Flex: { template: "<div><slot /></div>" }, Icon: true } },
 		})
 		expect(w.attributes("data-screen")).toBe("arrival")
+	})
+
+	describe("a long network name", () => {
+		const layout = parseSource("apps/extension/src/components/composite/TakeoverLayout.vue")
+		const elements = (match: (node: TemplateNode) => boolean, root = layout.template): TemplateNode[] => {
+			const found: TemplateNode[] = []
+			if (root)
+				walkElements(root, (node) => {
+					if (match(node)) found.push(node)
+				})
+			return found
+		}
+		const firstClass = (node: TemplateNode) => /\$style\.\w+/.exec(boundAttr(node, "class") ?? "")?.[0]
+		/** A native button or a component that renders one: either would inherit mid-word breaks. */
+		const isButton = (node: TemplateNode) => /^(button|Button|RowAction|RowTarget)$/.test(node.tag ?? "")
+		const interpolations = (node: TemplateNode) =>
+			(node.children ?? []).filter((child) => typeof child === "object" && child.type === NODE.INTERPOLATION) as TemplateNode[]
+
+		test("wraps in the content column, which holds no button, and grows the full-width buttons", () => {
+			const content = elements((node) => firstClass(node) === "$style.content")
+			expect(content).toHaveLength(1)
+			expect(elements(isButton)).toHaveLength(4)
+			expect(content.flatMap((node) => elements(isButton, node))).toEqual([])
+			expect(declarationsOf(layout, ".content")).toMatchObject({ "overflow-wrap": "anywhere" })
+
+			expect(
+				elements((node) => ["$style.primary", "$style.secondary"].includes(boundAttr(node, "class") ?? "")).map((node) => node.tag),
+			).toEqual(["button", "button"])
+			expect(declarationsOf(layout, ".primary, .secondary")).toMatchObject({
+				"min-height": "48px",
+				"padding-block": "5px",
+				"overflow-wrap": "anywhere",
+			})
+			for (const rule of [".primary, .secondary", ".primary", ".secondary"])
+				expect(declarationsOf(layout, rule)).not.toHaveProperty("height")
+		})
+
+		test("ends in an ellipsis inside the chip, which shares its row with the Lock button", () => {
+			const [chip, ...more] = elements((node) => boundAttr(node, "data-testid") === "id('chip')")
+			expect(more).toEqual([])
+			expect(chip && interpolations(chip)).toEqual([])
+			const labels = (chip?.children ?? []).filter(isElement).filter((node) => boundAttr(node, "class") === "$style.chip_label")
+			expect(labels.flatMap(interpolations).map((node) => (node.content as { content: string }).content.trim())).toEqual(["chip"])
+			expect(declarationsOf(layout, ".chip_label")).toMatchObject({
+				overflow: "hidden",
+				"text-overflow": "ellipsis",
+				"white-space": "nowrap",
+			})
+			expect(declarationsOf(layout, ".chip")).not.toHaveProperty("overflow-wrap")
+		})
 	})
 })

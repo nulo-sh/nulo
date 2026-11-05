@@ -14,6 +14,7 @@ import {
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
 import { tabAround } from "./helpers/pointer-probes"
 import { pollUntil } from "./fixtures/poll"
+import { bringToFront } from "./fixtures/browser"
 
 test("settings page shows all sections", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
@@ -171,7 +172,7 @@ test("a drag selects the text around a control and none of the control's own but
 }) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
-	await page.bringToFront()
+	await bringToFront(page)
 	await page.waitForSelector('[data-testid="balance-amount"]:not([aria-busy])', { visible: true, timeout: 15_000 })
 	const hero = await textOf(page, "balance-amount")
 
@@ -222,6 +223,30 @@ test("a drag selects the text around a control and none of the control's own but
 	await page.mouse.click(middle.x, middle.y)
 	await waitForToast(page, "Address is copied")
 	expect(await copies()).toEqual([await getAccountAddress(page)])
+
+	// Receive's whole address is a native button too, wrapped over lines: a drag selects all of it and
+	// copies nothing.
+	await waitForToastGone(page, "Address is copied")
+	await clickByTestId(page, "actions-receive")
+	await page.waitForSelector('[data-testid="receive-address-text"]', { visible: true, timeout: 10_000 })
+	await page.waitForFunction(
+		() =>
+			!document
+				.getAnimations()
+				.some((a) => a.playState === "running" && Number.isFinite(Number(a.effect?.getComputedTiming().endTime))),
+		{ timeout: 5_000 },
+	)
+	const inReceive = await dragSelect(
+		page,
+		await textEdge(page, "receive-address-text", "first"),
+		await textEdge(page, "receive-address-text", "last"),
+	)
+	console.log(`[select] inside Receive's address: ${JSON.stringify(inReceive)}`)
+	expect(inReceive.replace(/\s/g, "")).toBe(await getAccountAddress(page))
+	expect(await copies()).toHaveLength(1)
+	await page.evaluate(() => window.getSelection()?.removeAllRanges())
+	await clickByTestId(page, "receive-close")
+	await page.waitForSelector('[data-testid="receive-address-text"]', { hidden: true, timeout: 10_000 })
 
 	await navigateToSettings(page, "privacy")
 	await page.waitForSelector('[data-testid="explorer-trigger"]', { visible: true, timeout: 10_000 })
@@ -528,7 +553,7 @@ test("History's and Settings' titles sit 10px below the header with 28px under t
 		await seedTransaction(page, scope, { hash: `0x${(0x10 + i).toString(16).repeat(32)}`, amount: "1500000", at: now - i * 1_000 })
 	}
 	await seedUsdQuoteAndReload(page)
-	await page.bringToFront()
+	await bringToFront(page)
 
 	for (const { tab, hash, wrapper } of pages) {
 		await clickNavTab(page, tab)

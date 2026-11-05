@@ -15,12 +15,12 @@ const SRC = "apps/extension/src"
 const CALLS: Record<string, [number, number]> = {
 	"components/composite/activity/TransactionIncomingCard.vue": [1, 0],
 	"popup/components/modules/general/BalanceView.vue": [2, 0],
-	"popup/components/modules/general/RecentActivityView.vue": [2, 0],
+	"popup/components/modules/general/RecentActivityView.vue": [1, 0],
 	"popup/components/modules/general/TokenCard.vue": [3, 0],
 	"popup/pages/journal/[id].vue": [1, 0],
 	// The fiat hero's whole dollars are exact, so their decimals 0 are no guess.
 	"utils/hero-fit.ts": [3, 0],
-	"utils/journal-state.ts": [1, 0],
+	"utils/journal-state.ts": [2, 0],
 	"utils/snack-amount.ts": [1, 1],
 	"popup/components/modules/activity/TransactionCard.vue": [1, 0],
 	"popup/pages/received/[id].vue": [1, 0],
@@ -29,6 +29,9 @@ const CALLS: Record<string, [number, number]> = {
 
 /** [compact, plain]: plain has no fourth argument, compact passes exactly `{ compact: true }`. */
 function kinds(text: string, file = "inline.ts"): [number, number] {
+	// A file holds a call only if it spells the name, or a template hides one of its letters behind
+	// a `&#` reference (no named reference decodes to one).
+	if (!text.includes("balanceFormatted") && !text.includes("&#")) return [0, 0]
 	let compact = 0
 	let plain = 0
 	for (const { args } of callsTo(file, text, /\bbalanceFormatted$/)) {
@@ -59,6 +62,11 @@ describe("balanceFormatted's callers", () => {
 
 	test("a parenthesis in a string or a comment inside a call is not the call's end", () => {
 		expect(kinds('balanceFormatted(a, ")", 8 /* ) */, { compact: true })')).toEqual([1, 0])
+	})
+
+	test("a call a template spells with a character reference is read", () => {
+		const template = '<template><span :title="&#98;alanceFormatted(a, d, 8, { compact: true })" /></template>'
+		expect(kinds(template, "x.vue")).toEqual([1, 0])
 	})
 
 	test.each([

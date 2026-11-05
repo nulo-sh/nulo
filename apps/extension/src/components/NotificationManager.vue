@@ -156,5 +156,8 @@ watch(
 	width: 90%;
 	max-width: 480px;
 	padding: 24px;
+	/* Notice text can carry data: one string wider than the card. A centred flex item never shrinks
+	 * below its min-content width, which `anywhere` lowers and `break-word` does not. */
+	overflow-wrap: anywhere;
 }
 </style>

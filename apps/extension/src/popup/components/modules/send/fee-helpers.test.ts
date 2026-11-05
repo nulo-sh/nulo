@@ -318,7 +318,7 @@ describe("fee-helpers/buildFeeMethods — rows whose read has not landed", () =>
 	const PRIVATE = { id: "p1", type: FpcType.PrivateFpc, name: "Private Fee Juice", isProtocol: true }
 	const NULO_SPONSOR = { id: "s1", type: FpcType.DefaultSponsoredFpc, name: "Sponsored", isProtocol: true }
 	const HAND_ADDED = { id: "s2", type: FpcType.DefaultSponsoredFpc, name: "Dev sponsor", isProtocol: false }
-	const NEITHER = { balancesPending: true, fpcsPending: true }
+	const NEITHER = { balancesPending: true, fpcsPending: true, offersSponsor: true }
 	const BALANCES = { balancesPending: true, fpcsPending: false }
 
 	test("with neither read in, every row loads with its title alone, and Nulo's sponsor holds its place", () => {
@@ -327,6 +327,10 @@ describe("fee-helpers/buildFeeMethods — rows whose read has not landed", () =>
 			{ type: "private_fpc", title: "Private Fee Juice", subtitle: "private", fpc: null, checking: true },
 			{ type: "fpc", title: "Sponsored", subtitle: "sponsored", fpc: null, checking: true },
 		])
+	})
+
+	test("on a chain with no sponsor, nothing holds a sponsor's place while the FPC list loads", () => {
+		expect(buildFeeMethods([], undefined, { ...NEITHER, offersSponsor: false }).map((m) => m.type)).toEqual(["fj", "private_fpc"])
 	})
 
 	test("a list handed in while the FPC read is pending loads too, and needs no placeholder once it names Nulo's sponsor", () => {

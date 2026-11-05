@@ -11,8 +11,7 @@ const props = defineProps({
 	/** From useDappInteractionPayload.dapp; reads `url`, `loadingLogo`,
 	 *  `logoBlobUrl`, and `name` keys. */
 	dapp: { type: Object, default: null },
-	/** Per-window verb (e.g. "wants to connect to your wallet"). */
-	actionLabel: { type: String, required: true },
+	actionLabel: { type: String, default: "" },
 	/** Forwarded to the hostname `<span>` so e2e selectors stay scoped
 	 *  per window (e.g. "discover-hostname", "capabilities-hostname"). */
 	hostnameTestId: { type: String, default: undefined },
@@ -42,7 +41,7 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 				<span :class="$style.warning_text">{{ HOSTNAME_WARNING }}</span>
 			</Flex>
 			<span v-if="sanitizedName" :data-testid="nameTestId" :class="$style.dapp_name">{{ sanitizedName }}</span>
-			<span :data-testid="actionTestId" :class="$style.dapp_action">{{ actionLabel }}</span>
+			<span v-if="actionLabel" :data-testid="actionTestId" :class="$style.dapp_action">{{ actionLabel }}</span>
 		</Flex>
 	</Flex>
 </template>
@@ -108,5 +107,7 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 .dapp_action {
 	composes: type--body from global;
 	color: var(--nulo-secondary);
+
+	overflow-wrap: anywhere;
 }
 </style>
