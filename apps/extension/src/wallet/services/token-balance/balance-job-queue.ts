@@ -426,17 +426,27 @@ export class BalanceJobQueue {
 		err: unknown,
 	): Promise<void> {
 		const errorMessage = getErrorMessage(err)
-		for (const tb of batch) {
-			const taskId = owned.get(tb.id)
-			// A reset since batch-start may have cleared this batch's task record;
-			// `getTaskSync` would throw and abort the remaining failure writes.
-			if (!taskId || !this.tasks.hasTask(taskId)) continue
-			const task = this.tasks.getTaskSync(taskId)
-			if (!task.finishedAt) {
-				this.tasks.failTask(taskId, errorMessage)
+		// Every task is finished before the first write is awaited: the batch releases its
+		// pointers once this returns or throws, and a task left running then is never finished.
+		const failed = batch.filter((tb) => this.failUnfinishedTask(owned.get(tb.id), errorMessage))
+		let refused: { error: unknown } | undefined
+		for (const tb of failed) {
+			try {
 				await this.writeSyncFailure(tb.id, errorMessage, Date.now(), gen)
+			} catch (error) {
+				// Each row's record is its own write; the first refusal is rethrown for the tick to log.
+				refused ??= { error }
 			}
 		}
+		if (refused) throw refused.error
+	}
+
+	private failUnfinishedTask(taskId: string | undefined, message: string): boolean {
+		// A reset since batch-start may have cleared this batch's task record, and
+		// `getTaskSync` throws on an unknown id.
+		if (!taskId || !this.tasks.hasTask(taskId) || this.tasks.getTaskSync(taskId).finishedAt) return false
+		this.tasks.failTask(taskId, message)
+		return true
 	}
 
 	private releaseOwnedTaskPointers(batch: TokenBalanceRaw[], owned: Map<number, string>): void {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, test, expect, vi } from "vitest"
 import { FakeBackgroundTicker } from "@nulo/wallet-core/testing"
+import { type ILogger, LogLevel } from "@/wallet/logger"
 import type { TaskService } from "@/wallet/services/task/service"
 import { BalanceJobQueue } from "./balance-job-queue"
 import type { BalanceProjector, ProjectedBalance } from "./balance-projector"
@@ -647,6 +648,69 @@ describe("BalanceJobQueue", () => {
 
 		expect((await repo.get(1))?.privateBalance).toBe("100")
 		expect(onBalanceUpdated).toHaveBeenCalledTimes(1)
+	})
+
+	describe("a projector that throws fails the whole batch", () => {
+		const throwing = {
+			project: async () => {
+				throw new Error("node unreachable")
+			},
+		} as unknown as BalanceProjector
+
+		test("control: every task fails and every row gets its failure record", async () => {
+			const ticker = new FakeBackgroundTicker()
+			const repo = makeRepo([raw(1), raw(2)])
+			const tasks = makeTaskService()
+			const onBalanceUpdated = vi.fn()
+			const queue = new BalanceJobQueue(ticker, repo, throwing, tasks.service, { getGeneration: () => 0, onBalanceUpdated })
+
+			queue.enqueue(raw(1))
+			queue.enqueue(raw(2))
+			await queue.tick()
+
+			expect(tasks.failTask.mock.calls).toEqual([
+				[expect.any(String), "node unreachable"],
+				[expect.any(String), "node unreachable"],
+			])
+			expect((await repo.get(1))?.syncFailure?.message).toBe("node unreachable")
+			expect((await repo.get(2))?.syncFailure?.message).toBe("node unreachable")
+			expect(onBalanceUpdated).toHaveBeenCalledTimes(2)
+		})
+
+		test("a failure write that rejects leaves no task unfinished, and the other row still gets its record", async () => {
+			const ticker = new FakeBackgroundTicker()
+			const repo = makeRepo([raw(1), raw(2)])
+			const prepare = repo.prepare.bind(repo)
+			let prepares = 0
+			repo.prepare = async (balance: TokenBalanceRaw) => {
+				prepares++
+				if (prepares === 1) throw new Error("storage refused the write")
+				return prepare(balance)
+			}
+			const tasks = makeTaskService()
+			const log = vi.fn()
+			const logger = { log } as unknown as ILogger
+			const queue = new BalanceJobQueue(
+				ticker,
+				repo,
+				throwing,
+				tasks.service,
+				{ getGeneration: () => 0, onBalanceUpdated: vi.fn() },
+				logger,
+			)
+
+			queue.enqueue(raw(1))
+			queue.enqueue(raw(2))
+			await queue.tick()
+
+			const minted: string[] = tasks.createNewTask.mock.results.map((result) => result.value.id)
+			expect(minted).toHaveLength(2)
+			for (const id of minted) expect(tasks.service.getTaskSync(id).finishedAt, id).toBeDefined()
+			expect(prepares).toBe(2)
+			const records = [(await repo.get(1))?.syncFailure, (await repo.get(2))?.syncFailure].filter(Boolean)
+			expect(records).toEqual([expect.objectContaining({ message: "node unreachable" })])
+			expect(log.mock.calls.filter(([, level]) => level === LogLevel.Error)).toHaveLength(1)
+		})
 	})
 })
 
