@@ -45,7 +45,7 @@ One arc, one PR against `dev`, three phases (one per issue). Recon: [`recon.md`]
 
 ## Phases
 
-### Phase 1: #1627, every batch task finishes
+### Phase 1: #1627, every batch task finishes ✓
 
 - **Assumptions**: the projector returns one result per input (`balance-projector.ts:68-108`); in the first pass `failTask` cannot throw behind the `hasTask` and `finishedAt` checks (Opus R1 traced it).
 - **Tests** (`balance-job-queue.test.ts`, two rows of one account, a projector that throws): (a) control, working storage: every task fails with the projector's message, both rows get their failure record, `onBalanceUpdated` fires twice (green at the base; the existing returned-error test covers another path); (b) written first, red at the base: the first `prepare` call rejects: every task the queue minted is finished, `prepare` ran twice and the other row's record is written, `tick()` resolves and an injected logger records one error.

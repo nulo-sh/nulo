@@ -4,3 +4,4 @@
 - 2026-11-05 plan drafted; panel (Codex audit + Opus Plan leg) running.
 - 2026-11-05 panel round 1 folded in (Codex and Opus both approve with changes); Codex resumed for the verdict.
 - 2026-11-05 Codex R3 approve; no owner ask; auto-continue into arc 1.
+- 2026-11-05 Phase 1 gate green: token-balance suite 162/162, new test red on the base source, lint and typecheck:all clean.
