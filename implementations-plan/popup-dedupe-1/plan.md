@@ -1,7 +1,7 @@
 ---
 plan: popup-dedupe-1
 tier: light
-status: approved by the panel (Codex R3 approve); arc 1 next
+status: completed
 issues: "#1470 (arc 1, phase 1); #1449 (arc 1, phase 2)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 4b250dfe4
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-05
+- **Status**: completed, one arc: #1674 closes #1470 and #1449.
+- **Shipped**: Send's side rule as `forcedSide`, `canSwitchSender` and `canSwitchReceiver` in `apps/extension/src/components/composite/send/send-sides.ts`, read at every site, with the unread `isTokenRestricted` deleted (D1–D3). `ALREADY_ADDED`, `INVALID_ADDRESS` and `RPC_URL_MIN_LENGTH` in `utils/entity-rules.ts`; `entityListReducers` with `appendUnlistedUpdate` in place of four hand-written reducers (D4); `PROFILE_NAME_MAX` and `profileNameTaken` in `utils/profile-name.ts`. Every variant the existing tests missed was pinned first, and two pins were mutation-checked (D9).
+- **Known limits**: none.
+- **Dispositions**: rejected, each in D6: New token's `toLowerCase()` stays, a deliberate broader match (F6); the issue's `nameTakenError`/`addressTakenError` (superseded by #1543); `isPlausibleRpcUrl` (a constant instead, D5); an alias for the old reducer name; Send's recipient hint; the blank guards, the "changed?" checks and `maxLength="25"`. Rejected in review: keeping Select profile's splice (D4), an untrimmed text assertion (D8), a close-before-toast order assertion.
+- **Lessons**: none promoted. Both gotchas met here already have lines: the chaos model's line citations, and a never-happens pin's success control.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # popup-dedupe-1: one home for Send's side rule and for the entity forms' shared rules
 
