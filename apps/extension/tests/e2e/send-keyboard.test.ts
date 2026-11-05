@@ -391,9 +391,8 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 	expect(borders[0], "the chosen priority's border").toBe(accent)
 	expect(borders[1], "the hovered priority's border").not.toBe(accent)
 
-	// One Tab stop: the arrows move the choice and focus together, Tab and Shift+Tab each leave the
-	// row from the chosen level, and Tab from the control before it comes back onto that level. The
-	// row can end the page, where Tab hands focus to the browser, so the way back starts inside it.
+	// The row can end the page, where Tab hands focus to the browser; re-entry is tested from the
+	// control before it.
 	await page.focus(sel("send-fee-priority-normal"))
 	await page.keyboard.press("ArrowRight")
 	await waitForFocus(page, "send-fee-priority-fast")
