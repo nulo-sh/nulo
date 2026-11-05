@@ -544,6 +544,44 @@ describe("ExecutionService composition — the endpoint a send goes out through"
 		expect(h.addTransaction).not.toHaveBeenCalled()
 		expect((await h.journal.getOperation(h.getJournalId()))?.progress).toEqual({ stage: "failed", from: "proving" })
 	}, 15_000)
+
+	test.each([
+		{ label: "the build's endpoint, removed while it proved: refused", picks: "http://fake", sent: false },
+		{ label: "control: the endpoint added while it proved: dialed and recorded", picks: "http://added", sent: true },
+	])(
+		"the pick is asked over the network's live row; a pick of $label",
+		async ({ picks, sent }) => {
+			const h = await makeHarness()
+			const run = transfer(h)
+			await waitFor(() => h.ctrl.entered)
+			const live = { ...NETWORK, primaryEndpointId: "ep2", endpoints: [{ id: "ep2", rpcUrl: "http://added" }] }
+			h.getNetwork.mockResolvedValue(live)
+			h.pickSendEndpoint.mockResolvedValueOnce({ rpcUrl: picks })
+			h.ctrl.release()
+			const outcome = await run
+			expect(h.pickSendEndpoint.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ endpoints: live.endpoints }))
+			if (sent) {
+				expect(outcome).toBe("0xhash")
+				expect(h.addTransaction).toHaveBeenCalledWith(expect.objectContaining({ submittedEndpointUrl: "http://added" }))
+			} else {
+				expect(outcome).toBeInstanceOf(JournaledRejection)
+				expect(h.sendTx).not.toHaveBeenCalled()
+				expect(h.addTransaction).not.toHaveBeenCalled()
+			}
+		},
+		15_000,
+	)
+
+	test("a network moved to another chain while the send proved is refused before the pick", async () => {
+		const h = await makeHarness()
+		const run = transfer(h)
+		await waitFor(() => h.ctrl.entered)
+		h.getNetwork.mockResolvedValue({ ...NETWORK, chainId: NETWORK.chainId + 1 })
+		h.ctrl.release()
+		expect(await run).toBeInstanceOf(JournaledRejection)
+		expect(h.pickSendEndpoint).not.toHaveBeenCalled()
+		expect(h.sendTx).not.toHaveBeenCalled()
+	}, 15_000)
 })
 
 describe("ExecutionService composition — work runs only while the session that authorized it lives", () => {

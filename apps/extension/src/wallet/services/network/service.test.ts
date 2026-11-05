@@ -2084,7 +2084,10 @@ describe("NetworkService routes", () => {
 		expect(await service.getNodeFor(foreign)).not.toBe(mine)
 		// A caller holding a row whose endpoints differ from the cached route's gets a route for its row.
 		const edited = { ...row, endpoints: [...row.endpoints, { id: "z", rpcUrl: "https://z.example" }] }
-		expect(await service.getNodeFor(edited)).not.toBe(mine)
+		const rebuilt = await service.getNodeFor(edited)
+		expect(rebuilt).not.toBe(mine)
+		// So does one holding the same list under another chain identity, as a row from before a reset.
+		expect(await service.getNodeFor({ ...edited, chainId: edited.chainId + 1 })).not.toBe(rebuilt)
 	})
 
 	test.each<[string, (service: NetworkService, row: Network, extra: string) => Promise<unknown>]>([

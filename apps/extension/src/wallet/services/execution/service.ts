@@ -404,9 +404,14 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		return { l1ChainId: info.l1ChainId, rollupVersion: info.rollupVersion }
 	}
 
-	/** Submits only through an endpoint the network lists: an offscreen answer naming any other URL is
-	 *  refused before anything is recorded or sent. */
-	private async pickSendEndpoint(network: Network, tx: { txHash: string; anchorHash: string }): Promise<PickedEndpoint> {
+	/** Submits only through an endpoint the network lists when the proof is done, not when the build
+	 *  began: the pick is asked over the live row, and an answer naming any other URL is refused before
+	 *  anything is recorded or sent. */
+	private async pickSendEndpoint(built: Network, tx: { txHash: string; anchorHash: string }): Promise<PickedEndpoint> {
+		const network = await this.networkService.getNetwork(built.id)
+		if (network.chainId !== built.chainId || network.l1ChainId !== built.l1ChainId) {
+			throw new Error(`Network ${built.id} moved to another chain while the send was built`)
+		}
 		const { rpcUrl } = await this.pxeService.pickSendEndpoint(networkInfoFrom(network), tx)
 		if (!network.endpoints.some((endpoint) => endpoint.rpcUrl === rpcUrl)) {
 			throw new Error(`The endpoint picked for the send is not one of network ${network.id}'s`)

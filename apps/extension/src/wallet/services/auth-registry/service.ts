@@ -197,8 +197,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 
 	/**
 	 * The endpoint `txHash` went out through, found in `network`'s own profile: its journal row's,
-	 * else its activity row's. Only an endpoint the network still lists counts, since a restored row's
-	 * endpoint is backup data; with none, the caller reads nothing and fails closed.
+	 * else its activity row's. Only an endpoint the network listed when the operation read its row, or
+	 * lists now, counts, since a restored row's endpoint is backup data; with none, the caller reads
+	 * nothing and fails closed. The live row is unreadable once another profile is active.
 	 */
 	private async recordedEndpointOf(network: Network, txHash: string): Promise<string | undefined> {
 		const journaled = (await this.operationJournal.getOperations({ profileId: network.profileId })).find(
@@ -207,7 +208,10 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const url =
 			(journaled && "submittedEndpointUrl" in journaled ? journaled.submittedEndpointUrl : undefined) ??
 			(await this.transactionService.recordedEndpointOf(txHash, network.profileId))
-		return url && network.endpoints.some((endpoint) => endpoint.rpcUrl === url) ? url : undefined
+		if (!url) return undefined
+		const live = await this.networkService.getNetwork(network.id).catch(() => undefined)
+		const listed = [...network.endpoints, ...(live?.profileId === network.profileId ? live.endpoints : [])]
+		return listed.some((endpoint) => endpoint.rpcUrl === url) ? url : undefined
 	}
 
 	/** The retrying client of the endpoint `txHash` went out through. */
@@ -425,9 +429,12 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 			// not that its PUBLIC effect is mined + visible. Poll the on-chain state
 			// so a fast (proverless) follow-up consume can't race a not-yet-mined
 			// revoke. See waitForOnChainState.
-			const revokeBlock = await this.waitForTxProven(await this.receiptNodeFor(network, txHash), txHash)
+			// The verify reads where the proven wait read: another endpoint may not have the grant yet, and
+			// would report a reverted revoke as unauthorized.
+			const revokeNode = await this.receiptNodeFor(network, txHash)
+			const revokeBlock = await this.waitForTxProven(revokeNode, txHash)
 			// No subtask past the send: a profile switch clears the registry, and the prune must still land.
-			await this.verifyRevoked(network, await this.networkService.getNodeFor(network), scope, authwits, revokeBlock)
+			await this.verifyRevoked(network, revokeNode, scope, authwits, revokeBlock)
 
 			task.completeIfTracked()
 		} catch (error) {
@@ -471,9 +478,10 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 
 			// Ensure the registry toggle is mined + visible before returning, so a
 			// fast follow-up consume reads the new state (see waitForOnChainState).
-			await this.waitForTxProven(await this.receiptNodeFor(network, txHash), txHash)
+			const toggleNode = await this.receiptNodeFor(network, txHash)
+			await this.waitForTxProven(toggleNode, txHash)
 			// No subtask past the send: a profile switch clears the registry, and the status must still land.
-			await this.applyStatus(await this.networkService.getNodeFor(network), scope)
+			await this.applyStatus(toggleNode, scope)
 
 			task.completeIfTracked()
 		} catch (error) {

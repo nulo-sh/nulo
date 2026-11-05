@@ -343,7 +343,7 @@ export class ExecutionCoordinator {
 	 *
 	 *  Sequence (frozen):
 	 *    checkCancelled → journal(proving) → checkCancelled → prove → checkCancelled →
-	 *    assertAuthorization → [offchain hook] → toTx → commit(submitting) →
+	 *    assertAuthorization → [offchain hook] → toTx → pick endpoint → commit(submitting) →
 	 *    checkCancelled → assertLive + send → record → journal(succeeded)
 	 *
 	 *  The `submitting` commit is the one journal write the send depends on, so

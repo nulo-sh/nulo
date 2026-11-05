@@ -306,12 +306,11 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				throw new Error("duplicated hash")
 			}
 			const now = Date.now()
-			// `submittedEndpointUrl` is resolved by the EXECUTOR from the network it
-			// actually built+submitted against (captured before prove/send), then
-			// passed in. It is NOT re-derived here from active-profile state: a TTL
-			// auto-lock or profile switch DURING the (slow) prove would make an
-			// active-profile lookup throw or resolve the wrong profile's endpoint,
-			// recording a wrong/undefined URL — which at poll time routes the receipt
+			// `submittedEndpointUrl` is the endpoint the send was picked and submitted
+			// through, passed in by the executor. It is NOT re-derived here from
+			// active-profile state: a TTL auto-lock or profile switch DURING the (slow)
+			// prove would make an active-profile lookup throw or resolve the wrong
+			// profile's endpoint, recording a wrong/undefined URL — which at poll time routes the receipt
 			// fetch to the active profile's RPC (a cross-profile leak). See
 			// `NetworkService.getNodeForUrl`.
 			const tx: Tx = {

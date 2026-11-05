@@ -238,9 +238,10 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	private readonly staleNetworks: StaleNetworkRepository
 	/** One routed node per network row, with the endpoint list it was built for. */
 	private readonly routes = new Map<string, { key: string; node: RoutedNode }>()
-	/** URL-keyed transient cache for pending-tx polling pin. */
+	/** The retrying client of each endpoint a transaction was submitted through: the send, its dApp
+	 *  `wait` and the registry's receipt reads. */
 	private readonly transientNodes = new Map<string, AztecNode>()
-	/** Never evicted: the keys are only the endpoints failed sends went through. */
+	/** Never evicted: the keys are only endpoints a transaction was recorded on. */
 	private readonly singleAttemptNodes = new Map<string, AztecNode>()
 	private readonly lock: Lock
 	private readonly nodeFactory: NodeFactory
@@ -1026,12 +1027,12 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	/**
 	 * The routed node of `network`'s own row, never the active profile's: a profile switch mid-call
 	 * must not send this row's reads to a provider the other profile chose. Rebuilt when the row's
-	 * endpoint list differs from the one the cached route was built for.
+	 * chain identity or endpoint list differs from the one the cached route was built for.
 	 */
 	public async getNodeFor(network: Network): Promise<RoutedNode> {
 		await this.ensureInitialized()
 		const endpoints = routeEndpoints(network)
-		const key = JSON.stringify(endpoints)
+		const key = JSON.stringify([network.chainId, network.l1ChainId, endpoints])
 		const cached = this.routes.get(network.id)
 		if (cached?.key === key) return cached.node
 		const node = this.nodeFactory.createRoutedNode({ chainId: network.chainId, l1ChainId: network.l1ChainId, endpoints })
