@@ -1809,6 +1809,7 @@ describe("ProfileService integration", () => {
 			vi.spyOn(internals.sessionManager, "close").mockRejectedValue(new Error("close failed"))
 			await expect(service.lockActiveProfile()).rejects.toThrow("close failed")
 			expect(internals.pendingDekRewraps.size).toBe(0)
+			expect(internals.restoreAdmissions.size).toBe(0)
 			expect(buffers.every((b) => b.every((x) => x === 0))).toBe(true)
 			expect(await service.consumeDekRewrapContext(out.id)).toBeUndefined()
 		}, 30_000)
@@ -1819,6 +1820,7 @@ describe("ProfileService integration", () => {
 			if ("restoreError" in out && out.restoreError) throw new Error(String(out.restoreError))
 			await service.deleteProfile(out.id)
 			expect(await service.consumeDekRewrapContext(out.id)).toBeUndefined()
+			expect((service as unknown as { restoreAdmissions: Map<string, unknown> }).restoreAdmissions.has(out.id)).toBe(false)
 			await expect(service.finalizeRestore(out.id, "pass1234")).rejects.toThrow(/Invalid profile id/)
 		}, 30_000)
 
