@@ -4,12 +4,15 @@
  * Workers Builds and set on the Worker's build configuration. The token's value lives in this
  * process only, between its creation and its registration; it is never printed or written.
  *
- *   bun setup/build-token.ts narrow <worker> [--account-read] [--local-deploy <dir>]
+ *   bun setup/build-token.ts narrow <worker> [--account-read] [--local-deploy <dir>] [--role workers-scripts] [--name <token name>]
  *   bun setup/build-token.ts status
  *   bun setup/build-token.ts probe-worker delete
  *
  * `--local-deploy <dir>` runs `wrangler deploy` in <dir> under the new token alone, as the
  * positive control; only for a Worker whose checkout here is the code it serves.
+ * `--role workers-scripts` asks for account-wide `Workers Scripts Write` instead of the per-Worker
+ * role (Cloudflare refuses granular roles on user tokens, and Builds accepts user tokens only): the
+ * token then reaches every Worker, so the probe tests are skipped and only the deploy is proven.
  */
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -46,8 +49,13 @@ async function main() {
 	if (command === "probe-worker" && worker === "delete") return deleteProbe(cf)
 	if (command !== "narrow" || !worker)
 		throw new Error("usage: narrow <worker> [--account-read] [--local-deploy <dir>] | status | probe-worker delete")
-	const localDeploy = flags.includes("--local-deploy") ? flags[flags.indexOf("--local-deploy") + 1] : undefined
-	await narrow(cf, worker, { accountRead: flags.includes("--account-read"), localDeploy })
+	const flag = (name: string) => (flags.includes(name) ? flags[flags.indexOf(name) + 1] : undefined)
+	await narrow(cf, worker, {
+		accountRead: flags.includes("--account-read"),
+		localDeploy: flag("--local-deploy"),
+		wide: flag("--role") === "workers-scripts",
+		name: flag("--name"),
+	})
 }
 
 async function status(cf: Cf) {
@@ -63,17 +71,21 @@ async function status(cf: Cf) {
 	}
 }
 
-async function narrow(cf: Cf, worker: string, opts: { accountRead: boolean; localDeploy?: string }) {
+type NarrowOptions = { accountRead: boolean; localDeploy?: string; wide: boolean; name?: string }
+
+async function narrow(cf: Cf, worker: string, opts: NarrowOptions) {
 	const scripts = await cf.get<Script[]>(`/accounts/${ACCOUNT}/workers/scripts`)
 	const tag = scripts.find((s) => s.id === worker)?.tag
 	if (!tag) throw new Error(`${worker} is not a Worker of this account`)
 	const config = await cf.get<{ production_settings?: { build_token_uuid?: string } }>(`/accounts/${ACCOUNT}/builds/workers/${tag}`)
 	say(`${worker}: tag ${tag}, build token now ${config.production_settings?.build_token_uuid ?? "none"} (rollback value)`)
-	await ensureProbe(cf)
+	if (!opts.wide) await ensureProbe(cf)
 	const groups = await cf.get<Group[]>("/user/tokens/permission_groups")
-	const token = await createToken(cf, worker, tag, groups, opts.accountRead)
+	const token = opts.wide
+		? await createWideToken(cf, opts.name ?? `${worker} build`, groups)
+		: await createToken(cf, worker, tag, groups, opts.accountRead)
 	try {
-		await proveScope(token, worker, tag)
+		if (!opts.wide) await proveScope(token, worker, tag)
 		if (opts.localDeploy) await proveDeploy(token, opts.localDeploy)
 		const uuid = await register(cf, token)
 		await cf.patch(`/accounts/${ACCOUNT}/builds/workers/${tag}`, { production_settings: { build_token_uuid: uuid } })
@@ -177,6 +189,29 @@ async function createToken(cf: Cf, worker: string, tag: string, groups: Group[],
 		return { ...made, value: made.value }
 	}
 	throw new Error("no resource spelling for one Worker was accepted: per-Worker tokens are not available to this account yet")
+}
+
+/** The fallback token: Workers Scripts Write and Account Settings Read on this account, nothing else. */
+async function createWideToken(cf: Cf, name: string, groups: Group[]): Promise<Token & { value: string }> {
+	const pick = (n: string) => {
+		const g = groups.find((g) => g.name === n)
+		if (!g) throw new Error(`permission group missing: ${n}`)
+		return { id: g.id, name: g.name }
+	}
+	const policies: Policy[] = [
+		{
+			effect: "allow",
+			resources: { [`com.cloudflare.api.account.${ACCOUNT}`]: "*" },
+			permission_groups: [pick("Workers Scripts Write"), pick("Account Settings Read")],
+		},
+	]
+	const made = await cf.post<Token>("/user/tokens", { name, policies })
+	if (!made.value) throw new Error("the token was created but its value was not returned")
+	const back = await cf.get<Token>(`/user/tokens/${made.id}`)
+	say(
+		`created "${made.name}" (${made.id}) with resources ${resourceKeys(back).join(" ")} and roles ${(back.policies ?? []).flatMap((p) => p.permission_groups.map((g) => g.name)).join(", ")}`,
+	)
+	return { ...made, value: made.value }
 }
 
 /** Reads on its own Worker succeed; a secret write and a code upload on the probe Worker are refused. */
