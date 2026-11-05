@@ -343,7 +343,7 @@ async function stretchPayload(win: Page): Promise<void> {
 }
 
 /** Each font's text is measured alone: text on one line in two fonts can have different rect tops. */
-async function callCaptions(win: Page): Promise<{ lines: number; onBeside: boolean }[]> {
+async function callCaptions(win: Page): Promise<{ lines: number; onBeside: boolean; inRow: boolean }[]> {
 	return win.evaluate(() =>
 		Array.from(document.querySelectorAll('[data-testid="execute-op-payload-row"]'), (row) => {
 			const caption = row.lastElementChild
@@ -362,6 +362,7 @@ async function callCaptions(win: Page): Promise<{ lines: number; onBeside: boole
 			return {
 				lines: new Set(address.map((rect) => Math.round(rect.top))).size,
 				onBeside: Boolean(first && beside && beside.top < first.bottom && first.top < beside.bottom),
+				inRow: caption.getBoundingClientRect().right <= row.getBoundingClientRect().right + 0.5,
 			}
 		}),
 	)
@@ -371,7 +372,7 @@ async function expectCallCaptionsWhole(win: Page): Promise<void> {
 	const whole = async (label: string) => {
 		const captions = await callCaptions(win)
 		expect(captions.length, `${label}: payload rows`).toBeGreaterThan(0)
-		expect(captions, label).toEqual(captions.map(() => ({ lines: 1, onBeside: true })))
+		expect(captions, label).toEqual(captions.map(() => ({ lines: 1, onBeside: true, inRow: true })))
 	}
 	await whole("the window's width")
 	await atWidth(win, 360, async () => {
@@ -379,6 +380,11 @@ async function expectCallCaptionsWhole(win: Page): Promise<void> {
 		await win.evaluate(() => {
 			for (const el of document.querySelectorAll('[data-testid="execute-op-call-to"]')) el.textContent = "W".repeat(48)
 		})
+		const capped = await callCaptions(win)
+		expect(
+			capped.map(({ inRow }) => inRow),
+			"a contract wider than the row stays in it, at 360 px",
+		).toEqual(capped.map(() => true))
 		expect(await payloadPastCard(win), "a contract wider than the row, at 360 px").toBeLessThanOrEqual(0)
 	})
 }
