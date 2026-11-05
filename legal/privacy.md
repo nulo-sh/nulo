@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.9 — effective 5 November 2026**
+**Version 1.2.10 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -122,7 +122,7 @@ intentionally discloses it. Protocol privacy does not eliminate inference, and d
 information that a transaction makes public.
 
 **Your control:** Settings → Networks lets you replace any endpoint with one you trust or run
-yourself. **Pending transactions may continue to be checked through the endpoint used to submit
+yourself. When a network has more than one endpoint, Nulo uses the primary first and, while it fails, the others in the order Settings → Networks lists them. Each endpoint you add can receive the requests described above. **Pending transactions may continue to be checked through the endpoint used to submit
 them, including after you change or remove that endpoint.** Changing an endpoint does not withdraw
 information already disclosed.
 
@@ -470,3 +470,4 @@ described in § 5.
 | 1.2.7 | 27 October 2026 | The website and its mailing list are described in a separate Website Privacy Notice; § 5.5 keeps the hosts the wallet's functions involve. |
 | 1.2.8 | 5 November 2026 | Prices are requested for the price identifiers the signed token list names, and for AZTEC, which prices Fee Juice (§ 5.2). |
 | 1.2.9 | 5 November 2026 | The token list is downloaded about every six hours, retried within minutes then less often after a failure, and on request in Settings → Tokens (§§ 5.11, 6). |
+| 1.2.10 | «FILL: effective date» | When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails; each endpoint you add can receive its requests (§ 5.1). |
