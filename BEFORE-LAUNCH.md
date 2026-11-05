@@ -252,14 +252,16 @@ November 2026; the landing and `nulo-subscribe` both deploy from that promote's 
       that day
 
 **Due at the release that carries the store's audit note** (owner's pick, 2026-11-02, decision
-page 93, P93-46 C): the long description's "No account, no telemetry." is followed by "Not audited.
-See the Privacy Policy for what leaves your device.", and screenshot 4's caption carries the same
-two sentences. The dashboards are filled by hand, after the promote lands:
+page 93, P93-46 C; the owner moved "Not audited" in the long description on 2026-11-05: "Ok -
+description updated to that one"): the long description's "No account, no telemetry." is followed
+by "See the Privacy Policy for what leaves your device.", its last line reads "Open source,
+Apache-2.0, not audited: …", and screenshot 4's caption keeps "Not audited. See the Privacy
+Policy for what leaves your device." The dashboards are filled by hand, after the promote lands:
 
-- [ ] Chrome (owner): paste `apps/extension/store/listing.md` § Long description and replace
+- [x] Chrome (owner): paste `apps/extension/store/listing.md` § Long description and replace
       screenshot 4 with `apps/extension/store/screenshot-4-1280x800.png`, before the release's
       store dispatch (an approved staged submission locks every dashboard field)
-- [ ] AMO (owner): the same description and screenshot 4
+- [x] AMO (owner): the same description and screenshot 4
 
 The owner's live-Testnet send moved to § 3: from the 1.0.0 candidate, before the promote (owner's
 call, 2026-10-19, decision page 68).
