@@ -391,8 +391,9 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 	expect(borders[0], "the chosen priority's border").toBe(accent)
 	expect(borders[1], "the hovered priority's border").not.toBe(accent)
 
-	// One Tab stop: the arrows move the choice and focus together, Tab leaves the row, Shift+Tab
-	// comes back onto the chosen level and a second one leaves the other way.
+	// One Tab stop: the arrows move the choice and focus together, Tab and Shift+Tab each leave the
+	// row from the chosen level, and Tab from the control before it comes back onto that level. The
+	// row can end the page, where Tab hands focus to the browser, so the way back starts inside it.
 	await page.focus(sel("send-fee-priority-normal"))
 	await page.keyboard.press("ArrowRight")
 	await waitForFocus(page, "send-fee-priority-fast")
@@ -400,16 +401,13 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 	await expectAccentRing(page, "send-fee-priority-fast")
 	await page.keyboard.press("Tab")
 	expect(await activeTestId(page), "Tab from the chosen priority").not.toMatch(/^send-fee-priority-/)
-	await shiftTab(page)
-	await waitForFocus(page, "send-fee-priority-fast")
-	await shiftTab(page)
-	expect(await activeTestId(page), "Shift+Tab from the chosen priority").not.toMatch(/^send-fee-priority-/)
-}
-
-async function shiftTab(page: Page): Promise<void> {
+	await page.focus(sel("send-fee-priority-fast"))
 	await page.keyboard.down("Shift")
 	await page.keyboard.press("Tab")
 	await page.keyboard.up("Shift")
+	expect(await activeTestId(page), "Shift+Tab from the chosen priority").not.toMatch(/^send-fee-priority-/)
+	await page.keyboard.press("Tab")
+	await waitForFocus(page, "send-fee-priority-fast")
 }
 
 test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrows and Enter pick, Escape returns to it", {
