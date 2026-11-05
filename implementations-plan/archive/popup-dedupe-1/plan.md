@@ -136,7 +136,7 @@ One arc, one PR, no stack (D-orch-1). Branch `popup-dedupe-1-a1` off `origin/dev
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard), read at `4b250dfe4`. Plan-specific values:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard), read at `4b250dfe4`. Plan-specific values:
 
 1. No diff review (`code_review: off`).
 2. The review loop runs once over the arc diff from `4b250dfe4`, after the arc gate: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. Log each round in `lessons/phase-2.md`. Stop after three rounds that still have material findings.
