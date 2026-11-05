@@ -40,7 +40,7 @@ The 1 MiB + 1 KiB cap: the client sends a batch while its entries' summed length
 
 ## Owner checklist (Cloudflare and dRPC dashboards)
 
-Nothing here needs an agent, a token in the repository, or CI. The Worker deploys from `main` only.
+Nothing here needs a token in the repository or CI, and the Worker deploys from `main` only. `setup/inventory.ts` reads the account against this list and prints the steps left; it runs only as a keyed run under a temporary token the owner creates and deletes after (`env-exec request --template infra/rpc-proxy/setup/setup.env.example --slug cf-inventory -- bun infra/rpc-proxy/setup/inventory.ts`, approved with `op-remote`), so the token never enters a file or an agent's context.
 
 1. **Workers Builds**, Worker `nulo-rpc-proxy`: repository `nulo-sh/nulo`, root directory `infra/rpc-proxy`, production branch `main`, build watch paths `infra/rpc-proxy/**`, build variable `BUN_VERSION=1.4.2`, no build command, deploy command `bun run deploy`, **non-production branch builds off**. Narrow its build token to this Worker, as for `nulo-subscribe`, and confirm that no other Worker's build token (`nulo-landing`'s preview builds included, `infra/subscribe/README.md` step 3) can edit `nulo-rpc-proxy`: a branch build that can redeploy it can read its secrets.
 2. **Custom domains** `rpc.nulo.sh` and `testnet.rpc.nulo.sh` on the Worker. Check that `testnet.rpc.nulo.sh` serves a valid certificate: Universal SSL covers one level below `nulo.sh` only, and Workers Custom Domains say they issue their own. If the dashboard cannot issue it, the choices are Advanced Certificate Manager or a one-level name such as `rpc-testnet.nulo.sh` (a naming decision for the owner, and a change to `UPSTREAMS` in `src/worker.ts`).
