@@ -4,10 +4,11 @@
  * The standard path (`nulo-account.ts:buildTxExecutionRequest`) and the
  * fast path (`extension/.../execution/fast-path.ts`) both call this to
  * translate partial RPC-shaped fee settings into a real `GasSettings`
- * instance. Centralizing the translator prevents drift between the two
- * paths — a previous bug had the standard path hardcoding `1e18 / 1e18`
- * max fees while the fast path defaulted to
- * `getCurrentMinFees().mul(1.5)`.
+ * instance, so the two paths cannot drift apart.
+ *
+ * The default cap must cover the fee of the block the node simulates, which it prices
+ * ahead (a checkpoint's frozen fee can sit well above the current minimum) and refuses a
+ * cap below even with fee enforcement skipped.
  *
  * Re-derived from upstream `BaseWallet.completeFeeOptions({forEstimation, ...})`
  * (`@aztec-labs/wallet-sdk/base-wallet/base_wallet.js`). 5.0 split the branches: estimation
@@ -16,9 +17,9 @@
  */
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
+import { predictedWorstMinFees } from "../fee-juice"
 
-/** Upstream's private `minFeePadding`; here `maxFeesPerGas` defaults to
- *  `node.getCurrentMinFees().mul(1 + this)`, where upstream pads its predicted minimum. */
+/** Matches upstream `BaseWallet`'s private `minFeePadding`. */
 export const MIN_FEE_PADDING = 0.5
 
 /**
@@ -47,8 +48,8 @@ export interface CompleteFeeOptionsConfig {
  *
  * - `Gas.from(...)` / `GasFees.from(...)` rebuild the rich types from
  *   their hex-string RPC form.
- * - `maxFeesPerGas` defaults to `node.getCurrentMinFees() * 1.5` when
- *   the dApp didn't supply one.
+ * - `maxFeesPerGas` defaults to `predictedWorstMinFees(node) * 1.5` when
+ *   the dApp didn't supply one; a prediction error propagates.
  * - `maxPriorityFeesPerGas` defaults to `GasFees.empty()`.
  * - `forEstimation: true` → `GasSettings.forEstimation(...)` (high
  *   gas-limit padding for sim).
@@ -62,7 +63,7 @@ export async function completeFeeOptions(config: CompleteFeeOptionsConfig): Prom
 
 	const maxFeesPerGas = gasSettings?.maxFeesPerGas
 		? GasFees.from(gasSettings.maxFeesPerGas as Parameters<typeof GasFees.from>[0])
-		: (await node.getCurrentMinFees()).mul(1 + MIN_FEE_PADDING)
+		: (await predictedWorstMinFees(node)).mul(1 + MIN_FEE_PADDING)
 
 	const overrides = {
 		gasLimits: gasSettings?.gasLimits ? Gas.from(gasSettings.gasLimits as Parameters<typeof Gas.from>[0]) : undefined,

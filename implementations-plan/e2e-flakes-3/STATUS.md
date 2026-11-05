@@ -11,3 +11,6 @@
 - 2026-11-05 Codex audit round 2 (resumed): approve.
 - 2026-11-05 final fresh Codex pass: approve-with-changes, then approve on resume. Plan panel-approved; no open owner ask.
 - 2026-11-05 arc 1 phase 1 gate: pass (lint, typecheck:all; control green; onboarding-tab 10/10 Firefox, 5/5 Chrome at retry 0).
+- 2026-11-05 fix loop: Codex round 1 approve-with-changes, Opus diff review approve-with-changes, Codex round 2 approve. Close-out issues filed: #1681, #1682 (closed known-limit), #1683.
+- 2026-11-05 fix loop round 3 (Codex, with the README's verbatim rules): two comment nits, applied; converged.
+- 2026-11-05 arc 1 phase 2 gate: pass (lint, typecheck:all, test, test:all; probe red at base and green after on both browsers; pairs 5/5 per browser; shard 2/5 green on both).

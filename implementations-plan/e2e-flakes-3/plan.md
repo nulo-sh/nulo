@@ -48,7 +48,7 @@ One arc, one PR against `dev`, two phases. Recon: [recon.md](recon.md). Asks: [O
 
 **Validation gate.** `bun run lint`, `bun run typecheck:all`; then from `apps/extension`: `NULO_E2E_BROWSER=firefox bun run test:e2e -- tests/e2e/onboarding-tab.test.ts --retry=0` ten times, the same on Chrome five times. Pass: the control green, exit 0 on every run. The runs are regression checks: CI's trigger never reproduced locally, so the control is the proof. Runtimes in `lessons/phase-1.md`.
 
-### Phase 2 — #1590: the default simulation cap is the predicted worst minimum
+### Phase 2 — #1590: the default simulation cap is the predicted worst minimum ✓
 
 1. Red at base, never committed: the probe `_probe-fee-rise.test.ts` under `tests/e2e/network/` redirects the local node (`interceptRpc`, `redirect`) to a loopback proxy that forwards every call and answers `aztec_getCurrentMinFees` with a quarter of the node's value; it imports the token as `token-add-auto-trust` does. Expect the node's refusals and no toast within 60 s, on each browser.
 2. Change `fee-options.ts` as above; the probe passes on each browser, then is deleted.
@@ -61,7 +61,7 @@ One arc, one PR against `dev`, two phases. Recon: [recon.md](recon.md). Asks: [O
 
 - **Threat model.** The node is untrusted. A simulation's cap is a ceiling it never pays, and `predictedWorstMinFees` refuses a malformed reply (`checkedFees`); a hostile node can refuse a simulation by an absurd prediction, as it already could by refusing it. Committed caps are untouched (F6). The rpc-proxy already allows `getPredictedMinFees` (`infra/rpc-proxy/src/methods.ts:38`).
 - **Validation-on simulations.** An app that passes `skipFeeEnforcement: false` (`view-executor.ts:359-360`, `fast-path.ts:244`) has the node also check the cap against the next-block fee (`aztec-node` `server.js:953`), which the old default fails in the same frozen-fee case, and the payer's balance against estimation limits × cap (`p2p` `gas_validator.js:61-79`; `GasSettings.forEstimation`, twice the processable L2 gas). That bar is not the one a send meets (finalized limits × `feeCapFor`'s cap, unchanged). A payer whose balance sits between the old bar and the new one is now refused, as under upstream `BaseWallet`; the app opted into the check.
-- **Availability and cost.** A simulation now depends on `getPredictedMinFees`, and its error propagates (the fast arm demotes, the slow arm rethrows). On the node that error is a transport failure, which hits `getCurrentMinFees` alike: the head's failures are swallowed (`server.js:693-696`) and the fee provider's lookup never rejects once started (`fee_provider.js:95-128`). What is new is a provider that serves every method but this one. Every send the wallet prices already calls it (`feeCapFor`); a send whose app sets its own cap did not (`fee-cap.ts:36`), and its first build now does (`fee-strategy.ts:239-251` threads only the priority fee). On such a provider every wallet-priced send fails today, so the wallet does not support it: the app-capped case is a known limit, filed closed at close-out (README § Proportion). A cold boundary may wait up to 5 s (`QUOTE_MAX_WAIT_MS`), mostly overlapping the simulation's own unbounded wait on the same cache (`predict()`). No retry and no downgrade to the current fee (D6).
+- **Availability and cost.** A simulation now depends on `getPredictedMinFees`, and its error propagates (the fast arm demotes, the slow arm rethrows). On the node that error is a transport failure, which hits `getCurrentMinFees` alike: the head's failures are swallowed (`server.js:693-696`) and the fee provider's lookup never rejects once started (`fee_provider.js:95-128`). What is new is a provider that serves every method but this one. Every send the wallet prices already calls it (`feeCapFor`); a send whose app sets its own cap did not (`fee-cap.ts:36`), and its first build now does (`fee-strategy.ts:239-251` threads only the priority fee). On such a provider every wallet-priced send fails today, so the wallet does not support it: the app-capped case is a known limit, closed issue #1682 (README § Proportion). A cold boundary may wait up to 5 s (`QUOTE_MAX_WAIT_MS`), mostly overlapping the simulation's own unbounded wait on the same cache (`predict()`). No retry and no downgrade to the current fee (D6).
 - **Least privilege, crypto, supply chain, logging:** no permission, workflow, key, dependency or log line changes; the manifest does not change.
 
 ## Assumptions
@@ -80,10 +80,10 @@ None. Phase 1 is test code. Phase 2 changes no screen, copy or shown figure: a t
 - D2. #1590 is fixed at `completeFeeOptions`, the one default every simulation caller shares, mirroring upstream (Alternatives).
 - D3. The probe stays uncommitted: a committed spec would prove what the unit test proves, at about 35 s per browser.
 - D4. No fixture diagnostic on the toast wait: the popup's generic error would not name the fee; the node's line did.
-- D5. NewTokenPopup's balance wait has no bound before the first `onTokenBalanceAdded` (`NewTokenPopup.vue:116-130`). No trace ties it to these failures, and bounding it changes when the toast shows: left out; close-out files it as a closed `known-limit` issue.
+- D5. NewTokenPopup's balance wait has no bound before the first `onTokenBalanceAdded` (`NewTokenPopup.vue:116-130`). No trace ties it to these failures, and bounding it changes when the toast shows: left out: closed `known-limit` issue #1681.
 - D6. A failing `getPredictedMinFees` is not downgraded to `getCurrentMinFees`: that reopens the under-priced cap, and the committed path refuses the same way. Not an owner ask: no wallet screen, copy or figure changes, and each cost is either the send path's, a known limit, or upstream's behaviour under an app's opt-in (Audit verdicts).
 - D8. Phase 1 also updates `tests/e2e/FIREFOX.md`'s new-tab row, which named this spec's `targets()` wait "no failure seen" (the tree won over the change map).
-- D7. Two comments in `services/execution/` go stale (`view-executor.ts:337-338` names the old default; `batched-view-simulation.ts:364-365` says "byte-for-byte", while Nulo takes each fee's maximum and upstream the worst-L2 entry). That directory belongs to rpc-fallback-1 until its arc 3 lands: close-out files an issue to correct both.
+- D7. Two comments in `services/execution/` go stale (`view-executor.ts:337-338` names the old default; `batched-view-simulation.ts:364-365` says "byte-for-byte", while Nulo takes each fee's maximum and upstream the worst-L2 entry). That directory belongs to rpc-fallback-1 until its arc 3 lands: #1683 corrects both.
 
 ## Audit verdicts
 
@@ -97,13 +97,19 @@ None. Phase 1 is test code. Phase 2 changes no screen, copy or shown figure: a t
 
 **Final pass, resumed: approve.** No remaining material finding; the owner-approval requirement withdrawn. It noted that future-slot predictions can exceed an affordable next-block fee (`fee_predictor.js:82-91`), so the balance band is wider than the frozen-fee case; Security already discloses the band.
 
+**Fix loop, round 1: Codex approve-with-changes; Opus diff review approve-with-changes.** Codex: ledger row 70 stated the inferred frozen-fee trigger as fact; qualified. Opus: (1) the same, and "as upstream prices it" loosened to "like upstream": accepted. (2) Row 69's rule too broad, and its unverified gap unnamed: accepted. (3) Fix D7's comments here: rejected, the lane's collision rule forbids that directory outright. (4) A history sentence in `fee-options.ts`'s module doc: removed. (5) Tie the count to the tracked tab id: rejected, a pre-existing gap the fix leaves as it was. (6) Row 70 lands only after phase 2's gate: done so.
+
+**Fix loop, round 2 (Codex, resumed): approve.** No remaining finding; it agreed with both rejections.
+
+**Fix loop, round 3 (Codex, resumed with the README's two review rules and adversarial ask verbatim, which rounds 1 and 2 had left out): approve-with-changes, two comment nits.** `MIN_FEE_PADDING`'s doc restated the formula, and the fallback test's comment restated its arithmetic: both trimmed. No correctness or security finding; the loop converged.
+
 ## Delivery
 
 One PR against `dev` from `e2e-flakes-3-a1` (off `origin/dev`, carrying this plan's commit), opened ready after the local gates and the Codex fix loop: `fix(fees): price simulations on the predicted fee; count setup tabs via chrome.tabs` (83 characters). Body: what and why per phase, the validation runs with outcomes and runtimes, each browser's suite wall-clock before and after (no scenario added), `Closes #1667`, `Closes #1590`. No labels at creation; add `e2e:extension-smoke` only if the path filter skips smoke. Merge `origin/dev` before opening. Parallel lanes: none.
 
 ## Post-implementation
 
-`implementations-plan/README.md` § Post-implementation standard at 4b250dfe4 is the contract. Plan-specific: no `/code-review` (`code_review: off`); one Opus review of the final diff alongside the Codex loop's first round, which runs over the whole diff after phase 2 is green (`~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`), hard stop at three rounds. Close-out, as the PR's final commits: two closed `known-limit` issues, D5 (reopen on a popup stuck loading a balance) and the provider that blocks `getPredictedMinFees` (reopen when a supported network's provider is found doing so), and the D7 issue, each deduped first.
+`implementations-plan/README.md` § Post-implementation standard at 4b250dfe4 is the contract. Plan-specific: no `/code-review` (`code_review: off`); one Opus review of the final diff alongside the Codex loop's first round, which runs over the whole diff after phase 2 is green (`~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`), hard stop at three rounds. Close-out, as the PR's final commits: two closed `known-limit` issues, #1681 (D5; reopens on a popup stuck loading a balance) and #1682 (the provider that blocks `getPredictedMinFees`; reopens when a supported network's provider is seen doing so), and the open #1683 (D7), each deduped first; the plan archived and its index line removed.
 
 ## Seeds
 
