@@ -86,7 +86,7 @@ async function narrow(cf: Cf, worker: string, opts: NarrowOptions) {
 		: await createToken(cf, worker, tag, groups, opts.accountRead)
 	try {
 		if (!opts.wide) await proveScope(token, worker, tag)
-		if (opts.localDeploy) await proveDeploy(token, opts.localDeploy)
+		if (opts.localDeploy) await proveDeploy(token, opts.localDeploy, opts.wide)
 		const uuid = await register(cf, token)
 		await cf.patch(`/accounts/${ACCOUNT}/builds/workers/${tag}`, { production_settings: { build_token_uuid: uuid } })
 		const after = await cf.get<{ production_settings?: { build_token_uuid?: string } }>(`/accounts/${ACCOUNT}/builds/workers/${tag}`)
@@ -243,7 +243,7 @@ async function proveScope(token: Token & { value: string }, worker: string, tag:
 }
 
 /** `wrangler deploy` in the Worker's directory under the new token alone, then the same deploy aimed at the probe Worker, which must fail. */
-async function proveDeploy(token: Token & { value: string }, dir: string) {
+async function proveDeploy(token: Token & { value: string }, dir: string, wide: boolean) {
 	const run = async (args: string[]) => {
 		const proc = Bun.spawn(["bun", "--no-install", "./node_modules/.bin/wrangler", ...args], {
 			cwd: dir,
@@ -271,6 +271,8 @@ async function proveDeploy(token: Token & { value: string }, dir: string) {
 				.slice(0, 6)
 				.join("\n")}`,
 		)
+	// An account-wide token reaches every Worker by design; the negative deploy would only create the probe Worker.
+	if (wide) return
 	const other = await run(["deploy", "--name", PROBE])
 	say(
 		`  wrangler deploy --name ${PROBE} under the new token: exit ${other.code}${/10000|Authentication error|not authorized|403/i.test(other.text) ? " (authentication refused)" : ""}`,
