@@ -29,8 +29,8 @@
  * (the egress guard blocks both).
  *
  * Runtime: estimated 6 min on Chrome, 9 min on Firefox; measured 102 to 162 s and 182 to 186 s, the
- * release's real proof of the account's deployment included. The Fee Juice bridge adds an estimated
- * 30 to 60 s.
+ * release's real proof of the account's deployment included; from a release that pays from bridged
+ * Fee Juice, 133 s and 184 s.
  */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
