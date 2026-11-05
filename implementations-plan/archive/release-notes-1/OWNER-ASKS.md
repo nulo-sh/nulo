@@ -1,6 +1,6 @@
 # Owner asks: release-notes-1
 
-None blocks arc 1: the arc builds each recommendation below. A2–A5 change what a person reads, so the PR carries them as before/after and the orchestrator merges only on the owner's sign-off; A9–A11 ride on the same sign-off.
+None blocks arc 1: the arc builds each recommendation below. A2–A5 change what a person reads, so the PR carries them as before/after and the orchestrator merges only on the owner's sign-off; A9–A11 ride on the same sign-off; A12 is the owner's CodeQL ruling.
 
 ## A1. Where the per-version file lives, and its format (engineering call, proceeding)
 
@@ -69,3 +69,16 @@ None blocks arc 1: the arc builds each recommendation below. A2–A5 change what
 - **Options**: (a) the file covers the Release's span; when the previous stable skipped AMO, the owner pastes a combined text in the Developer Hub after the job; (b) the file covers AMO's span (over-describes the Release); (c) a second, AMO-only file.
 - **Recommendation**: (a). The `release` skill says so.
 - **What ships now**: (a).
+
+## A12. CodeQL alert #49 on the compose step (owner action, no code)
+
+- **The alert**: `actions/cache-poisoning/poisonable-step` (High) on `release.yml`'s "Compose the release body". On a dispatch, the job runs code from `needs.resolve.outputs.sha`.
+- **Why it is a false positive**:
+  - The sha is a `v*` tag's commit, and only the release app may create such a tag (ruleset "release tags: creation by the release app only"). No tag may be moved or deleted, and the range step refuses nightly names.
+  - The same workflow already runs that tree's code with the shared cache: `_lint-and-typecheck.yml` and `_unit-tests.yml`, through the setup-bun composite and `actions/cache`. So the step adds no new capability.
+  - The store jobs use the identical pattern without an alert only because the query skips jobs that set an `environment:`.
+- **Options**:
+  - (a) Dismiss the alert as a false positive, with that reason.
+  - (b) Compose from the workflow revision's tree and read the notes with `git show`. This gives up the tag's own composer, which changes the body's semantics, and leaves the other tag-tree jobs as they are.
+- **Recommendation**: (a). A lead does not dismiss alerts.
+- **What ships now**: the code unchanged, with the alert open until the owner rules on it.
