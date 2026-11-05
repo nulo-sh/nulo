@@ -32,7 +32,7 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 		},
 		{
 			version: "1.2.1",
-			effective: "4 November 2026",
+			effective: "5 November 2026",
 			material: false,
 			changes: ["The summary box names the default network as Nulo shows it, Alpha."],
 		},
@@ -111,7 +111,7 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 		},
 		{
 			version: "1.2.8",
-			effective: "4 November 2026",
+			effective: "5 November 2026",
 			material: false,
 			changes: [
 				"Prices are requested for the price identifiers the signed token list names, and for AZTEC, which prices Fee Juice (§ 5.2).",
@@ -119,7 +119,7 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 		},
 		{
 			version: "1.2.9",
-			effective: "4 November 2026",
+			effective: "5 November 2026",
 			material: false,
 			changes: [
 				"The token list is downloaded about every six hours, retried within minutes then less often after a failure, and on request in Settings → Tokens (§§ 5.11, 6).",

@@ -1,6 +1,6 @@
 # Website Privacy Notice
 
-**Version 1.1 — effective 4 November 2026**
+**Version 1.1 — effective 5 November 2026**
 
 This notice explains what happens to information when you visit `nulo.sh` or join its mailing list.
 The Nulo wallet itself is covered by the [Privacy Policy](privacy.md); this notice adds nothing to
@@ -149,4 +149,4 @@ describe, I will ask for your consent.
 | Version | Effective | Change |
 |---|---|---|
 | 1.0 | 27 October 2026 | First published version. |
-| 1.1 | 4 November 2026 | Drops the one-time email at store launch (summary, §§ 3.2 and 3.4); replies reach hello@nulo.sh (§ 3.4); the list is reviewed before each send (§ 3.5). |
+| 1.1 | 5 November 2026 | Drops the one-time email at store launch (summary, §§ 3.2 and 3.4); replies reach hello@nulo.sh (§ 3.4); the list is reviewed before each send (§ 3.5). |
