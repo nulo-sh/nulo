@@ -508,9 +508,9 @@ describe("how a change ends", () => {
 		expect(router.push).not.toHaveBeenCalled()
 	})
 
-	test.each([true, false])(
-		"a lock that unmounts the page before a saved change answers still ends an own window's flow (own window: %s)",
-		async (own) => {
+	describe("a lock that unmounts the page before a change saved but not reopened answers", () => {
+		/** Lands the lock and unmounts the page while the change is with the service; resolves to its answer. */
+		async function lockedBeforeTheAnswer(own: boolean) {
 			surface.handsBack = own
 			const held = Promise.withResolvers<void>()
 			profile.changeUnlockMethod.mockReturnValueOnce(held.promise)
@@ -521,13 +521,46 @@ describe("how a change ends", () => {
 			await flushPromises()
 			wrappers.splice(wrappers.indexOf(w), 1)
 			w.unmount()
-			held.reject(new UnlockMethodChangedError())
-			await flushPromises()
-			expect(surface.handBack.mock.calls).toEqual(own ? [["/popup/general"]] : [])
+			return async () => {
+				held.reject(new UnlockMethodChangedError())
+				await flushPromises()
+			}
+		}
+		const showsNothing = () => {
 			expect(openToast).not.toHaveBeenCalled()
 			stayed()
-		},
-	)
+		}
+
+		test("an own window still in its flow hands Home back", async () => {
+			const answer = await lockedBeforeTheAnswer(true)
+			await answer()
+			expect(surface.handBack).toHaveBeenCalledExactlyOnceWith("/popup/general")
+			showsNothing()
+		})
+
+		test("an own window that left its flow meanwhile drops the answer", async () => {
+			const answer = await lockedBeforeTheAnswer(true)
+			surface.handsBack = false
+			await answer()
+			expect(surface.handBack).not.toHaveBeenCalled()
+			showsNothing()
+		})
+
+		test("an own window whose lock screen selected another profile meanwhile drops the answer", async () => {
+			const answer = await lockedBeforeTheAnswer(true)
+			useAppStore().profile = { id: "p2", name: "Other", type: "password" } as never
+			await answer()
+			expect(surface.handBack).not.toHaveBeenCalled()
+			showsNothing()
+		})
+
+		test("elsewhere the page's teardown drops the run", async () => {
+			const answer = await lockedBeforeTheAnswer(false)
+			await answer()
+			expect(surface.handBack).not.toHaveBeenCalled()
+			showsNothing()
+		})
+	})
 
 	test("in Firefox's toolbar panel the page moves to its own window first", async () => {
 		surface.panel = true

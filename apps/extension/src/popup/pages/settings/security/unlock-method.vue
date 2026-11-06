@@ -62,6 +62,8 @@ const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onR
 const newPasskey = useNewProfilePasskey(runCeremony)
 /** Fences every step to the profile it started for: a switch or a reset drops what it returns. */
 const runs = createRunFence()
+/** The profile whose change the teardown kept running; see `onBeforeUnmount`. */
+let keptFor
 const isNewPasswordStep = computed(() => step.value === "newPassword")
 /** The current run's own change still with the service. The update and the reopened session it
  *  causes arrive before its answer, and only that answer says whether the change was made; `updated`
@@ -135,6 +137,13 @@ async function currentPasskey(isCurrent) {
 	return askProfilePasskey(runCeremony, managers.profile, { profileId: id, step: "unlockMethod", profileName: () => name }, isCurrent)
 }
 
+/** A run the teardown kept stays current only while the window still runs this flow for the profile
+ *  it was kept for: the watchers that would end it went with the page. */
+function snapshotRun() {
+	const fenced = runs.snapshot()
+	return () => fenced() && (keptFor === undefined || (handsBackToPanel() && appStore.profile?.id === keptFor))
+}
+
 /** A new passkey's card, at an input minted for this profile. */
 const nextPasskey = () => newPasskey.ask({ step: "unlockMethod", profileName: appStore.profile.name })
 
@@ -164,7 +173,7 @@ function leaveLocked() {
 async function attempt(run) {
 	if (isBusy.value || !appStore.isLogined) return
 	isBusy.value = true
-	const isCurrent = runs.snapshot()
+	const isCurrent = snapshotRun()
 	const profileId = appStore.profile.id
 	try {
 		const done = await run(isCurrent)
@@ -280,8 +289,10 @@ onBeforeUnmount(() => {
 	managers.profile.onProfileUpdated.remove(onProfileUpdated)
 	// A lock that closes the session over a saved change can land the window on its lock screen
 	// before the change answers; an own window keeps its flow there, so the answer still ends it.
-	if (commit && handsBackToPanel()) clearStep()
-	else reset()
+	if (commit && handsBackToPanel()) {
+		clearStep()
+		keptFor = appStore.profile?.id
+	} else reset()
 })
 </script>
 
