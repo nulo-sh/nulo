@@ -17,10 +17,12 @@
 import { expect, inject } from "vitest"
 import type { Page } from "puppeteer"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { bringToFront } from "../fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { createSecondAccount, getAccountAddress, refreshBalances, sendTransfer, switchAccountByAddress } from "../fixtures/helpers"
 import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
-import { SEALED_READ_MESSAGE } from "../fixtures/sealed-rows"
+import { readSealedRows, SEALED_READ_MESSAGE } from "../fixtures/sealed-rows"
+import { shotSend } from "../fixtures/shots"
 import { expectFitsNarrow } from "../fixtures/type-roles"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -49,6 +51,27 @@ async function waitForInFlightSend(page: Page, timeout = 60_000): Promise<void> 
 		IN_FLIGHT_STAGES,
 	)
 }
+
+/** Whether the page shows the Sending toast; a toast is asserted by its text, never clicked by it. */
+const showsSending = (page: Page): Promise<boolean> =>
+	page.evaluate(() =>
+		Array.from(document.querySelectorAll('[data-testid="snackbar-title"]')).some((title) => title.textContent?.startsWith("Sending")),
+	)
+
+/** Records, from now on, every moment the page shows the Sending toast; read with `sendingSeen`. */
+async function watchForSending(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const seen: string[] = []
+		Object.assign(window, { __sendingSeen: seen })
+		new MutationObserver(() => {
+			for (const title of document.querySelectorAll('[data-testid="snackbar-title"]')) {
+				if (title.textContent?.startsWith("Sending")) seen.push(title.textContent)
+			}
+		}).observe(document.body, { childList: true, subtree: true, characterData: true })
+	})
+}
+
+const sendingSeen = (page: Page): Promise<string[]> => page.evaluate(() => (window as unknown as { __sendingSeen: string[] }).__sendingSeen)
 
 /**
  * Try to switch accounts through the popup and report whether it took effect.
@@ -110,6 +133,9 @@ test.skipIf(!hasConfig)(
 			await refreshBalances(page)
 		})
 
+		let sendEnd: () => Promise<void> = async () => {
+			throw new Error("the third document was never opened")
+		}
 		await step("hold proof gate", () => holdProofGate(page))
 		// Deliberately not awaited: it cannot finish until the gate is released.
 		const sending = sendTransfer(page, { fromType: "public", toType: "public", amount: "1", destination: other, expect: "send" }).catch(
@@ -126,13 +152,68 @@ test.skipIf(!hasConfig)(
 				await expectFitsNarrow(page, "an in-flight send with its Cancel")
 			})
 
+			// The Sending toast's × lasts the session across popup documents, not just the one it was pressed in.
+			const second = await step("a second popup document shows the Sending toast", async () => {
+				const opened = await openPopup(tokenReadyExtension)
+				await waitForHash(opened, "#/popup/general", 15_000)
+				await opened.waitForFunction(
+					() =>
+						Array.from(document.querySelectorAll('[data-testid="snackbar-title"]')).some((t) =>
+							t.textContent?.startsWith("Sending"),
+						),
+					{ timeout: 15_000, polling: 100 },
+				)
+				return opened
+			})
+			await shotSend(second, "sending-toast-second-document", "snackbar")
+			await step("close the Sending toast in the first document", async () => {
+				await bringToFront(page)
+				await page.waitForFunction(
+					() =>
+						Array.from(document.querySelectorAll('[data-testid="snackbar-title"]')).some((t) =>
+							t.textContent?.startsWith("Sending"),
+						),
+					{ timeout: 15_000, polling: 100 },
+				)
+				await clickByTestId(page, "snackbar-close")
+				await page.waitForFunction(() => !document.querySelector('[data-testid="snackbar"]'), { timeout: 10_000 })
+			})
+			await second.close()
+			const third = await step("a third popup document lists the send and shows no toast", async () => {
+				const opened = await openPopup(tokenReadyExtension)
+				await opened.waitForSelector('[data-testid="tx-awaiting-cancel"]', { visible: true, timeout: 30_000 })
+				// The toast closes only when its send ends, a × or a reset, none of which comes before the
+				// release: one already shown here would still be up.
+				expect(await showsSending(opened)).toBe(false)
+				await watchForSending(opened)
+				return opened
+			})
+			const stored = await step("the send's dismissal is stored under the session", async () => {
+				const journal = await readSealedRows<{ id?: string; kind?: string; progress?: { stage?: string } }>(third, "journal")
+				const held = journal.find(({ row }) => row.kind === "transfer" && IN_FLIGHT_STAGES.includes(String(row.progress?.stage)))
+				const all = await third.evaluate(() => chrome.storage.session.get(null))
+				return { id: held?.row.id, entries: Object.entries(all).filter(([key]) => key.startsWith("nulo:sending:dismissed:")) }
+			})
+			expect(stored.entries).toEqual([[`nulo:sending:dismissed:${stored.id}`, expect.stringMatching(/^.+:\d+$/)]])
+			await shotSend(third, "sending-toast-dismissed-third-document", "tx-awaiting-cancel")
+			sendEnd = async () => {
+				await third.waitForFunction(() => !document.querySelector('[data-testid="tx-awaiting-cancel"]'), {
+					timeout: 180_000,
+					polling: 250,
+				})
+				expect(await sendingSeen(third)).toEqual([])
+			}
+
 			// The guard refuses the switch; the header still shows the sender.
+			await bringToFront(page)
 			expect(await step("attempt the blocked switch", () => attemptSwitch(page, other))).toBe(false)
 			expect(await activeAccount(page)).toBe(sender)
 		} finally {
 			await releaseProofGate(page)
 		}
+		await bringToFront(page)
 		await sending
+		await step("the third document never showed the dismissed send's toast", () => sendEnd())
 
 		// Once nothing is in flight the same switch goes through, so the guard
 		// gates on the send rather than disabling switching outright.

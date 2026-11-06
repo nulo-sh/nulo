@@ -126,6 +126,7 @@ const sends = useSendsInProgress({
 		return { symbol, decimals, hasDecimals }
 	},
 	tokenEvents: arrivalsTokens,
+	session: () => managers.profile.getSessionHandle(),
 	toast,
 	openToast,
 	updateToast,

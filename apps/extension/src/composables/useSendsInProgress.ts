@@ -31,6 +31,8 @@ export interface UseSendsInProgressOptions {
 	lookupToken: (tokenId: number) => Promise<SendToken | undefined>
 	/** A removal drops every label read so far, so a send whose token went names its recipient alone. */
 	tokenEvents: { onTokenDeleted: EventHandler<TokenDeleted> }
+	/** The unlocked session's handle, undefined while locked; read once per scope, at its reset. */
+	session: () => Promise<string | undefined>
 	toast: Readonly<Ref<ToastState | null | undefined>>
 	openToast: (options: ToastOptions) => number
 	updateToast: (id: number, label: string) => void
@@ -68,7 +70,42 @@ export function sendingLabel(op: OperationRecord, token: SendToken | undefined):
 /** A label still being looked up: the toast waits rather than name an older send first. */
 const PENDING = Symbol("pending")
 
-type ToastDeps = Pick<UseSendsInProgressOptions, "lookupToken" | "toast" | "openToast" | "updateToast" | "closeToast">
+/** Per send, the session handle under which the person closed its toast. A lock or a worker restart
+ *  changes the handle, so a stored dismissal never outlives its session and nothing removes it. */
+const DISMISSED_PREFIX = "nulo:sending:dismissed:"
+
+async function storedDismissal(id: string): Promise<unknown> {
+	const key = `${DISMISSED_PREFIX}${id}`
+	return (await chrome.storage.session.get(key))[key]
+}
+
+/** The dismissals stored under one scope's session handle, which `reset` reads once: a token deletion
+ *  re-asks labels, not the handle, and a × writes under the handle its scope began with. */
+function sessionDismissals(session: () => Promise<string | undefined>) {
+	let handle: Promise<string | undefined> = Promise.resolve(undefined)
+	return {
+		reset(active: boolean) {
+			handle = active
+				? Promise.resolve()
+						.then(session)
+						.catch(() => undefined)
+				: Promise.resolve(undefined)
+		},
+		/** The handle this scope began with; undefined while locked or unreadable. */
+		current: () => handle,
+		/** Written blind, one key per send: two documents dismissing at once cannot erase each other's. */
+		record(ids: readonly string[]) {
+			void handle
+				.then((current) => {
+					if (current === undefined || ids.length === 0) return
+					return chrome.storage.session.set(Object.fromEntries(ids.map((id) => [`${DISMISSED_PREFIX}${id}`, current])))
+				})
+				.catch(() => undefined)
+		},
+	}
+}
+
+type ToastDeps = Pick<UseSendsInProgressOptions, "lookupToken" | "session" | "toast" | "openToast" | "updateToast" | "closeToast">
 
 /**
  * The one Sending toast over a list of sends in progress. It names the newest popup send the person
@@ -83,13 +120,20 @@ function sendingToast(records: Readonly<Ref<readonly OperationRecord[]>>, deps: 
 	const asked = new Set<string>()
 	const labels = shallowRef(new Map<string, string | null>())
 	let own: { id: number; record: string } | undefined
+	const stored = sessionDismissals(deps.session)
 	/** Set while this opens or closes its own toast, which `onToastChange` must not read as the person's. */
 	let quiet = false
 	let live = false
 
 	async function resolveLabel(op: OperationRecord, mine: number) {
-		const token = op.tokenId === undefined ? undefined : await deps.lookupToken(op.tokenId).catch(() => undefined)
+		const [token, dismissal, session] = await Promise.all([
+			op.tokenId === undefined ? undefined : deps.lookupToken(op.tokenId).catch(() => undefined),
+			storedDismissal(op.id).catch(() => undefined),
+			stored.current(),
+		])
 		if (mine !== generation) return
+		// An unreadable key or session reads as not dismissed.
+		if (session !== undefined && dismissal === session) dismissed.add(op.id)
 		labels.value = new Map(labels.value).set(op.id, sendingLabel(op, token))
 	}
 
@@ -168,7 +212,9 @@ function sendingToast(records: Readonly<Ref<readonly OperationRecord[]>>, deps: 
 	}
 
 	function dismissRunning() {
-		for (const op of records.value) if (isPopupSend(op)) dismissed.add(op.id)
+		const ids = records.value.filter(isPopupSend).map((op) => op.id)
+		for (const id of ids) dismissed.add(id)
+		stored.record(ids)
 	}
 
 	/** Every label is read again, and a lookup already out lands nothing. */
@@ -183,6 +229,7 @@ function sendingToast(records: Readonly<Ref<readonly OperationRecord[]>>, deps: 
 		closeOwn()
 		forgetLabels()
 		dismissed = new Set()
+		stored.reset(active)
 		live = active
 	}
 
