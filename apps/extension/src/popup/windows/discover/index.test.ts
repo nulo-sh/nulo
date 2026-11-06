@@ -31,6 +31,7 @@ import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { deferred } from "@nulo/wallet-core/utils"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
+import { EVERY_SITE_CONFIRM } from "@/utils/every-site"
 import { GLOSSARY } from "@/utils/glossary"
 import { TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION } from "@/utils/chain-ids"
 import { chainInfoToChainId } from "@/wallet/services/wallet-sdk/session-established"
@@ -65,6 +66,8 @@ const loadInteractionPayloadMock = vi.fn(() => {
 
 const rejectViaInteractionServiceMock = vi.fn()
 const resolveInteractionMock = vi.fn(async () => undefined)
+const askConfirmMock = vi.fn(async () => false)
+const setEverySiteMock = vi.fn(async () => undefined)
 
 const getActiveProfileMock = vi.fn(() => {
 	return new Promise<unknown>((resolve, reject) => {
@@ -115,6 +118,14 @@ vi.mock("@/wallet/services/dapp-interaction/client", () => ({
 		}
 	}),
 }))
+
+vi.mock("@/wallet/services/dapp-session/client", () => ({
+	DappSessionServiceClient: vi.fn(function () {
+		return { connect: vi.fn(), disconnect: vi.fn(), setEverySite: setEverySiteMock }
+	}),
+}))
+
+vi.mock("@/composables/useConfirm", () => ({ useConfirm: () => ({ askConfirm: askConfirmMock }) }))
 
 vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({
@@ -615,5 +626,90 @@ describe("discover popup — Allow closes the window once the wallet has the ans
 		expect(isDisabled(deny(w))).toBe(false)
 		expect(w.find('[data-testid="error-text"]').exists()).toBe(true)
 		expect(windowsRemove()).not.toHaveBeenCalled()
+	})
+})
+
+describe("discover popup — Allow every site", () => {
+	const ready = async () => {
+		const w = factory()
+		await flushPromises()
+		getActiveProfilePromiseResolve?.({ id: "p1" })
+		await flushPromises()
+		loadPromiseResolve?.()
+		await flushPromises()
+		return w
+	}
+	const everySite = (w: ReturnType<typeof factory>) => w.find('[data-testid="discover-every-site"]')
+	const press = async (w: ReturnType<typeof factory>) => {
+		await everySite(w).trigger("click")
+		await flushPromises()
+	}
+	// biome-ignore lint/suspicious/noExplicitAny: chrome runtime stub for tests
+	const windowsRemove = () => (globalThis as any).chrome.windows.remove as ReturnType<typeof vi.fn>
+
+	test("a native button under Deny and Allow in the footer, disabled until Allow is", async () => {
+		const w = factory()
+		await flushPromises()
+		expect(isDisabled(everySite(w))).toBe(true)
+		getActiveProfilePromiseResolve?.({ id: "p1" })
+		await flushPromises()
+		loadPromiseResolve?.()
+		await flushPromises()
+		expect(isDisabled(everySite(w))).toBe(false)
+		expect(everySite(w).element.tagName).toBe("BUTTON")
+		expect(everySite(w).attributes("type")).toBe("button")
+		expect(shownText(everySite(w).element)).toBe("Allow every site")
+		const footer = w.findAll('[data-testid="dapp-approval-footer"] button').map((b) => b.attributes("data-testid"))
+		expect(footer).toEqual(["discover-deny-btn", "discover-allow-btn", "discover-every-site"])
+	})
+
+	test("the press asks the shared confirm; Cancel writes and answers nothing", async () => {
+		const w = await ready()
+		await press(w)
+		expect(askConfirmMock).toHaveBeenCalledWith(EVERY_SITE_CONFIRM)
+		expect(setEverySiteMock).not.toHaveBeenCalled()
+		expect(resolveInteractionMock).not.toHaveBeenCalled()
+		expect(windowsRemove()).not.toHaveBeenCalled()
+	})
+
+	test("a request as the wire carries it: Turn on writes the switch for the profile, then answers Allow, then closes", async () => {
+		const field = (n: number) => `0x${n.toString(16).padStart(64, "0")}`
+		payloadChainId = String(
+			chainInfoToChainId({ chainInfo: { chainId: field(TESTNET_L1_CHAIN_ID), version: field(TESTNET_ROLLUP_VERSION) } }),
+		)
+		payloadDapp = { name: "nulo-playground", url: "https://playground.nulo.sh" }
+		const order: string[] = []
+		askConfirmMock.mockResolvedValueOnce(true)
+		setEverySiteMock.mockImplementationOnce(async (...args: unknown[]) => {
+			order.push(`write:${JSON.stringify(args)}`)
+		})
+		resolveInteractionMock.mockImplementationOnce(async (...args: unknown[]) => {
+			order.push(`answer:${JSON.stringify(args)}`)
+		})
+		windowsRemove().mockImplementationOnce(() => order.push("close"))
+		const w = await ready()
+		await press(w)
+		expect(order).toEqual(['write:["p1",true]', 'answer:["req-123",{"approved":true}]', "close"])
+	})
+
+	test("a write that fails answers nothing and keeps the window, with an error", async () => {
+		askConfirmMock.mockResolvedValueOnce(true)
+		setEverySiteMock.mockRejectedValueOnce(new Error("locked"))
+		const w = await ready()
+		await press(w)
+		expect(resolveInteractionMock).not.toHaveBeenCalled()
+		expect(windowsRemove()).not.toHaveBeenCalled()
+		expect(w.find('[data-testid="error-text"]').exists()).toBe(true)
+		expect(isDisabled(deny(w))).toBe(false)
+	})
+
+	test("Turn on writes even when the app cancelled meanwhile; the cancelled overlay shows", async () => {
+		askConfirmMock.mockResolvedValueOnce(true)
+		resolveInteractionMock.mockRejectedValueOnce(new JobCancelledError())
+		const w = await ready()
+		await press(w)
+		expect(setEverySiteMock).toHaveBeenCalledWith("p1", true)
+		expect(w.find('[data-testid="cancelled-overlay"]').exists()).toBe(true)
+		expect(w.find('[data-testid="error-text"]').exists()).toBe(false)
 	})
 })

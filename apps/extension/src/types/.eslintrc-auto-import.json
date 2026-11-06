@@ -63,6 +63,7 @@
     "DappWindowError": true,
     "DirectiveBinding": true,
     "END_ACK_TIMEOUT_MS": true,
+    "EVERY_SITE_CONFIRM": true,
     "EffectScope": true,
     "EnsureSnapshot": true,
     "EnsureSuperseded": true,

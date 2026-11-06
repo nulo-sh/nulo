@@ -1,5 +1,5 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
-<script setup>
+<script setup lang="ts">
 /**
  * The shared footer for the three dApp approval windows (execute /
  * discover / capabilities) — the error-tooltip banner + Reject/Confirm button
@@ -33,6 +33,11 @@ defineProps({
 })
 
 const emit = defineEmits(["reject", "approve"])
+
+defineSlots<{
+	/** Under the two buttons, inside the strip: the discover window's "Allow every site". */
+	below?: () => unknown
+}>()
 </script>
 
 <template>
@@ -67,6 +72,8 @@ const emit = defineEmits(["reject", "approve"])
 				<Text color="inverse" align="center">{{ confirmLabel }}<template v-if="confirmDetail">{{ " " }}<span :class="$style.detail" data-testid="dapp-approval-confirm-detail">{{ confirmDetail }}</span></template></Text>
 			</Button>
 		</Flex>
+
+		<slot name="below" />
 	</Flex>
 </template>
 

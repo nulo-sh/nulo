@@ -233,6 +233,18 @@ place; its effective date is the day the promote publishes it, so until then it 
 - [ ] The Chrome Web Store's `alarms` justification is re-pasted from `apps/extension/store/listing.md`
       § Permissions, which now says the token list refreshes about every six hours
 
+**Due at the release that publishes privacy 1.2.10:** § 5.7 says that with Let every site see that
+Nulo is installed on, any site you open, and the scripts it runs, learns that Nulo is installed and
+its version without asking. A patch, so nobody is asked to accept again (the owner's pick, decision
+page 119). The version is archived and in place; its effective date is the day the promote publishes
+it, so until then it reads `«FILL: effective date»`:
+
+- [ ] `legal/privacy.md` — the version line and the 1.2.10 history row, dated the day it is published
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.10 (now `null`), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.10/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.10 text (`apps/extension/store/listing.md`
+      § Privacy policy text)
+
 **Due at the release that publishes website notice 1.1:** the notice drops the email at store
 launch and says replies reach hello@nulo.sh. It is dated for the promote that publishes it, 5
 November 2026; the landing and `nulo-subscribe` both deploy from that promote's push to `main`:

@@ -1,7 +1,7 @@
 ---
 plan: discovery-allow-1
 tier: mid
-status: approved by the panel (final Codex pass approve); OA-1, OA-2 and OA-3 answered on page 119; arc 1 in build
+status: approved by the panel (final Codex pass approve); OA-1, OA-2 and OA-3 answered on page 119; arc 1 merged (#1722); arc 2 in build
 issues: none (decision pages 116, 117, 118)
 driver: claude-code
 claude_model: opus
@@ -64,6 +64,11 @@ Good enough: no "Until I revoke", no remembered Deny, no change to the emoji che
 - **D10. The tooltip on "discover" keeps opening below**, covering the sentence's second line (the brief's first option). Opening above would need `DottedTerm` to pass `Tooltip`'s `side="top"` for one caller, and would cover the dApp's origin and name, which the person must be able to read.
 - **D11. Privacy § 5.7: an owner ask (OA-1).** The brief allows one sentence; Codex r1 read `legal/README.md`'s rule (what leaves the device is material) as a minor bump, against the patch precedent of 1.2.8 and 1.2.9. Both the words and the kind are read by people, so they are the owner's. Answered: P119-02 A, a patch version, no notice.
 - **D12. The footer gains one optional slot under its buttons** (`#below`); the capabilities and execute windows pass nothing and render as today.
+- **D13 (arc 2, the tree over the draft). `getEverySite()` answers `{ profileId, on }`.** The Settings page writes for the profile it read, and one read gives both, so the page needs no profile client.
+- **D14 (arc 2). The goldens follow the registry's convention:** `full` and `minimal` are the decoder's input in plaintext, as every sealed root's are (`stores.test.ts` and `snapshot.test.ts` read them so), and `discoveryPolicy.sealed` is the at-rest form. The class still refuses a plaintext row (D3); `stored-shapes.ts` says so beside the entry.
+- **D15 (arc 2). The confirm carries no `confirm_color`.** Strict mode's `"red"` reaches the confirm `Button` as an HTML `type` attribute and paints nothing; without it the button is the same accent one (`a2-settings-confirm` against p118-02-c-02).
+- **D16 (arc 2). Privacy 1.2.10, undated** (`«FILL: effective date»`, `effective: null`, a `BEFORE-LAUNCH.md` entry, 1.2.9 archived), as 1.2.9 shipped. Open PR #1687 claims 1.2.10 too; whichever lands second renumbers.
+- **D17 (arc 2, the orchestrator's word). Arc 1 merged before arc 2 began**, so arc 2 branches off `dev` as `discovery-allow-1-a2` (no stack) and carries the close-out in its own PR.
 
 ## Architecture & Implementation
 
@@ -135,7 +140,7 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`; `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/connect-check-window.test.ts` from the repo root (the real window opens, renders and connects; no e2e sweeps its type roles, `type-role-ban.test.ts` checks the source) and `cd apps/extension && bun run test:e2e -- tooltips-glossary --retry=0` (smoke: the Glossary page's order), both green at retry 0, Chrome; `bun run check:plans` after staging. Pass: every command exits 0. Layers: lint, typecheck, unit, component, network e2e (Chrome).
 
-## Phase 2: the switch's storage and service (arc 2)
+## Phase 2: the switch's storage and service (arc 2) ✓
 
 1. Add the root, `DiscoveryPolicy` and its test. Cases: absent is off (control: a sealed on-row allows); a plaintext on-row is off; a row that does not parse is off; keyless reads off and `set` throws `WalletLockedError`; a refusal while on refuses that origin only, while off writes nothing; the 33rd refusal evicts the oldest, a repeat moves to newest; off then on starts with no refusals; a refusal and an off started together end off (one lock); a write whose fence fails writes nothing; `purgeProfile` deletes. The schema uses `.strict()`, as `src` does.
 2. Wire it into `DappSessionService`: the RPC pair, the event, `allowsNewSite`, the refusal record (D4), the purge; both writes pass `deletion.assertCurrent` for the profile, as `admitDappRegistration` does. `service.test.ts`: `setEverySite` refuses a non-active profile id and writes nothing; it emits once on success; a discovery read started from an `onVerificationRefused` listener sees the refused origin (the ordering D4 relies on); a failing record leaves the outcome `revoked`; `purgeForProfile` removes the row; a plaintext on-row stays off after the profile's unlock runs `sealOnRowKeysReady` (control: a sealed on-row allows).
@@ -143,7 +148,7 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all` (the snapshot, goldens, census, scan and writers tests, and `apps/extension/scripts/e2e/profile-chaos-model.test.ts`, included). Pass: all exit 0. Layers: lint, typecheck, unit, storage.
 
-## Phase 3: the flow (arc 2)
+## Phase 3: the flow (arc 2) ✓
 
 1. Apply D5 in `discovery-flow.ts`. Add the `everySite` option to `fakeSdkServices`; add `allowsNewSite` to the three hand-rolled stubs.
 2. `background.every-site.test.ts`: on, a new site gets no window, a row, an approval, one token spent, and its check at establishment (control: off asks the window); on with stale Terms is refused with no row; a read that throws asks the window; a profile switch during the read refuses with no row; the switch turned off while the connection waits for admission refuses it with no row; a twin of an unpaced connection spends a token, shown by behaviour: with the origin's tokens spent it queues (control: a twin of an Allow is admitted at once); on with an unserved chain shows the notice.
@@ -151,7 +156,7 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`. Pass: all exit 0, the existing `background.*` tests unchanged. Layers: lint, typecheck, unit.
 
-## Phase 4: the Settings row (arc 2)
+## Phase 4: the Settings row (arc 2) ✓
 
 1. Add `EVERY_SITE_CONFIRM` and the `SETTINGS_ROWS` entry. Build the row on Connected Apps: read on mount (Toggle disabled until read), re-read on `onEverySiteChanged`, on asks `askConfirm` and writes only on Turn on, off writes at once, a failed write opens the shared failure toast and leaves the Toggle as it was.
 2. `connected-apps/index.test.ts`: `expectOwnedRows`; each path of step 1 once; the confirm object is `EVERY_SITE_CONFIRM`. `settings-search.test.ts`: "discover" finds the row on Connected Apps.

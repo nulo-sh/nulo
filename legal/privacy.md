@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.9 — effective 5 November 2026**
+**Version 1.2.10 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -239,6 +239,9 @@ When you connect Nulo to an application, that application learns what you approv
 account address, and the details of what you ask it to do. Settings → Connected Apps shows what you
 have granted and lets you revoke it. Disconnecting removes an application's wallet connection
 permissions; it does not necessarily invalidate authorisations already issued or recorded on-chain.
+If you turn on Let every site see that Nulo is installed in Settings → Connected Apps, any site you
+open, and the scripts it runs, learns that Nulo is installed and its version without asking;
+connecting and sharing an account still ask you.
 
 A bundled content script relays wallet-discovery and connection messages between participating web
 pages and the extension. **It does not scrape page text and does not run browsing analytics.** The
@@ -470,3 +473,4 @@ described in § 5.
 | 1.2.7 | 27 October 2026 | The website and its mailing list are described in a separate Website Privacy Notice; § 5.5 keeps the hosts the wallet's functions involve. |
 | 1.2.8 | 5 November 2026 | Prices are requested for the price identifiers the signed token list names, and for AZTEC, which prices Fee Juice (§ 5.2). |
 | 1.2.9 | 5 November 2026 | The token list is downloaded about every six hours, retried within minutes then less often after a failure, and on request in Settings → Tokens (§§ 5.11, 6). |
+| 1.2.10 | «FILL: effective date» | With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7). |

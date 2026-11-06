@@ -125,6 +125,12 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 				"The token list is downloaded about every six hours, retried within minutes then less often after a failure, and on request in Settings → Tokens (§§ 5.11, 6).",
 			],
 		},
+		{
+			version: "1.2.10",
+			effective: null,
+			material: false,
+			changes: ["With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7)."],
+		},
 	],
 }
 

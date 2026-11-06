@@ -246,7 +246,7 @@ sits at the SW seam where content-script messages arrive:
 
 | Attacker capability | Impact |
 |---|---|
-| Compromised page can post arbitrary `window.postMessage` payloads | Limited — discovery requires user approval via popup; encrypted channel uses ECDH P-256 + AES-GCM with verification hash; content script filters cross-frame spoofing. Bugs in upstream `ContentScriptConnectionHandler` are still page-reachable. |
+| Compromised page can post arbitrary `window.postMessage` payloads | Limited — discovery requires user approval via popup unless the person turned on the per-profile "every site" switch, which only a row sealed under the profile's keys turns on; either way every connection passes the emoji check and grants need their own approval; encrypted channel uses ECDH P-256 + AES-GCM with verification hash; content script filters cross-frame spoofing. Bugs in upstream `ContentScriptConnectionHandler` are still page-reachable. |
 | Compromised content script (XSS in upstream relay) | High — would bypass the SW envelope check, which cannot mitigate it; depends on upstream code review + minimization. |
 
 The background sets `chrome.storage.local` to trusted contexts at every start
@@ -398,7 +398,8 @@ Encrypted at rest:
 - `profile.secret` — master secret (AES-GCM)
 - `profile.guard` — password verification sentinel (AES-GCM)
 - Every profile-scoped root but the profile row itself: contacts, dApp
-  sessions and registration counts, the operation journal, the transaction
+  sessions, registration counts and the every-site switch with the sites the
+  emoji check refused under it, the operation journal, the transaction
   history, accounts and imported keys, tokens and the default-token seeder's
   marker, networks, fee payers, token balances, the authwit registry and its
   enable flags, incoming receipts with their trust, scan cursors,
