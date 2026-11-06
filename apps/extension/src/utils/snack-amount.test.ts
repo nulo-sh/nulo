@@ -9,7 +9,7 @@ describe("formatSnackAmount", () => {
 		["a whole number the 8 characters would cut", 123_456_789n * 10n ** 18n, 18, "123,456,789"],
 		["whole digits that end inside the cut, at the list rule's decimals", 1_234_567_890_123n, 6, "1,234,567.89"],
 		["the list rule drops the cut's trailing zero", 28_439_501n, 6, "28.43"],
-		["four significant digits below 1, where the row's cut would keep five", 3_920_343_815_200_000n, 18, "0.00392"],
+		["four significant digits below 1, where the width cut keeps a trailing zero", 3_920_343_815_200_000n, 18, "0.00392"],
 		["a whole u128 prints in full", 2n ** 128n - 1n, 0, "340,282,366,920,938,463,463,374,607,431,768,211,455"],
 		["dust keeps the row's hint", 1n, 18, "<0.000001"],
 		["zero", 0n, 18, "0"],
