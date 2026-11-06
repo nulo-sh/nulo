@@ -1,7 +1,7 @@
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import type { RetiredEndpoint } from "./retired-endpoints"
-import type { ChainKind } from "./spec"
+import type { ChainKind, Network } from "./spec"
 
 /** Immutable L1 identities for the seeded kinds — the trust root `getL1ChainIdStored` validates
  *  seeded rows against (a row is mutable storage; these constants ship in code). Custom/devnet
@@ -83,6 +83,13 @@ export const RETIRED_DEFAULT_ENDPOINTS: readonly RetiredEndpoint[] = [
 	{ sha256: "8c97d123e13121add8218c0240ca5f9af70cd57e2e50b9cfd1f9d5ef882f4ec5", replacement: TESTNET_RPC_URL },
 ]
 
+/** Names an earlier build seeded a kind's row with; the unlock gives such a row its seed's current
+ *  name. A row records nothing about who chose its name, so a person who picked one of these loses
+ *  it too. Entries stay for good, as the endpoints' do. */
+const RETIRED_DEFAULT_NAMES: Readonly<Partial<Record<ChainKind, readonly string[]>>> = {
+	mainnet: ["Alpha V6", "Mainnet"],
+}
+
 /** The one seed marked `isPrimaryActive` (Mainnet). Single source
  *  for the primary/default network — consumed by `getOrInitNetworks` (fresh seed) AND
  *  `getPrimaryNetwork` (the import/bootstrap fallback), so the two can't disagree. */
@@ -92,6 +99,16 @@ export const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)
  *  this build carries. */
 export function seedForKind(kind: ChainKind | undefined): DefaultSeed | undefined {
 	return kind === undefined ? undefined : DEFAULT_SEEDS.find((s) => s.kind === kind)
+}
+
+/** A copy of `network` under its seed's current name when it still carries a name an earlier build
+ *  seeded its kind with; `undefined` otherwise, or when another of the profile's `rows` already holds
+ *  that name, since a profile's names are unique. */
+export function retireDefaultName(network: Network, rows: readonly Network[]): Network | undefined {
+	const seed = seedForKind(network.kind)
+	if (!seed || !RETIRED_DEFAULT_NAMES[seed.kind]?.includes(network.name)) return undefined
+	const taken = rows.some((row) => row.id !== network.id && row.profileId === network.profileId && row.name === seed.name)
+	return taken ? undefined : { ...network, name: seed.name }
 }
 
 /** dRPC's free plan refuses a JSON-RPC batch of more entries whole (HTTP 400, seen 2026-11). A

@@ -5,7 +5,7 @@ import { isFieldAddress, sameFieldAddress } from "@nulo/wallet-bridge"
 import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** Utils */
-import { ALREADY_EXISTS } from "@/utils/entity-rules"
+import { ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 
 /** Services */
 import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
@@ -63,7 +63,7 @@ const validateSenderAddress = () => {
 
 	// Out of field range: the contact form's wording.
 	if (!isFieldAddress(senderAddress.value)) {
-		fillError("validation", "Invalid address")
+		fillError("validation", INVALID_ADDRESS)
 		return
 	}
 }

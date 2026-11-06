@@ -52,6 +52,14 @@ describe("the landing Worker", () => {
 		expect(await response.json()).toEqual({ ok: true })
 	})
 
+	it("hands a confirmation on as received too, to the same binding", async () => {
+		const { env, seen } = binding()
+		const request = post("/api/confirm", { origin: "https://nulo.sh", "content-type": "application/json" }, '{"token":"a.b"}')
+		expect(await (await worker.fetch(request, env)).json()).toEqual({ ok: true })
+		expect(seen).toEqual([request])
+		expect(await (seen[0] as Request).text()).toBe('{"token":"a.b"}')
+	})
+
 	it("passes a foreign or missing Origin through untouched, leaving the refusal to the subscribe Worker", async () => {
 		const { env, seen } = binding(async () => new Response(null, { status: 403 }))
 		expect((await worker.fetch(post("/api/subscribe", { origin: "https://preview.example" }), env)).status).toBe(403)
@@ -66,23 +74,25 @@ describe("the landing Worker", () => {
 		expect(response.headers.get("location")).toBe("/subscribed")
 	})
 
-	it.each(["GET", "HEAD", "PUT", "DELETE", "OPTIONS"])(
-		"refuses %s on /api/subscribe with its own 405 and never reaches the binding",
-		async (method) => {
-			const { env, seen } = binding()
-			const response = await worker.fetch(new Request(`${URL_BASE}/api/subscribe`, { method }), env)
-			expect(response.status).toBe(405)
-			expect(response.headers.get("allow")).toBe("POST")
-			expectOwnHeaders(response)
-			expect(seen).toHaveLength(0)
-		},
-	)
+	it.each(
+		["GET", "HEAD", "PUT", "DELETE", "OPTIONS"].flatMap((method) => ["/api/subscribe", "/api/confirm"].map((path) => [method, path])),
+	)("refuses %s on %s with its own 405 and never reaches the binding", async (method, path) => {
+		const { env, seen } = binding()
+		const response = await worker.fetch(new Request(`${URL_BASE}${path}`, { method }), env)
+		expect(response.status).toBe(405)
+		expect(response.headers.get("allow")).toBe("POST")
+		expectOwnHeaders(response)
+		expect(seen).toHaveLength(0)
+	})
 
 	it.each([
 		"/api/subscribe/",
 		"/api/Subscribe",
 		"/api/subscribe/extra",
 		"/api/unsubscribe",
+		"/api/confirm/",
+		"/api/Confirm",
+		"/api/confirm/extra",
 		"/api/",
 		"/api/%73ubscribe",
 		"/",

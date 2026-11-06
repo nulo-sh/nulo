@@ -23,6 +23,10 @@ export const RELEASE_DIGESTS: Readonly<Record<string, Readonly<Record<BrowserKin
 		chrome: "bcc66cb0960359a8a70fe7693086faff82af4718cf2429d7fb0ac79ffc261117",
 		firefox: "388fadfb24c86fae309605a64077924a5a384574429fa2a2fa7aa35e37e1a762",
 	},
+	"v1.2.0": {
+		chrome: "559bc2200fe9da8e33fca93e617c4d18069ea4c55fa6f4cda6ffc009dff4a2f0",
+		firefox: "a107680a13421d2d7d30641bca3aa71e3633e0f13583f07ef188c9e8fc2b4f70",
+	},
 }
 
 /**
@@ -35,18 +39,34 @@ export const RELEASE_DIGESTS: Readonly<Record<string, Readonly<Record<BrowserKin
  * only Set up again, or one its passkey still unlocks, as the row its `newPasskeyRow` writes decides.
  * `testnetHost`: the hostname of the Testnet node it seeds, which its install may request and the
  * egress guard refuses; the hostname alone, since the seeded URL may carry a provider's key.
+ * `sponsor`: whether it offers the canonical Sponsored fee payer on every chain, a custom network
+ * included, or only on the chains it lists, which leaves the run's sandbox network none.
  */
 export type ReleaseTraits = {
 	storage: "plaintext" | "sealed"
 	connect: "replaces-page" | "own-window"
 	passkey: "retired" | "unlocks"
 	testnetHost: string
+	sponsor: "every-chain" | "listed-chains"
 }
 
 export const RELEASE_TRAITS: Readonly<Record<string, ReleaseTraits>> = {
-	"v0.31.0": { storage: "plaintext", connect: "replaces-page", passkey: "retired", testnetHost: "lb.drpc.live" },
-	"v1.0.0": { storage: "sealed", connect: "own-window", passkey: "retired", testnetHost: "lb.drpc.live" },
-	"v1.1.0": { storage: "sealed", connect: "own-window", passkey: "unlocks", testnetHost: "lb.drpc.live" },
+	"v0.31.0": {
+		storage: "plaintext",
+		connect: "replaces-page",
+		passkey: "retired",
+		testnetHost: "lb.drpc.live",
+		sponsor: "every-chain",
+	},
+	"v1.0.0": { storage: "sealed", connect: "own-window", passkey: "retired", testnetHost: "lb.drpc.live", sponsor: "every-chain" },
+	"v1.1.0": { storage: "sealed", connect: "own-window", passkey: "unlocks", testnetHost: "lb.drpc.live", sponsor: "every-chain" },
+	"v1.2.0": {
+		storage: "sealed",
+		connect: "own-window",
+		passkey: "unlocks",
+		testnetHost: "aztec-testnet.drpc.org",
+		sponsor: "listed-chains",
+	},
 }
 
 /** `tag`'s traits; throws for a tag with none, as {@link releaseProblem} refuses one with no digest. */

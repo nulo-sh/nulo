@@ -21,9 +21,9 @@ import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 import {
-	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
+	DefaultEntrypointPublicCallError,
 	InvalidWalletArgumentsError,
 	ScopeViolationError,
 	SessionEndedError,
@@ -37,6 +37,7 @@ import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/w
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import { refusalOf } from "@/wallet/services/execution/contract-resolver"
+import { scopeRefusalKind } from "@/wallet/services/execution/mark-failed-unless-cancelled"
 import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import type { NetworkService } from "@/wallet/services/network/service"
 import type { AccountService } from "@/wallet/services/account/service"
@@ -278,6 +279,7 @@ export type QueuedFailureKind = Extract<
 	| "user_rejected"
 	| "scope_refused"
 	| "registry_refused"
+	| "unattached_refused"
 	| "malformed_request"
 	| "terms_refused"
 	| "session_ended"
@@ -312,11 +314,12 @@ export async function failQueuedForError(
 
 function queuedFailureKind(error: unknown): QueuedFailureKind {
 	if (error instanceof TermsAcceptanceRequiredError) return "terms_refused"
-	if (error instanceof AuthRegistryRefusalError) return "registry_refused"
-	if (error instanceof ScopeViolationError || error instanceof CapabilityNotGrantedError) return "scope_refused"
+	if (error instanceof ScopeViolationError) return scopeRefusalKind(error)
+	if (error instanceof CapabilityNotGrantedError) return "scope_refused"
 	if (error instanceof InvalidWalletArgumentsError) return "malformed_request"
 	if (error instanceof SessionEndedError || error instanceof WalletLockedError) return "session_ended"
 	if (error instanceof ChainNotSupportedError || error instanceof NoUsableAccountError) return "wallet_refused"
+	if (error instanceof DefaultEntrypointPublicCallError) return "wallet_refused"
 	if (error instanceof WindowEndedError) return WINDOW_END_KINDS[error.end]
 	if (error === WINDOW_CLOSED_BY_USER) return "user_rejected"
 	return "popup_bound"

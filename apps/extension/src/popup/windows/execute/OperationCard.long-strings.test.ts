@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { mount } from "@vue/test-utils"
-import postcss, { type ChildNode, type Rule } from "postcss"
+import postcss, { type AtRule, type ChildNode, type Rule } from "postcss"
 import { describe, expect, test } from "vitest"
 import CallArguments from "./CallArguments.vue"
 import OperationCard from "./OperationCard.vue"
@@ -133,11 +133,16 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		expect(declarationsOf(".full .row", "> :last-child", ARGS_STYLE)).toEqual({ "text-align": "left" })
 	})
 
-	test("a call's 64-character name and its address sit in the call row, whose children may break", async () => {
+	test("a call's 64-character name breaks in the call row; the contract beside it keeps its width", async () => {
 		const row = (await mountOpen()).find('[data-testid="execute-op-payload-row"]')
 		expect(row.classes()).toContain(CARD.call_row)
 		expect(row.element.firstElementChild?.textContent).toMatch(HUMANIZED)
 		expect(row.element.lastElementChild?.querySelector(".addr")?.textContent).toBe(TOKEN)
+		expect(declarationsOf(".call_row > *")).toEqual(WRAPS)
+		expect(declarationsOf(".call_row > :last-child")).toEqual({ "flex-shrink": "0", "max-width": "calc(100% - 12px)" })
+		const wrapped = CARD_STYLE.nodes.find((node): node is AtRule => node.type === "atrule" && node.params === "(width < 359px)")
+		const narrowCaption = wrapped?.nodes?.find(isRule(".call_row > :last-child"))
+		expect(narrowCaption?.nodes.map((node) => node.toString())).toEqual(["max-width: 100%"])
 	})
 
 	test.each([

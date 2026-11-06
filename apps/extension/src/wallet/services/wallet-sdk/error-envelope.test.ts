@@ -12,6 +12,7 @@ import {
 	ScopeViolationError,
 	SessionEndedError,
 	TooManyPendingError,
+	UnattachedAuthorizationRefusalError,
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
 import {
@@ -21,6 +22,8 @@ import {
 	DuplicateInitializationError,
 	PxeScopeUnregisteredError,
 	PxeStaleAnchorError,
+	ContractAssertionError,
+	DefaultEntrypointPublicCallError,
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import { unwrapOperationResult } from "@nulo/wallet-bridge"
@@ -31,6 +34,7 @@ import {
 	OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE,
 	SCOPE_VIOLATION_ENVELOPE,
 	toWalletResponseError,
+	UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE,
 	UNCLASSIFIED_ERROR_MESSAGE,
 } from "./error-envelope"
 
@@ -111,6 +115,24 @@ describe("toWalletResponseError", () => {
 			env === OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE &&
 				Object.isFrozen(env) &&
 				Object.isFrozen(OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE.data),
+		).toBe(true)
+	})
+
+	test("a missing witness for another account keeps the scope refusal's code with its own text, naming no account", () => {
+		const refusal = new UnattachedAuthorizationRefusalError()
+		const env = toWalletResponseError(refusal)
+		expect(env).toEqual({
+			code: 4100,
+			message:
+				"This transaction uses another account's authorization, and the request carries no witness for it. Attach the witness.",
+			data: { walletErrorCode: "SCOPE_VIOLATION" },
+		})
+		const wire = JSON.stringify(env)
+		expect({ address: /0x[0-9a-f]/i.test(wire), own: wire.includes(refusal.message) }).toEqual({ address: false, own: false })
+		expect(
+			env === UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE &&
+				Object.isFrozen(env) &&
+				Object.isFrozen(UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE.data),
 		).toBe(true)
 	})
 
@@ -268,6 +290,17 @@ describe("stale-anchor and unregistered-contract arms", () => {
 		expect(toWalletResponseError(new Error(ContractNotFoundError.MESSAGE))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
 	})
 
+	test("ContractAssertionError stays unclassified: a contract's text never reaches the dApp", () => {
+		const env = toWalletResponseError(
+			new ContractAssertionError("Assertion failed: secret text", { assertion: "secret text", frames: [] }),
+		)
+		expect(env).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+	})
+
+	test("DefaultEntrypointPublicCallError keeps the answer its plain error gave: unclassified", () => {
+		expect(toWalletResponseError(new DefaultEntrypointPublicCallError())).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+	})
+
 	test("InvalidWalletArgumentsError → {code:-32602, INVALID_PARAMS} with a constant message naming no method", () => {
 		const env = toWalletResponseError(InvalidWalletArgumentsError.forMethod("sendTx"))
 		expect(env).toEqual({
@@ -327,6 +360,10 @@ describe("stale-anchor and unregistered-contract arms", () => {
 		)
 		expect(registry).toBeInstanceOf(AuthRegistryRefusalError)
 		expect(toWalletResponseError(registry)).toBe(AUTH_REGISTRY_REFUSAL_ENVELOPE)
+
+		const assertion = rethrown(new ContractAssertionError("Assertion failed: secret text", { assertion: "secret text", frames: [] }))
+		expect(toWalletResponseError(assertion)).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError(rethrown(new DefaultEntrypointPublicCallError()))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
 	})
 })
 

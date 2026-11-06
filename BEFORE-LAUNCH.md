@@ -243,6 +243,31 @@ November 2026; the landing and `nulo-subscribe` both deploy from that promote's 
       shows the 1.0 text
 - [ ] `nulo-subscribe` deployed from the same push, so a new signup records `consent_version` 1.1
 
+**Due at the release that publishes website notice 1.2** (double opt-in, #1236): signups are
+confirmed by email before they join the list. The landing and `nulo-subscribe` both deploy from the
+promote's push to `main`, each by its own build:
+
+- [x] The owner's answers to `implementations-plan/archive/double-optin-1/OWNER-ASKS.md` (OA1–OA8) are in the PR
+- [ ] `legal/website-privacy.md` § 3.5 carries the owner's wording for OA9: its sentence "joins the
+      list only when you open the link and press Confirm" predates the pick that confirms on open
+- [ ] `legal/website-privacy.md` — the version line and the 1.2 history row carry the day the promote lands
+- [ ] The secret `CONFIRM_SECRET` is set on `nulo-subscribe` before the promote merges
+      (`infra/subscribe/README.md`, owner checklist item 3); without it every signup answers 503
+- [ ] Both builds green after the push. If either fails, turn the kill switch on until both are; a
+      `nulo-subscribe` deploy resets the switch from `wrangler.jsonc`, so recheck it after each one.
+      Run the checks below once both are live: until the landing is, a link opens the home page (it
+      works afterwards, for its 24 h)
+- [ ] With a fresh address you control that Resend does not hold: one email arrives, its link
+      unrewritten in the HTML and the text part (also once through a client that wraps links); a
+      second submission inside 24 h sends nothing; opening the link creates the contact with
+      `consent_version` 1.2, with no press; opening it again writes nothing; with JavaScript off,
+      `/confirm` posts nothing
+- [ ] On a disposable contact you withdraw first: look up a case variant of it before creating
+      anything (absent: kill switch on, stop); submit the variant (no email, no write); create a
+      contact twice and record whether the second create upserts
+- [ ] After the deploy, `nulo.sh/website-privacy` shows 1.2 and `nulo.sh/website-privacy/v1.1/`
+      shows the 1.1 text
+
 **Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
 2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
 
@@ -252,14 +277,16 @@ November 2026; the landing and `nulo-subscribe` both deploy from that promote's 
       that day
 
 **Due at the release that carries the store's audit note** (owner's pick, 2026-11-02, decision
-page 93, P93-46 C): the long description's "No account, no telemetry." is followed by "Not audited.
-See the Privacy Policy for what leaves your device.", and screenshot 4's caption carries the same
-two sentences. The dashboards are filled by hand, after the promote lands:
+page 93, P93-46 C; the owner moved "Not audited" in the long description on 2026-11-05: "Ok -
+description updated to that one"): the long description's "No account, no telemetry." is followed
+by "See the Privacy Policy for what leaves your device.", its last line reads "Open source,
+Apache-2.0, not audited: …", and screenshot 4's caption keeps "Not audited. See the Privacy
+Policy for what leaves your device." The dashboards are filled by hand, after the promote lands:
 
-- [ ] Chrome (owner): paste `apps/extension/store/listing.md` § Long description and replace
+- [x] Chrome (owner): paste `apps/extension/store/listing.md` § Long description and replace
       screenshot 4 with `apps/extension/store/screenshot-4-1280x800.png`, before the release's
       store dispatch (an approved staged submission locks every dashboard field)
-- [ ] AMO (owner): the same description and screenshot 4
+- [x] AMO (owner): the same description and screenshot 4
 
 The owner's live-Testnet send moved to § 3: from the 1.0.0 candidate, before the promote (owner's
 call, 2026-10-19, decision page 68).

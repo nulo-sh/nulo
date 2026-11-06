@@ -41,6 +41,7 @@ import { readSealedRows } from "../fixtures/sealed-rows"
 import { serializeInstance } from "../fixtures/selfpay-phase"
 import { trimAddress } from "@/utils/string"
 import {
+	atWidth,
 	coverageOf,
 	expectFitsNarrow,
 	expectLaidOut,
@@ -340,6 +341,53 @@ async function stretchPayload(win: Page): Promise<void> {
 		set('[data-testid="execute-grant-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
 	})
 }
+
+/** Each font's text is measured alone: text on one line in two fonts can have different rect tops. */
+async function callCaptions(win: Page): Promise<{ lines: number; onBeside: boolean; inRow: boolean }[]> {
+	return win.evaluate(() =>
+		Array.from(document.querySelectorAll('[data-testid="execute-op-payload-row"]'), (row) => {
+			const caption = row.lastElementChild
+			const to = caption?.querySelector('[data-testid="execute-op-call-to"]')
+			if (!caption || !to) throw new Error("a payload row with no contract")
+			const textRects = (parent: Element) =>
+				Array.from(parent.childNodes).flatMap((node) => {
+					if (node.nodeType !== 3 || (node.textContent ?? "").trim() === "") return []
+					const range = document.createRange()
+					range.selectNodeContents(node)
+					return Array.from(range.getClientRects()).filter((rect) => rect.width > 0)
+				})
+			const [address, on] = [textRects(to), textRects(caption)]
+			const first = address[0]
+			const beside = on[0]
+			return {
+				lines: new Set(address.map((rect) => Math.round(rect.top))).size,
+				onBeside: Boolean(first && beside && beside.top < first.bottom && first.top < beside.bottom),
+				inRow: caption.getBoundingClientRect().right <= row.getBoundingClientRect().right + 0.5,
+			}
+		}),
+	)
+}
+
+async function expectCallCaptionsWhole(win: Page): Promise<void> {
+	const whole = async (label: string) => {
+		const captions = await callCaptions(win)
+		expect(captions.length, `${label}: payload rows`).toBeGreaterThan(0)
+		expect(captions, label).toEqual(captions.map(() => ({ lines: 1, onBeside: true, inRow: true })))
+	}
+	await whole("the window's width")
+	await atWidth(win, 360, async () => {
+		await whole("360 px")
+		await win.evaluate(() => {
+			for (const el of document.querySelectorAll('[data-testid="execute-op-call-to"]')) el.textContent = "W".repeat(48)
+		})
+		const capped = await callCaptions(win)
+		expect(
+			capped.map(({ inRow }) => inRow),
+			"a contract wider than the row stays in it, at 360 px",
+		).toEqual(capped.map(() => true))
+		expect(await payloadPastCard(win), "a contract wider than the row, at 360 px").toBeLessThanOrEqual(0)
+	})
+}
 async function grantArguments(
 	win: Page,
 ): Promise<{ param: string | null; glyphs: number; below: boolean; indent: number | null; lines: number }[]> {
@@ -396,10 +444,12 @@ async function openExecute(ctx: Connected, { button, inputs, ready, details }: R
 	return win
 }
 
-/** No fee card, its estimate or its Fee Juice nudge shown, or the page's "Couldn't estimate fee" snack. */
+/** No fee card, its estimate or its Fee Juice nudge shown, the app's own failure under it, or the
+ *  page's "Couldn't estimate fee" snack. */
 function feeSettled(): boolean {
 	const card = document.querySelector('[data-testid="fee-settings-card"]')
 	if (!card || card.querySelector('[data-testid="fee-estimate"], [data-testid="send-fee-nudge"]')) return true
+	if (document.querySelector('[data-testid="execute-op-app-failure"]')) return true
 	return [...document.querySelectorAll('[data-testid="snackbar"]')].some((snack) => /estimate fee/i.test(snack.textContent ?? ""))
 }
 
@@ -416,6 +466,7 @@ async function runRequest(ctx: Connected, request: Request, shown: Set<string>):
 			await stretchPayload(win)
 			expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
 			await expectLaidOut(win, `${request.method}, the longest payload`)
+			if (request.details) await expectCallCaptionsWhole(win)
 			expect(observations.flatMap(({ hexOutsideMono }) => hexOutsideMono)).toEqual([])
 		}
 		const asserted = observations.flatMap(({ sites }) => sites.filter(({ mode }) => mode === "asserted"))

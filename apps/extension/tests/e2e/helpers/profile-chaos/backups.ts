@@ -29,7 +29,7 @@ export function shortFilePassword(s: RunState, ref: SecretRef): string {
 
 export type FilePasswordForm = { field: "backup-encrypt-password" | "account-file-password"; button: string }
 
-const BACKUP_FILE_PASSWORD: FilePasswordForm = { field: "backup-encrypt-password", button: "download-backup-btn" }
+const BACKUP_FILE_PASSWORD: FilePasswordForm = { field: "backup-encrypt-password", button: "create-protected-backup-btn" }
 
 /** True once the file password is typed and the page still refuses to encrypt with it. */
 export async function refusesShortPassword(page: Page, short: string, form: FilePasswordForm = BACKUP_FILE_PASSWORD): Promise<boolean> {
@@ -40,7 +40,7 @@ export async function refusesShortPassword(page: Page, short: string, form: File
 	return page.$eval(`[data-testid="${form.button}"]`, (el) => (el as HTMLButtonElement).disabled)
 }
 
-/** The passkey ceremony starts on agree; a password profile types its password first. */
+/** A password profile types its password; a passkey profile its file password, before its passkey. */
 export async function exportFullBackup(s: RunState, open: ModelProfile, p: ParamsMap["exportBackup"]): Promise<Driven> {
 	const page = s.anchor
 	const t0 = Date.now()

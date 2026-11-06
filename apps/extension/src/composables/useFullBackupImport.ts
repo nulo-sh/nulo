@@ -1,5 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { computed, ref, type Ref, type ShallowRef, shallowRef } from "vue"
+import { PROFILE_NAME_MAX } from "@/utils/profile-name"
 import { sanitizeString } from "@/utils/string"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
@@ -53,6 +54,7 @@ import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 export type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { isNewPasswordValid } from "@/utils/password"
 import type { NewProfileUnlock, UnlockMethod } from "@/composables/useNewProfilePasskey"
 import type { NewPasskeyDisplay } from "@/wallet/services/passkey/spec"
@@ -162,7 +164,7 @@ export interface UseFullBackupImportResult {
  *  so a name of spaces around a stripped character is no name at all. */
 function sanitizedBackupName(raw: unknown): string | null {
 	if (typeof raw !== "string" || raw.length === 0) return null
-	const cleaned = sanitizeString(raw, 32).trim()
+	const cleaned = sanitizeString(raw, PROFILE_NAME_MAX).trim()
 	return cleaned.length > 0 ? cleaned : null
 }
 
@@ -214,6 +216,10 @@ async function restoreProfileStep(
 	}
 	return newProfile
 }
+
+/** Finalize refuses a restore a lock, a worker restart or its time limit ended before it opened the
+ *  profile it wrote; that profile stays listed and opens at its next unlock. */
+const RESTORE_STOPPED = "The import stopped before the profile opened. Unlock the profile to open it."
 
 /** The restore's clients, its options, and the unlock the new profile is sealed under. */
 type RestoreDeps = { profileService: ProfileServiceClient; opts: UseFullBackupImportOptions; unlock: NewProfileUnlock }
@@ -339,7 +345,7 @@ async function executeRestore(
 		applyOutcome(io, {
 			kind: "fail",
 			title: "Couldn't open the imported profile",
-			message: errorMessageFromUnknown(err),
+			message: err instanceof SessionEndedError ? RESTORE_STOPPED : errorMessageFromUnknown(err),
 		})
 		return null
 	}

@@ -183,6 +183,11 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		zeroize(entry.destinationDek)
 	})
 
+	/** What lets a restore's finalize open the profile its commit wrote: set at the commit, taken back
+	 *  by an explicit lock, a deletion or the TTL, and gone after a worker restart. Secret-free: the
+	 *  page holds the credential. */
+	private readonly restoreAdmissions = new ExpiringStash<{ capturedAt: number }>(ProfileService.PENDING_RESTORE_TTL_MS, () => undefined)
+
 	/** Durable delete-in-progress markers (finding D). NOT an EntityStorage — see
 	 *  TombstoneRepository: a corrupt tombstone must still reserve its id. */
 	private readonly tombstones: TombstoneRepository
@@ -193,19 +198,23 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 	/** A restore-pending marker must be at least this old before the boot
 	 *  sweep may treat the import as ABANDONED and reap it. A marker only proves
-	 *  incompleteness — a password import whose SW died can still finalize via
-	 *  the popup's auto-reconnect — so abandonment is proven by age. Seven days
+	 *  incompleteness — the page of an import whose SW died may still call
+	 *  finalize, which is refused but clears the marker and keeps the profile for
+	 *  its next unlock — so abandonment is proven by age. Seven days
 	 *  is a generous multiple of any plausible import (slice RPCs are seconds; a
 	 *  passkey ceremony is minutes; PENDING_RESTORE_TTL is 30 min) and outlasts
 	 *  even a suspended-laptop onboarding tab; the wall-clock residual that
 	 *  remains is documented at the reap site. */
 	public static readonly TORN_IMPORT_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
-	/** Zeroize + drop stale rewrap contexts. MUST be called under the facade lock (`runExclusive`)
-	 *  so it can't zeroize an entry another op holds a live reference to. Optionally skips
-	 *  `exceptId` (the id being finalized). */
+	/** Zeroize + drop stale rewrap contexts and drop stale admissions. MUST be called under the facade
+	 *  lock (`runExclusive`) so it can't zeroize an entry another op holds a live reference to.
+	 *  Optionally skips `exceptId`'s rewrap context (the id being finalized). */
 	private sweepStalePendingRestore(now: number, exceptId?: string): void {
 		this.pendingDekRewraps.sweep(now, exceptId)
+		// Spares no id: `get` checks no expiry, so this sweep is what expires an admission before
+		// finalize compares it.
+		this.restoreAdmissions.sweep(now)
 	}
 
 	/**
@@ -891,8 +900,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// A caller that decided to lock one session must not close the session that replaced it.
 			const live = this.sessionHandle()
 			if (handle !== undefined && live !== undefined && live !== handle) return
-			// An explicit lock also ends every pending restore, before the close can fail: a
-			// stashed DEK rewrap context must not outlive the user's intent to lock.
+			// An explicit lock ends every pending restore before the close can fail: it wipes the
+			// rewrap contexts and takes back the admissions, so no passkey restore it ends opens.
 			this.sweepStalePendingRestore(Number.POSITIVE_INFINITY)
 			const { emitted, recordKept } = await this.sessionManager.close()
 			// A restarted worker holds no in-memory session, so `close()` emits
@@ -1674,8 +1683,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// earlier failed delete left with no session in memory goes too.
 			await this.sessionManager.closeProfile(id)
 			// Deleting a profile mid-restore must drop + zeroize its rewrap context (its
-			// buffers aren't aged yet, so the TTL sweep wouldn't reap them).
+			// buffers aren't aged yet, so the TTL sweep wouldn't reap them), and its admission.
 			this.pendingDekRewraps.drop(id)
+			this.restoreAdmissions.drop(id)
 			// A deleted profile's integrity records must not outlive it: a stale blocking record
 			// would keep the barrier up forever, and a stale verified-stamp could let a future
 			// same-id re-import skip its first boot verification.
@@ -1717,9 +1727,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 * When `bootCutoff` is supplied (the SW boot instant, captured BEFORE
 	 * `services.start()` — the same discipline as the journal reaper), also sweep TORN IMPORTS. A
 	 * restore-pending marker only proves the restore is INCOMPLETE, not
-	 * abandoned: a PASSWORD import whose SW died mid-flow can still legitimately
-	 * `finalizeRestore` against this new SW (the popup auto-reconnects; finalize
-	 * re-derives from the durable row + the popup-held password).
+	 * abandoned: the page of an import whose SW died mid-flow may still call
+	 * `finalizeRestore` against this new SW (the popup auto-reconnects). That
+	 * finalize is refused, since the restart took the admission, but it clears
+	 * the marker and keeps the profile, which opens at its next unlock.
 	 * Abandonment is therefore proven by AGE: only markers older than
 	 * {@link TORN_IMPORT_MIN_AGE_MS} are reaped — no live import plausibly spans
 	 * it, and the popup flow is an unbroken RPC chain whose failure paths run
@@ -1830,10 +1841,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				})
 				if (purged) continue
 				if (bootCutoff - marker.at < ProfileService.TORN_IMPORT_MIN_AGE_MS) {
-					// Incomplete, but not provably ABANDONED: a password import whose SW
-					// died can still finalize through the popup's auto-reconnect. Leave
-					// it; it stays unlock-refused (RestoreTornError) and is reaped once
-					// it ages past the floor.
+					// Incomplete, but not provably ABANDONED: the page of an import whose
+					// SW died may still call finalize, which clears the marker and keeps
+					// the profile. Leave it; it stays unlock-refused (RestoreTornError) and
+					// is reaped once it ages past the floor.
 					continue
 				}
 				// Aged past any plausible live import. Complete the compensating delete
@@ -2237,6 +2248,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				capturedAt: Date.now(),
 			})
 			scratch.storedContext = true
+			this.restoreAdmissions.set(id, { capturedAt: Date.now() })
 
 			// Late activation: do NOT open the session here. The popup
 			// will call `finalizeRestore(id, password)` after restoring
@@ -2293,8 +2305,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// identity check spares an entry a later restore stashed after the lock's hold watchdog
 		// released this call.
 		const seenRewrap = this.pendingDekRewraps.get(id)
+		// Read before any await, as the rewrap context is: an admission a same-id successor's commit
+		// sets meanwhile never admits this call, and this call's drop spares it.
+		const admission = this.restoreAdmissions.get(id)
 		try {
-			// Sweep stale entries but never the id being finalized here.
 			this.sweepStalePendingRestore(Date.now(), id)
 			// A tombstoned profile (SW died mid-delete) must not open a session. Gated here as well as
 			// at row-read so a delete that began mid-restore is caught.
@@ -2314,12 +2328,18 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (this.sessionManager.isActive(id)) {
 				return this.getProfileInfo(profile)
 			}
+			// A restore opens only on the admission its own commit set.
+			if (admission === undefined || this.restoreAdmissions.get(id) !== admission) {
+				throw new SessionEndedError()
+			}
 			// `restore` sealed the row under the credential handed back here: a row of another type was
 			// edited in between.
 			if (profile.type !== (credentialData ? "passkey" : "password")) {
 				throw new Error("Profile type changed between restore and finalizeRestore")
 			}
-			return await this.finalizeOpenHoldingLock(id, profile, password, credentialData)
+			const opened = await this.finalizeOpenHoldingLock(id, profile, password, credentialData)
+			if (this.restoreAdmissions.get(id) === admission) this.restoreAdmissions.drop(id)
+			return opened
 		} finally {
 			if (this.pendingDekRewraps.get(id) === seenRewrap) this.pendingDekRewraps.drop(id)
 		}

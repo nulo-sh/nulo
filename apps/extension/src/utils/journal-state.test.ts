@@ -375,6 +375,12 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(buildJournalTerminalCardProps(transferRecord(), known)).toMatchObject({ amount: "1.5", amountSymbol: "USDC" })
 	})
 
+	test("one send reads the list rule's digits in flight and once ended", () => {
+		const raw = { amountRaw: "28439501" }
+		expect(journalCardAmount(transferRecord({ ...raw, terminalAt: null }), TEST_TOKEN_BY_ID)).toBe("28.43")
+		expect(buildJournalTerminalCardProps(transferRecord(raw), TEST_CTX)?.amount).toBe("28.43")
+	})
+
 	test("an empty amount shows no amount and no symbol", () => {
 		const props = buildJournalTerminalCardProps(transferRecord({ amountRaw: "" }), TEST_CTX)
 		expect(props).toMatchObject({ title: "USDC", amount: null, amountSymbol: null })
@@ -763,6 +769,7 @@ describe("refusals filed before any window: card and detail", () => {
 		["wallet_refused", "Refused before sending", "The wallet refused this request before anything was signed. Nothing was sent."],
 		["scope_refused", "Not allowed", "The app asked for more than you allowed. Nothing was sent."],
 		["registry_refused", "Not allowed", "Apps cannot change your public authorizations. Nothing was sent."],
+		["unattached_refused", "Not allowed", "The app did not include an authorization from another of your accounts. Nothing was sent."],
 	])("%s reads %s on the card and in the detail", (kind, label, context) => {
 		const op = refused(kind)
 		expect(categoricalLabel(op)).toEqual({ label, context })

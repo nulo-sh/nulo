@@ -14,6 +14,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [amount-honesty](amount-honesty/plan.md) — completed — the wallet never guesses an amount's magnitude, and what it cannot state exactly it does not state
 - [approval-card-decoding](approval-card-decoding/plan.md) — completed — a readable execute-window approval card that decodes call arguments without guessing
 - [approval-scope-follow](approval-scope-follow/plan.md) — completed — a dApp transaction runs in the scope the dApp pinned, with a banner when the wallet's view differs
+- [authwit-copy-1](authwit-copy-1/plan.md) — completed — an app-paid window names the sender's attached authorization; an unattached refusal gets its own History text and app error
 - [authwit-index-1](authwit-index-1/plan.md) — completed — a dApp send's public authwits reach the index whatever History's write does, and are listed once the network took the send
 - [authwit-lifecycle-and-execution-followups](authwit-lifecycle-and-execution-followups/plan.md) — completed — a testable public-authwit lifecycle, plus the previous arc's execution follow-ups
 - [aztec-4.2.0-bump](aztec-4.2.0-bump/plan.md) — superseded by aztec-5.0-upgrade — move the Aztec packages from the last 4.2.0 nightly to the 4.2.0 stable release
@@ -537,3 +538,14 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [legal-dating-2](legal-dating-2/plan.md) — completed — Terms 1.2.1 and privacy 1.2.8 and 1.2.9 dated 4 November 2026 for the 1.2.0 promote, superseding #1538
 - [update-fpc-1](update-fpc-1/plan.md) — completed — the update test expects the canonical sponsor's removal, with its fee picks, on a chain that offers none (the run's custom sandbox network); all four update runs from v1.1.0 green
 - [scroll-cue-3](scroll-cue-3/plan.md) — completed — a "more below" button on the nine signed CollapsingHeroLayout screens and Restore again (part of #1658)
+- [wallet-bugs-3](wallet-bugs-3/plan.md) — completed — a balance batch finishes every task when a failure write throws (#1627), the payload row keeps a short address whole (#1653), the fee priority row is one roving tablist (#1535)
+- [popup-dedupe-1](popup-dedupe-1/plan.md) — completed — one helper for Send's side rule (#1470) and the entity forms' shared rules (#1449), no behaviour change (#1674)
+- [e2e-flakes-3](e2e-flakes-3/plan.md) — completed — the onboarding spec counts the setup tab through `chrome.tabs`; a simulation's default fee cap pads the predicted worst minimum (#1667, #1590)
+- [update-from-1.2.0](update-from-1.2.0/plan.md) — completed — the update scenarios run from v1.2.0: its pins, a `sponsor` trait that pays its sandbox send from bridged Fee Juice, and its Chrome recording; all five runs green (closes #1680)
+- [release-notes-1](release-notes-1/plan.md) — completed — per-version release notes atop the GitHub Release and on AMO, composed and checked in CI (#1668)
+- [network-rename-1](network-rename-1/plan.md) — completed — a seeded default row still named "Alpha V6" or "Mainnet" takes "Alpha" at unlock (closes #1364)
+- [double-optin-1](double-optin-1/plan.md) — completed — the mailing list confirms each signup by email before it counts (#1236)
+- [lows-1](lows-1/plan.md) — completed — a passkey answer is used in the step that collected it: three passkey flows take the new secret first, and any restore opens only on its own admission (#1693 and arc 2)
+- [prover-warm-1](prover-warm-1/plan.md) — completed — a kept-warm browser prover saves under 1 s at the median, so nothing ships; #1623 a known limit
+- [p116-build-1](p116-build-1/plan.md) — completed — the Receive QR at 240 px and the Holdings header on one row, the count alone, as page 116 picked (#1709)
+- [token-digits-1](token-digits-1/plan.md) — completed — list amounts follow one tiered digits rule, truncated ahead of the width cut, and a split side never reads 0 (#1702); #1708 a known limit

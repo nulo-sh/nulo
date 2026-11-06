@@ -72,12 +72,13 @@ import { Icon } from "@nulo/design"
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
 import { pressOn } from "../../../../../../tests/helpers/press-key"
 import { useAppStore } from "@/stores/app.store"
+import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import AccountExport from "./account.vue"
 
 const wrappers: VueWrapper[] = []
 
-function mountPage(profileType = "password") {
+function mountPage(profileType = "password", isLogined = true) {
 	const w = mount(AccountExport, {
 		attachTo: document.body,
 		global: {
@@ -86,6 +87,7 @@ function mountPage(profileType = "password") {
 					createSpy: vi.fn,
 					initialState: {
 						app: {
+							isLogined,
 							profile: { id: "p1", name: "Main", type: profileType },
 							network: { id: "n1", chainId: 7 },
 							accounts: [{ address: ADDRESS, chainId: 7, name: "Account 1", type: 0 }],
@@ -327,23 +329,36 @@ describe("an account file once saved", () => {
 })
 
 describe("a passkey profile's account file", () => {
-	async function approved() {
-		const w = mountPage("passkey")
+	/** Past the agreement, at the file's own password: no passkey has been asked. */
+	async function atPair(isLogined = true) {
+		const w = mountPage("passkey", isLogined)
 		await flushPromises()
 		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
 		expect(w.find('[data-testid="unlock-password-input"]').exists()).toBe(false)
-		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
-		await flushPromises()
 		return w
 	}
 	const save = (w: VueWrapper) => w.get('[data-testid="account-file-save-btn"]').element as HTMLButtonElement
+	const pair = (w: VueWrapper) => w.findComponent({ name: "FilePasswordSection" }).props()
 	async function typeFilePassword(w: VueWrapper, password: string, repeat = password) {
 		await w.get('[data-testid="file-password"]').setValue(password)
 		await w.get('[data-testid="file-password-repeat"]').setValue(repeat)
 	}
+	async function pressSave(w: VueWrapper) {
+		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
+		await flushPromises()
+	}
 
-	test("its passkey approves, then one sealed export under the file password downloads", async () => {
-		const w = await approved()
+	test("Agree shows the file password; Save asks the passkey, checks it, then one sealed export downloads", async () => {
+		const w = await atPair()
+		expect(w.find('[data-testid="account-file-confirm-passkey-btn"]').exists()).toBe(false)
+		expect(passkey.runCeremony).not.toHaveBeenCalled()
+		await typeFilePassword(w, "1234567")
+		expect(save(w).disabled).toBe(true)
+		await typeFilePassword(w, "12345678", "12345679")
+		expect(save(w).disabled).toBe(true)
+		await typeFilePassword(w, "12345678")
+		expect(save(w).disabled).toBe(false)
+		await pressSave(w)
 		expect(passkey.runCeremony).toHaveBeenCalledExactlyOnceWith({
 			mode: "get",
 			credentialId: "cred",
@@ -351,14 +366,6 @@ describe("a passkey profile's account file", () => {
 			step: "accountFile",
 			profileName: "Main",
 		})
-		await typeFilePassword(w, "1234567")
-		expect(save(w).disabled).toBe(true)
-		await typeFilePassword(w, "12345678", "12345679")
-		expect(save(w).disabled).toBe(true)
-		await typeFilePassword(w, "12345678")
-		expect(save(w).disabled).toBe(false)
-		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
-		await flushPromises()
 		expect(passkey.verifyExportCredential).toHaveBeenCalledExactlyOnceWith("p1", { passkey: ANSWER })
 		expect(exportAccount).toHaveBeenCalledExactlyOnceWith("p1", 7, ADDRESS, "12345678", true, ANSWER)
 		expect(downloadFile).toHaveBeenCalledExactlyOnceWith({
@@ -372,53 +379,117 @@ describe("a passkey profile's account file", () => {
 		expect(document.activeElement).toBe(w.get('[data-testid="account-close-btn"]').element)
 	})
 
+	test("an invalid pair asks no passkey, by Save or by Enter", async () => {
+		const w = await atPair()
+		await typeFilePassword(w, "12345678", "12345679")
+		await pressSave(w)
+		w.get('[data-testid="file-password-repeat"]').element.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+		)
+		await flushPromises()
+		expect(passkey.getPasskeyUnlockParams).not.toHaveBeenCalled()
+		expect(passkey.runCeremony).not.toHaveBeenCalled()
+		expect(exportAccount).not.toHaveBeenCalled()
+	})
+
 	test("Enter in the file password saves, but not while a composition is open", async () => {
-		const w = await approved()
+		const w = await atPair()
 		await typeFilePassword(w, "12345678")
 		const field = w.get('[data-testid="file-password"]').element
 		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true }))
 		await flushPromises()
-		expect(exportAccount).not.toHaveBeenCalled()
+		expect(passkey.runCeremony).not.toHaveBeenCalled()
 		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
 		await flushPromises()
 		expect(exportAccount).toHaveBeenCalledOnce()
 	})
 
-	test("a cancelled passkey leaves the page at its button and exports nothing", async () => {
-		passkey.runCeremony.mockRejectedValueOnce(new UserRejectedError("cancelled"))
-		const w = await approved()
-		expect(w.find('[data-testid="account-file-confirm-passkey-btn"]').exists()).toBe(true)
-		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
-		expect(exportAccount).not.toHaveBeenCalled()
-	})
-
-	test("an answer that cannot open the profile is refused at its prompt, with the passkey failure line", async () => {
-		passkey.verifyExportCredential.mockRejectedValueOnce(new Error("Passkey did not open this profile"))
-		const w = await approved()
-		expect(w.find('[data-testid="account-file-confirm-passkey-btn"]').exists()).toBe(true)
-		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
-		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Couldn't unlock. Try again." })
-		expect(exportAccount).not.toHaveBeenCalled()
-	})
-
-	test("a failed Save drops the answer: the page is back at its passkey button, and the next file asks again", async () => {
-		exportAccount.mockRejectedValueOnce(new Error("Passkey did not open this profile"))
-		const w = await approved()
+	test("the file seals under the pair typed at Save, whatever the fields hold once the card answers", async () => {
+		const w = await atPair()
 		await typeFilePassword(w, "12345678")
-		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
-		await flushPromises()
-		expect(w.find('[data-testid="account-file-save-btn"]').exists()).toBe(false)
-		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
-		expect(downloadFile).not.toHaveBeenCalled()
-		expect(document.activeElement).toBe(w.get('[data-testid="account-file-confirm-passkey-btn"]').element)
-		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
-		await flushPromises()
-		expect(passkey.runCeremony).toHaveBeenCalledTimes(2)
-		expect(w.find('[data-testid="file-password"]').exists()).toBe(true)
+		passkey.runCeremony.mockImplementationOnce(async () => {
+			await typeFilePassword(w, "edited-meanwhile")
+			return ANSWER
+		})
+		await pressSave(w)
+		expect(exportAccount).toHaveBeenCalledExactlyOnceWith("p1", 7, ADDRESS, "12345678", true, ANSWER)
 	})
 
-	test("a network switch ends the flow: the approval goes with it, and switching back asks the passkey again", async () => {
-		const w = await approved()
+	test("a held row seals from the journal under the pair typed at Save", async () => {
+		route.query = {}
+		networkReset.getPendingReset.mockResolvedValueOnce({ networkId: "tn", running: false })
+		networkReset.getStaleNetwork.mockResolvedValueOnce({ reset: { heldImported: [{ name: "Savings", address: HELD }] } })
+		const w = mountPage("passkey")
+		await flushPromises()
+		await w.findAll('[data-testid="export-account-row"]')[1]!.trigger("click")
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		await typeFilePassword(w, "12345678")
+		await pressSave(w)
+		expect(exportResetHeldAccount).toHaveBeenCalledExactlyOnceWith("p1", HELD, "12345678", true, ANSWER)
+		expect(exportAccount).not.toHaveBeenCalled()
+	})
+
+	test("a cancelled passkey keeps the typed pair and exports nothing", async () => {
+		passkey.runCeremony.mockRejectedValueOnce(new UserRejectedError("cancelled"))
+		const w = await atPair()
+		await typeFilePassword(w, "12345678")
+		await pressSave(w)
+		expect(pair(w)).toMatchObject({ password: "12345678", repeatedPassword: "12345678" })
+		expect(save(w).disabled).toBe(false)
+		expect(openToast).not.toHaveBeenCalled()
+		expect(exportAccount).not.toHaveBeenCalled()
+	})
+
+	test("a passkey that fails its card keeps the typed pair and says why", async () => {
+		passkey.runCeremony.mockRejectedValueOnce(new PasskeyPrfError("no prf"))
+		const w = await atPair()
+		await typeFilePassword(w, "12345678")
+		await pressSave(w)
+		expect(pair(w)).toMatchObject({ password: "12345678", repeatedPassword: "12345678" })
+		expect(save(w).disabled).toBe(false)
+		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "This passkey can't unlock Nulo." })
+		expect(passkey.verifyExportCredential).not.toHaveBeenCalled()
+		expect(exportAccount).not.toHaveBeenCalled()
+	})
+
+	test("an answer that cannot open the profile makes no file: the pair is dropped and the toast says so", async () => {
+		passkey.verifyExportCredential.mockRejectedValueOnce(new Error("Passkey did not open this profile"))
+		const w = await atPair()
+		await typeFilePassword(w, "12345678")
+		await pressSave(w)
+		expect(pair(w)).toMatchObject({ password: "", repeatedPassword: "" })
+		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Failed to create the file" })
+		expect(exportAccount).not.toHaveBeenCalled()
+	})
+
+	test("a failed Save drops the pair, and the next Save asks the passkey again", async () => {
+		exportAccount.mockRejectedValueOnce(new Error("Passkey did not open this profile"))
+		const w = await atPair()
+		await typeFilePassword(w, "12345678")
+		const before = w.findComponent({ name: "FilePasswordSection" }).vm
+		await pressSave(w)
+		expect(pair(w)).toMatchObject({ password: "", repeatedPassword: "" })
+		// Mounted again, so its first field takes the keyboard back.
+		expect(w.findComponent({ name: "FilePasswordSection" }).vm).not.toBe(before)
+		expect(save(w).disabled).toBe(true)
+		expect(downloadFile).not.toHaveBeenCalled()
+		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Failed to create the file" })
+		await typeFilePassword(w, "12345678")
+		await pressSave(w)
+		expect(passkey.runCeremony).toHaveBeenCalledTimes(2)
+		expect(downloadFile).toHaveBeenCalledOnce()
+	})
+
+	test("a page left open after a lock asks no passkey", async () => {
+		const w = await atPair(false)
+		await typeFilePassword(w, "12345678")
+		await pressSave(w)
+		expect(passkey.getPasskeyUnlockParams).not.toHaveBeenCalled()
+		expect(exportAccount).not.toHaveBeenCalled()
+	})
+
+	test("a network switch ends the flow: the typed pair goes with it", async () => {
+		const w = await atPair()
 		await typeFilePassword(w, "12345678")
 		const app = useAppStore()
 		app.network = { id: "n2", chainId: 8 } as never
@@ -427,8 +498,7 @@ describe("a passkey profile's account file", () => {
 		app.network = { id: "n1", chainId: 7 } as never
 		await flushPromises()
 		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
-		expect(w.find('[data-testid="account-file-confirm-passkey-btn"]').exists()).toBe(true)
-		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
+		expect(pair(w)).toMatchObject({ password: "", repeatedPassword: "" })
 		expect(exportAccount).not.toHaveBeenCalled()
 	})
 
@@ -439,29 +509,25 @@ describe("a passkey profile's account file", () => {
 			if (pending === "answer") passkey.runCeremony.mockReturnValueOnce(held.promise)
 			else if (pending === "check") passkey.verifyExportCredential.mockReturnValueOnce(held.promise as Promise<never>)
 			else exportAccount.mockReturnValueOnce(held.promise as Promise<"sealed-body">)
-			const w = await approved()
-			if (pending === "file") {
-				await typeFilePassword(w, "12345678")
-				await w.get('[data-testid="account-file-save-btn"]').trigger("click")
-				await flushPromises()
-			}
+			const w = await atPair()
+			await typeFilePassword(w, "12345678")
+			await pressSave(w)
 			useAppStore().network = { id: "n2", chainId: 8 } as never
 			await flushPromises()
 			held.resolve(pending === "answer" ? (ANSWER as never) : pending === "check" ? (undefined as never) : "sealed-body")
 			await flushPromises()
-			expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
 			expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(false)
 			expect(downloadFile).not.toHaveBeenCalled()
+			if (pending !== "file") expect(exportAccount).not.toHaveBeenCalled()
 		},
 	)
 
 	test("a pending file ends when the profile's unlock changes to a password, before a network switch", async () => {
 		const held = Promise.withResolvers<string>()
 		exportAccount.mockReturnValueOnce(held.promise as Promise<"sealed-body">)
-		const w = await approved()
+		const w = await atPair()
 		await typeFilePassword(w, "12345678")
-		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
-		await flushPromises()
+		await pressSave(w)
 		const app = useAppStore()
 		app.profile = { id: "p1", name: "Main", type: "password" } as never
 		await flushPromises()
@@ -474,76 +540,70 @@ describe("a passkey profile's account file", () => {
 	})
 
 	test("a made file stays through a network switch", async () => {
-		const w = await approved()
+		const w = await atPair()
 		await typeFilePassword(w, "12345678")
-		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
-		await flushPromises()
+		await pressSave(w)
 		useAppStore().network = { id: "n2", chainId: 8 } as never
 		await flushPromises()
 		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(true)
 	})
 
-	test("a lock the page outlives drops the approval and the typed file password: the next file asks its passkey again", async () => {
-		const w = await approved()
+	test("a lock the page outlives drops the typed file password: the next file asks its passkey again", async () => {
+		const w = await atPair()
 		const app = useAppStore()
-		app.isLogined = true
 		await typeFilePassword(w, "file-pass-1234")
 		expect(save(w).disabled).toBe(false)
 		app.isLogined = false
 		app.isLogined = true
 		await flushPromises()
 		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
-		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
-		await flushPromises()
-		expect(passkey.runCeremony).toHaveBeenCalledTimes(2)
-		expect(w.findComponent({ name: "FilePasswordSection" }).props()).toMatchObject({ password: "", repeatedPassword: "" })
+		expect(pair(w)).toMatchObject({ password: "", repeatedPassword: "" })
 		expect(save(w).disabled).toBe(true)
+		expect(passkey.runCeremony).not.toHaveBeenCalled()
 	})
 
 	test("a lock during the passkey lookup opens no prompt, and its reset cancels the page's ceremony", async () => {
 		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
 		passkey.getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
-		const w = mountPage("passkey")
-		await flushPromises()
+		const w = await atPair()
 		const app = useAppStore()
-		app.isLogined = true
-		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
-		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
+		await typeFilePassword(w, "12345678")
+		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
 		app.isLogined = false
 		app.isLogined = true
 		answerLookup({ credentialId: "cred", prfSalt: "salt" })
 		await flushPromises()
 		expect(passkey.runCeremony).not.toHaveBeenCalled()
 		expect(ceremonyReject).toHaveBeenCalledTimes(1)
+		expect(exportAccount).not.toHaveBeenCalled()
 	})
 
 	test.each([
 		["another chain id", 8, 0],
 		["(control) the same chain id", 7, 1],
 	] as const)(
-		"a lookup that settles with %s in the store asks the passkey only for the scope it began on",
+		"a lookup that settles with %s in the store asks the passkey only for the scope Save began on",
 		async (_label, chainId, asks) => {
 			let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
 			passkey.getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
-			const w = mountPage("passkey")
-			await flushPromises()
-			await w.get('[data-testid="agree-continue-btn"]').trigger("click")
-			await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
+			const w = await atPair()
+			await typeFilePassword(w, "12345678")
+			await w.get('[data-testid="account-file-save-btn"]').trigger("click")
 			// One synchronous block: the lookup's continuation runs before the page's network watcher.
 			answerLookup({ credentialId: "cred", prfSalt: "salt" })
 			useAppStore().network = { id: "n1", chainId } as never
 			await flushPromises()
 			expect(passkey.runCeremony).toHaveBeenCalledTimes(asks)
+			expect(exportAccount).toHaveBeenCalledTimes(asks)
 		},
 	)
 
 	test("a lookup that settles on another chain id asks nothing, though the chain id is back before the page resumes", async () => {
 		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
 		passkey.getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
-		const w = mountPage("passkey")
-		await flushPromises()
-		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
-		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
+		const w = await atPair()
+		await typeFilePassword(w, "12345678")
+		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
 		const app = useAppStore()
 		answerLookup({ credentialId: "cred", prfSalt: "salt" })
 		// Queued before the switch, so the chain id is back before the page's watcher reads it.
@@ -580,13 +640,13 @@ describe("a passkey profile's account file", () => {
 		expect(moveToOwnWindow.mock.calls).toEqual(moves)
 	})
 
-	test("a profile switch drops the approval: the next file asks its passkey again", async () => {
-		const w = await approved()
-		expect(w.find('[data-testid="file-password"]').exists()).toBe(true)
+	test("a profile switch drops the typed pair: the next file asks its passkey again", async () => {
+		const w = await atPair()
+		await typeFilePassword(w, "12345678")
 		useAppStore().profile = { id: "p2", name: "Other", type: "passkey" } as never
 		await flushPromises()
 		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
-		expect(w.find('[data-testid="account-file-confirm-passkey-btn"]').exists()).toBe(true)
-		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
+		expect(pair(w)).toMatchObject({ password: "", repeatedPassword: "" })
+		expect(passkey.runCeremony).not.toHaveBeenCalled()
 	})
 })
