@@ -51,7 +51,8 @@ import { type PrivateEventFilter, PrivateEventFilterSchema } from "@aztec-labs/a
 import { NotesFilterSchema } from "./schemas"
 import { PXE_NOT_SYNCED_DIAGNOSTIC, withStaleAnchorRetry } from "./stale-anchor"
 import { assertScopesRegistered } from "./scope-guard"
-import { PxeScopeUnregisteredError } from "@nulo/extension-messaging/errors"
+import { ContractAssertionError, PxeScopeUnregisteredError } from "@nulo/extension-messaging/errors"
+import { SimulationError } from "@aztec-labs/stdlib/errors"
 import {
 	type PublicEventLogger,
 	type PublicScanTips,
@@ -72,6 +73,20 @@ interface ProfileLifecycle {
 	dead: Set<string>
 	/** The erase in flight, which a same-generation clear joins. */
 	clearing?: { gen: string; done: Promise<void> }
+}
+
+const ASSERTION_PREFIX = "Assertion failed: "
+
+/** A simulation that failed on a contract's assertion leaves this process typed, with the failing
+ *  call path, which no later hop can recover from the message. Any other error is returned as is. */
+function typedSimulationError(err: unknown): unknown {
+	if (!(err instanceof SimulationError)) return err
+	const original = err.getOriginalMessage()
+	if (!original.startsWith(ASSERTION_PREFIX)) return err
+	return new ContractAssertionError(err.message, {
+		assertion: original.slice(ASSERTION_PREFIX.length),
+		frames: err.getCallStack().map((f) => ({ contract: f.contractAddress.toString(), selector: f.functionSelector?.toString() })),
+	})
 }
 
 /**
@@ -549,6 +564,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			// could flip it and silently break overrides. Pass it
 			// explicitly when we know we need it.
 			const request = await TxExecutionRequest.schema.parseAsync(txRequest)
+			// Typed outside the stale-anchor retry, so its text matching still reads the simulator's error.
 			return this.retryOnceOnStaleAnchor("simulateTx", pxe, () =>
 				pxe.simulateTx(request, {
 					simulatePublic: opts.simulatePublic,
@@ -561,7 +577,9 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 					// not set" during private execution. First scope is the tx sender by our convention.
 					senderForTags: simScopes[0],
 				}),
-			)
+			).catch((err: unknown) => {
+				throw typedSimulationError(err)
+			})
 		})
 	}
 
