@@ -383,6 +383,7 @@ Round 1 merged the contradiction check into both legs (a deviation from the tier
 | cross-arc fix, 1 | Codex `01a1b23f`, fresh, over the fix diff | revise (1 P1) | a return probe landing after its endpoint took the role and served a newer tip lowered the floor: the active endpoint's probe now only raises it; D35's wording; the registry residual is real with no moved read (D38) | none |
 | cross-arc fix, 1 | Opus 5.5, fresh | approve with changes (2 medium, 1 low) | 1 (the same late-probe path, already fixed); 2 (the residual is new with the stack and within I3's lag, so not a known limit: D38 guards it at no one-endpoint cost); 3 (a lie in the handover probe now raises the floor: known limit 1) | its claim that a row confirms when mined (it confirms on Proven, `reconcileFromTx`) |
 | cross-arc, 2 | Codex `01a1b22d` resumed | approve (1 P3) | F1 to F3 confirmed closed as dispositioned, the late-probe fix and D38 confirmed sound with no wedge and no new recipient; the P3 (ARCHITECTURE § 15 omitted D38's exception) fixed | none |
+| cross-arc, 3 | Codex `01a1b22d` resumed | approve | the two commits the final `test:all` forced: a single attempt with nothing to admit keeps the caller's whole budget (a clock tick built an uncached client one millisecond short; the network service's storage-read test caught it under load), and the type-role inventory's re-pin of the registry's digest, re-attested byte for byte | none |
 
 ## Seeds (not run; orchestrator-owned)
 

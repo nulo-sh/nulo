@@ -29,3 +29,4 @@
 - 2026-11-05: E1 green on Chrome (190 s) and Firefox (202 s), red with the offscreen pin removed; legal 1.2.10/1.2.2 and ARCHITECTURE § 15 committed.
 - 2026-11-05: arc 3 diff review converged (Codex revise then approve; Opus approve with changes, folded in as D34 and known limit 7); Phase 8 gate green on both browsers; final test:all and audit:vue green on 6d29f3a1b.
 - 2026-11-06: cross-arc fix round 1: Codex fresh revise (1 P1, fixed), Opus approve with changes (D38 built), Codex cross-arc resumed approve; F1 D36, F2 D37, F3 recorded D35
+- 2026-11-06: fix round 1 gates on 805ab3fd9: lint, typecheck:all, routing+adapters 130, execution+network+auth-registry, test:all green (third run); sandbox 8/8 386 s, E1 Chrome 293 s, E1 Firefox 318 s
