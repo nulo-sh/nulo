@@ -19,10 +19,12 @@ post_implementation_hardening: not scheduled
 
 - **Date:** 2026-11-05 (probe), closed 2026-11-06 on the owner's word ("archive").
 - **Status:** closed. A probe with no code: Phase 2 (the warm-up) was never built.
+- **Shipped:** nothing. The probe's verdict is close.
 - **Measured:** the removable init, warmed at window open, saves 970 ms at the Chrome median and nothing at the Firefox median (−899 ms), against a 2.0 s ship bar on Firefox; the fee estimate ran 596 ms (Chrome) and 739 ms (Firefox) slower with the warm-up, failing R4 (< 500 ms). Five pairs per browser plus a 4-core pair; tables in [recon.md § Probe](recon.md).
 - **Review loop:** plan: Codex reject → conditional approve → approve over three rounds, Opus conditional approve; the probe's instruments were never committed.
 - **Gates:** none for code; the probe's runs are recorded in `lessons/`.
-- **Dropped:** Phase 2 (ship) and its PR; the `/goal` and `/loop` seeds below are retired.
+- **Dropped:** Phase 2 (ship) and its PR.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 - **Known limits:** #1623 (closed as `known-limit` with these numbers; reopens on a measured saving above the issue's bar or on a bb.js whose init dominates the first proof).
 - **Open items:** none.
 - **Lessons:** none promoted; `lessons.md` is at its budget.
@@ -121,7 +123,7 @@ One PR from `prover-warm-1-a1` (cut from `origin/dev`, the plan commits cherry-p
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 4291a8c98, with:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 4291a8c98, with:
 - **Review loop:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, once over arc 1's diff after Phase 2 is green; hard stop at three rounds, then report.
 - **Delivery:** `gh pr create --base dev`; `gh pr checks <n> --watch` to the end.
 - **Close-out:** the PR's final commits; merge `origin/dev` in first and read `index.md` and `lessons.md`.
