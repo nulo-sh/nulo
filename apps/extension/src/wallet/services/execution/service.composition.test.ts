@@ -572,6 +572,40 @@ describe("ExecutionService composition — the endpoint a send goes out through"
 		15_000,
 	)
 
+	test.each([
+		{ label: "removes the picked endpoint: refused before anything is committed", after: "removed", sent: false },
+		{ label: "moves the network to another chain: refused before anything is committed", after: "rechained", sent: false },
+		{ label: "keeps the picked endpoint (control): dialed and recorded", after: "kept", sent: true },
+	] as const)(
+		"a row edit landing while the pick waits that $label",
+		async ({ after, sent }) => {
+			const h = await makeHarness()
+			const rows = {
+				removed: { ...NETWORK, primaryEndpointId: "ep2", endpoints: [{ id: "ep2", rpcUrl: "http://added" }] },
+				rechained: { ...NETWORK, chainId: NETWORK.chainId + 1 },
+				kept: { ...NETWORK, endpoints: [...NETWORK.endpoints, { id: "ep2", rpcUrl: "http://added" }] },
+			}
+			h.pickSendEndpoint.mockImplementationOnce(async () => {
+				h.getNetwork.mockResolvedValue(rows[after])
+				return { rpcUrl: "http://fake" }
+			})
+			const run = transfer(h)
+			await waitFor(() => h.ctrl.entered)
+			h.ctrl.release()
+			const outcome = await run
+			if (sent) {
+				expect(outcome).toBe("0xhash")
+				expect(h.addTransaction).toHaveBeenCalledWith(expect.objectContaining({ submittedEndpointUrl: "http://fake" }))
+				return
+			}
+			expect(outcome).toBeInstanceOf(JournaledRejection)
+			expect(h.sendTx).not.toHaveBeenCalled()
+			expect(h.addTransaction).not.toHaveBeenCalled()
+			expect((await h.journal.getOperation(h.getJournalId()))?.progress).toEqual({ stage: "failed", from: "proving" })
+		},
+		15_000,
+	)
+
 	test("a network moved to another chain while the send proved is refused before the pick", async () => {
 		const h = await makeHarness()
 		const run = transfer(h)
