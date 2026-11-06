@@ -5,3 +5,5 @@
 - 2026-11-06: arc 1 Phase 1 gate green (lint, typecheck:all, amount + census tests 188/188).
 - 2026-11-06: arc 1 Phase 2 gate green (targeted 4419; audit:vue; test:components 1394; test:all); 6 new cases red at the base on the digits.
 - 2026-11-06: arc 1 Phase 3 Chrome: armed build, smoke rows + send-outcome-rows + token-list 14/14 at retry 0 (receipt +1,234.56 wraps at 360 px, fits from 388 px); captures taken.
+- 2026-11-06: arc 1 Phase 3 Firefox: armed build, smoke 14/14 at retry 0 (the receipt wraps at 360 px, fits from its width). Phase 3 gate green; review loop round 1 running.
+- 2026-11-06: arc 1 review loop converged (R1 Codex clean + Opus clean, nits folded; R2 Codex clean); final gates next.

@@ -131,7 +131,7 @@ Each line quotes the pick that signs it (Decision ledger); captures light and da
   - Once, at the end, from the repo root: `bun run audit:vue` (typecheck:all ∥ test ∥ lint, then build), `bun run --cwd apps/extension test:components`, `bun run test:all`: exit 0.
   - Red at the base: the new `TokenCard`, `BalanceView`, `snack-amount` and `journal-state` cases fail with the base's sources (`git show 002b76fc7:<path>`), each on the digits.
 
-## Phase 3: e2e and captures
+## Phase 3: e2e and captures ✓
 
 - Reseed `tests/e2e/rows.test.ts`'s receipt to `1234567891` and its comment to `+1,234.56` (D8).
 - **Validation gate** (smoke through `bun run test:e2e`, Fact 7; no network file changes, CI runs the network lanes)
@@ -165,6 +165,13 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../README
 - **Opus, resumed with the same argument:** withdrew its D3-D5 condition ("the picks settle all three"); its other conditions were already folded.
 
 **Final fresh Codex pass** (new session, the consolidated plan and ledger): **approve.** No misstated fact; I1 holds pending the browser gate, which the plan already makes the proof; no adversarial finding the change introduces (the malformed-string path to `BigInt` stays as it is, acknowledged); representative strings re-checked against the real formatter (`12,345,678` / `12.34M`, `10,000.0`, `<0.001`, `<0.0000001`, `<0.00000001`).
+
+**Arc 1 review loop, round 1** (2026-11-06; the diff 5b7680d26..cf91270bb; consult log in [lessons/phase-1.md](lessons/phase-1.md)).
+- **Codex (gpt-6.1-sol, high): clean.** Nits: the snack's "four significant digits" case passed on the base cut too (`0.000392` both ways); `formatListSplit`'s doc said a side "never shows fewer" decimals, which trimming contradicts; `listDecimals`' comment restated its name.
+- **Opus 5.5 (general-purpose): clean.** Nits: the same doc and snack control; the floor's `repeat` throws below width 3 (no caller passes one: needs unsupported conditions, not fixed); the Phase 3 gate still owed its Firefox run and the plans gate.
+- **Accepted:** the snack case moved to `0.0039203438152` (base `0.003920`, now `0.00392`, red at the base); the doc rewritten; the comment deleted.
+
+**Arc 1 review loop, round 2** (resumed, the diff cf91270bb..df8e9d46b): **Codex clean.** Every fix verified, no regression; one test-title wording nit applied. The loop converged.
 
 ## Seeds (not run; orchestrator-owned)
 
