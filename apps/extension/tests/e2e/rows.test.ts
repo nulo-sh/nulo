@@ -716,9 +716,9 @@ function readIconBoxes(page: Page): Promise<IconBox[]> {
 }
 
 /** A settled transfer draws both sides, 11px each round a 9px arrow, 1px apart and 2.5px inside the
- *  border; a receipt has no sending side, so its arrow and side are centred. Both badges are a 10px
- *  glyph in a 2px ring, 5px past the border box at their corners: absolute, the box's padding edge
- *  sits 1px inside it. */
+ *  border; the seeded private receipt has no sending side, so its arrow and side are centred. The way
+ *  badge is a 10px glyph in a 2px ring. Both badges overhang their corners of the border box by 5px:
+ *  absolute, they are placed from the padding edge, 1px inside it. */
 function expectIconBox(box: IconBox, where: string): void {
 	const at = `${where}, ${box.row}`
 	expect(box.status, at).toEqual({ right: expect.closeTo(5, 0), top: expect.closeTo(5, 0) })
