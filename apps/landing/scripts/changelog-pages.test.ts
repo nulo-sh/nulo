@@ -31,7 +31,7 @@ describe("parseEditorial", () => {
 		["an em dash", toml().replace("A title.", "A title — and more."), /"title" holds an em dash/],
 		["an unknown glyph", toml().replace('icon = "send"', 'icon = "rocket"'), /unknown glyph "rocket"/],
 		["an inherited property as a glyph", toml().replace('icon = "send"', 'icon = "constructor"'), /unknown glyph "constructor"/],
-		["two changes", toml("1.2.0", 2), /three to five changes, not 2/],
+		["two changes in a minor release", toml("1.2.0", 2), /three to five changes, not 2/],
 		["six changes", toml("1.2.0", 6), /three to five changes, not 6/],
 		["an unknown table", `${toml()}\n[scene]\ncaption = "Five blocks."\n`, /unknown key "scene"/],
 		[
@@ -45,6 +45,22 @@ describe("parseEditorial", () => {
 		["a TOML syntax error, naming the file", toml().replace('"A title."', '"A title.'), /content\/changelog\/1\.2\.0\.toml: .*TOML/],
 	])("refuses %s", (_name, file, message) => {
 		expect(() => parseEditorial(file, "1.2.0")).toThrow(message)
+	})
+
+	test.each([
+		["one change", 1],
+		["two changes", 2],
+		["five changes", 5],
+	])("reads a patch release with %s", (_name, count) => {
+		expect(parseEditorial(toml("1.2.1", count), "1.2.1").changes).toHaveLength(count)
+	})
+
+	test.each([
+		["a patch release with no change", "1.2.1", 0, /a patch release's top part holds one to five changes, not 0/],
+		["a patch release with six changes", "1.2.1", 6, /a patch release's top part holds one to five changes, not 6/],
+		["two changes in a major release", "2.0.0", 2, /three to five changes, not 2/],
+	])("refuses %s", (_name, version, count, message) => {
+		expect(() => parseEditorial(toml(version, count), version)).toThrow(message)
 	})
 })
 

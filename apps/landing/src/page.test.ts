@@ -183,6 +183,21 @@ describe.each(["index.html", "how-aztec-works.html", "subscribed.html", "confirm
 	})
 })
 
+describe("index.html footer", () => {
+	it("links the changelog index between the release list and the privacy policy", () => {
+		const footer = element(source("index.html"), "footer", "<footer")
+		expect(startTags(footer, "a").map((a) => a.href)).toEqual([
+			"https://github.com/nulo-sh/nulo",
+			"https://github.com/nulo-sh/nulo/releases",
+			"/changelog/",
+			"/privacy",
+			"/website-privacy",
+			"/terms",
+		])
+		expect(text(element(footer, "a", 'href="/changelog/"'))).toBe("changelog")
+	})
+})
+
 describe("the built site", () => {
 	const OUT = resolve(ROOT, `node_modules/.cache/page-test-${process.pid}`)
 	const files = (ext: string) =>

@@ -113,7 +113,16 @@ function parseChange(raw: unknown, label: string): Change {
 	}
 }
 
-/** The page's top part. Refuses an unknown key, an unknown glyph, an em dash and fewer than three or more than five changes. */
+/** A patch release may name one or two changes; a minor or major release names three at least. */
+function assertChangeCount(count: number, version: string, label: string): void {
+	const patch = parts(version)[2] > 0
+	if (count >= (patch ? 1 : 3) && count <= 5) return
+	const rule = patch ? "a patch release's top part holds one" : "the top part holds three"
+	throw new Error(`${label}: ${rule} to five changes, not ${count}`)
+}
+
+/** The page's top part. Refuses an unknown key, an unknown glyph, an em dash, more than five changes, and
+ *  fewer than three, or than one for a patch release. */
 export function parseEditorial(toml: string, version: string): Editorial {
 	const label = `content/changelog/${version}.toml`
 	const parse = typeof Bun === "undefined" ? undefined : Bun.TOML?.parse
@@ -127,8 +136,7 @@ export function parseEditorial(toml: string, version: string): Editorial {
 	const raw = table(parsed, EDITORIAL_KEYS, label)
 	if (raw.version !== version) throw new Error(`${label}: the file says version ${String(raw.version)}`)
 	const changes = Array.isArray(raw.change) ? raw.change.map((entry, i) => parseChange(entry, `${label} change ${i + 1}`)) : []
-	if (changes.length < 3 || changes.length > 5)
-		throw new Error(`${label}: the top part holds three to five changes, not ${changes.length}`)
+	assertChangeCount(changes.length, version, label)
 	const date = text(raw, "date", label)
 	return { version, date, dateLabel: dateLabel(date, label), title: text(raw, "title", label), lede: text(raw, "lede", label), changes }
 }
