@@ -24,7 +24,7 @@ import { AccessLevel, DappSessionService } from "./service"
 import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { asImportedKeysDek, asMasterSecretBytes, deriveDappSessionMacKey, deriveRowKeys, type RowKeys, sealRow } from "@nulo/wallet-crypto"
 import { signDappSession } from "./integrity"
-import type { CapabilityDecision, DappSession, GrantedCapabilityRecord } from "./spec"
+import { type CapabilityDecision, DAPP_SESSION_DAYS, type DappSession, type GrantedCapabilityRecord } from "./spec"
 
 let activeProfile: { id: string } | undefined
 
@@ -251,6 +251,17 @@ describe("DappSessionService active-profile guards (preservation pins)", () => {
 		expect(h.writes).toEqual([`set:${ROW_ROOT}@${row.id}`])
 		expect(h.emitted).toEqual([row])
 	})
+})
+
+test("addDappSession: the session expires DAPP_SESSION_DAYS days after the Allow", async () => {
+	const { service: svc } = await makeService()
+	const day = 24 * 60 * 60 * 1000
+	const before = Date.now()
+	await svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1", "p1")
+	const after = Date.now()
+	const session = await svc.tryGetDappSessionByOriginAndChain("https://dapp.example", "1", "p1")
+	expect(session?.expiry).toBeGreaterThanOrEqual(before + DAPP_SESSION_DAYS * day)
+	expect(session?.expiry).toBeLessThanOrEqual(after + DAPP_SESSION_DAYS * day)
 })
 
 describe("applyCapabilityDecision requiresGrant", () => {
