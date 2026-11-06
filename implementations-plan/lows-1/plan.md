@@ -221,6 +221,8 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../README
 - **Accepted:** (1) by correcting D16 to the code, since keeping the pair there would change a failure screen nobody signed; (3) as a `PasskeyPrfError` pin (dropping the toast now fails it); every nit, both of Codex's.
 - **Answered:** (2) by the signed picture: page 111's OA-3 A frame shows the same banner above "Download protected backup" (D16).
 
+**Arc 2 review loop, round 2** (resumed, the diff 816c6a356..f7642fc11): **Codex clean (0 material).** Every fix verified, no regression; one nit, ARCHITECTURE's late-activation sentence promised a next unlock to a deleted profile too: fixed. The loop converged.
+
 ## Seeds (not run; orchestrator-owned)
 
 ```
