@@ -1,0 +1,3 @@
+- 2026-11-06: recon done (2 Sonnet explorers) at 002b76fc7; plan drafted; panel round 1 next.
+- 2026-11-06: panel round 1: Codex conditional approve, Opus conditional approve; folded (D6 re-read from #1701's investigation, D13-D16); final fresh Codex pass next.
+- 2026-11-06: final fresh Codex pass: r1 conditional approve (D6 → OA-1, Back joins a running hand-back, D14 rationale), r2 approve; plan committed; arc 1 next (auto-continue).
