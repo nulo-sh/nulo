@@ -121,7 +121,7 @@ One arc, one PR against `dev`: branch `authwit-copy-1-a1` off `origin/dev` carry
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 4291a8c98, with:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 4291a8c98, with:
 - **Review loop:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, over the arc's diff after Phase 3; one Opus `general-purpose` review beside round 1; hard stop at three rounds, then report.
 - **Delivery:** `gh pr create --draft --base dev`; `gh pr checks <n> --watch` once.
 - **Close-out:** the PR's final commits, after Phase 4 and its review round: bring in `origin/dev` and read `index.md` and `lessons.md`; Outcome block; `git mv` into `archive/`.
