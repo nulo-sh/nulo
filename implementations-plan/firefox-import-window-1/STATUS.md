@@ -3,3 +3,4 @@
 - 2026-11-06: final fresh Codex pass: r1 conditional approve (D6 → OA-1, Back joins a running hand-back, D14 rationale), r2 approve; plan committed; arc 1 next (auto-continue).
 - 2026-11-06: arc 1 Phase 1 gate green (lint, typecheck:all, 118 unit tests; the new table and the Back join red on the base copy).
 - 2026-11-06: arc 1 Phase 2 gate green (lint, typecheck:all, 114 unit tests; the inverted import pin red on the base `import.vue`).
+- 2026-11-06: arc 1 Phase 3 gate green (lint, typecheck:all, bun run test 17497 passed, test:components 1394 passed; the unlock-method pin red on the base page). Deviations: `leaveChanged` extracted for the complexity cap; 13 chaos-model citations re-cited.

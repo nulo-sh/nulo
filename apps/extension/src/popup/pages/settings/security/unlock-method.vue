@@ -29,11 +29,12 @@ const { openToast } = useToast()
 
 /** Utils */
 import { logCredentialFailure } from "@/utils/credential-refusal"
-import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, handsBackToPanel, leavePanelFor, returnToPanel } from "@/utils/own-window"
 import { askProfilePasskey } from "@/utils/profile-passkey"
 import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
 import { isNewPasswordValid } from "@/utils/password"
+import { showSnack } from "@/utils/snack"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -137,6 +138,16 @@ async function currentPasskey(isCurrent) {
 /** A new passkey's card, at an input minted for this profile. */
 const nextPasskey = () => newPasskey.ask({ step: "unlockMethod", profileName: appStore.profile.name })
 
+/** A change made leaves for Settings with its line; an own window hands both back to the panel. */
+function leaveChanged(outcome) {
+	if (handsBackToPanel()) {
+		void returnToPanel("/popup/settings", outcome)
+		return
+	}
+	showSnack(openToast, outcome.snack)
+	leaveFor(router, "/popup/settings")
+}
+
 /** Runs one change; the page stays on a cancel, and reports a failure before the save as nothing
  *  changed. A change made leaves for Settings, and one saved but not reopened ends at the lock screen.
  *  Every card a change asks runs inside its attempt, so no answer outlives the press that asked it. */
@@ -144,13 +155,13 @@ async function attempt(run) {
 	if (isBusy.value || !appStore.isLogined) return
 	isBusy.value = true
 	const isCurrent = runs.snapshot()
+	const profileId = appStore.profile.id
 	try {
 		const done = await run(isCurrent)
 		if (!isCurrent() || !done) return
 		newPasskey.forget()
 		reset()
-		openToast({ kind: "success", label: done })
-		leaveFor(router, "/popup/settings")
+		leaveChanged({ snack: { kind: "success", label: done }, profileId })
 	} catch (error) {
 		if (!isCurrent()) return
 		if (error instanceof UnlockMethodChangedError) {
