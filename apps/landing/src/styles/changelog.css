@@ -1,6 +1,5 @@
-/* The changelog pages: a grid of plates that enter in a stagger and lift on hover, the notes in a plain
- * column, both themes. Vite may emit this sheet before the one holding base.css and page.css, so an
- * override here carries an extra selector to win on specificity rather than order. */
+/* Vite emits this sheet before the one holding base.css and page.css, so an override here carries an
+ * extra selector to win on specificity rather than order. */
 
 /* The wallet's light values: CSS cannot apply base.css's `[theme="light"]` block under a media query. */
 @media (prefers-color-scheme: light) {
@@ -172,7 +171,6 @@
 	height: 28px;
 }
 
-/* The index's smaller tiles. */
 .k-icons .k-icon {
 	width: 48px;
 	height: 48px;
@@ -339,7 +337,6 @@
 	border-color: var(--txt-primary);
 }
 
-/* Index */
 .k-grid--index {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	margin-bottom: 80px;

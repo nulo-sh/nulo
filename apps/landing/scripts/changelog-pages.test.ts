@@ -42,6 +42,7 @@ describe("parseEditorial", () => {
 		["another version", toml("1.1.0"), /says version 1.1.0/],
 		["a day that does not exist", toml().replace("2026-11-05", "2026-02-30"), /date "2026-02-30" is not a YYYY-MM-DD day/],
 		["an empty title", toml().replace('"A title."', '""'), /"title" must be a non-empty string/],
+		["a TOML syntax error, naming the file", toml().replace('"A title."', '"A title.'), /content\/changelog\/1\.2\.0\.toml: .*TOML/],
 	])("refuses %s", (_name, file, message) => {
 		expect(() => parseEditorial(file, "1.2.0")).toThrow(message)
 	})
@@ -66,6 +67,8 @@ describe("renderNotes", () => {
 		["a heading", "# What's new\n\nLead.\n", /raw HTML is not allowed/],
 		["notes that open on a list", "- One.\n- Two.\n", /open with a lead line/],
 		["an em dash", "Lead — and more.\n", /em dash/],
+		["an em dash written as an entity", "Lead &mdash; and more.\n", /em dash/],
+		["a lead paragraph left open", "<p>Lead.\n\n- One.\n", /open with a lead line/],
 	])("refuses %s", (_name, markdown, message) => {
 		expect(() => renderNotes(markdown, "1.2.0")).toThrow(message)
 	})
@@ -142,6 +145,15 @@ describe("the pages", () => {
 			"/changelog/v1.1.0/",
 		])
 		expect(index.match(/<span class="k-release-lead">The lead line\.<\/span>/g)).toHaveLength(2)
+	})
+
+	test("a quote in a raw HTML lead stays inside the description attribute", () => {
+		const markdown = '<p>0;url=https://example.invalid/" http-equiv="refresh</p>\n\n- One.\n'
+		const [, html = ""] = plan({ sources: [{ ...source("1.2.0"), markdown }], siteVersion: "1.2.0", production: true }).map(
+			(p) => p.html,
+		)
+		expect(html).toContain('<meta name="description" content="0;url=https://example.invalid/&quot; http-equiv=&quot;refresh" />')
+		expect(html).not.toMatch(/<meta[^>]*" http-equiv="refresh/)
 	})
 
 	test("editorial text is escaped, never markup", () => {

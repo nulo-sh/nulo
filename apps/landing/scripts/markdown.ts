@@ -65,11 +65,9 @@ function assertAllowedTag(tagText: string, allowedTags: AllowedTags, label: stri
 }
 
 /**
- * Markdown passes raw HTML through, and Vite would happily bundle a smuggled inline script into an
- * external one the CSP allows. So the check runs on the RENDERED page: the renderer escapes every
- * literal `<` in text, which makes each remaining `<` the start of a tag — and each must be one of
- * ours, with attributes we expect. Reference links, images, entity-encoded schemes and tags split
- * across lines all end up here, whatever syntax produced them.
+ * Markdown passes raw HTML through, and Vite bundles a smuggled inline script into an asset the CSP
+ * allows, so the check runs on the RENDERED page: the renderer escapes every literal `<` in text, so
+ * each remaining `<` starts a tag, which must be allowed, with allowed attributes.
  */
 export function assertOnlyAllowedHtml(html: string, allowedTags: AllowedTags, label: string): void {
 	for (let at = html.indexOf("<"); at !== -1; at = html.indexOf("<", at + 1)) {

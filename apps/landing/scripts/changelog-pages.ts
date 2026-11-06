@@ -115,7 +115,13 @@ export function parseEditorial(toml: string, version: string): Editorial {
 	const label = `content/changelog/${version}.toml`
 	const parse = typeof Bun === "undefined" ? undefined : Bun.TOML?.parse
 	if (typeof parse !== "function") throw new Error("the landing build needs Bun >= 1.4 (Bun.TOML.parse is missing)")
-	const raw = table(parse(toml), EDITORIAL_KEYS, label)
+	let parsed: unknown
+	try {
+		parsed = parse(toml)
+	} catch (error) {
+		throw new Error(`${label}: ${(error as Error).message}`)
+	}
+	const raw = table(parsed, EDITORIAL_KEYS, label)
 	if (raw.version !== version) throw new Error(`${label}: the file says version ${String(raw.version)}`)
 	const changes = Array.isArray(raw.change) ? raw.change.map((entry, i) => parseChange(entry, `${label} change ${i + 1}`)) : []
 	if (changes.length < 3 || changes.length > 5)
@@ -127,11 +133,13 @@ export function parseEditorial(toml: string, version: string): Editorial {
 /** The notes as the GitHub Release shows them: paragraphs, lists and inline emphasis only, opening on a paragraph. */
 export function renderNotes(markdown: string, version: string): Notes {
 	const label = `release-notes/${version}.md`
-	if (markdown.includes("—")) throw new Error(`${label}: the notes hold an em dash`)
 	const html = renderMarkdown(markdown)
 	assertOnlyAllowedHtml(html, NOTE_TAGS, label)
-	if (!html.startsWith("<p>")) throw new Error(`${label}: the notes open with a lead line`)
-	return { lead: html.slice("<p>".length, html.indexOf("</p>")), html }
+	// Checked rendered, where `&mdash;` has become the dash too.
+	if (html.includes("—")) throw new Error(`${label}: the notes hold an em dash`)
+	const leadEnd = html.indexOf("</p>")
+	if (!html.startsWith("<p>") || leadEnd === -1) throw new Error(`${label}: the notes open with a lead line`)
+	return { lead: html.slice("<p>".length, leadEnd), html }
 }
 
 /** Every release needs both files; either alone is refused, so a page is never missing or half-made. */
@@ -163,7 +171,7 @@ function icon(name: GlyphName): string {
 
 interface ShellOptions {
 	readonly title: string
-	/** Already escaped. */
+	/** HTML text: entities kept, no tags. A raw HTML block in the notes keeps its literal `"`. */
 	readonly description: string
 	readonly path: string
 	readonly current: "page" | "true"
@@ -172,18 +180,19 @@ interface ShellOptions {
 }
 
 function shell(o: ShellOptions): string {
+	const description = o.description.replaceAll('"', "&quot;")
 	return `<!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>${esc(o.title)}</title>
-		<meta name="description" content="${o.description}" />
+		<meta name="description" content="${description}" />
 		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0908" />
 		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F5F5F7" />
 		${o.indexable ? "" : `<meta name="robots" content="noindex" />`}
 		<meta property="og:title" content="${esc(o.title)}" />
-		<meta property="og:description" content="${o.description}" />
+		<meta property="og:description" content="${description}" />
 		<meta property="og:image" content="${SITE}/og.png" />
 		<link rel="canonical" href="${SITE}${o.path}" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
