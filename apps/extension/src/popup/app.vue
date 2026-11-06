@@ -126,6 +126,7 @@ const sends = useSendsInProgress({
 		return { symbol, decimals, hasDecimals }
 	},
 	tokenEvents: arrivalsTokens,
+	session: () => managers.profile.getSessionHandle(),
 	toast,
 	openToast,
 	updateToast,
@@ -325,6 +326,7 @@ provide(SWITCH_SETTLED_KEY, () => settleLatestRun(() => switchRun, nextTick, swi
 watch([() => appStore.profile?.id, () => appStore.network?.id, () => appStore.account?.address], onScopeChanged, { flush: "sync" })
 /** Both lock paths run this: a lock control's at once, a lock event's under its seal. */
 const endScopeOnLock = () => {
+	sends.endScope()
 	onLocked()
 	switchNetwork.supersede()
 }

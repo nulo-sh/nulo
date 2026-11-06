@@ -549,3 +549,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [prover-warm-1](prover-warm-1/plan.md) — completed — a kept-warm browser prover saves under 1 s at the median, so nothing ships; #1623 a known limit
 - [p116-build-1](p116-build-1/plan.md) — completed — the Receive QR at 240 px and the Holdings header on one row, the count alone, as page 116 picked (#1709)
 - [token-digits-1](token-digits-1/plan.md) — completed — list amounts follow one tiered digits rule, truncated ahead of the width cut, and a split side never reads 0 (#1702); #1708 a known limit
+- [p110-build-1](p110-build-1/plan.md) — completed — the execute window names the app's failing assertion and refuses a no-account public call; the leaves block counts authorizations; a Sending toast's × lasts its session; the password hint keeps its space (#1706 and arc 2); #1714, #1715, #1717 known limits

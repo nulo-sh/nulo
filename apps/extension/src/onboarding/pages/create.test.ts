@@ -392,14 +392,16 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(at(RECOVERY_PHRASE_WARNINGS[2])).toBeLessThan(at("I saved it"))
 	})
 
-	test("the password is cleared before bootstrap runs, with no length hint under the empty fields", async () => {
+	test("the password is cleared before bootstrap runs, its length hint hidden in place under the empty fields", async () => {
 		const pending = defer<boolean>()
 		bootstrapActiveProfile.mockReturnValueOnce(pending.promise)
 		const w = await mountCreate()
 		await submitPassword(w)
 		expect(bootstrapActiveProfile).toHaveBeenCalledTimes(1)
 		expect(typed(w)).toEqual(["", ""])
-		expect(w.text()).not.toContain("At least 8 characters")
+		const hints = w.findAll("span").filter((el) => el.text() === "At least 8 characters")
+		expect(hints).toHaveLength(1)
+		expect(hints[0].element.closest('[class*="hidden_in_place"]')).not.toBeNull()
 		pending.resolve(true)
 		await flushPromises()
 		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(true)
