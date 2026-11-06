@@ -1,6 +1,0 @@
-- 2026-11-06: recon done (1 Sonnet explorer); research citations re-verified at 4291a8c98; plan drafted; panel round 1 next.
-- 2026-11-06: base replay from v1.1.0 green at retry 0: Chrome 63.4 s, Firefox 86.8 s. Codex round 1: conditional approve.
-- 2026-11-06: Opus round 1 conditional approve; base capture reads Alpha V6; both legs folded (D5 independent, D7, gates); final fresh Codex pass next.
-- 2026-11-06: final fresh Codex pass: conditional approve (local network suite), resumed: approve. Plan committed; arc 1 next.
-- 2026-11-06: arc 1 Phase 1 gate green (lint, typecheck:all, test, test:all, network unit dir; mutation reds). Phase 2 next.
-- 2026-11-06: Phase 2 gate green (replays v1.1.0 Chrome/Firefox and v1.2.0 Chrome at the final head; captures; Chrome smoke 62/62). Review loop converged in two rounds. PR next.

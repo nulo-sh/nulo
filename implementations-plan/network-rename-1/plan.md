@@ -1,7 +1,7 @@
 ---
 plan: network-rename-1
 tier: light
-status: arc 1 implemented, review loop converged, PR next
+status: completed; #1697 carries the change and this close-out
 issues: "#1364 (arc 1 closes it)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at 4291a8c98
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-06. Planned and delivered the same day; one arc.
+- **Status:** completed. #1697 into `dev` carries the change and this close-out; its merge closes #1364 and archives this plan.
+- **Shipped:** `retireDefaultName` and the retired names in `seeds.ts`; the unlock pass (`retireDefaults`) renames a mainnet-kind row still named "Alpha V6" or "Mainnet" to "Alpha" unless the profile already holds it; the update replay expects the recorded Mainnet row under the seed's name. Captures before and after with the orchestrator.
+- **Review loop:** plan: Codex and Opus conditional approve, the final fresh Codex conditional approve (the local network suite), resumed `approve`; diff: Codex and Opus 0 material, then Codex 0 material and `approve`.
+- **Gates:** lint, `typecheck:all`, `test`, `test:all` exit 0; the update replay from v1.1.0 on Chrome and Firefox and from v1.2.0 on Chrome, and the Chrome smoke suite, retry 0 ([lessons/phase-2.md](lessons/phase-2.md)).
+- **Dropped:** the journal-held name test (D7, unsupported state); the combined retired endpoint and name test (unreachable until a Mainnet endpoint is retired); the local network suite (the rule is a no-op on its profiles; the required lanes run it).
+- **Known limits:** #1698 (a popup that read its rows before the unlock pass keeps the earlier name until it reopens; a failed write waits for the next worker).
+- **Open items:** none.
+- **Lessons:** none promoted; `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # network-rename-1: a seeded default row still named "Alpha V6" or "Mainnet" takes "Alpha" at unlock
 
@@ -115,7 +128,7 @@ The PR says `Closes #1364`. Its body: the change and why, the owner's sign-off (
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 4291a8c98, with these values:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 4291a8c98, with these values:
 - **Review loop:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, over the diff from the plan commit once Phase 2 is green; one Opus `general-purpose` review beside the first round; hard stop at three rounds, then report.
 - **Delivery:** `gh pr create --base dev`; `gh pr checks <n> --watch` to the end.
 - **Close-out:** the PR's final commits. Merge `origin/dev` in first; read `index.md` and `lessons.md`. File one closed `known-limit` issue for I1 and the failed-write wait (reopen on a report of the old name after a reopened popup). Outcome: `Known limits: #<that>`, `Open items: none` unless a review adds one.
