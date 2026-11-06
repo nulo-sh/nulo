@@ -4,6 +4,7 @@
  *  that fails once its record is written offers Details, which opens that record. */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { type Tx, TxStatus } from "@/wallet/services/transaction/spec"
 import { readSealedRows } from "../fixtures/sealed-rows"
 import {
@@ -498,12 +499,67 @@ test.skipIf(!hasConfig)(
 	},
 )
 
+/** The same transfer, its fee paid by the app's own PrivateFPC payment, which charges the account's
+ *  Private Fee Juice, of which it holds none. A payment the app set has no fee card, so its failure
+ *  is always the snack's, whoever's call failed. */
+async function openFeePathFailure(ctx: ExtensionContext & { playgroundPage: Page }): Promise<Page> {
+	const config = aztecConfig as AztecTestConfig
+	const pg = ctx.playgroundPage
+	await setPgInput(pg, "tokenAddress", config.tokenAddress)
+	await setPgInput(pg, "recipient", config.minterAddress)
+	await setPgInput(pg, "amount", "1000000")
+	await setPgInput(pg, "feePayer", PRIVATE_FPC_ADDRESS)
+	const execute = waitForPopup(ctx, "execute", { timeout: 60_000 })
+	await clickByTestId(pg, "pg-btn-sendTx-feePayer")
+	return execute
+}
+
+test.skipIf(!hasConfig)(
+	"the execute window: an estimate failing inside the app's call names the app's assertion under the fee card, and no snack",
+	{ timeout: 300_000 },
+	async ({ dappConnectedExtensionWithTransactionCap }) => {
+		const ctx = dappConnectedExtensionWithTransactionCap
+		const config = aztecConfig as AztecTestConfig
+		const pg = ctx.playgroundPage
+		// A private transfer of 1 TST from an account that holds no private TST: Token's own assertion.
+		await pg.select(sel("pg-select-transferFn"), "transfer_private_to_private")
+		await setPgInput(pg, "tokenAddress", config.tokenAddress)
+		await setPgInput(pg, "recipient", config.minterAddress)
+		await setPgInput(pg, "amount", "1000000000000000000")
+		const opened = waitForPopup(ctx, "execute", { timeout: 60_000 })
+		await clickByTestId(pg, "pg-btn-sendTx-default")
+		const execute = await opened
+		const LINE = "The app's transaction cannot run right now: Balance too low. Fee estimation needs it to run."
+		const line = await execute.waitForSelector(sel("execute-op-app-failure"), { visible: true, timeout: 180_000 })
+		expect(await line?.evaluate((el) => el.textContent?.replace(/\s+/g, " ").trim())).toBe(LINE)
+		// The line and the snack it replaces are decided in one handler, so the snack's absence is settled here.
+		expect(await execute.$(SNACK)).toBeNull()
+		expect(await execute.$(sel("fee-estimate-failed"))).not.toBeNull()
+		await shotSend(execute, "p110-1619-app-failure", "execute-op-app-failure")
+
+		// Try again asks again: the line leaves with its failure, and the same failure brings it back.
+		await clickByTestId(execute, "fee-estimate-retry")
+		await execute.waitForFunction(
+			(s: string) => document.querySelector(s) === null,
+			{ timeout: 5_000, polling: 50 },
+			sel("execute-op-app-failure"),
+		)
+		await execute.waitForSelector(sel("execute-op-app-failure"), { visible: true, timeout: 180_000 })
+		expect(await execute.$(SNACK)).toBeNull()
+
+		await rejectExecute(execute)
+		await waitForPopupClosed(execute)
+		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
+	},
+)
+
 test.skipIf(!hasConfig)(
 	"the execute window: a fee-estimate error sits 12px above the approve/reject footer",
 	{ timeout: 300_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
 		const ctx = dappConnectedExtensionWithTransactionCap
-		const execute = await openUnfundedDappSend(ctx)
+		const execute = await openFeePathFailure(ctx)
 		await waitForToast(execute, "Couldn't estimate fee", 180_000, { kind: "error" })
 		await execute.waitForSelector(sel("fee-estimate-failed"), { visible: true, timeout: 10_000 })
 
