@@ -510,6 +510,7 @@
     "goBack": true,
     "h": true,
     "handleCancelOrUnconfirmed": true,
+    "handsBackToPanel": true,
     "hasInFlightSend": true,
     "hasReachedPresto": true,
     "hasRowsBeyondRetry": true,

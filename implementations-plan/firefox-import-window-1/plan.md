@@ -154,7 +154,7 @@ The sign-off, quoted from decision page 116 (signed 2026-11-06 17:04 UTC), which
 - **Both endings**, as the card windows already do: the panel reopens only when Firefox gives its browser window focus back within 3 s; otherwise the next panel the person opens lands on the result once (D16).
 - **Create, Chrome's popup, the Firefox sidebar, onboarding, the card windows**: none.
 
-## Phase 1: the hand-back predicate and the closed set
+## Phase 1: the hand-back predicate and the closed set ✓
 
 1. In `own-window.ts`, add `handsBackToPanel` and gate `returnToPanel` on it. Rewrite the header's last paragraph and `returnToPanel`'s doc comment to name an own window still in its flow.
 2. In `panel-handback.ts`, add `"/popup/settings"` to `HANDBACK_ROUTES`.
@@ -163,7 +163,7 @@ The sign-off, quoted from decision page 116 (signed 2026-11-06 17:04 UTC), which
 
 **Validation gate.** `bun run lint && bun run typecheck:all`, then `cd apps/extension && bun --bun vitest run src/utils/own-window.test.ts src/utils/panel-handback.test.ts src/components/Header.test.ts src/popup/pages/settings/accounts/import.test.ts src/popup/pages/settings/contacts/index.test.ts src/popup/pages/restore-again.test.ts`. Pass: exit 0; the new table fails on the base copy of `own-window.ts` (take it from 002b76fc7) and passes after. Layers: lint, typecheck, unit.
 
-## Phase 2: one landing for create and import
+## Phase 2: one landing for create and import ✓
 
 1. In `opening-flow.ts`, add `OpenedLanding` and `landOpenedProfile` as above.
 2. In `import.vue`, replace the release, toasts and pushes after the guard with one `landOpenedProfile` call per outcome. Remove `releaseOwnWindow` from the page's imports if unused.
@@ -174,14 +174,14 @@ The sign-off, quoted from decision page 116 (signed 2026-11-06 17:04 UTC), which
 
 **Validation gate.** `bun run lint && bun run typecheck:all`, then `cd apps/extension && bun --bun vitest run src/popup/opening-flow.test.ts src/popup/pages/import.test.ts src/popup/pages/profile/ src/utils/toast-call-sites.test.ts`. Pass: exit 0; the inverted import pin fails on the base `import.vue`. Layers: lint, typecheck, unit.
 
-## Phase 3: Change unlock method hands back
+## Phase 3: Change unlock method hands back ✓
 
 1. In `unlock-method.vue`, capture the profile id with the attempt's fence; on success hand back `/popup/settings` with the change's line, else show it and `leaveFor` as before.
 2. Tests, `unlock-method.test.ts` (mock `handsBackToPanel` and `returnToPanel` through the existing `importOriginal` mock): in its own window a made change hands back Settings with its line and the profile id, and neither toasts nor routes; in its own window a change saved but not reopened hands nothing back and keeps its info line and the lock screen (the control for D6); the existing "a change that ends after a switch to another profile tells the new one nothing" (`:341`) also asserts nothing handed back; the existing in-place cases stay green unchanged.
 
 **Validation gate.** `bun run lint && bun run typecheck:all`, then `cd apps/extension && bun --bun vitest run src/popup/pages/settings/security/`, then `bun run test` and `bun run --cwd apps/extension test:components`. Pass: exit 0. Layers: lint, typecheck, unit, component.
 
-## Phase 4: Firefox e2e, docs, captures
+## Phase 4: Firefox e2e, docs, captures ✓
 
 1. `toolbar-panel.test.ts`, a new test: **"a phrase imported from the panel with a passkey it already has closes its window, and the panel reopens on Home with its line"**. Steps: register a passkey profile (Main) in a control page, lock; open the panel on the lock screen; `IMPORT_FROM_LOCK_SCREEN`; `toOwnWindow(… "import-option-seed")`; in the window, type `CANONICAL_SEED_24`; `watchSessionWrites(control)` and `watchHandback(control)`; press `import-seed-passkey-reuse`; `sessionOpened(control, main)` gives the imported profile's id, with no panel open (`popupViews` 0); poll `returnState` until the window is gone, the record consumed and one panel open; `handbacks` equals `[{ route: "/popup/general", snack: { kind: "success", label: "Profile imported", profileId } }, null]`; `panelOn(browser, "#/popup/general")` and the line in the panel; after `POPUP_RETURN_FOCUS_MS`, still one panel.
    - Failure modes: the window survives the import's ending (#1701); no panel reopens for a non-card window; the record is not consumed or the line is not bound to the imported profile; an import's passkey step leaks into the panel (no PR-lane e2e runs an import's passkey step in an own window today).
