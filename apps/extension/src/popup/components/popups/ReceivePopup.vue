@@ -58,7 +58,7 @@ watch(
 				</Flex>
 
 				<Flex wide direction="column" align="center" gap="8">
-					<canvas id="my-qr-code" :class="$style.qrcode" />
+					<canvas id="my-qr-code" :class="$style.qrcode" data-testid="receive-qr" />
 
 					<Flex align="center" justify="center" :class="$style.link">
 						<Flex align="center" direction="column" gap="8">

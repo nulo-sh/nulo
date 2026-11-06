@@ -665,6 +665,29 @@ describe("holdings page — the total fits beside its meta line", () => {
 		}
 	})
 
+	// "1 token" is 49 px in the stand-in, "2 tokens" 56: the count alone widens, the total stays.
+	test("a total refits when only the count beside it grows", async () => {
+		installChromeStorage()
+		room = 117 + 49 + 4
+		const metaWidth = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+			return { width: 7 * (this.textContent ?? "").trim().length } as DOMRect
+		})
+		try {
+			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+			const w = await mountPage()
+			const figure = () => w.get('[data-testid="holdings-summary"] span[style]').element as HTMLElement
+			expect(figure().style.getPropertyValue("--hero-scale")).toBe("1")
+			balanceEvents.added.invoke(row("b2", "BBB", CHAIN_IDS.TESTNET))
+			await flushPromises()
+			expect(w.get('[data-testid="holdings-meta"]').text()).toBe("2 tokens")
+			expect(w.get('[data-testid="holdings-total"]').text()).toBe("$1,250.00")
+			expect(figure().style.getPropertyValue("--hero-scale")).toBe("0.9")
+		} finally {
+			metaWidth.mockRestore()
+		}
+	})
+
 	test("a summary that renders after the page mounts is still watched for resizes", async () => {
 		installChromeStorage()
 		const observed: Element[] = []

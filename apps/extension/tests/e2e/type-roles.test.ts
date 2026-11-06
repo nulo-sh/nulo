@@ -551,9 +551,7 @@ async function readTokenFiat(page: Page): Promise<{ text: string; lines: number 
 
 type HoldingsHeader = { align: string; metaLines: number; metaInsideTotal: boolean; metaRightGap: number }
 
-/** Holdings' header as laid out: the line's alignment, the count's line boxes, whether the count lies
- *  within the total's height, and how far its right edge stands from the line's. Bottom alignment
- *  passes every box check, so only the computed alignment tells it from the baseline. */
+/** Bottom alignment passes every box check too, so the line's computed alignment is read as well. */
 const readHoldingsHeader = (page: Page): Promise<HoldingsHeader> =>
 	page.evaluate(() => {
 		const summary = document.querySelector('[data-testid="holdings-summary"]')
@@ -572,8 +570,7 @@ const readHoldingsHeader = (page: Page): Promise<HoldingsHeader> =>
 		}
 	})
 
-/** One row at the popup's width and at the narrowest: the total and the count on one baseline, the
- *  count on one line at the right. The seeded total is long enough to be drawn below full size. */
+/** The seeded total is long enough to be drawn below full size, so the count sits beside a fitted figure. */
 async function expectHoldingsHeaderOneRow(page: Page): Promise<void> {
 	await page.waitForFunction(
 		(meta: string, figure: string) =>

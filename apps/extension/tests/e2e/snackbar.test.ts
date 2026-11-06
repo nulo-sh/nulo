@@ -268,8 +268,7 @@ async function snackAboveEnd(page: Page, testid: string): Promise<AboveEnd> {
 	return (await handle.jsonValue()) as AboveEnd
 }
 
-/** The open Receive sheet as a person sees it at rest: whether its card scrolls, whether Close lies
- *  inside the view, the code's drawn width and the network line. */
+/** The open Receive sheet at rest, as a person sees it. */
 async function receiveFit(page: Page): Promise<{ scrolls: boolean; closeInView: boolean; code: number; network: string }> {
 	return page.evaluate(() => {
 		const close = document.querySelector('[data-testid="receive-close"]')
@@ -278,7 +277,7 @@ async function receiveFit(page: Page): Promise<{ scrolls: boolean; closeInView: 
 		return {
 			scrolls: card ? card.scrollHeight > card.clientHeight : true,
 			closeInView: box !== undefined && box.top >= 0 && box.bottom <= window.innerHeight,
-			code: document.querySelector("#my-qr-code")?.getBoundingClientRect().width ?? 0,
+			code: document.querySelector('[data-testid="receive-qr"]')?.getBoundingClientRect().width ?? 0,
 			network: document.querySelector('[data-testid="receive-network"]')?.textContent?.trim() ?? "",
 		}
 	})
@@ -415,6 +414,7 @@ test("a success that opens under a still pointer closes itself after 2 s, though
 		return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) }
 	})
 	await page.mouse.move(at.x, at.y, { steps: 5 })
+	// A synthetic click: the parked pointer stays where it rests.
 	await clickByTestId(page, "receive-address")
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })
 	await settledSnack(page)
@@ -539,8 +539,9 @@ test("the Receive sheet fits the popup without a scroll, with the longest networ
 
 	// The widest name the field takes wraps the network line; the popup reads a rename as it boots.
 	const network = await readActiveNetwork(page)
-	await callService(page, NETWORK_SERVICE_NAME, "renameNetwork", [network.id, LONG_NETWORK_NAME])
 	try {
+		// Inside the try: a lost answer can follow a rename the service already stored.
+		await callService(page, NETWORK_SERVICE_NAME, "renameNetwork", [network.id, LONG_NETWORK_NAME])
 		const renamed = await openHome(registeredExtension)
 		await clickByTestId(renamed, "actions-receive")
 		await sheetAtRest(renamed, "receive-close")
@@ -566,6 +567,7 @@ test("in a Receive sheet taller than the popup, an error already clears where Cl
 	await clickByTestId(page, "actions-receive")
 	await sheetAtRest(page, "receive-close")
 	await lengthenCard(page, "receive-close", 400)
+	expect(await receiveFit(page)).toMatchObject({ scrolls: true, closeInView: false })
 	await overhangPopup(page)
 
 	await clickByTestId(page, "receive-address")
