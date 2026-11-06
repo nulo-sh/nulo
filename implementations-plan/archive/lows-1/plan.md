@@ -206,7 +206,7 @@ No PR says `Closes #n` (no public issue). Each PR body states what changed and t
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 7eed331bb, with these values:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 7eed331bb, with these values:
 - **Review loop:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; per arc, at its boundary, before its PR, with one Opus `general-purpose` review of the arc's diff beside the first round; hard stop at three rounds, then report. Arc 2 also gets one fresh cross-arc pass over the net diff from 7eed331bb.
 - **Delivery:** `gh pr create --base dev` per arc; `gh pr checks <n> --watch` to the end.
 - **Close-out:** arc 2's final commits. Merge `origin/dev` in first and read `index.md` and `lessons.md`. The Outcome's `Known limits:` and `Open items:` name no advisory id; the orchestrator records the fixes on the private findings.

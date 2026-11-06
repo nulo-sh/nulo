@@ -543,3 +543,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [update-from-1.2.0](update-from-1.2.0/plan.md) — completed — the update scenarios run from v1.2.0: its pins, a `sponsor` trait that pays its sandbox send from bridged Fee Juice, and its Chrome recording; all five runs green (closes #1680)
 - [release-notes-1](release-notes-1/plan.md) — completed — per-version release notes atop the GitHub Release and on AMO, composed and checked in CI (#1668)
 - [network-rename-1](network-rename-1/plan.md) — completed — a seeded default row still named "Alpha V6" or "Mainnet" takes "Alpha" at unlock (closes #1364)
+- [lows-1](lows-1/plan.md) — completed — a passkey answer is used in the step that collected it: three passkey flows take the new secret first, and any restore opens only on its own admission (#1693 and arc 2)
