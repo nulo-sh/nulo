@@ -68,6 +68,7 @@ describe("renderNotes", () => {
 		["notes that open on a list", "- One.\n- Two.\n", /open with a lead line/],
 		["an em dash", "Lead — and more.\n", /em dash/],
 		["an em dash written as an entity", "Lead &mdash; and more.\n", /em dash/],
+		["an em dash as an entity in a raw HTML block", "<p>Lead &#x2014; more.</p>\n", /em dash/],
 		["a lead paragraph left open", "<p>Lead.\n\n- One.\n", /open with a lead line/],
 	])("refuses %s", (_name, markdown, message) => {
 		expect(() => renderNotes(markdown, "1.2.0")).toThrow(message)

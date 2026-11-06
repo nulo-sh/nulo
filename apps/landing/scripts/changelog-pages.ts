@@ -55,6 +55,7 @@ const SITE_VERSION = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 const EDITORIAL_KEYS = ["version", "date", "title", "lede", "change"]
 const CHANGE_KEYS = ["icon", "area", "title", "line"]
+const EM_DASH = /—|&mdash;|&#0*8212;|&#x0*2014;/i
 const NOTE_TAGS: AllowedTags = new Map(["p", "ul", "ol", "li", "strong", "em", "code"].map((tag) => [tag, []]))
 
 function parts(version: string, pattern = STABLE): [number, number, number, string | undefined] {
@@ -135,8 +136,8 @@ export function renderNotes(markdown: string, version: string): Notes {
 	const label = `release-notes/${version}.md`
 	const html = renderMarkdown(markdown)
 	assertOnlyAllowedHtml(html, NOTE_TAGS, label)
-	// Checked rendered, where `&mdash;` has become the dash too.
-	if (html.includes("—")) throw new Error(`${label}: the notes hold an em dash`)
+	// Markdown text turns `&mdash;` into the dash; a raw HTML block keeps the entity as written.
+	if (EM_DASH.test(html)) throw new Error(`${label}: the notes hold an em dash`)
 	const leadEnd = html.indexOf("</p>")
 	if (!html.startsWith("<p>") || leadEnd === -1) throw new Error(`${label}: the notes open with a lead line`)
 	return { lead: html.slice("<p>".length, leadEnd), html }
