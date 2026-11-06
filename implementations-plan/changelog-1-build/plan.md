@@ -73,7 +73,7 @@ Asks: A1 and A2 go to the owner ([`OWNER-ASKS.md`](OWNER-ASKS.md)); neither conc
 
 New surfaces on nulo.sh: `/changelog/`, `/changelog/v1.1.0/`, `/changelog/v1.2.0/`, D2 as built under P117-09. Against the signed frames, one difference: the footer drops "preview d2 · cards". The top-part copy is the lane's draft; the owner edits it on the preview (P116-02). Untouched: the home page, How Aztec works, the legal pages, the extension. Accessibility calls under the owner's 2026-10-19 delegation: each index card is one link with the site's 2 px focus ring; glyph SVGs are `aria-hidden`; nothing is hidden without script or under reduced motion.
 
-## Phase 1: the generator, the shared markdown check and their tests
+## Phase 1: the generator, the shared markdown check and their tests ✓
 
 1. Move the markdown check into `scripts/markdown.ts`; keep `legal-pages.test.ts`'s cases unchanged except the bridge import (D7).
 2. Write `changelog-pages.ts`, `build-changelog.ts` and the two TOML files (D3).
@@ -99,6 +99,11 @@ One arc, one PR to `dev`. Branch `changelog-1-build-a1` off `origin/dev`, carryi
 ## Post-implementation
 
 Execution contract: `implementations-plan/README.md` § Post-implementation standard at `253ff8833`. `code_review: off`, so step 1 is absent. Loop (single arc, once over the whole diff after Phase 2 is green): `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh` and its codex-dir, hard stop at three rounds; one Opus 5.5 diff review beside round 1; log each round in `lessons/phase-2.md`. Close-out as the PR's last commits: the Outcome, lessons (dedupe; `lessons.md` is near its budget), open items filed, `STATUS.md` deleted, `git mv` into `archive/` in its own commit, `bun run check:plans` green. Then `gh pr create` and `gh pr checks <n> --watch`. Teardown after the merge: once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/changelog-1-build/plan.md` succeeds, run `agent-worktree done changelog-1-build --merged`.
+
+## Deviations (the tree won)
+
+- Phase 2 step 1 (`src/changelog.ts`, `changelog.css`) moved into Phase 1: once `vite.config.ts` reads the generated list, the landing build, and so `src/page.test.ts`, needs the pages' entry module.
+- A release page marks its nav link `aria-current="true"`, not `"page"`, since the link names the index; `changelog.css` gives it the same underline (an accessibility call).
 
 ## Audit verdicts
 

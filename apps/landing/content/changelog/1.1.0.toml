@@ -1,0 +1,35 @@
+# The top of the 1.1.0 changelog page. Its bottom part is release-notes/1.1.0.md.
+version = "1.1.0"
+date = "2026-10-27"
+title = "The first stable V6."
+lede = "Nulo moves to Aztec's Alpha V6. Five changes that come with it, then the full notes."
+
+[[change]]
+icon = "public"
+area = "Network"
+title = "Alpha V6 by default"
+line = "Aztec's main network is the default, with Testnet beside it. Testnet was reset with Aztec 6.0.0."
+
+[[change]]
+icon = "passkey"
+area = "Passkeys"
+title = "Your phrase, even with a passkey"
+line = "A passkey profile keeps a recovery phrase that its passkey unlocks."
+
+[[change]]
+icon = "private"
+area = "Storage"
+title = "Sealed on your device"
+line = "Accounts, contacts, tokens, balances, activity, sessions and networks are encrypted under your profile's key."
+
+[[change]]
+icon = "app"
+area = "Apps"
+title = "Approvals read as rows"
+line = "An app window shows a multi-call transaction as rows, and asks again when a fee rises."
+
+[[change]]
+icon = "warning"
+area = "Tokens"
+title = "Tokens from a signed list"
+line = "Default tokens come from a signed list. A token off the list carries a warning."
