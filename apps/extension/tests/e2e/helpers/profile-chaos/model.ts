@@ -258,8 +258,8 @@ export interface ParamsMap {
 	/** Unlock method's current-passkey prompt, asked by Save, held on a second page while the anchor
 	 *  deletes the profile or makes an approved change. */
 	raceMethodChangeElsewhere: Competitor
-	/** The account file page approved by the passkey, its file `password` typed, on a second page
-	 *  while the anchor makes an approved change; then Save, if the page still offers it. */
+	/** The account file page at its file `password`, typed with no card asked, on a second page while
+	 *  the anchor makes an approved change; then Save, if the page still offers it. */
 	raceMethodChangeDuringExport: { password: SecretRef; change: ParamsMap["changeUnlockMethod"] }
 	verifyAll: Record<string, never>
 }

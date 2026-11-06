@@ -377,8 +377,7 @@ onBeforeUnmount(() => {
 		</template>
 	</CollapsingHeroLayout>
 
-	<!-- The in-page passkey card, mounted only while a ceremony is in flight. A cancel returns to the
-	     typed file password. -->
+	<!-- A cancelled card returns to the typed file password. -->
 	<PasskeyCeremonyDialog
 		v-if="ceremonyRequest"
 		:request="ceremonyRequest"

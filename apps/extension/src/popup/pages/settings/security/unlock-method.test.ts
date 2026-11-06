@@ -547,9 +547,9 @@ describe("another window's change, a lock and an ended session", () => {
 			await flushPromises()
 		})
 		await click(w, "unlock-method-save")
-		// The change's own flush ends a turn after the click's.
-		await flushPromises()
-		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Now unlocks with your password" })
+		await vi.waitFor(() =>
+			expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Now unlocks with your password" }),
+		)
 		leftForSettings()
 	})
 

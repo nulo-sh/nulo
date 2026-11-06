@@ -72,6 +72,7 @@ import { Icon } from "@nulo/design"
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
 import { pressOn } from "../../../../../../tests/helpers/press-key"
 import { useAppStore } from "@/stores/app.store"
+import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import AccountExport from "./account.vue"
 
@@ -436,6 +437,18 @@ describe("a passkey profile's account file", () => {
 		expect(pair(w)).toMatchObject({ password: "12345678", repeatedPassword: "12345678" })
 		expect(save(w).disabled).toBe(false)
 		expect(openToast).not.toHaveBeenCalled()
+		expect(exportAccount).not.toHaveBeenCalled()
+	})
+
+	test("a passkey that fails its card keeps the typed pair and says why", async () => {
+		passkey.runCeremony.mockRejectedValueOnce(new PasskeyPrfError("no prf"))
+		const w = await atPair()
+		await typeFilePassword(w, "12345678")
+		await pressSave(w)
+		expect(pair(w)).toMatchObject({ password: "12345678", repeatedPassword: "12345678" })
+		expect(save(w).disabled).toBe(false)
+		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "This passkey can't unlock Nulo." })
+		expect(passkey.verifyExportCredential).not.toHaveBeenCalled()
 		expect(exportAccount).not.toHaveBeenCalled()
 	})
 

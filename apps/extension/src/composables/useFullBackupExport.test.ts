@@ -148,12 +148,12 @@ const CEREMONY_ANSWER = {
 } as PasskeyCredentialData
 const FILE_PASSWORD = "file-pass-1"
 
-/** Values no backup run writes (it writes "" or "finished", releases the latch, sets the warnings
- *  from the material above, raises the wrong-password flag, drops the agreement), so any write a
- *  superseded run makes shows against them. */
+/** Values no backup run writes (its statuses stop short of "downloaded"; it releases the latch, sets
+ *  the warnings from the material above, raises the wrong-password flag, drops the agreement), so
+ *  any write a superseded run makes shows against them. */
 const SENTINELS = {
 	isAgreed: true,
-	backupStatus: "encrypting",
+	backupStatus: "downloaded",
 	isBusy: true,
 	isDownloading: true,
 	isWrongPassword: false,
