@@ -61,6 +61,8 @@ After an update to a new minor version, Home shows one dismissible row, "Nulo 1.
 | D8 | `parseVersion` from `@nulo/legal` not reused | it accepts 2-part versions, which would build `/changelog/v1.2/` |
 | D9 | Smoke reads the loaded build's `version_name` for its expectations; on a prerelease it asserts no Home row under a seeded marker | the release's artifact smoke runs rc builds (Codex r1 #3) |
 | D10 | The new smoke test runs on the file's shared `registeredExtension`, after the first test; Dismiss returns the marker to its installed value | no second launch and registration for one key (Codex r1 #6) |
+| D11 | Deviation: the smoke test proves a tap opens a tab and the guard then records `nulo.sh`; the exact URL is the component test's | the guard keeps hosts only, and `OpenedTab` exposes no URL (Firefox names the tab `about:blank`) |
+| D12 | Deviation: `WhatsNewRow.vue` is a plain `<script setup>` | `vue-tsc` refuses a TS host's `#right` on the JS `SettingItem` (lessons.md, vue-tsc line) |
 
 ### UI impact
 
@@ -81,7 +83,7 @@ After an update to a new minor version, Home shows one dismissible row, "Nulo 1.
 - Run the storage drill above.
 - **Validation gate:** `bun run lint`, `bun run typecheck:all`, `cd apps/extension && bun --bun vitest run src/utils/whats-new src/wallet/utils/whats-new-stamp src/wallet/storage`, then `bun run test`. Pass: exit 0 each; the snapshot test passes with the new pin. Layers: lint, typecheck, unit.
 
-## Phase 2: the Home row and the About row
+## Phase 2: the Home row and the About row ✓
 
 - Add `WhatsNewRow.vue` with `WhatsNewRow.test.ts` (real `SettingItem`, `RowAction`): absent marker renders nothing; due renders the exact title, `open` and `close` glyphs, the "Dismiss" name, the row's target before Dismiss in Tab order; a tap calls `window.open` with the URL and `noopener,noreferrer`; Dismiss hides and writes the running minor.
 - Wire `general.vue`; add `WhatsNewRow` to `general.test.ts` STUBS. Add the About row and `src/popup/pages/settings/about.test.ts` (the row's href and title, placed after "Nulo Website").

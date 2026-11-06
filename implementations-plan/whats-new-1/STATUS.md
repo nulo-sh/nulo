@@ -3,3 +3,4 @@
 - 2026-11-06 Codex r1: conditional approve, 7 findings accepted; final fresh pass next
 - 2026-11-06 Codex final: approve (after one path fix); plan committed; arc 1 next
 - 2026-11-06 phase 1 gate: lint 0 (23 warnings, as base), typecheck:all 0, targeted vitest 134 passed, bun run test 17598 passed: green
+- 2026-11-06 phase 2 gate: smoke security-backup green on Chrome and Firefox (retry 0), update replay first case green on both, audit:vue 0, test:all 0: green; Codex loop next
