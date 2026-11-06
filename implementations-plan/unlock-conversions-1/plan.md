@@ -92,7 +92,7 @@ None. No screen, copy or row changes; the stored rows and events are today's.
 
 **Validation gate:** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/unlock-conversions src/wallet/services/network src/wallet/services/seal-on-unlock`. Pass: each exits 0; step 4 reds; `git diff --stat` shows `seeds.test.ts` and `retired-endpoints.test.ts` unchanged.
 
-## Phase 2: the guard
+## Phase 2: the guard ✓
 
 1. Write `unlock-conversions.scan.test.ts` (D6), on `sourceFiles` and `ts.createSourceFile`, member callees receiver-qualified, only logging calls dropped. Its header names the limits: code deeper than one hop, changed arguments, a repeated or reordered permitted callee, and aliasing pass; a root literal at a runner call proves syntax, not reachability. Self-tests on fixtures: a new subscriber reds; a new `this.renameTokens(profileId)` in a handler reds; an inline `this.storage.set(...)` in a followed body reds; a root no runner call names reds; a comment naming a callee passes.
 2. Add `await this.storage.set(id, row)` to one followed handler body locally; confirm the guard reds naming the file and the callee; revert.
