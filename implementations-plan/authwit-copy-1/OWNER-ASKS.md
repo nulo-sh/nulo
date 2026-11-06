@@ -1,6 +1,6 @@
 # authwit-copy-1: owner asks
 
-Each ask names the surface, what a person or an app sees before and after, the options, the recommendation and what ships now. The draft PR builds every recommendation and merges only after the owner's picks. Captures (light and dark, Chrome) are saved outside the repository by the lane and travel with the orchestrator's decision page; the arc's report names each file.
+Each ask names the surface, what a person or an app sees before and after, the options, the recommendation and what ships now. The draft PR builds every recommendation and merges only after the owner's picks. Captures (Chrome, light, each with a `-dark` twin) travel with the orchestrator's decision page; below they are named by file, and the five that decide something are in [`screenshots/`](screenshots/). They come from real sends on a local network: the playground's Crowdfunding donation paid by the app's sponsor with the sending account's own witness (#1656), and `tx-sendTx-fields`'s send that leaves out another account's witness (#1657).
 
 ## OA-1. The sender's own attached authorization on an app-paid send (execute window)
 
@@ -22,6 +22,7 @@ Also shown: an app whose fee payment spends the sender's token through the sende
 
 Recommendation: the line A, the group A. Nothing changes on any other route.
 What ships now: the line A and the group A.
+Captures: before, `before-app-paid-own-at-rest.png` and `before-app-paid-own-details.png` (no Authorizations section); after, `after-app-paid-own-at-rest.png` (the line) and `after-app-paid-own-details.png` (the group). The alternatives are not rendered.
 
 ## OA-2. History, a send refused because the app left out another account's authorization
 
@@ -32,6 +33,7 @@ Where: the History row's detail (Home and History cards keep the subtitle "Not a
 - **B (the issue's example).** "Not allowed" / "The app left out another account's authorization. Nothing was sent." Shorter; "another account's" can read as someone else's.
 
 What ships now: A.
+Captures: before, `before-unattached-history.png`; after, `unattached-history.png`. The window's refusal block, unchanged by this lane: `before-unattached-refusal.png`, `unattached-refusal.png`.
 
 ## OA-3. The app's error for that refusal (a public text apps may show or match)
 

@@ -1,7 +1,7 @@
 ---
 plan: authwit-copy-1
 tier: light
-status: approved by the panel (final Codex pass approve); arc 1 next
+status: arc 1 implemented and reviewed (Codex loop clean in two rounds), gates green; draft PR awaiting the owner's picks
 issues: "#1656, #1657"
 driver: claude-code
 claude_model: opus
@@ -77,13 +77,13 @@ The lane brief's no-ask budget is: "The execute window's Authorizations list on 
 - **Privacy**: the new app text is a constant (no address, no note, no account count); the app learns only that a witness it could have attached was missing, for an account it named itself. No new log line; the refusal keeps its `debug` level (`isExpectedRefusal`).
 - **Crypto, supply chain, privileges**: N/A (no new dependency, hash or credential).
 
-## Phase 1: the sender's own attached authorization (#1656)
+## Phase 1: the sender's own attached authorization (#1656) ✓
 
 Change map: `dapp-send-executor.ts` (`attachedOf` in `buildForEstimate`; the confirm branch unchanged; the comments at `:553-555` and `:1398`); `OperationCard.vue` (`authwitGroups`; the comment at `:222-226`); `discovery-probe.ts:21-22` (comment); `packages/wallet-bridge/src/fee.ts` (doc).
 Tests: `dapp-send-executor.test.ts:2004` keeps its uncarried `record("own")` (not listed, the never-happens case) and gains its control: with `carry(base.built, "own")` the estimate lists `{ ...record("own"), onBehalfOf: <the built account> }` before `consumed("b")`, the confirm sends, and `createAuthWit` is never called; under B (pinned) a confirm with no `previewId`, and one whose rebuild lists a different carried sender record than the estimate, both still send, while the other-account drift case beside them still fails `AUTHWITS_CHANGED` (the existing control). `OperationCard.summary.test.ts`: an app-paid send listing `{ ...OWN, onBehalfOf: MAIN }` (wire-shaped `0x` + 64 hex) shows "Already authorized by Main." and, in details, the new group holding it while `CONSUMED` stays in "your other accounts"; `[OWN]` without `onBehalfOf` still lists nothing.
 Gate: `bun run lint`, `bun run typecheck:all`, `bun run test` exit 0; the two files above red on base sources for the new cases, green after.
 
-## Phase 2: the unattached refusal's History text and app error (#1657)
+## Phase 2: the unattached refusal's History text and app error (#1657) ✓
 
 Change map: `error-envelope.ts`; `packages/wallet-core/src/jobs/types.ts` (with its producers comment); `mark-failed-unless-cancelled.ts`; `queued-journal.ts`; `operation-journal/gc.ts`; `utils/journal-state.ts`; `packages/wallet-bridge/README.md` (a paragraph beside the registry's: the refusal comes after the window opens, Reject or closing the window answers it, its envelope); `tests/e2e/network/tx-sendTx-fields.test.ts` (D6, D7).
 Tests: `error-envelope.test.ts`: the refusal gets the frozen new envelope, whose JSON holds no `0x` address and not the refusal's own message; `journal-state.test.ts` row; `types.test.ts` produced list (and its comment); `gc.test.ts` `REFUSAL_KINDS`; `mark-failed-unless-cancelled.test.ts` and `queued-journal.test.ts` rows mapping the class to `unattached_refused`, the plain scope refusal still `scope_refused` (control).
@@ -115,6 +115,13 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../README
 - Rejected: none.
 
 **Final fresh Codex pass** (new session): conditional approve. Material: OA-4 covered only the failed-estimate path; B also leaves sender drift after a landed estimate unchecked (folded: D2, OA-4, a pinning test). Nit: three sentences still overstated I1 or D2 (folded: recon, Security, OA-4). Resumed: approve, no regressions.
+
+**Implementation review** (arc 1, diff `4c633b4a7..HEAD`; log in [lessons/phase-1.md](lessons/phase-1.md)).
+- Codex round 1 (new session, gpt-6.1-sol high, the README's two rules verbatim): clean.
+- Opus 5.5 (general-purpose) beside it: no material finding; nits: an app-paid `createAuthWit` assertion no change could fail (dropped, with the title's claim), a comment line over 100 characters (rewrapped). Rejected: reading the stored error kind in the e2e beside the asserted History text (redundant).
+- Codex round 2 (resumed, the fix commit): clean.
+
+**Deviations.** D6's History read runs at the end of `tx-sendTx-fields`, after switching the wallet to the sender: the journal detail shows only the selected account's records (`popup/pages/journal/journal-detail-scope.ts`), and the refused send is the second account's.
 
 ## Seeds (not run; orchestrator-owned)
 
