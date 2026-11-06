@@ -25,6 +25,7 @@ import {
 	patchPagePolling,
 	pickFileByTestId,
 	registerProfile,
+	replaceInputValue,
 	test,
 	waitForHash,
 	withTimeoutMessage,
@@ -544,11 +545,15 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await panelOn(browser, "#/popup/general")
 			const exportWindow = await toOwnWindow(ctx, control, () => routePanel(browser, EXPORT))
 			await waitForHash(exportWindow, EXPORT, 60_000)
-			// "Creating your backup" shows before the prompt, so only the passkey's answer proves the step ran.
-			await recordCredentialGets(exportWindow)
-			await refusePasskeyStep(exportWindow, auth, "agree-continue-btn")
+			// The file password comes before the prompt, and "Creating your backup" shows under it, so
+			// only the passkey's answer proves the step ran.
 			await clickByTestId(exportWindow, "agree-continue-btn")
-			await exportWindow.waitForSelector(sel("backup-encrypt-password-input"), { visible: true, timeout: 240_000 })
+			await replaceInputValue(exportWindow, sel("backup-encrypt-password-input"), FILE_PASSWORD)
+			await replaceInputValue(exportWindow, sel("backup-encrypt-password-confirm-input"), FILE_PASSWORD)
+			await recordCredentialGets(exportWindow)
+			await refusePasskeyStep(exportWindow, auth, "create-protected-backup-btn")
+			await clickByTestId(exportWindow, "create-protected-backup-btn")
+			await exportWindow.waitForSelector(sel("backup-done-banner"), { visible: true, timeout: 240_000 })
 			expect(await readCredentialGets(exportWindow)).toEqual([{ prf: true }])
 
 			// A file picker takes focus as a passkey prompt does, so Import contacts leaves the panel for a

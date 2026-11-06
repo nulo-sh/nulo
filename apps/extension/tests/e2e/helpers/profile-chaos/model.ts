@@ -335,9 +335,11 @@ const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 122, "if (!ext
 const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 86, 'inner.name === "NotAllowedError") return "not-confirmed"')
 const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 303, "public async createAccount(")
 const EXPORT = "src/composables/useFullBackupExport.ts"
-const FULL_EXPORT = cite(EXPORT, 388, "sealFullBackupText(plaintext as string, state.password.value as string)")
-const FILE_PASSWORD_RULE = cite(EXPORT, 561, "!isPasskeyProfile.value || isNewPasswordValid(")
-const FILE_PASSWORD_BLOCKED = cite(EXPORT, 379, "if (filePasswordBlocked(ctx)) return")
+const FULL_EXPORT = cite(EXPORT, 313, "const sealed = await sealFullBackupText(compact, password)")
+/** A passkey profile's run seals under the file password read at its press, and publishes only the sealed file. */
+const PASSKEY_SEALS_IN_RUN = cite(EXPORT, 376, "return await sealInRun(ctx, isCurrent, result.compact, filePassword)")
+const FILE_PASSWORD_RULE = cite(EXPORT, 599, "!isPasskeyProfile.value || isNewPasswordValid(")
+const FILE_PASSWORD_BLOCKED = cite(EXPORT, 399, "filePasswordBlocked(ctx)) return")
 const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 681, "public async exportAccount(")
 const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 765, "public async importAccount(")
 const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 837, "This account is already in your wallet")
@@ -911,7 +913,7 @@ const addAccount: ActionSpec<"addAccount"> = {
 // ── full backups ────────────────────────────────────────────────────────
 
 /** A password profile's file opens with its password; a passkey profile's with a file password of
- *  its own, which the page asks under the wallet's rule before it encrypts anything. */
+ *  its own, which the page asks under the wallet's rule before it asks the passkey. */
 const exportBackup: ActionSpec<"exportBackup"> = {
 	name: "exportBackup",
 	family: "backup",
@@ -957,7 +959,7 @@ const exportBackup: ActionSpec<"exportBackup"> = {
 			["committed"],
 			writes,
 			"unchanged",
-			from.method === "password" ? [FULL_EXPORT] : [FULL_EXPORT, FILE_PASSWORD_RULE, "decision:P86-06"],
+			from.method === "password" ? [FULL_EXPORT] : [FULL_EXPORT, PASSKEY_SEALS_IN_RUN, FILE_PASSWORD_RULE, "decision:P86-06"],
 		)
 	},
 }
