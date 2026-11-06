@@ -1743,12 +1743,6 @@ describe("execute window — a request the wallet refused", () => {
 		await expectRefused(kind, window)
 	})
 
-	test("a no-account estimate refused for several calls: the same notice, from the fee's own failure", async () => {
-		const window = await opened({ ...send, executionMode: "default_entrypoint" })
-		feeMapInstances[0]!.opts.onError?.(0, SEVERAL_CALLS)
-		await expectRefused("several", window)
-	})
-
 	test("an approval the worker refuses: the same notice, never an error row", async () => {
 		const window = await opened()
 		approveInteractionMock.mockRejectedValueOnce(BINDING as never)

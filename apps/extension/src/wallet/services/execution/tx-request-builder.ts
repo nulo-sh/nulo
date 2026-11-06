@@ -22,9 +22,9 @@
  *   - `"Contract not found"` / `"Contract artifact not found"` /
  *     `"Method not found"` — per-action resolution failures
  *   - `"Invalid authwit content kind"` — unrecognized authwit `content.kind`
- *   - a `DefaultEntrypointRefusalError` — a NO_FROM request of more than one call, or whose call
- *     is a public or utility function, typed so the request records it as its refusal; an empty
- *     call list keeps the plain `"DefaultEntrypoint requires exactly 1 call, got 0"`
+ *   - a `DefaultEntrypointRefusal` — a NO_FROM request of more than one call, or whose call is a
+ *     public or utility function, typed so the request records it as its refusal; an empty call
+ *     list keeps the plain `"DefaultEntrypoint requires exactly 1 call, got 0"`
  *
  * ## Public authwits: collected here, recorded POST-send
  *
@@ -129,6 +129,12 @@ export function sendScopes(account: AztecAddress, additionalScopes: unknown): Az
 		if (!scopes.has(address.toString())) scopes.set(address.toString(), address)
 	}
 	return [...scopes.values()]
+}
+
+/** The default entrypoint runs one call. Refused before any network or PXE work: the count needs
+ *  neither, and a request refused for it must not first fail on a contract it names. */
+function refuseSeveralNoFromCalls(op: AztecSendTxOperation): void {
+	if ((op.exec.calls ?? []).length > 1) throw new DefaultEntrypointMultiCallError()
 }
 
 export class TxRequestBuilder {
@@ -389,8 +395,9 @@ export class TxRequestBuilder {
 		artifacts: Awaited<ReturnType<TxRequestBuilder["resolver"]["resolveArtifacts"]>>,
 	): Promise<FunctionCall> {
 		const rawCalls = op.exec.calls ?? []
-		if (rawCalls.length > 1) throw new DefaultEntrypointMultiCallError()
-		if (rawCalls.length === 0) throw new Error("DefaultEntrypoint requires exactly 1 call, got 0")
+		if (rawCalls.length !== 1) {
+			throw new Error(`DefaultEntrypoint requires exactly 1 call, got ${rawCalls.length}`)
+		}
 		const call = await FunctionCall.schema.parseAsync(rawCalls[0])
 		const noFromArtifact = requireArtifact(instances, artifacts, call.to.toString())
 		const noFromFn = assertSelectorBinding(await findFunctionBySelector(noFromArtifact, call.selector.toString()), call, CALL_BINDING)
@@ -436,6 +443,7 @@ export class TxRequestBuilder {
 		try {
 			this.log(`buildNoFrom: starting, accountAddress=${op.accountAddress}, networkId=${op.networkId}`)
 			await this.profileService.assertFence(fence)
+			refuseSeveralNoFromCalls(op)
 
 			const network = await this.networkService.getNetwork(op.networkId)
 			const node = await this.networkService.getNode(network.chainId)

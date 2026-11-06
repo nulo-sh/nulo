@@ -549,13 +549,19 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		expect(built.txRequest.functionSelector.toString()).toBe(await selectorOf())
 	})
 
-	test("NO_FROM: two calls are refused, typed, before any fee read; no call keeps its plain error", async () => {
+	test("NO_FROM: two calls are refused, typed, before any contract is resolved or fee read; no call keeps its plain error", async () => {
 		const getCurrentMinFees = noFromHarness()
 		const call = wireCall({ name: FN.name, selector: await selectorOf() })
+		h.deps.resolver.resolveInstances.mockClear()
 
 		const several = await rejectionOf(buildNoFromCalls([call, call]))
 		expect(several.constructor).toBe(DefaultEntrypointMultiCallError)
 		expect(several.message).toBe("DefaultEntrypoint requires exactly 1 call")
+		expect(h.deps.resolver.resolveInstances).not.toHaveBeenCalled()
+		await buildNoFromCalls([call])
+		expect(h.deps.resolver.resolveInstances).toHaveBeenCalledTimes(1)
+
+		getCurrentMinFees.mockClear()
 		const none = await rejectionOf(buildNoFromCalls([]))
 		expect(none.constructor).toBe(Error)
 		expect(none.message).toBe("DefaultEntrypoint requires exactly 1 call, got 0")
