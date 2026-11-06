@@ -1,6 +1,8 @@
 # discovery-allow-1: owner asks
 
-No ask is open.
+## Open
+
+- **OA-4, what a Connected Apps row names** (arc 2, does not gate the merge): with the switch on, every site that discovers Nulo gets a row with no tap (P119-03 A), and the list row shows only the name the site sent (sanitized, at most 64 characters), not its origin. A site can so place a line of its own words in Settings → Connected Apps, such as "Nulo support: restore your wallet at …". Without the switch, a row needs an Allow in a window that shows the origin. Options: **A** keep the row as it is (the row's own page shows the origin); **B** show the site's host under the name in the list row. Either is a UI change only the owner makes; the lane ships A, today's row.
 
 ## Answered
 

@@ -23,11 +23,15 @@ import { EVERY_SITE_CONFIRM } from "@/utils/every-site"
 import { pluralize } from "@/utils/plural"
 import { settingsRow } from "@/utils/settings-search"
 
+/** Stores */
+import { useAppStore } from "@/stores/app.store"
+
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfirm } from "@/composables/useConfirm"
 import { SETTING_UPDATE_FAILED } from "@/composables/useSettingUpdate"
 import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
+const appStore = useAppStore()
 const { openToast } = useToast()
 const { requestConfirm, askConfirm } = useConfirm()
 const { vSettingsRow } = useSettingsRowHighlight()
@@ -57,6 +61,7 @@ const everySiteRow = settingsRow("connected-apps-every-site")
 /** The profile the switch was read for, `null` until read: the Toggle waits for it. */
 const everySiteProfile = ref(null)
 const everySite = ref(false)
+let everySiteReads = 0
 
 const dappSessionService = new DappSessionServiceClient()
 dappSessionService.onDappSessionAdded.add(onDappSessionAdded)
@@ -85,13 +90,17 @@ function onDappSessionUpdated(session) {
 
 const rowIdBase = useId()
 
+/** Only the latest read lands. Unread, the Toggle is disabled: showing off for a switch that may be
+ *  on would mislead. */
 async function readEverySite() {
+	const read = ++everySiteReads
 	try {
 		const { profileId, on } = await dappSessionService.getEverySite()
+		if (read !== everySiteReads) return
 		everySiteProfile.value = profileId
 		everySite.value = on
 	} catch {
-		// Unread, the Toggle stays disabled: showing off for a switch that may be on would mislead.
+		if (read === everySiteReads) everySiteProfile.value = null
 	}
 }
 
@@ -103,6 +112,7 @@ async function onEverySiteToggle(next) {
 		everySite.value = next
 	} catch {
 		openToast({ kind: "error", label: SETTING_UPDATE_FAILED })
+		void readEverySite()
 	}
 }
 
@@ -130,6 +140,15 @@ const handleDropAllSessions = () => {
 		},
 	})
 }
+
+// Another window can switch the profile while this page stays open; the switch is per profile.
+watch(
+	() => appStore.profile?.id,
+	() => {
+		everySiteProfile.value = null
+		void readEverySite()
+	},
+)
 
 onBeforeMount(async () => {
 	void readEverySite()

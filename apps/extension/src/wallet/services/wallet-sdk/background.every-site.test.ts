@@ -220,8 +220,9 @@ describe("a new site with the every-site switch", () => {
 			await discoveryRun(id)
 		}
 		discover("d3", 3)
-		// Each connection reads the switch before and after its admission: d3's first read is the 5th.
-		await reads.reached(5)
+		// Each connection reads the switch before and after its admission and after its write: d3's
+		// first read is the 7th.
+		await reads.reached(7)
 		on = false
 		await flush()
 		expect(approved()).toEqual(["d1", "d2"])
@@ -229,6 +230,17 @@ describe("a new site with the every-site switch", () => {
 		await discoveryRun("d3")
 		expect(rejected()).toEqual(["d3"])
 		expect([...rows.keys()].map((key) => key.split("|")[1]).sort()).toEqual(["1", "2"])
+	})
+
+	test("turned off once its row is being written: refused, and the row rolled back", async () => {
+		let read = 0
+		const { discover, rows } = boot({ everySite: () => ++read <= 2 })
+		discover("d1")
+		await discoveryRun("d1")
+		expect(read).toBe(3)
+		expect(approved()).toEqual([])
+		expect(rejected()).toEqual(["d1"])
+		expect(rows.size).toBe(0)
 	})
 
 	test.each([
@@ -255,7 +267,7 @@ describe("a new site with the every-site switch", () => {
 		on = unpaced
 		hold = release.promise
 		discover("last", 9)
-		await reads.reached(spenders.length * 2 + 1)
+		await reads.reached(spenders.length * 3 + 1)
 		discover("twin", 9)
 		await lookups.reached(spenders.length + 2)
 		await flush()

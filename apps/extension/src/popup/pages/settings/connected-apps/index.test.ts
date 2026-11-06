@@ -3,6 +3,7 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { VueWrapper } from "@vue/test-utils"
 import { SETTING_UPDATE_FAILED } from "@/composables/useSettingUpdate"
+import { useAppStore } from "@/stores/app.store"
 import { EVERY_SITE_CONFIRM } from "@/utils/every-site"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { expectOwnedRows, settingsContext } from "../../../../../tests/helpers/settings-rows"
@@ -253,5 +254,35 @@ describe("Settings › Connected apps — the every-site switch", () => {
 		for (const listener of mocks.everySiteChanged) listener({ profileId: "p1", on: true })
 		await flushPromises()
 		expect(shown(w)).toEqual(["true", "false"])
+	})
+
+	test("a profile switched elsewhere disables the Toggle until that profile's switch is read", async () => {
+		const w = await mountPage([])
+		const read = Promise.withResolvers<unknown>()
+		mocks.getEverySite.mockReturnValue(read.promise)
+		;(useAppStore() as unknown as { profile: { id: string } }).profile = { id: "p2" }
+		await flushPromises()
+		expect(shown(w)).toEqual(["false", "true"])
+		read.resolve({ profileId: "p2", on: true })
+		await flushPromises()
+		expect(shown(w)).toEqual(["true", "false"])
+		await press(w, false)
+		expect(mocks.setEverySite).toHaveBeenCalledWith("p2", false)
+	})
+
+	test("only the latest read lands, and a failed read disables the Toggle", async () => {
+		const w = await mountPage([])
+		const [older, newer] = [Promise.withResolvers<unknown>(), Promise.withResolvers<unknown>()]
+		mocks.getEverySite.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise)
+		for (let i = 0; i < 2; i++) for (const listener of mocks.everySiteChanged) listener({ profileId: "p1", on: i === 1 })
+		newer.resolve({ profileId: "p1", on: true })
+		await flushPromises()
+		older.resolve({ profileId: "p1", on: false })
+		await flushPromises()
+		expect(shown(w)).toEqual(["true", "false"])
+		mocks.getEverySite.mockRejectedValueOnce(new Error("locked"))
+		for (const listener of mocks.everySiteChanged) listener({ profileId: "p1", on: true })
+		await flushPromises()
+		expect(toggle(w).attributes("disabled")).toBe("true")
 	})
 })

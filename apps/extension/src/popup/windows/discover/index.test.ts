@@ -712,4 +712,17 @@ describe("discover popup — Allow every site", () => {
 		expect(w.find('[data-testid="cancelled-overlay"]').exists()).toBe(true)
 		expect(w.find('[data-testid="error-text"]').exists()).toBe(false)
 	})
+
+	test("an app that cancelled while the confirm was open: Turn on writes, answers nothing, and the overlay shows", async () => {
+		const answer = Promise.withResolvers<boolean>()
+		askConfirmMock.mockReturnValueOnce(answer.promise)
+		const w = await ready()
+		await press(w)
+		isCancelledMock.value = true
+		answer.resolve(true)
+		await flushPromises()
+		expect(setEverySiteMock).toHaveBeenCalledWith("p1", true)
+		expect(resolveInteractionMock).not.toHaveBeenCalled()
+		expect(w.find('[data-testid="cancelled-overlay"]').exists()).toBe(true)
+	})
 })

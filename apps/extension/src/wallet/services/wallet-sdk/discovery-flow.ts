@@ -397,7 +397,7 @@ async function runDiscoveryPopup(
 		const admitted = await admitVerifyWindow(discovery, deps, unpaced)
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
 		if (unpaced && !(await stillAllowed(discovery, profileId, admitted, deps))) return
-		await persistAndApprove(discovery, chainId, params, profileId, admitted, deps)
+		await persistAndApprove(discovery, chainId, params, profileId, admitted, unpaced, deps)
 	} finally {
 		resolvePopup(unpaced)
 		pendingDiscoveryPromises.delete(dedupeKey)
@@ -414,7 +414,7 @@ async function askedAndAllowed(discovery: PendingDiscovery, params: DiscoveryPar
 }
 
 /** A connection the switch let through waits for its slot after reading it: one the person turned
- *  the switch off for meanwhile is refused, so off holds at once. */
+ *  the switch off for meanwhile is refused before anything is written. */
 async function stillAllowed(
 	discovery: PendingDiscovery,
 	profileId: string,
@@ -423,13 +423,32 @@ async function stillAllowed(
 ): Promise<boolean> {
 	if (await deps.dappSessionService.allowsNewSite(profileId, discovery.origin)) return true
 	reservation.releaseIfUnstarted()
+	refuseSwitchedOff(discovery, deps)
+	return false
+}
+
+/** The switch read once more after the row is written, as the last await before the approval: an
+ *  off that resolved before this read refuses the connection and rolls its row back; a later one
+ *  leaves the site connected, for Disconnect to remove. */
+async function switchedOffSinceWrite(
+	discovery: PendingDiscovery,
+	profileId: string,
+	sessionId: string,
+	deps: DiscoveryDeps,
+): Promise<boolean> {
+	if (await deps.dappSessionService.allowsNewSite(profileId, discovery.origin)) return false
+	await rollBackDiscoverySession((id) => deps.dappSessionService.deleteDappSession(id), sessionId, "every-site", deps.logger)
+	refuseSwitchedOff(discovery, deps)
+	return true
+}
+
+function refuseSwitchedOff(discovery: PendingDiscovery, deps: DiscoveryDeps): void {
 	deps.handler.rejectDiscovery(discovery.requestId)
 	deps.logger.log(
 		"wallet-sdk",
 		LogLevel.Info,
 		`Discovery rejected (every site may no longer see Nulo): request ${describeExternalId(discovery.requestId)}`,
 	)
-	return false
 }
 
 /** The dApp as a window shows it. Its dApp-controlled name is sanitized here, at the persistence
@@ -505,6 +524,7 @@ async function persistAndApprove(
 	params: DiscoveryParams,
 	profileId: string,
 	reservation: WindowReservation,
+	unpaced: boolean,
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { handler, dappSessionService, logger } = deps
@@ -551,6 +571,7 @@ async function persistAndApprove(
 			await rollBackDiscoverySession(deleteSession, newSession.id, "ungranted", logger)
 			throw error
 		}
+		if (unpaced && (await switchedOffSinceWrite(discovery, profileId, newSession.id, deps))) return
 
 		// Re-check freshness AFTER the durable writes (which can
 		// themselves cross the deadline) and approve, or roll back + reject.
