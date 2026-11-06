@@ -30,7 +30,8 @@ and the owner's sign-offs are quoted where the rules require them.
 - **Excellent**: (1) the contact appears only when the page the link opens posts its token, by
   script as it loads or by a press when that post fails, never on a bare GET, so a scanner that
   fetches links without running their scripts subscribes nobody; (2) a typed-in stranger
-  is never added and gets at most one email per exact address per 24 hours; (3) no request to
+  is never added unless a scanner that runs the page opens their link (D13), and gets at most one
+  email per exact address per 24 hours; (3) no request to
   nulo.sh carries the address in its URL, and no log line carries it, the token or a secret; (4) an
   expired, forged or malformed link gets one answer, with no hint of which.
 - **Good enough**: confirming needs JavaScript (the token rides in the URL fragment); a flood can
@@ -294,7 +295,8 @@ nothing new.
 4. Add `confirm.html` to `vite.config.ts`, the `pr-quick.yml` verify list, `CI.md`, the README.
 5. Tests: `confirm.test.ts` (each outcome; the lock; JSON `{token}` with `Accept:
    application/json` to `/api/confirm`; a missing, malformed or over-long fragment shows the invalid
-   state and posts nothing, beside a well-formed control that posts on a press and never before);
+   state and posts nothing, beside a well-formed control that posts on a press and never before,
+   superseded by Phase 5's post on open);
    `worker.test.ts` (both paths forwarded unchanged; `/api/confirm/` and `/api/Confirm` 404;
    non-POST 405 on both); `page.test.ts` (confirm built, noindex, footer, same-origin references
    only; `/subscribed`'s new text); `signup.test.ts` (the new message).
@@ -325,9 +327,9 @@ nothing new.
 1. Start the landing's dev server on a port claimed through `~/.agents/ports.md`; drive it with
    the Puppeteer `apps/extension` already installs (this repo's runner; adding Playwright for one
    scratch check is a new dependency), `/api/*` answered by request interception.
-2. Check on `/confirm#<token>`: no POST before the press; one POST with the token after it; a
-   second press in flight sends nothing; the final state moves focus to the heading. Record the
-   result in `lessons/phase-4.md` and the PR body.
+2. Check on `/confirm#<token>` (under A; Phase 5 reruns it for D13): no POST before the press;
+   one POST with the token after it; a second press in flight sends nothing; the final state moves
+   focus to the heading. Record the result in `lessons/phase-4.md` and the PR body.
 3. Capture: the email HTML at 600 and 390 px; the hero form after submit; `/subscribed`; `/confirm`
    in each state and without script; the notice's changed sections, before and after. Name each
    picture beside its copy in `OWNER-ASKS.md`.

@@ -1,6 +1,6 @@
 /**
  * The `/confirm` page: the link in the confirmation email carries its token in the fragment, which
- * the browser keeps out of every request, and only this script can read it and post it. So a browser
+ * the browser keeps out of every request URL, and only this script can read it and post it. So a browser
  * confirms as the page opens, while a mail scanner with no script engine adds nobody; one that runs
  * the page's script can confirm an address.
  */
@@ -100,7 +100,6 @@ export interface StartedConfirm {
 	readonly opened: Promise<void>
 }
 
-/** Shows the page for `hash` and, given a well-formed token, posts it at once; `null` without one. */
 export function startConfirm(view: ConfirmView, hash: string, fetchImpl: Fetch): StartedConfirm | null {
 	const token = tokenFrom(hash)
 	show(view, token ? "ready" : "invalid")
