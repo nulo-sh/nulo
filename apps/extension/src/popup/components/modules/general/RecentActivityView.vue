@@ -23,7 +23,7 @@ import { useJournalMirror } from "@/composables/useJournalMirror"
 
 /** Utils */
 import { usePrices } from "@/composables/usePrices"
-import { balanceFormatted } from "@/utils/amount.js"
+import { formatListAmount } from "@/utils/amount.js"
 import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { knownDecimals } from "@/utils/token-amount"
 import { dashIfBlank, isBlank } from "@/utils/string"
@@ -199,7 +199,7 @@ const executingAmount = computed(() => {
 	if (!isUiTransfer.value) return null
 	const decimals = knownDecimals(tokenById(executingTask.value.content.tokenId))
 	if (decimals === null) return null
-	return balanceFormatted(String(executingTask.value.content.amount), decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
+	return formatListAmount(String(executingTask.value.content.amount), decimals, ROW_AMOUNT_LENGTH)
 })
 const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null

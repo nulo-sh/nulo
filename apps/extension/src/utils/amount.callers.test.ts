@@ -13,17 +13,17 @@ import { REPO_ROOT, sourceFiles, TEST_FILE } from "../../scripts/type-roles/sour
 const SRC = "apps/extension/src"
 /** File → [compact calls, plain calls, list-rule calls]. */
 const CALLS: Record<string, [number, number, number]> = {
-	"components/composite/activity/TransactionIncomingCard.vue": [1, 0, 0],
-	"popup/components/modules/general/BalanceView.vue": [2, 0, 0],
-	"popup/components/modules/general/RecentActivityView.vue": [1, 0, 0],
-	"popup/components/modules/general/TokenCard.vue": [3, 0, 0],
+	"components/composite/activity/TransactionIncomingCard.vue": [0, 0, 1],
+	"popup/components/modules/general/BalanceView.vue": [0, 0, 1],
+	"popup/components/modules/general/RecentActivityView.vue": [0, 0, 1],
+	"popup/components/modules/general/TokenCard.vue": [0, 0, 1],
 	"popup/pages/journal/[id].vue": [1, 0, 0],
 	"utils/amount.ts": [2, 0, 2],
 	// The fiat hero's whole dollars are exact, so their decimals 0 are no guess.
 	"utils/hero-fit.ts": [3, 0, 0],
-	"utils/journal-state.ts": [2, 0, 0],
-	"utils/snack-amount.ts": [1, 1, 0],
-	"popup/components/modules/activity/TransactionCard.vue": [1, 0, 0],
+	"utils/journal-state.ts": [0, 0, 2],
+	"utils/snack-amount.ts": [0, 0, 2],
+	"popup/components/modules/activity/TransactionCard.vue": [0, 0, 1],
 	"popup/pages/received/[id].vue": [1, 0, 0],
 	"popup/pages/tx/[id].vue": [1, 0, 0],
 }

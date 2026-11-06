@@ -8,7 +8,7 @@
 // The glyph module, not the barrel: the e2e typecheck reaches this file and resolves no `.vue`.
 import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
-import { balanceFormatted } from "@/utils/amount.js"
+import { formatListAmount } from "@/utils/amount.js"
 import { stageSubtitle } from "@/utils/card-subtitle"
 import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { dashIfBlank } from "@/utils/string"
@@ -77,7 +77,7 @@ export function journalCardAmount(op: OperationRecord, tokenById: (id: number) =
 	const amount = journalTransferAmount(op, tokenById(op.tokenId))
 	const units = amount ? parseSide(amount.raw) : undefined
 	if (!amount || units === undefined) return null
-	return balanceFormatted(units, amount.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
+	return formatListAmount(units, amount.decimals, ROW_AMOUNT_LENGTH)
 }
 
 /** An in-flight send's symbol, set whenever its token is known, amount or not. */
@@ -458,7 +458,7 @@ function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): J
 	let amountSymbol: string | null = null
 	const stored = journalTransferAmount(op, token)
 	if (stored && token) {
-		amount = balanceFormatted(stored.raw, stored.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
+		amount = formatListAmount(stored.raw, stored.decimals, ROW_AMOUNT_LENGTH)
 		amountSymbol = token.symbol ?? null
 	}
 
