@@ -1,0 +1,11 @@
+# Arc 2 (Phases 2-4): the reordered flows, OA-6 and OA-7
+
+Every run below is at retry 0, on the arc's head unless it names another commit.
+
+- **Owner answers.** Decision page 111 (2026-11-06) answered OA-1 to OA-7; the plan's Owner decisions quote each pick. OA-6 A and OA-7 B joined arc 2.
+- **Base checks.** On the base pages, the new pins fail where the plan says: unlock method (a), (c) and (f); full backup (a), (c) and (e); account file (a) and (b) (21 tests red on the base `account.vue`). The first draft of unlock method's (c) passed on base: it never edited the pair while the card was open. It now captures what the card saw.
+- **A test that ended before its run.** Unlock method's "own change keeps its run" test: Save's chain grew (card, verify, change), so one `flushPromises` ended before the run and the unmount reset it. A second flush fixed it.
+- **Leaked mock values.** `vi.clearAllMocks` keeps `mockResolvedValueOnce` queues, so a failing passkey test in `full-passkey.pins.test.ts` left values that failed the password tests after it. They cleared once the passkey tests passed.
+- **Chaos model.** The citations moved by a line diff from base; `profile-chaos-model.test.ts` 266/266 after each phase. `refuse` on a new-passkey change now refuses the create (D15).
+- **Gates (2026-11-06, at 52eff5b6c).** `bun run lint` exit 0 (no warning in a touched file); `typecheck:all` exit 0; the profile, import, export, unlock-method and chaos-model suites, 31 files, 1318 passed; `test:components` 99 files, 1394 passed; `test:all` exit 0 (extension 17478 passed).
+- **Smoke, armed build.** Chrome: security, passkey-backup, passkey-retry, own-window 17/17; legal-acceptance, account-import-export, backup-roundtrip, restore-outcome 22/22 (toolbar-panel skips on Chrome by design). Firefox: the first four 17/17; the second batch hit this session's own 585 s bound with toolbar-panel in its last test (load1 above 280 on 188 cores), its other four files 22/22; toolbar-panel alone then 6/6 in 157 s. The bound's kill orphaned one geckodriver group of this run, stopped by its pgid.
