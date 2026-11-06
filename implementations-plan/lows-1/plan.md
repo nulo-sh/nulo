@@ -1,7 +1,7 @@
 ---
 plan: lows-1
 tier: mid
-status: arc 1 merged (#1693); arc 2 implemented on the owner's page-111 answers (OA-1 to OA-7), gates and review loop next
+status: completed
 issues: "none public; the findings are tracked privately, so no PR says `Closes #n`"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,22 @@ base: origin/dev at 7eed331bb
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-06
+- **Status**: completed in two arcs. Arc 1 merged as #1693; arc 2 is the PR from `lows-1-a2`, whose final commits are this close-out. The findings are tracked privately, so no PR closes a public issue.
+- **Shipped**:
+  - Arc 1: a restore opens its profile only on the admission its own commit set; an accepted explicit lock, a deletion, a worker restart and 30 minutes take it back (D1-D5).
+  - Arc 2: Settings → Unlock method, the full backup and the account file take the new secret first and run the passkey card in the step it authorizes (OA-1 to OA-4, D6-D9, D15-D17); a lock that leaves the full backup open starts it over (OA-5, D11); password restores share the admission (OA-6, D13); a refused finalize says how to open the profile (OA-7, D14).
+  - Pins in each page's and composable's unit tests, the chaos model and drivers, the e2e helpers, and the pictures in `screenshots/`.
+- **Known limits**: none filed. The residuals are reported to the orchestrator privately and become `known-limit` issues only after the findings are published.
+- **Open items**: none.
+- **Dispositions**:
+  - The import page shows the OA-7 sentence only when it is open and connected at the refusal; a lock routes it to the lock screen and a worker restart shows "Client disconnected", both keeping the profile (D18): no change.
+  - Planning withdrew finalize's post-open re-check (§ Audit verdicts, final pass round 1).
+  - No `lessons.md` promotion: its one candidate, vitest's `clearAllMocks` keeping `mockResolvedValueOnce` queues, is documented vitest behaviour, and the file sits at its budget.
+- **Seeds retired**: the `/goal` and `/loop` seeds below.
 
 # lows-1: a passkey answer is used in the step that collected it, and an explicit lock ends a pending passkey restore
 
@@ -155,23 +171,29 @@ Steps:
 
 **Gate outcome** (2026-11-05, at the round-1 fix commit): lint and typecheck:all exit 0; the unit command green (22 files, 891 tests); on base, 5 of the describe's 8 tests fail and (b), (c) and (e)'s control pass; replacing the identity-checked drop with an unconditional one fails (d)'s open seam; `bun run test` (17456 passed) and `bun run test:all` exit 0; smoke on Chrome 6/6; smoke on Firefox 6/6; `check:plans` exit 0.
 
-## Phase 2 (arc 2): Unlock method
+## Phase 2 (arc 2): Unlock method ✓
 
 Steps (after OA-1 and OA-2): D6, D7 and D11 in `unlock-method.vue`. In `unlock-method.test.ts`, rewrite or retire the pins that encode the held answer (`:222`, `:251`, `:298`, `:307`, `:458`, `:486`, `:510`, `:597`, `:608`) and pin: (a) "Use a password instead" runs no card; (b) Save or Enter with an invalid pair runs no card; (c) Save snapshots the pair, and a pair edited while the card is open is not the one committed; (d) a failed Save, then Save, runs a second card; (e) a lock while the card is open commits nothing, and removes the step; (f) "Use a new passkey" asks the new passkey, then the current one, and a cancel at either commits nothing. Update the chaos transitions and `tests/e2e/security.test.ts` and `tests/e2e/helpers/profile-chaos/unlock-method.ts`.
 
 **Validation gate** (every command from the repo root unless it starts with `cd`): `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/pages/settings/security/unlock-method.test.ts src/wallet/services/profile/unlock-method.composition.test.ts scripts/e2e/profile-chaos-model.test.ts --retry=0` green, with (a), (c) and (f) red on the base page; `cd apps/extension && bun run test:components`; smoke (Phase 1's build and flags) `tests/e2e/security.test.ts` green on Chrome and Firefox.
 
-## Phase 3 (arc 2): Full backup
+**Gate outcome** (2026-11-06, at 52eff5b6c, every run at retry 0): lint and typecheck:all exit 0; the unit command green; on the base page, (a), (c) and (f) fail; `test:components` 99 files, 1394 passed; smoke `security` 7/7 on Chrome and on Firefox.
+
+## Phase 3 (arc 2): Full backup ✓
 
 Steps (after OA-3 and OA-5): D8 and D11 in `useFullBackupExport.ts` and `full.vue`. In `full-passkey.pins.test.ts`, at the composable boundary, not the DOM alone: (a) Agree runs no card; (b) click or Enter with an invalid pair runs no card; (c) the press seals with the pair captured at it, in the run, and never assigns the plaintext to the context; (d) the run ends at `encrypted` without a download, and Download then saves; (e) a failed seal returns to the pair and the next press runs a new card; (f) a lock while the seal runs publishes nothing and starts the page over. Keep `useFullBackupExport.test.ts`'s password pins green unchanged. Update `tests/e2e/helpers/backup-export.ts` (`downloadPasskeyBackup`) and the e2e that drive the old order: `passkey-backup.test.ts`, `passkey-retry.test.ts`, `toolbar-panel.test.ts`, `own-window.test.ts`, `legal-acceptance.test.ts`, `update-replay.test.ts`, `helpers/handshake-import.ts`, `helpers/profile-chaos/backups.ts`.
 
 **Validation gate:** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/composables/useFullBackupExport.test.ts src/popup/pages/settings/security/export/full.test.ts src/popup/pages/settings/security/export/full-passkey.pins.test.ts scripts/e2e/profile-chaos-model.test.ts --retry=0` green, with (a), (c) and (e) red on base; `cd apps/extension && bun run test:components`; smoke `tests/e2e/passkey-backup.test.ts tests/e2e/passkey-retry.test.ts tests/e2e/own-window.test.ts tests/e2e/toolbar-panel.test.ts tests/e2e/legal-acceptance.test.ts` green on Chrome and Firefox; `update-replay.test.ts` from `v1.2.0` on Chrome and Firefox, as `tests/e2e/README.md` § In-place update runs it (`build-update-candidate.sh <b>`, then `NULO_E2E_ARTIFACT_RUN=1 NULO_E2E_UPDATE_FROM=v1.2.0 NULO_E2E_UPDATE_TO=<candidate>` and `--retry=0`), then the armed smoke build again; `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/import-handshake-note.test.ts --retry=0`, and the same with `NULO_E2E_BROWSER=firefox`: green.
 
-## Phase 4 (arc 2): Account file
+**Gate outcome** (2026-11-06, every run at retry 0): the unit command green (with Phase 4's, 31 files, 1318 passed); on base, (a), (c) and (e) fail; `test:components` green; smoke `passkey-backup`, `passkey-retry`, `own-window`, `legal-acceptance` green on both browsers and `toolbar-panel` 6/6 on Firefox (it skips on Chrome by design; the first Firefox batch hit this session's own time bound in its last test, then the file passed alone); `update-replay` from v1.2.0 4/4 on Chrome and 4/4 on Firefox; `import-handshake-note` 2/2 on Chrome and 2/2 on Firefox (the runner first refused the file without `NULO_E2E_PROVERLESS=1`, which it requires: no test ran).
+
+## Phase 4 (arc 2): Account file ✓
 
 Steps (after OA-4): D9 in `account.vue`. In `account.test.ts`, adapt the pins that encode the confirm step (`:345`, `:395`, `:404`, `:420`, `:486`, `:503`, `:540`, `:583`) and pin: (a) no card runs before a valid pair, by click or Enter; (b) Save runs one card, the verify, then `exportAccount` (and `exportResetHeldAccount` for a held row) with the pair and scope captured at the press, and a pair edited while the card is open is not used; (c) a scope change while the card is open exports nothing (control: an unchanged scope exports); (d) a second Save runs a second card; (e) the lock pins stay. Update the chaos transitions and `tests/e2e/helpers/profile-chaos/accounts-io.ts`.
 
 **Validation gate:** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/pages/settings/security/export/account.test.ts scripts/e2e/profile-chaos-model.test.ts --retry=0` green, with (a) and (b) red on base; `bun run audit:vue` and `bun run test:all` exit 0; smoke `tests/e2e/account-import-export.test.ts` green on Chrome and Firefox; the profile chaos campaign on Chrome and Firefox, `cd apps/extension && NULO_E2E_BROWSER=<b> NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1 NULO_E2E_CHAOS_RUNS=5 NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/profile-chaos.test.ts --retry=0`, all seven oracles green; `bun run check:plans`.
+
+**Gate outcome** (2026-11-06, every run at retry 0): the unit command green; on the base page, 21 tests fail, (a) and (b) among them; `audit:vue` and `test:all` exit 0 at the final head (below); smoke `account-import-export` 4/4 on Chrome and on Firefox; the chaos campaign, seeds 1-5, 5/5 on Chrome and 5/5 on Firefox with no violation (a seed with a planned restart reads "incomplete", by design). Seeds 1-5 drew no `raceMethodChangeDuringExport`, a Firefox-only race, so it ran three more times on Firefox, all green: a hand list that drives every changed passkey action once (both account-file variants, the passkey backup, a refused and an approved new passkey, the race, `verifyAll`), and seeds 5165 and 7760, found by the planner offline; `check:plans` exit 0.
 
 ## Delivery
 

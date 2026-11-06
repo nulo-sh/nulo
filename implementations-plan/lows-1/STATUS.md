@@ -1,6 +1,0 @@
-- 2026-11-05: recon done (2 Sonnet explorers); plan drafted at 7eed331bb; panel round 1 next.
-- 2026-11-05: panel round 1: Codex reject, Opus conditional approve; all findings folded (D2 bracket, D8/D9 contracts, D4 boundary, OA-7); final fresh Codex pass next.
-- 2026-11-05: final Codex pass r1 reject; D2 narrowed to the identity capture, gates rewritten; resuming the final session for its verdict.
-- 2026-11-05: final Codex pass r2 conditional approve, r3 approve; plan committed; arc 1 next (auto-continue).
-- 2026-11-05: arc 1 Phase 1 on `lows-1-a1`; gate green (smoke 6/6 on Chrome and Firefox); Codex round 1 clean, Opus 2 material folded, round 2 clean; final gates, then the PR.
-- 2026-11-06: arc 1 merged (#1693). Arc 2 on `lows-1-a2` on the page-111 answers: Phases 2-4, OA-6 and OA-7 committed; lint, typecheck:all, unit, test:components, test:all and smoke (Chrome 39/39, Firefox 45/45) green; network, update-replay and chaos gates next, then the review loop.
