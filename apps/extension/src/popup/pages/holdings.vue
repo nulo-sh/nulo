@@ -125,18 +125,18 @@ const openAddToken = (address: string) => popupStore.open("new_token", { address
 
 const summary = useTemplateRef<ComponentPublicInstance>("summary")
 const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
-const metaRuler = useTemplateRef<HTMLElement>("metaRuler")
+const metaLine = useTemplateRef<HTMLElement>("metaLine")
 /** No count until the list answers: an unread list is not an empty one. */
 const summaryMeta = computed(() => {
 	if (isLoading.value || error.value) return ""
 	if (unavailable.value) return "Prices unavailable"
-	return `${rows.value.length} ${pluralize(rows.value.length, "token", "tokens")}${showFiatValues.value && aggregate.value.partial && !awaitingPrices.value ? " · priced assets only" : ""}`
+	return `${rows.value.length} ${pluralize(rows.value.length, "token", "tokens")}`
 })
-/** The total's type as a fraction of its 26 px: full size while it fits beside the meta line
- *  wrapped to its narrowest, then the largest that does, with no floor, so no digit is ever hidden. */
+/** The total's type as a fraction of its 26 px: full size while it fits beside the meta line,
+ *  then the largest that does, with no floor, so no digit is ever hidden. */
 const totalScale = ref(1)
-/** The space, in px, a shrunk total keeps before the meta line: `.summary_amount_shrunk`'s margin,
- *  which makes the meta line wrap clear of it. A total that fits at full size has none. */
+/** The space, in px, a shrunk total keeps before the meta line: `.summary_amount_shrunk`'s margin.
+ *  A total that fits at full size has none. */
 const TOTAL_GAP = 8
 /** Measured widths are rounded to layout units (1/60 px in Firefox), so a total the line lays out
  *  exactly beside the meta can measure a hair over the room the two leave it. */
@@ -147,8 +147,9 @@ const summaryLine = () => summary.value?.$el as HTMLElement | undefined
 function fitTotal() {
 	const line = summaryLine()
 	const form = totalRuler.value
-	const meta = metaRuler.value
+	const meta = metaLine.value
 	if (!line || !form || !meta) return
+	// The meta line never wraps or shrinks, so its own box is the width it keeps.
 	const room = heroRoom(line) - meta.getBoundingClientRect().width
 	if (rulerWidth(form, 1) <= room + LAYOUT_ROUNDING) {
 		totalScale.value = 1
@@ -204,7 +205,7 @@ onBeforeUnmount(() => {
 <template>
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper" data-testid="holdings-page">
 		<Flex direction="column" gap="16" :class="$style.content">
-			<Flex ref="summary" align="end" justify="between" :class="$style.summary" data-testid="holdings-summary">
+			<Flex ref="summary" justify="between" :class="$style.summary" data-testid="holdings-summary">
 				<span
 					v-if="showFiatValues"
 					data-testid="holdings-total"
@@ -214,14 +215,12 @@ onBeforeUnmount(() => {
 					<Skeleton v-if="awaitingPrices" :width="96" :height="26" data-testid="holdings-total-loading" :class="$style.total_skeleton" />
 					<span v-else :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }" :aria-hidden="totalUnknown || undefined">{{ totalDisplay }}</span>
 				</span>
-				<span data-testid="holdings-meta" :class="$style.summary_meta">{{ summaryMeta }}</span>
-				<!-- The fit's ruler: the total in the line's classes at full size and the meta line at its
-				     narrowest, clipped to nothing, never drawn. -->
+				<span ref="metaLine" data-testid="holdings-meta" :class="$style.summary_meta">{{ summaryMeta }}</span>
+				<!-- The fit's ruler: the total in the line's classes at full size, clipped to nothing, never drawn. -->
 				<span v-if="showFiatValues" aria-hidden="true" :class="$style.summary_ruler">
 					<span :class="[$style.summary_amount, $style.summary_ruler_total]">
 						<span ref="totalRuler" :class="$style.summary_fit">{{ totalDisplay }}</span>
 					</span>
-					<span ref="metaRuler" :class="[$style.summary_meta, $style.summary_ruler_meta]">{{ summaryMeta }}</span>
 				</span>
 			</Flex>
 
@@ -255,6 +254,7 @@ onBeforeUnmount(() => {
 }
 
 .summary {
+	align-items: baseline;
 	padding-bottom: 4px;
 }
 
@@ -294,15 +294,13 @@ onBeforeUnmount(() => {
 	white-space: nowrap;
 }
 
-.summary_ruler_meta {
-	position: absolute;
-	width: min-content;
-}
-
 .summary_meta {
 	composes: type--meta from global;
 	/* Empty while the list loads, and the list below must not move when the count arrives. */
 	min-height: 1lh;
+	/* One row: a long total shrinks to leave the count whole. */
+	flex-shrink: 0;
+	white-space: nowrap;
 	color: var(--nulo-secondary);
 }
 

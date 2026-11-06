@@ -1,7 +1,7 @@
 ---
 plan: p110-build-1
 tier: mid
-status: approved by the panel (final Codex pass: approve)
+status: completed
 issues: "#1619, #1571 (arc 1); #1569, #1620 (arc 2); #1644, #1645 held (arc 4); page 116 picks open (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,41 @@ base: origin/dev at 5f7da07c5
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-06.
+- **Status:** completed. Arc 1 shipped in #1706 (merged). Arc 2 ships in the PR titled `fix(popup): sending toast dismissal lasts the session; the password hint keeps its space`, whose merge closes the plan. Arcs 3 and 4 were not built:
+  - page 116's P116-17, P116-20 and P116-21 remain open picks for the orchestrator; that page's P116-10 and P116-11 shipped separately in #1709;
+  - #1644 and #1645 stay open, held for the owner's word, each with a comment.
+- **Shipped:**
+  - Arc 1, #1619 A: a contract assertion leaves the PXE as a typed, bounded `ContractAssertionError`. The execute window names it under the fee card when a frame matches the request's own call by contract and selector, and the toast does not open.
+  - Arc 1, #1571 Q6 C: a no-account public call is refused up front, recorded as the request's refusal, filed `wallet_refused` and answered with the wallet's constant.
+  - Arc 1, #1571 Q3 B and Q4 B: "Leaves your account" counts signed authorizations, and draws under a refusal and in the raised-fee window.
+  - Arc 1, #1571 Q1 B: the preview snack closes on retry.
+  - Arc 1, #1571 Q2 A and Q5 A: closed as built.
+  - Arc 2, #1569 B: the Sending toast's × lasts its session across popup documents, through one `chrome.storage.session` key per send holding the session handle; a lock ends the toast's scope before the shell closes its messages.
+  - Arc 2, #1620 B: the password hint row hides in place.
+- **Review loop:**
+  - Plan: Codex `conditional approve`, folded; Opus `conditional approve`, folded; a final fresh Codex pass, `approve` after two resumes.
+  - Arc 1: Codex two rounds, ending `approve`; one Opus diff review, five Low findings, folded.
+  - Arc 2: Codex three rounds (one Medium, then two Mediums against round 1's fix, then `approve`); one Opus diff review, four Low findings, three folded and one filed as a known limit.
+- **Gates:** each PR body states its runs. Details per phase are in [lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-5.md](lessons/phase-5.md) and [lessons/phase-6.md](lessons/phase-6.md).
+- **Dropped:** none of the picks. Deviations, all recorded with their reasons:
+  - D11: the snack scenario moved to the app's PrivateFPC payment;
+  - D12: `feeSettled` accepts the line, and the raised-fee case imports TST;
+  - D7, built with the lock ordering instead of a live-handle check;
+  - Phase 6's e2e reads a document offset;
+  - the Phase 5 mutation reds at the no-toast check, before the observer arms.
+- **Known limits:**
+  - #1714: a queued public call's assertion keeps the toast.
+  - #1715: a × in one open document does not close the toast in another open one; a comment adds the stale-× case.
+  - #1717: a password or unlock-method change made mid-send stops a dismissal from holding.
+- **Open items:**
+  - #1699: the copy for a no-account request with a utility call or several calls (owner decision).
+  - #1710: whether "Leaves your account" counts the sender's own authorization that an app-paid send carries, which #1696 now lists (owner decision).
+- **Lessons:** nothing promoted to `lessons.md`, which is at its budget. The scroll-clamped layout check went to the `e2e-testing` skill (§ What to assert).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # p110-build-1: the execute-window and popup picks of decision page 110
 
@@ -73,7 +108,7 @@ Arc 4 builds, if the owner confirms: #1644 B (`call-surface.ts` `utf8Text` drops
 | D4 | Q4: `accountOutflows` takes the wallet-signed authorizations as a second input, skipping one whose caller is the account itself (I3), and returns per token both counts; a pure `outflowLabel` writes "1 transfer", "1 authorization" or "1 transfer, 1 authorization" (the options' wording for B) | computing it in `OperationCard.vue` (the prototype): a second pass and a template-side join that the unit tests of `call-surface.ts` cannot reach; matching an authorization to a direct call by contract, selector and arguments: more code for the same answer, since a self-caller authorization licenses only the account's own calls, and the others never pair with one |
 | D5 | Q3: the block's gate loses `!$slots.fee`; it draws above whatever fills the fee section | a prop the raised-fee window sets: only needed for option C, which the owner did not pick |
 | D6 | Q1: the preview snack keeps its id and closes on the retry's re-ask when no preview failure stands, through the same local helper as the fee snack | closing it when a preview lands (the prototype): not what "as the fee snack already does" describes |
-| D7 | #1569: one `chrome.storage.session` key per dismissed send, `nulo:sending:dismissed:<recordId>`, whose value is the session handle `ProfileService.getSessionHandle()` already gives the popup (`` `${workerId}:${serial}` ``, `undefined` while locked); the handle is read once at the reset that turns the toast on, and the dismissal writes it, with no read first, for each running popup send (nothing when the handle is `undefined`); the per-send label lookup also reads the send's key and treats it as dismissed only under that handle; no removal: a lock, or a worker restart (which no live send survives), changes the handle, and the browser drops `storage.session` with its session | (a) one shared key read-merged-written (the first draft): two documents (the Firefox sidebar and the popup) lose each other's dismissals, and a read fenced by the label generation is dropped by a token deletion (Codex round 1, findings 3, 4); (b) key by profile, removed by the open popup at lock (the prototype): a lock with no popup open leaves it, and a send at `submitting`, which outlives a lock (Fact 7), stays hidden; a scope gap in a network switch would read as a lock; (c) the worker removes the keys at close: the profile service learns a popup key; (d) `captureRunFence()`: takes the facade lock and returns what D7 does not need (Opus round 1, finding 2) |
+| D7 | #1569 (built with one ordering, arc 2 review rounds 1-2: a lock ends the toast's scope (`endScope`, first in `endScopeOnLock`) before the shell closes its messages, so the close a lock makes is never read as a × and a document whose session ended never overwrites the next session's dismissal): one `chrome.storage.session` key per dismissed send, `nulo:sending:dismissed:<recordId>`, whose value is the session handle `ProfileService.getSessionHandle()` already gives the popup (`` `${workerId}:${serial}` ``, `undefined` while locked); the handle is read once at the reset that turns the toast on, and the dismissal writes it, with no read first, for each running popup send (nothing when the handle is `undefined`); the per-send label lookup also reads the send's key and treats it as dismissed only under that handle; no removal: a lock, or a worker restart (which no live send survives), changes the handle, and the browser drops `storage.session` with its session | (a) one shared key read-merged-written (the first draft): two documents (the Firefox sidebar and the popup) lose each other's dismissals, and a read fenced by the label generation is dropped by a token deletion (Codex round 1, findings 3, 4); (b) key by profile, removed by the open popup at lock (the prototype): a lock with no popup open leaves it, and a send at `submitting`, which outlives a lock (Fact 7), stays hidden; a scope gap in a network switch would read as a lock; (c) the worker removes the keys at close: the profile service learns a popup key; (d) `captureRunFence()`: takes the facade lock and returns what D7 does not need (Opus round 1, finding 2) |
 | D8 | #1620: `hideHint` keeps the row's box (`visibility: hidden`) instead of dropping it; no new prop | an opt-in `keepHintSpace` prop (the prototype): an option for one caller |
 | D9 | E2E: one new scenario (#1619), one rewritten (Q6), assertions added to two existing ones (Q3, Q4), captures through the existing `NULO_E2E_SHOT_DIR` hook, set on the Chrome runs only (a Firefox extension page refuses `captureScreenshot`, `tests/e2e/FIREFOX.md`) | an e2e per question: Q1, Q3 under a refusal and the labels are props-to-DOM, which component tests prove at a fraction of the cost |
 | D11 | Built (Phase 1 measurement): `snack-placement`'s unfunded public transfer now reads as the app's ("attempt to subtract with overflow", Token's frame at the request's selector), so its execute-window case forces the failure through the app's own PrivateFPC payment (`pg-btn-sendTx-feePayer`, `feePayer` = the canonical PrivateFPC, none held): an app-set payment has no fee card, so the snack stays whoever's call failed | Private Fee Juice picked in the fee card (I2's plan): its row is disabled, "no balance", for an account holding none (`fee-helpers.ts`) |
@@ -206,6 +241,25 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 **Arc 1, Opus diff review**: no High or Medium; five Low, all accepted: a summary-test fixture whose authorization another account signs over this account's tokens, which fails once the `onBehalfOf` filter goes (mutation run red); the selector regex in `appAssertion`, dead behind the bounded frame, removed; a line break in an assertion reads as a space, never joins two words; capture names say what they show; the request builder's header states the invariant, not its caller. Checked and holding: no failure reaches neither the line nor a snack, the stale-anchor retry, the class across the worker hop, the refusal's answer and Activity title, no new log reach, a dApp cannot forge frames.
 
 **Arc 1, Codex round 2** (the round-1 session resumed on the fix diff, f8b0919b0): verified every fold (the testid reads, the removed regex behind the bounded frame, the whitespace rule, the isolating `onBehalfOf` fixture, the `$eval` reads) and found no regression and no new state, lifecycle, logging or approval behavior: `VERDICT: approve`.
+
+**Arc 2, Codex round 1** (gpt-6.1-sol, high, fresh session, on the arc diff): `conditional approve`, one Medium, accepted. A document whose session has ended (a lock it hears late, its seal closing its own toast before its scope resets) wrote its old handle over the next session's dismissal of a send that outlived the lock, so a reopen under the new session showed the toast again. Codex reproduced it in memory. Fixed locally: at the ×, the write reads the live handle and stores the reset's handle only when the two still match. The value written is still the handle read at the reset, and no state or protocol is added. A unit regression reds without the guard. No finding on the hint row or the storage trust boundary.
+
+**Arc 2, Opus diff review**: no High or Medium; four Low, three folded and one filed.
+- Its first finding is Codex's, already fixed in the tree it read.
+- The e2e observer now checks for a toast and arms itself in one evaluate, so no toast can slip in between.
+- The onboarding observer rejects on a bound instead of hanging when the button never reads "Creating...".
+- A password or unlock-method change re-opens the session without a lock, which gives it a new handle the open document never re-reads. This fails open (a toast can come back, none is hidden) and is rare, so it is filed as a known limit, #1717.
+- Checked and holding: handle uniqueness (a random worker id and a monotonic serial), no live send across a worker restart, the network switch keeping the handle, record-id collisions, the two-document blind writes, the fences, no open-then-close, the lock button's ordering, other `closeToast` callers, privacy (the value is `uuid:n`), the repo rules.
+
+**Arc 2, Codex round 2** (the round-1 session resumed on b032586f9): the observer fixes are sound, but two Mediums against round 1's live-handle guard, both accepted.
+- A live-handle reply that was sampled before another document's lock, unlock and dismissal, then delivered late, still carries the old handle, so the overwrite stays possible.
+- The extra worker round trip delays the write, and closing the popup during it loses an honest dismissal.
+- Both reproduced in memory.
+- Remedy, local and with no added state: the guard is removed, and the write is again blind from the reset's handle, dispatched without a round trip. The lock path, the only programmatic close of the Sending toast, now ends the toast's scope first (`sends.endScope()`, the first call in `endScopeOnLock`, which both lock paths run and the shell's wiring test pins). Its close is quiet and never reads as a ×.
+- The regression test reds with `endScope` made a no-op.
+- What remains: a × the person presses in a document in the milliseconds before it hears a lock that another document followed with an unlock and a dismissal. It fails open, and is recorded on #1715.
+
+**Arc 2, Codex round 3** (the same session, resumed on d681dd172): it verified that the manual lock, the worker's lock event and the boot-time seal all end the toast's scope before the shell closes its messages; that repeated resets are harmless; that the other programmatic closes are guarded by toast identity, kind, label or action; and that an honest × makes one write with no extra session read. No remaining finding, high confidence: `VERDICT: approve`.
 
 ## Seeds
 
