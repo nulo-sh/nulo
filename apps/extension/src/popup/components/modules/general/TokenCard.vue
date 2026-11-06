@@ -7,7 +7,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "@/composables/usePrices"
 
 /** Utils */
-import { balanceFormatted } from "@/utils/amount.js"
+import { formatListSplit } from "@/utils/amount.js"
 import { dashIfBlank } from "@/utils/string"
 import { knownDecimals, parseRawBalance } from "@/utils/token-amount"
 
@@ -48,12 +48,9 @@ const isMalformed = computed(
 const decimals = computed(() => (isMalformed.value ? 0 : token.value.decimals))
 const publicRaw = computed(() => (isMalformed.value ? 0n : BigInt(props.tokenBalance.publicBalance || 0)))
 const privateRaw = computed(() => (isMalformed.value ? 0n : BigInt(props.tokenBalance.privateBalance || 0)))
-/** The total and each side share one width: a side never holds more than the total, so it never
- *  reads fewer of its digits. */
 const FIGURE_WIDTH = 10
-const totalBalance = computed(() =>
-	isMalformed.value ? "—" : balanceFormatted(privateRaw.value + publicRaw.value, decimals.value, FIGURE_WIDTH, { compact: true }).value,
-)
+const figures = computed(() => formatListSplit(privateRaw.value, publicRaw.value, decimals.value, FIGURE_WIDTH))
+const totalBalance = computed(() => (isMalformed.value ? "—" : figures.value.total))
 
 /** Holding fiat value between amount and split — absent when unpriced.
  *  The client lifecycle lives here (row-level) because TokenCard is mounted
@@ -66,8 +63,8 @@ onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
 })
-const privateFormatted = computed(() => balanceFormatted(privateRaw.value, decimals.value, FIGURE_WIDTH, { compact: true }).value)
-const publicFormatted = computed(() => balanceFormatted(publicRaw.value, decimals.value, FIGURE_WIDTH, { compact: true }).value)
+const privateFormatted = computed(() => figures.value.private)
+const publicFormatted = computed(() => figures.value.public)
 // Treat updatedAt===0 as "balance has never synced" — the projector hasn't run yet
 // so the "0" placeholder in the row would be misleading. Render a skeleton instead.
 const isInitialSync = computed(() => !!props.tokenBalance && props.tokenBalance.updatedAt === 0)
