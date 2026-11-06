@@ -18,6 +18,7 @@ import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import {
+	DAPP_SESSION_DAYS,
 	DAPP_SESSION_SERVICE_NAME,
 	type DappMetadata,
 	type DappPermissions,
@@ -246,7 +247,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 				permissions: permissions,
 				accounts: accounts,
 				confirmationLevel: confirmationLevel,
-				expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
+				expiry: Date.now() + DAPP_SESSION_DAYS * 24 * 60 * 60 * 1000,
 			}
 			const write = await this.storage.prepare(session.id, session)
 			await commitFencedCreate(deletion, fence, write, () => this.storage.delete(session.id), {
