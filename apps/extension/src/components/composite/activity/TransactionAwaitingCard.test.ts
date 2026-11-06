@@ -20,7 +20,7 @@ const STUBS = {
 				<span class="symbol">{{ amountSymbol }}</span>
 			</div>
 		`,
-		props: ["title", "icon", "amount", "amountSymbol", "testId", "stage", "backend", "oneLineTitle"],
+		props: ["title", "icon", "amount", "amountSymbol", "titleNamesToken", "direction", "testId", "stage", "backend", "oneLineTitle"],
 	},
 }
 
@@ -103,26 +103,30 @@ describe("composite/TransactionAwaitingCard", () => {
 		expect(w.text()).toContain("USDC")
 	})
 
-	test("transferTypeLabel renders a chip when provided; suppressed when null", () => {
-		const withChip = mountCard({ transferTypeLabel: "Private → Public" })
-		expect(withChip.text()).toContain("Private → Public")
-		expect(withChip.html()).toMatch(/transfer_chip/)
+	const SEND = { from: "private", to: "public", way: "out", label: "Private → Public" } as const
 
-		const noChip = mountCard()
-		expect(noChip.html()).not.toMatch(/transfer_chip/)
+	test("a send hands the layout its direction and title flag, and says the direction in hidden words, not a chip", () => {
+		const w = mountCard({ subtitle: "Generating proof...", direction: SEND, titleNamesToken: true })
+		const layout = w.findComponent(STUBS.TransactionCardLayout)
+		expect(layout.props()).toMatchObject({ direction: SEND, titleNamesToken: true, oneLineTitle: false })
+		const words = w.get("[data-testid='activity-direction-chip']")
+		expect(words.element.textContent).toBe("Private → Public")
+		expect(words.attributes("class")).toMatch(/_direction_/)
+		expect(w.find("[data-testid='activity-title-sep']").exists()).toBe(false)
+		expect(w.find('[data-testid="activity-app-chip"]').exists()).toBe(false)
 	})
 
-	// transferTypeLabel and originLabel are mutually exclusive on the chip: transfer ops carry the
-	// first, dApp ops the second.
-	test("a transfer keeps its whole title and the direction chip; the stage line is cut and atomic", () => {
-		const w = mountCard({ subtitle: "Generating proof...", transferTypeLabel: "Private → Public" })
-		const subtitleSpan = w.find('[role="status"]')
-		expect(subtitleSpan.attributes("class")).toMatch(/subtitle/)
-		expect(subtitleSpan.attributes("aria-atomic")).toBe("true")
-		expect(w.html()).toMatch(/transfer_chip/)
-		expect(w.text()).toContain("Private → Public")
-		expect(w.findComponent(STUBS.TransactionCardLayout).props("oneLineTitle")).toBe(false)
-		expect(w.find('[data-testid="activity-app-chip"]').exists()).toBe(false)
+	test("a move's words say it stayed in the account, outside the live stage line, which stays cut and atomic", () => {
+		const w = mountCard({ subtitle: "Generating proof...", direction: { ...SEND, way: "self" } })
+		const status = w.get('[role="status"]')
+		expect(status.attributes("class")).toMatch(/subtitle/)
+		expect(status.attributes("aria-atomic")).toBe("true")
+		expect(status.find("[data-testid='activity-direction-chip']").exists()).toBe(false)
+		expect(w.get("[data-testid='activity-direction-chip']").element.textContent).toBe("Private → Public, within this account")
+	})
+
+	test("with no direction there are no hidden words", () => {
+		expect(mountCard({ subtitle: "Queued..." }).find("[data-testid='activity-direction-chip']").exists()).toBe(false)
 	})
 
 	test("a dApp's call: its function title is cut to one line and the host sits in the app chip", () => {

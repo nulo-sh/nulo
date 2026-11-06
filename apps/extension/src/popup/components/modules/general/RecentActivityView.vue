@@ -35,14 +35,16 @@ import {
 	isQueuedTransfer,
 	journalCardAmount,
 	journalCardAmountSymbol,
+	journalCardDirection,
 	journalProgressWord,
 	journalCardIcon,
 	journalCardOriginLabel,
 	journalCardTitle,
-	journalCardTransferTypeLabel,
+	journalCardTitleNamesToken,
 	sanitizeJournalSubtitle,
 } from "@/utils/journal-state"
-import { callTitle } from "@/utils/tx-enrichment"
+import { callTitle, transferDirection } from "@/utils/tx-enrichment"
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { buildCancelHandler, buildFocusHandler, isMatchingTask } from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
 
@@ -204,6 +206,12 @@ const executingAmount = computed(() => {
 const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null
 	return tokenById(executingTask.value.content.tokenId)?.symbol || null
+})
+/** The task holds the request's own sender and recipient, as the send's journal record does. */
+const executingDirection = computed(() => {
+	if (!isUiTransfer.value) return null
+	const { transferType, senderAddress, recipientAddress } = executingTask.value.content
+	return transferDirection(transferType, sameFieldAddress(senderAddress, recipientAddress))
 })
 
 /** Durable journal records. Survives SW restart + popup close/reopen so if
@@ -626,7 +634,8 @@ onBeforeUnmount(() => {
 				:originLabel="journalCardOriginLabel(op)"
 				:amount="cardAmountFor(op)"
 				:amountSymbol="cardAmountSymbolFor(op)"
-				:transferTypeLabel="journalCardTransferTypeLabel(op)"
+				:titleNamesToken="journalCardTitleNamesToken(op)"
+				:direction="journalCardDirection(op)"
 				:cancellable="true"
 				:jobId="op.id"
 				:stage="op.progress?.stage ?? null"
@@ -649,6 +658,8 @@ onBeforeUnmount(() => {
 				:originLabel="executingOriginLabel"
 				:amount="executingAmount"
 				:amountSymbol="executingAmountSymbol"
+				:titleNamesToken="isUiTransfer"
+				:direction="executingDirection"
 				:oneLineTitle="!isUiTransfer"
 			/>
 			<TransactionAwaitingCard v-else-if="!renderedInFlightOps.length && showFallbackAwaiting" />

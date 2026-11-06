@@ -693,6 +693,18 @@ describe("RecentActivityView — one feed block for token and account views", ()
 		expect(await titleFor(43)).toEqual(["—"])
 	})
 
+	test("the running Send's card draws its task's direction, titled by its token; a task with no known type draws none", async () => {
+		const cardFor = async (transferType: unknown) => {
+			const content = { kind: H.ContentKind.Transfer, senderAddress: ACCT_A, recipientAddress: "0xother", tokenId: 42, transferType }
+			H.getTasks.mockResolvedValue([{ ...uiTransferTask(ACCT_A), content }])
+			const w = mountFeed()
+			await flushPromises()
+			return awaitingCards(w).map((c) => [c.props("direction"), c.props("titleNamesToken")])
+		}
+		expect(await cardFor(1)).toEqual([[{ from: "private", to: "public", way: "out", label: "Private → Public" }, true]])
+		expect(await cardFor(undefined)).toEqual([[null, true]])
+	})
+
 	test("a proving op's backend subtitle outranks the executing task's label and stamps the card", async () => {
 		const proving = (backend?: string) => ({
 			...inFlightTransferOp(ACCT_A),
@@ -905,7 +917,7 @@ describe("RecentActivityView — arrivals", () => {
 })
 
 describe("RecentActivityView — the awaiting card's fields", () => {
-	const FIELDS = ["title", "icon", "originLabel", "amount", "amountSymbol", "transferTypeLabel"] as const
+	const FIELDS = ["title", "icon", "originLabel", "amount", "amountSymbol", "titleNamesToken", "direction"] as const
 	const inFlight = (id: string, createdAt: number, over: Record<string, unknown>) => ({
 		id,
 		accountAddress: ACCT_A,
@@ -917,7 +929,7 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 		...over,
 	})
 
-	test("each in-flight op's card reads its title, icon, chips and amount from the record and its token", async () => {
+	test("each in-flight op's card reads its title, icon, chip, amount and direction from the record and its token", async () => {
 		H.getTokens.mockResolvedValue([
 			{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true },
 			{ id: 43, symbol: "", decimals: 6, hasDecimals: true },
@@ -933,7 +945,8 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					originLabel: null,
 					amount: "1.5",
 					amountSymbol: "USDC",
-					transferTypeLabel: "Private → Private",
+					titleNamesToken: true,
+					direction: { from: "private", to: "private", way: "out", label: "Private → Private" },
 				},
 			],
 			[
@@ -944,7 +957,8 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					originLabel: null,
 					amount: null,
 					amountSymbol: "USDC",
-					transferTypeLabel: null,
+					titleNamesToken: true,
+					direction: null,
 				},
 			],
 			[
@@ -955,7 +969,8 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					originLabel: null,
 					amount: null,
 					amountSymbol: "RAW",
-					transferTypeLabel: null,
+					titleNamesToken: true,
+					direction: null,
 				},
 			],
 			[
@@ -966,7 +981,8 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					originLabel: null,
 					amount: null,
 					amountSymbol: "USDC",
-					transferTypeLabel: null,
+					titleNamesToken: true,
+					direction: null,
 				},
 			],
 			[
@@ -977,7 +993,8 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					originLabel: null,
 					amount: "2",
 					amountSymbol: null,
-					transferTypeLabel: null,
+					titleNamesToken: true,
+					direction: null,
 				},
 			],
 			[
@@ -988,7 +1005,8 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					originLabel: null,
 					amount: null,
 					amountSymbol: null,
-					transferTypeLabel: "Private → Public",
+					titleNamesToken: true,
+					direction: { from: "private", to: "public", way: "out", label: "Private → Public" },
 				},
 			],
 			[
@@ -1006,7 +1024,8 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					originLabel: "alpha.example",
 					amount: null,
 					amountSymbol: null,
-					transferTypeLabel: null,
+					titleNamesToken: false,
+					direction: null,
 				},
 			],
 			[
@@ -1017,12 +1036,21 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					originLabel: "[https://evil.example]",
 					amount: null,
 					amountSymbol: null,
-					transferTypeLabel: null,
+					titleNamesToken: false,
+					direction: null,
 				},
 			],
 			[
 				{ kind: "dapp_execute" },
-				{ title: "Transaction", icon: "zap", originLabel: "dApp", amount: null, amountSymbol: null, transferTypeLabel: null },
+				{
+					title: "Transaction",
+					icon: "zap",
+					originLabel: "dApp",
+					amount: null,
+					amountSymbol: null,
+					titleNamesToken: false,
+					direction: null,
+				},
 			],
 		]
 		H.getOperations.mockResolvedValue(table.map(([over], i) => inFlight(`op-${i}`, 100 - i, over)))

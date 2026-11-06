@@ -100,8 +100,10 @@ const txStatusAttr = computed(() => {
 	return "unknown"
 })
 
+/** A transfer is titled by its amount's symbol; a mint by its kind, so its amount keeps the symbol. */
+const titleNamesToken = computed(() => type.value === "transfer" && Boolean(amount.value?.symbol))
 const title = computed(() => {
-	if (type.value === "transfer" && amount.value?.symbol) return dashIfBlank(amount.value.symbol)
+	if (titleNamesToken.value && amount.value) return dashIfBlank(amount.value.symbol)
 	return getTxTitle(props.tx.calls, props.tokens)
 })
 
@@ -158,6 +160,7 @@ onBeforeUnmount(() => {
 		:icon="icon"
 		:amount="amountStr"
 		:amountSymbol="displayAmountSymbol"
+		:titleNamesToken="titleNamesToken"
 		:amountFiat="amountFiat"
 		:to="to"
 		testId="tx-card"
