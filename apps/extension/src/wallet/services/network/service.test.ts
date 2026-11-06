@@ -47,6 +47,7 @@ import type { Network, NetworkEndpoint } from "./spec"
 import { classifyChains } from "@/wallet/services/stale-network/classify"
 import { seedOffersKey } from "./seed-offers"
 import { DEFAULT_SEEDS, seedForKind } from "./seeds"
+import { retiredEndpointsConversion, UNLOCK_CONVERSIONS } from "@/wallet/services/unlock-conversions"
 
 /** One key for every profile, as the profile fakes hold it. */
 const ROW_KEY_FAKE = await rowKeysForEveryProfile()
@@ -2873,10 +2874,13 @@ describe("NetworkService — a retired default", () => {
 	const RETIRED_URL = "https://lb.drpc.live/aztec-testnet/FAKEKEY"
 	const REPLACEMENT = "https://aztec-testnet.drpc.org"
 	const digest = async (text: string) => bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))))
-	const synthetic = async () => [{ sha256: await digest(RETIRED_URL), replacement: REPLACEMENT }]
+	const synthetic = async () => {
+		const retired = retiredEndpointsConversion([{ sha256: await digest(RETIRED_URL), replacement: REPLACEMENT }])
+		return UNLOCK_CONVERSIONS.map((conversion) => (conversion.name === retired.name ? retired : conversion))
+	}
 	const retire = async (service: NetworkService) =>
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		(service as any).retireDefaults("p1", await synthetic())
+		(service as any).convertRows("p1", await synthetic())
 	const retiredTestnet = (local: FakeStorageArea, id: string, profileId = "p1") =>
 		storeRow(local, {
 			id,
@@ -2902,9 +2906,9 @@ describe("NetworkService — a retired default", () => {
 		const inTheClear = () => JSON.stringify(local.store.get("nulo:core:networks@tn")).includes("aztec-testnet")
 		const profiles = Object.assign(internals.profileService, { onRowKeysReady: new EventHandler<string>() })
 		await internals.init({ get: () => profiles })
-		const real = internals.retireDefaults.bind(service)
+		const real = internals.convertRows.bind(service)
 		const sealedFirst: boolean[] = []
-		vi.spyOn(internals, "retireDefaults").mockImplementation(async (profileId) => {
+		vi.spyOn(internals, "convertRows").mockImplementation(async (profileId) => {
 			sealedFirst.push(!inTheClear())
 			return real(profileId, await synthetic())
 		})
@@ -2927,6 +2931,31 @@ describe("NetworkService — a retired default", () => {
 		expect((await stored(local, "other")).endpoints[0]?.rpcUrl).toBe(RETIRED_URL)
 		await service.getNode(CHAIN_IDS.TESTNET)
 		expect(factory.created.map((c) => c.rpcUrl)).toEqual([RETIRED_URL, REPLACEMENT])
+	})
+
+	test("a conversion that throws is logged at warn by name and root, and one that ran at debug", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		retiredTestnet(local, "tn")
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+		const internals = service as any
+		const warn = vi.spyOn(internals, "logWarn")
+		const debug = vi.spyOn(internals, "logDebug")
+		const throwing = { name: "throws", root: "networks", convert: () => Promise.reject(new Error("https://node.example/KEY")) }
+		await internals.convertRows("p1", [...(await synthetic()), throwing])
+		expect((await stored(local, "tn")).endpoints[0]?.rpcUrl).toBe(REPLACEMENT)
+		expect(warn).toHaveBeenCalledWith("an unlock conversion threw; the next worker retries", {
+			conversion: "throws",
+			root: "networks",
+			converted: 0,
+			failed: 1,
+		})
+		expect(debug).toHaveBeenCalledWith("unlock conversion ran", {
+			conversion: "retired-default-endpoints",
+			root: "networks",
+			converted: 1,
+			failed: 0,
+		})
+		expect(JSON.stringify([...warn.mock.calls, ...debug.mock.calls])).not.toContain("KEY")
 	})
 
 	test("a network a reset journal holds keeps its endpoints as captured", async () => {
