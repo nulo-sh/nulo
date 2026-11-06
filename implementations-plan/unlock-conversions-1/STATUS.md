@@ -6,3 +6,4 @@
 - 2026-11-06: final fresh Codex pass: approve. Plan approved for auto-continue (no owner ask).
 - 2026-11-06: Phase 1 gate green (lint, typecheck:all, 335 tests; mutation red); D5 follows the orchestrator's 21:42 update (throw line at warn).
 - 2026-11-06: Phase 2 gate green (lint, typecheck:all, 340 tests; inline-write mutation red).
+- 2026-11-06: Phase 3 gate green (baseline:storage unchanged; replays v1.1.0 and v1.2.0 on Chrome and Firefox 4/4 each; test, test:all exit 0).

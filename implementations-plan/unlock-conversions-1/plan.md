@@ -99,7 +99,7 @@ None. No screen, copy or row changes; the stored rows and events are today's.
 
 **Validation gate:** Phase 1's commands plus `cd apps/extension && bun --bun vitest run src/wallet/services/unlock-conversions.scan`. Pass: exit 0; step 2 reds; `git status` clean of the edit.
 
-## Phase 3: docs, baselines and the update replay
+## Phase 3: docs, baselines and the update replay ✓
 
 Warning: never rerun a red replay. Read it; run the same case on a base candidate (0bfd2c088) before you diagnose. The v1.1.0 recording's dApp session passes the replay's check until about 2026-11-10 17:56 UTC (#1641); past it, the v1.1.0 runs become "not run, with reason".
 
