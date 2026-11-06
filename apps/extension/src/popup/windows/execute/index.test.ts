@@ -1654,8 +1654,18 @@ describe("execute window — a request the wallet refused", () => {
 		code: "DEFAULT_ENTRYPOINT_PUBLIC_CALL",
 		message: "DefaultEntrypoint only supports private functions",
 	})
+	const UTILITY_CALL = walletErrorFromPayload({
+		code: "DEFAULT_ENTRYPOINT_UTILITY_CALL",
+		message: "DefaultEntrypoint only supports private functions",
+	})
+	const SEVERAL_CALLS = walletErrorFromPayload({
+		code: "DEFAULT_ENTRYPOINT_MULTI_CALL",
+		message: "DefaultEntrypoint requires exactly 1 call",
+	})
 	const REASON = {
 		public: "This transaction runs a public call without an account, which Nulo can't send. Reject tells the app.",
+		utility: "This app asked for a utility call without an account. Nulo can only run it from an account.",
+		several: "This app asked for several calls without an account. Nulo can only run one call this way.",
 		registry:
 			"This transaction asks your account to change its public authorizations from inside another contract. Apps are never allowed to, so it can't be sent. Reject tells the app.",
 		call: "A call in this transaction does not run the function it names. Nulo never sends such a call, so it can't be sent. Reject tells the app.",
@@ -1725,10 +1735,18 @@ describe("execute window — a request the wallet refused", () => {
 		["registry", REGISTRY],
 		["unattached", UNATTACHED],
 		["public", PUBLIC_CALL],
+		["utility", UTILITY_CALL],
+		["several", SEVERAL_CALLS],
 	] as const)("a preview refused by the %s check: the same notice", async (kind, error) => {
 		const window = await opened({ ...send, executionMode: "default_entrypoint" })
 		feeMapInstances[1]!.opts.onError?.(0, error)
 		await expectRefused(kind, window)
+	})
+
+	test("a no-account estimate refused for several calls: the same notice, from the fee's own failure", async () => {
+		const window = await opened({ ...send, executionMode: "default_entrypoint" })
+		feeMapInstances[0]!.opts.onError?.(0, SEVERAL_CALLS)
+		await expectRefused("several", window)
 	})
 
 	test("an approval the worker refuses: the same notice, never an error row", async () => {

@@ -13,7 +13,13 @@ import { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { HashedValues } from "@aztec-labs/stdlib/tx"
-import { DefaultEntrypointPublicCallError, ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import {
+	DefaultEntrypointMultiCallError,
+	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
+	ScopeViolationError,
+	SessionEndedError,
+} from "@nulo/extension-messaging/errors"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import z from "zod"
 import { getAuthRegistryAddress, getSetAuthorizedFn } from "@/wallet/utils/auth-registry"
@@ -454,8 +460,9 @@ const wireCall = (fields: Record<string, unknown>) => ({
 	...fields,
 })
 
-const buildNoFrom = (call: unknown, opts: unknown = {}) =>
-	h.builder.buildNoFrom({ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), exec: { calls: [call] }, opts } as never, FENCE)
+const buildNoFromCalls = (calls: unknown[], opts: unknown = {}) =>
+	h.builder.buildNoFrom({ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), exec: { calls }, opts } as never, FENCE)
+const buildNoFrom = (call: unknown, opts: unknown = {}) => buildNoFromCalls([call], opts)
 
 describe("each scope account's contract is in the PXE before a run stubs it", () => {
 	const OTHER = AztecAddress.fromBigIntUnsafe(0x07e5n)
@@ -516,7 +523,7 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		expect(built.txRequest.functionSelector.toString()).toBe(selector)
 	})
 
-	test("NO_FROM: a call whose selector is a public function is refused, typed, before any fee read; a utility one plainly; a private one builds", async () => {
+	test("NO_FROM: a call whose selector is a public or a utility function is refused, typed, before any fee read; a private one builds", async () => {
 		const PUBLIC_FN = { ...FN, name: "transfer_public_to_public", functionType: FunctionType.PUBLIC }
 		const UTILITY_FN = { ...FN, name: "balance_of_private", functionType: FunctionType.UTILITY }
 		const artifact = { functions: [FN, UTILITY_FN], nonDispatchPublicFunctions: [PUBLIC_FN] }
@@ -534,12 +541,25 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		const utility = await rejectionOf(
 			buildNoFrom(wireCall({ name: UTILITY_FN.name, selector: utilitySelector, type: FunctionType.UTILITY })),
 		)
-		expect(utility.constructor).toBe(Error)
+		expect(utility.constructor).toBe(DefaultEntrypointUtilityCallError)
 		expect(utility.message).toBe("DefaultEntrypoint only supports private functions")
 		expect(getCurrentMinFees).not.toHaveBeenCalled()
 
 		const built = await buildNoFrom(wireCall({ name: FN.name, selector: await selectorOf() }))
 		expect(built.txRequest.functionSelector.toString()).toBe(await selectorOf())
+	})
+
+	test("NO_FROM: two calls are refused, typed, before any fee read; no call keeps its plain error", async () => {
+		const getCurrentMinFees = noFromHarness()
+		const call = wireCall({ name: FN.name, selector: await selectorOf() })
+
+		const several = await rejectionOf(buildNoFromCalls([call, call]))
+		expect(several.constructor).toBe(DefaultEntrypointMultiCallError)
+		expect(several.message).toBe("DefaultEntrypoint requires exactly 1 call")
+		const none = await rejectionOf(buildNoFromCalls([]))
+		expect(none.constructor).toBe(Error)
+		expect(none.message).toBe("DefaultEntrypoint requires exactly 1 call, got 0")
+		expect(getCurrentMinFees).not.toHaveBeenCalled()
 	})
 
 	test("NO_FROM: an absent name never reaches the binding: the call schema refuses it", async () => {
