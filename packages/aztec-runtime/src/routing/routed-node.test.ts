@@ -259,6 +259,16 @@ describe("routing calls", () => {
 		expect(h.node.route.snapshot()[1]?.state).toBe("behind")
 	})
 
+	test("a read the freshly admitted primary refuses never moves to an endpoint behind the tip its admission saw", async () => {
+		const h = new Harness([A, B])
+		h.endpoint(A).tip = 100
+		h.endpoint(B).tip = 99
+		h.endpoint(A).fail = (m) => (m === "getPublicStorageAt" ? entryError(35) : undefined)
+		await expect(h.node.getPublicStorageAt("latest", undefined as never, undefined as never)).rejects.toThrow("entry 35")
+		expect(h.seen(B)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`])
+		expect(h.node.route.snapshot().map((e) => e.state)).toEqual(["ready", "behind"])
+	})
+
 	test("a fallback is admitted while the primary is dead; another chain and another rollup are refused", async () => {
 		const h = new Harness([A, B, C, "https://d.example"], { rollupAddress: ROLLUP })
 		h.endpoint(A).fail = () => transport("unreachable")

@@ -202,6 +202,27 @@ describe("the floor", () => {
 		expect(health.floor()).toBe(12)
 	})
 
+	test("takes the tip of each endpoint that takes the role, and of a probe the active one answers", () => {
+		const health = new RouteHealth(2, 0)
+		health.probed(0, passing(100), 0)
+		expect(health.active()).toBe(0)
+		expect(health.floor()).toBe(100)
+		health.probed(1, passing(99), 1)
+		expect(health.state(1)).toBe("behind")
+		health.probed(1, passing(103), 1 + probeSpacingMs)
+		expect(health.floor()).toBe(100)
+		health.failed(0, "timeout", new Error("abort"), 2 + probeSpacingMs)
+		expect(health.active()).toBe(1)
+		expect(health.floor()).toBe(103)
+		const first = health.nextProbeAt(0)
+		health.probed(0, passing(104), first)
+		health.probed(0, passing(104), first + holdDownMinMs)
+		expect(health.active()).toBe(0)
+		expect(health.floor()).toBe(104)
+		health.probed(0, passing(110), first + 2 * holdDownMinMs)
+		expect(health.floor()).toBe(110)
+	})
+
 	test("follows the active endpoint down, and an endpoint seen below it no longer qualifies", () => {
 		const health = admittedPair(10)
 		health.servedTip(0, 20, 1)
@@ -213,15 +234,15 @@ describe("the floor", () => {
 		expect(health.qualifies(1)).toBe(true)
 	})
 
-	test("seeding it above the active endpoint takes the role, the primary included, when another endpoint exists", () => {
+	test("seeding it above the active endpoint takes the role, the primary included, when another endpoint exists; the higher of the seed and the new holder's tip wins", () => {
 		const health = admittedPair(10)
 		health.probed(1, passing(30), 1)
 		health.seedFloor(25, 2)
 		expect(health.state(0)).toBe("behind")
 		expect(health.active()).toBe(1)
-		expect(health.floor()).toBe(25)
+		expect(health.floor()).toBe(30)
 		health.seedFloor(5, 3)
-		expect(health.floor()).toBe(25)
+		expect(health.floor()).toBe(30)
 	})
 
 	test("seeding it above every endpoint leaves no active endpoint", () => {
