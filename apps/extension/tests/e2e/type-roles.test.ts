@@ -75,6 +75,7 @@ import {
 	withBlockedAccount,
 } from "./fixtures/type-roles"
 import { TEST_PASSWORD } from "./fixtures/constants"
+import { shotSend } from "./fixtures/shots"
 import { skipUnlessListPrices } from "./fixtures/token-list"
 import {
 	type ActivityScope,
@@ -548,6 +549,51 @@ async function readTokenFiat(page: Page): Promise<{ text: string; lines: number 
 	})
 }
 
+type HoldingsHeader = { align: string; metaLines: number; metaInsideTotal: boolean; metaRightGap: number }
+
+/** Holdings' header as laid out: the line's alignment, the count's line boxes, whether the count lies
+ *  within the total's height, and how far its right edge stands from the line's. Bottom alignment
+ *  passes every box check, so only the computed alignment tells it from the baseline. */
+const readHoldingsHeader = (page: Page): Promise<HoldingsHeader> =>
+	page.evaluate(() => {
+		const summary = document.querySelector('[data-testid="holdings-summary"]')
+		const total = document.querySelector('[data-testid="holdings-total"]')?.getBoundingClientRect()
+		const meta = document.querySelector('[data-testid="holdings-meta"]')
+		if (!summary || !total || !meta) throw new Error("no Holdings header")
+		const range = document.createRange()
+		range.selectNodeContents(meta)
+		const tops = [...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))
+		const box = meta.getBoundingClientRect()
+		return {
+			align: getComputedStyle(summary).alignItems,
+			metaLines: new Set(tops).size,
+			metaInsideTotal: box.top >= total.top - 0.5 && box.bottom <= total.bottom + 0.5,
+			metaRightGap: summary.getBoundingClientRect().right - box.right,
+		}
+	})
+
+/** One row at the popup's width and at the narrowest: the total and the count on one baseline, the
+ *  count on one line at the right. The seeded total is long enough to be drawn below full size. */
+async function expectHoldingsHeaderOneRow(page: Page): Promise<void> {
+	await page.waitForFunction(
+		(meta: string, figure: string) =>
+			/^\d+ tokens?$/.test(document.querySelector(meta)?.textContent?.trim() ?? "") &&
+			Number.parseFloat(document.querySelector<HTMLElement>(figure)?.style.getPropertyValue("--hero-scale") ?? "1") < 1,
+		{ timeout: 30_000, polling: 100 },
+		sel("holdings-meta"),
+		`${sel("holdings-total")} span[style]`,
+	)
+	const oneRow = { align: "baseline", metaLines: 1, metaInsideTotal: true }
+	const full = await readHoldingsHeader(page)
+	expect(full, "Holdings' header at the popup's width").toMatchObject(oneRow)
+	expect(full.metaRightGap).toBeCloseTo(0, 0)
+	await atWidth(page, NARROW_WIDTH, async () => {
+		const narrow = await readHoldingsHeader(page)
+		expect(narrow, `Holdings' header at ${NARROW_WIDTH} px`).toMatchObject(oneRow)
+		expect(narrow.metaRightGap).toBeCloseTo(0, 0)
+	})
+}
+
 /** Holdings' offer to add a pasted address no row holds: the address in `meta`, inside the button's box. */
 async function expectAddTokenOffer(page: Page): Promise<void> {
 	await replaceInputValue(page, sel("holdings-search"), RECIPIENT)
@@ -895,6 +941,8 @@ test("a seeded wallet's Home, Holdings, Activity, its tx, receipt and send detai
 		await page.waitForSelector(sel("receive-address"), { hidden: true, timeout: 15_000 })
 
 		await openHoldings(page)
+		await expectHoldingsHeaderOneRow(page)
+		await shotSend(page, "holdings-header", "holdings-summary")
 		await expectPageClean(page, "Holdings")
 		await expectAddTokenOffer(page)
 		await clickNavTab(page, "activity")
