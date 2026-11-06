@@ -163,8 +163,11 @@ test("after a minor update Home shows What's new above Get started: nulo.sh is r
 	}
 
 	await navigateByHash(page, "#/popup/settings/about")
-	const about = await page.waitForSelector(sel("about-whats-new"), { visible: true, timeout: 10_000 })
-	expect(await about?.evaluate((row) => row.getAttribute("href"))).toBe(changelogUrl(releaseCore(version) ?? ""))
+	await page.waitForSelector(sel("about-whats-new"), { visible: true, timeout: 10_000 })
+	expect(await page.$eval(sel("about-whats-new"), (row) => [row.tagName, row.getAttribute("href")])).toEqual([
+		"A",
+		changelogUrl(releaseCore(version) ?? ""),
+	])
 	await shotSend(page, "whats-new-about", "about-whats-new")
 
 	expect(registeredExtension.consoleErrors).toEqual([])
