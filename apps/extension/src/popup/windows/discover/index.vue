@@ -7,6 +7,8 @@ import IdentityStrip from "@/components/composite/IdentityStrip.vue"
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
 import DappCancelledOverlay from "@/components/composite/DappCancelledOverlay.vue"
 import DappApprovalFooter from "@/components/composite/DappApprovalFooter.vue"
+import DottedTerm from "@/components/composite/DottedTerm.vue"
+import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
 
 /** Utils */
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
@@ -15,6 +17,7 @@ import { resolveDappChain } from "../capabilities/chain-mismatch"
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
 import { type DiscoveryPayload, DappInteractionServiceClient, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
+import { DAPP_SESSION_DAYS } from "@/wallet/services/dapp-session/spec"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -55,6 +58,9 @@ const chainName = computed(() =>
 	payload.value ? resolveDappChain(payload.value.params.chainId, appStore.networks, appStore.network?.chainId).name : "this network",
 )
 const actionLabel = computed(() => `wants to connect on ${chainName.value}`)
+const rememberLine = computed(
+	() => `Nulo remembers this site on ${chainName.value} for ${DAPP_SESSION_DAYS} days. Revoke it in Settings → Connected Apps.`,
+)
 
 // init/reject/services are referenced lazily (thunks): they are declared below
 // and only invoked by start()/dispose()/the guard at runtime.
@@ -145,13 +151,43 @@ onUnmounted(disposeWindow)
 				actionTestId="discover-action"
 			/>
 
-			<Flex direction="column" gap="8" :class="$style.body">
+			<Flex direction="column" gap="16" :class="$style.body">
 				<Text variant="body" color="primary" :style="{ lineHeight: '1.5' }" data-testid="discover-scope">
-					Allowing lets this site ask Nulo for things and know that Nulo is running. It sees no account or balance until you approve a request.
+					Allowing lets this site
+					<DottedTerm term="discover" position="start" testid="discover-term-discover">discover</DottedTerm>
+					Nulo. It sees no account or balance until you pass the
+					<DottedTerm term="connection-check" testid="discover-term-check">connection check</DottedTerm>
+					and approve a request.
 				</Text>
-				<Text variant="body" color="tertiary" :style="{ lineHeight: '1.5' }">
-					Make sure you trust the site you're connecting to. You can revoke this connection any time from Settings → Connected Apps.
-				</Text>
+
+				<Flex direction="column" gap="10" wide>
+					<SectionLabel label="If you allow" />
+					<ItemsContainer role="list" data-testid="discover-facts">
+						<PermissionRow
+							role="listitem"
+							icon="extension"
+							title="This site learns Nulo is installed."
+							subOn="It also sees Nulo's version, as do the scripts on the page."
+							data-testid="discover-fact-presence"
+						/>
+						<PermissionRow
+							role="listitem"
+							icon="app"
+							title="It can then ask to connect."
+							subOn="You compare emojis first. Sharing an account needs your OK."
+							data-testid="discover-fact-next"
+						/>
+						<PermissionRow
+							role="listitem"
+							icon="eye-off"
+							title="It sees nothing else."
+							subOn="No account, address, balance or history."
+							data-testid="discover-fact-hidden"
+						/>
+					</ItemsContainer>
+				</Flex>
+
+				<Text variant="body" color="tertiary" :style="{ lineHeight: '1.5' }" data-testid="discover-remember">{{ rememberLine }}</Text>
 			</Flex>
 		</Flex>
 
