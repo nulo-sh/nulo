@@ -763,6 +763,7 @@ describe("refusals filed before any window: card and detail", () => {
 		["wallet_refused", "Refused before sending", "The wallet refused this request before anything was signed. Nothing was sent."],
 		["scope_refused", "Not allowed", "The app asked for more than you allowed. Nothing was sent."],
 		["registry_refused", "Not allowed", "Apps cannot change your public authorizations. Nothing was sent."],
+		["unattached_refused", "Not allowed", "The app did not include an authorization from another of your accounts. Nothing was sent."],
 	])("%s reads %s on the card and in the detail", (kind, label, context) => {
 		const op = refused(kind)
 		expect(categoricalLabel(op)).toEqual({ label, context })

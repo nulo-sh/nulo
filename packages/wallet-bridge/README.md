@@ -213,6 +213,20 @@ text:
 }
 ```
 
+A transaction whose own contracts ask for an authorization on behalf of another
+account the session may use, while the request carries no witness for it, is
+refused while the window estimates or previews it: the wallet signs only as the
+sending account. Reject or closing the window answers this envelope, with the
+same code and its own text, naming no account:
+
+```jsonc
+{
+  "code": 4100,
+  "message": "This transaction uses another account's authorization, and the request carries no witness for it. Attach the witness.",
+  "data": { "walletErrorCode": "SCOPE_VIOLATION" }
+}
+```
+
 A call whose arguments the wallet API's schema refuses (a value that is not
 an address or a field, a call without its selector, a missing option, a
 `requestCapabilities` header without its version or metadata, a raw message
