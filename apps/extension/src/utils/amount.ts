@@ -136,7 +136,6 @@ export const balanceFormatted = (
 	return { value: fullValue, slashed: false }
 }
 
-/** The decimals the list rule keeps of a positive amount (see `formatListAmount`). */
 const listDecimals = (units: bigint, decimals: number): number => {
 	const whole = units / 10n ** BigInt(decimals)
 	const places = whole > 0n ? Math.max(2, 4 - whole.toString().length) : decimals - units.toString().length + 4
@@ -166,8 +165,8 @@ export const formatListAmount = (units: bigint | string | null | undefined, deci
 }
 
 /**
- * A token's total by `formatListAmount`, and each side truncated to the total's decimals so it never
- * shows fewer of them; a non-zero side that truncates to nothing reads `<0.0…1` at them, never `0`.
+ * A token's total by `formatListAmount`, and each side truncated to the decimals the rule gives the
+ * total; a non-zero side that truncates to nothing reads `<0.0…1` at them, never `0`.
  */
 export const formatListSplit = (
 	privateUnits: bigint,
