@@ -1,0 +1,2 @@
+- 2026-11-06 recon: #1728's path holds (no gate refuses an empty call list before the build); plan drafted (light); Codex audit next
+- 2026-11-06 Codex plan audit round 1 conditional approve (3 findings folded); round 2 approve; plan committed; phase 1 starts
