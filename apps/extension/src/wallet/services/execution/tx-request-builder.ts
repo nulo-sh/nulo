@@ -22,10 +22,9 @@
  *   - `"Contract not found"` / `"Contract artifact not found"` /
  *     `"Method not found"` — per-action resolution failures
  *   - `"Invalid authwit content kind"` — unrecognized authwit `content.kind`
- *   - `"DefaultEntrypoint requires exactly 1 call, got ${n}"`
- *   - `DefaultEntrypointPublicCallError` — a NO_FROM call to a public function, typed so the
- *     request records it as its refusal; any other non-private type keeps the plain
- *     `"DefaultEntrypoint only supports private functions"`
+ *   - a `DefaultEntrypointRefusal` — a NO_FROM request of more than one call, or whose call is a
+ *     public or utility function, typed so the request records it as its refusal; an empty call
+ *     list keeps the plain `"DefaultEntrypoint requires exactly 1 call, got 0"`
  *
  * ## Public authwits: collected here, recorded POST-send
  *
@@ -50,7 +49,11 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { Capsule, ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from "@aztec-labs/stdlib/tx"
-import { DefaultEntrypointPublicCallError } from "@nulo/extension-messaging/errors"
+import {
+	DefaultEntrypointMultiCallError,
+	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
+} from "@nulo/extension-messaging/errors"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 import type { AccountService } from "@/wallet/services/account/service"
@@ -126,6 +129,12 @@ export function sendScopes(account: AztecAddress, additionalScopes: unknown): Az
 		if (!scopes.has(address.toString())) scopes.set(address.toString(), address)
 	}
 	return [...scopes.values()]
+}
+
+/** The default entrypoint runs one call. Refused before any network or PXE work: the count needs
+ *  neither, and a request refused for it must not first fail on a contract it names. */
+function refuseSeveralNoFromCalls(op: AztecSendTxOperation): void {
+	if ((op.exec.calls ?? []).length > 1) throw new DefaultEntrypointMultiCallError()
 }
 
 export class TxRequestBuilder {
@@ -392,11 +401,11 @@ export class TxRequestBuilder {
 		const call = await FunctionCall.schema.parseAsync(rawCalls[0])
 		const noFromArtifact = requireArtifact(instances, artifacts, call.to.toString())
 		const noFromFn = assertSelectorBinding(await findFunctionBySelector(noFromArtifact, call.selector.toString()), call, CALL_BINDING)
+		if (noFromFn.functionType === FunctionType.PRIVATE) return call
 		if (noFromFn.functionType === FunctionType.PUBLIC) throw new DefaultEntrypointPublicCallError()
-		if (noFromFn.functionType !== FunctionType.PRIVATE) {
-			throw new Error("DefaultEntrypoint only supports private functions")
-		}
-		return call
+		if (noFromFn.functionType === FunctionType.UTILITY) throw new DefaultEntrypointUtilityCallError()
+		// Fails closed on a function type a later Aztec line adds.
+		throw new Error("DefaultEntrypoint only supports private functions")
 	}
 
 	/** Parse authwits/capsules/extra args from both exec and opts (same merge as
@@ -434,6 +443,7 @@ export class TxRequestBuilder {
 		try {
 			this.log(`buildNoFrom: starting, accountAddress=${op.accountAddress}, networkId=${op.networkId}`)
 			await this.profileService.assertFence(fence)
+			refuseSeveralNoFromCalls(op)
 
 			const network = await this.networkService.getNetwork(op.networkId)
 			const node = await this.networkService.getNode(network.chainId)
