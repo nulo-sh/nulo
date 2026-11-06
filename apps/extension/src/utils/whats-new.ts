@@ -1,13 +1,13 @@
 /**
  * When Home's What's new row shows. The device keeps the last minor it was told about; the row
- * shows on a stable build whose minor is above it, so a patch, a prerelease and a fresh install
- * never prompt. The worker writes the marker on install and update, the row's Dismiss after that.
+ * shows on a stable build whose minor is above it. A fresh install and a prerelease never prompt,
+ * a patch never raises a new notice, and an undismissed one stays due across a patch. The worker
+ * writes the marker on install and update, the row's Dismiss after that.
  */
 
 /** Device-wide: outside every profile-deletion prefix, and in no backup slice. */
 export const WHATS_NEW_SEEN_KEY = "nulo:ui:whatsNewSeen"
 
-/** What the marker holds: `"MAJOR.MINOR"`. */
 export const SEEN_PATTERN = /^\d+\.\d+$/
 
 const STABLE = /^\d+\.\d+\.\d+$/
@@ -28,7 +28,6 @@ export function minorOf(version: string): string | undefined {
 	return match ? `${Number(match[1])}.${Number(match[2])}` : undefined
 }
 
-/** The stored marker, or undefined when absent or damaged. */
 export const decodeSeen = (raw: unknown): string | undefined => (typeof raw === "string" && SEEN_PATTERN.test(raw) ? raw : undefined)
 
 const minorParts = (minor: string): [number, number] => {

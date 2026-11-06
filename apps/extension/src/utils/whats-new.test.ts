@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest"
 import { PROFILE_UI_KEY_PREFIXES } from "./profile-ui-keys"
 import { changelogUrl, isWhatsNewDue, minorOf, releaseCore, seenOnInstall, WHATS_NEW_SEEN_KEY } from "./whats-new"
 
-/** The marker after each `onInstalled`, then whether Home shows the row: what a person meets. */
 function afterEvent(details: { reason: string; previousVersion?: string }, running: string, stored: unknown) {
 	const written = seenOnInstall(details, running, stored)
 	const marker = written ?? stored
@@ -19,9 +18,10 @@ describe("the What's new marker", () => {
 		expect(afterEvent({ reason: "update", previousVersion: "1.2.4.0" }, "1.3.0", undefined)).toEqual({ written: "1.2", due: true })
 	})
 
-	test("a patch never prompts; a minor and a major do", () => {
+	test("a patch never raises a notice, a minor and a major do, and an undismissed one stays due across a patch", () => {
 		expect(isWhatsNewDue("1.3.0", "1.3")).toBe(false)
 		expect(isWhatsNewDue("1.3.1", "1.3")).toBe(false)
+		expect(isWhatsNewDue("1.3.1", "1.2")).toBe(true)
 		expect(isWhatsNewDue("1.4.0", "1.3")).toBe(true)
 		expect(isWhatsNewDue("2.0.0", "1.9")).toBe(true)
 		expect(isWhatsNewDue("1.10.0", "1.9")).toBe(true)
