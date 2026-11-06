@@ -247,6 +247,12 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 
 **Final pass, round 2 (resumed): approve.** "D6 consistently preserves today's ending; OA-1 explicitly separates the unapproved alternatives. The arc can ship without that answer." One note folded: the join is checked again after `closeOwnWindow`'s `getCurrent()` await.
 
+**Arc 1 review, Codex round 1 (gpt-6.1-sol, high, new session, the arc's diff against `origin/dev` at 253ff8833): clean.** "No material findings. … Both E2E paths require the original window to disappear; no assertions were loosened, timeouts raised, or retries/skips added. In-memory checks passed both Back/hand-back orderings and confirmed the first ending wins."
+
+**Arc 1 review, Opus leg (alongside round 1): findings, no correctness defect.** Accepted, all wording or test: the own-window header and `handsBackToPanel`'s doc overstated which endings hand back (export, reveal and account-file export close on Back; refusals and D6 stay in the window); `returnState`'s doc named only the card window; FIREFOX.md's list missed the account file and Restore again; `leaveChanged`'s doc narrated; two test names carried a decision id; the Chrome needs-unlock line was pinned by no page test (it was not on the base either) → one assertion. Folded in one commit; the chaos model re-cited.
+
+**Arc 1 review, Codex round 2 (resumed): clean.** "No new findings (confidence: high). The follow-up changes no runtime behavior, strengthens the in-place needs-unlock assertion, and preserves the E2E guarantees. All 13 unlock-method citations match their current source lines."
+
 ## Seeds
 
 Recorded for completeness; the orchestrator runs this lane, so neither seed is used.

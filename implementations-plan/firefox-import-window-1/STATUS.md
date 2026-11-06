@@ -5,3 +5,4 @@
 - 2026-11-06: arc 1 Phase 2 gate green (lint, typecheck:all, 114 unit tests; the inverted import pin red on the base `import.vue`).
 - 2026-11-06: arc 1 Phase 3 gate green (lint, typecheck:all, bun run test 17497 passed, test:components 1394 passed; the unlock-method pin red on the base page). Deviations: `leaveChanged` extracted for the complexity cap; 13 chaos-model citations re-cited.
 - 2026-11-06: arc 1 Phase 4: the new Firefox scenario green at retry 0 (16-18 s) and red with the hand-back off; toolbar-panel.test.ts 7/7 on Firefox (179 s); four captures taken (shots dir). Smoke suites run on the final head.
+- 2026-11-06: arc 1 review loop converged (Codex r1 clean, Opus findings folded, Codex r2 clean); final gates next.
