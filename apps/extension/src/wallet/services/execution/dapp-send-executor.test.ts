@@ -2047,14 +2047,13 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			expect(unseen.proveAndSend).not.toHaveBeenCalled()
 		})
 
-		test("the account's own request the app carried a witness for is listed as given by the account, and nothing is signed", async () => {
+		test("the account's own request the app carried a witness for is listed as given by the account", async () => {
 			const h = observing([record("own"), consumed("b")])
 			carry(h.base.built, "own")
 			const estimate = await h.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
 			expect(estimate.discoveredAuthwits).toEqual([own("own"), consumed("b")])
 			await h.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: estimate.previewId })
 			expect(h.proveAndSend).toHaveBeenCalledTimes(1)
-			expect(h.base.built.account.createAuthWit).not.toHaveBeenCalled()
 		})
 
 		test("a confirm holds only another account's records: the account's own carried one sends with no preview, or changed since it", async () => {

@@ -222,8 +222,8 @@ const createAuthwitSurface = (m: unknown): CreateAuthwitSurface => {
 /** Which surface lists the authorizations this operation uses: the preview for a NO_FROM
  *  operation, the fee estimate for a standard one; `send_transaction` adds none at confirm, and
  *  an embedded-fee standard operation signs none, so it lists only those an account of the
- *  person already gave. Nothing is rendered when there is nothing to list: an absent row must not read as a claim
- *  of absence. */
+ *  person already gave. Nothing is rendered when there is nothing to list: an absent row must not
+ *  read as a claim of absence. */
 type AuthwitSurface =
 	| { kind: "list"; authwits: readonly DiscoveredAuthwit[] }
 	| { kind: "pending" }
