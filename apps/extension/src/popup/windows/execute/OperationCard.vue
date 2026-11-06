@@ -51,13 +51,13 @@ import {
 	type CallerContext,
 	type WireCall,
 	accountOutflows,
+	outflowLabel,
 	authwitTitle,
 	callSurface,
 	rowTitle,
 	tokenAt,
 	wire,
 } from "./call-surface"
-import { pluralize } from "@/utils/plural"
 import { trimAddress } from "@/utils/string"
 import { callTitle } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
@@ -120,6 +120,8 @@ const props = defineProps<{
 	tokenFlagAcknowledged?: boolean
 	/** The wallet refuses this request: nothing on the card advises approving it. */
 	refused?: boolean
+	/** The app's own failing assertion, sanitized, while the estimate that met it stands. */
+	appFailure?: string
 }>()
 
 const emit = defineEmits<{
@@ -154,9 +156,15 @@ const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: 
 	return (op.exec.calls as WireCall[]).map((call, j) => ({ call, surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)) }))
 }
 const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
+/** What this account signs away by authorization, read as the authorizations block reads it. */
+const signedAuthorizations = computed(() =>
+	(summaryAuthwits.value ?? [])
+		.filter(({ authwit }) => authwit.onBehalfOf === undefined)
+		.map(({ authwit, surface }) => ({ call: { to: authwit.consumer }, surface, caller: authwit.caller })),
+)
 const outflows = computed(() =>
 	props.op.kind === "aztec_sendTx"
-		? accountOutflows(sendTxRows.value, props.op.accountAddress, props.tokens, props.op.network?.chainId)
+		? accountOutflows(sendTxRows.value, props.op.accountAddress, props.tokens, props.op.network?.chainId, signedAuthorizations.value)
 		: [],
 )
 const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
@@ -468,13 +476,13 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 
 		<div :class="$style.op_divider" />
 
-		<!-- Part of the card's own fee section: where a slot replaces that section, this goes too. -->
-		<template v-if="outflows.length && !$slots.fee">
+		<!-- Opens every fee section, a window's own block in the slot included. -->
+		<template v-if="outflows.length">
 			<Flex data-testid="execute-op-leaves-account" direction="column" gap="8" wide :class="$style.leaves">
 				<Text variant="label-section" color="secondary">Leaves your account</Text>
 				<Flex v-for="row in outflows" :key="row.contract" data-testid="execute-op-leaves-row" :data-contract="row.contract" justify="between" align="center" :class="$style.row">
-					<Text variant="body" color="secondary" :class="$style.leaves_count">{{ row.count }} {{ pluralize(row.count, "transfer", "transfers") }}</Text>
-					<Text variant="amount-row" color="primary">{{ row.amount.text }}<template v-if="row.amount.baseUnits"> base units</template></Text>
+					<Text data-testid="execute-op-leaves-count" variant="body" color="secondary" :class="$style.leaves_count">{{ outflowLabel(row) }}</Text>
+					<Text data-testid="execute-op-leaves-amount" variant="amount-row" color="primary">{{ row.amount.text }}<template v-if="row.amount.baseUnits"> base units</template></Text>
 				</Flex>
 			</Flex>
 			<div :class="$style.leaves_rule" />
@@ -541,23 +549,30 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			</Flex>
 		</template>
 
-		<FeeSettingsCard
-			v-else
-			embedded
-			:lockedMethod="requestedMethod(op)"
-			:profile="profile"
-			:network="op.network"
-			:account="op.account"
-			:feeEstimate="feeEstimate"
-			:isEstimating="isEstimating"
-			:isQueued="isQueued"
-			:offersQueue="false"
-			:estimateFailed="estimateFailed"
-			:modelValue="op.feeSettings"
-			@update:modelValue="(value: FeeSettings | undefined) => emit('updateFeeSettings', index, value)"
-			@update:payer="(payer: FeePayerPick | null) => emit('updatePayer', index, payer)"
-			@retryEstimate="emit('retryEstimate', index)"
-		/>
+		<template v-else>
+			<FeeSettingsCard
+				embedded
+				:lockedMethod="requestedMethod(op)"
+				:profile="profile"
+				:network="op.network"
+				:account="op.account"
+				:feeEstimate="feeEstimate"
+				:isEstimating="isEstimating"
+				:isQueued="isQueued"
+				:offersQueue="false"
+				:estimateFailed="estimateFailed"
+				:modelValue="op.feeSettings"
+				@update:modelValue="(value: FeeSettings | undefined) => emit('updateFeeSettings', index, value)"
+				@update:payer="(payer: FeePayerPick | null) => emit('updatePayer', index, payer)"
+				@retryEstimate="emit('retryEstimate', index)"
+			/>
+			<!-- Mounted with the card: a region created with its text in place may go unannounced. -->
+			<div role="status" aria-live="polite" aria-atomic="true" data-testid="execute-op-app-failure-live">
+				<p v-if="appFailure" data-testid="execute-op-app-failure" :class="[$style.app_failure, 'color--txt-danger']">
+					The app's transaction cannot run right now: <bdi>{{ appFailure }}</bdi>. Fee estimation needs it to run.
+				</p>
+			</div>
+		</template>
 	</Flex>
 
 	<Flex
@@ -800,6 +815,15 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 .leaves_count {
 	flex-shrink: 0;
 	white-space: nowrap;
+}
+
+/* The text is the contract's: stacked combining marks, which the sanitizer leaves, stay in the box. */
+.app_failure {
+	composes: type--body from global;
+	margin: 0;
+	padding: 0 12px 12px;
+	overflow-wrap: anywhere;
+	overflow: hidden;
 }
 
 .leaves_rule {

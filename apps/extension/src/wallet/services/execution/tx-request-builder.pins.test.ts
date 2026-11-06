@@ -13,7 +13,7 @@ import { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { HashedValues } from "@aztec-labs/stdlib/tx"
-import { ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { DefaultEntrypointPublicCallError, ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import z from "zod"
 import { getAuthRegistryAddress, getSetAuthorizedFn } from "@/wallet/utils/auth-registry"
@@ -516,9 +516,10 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		expect(built.txRequest.functionSelector.toString()).toBe(selector)
 	})
 
-	test("NO_FROM: a call whose selector is a public function is refused before any fee read; a private one builds", async () => {
+	test("NO_FROM: a call whose selector is a public function is refused, typed, before any fee read; a utility one plainly; a private one builds", async () => {
 		const PUBLIC_FN = { ...FN, name: "transfer_public_to_public", functionType: FunctionType.PUBLIC }
-		const artifact = { functions: [FN], nonDispatchPublicFunctions: [PUBLIC_FN] }
+		const UTILITY_FN = { ...FN, name: "balance_of_private", functionType: FunctionType.UTILITY }
+		const artifact = { functions: [FN, UTILITY_FN], nonDispatchPublicFunctions: [PUBLIC_FN] }
 		h.deps.resolver.resolveArtifacts.mockResolvedValue(new Map([[CLASS_ID.toString(), artifact]]) as never)
 		const getCurrentMinFees = noFromHarness()
 		const publicSelector = (await FunctionSelector.fromNameAndParameters(PUBLIC_FN.name, PUBLIC_FN.parameters)).toString()
@@ -526,8 +527,15 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		const refused = await rejectionOf(
 			buildNoFrom(wireCall({ name: PUBLIC_FN.name, selector: publicSelector, type: FunctionType.PUBLIC })),
 		)
-		expect(refused.constructor).toBe(Error)
+		expect(refused.constructor).toBe(DefaultEntrypointPublicCallError)
 		expect(refused.message).toBe("DefaultEntrypoint only supports private functions")
+		expect(getCurrentMinFees).not.toHaveBeenCalled()
+		const utilitySelector = (await FunctionSelector.fromNameAndParameters(UTILITY_FN.name, UTILITY_FN.parameters)).toString()
+		const utility = await rejectionOf(
+			buildNoFrom(wireCall({ name: UTILITY_FN.name, selector: utilitySelector, type: FunctionType.UTILITY })),
+		)
+		expect(utility.constructor).toBe(Error)
+		expect(utility.message).toBe("DefaultEntrypoint only supports private functions")
 		expect(getCurrentMinFees).not.toHaveBeenCalled()
 
 		const built = await buildNoFrom(wireCall({ name: FN.name, selector: await selectorOf() }))

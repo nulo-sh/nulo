@@ -357,6 +357,48 @@ export class PxeStaleAnchorError extends WalletError {
 	}
 }
 
+/** A contract assertion's own text and the failing call path, outermost frame first. */
+export interface ContractAssertionDetails {
+	readonly assertion: string
+	readonly frames: readonly { readonly contract: string; readonly selector?: string }[]
+}
+
+const ASSERTION_MAX = 1_024
+const FRAMES_MAX = 16
+const FIELD_ADDRESS = /^0x[0-9a-fA-F]{64}$/
+const SELECTOR = /^0x[0-9a-fA-F]{8}$/
+
+function frameOf(frame: unknown): ContractAssertionDetails["frames"] {
+	const { contract, selector } = (typeof frame === "object" && frame !== null ? frame : {}) as Record<string, unknown>
+	if (typeof contract !== "string" || !FIELD_ADDRESS.test(contract)) return []
+	return [typeof selector === "string" && SELECTOR.test(selector) ? { contract, selector } : { contract }]
+}
+
+/** Wire details are unvalidated, so the bound is applied on every construction, a rebuild included. */
+function boundedAssertion(details: unknown): ContractAssertionDetails {
+	const { assertion, frames } = (typeof details === "object" && details !== null ? details : {}) as Record<string, unknown>
+	return {
+		// Cut by code point, so a cap never leaves half a surrogate pair.
+		assertion: typeof assertion === "string" ? [...assertion.slice(0, 2 * ASSERTION_MAX)].slice(0, ASSERTION_MAX).join("") : "",
+		frames: Array.isArray(frames) ? frames.slice(0, FRAMES_MAX).flatMap(frameOf) : [],
+	}
+}
+
+/**
+ * A simulation failed on a contract's own assertion. Built where the PXE runs, the only process that
+ * holds the failing call path; the message is the simulator's, unchanged. The assertion text is the
+ * contract's, so a reader shows it only as the app's words, sanitized, and only when a frame names
+ * one of the request's own calls.
+ */
+export class ContractAssertionError extends WalletError {
+	public static readonly CODE = "CONTRACT_ASSERTION"
+	declare public readonly details: ContractAssertionDetails
+
+	public constructor(message: string, details?: unknown) {
+		super(ContractAssertionError.CODE, message, boundedAssertion(details), "ContractAssertionError")
+	}
+}
+
 /**
  * A request named a contract instance or class the wallet's PXE does not hold. Raised while
  * resolving contracts — before proving, before any broadcast — so a dApp may register the contract
@@ -382,6 +424,25 @@ export class ContractNotFoundError extends WalletError {
 
 	public constructor() {
 		super(ContractNotFoundError.CODE, ContractNotFoundError.MESSAGE, undefined, "ContractNotFoundError")
+	}
+}
+
+/**
+ * A request asked the default entrypoint, which runs with no account, to run a public function:
+ * Nulo cannot send that, so it refuses before anything is signed, by the same check the send runs.
+ * The dApp's answer stays the unclassified constant; the wallet's own surfaces read the class.
+ */
+export class DefaultEntrypointPublicCallError extends WalletError {
+	public static readonly CODE = "DEFAULT_ENTRYPOINT_PUBLIC_CALL"
+	public static readonly MESSAGE = "DefaultEntrypoint only supports private functions"
+
+	public constructor() {
+		super(
+			DefaultEntrypointPublicCallError.CODE,
+			DefaultEntrypointPublicCallError.MESSAGE,
+			undefined,
+			"DefaultEntrypointPublicCallError",
+		)
 	}
 }
 
@@ -686,6 +747,8 @@ const REBUILT_AS = [
 	UnsupportedMethodError,
 	InvalidWalletArgumentsError,
 	PxeStaleAnchorError,
+	ContractAssertionError,
+	DefaultEntrypointPublicCallError,
 	ContractNotRegisteredError,
 	ContractNotFoundError,
 	ChainNotSupportedError,
