@@ -306,7 +306,7 @@ async function watchHandback(control: Page): Promise<void> {
 	}, HANDBACK_KEY)
 }
 
-/** The card window's return as the control page sees it, without moving focus. */
+/** An own window's return as the control page sees it, without moving focus. */
 const returnState = (control: Page, windowId: number) =>
 	control.evaluate(
 		async (key: string, id: number) => ({

@@ -418,7 +418,7 @@ describe("popup import — in its own window", () => {
 	})
 
 	test.each(["active", "needs-unlock"] as const)(
-		"a finished import (%s) hands Home and 'Profile imported' back to the panel, and neither toasts nor routes (P116-16)",
+		"a finished import (%s) hands Home and 'Profile imported' back to the panel, and neither toasts nor routes",
 		async (outcome) => {
 			surface.handsBack = true
 			vi.mocked(completeImportWithRecovery).mockResolvedValueOnce(outcome)
@@ -547,6 +547,7 @@ describe("popup import — the activation wait", () => {
 		await done
 
 		expect(boot.hydrate).toHaveBeenCalledTimes(1)
+		expect(toast.open).toHaveBeenCalledWith({ kind: "success", label: "Profile imported. Unlock to continue" })
 		expect(nav.push).toHaveBeenCalledWith("/popup/auth")
 	})
 })

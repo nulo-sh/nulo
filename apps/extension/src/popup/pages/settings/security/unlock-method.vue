@@ -138,7 +138,6 @@ async function currentPasskey(isCurrent) {
 /** A new passkey's card, at an input minted for this profile. */
 const nextPasskey = () => newPasskey.ask({ step: "unlockMethod", profileName: appStore.profile.name })
 
-/** A change made leaves for Settings with its line; an own window hands both back to the panel. */
 function leaveChanged(outcome) {
 	if (handsBackToPanel()) {
 		void returnToPanel("/popup/settings", outcome)

@@ -9,8 +9,9 @@
  * opened it is gone by the time it could, and a later start from the panel focuses that window.
  *
  * The file picks (contacts, the account file, Restore again's backup) open as a card window, which
- * shows only the pick. A flow that ends in its own window ends where the panel would have ended it:
- * the window hands that page and its line back to the panel and closes.
+ * shows only the pick. Where a flow's ending lands on a page (a card's result, an import, a changed
+ * unlock method), the window hands that page and its line back to the panel and closes; Back on any
+ * other flow only closes it.
  */
 import type { CreateWindowOptions } from "@nulo/wallet-core/ports"
 import type { NavigationHookAfter } from "vue-router"
@@ -131,9 +132,9 @@ export function isCardWindow(): boolean {
 	return inPopupWindow && isCardFlow(ownFlow)
 }
 
-/** This document still runs the flow it was opened for, in the popup-type window it was handed, so
- *  the flow's end hands back to the panel. Synchronous, so a caller decides in the task of its last
- *  ownership check. Read after `ownWindowSettled`. */
+/** This document still runs the flow it was opened for, in the popup-type window it was handed: the
+ *  only document whose ending may hand back to the panel. Synchronous, so a caller decides in the
+ *  task of its last ownership check. Read after `ownWindowSettled`. */
 export function handsBackToPanel(): boolean {
 	return inPopupWindow && ownFlow !== undefined
 }

@@ -469,7 +469,7 @@ describe("how a change ends", () => {
 		nothingChanged()
 	})
 
-	test("in its own window a made change hands Settings and its line back to the panel, and neither toasts nor routes (P116-16)", async () => {
+	test("in its own window a made change hands Settings and its line back to the panel, and neither toasts nor routes", async () => {
 		surface.handsBack = true
 		const w = mountPage("passkey")
 		await flushPromises()
