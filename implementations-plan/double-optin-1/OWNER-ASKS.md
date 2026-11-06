@@ -4,8 +4,9 @@ The lane's visible budget, from the orchestrator's brief: "New copy on three sur
 confirmation email (subject and body), the form's reply after submit ("check your inbox" instead of
 "you're in"), and the confirmation page the link opens (success, expired, invalid). The privacy
 notice's "No confirmation email" section and its recipients line change too." Every item below
-needs your words before the PR leaves draft. **What ships now**: the arc builds each recommendation
-as written, so the draft PR shows exactly what you would approve; a different pick is a copy edit.
+needs your words before the PR leaves draft. **Answered**: OA1–OA8 on decision page 114 (signed
+2026-11-06, 14:27 UTC) and OA4's follow-up on page 116 (signed 17:04 UTC), quoted under each ask.
+**Open**: OA9, which the answer to OA4 opened.
 
 Pictures: `~/.cache/nulo-backlog/double-optin-1/shots/`, named under each ask. The pages are the
 built site served with its CSP; "before" is `dev` at the plan's base. The email is drawn by Chrome; a
@@ -32,6 +33,11 @@ The eyebrow, the heading and the footer are set in capitals by style, as picture
 is hidden in the body and shows only in the inbox list. Before: no email. Pictures: `email-600.png`, `email-390.png`, `email.html`, `email.txt`.
 Recommendation: sign as written.
 
+**Answered (P114-01): approved as written**, with `p114-email-600` and `p114-email-390` on the page,
+the two renders above (the same files). Your note on OA4 asked for them: "what's the email design
+like? I want to see that / approve myself too". The email's source has not changed since they were
+drawn, so the built email is the one you approved.
+
 ## OA2. The form's reply after submit (changed)
 
 | Where | Before | Proposed |
@@ -50,6 +56,8 @@ your inbox to confirm." with the button "Sent". Recommendation: (a), the table a
 visitor is new and submits once. As today, the status line is read out by a screen reader but not
 shown after a success: what you see change is the button. Pictures: `form-before.png`, `form-after.png`.
 
+**Answered (P114-02): A**, the table above.
+
 ## OA3. `/subscribed`, the answer without JavaScript (changed)
 
 | Part | Before | Proposed |
@@ -60,6 +68,8 @@ shown after a success: what you see change is the button. Pictures: `form-before
 | Link | Back to nulo.sh | Back to nulo.sh |
 
 Pictures: `subscribed-before.png`, `subscribed-after.png`. Recommendation: sign.
+
+**Answered (P114-03): approved as written.**
 
 ## OA4. `/confirm`, the page the link opens (new)
 
@@ -83,6 +93,20 @@ delegation, shown here so you see it). One edge: someone who left the list and o
 again within 24 hours sees "You're on the list." while staying off it. Pictures:
 `confirm-ready.png`, `confirm-done.png`, `confirm-invalid.png`, `confirm-retry.png`,
 `confirm-noscript.png`, and `confirm-ready-390.png` on a phone. Recommendation: sign.
+
+**Answered (P114-04, then P116-23): C.** Your note on page 114: "Shouldn't we auto-confirm once the
+user lands on the link? It'd be extremely weird that they have to: 1. Sign-up 2. Get the email,
+click "Confirm" 3. Get directed to a page click "Confirm" again 4. And only then they are
+confirmed." Your pick on page 116: "Join on open in a browser: the page submits itself by
+JavaScript as it loads, with A's button as the no-JavaScript fallback. A scanner with no script
+engine adds nobody; one that runs pages (some sandboxes) still could." Built: the page posts the
+token as it opens and shows "You're on the list." with no second tap; opening the link again shows
+it again and adds nothing. For the moment the post takes, the page shows the "Link opened" row with
+its button inactive, the state A showed after a press. If the post does not go through, the
+"Network or server error" row shows, and Confirm sends it again. The expired or invalid state and
+every line of copy are A's, as approved. Pictures of C: `c-confirm-done.png`, `c-confirm-retry.png`,
+`c-confirm-invalid.png`, `c-confirm-noscript.png`, `c-form-after.png`. What "the no-JavaScript
+fallback" can be is in OA9.
 
 ## OA5. Website privacy notice 1.2 (changed)
 
@@ -126,6 +150,8 @@ Effective date: the day of the promote that publishes it (left as a blank on `de
 
 Pictures: `notice-before.png`, `notice-after.png`. Recommendation: sign.
 
+**Answered (P114-05): approved as written.** One sentence of § 3.5 no longer matches C: OA9.
+
 ## OA6. Floods, Resend's daily send quota and bounces (answer before the PR leaves draft)
 
 Resend's Free plan sends at most 100 transactional emails a day (reset at 00:00 UTC); broadcasts
@@ -149,6 +175,8 @@ Options:
 
 Recommendation: (a) now; revisit if the daily check shows junk. The PR implements (a).
 
+**Answered (P114-06): A.** Filed as a closed known limit at close-out (the plan's Outcome).
+
 ## OA7. Contacts who joined before double opt-in
 
 The list already holds the addresses that signed up before this change, none of them confirmed by
@@ -156,3 +184,35 @@ email. This plan confirms new signups only. Options: (a) keep them as they are (
 notice 1.0 or 1.1, which said no confirmation email is sent, and the launch email told each why they
 got it); (b) before the next campaign, send them one email asking them to confirm and keep only
 those who do: new work, a separate plan. Recommendation: (a).
+
+**Answered (P114-07): A.**
+
+## OA8. Which branch deploys `nulo-subscribe` (a dashboard setting)
+
+The Workers Builds API showed `nulo-subscribe` building from `dev`, while the landing builds from
+`main`; merging into `dev` would have deployed the new Worker ahead of the `/confirm` page. Options:
+(a) set its production branch to `main`; (b) keep `dev` and merge only in a promote window.
+
+**Answered (P114-08): A**, with your note: "I've confirmed: I've already changed the settings for
+the `main` branch. Safe to merge." Nothing in the PR changes.
+
+## OA9. Notice 1.2 § 3.5 after your pick C (open)
+
+**The sentence.** § 3.5, approved before you picked C, says: "Your address joins the list only
+when you open the link and press Confirm." With C nobody presses in a browser that runs the page,
+so it no longer holds. It ships as approved until you answer; the notice is not published before
+the promote, which also fills its effective date (`BEFORE-LAUNCH.md`). Options:
+- (a) "Your address joins the list only when you open the link in a browser: the page confirms it
+  as it loads, and if that does not go through, you press Confirm."
+- (b) "Your address joins the list only when you open the link."
+
+Recommendation: (a); it says what happens and keeps the press the page may still ask for.
+
+**For your information, no answer needed: the no-JavaScript fallback.** C names A's button as the
+fallback without JavaScript. Under A the button needed JavaScript too: the token sits in the part
+of the link only the page's script can read, which is what keeps the address out of our request
+records (notice § 3.1). So with JavaScript off the page shows A's approved line, "Confirming needs
+JavaScript. Turn it on and open the link again.", and no button; the button is the fallback when
+the opening post does not go through. A button that works without JavaScript needs the token in a
+part of the link the server receives, which puts the address in Cloudflare's request records and
+contradicts § 3.1; not built. Picture: `c-confirm-noscript.png`.

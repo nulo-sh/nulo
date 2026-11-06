@@ -247,7 +247,9 @@ November 2026; the landing and `nulo-subscribe` both deploy from that promote's 
 confirmed by email before they join the list. The landing and `nulo-subscribe` both deploy from the
 promote's push to `main`, each by its own build:
 
-- [ ] The owner's answers to `implementations-plan/double-optin-1/OWNER-ASKS.md` (OA1–OA7) are in the PR
+- [x] The owner's answers to `implementations-plan/double-optin-1/OWNER-ASKS.md` (OA1–OA8) are in the PR
+- [ ] `legal/website-privacy.md` § 3.5 carries the owner's wording for OA9: its sentence "joins the
+      list only when you open the link and press Confirm" predates the pick that confirms on open
 - [ ] `legal/website-privacy.md` — the version line and the 1.2 history row carry the day the promote lands
 - [ ] The secret `CONFIRM_SECRET` is set on `nulo-subscribe` before the promote merges
       (`infra/subscribe/README.md`, owner checklist item 3); without it every signup answers 503

@@ -16,19 +16,20 @@ base: 4291a8c98
 The nulo.sh form adds any syntactically valid address to the Resend launch list today, so anyone can
 enter someone else's address (#1236). After this plan, a submission sends one confirmation email
 with a signed link that works for 24 hours, and the contact is created only when the person opens
-the link and presses Confirm. No pending rows are stored anywhere of ours. The owner deferred double
+the link in a browser, whose page posts the token as it loads (the owner's pick, D13). No pending rows are stored anywhere of ours. The owner deferred double
 opt-in on 2026-10-27 with the trigger "before any campaign after the launch email"; the launch email
 went out on 2026-11-04, so the trigger holds. Scope: new submissions. Contacts already on the list
-are OA7. Over the mid target (about 370 lines): the three audit tables carry every finding's
-disposition, and nothing here restates `OWNER-ASKS.md`.
+are OA7. Over the mid target (about 440 lines): the audit tables carry every finding's disposition,
+and the owner's sign-offs are quoted where the rules require them.
 
 ## Outcome & Quality Bar
 
 - **For whom**: a visitor who wants Nulo updates, reading the confirmation email on a phone or a
   desktop; the owner, whose next campaign must reach only people who asked; a stranger whose address
   someone else typed.
-- **Excellent**: (1) the contact appears only after a press on the page the link opens, never on a
-  bare GET, so a mail scanner that prefetches links cannot subscribe anyone; (2) a typed-in stranger
+- **Excellent**: (1) the contact appears only when the page the link opens posts its token, by
+  script as it loads or by a press when that post fails, never on a bare GET, so a scanner that
+  fetches links without running their scripts subscribes nobody; (2) a typed-in stranger
   is never added and gets at most one email per exact address per 24 hours; (3) no request to
   nulo.sh carries the address in its URL, and no log line carries it, the token or a secret; (4) an
   expired, forged or malformed link gets one answer, with no hint of which.
@@ -40,8 +41,9 @@ disposition, and nothing here restates `OWNER-ASKS.md`.
 ## Assumptions
 
 **Facts** (sources in [recon.md](recon.md)):
-1. Both Workers deploy from `main`, each by its own Workers Build from the same push; the lane
-   brief's "from `dev`" does not hold. Production changes at the next promote.
+1. Both Workers deploy from `main`, each by its own Workers Build from the same push: the landing
+   always did; `nulo-subscribe`'s Build was set to `dev` until the owner moved it (D16). Production
+   changes at the next promote.
 2. Resend's `Idempotency-Key` on `POST /emails` lasts 24 h per method and endpoint; a reused key with
    another payload is `409 invalid_idempotent_request`, one in flight `409
    concurrent_idempotent_requests`; `409 resource_locked` also exists.
@@ -68,10 +70,11 @@ disposition, and nothing here restates `OWNER-ASKS.md`.
   request) is undone. The README's "no withdrawal can be lost" becomes this conditional known
   limit; the duplicate check at BEFORE-LAUNCH records whether creates upsert.
 
-**Asks** (all in [OWNER-ASKS.md](OWNER-ASKS.md); the arc builds each recommendation and the PR stays
-a draft until the owner's words): OA1 the email; OA2 the form's reply, a repeat inside 24 h
-included; OA3 `/subscribed`; OA4 `/confirm`, the press included; OA5 notice 1.2; OA6 flood, quota
-and bounces; OA7 contacts that joined before double opt-in.
+**Asks** (all in [OWNER-ASKS.md](OWNER-ASKS.md), answered on decision page 114, signed 2026-11-06
+14:27 UTC, and page 116, signed 17:04 UTC): OA1 the email; OA2 the form's reply, a repeat inside
+24 h included; OA3 `/subscribed`; OA4 `/confirm`, answered by D13; OA5 notice 1.2; OA6 flood, quota
+and bounces; OA7 contacts that joined before double opt-in; OA8 the branch `nulo-subscribe`
+deploys from. Open: OA9, the one notice sentence D13 made inaccurate.
 
 ## Architecture & Implementation
 
@@ -88,12 +91,12 @@ template module and one Resend call; its one new input is the secret `CONFIRM_SE
    (the request is accepted; a send in flight can still fail, Inference (c) applies); any other
    409 fails as today (502).
 3. The email links to `https://nulo.sh/confirm#<token>`. The static `/confirm` page reads the
-   fragment, which a browser does not send in its request, and shows a Confirm button.
-4. The press: `fetch POST /api/confirm`, JSON `{"token": …}` → the same admission → config →
+   fragment, which a browser does not send in its request, and posts it at once (D13).
+4. The post (on load, or a press on the retry): `fetch POST /api/confirm`, JSON `{"token": …}` → the same admission → config →
    `readToken` (`null` → 400 `{"ok":false}`, one answer for every bad token) → `addContact`,
    unchanged (lookup, mirror read, create, recheck; `consent_version` and `consented_at` are the
-   confirmation's, as today they are the submission's) → 200 `{"ok":true}`. A second press, or a
-   second open, finds the contact and writes nothing.
+   confirmation's, as today they are the submission's) → 200 `{"ok":true}`. A second open, or a
+   press after a lost answer, finds the contact and writes nothing.
 
 **Token** (`src/token.ts`). `<payload>.<mac>`, unpadded base64url. Payload: the JSON
 `{"e": email, "t": submittedAtMs}`. MAC: HMAC-SHA-256 under the UTF-8 bytes of `CONFIRM_SECRET`
@@ -129,6 +132,7 @@ resets the window.
 - Landing `src/confirm.ts`: `tokenFrom(hash)` (shape and 1,024-character cap, else none),
   `postConfirm(token, fetch)` → `"confirmed" | "invalid" | "retry"` (only `200 {"ok":true}`
   confirms, `400` is invalid), `submitConfirm(view, fetch)` over a `ConfirmView` like `SignupView`,
+  `startConfirm(view, hash, fetch)`, which posts at once and returns `{ press, opened }` (D13),
   `mountConfirm()` from `main.ts`, a no-op on other pages. The token is read once at mount, set
   only through `textContent`/attributes, never `innerHTML`.
 
@@ -150,19 +154,29 @@ send key; a format prefix and a canonical-encoding check in the token; deriving 
 surfaces: the confirmation email (subject and body), the form's reply after submit ("check your
 inbox" instead of "you're in"), and the confirmation page the link opens (success, expired,
 invalid). The privacy notice's "No confirmation email" section and its recipients line change
-too." Each surface waits for the owner's sign-off in `OWNER-ASKS.md`, before and after with
-pictures; the extension shows nothing new.
-- *UI impact: the confirmation email* (new): OA1.
-- *UI impact: the hero and footer forms' reply after submit* (status line and button label): OA2.
-- *UI impact: `/subscribed`*, the no-JavaScript answer (title, heading, line): OA3.
-- *UI impact: `/confirm`* (new page; ready, confirmed, invalid, retry, no-JavaScript): OA4.
-- *UI impact: the website privacy notice 1.2* (summary, § 3.1, § 3.3–3.6, § 6, history): OA5.
+too." The owner signed each surface on decision page 114 (2026-11-06, 14:27 UTC) and page 116
+(17:04 UTC); the words are in `OWNER-ASKS.md`, the pictures under each ask. The extension shows
+nothing new.
+- *UI impact: the confirmation email* (new): OA1, P114-01 "approved as written", with its 600 and
+  390 px renders on the page; the built email is the one rendered (same source since the capture).
+- *UI impact: the hero and footer forms' reply after submit* (status line and button label): OA2,
+  P114-02 "A".
+- *UI impact: `/subscribed`*, the no-JavaScript answer (title, heading, line): OA3, P114-03
+  "approved as written".
+- *UI impact: `/confirm`* (new page; confirmed, invalid, retry, no-JavaScript): OA4, P114-04's note
+  ("Shouldn't we auto-confirm once the user lands on the link?") answered by P116-23 "C": "Join on
+  open in a browser: the page submits itself by JavaScript as it loads, with A's button as the
+  no-JavaScript fallback. A scanner with no script engine adds nobody; one that runs pages (some
+  sandboxes) still could." The copy is A's as approved; D14 and D15 say how C's states use it.
+- *UI impact: the website privacy notice 1.2* (summary, § 3.1, § 3.3–3.6, § 6, history): OA5,
+  P114-05 "approved as written"; its § 3.5 sentence on the press is OA9, open.
 
 ## Security & Adversarial Considerations
 
 - **Third-party mailing.** Anyone can still make the form send one email to an address not on the
   list: at most one per exact address per 24 h, five submissions per minute per IP per location,
-  60 per minute overall per location. The email adds nothing; the address joins only on a press.
+  60 per minute overall per location. The email adds nothing; the address joins only when the link
+  is opened in a browser that runs the page.
 - **Flood (OA6; filed at close-out as a known limit, linking #1237).** A script supplies `Origin`
   and leaves the honeypot empty, so one IP at 5 a minute spends the 100-a-day quota in about 20
   minutes. Then honest visitors read "try again" until 00:00 UTC, and while it lasts a new address
@@ -187,9 +201,14 @@ pictures; the extension shows nothing new.
 - **Replay.** A valid token replayed after confirmation writes nothing (the contact exists, in any
   state). After a full deletion on request, a token under 24 h old can re-create the contact; the
   notice already says a later sign-up can re-add a deleted address (README known limit).
-- **Link scanners.** A GET only loads a static page; the contact needs a POST with
-  `Origin: https://nulo.sh` after a press. A scanner that runs scripts and presses buttons could
-  still confirm (README known limit).
+- **Link scanners, the accepted trade (D13).** A GET only loads a static page; the contact needs
+  the page's script to read the fragment and POST it with `Origin: https://nulo.sh`. A scanner that
+  fetches links without running their scripts adds nobody. One that runs the page (some sandboxes
+  detonate links in a browser) confirms the address it opens, so a stranger whose address someone
+  typed, behind such a scanner, can be added without a tap. The owner accepted that on page 116
+  for one tap in every browser: "A scanner with no script engine adds nobody; one that runs pages
+  (some sandboxes) still could." Bounds: every product update's one-click unsubscribe, the
+  per-address and per-IP limits on the emails that start it. README known limit.
 - **Privacy.** The address travels in the email, in Resend's logs (disclosed) and in POST bodies;
   the fragment keeps it out of every nulo.sh request line, `Referer` and Cloudflare's request
   sample, though a recipient's link wrapper sees the whole link. The send key is an HMAC. The
@@ -212,16 +231,20 @@ pictures; the extension shows nothing new.
 |---|---|---|---|---|
 | D1 | Stateless HMAC token, no stored pending rows | for | for | C stores unconfirmed addresses, spends the contact quota, adds a re-subscribe path |
 | D2 | Token in the fragment of a static landing page | for | for | B and the interstitial put the address in a nulo.sh request line; the cost (JavaScript) is OA4 |
-| D3 | A press confirms; a GET never does | for | for | the stranger never presses, so only a scanner's GET would confirm |
+| D3 | A press confirms; a GET never does | for | for | superseded by D13 (the owner's pick); a GET still never confirms |
 | D4 | Per-address limit by Resend's `Idempotency-Key`, on the exact address | for, no normalization | for, with lowercase and tag strip | rejected the strip: Gmail's dots defeat any partial rule, so it bounds nothing for the commonest provider; the claim is narrowed instead |
 | D5 | A listed address gets no email | for | for, once (d) is recorded | no mail to listed people; no write |
-| D6 | `consented_at` and `consent_version` at confirmation | confirmation time | either | consent is the press; `addContact` stays unchanged and `v` leaves the token |
+| D6 | `consented_at` and `consent_version` at confirmation | confirmation time | either | consent is opening the emailed link (D13); `addContact` stays unchanged and `v` leaves the token |
 | D7 | `/api/confirm` shares both limiters | for | for | no new binding |
 | D8 | Separate secret, 32-character floor, fail closed | for | for | key separation |
 | D9 | Accessibility (owner's 2026-10-19 delegation): native `<button type="button">`, the `aria-disabled` lock signup uses, a `role="status"` region; on a final state the button is hidden and focus moves to the heading (`tabindex="-1"`) | for, show it in OA4 | for | focus never lands on a removed control |
 | D10 | Named 409s only | proposed | — | an unknown 409 proves nothing; reading the name is local to `call()` |
 | D11 | Token without a format prefix or canonical check | for the prefix | against both | tie on the prefix, so the simpler form: rotation already voids 24 h of links |
 | D12 | Notice 1.2 keeps `«FILL: effective date»`; `legal-pages.test.ts` reads its history row as `parseDocumentHeader` reads the header (a placeholder is no date yet) | (Codex loop) | — | deviation found in Phase 3: the test compared a parsed header (`null`) with a raw row; a blank is refused on a PR into `main` by the launch gate (proved red with `NULO_LAUNCH_GATE=1`), a placeholder date would not be |
+| D13 | `/confirm` posts its token as it loads; A's button stays as the retry | — | — | the owner's pick, P116-23 C (quoted under UI impact); no Worker change, since `/api/confirm` was already idempotent |
+| D14 | With JavaScript off, A's approved no-script line and no button | — | — | deviation from C's wording: no button can confirm without script, since only the page's script reads the fragment and a server-readable token would put the address in the request records notice § 3.1 excludes; the fallback that can work is the retry. Told to the owner in OA9 |
+| D15 | While the opening post is in flight, A's ready state with the button locked | — | — | only approved states show (A's state between a press and its answer); hiding the button would leave "Press Confirm" with nothing to press. Accessibility (2026-10-19 delegation): focus moves to the heading on a final answer, as before |
+| D16 | `nulo-subscribe` deploys from `main` | — | — | P114-08 "A", the owner: "I've confirmed: I've already changed the settings for the `main` branch. Safe to merge." A dashboard setting; nothing in the repo changes |
 
 ## Phases
 
@@ -310,14 +333,29 @@ pictures; the extension shows nothing new.
    picture beside its copy in `OWNER-ASKS.md`.
 - *Gate*: the check passes; every picture exists and is named; `bun run check:plans` exits 0.
 
+**Phase 5 — the owner's answers** ✓ (after decision pages 114 and 116).
+1. `src/confirm.ts`: `startConfirm` posts at once (D13); module doc, both READMEs, the email
+   template's comment and the `BEFORE-LAUNCH.md` acceptance step say the link confirms on open.
+2. `confirm.test.ts`: the post fires as the page opens (locked, one request, the confirmed state,
+   focus on the heading); a second open posts the same token and shows the confirmed state again
+   (the Worker's side, one contact and two 200s, is `worker.test.ts`); each answer class on the
+   opening post; after a failed opening post the button confirms on a press; a press while it is in
+   flight sends nothing. Mutation check: an `opened` that posts nothing reds eight tests.
+3. Quote the sign-offs in the ledger, the `UI impact` lines, `OWNER-ASKS.md` and the PR body.
+4. The browser check again with the site's CSP, scripts on and off; captures of `/confirm`'s
+   states and the form's reply.
+- *Gate*: `cd infra/subscribe && BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 bun test`, `bun run --cwd
+  apps/landing test` and `build`, `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun
+  run check:plans`, all at retry 0; one Codex round over the diff since the converged head.
+
 ## Delivery
 
 One arc, one PR against `dev` (D-orch-1: no stack), branch `double-optin-1-a1` off `origin/dev`
 carrying the plan commit. Title: `feat(subscribe): confirm each signup by email before it joins the
 list` (70 characters). Body: what changed and why, the gates with outcomes, the browser check, the
 accessibility call under the owner's 2026-10-19 delegation (D9), `Closes #1236`. Opened **as a
-draft** after the gates and the Codex loop: the owner's answers to OA1–OA7 come back through the
-orchestrator, then the copy edits, the close-out commits and "ready". No e2e lane trips.
+draft** after the gates and the Codex loop: the owner's answers to OA1–OA8 came back through the
+orchestrator, then Phase 5, the close-out commits and "ready". No e2e lane trips.
 
 ## Post-implementation
 
