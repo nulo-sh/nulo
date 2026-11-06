@@ -1,7 +1,7 @@
 ---
 plan: p110-build-1
 tier: mid
-status: approved by the panel (final Codex pass: approve)
+status: completed
 issues: "#1619, #1571 (arc 1); #1569, #1620 (arc 2); #1644, #1645 held (arc 4); page 116 picks open (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,41 @@ base: origin/dev at 5f7da07c5
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-06.
+- **Status:** completed. Arc 1 shipped in #1706 (merged). Arc 2 ships in the PR titled `fix(popup): sending toast dismissal lasts the session; the password hint keeps its space`, whose merge closes the plan. Arcs 3 and 4 were not built:
+  - page 116's P116-17, P116-20 and P116-21 remain open picks for the orchestrator; that page's P116-10 and P116-11 shipped separately in #1709;
+  - #1644 and #1645 stay open, held for the owner's word, each with a comment.
+- **Shipped:**
+  - Arc 1, #1619 A: a contract assertion leaves the PXE as a typed, bounded `ContractAssertionError`. The execute window names it under the fee card when a frame matches the request's own call by contract and selector, and the toast does not open.
+  - Arc 1, #1571 Q6 C: a no-account public call is refused up front, recorded as the request's refusal, filed `wallet_refused` and answered with the wallet's constant.
+  - Arc 1, #1571 Q3 B and Q4 B: "Leaves your account" counts signed authorizations, and draws under a refusal and in the raised-fee window.
+  - Arc 1, #1571 Q1 B: the preview snack closes on retry.
+  - Arc 1, #1571 Q2 A and Q5 A: closed as built.
+  - Arc 2, #1569 B: the Sending toast's × lasts its session across popup documents, through one `chrome.storage.session` key per send holding the session handle; a lock ends the toast's scope before the shell closes its messages.
+  - Arc 2, #1620 B: the password hint row hides in place.
+- **Review loop:**
+  - Plan: Codex `conditional approve`, folded; Opus `conditional approve`, folded; a final fresh Codex pass, `approve` after two resumes.
+  - Arc 1: Codex two rounds, ending `approve`; one Opus diff review, five Low findings, folded.
+  - Arc 2: Codex three rounds (one Medium, then two Mediums against round 1's fix, then `approve`); one Opus diff review, four Low findings, three folded and one filed as a known limit.
+- **Gates:** each PR body states its runs. Details per phase are in [lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-5.md](lessons/phase-5.md) and [lessons/phase-6.md](lessons/phase-6.md).
+- **Dropped:** none of the picks. Deviations, all recorded with their reasons:
+  - D11: the snack scenario moved to the app's PrivateFPC payment;
+  - D12: `feeSettled` accepts the line, and the raised-fee case imports TST;
+  - D7, built with the lock ordering instead of a live-handle check;
+  - Phase 6's e2e reads a document offset;
+  - the Phase 5 mutation reds at the no-toast check, before the observer arms.
+- **Known limits:**
+  - #1714: a queued public call's assertion keeps the toast.
+  - #1715: a × in one open document does not close the toast in another open one; a comment adds the stale-× case.
+  - #1717: a password or unlock-method change made mid-send stops a dismissal from holding.
+- **Open items:**
+  - #1699: the copy for a no-account request with a utility call or several calls (owner decision).
+  - #1710: whether "Leaves your account" counts the sender's own authorization that an app-paid send carries, which #1696 now lists (owner decision).
+- **Lessons:** nothing promoted to `lessons.md`, which is at its budget. The scroll-clamped layout check went to the `e2e-testing` skill (§ What to assert).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # p110-build-1: the execute-window and popup picks of decision page 110
 
@@ -223,6 +258,8 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - Remedy, local and with no added state: the guard is removed, and the write is again blind from the reset's handle, dispatched without a round trip. The lock path, the only programmatic close of the Sending toast, now ends the toast's scope first (`sends.endScope()`, the first call in `endScopeOnLock`, which both lock paths run and the shell's wiring test pins). Its close is quiet and never reads as a ×.
 - The regression test reds with `endScope` made a no-op.
 - What remains: a × the person presses in a document in the milliseconds before it hears a lock that another document followed with an unlock and a dismissal. It fails open, and is recorded on #1715.
+
+**Arc 2, Codex round 3** (the same session, resumed on d681dd172): it verified that the manual lock, the worker's lock event and the boot-time seal all end the toast's scope before the shell closes its messages; that repeated resets are harmless; that the other programmatic closes are guarded by toast identity, kind, label or action; and that an honest × makes one write with no extra session read. No remaining finding, high confidence: `VERDICT: approve`.
 
 ## Seeds
 
