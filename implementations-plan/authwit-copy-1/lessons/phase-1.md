@@ -6,3 +6,6 @@
 - `tx-sendTx-fields` on Chrome, proverless, retry 0: 38.6 s on base sources (4291a8c98, unchanged spec); 42.0 s with the change and its committed History step (account switch, History read); 53.4 s on base sources with the temporary capture steps.
 - Review: Codex round 1 clean; Opus nits folded (40cc29f02); Codex round 2 clean.
 - Full Chrome smoke at 40cc29f02, retry 0: 62 files passed, 11 skipped (276 tests passed, 28 skipped), 1687.9 s.
+- OA-4 A (the owner's pick): branch rebased onto `origin/dev` first (two unrelated commits). The flipped confirm test red on the B source (1 of 3 in its describe), green after.
+- Phase 4 gates, retry 0: lint, typecheck:all, `bun run test` (993 files), `test:components` (99), the execute window (23 files), `check:plans`. `tx-sendTx-fields` through `agent.sh`, prover on: Chrome 89.9 s, Firefox 164.9 s, host load about 380 on 188 cores (the arc's earlier 42.0 s was proverless).
+- Codex round 3 on the diff since the reviewed head: clean.

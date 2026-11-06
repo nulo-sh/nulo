@@ -1,7 +1,7 @@
 ---
 plan: authwit-copy-1
 tier: light
-status: arc 1 complete with the owner's picks (decision page 115), OA-4 A built; PR ready
+status: completed
 issues: "#1656, #1657"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,15 @@ base: origin/dev at 4291a8c98
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-06. **Status:** completed, one arc, PR #1696.
+- **Shipped:** an app-paid window names the sending account's own attached authorization ("Already authorized by <the account>.", its own details group); an app-paid confirm never uses an authorization the window did not list; the unattached refusal gets its own History text (`unattached_refused`) and app error (code 4100, `SCOPE_VIOLATION`, its own constant text). Every surface on the owner's picks, decision page 115 (all A).
+- **Known limits:** none. I2 (a carried hash is not a checked signature) over-states only toward rejecting and adds no capability, as #1649's I2; OA-1 states it and P115-01 accepted it.
+- **Open items:** none. #1655 stays the owner's own plan.
+- **Lessons:** History reads only the selected account's records, now in the `e2e-testing` skill.
+- **Seeds retired:** the `/goal` and `/loop` below.
 
 ## Scope
 
@@ -132,6 +141,7 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../README
 - Codex round 1 (new session, gpt-6.1-sol high, the README's two rules verbatim): clean.
 - Opus 5.5 (general-purpose) beside it: no material finding; nits: an app-paid `createAuthWit` assertion no change could fail (dropped, with the title's claim), a comment line over 100 characters (rewrapped). Rejected: reading the stored error kind in the e2e beside the asserted History text (redundant).
 - Codex round 2 (resumed, the fix commit): clean.
+- Codex round 3 (new session, gpt-6.1-sol high, the README's two rules verbatim; diff since the reviewed head, OA-4 A): clean. It checked the reuse path (embedded estimates are not reused), the identical keys at estimate and confirm, and that a send carrying no witness of the sender's keeps today's keys.
 
 **Deviations.** D6's History read runs at the end of `tx-sendTx-fields`, after switching the wallet to the sender: the journal detail shows only the selected account's records (`popup/pages/journal/journal-detail-scope.ts`), and the refused send is the second account's.
 

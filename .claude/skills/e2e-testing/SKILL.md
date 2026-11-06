@@ -753,6 +753,9 @@ the pattern.
   builds it from the element's other attributes. To stop a theme flip's transitions before a quick shot, `finish()` each of
   `document.getAnimations()`; a looping one throws and is left alone. A popup's `document.body` can
   still be null when `waitForPopup` resolves: observe `document.documentElement`.
+- **History shows only the selected account's records.** `readJournalDetail` on another account's
+  send waits out its timeout on an empty page (`src/popup/pages/journal/journal-detail-scope.ts`):
+  switch to that account first (`switchAccountByAddress`), as `network/tx-sendTx-fields.test.ts` does.
 - **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a
   glyph's middle and about half a pixel right of it, and a drag of one single move leaves a bare
   caret: press a quarter in from a character's outer edge and move in steps
