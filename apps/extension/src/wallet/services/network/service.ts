@@ -289,12 +289,12 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
 	}
 
-	/** Moves the profile's networks off what an earlier build seeded and this one retired: an endpoint
-	 *  as `updateEndpoint` would, a seeded name to the seed's current one. A network a reset journal
-	 *  holds is left as captured, since the reset's resume matches its primary against the captured URL. */
+	/** A network a reset journal holds is left as captured: the reset's resume matches its primary
+	 *  against the captured URL. */
 	private async retireDefaults(profileId: string, retired: readonly RetiredEndpoint[] = RETIRED_DEFAULT_ENDPOINTS): Promise<void> {
 		await this.lock.withLock(async () => {
 			const held = (await this.staleNetworks.getJournal(profileId))?.networkId
+			// Read once: a profile holds at most one row per seeded kind, so no rename here meets another.
 			const rows = (await this.storage.getValues()).filter((network) => network.profileId === profileId)
 			for (const network of rows) {
 				if (network.id === held) continue

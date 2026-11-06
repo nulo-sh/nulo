@@ -224,7 +224,8 @@ const recordedTestnet = (expected: Expected): number => recordedNetwork(expected
 const testnetNetworkId = (expected: Expected): string => recordedNetwork(expected).id
 
 /** The name the candidate shows for a recorded network: the unlock gives Mainnet's row this build's
- *  seed name, since every recording's carries one its release seeded; the others keep theirs. */
+ *  seed name, since every recording's Mainnet row carries a name its release seeded; the others keep
+ *  theirs. */
 const nameAfterUpdate = (network: NetworkRow): string =>
 	network.kind === "mainnet" ? (seedForKind("mainnet")?.name ?? network.name) : network.name
 

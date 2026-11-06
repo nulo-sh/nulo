@@ -2909,10 +2909,14 @@ describe("NetworkService — a retired default", () => {
 			return real(profileId, await synthetic())
 		})
 		await service.getNode(CHAIN_IDS.TESTNET)
+		const mainnetNode = {} as AztecNode
+		internals.nodes.set(CHAIN_IDS.MAINNET, mainnetNode)
 		const updated: Network[] = []
 		service.onNetworkUpdated.add((network) => updated.push(network))
 		profiles.onRowKeysReady.invoke("p1")
 		await vi.waitFor(() => expect(updated.map((network) => network.id).sort()).toEqual(["mn", "tn"]))
+		// A rename moves no endpoint, so Mainnet's node stays.
+		expect(internals.nodes.get(CHAIN_IDS.MAINNET)).toBe(mainnetNode)
 		expect(sealedFirst).toEqual([true])
 		expect(inTheClear()).toBe(false)
 		expect(JSON.stringify(local.store.get("nulo:core:networks@mn"))).not.toContain("Alpha")
