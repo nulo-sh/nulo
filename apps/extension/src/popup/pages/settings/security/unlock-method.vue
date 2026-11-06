@@ -147,6 +147,17 @@ function leaveChanged(outcome) {
 	leaveFor(router, "/popup/settings")
 }
 
+/** The session closed over a saved change, so the lock screen is next. A handed-back panel boots
+ *  there and opens Home after the unlock, with no line: it carries one only to an open session. */
+function leaveLocked() {
+	if (handsBackToPanel()) {
+		void returnToPanel("/popup/general")
+		return
+	}
+	openToast({ kind: "info", label: "Unlock method changed. Unlock Nulo again to continue." })
+	router.replace("/popup/auth")
+}
+
 /** Runs one change; the page stays on a cancel, and reports a failure before the save as nothing
  *  changed. A change made leaves for Settings, and one saved but not reopened ends at the lock screen.
  *  Every card a change asks runs inside its attempt, so no answer outlives the press that asked it. */
@@ -165,8 +176,7 @@ async function attempt(run) {
 		if (!isCurrent()) return
 		if (error instanceof UnlockMethodChangedError) {
 			reset()
-			openToast({ kind: "info", label: "Unlock method changed. Unlock Nulo again to continue." })
-			router.replace("/popup/auth")
+			leaveLocked()
 			return
 		}
 		if (error instanceof StaleUnlockCredentialError) {

@@ -483,8 +483,7 @@ describe("how a change ends", () => {
 		stayed()
 	})
 
-	test.each([false, true])("a change saved but not reopened says so and goes to the lock screen (own window: %s)", async (own) => {
-		surface.handsBack = own
+	test("a change saved but not reopened says so and goes to the lock screen", async () => {
 		profile.changeUnlockMethod.mockRejectedValueOnce(new UnlockMethodChangedError())
 		const w = mountPage("passkey")
 		await flushPromises()
@@ -495,6 +494,18 @@ describe("how a change ends", () => {
 		})
 		expect(router.replace).toHaveBeenCalledExactlyOnceWith("/popup/auth")
 		expect(surface.handBack).not.toHaveBeenCalled()
+	})
+
+	test("in its own window a change saved but not reopened hands Home back with no line, and neither toasts nor routes", async () => {
+		surface.handsBack = true
+		profile.changeUnlockMethod.mockRejectedValueOnce(new UnlockMethodChangedError())
+		const w = mountPage("passkey")
+		await flushPromises()
+		await click(w, "unlock-method-new-passkey")
+		expect(surface.handBack).toHaveBeenCalledExactlyOnceWith("/popup/general")
+		expect(openToast).not.toHaveBeenCalled()
+		stayed()
+		expect(router.push).not.toHaveBeenCalled()
 	})
 
 	test("in Firefox's toolbar panel the page moves to its own window first", async () => {
