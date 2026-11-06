@@ -64,6 +64,9 @@ const fakeNodeFactory: NodeFactory = {
 	readPublicStorageOnce: async () => {
 		throw new Error("not read here")
 	},
+	createRoutedNode: () => {
+		throw new Error("not routed here")
+	},
 }
 
 const fakeNetwork = { profileId: "p", chainId: 31337, rpcUrl: "http://node.local" }

@@ -487,6 +487,12 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   leaving `<Transition>` is visible while `isOpen` is already false. Gate on `data-dropdown-open`
   (open a menu through `openDropdown`, which clicks only a closed one), `data-toggle-active`,
   `data-restore-stage`, `data-boot-outcome`; add one if it is missing.
+- **A layout shift is a document offset when the page is scrolled.** A row dropped above an element
+  on a page scrolled to its bottom moves the content above it on screen. Scroll clamping keeps the
+  element's own viewport top, so `getBoundingClientRect().top` alone reads no shift. Compare
+  `top + document.scrollingElement.scrollTop` before and after, and prove the check with a mutation
+  that restores the shift (`onboarding-tab.test.ts`'s password create;
+  `implementations-plan/archive/p110-build-1/lessons/phase-6.md`).
 - **Freshness-gated balances.** An imported backup already carries the expected value. Capture
   `captureBalanceBaseline` first and require `updatedAt` newer AND the exact raw value AND the
   token-scoped render (`waitForFreshBalanceRow`, `waitForTokenCardAmount`); body-text scans

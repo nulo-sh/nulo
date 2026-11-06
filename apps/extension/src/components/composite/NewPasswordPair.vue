@@ -53,8 +53,8 @@ watch(hidden, (value) => (latest = value), { flush: "sync" })
 			<template #suffix>
 				<PasswordVisibilityToggle :hidden="hidden" :data-testid="testids.toggle" @toggle="toggleHidden" />
 			</template>
-			<template v-if="!hideHint" #bottom>
-				<Flex align="center" gap="6" :class="$style.hint_row">
+			<template #bottom>
+				<Flex align="center" gap="6" :class="[$style.hint_row, hideHint && $style.hidden_in_place]">
 					<Icon name="lock" :size="12" color="tertiary" />
 					<Text variant="body" color="tertiary" :data-testid="testids.hint">{{ hint }}</Text>
 				</Flex>
@@ -81,5 +81,10 @@ watch(hidden, (value) => (latest = value), { flush: "sync" })
 <style module>
 .hint_row {
 	margin-top: 4px;
+}
+
+/* Keeps the row's box, so hiding it moves nothing below; `visibility` also takes it out of the accessibility tree. */
+.hidden_in_place {
+	visibility: hidden;
 }
 </style>

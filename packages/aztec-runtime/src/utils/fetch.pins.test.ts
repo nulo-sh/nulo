@@ -3,9 +3,12 @@
  * error message and status-classification branch is the contract callers
  * (connectivity classification, retry policy) match on.
  */
+import { createSafeJsonRpcClient } from "@aztec-labs/foundation/json-rpc/client"
 import { NoRetryError } from "@aztec-labs/foundation/retry"
+import { type AztecNode, AztecNodeApiSchema } from "@aztec-labs/stdlib/interfaces/client"
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { MAX_NODE_RESPONSE_BYTES, makeFetchWithTimeout, makeSingleAttemptFetch } from "./fetch"
+import { SILENT_RPC_LOG } from "../adapters/aztec-node-factory-adapter"
+import { MAX_NODE_RESPONSE_BYTES, makeFetchWithTimeout, makeSingleAttemptFetch, type TransportFailure, transportFailureOf } from "./fetch"
 
 const realFetch = globalThis.fetch
 
@@ -246,5 +249,156 @@ describe("retryWhile (makeFetchWithTimeout)", () => {
 		globalThis.fetch = vi.fn(async () => jsonResponse({ result: 9 }, { ok: true })) as typeof fetch
 		const out = await makeFetchWithTimeout(1000, { retryWhile: () => false })("http://h", {})
 		expect(out.response).toEqual({ result: 9 })
+	})
+})
+
+/** The failure kind a routed node reads to decide whether a call may move to another endpoint. Each
+ *  row also pins today's attempt count, which tagging must leave unchanged. */
+describe("transport failure kinds (makeFetchWithTimeout)", () => {
+	/** Runs one call to completion under fake timers and returns its error and the attempts it made. */
+	async function failedCall(reply: () => Response | Promise<Response>): Promise<{ error: unknown; attempts: number }> {
+		let attempts = 0
+		globalThis.fetch = vi.fn(async () => {
+			attempts++
+			return reply()
+		}) as unknown as typeof fetch
+		vi.useFakeTimers()
+		try {
+			const outcome = makeFetchWithTimeout(1000)("http://h", [{ jsonrpc: "2.0", id: 0, method: "m", params: [] }]).then(
+				() => undefined,
+				(e: unknown) => e,
+			)
+			await vi.advanceTimersByTimeAsync(10_000)
+			return { error: await outcome, attempts }
+		} finally {
+			vi.useRealTimers()
+		}
+	}
+
+	const json = (body: unknown, status: number) => new Response(JSON.stringify(body), { status })
+	const html = (status: number) => new Response("<html>busy</html>", { status, headers: { "content-type": "text/html" } })
+
+	test.each<{ name: string; reply: () => Response; kind: TransportFailure | undefined; attempts: number }>([
+		{ name: "HTTP 500 with a JSON body", reply: () => json({ error: { message: "boom" } }, 500), kind: "server", attempts: 4 },
+		{ name: "HTTP 502 with an HTML body", reply: () => html(502), kind: "server", attempts: 4 },
+		{ name: "a 200 that is not JSON", reply: () => new Response("nope", { status: 200 }), kind: "malformed", attempts: 4 },
+		{ name: "an HTML 429 page", reply: () => html(429), kind: "malformed", attempts: 4 },
+		{ name: "an HTML 404 page", reply: () => html(404), kind: "malformed", attempts: 4 },
+		{
+			name: "HTTP 429 with a JSON body",
+			reply: () => json({ error: { code: 429, message: "slow down" } }, 429),
+			kind: "overloaded",
+			attempts: 1,
+		},
+		{ name: "HTTP 408 with a JSON body", reply: () => json({}, 408), kind: "overloaded", attempts: 1 },
+		{ name: "HTTP 425 with a JSON body", reply: () => json({}, 425), kind: "overloaded", attempts: 1 },
+		{
+			name: "a gateway's HTTP 400 batch refusal (every entry code 31)",
+			reply: () =>
+				json(
+					[0, 1].map((id) => ({ jsonrpc: "2.0", id, error: { code: 31, message: "batch too large" } })),
+					400,
+				),
+			kind: "refused",
+			attempts: 1,
+		},
+		{
+			name: "HTTP 403 with a non-reserved code",
+			reply: () => json({ error: { code: 35, message: "no" } }, 403),
+			kind: "refused",
+			attempts: 1,
+		},
+		{ name: "HTTP 401 with no JSON-RPC code", reply: () => json({ message: "unauthorized" }, 401), kind: "refused", attempts: 1 },
+		{
+			name: "a 200 JSON-RPC error object with a non-reserved code",
+			reply: () => json({ jsonrpc: "2.0", id: null, error: { code: 26, message: "limit" } }, 200),
+			kind: "refused",
+			attempts: 1,
+		},
+		{
+			name: "the node's own HTTP 400 (reserved code)",
+			reply: () =>
+				json(
+					{ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Batch request exceeds maximum allowed size of 100" } },
+					400,
+				),
+			kind: undefined,
+			attempts: 1,
+		},
+		{
+			name: "a gateway batch carrying one reserved code",
+			reply: () => json([{ jsonrpc: "2.0", id: 0, error: { code: -32602, message: "invalid params" } }], 400),
+			kind: undefined,
+			attempts: 1,
+		},
+	])("$name is $kind after $attempts attempt(s)", async ({ reply, kind, attempts }) => {
+		const call = await failedCall(reply)
+		expect(call.error).toBeInstanceOf(Error)
+		expect(transportFailureOf(call.error)).toBe(kind)
+		expect(call.attempts).toBe(attempts)
+	})
+
+	test("a refused 200 error object is a NoRetryError; one with a reserved code still resolves (control)", async () => {
+		const refused = await failedCall(() => json({ jsonrpc: "2.0", id: null, error: { code: 26, message: "limit" } }, 200))
+		expect(refused.error).toBeInstanceOf(NoRetryError)
+		globalThis.fetch = vi.fn(async () =>
+			json({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "internal" } }, 200),
+		) as typeof fetch
+		const out = await makeSingleAttemptFetch(1000)("http://h", [])
+		expect(out.response).toEqual({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "internal" } })
+	})
+
+	test.each<{ name: string; thrown: () => unknown; kind: TransportFailure }>([
+		{ name: "a refused connection", thrown: () => new TypeError("fetch failed"), kind: "unreachable" },
+		{ name: "the abort", thrown: () => new DOMException("aborted", "AbortError"), kind: "timeout" },
+	])("$name is $kind after 4 attempts", async ({ thrown, kind }) => {
+		const call = await failedCall(() => {
+			throw thrown()
+		})
+		expect(transportFailureOf(call.error)).toBe(kind)
+		expect(call.attempts).toBe(4)
+	})
+
+	test("an abort during the body read is a timeout and keeps today's message", async () => {
+		vi.useFakeTimers()
+		try {
+			globalThis.fetch = vi.fn(async (_h: unknown, init: RequestInit) => {
+				const signal = init.signal as AbortSignal
+				const body = new ReadableStream<Uint8Array>({
+					start(controller) {
+						signal.addEventListener("abort", () => controller.error(new Error("body read aborted")))
+					},
+				})
+				return new Response(body, { status: 200 })
+			}) as unknown as typeof fetch
+			const pending = makeSingleAttemptFetch(50)("http://h", {}).catch((e: unknown) => e)
+			await vi.advanceTimersByTimeAsync(60)
+			const error = await pending
+			expect((error as Error).message).toBe("Failed to parse body as JSON")
+			expect(transportFailureOf(error)).toBe("timeout")
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a body over the budget has no kind: the same reply would come from any endpoint", async () => {
+		globalThis.fetch = vi.fn(async () => streamedJsonString(MAX_NODE_RESPONSE_BYTES + 1, 200)) as unknown as typeof fetch
+		const error = await makeSingleAttemptFetch(60_000)("http://h", {}).catch((e: unknown) => e)
+		expect(error).toBeInstanceOf(NoRetryError)
+		expect(transportFailureOf(error)).toBeUndefined()
+	})
+
+	test("the kind reaches every caller of a failed batch through the client's `cause.data`", async () => {
+		globalThis.fetch = vi.fn(async () => json({ error: { message: "boom" } }, 503)) as typeof fetch
+		const node = createSafeJsonRpcClient<AztecNode>("http://h", AztecNodeApiSchema, {
+			namespaceMethods: "aztec",
+			fetch: makeSingleAttemptFetch(1000),
+			log: SILENT_RPC_LOG,
+		})
+		const [a, b] = await Promise.all([node.getBlockNumber().catch((e: unknown) => e), node.getChainTips().catch((e: unknown) => e)])
+		expect(transportFailureOf(a)).toBe("server")
+		expect(transportFailureOf(b)).toBe("server")
+		expect((a as Error & { cause: { data: unknown } }).cause.data).toBe((b as Error & { cause: { data: unknown } }).cause.data)
+		expect(transportFailureOf(new Error("the node's own answer", { cause: { code: -32603, message: "x" } }))).toBeUndefined()
 	})
 })

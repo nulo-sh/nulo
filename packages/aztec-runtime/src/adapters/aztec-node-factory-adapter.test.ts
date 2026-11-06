@@ -245,3 +245,143 @@ describe("isAllowedRpcUrl", () => {
 		}
 	})
 })
+
+describe("createRoutedNode", () => {
+	const OTHER = "https://other.example"
+	const L1 = 11_155_111
+	const VERSION = 4
+	const address = (n: number, bytes: number) => `0x${n.toString(16).padStart(bytes * 2, "0")}`
+	const L1_KEYS = ["rollupAddress", "registryAddress", "inboxAddress", "outboxAddress", "feeJuiceAddress", "feeJuicePortalAddress"]
+	const L1_MORE = [
+		"coinIssuerAddress",
+		"rewardDistributorAddress",
+		"governanceProposerAddress",
+		"governanceAddress",
+		"stakingAssetAddress",
+	]
+	const NODE_INFO = {
+		nodeVersion: "6.0.0",
+		l1ChainId: L1,
+		rollupVersion: VERSION,
+		l1ContractAddresses: Object.fromEntries([...L1_KEYS, ...L1_MORE].map((key, i) => [key, address(i + 1, 20)])),
+		protocolContractAddresses: Object.fromEntries(
+			["classRegistry", "feeJuice", "instanceRegistry", "multiCallEntrypoint"].map((key, i) => [key, address(i + 1, 32)]),
+		),
+		realProofs: false,
+		txsLimits: { gas: { daGas: 1, l2Gas: 1 } },
+	}
+	const tip = { block: { number: 5, hash: address(5, 32) }, checkpoint: { number: 1, hash: address(1, 32) } }
+	const TIPS = { proposed: tip.block, checkpointed: tip, proven: tip, finalized: tip }
+	const spec = (urls: string[]) => ({
+		chainId: (L1 ^ VERSION) >>> 0,
+		l1ChainId: L1,
+		endpoints: urls.map((rpcUrl, i) => ({ id: `e${i}`, rpcUrl })),
+	})
+	const result = (method: string): unknown =>
+		method === "aztec_getNodeInfo"
+			? NODE_INFO
+			: method === "aztec_getChainTips"
+				? TIPS
+				: method === "aztec_getBlockNumber"
+					? 5
+					: new Fr(1n).toString()
+
+	test("each endpoint keeps its batch cap inside one routed node, and its clients print nothing", async () => {
+		let refuseTipsAtUrl = false
+		const spy = vi.fn(async (url: string, init: RequestInit) => {
+			const calls = JSON.parse(String(init.body)) as { id: number; method: string }[]
+			if (url === URL && refuseTipsAtUrl && calls.some((c) => c.method === "aztec_getChainTips")) {
+				return reply(
+					calls.map((c) => ({ jsonrpc: "2.0", id: c.id, error: { code: 31, message: SENTINEL } })),
+					400,
+				)
+			}
+			return reply(calls.map((c) => ({ jsonrpc: "2.0", id: c.id, result: result(c.method) })))
+		})
+		globalThis.fetch = spy as unknown as typeof fetch
+		const entriesAt = (url: string) =>
+			spy.mock.calls.filter(([u]) => u === url).map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)
+		const node = new AztecNodeFactoryAdapter((url) => (url === URL ? 3 : undefined)).createRoutedNode(spec([URL, OTHER]))
+		const eightReads = () =>
+			Promise.all(Array.from({ length: 8 }, (_, i) => node.getPublicStorageAt("latest", CONTRACT, new Fr(BigInt(i)))))
+
+		await node.getChainTips()
+		await eightReads()
+		refuseTipsAtUrl = true
+		await node.getChainTips()
+		await eightReads()
+
+		expect(node.route.active()?.id).toBe("e1")
+		// The last request is the first return probe of the primary, which lost the role on the refusal.
+		expect(entriesAt(URL)).toEqual([2, 1, 3, 3, 2, 1, 2])
+		expect(entriesAt(OTHER)).toEqual([2, 1, 8])
+		const printed = consoleText(consoleSpies)
+		expect(printed).not.toContain(URL)
+		expect(printed).not.toContain(OTHER)
+		expect(printed).not.toContain(SENTINEL)
+	})
+
+	test("refuses when no endpoint is allowed, and drops a refused one beside an allowed one", () => {
+		const factory = new AztecNodeFactoryAdapter(uncapped)
+		expect(() => factory.createRoutedNode(spec(["http://example.com"]))).toThrow(/refused/)
+		expect(
+			factory
+				.createRoutedNode(spec(["http://example.com", URL]))
+				.route.snapshot()
+				.map((e) => e.id),
+		).toEqual(["e1"])
+	})
+
+	// One endpoint routes exactly as the retrying client did: same requests, same sleeps, same outcome.
+	const answered = (body: string) => {
+		const calls = JSON.parse(body) as { id: number }[]
+		return reply(calls.map((c) => ({ jsonrpc: "2.0", id: c.id, result: 5 })))
+	}
+	const hangUntilAbort = (signal: AbortSignal | null | undefined) =>
+		new Promise<Response>((_, reject) => {
+			signal?.addEventListener("abort", () => reject(new DOMException("The operation was aborted.", "AbortError")))
+		})
+	const replies: [string, (n: number, body: string, signal: AbortSignal | null | undefined) => Response | Promise<Response>][] = [
+		["a 503 every time", () => reply({ error: { message: "boom" } }, 503)],
+		["a 503 twice, then the answer", (n, body) => (n <= 2 ? reply({ error: { message: "boom" } }, 503) : answered(body))],
+		["a refused connection every time", () => Promise.reject(new TypeError("fetch failed"))],
+		["an HTML 429 page every time", () => new Response("<html>slow</html>", { status: 429 })],
+		["a JSON 429", () => reply({ error: { code: 429, message: "slow down" } }, 429)],
+		["a gateway refusal", () => reply({ error: { code: 35, message: "no" } }, 400)],
+		["the node's own 400", () => reply({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "too big" } }, 400)],
+		["a gateway refusal in a 200", () => reply({ jsonrpc: "2.0", id: null, error: { code: 26, message: "limit" } }, 200)],
+		["no answer within the 60 s abort, every time", (_n, _body, signal) => hangUntilAbort(signal)],
+	]
+	test.each(replies)("one endpoint, %s: the same requests, sleeps and outcome as createNode", async (_label, answer) => {
+		const outcomes: unknown[] = []
+		for (const build of [
+			(f: AztecNodeFactoryAdapter) => f.createNode(URL),
+			(f: AztecNodeFactoryAdapter) => f.createRoutedNode(spec([URL])),
+		]) {
+			let requests = 0
+			globalThis.fetch = vi.fn(async (_url: string, init: RequestInit) =>
+				answer(++requests, String(init.body), init.signal),
+			) as unknown as typeof fetch
+			vi.useFakeTimers()
+			const node = build(new AztecNodeFactoryAdapter(uncapped))
+			const started = Date.now()
+			let finishedAt = 0
+			const settled = node.getBlockNumber().then(
+				(value) => ({ value }),
+				(error: Error) => ({ error: error.message }),
+			)
+			void settled.then(() => {
+				finishedAt = Date.now()
+			})
+			await vi.advanceTimersByTimeAsync(300_000)
+			outcomes.push({ outcome: await settled, requests, waitedMs: finishedAt - started })
+			vi.useRealTimers()
+		}
+		const [today, routed] = outcomes as { outcome: unknown; requests: number; waitedMs: number }[]
+		expect(routed?.outcome).toEqual(today?.outcome)
+		expect(routed?.requests).toBe(today?.requests)
+		// The same sleeps; each routed retry also re-enters the client's zero-delay batch window.
+		expect((routed?.waitedMs ?? 0) - (today?.waitedMs ?? 0)).toBeGreaterThanOrEqual(0)
+		expect((routed?.waitedMs ?? 0) - (today?.waitedMs ?? 0)).toBeLessThanOrEqual((today?.requests ?? 0) - 1)
+	})
+})
