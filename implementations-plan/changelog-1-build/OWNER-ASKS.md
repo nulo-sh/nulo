@@ -1,6 +1,6 @@
 # Owner asks: changelog-1-build
 
-Neither ask concerns a surface this arc builds; the arc ships without waiting.
+Neither ask concerns a surface this arc builds; the arc ships without waiting. Filed as #1711 (A1) and #1712 (A2).
 
 ## A1. Link the changelog from the home page
 
