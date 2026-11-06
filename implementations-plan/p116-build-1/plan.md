@@ -1,7 +1,7 @@
 ---
 plan: p116-build-1
 tier: light
-status: arc 1 implemented; Codex fix loop clean in two rounds, Opus review folded; PR next
+status: completed (delivered in #1709)
 issues: "#1563, #618 (both already closed; the PR says `Closes` for each as the program asks)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 002b76fc7
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-06.
+- **Status:** completed; delivered in #1709, whose merge closes the plan.
+- **Shipped:** #1709. The Receive QR is 240 px, and the sheet fits without a scroll (P116-10 A). The Holdings header is one row, and the meta reads the count alone (P116-11 C with the owner's note). The tests are unit tests plus smoke checks on Chrome and Firefox.
+- **Dropped or rejected:** the frame sampler (D7), replaced by a one-off measurement in both browsers; a full-suite runtime comparison (D6), replaced by per-file times at base and head.
+- **Left as it is:** Home's hero keeps "priced assets only", which the pick did not cover.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. Both harness gotchas met here are already documented: Firefox's privileged-scope commands in `apps/extension/tests/e2e/FIREFOX.md`, and the popup CSP's `style-src-attr` in the `e2e-testing` skill.
+- **Seeds retired:** no `/goal` or `/loop` seed of this plan is live.
 
 # p116-build-1: the Receive QR at 240 px; the Holdings header counts tokens on one row
 
