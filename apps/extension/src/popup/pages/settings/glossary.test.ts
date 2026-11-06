@@ -49,7 +49,13 @@ describe("settings/glossary", () => {
 				"glossary-entry-priority-fee",
 				"glossary-entry-fpc",
 			],
-			["glossary-entry-authorization", "glossary-entry-name-for-this-app", "glossary-entry-interface"],
+			[
+				"glossary-entry-authorization",
+				"glossary-entry-name-for-this-app",
+				"glossary-entry-interface",
+				"glossary-entry-discover",
+				"glossary-entry-connection-check",
+			],
 			["glossary-entry-proof", "glossary-entry-proving"],
 		])
 	})
@@ -113,6 +119,13 @@ describe("settings/glossary", () => {
 			"Interface",
 			"A contract's interface names a call's arguments; without it Nulo shows the raw values.",
 			"Approval window",
+		],
+		["discover", "Discover", "A site learning that Nulo is installed, and its version, so it can ask to connect.", "Connect window"],
+		[
+			"connection-check",
+			"Connection check",
+			"Emojis you compare with the site's, so no one can sit between Nulo and the site.",
+			"Connect window",
 		],
 		["proof", "Proof", "What your device builds to show a transaction is valid without revealing what's in it.", "Proving"],
 		[
