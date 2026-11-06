@@ -36,6 +36,11 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; fi
 		files: ["apps/extension/src/utils/own-window.ts"],
 	},
 	"nulo:own-window:handback": { kind: "session", reason: "the hand-back to the toolbar panel, chrome.storage.session" },
+	"nulo:sending:dismissed:": {
+		kind: "session",
+		reason: "prefix of the Sending toast's per-send dismissals for one unlocked session, chrome.storage.session",
+		files: ["apps/extension/src/composables/useSendsInProgress.ts"],
+	},
 	"nulo:theme": { kind: "local-storage", reason: "the pre-paint theme hint, window.localStorage" },
 	"nulo:scope-follow": { kind: "lock", reason: "a Web Lock name" },
 	"nulo:restoreOutcome@": {

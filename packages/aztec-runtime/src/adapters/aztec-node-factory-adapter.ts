@@ -21,6 +21,7 @@ import { type AztecNode, AztecNodeApiSchema, createAztecNodeClient } from "@azte
 import { walletChainId } from "@nulo/wallet-core/chain-id"
 import { rpcTransportVerdict } from "@nulo/wallet-core/utils"
 import type { NodeFactory } from "../ports/node-factory-port"
+import { type RouteLogEvent, type RouteSpec, type RoutedNode, routeNode, type SubmissionPins } from "../routing/routed-node"
 import { makeFetchWithTimeout, makeSingleAttemptFetch, type RetryOptions } from "../utils/fetch"
 
 const noop = () => {}
@@ -102,6 +103,26 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 		return walletChainId(info.l1ChainId, info.rollupVersion)
 	}
 
+	public createRoutedNode(spec: RouteSpec, options: RetryOptions & { pins?: SubmissionPins } = {}): RoutedNode {
+		const verdicts = spec.endpoints.map((endpoint) => isAllowedRpcUrl(endpoint.rpcUrl))
+		const refused = verdicts.find((verdict) => !verdict.ok)
+		const endpoints = spec.endpoints.filter((_, i) => verdicts[i]?.ok)
+		if (endpoints.length === 0 && refused && !refused.ok) {
+			throw new Error(`AztecNodeFactoryAdapter refused to construct node client — ${refused.reason}`)
+		}
+		return routeNode(
+			(rpcUrl, timeoutMs) => silentSingleAttemptNode(rpcUrl, timeoutMs, this.maxBatchSizeFor(rpcUrl)),
+			{ ...spec, endpoints },
+			{
+				now: Date.now,
+				sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+				log: logRouteEvent,
+				retryWhile: options.retryWhile,
+				pins: options.pins,
+			},
+		)
+	}
+
 	public async readPublicStorageOnce(rpcUrl: string, contract: AztecAddress, slot: Fr, timeoutMs: number): Promise<Fr> {
 		const check = isAllowedRpcUrl(rpcUrl)
 		if (!check.ok) {
@@ -116,6 +137,13 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 		if (value === undefined) throw new Error("AztecNodeFactoryAdapter read no value")
 		return value
 	}
+}
+
+/** A change of endpoint state or of the active endpoint reaches the default log level; a moved call
+ *  only debug. Events carry endpoint ids, never URLs. */
+function logRouteEvent(event: RouteLogEvent): void {
+	if (event.event === "move") console.debug("[route] call moved off an endpoint", event)
+	else console.info("[route] endpoint routing changed", event)
 }
 
 /** `createAztecNodeClient` with no versions to check, plus the `log` option it cannot pass. */
