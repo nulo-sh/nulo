@@ -74,7 +74,7 @@ After an update to a new minor version, Home shows one dismissible row, "Nulo 1.
 - **Frontend:** the title interpolates a compile-time constant through Vue text; the tab opens with `noopener,noreferrer`; no new permission (`window.open` needs none).
 - **Supply chain / crypto / least privilege:** no dependency, no cryptography, no CI token change.
 
-## Phase 1: the marker and its rule
+## Phase 1: the marker and its rule ✓
 
 - Add `src/utils/whats-new.ts` and `src/utils/whats-new.test.ts`. Cover: fresh install (writes the running minor, not due); same minor; patch bump (not due); minor and major bump (due, the success control); prerelease (not due; its core is `X.Y.Z`); a dismissed minor stays not due; update with no marker writes `previousVersion`'s minor from a 4-part string; update with a marker writes nothing; an undecodable marker is not due and is rewritten on the next install event; the key is outside every profile-deletion prefix; device reset (no key) is not due.
 - Add `src/wallet/utils/whats-new-stamp.ts` with one test (a stub area: install writes the running minor, update writes `previousVersion`'s, a decodable marker is untouched, a rejected read resolves). Wire it into `wallet/index.ts`.

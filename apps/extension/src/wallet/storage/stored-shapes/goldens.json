@@ -2024,6 +2024,20 @@
 			"shape": "tokenIdHighWater",
 			"key": "nulo:core:token-id-high-water",
 			"value": 1
+		},
+		{
+			"id": "uiWhatsNewSeen.full",
+			"stamp": 4,
+			"shape": "uiWhatsNewSeen",
+			"key": "nulo:ui:whatsNewSeen",
+			"value": "1.12"
+		},
+		{
+			"id": "uiWhatsNewSeen.minimal",
+			"stamp": 4,
+			"shape": "uiWhatsNewSeen",
+			"key": "nulo:ui:whatsNewSeen",
+			"value": "0.0"
 		}
 	]
 }
