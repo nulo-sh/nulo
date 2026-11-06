@@ -1,0 +1,3 @@
+- 2026-11-06 plan drafted (light), recon persisted; Codex audit next
+- 2026-11-06 Codex round 1 conditional approve; round 2 conditional approve (in-flight/failed rows held for the owner → OA-2; 11 px chip withdrawn); plan revised
+- 2026-11-06 Codex final verdict approve; plan committed; arc 1 starts
