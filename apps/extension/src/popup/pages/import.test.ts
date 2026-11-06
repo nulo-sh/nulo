@@ -37,6 +37,8 @@ const surface = vi.hoisted(() => ({
 	move: vi.fn(async (_route: string) => true),
 	close: vi.fn(async () => false),
 	release: vi.fn(),
+	handsBack: false,
+	handBack: vi.fn(async (..._args: unknown[]) => true),
 }))
 vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.needsOwnWindow() }))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
@@ -45,6 +47,8 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 	leavePanelFor: async (route: string) => surface.needsOwnWindow() && (await surface.move(route)),
 	closeOwnWindow: () => surface.close(),
 	releaseOwnWindow: () => surface.release(),
+	handsBackToPanel: () => surface.handsBack,
+	returnToPanel: (...args: unknown[]) => surface.handBack(...args),
 }))
 
 import { openSearchPanel } from "@codemirror/search"
@@ -192,6 +196,7 @@ beforeEach(() => {
 	surface.needsOwnWindow.mockReturnValue(false)
 	surface.move.mockResolvedValue(true)
 	surface.close.mockResolvedValue(false)
+	surface.handsBack = false
 	holder.flow = makeFlow()
 	installChromeStorage({}, { persist: false })
 })
@@ -412,14 +417,23 @@ describe("popup import — in its own window", () => {
 		expect(holder.flow.handleBack).not.toHaveBeenCalled()
 	})
 
-	test("a finished restore releases the window before it shows the wallet", async () => {
-		await mountImport()
-		await holder.opts.completeImport({ id: "p1" })
+	test.each(["active", "needs-unlock"] as const)(
+		"a finished import (%s) hands Home and 'Profile imported' back to the panel, and neither toasts nor routes (P116-16)",
+		async (outcome) => {
+			surface.handsBack = true
+			vi.mocked(completeImportWithRecovery).mockResolvedValueOnce(outcome)
+			await mountImport()
+			await holder.opts.completeImport({ id: "p1" })
 
-		expect(surface.release).toHaveBeenCalledTimes(1)
-		expect(nav.push).toHaveBeenCalledWith("/popup/general")
-		expect(surface.release.mock.invocationCallOrder[0]).toBeLessThan(nav.push.mock.invocationCallOrder[0] ?? 0)
-	})
+			expect(surface.handBack).toHaveBeenCalledExactlyOnceWith("/popup/general", {
+				snack: { kind: "success", label: "Profile imported" },
+				profileId: "p1",
+			})
+			expect(surface.release).not.toHaveBeenCalled()
+			expect(toast.open).not.toHaveBeenCalled()
+			expect(nav.push).not.toHaveBeenCalled()
+		},
+	)
 })
 
 describe("popup import — a completion the shell took over", () => {
@@ -433,23 +447,27 @@ describe("popup import — a completion the shell took over", () => {
 	}
 
 	test("a flow the shell ended while the page still shows releases no window, toasts nothing and routes nowhere", async () => {
+		surface.handsBack = true
 		const { wait, done } = await startHeld()
 		endOpeningFlows()
 		wait.resolve("active")
 		await done
 
+		expect(surface.handBack).not.toHaveBeenCalled()
 		expect(surface.release).not.toHaveBeenCalled()
 		expect(toast.open).not.toHaveBeenCalled()
 		expect(nav.push).not.toHaveBeenCalled()
 	})
 
 	test("a page that went before its wait ended does nothing either", async () => {
+		surface.handsBack = true
 		const { w, wait, done } = await startHeld()
 		wrappers.splice(wrappers.indexOf(w), 1)
 		w.unmount()
 		wait.resolve("active")
 		await done
 
+		expect(surface.handBack).not.toHaveBeenCalled()
 		expect(surface.release).not.toHaveBeenCalled()
 		expect(toast.open).not.toHaveBeenCalled()
 		expect(nav.push).not.toHaveBeenCalled()
