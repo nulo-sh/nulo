@@ -159,7 +159,7 @@ One arc, one PR, no stack: branch `token-digits-1-a1` off `origin/dev`, carrying
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 002b76fc7, with these values:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 002b76fc7, with these values:
 - **Review loop:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, over the arc's diff after Phase 3; one Opus `general-purpose` review beside the first round; hard stop at three rounds, then report.
 - **Delivery:** `gh pr create --base dev`; `gh pr checks <n> --watch` to the end.
 - **Close-out:** the PR's final commits; merge `origin/dev` first and read `index.md` and `lessons.md`.
