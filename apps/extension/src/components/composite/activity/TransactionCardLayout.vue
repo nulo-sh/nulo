@@ -4,12 +4,14 @@ import type { GlyphName } from "@nulo/design"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
 import RowTarget from "@/components/ui/RowTarget.vue"
 import { vSnackFooter } from "@/composables/snackInset"
+import type { RowDirection, RowWay } from "@/utils/row-direction"
 /**
  * The one layout every activity card composes, so field positions stay identical across the
  * lifecycle: [activity icon + badge] [title (+ trailing) / secondary] [amount column], with an
  * optional `#actions` corner, which an open snack keeps clear of where the screen has room. It owns
  * the row's interactivity: with `to` the row is a link, with `opens` a button whose press emits
- * `activate`, otherwise it is inert.
+ * `activate`, otherwise it is inert. With a `direction` the icon box draws the two sides and a corner
+ * badge for the way in place of `icon`; the card puts the direction's words in its own text.
  *
  * `txAmountDisplay` / `txTransferTypeLabel` / `txStatus` / `txHash` bind as `data-tx-*` on the
  * root and `stage` / `backend` as `data-stage` / `data-backend`, the facts e2e waits on; Vue omits
@@ -40,10 +42,10 @@ const props = defineProps({
 	arriving: { type: Boolean, default: false },
 	/** The title names the function a dApp called: it stays on one line, cut at its end. */
 	oneLineTitle: { type: Boolean, default: false },
-	/** `#title-trailing` opens with the shared separator: where the row has no room for it beside the
-	 *  title, it drops under the title without its separator. */
-	wrapTrailing: { type: Boolean, default: false },
+	direction: { type: Object as PropType<RowDirection | null>, default: null },
 })
+
+const WAY_GLYPHS: Record<RowWay, GlyphName> = { out: "send", in: "receive", self: "swap" }
 
 const emit = defineEmits(["activate"])
 
@@ -101,21 +103,25 @@ function hasActionsContent() {
 
 		<Flex align="center" gap="16" :class="$style.left_content">
 			<Flex align="center" justify="center" :class="$style.activity_icon" data-testid="activity-icon">
-				<Icon :name="icon" size="18" color="secondary" />
+				<!-- The glyphs draw what the card's hidden direction words say, so assistive tech skips them. -->
+				<Flex v-if="direction" align="center" justify="center" :class="$style.icon_pair" aria-hidden="true" data-testid="activity-icon-pair">
+					<Icon v-if="direction.from" :name="direction.from" size="11" color="secondary" />
+					<Icon name="forward" size="9" color="tertiary" />
+					<Icon :name="direction.to" size="11" color="secondary" />
+				</Flex>
+				<Icon v-else :name="icon" size="18" color="secondary" />
 				<div v-if="$slots.badge" :class="$style.badge">
 					<slot name="badge" />
+				</div>
+				<div v-if="direction" :class="[$style.badge, $style.badge_way]" aria-hidden="true" :data-way="direction.way" data-testid="activity-way-badge">
+					<Icon :name="WAY_GLYPHS[direction.way]" size="10" color="secondary" />
 				</div>
 			</Flex>
 
 			<Flex direction="column" gap="4" :class="$style.text" data-testid="activity-text">
-				<Flex
-					align="center"
-					:gap="wrapTrailing ? undefined : '6'"
-					:class="[$style.title_row, wrapTrailing && $style.title_row_wrap]"
-					data-testid="activity-title-row"
-				>
+				<Flex align="center" gap="6" :class="$style.title_row" data-testid="activity-title-row">
 					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
-					<span v-if="$slots['title-trailing']" :class="wrapTrailing ? $style.trailing : $style.trailing_inline"><slot name="title-trailing" /></span>
+					<span v-if="$slots['title-trailing']" :class="$style.trailing_inline"><slot name="title-trailing" /></span>
 				</Flex>
 				<Flex v-if="$slots.secondary" align="center" gap="6" :class="$style.secondary_row">
 					<slot name="secondary" />
@@ -226,6 +232,15 @@ function hasActionsContent() {
 	border-radius: 50%;
 }
 
+.badge_way {
+	top: auto;
+	bottom: -6px;
+}
+
+.icon_pair {
+	gap: 1px;
+}
+
 .text {
 	min-width: 0;
 }
@@ -244,36 +259,17 @@ function hasActionsContent() {
 	white-space: nowrap;
 }
 
-/* Equal and opposite margins cancel on one line, so a row that fits lays out as without them; wrapped,
- * the group starts 8.78 px (the separator's 2.78 px glyph at 14 px Space Grotesk 700, plus its 6 px gap)
- * left of the clip, the chip under the title. A fixed box would move every fitting chip a sub-pixel. */
-.title_row_wrap {
-	--sep-room: 8.78px;
-	flex-wrap: wrap;
-	gap: 4px 6px;
-	overflow-x: clip;
-}
-
-.title_row_wrap > .title {
-	margin-right: var(--sep-room);
-}
-
-.trailing {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	margin-left: calc(-1 * var(--sep-room));
-}
-
 /* Generates no box, so the separator and chips lay out as the title row's own items. */
 .trailing_inline {
 	display: contents;
 }
 
-/* Below the popup's width every title row wraps as `wrapTrailing` does, and the amount and actions
- * drop under the text, at the right, when they do not fit beside it, since neither a chip nor a
- * figure may be cut. A function's name breaks anywhere and is cut only past a third line. Two classes
- * outrank the global `justify-between`. */
+/* Below the popup's width a title's trailing group drops under the title where it has no room beside
+ * it, and the amount and actions drop under the text, at the right, when they do not fit beside it,
+ * since neither a chip nor a figure may be cut. A function's name breaks anywhere and is cut only past
+ * a third line. Two classes outrank the global `justify-between`. Equal and opposite margins cancel on
+ * one line; wrapped, the group starts 8.78 px (the separator's 2.78 px glyph at 14 px Space Grotesk
+ * 700, plus its 6 px gap) left of the clip, so the separator hides and the chip sits under the title. */
 @media (width < 359px) {
 	.wrapper.wrapper {
 		flex-wrap: wrap;

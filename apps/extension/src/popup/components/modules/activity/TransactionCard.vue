@@ -3,11 +3,12 @@
 /**
  * Settled phase of an activity card. Wraps `TransactionCardLayout` so its
  * field positions match the in-flight phase (`TransactionAwaitingCard`) —
- * title row stays put across the lifecycle; only badge + secondary-row
- * content swap from spinner+status-text to status-icon+hash-and-chips.
+ * title row and icon box stay put across the lifecycle; only badge + secondary-row
+ * content swap from spinner+status-text to status-icon+hash.
  */
 /** Vendor */
 import type { GlyphName } from "@nulo/design"
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { PropType } from "vue"
 
 /** Components */
@@ -27,7 +28,7 @@ import { knownDecimals } from "@/utils/token-amount"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "@/composables/usePrices"
 import { getTransactionExplorerUrl } from "@/wallet/constants/explorers"
-import { getTxCategory, getTxTitle, getOriginLabel, getPrimaryCall, formatTransferType } from "@/utils/tx-enrichment"
+import { getTxCategory, getTxTitle, getOriginLabel, getPrimaryCall, transferDirection } from "@/utils/tx-enrichment"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -104,9 +105,11 @@ const title = computed(() => {
 	return getTxTitle(props.tx.calls, props.tokens)
 })
 
-const transferTypeLabel = computed(() => {
-	if (type.value === "transfer" && transfer.value) return formatTransferType(transfer.value.type)
-	return null
+const isTransfer = computed(() => type.value === "transfer" && Boolean(transfer.value))
+/** A transfer that lands on its sender's own account is a move between its sides. */
+const direction = computed(() => {
+	const t = transfer.value
+	return isTransfer.value && t ? transferDirection(t.type, sameFieldAddress(t.from, t.to)) : null
 })
 
 const originLabel = computed(() => getOriginLabel(props.tx.origin))
@@ -114,7 +117,7 @@ const originLabel = computed(() => getOriginLabel(props.tx.origin))
  *  first space does in every other chip. */
 const slotLabel = computed(() => originLabel.value?.replace(/^[\t\n\f\r ]+/, ""))
 /** A dApp's call with no direction is titled by the function it called. */
-const oneLineTitle = computed(() => Boolean(originLabel.value) && !transferTypeLabel.value)
+const oneLineTitle = computed(() => Boolean(originLabel.value) && !isTransfer.value)
 const hashSlice = computed(() => {
 	if (!props.tx.hash) return null
 	return `${props.tx.hash.slice(0, 4)}...${props.tx.hash.slice(-4)}`
@@ -159,38 +162,27 @@ onBeforeUnmount(() => {
 		:to="to"
 		testId="tx-card"
 		:txAmountDisplay="amountStr"
-		:txTransferTypeLabel="transferTypeLabel"
+		:txTransferTypeLabel="direction?.label ?? null"
 		:txStatus="txStatusAttr"
 		:txHash="props.tx.hash"
 		:oneLineTitle="oneLineTitle"
+		:direction="direction"
 	>
 		<template #badge>
 			<Icon :name="statusIcon" size="12" :color="STATUS_ICON_FILL[statusColor]" :class="$style.status_icon" data-testid="activity-status-icon" />
 		</template>
 
-		<template v-if="transferTypeLabel || originLabel" #title-trailing>
-			<!-- Chip stays in the title row across the lifecycle so it
-			     doesn't visually jump when the tx confirms. The dot is a
-			     subtle visual separator so "USDC" and "Private → Public"
-			     don't read as one continuous string.
-			     For the settled card the two labels are INDEPENDENT (not
-			     mutually exclusive like on the journal-driven awaiting /
-			     terminal cards): `transferTypeLabel` is derived from the
-			     call shape and `originLabel` from `tx.origin`. A
-			     dApp-initiated transfer sets both — render both so the
-			     dApp identity isn't silently dropped. -->
+		<template v-if="originLabel" #title-trailing>
 			<span :class="$style.title_sep" data-testid="activity-title-sep">·</span>
-			<span v-if="transferTypeLabel && originLabel" :class="$style.chips">
-				<span :class="$style.chip" data-testid="activity-direction-chip">{{ transferTypeLabel }}</span>
-				<span :class="$style.app_slot">
-					<span :class="$style.app_chip" data-testid="activity-app-chip">{{ slotLabel }}</span>
-				</span>
+			<!-- A transfer's symbol is never cut, so its app chip gives way, down to its floor. -->
+			<span v-if="isTransfer" :class="$style.app_slot">
+				<span :class="$style.app_chip" data-testid="activity-app-chip">{{ slotLabel }}</span>
 			</span>
-			<span v-else-if="transferTypeLabel" :class="$style.chip" data-testid="activity-direction-chip">{{ transferTypeLabel }}</span>
 			<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 		</template>
 
 		<template #secondary>
+			<span v-if="direction" :class="$style.direction" data-testid="activity-direction-chip">{{ direction.label }}</span>
 			<span v-if="hashSlice && explorerUrl" :class="$style.hash_group">
 				<span data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>
 				<RowAction :href="explorerUrl" label="Open in block explorer" data-testid="activity-row-explorer" :class="$style.explorer">
@@ -225,50 +217,25 @@ onBeforeUnmount(() => {
 	composes: title_sep from "../../../../components/composite/activity/activity-card.module.css";
 }
 
-.chip {
-	composes: type--label-section from global;
-	color: var(--nulo-secondary);
-	background: var(--nulo-surface-low);
-	border: 1px solid var(--hairline-soft);
-	padding: 1px 4px;
+.direction {
+	composes: visually_hidden from "../../../../components/composite/activity/activity-card.module.css";
 }
 
 .app_chip {
 	composes: app_chip from "../../../../components/composite/activity/activity-card.module.css";
 }
 
-/* A wrap measures the slot at its floor (a zero basis, clamped up), so the slot drops under the whole
- * direction chip exactly where one line would squeeze it below that floor; on its own line it fills
- * the line, its chip up to its cap. */
-.chips {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 4px 6px;
-	min-width: 0;
-}
-
-/* The slot takes the room left and the chip inside hugs its name up to its cap. A zero basis takes no
- * share of the shrink; the floor is the chip's border, padding and one "…" at the chip's 10px, so the
- * chip never draws empty. */
+/* The slot takes the room the title leaves and the chip inside hugs its name up to its cap. Its floor
+ * is the chip's border, padding and one whole "…" at the chip's 11px, so the chip never draws empty. */
 .app_slot {
 	display: flex;
 	flex: 1 1 0;
-	min-width: 19px;
+	min-width: 20px;
 }
 
 /* Below the shared cap in this row only; two classes outrank the shared chip's `flex-shrink: 0`. */
 .app_slot > .app_chip {
 	flex-shrink: 1;
-}
-
-/* A dApp transfer's two chips keep 10px semibold: at 11px they outgrow the row, and the app chip shows
- * only "…" where its name was drawn. */
-.chips > .chip,
-.app_slot > .app_chip {
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
 }
 
 /* A line's first character is clipped, never ellipsed; an empty atomic inline in its place lets the

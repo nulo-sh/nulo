@@ -7,6 +7,7 @@
 import { flushPromises, mount } from "@vue/test-utils"
 import { describe, expect, test, vi } from "vitest"
 import { createMemoryHistory, createRouter } from "vue-router"
+import { receivedDirection } from "@/utils/received-display"
 import TransactionIncomingCard from "./TransactionIncomingCard.vue"
 
 const STUBS = {
@@ -19,12 +20,13 @@ const STUBS = {
 				<span class="title">{{ title }}</span>
 				<span class="title-trailing"><slot name="title-trailing" /></span>
 				<slot name="badge" />
+				<slot name="secondary" />
 				<span class="amount">{{ amount }}</span>
 				<span class="symbol">{{ amountSymbol }}</span>
 				<span v-if="amountFiat" data-testid="activity-fiat">{{ amountFiat }}</span>
 			</div>
 		`,
-		props: ["title", "icon", "amount", "amountSymbol", "amountFiat", "testId", "txHash"],
+		props: ["title", "icon", "amount", "amountSymbol", "amountFiat", "testId", "txHash", "direction"],
 	},
 }
 
@@ -101,15 +103,18 @@ describe("composite/TransactionIncomingCard", () => {
 		expect(w.find(".symbol").text()).toBe("Token")
 	})
 
-	test("kind chip defaults to 'Received' (testid tx-incoming-kind-chip)", () => {
-		const chip = mountCard().find('[data-testid="tx-incoming-kind-chip"]')
-		expect(chip.exists()).toBe(true)
-		expect(chip.text()).toBe("Received")
+	test("the direction goes to the layout and its words to a hidden span under the kind chip's testid; no title-trailing", () => {
+		const direction = receivedDirection("private-to-public")
+		const w = mountCard({ direction })
+		expect(w.findComponent(STUBS.TransactionCardLayout).props("direction")).toEqual(direction)
+		const words = w.get('[data-testid="tx-incoming-kind-chip"]')
+		expect(words.element.textContent).toBe("Private → Public")
+		expect(words.classes().some((c) => c.includes("direction"))).toBe(true)
+		expect(w.find(".title-trailing").element.childElementCount).toBe(0)
 	})
 
-	test("kind chip renders the resolved receivedLabel (D5-D)", () => {
-		const chip = mountCard({ receivedLabel: "Private → Public" }).find('[data-testid="tx-incoming-kind-chip"]')
-		expect(chip.text()).toBe("Private → Public")
+	test("without a direction there are no words to read", () => {
+		expect(mountCard().find('[data-testid="tx-incoming-kind-chip"]').exists()).toBe(false)
 	})
 })
 
@@ -159,11 +164,16 @@ describe("composite/TransactionIncomingCard — the row, on the real layout and 
 		w.unmount()
 	})
 
-	test("the separator and the kind chip ride the group that drops under the title where the row has no room", async () => {
-		const { w } = await mountRow({ receivedLabel: "Received privately" })
-		const group = w.get('[data-testid="tx-incoming-kind-chip"]').element.parentElement as HTMLElement
-		expect(group.className).toMatch(/_trailing_/)
-		expect(group.textContent).toBe("·Received privately")
+	test("a received note draws the arrow and the shield with the inbound badge, and its words lead the hash line", async () => {
+		const { w } = await mountRow({ direction: receivedDirection("received-privately"), txHash: `0x${"5c".repeat(32)}` })
+		const names = (testid: string) =>
+			w.findAll(`[data-testid="${testid}"] [data-testid="stub-icon"]`).map((i) => i.attributes("data-name"))
+		expect(names("activity-icon-pair")).toEqual(["forward", "private"])
+		expect(names("activity-way-badge")).toEqual(["receive"])
+		expect(w.find('[data-testid="tx-incoming-kind-sep"]').exists()).toBe(false)
+		const words = w.get('[data-testid="tx-incoming-kind-chip"]').element
+		expect(words.nextElementSibling?.getAttribute("data-testid")).toBe("activity-incoming-hash")
+		expect(words.textContent).toBe("Received privately")
 		w.unmount()
 	})
 
