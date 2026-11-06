@@ -1,0 +1,4 @@
+- 2026-11-06 phase 0.4: recon done (recon.md); #1691 is the landing page, closed by #1713, so this lane refers to it and closes nothing
+- 2026-11-06 plan drafted (112 lines); Codex audit next
+- 2026-11-06 Codex r1: conditional approve, 7 findings accepted; final fresh pass next
+- 2026-11-06 Codex final: approve (after one path fix); plan committed; arc 1 next
