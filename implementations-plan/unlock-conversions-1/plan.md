@@ -1,7 +1,7 @@
 ---
 plan: unlock-conversions-1
 tier: light
-status: approved (final fresh Codex pass: approve); arc 1 next
+status: completed; #1726 carries the change and this close-out
 issues: none (decision page 117, P117-04)
 driver: claude-code
 claude_model: opus
@@ -13,6 +13,19 @@ base: origin/dev at 0bfd2c088
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-06. Planned and delivered the same day; one arc. No issue closes.
+- **Status:** completed. #1726 into `dev` carries the change and this close-out; its merge archives the plan.
+- **Shipped:** `UNLOCK_CONVERSIONS` and `runUnlockConversions` (`wallet/services/unlock-conversions.ts`) with a table per entry; `NetworkService.convertRows` on them; the AST guard over every unlock handler; one sentence each in `ARCHITECTURE.md` § 5 and `CLAUDE.md`.
+- **Deviations:** D5's throw line at `warn` (the orchestrator's brief update, 2026-11-06 21:42 UTC); D6 follows every same-file method a handler calls (Opus, diff review); the arc branch cut at 4ae04b194 and `dev` merged at close-out (#1722 only; the replays ran at 962b967eb, before it).
+- **Review loop:** plan: Codex and Opus conditional approve, Codex resumed conditional approve, the final fresh Codex `approve`; diff: Codex and Opus 0 material, Codex resumed `approve`.
+- **Gates:** lint, `typecheck:all`, `test`, `test:all` exit 0; `baseline:storage` unchanged; the update replay from v1.1.0 and v1.2.0 on Chrome and Firefox, 4/4 each at retry 0 ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Dropped:** the relay append, which is rpc-fallback-1 arc 5's, its once-memory that arc's call (I2).
+- **Known limits:** none. **Open items:** none.
+- **Lessons:** none promoted; `lessons.md` is at its budget. Over the 150-line target by the Outcome and the review record; nothing restated.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # unlock-conversions-1: one ordered list of the row conversions a sealed root takes at unlock
 
