@@ -1,9 +1,7 @@
 <script setup lang="ts">
 /**
- * In-flight phase of an activity card. Wraps `TransactionCardLayout` so its
- * field positions stay byte-identical with `TransactionCard` (the settled
- * phase). The only visible difference between phases is the badge slot
- * (spinner here vs. status icon there) and the secondary-row content.
+ * In-flight phase of an activity card. Wraps `TransactionCardLayout`, as the
+ * settled `TransactionCard` does, so every field keeps its place between phases.
  */
 import { computed, type PropType } from "vue"
 import type { GlyphName } from "@nulo/design"

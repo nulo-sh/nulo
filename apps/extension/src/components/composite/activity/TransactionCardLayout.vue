@@ -264,12 +264,11 @@ function hasActionsContent() {
 	display: contents;
 }
 
-/* Below the popup's width a title's trailing group drops under the title where it has no room beside
- * it, and the amount and actions drop under the text, at the right, when they do not fit beside it,
- * since neither a chip nor a figure may be cut. A function's name breaks anywhere and is cut only past
- * a third line. Two classes outrank the global `justify-between`. Equal and opposite margins cancel on
- * one line; wrapped, the group starts 8.78 px (the separator's 2.78 px glyph at 14 px Space Grotesk
- * 700, plus its 6 px gap) left of the clip, so the separator hides and the chip sits under the title. */
+/* Below the popup's width neither a chip nor a figure may be cut, so the title's trailing group, the
+ * amount and the actions wrap instead. Two classes outrank the global `justify-between`.
+ * `--sep-room` is the separator's 2.78 px glyph at 14 px Space Grotesk 700 plus its 6 px gap: the
+ * equal and opposite margins cancel on one line, and once wrapped they start the group that far left
+ * of the clip, hiding the separator. */
 @media (width < 359px) {
 	.wrapper.wrapper {
 		flex-wrap: wrap;

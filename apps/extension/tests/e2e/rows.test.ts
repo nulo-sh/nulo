@@ -568,7 +568,7 @@ const ROWS = `${sel("tx-card")}, ${sel("tx-incoming-card")}`
 const RECEIPT_TOKEN_ID = 1
 /** A dApp's own name: at 360px its chip is cut at its cap beside the transfer's symbol. */
 const DAPP_NAME = "Shielded Payroll Portal"
-/** A dApp's transfer whose dollar figure leaves its app chip no room past its floor. */
+/** A dApp's large transfer: its app chip is cut at its cap beside the transfer's symbol. */
 const LARGE_DAPP_HASH = `0x${"6e".repeat(32)}`
 /** The floor of a dApp transfer's app chip: its border, padding and one whole "…" at the chip's 11px. */
 const APP_CHIP_FLOOR = 20
@@ -667,10 +667,10 @@ const gapsOf = (rows: RowLayout[]) => rows.slice(1).map((row, i) => row.top - ro
 type IconBox = {
 	row: string
 	way: string | null
-	/** The pair's width and its frames' distance inside the box's border, each side. */
-	pair: { glyphs: number; width: number; left: number; right: number } | null
-	/** The way badge's box, and how far its right and bottom edges sit past the icon box's. */
-	badge: { width: number; height: number; right: number; bottom: number } | null
+	/** Each glyph's frame width, the pair's width and its frames' distance inside the box's border, each side. */
+	pair: { sizes: number[]; width: number; left: number; right: number } | null
+	/** The way badge's box and glyph, and how far its right and bottom edges sit past the icon box's. */
+	badge: { width: number; height: number; glyph: number; right: number; bottom: number } | null
 	/** How far the status badge's right edge sits past the box's, and its top edge above the box's. */
 	status: { right: number; top: number } | null
 	/** The title row holds its title alone, with no chip beside it. */
@@ -688,19 +688,26 @@ function readIconBoxes(page: Page): Promise<IconBox[]> {
 				const glyphs = [...row.querySelectorAll('[data-testid="activity-icon-pair"] svg')].map((g) => g.getBoundingClientRect())
 				const badge = row.querySelector('[data-testid="activity-way-badge"]') as HTMLElement
 				const b = badge.getBoundingClientRect()
+				const badgeGlyph = badge.querySelector("svg")?.getBoundingClientRect().width ?? 0
 				const status = row.querySelector('[data-testid="activity-status-icon"]')?.parentElement?.getBoundingClientRect()
 				return {
 					row: `${row.getAttribute("data-testid")} ${row.getAttribute("data-tx-hash")?.slice(0, 6) ?? ""}`.trim(),
 					way: badge.getAttribute("data-way"),
 					pair: glyphs.length
 						? {
-								glyphs: glyphs.length,
+								sizes: glyphs.map((g) => r1(g.width)),
 								width: r1(glyphs[glyphs.length - 1].right - glyphs[0].left),
 								left: r1(glyphs[0].left - box.left - 1),
 								right: r1(box.right - 1 - glyphs[glyphs.length - 1].right),
 							}
 						: null,
-					badge: { width: r1(b.width), height: r1(b.height), right: r1(b.right - box.right), bottom: r1(b.bottom - box.bottom) },
+					badge: {
+						width: r1(b.width),
+						height: r1(b.height),
+						glyph: r1(badgeGlyph),
+						right: r1(b.right - box.right),
+						bottom: r1(b.bottom - box.bottom),
+					},
 					status: status ? { right: r1(status.right - box.right), top: r1(box.top - status.top) } : null,
 					titleAlone: row.querySelector('[data-testid="activity-title-row"]')?.childElementCount === 1,
 				}
@@ -708,20 +715,26 @@ function readIconBoxes(page: Page): Promise<IconBox[]> {
 	}, ROWS)
 }
 
-/** A C2S pair of two sides sits 2.5px inside the border each side; a receipt's arrow and side are
- *  centred. The way badge mirrors the status badge's offset at the lower corner. */
+/** A settled transfer draws both sides, 11px each round a 9px arrow, 1px apart and 2.5px inside the
+ *  border; a receipt has no sending side, so its arrow and side are centred. Both badges are a 10px
+ *  glyph in a 2px ring, 5px past the border box at their corners: absolute, the box's padding edge
+ *  sits 1px inside it. */
 function expectIconBox(box: IconBox, where: string): void {
 	const at = `${where}, ${box.row}`
-	expect(box.status, at).not.toBeNull()
-	expect(box.badge, at).toMatchObject({
+	expect(box.status, at).toEqual({ right: expect.closeTo(5, 0), top: expect.closeTo(5, 0) })
+	expect(box.badge, at).toEqual({
 		width: expect.closeTo(14, 0),
 		height: expect.closeTo(14, 0),
-		right: expect.closeTo(box.status?.right ?? Number.NaN, 1),
-		bottom: expect.closeTo(box.status?.top ?? Number.NaN, 1),
+		glyph: expect.closeTo(10, 0),
+		right: expect.closeTo(5, 0),
+		bottom: expect.closeTo(5, 0),
 	})
-	if (box.pair?.glyphs === 3)
-		expect(box.pair, at).toMatchObject({ width: expect.closeTo(33, 0), left: expect.closeTo(2.5, 0), right: expect.closeTo(2.5, 0) })
-	else expect(Math.abs((box.pair?.left ?? 0) - (box.pair?.right ?? 99)), at).toBeLessThanOrEqual(0.5)
+	const receipt = box.row.startsWith("tx-incoming-card")
+	expect(box.pair, at).toEqual(
+		receipt
+			? { sizes: [9, 11], width: expect.closeTo(21, 0), left: expect.closeTo(8.5, 0), right: expect.closeTo(8.5, 0) }
+			: { sizes: [11, 9, 11], width: expect.closeTo(33, 0), left: expect.closeTo(2.5, 0), right: expect.closeTo(2.5, 0) },
+	)
 }
 
 /** The five seeded rows: a send out, three moves to the sender (two of them a dApp's transfers, the
@@ -800,7 +813,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		dapp: DAPP_NAME,
 	})
 	await seedTokenRow(page, scope, RECEIPT_TOKEN_ID)
-	// "Received privately" beside "+1,234.56" has no room at 360px.
+	// A priced receipt of "+1,234.56" beside its two-glyph icon box.
 	await seedReceipt(page, scope, {
 		tokenId: RECEIPT_TOKEN_ID,
 		amount: "1234567891",
@@ -857,6 +870,17 @@ const SHORT_APP = "NEMI"
 const APP_CHIP_CAP = 96
 const DAPP_CALL_HASH = `0x${"6c".repeat(32)}`
 const DAPP_TRANSFER_HASH = `0x${"6d".repeat(32)}`
+/** A dApp's transfer of a token whose 16-letter symbol leaves its app chip only its floor. */
+const FLOOR_TRANSFER_HASH = `0x${"6f".repeat(32)}`
+
+/** History's sixth row, past Home's list: a long symbol leaves its app chip the floor, with its "…" whole. */
+async function expectFloorChip(page: Page): Promise<void> {
+	await page.waitForSelector(`${sel("tx-card")}[data-tx-hash="${FLOOR_TRANSFER_HASH}"] ${sel("activity-app-chip")}`, { timeout: 15_000 })
+	const floor = await readAppChip(page, FLOOR_TRANSFER_HASH)
+	console.log(`[rows] the floor transfer ${JSON.stringify(floor)}`)
+	expect(floor).toMatchObject({ cut: true, besideTitle: true, lead: { content: '""', display: "inline-block" } })
+	expect(floor.width).toBeCloseTo(APP_CHIP_FLOOR, 0)
+}
 
 type NamedRows = {
 	/** Scroll containers and the document that came out wider than their box. */
@@ -1017,7 +1041,7 @@ async function readMethodRow(page: Page, shot: string, text: string): Promise<Me
 	return row
 }
 
-test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol whole with its app chip cut at its cap beside it, and at 240px no row's text is hidden or newly cut; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
+test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol whole with its app chip cut beside it, at its cap or, under a 16-letter symbol, at its 20px floor, and at 240px no row's text is hidden or newly cut; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
 	listedExtensionPerTest,
 }) => {
 	const page = await openPopup(listedExtensionPerTest)
@@ -1050,6 +1074,17 @@ test("a dApp's long function name and host never widen Home or History, named or
 	})
 	await seedTransaction(page, scope, { hash: DAPP_CALL_HASH, amount: "0", method: LONG_METHOD, dapp: SHORT_APP, at: now - 1_000 })
 	await seedTransaction(page, scope, { hash: DAPP_TRANSFER_HASH, amount: "2500000", transferType: 2, dapp: LONG_HOST, at: now - 2_000 })
+	await seedTransaction(
+		page,
+		{ ...scope, token: { ...scope.token, symbol: "LONGSYMBOL123456" } },
+		{
+			hash: FLOOR_TRANSFER_HASH,
+			amount: (1_250n * 10n ** BigInt(scope.token.decimals)).toString(),
+			transferType: 2,
+			dapp: LONG_HOST,
+			at: now - 2_500,
+		},
+	)
 	await seedUsdQuoteAndReload(page)
 	await bringToFront(page)
 
@@ -1074,6 +1109,7 @@ test("a dApp's long function name and host never widen Home or History, named or
 		// Every app chip, a dApp transfer's included, takes the caps role's 11px bold.
 		expect(rows.call.type).toBe("11px 700 1.1px")
 		for (const key of ["transfer", "nameless"]) expect(rows[key].type, key).toBe(rows.call.type)
+		if (surface.name === "History") await expectFloorChip(page)
 		// Below the popup's width a function's name takes a second line, so one whole here stays whole.
 		await expectFitsNarrow(page, `${surface.name}, dApp rows`)
 	}

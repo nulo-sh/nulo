@@ -632,9 +632,8 @@ export class TransferExecutor {
 				// `balanceFormatted(rawAmount, decimals, length)`.
 				amountRaw: req.amount.toString(),
 				recipientAddress: req.recipientAddress,
-				// Persist the privacy direction so the in-flight awaiting
-				// card can render the Private/Public chip the settled card
-				// shows. Resolved via `formatTransferType()` consumer-side.
+				// Persist the privacy direction so the in-flight and failed
+				// cards can name it, via `formatTransferType()` consumer-side.
 				transferType: req.transferType,
 				initialStage: { stage: queued ? "queued" : "pending" },
 			})

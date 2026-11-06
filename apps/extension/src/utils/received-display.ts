@@ -57,7 +57,6 @@ const SIDES: Record<ReceivedType, Pick<RowDirection, "from" | "to">> = {
 	minted: { from: null, to: "public" },
 }
 
-/** A receipt's row direction: always inbound, in its label's words. */
 export function receivedDirection(type: ReceivedType): RowDirection {
 	return { ...SIDES[type], way: "in", label: LABELS[type] }
 }

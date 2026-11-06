@@ -24,7 +24,7 @@ const H = vi.hoisted(() => {
 			tokenDecimals: 0,
 			txHash: "0xparity",
 			amountFiat: "≈ $42.42",
-			receivedLabel: "Received",
+			direction: { from: null, to: "public", way: "in", label: "PARITY-WAY" },
 		},
 		store: { current: null as unknown as ReturnType<typeof createAppStoreHarness> },
 	}
@@ -126,8 +126,8 @@ const STUBS = {
 	ActivityRowCard: false,
 	TransactionIncomingCard: false,
 	TransactionCardLayout: {
-		props: ["title", "amount", "testId"],
-		template: `<div :data-testid="testId"><span class="title">{{ title }}</span><span class="amount">{{ amount }}</span></div>`,
+		props: ["title", "amount", "testId", "direction"],
+		template: `<div :data-testid="testId"><span class="title">{{ title }}</span><span class="amount">{{ amount }}</span><span class="to">{{ direction?.to }}</span><slot name="secondary" /></div>`,
 	},
 	Flex: { template: "<div><slot /></div>" },
 }
@@ -166,5 +166,7 @@ describe("a received row on Home and on History", () => {
 		expect(card.exists()).toBe(true)
 		expect(card.find(".title").text()).toBe("PARITY-PIN")
 		expect(card.find(".amount").text()).toBe("+4,242")
+		expect(card.find(".to").text()).toBe("public")
+		expect(card.find('[data-testid="tx-incoming-kind-chip"]').text()).toBe("PARITY-WAY")
 	})
 })

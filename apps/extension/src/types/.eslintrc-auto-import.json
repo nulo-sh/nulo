@@ -456,6 +456,7 @@
     "defineComponent": true,
     "detailRowsFor": true,
     "detectBackupType": true,
+    "directionWords": true,
     "displaySymbol": true,
     "downloadFile": true,
     "effectScope": true,

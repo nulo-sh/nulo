@@ -200,6 +200,7 @@ declare global {
   const defineComponent: typeof import('vue').defineComponent
   const detailRowsFor: typeof import('../utils/presto-ui-state').detailRowsFor
   const detectBackupType: typeof import('../utils/full-backup-helpers').detectBackupType
+  const directionWords: typeof import('../utils/row-direction').directionWords
   const displaySymbol: typeof import('../utils/tx-amount').displaySymbol
   const downloadFile: typeof import('../utils/files').downloadFile
   const effectScope: typeof import('vue').effectScope
@@ -1136,6 +1137,7 @@ declare module 'vue' {
     readonly defineComponent: UnwrapRef<typeof import('vue')['defineComponent']>
     readonly detailRowsFor: UnwrapRef<typeof import('../utils/presto-ui-state')['detailRowsFor']>
     readonly detectBackupType: UnwrapRef<typeof import('../utils/full-backup-helpers')['detectBackupType']>
+    readonly directionWords: UnwrapRef<typeof import('../utils/row-direction')['directionWords']>
     readonly displaySymbol: UnwrapRef<typeof import('../utils/tx-amount')['displaySymbol']>
     readonly downloadFile: UnwrapRef<typeof import('../utils/files')['downloadFile']>
     readonly effectScope: UnwrapRef<typeof import('vue')['effectScope']>

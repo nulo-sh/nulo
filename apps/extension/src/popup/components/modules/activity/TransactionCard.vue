@@ -1,10 +1,9 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup lang="ts">
 /**
- * Settled phase of an activity card. Wraps `TransactionCardLayout` so its
- * field positions match the in-flight phase (`TransactionAwaitingCard`) —
- * title row and icon box stay put across the lifecycle; only badge + secondary-row
- * content swap from spinner+status-text to status-icon+hash.
+ * Settled phase of an activity card. Wraps `TransactionCardLayout`, as the in-flight phase
+ * (`TransactionAwaitingCard`) does, so the title row and icon box keep their places across the
+ * lifecycle.
  */
 /** Vendor */
 import type { GlyphName } from "@nulo/design"
@@ -29,6 +28,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "@/composables/usePrices"
 import { getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 import { getTxCategory, getTxTitle, getOriginLabel, getPrimaryCall, transferDirection } from "@/utils/tx-enrichment"
+import { directionWords } from "@/utils/row-direction"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -116,7 +116,7 @@ const originLabel = computed(() => getOriginLabel(props.tx.origin))
 /** The empty inline that leads the slot's chip keeps a space after it from collapsing, as a line's
  *  first space does in every other chip. */
 const slotLabel = computed(() => originLabel.value?.replace(/^[\t\n\f\r ]+/, ""))
-/** A dApp's call with no direction is titled by the function it called. */
+/** A transfer's title is its symbol, which is never cut. */
 const oneLineTitle = computed(() => Boolean(originLabel.value) && !isTransfer.value)
 const hashSlice = computed(() => {
 	if (!props.tx.hash) return null
@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
 		</template>
 
 		<template #secondary>
-			<span v-if="direction" :class="$style.direction" data-testid="activity-direction-chip">{{ direction.label }}</span>
+			<span v-if="direction" :class="$style.direction" data-testid="activity-direction-chip">{{ directionWords(direction) }}</span>
 			<span v-if="hashSlice && explorerUrl" :class="$style.hash_group">
 				<span data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>
 				<RowAction :href="explorerUrl" label="Open in block explorer" data-testid="activity-row-explorer" :class="$style.explorer">

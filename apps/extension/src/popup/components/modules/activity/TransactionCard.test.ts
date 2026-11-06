@@ -20,7 +20,7 @@ vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({ network: { chainId: CHAIN_IDS.TESTNET }, defaultExplorer: "aztecscan" }),
 }))
 
-// Controllable price feed for the D2 fiat case.
+// Controllable price feed for the fiat case.
 let mockQuotes: Record<string, unknown> = {}
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
@@ -147,6 +147,17 @@ describe("modules/activity/TransactionCard (settled)", () => {
 			expect(sentTo(ACCOUNT, `0x${"0b".repeat(32)}`).props("direction")?.way).toBe("out")
 		})
 
+		test("a move's hidden words say the value stayed in the account; the row's transfer type keeps the label", () => {
+			const moved = sentTo(ACCOUNT, ACCOUNT)
+			expect(moved.find('[data-testid="activity-direction-chip"]').text()).toBe("Private → Public, within this account")
+			expect(moved.props("txTransferTypeLabel")).toBe("Private → Public")
+			expect(
+				sentTo(ACCOUNT, `0x${"0b".repeat(32)}`)
+					.find('[data-testid="activity-direction-chip"]')
+					.text(),
+			).toBe("Private → Public")
+		})
+
 		test("two equal addresses that are no address never make a move", () => {
 			expect(sentTo("", "").props("direction")?.way).toBe("out")
 		})
@@ -193,7 +204,7 @@ describe("modules/activity/TransactionCard (settled)", () => {
 			const slot = w.find('[data-testid="activity-app-chip"]').element.parentElement
 			expect(slot?.className).toMatch(/app_slot/)
 			expect(slot?.textContent).toBe(HOST)
-			expect(w.html()).not.toMatch(/_chips_/)
+			expect(slot?.previousElementSibling?.getAttribute("data-testid")).toBe("activity-title-sep")
 			expect(
 				w
 					.get('[data-testid="activity-direction-chip"]')

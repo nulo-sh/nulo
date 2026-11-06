@@ -1,7 +1,6 @@
 /**
- * TransactionIncomingCard — first colocated suite (the composite predated the
- * coverage minimums). Pins amount formatting, the +prefix, the I1 fiat
- * passthrough, and the no-fake-fiat rule for unpriced receives.
+ * Pins amount formatting, the + prefix, the fiat passthrough, the no-fake-fiat rule for unpriced
+ * receives, and the direction's words under the card's own testid.
  */
 
 import { flushPromises, mount } from "@vue/test-utils"
