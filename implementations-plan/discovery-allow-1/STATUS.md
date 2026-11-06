@@ -4,3 +4,5 @@
 - 2026-11-06T20:15Z round 1: Codex conditional approve, Opus conditional approve; folded; final fresh Codex pass next
 - 2026-11-06T20:22Z final fresh Codex pass: approve (after two verify rounds); OA-3 blocks arc 1; plan committed, session ends at the plan report
 - 2026-11-06T20:56Z page 119 signed (OA-3 = P119-01 A, OA-1 = P119-02 A, OA-2 = P119-03 A); arc 1 branch `discovery-allow-1-a1`; draft applied, touched tests green (window, glossary, bans)
+- 2026-11-06T21:05Z phase 1 gate: lint, typecheck:all, test, test:all pass; network `connect-check-window` Chrome retry 0 pass (2 tests, 37 s); smoke `tooltips-glossary` Chrome retry 0 pass (3 tests, 17 s)
+- 2026-11-06T21:20Z arc 1 review: Codex r1 approve (2 low, fixed), Opus approve (low, fixed), Codex r2 approve; captures taken; final gates next

@@ -126,7 +126,7 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 - **Logs.** New lines are Info, name the request id only, never an origin or the policy row.
 - **Crypto, supply chain.** No new dependency; rows use the existing row seal (`@nulo/wallet-crypto`).
 
-## Phase 1: the connect window explains Allow (arc 1)
+## Phase 1: the connect window explains Allow (arc 1) ✓
 
 1. Rewrite the body of `discover/index.vue` as Architecture says. Keep every existing testid.
 2. Add the two glossary entries; update `glossary.test.ts`'s table and sections and the Glossary page test's order.
@@ -194,6 +194,11 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../README
 
 **Final fresh Codex pass** (new session, the consolidated plan and ledger): **conditional approve.** (1) D9's precedent is not a sign-off: accepted, now OA-3, and arc 1's auto-continue precondition is not met. (2) Two test lines contradicted D4 and D6: rewritten. (3) A connection queued behind admission could complete after the switch is turned off: accepted as a local fix (D5's re-check; no new state). (4) OA-1 and OA-2 were defaults posing as asks: they now gate arc 2's merge, not its build. It confirmed D4's ordering against `Lock`'s FIFO, the rejection of D6 option B, the sealed-only reads and the runner wiring.
 - **Resumed twice (verify only):** one stale D11 sentence ("ships without the edit") contradicted the merge gate; rewritten. **Verdict: approve** (high confidence). Arc 1's auto-continue precondition is not met while OA-3 is open.
+
+**Arc 1 review loop** (2026-11-06, the diff `f0d86d692..discovery-allow-1-a1`):
+- **Codex r1 (gpt-6.1-sol, high): approve**, two low findings, both accepted: the body's order and "If you allow" were unpinned (a test now checks the signed order, with `SectionLabel` and `ItemsContainer` stubbed so the label renders); `DAPP_SESSION_DAYS`'s comment named its caller (dropped).
+- **Opus 5.5 (general-purpose): approve**, low findings, accepted: the same unpinned label; the wire test's raw `appId` was never read (it now checks the identity block receives it unchanged); nothing tied the stored expiry to the constant (a `service.test.ts` case now does).
+- **Codex r2 (resumed, verify only): approve**, no new finding. Converged.
 
 ## Seeds (not run; orchestrator-owned)
 
