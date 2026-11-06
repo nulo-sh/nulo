@@ -183,8 +183,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		zeroize(entry.destinationDek)
 	})
 
-	/** What lets a passkey restore's finalize open the profile its commit wrote: set at the commit,
-	 *  taken back by an explicit lock, a deletion or the TTL. Secret-free: the page holds the answer. */
+	/** What lets a restore's finalize open the profile its commit wrote: set at the commit, taken back
+	 *  by an explicit lock, a deletion or the TTL, and gone after a worker restart. Secret-free: the
+	 *  page holds the credential. */
 	private readonly restoreAdmissions = new ExpiringStash<{ capturedAt: number }>(ProfileService.PENDING_RESTORE_TTL_MS, () => undefined)
 
 	/** Durable delete-in-progress markers (finding D). NOT an EntityStorage — see
@@ -197,8 +198,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 	/** A restore-pending marker must be at least this old before the boot
 	 *  sweep may treat the import as ABANDONED and reap it. A marker only proves
-	 *  incompleteness — a password import whose SW died can still finalize via
-	 *  the popup's auto-reconnect — so abandonment is proven by age. Seven days
+	 *  incompleteness — the page of an import whose SW died may still call
+	 *  finalize, which is refused but clears the marker and keeps the profile for
+	 *  its next unlock — so abandonment is proven by age. Seven days
 	 *  is a generous multiple of any plausible import (slice RPCs are seconds; a
 	 *  passkey ceremony is minutes; PENDING_RESTORE_TTL is 30 min) and outlasts
 	 *  even a suspended-laptop onboarding tab; the wall-clock residual that
@@ -1725,9 +1727,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 * When `bootCutoff` is supplied (the SW boot instant, captured BEFORE
 	 * `services.start()` — the same discipline as the journal reaper), also sweep TORN IMPORTS. A
 	 * restore-pending marker only proves the restore is INCOMPLETE, not
-	 * abandoned: a PASSWORD import whose SW died mid-flow can still legitimately
-	 * `finalizeRestore` against this new SW (the popup auto-reconnects; finalize
-	 * re-derives from the durable row + the popup-held password).
+	 * abandoned: the page of an import whose SW died mid-flow may still call
+	 * `finalizeRestore` against this new SW (the popup auto-reconnects). That
+	 * finalize is refused, since the restart took the admission, but it clears
+	 * the marker and keeps the profile, which opens at its next unlock.
 	 * Abandonment is therefore proven by AGE: only markers older than
 	 * {@link TORN_IMPORT_MIN_AGE_MS} are reaped — no live import plausibly spans
 	 * it, and the popup flow is an unbroken RPC chain whose failure paths run
@@ -1838,10 +1841,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				})
 				if (purged) continue
 				if (bootCutoff - marker.at < ProfileService.TORN_IMPORT_MIN_AGE_MS) {
-					// Incomplete, but not provably ABANDONED: a password import whose SW
-					// died can still finalize through the popup's auto-reconnect. Leave
-					// it; it stays unlock-refused (RestoreTornError) and is reaped once
-					// it ages past the floor.
+					// Incomplete, but not provably ABANDONED: the page of an import whose
+					// SW died may still call finalize, which clears the marker and keeps
+					// the profile. Leave it; it stays unlock-refused (RestoreTornError) and
+					// is reaped once it ages past the floor.
 					continue
 				}
 				// Aged past any plausible live import. Complete the compensating delete
@@ -2325,9 +2328,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (this.sessionManager.isActive(id)) {
 				return this.getProfileInfo(profile)
 			}
-			// A passkey restore opens only on the admission its own commit set. A password restore keeps
-			// finalizing after a worker restart, as the torn-import sweep's comments promise.
-			if (profile.type === "passkey" && (admission === undefined || this.restoreAdmissions.get(id) !== admission)) {
+			// A restore opens only on the admission its own commit set.
+			if (admission === undefined || this.restoreAdmissions.get(id) !== admission) {
 				throw new SessionEndedError()
 			}
 			// `restore` sealed the row under the credential handed back here: a row of another type was
