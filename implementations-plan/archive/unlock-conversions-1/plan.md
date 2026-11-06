@@ -132,7 +132,7 @@ The body: the change and why, the sign-off quoted, the claims that did not hold,
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 0bfd2c088, with these values:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 0bfd2c088, with these values:
 - **Review loop:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, over the diff from the plan commit once Phase 3 is green; one Opus `general-purpose` review beside the first round; hard stop at three rounds, then report.
 - **Delivery:** `gh pr create --base dev`; `gh pr checks <n> --watch` to the end.
 - **Close-out:** the PR's final commits. Merge `origin/dev` in first; read `index.md` and `lessons.md`. Outcome: `Known limits: none`, `Open items: none` unless a review adds one.
