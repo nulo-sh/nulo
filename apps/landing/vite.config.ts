@@ -6,12 +6,14 @@ import { siteHeaders } from "./scripts/headers.ts"
 
 const here = dirname(fileURLToPath(import.meta.url))
 
-// Written by scripts/build-legal.ts (predev/prebuild). Read as data: Vite loads this config under
-// the ambient Node with workspace imports externalized, where a raw-TypeScript package cannot load.
-// Absent only when nothing is being built (`vite preview` over an existing dist); CI asserts that a
-// build ships the pages, so a missing list cannot silently drop them.
-const legalPagesFile = resolve(here, "src/generated/legal-pages.json")
-const legalPages: string[] = existsSync(legalPagesFile) ? JSON.parse(readFileSync(legalPagesFile, "utf8")) : []
+// Written by scripts/build-legal.ts and scripts/build-changelog.ts (predev/prebuild). Read as data:
+// Vite loads this config under the ambient Node with workspace imports externalized, where a
+// raw-TypeScript package cannot load. Absent only when nothing is being built (`vite preview` over an
+// existing dist); CI asserts that a build ships the pages, so a missing list cannot silently drop them.
+function generatedPages(name: string): string[] {
+	const file = resolve(here, "src/generated", name)
+	return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : []
+}
 
 export default defineConfig({
 	server: {
@@ -27,10 +29,15 @@ export default defineConfig({
 		assetsInlineLimit: 0,
 		rollupOptions: {
 			// Cloudflare serves `terms.html` at `/terms` and `terms/v1.0/index.html` at `/terms/v1.0/`,
-			// so extra HTML entries are the whole routing story. scripts/build-legal.ts writes the legal ones.
-			input: ["index.html", "how-aztec-works.html", "subscribed.html", "confirm.html", ...legalPages].map((path) =>
-				resolve(here, path),
-			),
+			// so extra HTML entries are the whole routing story.
+			input: [
+				"index.html",
+				"how-aztec-works.html",
+				"subscribed.html",
+				"confirm.html",
+				...generatedPages("legal-pages.json"),
+				...generatedPages("changelog-pages.json"),
+			].map((path) => resolve(here, path)),
 		},
 	},
 })
