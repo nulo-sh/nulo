@@ -239,11 +239,9 @@ class Router implements Route {
 		const node = nodeOf(async (method, args) => {
 			const pinned = method === "getTxReceipt" ? this.pins.byTxHash.get(pinKey(args[0])) : undefined
 			if (pinned) return this.pinnedReceipt(pinned, args, timeoutMs, 1)
-			const start = this.deps.now()
-			if (this.health.active() === undefined) await this.admitWithin(start + timeoutMs, timeoutMs)
+			const left = await this.budgetAfterAdmission(timeoutMs)
 			const index = this.health.active()
 			const endpoint = index === undefined ? undefined : this.endpoints[index]
-			const left = timeoutMs - (this.deps.now() - start)
 			if (index === undefined || !endpoint || left <= 0) throw noEndpoint("the call")
 			// A budget cut by admission gets its own client; the full one is shared.
 			const client = left === timeoutMs ? this.client(endpoint.rpcUrl, timeoutMs) : this.connect(endpoint.rpcUrl, left)
@@ -438,6 +436,15 @@ class Router implements Route {
 			if (!this.health.lone) this.deps.log({ event: "move", chainId: this.spec.chainId, endpointId, failure, method })
 			return { kind: "failed", error, spent: !countsTowardDown(failure) }
 		}
+	}
+
+	/** What a single attempt's budget has left once any admission ran. Only an admission spends it, so a
+	 *  clock tick alone never forfeits the client shared at the full budget. */
+	private async budgetAfterAdmission(timeoutMs: number): Promise<number> {
+		if (this.health.active() !== undefined) return timeoutMs
+		const start = this.deps.now()
+		await this.admitWithin(start + timeoutMs, timeoutMs)
+		return timeoutMs - (this.deps.now() - start)
 	}
 
 	/** {@link admitFirst} for one caller's budget: the caller stops waiting once `budgetMs` pass,

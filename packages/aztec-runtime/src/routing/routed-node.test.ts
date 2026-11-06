@@ -554,6 +554,14 @@ describe("races", () => {
 		expect(h.seen(B)).toEqual([])
 	})
 
+	test("with no admission to run, the attempt gets the caller's whole budget however the clock moves", async () => {
+		const h = new Harness([A])
+		let tick = 0
+		Object.defineProperty(h, "now", { get: () => tick++, set: () => {} })
+		await h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
+		expect(h.seen(A)).toEqual([`getContract@${probeTimeoutMs}`])
+	})
+
 	test("admission and the attempt share the caller's budget: the attempt gets what admission left", async () => {
 		const h = new Harness([A, B])
 		h.endpoint(A).hold = (m) => {
