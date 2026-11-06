@@ -270,9 +270,9 @@
 		0 0 4px var(--app-bg);
 }
 
-/* No frame, but a solid backing, so the grain never runs under the text. */
+/* No frame, but a solid backing, so the grain never runs under the text. Left unpositioned so its
+ * halo paints beneath the links that follow it. */
 .cl-notes__body {
-	position: relative;
 	max-width: 68ch;
 	background: var(--app-bg);
 	box-shadow: 0 0 0 20px var(--app-bg);
