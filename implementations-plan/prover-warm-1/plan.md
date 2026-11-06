@@ -1,7 +1,7 @@
 ---
 plan: prover-warm-1
 tier: light
-status: probe done (2026-11-05), D2 verdict close; Phase 2 not built; numbers in recon.md § Probe
+status: closed; probe done 2026-11-05, D2 verdict close; no code; #1623 closed as a known limit; archived by the close-out PR
 issues: "#1623 (arc 1 says `Closes #1623` on ship; on close the orchestrator closes it as a known limit with the numbers; on hold it waits for the owner)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 4291a8c98
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-05 (probe), closed 2026-11-06 on the owner's word ("archive").
+- **Status:** closed. A probe with no code: Phase 2 (the warm-up) was never built.
+- **Measured:** the removable init, warmed at window open, saves 970 ms at the Chrome median and nothing at the Firefox median (−899 ms), against a 2.0 s ship bar on Firefox; the fee estimate ran 596 ms (Chrome) and 739 ms (Firefox) slower with the warm-up, failing R4 (< 500 ms). Five pairs per browser plus a 4-core pair; tables in [recon.md § Probe](recon.md).
+- **Review loop:** plan: Codex reject → conditional approve → approve over three rounds, Opus conditional approve; the probe's instruments were never committed.
+- **Gates:** none for code; the probe's runs are recorded in `lessons/`.
+- **Dropped:** Phase 2 (ship) and its PR; the `/goal` and `/loop` seeds below are retired.
+- **Known limits:** #1623 (closed as `known-limit` with these numbers; reopens on a measured saving above the issue's bar or on a bb.js whose init dominates the first proof).
+- **Open items:** none.
+- **Lessons:** none promoted; `lessons.md` is at its budget.
 
 # prover-warm-1: measure a warm browser prover, and warm it only where the numbers pay
 
