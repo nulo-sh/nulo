@@ -1,7 +1,7 @@
 /**
  * The toolbar popup, opened by the background: after onboarding's "Open wallet", after a step that
  * Firefox's toolbar panel handed to the passkey window, whose prompt closed the panel, and after a
- * file pick the panel handed to a window of its own.
+ * flow the panel handed to a window of its own.
  */
 import { isSenderAtUrl } from "@nulo/extension-messaging/background"
 import { pointToolbarAtSidebar } from "@/utils/browser-surface"

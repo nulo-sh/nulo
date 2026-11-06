@@ -5,6 +5,7 @@ import {
 	captureOwnWindow,
 	closeOwnWindow,
 	followOwnRoute,
+	handsBackToPanel,
 	isCardWindow,
 	leavePanelFor,
 	moveToOwnWindow,
@@ -32,6 +33,7 @@ let getWindow: ReturnType<typeof vi.fn>
 let update: ReturnType<typeof vi.fn>
 let session: Map<string, unknown>
 let sessionGet: ReturnType<typeof vi.fn>
+let sessionSet: ReturnType<typeof vi.fn>
 let sendMessage: ReturnType<typeof vi.fn>
 let closeDocument: ReturnType<typeof vi.spyOn>
 
@@ -45,15 +47,16 @@ beforeEach(() => {
 	sessionGet = vi.fn(async (keys: string | string[]) =>
 		Object.fromEntries([keys].flat().flatMap((key) => (session.has(key) ? [[key, session.get(key)]] : []))),
 	)
+	sessionSet = vi.fn(async (items: Record<string, unknown>) => {
+		for (const [key, value] of Object.entries(items)) session.set(key, value)
+	})
 	vi.stubGlobal("chrome", {
 		runtime: { getURL: (path: string) => `moz-extension://nulo/${path}`, sendMessage },
 		windows: { create, getCurrent, get: getWindow, update },
 		storage: {
 			session: {
 				get: sessionGet,
-				set: async (items: Record<string, unknown>) => {
-					for (const [key, value] of Object.entries(items)) session.set(key, value)
-				},
+				set: sessionSet,
 				remove: async (keys: string | string[]) => {
 					for (const key of [keys].flat()) session.delete(key)
 				},
@@ -311,12 +314,48 @@ describe("the card window", () => {
 		expect(closeDocument).toHaveBeenCalledTimes(1)
 	})
 
-	test("outside a card window the return does nothing", async () => {
-		await boot(`#${EXPORT}?window=own`)
-		expect(await returnToPanel(CONTACTS, OUTCOME)).toBe(false)
+	test.each([
+		["the profile import", "#/popup/import?option=seed&window=own&opener=12", "/popup/general"],
+		["the unlock method", "#/popup/settings/security/unlock-method?window=own&opener=12", "/popup/settings"],
+		["a card", `#${CONTACTS}?window=own&opener=12`, CONTACTS],
+	] as const)("%s's own window, still in its flow, hands its ending back to the panel", async (_flow, hash, route) => {
+		await boot(hash)
+		expect(handsBackToPanel()).toBe(true)
+		expect(await returnToPanel(route, OUTCOME)).toBe(true)
+		expect(session.get(HANDBACK_KEY)).toEqual({ route, snack: SNACK })
+		expect(sendMessage).toHaveBeenCalledExactlyOnceWith({ type: "nulo:return-to-panel", opener: 12 })
+		expect(closeDocument).toHaveBeenCalledTimes(1)
+	})
+
+	test("a window that left its flow, a marked URL in a tab and an unmarked page hand nothing back", async () => {
+		const IMPORT = "#/popup/import?option=seed&window=own&opener=12"
+		await boot(IMPORT)
+		await releaseOwnWindow()
+		const left = [handsBackToPanel(), await returnToPanel("/popup/general", OUTCOME)]
+		await boot(IMPORT, "normal")
+		const tab = [handsBackToPanel(), await returnToPanel("/popup/general", OUTCOME)]
+		await boot("#/popup/import?option=seed")
+		const unmarked = [handsBackToPanel(), await returnToPanel("/popup/general", OUTCOME)]
+		expect({ left, tab, unmarked }).toEqual({ left: [false, false], tab: [false, false], unmarked: [false, false] })
 		expect(session.has(HANDBACK_KEY)).toBe(false)
 		expect(sendMessage).not.toHaveBeenCalled()
 		expect(closeDocument).not.toHaveBeenCalled()
+	})
+
+	test("a Back pressed while the hand-back writes its record joins it: the reopen is asked before the window closes", async () => {
+		await boot("#/popup/import?option=seed&window=own&opener=12")
+		getCurrent.mockResolvedValue({ id: 30, type: "popup" })
+		const write = deferred<void>()
+		sessionSet.mockReturnValueOnce(write.promise)
+		const handing = returnToPanel("/popup/general", OUTCOME)
+		const back = closeOwnWindow()
+		await flushPromises()
+		expect(closeDocument).not.toHaveBeenCalled()
+		write.resolve()
+		expect(await Promise.all([handing, back])).toEqual([true, true])
+		expect(sendMessage).toHaveBeenCalledExactlyOnceWith({ type: "nulo:return-to-panel", opener: 12 })
+		expect(closeDocument).toHaveBeenCalledTimes(1)
+		expect(sendMessage.mock.invocationCallOrder[0]).toBeLessThan(closeDocument.mock.invocationCallOrder[0] ?? 0)
 	})
 
 	test("Cancel or back in a card window hands back to the flow's page with no snack", async () => {
