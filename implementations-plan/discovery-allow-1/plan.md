@@ -1,7 +1,7 @@
 ---
 plan: discovery-allow-1
 tier: mid
-status: approved by the panel (final Codex pass approve); arc 1 waits on OA-3, arc 2's merge on OA-1 and OA-2
+status: approved by the panel (final Codex pass approve); OA-1, OA-2 and OA-3 answered on page 119; arc 1 in build
 issues: none (decision pages 116, 117, 118)
 driver: claude-code
 claude_model: opus
@@ -25,6 +25,9 @@ Two arcs, stacked, then a docs-only close-out. Arc 1 rewrites the connect window
 - **P117-07 A4** (re-picked in chat 2026-11-06 about 18:40 UTC: "on p117-07 instead of the thing I selected: A2, can we do A4?"): a quiet underlined "Allow every site" text button centred under Deny and Allow; it opens the Settings confirm before anything is written; Turn on grants every site and closes the window as an Allow would.
 - **P116-07 B** (page 116, signed 17:04 UTC), the off-switch: "Let every site see that Nulo is installed", a Toggle, off at start; on asks "Let every site see Nulo?" / "Any site you open, and the scripts it runs, will learn that Nulo is installed and its version, without asking. Connecting and sharing an account still ask you." / "Turn on" (the strict-mode precedent: accent button); off is immediate; sites already allowed keep their 7 days; stored per profile in a sealed row. Its sub-line "Skips the connect window. Connecting and sharing an account still ask you." is in every frame of page 118.
 - **P116-07's guard** (page 116's own text, signed with its picks): "Under every option the secure-origin and subframe refusals, the Terms gate, the rate caps and the emoji check stay; an auto-allowed site that fails the emoji check goes back to the connect window."
+- **P119-01 A** (page 119, signed 2026-11-06 at 20:31 UTC, OA-3): both new glossary rows' where-line reads "Connect window"; the two rows (Discover, Connection check) go last under Apps, after Interface.
+- **P119-02 A** (page 119, signed 2026-11-06 at 20:31 UTC, OA-1): the Privacy Policy § 5.7 sentence ships as a patch version (1.2.x), no notice.
+- **P119-03 A** (page 119, signed 2026-11-06 at 20:31 UTC, OA-2): with the switch on, Connected Apps lists every site the switch lets through, no cap; each entry expires after 7 days or on Disconnect.
 - **P118-02 C** (page 118, signed 2026-11-06, relayed 19:37 UTC): the row sits first on Settings → Connected Apps, above Sessions, the 12 px spacing opened to 32 px under it; testids `privacy-row-every-site` and `every-site-toggle`; search synonyms connect, discover, allow, sites, dapps, prompt point at Connected Apps.
 
 ## Outcome & Quality Bar
@@ -45,7 +48,7 @@ Good enough: no "Until I revoke", no remembered Deny, no change to the emoji che
 - I2. An auto-allowed site's Connected Apps row reads "Allowed. Not connected yet." until its key exchange writes the hash (before the person answers the check), as after a manual Allow. With the switch on, every site that discovers gets such a 7-day row with no tap, so the list grows with the sites a person visits (Opus r1): no new UI, but a behaviour a person notices, so OA-2 states it. Lookups decrypt every row of the profile: more rows cost more per discovery (plausible, unmeasured; expired rows go on the next add or lookup).
 - I3. The A4 button sits inside the footer strip in the signed frame, so the footer needs a slot; the discover window is its only filler.
 
-**Asks**: in [OWNER-ASKS.md](OWNER-ASKS.md). OA-3 (the glossary `where` lines) blocks arc 1. OA-1 (the Privacy Policy sentence and its version kind) and OA-2 (the Connected Apps list grows with every site the switch lets through) concern arc 2: it may be built before they are answered, its PR stays draft, and it merges only after both are.
+**Asks**: all answered on page 119 ([OWNER-ASKS.md](OWNER-ASKS.md) § Answered): OA-3 = P119-01 A (arc 1), OA-1 = P119-02 A and OA-2 = P119-03 A (arc 2).
 
 ## Decision ledger
 
@@ -57,9 +60,9 @@ Good enough: no "Until I revoke", no remembered Deny, no change to the emoji che
 - **D6. The window grants through a separate RPC, then resolves as Allow.** `setEverySite(profileId, true)` on `DappSessionService` (refused unless `profileId` is the active profile; the write runs under the profile-deletion fence), then `resolveInteraction(requestId, { approved: true })`. The interaction result keeps its one field. A write that fails resolves nothing. Turn on always writes, even when the app cancelled its request while the confirm was open: the confirm asks about every site, the window cannot know of a cancellation the worker has not yet sent (Codex r1), and one rule beats two that depend on timing; the cancelled overlay then shows as for any refused Allow. Rejected (Opus r1's option B): carrying `everySite` in the interaction result, which reopens the one-field rule pinned by `dapp-interaction/service.test.ts` and turns a Settings write into a dApp-window protocol field.
 - **D7. One confirm object for both callers**, `EVERY_SITE_CONFIRM` in `src/utils/every-site.ts`, passed to `askConfirm` by the page and the window, so the two cannot drift.
 - **D8. The Settings row stays in sync through an event.** `onEverySiteChanged` (`{ profileId, on }`) on the service; the page re-reads on it. A popup kept open (Firefox's sidebar, an expanded tab) would otherwise show off while the window turned it on.
-- **D9. The glossary `where` lines are an owner ask (OA-3).** Every Glossary row shows a `where` line; the signed pick gives the two terms and definitions only. The lane first settled them on precedent (iface-line-1, copy-polish); Codex r1, Opus r1 and the final Codex pass held that a precedent is not a sign-off, and CLAUDE.md § UI changes agrees. Recommended: both "Connect window", the only screen that dots them, last under Apps as `interface` went. Arc 1 waits for the answer.
+- **D9. The glossary `where` lines are an owner ask (OA-3).** Every Glossary row shows a `where` line; the signed pick gives the two terms and definitions only. The lane first settled them on precedent (iface-line-1, copy-polish); Codex r1, Opus r1 and the final Codex pass held that a precedent is not a sign-off, and CLAUDE.md § UI changes agrees. Answered: P119-01 A, both "Connect window", last under Apps after Interface.
 - **D10. The tooltip on "discover" keeps opening below**, covering the sentence's second line (the brief's first option). Opening above would need `DottedTerm` to pass `Tooltip`'s `side="top"` for one caller, and would cover the dApp's origin and name, which the person must be able to read.
-- **D11. Privacy § 5.7: an owner ask (OA-1).** The brief allows one sentence; Codex r1 read `legal/README.md`'s rule (what leaves the device is material) as a minor bump, against the patch precedent of 1.2.8 and 1.2.9. Both the words and the kind are read by people, so they are the owner's: arc 2 may be built before the answer, its PR stays draft, and it merges only with the answer applied.
+- **D11. Privacy § 5.7: an owner ask (OA-1).** The brief allows one sentence; Codex r1 read `legal/README.md`'s rule (what leaves the device is material) as a minor bump, against the patch precedent of 1.2.8 and 1.2.9. Both the words and the kind are read by people, so they are the owner's. Answered: P119-02 A, a patch version, no notice.
 - **D12. The footer gains one optional slot under its buttons** (`#below`); the capabilities and execute windows pass nothing and render as today.
 
 ## Architecture & Implementation
@@ -107,11 +110,11 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 ## UI impact
 
 - **Connect window body** (arc 1). Before: the scope sentence and the trust line. After: the D sentence with two dotted terms, "If you allow" and the three rows, the remember line naming the app's chain (frame p117-06-d-01). Dotted terms: two, the screen maximum.
-- **Settings → Glossary** (arc 1): two rows in Apps; their "where" line as OA-3 answers.
+- **Settings → Glossary** (arc 1): two rows last in Apps, after Interface, each "where" line "Connect window" (P119-01 A).
 - **Connect window footer** (arc 2): "Allow every site" centred under Deny and Allow (frame p117-07-a4-01); its confirm over the window (a4-02).
 - **Settings → Connected Apps** (arc 2): the row first, off at start (frames p118-02-c-01/-02).
 - **Behaviour** (arc 2): with the switch on, a new site goes straight to the connection check; its row in Connected Apps reads as after any Allow. No other screen changes.
-- **Privacy Policy § 5.7** (arc 2): only on OA-1's answer.
+- **Privacy Policy § 5.7** (arc 2): the one sentence as a patch version, no notice (P119-02 A).
 - **Accessibility calls** (the owner's 2026-10-19 delegation): the two dotted terms are Tab stops before Deny and Allow, as `DottedTerm` is everywhere; "Allow every site" is a native button after Allow in the Tab order, with the 2 px accent ring on `:focus-visible`, disabled until Allow is; the confirm traps focus and Escape cancels it, never grants.
 
 ## Security & Adversarial Considerations
@@ -166,8 +169,8 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 
 ## Delivery
 
-- **Arc 1:** after OA-3's answer, branch `discovery-allow-1-a1` off this plan's commit; Phase 1; PR `feat(connect): the connect window says what allow reveals, with two glossary terms`.
-- **Arc 2:** `discovery-allow-1-a2` stacked on arc 1; Phases 2-5; its PR stays draft until OA-1 and OA-2 are answered; PR `feat(connect): an opt-in switch lets every site see nulo, off in connected apps`.
+- **Arc 1:** (OA-3 answered: P119-01 A) branch `discovery-allow-1-a1` off this plan's commit; Phase 1; PR `feat(connect): the connect window says what allow reveals, with two glossary terms`.
+- **Arc 2:** `discovery-allow-1-a2` stacked on arc 1; Phases 2-5, with P119-02 A applied to `legal/`; PR `feat(connect): an opt-in switch lets every site see nulo, off in connected apps`.
 - **Close-out:** `discovery-allow-1-close-out` on arc 2, docs only.
 - `gh stack submit --auto`, then each body with `gh pr edit`; no label at creation. Neither arc closes an issue (no issue tracks this work). Each body states the per-browser network e2e wall-clock before and after, the captures and the sign-off quotes.
 - Parallelism: none; arc 2 edits the window file arc 1 rewrites.

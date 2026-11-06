@@ -10,6 +10,9 @@ import {
 
 export const DAPP_SESSION_SERVICE_NAME = "dapp-session"
 
+/** How long an allowed app's session lives from its Allow. The connect window states it. */
+export const DAPP_SESSION_DAYS = 7
+
 /** EntityStorage root for dApp session rows. Frozen: renaming detaches every connected session. */
 export const DAPP_SESSION_STORAGE_ROOT = "nulo:core:dappSessions"
 

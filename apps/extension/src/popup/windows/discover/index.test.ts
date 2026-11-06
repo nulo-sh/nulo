@@ -31,6 +31,10 @@ import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { deferred } from "@nulo/wallet-core/utils"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
+import { GLOSSARY } from "@/utils/glossary"
+import { TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION } from "@/utils/chain-ids"
+import { chainInfoToChainId } from "@/wallet/services/wallet-sdk/session-established"
+import { shownText } from "../../../../tests/helpers/shown-text"
 
 // ── Mock state (closure refs so tests can flip values mid-test) ──────
 
@@ -39,6 +43,7 @@ let dappMock = ref<{ name: string; url: string } | null>(null)
 let payloadMock = ref<unknown>(null)
 // The chain the discovery named, decimal as the background decodes it.
 let payloadChainId = "77"
+let payloadDapp = { name: "Test DApp", url: "https://example.com" }
 let isCancelledMock = ref(false)
 let loadPromiseResolve: (() => void) | undefined
 let loadPromiseReject: ((err: Error) => void) | undefined
@@ -50,7 +55,7 @@ const loadInteractionPayloadMock = vi.fn(() => {
 		loadPromiseResolve = () => {
 			// Simulate that loadInteractionPayload commits requestId + dapp BEFORE resolving
 			requestIdMock.value = "req-123"
-			dappMock.value = { name: "Test DApp", url: "https://example.com" }
+			dappMock.value = payloadDapp
 			payloadMock.value = { params: { dappMetadata: dappMock.value, chainId: payloadChainId } }
 			resolve()
 		}
@@ -148,6 +153,7 @@ afterEach(() => {
 	dappMock = ref<{ name: string; url: string } | null>(null)
 	payloadMock = ref<unknown>(null)
 	payloadChainId = "77"
+	payloadDapp = { name: "Test DApp", url: "https://example.com" }
 	routeMock.value = { query: { requestId: "req-123" } }
 	isCancelledMock = ref(false)
 	loadPromiseResolve = undefined
@@ -453,22 +459,81 @@ describe("discover popup — the line under the app names the app's network", ()
 	})
 })
 
-describe("discover popup — what Allow grants", () => {
-	test("says what the site gets, above the trust line", () => {
+describe("discover popup — what Allow reveals", () => {
+	const ready = async () => {
 		const w = factory()
-		const scope = w.get('[data-testid="discover-scope"]')
-		expect(scope.text()).toBe(
-			"Allowing lets this site ask Nulo for things and know that Nulo is running. It sees no account or balance until you approve a request.",
-		)
-		expect(w.text().indexOf(scope.text())).toBeLessThan(w.text().indexOf("Make sure you trust the site"))
-	})
-})
+		await flushPromises()
+		getActiveProfilePromiseResolve?.({ id: "p1" })
+		await flushPromises()
+		loadPromiseResolve?.()
+		await flushPromises()
+		return w
+	}
+	const shown = (w: ReturnType<typeof factory>, testid: string) => shownText(w.get(`[data-testid="${testid}"]`).element)
 
-describe("discover popup — the revoke line", () => {
-	test("names the settings screen that lists connections", () => {
-		const text = factory().text()
-		expect(text).toContain("You can revoke this connection any time from Settings → Connected Apps.")
-		expect(text).not.toContain("General → Sessions")
+	test("the sentence, the three facts and the remember line read as signed; the trust line is gone", async () => {
+		const w = await ready()
+		expect(shown(w, "discover-scope")).toBe(
+			"Allowing lets this site discover Nulo. It sees no account or balance until you pass the connection check and approve a request.",
+		)
+		const rows = w.findAll('[data-testid="discover-facts"] [role="listitem"]').map((row) => {
+			const sub = shownText(row.get('[data-testid="cap-row-sub"]').element)
+			return [row.attributes("data-testid"), shownText(row.element).slice(0, -sub.length), sub]
+		})
+		expect(rows).toEqual([
+			[
+				"discover-fact-presence",
+				"This site learns Nulo is installed.",
+				"It also sees Nulo's version, as do the scripts on the page.",
+			],
+			["discover-fact-next", "It can then ask to connect.", "You compare emojis first. Sharing an account needs your OK."],
+			["discover-fact-hidden", "It sees nothing else.", "No account, address, balance or history."],
+		])
+		expect(shown(w, "discover-remember")).toBe("Nulo remembers this site on Devnet for 7 days. Revoke it in Settings → Connected Apps.")
+		expect(w.text()).not.toContain("Make sure you trust")
+		expect(w.text()).not.toContain("General → Sessions")
+	})
+
+	test("the two dotted terms define themselves from the glossary", async () => {
+		const w = await ready()
+		const terms = w.findAll('[data-testid="discover-scope"] [aria-describedby]')
+		expect(terms.map((t) => [t.attributes("data-testid"), t.text()])).toEqual([
+			["discover-term-discover", "discover"],
+			["discover-term-check", "connection check"],
+		])
+		const definitions = terms.map((t) => w.get(`[id="${t.attributes("aria-describedby")}"]`).text())
+		expect(definitions).toEqual([GLOSSARY.discover.definition, GLOSSARY["connection-check"].definition])
+	})
+
+	test("a request as the wire carries it: the remember line names the chain its fields decode to", async () => {
+		// `chainInfo` arrives as two 32-byte hex fields and the app's name as its raw `appId`.
+		const field = (n: number) => `0x${n.toString(16).padStart(64, "0")}`
+		const chainInfo = { chainId: field(TESTNET_L1_CHAIN_ID), version: field(TESTNET_ROLLUP_VERSION) }
+		payloadChainId = String(chainInfoToChainId({ chainInfo }))
+		payloadDapp = { name: "nulo-playground", url: "https://playground.nulo.sh" }
+		const w = await ready()
+		expect(shown(w, "discover-remember")).toBe(
+			"Nulo remembers this site on Testnet for 7 days. Revoke it in Settings → Connected Apps.",
+		)
+		expect(shown(w, "discover-scope")).toBe(
+			"Allowing lets this site discover Nulo. It sees no account or balance until you pass the connection check and approve a request.",
+		)
+	})
+
+	test("a chain with no wallet network: the remember line names it by its id", async () => {
+		payloadChainId = "99"
+		const w = await ready()
+		expect(shown(w, "discover-remember")).toBe(
+			"Nulo remembers this site on Aztec:99 for 7 days. Revoke it in Settings → Connected Apps.",
+		)
+	})
+
+	test("before the request loads the remember line names no network", async () => {
+		const w = factory()
+		await flushPromises()
+		expect(shown(w, "discover-remember")).toBe(
+			"Nulo remembers this site on this network for 7 days. Revoke it in Settings → Connected Apps.",
+		)
 	})
 })
 
