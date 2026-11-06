@@ -206,34 +206,57 @@ export const amountOf = (
 	return symbol ? { text: `${text} ${symbol}`, baseUnits: false } : { text, baseUnits: true }
 }
 
-export type AccountOutflow = { contract: string; count: number; amount: { text: string; baseUnits: boolean } }
+export type AccountOutflow = {
+	contract: string
+	transfers: number
+	authorizations: number
+	amount: { text: string; baseUnits: boolean }
+}
+
+type OutflowRow = { call: WireCall; surface: CallSurface }
 
 const sentBy = (sender: TransferSender, account: string): boolean => sender.kind !== "none" && sameFieldAddress(sender.address, account)
 
 /**
- * Per token contract, the calls the wallet reads as a direct transfer from `account` to another
- * address, counted and summed. A gross figure of what the calls say, not a balance change: a call it
- * cannot read, and an authorization the transaction uses, add nothing.
+ * Per token contract, what the wallet reads as moving `account`'s tokens to another address: the
+ * direct transfers among `calls`, and the authorizations the account signs for another contract to
+ * move them, counted apart and summed together. A gross figure of what the calls say, not a
+ * balance change: a call or an authorization it cannot read adds nothing.
  */
 export const accountOutflows = (
-	rows: readonly { call: WireCall; surface: CallSurface }[],
+	calls: readonly OutflowRow[],
 	account: string,
 	tokens: readonly TokenInfo[] | undefined,
 	chainId: number | undefined,
+	authorizations: readonly (OutflowRow & { caller: string })[] = [],
 ): AccountOutflow[] => {
-	const sums = new Map<string, { contract: string; count: number; sum: bigint }>()
-	for (const { call, surface } of rows) {
-		if (surface.kind !== "transfer" || !sentBy(surface.sender, account) || sameFieldAddress(surface.to, account)) continue
+	const sums = new Map<string, { contract: string; transfers: number; authorizations: number; sum: bigint }>()
+	const add = ({ call, surface }: OutflowRow, counted: "transfers" | "authorizations") => {
+		if (surface.kind !== "transfer" || !sentBy(surface.sender, account) || sameFieldAddress(surface.to, account)) return
 		const contract = wire(call.to, 80)
-		const prior = sums.get(contract.toLowerCase()) ?? { contract, count: 0, sum: 0n }
-		sums.set(contract.toLowerCase(), { contract, count: prior.count + 1, sum: prior.sum + BigInt(surface.amount) })
+		const prior = sums.get(contract.toLowerCase()) ?? { contract, transfers: 0, authorizations: 0, sum: 0n }
+		sums.set(contract.toLowerCase(), { ...prior, [counted]: prior[counted] + 1, sum: prior.sum + BigInt(surface.amount) })
 	}
-	return [...sums.values()].map(({ contract, count, sum }) => ({
+	for (const row of calls) add(row, "transfers")
+	// An authorization naming the account as caller licenses only a call the account makes itself,
+	// which `calls` already reads; `caller` is the decoded request, so this is a reading, not a proof.
+	for (const row of authorizations) if (!sameFieldAddress(row.caller, account)) add(row, "authorizations")
+	return [...sums.values()].map(({ contract, transfers, authorizations, sum }) => ({
 		contract,
-		count,
+		transfers,
+		authorizations,
 		amount: amountOf(tokens, chainId, contract, sum.toString()),
 	}))
 }
+
+/** "1 transfer", "2 authorizations", or both joined: the counts a row of the block names. */
+export const outflowLabel = ({ transfers, authorizations }: Pick<AccountOutflow, "transfers" | "authorizations">): string =>
+	[
+		transfers ? `${transfers} ${pluralize(transfers, "transfer", "transfers")}` : "",
+		authorizations ? `${authorizations} ${pluralize(authorizations, "authorization", "authorizations")}` : "",
+	]
+		.filter(Boolean)
+		.join(", ")
 
 /** A one-line reading of a decoded value. Trimmed and summarized for the row; `full` prints every
  *  value whole, for the hover text. An address on its own row is left to `AddressDisplay`. */

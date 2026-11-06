@@ -603,7 +603,7 @@ describe("OperationCard — what leaves the account opens the fee section", () =
 		expect(leaves(w).element.compareDocumentPosition(fee) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 	})
 
-	test("nothing this account sends, or a block that replaces the fee section: no rows; the same sends otherwise show them", async () => {
+	test("nothing this account sends: no rows; a block a window draws in the fee's place: the rows open it", async () => {
 		const others = request([transfer(VAULT, RECIPIENT, 4n * e18), exit])
 		expect(leaves(await mountCard({ tokens: [TST], decodedCalls: others.decodedCalls }, others.op)).exists()).toBe(false)
 
@@ -614,7 +614,26 @@ describe("OperationCard — what leaves the account opens the fee section", () =
 			global: { stubs, components: { AddressDisplay, SectionLabel } },
 		})
 		await flushPromises()
-		expect([leaves(replaced).exists(), replaced.find('[data-testid="refusal"]').exists()]).toEqual([false, true])
-		expect(rows(await mountCard({ tokens: [TST], decodedCalls: own.decodedCalls }, own.op))).toEqual([["1 transfer", "4 TST"]])
+		expect(rows(replaced)).toEqual([["1 transfer", "4 TST"]])
+		const block = replaced.get('[data-testid="refusal"]').element
+		expect(leaves(replaced).element.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		replaced.unmount()
+	})
+
+	test("an authorization the account signs counts as one, from the estimate or the raised-fee window's list; another account's does not", async () => {
+		const { decodedAuthwits } = await decodeFixture()
+		decodedAuthwits.set(CONSUMED.messageHash, await decodeConsumed())
+		const { op, decodedCalls } = request([exit])
+		const estimated = await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([...AUTHWITS, CONSUMED]) }, op)
+		expect(rows(estimated)).toEqual([["1 authorization", "25 USDC"]])
+
+		const raised = mount(OperationCard, {
+			props: { op: op as never, index: 0, tokens: [USDC_TOKEN], decodedCalls, decodedAuthwits, approvedAuthwits: AUTHWITS },
+			slots: { fee: '<div data-testid="raised-fee" />' },
+			global: { stubs, components: { AddressDisplay, SectionLabel } },
+		})
+		await flushPromises()
+		expect(rows(raised)).toEqual([["1 authorization", "25 USDC"]])
+		raised.unmount()
 	})
 })
