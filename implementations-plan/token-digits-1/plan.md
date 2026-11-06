@@ -1,7 +1,7 @@
 ---
 plan: token-digits-1
 tier: mid
-status: approved by the panel (final fresh Codex pass approve); arc 1 next
+status: closed; arc 1 shipped as PR #1707 (Closes #1702); archived by its close-out commits
 issues: "#1702"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at 002b76fc7
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-06.
+- **Status:** closed. Arc 1 delivered in one PR; the merge closes the plan.
+- **Shipped:** PR #1707 (`Closes #1702`): `formatListAmount` and `formatListSplit` in `apps/extension/src/utils/amount.ts`, twelve list calls routed to them (token rows, Send's picker, the token page's split, activity rows, the arrival chip and the send toasts), the callers census counting the list tier, the smoke receipt reseeded. `balanceFormatted` and `formatBaseUnits` unchanged; the heroes, Send and the execute window unchanged.
+- **Review loop:** plan: Codex reject, then approve on resume; Opus conditional approve, folded; a final fresh Codex pass approve. Arc: Codex round 1 clean with nits, Opus clean with nits, Codex round 2 clean.
+- **Gates:** lint, `typecheck:all`, `audit:vue`, `test:components`, `test:all`; smoke `rows`, `send-outcome-rows` and `token-list` 14/14 on Chrome and on Firefox at retry 0. Per-phase runs in [lessons/phase-1.md](lessons/phase-1.md).
+- **Dropped:** none.
+- **Known limits:** #1708 (a dust amount at a width below 3 throws; closed as `known-limit`, reopens when a caller passes such a width).
+- **Open items:** none.
+- **Lessons:** none promoted; `lessons.md` is at its budget, and the scratch capture config is recorded in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # token-digits-1: one tiered digits rule for list amounts; split lines never read 0
 
@@ -168,7 +181,7 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../README
 
 **Arc 1 review loop, round 1** (2026-11-06; the diff 5b7680d26..cf91270bb; consult log in [lessons/phase-1.md](lessons/phase-1.md)).
 - **Codex (gpt-6.1-sol, high): clean.** Nits: the snack's "four significant digits" case passed on the base cut too (`0.000392` both ways); `formatListSplit`'s doc said a side "never shows fewer" decimals, which trimming contradicts; `listDecimals`' comment restated its name.
-- **Opus 5.5 (general-purpose): clean.** Nits: the same doc and snack control; the floor's `repeat` throws below width 3 (no caller passes one: needs unsupported conditions, not fixed); the Phase 3 gate still owed its Firefox run and the plans gate.
+- **Opus 5.5 (general-purpose): clean.** Nits: the same doc and snack control; the floor's `repeat` throws below width 3 (no caller passes one: needs unsupported conditions, not fixed; known limit #1708); the Phase 3 gate still owed its Firefox run and the plans gate.
 - **Accepted:** the snack case moved to `0.0039203438152` (base `0.003920`, now `0.00392`, red at the base); the doc rewritten; the comment deleted.
 
 **Arc 1 review loop, round 2** (resumed, the diff cf91270bb..df8e9d46b): **Codex clean.** Every fix verified, no regression; one test-title wording nit applied. The loop converged.
