@@ -2,3 +2,6 @@
 - 2026-11-06: panel round 1: Codex reject (D3/D5 as asks; Fact 3; bounds claim; I1 coverage; gate commands); fixes folded, D3/D5 argued back; Opus leg pending.
 - 2026-11-06: Opus R1 conditional approve folded; Codex R1 resumed: approve (D3-D5 settled from the picks' words); final fresh Codex pass next.
 - 2026-11-06: final fresh Codex pass approve; Opus withdrew D3-D5; plan committed; arc 1 next (auto-continue, OWNER-ASKS none).
+- 2026-11-06: arc 1 Phase 1 gate green (lint, typecheck:all, amount + census tests 188/188).
+- 2026-11-06: arc 1 Phase 2 gate green (targeted 4419; audit:vue; test:components 1394; test:all); 6 new cases red at the base on the digits.
+- 2026-11-06: arc 1 Phase 3 Chrome: armed build, smoke rows + send-outcome-rows + token-list 14/14 at retry 0 (receipt +1,234.56 wraps at 360 px, fits from 388 px); captures taken.

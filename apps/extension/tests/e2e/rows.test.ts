@@ -810,10 +810,10 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		dapp: DAPP_NAME,
 	})
 	await seedTokenRow(page, scope, RECEIPT_TOKEN_ID)
-	// "Received privately" beside "+28.43950" has no room at 360px.
+	// "Received privately" beside "+1,234.56" has no room at 360px.
 	await seedReceipt(page, scope, {
 		tokenId: RECEIPT_TOKEN_ID,
-		amount: "28439501",
+		amount: "1234567891",
 		uniqueNoteHash: `0x${"5c".repeat(32)}`,
 		at: now - 3_000,
 	})

@@ -106,7 +106,7 @@ Each line quotes the pick that signs it (Decision ledger); captures light and da
 - **Cost and bounds:** the helper stringifies the units once more, as `formatBaseUnits` already does on the same input; it adds no bound and removes none. Incoming and terminal journal rows reach `BigInt` without `parseSide`'s 80-character cap today (`TransactionIncomingCard.vue:43`, `journal-state.ts:461`), and stay so: changing what those rows refuse is a different change (#1593's contract).
 - **Least privilege, crypto, supply chain, logging, storage:** no change; no dependency, no log line, no `chrome.storage.local` key.
 
-## Phase 1: the rule
+## Phase 1: the rule ✓
 
 - Add `formatListAmount`, `formatListSplit` and their internal helpers to `src/utils/amount.ts`.
 - **Tests** in `src/utils/amount.test.ts`, two `test.each` tables (computed by a scratch run of the design, verified by the implementation):
@@ -117,7 +117,7 @@ Each line quotes the pick that signs it (Decision ledger); captures light and da
   - `bun run lint`, `bun run typecheck:all`: exit 0.
   - From `apps/extension`: `bun --bun vitest run src/utils/amount.test.ts src/utils/amount.callers.test.ts --retry=0`: green.
 
-## Phase 2: the callers
+## Phase 2: the callers ✓
 
 - Move the twelve calls (Architecture § Callers); rewrite the comments the file map names.
 - **Tests:**
