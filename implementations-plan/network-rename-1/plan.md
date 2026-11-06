@@ -1,7 +1,7 @@
 ---
 plan: network-rename-1
 tier: light
-status: approved by the final fresh Codex pass; arc 1 next (auto-continue)
+status: arc 1 implemented, review loop converged, PR next
 issues: "#1364 (arc 1 closes it)"
 driver: claude-code
 claude_model: opus
@@ -94,7 +94,7 @@ One arc, one PR against `dev`. At the unlock hook that already moves retired def
 
 **Validation gate:** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`, then `cd apps/extension && bun --bun vitest run src/wallet/services/network`. Pass: each exits 0; step 5 reds.
 
-## Phase 2: the update replay, the captures and smoke
+## Phase 2: the update replay, the captures and smoke ✓
 
 Warning: never rerun a red. Read the first one; if it is the recording's session check, stop and report (a refresh, as #1641 did, is a separate ask); else diagnose at the cause.
 
@@ -131,6 +131,10 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../README
 - **Disagreement settled:** D5 goes independent (Codex): its reproducer stands, and the independent form also catches a seed rename. Kept against Opus: the Firefox runs and wall-clocks (the lane brief asks for them). Rejected: the in-loop snapshot update (D8).
 
 **Final fresh Codex pass** (new session, 2026-11-06): **conditional approve**, one condition: run the local network suite (CLAUDE.md's row for network behaviour). Answered: the change alters a display string and touches no node, dApp or PXE path; every network-suite profile is seeded "Alpha", so the rule runs only as a no-op there; the PR's required network lanes run the suite on both browsers. **Resumed: approve**; the condition withdrawn ("I cannot identify a failure path that the local network suite would uniquely establish"), the deviation recorded in Phase 2's gate.
+
+**Arc 1 review loop** (2026-11-06; the diff 9610cd9aa..13698a765, then 13698a765..3f679ea03; log in [lessons/phase-2.md](lessons/phase-2.md)).
+- **Round 1, Codex (gpt-6.1-sol, high): 0 material**, one nit (the method doc restated its helpers), accepted. **Opus 5.5 (general-purpose): 0 material**, five nits: three accepted (a node-kept assertion, a snapshot comment, a comment's wording), two rejected (an unreachable combined-row case; a re-assertion after `waitFor`).
+- **Round 2, Codex (resumed): 0 material, approve.** The loop converged.
 
 ## Seeds (not run; orchestrator-owned)
 
