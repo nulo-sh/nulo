@@ -38,6 +38,7 @@ import { createHash } from "node:crypto"
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { minorOf, WHATS_NEW_SEEN_KEY } from "@/utils/whats-new"
 import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
 import { INCOMING_TRANSFER_SERVICE_NAME, IncomingTransferRecordSchema } from "@/wallet/services/incoming-transfer/spec"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
@@ -66,6 +67,7 @@ import { holdNodeStubs } from "./fixtures/node-stub"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import {
 	inPlaceUpdate,
+	manifestVersion,
 	readLocalStorage,
 	type UpdateBuilds,
 	updateBuilds,
@@ -677,6 +679,8 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 			}
 			await page.close()
 			const stored = await readLocalStorage(ctx)
+			// The release's own marker, or, where it kept none, the update's stamp: the minor it came from.
+			expect(stored[WHATS_NEW_SEEN_KEY]).toBe(minorOf(manifestVersion(pair.from)))
 			await expectBackupImports("password", await exportBackupFile(ctx), stored)
 		})
 	})

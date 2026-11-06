@@ -361,6 +361,7 @@ export const FAMILY_GROUPS = {
 	legalAccepted: device("value:nulo:legal:accepted", "written only by accepting the Terms"),
 	uiActiveAccount: device("value:nulo:ui:activeAccount", "only earlier builds wrote it"),
 	uiLastActiveProfile: device("value:nulo:ui:lastActiveProfile", "the lock screen's profile, moved by create, unlock and the picker"),
+	uiWhatsNewSeen: device("value:nulo:ui:whatsNewSeen", "written on install and update, and by Home's What's new Dismiss"),
 	uiLoggerWindowId: device("value:nulo:ui:loggerWindowId", "the log viewer's window"),
 	onboardingCompleted: device("value:nulo:onboarding:completed", "onboarding's last step writes it"),
 	uiPinnedTokens: action("root:nulo:ui:pinnedTokens", "a person's pin writes it", SEALED),

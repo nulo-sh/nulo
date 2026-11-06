@@ -551,4 +551,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [p116-build-1](p116-build-1/plan.md) — completed — the Receive QR at 240 px and the Holdings header on one row, the count alone, as page 116 picked (#1709)
 - [token-digits-1](token-digits-1/plan.md) — completed — list amounts follow one tiered digits rule, truncated ahead of the width cut, and a split side never reads 0 (#1702); #1708 a known limit
 - [p110-build-1](p110-build-1/plan.md) — completed — the execute window names the app's failing assertion and refuses a no-account public call; the leaves block counts authorizations; a Sending toast's × lasts its session; the password hint keeps its space (#1706 and arc 2); #1714, #1715, #1717 known limits
+- [whats-new-1](whats-new-1/plan.md) — completed — the Home row and About row that say Nulo was updated (P117-08 A, #1724)
 - [unlock-conversions-1](unlock-conversions-1/plan.md) — completed — the unlock-time row conversions of a sealed root are entries of one ordered list, applied by one runner, with an AST guard over every unlock handler (#1726)
