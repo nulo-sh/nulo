@@ -174,7 +174,7 @@ describe.each([
 	})
 })
 
-describe.each(["index.html", "how-aztec-works.html", "subscribed.html"])("%s footer", (page) => {
+describe.each(["index.html", "how-aztec-works.html", "subscribed.html", "confirm.html"])("%s footer", (page) => {
 	it("links the website privacy notice beside the wallet's privacy policy and terms", () => {
 		const footer = element(source(page), "footer", "<footer")
 		const links = startTags(footer, "a").map((a) => a.href)
@@ -207,15 +207,28 @@ describe("the built site", () => {
 	it("serves /subscribed: the no-script landing of a form post, unindexed, with a way back", () => {
 		const html = readFileSync(join(OUT, "subscribed.html"), "utf8")
 		const main = element(html, "main", "<main")
-		expect(text(main)).toBe("You're on the list. We'll send occasional updates. Back to nulo.sh")
+		expect(text(main)).toBe("Check your inbox. We sent you a link to confirm your address. It works for 24 hours. Back to nulo.sh")
 		expect(startTags(main, "a")).toEqual([expect.objectContaining({ href: "/" })])
 		expect(startTags(html, "meta")).toContainEqual({ name: "robots", content: "noindex" })
 		expect(text(main)).not.toContain("—")
 	})
 
+	it("serves /confirm: unindexed, its controls hidden until the script shows them, a line for a browser without script", () => {
+		const html = readFileSync(join(OUT, "confirm.html"), "utf8")
+		const main = element(html, "main", "<main")
+		expect(startTags(html, "meta")).toContainEqual({ name: "robots", content: "noindex" })
+		expect(startTags(main, "button")).toEqual([{ class: "btn", type: "button", "data-confirm-button": "", hidden: "" }])
+		expect(startTags(main, "a")).toEqual([{ class: "btn", href: "/", "data-confirm-back": "", hidden: "" }])
+		expect(startTags(main, "h1")).toEqual([expect.objectContaining({ tabindex: "-1", "data-confirm-heading": "" })])
+		expect(startTags(main, "p")).toContainEqual(expect.objectContaining({ role: "status", "data-confirm-status": "" }))
+		expect(text(element(main, "noscript", "<noscript"))).toBe("Confirming needs JavaScript. Turn it on and open the link again.")
+		expect(startTags(main, "form")).toEqual([])
+		expect(text(main)).not.toContain("—")
+	})
+
 	it("loads nothing from another origin: every resource reference in the HTML is this site's", () => {
 		const pages = files(".html")
-		for (const page of ["index.html", "how-aztec-works.html", "subscribed.html", "terms.html", "privacy.html"]) {
+		for (const page of ["index.html", "how-aztec-works.html", "subscribed.html", "confirm.html", "terms.html", "privacy.html"]) {
 			expect(pages).toContain(join(OUT, page))
 		}
 		for (const file of pages) {
