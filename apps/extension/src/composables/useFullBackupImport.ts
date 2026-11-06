@@ -54,6 +54,7 @@ import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 export type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { isNewPasswordValid } from "@/utils/password"
 import type { NewProfileUnlock, UnlockMethod } from "@/composables/useNewProfilePasskey"
 import type { NewPasskeyDisplay } from "@/wallet/services/passkey/spec"
@@ -216,6 +217,10 @@ async function restoreProfileStep(
 	return newProfile
 }
 
+/** Finalize refuses a restore a lock, a worker restart or its time limit ended before it opened the
+ *  profile it wrote; that profile stays listed and opens at its next unlock. */
+const RESTORE_STOPPED = "The import stopped before the profile opened. Unlock the profile to open it."
+
 /** The restore's clients, its options, and the unlock the new profile is sealed under. */
 type RestoreDeps = { profileService: ProfileServiceClient; opts: UseFullBackupImportOptions; unlock: NewProfileUnlock }
 
@@ -340,7 +345,7 @@ async function executeRestore(
 		applyOutcome(io, {
 			kind: "fail",
 			title: "Couldn't open the imported profile",
-			message: errorMessageFromUnknown(err),
+			message: err instanceof SessionEndedError ? RESTORE_STOPPED : errorMessageFromUnknown(err),
 		})
 		return null
 	}
