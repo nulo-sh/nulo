@@ -1,7 +1,7 @@
 ---
 plan: chips-3
 tier: light
-status: approved by the panel (Codex final verdict: approve); arc 1 in review
+status: approved by the panel (Codex final verdict: approve); arc 1 in review (#1723)
 issues: "#657 (closed; pages 117 and 118 reopened its row)"
 driver: claude-code
 claude_model: opus
