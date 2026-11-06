@@ -301,15 +301,15 @@ describe("useSendsInProgress — a dismissal lasts its session", () => {
 		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
 	})
 
-	test("a × after the worker's session moved writes nothing; the session read at the reset stays the one compared", async () => {
+	test("a × after the worker's session moved writes under the handle read at the reset, never the new one", async () => {
 		const op = send()
 		const h = track(harness({ stored: [op] }))
 		await settle()
 		h.handle.value = "w:2"
 		h.toasts.closeToast()
 		await settle()
-		expect(h.area.set).not.toHaveBeenCalled()
-		expect(h.session).toHaveBeenCalledTimes(2)
+		expect(h.area.data).toStrictEqual({ [dismissedKey(op)]: "w:1" })
+		expect(h.session).toHaveBeenCalledTimes(1)
 		h.scope.value = undefined
 		h.scope.value = A
 		await settle()
@@ -323,8 +323,9 @@ describe("useSendsInProgress — a dismissal lasts its session", () => {
 		const stale = track(harness({ stored: [op], area }))
 		await settle()
 		expect(stale.label()).toBe("Sending 10 TST to 0x04d7…457a")
-		stale.handle.value = "w:2"
-		// Its lock closes its own toast before its scope resets.
+		// Its lock ends the toast's scope, then closes the shell's messages, then resets the scope.
+		stale.sends.endScope()
+		expect(stale.toasts.toast.value).toBeNull()
 		stale.toasts.closeToast()
 		stale.scope.value = undefined
 		await settle()

@@ -93,18 +93,12 @@ function sessionDismissals(session: () => Promise<string | undefined>) {
 		},
 		/** The handle this scope began with; undefined while locked or unreadable. */
 		current: () => handle,
-		/** Written blind, one key per send: two documents dismissing at once cannot erase each other's. A
-		 *  document whose session has already ended writes nothing, so a lock it hears late cannot overwrite
-		 *  the next session's dismissal of a send that outlived the lock. */
+		/** Written blind, one key per send: two documents dismissing at once cannot erase each other's. */
 		record(ids: readonly string[]) {
-			if (ids.length === 0) return
-			const live = Promise.resolve()
-				.then(session)
-				.catch(() => undefined)
-			void Promise.all([handle, live])
-				.then(([began, now]) => {
-					if (began === undefined || began !== now) return
-					return chrome.storage.session.set(Object.fromEntries(ids.map((id) => [`${DISMISSED_PREFIX}${id}`, began])))
+			void handle
+				.then((current) => {
+					if (current === undefined || ids.length === 0) return
+					return chrome.storage.session.set(Object.fromEntries(ids.map((id) => [`${DISMISSED_PREFIX}${id}`, current])))
 				})
 				.catch(() => undefined)
 		},
@@ -208,8 +202,8 @@ function sendingToast(records: Readonly<Ref<readonly OperationRecord[]>>, deps: 
 		if (quiet) return
 		if (ownLeft(next, prev)) {
 			own = undefined
-			// Closed rather than replaced: the ×, or a lock, whose reset drops the set and whose ended
-			// session writes nothing.
+			// Closed rather than replaced: the person's ×. A lock ends the scope first (`endScope`), so
+			// its close is quiet.
 			if (!next) dismissRunning()
 		} else if (!next && prev) void nextTick(reconcile)
 	}
@@ -287,6 +281,12 @@ export function useSendsInProgress(options: UseSendsInProgressOptions) {
 		{ immediate: true, flush: "sync" },
 	)
 
+	/** Called by a lock before the shell closes its messages: a close the lock makes is never read as
+	 *  the person's ×, which would store the ended session's handle over the next one's dismissal. */
+	function endScope() {
+		sending.reset(false)
+	}
+
 	function dispose() {
 		current = undefined
 		sending.reset(false)
@@ -298,5 +298,5 @@ export function useSendsInProgress(options: UseSendsInProgressOptions) {
 		mirror.dispose()
 	}
 
-	return { records, dispose }
+	return { records, endScope, dispose }
 }
