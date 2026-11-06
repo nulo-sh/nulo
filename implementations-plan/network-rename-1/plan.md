@@ -83,7 +83,7 @@ One arc, one PR against `dev`. At the unlock hook that already moves retired def
 - **Integrity:** exact match, kind-gated, profile-filtered, refused on a name collision: no duplicate name, no custom row, chain, endpoint or account touched. The journal skip and Mainnet's quarantine stay.
 - **Logging:** no new line; the warn carries only `{ error }`. **Crypto, privileges, supply chain:** unchanged; no dependency.
 
-## Phase 1: the rule, its wiring and their tests
+## Phase 1: the rule, its wiring and their tests ✓
 
 1. In `seeds.ts`, add the list and the rule (D3).
 2. In `seeds.test.ts`, add one table. Renamed, id, endpoints and primary kept: a mainnet row named "Alpha V6"; one named "Mainnet"; one beside another profile's "Alpha". `undefined`: "My Alpha", "alpha v6", a `custom` and a `testnet` row named "Alpha V6", a row with no `kind` named "Mainnet", a mainnet row beside a row of its profile named "Alpha", and the renamed row.
