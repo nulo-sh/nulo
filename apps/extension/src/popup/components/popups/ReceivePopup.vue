@@ -58,7 +58,7 @@ watch(
 				</Flex>
 
 				<Flex wide direction="column" align="center" gap="8">
-					<canvas id="my-qr-code" :class="$style.qrcode" />
+					<canvas id="my-qr-code" :class="$style.qrcode" data-testid="receive-qr" />
 
 					<Flex align="center" justify="center" :class="$style.link">
 						<Flex align="center" direction="column" gap="8">
@@ -129,8 +129,11 @@ watch(
 	overflow-wrap: anywhere;
 }
 
+/* 240 px leaves the sheet room for the address and the network line without a scroll in the
+   popup's frame; a narrower frame shrinks the code with its column. */
 .qrcode {
-	width: 100%;
+	width: 240px;
+	max-width: 100%;
 	image-rendering: pixelated;
 
 	user-select: none;
