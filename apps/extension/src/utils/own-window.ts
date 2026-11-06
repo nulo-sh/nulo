@@ -8,8 +8,10 @@
  * One window per flow: the window stores its own id in `chrome.storage.session`, since the panel that
  * opened it is gone by the time it could, and a later start from the panel focuses that window.
  *
- * The file picks (contacts, the account file, Restore again's backup) open as a card window: the
- * window shows only the pick, and when the flow ends it hands back to the panel and closes.
+ * The file picks (contacts, the account file, Restore again's backup) open as a card window, which
+ * shows only the pick. Where a flow's ending lands on a page (a card's result, an import, a changed
+ * unlock method), the window hands that page and its line back to the panel and closes; Back on any
+ * other flow only closes it.
  */
 import type { CreateWindowOptions } from "@nulo/wallet-core/ports"
 import type { NavigationHookAfter } from "vue-router"
@@ -43,7 +45,7 @@ type CardFlow = (typeof CARD_FLOWS)[number]
 let ownRoute: string | undefined
 let ownFlow: OwnFlow | undefined
 let openerId: number | undefined
-/** Set once the window type is read: a marked URL in a tab is never a card. */
+/** Set once the window type is read: a marked URL in a tab is never a card and never hands back. */
 let inPopupWindow = false
 let registeredId: number | undefined
 let registration: Promise<void> = Promise.resolve()
@@ -118,7 +120,8 @@ export function ownWindowRoute(): string | undefined {
 	return ownRoute
 }
 
-/** Resolves once the boot registration settled, and with it `isCardWindow`; never rejects. */
+/** Resolves once the boot registration settled, and with it `isCardWindow` and `handsBackToPanel`;
+ *  never rejects. */
 export function ownWindowSettled(): Promise<void> {
 	return registration
 }
@@ -127,6 +130,13 @@ export function ownWindowSettled(): Promise<void> {
  *  to. Read after `ownWindowSettled`. */
 export function isCardWindow(): boolean {
 	return inPopupWindow && isCardFlow(ownFlow)
+}
+
+/** This document still runs the flow it was opened for, in the popup-type window it was handed: the
+ *  only document whose ending may hand back to the panel. Synchronous, so a caller decides in the
+ *  task of its last ownership check. Read after `ownWindowSettled`. */
+export function handsBackToPanel(): boolean {
+	return inPopupWindow && ownFlow !== undefined
 }
 
 /** The flow finished; from now on the document behaves like any popup page, and a later start opens
@@ -240,18 +250,21 @@ export async function closeOwnWindow(): Promise<boolean> {
 	if (ownRoute === undefined) return false
 	const current = await chrome.windows.getCurrent().catch(() => undefined)
 	if (current?.type !== "popup") return false
+	// A close during a hand-back's record write would end the document before it asks for the reopen.
+	if (returning) return returning
 	if (isCardFlow(flow)) return returnToPanel(OWN_WINDOW_ROUTES[flow])
 	window.close()
 	return true
 }
 
 /**
- * Ends a card window's flow: leaves the hand-back for the panel, asks the background to reopen the
+ * Ends an own window's flow: leaves the hand-back for the panel, asks the background to reopen the
  * panel on the browser window this one was opened from, and closes, whatever the answer. The first
- * call wins, so a late Cancel cannot replace an outcome. False, doing nothing, outside a card window.
+ * call wins, so a late Cancel cannot replace an outcome. False, doing nothing, unless
+ * {@link handsBackToPanel}.
  */
 export function returnToPanel(route: HandbackRoute, outcome?: Outcome): Promise<boolean> {
-	if (!isCardWindow()) return Promise.resolve(false)
+	if (!handsBackToPanel()) return Promise.resolve(false)
 	returning ??= handBack(route, outcome)
 	return returning
 }

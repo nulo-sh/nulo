@@ -15,6 +15,7 @@ const HANDBACK_ROUTES = [
 	"/popup/settings/accounts/import",
 	"/popup/general",
 	"/popup/restore-again",
+	"/popup/settings",
 ] as const
 export type HandbackRoute = (typeof HANDBACK_ROUTES)[number]
 

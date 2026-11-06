@@ -260,6 +260,7 @@ declare global {
   const goBack: typeof import('../utils/page-back').goBack
   const h: typeof import('vue').h
   const handleCancelOrUnconfirmed: typeof import('../utils/passkey-copy').handleCancelOrUnconfirmed
+  const handsBackToPanel: typeof import('../utils/own-window').handsBackToPanel
   const hasInFlightSend: typeof import('../utils/in-flight-send').hasInFlightSend
   const hasReachedPresto: typeof import('../utils/presto-ui-state').hasReachedPresto
   const hasRowsBeyondRetry: typeof import('../composables/restore-error-log').hasRowsBeyondRetry
@@ -1197,6 +1198,7 @@ declare module 'vue' {
     readonly goBack: UnwrapRef<typeof import('../utils/page-back')['goBack']>
     readonly h: UnwrapRef<typeof import('vue')['h']>
     readonly handleCancelOrUnconfirmed: UnwrapRef<typeof import('../utils/passkey-copy')['handleCancelOrUnconfirmed']>
+    readonly handsBackToPanel: UnwrapRef<typeof import('../utils/own-window')['handsBackToPanel']>
     readonly hasInFlightSend: UnwrapRef<typeof import('../utils/in-flight-send')['hasInFlightSend']>
     readonly hasReachedPresto: UnwrapRef<typeof import('../utils/presto-ui-state')['hasReachedPresto']>
     readonly hasRowsBeyondRetry: UnwrapRef<typeof import('../composables/restore-error-log')['hasRowsBeyondRetry']>
