@@ -101,8 +101,6 @@ export async function launchExtension(
 		legal?: LegalSeed
 		fixedWindowSize?: boolean
 		live?: true
-		/** More hosts a live launch may reach directly, such as a dApp's own origins; ignored unless `live`. */
-		extraDirectHosts?: readonly string[]
 		tokenList?: "held"
 		grantPermissionRequests?: true
 		/** A build other than the run's: a release's or an update candidate's. */
@@ -134,7 +132,7 @@ export async function launchExtension(
 	if (opts.live && inject("liveLeg") !== true) {
 		throw new Error("a live launch reaches the live Testnet node and list host, which only an artifact run's live spec may do")
 	}
-	const directHosts = [...CRS_HOSTS, ...(opts.live ? [LIVE_NODE_HOST, LIVE_LIST_HOST, ...(opts.extraDirectHosts ?? [])] : [])]
+	const directHosts = [...CRS_HOSTS, ...(opts.live ? [LIVE_NODE_HOST, LIVE_LIST_HOST] : [])]
 	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, directHosts, cspArmed)
 
 	const { browser, close: closeBrowser } = await launch()
