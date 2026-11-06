@@ -19,13 +19,14 @@ post_implementation_hardening: not scheduled
 
 - **Date**: 2026-11-06
 - **Status**: completed in one arc, #1716 from `firefox-import-window-1-a1`, whose final commits are this close-out; it closes #1701.
-- **Shipped**: on Firefox's toolbar panel, an import (both outcomes) and the unlock-method page's three successes close their own window, and the panel reopens on Home or Settings with the flow's line, bound to its profile (P116-16 B). One synchronous predicate, `handsBackToPanel()`, gates every hand-back; create and import land through `landOpenedProfile` (`src/popup/opening-flow.ts`); a Back during a hand-back's record write joins it. Unit pins on each page and helper; a new Firefox e2e scenario (16-18 s locally, red with the hand-back off) and test 6 now assert the hand-back through one helper shared with the contacts card; FIREFOX.md's toolbar-panel row names the hand-back.
+- **Shipped**: on Firefox's toolbar panel, an import (both outcomes) and the unlock-method page's three successes close their own window, and the panel reopens on Home or Settings with the flow's line, bound to its profile (P116-16 B). A change saved but not reopened (`UnlockMethodChangedError`) closes its window too and hands Home back with no line: the panel opens on the lock screen, then Home after the unlock (P117-12 B, D17). One synchronous predicate, `handsBackToPanel()`, gates every hand-back; create and import land through `landOpenedProfile` (`src/popup/opening-flow.ts`); a Back during a hand-back's record write joins it. Unit pins on each page and helper; a new Firefox e2e scenario (16-18 s locally, red with the hand-back off) and test 6 now assert the hand-back through one helper shared with the contacts card; FIREFOX.md's toolbar-panel row names the hand-back.
 - **Known limits** (D16), each a closed `known-limit` issue: #1718 (no focus back on the opener within 3 s, no panel reopens); #1719 (a profile-bound line whose profile does not open on the landing never shows); #1720 (a window that left its flow ends in place).
-- **Open items**: OA-1 in [OWNER-ASKS.md](OWNER-ASKS.md), the unlock-method window's `UnlockMethodChangedError` ending; today's ending ships (D6).
+- **Open items**: none. OA-1 ([OWNER-ASKS.md](OWNER-ASKS.md)) was answered B on page 117 after the first close-out and ships in the same PR (D17).
 - **Dispositions**:
   - The base moved to 36551502f under the plan (#1703 reordered the unlock-method page's passkey steps); `attempt`'s success branch was unchanged, so the plan held.
   - `leaveChanged` was extracted from `attempt` to stay under the cognitive-complexity cap, with no suppression; the chaos model's `unlock-method.vue` citations were re-cited twice by line diffs.
   - The Firefox and Chrome smoke suites ran once, on the reviewed head, not at Phase 4's gate.
+  - OA-1's answer arrived after this plan was archived on the branch, before the merge; Phase 5 built it in the same PR and the archived copy was amended in place, since the archive had not reached `dev`.
   - No `lessons.md` promotion: the one cross-task gotcha, re-citing the chaos model after an edit above a cited line, is already there; the other, a privileged panel read refusing a passkey prompt in another window, is FIREFOX.md's toolbar-panel row.
 - **Seeds retired**: the `/goal` and `/loop` seeds below.
 
@@ -39,13 +40,13 @@ One arc, one PR against `dev`, `Closes #1701`, no stack. On Firefox's toolbar pa
 - "every ending of the profile import ends in that one `completeImport`": true for the successes; the refusals (a wrong file password, a refused phrase) stay in the window for another try, as the card windows' refusals do.
 - The issue's tests list says the e2e runs "through `agent.sh`" (the lane brief): `scripts/e2e/agent.sh` runs the network config only (`agent.sh:16`). Smoke runs through `bun run test:e2e`, which claims its geckodriver ports through `reservePort` against `~/.agents/ports.md` (D11).
 
-In scope: the import's two successful endings (`active`, `needs-unlock`), the unlock-method page's three successes, create's opened landing. Out, with the reason: the unlock-method page's `UnlockMethodChangedError` ending (today's ending ships; OA-1 asks the owner, D6); an own window's Back or Cancel outside the cards (closes, no panel; not in the owner's pick, D7); a window that left its flow (an ordinary page by design, D8); create's hand-off when the profile did not open (D4); refusals, which keep the page for another try.
+In scope: the import's two successful endings (`active`, `needs-unlock`), the unlock-method page's three successes and its `UnlockMethodChangedError` ending (OA-1, answered B, D17), create's opened landing. Out, with the reason: an own window's Back or Cancel outside the cards (closes, no panel; not in the owner's pick, D7); a window that left its flow (an ordinary page by design, D8); create's hand-off when the profile did not open (D4); refusals, which keep the page for another try.
 
 ## Outcome & Quality Bar
 
 - **For whom:** a Firefox user who imports a profile, or changes how a profile unlocks, from the toolbar panel; and the maintainer of the hand-off code.
 - **Excellent:** (1) the window closes by itself at the end and the panel reopens on Home (import) or Settings (unlock method) with the flow's existing line, bound to that profile; (2) a needs-unlock import with its session closed reopens the panel on the lock screen with the imported profile selected, and the line shows on Home after the unlock; (3) one predicate decides "this document hands its ending back", and one helper lands both opening flows, so a later flow cannot end differently by accident; (4) Chrome, the Firefox sidebar and onboarding behave byte-for-byte as before.
-- **Good enough:** refusals and the `UnlockMethodChangedError` ending keep today's in-window behaviour; the residuals of D16 are known limits; no new copy.
+- **Good enough:** refusals keep today's in-window behaviour; the residuals of D16 are known limits; no new copy.
 
 ## Assumptions
 
@@ -68,7 +69,7 @@ In scope: the import's two successful endings (`active`, `needs-unlock`), the un
 
 **Asks**
 - The needs-unlock ending: settled by the page the owner signed (D5).
-- OA-1, open: the unlock-method window's ending after a change saved but not reopened ([OWNER-ASKS.md](OWNER-ASKS.md)). What ships now: today's ending in the window (D6); the arc does not depend on the answer.
+- OA-1, answered B on page 117 (P117-12): the unlock-method window's ending after a change saved but not reopened ([OWNER-ASKS.md](OWNER-ASKS.md), D17).
 
 ## Architecture & Implementation
 
@@ -124,7 +125,7 @@ showSnack(openToast, changed)
 leaveFor(router, "/popup/settings")
 ```
 
-The `UnlockMethodChangedError` branch is unchanged everywhere (D6, OA-1). The `StaleUnlockCredentialError`, cancel and failure branches are unchanged: they keep the page for another try.
+The `UnlockMethodChangedError` branch calls `leaveLocked()` after `reset()` (Phase 5, D17): in an own window still in its flow, `returnToPanel("/popup/general")` with no outcome, so the panel boots as any panel does (its guard sends the closed session to the lock screen, whose unlock lands Home through `landingRoute()`, and the record settles there with nothing to show); elsewhere the info line and `router.replace("/popup/auth")` as before. The `StaleUnlockCredentialError`, cancel and failure branches are unchanged: they keep the page for another try.
 
 **Control flow, import from the panel (Firefox).** Panel: Import → method → `leavePanelFor` opens `#/popup/import?…&window=own&opener=<id>` and closes the panel → the window boots, `register` sets `inPopupWindow`, `ownFlow = "import"` → the import runs in the window, its passkey card included → `completeImport` → `landOpenedProfile` → `returnToPanel` writes `{ route: "/popup/general", snack: { …IMPORTED, profileId } }`, sends `RETURN_TO_PANEL`, closes → the background removes the window and opens the panel on the opener once it has focus → the panel boots on `#/popup/general` as any fresh panel does (Home with the session open; the lock screen, then Home after the unlock; the shell's own boot-failure screen if its bootstrap fails) and shows "Profile imported" once that profile's session is open on Home.
 
@@ -140,7 +141,9 @@ The `UnlockMethodChangedError` branch is unchanged everywhere (D6, OA-1). The `S
 | `src/popup/opening-flow.ts` / `.test.ts` (new test file) | `landOpenedProfile`, `OpenedLanding`; its two branches |
 | `src/popup/pages/import.vue` / `import.test.ts` | the landing call; the inverted pin and the needs-unlock case |
 | `src/popup/pages/profile/new-profile-helpers.ts` | create lands through the helper (its existing tests prove the in-place landing) |
-| `src/popup/pages/settings/security/unlock-method.vue` / `.test.ts` | the hand-back on success; two cases and one extended assertion |
+| `src/popup/pages/settings/security/unlock-method.vue` / `.test.ts` | the hand-back on success and on `UnlockMethodChangedError` (`leaveLocked`); three cases and one extended assertion |
+| `src/composables/panelLanding.test.ts` | a Home record with no line, met by the lock screen, lands Home and shows nothing |
+| `tests/e2e/helpers/profile-chaos/model.ts` | `unlock-method.vue` citations re-cited after the edits |
 | `tests/e2e/toolbar-panel.test.ts` | one new Firefox scenario; test 6's ending |
 | `tests/e2e/helpers/import-drivers.ts` | `submitEncryptedFullBackup` reports a window that closed itself |
 | `tests/e2e/FIREFOX.md` | the toolbar-panel row names the import's and unlock method's hand-back |
@@ -154,7 +157,7 @@ Sixteen files (two generated), about +170/−30 lines.
 - **Threat model.** No new trust boundary, message, permission or stored key. The record lives in `chrome.storage.session` (`HANDBACK_KEY`, already registered in `stored-shapes.scan.test.ts`). The wallet restricts only `storage.local` itself (`src/wallet/index.ts:54`); `storage.session` stays at the browsers' default, which does not expose it to content scripts (confidence: moderate for Firefox, which has no `setAccessLevel`). The capability that matters is code running in an extension page: it can already write any record and send `RETURN_TO_PANEL` with any opener, since the background checks the sender's document and window type, not its flow (an inherited property; authenticating the record would add registration and cleanup obligations out of proportion). The most `/popup/settings` in the closed set adds is a panel opening on Settings, which any extension page can already route to.
 - **The sender.** `RETURN_TO_PANEL` is honoured only for the popup page in a popup-type window (F2); widening `returnToPanel` changes which wallet pages may ask, not who may. The window removed is always the sender's.
 - **Profile binding.** Each line carries the profile id of the run that produced it (the imported profile; the unlock-method run's fenced profile), and the panel shows it only with that profile's session open (F4). A profile switch during the change invalidates the run, so no line is built.
-- **Secrets.** No secret enters the record: a fixed label and a profile id. The unlock-method page clears its held answer and typed passwords (`reset()`) before it hands back; the import window's phrase and passwords die with its document (I2). No new log line.
+- **Secrets.** No secret enters the record: a fixed label and a profile id, or the route alone after `UnlockMethodChangedError`. The unlock-method page clears its held answer and typed passwords (`reset()`) before it hands back; the import window's phrase and passwords die with its document (I2). No new log line.
 - **Least privilege, crypto, supply chain.** No permission, dependency or cryptography change.
 - **Known limits inherited** (closed): #1067, #1068, #1069, #1070; this plan files D16's three at close-out.
 
@@ -164,7 +167,7 @@ The sign-off, quoted from decision page 116 (signed 2026-11-06 17:04 UTC), which
 
 - **Firefox toolbar panel → Import profile → Recovery phrase or Full backup** (any unlock choice). Before: the window shows Home with "Profile imported", or the lock screen with "Profile imported. Unlock to continue", and stays open. After: the window closes and the panel reopens on Home with "Profile imported"; when an unlock is needed, the panel opens on the lock screen with the imported profile selected, and "Profile imported" shows on Home after the unlock. No copy changes.
 - **Firefox toolbar panel → Settings → Unlock method** (a new passkey, a password to a passkey, a passkey to a password). Before: the window shows Settings with the change's line and stays open. After: the window closes and the panel reopens on Settings with the same line ("Now unlocks with your passkey", "Now unlocks with your new passkey", "Now unlocks with your password").
-- **The same window, a change saved but not reopened** (rare): unchanged, the lock screen with "Unlock method changed. Unlock Nulo again to continue." in the window, whose unlock returns to the page; OA-1 asks the owner whether it hands back too (D6).
+- **The same window, a change saved but not reopened** (rare). The sign-off, decision page 117 (signed 2026-11-06 18:18 UTC), **P117-12**: B, "The window closes and the panel reopens on the lock screen; after the unlock the panel opens Home. The line does not show: the panel can carry a line only to a page with the session open, and after the unlock it would read wrong. This is what #1701's investigation proposed." Before: the window shows the lock screen with "Unlock method changed. Unlock Nulo again to continue.", and its unlock returns to the Unlock method page. After: the window closes and the panel reopens on the lock screen; after the unlock the panel opens Home; no line shows. Chrome's popup and the Firefox sidebar keep the line and the lock screen.
 - **Both endings**, as the card windows already do: the panel reopens only when Firefox gives its browser window focus back within 3 s; otherwise the next panel the person opens lands on the result once (D16).
 - **Create, Chrome's popup, the Firefox sidebar, onboarding, the card windows**: none.
 
@@ -212,6 +215,14 @@ The sign-off, quoted from decision page 116 (signed 2026-11-06 17:04 UTC), which
 
 Pass: every run exits 0 at retry 0; the new scenario fails on the base `own-window.ts` (window stays open). Layers: e2e (smoke, both browsers).
 
+## Phase 5: a change saved but not reopened hands back (OA-1 B) ✓
+
+1. In `unlock-method.vue`, `leaveLocked()` beside `leaveChanged()` (the branch inline would take `attempt` past the cognitive-complexity cap): hand back `/popup/general` with no outcome when `handsBackToPanel()`, else the info line and the lock screen.
+2. Tests, `unlock-method.test.ts`: D6's `test.each` splits into the in-place case (line, lock screen, no hand-back; Chrome and the sidebar) and the own-window case (one hand-back of `/popup/general` with no outcome, no toast, no route). `panelLanding.test.ts`: a `{ route: "/popup/general" }` record met by the lock screen gives `postAuthRoute()` Home, and arriving there with a session open consumes it and shows nothing.
+3. Re-cite `tests/e2e/helpers/profile-chaos/model.ts` by a line diff from HEAD.
+
+**Validation gate.** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run --cwd apps/extension test:components`, then Phase 4's three e2e runs, `bun run check:plans`. Pass: exit 0 at retry 0; the own-window case fails on the Phase 4 page (taken from HEAD before the edit).
+
 ## Delivery
 
 - One arc, one branch `firefox-import-window-1-a1` off `origin/dev` carrying the plan commit; one PR against `dev`, opened ready after the Codex loop converges and the local gates pass; no stack. `code_review: off`.
@@ -239,7 +250,7 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 - **D3**, the landing's home and shape: `popup/opening-flow.ts`, the module that already names the two opening flows; `route` is this document's page, the hand-back is always Home (the panel's guard and `postAuthRoute` cover the lock screen, F5), `line` and `panelLine` are separate because the needs-unlock line ("…Unlock to continue") would read wrong after the unlock.
 - **D4**, create's hand-off (the profile did not open) stays out of the helper: it toasts an error with a `sub` after an awaited route and rethrows a failed navigation to hold its latch; it runs only where create ran, never in an own window (F8); routing it through the helper adds a mode with no behaviour.
 - **D5**, the needs-unlock import: hand back Home with "Profile imported"; signed on page 116 ("or the lock screen when an unlock is needed, the line showing after the unlock").
-- **D6**, `UnlockMethodChangedError` in an own window: today's ending ships (the lock screen and the info line in the window; the unlock returns to the page, which reads the method the profile now has), and OA-1 asks the owner. Codex round 1, the Opus leg and the final pass all held that the signed text names only the change's line; #1701's investigation proposes handing back `/popup/general` with no line, but an investigation's proposal and a matching file count do not show the owner approved dropping a visible line. No success line is true ("saved, or may have been", F9), and the info line cannot ride the record (F3), so the answer is a choice between two visible endings. The follow-up is one branch.
+- **D6** (superseded by D17), `UnlockMethodChangedError` in an own window: today's ending ships (the lock screen and the info line in the window; the unlock returns to the page, which reads the method the profile now has), and OA-1 asks the owner. Codex round 1, the Opus leg and the final pass all held that the signed text names only the change's line; #1701's investigation proposes handing back `/popup/general` with no line, but an investigation's proposal and a matching file count do not show the owner approved dropping a visible line. No success line is true ("saved, or may have been", F9), and the info line cannot ride the record (F3), so the answer is a choice between two visible endings. The follow-up is one branch.
 - **D7**, Back or Cancel in a non-card own window: unchanged (closes, no panel), as #1701's investigation listed it with no change proposed and the owner's pick does not name it.
 - **D8**, a window that left its flow (an own window's lock screen used to start a create or an import, or a lock landing that ended the flow): an ordinary popup page by design (`own-window.ts:132-139`), so it still ends in place. This keeps existing behaviour outside the pick; it is not an owner decision. Filed at close-out as a closed `known-limit` issue (D16 c); reopens if the owner asks such a window to hand back too.
 - **D9**, the e2e scenario is a test of its own rather than appended to test 2: its name says what it proves and a red in one does not mask the other; cost about one launch (9 s on Firefox).
@@ -248,6 +259,8 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 - **D12**, a handed-back line is not also shown in the closing window (as account import does; Restore again's flash is not copied).
 - **D13** (Codex r1 #1, #2), the hand-back decision is synchronous: `handsBackToPanel()` is read in the caller's task and the hand-back is started without awaiting it, so create's in-place push still follows its last `assertActive()` with no suspension, and the unlock-method page's in-place ending cannot run after a profile switch. Rejected: an awaited `returnToPanel` followed by a re-check, which needs each caller's fence passed into the helper.
 - **D14** (Codex r1 #2; rationale corrected by the final pass #3), the unlock-method page does not hold `isBusy` while its window closes: `reset()` re-enables its buttons for the hand-back's one IPC round trip. In that time a press reaches at most a read-only lookup (`getPasskeyUnlockParams`) and an OS passkey prompt, or a UI step ("Use a passkey instead" opens the password field); every mutation needs a prompt answered or a password typed and confirmed, and the window's close ends the page first. A hold would also be undone by the type watcher's own `reset()` on the reopened session.
+- **D17**, OA-1 answered: **P117-12**, B, signed on decision page 117 on 2026-11-06 at 18:18 UTC: "The window closes and the panel reopens on the lock screen; after the unlock the panel opens Home. The line does not show: the panel can carry a line only to a page with the session open, and after the unlock it would read wrong. This is what #1701's investigation proposed." Built as `leaveLocked()` (Phase 5); the hand-back names Home, which the closed set already holds, so the record, the background and the panel's landing are unchanged; Chrome and the sidebar keep the in-place line.
+- **D18**, no e2e scenario for D17: the smoke suite cannot make a saved change fail to reopen without a fault hook in the service, and the hand-back is the mechanism the import scenario already drives on Firefox; the page's branch is pinned by `unlock-method.test.ts`, the landing by `panelLanding.test.ts`.
 - **D16** (Opus r1 #3, #4, #8), three residuals filed at close-out as closed `known-limit` issues, with no code: (a) the panel reopens only if the opener window gets focus within 3 s (`toolbar-popup.ts:108-109`), so a person who left Firefox during a long restore finds no window and no panel, and the next panel they open lands on the result (the cards share it); (b) a line bound to a profile whose session does not open on the landing never shows: a needs-unlock import while another profile opens, or an unlock-method success behind the integrity barrier (the barrier shows on every boot, and the record dies with the browser session); (c) D8's left-flow window.
 - **D15** (Codex r1 #3), no composition test for the locked landing: the chain is pinned piecewise (the guard's auth gate, `src/popup/route-guard.test.ts`; lock screen first, then the landing and its line, `src/composables/panelLanding.test.ts:50-72`), and it crosses a popup boot and a runtime message, outside `tests/COMPOSITION-TESTS.md`'s service graph.
 
