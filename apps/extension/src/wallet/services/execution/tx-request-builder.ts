@@ -23,7 +23,9 @@
  *     `"Method not found"` — per-action resolution failures
  *   - `"Invalid authwit content kind"` — unrecognized authwit `content.kind`
  *   - `"DefaultEntrypoint requires exactly 1 call, got ${n}"`
- *   - `"DefaultEntrypoint only supports private functions"`
+ *   - `DefaultEntrypointPublicCallError` — a NO_FROM call to a public function, which the window
+ *     refuses up front; any other non-private type keeps the plain
+ *     `"DefaultEntrypoint only supports private functions"`
  *
  * ## Public authwits: collected here, recorded POST-send
  *
@@ -48,6 +50,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { Capsule, ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from "@aztec-labs/stdlib/tx"
+import { DefaultEntrypointPublicCallError } from "@nulo/extension-messaging/errors"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 import type { AccountService } from "@/wallet/services/account/service"
@@ -389,6 +392,7 @@ export class TxRequestBuilder {
 		const call = await FunctionCall.schema.parseAsync(rawCalls[0])
 		const noFromArtifact = requireArtifact(instances, artifacts, call.to.toString())
 		const noFromFn = assertSelectorBinding(await findFunctionBySelector(noFromArtifact, call.selector.toString()), call, CALL_BINDING)
+		if (noFromFn.functionType === FunctionType.PUBLIC) throw new DefaultEntrypointPublicCallError()
 		if (noFromFn.functionType !== FunctionType.PRIVATE) {
 			throw new Error("DefaultEntrypoint only supports private functions")
 		}

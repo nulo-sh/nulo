@@ -12,6 +12,7 @@ import { describe, expect, test, vi } from "vitest"
 import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
 import {
 	AuthRegistryRefusalError,
+	DefaultEntrypointPublicCallError,
 	DuplicateInitializationError,
 	ScopeViolationError,
 	SessionEndedError,
@@ -105,6 +106,16 @@ describe("markFailedUnlessCancelled", () => {
 		)
 		await markFailedUnlessCancelled(error, "j1", lane)
 		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "registry_refused"), undefined)
+	})
+
+	test("a public call through the default entrypoint records wallet_refused; the same text on a plain error does not", async () => {
+		const lane = fakeLane()
+		const error = new DefaultEntrypointPublicCallError()
+		await markFailedUnlessCancelled(error, "j1", lane)
+		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "wallet_refused"), undefined)
+		const plain = new Error(DefaultEntrypointPublicCallError.MESSAGE)
+		await markFailedUnlessCancelled(plain, "j2", lane)
+		expect(lane.markJournal).toHaveBeenLastCalledWith("j2", { stage: "failed" }, normalizeError(plain, "dapp_execute"), undefined)
 	})
 
 	test("a call-binding refusal retitles the record in its failing write; an inner call or a plain failure never does", async () => {

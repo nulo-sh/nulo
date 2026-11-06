@@ -24,6 +24,7 @@ import {
 	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
+	DefaultEntrypointPublicCallError,
 	InvalidWalletArgumentsError,
 	ScopeViolationError,
 	SessionEndedError,
@@ -317,6 +318,7 @@ function queuedFailureKind(error: unknown): QueuedFailureKind {
 	if (error instanceof InvalidWalletArgumentsError) return "malformed_request"
 	if (error instanceof SessionEndedError || error instanceof WalletLockedError) return "session_ended"
 	if (error instanceof ChainNotSupportedError || error instanceof NoUsableAccountError) return "wallet_refused"
+	if (error instanceof DefaultEntrypointPublicCallError) return "wallet_refused"
 	if (error instanceof WindowEndedError) return WINDOW_END_KINDS[error.end]
 	if (error === WINDOW_CLOSED_BY_USER) return "user_rejected"
 	return "popup_bound"
