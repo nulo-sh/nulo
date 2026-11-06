@@ -38,6 +38,7 @@ import {
 	LOCAL_NETWORK_RPC_URL,
 	PRIMARY_SEED,
 	RETIRED_DEFAULT_ENDPOINTS,
+	retireDefaultName,
 	SEED_L1_BY_KIND,
 	seedForKind,
 } from "./seeds"
@@ -273,8 +274,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			"sealing the profile's plaintext networks failed; the next worker retries",
 			async (profileId) => {
 				await this.sealLegacyRows(profileId)
-				await runSealing(warn, "moving the profile's endpoints off a retired default failed; the next worker retries", () =>
-					this.retireDefaultEndpoints(profileId),
+				await runSealing(warn, "moving the profile's networks off a retired default failed; the next worker retries", () =>
+					this.retireDefaults(profileId),
 				)
 			},
 		)
@@ -288,25 +289,24 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
 	}
 
-	/** Moves the profile's endpoints off a default an earlier build seeded and this one retired, as
-	 *  `updateEndpoint` would. A network a reset journal holds keeps its endpoints as captured, since
-	 *  the reset's resume matches its primary against the captured URL. */
-	private async retireDefaultEndpoints(
-		profileId: string,
-		retired: readonly RetiredEndpoint[] = RETIRED_DEFAULT_ENDPOINTS,
-	): Promise<void> {
+	/** A network a reset journal holds is left as captured: the reset's resume matches its primary
+	 *  against the captured URL. */
+	private async retireDefaults(profileId: string, retired: readonly RetiredEndpoint[] = RETIRED_DEFAULT_ENDPOINTS): Promise<void> {
 		await this.lock.withLock(async () => {
 			const held = (await this.staleNetworks.getJournal(profileId))?.networkId
-			for (const network of await this.storage.getValues()) {
-				if (network.profileId !== profileId || network.id === held) continue
+			// Read once: a profile holds at most one row per seeded kind, so no rename here meets another.
+			const rows = (await this.storage.getValues()).filter((network) => network.profileId === profileId)
+			for (const network of rows) {
+				if (network.id === held) continue
 				const moved = await retireEndpoints(network, retired)
-				if (moved === undefined) continue
-				await this.storage.set(moved.id, moved)
+				const next = retireDefaultName(moved ?? network, rows) ?? moved
+				if (next === undefined) continue
+				await this.storage.set(next.id, next)
 				network.endpoints.forEach((endpoint, i) => {
-					if (endpoint.rpcUrl !== moved.endpoints[i]?.rpcUrl) this.transientNodes.delete(endpoint.rpcUrl)
+					if (endpoint.rpcUrl !== next.endpoints[i]?.rpcUrl) this.transientNodes.delete(endpoint.rpcUrl)
 				})
-				if (findPrimaryEndpoint(network)?.rpcUrl !== findPrimaryEndpoint(moved)?.rpcUrl) this.nodes.delete(moved.chainId)
-				this.emit("onNetworkUpdated", moved)
+				if (findPrimaryEndpoint(network)?.rpcUrl !== findPrimaryEndpoint(next)?.rpcUrl) this.nodes.delete(next.chainId)
+				this.emit("onNetworkUpdated", next)
 			}
 		})
 	}

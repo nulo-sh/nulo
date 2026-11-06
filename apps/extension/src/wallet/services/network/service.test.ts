@@ -23,7 +23,7 @@ import { bytesToHex, EventHandler } from "@nulo/wallet-core/utils"
 import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
-import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { LoggerStore } from "@/wallet/logger"
@@ -2869,14 +2869,14 @@ describe("NetworkService in-place reset", () => {
 	})
 })
 
-describe("NetworkService — an endpoint on a retired default", () => {
+describe("NetworkService — a retired default", () => {
 	const RETIRED_URL = "https://lb.drpc.live/aztec-testnet/FAKEKEY"
 	const REPLACEMENT = "https://aztec-testnet.drpc.org"
 	const digest = async (text: string) => bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))))
 	const synthetic = async () => [{ sha256: await digest(RETIRED_URL), replacement: REPLACEMENT }]
 	const retire = async (service: NetworkService) =>
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-		(service as any).retireDefaultEndpoints("p1", await synthetic())
+		(service as any).retireDefaults("p1", await synthetic())
 	const retiredTestnet = (local: FakeStorageArea, id: string, profileId = "p1") =>
 		storeRow(local, {
 			id,
@@ -2888,28 +2888,41 @@ describe("NetworkService — an endpoint on a retired default", () => {
 			endpoints: [{ id: "seed1", rpcUrl: RETIRED_URL, label: "dRPC" }],
 		})
 
-	test("the unlock seals the profile's row and moves it to the replacement, announced once, and the chain's node is rebuilt on it", async () => {
+	const seededAlphaV6 = (local: FakeStorageArea, id: string, profileId = "p1") =>
+		storeRow(local, { id, profileId, name: "Alpha V6", chainId: CHAIN_IDS.MAINNET, l1ChainId: MAINNET_L1_CHAIN_ID, kind: "mainnet" })
+
+	test("the unlock seals the profile's rows, moves the retired endpoint and the retired seed name, each announced once, and the chain's node is rebuilt", async () => {
 		const { service, factory, local } = setupServiceWithStorage({})
 		retiredTestnet(local, "tn")
 		retiredTestnet(local, "other", "p2")
+		seededAlphaV6(local, "mn")
+		seededAlphaV6(local, "other-mn", "p2")
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 		const internals = service as any
 		const inTheClear = () => JSON.stringify(local.store.get("nulo:core:networks@tn")).includes("aztec-testnet")
 		const profiles = Object.assign(internals.profileService, { onRowKeysReady: new EventHandler<string>() })
 		await internals.init({ get: () => profiles })
-		const real = internals.retireDefaultEndpoints.bind(service)
+		const real = internals.retireDefaults.bind(service)
 		const sealedFirst: boolean[] = []
-		vi.spyOn(internals, "retireDefaultEndpoints").mockImplementation(async (profileId) => {
+		vi.spyOn(internals, "retireDefaults").mockImplementation(async (profileId) => {
 			sealedFirst.push(!inTheClear())
 			return real(profileId, await synthetic())
 		})
 		await service.getNode(CHAIN_IDS.TESTNET)
+		const mainnetNode = {} as AztecNode
+		internals.nodes.set(CHAIN_IDS.MAINNET, mainnetNode)
 		const updated: Network[] = []
 		service.onNetworkUpdated.add((network) => updated.push(network))
 		profiles.onRowKeysReady.invoke("p1")
-		await vi.waitFor(() => expect(updated.map((network) => network.id)).toEqual(["tn"]))
+		await vi.waitFor(() => expect(updated.map((network) => network.id).sort()).toEqual(["mn", "tn"]))
+		// A rename moves no endpoint, so Mainnet's node stays.
+		expect(internals.nodes.get(CHAIN_IDS.MAINNET)).toBe(mainnetNode)
 		expect(sealedFirst).toEqual([true])
 		expect(inTheClear()).toBe(false)
+		expect(JSON.stringify(local.store.get("nulo:core:networks@mn"))).not.toContain("Alpha")
+		expect(await stored(local, "mn")).toMatchObject({ name: "Alpha", chainId: CHAIN_IDS.MAINNET, kind: "mainnet" })
+		expect(updated.find((network) => network.id === "mn")?.name).toBe("Alpha")
+		expect((await stored(local, "other-mn")).name).toBe("Alpha V6")
 		expect((await stored(local, "tn")).endpoints).toEqual([{ id: "seed1", rpcUrl: REPLACEMENT, label: "dRPC" }])
 		expect((await stored(local, "other")).endpoints[0]?.rpcUrl).toBe(RETIRED_URL)
 		await service.getNode(CHAIN_IDS.TESTNET)

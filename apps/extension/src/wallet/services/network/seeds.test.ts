@@ -5,7 +5,14 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import { bytesToHex } from "@nulo/wallet-core/utils"
 import { stubBatchFetch } from "../../../../tests/helpers/batch-fetch"
 import { createWalletNodeFactory } from "./node-factory"
-import { DRPC_FREE_PLAN_BATCH_LIMIT, LOCAL_NETWORK_RPC_URL, maxBatchSizeFor, RETIRED_DEFAULT_ENDPOINTS, seedForKind } from "./seeds"
+import {
+	DRPC_FREE_PLAN_BATCH_LIMIT,
+	LOCAL_NETWORK_RPC_URL,
+	maxBatchSizeFor,
+	RETIRED_DEFAULT_ENDPOINTS,
+	retireDefaultName,
+	seedForKind,
+} from "./seeds"
 import type { Network } from "./spec"
 
 describe("the remote defaults' batches", () => {
@@ -57,5 +64,44 @@ describe("RETIRED_DEFAULT_ENDPOINTS", () => {
 		expect(entry?.replacement).toBe(seedForKind("testnet")?.rpcUrl)
 		// A boolean, so a failure prints neither URL.
 		expect(digest === entry?.sha256).toBe(true)
+	})
+})
+
+describe("retireDefaultName", () => {
+	const row = (over: Partial<Network> & { id: string }): Network => ({
+		profileId: "p1",
+		chainId: 1,
+		l1ChainId: 1,
+		name: "Alpha V6",
+		primaryEndpointId: "e1",
+		endpoints: [{ id: "e1", rpcUrl: "https://node.example", label: "dRPC" }],
+		kind: "mainnet",
+		...over,
+	})
+	// Another profile's "Alpha" does not count as taken.
+	const otherProfile = row({ id: "other", profileId: "p2", name: "Alpha", kind: "custom" })
+
+	test.each(["Alpha V6", "Mainnet"])("a mainnet row named %s takes the seed's name, keeping everything else", (name) => {
+		const network = row({ id: "mn", name })
+		const before = structuredClone(network)
+		const next = retireDefaultName(network, [network, otherProfile])
+		expect(next).toEqual({ ...before, name: "Alpha" })
+		expect(network).toEqual(before)
+		expect(retireDefaultName(next!, [next!, otherProfile])).toBeUndefined()
+	})
+
+	test.each([
+		["a name the person chose", row({ id: "mn", name: "My Alpha" })],
+		["another case of a retired name", row({ id: "mn", name: "alpha v6" })],
+		["a custom row", row({ id: "mn", kind: "custom" })],
+		["a Testnet row", row({ id: "mn", kind: "testnet" })],
+		["a row with no kind", row({ id: "mn", name: "Mainnet", kind: undefined })],
+	])("leaves %s alone", (_label, network) => {
+		expect(retireDefaultName(network, [network])).toBeUndefined()
+	})
+
+	test("leaves the row alone while another network of its profile holds the seed's name", () => {
+		const network = row({ id: "mn" })
+		expect(retireDefaultName(network, [network, row({ id: "mine", name: "Alpha", kind: "custom" })])).toBeUndefined()
 	})
 })
