@@ -377,7 +377,7 @@ orchestrator, then Phase 5, the close-out commits and "ready". No e2e lane trips
 ## Post-implementation
 
 The contract is this plan plus [`implementations-plan/README.md` § Post-implementation
-standard](../README.md#post-implementation-standard) at `4291a8c98`. Values: `code_review: off`;
+standard](../../README.md#post-implementation-standard) at `4291a8c98`. Values: `code_review: off`;
 reviewer `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only
 gpt-6.1-sol`, resumed with `resume-codex.sh`; one loop over the whole arc diff from `origin/dev`,
 three rounds then stop and report; one Opus review (`Agent`, `general-purpose`, `model: "opus"`)

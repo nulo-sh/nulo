@@ -2,7 +2,7 @@
 
 Base: `origin/dev` at `4291a8c98`. Two Explore agents (Sonnet) plus the planner's own reads of
 `infra/subscribe`, `apps/landing`, `legal/website-privacy.md`, the archived
-[mailing-list-1](../archive/mailing-list-1/plan.md) plan and Resend's public docs (read 2026-11-05).
+[mailing-list-1](../mailing-list-1/plan.md) plan and Resend's public docs (read 2026-11-05).
 
 ## Reuse map
 
