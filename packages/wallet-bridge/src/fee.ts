@@ -157,8 +157,9 @@ export type DiscoveredAuthwit = {
 	readonly args: readonly string[]
 	readonly innerHash: string
 	readonly messageHash: string
-	/** Another approved account of the send, whose witness the transaction already carries; the
-	 *  wallet does not sign it. Absent on a request the sending account signs. */
+	/** The account whose witness the transaction already carries, which the wallet does not sign:
+	 *  another approved account of the send, or on a send whose app pays its own fee the sending
+	 *  account itself. Absent on a request the sending account signs. */
 	readonly onBehalfOf?: string
 }
 
