@@ -113,7 +113,6 @@ function parseChange(raw: unknown, label: string): Change {
 	}
 }
 
-/** A patch release may name one or two changes; a minor or major release names three at least. */
 function assertChangeCount(count: number, version: string, label: string): void {
 	const patch = parts(version)[2] > 0
 	if (count >= (patch ? 1 : 3) && count <= 5) return

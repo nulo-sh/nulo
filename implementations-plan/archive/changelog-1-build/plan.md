@@ -100,7 +100,7 @@ Validation gate: `bun run --cwd apps/landing test` exits 0 with both test files 
 1. Add `src/changelog.ts` and `src/styles/changelog.css` (D2 and the shared layer, one file; D5).
 2. In `src/page.test.ts`, run `build-changelog.ts` before `vite build`, and require the three pages.
 3. In `pr-quick.yml`, add `release-notes/**` to `landing` and the three pages to "Verify the pages shipped"; pin the filter in `behavior-gating.test.ts`.
-4. Add `/changelog/` to the sitemap. Update `apps/landing/README.md`, `CI.md` (`build-landing`) and the release skill's § Release notes: the TOML beside the notes (P116-02), its three to five changes, and a version rename that moves both files and the TOML's `version`.
+4. Add `/changelog/` to the sitemap. Update `apps/landing/README.md`, `CI.md` (`build-landing`) and the release skill's § Release notes: the TOML beside the notes (P116-02), its three to five changes (one to five for a patch, D10), and a version rename that moves both files and the TOML's `version`.
 5. Capture with a scratch script (never committed): v1.2.0, v1.1.0 and the index at 1280 and 390 px, light and dark, on a registry-claimed port with the production CSP; record `scrollWidth <= innerWidth` for each. With script off and with reduced motion, assert every card and the notes are visible (computed opacity 1), and that Tab reaches each index link with a visible ring.
 
 Validation gate: `bun run --cwd apps/landing build` exits 0 and `dist/changelog/{index.html,v1.1.0/index.html,v1.2.0/index.html}` exist; `WORKERS_CI_BRANCH=main` builds the same three, indexable; `bun run audit:vue`, `bun run test:all`, `bun run test:ci-gating`, `bun run lint:actions` and `bun run check:plans` exit 0; `cd apps/extension && bun run test:e2e -- --retry=0` (smoke, Chrome) exits 0, as `CLAUDE.md` asks of a user-visible change, though no suite covers the landing; twelve captures with no horizontal scroll; the no-script, reduced-motion and keyboard checks pass. Layers: lint, typecheck, unit, build, smoke e2e, browser check.
@@ -128,6 +128,7 @@ Each finding's path: `lessons/phase-0.md`.
 - **Fix loop round 2** (resumed): one finding, demonstrated: an em dash entity in a raw HTML block; fixed.
 - **Fix loop round 3** (resumed, the cap): one finding, demonstrated: a numeric reference with no semicolon. Fixed at the cause: the notes refuse any character reference but the four Bun's markdown text emits, so every raw-block encoding is closed; the loop stops here.
 - **CodeQL on the PR**: two High alerts in new code, a test regex over `<script` tags and the regex tag-strip feeding the meta description; neither reachable (the notes allow six attribute-free inline tags, the sink is a quoted attribute). Fixed at the source: string removal of those six tags, the sink encodes `<`, `>` and `"`, the test counts by split (`lessons/phase-2.md`).
+- **The owner's answers** (page 118, "P118-06: B" and "P118-07: B"; D9, D10): one Codex pass (gpt-6.1-sol, high, fresh session) over `3808596a4..` the two commits that build them: clean, no functional finding; it checked patch detection over 35 version and count pairs, one- and two-card renders, and the footer link. Two cleanups taken: this plan's Phase 2 step 4 named the old rule, and a helper comment restated the TSDoc.
 
 ## Seeds
 
