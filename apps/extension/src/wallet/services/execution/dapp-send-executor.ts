@@ -1201,7 +1201,7 @@ export class DappSendExecutor {
 				onBuilt,
 				probe,
 			)
-			return { ...built, discoveredHashes: consumedOf(probe).map(listedKey) }
+			return { ...built, discoveredHashes: attachedOf(probe, built).map(listedKey) }
 		}
 		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(
 			op,
@@ -1395,15 +1395,9 @@ function listedRecords(decoded: Pick<DecodedAuthwits, "signable" | "consumed">):
 	return [...decoded.signable.map(({ record }) => record), ...decoded.consumed]
 }
 
-/** What an app-paid confirm holds to its preview: the records another account's carried witness
- *  covers. The account's own carried ones are listed (`attachedOf`) but not held. */
-function consumedOf(probe: CollectingDiscoveryProbe): DiscoveredAuthwit[] {
-	return probe.discovered.filter((record) => record.onBehalfOf !== undefined)
-}
-
-/** What an app-paid estimate lists: the send signs nothing, so each request whose witness it carries,
- *  the account's own named as given by the account. A carried hash is not a checked signature: only
- *  a contract that checks the request makes the validated run check its witness. */
+/** What an app-paid send lists, and holds its confirm to: the send signs nothing, so each request
+ *  whose witness it carries, the account's own named as given by the account. A carried hash is not
+ *  a checked signature: only a contract that checks the request makes the validated run check it. */
 function attachedOf(probe: CollectingDiscoveryProbe, built: Pick<FeeEstimate, "account" | "txRequest">): DiscoveredAuthwit[] {
 	const carried = carriedHashes(built.txRequest)
 	const account = built.account.address.toString()

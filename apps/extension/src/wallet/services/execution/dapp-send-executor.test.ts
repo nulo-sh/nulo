@@ -2056,22 +2056,26 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			expect(h.proveAndSend).toHaveBeenCalledTimes(1)
 		})
 
-		test("a confirm holds only another account's records: the account's own carried one sends with no preview, or changed since it", async () => {
+		test("a confirm never uses an own carried authorization the window did not list: none listed, or another listed", async () => {
 			const missing = observing([record("own")])
 			carry(missing.base.built, "own")
-			await missing.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, CTX)
-			expect(missing.proveAndSend).toHaveBeenCalledTimes(1)
+			await expect(missing.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, CTX)).rejects.toThrow(
+				ESTIMATE_INCOMPLETE_MESSAGE,
+			)
+			expect(missing.proveAndSend).not.toHaveBeenCalled()
 
 			const drifted = observing([record("a")], [record("c")])
 			carry(drifted.base.built, "a")
 			carry(drifted.base.built, "c")
 			const estimate = await drifted.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
 			expect(estimate.discoveredAuthwits).toEqual([own("a")])
-			await drifted.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, {
-				...CTX,
-				previewId: estimate.previewId,
-			})
-			expect(drifted.proveAndSend).toHaveBeenCalledTimes(1)
+			await expect(
+				drifted.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, {
+					...CTX,
+					previewId: estimate.previewId,
+				}),
+			).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
+			expect(drifted.proveAndSend).not.toHaveBeenCalled()
 		})
 	})
 
