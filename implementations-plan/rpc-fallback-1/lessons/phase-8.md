@@ -35,3 +35,14 @@
 - E1 rerun (header check added): Firefox green, 203 s; peak per 10 s A 60, B 22.
 - Armed smoke loop (`endpoints.test.ts`, migration fixture, token seeds, CSP report): Chrome 7/7, Firefox 7/7, 98 s for both builds and runs.
 - Final head `6d29f3a1b`: `bun run test:all` green at retry 0 (185 s; aztec-runtime 559, extension 17564); `bun run audit:vue` green (192 s); `bun run check:plans` 0 findings.
+
+## Cross-arc review and fix round 1
+
+- Codex `01a1b22d`, a fresh session over `origin/dev...rpc-fallback-1-a3`: revise, two P1 and one P2.
+  - F1, demonstrated: a background route is never seeded, and admission recorded the primary's tip without raising the floor. A storage read the freshly admitted primary refused moved to an endpoint a block behind, which read a live grant's slot as empty, and `syncAuthwit` deleted the row. Fixed by D36: the endpoint taking the role brings the tip it was last seen at.
+  - F2, demonstrated: the send's membership check read the row before the pick's await. Fixed by D37: the row is read again once the pick answers.
+  - F3, measured: a submission and a read on one endpoint no longer share an SDK batch. Recorded as D35, not fixed: one client carries one retry policy.
+- Each new test was red before its fix: the health machine's floor test (110 against 120 for the late probe), the routed node's refused storage read (it resolved through B), and the composition test's row edit during the pick (sent through the removed endpoint).
+- The seed test's expectation moved from 25 to 30, on purpose: seeding hands the role to an endpoint seen at 30, which now brings its tip.
+- Codex `01a1b23f`, a fresh session over the fix diff: revise, one P1. Routing a probe the active endpoint answered through `servedTip` let a return probe that landed after its endpoint took the role and served a newer tip lower the floor. Fixed: that probe only raises the tip and the floor. Opus 5.5, fresh: approve with changes. It reproduced the same path, and argued the registry residual is new with the stack and within the plan's own one-or-two-block lag. Fixed by D38 (`fce91744f`): a confirmed row is dropped only once the grant's recorded endpoint also reads it unauthorized, and one endpoint asks nothing more.
+- Codex `01a1b22d`, resumed: approve, F1 to F3 closed; its one P3 (ARCHITECTURE § 15 omitted D38's exception) fixed.
