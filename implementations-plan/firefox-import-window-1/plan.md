@@ -253,6 +253,8 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 
 **Arc 1 review, Codex round 2 (resumed): clean.** "No new findings (confidence: high). The follow-up changes no runtime behavior, strengthens the in-place needs-unlock assertion, and preserves the E2E guarantees. All 13 unlock-method citations match their current source lines."
 
+**Arc 1 review, Codex round 3 (resumed; the standard's two verbatim rules, which rounds 1 and 2 carried only in the owner's equivalent wording): three comment-only findings, no correctness or security defect.** All accepted: `landOpenedProfile`'s doc restated its else branch; `expectHandedBack`'s doc enumerated its assertions; the restore driver's reader comment restated the classification instead of naming why a detach counts (a self-closing window can reject a read before Puppeteer marks the page closed). Folded; no fourth round, as nothing material remained and the loop's cap is three.
+
 ## Seeds
 
 Recorded for completeness; the orchestrator runs this lane, so neither seed is used.

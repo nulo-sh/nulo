@@ -34,7 +34,6 @@ export interface OpenedLanding {
  * Ends a create or an import as the panel would, in the caller's task, so nothing runs between the
  * caller's last check and the landing. An own window still in its flow hands Home back: a fresh panel
  * boots there, and its guard sends a locked session to the lock screen, whose unlock returns Home.
- * Any other document releases its window, shows `line` and goes to `route`.
  */
 export function landOpenedProfile(
 	router: Pick<Router, "push">,

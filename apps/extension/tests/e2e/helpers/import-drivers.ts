@@ -281,7 +281,8 @@ interface RestoreEnding {
 
 const CLOSED: RestoreEnding = { home: false, refusal: null, closed: true }
 
-/** Where the restore's page is; a page gone, as an own window that hands its ending back is, reads closed. */
+/** A window that closes itself can reject a read before Puppeteer marks its page closed, so a
+ *  detach reads as closed too. */
 const readRestoreEnding = (page: Page): Promise<RestoreEnding> =>
 	page.isClosed()
 		? Promise.resolve(CLOSED)

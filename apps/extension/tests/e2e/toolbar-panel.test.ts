@@ -327,9 +327,7 @@ interface HandedBack {
 	timeoutMs?: number
 }
 
-/** The own window `windowId` handed `route` and `label` back for `profileId`: it closed, its record
- *  was consumed, and the one panel that reopened shows the line on `route` and stays the only one.
- *  Read from the control page until the panel is up, since a read in the panel moves focus. */
+/** Reads from the control page until the panel is up: a read in the panel moves focus. */
 async function expectHandedBack(
 	browser: Browser,
 	control: Page,
