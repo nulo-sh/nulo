@@ -566,14 +566,14 @@ test("History's list keeps the −8px row box inside the page: nothing scrolls s
 
 const ROWS = `${sel("tx-card")}, ${sel("tx-incoming-card")}`
 const RECEIPT_TOKEN_ID = 1
-/** A dApp's own name: at 360px its chip is cut beside the transfer's direction. */
+/** A dApp's own name: at 360px its chip is cut at its cap beside the transfer's symbol. */
 const DAPP_NAME = "Shielded Payroll Portal"
 /** A dApp's transfer whose dollar figure leaves its app chip no room past its floor. */
 const LARGE_DAPP_HASH = `0x${"6e".repeat(32)}`
-/** The floor of a two-chip row's app chip: its border, padding and one "…" at the chip's 10px. */
-const APP_CHIP_FLOOR = 19
-/** The two chips' gap when the app chip drops under the direction chip. */
-const CHIP_ROW_GAP = 4
+/** The floor of a dApp transfer's app chip: its border, padding and one whole "…" at the chip's 11px. */
+const APP_CHIP_FLOOR = 20
+/** An account other than the seeded sender's: a transfer to it goes out, one to the sender is a move. */
+const OUTSIDE = `0x${"1e".repeat(32)}`
 
 type RowLayout = {
 	row: string
@@ -664,108 +664,98 @@ async function settledRows(page: Page, count: number): Promise<RowLayout[]> {
 
 const gapsOf = (rows: RowLayout[]) => rows.slice(1).map((row, i) => row.top - rows[i].bottom)
 
-type TwoChipRow = {
-	directionLines: number
-	/** `lead` is the chip's `::before`: an empty inline-block lets the "…" replace the first letter.
-	 *  `gap` runs from the direction chip's bottom to the app chip's top, `left` between their left edges. */
-	chip: { width: number; cut: boolean; name: string; gap: number; left: number; lead: { content: string; display: string } }
+type IconBox = {
+	row: string
+	way: string | null
+	/** The pair's width and its frames' distance inside the box's border, each side. */
+	pair: { glyphs: number; width: number; left: number; right: number } | null
+	/** The way badge's box, and how far its right and bottom edges sit past the icon box's. */
+	badge: { width: number; height: number; right: number; bottom: number } | null
+	/** How far the status badge's right edge sits past the box's, and its top edge above the box's. */
+	status: { right: number; top: number } | null
+	/** The title row holds its title alone, with no chip beside it. */
+	titleAlone: boolean
 }
 
-function readTwoChipRow(page: Page, hash: string): Promise<TwoChipRow> {
+/** Each direction row's icon box, measured from the inside of its 1px border. */
+function readIconBoxes(page: Page): Promise<IconBox[]> {
+	return page.evaluate((rowsSel: string) => {
+		const r1 = (n: number) => Math.round(n * 10) / 10
+		return [...document.querySelectorAll(rowsSel)]
+			.filter((row) => row.querySelector('[data-testid="activity-way-badge"]'))
+			.map((row) => {
+				const box = (row.querySelector('[data-testid="activity-icon"]') as HTMLElement).getBoundingClientRect()
+				const glyphs = [...row.querySelectorAll('[data-testid="activity-icon-pair"] svg')].map((g) => g.getBoundingClientRect())
+				const badge = row.querySelector('[data-testid="activity-way-badge"]') as HTMLElement
+				const b = badge.getBoundingClientRect()
+				const status = row.querySelector('[data-testid="activity-status-icon"]')?.parentElement?.getBoundingClientRect()
+				return {
+					row: `${row.getAttribute("data-testid")} ${row.getAttribute("data-tx-hash")?.slice(0, 6) ?? ""}`.trim(),
+					way: badge.getAttribute("data-way"),
+					pair: glyphs.length
+						? {
+								glyphs: glyphs.length,
+								width: r1(glyphs[glyphs.length - 1].right - glyphs[0].left),
+								left: r1(glyphs[0].left - box.left - 1),
+								right: r1(box.right - 1 - glyphs[glyphs.length - 1].right),
+							}
+						: null,
+					badge: { width: r1(b.width), height: r1(b.height), right: r1(b.right - box.right), bottom: r1(b.bottom - box.bottom) },
+					status: status ? { right: r1(status.right - box.right), top: r1(box.top - status.top) } : null,
+					titleAlone: row.querySelector('[data-testid="activity-title-row"]')?.childElementCount === 1,
+				}
+			})
+	}, ROWS)
+}
+
+/** A C2S pair of two sides sits 2.5px inside the border each side; a receipt's arrow and side are
+ *  centred. The way badge mirrors the status badge's offset at the lower corner. */
+function expectIconBox(box: IconBox, where: string): void {
+	const at = `${where}, ${box.row}`
+	expect(box.status, at).not.toBeNull()
+	expect(box.badge, at).toMatchObject({
+		width: expect.closeTo(14, 0),
+		height: expect.closeTo(14, 0),
+		right: expect.closeTo(box.status?.right ?? Number.NaN, 1),
+		bottom: expect.closeTo(box.status?.top ?? Number.NaN, 1),
+	})
+	if (box.pair?.glyphs === 3)
+		expect(box.pair, at).toMatchObject({ width: expect.closeTo(33, 0), left: expect.closeTo(2.5, 0), right: expect.closeTo(2.5, 0) })
+	else expect(Math.abs((box.pair?.left ?? 0) - (box.pair?.right ?? 99)), at).toBeLessThanOrEqual(0.5)
+}
+
+/** The five seeded rows: a send out, three moves to the sender (two of them a dApp's transfers, the
+ *  large one cut at its cap beside its symbol) and a receipt. Only the dApp transfers carry a chip. */
+async function expectDirectionRows(page: Page, where: string): Promise<void> {
+	const large = await readAppChip(page, LARGE_DAPP_HASH)
+	console.log(`[rows] ${where}: the large dApp transfer ${JSON.stringify(large)}`)
+	expect(large).toMatchObject({ cut: true, besideTitle: true, name: DAPP_NAME, lead: { content: '""', display: "inline-block" } })
+	expect(large.width).toBeCloseTo(APP_CHIP_CAP, 0)
+	const boxes = await readIconBoxes(page)
+	console.log(`[rows] ${where}: icon boxes ${JSON.stringify(boxes)}`)
+	expect(boxes.map((b) => b.way).sort()).toEqual(["in", "out", "self", "self", "self"])
+	for (const box of boxes) expectIconBox(box, where)
+	expect(boxes.filter((b) => !b.titleAlone).map((b) => b.row)).toEqual(["tx-card 0x6b6b", "tx-card 0x6e6e"])
+}
+
+type AppChip = { width: number; cut: boolean; name: string; besideTitle: boolean; lead: { content: string; display: string } }
+
+/** A dApp transfer's app chip: `lead` is its `::before`, an empty inline-block that lets the "…" replace the first letter. */
+function readAppChip(page: Page, hash: string): Promise<AppChip> {
 	return page.evaluate((h: string) => {
 		const row = document.querySelector(`[data-testid="tx-card"][data-tx-hash="${h}"]`)
-		const direction = row?.querySelector<HTMLElement>('[data-testid="activity-direction-chip"]')
 		const chip = row?.querySelector<HTMLElement>('[data-testid="activity-app-chip"]')
-		if (!direction || !chip) throw new Error(`row ${h.slice(0, 6)} has no two chips`)
-		const range = document.createRange()
-		range.selectNodeContents(direction)
-		const below = direction.getBoundingClientRect()
+		const title = row?.querySelector('[data-testid="activity-title"]')
+		if (!chip || !title) throw new Error(`row ${h.slice(0, 6)} has no app chip`)
 		const box = chip.getBoundingClientRect()
 		return {
-			directionLines: new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size,
-			chip: {
-				width: box.width,
-				cut: chip.scrollWidth > chip.clientWidth,
-				name: chip.textContent ?? "",
-				gap: box.top - below.bottom,
-				left: box.left - below.left,
-				lead: (({ content, display }) => ({ content, display }))(getComputedStyle(chip, "::before")),
-			},
+			width: box.width,
+			cut: chip.scrollWidth > chip.clientWidth,
+			name: chip.textContent ?? "",
+			besideTitle: box.top < title.getBoundingClientRect().bottom - 0.5,
+			lead: (({ content, display }) => ({ content, display }))(getComputedStyle(chip, "::before")),
 		}
 	}, hash)
-}
-
-type ReceiptChip = {
-	/** The title, separator and chip on one line, with their two 6px gaps. */
-	need: number
-	/** From the text column's left edge to 10px short of the amount column. */
-	space: number
-	wrapped: boolean
-	gaps: { titleToSep: number; sepToChip: number }
-	/** The chip's left edge and the separator's right edge, each from the title row's clipping edge. */
-	chipLeft: number
-	sepRight: number
-	/** From the title's bottom to the wrapped chip's top. */
-	rowGap: number
-}
-
-/** The page's one receipt: its kind chip beside its title, or under it where the line has no room. */
-function readReceiptChip(page: Page): Promise<ReceiptChip> {
-	return page.evaluate(() => {
-		const row = document.querySelector('[data-testid="tx-incoming-card"]')
-		const ids = [
-			"activity-title",
-			"tx-incoming-kind-chip",
-			"tx-incoming-kind-sep",
-			"activity-title-row",
-			"activity-text",
-			"activity-amount-col",
-		]
-		const els = ids.map((id) => row?.querySelector(`[data-testid="${id}"]`))
-		if (els.some((el) => !el)) throw new Error("the receipt row is incomplete")
-		const [title, chip, sep, clip, text, amountCol] = els.map((el) => (el as Element).getBoundingClientRect())
-		return {
-			need: title.width + 6 + sep.width + 6 + chip.width,
-			space: amountCol.left - 10 - text.left,
-			wrapped: chip.top >= title.bottom - 0.5,
-			gaps: { titleToSep: sep.left - title.right, sepToChip: chip.left - sep.right },
-			chipLeft: chip.left - clip.left,
-			sepRight: sep.right - clip.left,
-			rowGap: chip.top - title.bottom,
-		}
-	})
-}
-
-function expectReceiptWrapped(chip: ReceiptChip, where: string): void {
-	expect(chip.wrapped, where).toBe(true)
-	expect(chip.need, where).toBeGreaterThan(chip.space)
-	expect(Math.abs(chip.chipLeft), where).toBeLessThanOrEqual(0.5)
-	expect(chip.sepRight, where).toBeLessThanOrEqual(0)
-	expect(chip.rowGap, where).toBeCloseTo(4, 0)
-}
-
-/** A row that fits stays as it was: the receipt keeps its one line from the first popup width that holds
- *  it, and wraps a pixel short of it. The popup's body is `--base-width` wide whatever the viewport. */
-async function expectReceiptFitsFromItsWidth(page: Page): Promise<void> {
-	const short = await readReceiptChip(page)
-	const fits = 360 + Math.ceil(short.need - short.space)
-	for (const width of [fits, fits - 1]) {
-		await setViewport(page, { width, height: 600 })
-		await page.evaluate((w: number) => document.documentElement.style.setProperty("--base-width", `${w}px`), width)
-		await settledRows(page, 5)
-		const receipt = await readReceiptChip(page)
-		console.log(`[rows] History at ${width}px: the receipt ${JSON.stringify(receipt)}`)
-		if (width === fits - 1) {
-			expectReceiptWrapped(receipt, `${width}px`)
-			continue
-		}
-		expect(receipt.wrapped).toBe(false)
-		expect(receipt.need).toBeLessThanOrEqual(receipt.space)
-		expect(receipt.gaps.titleToSep).toBeCloseTo(6, 1)
-		expect(receipt.gaps.sepToChip).toBeCloseTo(6, 1)
-	}
-	await page.evaluate(() => document.documentElement.style.removeProperty("--base-width"))
-	await setViewport(page, { width: 360, height: 600 })
 }
 
 /** Opens a surface by its hash and waits for the rows on screen to leave: the hash changes before
@@ -784,7 +774,7 @@ const SURFACES = [
 	{ name: "History", hash: "#/popup/activity" },
 ]
 
-test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount, a dApp's large transfer with its app chip under its direction and a priced receipt stay inside their rows and never cover an amount, the receipt's chip under its title only where it does not fit, dark and light", async ({
+test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount, a dApp's large transfer with its app chip cut beside its symbol and a priced receipt stay inside their rows and never cover an amount; each direction row draws its two sides and its way badge at their sizes inside its icon box, its title alone, dark and light", async ({
 	listedExtensionPerTest,
 	skip,
 }) => {
@@ -793,7 +783,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 	await waitForHash(page, "#/popup/general")
 	const scope = await readActivityScope(page, { priced: true })
 	const now = Date.now()
-	await seedTransaction(page, scope, { hash: TX_HASH, amount: "1500000", at: now })
+	await seedTransaction(page, scope, { hash: TX_HASH, amount: "1500000", at: now, to: OUTSIDE })
 	await seedTransaction(page, scope, { hash: `0x${"6a".repeat(32)}`, amount: "123456789123456", at: now - 1_000 })
 	await seedTransaction(page, scope, {
 		hash: `0x${"6b".repeat(32)}`,
@@ -826,7 +816,6 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		for (const surface of SURFACES) {
 			await openSurface(page, surface.hash)
 			const rows = await settledRows(page, 5)
-			const large = await readTwoChipRow(page, LARGE_DAPP_HASH)
 			const gaps = gapsOf(rows)
 			console.log(
 				`[rows] ${theme}, ${surface.name}: heights ${rows.map((r) => (r.bottom - r.top).toFixed(1)).join(", ")}; gaps ${gaps.map((g) => g.toFixed(1)).join(", ")}; amounts ${rows.map((r) => r.amount).join(", ")}`,
@@ -835,16 +824,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 				[],
 			)
 			for (const gap of gaps) expect.soft(gap, `${surface.name}'s row gap`).toBeCloseTo(10, 0)
-			console.log(`[rows] ${theme}, ${surface.name}: the large dApp transfer ${JSON.stringify(large)}`)
-			// Past the app chip's floor it drops under the whole direction chip and keeps its name, cut at its cap.
-			expect(large.directionLines, surface.name).toBe(1)
-			expect(large.chip).toMatchObject({ cut: true, name: DAPP_NAME, lead: { content: '""', display: "inline-block" } })
-			expect(large.chip.gap).toBeCloseTo(CHIP_ROW_GAP, 0)
-			expect(large.chip.left).toBeCloseTo(0, 0)
-			expect(large.chip.width).toBeCloseTo(APP_CHIP_CAP, 0)
-			const receipt = await readReceiptChip(page)
-			console.log(`[rows] ${theme}, ${surface.name}: the receipt ${JSON.stringify(receipt)}`)
-			expectReceiptWrapped(receipt, `${theme}, ${surface.name}`)
+			await expectDirectionRows(page, `${theme}, ${surface.name}`)
 			if (surface.name === "History" && theme === "dark") await shotSend(page, "dapp-transfer-rows", "activity-app-chip")
 			if (surface.name !== "History") continue
 			const clearance = await page.evaluate((rowsSel: string) => {
@@ -856,8 +836,6 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 			expect(clearance).toBeCloseTo(12, 0)
 		}
 	}
-
-	await expectReceiptFitsFromItsWidth(page)
 
 	expect(listedExtensionPerTest.consoleErrors).toEqual([])
 	expect(listedExtensionPerTest.pageErrors).toEqual([])
@@ -883,19 +861,17 @@ const DAPP_TRANSFER_HASH = `0x${"6d".repeat(32)}`
 type NamedRows = {
 	/** Scroll containers and the document that came out wider than their box. */
 	overflowing: string[]
-	/** Per row: its title's line count, whether its text is cut and shown with an ellipsis, its direction
-	 *  chip's line count, its app chip and whether that chip sits below the direction chip, or below the
-	 *  title where the row has no direction. */
+	/** Per row: its title's line count, whether its text is cut and shown with an ellipsis, its app chip
+	 *  and whether that chip sits below the title. */
 	rows: Record<
 		string,
 		{
 			lines: number
 			cut: boolean
 			ellipsis: boolean
-			direction: { lines: number } | null
 			chip: { text: string; width: number; cut: boolean; below: boolean } | null
-			/** Each chip's computed size, weight and tracking. */
-			type: { direction: string | null; chip: string | null }
+			/** The app chip's computed size, weight and tracking. */
+			type: string | null
 		}
 	>
 }
@@ -937,21 +913,18 @@ async function readDappRows(page: Page): Promise<NamedRows> {
 		const readRow = (row: Element) => {
 			const title = row.querySelector<HTMLElement>('[data-testid="activity-title"]')
 			if (!title) throw new Error("a row has no title")
-			const direction = row.querySelector('[data-testid="activity-direction-chip"]')
 			const chip = row.querySelector<HTMLElement>('[data-testid="activity-app-chip"]')
-			const before = (direction ?? title).getBoundingClientRect()
 			return {
 				lines: lineCount(title),
 				cut: title.scrollWidth > title.clientWidth,
 				ellipsis: getComputedStyle(title).textOverflow === "ellipsis",
-				direction: direction && { lines: lineCount(direction) },
 				chip: chip && {
 					text: chip.textContent?.trim() ?? "",
 					width: chip.getBoundingClientRect().width,
 					cut: chip.scrollWidth > chip.clientWidth,
-					below: chip.getBoundingClientRect().top >= before.bottom - 0.5,
+					below: chip.getBoundingClientRect().top >= title.getBoundingClientRect().bottom - 0.5,
 				},
-				type: { direction: typeOf(direction), chip: typeOf(chip) },
+				type: typeOf(chip),
 			}
 		}
 		const overflowing = new Set<string>()
@@ -1044,7 +1017,7 @@ async function readMethodRow(page: Page, shot: string, text: string): Promise<Me
 	return row
 }
 
-test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol and direction whole with its app chip cut beside them, and at 240px no row's text is hidden or newly cut; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
+test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol whole with its app chip cut at its cap beside it, and at 240px no row's text is hidden or newly cut; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
 	listedExtensionPerTest,
 }) => {
 	const page = await openPopup(listedExtensionPerTest)
@@ -1095,14 +1068,12 @@ test("a dApp's long function name and host never widen Home or History, named or
 		expect(rows.terminal.chip).toMatchObject({ cut: true, width: expect.closeTo(APP_CHIP_CAP, 0) })
 		expect(rows.call.chip).toMatchObject({ cut: false, below: false })
 		expect(rows.transfer.cut).toBe(false)
-		expect(rows.transfer.direction).toEqual({ lines: 1 })
 		expect(rows.transfer.chip).toMatchObject({ cut: true, below: false })
 		expect(rows.transfer.chip?.width).toBeGreaterThan(APP_CHIP_FLOOR + 0.5)
-		expect(rows.transfer.chip?.width).toBeLessThan(APP_CHIP_CAP - 0.5)
-		// A dApp transfer's two chips keep 10px semibold; a lone app chip takes the caps role's 11px bold.
-		expect(rows.transfer.type).toEqual({ direction: "10px 600 0.8px", chip: "10px 600 0.8px" })
-		expect(rows.call.type).toEqual({ direction: null, chip: "11px 700 1.1px" })
-		expect(rows.nameless.type).toEqual(rows.call.type)
+		expect(rows.transfer.chip?.width).toBeLessThanOrEqual(APP_CHIP_CAP + 0.5)
+		// Every app chip, a dApp transfer's included, takes the caps role's 11px bold.
+		expect(rows.call.type).toBe("11px 700 1.1px")
+		for (const key of ["transfer", "nameless"]) expect(rows[key].type, key).toBe(rows.call.type)
 		// Below the popup's width a function's name takes a second line, so one whole here stays whole.
 		await expectFitsNarrow(page, `${surface.name}, dApp rows`)
 	}

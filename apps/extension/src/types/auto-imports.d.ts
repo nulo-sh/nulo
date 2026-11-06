@@ -428,6 +428,7 @@ declare global {
   const readSendPicks: typeof import('../utils/fee-picks').readSendPicks
   const readSendSlots: typeof import('../utils/fee-picks').readSendSlots
   const readonly: typeof import('vue').readonly
+  const receivedDirection: typeof import('../utils/received-display').receivedDirection
   const receivedLabel: typeof import('../utils/received-display').receivedLabel
   const ref: typeof import('vue').ref
   const refreshBalances: typeof import('../utils/core').refreshBalances
@@ -529,6 +530,7 @@ declare global {
   const tokenForReceipt: typeof import('../utils/received-display').tokenForReceipt
   const tokenHeroCandidates: typeof import('../utils/hero-fit').tokenHeroCandidates
   const tokenMovementLabel: typeof import('../utils/tx-enrichment').tokenMovementLabel
+  const transferDirection: typeof import('../utils/tx-enrichment').transferDirection
   const transferLabel: typeof import('../utils/token-transfer-vocabulary').transferLabel
   const triggerRef: typeof import('vue').triggerRef
   const trimAddress: typeof import('../utils/string').trimAddress
@@ -905,6 +907,9 @@ declare global {
   // @ts-ignore
   export type { RestoreOutcome } from '../utils/restore-outcome'
   import('../utils/restore-outcome')
+  // @ts-ignore
+  export type { Side, RowWay, RowDirection } from '../utils/row-direction'
+  import('../utils/row-direction')
   // @ts-ignore
   export type { HubConfig, HubValues } from '../utils/settings-labels'
   import('../utils/settings-labels')
@@ -1359,6 +1364,7 @@ declare module 'vue' {
     readonly readSendPicks: UnwrapRef<typeof import('../utils/fee-picks')['readSendPicks']>
     readonly readSendSlots: UnwrapRef<typeof import('../utils/fee-picks')['readSendSlots']>
     readonly readonly: UnwrapRef<typeof import('vue')['readonly']>
+    readonly receivedDirection: UnwrapRef<typeof import('../utils/received-display')['receivedDirection']>
     readonly receivedLabel: UnwrapRef<typeof import('../utils/received-display')['receivedLabel']>
     readonly ref: UnwrapRef<typeof import('vue')['ref']>
     readonly refreshBalances: UnwrapRef<typeof import('../utils/core')['refreshBalances']>
@@ -1460,6 +1466,7 @@ declare module 'vue' {
     readonly tokenForReceipt: UnwrapRef<typeof import('../utils/received-display')['tokenForReceipt']>
     readonly tokenHeroCandidates: UnwrapRef<typeof import('../utils/hero-fit')['tokenHeroCandidates']>
     readonly tokenMovementLabel: UnwrapRef<typeof import('../utils/tx-enrichment')['tokenMovementLabel']>
+    readonly transferDirection: UnwrapRef<typeof import('../utils/tx-enrichment')['transferDirection']>
     readonly transferLabel: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['transferLabel']>
     readonly triggerRef: UnwrapRef<typeof import('vue')['triggerRef']>
     readonly trimAddress: UnwrapRef<typeof import('../utils/string')['trimAddress']>

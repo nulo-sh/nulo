@@ -89,7 +89,7 @@ Decision pages 117 and 118 (signed 2026-11-06, 18:18 and 19:37 UTC) replace the 
 - **In-flight and failed rows:** unchanged; OA-2 shows them both ways.
 - **Accessibility, under the owner's 2026-10-19 delegation:** the chip's words stay in the reading order as hidden text. The new glyphs are hidden from assistive tech. No Tab stop or focus ring moves.
 
-## Phase 1: the direction type, the layout and two cards
+## Phase 1: the direction type, the layout and two cards ✓
 
 Change map: `src/utils/row-direction.ts` (new), `src/utils/tx-enrichment.ts`, `src/utils/received-display.ts`, `TransactionCardLayout.vue`, `TransactionCard.vue`, `TransactionIncomingCard.vue`, `activity-card.module.css`, `scripts/type-roles/exceptions.ts`, `tests/e2e/fixtures/type-roles.ts`.
 
@@ -106,7 +106,7 @@ Tests (colocated, updated in place):
 - Pass: every command exits 0.
 - Layers: typecheck, lint, unit, component.
 
-## Phase 2: the smoke e2e, both browsers
+## Phase 2: the smoke e2e, both browsers ✓
 
 - **`tests/e2e/rows.test.ts`:** the "rows sit 10px apart" test drops `readTwoChipRow`, `readReceiptChip`, `expectReceiptWrapped` and `expectReceiptFitsFromItsWidth`. It reads each direction row's icon box instead:
   - a two-glyph pair is 33 ± 0.5 px wide, its frames 2.5 ± 0.5 px inside the border on both sides;
@@ -123,6 +123,7 @@ Tests (colocated, updated in place):
 - Run it on Chrome, then with `NULO_E2E_BROWSER=firefox`.
 - Pass: both green.
 - Smoke launches claim their egress ports in `~/.agents/ports.md` themselves; no network suite file changes.
+- **Measured** (base 0bfd2c088 → head, retry 0, this shared host): Chrome `rows` 63.9 s → 69.3 s, `type-roles` 95.7 s → 96.5 s; Firefox `rows` 122.7 s → 118.8 s, `type-roles` 152.6 s → 171.0 s. Every row measured pair 33 px, 2.5 px inside the border each side, badge 14 px mirroring the status badge, on both browsers and themes.
 
 ## Phase 3: captures and the two answers (no build)
 
