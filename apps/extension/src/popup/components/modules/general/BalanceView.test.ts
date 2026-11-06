@@ -738,6 +738,14 @@ describe("BalanceView — token hero (tokenBalance prop)", () => {
 		expect(wrapper.find('[data-testid="public-balance-value"]').text()).toBe("250")
 	})
 
+	test("the split reads as a token row's: a dust side under 999.999 reads <0.01, never 0, while the hero keeps every digit", async () => {
+		mockQuotes = FRESH()
+		const { wrapper } = await mountView({ tokenBalance: { ...SEED[0], privateBalance: "500", publicBalance: "999998500" } })
+		expect(wrapper.find('[data-testid="private-balance-value"]').text()).toBe("<0.01")
+		expect(wrapper.find('[data-testid="public-balance-value"]').text()).toBe("999.99")
+		expect(wrapper.find('[data-testid="balance-amount"]').text()).toContain("999.999")
+	})
+
 	test("the private and public marks carry their labels as tooltip and accessible name, not on the groups", async () => {
 		const { wrapper } = await mountView({ tokenBalance: SEED[0] })
 		const tooltips = wrapper.findAll('[data-testid="stub-tooltip"]')

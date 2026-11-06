@@ -6,6 +6,7 @@ import {
 	ScopeViolationError,
 	SessionEndedError,
 	TooManyPendingError,
+	UnattachedAuthorizationRefusalError,
 } from "@nulo/extension-messaging/errors"
 import type { JournalRetitle } from "@/wallet/services/operation-journal/spec"
 import { refusalOf } from "./contract-resolver"
@@ -48,8 +49,11 @@ function dappFailureKind(error: unknown): JobErrorKind {
 	return error instanceof DefaultEntrypointPublicCallError ? "wallet_refused" : failureKind(error, "dapp_execute")
 }
 
-function scopeRefusalKind(error: ScopeViolationError): JobErrorKind {
-	return error instanceof AuthRegistryRefusalError ? "registry_refused" : "scope_refused"
+/** The History kind of a scope refusal, by class: every path that journals one reads it here. */
+export function scopeRefusalKind(error: ScopeViolationError): "scope_refused" | "registry_refused" | "unattached_refused" {
+	if (error instanceof AuthRegistryRefusalError) return "registry_refused"
+	if (error instanceof UnattachedAuthorizationRefusalError) return "unattached_refused"
+	return "scope_refused"
 }
 
 /** The journal kind of a send failure. Classified failures keep their own kind:

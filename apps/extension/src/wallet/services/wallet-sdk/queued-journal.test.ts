@@ -16,6 +16,7 @@ import {
 	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
+	UnattachedAuthorizationRefusalError,
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
 import { NoUsableAccountError } from "@nulo/wallet-bridge"
@@ -424,6 +425,7 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			new AuthRegistryRefusalError("Scope violation: sendTx call targets an authorization registry grant function"),
 			"Transaction",
 		],
+		["another account's authorization left out", "unattached_refused", new UnattachedAuthorizationRefusalError(), "Transaction"],
 		["a call-binding refusal", "scope_refused", bindingRefusal(CALL_BINDING), "transfer_public_to_public"],
 		["an authorization's call-binding refusal", "scope_refused", bindingRefusal(AUTHWIT_CALL_BINDING), "Transaction"],
 		["a missing grant", "scope_refused", new CapabilityNotGrantedError("transaction"), "Transaction"],

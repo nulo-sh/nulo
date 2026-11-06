@@ -8,7 +8,7 @@
 // The glyph module, not the barrel: the e2e typecheck reaches this file and resolves no `.vue`.
 import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
-import { balanceFormatted } from "@/utils/amount.js"
+import { formatListAmount } from "@/utils/amount.js"
 import { stageSubtitle } from "@/utils/card-subtitle"
 import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { dashIfBlank } from "@/utils/string"
@@ -77,7 +77,7 @@ export function journalCardAmount(op: OperationRecord, tokenById: (id: number) =
 	const amount = journalTransferAmount(op, tokenById(op.tokenId))
 	const units = amount ? parseSide(amount.raw) : undefined
 	if (!amount || units === undefined) return null
-	return balanceFormatted(units, amount.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
+	return formatListAmount(units, amount.decimals, ROW_AMOUNT_LENGTH)
 }
 
 /** An in-flight send's symbol, set whenever its token is known, amount or not. */
@@ -311,6 +311,11 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 			return { label: "Not allowed", context: "The app asked for more than you allowed. Nothing was sent." }
 		case "registry_refused":
 			return { label: "Not allowed", context: "Apps cannot change your public authorizations. Nothing was sent." }
+		case "unattached_refused":
+			return {
+				label: "Not allowed",
+				context: "The app did not include an authorization from another of your accounts. Nothing was sent.",
+			}
 		case "malformed_request":
 			return { label: "Couldn't read request", context: "The app sent a request the wallet could not read. Nothing was sent." }
 		case "terms_refused":
@@ -371,6 +376,7 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 			return "Stopped when the wallet locked"
 		case "scope_refused":
 		case "registry_refused":
+		case "unattached_refused":
 			return "Not allowed"
 		case "malformed_request":
 			return "Couldn't read request"
@@ -458,7 +464,7 @@ function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): J
 	let amountSymbol: string | null = null
 	const stored = journalTransferAmount(op, token)
 	if (stored && token) {
-		amount = balanceFormatted(stored.raw, stored.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
+		amount = formatListAmount(stored.raw, stored.decimals, ROW_AMOUNT_LENGTH)
 		amountSymbol = token.symbol ?? null
 	}
 

@@ -25,7 +25,7 @@ import AppFeeLine from "@/popup/components/modules/send/AppFeeLine.vue"
 import FeeCostReadout from "@/popup/components/modules/send/FeeCostReadout.vue"
 import FlaggedTokenBanner from "@/popup/components/modules/general/FlaggedTokenBanner.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
-import { isSelfPay } from "@nulo/wallet-bridge"
+import { isSelfPay, sameFieldAddress } from "@nulo/wallet-bridge"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import type {
 	DecodedCall,
@@ -229,9 +229,9 @@ const createAuthwitSurface = (m: unknown): CreateAuthwitSurface => {
 
 /** Which surface lists the authorizations this operation uses: the preview for a NO_FROM
  *  operation, the fee estimate for a standard one; `send_transaction` adds none at confirm, and
- *  an embedded-fee standard operation signs none, so it lists only those another account already
- *  gave. Nothing is rendered when there is nothing to list: an absent row must not read as a claim
- *  of absence. */
+ *  an embedded-fee standard operation signs none, so it lists only those an account of the
+ *  person already gave. Nothing is rendered when there is nothing to list: an absent row must not
+ *  read as a claim of absence. */
 type AuthwitSurface =
 	| { kind: "list"; authwits: readonly DiscoveredAuthwit[] }
 	| { kind: "pending" }
@@ -268,10 +268,13 @@ const summaryAuthwits = computed(() =>
 	authwits.value.kind === "list" ? authwits.value.authwits.map((authwit) => ({ authwit, surface: authwitArgs(authwit) })) : undefined,
 )
 
-/** The details keep what the wallet signs apart from what another account already gave; `k` stays
- *  each record's index in the listed order, which the advice reads. */
+/** The details keep what the wallet signs apart from what an account already gave, the sending
+ *  account's own apart from another's; `k` stays each record's index in the listed order, which the
+ *  advice reads. */
 const authwitGroups = computed(() => {
 	const rows = (authwits.value.kind === "list" ? authwits.value.authwits : []).map((a, k) => ({ a, k }))
+	const sender = props.op.kind === "aztec_sendTx" ? props.op.accountAddress : ""
+	const bySender = (a: DiscoveredAuthwit) => a.onBehalfOf !== undefined && sameFieldAddress(a.onBehalfOf, sender)
 	return [
 		{
 			testid: "execute-op-discovered-authwits",
@@ -279,9 +282,14 @@ const authwitGroups = computed(() => {
 			rows: rows.filter(({ a }) => a.onBehalfOf === undefined),
 		},
 		{
+			testid: "execute-op-sender-authwits",
+			label: "Authorizations this account already gave",
+			rows: rows.filter(({ a }) => bySender(a)),
+		},
+		{
 			testid: "execute-op-consumed-authwits",
 			label: "Authorizations your other accounts already gave",
-			rows: rows.filter(({ a }) => a.onBehalfOf !== undefined),
+			rows: rows.filter(({ a }) => a.onBehalfOf !== undefined && !bySender(a)),
 		},
 	].filter((group) => group.rows.length)
 })

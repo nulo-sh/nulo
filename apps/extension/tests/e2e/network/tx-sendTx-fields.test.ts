@@ -1,7 +1,11 @@
 import { expect, inject } from "vitest"
 import { REFUSAL_REASON } from "@/popup/windows/execute/refusal"
-import { SCOPE_VIOLATION_ENVELOPE } from "@/wallet/services/wallet-sdk/error-envelope"
-import { clickByTestId, test } from "../fixtures/extension"
+import { UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE } from "@/wallet/services/wallet-sdk/error-envelope"
+import { switchAccountByAddress } from "../fixtures/accounts"
+import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
+import { waitForSendRecord } from "../fixtures/journal"
+import { readJournalDetail } from "../fixtures/journal-page"
+import { shotSend } from "../fixtures/shots"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { assertPgOk, setPgInputs, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { readyAuthwitOwner } from "../fixtures/send"
@@ -16,7 +20,7 @@ const hasConfig = aztecConfig !== undefined
  * first-read checkpointed receipt is valid here; the unit tests pin the polling order. The witness
  * the dApp attaches routes the estimate through classic discovery. The first send readies the owner
  * (`readyAuthwitOwner`). A send that needs the owner's authorization without carrying it is held as a refusal the app hears on
- * Reject; one that carries it names the owner on its authorization row.
+ * Reject, and History names what it left out; one that carries it names the owner on its authorization row.
  */
 test.skipIf(!hasConfig)(
 	"tx-sendTx-fields — a waiting send gets its checkpointed receipt; a send reads its additional scope's notes and names its authorization",
@@ -45,11 +49,12 @@ test.skipIf(!hasConfig)(
 			confirm: document.querySelector('[data-testid="execute-confirm-btn"]') !== null,
 		}))
 		expect(held).toEqual({ kind: "unattached", reason: REFUSAL_REASON.unattached, confirm: false })
+		await shotSend(refused, "unattached-refusal", "execute-op-refusal")
 		await rejectExecute(refused)
 		const answer = await waitForPgResult(page, "sendTx", refusedSeq, 120_000)
 		expect({ status: answer.status, error: answer.errorJson }).toEqual({
 			status: "error",
-			error: { message: JSON.stringify(SCOPE_VIOLATION_ENVELOPE) },
+			error: { message: JSON.stringify(UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE) },
 		})
 
 		const seq = await snapshotResultSeq(page)
@@ -79,5 +84,18 @@ test.skipIf(!hasConfig)(
 		const sent = await waitForPgResult(page, "sendTx", seq, 300_000)
 		await assertPgOk(page, sent, "fields:additionalScope")
 		expect((sent.resultJson as { txHash?: unknown }).txHash).toEqual(expect.stringMatching(/^0x[0-9a-f]{64}$/))
+
+		// History shows the selected account's records only, and the refused send was the sender's.
+		const wallet = await openPopup(ctx)
+		await waitForHash(wallet, "#/popup/general")
+		await switchAccountByAddress(wallet, sender)
+		const record = await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "failed")
+		expect(await readJournalDetail(wallet, record.id, "unattached-history")).toEqual({
+			"journal-detail-category": "Not allowed",
+			"journal-detail-context": "The app did not include an authorization from another of your accounts. Nothing was sent.",
+			"journal-detail-state": "Failed",
+			"journal-detail-method": "Transaction",
+			"journal-detail-error-message": null,
+		})
 	},
 )

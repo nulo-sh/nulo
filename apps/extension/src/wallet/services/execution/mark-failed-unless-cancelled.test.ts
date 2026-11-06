@@ -17,6 +17,7 @@ import {
 	ScopeViolationError,
 	SessionEndedError,
 	TooManyPendingError,
+	UnattachedAuthorizationRefusalError,
 } from "@nulo/extension-messaging/errors"
 import type { FunctionAbi } from "@aztec-labs/stdlib/abi"
 import type { JournalRetitle } from "@/wallet/services/operation-journal/spec"
@@ -116,6 +117,13 @@ describe("markFailedUnlessCancelled", () => {
 		const plain = new Error(DefaultEntrypointPublicCallError.MESSAGE)
 		await markFailedUnlessCancelled(plain, "j2", lane)
 		expect(lane.markJournal).toHaveBeenLastCalledWith("j2", { stage: "failed" }, normalizeError(plain, "dapp_execute"), undefined)
+	})
+
+	test("another account's authorization left out of a dApp send records unattached_refused", async () => {
+		const lane = fakeLane()
+		const error = new UnattachedAuthorizationRefusalError()
+		await markFailedUnlessCancelled(error, "j1", lane)
+		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "unattached_refused"), undefined)
 	})
 
 	test("a call-binding refusal retitles the record in its failing write; an inner call or a plain failure never does", async () => {

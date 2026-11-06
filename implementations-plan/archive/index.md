@@ -14,6 +14,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [amount-honesty](amount-honesty/plan.md) — completed — the wallet never guesses an amount's magnitude, and what it cannot state exactly it does not state
 - [approval-card-decoding](approval-card-decoding/plan.md) — completed — a readable execute-window approval card that decodes call arguments without guessing
 - [approval-scope-follow](approval-scope-follow/plan.md) — completed — a dApp transaction runs in the scope the dApp pinned, with a banner when the wallet's view differs
+- [authwit-copy-1](authwit-copy-1/plan.md) — completed — an app-paid window names the sender's attached authorization; an unattached refusal gets its own History text and app error
 - [authwit-index-1](authwit-index-1/plan.md) — completed — a dApp send's public authwits reach the index whatever History's write does, and are listed once the network took the send
 - [authwit-lifecycle-and-execution-followups](authwit-lifecycle-and-execution-followups/plan.md) — completed — a testable public-authwit lifecycle, plus the previous arc's execution follow-ups
 - [aztec-4.2.0-bump](aztec-4.2.0-bump/plan.md) — superseded by aztec-5.0-upgrade — move the Aztec packages from the last 4.2.0 nightly to the 4.2.0 stable release
@@ -546,3 +547,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [double-optin-1](double-optin-1/plan.md) — completed — the mailing list confirms each signup by email before it counts (#1236)
 - [lows-1](lows-1/plan.md) — completed — a passkey answer is used in the step that collected it: three passkey flows take the new secret first, and any restore opens only on its own admission (#1693 and arc 2)
 - [prover-warm-1](prover-warm-1/plan.md) — completed — a kept-warm browser prover saves under 1 s at the median, so nothing ships; #1623 a known limit
+- [token-digits-1](token-digits-1/plan.md) — completed — list amounts follow one tiered digits rule, truncated ahead of the width cut, and a split side never reads 0 (#1702); #1708 a known limit

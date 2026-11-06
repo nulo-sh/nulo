@@ -486,6 +486,34 @@ describe("OperationCard — an authorization another account of the profile alre
 		expect(rows(await mountListing([OWN, CONSUMED], appPaid))).toEqual([CONSUMED_ROW])
 		expect(rows(await mountListing([OWN], appPaid))).toEqual([])
 	})
+
+	test("an app-paid send names the account's own attached authorization as the account's, in a details group of its own", async () => {
+		const op = fixtureOp() as unknown as { exec: object }
+		const appPaid = { ...op, exec: { ...op.exec, feePayer: VAULT } }
+		const ATTACHED = { ...OWN, onBehalfOf: MAIN }
+		const w = await mountListing([ATTACHED, CONSUMED], appPaid)
+		expect(read(w, "execute-discovered-authwit-line")).toEqual([
+			`Lets ${trimAddress(HUB)} move 25 USDC from Main to ${trimAddress(HUB)}`,
+			`Lets Main move 1 USDC from Savings to ${trimAddress(RECIPIENT)}`,
+		])
+		expect(rows(w)).toEqual([{ hash: OWN.messageHash, onBehalf: MAIN, line: "Already authorized by Main." }, CONSUMED_ROW])
+		await toggle(w).trigger("click")
+		const GROUPS = ["execute-op-discovered-authwits", "execute-op-sender-authwits", "execute-op-consumed-authwits"]
+		const groups = w.findAll(GROUPS.map((id) => `[data-testid="${id}"]`).join(", ")).map((group) => ({
+			group: group.attributes("data-testid"),
+			label: group.find("span").text(),
+			hashes: group.findAll('[data-testid="execute-op-discovered-authwit"]').map((row) => row.attributes("data-message-hash")),
+		}))
+		expect(groups).toEqual([
+			{ group: "execute-op-sender-authwits", label: "Authorizations this account already gave", hashes: [OWN.messageHash] },
+			{
+				group: "execute-op-consumed-authwits",
+				label: "Authorizations your other accounts already gave",
+				hashes: [CONSUMED.messageHash],
+			},
+		])
+		expect(read(w, "execute-discovered-authorized-by")).toEqual(["Main", "Savings"])
+	})
 })
 
 describe("OperationCard — a default-entrypoint send whose authorization preview failed", () => {
