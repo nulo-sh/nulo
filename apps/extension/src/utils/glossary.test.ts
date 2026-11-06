@@ -94,6 +94,20 @@ const SPEC = [
 		"A contract's interface names a call's arguments; without it Nulo shows the raw values.",
 		"Approval window",
 	],
+	[
+		"Apps",
+		"discover",
+		"Discover",
+		"A site learning that Nulo is installed, and its version, so it can ask to connect.",
+		"Connect window",
+	],
+	[
+		"Apps",
+		"connection-check",
+		"Connection check",
+		"Emojis you compare with the site's, so no one can sit between Nulo and the site.",
+		"Connect window",
+	],
 	["Transactions", "proof", "Proof", "What your device builds to show a transaction is valid without revealing what's in it.", "Proving"],
 	[
 		"Transactions",
