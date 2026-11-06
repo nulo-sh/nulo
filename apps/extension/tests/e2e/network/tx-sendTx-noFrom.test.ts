@@ -61,15 +61,12 @@ test.skipIf(!hasConfig)(
 		const seqTx = await snapshotResultSeq(page)
 		const execute = await openNoFromWindow(ctx, page, "pg-btn-sendTx-noFrom")
 		expect(await execute.$(FEE_SET_BADGE)).not.toBeNull()
-		const refusal = await execute.waitForSelector('[data-testid="execute-op-refusal"][data-kind="public"]', {
-			visible: true,
-			timeout: 60_000,
-		})
-		expect(await refusal?.$eval('[data-testid="execute-op-refusal-reason"]', (el) => el.textContent?.trim())).toBe(
+		await execute.waitForSelector('[data-testid="execute-op-refusal"][data-kind="public"]', { visible: true, timeout: 60_000 })
+		expect(await execute.$eval('[data-testid="execute-op-refusal-reason"]', (el) => el.textContent?.trim())).toBe(
 			"This transaction runs a public call without an account, which Nulo can't send. Reject tells the app.",
 		)
 		expect(await execute.$('[data-testid="execute-confirm-btn"]')).toBeNull()
-		await shotSend(execute, "p110-q6-public-refused", "execute-op-refusal")
+		await shotSend(execute, "execute-public-refused", "execute-op-refusal")
 		await rejectExecute(execute)
 		await waitForPopupClosed(execute)
 

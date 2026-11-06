@@ -202,7 +202,11 @@ test.skipIf(!hasConfig)(
 		await shotSend(feePopup, "fee-window-raised", "fee-raised")
 		// What leaves the account opens the window's own fee block.
 		const leaves = await feePopup.$$eval('[data-testid="execute-op-leaves-row"]', (rows) =>
-			rows.map((row) => [...row.querySelectorAll("span")].map((el) => el.textContent?.replace(/\s+/g, " ").trim())),
+			rows.map((row) =>
+				["execute-op-leaves-count", "execute-op-leaves-amount"].map((id) =>
+					row.querySelector(`[data-testid="${id}"]`)?.textContent?.replace(/\s+/g, " ").trim(),
+				),
+			),
 		)
 		expect(leaves).toEqual([["1 transfer", expect.stringMatching(/ TST$/)]])
 		expect(
@@ -211,7 +215,7 @@ test.skipIf(!hasConfig)(
 				return raised !== null && (block.compareDocumentPosition(raised) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
 			}),
 		).toBe(true)
-		await shotSend(feePopup, "p110-q3-leaves-raised", "execute-op-leaves-account")
+		await shotSend(feePopup, "execute-leaves-raised-fee", "execute-op-leaves-account")
 		// The dApp's own row is pending from its request on; only a settled one would mean an answer.
 		const settled = await page.evaluate(
 			(after) =>

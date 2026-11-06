@@ -118,10 +118,14 @@ test.skipIf(!hasConfig)(
 		})
 		// What the donation signs away opens the fee section: one authorization, the pulled amount.
 		const leaves = await execPopup.$$eval('[data-testid="execute-op-leaves-row"]', (rows) =>
-			rows.map((row) => [...row.querySelectorAll("span")].map((el) => el.textContent?.replace(/\s+/g, " ").trim())),
+			rows.map((row) =>
+				["execute-op-leaves-count", "execute-op-leaves-amount"].map((id) =>
+					row.querySelector(`[data-testid="${id}"]`)?.textContent?.replace(/\s+/g, " ").trim(),
+				),
+			),
 		)
 		expect(leaves).toEqual([["1 authorization", "5 PULL"]])
-		await shotSend(execPopup, "p110-q4-leaves-authorization", "execute-op-leaves-account")
+		await shotSend(execPopup, "execute-leaves-authorization", "execute-op-leaves-account")
 
 		await approveExecute(execPopup)
 

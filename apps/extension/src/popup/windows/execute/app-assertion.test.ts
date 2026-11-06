@@ -47,8 +47,8 @@ describe("appAssertion", () => {
 		expect(appAssertion(inTransfer("Balance too low"), [{ ...transfer, to: 5 }])).toBeUndefined()
 	})
 
-	test("controls and newlines are stripped, the trailing stop trimmed, and the text capped at 120", () => {
-		expect(appAssertion(inTransfer("‮Balance\u0000 too\nlow. ‏"), [transfer])).toBe("Balance toolow")
+	test("controls are stripped, a line break read as a space, the trailing stop trimmed, and the text capped at 120", () => {
+		expect(appAssertion(inTransfer("‮Balance\u0000 too\nlow. ‏"), [transfer])).toBe("Balance too low")
 		const long = appAssertion(inTransfer("a".repeat(300)), [transfer])
 		expect(long).toBe(`${"a".repeat(120)}…`)
 		expect(appAssertion(inTransfer("‮\u0007 ."), [transfer])).toBeUndefined()

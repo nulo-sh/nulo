@@ -23,8 +23,8 @@
  *     `"Method not found"` — per-action resolution failures
  *   - `"Invalid authwit content kind"` — unrecognized authwit `content.kind`
  *   - `"DefaultEntrypoint requires exactly 1 call, got ${n}"`
- *   - `DefaultEntrypointPublicCallError` — a NO_FROM call to a public function, which the window
- *     refuses up front; any other non-private type keeps the plain
+ *   - `DefaultEntrypointPublicCallError` — a NO_FROM call to a public function, typed so the
+ *     request records it as its refusal; any other non-private type keeps the plain
  *     `"DefaultEntrypoint only supports private functions"`
  *
  * ## Public authwits: collected here, recorded POST-send

@@ -160,8 +160,11 @@ export const decodeFixture = async ({ vaultDecoded = true } = {}) => {
 	}
 }
 
+/** The decode the window fetches for an authorization on the fixture's USDC. */
+export const decodeAuthwit = (authwit: DiscoveredAuthwit): Promise<DecodedCall> => decodeCallForDisplay(lookup, authwitDisplayCall(authwit))
+
 /** The decode the window fetches for {@link CONSUMED}. */
-export const decodeConsumed = (): Promise<DecodedCall> => decodeCallForDisplay(lookup, authwitDisplayCall(CONSUMED))
+export const decodeConsumed = (): Promise<DecodedCall> => decodeAuthwit(CONSUMED)
 
 /** A `grantPublicAuthwit` content as the playground sends it: the owner and spender as hex, the
  *  amount and nonce as decimal strings. */

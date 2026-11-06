@@ -530,12 +530,12 @@ test.skipIf(!hasConfig)(
 		await clickByTestId(pg, "pg-btn-sendTx-default")
 		const execute = await opened
 		const LINE = "The app's transaction cannot run right now: Balance too low. Fee estimation needs it to run."
-		const line = await execute.waitForSelector(sel("execute-op-app-failure"), { visible: true, timeout: 180_000 })
-		expect(await line?.evaluate((el) => el.textContent?.replace(/\s+/g, " ").trim())).toBe(LINE)
+		await execute.waitForSelector(sel("execute-op-app-failure"), { visible: true, timeout: 180_000 })
+		expect(await execute.$eval(sel("execute-op-app-failure"), (el) => el.textContent?.replace(/\s+/g, " ").trim())).toBe(LINE)
 		// The line and the snack it replaces are decided in one handler, so the snack's absence is settled here.
 		expect(await execute.$(SNACK)).toBeNull()
 		expect(await execute.$(sel("fee-estimate-failed"))).not.toBeNull()
-		await shotSend(execute, "p110-1619-app-failure", "execute-op-app-failure")
+		await shotSend(execute, "execute-app-assertion", "execute-op-app-failure")
 
 		// Try again asks again: the line leaves with its failure, and the same failure brings it back.
 		await clickByTestId(execute, "fee-estimate-retry")

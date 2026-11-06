@@ -249,7 +249,6 @@ export const accountOutflows = (
 	}))
 }
 
-/** "1 transfer", "2 authorizations", or both joined: the counts a row of the block names. */
 export const outflowLabel = ({ transfers, authorizations }: Pick<AccountOutflow, "transfers" | "authorizations">): string =>
 	[
 		transfers ? `${transfers} ${pluralize(transfers, "transfer", "transfers")}` : "",

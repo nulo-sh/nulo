@@ -19,6 +19,7 @@ import type { DecodedCall, DiscoveredAuthwit } from "@/wallet/services/execution
 import {
 	AUTHWITS,
 	CONSUMED,
+	decodeAuthwit,
 	decodeConsumed,
 	decodeFixture,
 	feeEstimateWith,
@@ -626,6 +627,11 @@ describe("OperationCard — what leaves the account opens the fee section", () =
 		const { op, decodedCalls } = request([exit])
 		const estimated = await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([...AUTHWITS, CONSUMED]) }, op)
 		expect(rows(estimated)).toEqual([["1 authorization", "25 USDC"]])
+		// Another account's signature naming this account's tokens, called by a contract: still not this account's.
+		const forged: DiscoveredAuthwit = { ...CONSUMED, caller: HUB, args: [MAIN, ...CONSUMED.args.slice(1)], messageHash: field(0xf0f0n) }
+		decodedAuthwits.set(forged.messageHash, await decodeAuthwit(forged))
+		const withForged = await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([...AUTHWITS, forged]) }, op)
+		expect(rows(withForged)).toEqual([["1 authorization", "25 USDC"]])
 
 		const raised = mount(OperationCard, {
 			props: { op: op as never, index: 0, tokens: [USDC_TOKEN], decodedCalls, decodedAuthwits, approvedAuthwits: AUTHWITS },

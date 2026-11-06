@@ -247,7 +247,6 @@ const reportsEstimateFailure = (op: UIOperation): boolean => !isAppPaid(op) || p
 /** Only a send whose fee card the window draws shows the app's failure in place of the snack. */
 const feeCardAppFailure = (op: UIOperation | undefined, err: unknown): string | undefined =>
 	op?.kind === "aztec_sendTx" && !isEmbeddedFeePayment(op) ? appAssertion(err, (op.exec?.calls ?? []) as WireCall[]) : undefined
-/** Closes the snack `id` names, unless another has replaced it. */
 const retireSnack = (id: number | undefined) => {
 	if (id !== undefined && toast.value?.id === id) closeToast()
 }
