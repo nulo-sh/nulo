@@ -178,7 +178,8 @@ describe("onboarding tab", () => {
 		await page.evaluate(() => {
 			const button = document.querySelector('[data-testid="onboarding-submit-create"]')
 			const field = document.querySelector('[data-testid="onboarding-password-confirm"]')
-			const atCreating = new Promise<number>((resolve) => {
+			const atCreating = new Promise<number>((resolve, reject) => {
+				setTimeout(() => reject(new Error("the create button never read Creating...")), 15_000)
 				new MutationObserver((_, observer) => {
 					if (!button?.textContent?.includes("Creating...") || !field) return
 					observer.disconnect()

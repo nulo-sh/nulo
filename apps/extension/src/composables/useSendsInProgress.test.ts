@@ -301,19 +301,40 @@ describe("useSendsInProgress — a dismissal lasts its session", () => {
 		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
 	})
 
-	test("a × after the worker's session moved writes under the handle read at the reset, never the new one", async () => {
+	test("a × after the worker's session moved writes nothing; the session read at the reset stays the one compared", async () => {
 		const op = send()
 		const h = track(harness({ stored: [op] }))
 		await settle()
 		h.handle.value = "w:2"
 		h.toasts.closeToast()
 		await settle()
-		expect(h.area.data).toStrictEqual({ [dismissedKey(op)]: "w:1" })
-		expect(h.session).toHaveBeenCalledTimes(1)
+		expect(h.area.set).not.toHaveBeenCalled()
+		expect(h.session).toHaveBeenCalledTimes(2)
 		h.scope.value = undefined
 		h.scope.value = A
 		await settle()
 		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
+	})
+
+	test("a lock a stale document hears late never overwrites the next session's dismissal", async () => {
+		// A send at submitting outlives a lock; under the next session another document already closed its toast.
+		const op = send({ progress: { stage: "submitting" } })
+		const area = sessionArea({ [dismissedKey(op)]: "w:2" })
+		const stale = track(harness({ stored: [op], area }))
+		await settle()
+		expect(stale.label()).toBe("Sending 10 TST to 0x04d7…457a")
+		stale.handle.value = "w:2"
+		// Its lock closes its own toast before its scope resets.
+		stale.toasts.closeToast()
+		stale.scope.value = undefined
+		await settle()
+		expect(area.set).not.toHaveBeenCalled()
+		expect(area.data).toStrictEqual({ [dismissedKey(op)]: "w:2" })
+		stale.stop()
+
+		const reopened = track(harness({ stored: [op], area, session: async () => "w:2" }))
+		await settle()
+		expect(reopened.toasts.toast.value).toBeNull()
 	})
 
 	test("a dismissed send's toast never opens, not even before its key is read", async () => {

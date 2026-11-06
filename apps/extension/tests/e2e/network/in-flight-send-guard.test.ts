@@ -52,22 +52,23 @@ async function waitForInFlightSend(page: Page, timeout = 60_000): Promise<void> 
 	)
 }
 
-/** Whether the page shows the Sending toast; a toast is asserted by its text, never clicked by it. */
-const showsSending = (page: Page): Promise<boolean> =>
-	page.evaluate(() =>
-		Array.from(document.querySelectorAll('[data-testid="snackbar-title"]')).some((title) => title.textContent?.startsWith("Sending")),
-	)
-
-/** Records, from now on, every moment the page shows the Sending toast; read with `sendingSeen`. */
-async function watchForSending(page: Page): Promise<void> {
-	await page.evaluate(() => {
+/**
+ * Records, from now on, every moment the page shows the Sending toast (read with `sendingSeen`), and
+ * answers whether it shows one already, checked in the same task the observer starts. A toast is
+ * asserted by its text, never clicked by it.
+ */
+async function watchForSending(page: Page): Promise<boolean> {
+	return page.evaluate(() => {
 		const seen: string[] = []
 		Object.assign(window, { __sendingSeen: seen })
+		const showing = () =>
+			Array.from(document.querySelectorAll('[data-testid="snackbar-title"]')).filter((title) =>
+				title.textContent?.startsWith("Sending"),
+			)
 		new MutationObserver(() => {
-			for (const title of document.querySelectorAll('[data-testid="snackbar-title"]')) {
-				if (title.textContent?.startsWith("Sending")) seen.push(title.textContent)
-			}
+			for (const title of showing()) seen.push(title.textContent ?? "")
 		}).observe(document.body, { childList: true, subtree: true, characterData: true })
+		return showing().length > 0
 	})
 }
 
@@ -184,8 +185,7 @@ test.skipIf(!hasConfig)(
 				await opened.waitForSelector('[data-testid="tx-awaiting-cancel"]', { visible: true, timeout: 30_000 })
 				// The toast closes only when its send ends, a × or a reset, none of which comes before the
 				// release: one already shown here would still be up.
-				expect(await showsSending(opened)).toBe(false)
-				await watchForSending(opened)
+				expect(await watchForSending(opened)).toBe(false)
 				return opened
 			})
 			const stored = await step("the send's dismissal is stored under the session", async () => {
