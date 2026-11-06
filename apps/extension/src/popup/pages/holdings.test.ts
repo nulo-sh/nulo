@@ -176,8 +176,23 @@ describe("holdings page", () => {
 		expect(symbols).toEqual(["AAA", "BBB"])
 		const summary = w.find('[data-testid="holdings-summary"]').text()
 		expect(summary).toContain("$1,250.00")
-		expect(summary).toContain("2 tokens")
-		expect(summary).toContain("priced assets only") // BBB is unpriced
+		expect(w.get('[data-testid="holdings-meta"]').text()).toBe("2 tokens")
+	})
+
+	// The total tells the two apart: an unpriced holding counts but adds nothing to it.
+	test.each([
+		["one of two holdings unpriced", row("b2", "BBB", CHAIN_IDS.TESTNET), "$1,250.00"],
+		["both holdings priced", row("b2", "USDT", CHAIN_IDS.TESTNET, TEST_TOKENS.USDT), "$2,500.00"],
+	])("with %s, the meta line is the count alone beside the priced total", async (_, second, figure) => {
+		installChromeStorage()
+		mockQuotes = Object.fromEntries(
+			["usd-coin", "tether"].map((id) => [id, { coingeckoId: id, usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null }]),
+		)
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC), second]
+		const w = await mountPage()
+		expect(w.get('[data-testid="holdings-total"]').text()).toBe(figure)
+		expect(w.get('[data-testid="holdings-meta"]').text()).toBe("2 tokens")
+		expect(w.get('[data-testid="holdings-summary"]').text()).not.toMatch(/priced/)
 	})
 
 	test("one row being refreshed shows one grey dot beside All holdings and no mark on any row, until its task finishes", async () => {
@@ -511,8 +526,7 @@ describe("holdings page — prices unavailable", () => {
 	})
 })
 
-// The summary also holds a hidden ruler that repeats the figure and the meta line, so these read the
-// visible spans only.
+// The summary also holds a hidden ruler that repeats the figure, so these read the visible spans only.
 describe("holdings page — before the first price answer", () => {
 	const total = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="holdings-total"]')
 	const meta = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="holdings-meta"]').text()
@@ -537,7 +551,7 @@ describe("holdings page — before the first price answer", () => {
 		expect(skeleton(w).exists()).toBe(false)
 		expect(total(w).attributes("aria-busy")).toBeUndefined()
 		expect(total(w).text()).toBe("$1,250.00")
-		expect(meta(w)).toBe("2 tokens · priced assets only")
+		expect(meta(w)).toBe("2 tokens")
 	})
 
 	test("while the list reads, the total is the skeleton and no count shows; the list's answer brings the count, the price answer the figure", async () => {
@@ -601,7 +615,7 @@ describe("holdings page — before the first price answer", () => {
 		expect(skeleton(w).exists()).toBe(false)
 		expect(total(w).attributes("aria-busy")).toBeUndefined()
 		expect(total(w).text()).toBe("$0.00")
-		expect(meta(w)).toBe("1 token · priced assets only")
+		expect(meta(w)).toBe("1 token")
 	})
 })
 
@@ -626,27 +640,49 @@ describe("holdings page — the total fits beside its meta line", () => {
 		expect((figures[0].element as HTMLElement).style.getPropertyValue("--hero-scale")).toBe(scale)
 	})
 
-	// "2 tokens · priced assets only" in a 7 px stand-in: 203 px on one line, 42 px at its narrowest
-	// ("tokens", "priced", "assets"), which only the hidden ruler is laid out at.
+	// "2 tokens" in a 7 px stand-in: 56 px whole, 42 px at its narrowest word. The meta line never
+	// wraps, so the total's room is the line less the whole count.
 	test.each([
-		["at the page's width", 312],
-		["4 px clear of the meta line at its narrowest", 117 + 42 + 4],
-		["when the measured room rounds a hair short of it", 117 + 42 - 0.02],
-	])("a total beside a partial meta line keeps 26 px %s", async (_, width) => {
+		["keeps 26 px at the page's width", 312, "1"],
+		["keeps 26 px 4 px clear of the whole count", 117 + 56 + 4, "1"],
+		["keeps 26 px when the measured room rounds a hair short of it", 117 + 56 - 0.02, "1"],
+		["shrinks, 8 px clear of the count, where only its narrowest word would leave it room", 117 + 42 + 4, "0.84"],
+	])("a total beside the count %s", async (_, width, scale) => {
 		installChromeStorage()
 		room = width
 		const metaWidth = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-			const words = (this.textContent ?? "").trim().split(/\s+/)
-			const narrowest = this.closest("[aria-hidden]") !== null
-			return { width: 7 * (narrowest ? Math.max(...words.map((w) => w.length)) : words.join(" ").length) } as DOMRect
+			return { width: 7 * (this.textContent ?? "").trim().length } as DOMRect
 		})
 		try {
 			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
 			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC), row("b2", "BBB", CHAIN_IDS.TESTNET)]
 			const w = await mountPage()
-			expect(w.find('[data-testid="holdings-summary"]').text()).toContain("2 tokens · priced assets only")
+			expect(w.get('[data-testid="holdings-meta"]').text()).toBe("2 tokens")
 			const figure = w.get('[data-testid="holdings-summary"] span[style]').element as HTMLElement
-			expect(figure.style.getPropertyValue("--hero-scale")).toBe("1")
+			expect(figure.style.getPropertyValue("--hero-scale")).toBe(scale)
+		} finally {
+			metaWidth.mockRestore()
+		}
+	})
+
+	// "1 token" is 49 px in the stand-in, "2 tokens" 56: the count alone widens, the total stays.
+	test("a total refits when only the count beside it grows", async () => {
+		installChromeStorage()
+		room = 117 + 49 + 4
+		const metaWidth = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+			return { width: 7 * (this.textContent ?? "").trim().length } as DOMRect
+		})
+		try {
+			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+			const w = await mountPage()
+			const figure = () => w.get('[data-testid="holdings-summary"] span[style]').element as HTMLElement
+			expect(figure().style.getPropertyValue("--hero-scale")).toBe("1")
+			balanceEvents.added.invoke(row("b2", "BBB", CHAIN_IDS.TESTNET))
+			await flushPromises()
+			expect(w.get('[data-testid="holdings-meta"]').text()).toBe("2 tokens")
+			expect(w.get('[data-testid="holdings-total"]').text()).toBe("$1,250.00")
+			expect(figure().style.getPropertyValue("--hero-scale")).toBe("0.9")
 		} finally {
 			metaWidth.mockRestore()
 		}

@@ -383,15 +383,15 @@ describe("TokenCard — R5 layout (subtitle left, private/public split right)", 
 		expect(splitSides(w)).toEqual(["123.45M", "1,234.5"])
 	})
 
-	test("each side shows the total's decimals: 999.999 all public reads 999.999 on its line", async () => {
+	test("the list rule reads 999.999 all public as 999.99 on the total and its side, never rounded up; the empty side reads 0", async () => {
 		mockQuotes = {}
 		const w = factory({ updatedAt: 1, publicBalance: (999_999n * 10n ** 15n).toString() })
 		await flushPromises()
-		expect(w.get('[data-testid="token-amount"]').text()).toBe("999.999")
-		expect(splitSides(w)).toEqual(["0", "999.999"])
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("999.99")
+		expect(splitSides(w)).toEqual(["0", "999.99"])
 	})
 
-	test("sides that differ keep their own digits, cut and never rounded up, as the total is", async () => {
+	test("each side reads at the total's decimals: a dust side under 999.999 reads <0.01, never 0", async () => {
 		mockQuotes = {}
 		const w = factory({
 			updatedAt: 1,
@@ -399,8 +399,8 @@ describe("TokenCard — R5 layout (subtitle left, private/public split right)", 
 			publicBalance: (9_999_985n * 10n ** 14n).toString(),
 		})
 		await flushPromises()
-		expect(w.get('[data-testid="token-amount"]').text()).toBe("999.999")
-		expect(splitSides(w)).toEqual(["0.0005", "999.9985"])
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("999.99")
+		expect(splitSides(w)).toEqual(["<0.01", "999.99"])
 	})
 
 	test("a row the signed list flags reads 'Flagged as a scam' in place of its name; an unflagged row keeps its name", async () => {

@@ -20,12 +20,7 @@ import {
 	type OperationKind,
 } from "@/wallet/services/execution/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import {
-	JobCancelledError,
-	type ScopeViolationError,
-	TermsAcceptanceRequiredError,
-	UserRejectedError,
-} from "@nulo/extension-messaging/errors"
+import { JobCancelledError, TermsAcceptanceRequiredError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/service"
 import { randomIdNotIn } from "@/wallet/services/id-allocators"
 import { Lock } from "@/wallet/utils"
@@ -68,6 +63,7 @@ import {
 	type Methods,
 	type Events,
 	type DappInteraction,
+	type RecordedRefusal,
 	INTERACTION_TIMEOUT_MS,
 } from "./spec"
 
@@ -344,12 +340,12 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	}
 
 	/** Keeps the first refusal an estimate or preview of a still-pending request met. */
-	public recordRefusal(id: string, refusal: ScopeViolationError): void {
+	public recordRefusal(id: string, refusal: RecordedRefusal): void {
 		const interaction = this.storage.get(id)
 		if (interaction && !interaction.refusal) interaction.refusal = refusal
 	}
 
-	public refusalOf(id: string): ScopeViolationError | undefined {
+	public refusalOf(id: string): RecordedRefusal | undefined {
 		return this.storage.get(id)?.refusal
 	}
 

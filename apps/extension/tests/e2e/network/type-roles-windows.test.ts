@@ -444,10 +444,12 @@ async function openExecute(ctx: Connected, { button, inputs, ready, details }: R
 	return win
 }
 
-/** No fee card, its estimate or its Fee Juice nudge shown, or the page's "Couldn't estimate fee" snack. */
+/** No fee card, its estimate or its Fee Juice nudge shown, the app's own failure under it, or the
+ *  page's "Couldn't estimate fee" snack. */
 function feeSettled(): boolean {
 	const card = document.querySelector('[data-testid="fee-settings-card"]')
 	if (!card || card.querySelector('[data-testid="fee-estimate"], [data-testid="send-fee-nudge"]')) return true
+	if (document.querySelector('[data-testid="execute-op-app-failure"]')) return true
 	return [...document.querySelectorAll('[data-testid="snackbar"]')].some((snack) => /estimate fee/i.test(snack.textContent ?? ""))
 }
 

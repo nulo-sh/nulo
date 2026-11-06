@@ -6,7 +6,12 @@
  * lives in a real interaction service.
  */
 import { describe, expect, test, vi } from "vitest"
-import { AuthRegistryRefusalError, JobCancelledError, ScopeViolationError } from "@nulo/extension-messaging/errors"
+import {
+	AuthRegistryRefusalError,
+	DefaultEntrypointPublicCallError,
+	JobCancelledError,
+	ScopeViolationError,
+} from "@nulo/extension-messaging/errors"
 import type { FeeSettings } from "@nulo/wallet-bridge"
 import type { WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { DappInteractionService } from "@/wallet/services/dapp-interaction/service"
@@ -44,6 +49,7 @@ describe("a refusal an estimate or preview meets is the request's", () => {
 	test.each([
 		["estimate", "registry", new AuthRegistryRefusalError(REGISTRY)],
 		["preview", "call binding", new ScopeViolationError("Scope violation: call name does not match selector's function")],
+		["preview", "default-entrypoint public call", new DefaultEntrypointPublicCallError()],
 	] as const)(
 		"the %s that meets a %s refusal records it, and every later attempt answers it without running",
 		async (first, _, refusal) => {
@@ -78,13 +84,15 @@ describe("a refusal an estimate or preview meets is the request's", () => {
 		expect(interactions.refusalOf("req-1")).toBe(first)
 	})
 
-	test("a failure that is not a scope refusal records nothing, and the next estimate runs", async () => {
+	test("a failure that is not a recorded refusal records nothing, and the next estimate runs", async () => {
 		const { self, interactions, dappSendExecutor } = makeSelf()
 		dappSendExecutor.estimateOperationFee.mockRejectedValueOnce(new Error("node unreachable"))
 		dappSendExecutor.previewOperationAuthwits.mockRejectedValueOnce(new JobCancelledError(undefined, { jobId: "t-1" }))
+		dappSendExecutor.previewOperationAuthwits.mockRejectedValueOnce(new Error(DefaultEntrypointPublicCallError.MESSAGE))
 
 		await expect(self.estimateOperationFee("req-1", 0, FEE)).rejects.toThrow("node unreachable")
 		await expect(self.previewOperationAuthwits("req-1", 0)).rejects.toBeInstanceOf(JobCancelledError)
+		await expect(self.previewOperationAuthwits("req-1", 0)).rejects.toThrow(DefaultEntrypointPublicCallError.MESSAGE)
 		expect(interactions.refusalOf("req-1")).toBeUndefined()
 		await expect(self.estimateOperationFee("req-1", 0, FEE)).resolves.toEqual({ estimateId: "e-1" })
 	})

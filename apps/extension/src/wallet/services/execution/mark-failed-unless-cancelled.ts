@@ -1,6 +1,7 @@
 import { type JobError, type JobErrorKind, type JobProgress, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
 import {
 	AuthRegistryRefusalError,
+	DefaultEntrypointPublicCallError,
 	DuplicateInitializationError,
 	ScopeViolationError,
 	SessionEndedError,
@@ -39,8 +40,13 @@ export function markFailedUnlessCancelled(
 	if (error instanceof JobCancelledSentinel) {
 		throw error
 	}
-	const kind = error instanceof ScopeViolationError ? scopeRefusalKind(error) : failureKind(error, "dapp_execute")
+	const kind = error instanceof ScopeViolationError ? scopeRefusalKind(error) : dappFailureKind(error)
 	return lane.markJournal(journalId, { stage: "failed" }, normalizeError(error, kind), refusalOf(error))
+}
+
+/** A public call through the default entrypoint is refused before anything is signed. */
+function dappFailureKind(error: unknown): JobErrorKind {
+	return error instanceof DefaultEntrypointPublicCallError ? "wallet_refused" : failureKind(error, "dapp_execute")
 }
 
 /** The History kind of a scope refusal, by class: every path that journals one reads it here. */

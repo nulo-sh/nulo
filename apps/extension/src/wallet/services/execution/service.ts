@@ -25,7 +25,7 @@ import { OperationJournalService } from "@/wallet/services/operation-journal/ser
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
 import { isApprovedSendInFlight } from "@/utils/in-flight-send"
 import { abortableSleep } from "@/utils/abortable-sleep"
-import { DAPP_INTERACTION_SERVICE_NAME, type ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
+import { DAPP_INTERACTION_SERVICE_NAME, type ExecutionHooks, type RecordedRefusal } from "@/wallet/services/dapp-interaction/spec"
 import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { TaskService, type WrappedTask, ExecuteOperationContent } from "@/wallet/services/task/service"
@@ -36,6 +36,7 @@ import { type CancelOrFailResult, classifyOperationCatch } from "./rpc-cancel"
 import { EstimateCancelRegistry } from "./estimate-cancel-registry"
 import {
 	ContractNotRegisteredError,
+	DefaultEntrypointPublicCallError,
 	InvalidWalletArgumentsError,
 	JobCancelledError,
 	ScopeViolationError,
@@ -120,8 +121,8 @@ export interface InteractionOperationSource {
 	materializeStoredDraft(interactionId: string, index: number): Promise<DraftOperation>
 	materializeQuestionDraft(interactionId: string): Promise<DraftOperation>
 	/** Keeps a refusal an estimate or preview of the request met; a request no longer stored keeps nothing. */
-	recordRefusal(interactionId: string, refusal: ScopeViolationError): void
-	refusalOf(interactionId: string): ScopeViolationError | undefined
+	recordRefusal(interactionId: string, refusal: RecordedRefusal): void
+	refusalOf(interactionId: string): RecordedRefusal | undefined
 }
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
@@ -826,7 +827,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		try {
 			return await run()
 		} catch (error) {
-			if (!(error instanceof ScopeViolationError)) throw error
+			if (!(error instanceof ScopeViolationError || error instanceof DefaultEntrypointPublicCallError)) throw error
 			source.recordRefusal(interactionId, error)
 			throw source.refusalOf(interactionId) ?? error
 		}

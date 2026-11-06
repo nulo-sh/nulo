@@ -3,9 +3,10 @@ import { expect, inject } from "vitest"
 import { UNCLASSIFIED_ERROR_MESSAGE } from "@/wallet/services/wallet-sdk/error-envelope"
 import { waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, type ExtensionContext, grantCapBundle, openPopup, test } from "../fixtures/extension"
-import { readSendRecords, type SendRecordView, waitForSendRecord } from "../fixtures/journal"
+import { readSendRecords, type SendRecordView, waitForDappExecuteOutcomes, waitForSendRecord } from "../fixtures/journal"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult, waitForPgResults } from "../fixtures/playground"
-import { approveExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
+import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
+import { shotSend } from "../fixtures/send-page"
 import { expectWindowHeldBehindProof, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -15,8 +16,8 @@ const hasConfig = aztecConfig !== undefined
  * Test #30 — `sendTx` with `from: "NO_FROM"` runs the dApp's one call through the default
  * entrypoint: no account is the caller, and the app sets the fee (the window shows the fee-set
  * badge, no fee picker). The default entrypoint runs only a private function: a public call is
- * refused after approval, and the dApp learns nothing more than the wallet's constant for an
- * unclassified throw. `SponsoredFPC.sponsor_unconditionally` is the private call that stands alone:
+ * refused before approval, by the check the send runs, and the dApp learns nothing more than the
+ * wallet's constant for an unclassified throw. `SponsoredFPC.sponsor_unconditionally` is the private call that stands alone:
  * it reads no sender and pays its own fee, so it lands, and two at once both land, one at a time:
  * the second window waits for its preview, Confirm off, while the first proves.
  *
@@ -49,7 +50,7 @@ const dappSends = async (wallet: Page): Promise<SendRecordView[]> =>
 	(await readSendRecords(wallet)).filter((r) => r.kind === "dapp_execute")
 
 test.skipIf(!hasConfig)(
-	"tx-sendTx-noFrom — a public call is refused after approval, and the dApp gets only the wallet's constant",
+	"tx-sendTx-noFrom — a public call is refused before approval: the window names it, only Reject shows, and Reject answers with the wallet's constant",
 	{ timeout: 120_000 },
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const page = ctx.playgroundPage
@@ -60,7 +61,14 @@ test.skipIf(!hasConfig)(
 		const seqTx = await snapshotResultSeq(page)
 		const execute = await openNoFromWindow(ctx, page, "pg-btn-sendTx-noFrom")
 		expect(await execute.$(FEE_SET_BADGE)).not.toBeNull()
-		await approveExecute(execute)
+		await execute.waitForSelector('[data-testid="execute-op-refusal"][data-kind="public"]', { visible: true, timeout: 60_000 })
+		expect(await execute.$eval('[data-testid="execute-op-refusal-reason"]', (el) => el.textContent?.trim())).toBe(
+			"This transaction runs a public call without an account, which Nulo can't send. Reject tells the app.",
+		)
+		expect(await execute.$('[data-testid="execute-confirm-btn"]')).toBeNull()
+		await shotSend(execute, "execute-public-refused", "execute-op-refusal")
+		await rejectExecute(execute)
+		await waitForPopupClosed(execute)
 
 		const result = await waitForPgResult(page, "sendTx", seqTx, 60_000)
 		expect({ status: result.status, error: result.errorJson }).toEqual({
@@ -68,8 +76,10 @@ test.skipIf(!hasConfig)(
 			error: { message: JSON.stringify(UNCLASSIFIED_ERROR_MESSAGE) },
 		})
 		const wallet = await openPopup(ctx)
-		await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "failed")
-		expect((await dappSends(wallet)).map((r) => r.stage)).toEqual(["failed"])
+		const outcomes = await waitForDappExecuteOutcomes(wallet, "the refused request's record", (rows) =>
+			rows.some((r) => r.stage === "failed"),
+		)
+		expect(outcomes.map(({ stage, failure }) => ({ stage, failure }))).toEqual([{ stage: "failed", failure: "wallet_refused" }])
 	},
 )
 

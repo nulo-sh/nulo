@@ -227,6 +227,8 @@ declare global {
   const forChain: typeof import('../utils/token-order').forChain
   const formatBaseUnits: typeof import('../utils/amount').formatBaseUnits
   const formatGasBalance: typeof import('../utils/fee-estimation').formatGasBalance
+  const formatListAmount: typeof import('../utils/amount').formatListAmount
+  const formatListSplit: typeof import('../utils/amount').formatListSplit
   const formatSnackAmount: typeof import('../utils/snack-amount').formatSnackAmount
   const formatTransferType: typeof import('../utils/tx-enrichment').formatTransferType
   const fullBackupFileName: typeof import('../utils/full-backup-helpers').fullBackupFileName
@@ -1157,6 +1159,8 @@ declare module 'vue' {
     readonly forChain: UnwrapRef<typeof import('../utils/token-order')['forChain']>
     readonly formatBaseUnits: UnwrapRef<typeof import('../utils/amount')['formatBaseUnits']>
     readonly formatGasBalance: UnwrapRef<typeof import('../utils/fee-estimation')['formatGasBalance']>
+    readonly formatListAmount: UnwrapRef<typeof import('../utils/amount')['formatListAmount']>
+    readonly formatListSplit: UnwrapRef<typeof import('../utils/amount')['formatListSplit']>
     readonly formatSnackAmount: UnwrapRef<typeof import('../utils/snack-amount')['formatSnackAmount']>
     readonly formatTransferType: UnwrapRef<typeof import('../utils/tx-enrichment')['formatTransferType']>
     readonly fullBackupFileName: UnwrapRef<typeof import('../utils/full-backup-helpers')['fullBackupFileName']>

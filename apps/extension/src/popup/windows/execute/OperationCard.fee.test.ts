@@ -216,6 +216,44 @@ describe("OperationCard — a wire-shaped transaction whose estimate failed", ()
 		await w.setProps({ estimateFailed: false })
 		expect(w.find('[data-testid="fee-estimate-failed"]').exists()).toBe(false)
 	})
+
+	test("the app's own failure: one line under the fee card, its text isolated, in a polite region mounted with the card", async () => {
+		const w = await mountCard(sendTx(), undefined, { feeEstimate: undefined, estimateFailed: true })
+		const live = w.get('[data-testid="execute-op-app-failure-live"]')
+		expect(live.attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+		expect(live.find('[data-testid="execute-op-app-failure"]').exists()).toBe(false)
+		await w.setProps({ appFailure: "Balance too low" })
+		const line = live.get('[data-testid="execute-op-app-failure"]')
+		expect(line.text()).toBe("The app's transaction cannot run right now: Balance too low. Fee estimation needs it to run.")
+		expect(line.get("bdi").text()).toBe("Balance too low")
+		expect(line.classes()).toContain("color--txt-danger")
+		expect(fee(w).element.compareDocumentPosition(line.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+	})
+
+	test.each([
+		[
+			"a fee the app pays",
+			{ ...sendTx({ feePayer: `0x${"2f".repeat(32)}` }), feeSettings: { paymentMethod: { kind: "embedded" } } },
+			{},
+		],
+		["a window that draws its own fee block", sendTx(), { fee: '<div data-testid="own-fee-block" />' }],
+	])("%s: no fee card, so no line", async (_case, op, slots) => {
+		const w = mount(OperationCard, {
+			props: {
+				op: op as never,
+				index: 0,
+				profile: { id: "p1", name: "Main" } as never,
+				estimateFailed: true,
+				appFailure: "Balance too low",
+			},
+			slots,
+			global: { stubs },
+		})
+		mounted = w
+		await flushPromises()
+		expect(w.find('[data-testid="execute-op-app-failure-live"]').exists()).toBe(false)
+		expect(w.text()).not.toContain("Balance too low")
+	})
 })
 
 describe("OperationCard — the sponsor a wire-shaped transaction defaults to", () => {
