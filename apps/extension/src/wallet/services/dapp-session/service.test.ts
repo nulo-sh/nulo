@@ -745,7 +745,7 @@ describe("the every-site switch", () => {
 		expect(await service.allowsNewSite("p1", ORIGIN)).toBe(false)
 		await service.setEverySite("p1", true)
 		expect(changes).toEqual([{ profileId: "p1", on: true }])
-		expect(await service.getEverySite()).toBe(true)
+		expect(await service.getEverySite()).toEqual({ profileId: "p1", on: true })
 		expect(await service.allowsNewSite("p1", ORIGIN)).toBe(true)
 		expect(await service.allowsNewSite("p2", ORIGIN)).toBe(false)
 		expect(await policyRow(browserApi)).toBeDefined()

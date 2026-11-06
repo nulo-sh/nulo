@@ -154,10 +154,10 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		await this.registrations.admit(fence.profileId, chainId, origin, () => deletion.assertCurrent(fence.profileId, fence.epoch))
 	}
 
-	public async getEverySite(): Promise<boolean> {
+	public async getEverySite(): Promise<{ profileId: string; on: boolean }> {
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		return await this.discoveryPolicy.isOn(profile.id)
+		return { profileId: profile.id, on: await this.discoveryPolicy.isOn(profile.id) }
 	}
 
 	/** The every-site switch, written only for the profile the person is in: a write for another

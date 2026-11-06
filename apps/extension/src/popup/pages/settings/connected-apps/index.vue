@@ -11,6 +11,7 @@
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
 import RowTarget from "@/components/ui/RowTarget.vue"
+import SettingControlRow from "@/components/ui/Settings/SettingControlRow.vue"
 
 /** Services */
 import { DappSessionServiceClient } from "@/wallet/services/dapp-session/client"
@@ -18,11 +19,18 @@ import { getSafeDisplay } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Utils */
 import { entityListReducers } from "@/utils/entity-list"
+import { EVERY_SITE_CONFIRM } from "@/utils/every-site"
 import { pluralize } from "@/utils/plural"
+import { settingsRow } from "@/utils/settings-search"
 
 /** Composables */
+import { useToast } from "@/composables/toast"
 import { useConfirm } from "@/composables/useConfirm"
-const { requestConfirm } = useConfirm()
+import { SETTING_UPDATE_FAILED } from "@/composables/useSettingUpdate"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
+const { openToast } = useToast()
+const { requestConfirm, askConfirm } = useConfirm()
+const { vSettingsRow } = useSettingsRowHighlight()
 
 const formatGrantSummary = (grants) => {
 	// getSafeDisplay returns the constant "Unknown" shortLabel for
@@ -45,10 +53,17 @@ const sessionList = entityListReducers(dappSessions)
 
 const sortedSessions = computed(() => [...dappSessions.value].sort((a, b) => a.expiry - b.expiry))
 
+const everySiteRow = settingsRow("connected-apps-every-site")
+/** The profile the switch was read for, `null` until read: the Toggle waits for it. */
+const everySiteProfile = ref(null)
+const everySite = ref(false)
+
 const dappSessionService = new DappSessionServiceClient()
 dappSessionService.onDappSessionAdded.add(onDappSessionAdded)
 dappSessionService.onDappSessionUpdated.add(onDappSessionUpdated)
 dappSessionService.onDappSessionDeleted.add(sessionList.onDeleted)
+// The connect window's "Allow every site" turns it on too, maybe while this page stays open.
+dappSessionService.onEverySiteChanged.add(readEverySite)
 
 function hydrateLogo(session) {
 	if (!session.dappMetadata?.logo || session.dappMetadata.logoBlobUrl) return
@@ -69,6 +84,27 @@ function onDappSessionUpdated(session) {
 }
 
 const rowIdBase = useId()
+
+async function readEverySite() {
+	try {
+		const { profileId, on } = await dappSessionService.getEverySite()
+		everySiteProfile.value = profileId
+		everySite.value = on
+	} catch {
+		// Unread, the Toggle stays disabled: showing off for a switch that may be on would mislead.
+	}
+}
+
+/** On asks first and writes only on Turn on; off writes at once. The Toggle shows what was written. */
+async function onEverySiteToggle(next) {
+	if (next && !(await askConfirm(EVERY_SITE_CONFIRM))) return
+	try {
+		await dappSessionService.setEverySite(everySiteProfile.value, next)
+		everySite.value = next
+	} catch {
+		openToast({ kind: "error", label: SETTING_UPDATE_FAILED })
+	}
+}
 
 const handleDropSession = (session) => {
 	requestConfirm({
@@ -96,6 +132,7 @@ const handleDropAllSessions = () => {
 }
 
 onBeforeMount(async () => {
+	void readEverySite()
 	const sessions = await dappSessionService.getDappSessions()
 	dappSessions.value = sessions
 	for (const session of sessions) hydrateLogo(session)
@@ -124,6 +161,22 @@ onBeforeUnmount(() => {
 				</template>
 			</Dropdown>
 		</template>
+
+		<SettingControlRow
+			:title="everySiteRow.title"
+			:description="everySiteRow.description"
+			align="center"
+			:data-testid="everySiteRow.testid"
+			v-settings-row="everySiteRow.id"
+			:class="$style.every_site"
+		>
+			<Toggle
+				:modelValue="everySite"
+				:disabled="everySiteProfile === null"
+				@update:modelValue="onEverySiteToggle"
+				data-testid="every-site-toggle"
+			/>
+		</SettingControlRow>
 
 		<SectionLabel label="Sessions" :count="sortedSessions.length" />
 
@@ -175,6 +228,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
+/* The page's 12 px gap separates list rows; the switch above the list takes Privacy's 32 px. */
+.every_site {
+	margin-bottom: 20px;
+}
+
 .row {
 	composes: divider row from "../../../../components/ui/Settings/settings-row.module.css";
 }

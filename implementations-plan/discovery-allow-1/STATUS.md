@@ -10,3 +10,4 @@
 - 2026-11-06T22:35Z PR #1722 opened ready; first CI run green on all five required checks; dev moved (index.md conflict only), merged by hand; lint, typecheck:all, test:all pass on the merged head
 - 2026-11-06T22:41Z arc 2 phase 2 gate (branch `discovery-allow-1-a2` off dev at 961f90642): lint, typecheck:all, test, test:all pass
 - 2026-11-06T22:55Z arc 2 phase 3 gate: lint, typecheck:all, test, test:all pass; three flow mutations (main token, twin token, off re-check) each red a new test
+- 2026-11-06T23:04Z arc 2 phase 4 gate: lint, typecheck:all, test pass (the Connected Apps row, its confirm, the search entry)

@@ -160,8 +160,8 @@ export type Methods = {
 	setCapabilityRejections(sessionId: string, rejections: RejectedCapabilityRecord[]): DappSession
 	getCapabilityRejections(sessionId: string): RejectedCapabilityRecord[]
 	applyCapabilityDecision(sessionId: string, decision: CapabilityDecision): DappSession
-	/** The active profile's "every site may see Nulo" switch. */
-	getEverySite(): boolean
+	/** The active profile and its "every site may see Nulo" switch. */
+	getEverySite(): { profileId: string; on: boolean }
 	/** Refused unless `profileId` is the active profile. */
 	setEverySite(profileId: string, on: boolean): void
 }

@@ -1,7 +1,11 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import type { VueWrapper } from "@vue/test-utils"
+import { SETTING_UPDATE_FAILED } from "@/composables/useSettingUpdate"
+import { EVERY_SITE_CONFIRM } from "@/utils/every-site"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
+import { expectOwnedRows, settingsContext } from "../../../../../tests/helpers/settings-rows"
 import ConnectedApps from "./index.vue"
 
 type Session = {
@@ -14,23 +18,34 @@ type Session = {
 
 const mocks = vi.hoisted(() => ({
 	getDappSessions: vi.fn(),
+	getEverySite: vi.fn(),
+	setEverySite: vi.fn(),
 	requestConfirm: vi.fn(),
+	askConfirm: vi.fn(),
+	openToast: vi.fn(),
+	everySiteChanged: [] as Array<(change: unknown) => void>,
 	added: [] as Array<(session: unknown) => void>,
 	updated: [] as Array<(session: unknown) => void>,
 	deleted: [] as Array<(session: unknown) => void>,
 }))
 
-vi.mock("@/composables/useConfirm", () => ({ useConfirm: () => ({ requestConfirm: mocks.requestConfirm }) }))
-vi.mock("vue-router", () => ({ useRoute: () => ({ params: {} }), useRouter: () => ({ push: vi.fn(), go: vi.fn() }) }))
+vi.mock("@/composables/useConfirm", () => ({
+	useConfirm: () => ({ requestConfirm: mocks.requestConfirm, askConfirm: mocks.askConfirm }),
+}))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: mocks.openToast }) }))
+vi.mock("vue-router", () => ({ useRoute: () => ({ params: {}, query: {} }), useRouter: () => ({ push: vi.fn(), go: vi.fn() }) }))
 vi.mock("@/wallet/services/dapp-session/client", () => ({
 	DappSessionServiceClient: vi.fn(function () {
 		return {
 			getDappSessions: mocks.getDappSessions,
+			getEverySite: mocks.getEverySite,
+			setEverySite: mocks.setEverySite,
 			deleteDappSession: vi.fn(),
 			disconnect: vi.fn(),
 			onDappSessionAdded: { add: (fn: (session: unknown) => void) => mocks.added.push(fn) },
 			onDappSessionUpdated: { add: (fn: (session: unknown) => void) => mocks.updated.push(fn) },
 			onDappSessionDeleted: { add: (fn: (session: unknown) => void) => mocks.deleted.push(fn) },
+			onEverySiteChanged: { add: (fn: (change: unknown) => void) => mocks.everySiteChanged.push(fn) },
 		}
 	}),
 }))
@@ -49,6 +64,7 @@ afterEach(() => {
 	mocks.added.length = 0
 	mocks.updated.length = 0
 	mocks.deleted.length = 0
+	mocks.everySiteChanged.length = 0
 })
 
 const session = (id: string, name: string, expiry: number): Session => ({
@@ -57,8 +73,9 @@ const session = (id: string, name: string, expiry: number): Session => ({
 	dappMetadata: { name, url: `http://${name}.test` },
 })
 
-async function mountPage(sessions: Session[]) {
+async function mountPage(sessions: Session[], everySite: Promise<unknown> = Promise.resolve({ profileId: "p1", on: false })) {
 	mocks.getDappSessions.mockResolvedValue(sessions)
+	mocks.getEverySite.mockReturnValue(everySite)
 	const w = mount(ConnectedApps, {
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
@@ -73,6 +90,7 @@ async function mountPage(sessions: Session[]) {
 				Tooltip: { template: "<div><slot /></div>" },
 				RowAction: { template: "<button><slot /></button>" },
 				Icon: true,
+				Toggle: true,
 			},
 		},
 	})
@@ -169,5 +187,71 @@ describe("Settings › Connected apps — Disconnect all", () => {
 
 	test("asks about two sessions in the plural (control)", async () => {
 		expect(await confirmText([session("s1", "alpha", 1), session("s2", "beta", 2)])).toBe("Disconnect all 2 sessions?")
+	})
+})
+
+describe("Settings › Connected apps — the every-site switch", () => {
+	const toggle = (w: VueWrapper) => w.findComponent('[data-testid="every-site-toggle"]')
+	const shown = (w: VueWrapper) => [toggle(w).attributes("modelvalue"), toggle(w).attributes("disabled")]
+	const press = async (w: VueWrapper, on: boolean) => {
+		;(toggle(w) as VueWrapper).vm.$emit("update:modelValue", on)
+		await flushPromises()
+	}
+
+	test("the page owns the row, first, above the sessions", async () => {
+		const w = await mountPage([session("s1", "alpha", 1)])
+		expectOwnedRows(w, "/popup/settings/connected-apps", settingsContext())
+		const order = w.findAll('[data-testid="privacy-row-every-site"], h2').map((el) => el.element.tagName)
+		expect(order).toEqual(["DIV", "H2"])
+	})
+
+	test("the Toggle is disabled until the switch is read, then shows it", async () => {
+		const read = Promise.withResolvers<unknown>()
+		const w = await mountPage([], read.promise)
+		expect(shown(w)).toEqual(["false", "true"])
+		read.resolve({ profileId: "p1", on: true })
+		await flushPromises()
+		expect(shown(w)).toEqual(["true", "false"])
+	})
+
+	test("on asks the shared confirm and writes nothing when it is cancelled", async () => {
+		const w = await mountPage([])
+		mocks.askConfirm.mockResolvedValue(false)
+		await press(w, true)
+		expect(mocks.askConfirm).toHaveBeenCalledWith(EVERY_SITE_CONFIRM)
+		expect(mocks.setEverySite).not.toHaveBeenCalled()
+		expect(shown(w)).toEqual(["false", "false"])
+	})
+
+	test("Turn on writes for the profile the switch was read for, then shows on", async () => {
+		const w = await mountPage([])
+		mocks.askConfirm.mockResolvedValue(true)
+		await press(w, true)
+		expect(mocks.setEverySite).toHaveBeenCalledWith("p1", true)
+		expect(shown(w)).toEqual(["true", "false"])
+	})
+
+	test("off writes at once, with no confirm", async () => {
+		const w = await mountPage([], Promise.resolve({ profileId: "p1", on: true }))
+		await press(w, false)
+		expect(mocks.askConfirm).not.toHaveBeenCalled()
+		expect(mocks.setEverySite).toHaveBeenCalledWith("p1", false)
+		expect(shown(w)).toEqual(["false", "false"])
+	})
+
+	test("a refused write shows the shared failure toast and leaves the Toggle as it was", async () => {
+		const w = await mountPage([], Promise.resolve({ profileId: "p1", on: true }))
+		mocks.setEverySite.mockRejectedValueOnce(new Error("locked"))
+		await press(w, false)
+		expect(mocks.openToast).toHaveBeenCalledWith({ kind: "error", label: SETTING_UPDATE_FAILED })
+		expect(shown(w)).toEqual(["true", "false"])
+	})
+
+	test("a change made elsewhere, as by the connect window, is read again", async () => {
+		const w = await mountPage([])
+		mocks.getEverySite.mockResolvedValue({ profileId: "p1", on: true })
+		for (const listener of mocks.everySiteChanged) listener({ profileId: "p1", on: true })
+		await flushPromises()
+		expect(shown(w)).toEqual(["true", "false"])
 	})
 })
