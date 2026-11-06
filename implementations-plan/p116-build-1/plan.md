@@ -1,7 +1,7 @@
 ---
 plan: p116-build-1
 tier: light
-status: approved by Codex (round 3); arc 1 next
+status: arc 1 implemented; Codex fix loop clean in two rounds, Opus review folded; PR next
 issues: "#1563, #618 (both already closed; the PR says `Closes` for each as the program asks)"
 driver: claude-code
 claude_model: opus
@@ -28,6 +28,7 @@ One arc, one PR against `dev`, no stack. It builds the two picks of decision pag
 - **D5 (panel): `max-width: 100%` beside `width: 240px`.** The type-roles sweep lays the open sheet out at 240 px (`NARROW_WIDTH`), where a fixed 240 px code plus the 40 px body padding passes the view; `max-width` keeps the code inside the column there and changes nothing at 360 px.
 - **D6 (panel, revised after Codex A1-C): no new e2e scenario, but the added browser work is costed.** Two existing tests take the real-layout checks jsdom cannot make (below). Their added steps (a rename, a second popup page, a second Receive, the one-row checks) are e2e cost, so the PR body reports both touched files' wall-clock at base and at head, per browser; nothing else in the suite changes, so their delta is the suite's. A full-suite before/after is not run: on this shared host its noise exceeds the few seconds measured.
 - **D7 (panel, Codex A1-B): one summary height.** Baseline alignment changes how the empty meta, the skeleton and a shrunk figure share the line. Traced: the total's 26 px strut sets both the ascent and the descent in every state (the empty meta's synthesized baseline is its bottom edge, so it rises 1lh, less than the total's ascent; the shrunk figure is an inline box inside the full-size line), so the height should not move. No committed e2e checks the transitions: the smoke harness can hold incoming polls, proofs, projections, restores, passkey requests, mining and node stubs, but not the balance-list or price replies, and with a cached quote the states can resolve inside one frame, so a frame sampler would pass without seeing them (Codex round 2). A reply-holding seam is test infrastructure out of proportion to a cosmetic, traced-stable risk. Instead, phase 2 measures it once in both browsers (below) and fixes any difference in CSS before its gate passes. "Prices unavailable" at the 240 px sweep is not tested: 18 mono characters at 13 px are about 140 px, beside a 16 px dash, in a 192 px line.
+- **D8 (implementation deviations).** The still-pointer test aims at the network line, because the 240 px sheet moved the snack off the address's last line; its `covered` assertion stays (phase 1). The canvas takes `data-testid="receive-qr"`, so the e2e reads it by testid; that adds no visible change. The PR's captures sit in `screenshots/` here: before frames from the page-116 lane's dev renders, after frames from this arc's smoke run.
 
 ## Outcome & Quality Bar
 
@@ -129,6 +130,12 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 **Codex round 2** (resumed): A, C (the per-file delta judged proportional: files run sequentially, `vite.shared.ts:134`) and the minor fixes verified. One gap: the sampler can pass without seeing a loading state, since a cached quote can resolve inside one frame (`usePrices.ts:92`, `price/service.ts:201`); Codex asked for held replies inside the test. Plausible but unverified. Disposition: the sampler is dropped; no seam holds those replies, and building one is out of proportion (D7); a one-off measurement in both browsers replaces it.
 
 **Codex round 3** (resumed): approve. The one-off measurement of the five states with the head build's classes establishes the height invariant without claiming transition coverage; Codex withdrew the held-reply ask, which assumed a seam it had not verified. Round 4 (resumed) confirmed the file records it: approve.
+
+**Post-implementation, Codex round 1** (gpt-6.1-sol, high, fresh session over `git diff 002b76fc7..HEAD -- apps`): changes-required. The first rename sat before the `try`, so a lost answer after the service stored it skipped the restore (demonstrated by fault injection). Fixed by moving it inside. Four comment trims taken.
+
+**Opus review** (general-purpose, alongside round 1): changes-required, three test-only findings, all taken. The QR canvas was read by its id, which breaks the e2e selector rule; it now has a testid. `receiveFit` had no success control; the lengthened sheet now reads `scrolls: true`. No case refit on a count-only change; a unit case was added, and it fails with `summaryMeta` dropped from the watch.
+
+**Post-implementation, Codex round 2** (resumed over the fix diff): clean. It confirmed the restore under the same fault. An optional nit (the `receiveFit` doc restated its name) was taken.
 
 ## Seeds
 

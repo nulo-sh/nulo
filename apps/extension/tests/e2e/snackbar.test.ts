@@ -268,7 +268,6 @@ async function snackAboveEnd(page: Page, testid: string): Promise<AboveEnd> {
 	return (await handle.jsonValue()) as AboveEnd
 }
 
-/** The open Receive sheet at rest, as a person sees it. */
 async function receiveFit(page: Page): Promise<{ scrolls: boolean; closeInView: boolean; code: number; network: string }> {
 	return page.evaluate(() => {
 		const close = document.querySelector('[data-testid="receive-close"]')
