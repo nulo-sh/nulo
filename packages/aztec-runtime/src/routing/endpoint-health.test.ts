@@ -202,7 +202,7 @@ describe("the floor", () => {
 		expect(health.floor()).toBe(12)
 	})
 
-	test("takes the tip of each endpoint that takes the role, and of a probe the active one answers", () => {
+	test("takes the tip of each endpoint that takes the role, and is raised, never lowered, by a probe the active one answers", () => {
 		const health = new RouteHealth(2, 0)
 		health.probed(0, passing(100), 0)
 		expect(health.active()).toBe(0)
@@ -221,6 +221,10 @@ describe("the floor", () => {
 		expect(health.floor()).toBe(104)
 		health.probed(0, passing(110), first + 2 * holdDownMinMs)
 		expect(health.floor()).toBe(110)
+		health.servedTip(0, 120, first + 2 * holdDownMinMs + 1)
+		health.probed(0, passing(110), first + 2 * holdDownMinMs + 2)
+		expect(health.floor()).toBe(120)
+		expect([health.active(), health.qualifies(0)]).toEqual([0, true])
 	})
 
 	test("follows the active endpoint down, and an endpoint seen below it no longer qualifies", () => {

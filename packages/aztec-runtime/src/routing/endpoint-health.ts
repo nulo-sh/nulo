@@ -224,7 +224,7 @@ export class RouteHealth {
 		health.nextProbeAt = now + health.holdDownMs
 	}
 
-	/** `index` served a proposed tip through a tip read or a probe; the active endpoint's sets the floor, up or down. */
+	/** `index` served a proposed tip through a tip read; the active endpoint's sets the floor, up or down. */
 	public servedTip(index: number, proposed: number, now: number): void {
 		const health = this.at(index)
 		health.tip = proposed
@@ -276,8 +276,11 @@ export class RouteHealth {
 		health.admitted = true
 		health.failures = 0
 		health.unanswered = false
+		// A probe may land after a newer tip read the same endpoint served, having taken the role meanwhile:
+		// the active endpoint's probe raises its tip and the floor, never lowers them.
 		if (index === this.activeIndex) {
-			this.servedTip(index, tip, now)
+			health.tip = Math.max(health.tip ?? tip, tip)
+			this.floorValue = Math.max(this.floorValue, tip)
 			return
 		}
 		health.tip = tip
