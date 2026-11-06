@@ -7,7 +7,8 @@ import { RETIRED_DEFAULT_ENDPOINTS, retireDefaultName } from "./network/seeds"
  * the pre-unlock migration engine never holds. `convert` returns the row's converted copy, or
  * `undefined` when the row needs none. It reads only `row` and `rows` (the profile's rows of the
  * root as read before the pass), never a build version or a stored marker, so it holds whichever
- * build wrote the row; its own output converts no further, and the copy keeps `id` and `profileId`.
+ * build wrote the row. No entry of the list converts its output again, so a second pass writes
+ * nothing, and the copy keeps `id` and `profileId`.
  */
 export type UnlockConversion<R extends SealedStoreName> = {
 	readonly name: string
@@ -21,14 +22,12 @@ export type AnyUnlockConversion = { [R in SealedStoreName]: UnlockConversion<R> 
  *  endpoint URL and an error message can quote its input. */
 export type ConversionRecord = { conversion: string; root: SealedStoreName; converted: number; failed: number }
 
-/** An endpoint on a URL an earlier build seeded and this one retired takes the URL that replaces it. */
 export const retiredEndpointsConversion = (retired: readonly RetiredEndpoint[]): UnlockConversion<"networks"> => ({
 	name: "retired-default-endpoints",
 	root: "networks",
 	convert: (row) => retireEndpoints(row, retired),
 })
 
-/** A seeded row still named as an earlier build seeded its kind takes the seed's current name. */
 const retiredNamesConversion: UnlockConversion<"networks"> = {
 	name: "retired-default-names",
 	root: "networks",
@@ -43,7 +42,6 @@ export const UNLOCK_CONVERSIONS: readonly AnyUnlockConversion[] = [
 ]
 
 export type UnlockConversionRun<R extends SealedStoreName> = {
-	/** Rows left as read. */
 	skip?: (row: StoredRow<R>) => boolean
 	/** Persists one changed row; awaited before the next row converts. */
 	commit: (before: StoredRow<R>, after: StoredRow<R>) => Promise<void>
@@ -80,7 +78,7 @@ async function convertRow<R extends SealedStoreName>(
 /**
  * Applies every conversion of `root` to `rows`, one row at a time, committing each changed row
  * before the next converts, and logs one {@link ConversionRecord} per conversion, also when a
- * commit rejects. A conversion that throws is counted and skipped for that row; a rejected commit
+ * commit rejects. A conversion that throws is counted and ends that row's conversions; a rejected commit
  * ends the run and rejects with its error.
  */
 export async function runUnlockConversions<R extends SealedStoreName>(

@@ -35,7 +35,7 @@ type Case = { label: string; row: Network; rows?: Network[]; expected: Network |
 const TABLES: Record<string, Case[]> = {
 	"retired-default-endpoints": [
 		{
-			label: "the Testnet default a v0.31.0 build stored",
+			label: "v0.31.0's Testnet default",
 			row: recordedTestnet,
 			expected: {
 				...recordedTestnet,
@@ -81,6 +81,19 @@ describe("UNLOCK_CONVERSIONS", () => {
 	})
 })
 
+test("the list run again over the rows it committed commits nothing", async () => {
+	const rows = [recordedTestnet, network({ id: "m1", kind: "mainnet", name: "Alpha V6" }), network({ id: "c1" })]
+	const pass = async (input: Network[]) => {
+		const after = new Map<string, Network>()
+		await runUnlockConversions("networks", input, { commit: async (_, next) => void after.set(next.id, next), log: () => {} })
+		return after
+	}
+	const first = await pass(rows)
+	// A count, so a failure prints no recorded endpoint URL.
+	expect(first.size).toBe(2)
+	expect((await pass(rows.map((row) => first.get(row.id) ?? row))).size).toBe(0)
+})
+
 describe("runUnlockConversions", () => {
 	type Logged = { level: string; message: string; record: ConversionRecord }
 	const entry = (name: string, convert: UnlockConversion<"networks">["convert"]): UnlockConversion<"networks"> => ({
@@ -105,7 +118,7 @@ describe("runUnlockConversions", () => {
 	test("each row takes the entries in list order, a skipped row none, and a second run commits nothing", async () => {
 		const rows = [network({ id: "a", name: "x" }), network({ id: "b", name: "y" })]
 		const list = [
-			suffix("first", "1"),
+			entry("first", (row) => (row.name.includes("1") ? undefined : { ...row, name: `${row.name}1` })),
 			entry("second", (row) => (row.name.endsWith("1") ? { ...row, name: `${row.name}2` } : undefined)),
 		]
 		const { committed, logged } = await run(rows, list, (row) => row.id === "b")
@@ -122,7 +135,7 @@ describe("runUnlockConversions", () => {
 				record: { conversion: "second", root: "networks", converted: 1, failed: 0 },
 			},
 		])
-		expect((await run([network({ id: "a", name: "x12" })], [suffix("first", "12")])).committed).toEqual([])
+		expect((await run([network({ id: "a", name: "x12" })], list)).committed).toEqual([])
 	})
 
 	test("a throw ends that row's list with the prefix committed, the next row converts, and the line warns", async () => {
