@@ -3,5 +3,4 @@
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
 - [rpc-fallback-1](rpc-fallback-1/plan.md) — arcs 1 and 2 in progress; arc 3 waits on OA-1, OA-2, OA-8 — each network fails over to its next endpoint and returns to its primary; then Nulo's relay as the second endpoint (#1624)
-
-- [chips-3](chips-3/plan.md) — arc 1 in progress — the direction chip becomes C2 at the C2S size; the token-symbol question
+- [chips-3](chips-3/plan.md) — arc 1 in review — the direction chip becomes C2 at the C2S size; the token-symbol question

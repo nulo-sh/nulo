@@ -1,7 +1,7 @@
 ---
 plan: chips-3
 tier: light
-status: approved by the panel (Codex final verdict: approve); arc 1 in progress
+status: approved by the panel (Codex final verdict: approve); arc 1 in review
 issues: "#657 (closed; pages 117 and 118 reopened its row)"
 driver: claude-code
 claude_model: opus
@@ -125,7 +125,7 @@ Tests (colocated, updated in place):
 - Smoke launches claim their egress ports in `~/.agents/ports.md` themselves; no network suite file changes.
 - **Measured** (base 0bfd2c088 → head, retry 0, this shared host): Chrome `rows` 63.9 s → 69.3 s, `type-roles` 95.7 s → 96.5 s; Firefox `rows` 122.7 s → 118.8 s, `type-roles` 152.6 s → 171.0 s. Every row measured pair 33 px, 2.5 px inside the border each side, badge 14 px mirroring the status badge, on both browsers and themes.
 
-## Phase 3: captures and the two answers (no build)
+## Phase 3: captures and the two answers (no build) ✓
 
 - **PR captures.** On the armed Chrome build, shoot Home and History, light and dark: the four signed rows and a dApp transfer. A throwaway spec makes them and is never committed. The PNGs go to `implementations-plan/chips-3/screenshots/` for the PR body.
 - **The two asks.** On a local throwaway branch that is never pushed, add `localStorage` switches.
@@ -133,6 +133,7 @@ Tests (colocated, updated in place):
   - **OA-2:** draw C2 on an in-flight and a failed transfer. Shoot `p119-02-<today|c2>-<nn>`.
   - Shoot every frame on Home and History, light and dark. Put the PNGs, a `captions.json` and an `options.md` under `~/.cache/nulo-backlog/chips-3/shots/`. Delete the branch afterwards.
 - **Gate.** Pass: every frame exists in both themes, and `captions.json` names each one. `git status` shows only plan files.
+- **Result.** Four PR frames in [screenshots/](screenshots/). Sixteen page-119 frames in both themes; Codex's consult on the two recommendations added `p119-01-*-04`, an unpriced second token's row, where option a costs most. The app chip reaches its 20 px floor at a 14-letter symbol ([lessons/phase-1.md](lessons/phase-1.md)).
 
 ## Decision ledger
 
@@ -143,6 +144,8 @@ Tests (colocated, updated in place):
 - D5. A dApp transfer's lone app chip keeps the slot, at 11 px with a 20 px floor; the 10 px rule retires (Codex round 2, withdrawn).
 - D6. `wrapTrailing` and `tx-incoming-kind-sep` retire with their element.
 - D7. A move is `sameFieldAddress(from, to)`; a malformed pair is never a move.
+- D8. A move's hidden words add ", within this account", since its ⇄ badge is `aria-hidden`; `data-tx-transfer-type` keeps the label (review round 1; an accessibility call under the 2026-10-19 delegation).
+- D9. The app chip's 20 px floor gets an e2e row on History, a 16-letter symbol; Home's list stops at five rows (review round 1).
 
 ## Audit verdicts
 
@@ -154,6 +157,12 @@ Tests (colocated, updated in place):
   - Withdrawn: 11 px follows the signed prototype (Fact 6).
   - Condition: the plan matches the work. This revision does.
 - **Final verdict (round 3, verification):** approve. "Arc 1 now matches the signed scope … No new material plan defect found."
+
+Arc 1's fix loop (Codex gpt-6.1-sol, high, read-only; one Opus review beside round 1):
+
+- **Round 1.** Codex, 3 findings, all fixed: the icon box e2e accepted a single centred glyph and a lost overhang; a parity fixture still passed the retired prop; stale comments. Opus, 1 medium and 6 low, all fixed: a move's badge had no words for assistive tech (D8); the floor had no e2e (D9); a vacuous assertion; stale comments. Declined: one shared visually-hidden utility for the four local copies, which would touch the fee and contacts code.
+- **Round 2.** Codex, 1 low (a comment called both badges 10 px), fixed. "The six functional fixes hold."
+- **Round 3.** Codex: "findings: 0 … clean".
 
 ## Delivery
 

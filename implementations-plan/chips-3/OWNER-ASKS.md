@@ -10,7 +10,7 @@ Arc 1 depends on neither ask: it ships today's symbol and today's in-flight chip
   - **a:** no symbol where the title already names the token. A mint keeps it under its amount.
   - **b:** as a, and a symbol that stays sits beside its amount on one line.
 - **Where the symbol is still needed:** a mint only. It is titled "Mint (public)" or "Mint (private)". No activity row shows a fee or mixes two tokens. No dApp op row shows an amount (`recon.md` § A token symbol beside an amount).
-- **Recommendation:** made in the arc 1 report, after the pictures.
+- **Recommendation:** a, moderate confidence. A priced row's amount column drops to two lines, and its title names the token. The strongest case against: an unpriced row's column is a bare figure (`p119-01-a-04`).
 - **What ships now:** today.
 
 ## OA-2 (arc 2): in-flight and failed transfer rows
