@@ -129,8 +129,11 @@ watch(
 	overflow-wrap: anywhere;
 }
 
+/* 240 px leaves the sheet room for the address and the network line without a scroll in the
+   popup's frame; a narrower frame shrinks the code with its column. */
 .qrcode {
-	width: 100%;
+	width: 240px;
+	max-width: 100%;
 	image-rendering: pixelated;
 
 	user-select: none;

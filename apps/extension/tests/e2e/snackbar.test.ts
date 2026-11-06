@@ -8,6 +8,9 @@ import { pointerClick } from "./helpers/legal-drivers"
 import { activeTestId, focusInPopupOf } from "./helpers/pointer-probes"
 import { shotSend } from "./fixtures/send-page"
 import { bringToFront } from "./fixtures/browser"
+import { LONG_NETWORK_NAME, readActiveNetwork } from "./fixtures/networks"
+import { callService } from "./fixtures/session"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const SNACK = sel("snackbar")
@@ -265,12 +268,19 @@ async function snackAboveEnd(page: Page, testid: string): Promise<AboveEnd> {
 	return (await handle.jsonValue()) as AboveEnd
 }
 
-/** Scrolls the container that scrolls `testid` to its end. */
-async function scrollToEnd(page: Page, testid: string): Promise<void> {
-	await page.$eval(sel(testid), (control) => {
-		let scroller = control.parentElement
-		while (scroller && getComputedStyle(scroller).overflowY !== "auto") scroller = scroller.parentElement
-		scroller?.scrollTo(0, scroller.scrollHeight)
+/** The open Receive sheet as a person sees it at rest: whether its card scrolls, whether Close lies
+ *  inside the view, the code's drawn width and the network line. */
+async function receiveFit(page: Page): Promise<{ scrolls: boolean; closeInView: boolean; code: number; network: string }> {
+	return page.evaluate(() => {
+		const close = document.querySelector('[data-testid="receive-close"]')
+		const card = close?.closest('[data-testid="popup-card-body"]')?.parentElement
+		const box = close?.getBoundingClientRect()
+		return {
+			scrolls: card ? card.scrollHeight > card.clientHeight : true,
+			closeInView: box !== undefined && box.top >= 0 && box.bottom <= window.innerHeight,
+			code: document.querySelector("#my-qr-code")?.getBoundingClientRect().width ?? 0,
+			network: document.querySelector('[data-testid="receive-network"]')?.textContent?.trim() ?? "",
+		}
 	})
 }
 
@@ -399,10 +409,10 @@ test("a success that opens under a still pointer closes itself after 2 s, though
 	await recordSnackLife(page)
 	await countCardEvents(page)
 
-	// The snack opens above where Close stops, over the address's last line, so the pointer rests there.
-	const at = await page.$eval(sel("receive-address-text"), (el) => {
+	// The snack opens above where Close stops, over the network line, so the pointer rests there.
+	const at = await page.$eval(sel("receive-network"), (el) => {
 		const box = el.getBoundingClientRect()
-		return { x: Math.round(box.left + box.width / 2), y: Math.round(box.bottom - 6) }
+		return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) }
 	})
 	await page.mouse.move(at.x, at.y, { steps: 5 })
 	await clickByTestId(page, "receive-address")
@@ -508,23 +518,44 @@ test("over the accounts sheet, which covers the nav, an error sits 12px up and g
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 60_000)
 
-test("in the Receive sheet a copy's snack sits 12px above where the sheet's Close button stops", async ({ registeredExtension }) => {
+test("the Receive sheet fits the popup without a scroll, with the longest network name too, and a copy's snack sits 12px above its Close", async ({
+	registeredExtension,
+}) => {
 	const page = await openHome(registeredExtension)
 	await stubClipboard(page, "resolve")
 	await clickByTestId(page, "actions-receive")
 	await sheetAtRest(page, "receive-close")
+	expect(await receiveFit(page)).toMatchObject({ scrolls: false, closeInView: true, code: 240 })
 	await shotSend(page, "sheet-receive", "receive-close")
-	// At the popup's size the whole address and the network line make the sheet scroll a little.
-	await scrollToEnd(page, "receive-close")
 
 	await clickByTestId(page, "receive-address")
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })
 	const rect = await settledSnack(page)
 	const closeTop = await page.$eval(sel("receive-close"), (el) => el.getBoundingClientRect().top)
 	expect(closeTop - rect.bottom).toBeCloseTo(12, 0)
-
+	// A new page clears both lists.
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
+
+	// The widest name the field takes wraps the network line; the popup reads a rename as it boots.
+	const network = await readActiveNetwork(page)
+	await callService(page, NETWORK_SERVICE_NAME, "renameNetwork", [network.id, LONG_NETWORK_NAME])
+	try {
+		const renamed = await openHome(registeredExtension)
+		await clickByTestId(renamed, "actions-receive")
+		await sheetAtRest(renamed, "receive-close")
+		expect(await receiveFit(renamed)).toEqual({
+			scrolls: false,
+			closeInView: true,
+			code: 240,
+			network: `Your address on ${LONG_NETWORK_NAME}`,
+		})
+		expect(registeredExtension.consoleErrors).toEqual([])
+		expect(registeredExtension.pageErrors).toEqual([])
+	} finally {
+		// The fixture's browser serves every test in this file.
+		await callService(page, NETWORK_SERVICE_NAME, "renameNetwork", [network.id, network.name])
+	}
 }, 60_000)
 
 test("in a Receive sheet taller than the popup, an error already clears where Close stops, so a scroll and a click in one task land on Close", async ({
