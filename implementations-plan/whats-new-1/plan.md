@@ -114,6 +114,7 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 - **Codex final** (fresh session): `conditional approve`, one condition (medium, demonstrated): the replay commands named the wrong candidate path and no browser → fixed (repo-root build, `cd apps/extension`, `NULO_E2E_BROWSER`). Notes folded: the egress baseline is read before the seeded reload; the prerelease branch restores the marker too.
 - **Codex final, resumed:** `approve` ("No remaining conditions or new material findings.").
 - **Diff loop r1** (gpt-6.1-sol, high, new session, the net diff from `dev` 4ae04b194): `findings`, one (low, demonstrated): the rule's header said a patch never prompts, but an undismissed notice stays due across a patch (D2 keeps the marker) → header rewritten, two restating comments dropped, the case added to the rule test. **r2** (resumed): `clean`.
+- **Opus 5.5 diff review** (beside r1): `findings`, four, all accepted in 3722ba8f4: (1, demonstrated) the prerelease config writes an rc version into the extension's `package.json` on `dev`, which would red the row's component test → the row takes `version` as a prop defaulting to `__VERSION__`, the test pins a stable one and adds an rc mount; (2, plausible flake) the smoke test closed the tab before the guard saw its request → poll first; (3) the rc branch's null check names where the rule is proved; (4) the stamp's comment gave the wrong reason. **Codex r3** (resumed): `clean`.
 
 ## Seeds
 
