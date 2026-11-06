@@ -257,8 +257,9 @@ promote's push to `main`, each by its own build:
       works afterwards, for its 24 h)
 - [ ] With a fresh address you control that Resend does not hold: one email arrives, its link
       unrewritten in the HTML and the text part (also once through a client that wraps links); a
-      second submission inside 24 h sends nothing; the press on `/confirm` creates the contact with
-      `consent_version` 1.2; a second press writes nothing
+      second submission inside 24 h sends nothing; opening the link creates the contact with
+      `consent_version` 1.2, with no press; opening it again writes nothing; with JavaScript off,
+      `/confirm` posts nothing
 - [ ] On a disposable contact you withdraw first: look up a case variant of it before creating
       anything (absent: kill switch on, stop); submit the variant (no email, no write); create a
       contact twice and record whether the second create upserts

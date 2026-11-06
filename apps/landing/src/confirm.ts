@@ -1,7 +1,8 @@
 /**
  * The `/confirm` page: the link in the confirmation email carries its token in the fragment, which
- * the browser keeps out of every request, and the address joins the list only when the visitor
- * presses Confirm. Nothing is posted on load, so a mail scanner that opens the link adds no one.
+ * the browser keeps out of every request, and only this script can read it and post it. So a browser
+ * confirms as the page opens, while a mail scanner with no script engine adds nobody; one that runs
+ * the page's script can confirm an address.
  */
 
 export type ConfirmState = "ready" | "confirmed" | "invalid"
@@ -93,10 +94,19 @@ export async function submitConfirm(view: ConfirmView, token: string, fetchImpl:
 	view.heading.focus()
 }
 
-export function startConfirm(view: ConfirmView, hash: string, fetchImpl: Fetch): (() => Promise<void>) | null {
+export interface StartedConfirm {
+	/** The Confirm button's handler, the way to try again when the opening post does not go through. */
+	readonly press: () => Promise<void>
+	readonly opened: Promise<void>
+}
+
+/** Shows the page for `hash` and, given a well-formed token, posts it at once; `null` without one. */
+export function startConfirm(view: ConfirmView, hash: string, fetchImpl: Fetch): StartedConfirm | null {
 	const token = tokenFrom(hash)
 	show(view, token ? "ready" : "invalid")
-	return token ? () => submitConfirm(view, token, fetchImpl) : null
+	if (!token) return null
+	const press = () => submitConfirm(view, token, fetchImpl)
+	return { press, opened: press() }
 }
 
 export function mountConfirm(fetchImpl: Fetch = (input, init) => fetch(input, init)): void {
@@ -108,6 +118,6 @@ export function mountConfirm(fetchImpl: Fetch = (input, init) => fetch(input, in
 	const back = root.querySelector<HTMLElement>("[data-confirm-back]")
 	const status = root.querySelector<HTMLElement>("[data-confirm-status]")
 	if (!heading || !lead || !button || !back || !status) return
-	const press = startConfirm({ heading, lead, button, back, status }, location.hash, fetchImpl)
-	if (press) button.addEventListener("click", () => void press())
+	const started = startConfirm({ heading, lead, button, back, status }, location.hash, fetchImpl)
+	if (started) button.addEventListener("click", () => void started.press())
 }

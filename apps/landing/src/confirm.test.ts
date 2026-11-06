@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CONFIRM_COPY, type ConfirmView, RETRY_MESSAGE, startConfirm, submitConfirm, tokenFrom } from "./confirm"
+import { CONFIRM_COPY, type ConfirmView, RETRY_MESSAGE, startConfirm, tokenFrom } from "./confirm"
 
 const TOKEN = "eyJlIjoicEBleGFtcGxlLmNvbSIsInQiOjF9.abc_DEF-123"
 
@@ -49,24 +49,40 @@ describe("tokenFrom", () => {
 })
 
 describe("startConfirm", () => {
-	it("shows Confirm for a well-formed token and posts nothing until the press, then exactly once", async () => {
-		const { v, busy } = view()
+	it("posts the token once as the page opens, locked while in flight, and confirms with no press", async () => {
+		const { v, busy, focused } = view()
 		const { calls, fetchImpl } = fakeFetch(async () => Response.json({ ok: true }), busy)
-		const press = startConfirm(v, `#${TOKEN}`, fetchImpl)
-		expect(shown(v)).toEqual({ ...CONFIRM_COPY.ready, button: true, back: false })
-		expect(calls).toHaveLength(0)
-		await press?.()
+		const started = startConfirm(v, `#${TOKEN}`, fetchImpl)
 		expect(calls).toHaveLength(1)
 		const [call] = calls as [Call]
+		expect(call.busy).toBe(true)
 		expect(call.input).toBe("/api/confirm")
 		expect(call.init.method).toBe("POST")
 		expect(new Headers(call.init.headers).get("accept")).toBe("application/json")
 		expect(JSON.parse(String(call.init.body))).toEqual({ token: TOKEN })
 		expect(call.init.signal).toBeInstanceOf(AbortSignal)
+		expect(shown(v)).toEqual({ ...CONFIRM_COPY.ready, button: true, back: false })
+		await started?.opened
+		expect(calls).toHaveLength(1)
+		expect(shown(v)).toEqual({ ...CONFIRM_COPY.confirmed, button: false, back: true })
+		expect(focused()).toBe(1)
+		expect(v.status.textContent).toBe("")
+	})
+
+	it("opened a second time, posts the same token again and shows the confirmed state again", async () => {
+		const bodies: unknown[] = []
+		for (let open = 0; open < 2; open++) {
+			const { v, busy } = view()
+			const { calls, fetchImpl } = fakeFetch(async () => Response.json({ ok: true }), busy)
+			await startConfirm(v, `#${TOKEN}`, fetchImpl)?.opened
+			bodies.push(...calls.map((c) => JSON.parse(String(c.init.body))))
+			expect(shown(v)).toEqual({ ...CONFIRM_COPY.confirmed, button: false, back: true })
+		}
+		expect(bodies).toEqual([{ token: TOKEN }, { token: TOKEN }])
 	})
 
 	it.each(["", "#", "#not-a-token", `#${TOKEN}${"A".repeat(1024)}`])(
-		"shows the invalid state for %j and offers nothing to press",
+		"shows the invalid state for %j, posts nothing and offers nothing to press",
 		(hash) => {
 			const { v, busy } = view()
 			const { calls, fetchImpl } = fakeFetch(async () => Response.json({ ok: true }), busy)
@@ -77,22 +93,11 @@ describe("startConfirm", () => {
 	)
 })
 
-describe("submitConfirm", () => {
-	it("confirms on 200 { ok: true }: the button goes, the way back shows, focus moves to the heading", async () => {
-		const { v, busy, focused } = view()
-		startConfirm(v, `#${TOKEN}`, async () => Response.json({}))
-		const { calls, fetchImpl } = fakeFetch(async () => Response.json({ ok: true }), busy)
-		await submitConfirm(v, TOKEN, fetchImpl)
-		expect(calls[0]?.busy).toBe(true)
-		expect(shown(v)).toEqual({ ...CONFIRM_COPY.confirmed, button: false, back: true })
-		expect(focused()).toBe(1)
-		expect(v.status.textContent).toBe("")
-	})
-
+describe("the answer to the post", () => {
 	it("reads a 400 as a link that does not work, whatever made the Worker refuse it", async () => {
 		const { v, busy, focused } = view()
 		const { fetchImpl } = fakeFetch(async () => Response.json({ ok: false }, { status: 400 }), busy)
-		await submitConfirm(v, TOKEN, fetchImpl)
+		await startConfirm(v, `#${TOKEN}`, fetchImpl)?.opened
 		expect(shown(v)).toEqual({ ...CONFIRM_COPY.invalid, button: false, back: true })
 		expect(focused()).toBe(1)
 	})
@@ -107,24 +112,39 @@ describe("submitConfirm", () => {
 
 	it.each(retries)("keeps the button for a retry after %s, says so, and releases the lock", async (_, answer) => {
 		const { v, busy, focused } = view()
-		startConfirm(v, `#${TOKEN}`, async () => Response.json({}))
 		const { fetchImpl } = fakeFetch(answer, busy)
-		await submitConfirm(v, TOKEN, fetchImpl)
+		await startConfirm(v, `#${TOKEN}`, fetchImpl)?.opened
 		expect(shown(v)).toEqual({ ...CONFIRM_COPY.ready, button: true, back: false })
 		expect([v.status.textContent, v.status.dataset.state]).toEqual([RETRY_MESSAGE, "error"])
 		expect(busy()).toBe(false)
 		expect(focused()).toBe(0)
 	})
+})
 
-	it("ignores a second press while the first is in flight", async () => {
+describe("the Confirm button", () => {
+	it("after an opening post that did not go through, confirms on a press with the same token", async () => {
+		const { v, busy, focused } = view()
+		const answers = [async () => Promise.reject(new TypeError("offline")), async () => Response.json({ ok: true })]
+		const { calls, fetchImpl } = fakeFetch(() => (answers.shift() as () => Promise<Response>)(), busy)
+		const started = startConfirm(v, `#${TOKEN}`, fetchImpl)
+		await started?.opened
+		expect(v.status.textContent).toBe(RETRY_MESSAGE)
+		await started?.press()
+		expect(calls.map((c) => JSON.parse(String(c.init.body)))).toEqual([{ token: TOKEN }, { token: TOKEN }])
+		expect(shown(v)).toEqual({ ...CONFIRM_COPY.confirmed, button: false, back: true })
+		expect(v.status.textContent).toBe("")
+		expect(focused()).toBe(1)
+	})
+
+	it("sends nothing while the opening post is in flight", async () => {
 		const { v, busy } = view()
 		let release: (r: Response) => void = () => {}
 		const { calls, fetchImpl } = fakeFetch(() => new Promise<Response>((resolve) => (release = resolve)), busy)
-		const first = submitConfirm(v, TOKEN, fetchImpl)
-		await submitConfirm(v, TOKEN, fetchImpl)
+		const started = startConfirm(v, `#${TOKEN}`, fetchImpl)
+		await started?.press()
 		expect(calls).toHaveLength(1)
 		release(Response.json({ ok: true }))
-		await first
+		await started?.opened
 		expect(v.heading.textContent).toBe(CONFIRM_COPY.confirmed.heading)
 	})
 })

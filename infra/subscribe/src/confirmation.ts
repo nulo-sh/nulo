@@ -1,5 +1,5 @@
 // The one email a signup sends. It loads no remote image or font, so opening it reaches no server,
-// and it carries no unsubscribe link: the address is not on the list until the press on /confirm.
+// and it carries no unsubscribe link: the address is not on the list until /confirm posts its token.
 
 export const CONFIRM_URL = "https://nulo.sh/confirm"
 const PRIVACY_URL = "https://nulo.sh/website-privacy"
