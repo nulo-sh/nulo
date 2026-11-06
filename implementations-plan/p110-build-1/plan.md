@@ -205,6 +205,8 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 
 **Arc 1, Opus diff review**: no High or Medium; five Low, all accepted: a summary-test fixture whose authorization another account signs over this account's tokens, which fails once the `onBehalfOf` filter goes (mutation run red); the selector regex in `appAssertion`, dead behind the bounded frame, removed; a line break in an assertion reads as a space, never joins two words; capture names say what they show; the request builder's header states the invariant, not its caller. Checked and holding: no failure reaches neither the line nor a snack, the stale-anchor retry, the class across the worker hop, the refusal's answer and Activity title, no new log reach, a dApp cannot forge frames.
 
+**Arc 1, Codex round 2** (the round-1 session resumed on the fix diff, f8b0919b0): verified every fold (the testid reads, the removed regex behind the bounded frame, the whitespace rule, the isolating `onBehalfOf` fixture, the `$eval` reads) and found no regression and no new state, lifecycle, logging or approval behavior: `VERDICT: approve`.
+
 ## Seeds
 
 Not run (orchestrator-owned); recorded for a fresh session in this worktree.

@@ -7,3 +7,4 @@
 - `type-roles-windows`' `feeSettled` waited on an estimate, a nudge or the snack; it now also accepts the app's failure line, since the line replaces the snack.
 - Review round 1 on the arc diff: Codex `conditional approve` (two Low: comments, testid reads); the Opus diff review, five Low (an untested `onBehalfOf` filter, a dead selector regex, line breaks joining words, plan ids in capture names, a caller named in a header). All folded in one commit; Codex resumed on the fix diff.
 - e2e reads: the suite's `waitForSelector` (`fixtures/dom.ts`) returns no element handle, so a spec reads text with `page.$eval(selector, …)` after it. Two first-run failures were this, not the product; the rerun was green (8/8, Chrome).
+- Review round 2: the Codex session resumed on f8b0919b0 verified the folds, `VERDICT: approve`. The loop converged in two rounds. The open item went to #1699 (no duplicate found).
