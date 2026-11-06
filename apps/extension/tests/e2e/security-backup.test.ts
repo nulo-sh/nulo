@@ -128,6 +128,7 @@ test("after a minor update Home shows What's new above Get started: nulo.sh is r
 	await waitForHash(page, "#/popup/general")
 	await waitForHomeReminders(page)
 	if (!isStable(version)) {
+		// The unit and component tests prove the rule; this only reads that the rc build follows it.
 		expect(await page.$(sel("whats-new-row"))).toBeNull()
 		await writeSeen(page, installed)
 	} else {
@@ -149,8 +150,9 @@ test("after a minor update Home shows What's new above Get started: nulo.sh is r
 
 		// Where the tab lands is the component test's: the guard keeps hosts, and Firefox names the tab about:blank.
 		const tab = await waitForNewTab(registeredExtension.browser, () => clickByTestId(page, "whats-new-open"), 10_000)
-		await tab.close()
+		// Closed only once its request arrived: a tab closed first may never send it.
 		await expect.poll(siteAttempts, { timeout: 10_000 }).toBeGreaterThan(before)
+		await tab.close()
 		expect(await page.$(sel("whats-new-row"))).not.toBeNull()
 
 		await clickByTestId(page, "whats-new-dismiss")

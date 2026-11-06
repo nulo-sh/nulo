@@ -8,11 +8,12 @@ import { installChromeStorage } from "../../../../../tests/helpers/chrome-storag
 import WhatsNewRow from "./WhatsNewRow.vue"
 
 const COMPONENTS = { Flex, Icon, Text, ItemsContainer, SettingItem, RowAction }
-const VERSION = __VERSION__
+/** Pinned: `dev` carries an rc version while a prerelease is out, and an rc never shows the row. */
+const VERSION = "1.4.0"
 
-async function mountRow(stored: Record<string, unknown>) {
+async function mountRow(stored: Record<string, unknown>, version = VERSION) {
 	const storage = installChromeStorage(stored)
-	const w = mount(WhatsNewRow, { global: { components: COMPONENTS }, attachTo: document.body })
+	const w = mount(WhatsNewRow, { props: { version }, global: { components: COMPONENTS }, attachTo: document.body })
 	await flushPromises()
 	return { w, storage }
 }
@@ -23,10 +24,13 @@ afterEach(() => {
 })
 
 describe("general/WhatsNewRow", () => {
-	test("shows only under a marker below the running minor", async () => {
-		expect((await mountRow({})).w.find('[data-testid="whats-new-row"]').exists()).toBe(false)
-		expect((await mountRow({ [WHATS_NEW_SEEN_KEY]: minorOf(VERSION) })).w.find('[data-testid="whats-new-row"]').exists()).toBe(false)
-		expect((await mountRow({ [WHATS_NEW_SEEN_KEY]: "0.0" })).w.find('[data-testid="whats-new-row"]').exists()).toBe(true)
+	test("shows only under a marker below the running minor, and never on a prerelease", async () => {
+		const shown = async (stored: Record<string, unknown>, version?: string) =>
+			(await mountRow(stored, version)).w.find('[data-testid="whats-new-row"]').exists()
+		expect(await shown({})).toBe(false)
+		expect(await shown({ [WHATS_NEW_SEEN_KEY]: "1.4" })).toBe(false)
+		expect(await shown({ [WHATS_NEW_SEEN_KEY]: "1.3" })).toBe(true)
+		expect(await shown({ [WHATS_NEW_SEEN_KEY]: "1.3" }, "1.4.0-rc.1")).toBe(false)
 	})
 
 	test("reads the signed copy, the open glyph, and a Dismiss control that Tab reaches right after the row", async () => {
