@@ -12,3 +12,4 @@
 - 2026-11-06T22:55Z arc 2 phase 3 gate: lint, typecheck:all, test, test:all pass; three flow mutations (main token, twin token, off re-check) each red a new test
 - 2026-11-06T23:04Z arc 2 phase 4 gate: lint, typecheck:all, test pass (the Connected Apps row, its confirm, the search entry)
 - 2026-11-06T23:16Z arc 2 phase 5 built: footer slot, Allow every site, e2e connect-every-site (Chrome debug pass 13 s test / 81 s wall), docs, privacy 1.2.10; captures in screenshots/; gate next
+- 2026-11-06T23:37Z arc 2 phase 5 gate: lint, typecheck:all, test:all, legal pass; network `connect-every-site`, `connect-check-window`, `connect-deny` retry 0 pass on Chrome (14 s, 38 s, 66 s) and Firefox (22 s, 54 s, 71 s); smoke `settings-routes` retry 0 pass on Chrome and Firefox; review loop next

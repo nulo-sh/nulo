@@ -163,7 +163,7 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run test`. Pass: exit 0. Layers: lint, typecheck, component.
 
-## Phase 5: the window's button, e2e, docs (arc 2)
+## Phase 5: the window's button, e2e, docs (arc 2) ✓
 
 1. Add the footer slot (+ one test). Add the button and `allowEverySite` to the window; connect the session client in `connectServices` and update the lifecycle test's order. `index.test.ts`: disabled until ready; cancel writes and resolves nothing; Turn on writes, then resolves `{ approved: true }`, in that order, then closes; a failed write resolves nothing; Turn on writes even when `resolveInteraction` then throws `JobCancelledError`, and the cancelled overlay shows.
 2. `connect-every-site.test.ts` (Chrome and Firefox): connect, press "Allow every site", the confirm shows in the window, Escape closes it with nothing written, press again, Turn on; the check opens, They match; Settings → Connected Apps shows the Toggle on; disconnect the session; connect again: no connect window, the check opens. It proves what no cheaper layer can: a confirm inside a window, and a row the window's RPC sealed read by the worker on the real page path, on both browsers. Estimate 60-90 s per browser; the PR states it measured.
