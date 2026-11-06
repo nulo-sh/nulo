@@ -509,7 +509,6 @@ describe("how a change ends", () => {
 	})
 
 	describe("a lock that unmounts the page before a change saved but not reopened answers", () => {
-		/** Lands the lock and unmounts the page while the change is with the service; resolves to its answer. */
 		async function lockedBeforeTheAnswer(own: boolean) {
 			surface.handsBack = own
 			const held = Promise.withResolvers<void>()

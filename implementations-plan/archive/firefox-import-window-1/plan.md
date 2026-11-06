@@ -288,6 +288,8 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 
 **Arc 2, Codex round 2 (resumed): the race fixed; one P2 regression, high confidence.** The kept run outlived the watchers that end it, so leaving the flow (New profile) or selecting another profile on the lock screen before the answer still acted on it (an in-place lock screen over the new flow, or a hand-back over the new selection). Accepted: the kept run is bound to the flow and its profile (D19), with a test per case, each red on the round-1 page. Direct navigation away, Back, success cleanup and Chrome's teardown held.
 
+**Arc 2, Codex round 3 (resumed): no correctness or security finding, high confidence.** "The functional fix holds … No new security boundary is exposed; a retained generation now also requires current flow and profile ownership." One comment finding (a test helper's doc narrated its steps), folded. The loop's cap is three rounds; nothing material remained.
+
 ## Seeds
 
 Recorded for completeness; the orchestrator runs this lane, so neither seed is used.
