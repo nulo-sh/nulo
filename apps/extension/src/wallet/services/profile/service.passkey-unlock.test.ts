@@ -170,7 +170,7 @@ describe("a phrase import and a backup restore choose their unlock", () => {
 	})
 })
 
-describe("a passkey restore opens only on the admission its commit set", () => {
+describe("a restore opens only on the admission its commit set", () => {
 	type Admissions = Map<string, { capturedAt: number }>
 	const admissions = (env: Env) => (env.service as unknown as { restoreAdmissions: Admissions }).restoreAdmissions
 	const marker = async (env: Env, id: string) =>
@@ -190,18 +190,35 @@ describe("a passkey restore opens only on the admission its commit set", () => {
 		return { id: restored.id, answer }
 	}
 
-	test("a lock after the commit refuses finalize, and the profile stays, unmarked, for its next unlock", async () => {
-		const env = await boot()
-		await env.service.createProfile("P", PASSWORD)
-		const handle = await env.service.getSessionHandle()
-		const { id, answer } = await restoredPasskey(env, 0x51)
-		await env.service.lockActiveProfile(handle)
-		await expect(env.service.finalizeRestore(id, undefined, answer)).rejects.toThrow(SessionEndedError)
-		expect(await env.service.getActiveProfile()).toBeUndefined()
-		expect((await env.service.getProfiles()).map((p) => p.id)).toContain(id)
-		expect(await marker(env, id)).toBeUndefined()
-		expect((await env.service.unlockPasskeyProfile(id, answer)).id).toBe(id)
-	}, 30_000)
+	/** A password restore of the phrase of `fill`, written and not finalized. */
+	async function restoredPassword(env: Env, fill: number) {
+		const restored = await env.service.restore({ id: "ignored", name: "W", type: "password" }, await backupBody(fill), PASSWORD)
+		if ("restoreError" in restored && restored.restoreError) throw new Error(String(restored.restoreError))
+		return restored.id
+	}
+
+	test.each(["passkey", "password"] as const)(
+		"a lock after a %s restore's commit refuses finalize, and the profile stays, unmarked, for its next unlock",
+		async (method) => {
+			const env = await boot()
+			await env.service.createProfile("P", PASSWORD)
+			const handle = await env.service.getSessionHandle()
+			const passkey = method === "passkey" ? await restoredPasskey(env, 0x51) : undefined
+			const id = passkey?.id ?? (await restoredPassword(env, 0x51))
+			await env.service.lockActiveProfile(handle)
+			await expect(env.service.finalizeRestore(id, passkey ? undefined : PASSWORD, passkey?.answer)).rejects.toThrow(
+				SessionEndedError,
+			)
+			expect(await env.service.getActiveProfile()).toBeUndefined()
+			expect((await env.service.getProfiles()).map((p) => p.id)).toContain(id)
+			expect(await marker(env, id)).toBeUndefined()
+			const opened = passkey
+				? await env.service.unlockPasskeyProfile(id, passkey.answer)
+				: await env.service.unlockProfile(id, PASSWORD)
+			expect(opened.id).toBe(id)
+		},
+		30_000,
+	)
 
 	test("with no lock, finalize opens it, and a second finalize opens nothing more", async () => {
 		const env = await boot()
@@ -268,16 +285,16 @@ describe("a passkey restore opens only on the admission its commit set", () => {
 		30_000,
 	)
 
-	test("a restart before finalize refuses a passkey restore, which opens at its next unlock; a password restore still finalizes", async () => {
+	test("a restart before finalize refuses a passkey and a password restore; each opens at its next unlock", async () => {
 		const env = await boot()
 		const { id, answer } = await restoredPasskey(env, 0x56)
-		const withPassword = await env.service.restore({ id: "ignored", name: "W", type: "password" }, await backupBody(0x57), PASSWORD)
-		if ("restoreError" in withPassword && withPassword.restoreError) throw new Error(String(withPassword.restoreError))
+		const withPassword = await restoredPassword(env, 0x57)
 		const rebooted = await boot({ api: env.api })
 		await expect(rebooted.service.finalizeRestore(id, undefined, answer)).rejects.toThrow(SessionEndedError)
-		expect((await rebooted.service.finalizeRestore(withPassword.id, PASSWORD)).profile.id).toBe(withPassword.id)
-		await rebooted.service.lockActiveProfile()
+		await expect(rebooted.service.finalizeRestore(withPassword, PASSWORD)).rejects.toThrow(SessionEndedError)
 		expect((await rebooted.service.unlockPasskeyProfile(id, answer)).id).toBe(id)
+		await rebooted.service.lockActiveProfile()
+		expect((await rebooted.service.unlockProfile(withPassword, PASSWORD)).id).toBe(withPassword)
 	}, 60_000)
 })
 

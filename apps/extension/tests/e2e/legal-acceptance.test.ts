@@ -155,9 +155,9 @@ async function revealSeedPhrase(page: Page): Promise<string> {
 
 /**
  * Assemble a full backup through the page flow and download it, encrypted. A password profile
- * unlocks first; a passkey profile's agreement starts its WebAuthn ceremony in the page itself,
- * which is exactly what an overlay would break, and its file takes a password of its own. Returns
- * the file's content.
+ * unlocks first; a passkey profile's file takes a password of its own, and the press after it
+ * starts the WebAuthn ceremony in the page itself, which is exactly what an overlay would break.
+ * Returns the file's content.
  */
 async function downloadFullBackup(page: Page, password?: string): Promise<Record<string, unknown>> {
 	await navigateByHash(page, "#/popup/settings/security/export", 15_000)

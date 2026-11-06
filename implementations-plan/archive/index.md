@@ -544,3 +544,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [release-notes-1](release-notes-1/plan.md) — completed — per-version release notes atop the GitHub Release and on AMO, composed and checked in CI (#1668)
 - [network-rename-1](network-rename-1/plan.md) — completed — a seeded default row still named "Alpha V6" or "Mainnet" takes "Alpha" at unlock (closes #1364)
 - [double-optin-1](double-optin-1/plan.md) — completed — the mailing list confirms each signup by email before it counts (#1236)
+- [lows-1](lows-1/plan.md) — completed — a passkey answer is used in the step that collected it: three passkey flows take the new secret first, and any restore opens only on its own admission (#1693 and arc 2)
