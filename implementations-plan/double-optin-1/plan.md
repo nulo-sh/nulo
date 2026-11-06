@@ -429,6 +429,19 @@ alignment (both readers know one placeholder marker; a missing row or unequal da
 **Fix loop, round 2** (the same Codex session resumed on `gpt-6.1-sol` over the fix commit): no
 finding, **`VERDICT: approve`**. The loop converged.
 
+**Phase 5 round** (Codex `gpt-6.1-sol` high, read-only, a fresh session over the diff since the
+converged head): **`VERDICT: approve`**, no functional finding; it confirmed the lock is set before
+the click listener attaches, so no race, and that D14 matches the tree. Resumed over the fix
+commit: no finding, **`VERDICT: approve`**.
+
+| Finding | Disposition |
+|---|---|
+| Excellent (2) "a typed-in stranger is never added" ignores D13 | accepted: names the exception |
+| Phases 2 and 4 still require no POST before a press | accepted: marked superseded by Phase 5 |
+| `confirm.ts` "keeps out of every request" (the POST body carries the token) | accepted: "every request URL" |
+| `startConfirm`'s doc-comment narrates its body | accepted: deleted |
+| The second-open test repeats the success test | rejected: the orchestrator's brief requires it, and it proves the page keeps no state that refuses a second open |
+
 ## Seeds
 
 ```

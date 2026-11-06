@@ -104,8 +104,9 @@ token as it opens and shows "You're on the list." with no second tap; opening th
 it again and adds nothing. For the moment the post takes, the page shows the "Link opened" row with
 its button inactive, the state A showed after a press. If the post does not go through, the
 "Network or server error" row shows, and Confirm sends it again. The expired or invalid state and
-every line of copy are A's, as approved. Pictures of C: `c-confirm-done.png`, `c-confirm-retry.png`,
-`c-confirm-invalid.png`, `c-confirm-noscript.png`, `c-form-after.png`. What "the no-JavaScript
+every line of copy are A's, as approved. Pictures of C: `c-confirm-opening.png` (the post in flight), `c-confirm-done.png`,
+`c-confirm-retry.png`, `c-confirm-invalid.png`, `c-confirm-noscript.png`, `c-form-after.png` and
+`c-subscribed-noscript.png` (the form without JavaScript). What "the no-JavaScript
 fallback" can be is in OA9.
 
 ## OA5. Website privacy notice 1.2 (changed)

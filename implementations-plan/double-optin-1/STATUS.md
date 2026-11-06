@@ -11,3 +11,4 @@
 - 2026-11-05: review loop round 1: Codex and Opus approve; nits applied; resuming Codex to verify.
 - 2026-11-05: review loop converged (round 2 approve); final gates green but test:release's 7 host-only zip failures; next draft PR.
 - 2026-11-06: rebased on origin/dev 002b76fc7; owner answers (pages 114, 116) recorded; Phase 5 built (confirm on open, D13–D16), confirm tests 15/15, mutation reds 8; OA9 opened.
+- 2026-11-06: Phase 5 gates green at retry 0 (subscribe 91/91, landing 173+1 skip, build, lint, typecheck:all, test:all, check:plans); Codex approve twice; browser check 18/18.
