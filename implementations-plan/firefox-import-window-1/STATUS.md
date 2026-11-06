@@ -1,8 +1,0 @@
-- 2026-11-06: recon done (2 Sonnet explorers) at 002b76fc7; plan drafted; panel round 1 next.
-- 2026-11-06: panel round 1: Codex conditional approve, Opus conditional approve; folded (D6 re-read from #1701's investigation, D13-D16); final fresh Codex pass next.
-- 2026-11-06: final fresh Codex pass: r1 conditional approve (D6 → OA-1, Back joins a running hand-back, D14 rationale), r2 approve; plan committed; arc 1 next (auto-continue).
-- 2026-11-06: arc 1 Phase 1 gate green (lint, typecheck:all, 118 unit tests; the new table and the Back join red on the base copy).
-- 2026-11-06: arc 1 Phase 2 gate green (lint, typecheck:all, 114 unit tests; the inverted import pin red on the base `import.vue`).
-- 2026-11-06: arc 1 Phase 3 gate green (lint, typecheck:all, bun run test 17497 passed, test:components 1394 passed; the unlock-method pin red on the base page). Deviations: `leaveChanged` extracted for the complexity cap; 13 chaos-model citations re-cited.
-- 2026-11-06: arc 1 Phase 4: the new Firefox scenario green at retry 0 (16-18 s) and red with the hand-back off; toolbar-panel.test.ts 7/7 on Firefox (179 s); four captures taken (shots dir). Smoke suites run on the final head.
-- 2026-11-06: arc 1 review loop converged (Codex r1 clean, Opus findings folded, Codex r2 clean); final gates next.

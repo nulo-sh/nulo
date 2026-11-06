@@ -1,7 +1,7 @@
 ---
 plan: firefox-import-window-1
 tier: mid
-status: approved by the panel (final Codex pass approve); arc 1 next
+status: completed
 issues: "#1701"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at 002b76fc7
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-06
+- **Status**: completed in one arc, #1716 from `firefox-import-window-1-a1`, whose final commits are this close-out; it closes #1701.
+- **Shipped**: on Firefox's toolbar panel, an import (both outcomes) and the unlock-method page's three successes close their own window, and the panel reopens on Home or Settings with the flow's line, bound to its profile (P116-16 B). One synchronous predicate, `handsBackToPanel()`, gates every hand-back; create and import land through `landOpenedProfile` (`src/popup/opening-flow.ts`); a Back during a hand-back's record write joins it. Unit pins on each page and helper; a new Firefox e2e scenario (16-18 s locally, red with the hand-back off) and test 6 now assert the hand-back through one helper shared with the contacts card; FIREFOX.md's toolbar-panel row names the hand-back.
+- **Known limits** (D16), each a closed `known-limit` issue: #1718 (no focus back on the opener within 3 s, no panel reopens); #1719 (a profile-bound line whose profile does not open on the landing never shows); #1720 (a window that left its flow ends in place).
+- **Open items**: OA-1 in [OWNER-ASKS.md](OWNER-ASKS.md), the unlock-method window's `UnlockMethodChangedError` ending; today's ending ships (D6).
+- **Dispositions**:
+  - The base moved to 36551502f under the plan (#1703 reordered the unlock-method page's passkey steps); `attempt`'s success branch was unchanged, so the plan held.
+  - `leaveChanged` was extracted from `attempt` to stay under the cognitive-complexity cap, with no suppression; the chaos model's `unlock-method.vue` citations were re-cited twice by line diffs.
+  - The Firefox and Chrome smoke suites ran once, on the reviewed head, not at Phase 4's gate.
+  - No `lessons.md` promotion: the one cross-task gotcha, re-citing the chaos model after an edit above a cited line, is already there; the other, a privileged panel read refusing a passkey prompt in another window, is FIREFOX.md's toolbar-panel row.
+- **Seeds retired**: the `/goal` and `/loop` seeds below.
 
 # firefox-import-window-1: a profile imported from Firefox's toolbar panel ends like a created one
 
