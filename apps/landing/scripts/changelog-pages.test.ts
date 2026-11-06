@@ -55,6 +55,10 @@ describe("renderNotes", () => {
 		expect(notes.html).toContain("<li><strong>Two</strong> with <code>code</code>.</li>")
 	})
 
+	test("markdown text keeps its ampersands, quotes and decoded references", () => {
+		expect(renderNotes('R&D, "quoted" &amp; &copy; text.\n', "1.2.0").lead).toBe("R&amp;D, &quot;quoted&quot; &amp; © text.")
+	})
+
 	test.each([
 		["a link", "Lead.\n\n- See [the site](https://nulo.sh).\n", /raw HTML is not allowed/],
 		["an image", "Lead.\n\n![logo](/og.png)\n", /raw HTML is not allowed/],
@@ -68,7 +72,8 @@ describe("renderNotes", () => {
 		["notes that open on a list", "- One.\n- Two.\n", /open with a lead line/],
 		["an em dash", "Lead — and more.\n", /em dash/],
 		["an em dash written as an entity", "Lead &mdash; and more.\n", /em dash/],
-		["an em dash as an entity in a raw HTML block", "<p>Lead &#x2014; more.</p>\n", /em dash/],
+		["an em dash as an entity in a raw HTML block", "<p>Lead &#x2014; more.</p>\n", /character reference/],
+		["a numeric reference with no semicolon in a raw HTML block", "<p>Lead &#8212 more.</p>\n", /character reference/],
 		["a lead paragraph left open", "<p>Lead.\n\n- One.\n", /open with a lead line/],
 	])("refuses %s", (_name, markdown, message) => {
 		expect(() => renderNotes(markdown, "1.2.0")).toThrow(message)

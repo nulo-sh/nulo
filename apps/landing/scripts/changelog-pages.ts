@@ -55,7 +55,9 @@ const SITE_VERSION = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 const EDITORIAL_KEYS = ["version", "date", "title", "lede", "change"]
 const CHANGE_KEYS = ["icon", "area", "title", "line"]
-const EM_DASH = /—|&mdash;|&#0*8212;|&#x0*2014;/i
+/** Markdown text decodes every reference and re-escapes only these four, so any other came from a raw
+ *  HTML block, where the browser decodes it past the checks on the text. */
+const RAW_REFERENCE = /&(?!(?:amp|lt|gt|quot);)[#A-Za-z]/
 const NOTE_TAGS: AllowedTags = new Map(["p", "ul", "ol", "li", "strong", "em", "code"].map((tag) => [tag, []]))
 
 function parts(version: string, pattern = STABLE): [number, number, number, string | undefined] {
@@ -136,8 +138,8 @@ export function renderNotes(markdown: string, version: string): Notes {
 	const label = `release-notes/${version}.md`
 	const html = renderMarkdown(markdown)
 	assertOnlyAllowedHtml(html, NOTE_TAGS, label)
-	// Markdown text turns `&mdash;` into the dash; a raw HTML block keeps the entity as written.
-	if (EM_DASH.test(html)) throw new Error(`${label}: the notes hold an em dash`)
+	if (RAW_REFERENCE.test(html)) throw new Error(`${label}: a character reference outside markdown text`)
+	if (html.includes("—")) throw new Error(`${label}: the notes hold an em dash`)
 	const leadEnd = html.indexOf("</p>")
 	if (!html.startsWith("<p>") || leadEnd === -1) throw new Error(`${label}: the notes open with a lead line`)
 	return { lead: html.slice("<p>".length, leadEnd), html }
