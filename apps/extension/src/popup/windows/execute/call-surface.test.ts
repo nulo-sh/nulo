@@ -9,6 +9,7 @@ import {
 	type CallSurface,
 	type TransferSender,
 	accountOutflows,
+	outflowLabel,
 	amountLabel,
 	authwitLine,
 	authwitTitle,
@@ -536,7 +537,7 @@ describe("rawToggleLabel", () => {
 })
 
 // `sameFieldAddress` refuses the `0xaa…` constants above (beyond the field), so these use valid ones.
-describe("accountOutflows: the direct transfers this account sends to another address, per token", () => {
+describe("accountOutflows: the transfers and authorizations that move this account's tokens to another address, per token", () => {
 	const TST = { id: 2, chainId: 1, contract: VAULT, name: "Test", symbol: "TST", decimals: 18 } as TokenInfo
 	const USDC_TOKEN = { ...USDC, contract: USDC_AT }
 	const units = (n: bigint, decimals: number) => (n * 10n ** BigInt(decimals)).toString()
@@ -559,8 +560,8 @@ describe("accountOutflows: the direct transfers this account sends to another ad
 			{ call: { to: USDC_AT }, surface: { kind: "raw", reason: "unknown-function", rows: [], hidden: 0 } as CallSurface },
 		]
 		expect(accountOutflows(rows, MAIN, [TST, USDC_TOKEN], 1)).toEqual([
-			{ contract: VAULT, count: 2, amount: { text: "6 TST", baseUnits: false } },
-			{ contract: USDC_AT, count: 1, amount: { text: "10 USDC", baseUnits: false } },
+			{ contract: VAULT, transfers: 2, authorizations: 0, amount: { text: "6 TST", baseUnits: false } },
+			{ contract: USDC_AT, transfers: 1, authorizations: 0, amount: { text: "10 USDC", baseUnits: false } },
 		])
 	})
 
@@ -568,7 +569,52 @@ describe("accountOutflows: the direct transfers this account sends to another ad
 		expect(accountOutflows([send(RECIPIENT, VAULT, units(1n, 18), { kind: "none" })], MAIN, [TST], 1)).toEqual([])
 		const blank = { ...TST, symbol: BEL }
 		expect(accountOutflows([send(RECIPIENT, VAULT, "5000000", fromAccount)], MAIN, [blank], 1)).toEqual([
-			{ contract: VAULT, count: 1, amount: { text: "5000000", baseUnits: true } },
+			{ contract: VAULT, transfers: 1, authorizations: 0, amount: { text: "5000000", baseUnits: true } },
 		])
+	})
+
+	// An authorization reads its `from` from its own arguments, as the authorizations block reads it.
+	const FPC = field(0xf9cn)
+	const authorize = (to: string, contract: string, amount: string, from: string, caller = FPC) => ({
+		...send(to, contract, amount, { kind: "explicit", address: from }),
+		caller,
+	})
+
+	test("an authorization moving the account's tokens counts apart from transfers and sums with them", () => {
+		expect(accountOutflows([], MAIN, [TST], 1, [authorize(RECIPIENT, VAULT, units(5n, 18), MAIN)])).toEqual([
+			{ contract: VAULT, transfers: 0, authorizations: 1, amount: { text: "5 TST", baseUnits: false } },
+		])
+		const rows = [send(RECIPIENT, VAULT, units(5n, 18), fromAccount)]
+		expect(accountOutflows(rows, MAIN, [TST], 1, [authorize(RECIPIENT, VAULT, units(3n, 18), MAIN)])).toEqual([
+			{ contract: VAULT, transfers: 1, authorizations: 1, amount: { text: "8 TST", baseUnits: false } },
+		])
+	})
+
+	test("an authorization from another account, to the account itself, unread, or whose caller is the account adds nothing", () => {
+		const unread = {
+			call: { to: VAULT },
+			surface: { kind: "raw", reason: "unknown-function", rows: [], hidden: 0 } as CallSurface,
+			caller: FPC,
+		}
+		const authorizations = [
+			authorize(RECIPIENT, VAULT, units(2n, 18), RECIPIENT),
+			authorize(MAIN, VAULT, units(2n, 18), MAIN),
+			unread,
+			// The account's own call, which the transfer row already reads: counted once.
+			authorize(RECIPIENT, VAULT, units(5n, 18), MAIN, MAIN),
+		]
+		expect(accountOutflows([send(RECIPIENT, VAULT, units(5n, 18), fromAccount)], MAIN, [TST], 1, authorizations)).toEqual([
+			{ contract: VAULT, transfers: 1, authorizations: 0, amount: { text: "5 TST", baseUnits: false } },
+		])
+	})
+
+	test.each([
+		[1, 0, "1 transfer"],
+		[2, 0, "2 transfers"],
+		[0, 1, "1 authorization"],
+		[0, 3, "3 authorizations"],
+		[1, 1, "1 transfer, 1 authorization"],
+	])("%i transfers and %i authorizations read %j", (transfers, authorizations, label) => {
+		expect(outflowLabel({ transfers, authorizations })).toBe(label)
 	})
 })

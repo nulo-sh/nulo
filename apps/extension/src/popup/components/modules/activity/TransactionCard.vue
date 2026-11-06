@@ -19,7 +19,7 @@ import { type Tx, TxStatus, TxExecutionResult } from "@/wallet/services/transact
 
 /** Utils */
 import { STATUS_ICON_FILL } from "@/components/composite/activity/status-icon-fill"
-import { balanceFormatted } from "@/utils/amount.js"
+import { formatListAmount } from "@/utils/amount.js"
 import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { txAmount } from "@/utils/tx-amount"
 import { dashIfBlank } from "@/utils/string"
@@ -127,9 +127,7 @@ const explorerUrl = computed(() => {
 })
 
 const amountStr = computed(() =>
-	amount.value && !figureUnknown.value
-		? balanceFormatted(amount.value.units, amount.value.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
-		: null,
+	amount.value && !figureUnknown.value ? formatListAmount(amount.value.units, amount.value.decimals, ROW_AMOUNT_LENGTH) : null,
 )
 const displayAmountSymbol = computed(() => amount.value?.symbol || null)
 

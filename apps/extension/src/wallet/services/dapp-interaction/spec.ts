@@ -12,7 +12,7 @@ import type {
 	OperationRequest,
 } from "@nulo/wallet-bridge"
 import type { QueuedFeePayer } from "@nulo/wallet-core/jobs"
-import type { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import type { DefaultEntrypointPublicCallError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import type { WindowEnd } from "./window-end"
 
 /** Protocol-shape types (`ExecutionParams`, `ExecutionResult`,
@@ -102,8 +102,12 @@ export type DappInteraction = {
 	hooks?: ExecutionHooks
 	/** The first refusal an estimate or preview of this request met. The request can no longer be
 	 *  approved, and the window's own end of it (Reject, unload, close) answers this refusal. */
-	refusal?: ScopeViolationError
+	refusal?: RecordedRefusal
 }
+
+/** A refusal the request itself carries, met before anything was signed: a scope refusal, or a
+ *  public call through the default entrypoint, which Nulo cannot send. */
+export type RecordedRefusal = ScopeViolationError | DefaultEntrypointPublicCallError
 
 export type ExecutionPayload = {
 	params: ExecutionParams

@@ -10,6 +10,7 @@ import {
 	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
+	DefaultEntrypointPublicCallError,
 	InvalidWalletArgumentsError,
 	JobCancelledError,
 	ScopeViolationError,
@@ -432,6 +433,7 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 		["an ended session", "session_ended", new SessionEndedError(), "Transaction"],
 		["a lock when its turn came", "session_ended", new WalletLockedError(), "Transaction"],
 		["a chain the wallet does not serve", "wallet_refused", new ChainNotSupportedError(), "Transaction"],
+		["a public call through the default entrypoint", "wallet_refused", new DefaultEntrypointPublicCallError(), "Transaction"],
 		[
 			"no account the dApp may use",
 			"wallet_refused",

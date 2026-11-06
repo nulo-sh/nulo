@@ -1,6 +1,7 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { clickByTestId, openPopup, test } from "../fixtures/extension"
+import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
+import { importToken } from "../fixtures/helpers"
 import { pinnedFeeText, refusePrices, seedFeeJuiceQuote, settledText } from "../fixtures/fee-quote"
 import { shotSend } from "../fixtures/send-page"
 import { callService } from "../fixtures/helpers"
@@ -140,6 +141,11 @@ test.skipIf(!hasConfig)(
 		} finally {
 			await cleanup()
 		}
+		// A registered token, so the windows read the call as the account's transfer.
+		const home = await openPopup(ctx)
+		await waitForHash(home, "#/popup/general")
+		await importToken(home, aztecConfig!.tokenAddress)
+		await home.close()
 
 		await setTransferInputs(page)
 		const seqTx = await snapshotResultSeq(page)
@@ -194,6 +200,22 @@ test.skipIf(!hasConfig)(
 		expect(await prices.refused.failures(), "price interception failures").toEqual([])
 		await prices.refused.stop()
 		await shotSend(feePopup, "fee-window-raised", "fee-raised")
+		// What leaves the account opens the window's own fee block.
+		const leaves = await feePopup.$$eval('[data-testid="execute-op-leaves-row"]', (rows) =>
+			rows.map((row) =>
+				["execute-op-leaves-count", "execute-op-leaves-amount"].map((id) =>
+					row.querySelector(`[data-testid="${id}"]`)?.textContent?.replace(/\s+/g, " ").trim(),
+				),
+			),
+		)
+		expect(leaves).toEqual([["1 transfer", expect.stringMatching(/ TST$/)]])
+		expect(
+			await feePopup.$eval('[data-testid="execute-op-leaves-account"]', (block) => {
+				const raised = document.querySelector('[data-testid="fee-raised"]')
+				return raised !== null && (block.compareDocumentPosition(raised) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+			}),
+		).toBe(true)
+		await shotSend(feePopup, "execute-leaves-raised-fee", "execute-op-leaves-account")
 		// The dApp's own row is pending from its request on; only a settled one would mean an answer.
 		const settled = await page.evaluate(
 			(after) =>

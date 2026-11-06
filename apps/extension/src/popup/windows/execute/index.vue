@@ -32,7 +32,8 @@ import {
 	pendingAuthwitDecodes,
 } from "./display-calls"
 import { REFUSAL_REASON, REFUSAL_TITLE, type RefusalKind, refusalKind } from "./refusal"
-import { grantRefusalRow } from "./call-surface"
+import { grantRefusalRow, type WireCall } from "./call-surface"
+import { appAssertion } from "./app-assertion"
 import {
 	WrongProfileError,
 	assertRequestProfile,
@@ -203,6 +204,9 @@ const queueWatch = (index: number, estimateToken: string, signal: AbortSignal) =
 
 /** The snack that reported a failed estimate: closed once none it reported stands, unless replaced. */
 let feeFailureSnackId: number | undefined
+/** Per operation, the app's own failing assertion from its last estimate, drawn under the fee card in
+ *  place of the snack while that failure stands. */
+const appFailures = ref<Record<number, string>>({})
 const {
 	results: feeEstimates,
 	estimating: estimatingOps,
@@ -227,7 +231,11 @@ const {
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
 		console.error("[Execute] Fee estimation failed", { op: key, error: err })
-		if (reportsEstimateFailure(operations.value[key] as unknown as UIOperation)) {
+		const op = operations.value[key] as unknown as UIOperation
+		const inline = feeCardAppFailure(op, err)
+		if (inline) appFailures.value[key] = inline
+		else delete appFailures.value[key]
+		if (!inline && reportsEstimateFailure(op)) {
 			feeFailureSnackId = openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 		}
 	},
@@ -236,9 +244,17 @@ const {
 /** An app-paid operation's estimate only checks the app's fee contract, so its other failures are
  *  unknown, never a verdict. A payment the person makes all the same keeps Confirm waiting on a retry. */
 const reportsEstimateFailure = (op: UIOperation): boolean => !isAppPaid(op) || personPaysAppPayment(op)
+/** Only a send whose fee card the window draws shows the app's failure in place of the snack. */
+const feeCardAppFailure = (op: UIOperation | undefined, err: unknown): string | undefined =>
+	op?.kind === "aztec_sendTx" && !isEmbeddedFeePayment(op) ? appAssertion(err, (op.exec?.calls ?? []) as WireCall[]) : undefined
+const retireSnack = (id: number | undefined) => {
+	if (id !== undefined && toast.value?.id === id) closeToast()
+}
+/** The snack reports only the failures not already drawn under their card. */
 const retireFeeFailureSnack = () => {
-	if (operations.value.some((op, i) => failedFeeEstimates.value[i] && reportsEstimateFailure(op as unknown as UIOperation))) return
-	if (feeFailureSnackId !== undefined && toast.value?.id === feeFailureSnackId) closeToast()
+	const reported = (op: UIOperation, i: number) => failedFeeEstimates.value[i] && !appFailures.value[i] && reportsEstimateFailure(op)
+	if (operations.value.some((op, i) => reported(op as unknown as UIOperation, i))) return
+	retireSnack(feeFailureSnackId)
 	feeFailureSnackId = undefined
 }
 
@@ -268,6 +284,8 @@ const payerShort = computed(() =>
 	}),
 )
 
+/** The snack that reported a failed preview: closed, as the fee's is, once none stands. */
+let previewFailureSnackId: number | undefined
 // A `default_entrypoint` operation never gets a fee estimate (the dApp pays), so
 // the authorizations it uses are previewed through their own slot
 // of the same engine: same attempt token, flow key, cancel and handoff rules.
@@ -292,11 +310,19 @@ const {
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
 		console.error(`[Execute] Authorization preview failed for op ${key}:`, err)
-		openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
+		previewFailureSnackId = openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
 	},
 })
 
-const retryAuthwitPreview = (index: number) => scheduleAuthwitPreview(index, { index })
+const retirePreviewFailureSnack = () => {
+	if (operations.value.some((_, i) => failedAuthwitPreviews.value[i])) return
+	retireSnack(previewFailureSnackId)
+	previewFailureSnackId = undefined
+}
+const retryAuthwitPreview = (index: number) => {
+	scheduleAuthwitPreview(index, { index })
+	retirePreviewFailureSnack()
+}
 
 const awaitsEstimates = computed(() =>
 	operations.value.some((op, i) =>
@@ -697,6 +723,7 @@ onUnmounted(() => {
 						:tokenFlagged="isFlaggedAdd(op as UIOperation)"
 						:tokenFlagAcknowledged="flagAcknowledged.has(i)"
 						:refused="refusal !== undefined"
+						:appFailure="failedFeeEstimates[i] ? appFailures[i] : undefined"
 						@updateFeeSettings="handleFeeUpdate"
 						@retryEstimate="retryFeeEstimate"
 						@retryPreview="retryAuthwitPreview"
