@@ -4,3 +4,4 @@
 - `leaveLocked()` sits beside `leaveChanged()`: the branch inline would take `attempt` past the cognitive-complexity cap, as in Phase 3.
 - Codex round 1 found that the lock can land before the error answers: `SessionManager.close()` emits the lock before its storage cleanup, and the shell's lock landing unmounts the page, whose teardown dropped the run. A unit test that rejects at once cannot see it; the fix's test holds the answer, lands the lock, unmounts, then rejects.
 - The edits moved nine chaos-model citations of `unlock-method.vue`; re-cited by a line diff from HEAD and checked by `scripts/e2e/profile-chaos-model.test.ts`.
+- Round 2: a run kept past its page's teardown loses the watchers that cancelled it (profile switch, a reset), so its fence must carry those conditions itself; the kept run is current only while the window still runs the flow for the profile it was kept for.
