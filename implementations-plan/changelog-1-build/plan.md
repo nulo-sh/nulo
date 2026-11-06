@@ -1,0 +1,113 @@
+---
+plan: changelog-1-build
+tier: light
+driver: claude-code
+claude_model: opus
+codex_model: sol
+code_review: off
+explainer: off
+eli5_mode: skipped (orchestrator-owned)
+base: 253ff8833 (origin/dev)
+issues: "#1691"
+status: approved
+---
+
+# Changelog pages on nulo.sh, direction D2 "Cards"
+
+Each stable release gets a static page at `https://nulo.sh/changelog/vX.Y.Z/`, with an index at `/changelog/`. The top part comes from an editorial file per release, `apps/landing/content/changelog/X.Y.Z.toml`; the bottom part is `release-notes/X.Y.Z.md`, rendered as the GitHub Release shows it. Closes #1691 in one arc. Recon: [`recon.md`](recon.md). The prototype (branch `worktree-changelog-1`, never pushed) is the starting point; only D2 and its shared base survive.
+
+**Sign-offs (quoted as the owner gave them):** P116-01 A (a page per release at `/changelog/vX.Y.Z/` and an index; "one creative part … with icons" on top, "the bullet list of the markdown we already generate" at the bottom); P116-02 (whoever writes the notes writes the editorial file; the owner signs off both on the Workers Builds preview); P116-04 ("Whatever is easiest… wouldn't over-engineer"); P116-05 (approve the four-direction render); P117-09 D2 "Cards" (2026-11-06 18:18 UTC), as built in the prototype frames `p117-cl-d2-*`.
+
+## Outcome & Quality Bar
+
+- **For whom**: a person deciding whether to install or update Nulo, often arriving from the wallet's What's new row on a laptop or a phone; and the maintainer who writes the next release's files.
+- **Excellent**: the pages match the signed D2 frames at 1280 and 390 px in both themes, with no horizontal scroll, and read in full with no script or with reduced motion. A bad editorial file or notes file fails the PR's CI with a message naming the file and the rule, never a broken or silent page.
+- **Good enough**: no per-release imagery beyond the wallet's glyphs; no RSS; no home-page link (A1).
+
+## Assumptions
+
+Facts:
+- F1. Root `package.json` `version` is `1.2.0` on `dev` and on `main`; release-please bumps it in the Release PR (`CI.md`).
+- F2. `release-notes/` holds `1.1.0.md` and `1.2.0.md`; their Releases published on 2026-10-27 and 2026-11-05, the dates the prototype's TOML files carry.
+- F3. The landing renders legal markdown with `Bun.markdown.html` and checks the rendered HTML against a private tag allowlist in `apps/landing/scripts/legal-pages.ts`; its tests reach `Bun.markdown` through a `bun -e` bridge.
+- F4. Workers Builds injects `WORKERS_CI_BRANCH`, the pushed branch (Cloudflare docs, Workers Builds configuration). Nothing in the repo reads it today.
+- F5. The CSP (`public/_headers`) allows `style-src 'unsafe-inline'` and `script-src 'self'`.
+- F6. `src/page.test.ts`'s cross-origin scan reads resource attributes, meta URLs and form actions, not `<a href>`.
+- F7. `pr-quick.yml`'s `landing` filter lacks `release-notes/**`; `unit-tests` runs on every PR.
+- F8. The `whats-new-1` lane links the wallet to `https://nulo.sh/changelog/vX.Y.Z/` (three-part version).
+- F9. The prototype's light block sets `--txt-body` to 62 % black; the wallet's `[theme="light"]` sets 58 %. The signed frames carry 62 %.
+- F10. `notesProblems` does not require a lead line or `- ` bullets; that shape is the release skill's convention only.
+
+Inferences: I1, Workers Builds' production branch is `main` (`CLAUDE.md` § Branching, the release skill). I2, `Bun.markdown` escapes every `<` in text, so each `<` left in its output starts a tag; the legal check rests on it and its tests hold it.
+
+Asks: A1 and A2 go to the owner ([`OWNER-ASKS.md`](OWNER-ASKS.md)); neither concerns a surface this arc builds.
+
+## Architecture & Implementation
+
+- **`scripts/markdown.ts`** (new, moved from `legal-pages.ts`): `renderMarkdown`, `escapeHtml`, `assertOnlyAllowedHtml(html, allowed, label)` with `isSafeHref`. Legal keeps its allowlist and passes it in.
+- **`scripts/changelog-pages.ts`** (new, pure; split templates into `changelog-html.ts` only if the file outgrows one screen of logic): `parseEditorial(toml, version)`, `renderNotes(markdown, version)`, `pairSources(notes, editorials)`, `isDraft(version, siteVersion)`, `planChangelogPages({ releases, siteVersion, production })` returning `{ path, html }[]`, and the D2 templates.
+- **`scripts/build-changelog.ts`** (new, file I/O only): reads the two source dirs, the root version and `WORKERS_CI_BRANCH`; writes `changelog/**/index.html` and `src/generated/changelog-pages.json`, as `build-legal.ts` does.
+- **Flow**: `prebuild` runs `build-legal.ts`, then `build-changelog.ts`; `vite.config.ts` reads both lists into `rollupOptions.input`; `src/changelog.ts` is the pages' one module (stylesheets, the reveal observer, `mountPage` for the grain).
+- **Version gate (D1)**: a release is a draft when its version is above the root version (a prerelease root such as `1.3.0-rc.1` sits below `1.3.0`). `production` is `WORKERS_CI_BRANCH === "main"`: a production build leaves drafts out of every page, the index and the pager included, and its pages are indexable; every other build renders drafts too, and all its changelog pages carry `noindex`.
+- **Alternative not taken**: one generator for legal and changelog pages. They share only the markdown check and the bar; one module per page family keeps each test file about one thing.
+
+## Decision ledger
+
+- D1. Version gate as above. Every non-production page is `noindex`, not only drafts: the Release PR's preview already carries the bumped root version, so its new release would otherwise be indexable (Codex 3). Rejected: no branch input (drafts would sit on nulo.sh between the promote and the Release PR); production as the default when the variable is absent (local and CI builds could never show a draft).
+- D2. Every notes file needs its TOML and every TOML its notes; the build refuses either orphan. `release-notes/**` joins the landing filter, so a notes PR without its TOML goes red on `build-landing` and the landing unit tests. The release skill says so, and that a version rename moves both files and the TOML's `version` (Codex 9).
+- D3. TOML shape: `version`, `date` (`YYYY-MM-DD`), `title`, `lede`, three to five `[[change]]` with `icon`, `area`, `title`, `line`. Unknown keys are refused, so `figure` and `[scene]` leave the two files. Every string is non-empty and holds no em dash; `icon` is an own key of `glyphs` (`Object.hasOwn`: `"constructor"` passes `in`, Codex 2).
+- D4. Notes allowlist: `p`, `ul`, `ol`, `li`, `strong`, `em`, `code`, no attributes; the first block must be a `<p>` (the index's lead line, the page's description; a rule the release checks do not make, F10). Em dash refused.
+- D5. Light theme: `changelog.css` keeps the prototype's override under `prefers-color-scheme: light`, the wallet tokens these pages read plus the landing's own (`--line`, `--line2`, `--dim`, the grain colour), with the signed values (62 % body text included, F9). No pin: the copy is the signed look, and a whole-block pin would tie the landing to wallet tokens it never reads (Codex 5, 8). Rejected: copying and pinning the whole block.
+- D6. `public/sitemap.xml` gains `/changelog/` only; release pages are found through its links.
+- D7. The `bun -e` bridge moves into `scripts/in-bun.ts`, used by both test files.
+- D8. Dropped from the prototype: d1, d3, d4, `three`, the capture script, the footer's "preview d2 · cards" label, the blanket `noindex`. The hover redraw keeps its second, identical keyframes: changing `animation-name` is what restarts the draw.
+
+## Security & Adversarial Considerations
+
+- **Threat model**: the sources are repo files reviewed in PRs. The attacker is a contributor PR, or a compromised maintainer account, that smuggles markup, script or an off-site resource onto nulo.sh, which shares an origin with `/api/subscribe`.
+- **The boundary is the rendered allowlist.** Vite bundles a `<script type="module">` it finds in a page into a same-origin asset the CSP admits, so the CSP does not stop smuggled script. Every TOML string is escaped; the rendered notes must pass D4's allowlist; the legal allowlist never applies to notes; the built-site scan refuses any cross-origin resource.
+- **Gate failure**: if `WORKERS_CI_BRANCH` is absent on production, a draft ships `noindex`; its text is already public in the repo. Exploitability of a branch named `main` elsewhere: unknown, no path found (Workers Builds builds this repo's own pushes).
+- **Supply chain**: no new dependency; Bun built-ins only. **Least privilege, crypto, secrets**: none touched; `wrangler.jsonc` and `_headers` unchanged. **Privacy**: no tracking, no third-party request; GitHub links are plain navigations.
+
+## UI impact
+
+New surfaces on nulo.sh: `/changelog/`, `/changelog/v1.1.0/`, `/changelog/v1.2.0/`, D2 as built under P117-09. Against the signed frames, one difference: the footer drops "preview d2 · cards". The top-part copy is the lane's draft; the owner edits it on the preview (P116-02). Untouched: the home page, How Aztec works, the legal pages, the extension. Accessibility calls under the owner's 2026-10-19 delegation: each index card is one link with the site's 2 px focus ring; glyph SVGs are `aria-hidden`; nothing is hidden without script or under reduced motion.
+
+## Phase 1: the generator, the shared markdown check and their tests
+
+1. Move the markdown check into `scripts/markdown.ts`; keep `legal-pages.test.ts`'s cases unchanged except the bridge import (D7).
+2. Write `changelog-pages.ts`, `build-changelog.ts` and the two TOML files (D3).
+3. Wire `package.json` (`predev`, `prebuild`), `vite.config.ts` and `.gitignore` (`/changelog/`, `src/generated/changelog-pages.json`).
+4. Write `scripts/changelog-pages.test.ts`, table-driven around one valid fixture: one case per refused TOML class (em dash, unknown glyph, `constructor`, two changes, six changes, unknown key, wrong version, bad date); one per refused notes class (link, image, a multiline `<script type="module">`, an attribute on an allowed tag, list first); both orphans; the gate (production: a draft is absent from paths, index and pager, and released pages are indexable; preview: every page `noindex`, the Release PR case included; `1.10.0` above `1.9.0`; a `1.3.0-rc.1` root); a TOML `<` escaped; the real files pair, render and hold no em dash.
+
+Validation gate: `bun run --cwd apps/landing test` exits 0 with both test files green; `bun run --cwd apps/landing typecheck` and `bun run lint` exit 0. Layers: lint, typecheck, unit.
+
+## Phase 2: the page, CI, sitemap, docs and captures
+
+1. Add `src/changelog.ts` and `src/styles/changelog.css` (D2 and the shared layer, one file; D5).
+2. In `src/page.test.ts`, run `build-changelog.ts` before `vite build`, and require the three pages.
+3. In `pr-quick.yml`, add `release-notes/**` to `landing` and the three pages to "Verify the pages shipped"; pin the filter in `behavior-gating.test.ts`.
+4. Add `/changelog/` to the sitemap. Update `apps/landing/README.md`, `CI.md` (`build-landing`) and the release skill's § Release notes: the TOML beside the notes (P116-02), its three to five changes, and a version rename that moves both files and the TOML's `version`.
+5. Capture with a scratch script (never committed): v1.2.0, v1.1.0 and the index at 1280 and 390 px, light and dark, on a registry-claimed port with the production CSP; record `scrollWidth <= innerWidth` for each. With script off and with reduced motion, assert every card and the notes are visible (computed opacity 1), and that Tab reaches each index link with a visible ring.
+
+Validation gate: `bun run --cwd apps/landing build` exits 0 and `dist/changelog/{index.html,v1.1.0/index.html,v1.2.0/index.html}` exist; `WORKERS_CI_BRANCH=main` builds the same three, indexable; `bun run audit:vue`, `bun run test:all`, `bun run test:ci-gating`, `bun run lint:actions` and `bun run check:plans` exit 0; `cd apps/extension && bun run test:e2e -- --retry=0` (smoke, Chrome) exits 0, as `CLAUDE.md` asks of a user-visible change, though no suite covers the landing; twelve captures with no horizontal scroll; the no-script, reduced-motion and keyboard checks pass. Layers: lint, typecheck, unit, build, smoke e2e, browser check.
+
+## Delivery
+
+One arc, one PR to `dev`. Branch `changelog-1-build-a1` off `origin/dev`, carrying the plan commit. Title: `feat(landing): changelog pages at /changelog, one per stable release` (68 characters). The body: what and why, the gates with outcomes, the twelve captures, the two TOML files named as the owner's to edit on the preview, the UI-impact differences, the accessibility calls, `Closes #1691`. No label: the workflow edit runs pr-quick only. The close-out lands before the first push, so CI runs once.
+
+## Post-implementation
+
+Execution contract: `implementations-plan/README.md` § Post-implementation standard at `253ff8833`. `code_review: off`, so step 1 is absent. Loop (single arc, once over the whole diff after Phase 2 is green): `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh` and its codex-dir, hard stop at three rounds; one Opus 5.5 diff review beside round 1; log each round in `lessons/phase-2.md`. Close-out as the PR's last commits: the Outcome, lessons (dedupe; `lessons.md` is near its budget), open items filed, `STATUS.md` deleted, `git mv` into `archive/` in its own commit, `bun run check:plans` green. Then `gh pr create` and `gh pr checks <n> --watch`. Teardown after the merge: once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/changelog-1-build/plan.md` succeeds, run `agent-worktree done changelog-1-build --merged`.
+
+## Audit verdicts
+
+Each finding's path: `lessons/phase-0.md`.
+- **Codex round 1** (gpt-6.1-sol, high): approve with changes. Accepted all nine: recon's notes-rule claim corrected (1, F10); `Object.hasOwn` for glyphs (2); every non-production page `noindex` (3, D1); the script and attribute refusal cases (4); the small light override, no whole-block pin (5, D5); gate assertions over index and pager, numeric order (6); no-script, reduced-motion and keyboard checks, `audit:vue`, an explicit `test:e2e` exception (7); 62 % kept as signed (8); the release skill's paired rename (9).
+- **Codex round 2** (same session, verification): approve with changes. Accepted both: a stale "add the D5 pin" step removed (1); the smoke suite runs in the Phase 2 gate instead of a self-declared exception (2).
+- **Codex rounds 3 and 4** (same session): round 3 found the round-2 edits unapplied (an aborted edit script); applied. Round 4: approve, no remaining material finding. The plan is approved under the auto-continue rule: neither owner ask concerns a surface this arc builds.
+
+## Seeds
+
+- `/goal` Phases 1 and 2 of implementations-plan/changelog-1-build/plan.md marked ✓, each gate's output in the transcript; the Codex loop converged (a resumed pass with no new material finding, quoted); the close-out's archive move shown with `git show --stat`; the PR open against `dev` after the loop, `gh pr view` shown; `bun run test:all` and `bun run lint` exit 0.
+- `/loop 15m` Drive implementations-plan/changelog-1-build forward: read plan.md and lessons/, take the next unticked step, run its gate, decide open questions with Codex (gpt-6.1-sol, high), never merge, stop after reporting a green PR.
