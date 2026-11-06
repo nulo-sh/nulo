@@ -1,7 +1,7 @@
 ---
 plan: chips-3
 tier: light
-status: approved by the panel (Codex final verdict: approve); arc 1 in review (#1723)
+status: approved by the panel (Codex final verdict: approve); arc 1 merged (#1723); arc 2 in progress
 issues: "#657 (closed; pages 117 and 118 reopened its row)"
 driver: claude-code
 claude_model: opus
@@ -10,26 +10,28 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 1 explorer (sonnet); one Codex gpt-6.1-sol high audit, resumed
-base: origin/dev at 0bfd2c088
+base: origin/dev at 0bfd2c088 (arc 2: 24d59880f)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
 # chips-3: the direction chip becomes C2 at the C2S size
 
-Decision pages 117 and 118 (signed 2026-11-06, 18:18 and 19:37 UTC) replace the direction chip of the Home and History rows with C2 at C2S. **Arc 1** builds it on the rows the owner saw: the settled transfer row and the receipt row. It also answers the owner's token-symbol question with pictures. **Arc 2** builds the owner's answers to [OWNER-ASKS.md](OWNER-ASKS.md); nothing past this line plans it. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/extension/` unless they name a package. The plan runs about 25 lines over the light target: the two audit rounds and the trust-boundary trace.
+Decision pages 117 and 118 (signed 2026-11-06, 18:18 and 19:37 UTC) replace the direction chip of the Home and History rows with C2 at C2S. **Arc 1** builds it on the rows the owner saw: the settled transfer row and the receipt row. It also answers the owner's token-symbol question with pictures. **Arc 2** (Phase 4) builds the owner's page 120 answers to [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/extension/` unless they name a package. The plan runs about 60 lines over the light target: the two audit rounds, the trust-boundary trace and arc 2's phase.
 
 ## Scope: the owner's picks, verbatim
 
 - **P117-01, C2:** "C's glyph pair plus a small corner badge on the icon box, lower right (the status check holds the top right): ↗ for sent, ↙ for received, the swap glyph ⇄ for a move to the same account (the set has no ↔). Rows stay two lines; the box carries two badges and a pair inside 40 px." The owner's note: "I REALLY like C2 but when there are two glyphs, it looks like it's too close to the border of the rectangle. Can we generate one option like C2 but a tini-tiny smaller glyphs inside the rectangle?"
 - **P118-01, C2S:** "Side glyphs 11 px, badge glyph 10 px (the badge 14 px with its ring): the ink sits 3.4 px from the border, double today's clearance, and the badge 6.4 px from the nearest glyph. The globe keeps its meridians distinct." The arrow stays 9 px.
 - **P118-01's note:** "hey, I've just realize that we are also repeating "cUSDC" on the right side, when it's not necessary since it has the token name as a title for the row. Would it make sense to remove it? Or is there a case were it's needed?" OA-1 answers it; arc 1 builds nothing for it.
+- **P120-01, A** (decision page 120, signed 2026-11-06 23:33 UTC, no notes): "No symbol where the title already names the token; a mint keeps it under its amount." The page's reasoning beside it: "A priced row's amount column drops from three lines to two, and the title beside it names the token."
+- **P120-02, C2** (the same page): "The same pair and way badge as a settled send, from the start. The spinner, or the failed status, keeps the top right; ↗ or ⇄ follows the send's two addresses, as the settled row's do."
 
 ## Outcome & Quality Bar
 
 - **For whom:** a person scanning Home or History for what moved, which way and between which sides; a screen-reader user who heard the chip's words before.
 - **Excellent:** (1) the pair and the badge sit at the measured C2S sizes in both browsers and both themes, and the e2e proves the clearance the owner asked for; (2) a screen reader reads today's chip words once, and the glyphs add nothing to it; (3) a stored row cannot make the glyphs claim a move it did not record.
-- **Good enough:** the arrow, the box, the status badge and every other field stay as they are; in-flight and failed rows keep their chip until OA-2 is answered.
+- **Good enough:** the arrow, the box, the status badge and every other field stay as they are; in arc 1, in-flight and failed rows keep their chip until OA-2 is answered.
 
 ## Assumptions
 
@@ -47,7 +49,7 @@ Decision pages 117 and 118 (signed 2026-11-06, 18:18 and 19:37 UTC) replace the 
 **Inferences:**
 - I1. The app chip's floor at 11 px is a whole "…" plus its border and padding, about 20 px (19.89 px measured in #657). Phase 2 measures it on both browsers.
 
-**Asks:** OA-1 (the symbol) and OA-2 (in-flight and failed rows) in [OWNER-ASKS.md](OWNER-ASKS.md). Arc 1 depends on neither: it ships today's symbol and today's in-flight chip.
+**Asks:** OA-1 (the symbol) and OA-2 (in-flight and failed rows) in [OWNER-ASKS.md](OWNER-ASKS.md). Arc 1 depends on neither: it ships today's symbol and today's in-flight chip. Both answered on page 120 (D10); arc 2 builds them.
 
 ## Architecture & Implementation
 
@@ -63,7 +65,7 @@ Decision pages 117 and 118 (signed 2026-11-06, 18:18 and 19:37 UTC) replace the 
   - Being a transfer still decides `oneLineTitle`, so an unknown stored type keeps its title whole. It shows no pair.
   - `data-tx-transfer-type` keeps today's text for the four known types.
 - **Receipt:** the `receivedLabel` prop becomes `direction`, built by `buildIncomingCardProps`. The kind chip, its separator and its green go; its hidden span keeps `tx-incoming-kind-chip`, so the network e2e is untouched.
-- **Awaiting and terminal cards: unchanged** (OA-2).
+- **Awaiting and terminal cards: unchanged** in arc 1 (OA-2); arc 2 is Phase 4.
 - **Alternatives not taken:**
   - The prototype's five props and its label parser: one typed prop cannot disagree with itself.
   - A layout-owned hidden span: it works too, but the two testids would need a prop.
@@ -86,7 +88,9 @@ Decision pages 117 and 118 (signed 2026-11-06, 18:18 and 19:37 UTC) replace the 
   - The icon box shows the pair and the corner badge at C2S, and these rows are two lines.
   - A dApp transfer's app chip is 11 px, as the signed prototype rendered it.
   - Sign-off: P117-01 and P118-01 above.
-- **In-flight and failed rows:** unchanged; OA-2 shows them both ways.
+- **In-flight and failed rows:** unchanged in arc 1; arc 2 builds P120-02 below.
+- **Arc 2, the amount column of every activity row** (Home, History, the token page; light and dark): no symbol under an amount whose title names the token (a send, a move, a receipt, a dApp's transfer, a send in flight or failed); a mint keeps it. Before: amount, symbol, fiat. After: amount, fiat. Sign-off: P120-01 A, quoted under Scope.
+- **Arc 2, a wallet send queued, proving, failed or cancelled:** its "PRIVATE → PUBLIC" chip leaves the title row; the icon box draws the pair and the way badge of the settled row, with the spinner or the status icon top right. Sign-off: P120-02 C2, quoted under Scope.
 - **Accessibility, under the owner's 2026-10-19 delegation:** the chip's words stay in the reading order as hidden text. The new glyphs are hidden from assistive tech. No Tab stop or focus ring moves.
 
 ## Phase 1: the direction type, the layout and two cards ✓
@@ -135,6 +139,25 @@ Tests (colocated, updated in place):
 - **Gate.** Pass: every frame exists in both themes, and `captions.json` names each one. `git status` shows only plan files.
 - **Result.** Four PR frames in [screenshots/](screenshots/). Sixteen page-119 frames in both themes; Codex's consult on the two recommendations added `p119-01-*-04`, an unpriced second token's row, where option a costs most. The app chip reaches its 20 px floor at a 14-letter symbol ([lessons/phase-1.md](lessons/phase-1.md)).
 
+## Phase 4: arc 2, the symbol and the in-flight pair
+
+Change map (paths under `apps/extension/src/`):
+- `components/composite/activity/TransactionCardLayout.vue`: `titleNamesToken` (default false) hides `amountSymbol`.
+- `popup/components/modules/activity/TransactionCard.vue`: `titleNamesToken` is the branch that titles the row by its symbol; a mint's title is its kind, so it keeps the symbol. `TransactionIncomingCard.vue`: always, its title is its token.
+- `utils/journal-state.ts`: `journalCardDirection(op)` = `transferDirection(op.transferType, sameFieldAddress(op.accountAddress, op.recipientAddress))` for a transfer, else null; `journalCardTitleNamesToken(op)`; `JournalTerminalCardProps` trades `transferTypeLabel` for `direction` and gains `titleNamesToken`; `journalCardTransferTypeLabel` retires.
+- `TransactionAwaitingCard.vue`, `TransactionTerminalCard.vue`: `direction` replaces `transferTypeLabel`; the chip goes; `#secondary` opens with the hidden words under `activity-direction-chip` (`directionWords`), outside the live status span.
+- `popup/components/modules/general/RecentActivityView.vue`, `popup/pages/activity.vue`: pass both; the orphan task card takes the task's type and two addresses the same way.
+- The stories follow their props.
+
+Tests (colocated, in place):
+- `TransactionCardLayout.test.ts`: a wire-shaped send (a `0x` + 64-hex contract on the root, "cUSDC") with `titleNamesToken` draws amount and fiat, no symbol; a mint ("Mint (public)") and an omitted flag keep it.
+- `TransactionCard.test.ts`: a transfer passes the flag, a mint does not. `TransactionIncomingCard.test.ts`: passes it.
+- `journal-state.test.ts`: `journalCardDirection` gives `out` to another address, `self` to the sender in another hex case, `out` for a missing or malformed pair, null for an unknown or missing type and for a `dapp_execute` record carrying a `transferType`; the terminal props carry `direction` and the flag.
+- `TransactionAwaitingCard.test.ts`, `TransactionTerminalCard.test.ts`: no chip; the hidden span holds the words, outside the `role="status"` span; a dApp op keeps its app chip.
+- `RecentActivityView.test.ts`: the field table reads `direction` and `titleNamesToken`. **No jump:** one send mounted queued (awaiting card) and settled (`TransactionCard`) over the real layout draws the same icon box (pair, way badge, a status badge top right), title row, secondary words and amount column.
+
+**Validation gate.** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`; then the Phase 2 e2e at retry 0, Chrome then Firefox, unchanged files: the settled pair's geometry is the same layout code, and no e2e reads the in-flight chip or the symbol. Pass: every command exits 0. Captures as Phase 3, ids `p120-01-built-<nn>` and `p120-02-built-<nn>`.
+
 ## Decision ledger
 
 - D1. Arc 1 takes C2 on the settled and receipt cards only; the in-flight and failed cards wait for OA-2 (Codex round 2, held).
@@ -146,6 +169,10 @@ Tests (colocated, updated in place):
 - D7. A move is `sameFieldAddress(from, to)`; a malformed pair is never a move.
 - D8. A move's hidden words add ", within this account", since its ⇄ badge is `aria-hidden`; `data-tx-transfer-type` keeps the label (review round 1; an accessibility call under the 2026-10-19 delegation).
 - D9. The app chip's 20 px floor gets an e2e row on History, a 16-letter symbol; Home's list stops at five rows (review round 1).
+- D10. OA-1 = P120-01 A, OA-2 = P120-02 C2 (Scope quotes both). These are arc 2's only visible changes.
+- D11. The symbol rule is one layout flag, `titleNamesToken`, set by each card from the branch that builds its title; default false keeps the symbol on any row that does not opt in. Codex (consult, high confidence): "(b)'s comparison is redundant: both addresses would come from that same token selection"; a token-identity pair of props was not taken. Comparing the rendered title and symbol was never an option.
+- D12. An in-flight or failed send's way comes from its journal record's `accountAddress` and `recipientAddress`, the same request fields the settled record's `from` and `to` are written from (`transfer-executor.ts`), so the badge cannot flip at settlement. The orphan task card does the same from its task.
+- D13. The in-flight and failed cards' hidden words take the settled card's `activity-direction-chip` testid (the chip they replace had none) and sit outside the live status span, so a stage change does not re-announce them. An accessibility call under the 2026-10-19 delegation.
 
 ## Audit verdicts
 
@@ -168,7 +195,7 @@ Arc 1's fix loop (Codex gpt-6.1-sol, high, read-only; one Opus review beside rou
 
 - Arc 1: branch `worktree-chips-3`. Open one PR against `dev` with `gh pr create`, ready, no label. Title: `feat(activity): settled and received rows draw their direction in the icon box`.
 - The body quotes P117-01 and P118-01 verbatim and holds the Phase 3 PR captures. It states the e2e wall-clock before and after, the D4 accessibility call and both open asks. It says "Refs #657"; there is no `Closes`.
-- Arc 2 starts from `dev` after arc 1 merges, as p110-build-1 did. The plan's close-out ships with arc 2. If both answers keep today, the close-out ships alone.
+- Arc 2 starts from `dev` after arc 1 merges, as p110-build-1 did, on branch `chips-3-a2`. One PR with `gh pr create`, ready, no label; the body quotes P120-01 and P120-02 with the page and time and says "Refs #657". The plan's close-out ships with arc 2.
 
 ## Post-implementation
 
