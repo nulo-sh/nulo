@@ -551,8 +551,8 @@ export class DappSendExecutor {
 	}
 
 	/** An embedded fee payment skips discovery, as its confirm does: the app's own fee calls conflict
-	 *  with the discovery simulation's dummy fee method. Its validated run lists what another account's
-	 *  carried witness covers. */
+	 *  with the discovery simulation's dummy fee method. Its validated run lists each authorization
+	 *  whose witness the request carries, the account's own included. */
 	private async buildForEstimate(
 		operation: Operation,
 		actions: Action[],
@@ -568,7 +568,7 @@ export class DappSendExecutor {
 		const op = { ...(operation as SendTransactionOperation), actions: [...actions], fee }
 		const probe = new CollectingDiscoveryProbe()
 		const built = await this.deps.buildAndEstimateValidated(op, feeSettings, fence, undefined, signal, undefined, probe)
-		return { built, discovered: consumedOf(probe) }
+		return { built, discovered: attachedOf(probe, built) }
 	}
 
 	/**
@@ -1201,7 +1201,7 @@ export class DappSendExecutor {
 				onBuilt,
 				probe,
 			)
-			return { ...built, discoveredHashes: consumedOf(probe).map(listedKey) }
+			return { ...built, discoveredHashes: attachedOf(probe, built).map(listedKey) }
 		}
 		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(
 			op,
@@ -1395,9 +1395,16 @@ function listedRecords(decoded: Pick<DecodedAuthwits, "signable" | "consumed">):
 	return [...decoded.signable.map(({ record }) => record), ...decoded.consumed]
 }
 
-/** What an app-paid send lists: it signs nothing, so only what another account's carried witness covers. */
-function consumedOf(probe: CollectingDiscoveryProbe): DiscoveredAuthwit[] {
-	return probe.discovered.filter((record) => record.onBehalfOf !== undefined)
+/** What an app-paid send lists, and holds its confirm to: the send signs nothing, so each request
+ *  whose witness it carries, the account's own named as given by the account. A carried hash is not
+ *  a checked signature: only a contract that checks the request makes the validated run check it. */
+function attachedOf(probe: CollectingDiscoveryProbe, built: Pick<FeeEstimate, "account" | "txRequest">): DiscoveredAuthwit[] {
+	const carried = carriedHashes(built.txRequest)
+	const account = built.account.address.toString()
+	return probe.discovered.flatMap((record) => {
+		if (record.onBehalfOf !== undefined) return [record]
+		return carried.has(record.messageHash) ? [{ ...record, onBehalfOf: account }] : []
+	})
 }
 
 /** The journal's copy of a send's grants, scoped as the recorder writes them; none for a send that

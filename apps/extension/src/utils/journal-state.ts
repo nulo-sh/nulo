@@ -311,6 +311,11 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 			return { label: "Not allowed", context: "The app asked for more than you allowed. Nothing was sent." }
 		case "registry_refused":
 			return { label: "Not allowed", context: "Apps cannot change your public authorizations. Nothing was sent." }
+		case "unattached_refused":
+			return {
+				label: "Not allowed",
+				context: "The app did not include an authorization from another of your accounts. Nothing was sent.",
+			}
 		case "malformed_request":
 			return { label: "Couldn't read request", context: "The app sent a request the wallet could not read. Nothing was sent." }
 		case "terms_refused":
@@ -371,6 +376,7 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 			return "Stopped when the wallet locked"
 		case "scope_refused":
 		case "registry_refused":
+		case "unattached_refused":
 			return "Not allowed"
 		case "malformed_request":
 			return "Couldn't read request"

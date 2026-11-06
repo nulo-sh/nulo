@@ -34,6 +34,7 @@ import {
 	TermsAcceptanceRequiredError,
 	TooManyPendingError,
 	DuplicateInitializationError,
+	UnattachedAuthorizationRefusalError,
 	UnsupportedMethodError,
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
@@ -254,9 +255,22 @@ export const OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE = Object.freeze({
 	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
 })
 
+/** A transaction whose authorization request names another approved account and carries no witness
+ *  for it: the scope refusal's code with its own text, a public contract like
+ *  `SCOPE_VIOLATION_MESSAGE`. It names no account, so the app learns only what it left out. */
+export const UNATTACHED_AUTHORIZATION_REFUSAL_MESSAGE =
+	"This transaction uses another account's authorization, and the request carries no witness for it. Attach the witness."
+
+export const UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE = Object.freeze({
+	code: 4100,
+	message: UNATTACHED_AUTHORIZATION_REFUSAL_MESSAGE,
+	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
+})
+
 function scopeViolationEnvelope(error: ScopeViolationError): WalletResponse["error"] {
 	if (error instanceof AuthRegistryRefusalError) return AUTH_REGISTRY_REFUSAL_ENVELOPE
 	if (error instanceof OwnAccountIntentRefusalError) return OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE
+	if (error instanceof UnattachedAuthorizationRefusalError) return UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE
 	return SCOPE_VIOLATION_ENVELOPE
 }
 

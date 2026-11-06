@@ -75,7 +75,6 @@ const accounts = computed(() => {
 	return [...live, ...heldAccounts.value.filter((h) => !live.some((a) => a.address === h.address))]
 })
 
-const confirmPasskeyButton = useTemplateRef("confirmPasskeyButton")
 const closeButton = useTemplateRef("closeButton")
 const selectedAddress = ref("")
 const isAgreed = ref(false)
@@ -85,11 +84,9 @@ const isBusy = ref(false)
 const isDownloading = ref(false)
 const filePassword = ref("")
 const repeatedFilePassword = ref("")
-/** The passkey's answer, held from "Confirm with passkey" to Save for the profile, account and network
- *  it was given for only; any reset or failed Save drops it. Shallow: the answer itself is never made
- *  reactive. */
-const approval = shallowRef(null)
-const isApproved = computed(() => approval.value !== null)
+/** Bumped by a Save that failed after its passkey, which drops the typed pair: the pair mounts again,
+ *  and its first field takes the keyboard back. */
+const pairRun = ref(0)
 const canSaveFile = computed(() => isNewPasswordValid(filePassword.value ?? "", repeatedFilePassword.value ?? ""))
 
 /** "" | "ready" | "protected" | "downloaded" — the file stages, mirroring Full Backup's status machine. */
@@ -111,12 +108,11 @@ const resetFlow = () => {
 	isDownloading.value = false
 	fileStatus.value = ""
 	payload.value = ""
-	dropApproval()
+	clearFilePassword()
 	onCeremonyReject(new Error("The account file flow started over"))
 }
 
-function dropApproval() {
-	approval.value = null
+function clearFilePassword() {
 	filePassword.value = ""
 	repeatedFilePassword.value = ""
 }
@@ -167,7 +163,7 @@ watch(
 	},
 )
 // A lock can leave this page mounted (an unlock from another window supersedes it before the
-// landing): what was typed or approved belongs to the session that ended.
+// landing): what was typed or asked belongs to the session that ended.
 watchLockStart(
 	() => appStore.isLogined,
 	() => {
@@ -176,8 +172,8 @@ watchLockStart(
 	},
 )
 // A passkey profile's file not made yet ends when this window's chain id changes or clears (its own
-// bootstrap clears it; another window's network switch never reaches it): its approval and any
-// pending export belong to the session or network before. A made file is kept.
+// bootstrap clears it; another window's network switch never reaches it): its typed pair and any
+// pending Save belong to the session or network before. A made file is kept.
 watch(
 	() => appStore.network?.chainId,
 	() => {
@@ -207,65 +203,70 @@ const exportSelected = (encrypt) =>
 		? managers.account.exportResetHeldAccount(appStore.profile.id, selectedAddress.value, password.value, encrypt)
 		: managers.account.exportAccount(appStore.profile.id, appStore.network.chainId, selectedAddress.value, password.value, encrypt)
 
-/** What the approval is for: Save refuses an answer given for another profile, account or network. */
-const approvalScope = () => `${appStore.profile?.id}|${appStore.network?.chainId}|${selectedAddress.value}`
+/** What a Save is for: its answer and its file never reach another profile, network or account. */
+const exportScope = () =>
+	`${appStore.profile?.id}|${appStore.network?.chainId}|${selectedAddress.value}|${selectedAccount.value?.held ? "held" : "live"}`
 
-const handleConfirmPasskey = async () => {
-	if (isBusy.value) return
-	isBusy.value = true
-	const isCurrent = runs.snapshot()
-	const scope = approvalScope()
-	const { id: profileId, name } = appStore.profile
+/** The passkey's answer for one Save, asked at the profile's own input; `undefined` when the Save
+ *  stops there (cancelled, superseded or out of scope), its failure already told and the pair kept. */
+async function askFilePasskey(profileId, name, inScope, isCurrent) {
 	try {
-		const inScope = () => isCurrent() && scope === approvalScope()
 		const answer = await askProfilePasskey(
 			runCeremony,
 			managers.profile,
 			{ profileId, step: "accountFile", profileName: () => name },
 			inScope,
 		)
-		if (answer === undefined || !inScope()) return
-		// An answer that cannot open the profile is refused here, never held until Save.
-		await managers.profile.verifyExportCredential(profileId, { passkey: answer })
-		if (!inScope()) return
-		approval.value = { answer, scope }
+		return inScope() ? answer : undefined
 	} catch (error) {
-		if (!isCurrent() || handleCancelOrUnconfirmed(error, openToast)) return
-		openToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.unlockFailed) })
-	} finally {
-		if (isCurrent()) isBusy.value = false
+		if (isCurrent() && !handleCancelOrUnconfirmed(error, openToast))
+			openToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.unlockFailed) })
+		return undefined
 	}
 }
 
-/** One sealed export under the file password, approved by the held answer, then the download. */
-const handleSaveFile = async () => {
-	if (!canSaveFile.value || isBusy.value || !approval.value || approval.value.scope !== approvalScope()) return
-	isBusy.value = true
-	const isCurrent = runs.snapshot()
-	const { answer } = approval.value
+/** The answer checked, then one sealed export under the pair read at the press. A failure here drops
+ *  the pair, and the next Save asks the passkey again. */
+async function sealAccountFile(save, answer, inScope, isCurrent) {
+	const { profileId, chainId, address, held, password } = save
 	try {
-		const body = selectedAccount.value?.held
-			? await managers.account.exportResetHeldAccount(appStore.profile.id, selectedAddress.value, filePassword.value, true, answer)
-			: await managers.account.exportAccount(
-					appStore.profile.id,
-					appStore.network.chainId,
-					selectedAddress.value,
-					filePassword.value,
-					true,
-					answer,
-				)
+		await managers.profile.verifyExportCredential(profileId, { passkey: answer })
+		if (!inScope()) return
+		const body = held
+			? await managers.account.exportResetHeldAccount(profileId, address, password, true, answer)
+			: await managers.account.exportAccount(profileId, chainId, address, password, true, answer)
 		if (!isCurrent()) return
 		payload.value = body
 		fileStatus.value = "protected"
-		dropApproval()
+		clearFilePassword()
 	} catch (error) {
 		if (!isCurrent()) return
 		logCredentialFailure("[export/account] passkey file failed:", error)
-		// An answer a Save failed with is never reused: the page asks the passkey again, and the
-		// keyboard lands on that ask, as the removed Save took focus with it.
-		dropApproval()
+		clearFilePassword()
+		pairRun.value++
 		openToast({ kind: "error", label: "Failed to create the file" })
-		void nextTick(() => confirmPasskeyButton.value?.$el?.focus())
+	}
+}
+
+/** Save, passkey profile: the pair and the scope are read at the press, before the passkey is asked,
+ *  and the file it seals is downloaded in the same press. */
+const handleSaveFile = async () => {
+	if (!appStore.isLogined || !canSaveFile.value || isBusy.value) return
+	isBusy.value = true
+	const isCurrent = runs.snapshot()
+	const scope = exportScope()
+	const inScope = () => isCurrent() && scope === exportScope()
+	const { id: profileId, name } = appStore.profile
+	const save = {
+		profileId,
+		chainId: appStore.network?.chainId,
+		address: selectedAddress.value,
+		held: !!selectedAccount.value?.held,
+		password: filePassword.value,
+	}
+	try {
+		const answer = await askFilePasskey(profileId, name, inScope, isCurrent)
+		if (answer !== undefined) await sealAccountFile(save, answer, inScope, isCurrent)
 	} finally {
 		if (isCurrent()) isBusy.value = false
 	}
@@ -355,9 +356,9 @@ const onKeydown = (e) => {
 	if (!selectedAddress.value || fileStatus.value) return
 	if (!isAgreed.value) handleAgree()
 	else if (!isPasskeyProfile.value) handleCreate()
-	else if (isApproved.value && isPopupSubmitKey(e)) handleSaveFile()
+	else if (isPopupSubmitKey(e)) handleSaveFile()
 }
-watch(selectedAddress, () => dropApproval())
+watch(selectedAddress, clearFilePassword)
 watch(fileStatus, async (status) => {
 	if (status !== "downloaded") return
 	await nextTick()
@@ -383,7 +384,7 @@ onBeforeUnmount(() => {
 	runs.invalidate()
 	payload.value = ""
 	password.value = null
-	dropApproval()
+	clearFilePassword()
 })
 </script>
 
@@ -426,10 +427,10 @@ onBeforeUnmount(() => {
 			</div>
 		</template>
 
-		<!-- Step 3, passkey profile: its passkey approves, then the file takes a password of its own -->
-		<template v-else-if="isPasskeyProfile && !fileStatus && !isApproved" />
+		<!-- Step 3, passkey profile: the file's own password; Save asks the passkey -->
 		<FilePasswordSection
 			v-else-if="isPasskeyProfile && !fileStatus"
+			:key="pairRun"
 			v-model:password="filePassword"
 			v-model:repeatedPassword="repeatedFilePassword"
 			testid="account-file-password"
@@ -488,18 +489,6 @@ onBeforeUnmount(() => {
 		<template v-if="selectedAddress" #bottom>
 			<Button v-if="selectedAddress && !isAgreed" @click="handleAgree" variant="cta" data-testid="agree-continue-btn">
 				Agree &amp; Continue
-			</Button>
-
-			<Button
-				v-else-if="isPasskeyProfile && !fileStatus && !isApproved"
-				ref="confirmPasskeyButton"
-				@click="handleConfirmPasskey"
-				@keydown.enter="refuseRepeatEnter"
-				:disabled="isBusy"
-				variant="cta"
-				data-testid="account-file-confirm-passkey-btn"
-			>
-				Confirm with passkey
 			</Button>
 
 			<Flex v-else-if="isPasskeyProfile && !fileStatus" direction="column" gap="12" wide>

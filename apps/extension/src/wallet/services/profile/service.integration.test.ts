@@ -2508,8 +2508,8 @@ describe("torn-import sweep on boot resume", () => {
 	// A torn import (restore() ran; finalize never did — SW/popup death, transport
 	// death, or a persistently-failed compensating delete) leaves the profile row
 	// + its restore-pending marker durable. A marker only proves the restore is
-	// INCOMPLETE (a password import whose SW died can still finalize via the
-	// popup's auto-reconnect), so the sweep proves ABANDONMENT by
+	// INCOMPLETE (the page of an import whose SW died may still call finalize,
+	// which is refused but keeps the profile), so the sweep proves ABANDONMENT by
 	// age: only markers older than TORN_IMPORT_MIN_AGE_MS are reaped. The boot
 	// resume must then complete the compensating delete instead of leaving the
 	// zombie immortal.
@@ -2599,11 +2599,11 @@ describe("torn-import sweep on boot resume", () => {
 		expect(await markerRaw(api, live.id)).toBeDefined()
 	}, 30_000)
 
-	test("an INCOMPLETE-but-young torn import (below the age floor) is NOT reaped — it may still finalize", async () => {
+	test("an INCOMPLETE-but-young torn import (below the age floor) is NOT reaped — its page may still call finalize", async () => {
 		const { api, service: boot1 } = await makeService()
 		const young = await tornRestore(boot1)
-		// The SW dies and reboots mid-import; the popup's auto-reconnect could
-		// still legitimately finalize a password import — the sweep must wait.
+		// The SW dies and reboots mid-import; the popup's auto-reconnect may still
+		// call finalize, which keeps the profile for its next unlock — the sweep must wait.
 		await new Promise((r) => setTimeout(r, 3))
 		const bootCutoff = Date.now()
 		const { service: boot2 } = await makeServiceFromExistingApi(api)
@@ -2685,7 +2685,7 @@ describe("torn-import sweep on boot resume", () => {
 		const orphan = await tornRestore(boot1)
 		await ageMarker(api, orphan.id) // aged past the floor → sweep-eligible
 
-		// The popup's finalize arrives first (auto-reconnect continuation): it
+		// The popup's finalize arrives first: it
 		// clears the marker under the facade lock and opens the session. The
 		// generation is UNCHANGED — only the marker guard can save the profile.
 		await boot1.finalizeRestore(orphan.id, "pass1234")
