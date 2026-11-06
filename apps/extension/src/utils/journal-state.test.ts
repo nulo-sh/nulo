@@ -375,6 +375,12 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(buildJournalTerminalCardProps(transferRecord(), known)).toMatchObject({ amount: "1.5", amountSymbol: "USDC" })
 	})
 
+	test("one send reads the list rule's digits in flight and once ended", () => {
+		const raw = { amountRaw: "28439501" }
+		expect(journalCardAmount(transferRecord({ ...raw, terminalAt: null }), TEST_TOKEN_BY_ID)).toBe("28.43")
+		expect(buildJournalTerminalCardProps(transferRecord(raw), TEST_CTX)?.amount).toBe("28.43")
+	})
+
 	test("an empty amount shows no amount and no symbol", () => {
 		const props = buildJournalTerminalCardProps(transferRecord({ amountRaw: "" }), TEST_CTX)
 		expect(props).toMatchObject({ title: "USDC", amount: null, amountSymbol: null })
