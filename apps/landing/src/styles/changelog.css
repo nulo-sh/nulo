@@ -312,8 +312,9 @@
 	text-transform: uppercase;
 }
 
+/* The body's 20 px halo plus the 16 px gap, so the link clears the backing instead of sitting on its edge. */
 .cl-notes__more {
-	margin-top: 16px;
+	margin-top: 36px;
 }
 
 .cl-pager {
