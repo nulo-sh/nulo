@@ -1,0 +1,8 @@
+- 2026-11-06 plan drafted (light), recon persisted; Codex audit next
+- 2026-11-06 Codex round 1 conditional approve; round 2 conditional approve (in-flight/failed rows held for the owner → OA-2; 11 px chip withdrawn); plan revised
+- 2026-11-06 Codex final verdict approve; plan committed; arc 1 starts
+- 2026-11-06 phase 1 gate green: lint, typecheck:all, test:all (extension 17601 passed), test:ci-gating (752 pass)
+- 2026-11-06 phase 2 gate green: rows + type-roles smoke at retry 0, Chrome 168 s, Firefox 292 s (base 162 s / 277 s)
+- 2026-11-06 review: Codex rounds 1-3 (3 + 1 findings fixed, then clean); Opus review (1 medium, 6 low fixed)
+- 2026-11-06 phase 3 done: PR captures, page 119 frames (16 × 2 themes) with captions and options
+- 2026-11-06 rebased onto dev 4ae04b194 (index.md conflict only); final gates green on that head: lint, typecheck:all, test:all (extension 17702 passed; the first run timed out once in `export/full.test.ts`, untouched here, under host load, and the rerun was green), rows + type-roles smoke at retry 0, Chrome 172 s, Firefox 275 s

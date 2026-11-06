@@ -10,6 +10,7 @@ import { PRIVATE_ADDRESS_MAGIC_VALUE } from "@nulo/aztec-runtime/pxe/public-even
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
 import type { TokenInfo } from "@/wallet/services/token/spec"
+import type { RowDirection } from "./row-direction"
 import { knownDecimals } from "./token-amount"
 
 const ZERO_ADDRESS = AztecAddress.ZERO.toString().toLowerCase()
@@ -48,6 +49,18 @@ export function receivedLabel(type: ReceivedType): string {
 	return LABELS[type]
 }
 
+/** The sides a receipt names: a note and a mint disclose no sending side. */
+const SIDES: Record<ReceivedType, Pick<RowDirection, "from" | "to">> = {
+	"received-privately": { from: null, to: "private" },
+	"public-to-public": { from: "public", to: "public" },
+	"private-to-public": { from: "private", to: "public" },
+	minted: { from: null, to: "public" },
+}
+
+export function receivedDirection(type: ReceivedType): RowDirection {
+	return { ...SIDES[type], way: "in", label: LABELS[type] }
+}
+
 /** Resolve the "From" card treatment. */
 export function resolveFromDisplay(record: IncomingTransferRecord): FromDisplay {
 	if (record.kind === "note") return { kind: "redacted" }
@@ -82,6 +95,6 @@ export function buildIncomingCardProps(
 		tokenDecimals: knownDecimals(token),
 		txHash: inc.txHash,
 		amountFiat: token ? (fiatLabel(token, BigInt(inc.amountRaw || 0)) ?? null) : null,
-		receivedLabel: receivedLabel(resolveReceivedType(inc)),
+		direction: receivedDirection(resolveReceivedType(inc)),
 	}
 }
