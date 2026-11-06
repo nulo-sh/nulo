@@ -19,7 +19,7 @@
  * The instance is per-estimate and stateful: `collected` is the executor's
  * bookkeeping surface (what discovery added), replacing the standalone
  * discovery sim's return value in the folded flow. An app-paid send hands its
- * one validated run to a probe too, and reads only what another account gave.
+ * one validated run to a probe too, and lists only what a carried witness covers.
  */
 
 import { collectOffchainEffects } from "@aztec-labs/stdlib/tx"

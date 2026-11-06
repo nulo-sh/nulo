@@ -2001,8 +2001,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 		expect(proveAndSend).not.toHaveBeenCalled()
 	})
 
-	test("an app-paid estimate lists only the authorizations its validated run consumed, and its confirm is held to them", async () => {
-		const base = makeHarness()
+	describe("an app-paid send", () => {
 		const appPaid = {
 			planner: {
 				processAztecJsPayload: vi.fn(async () => ({
@@ -2014,29 +2013,67 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 		}
 		const appPaidOp = () => readingOwner({ feeSettings: { paymentMethod: { kind: "embedded" } } })
 		const EMBEDDED = { paymentMethod: { kind: "embedded" } } as never
-		/** A validated pipeline whose probe reads `runs[n]` on its n-th build, the last one after. */
+		/** A harness whose validated pipeline returns `base`'s build, its probe reading `runs[n]` on
+		 *  its n-th build, the last one after. */
 		const observing = (...runs: unknown[][]) => {
+			const base = makeHarness()
 			let n = 0
-			return vi.fn(async (...args: unknown[]) => {
+			const validated = vi.fn(async (...args: unknown[]) => {
 				const records = runs[Math.min(n++, runs.length - 1)] ?? []
 				;(args[6] as { discovered: unknown[] } | undefined)?.discovered.push(...records)
 				await (args[5] as ((txCalls: unknown) => Promise<void>) | undefined)?.(base.built.txCalls)
 				return base.built as never
 			})
+			return { base, ...makeHarness({ ...appPaid, buildAndEstimateValidated: validated }) }
 		}
-		const h = makeHarness({ ...appPaid, buildAndEstimateValidated: observing([record("own"), consumed("b")]) })
-		const estimate = await h.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
-		expect(estimate.discoveredAuthwits).toEqual([consumed("b")])
-		await h.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: estimate.previewId })
-		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
+		const own = (tag: string) => ({ ...record(tag), onBehalfOf: "0xacct" })
 
-		const unseen = makeHarness({ ...appPaid, buildAndEstimateValidated: observing([], [consumed("b")]) })
-		const blank = await unseen.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
-		expect(blank.discoveredAuthwits).toEqual([])
-		await expect(
-			unseen.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: blank.previewId }),
-		).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
-		expect(unseen.proveAndSend).not.toHaveBeenCalled()
+		test("its estimate lists only the authorizations its validated run consumed, and its confirm is held to them", async () => {
+			const h = observing([record("own"), consumed("b")])
+			const estimate = await h.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
+			expect(estimate.discoveredAuthwits).toEqual([consumed("b")])
+			await h.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: estimate.previewId })
+			expect(h.proveAndSend).toHaveBeenCalledTimes(1)
+
+			const unseen = observing([], [consumed("b")])
+			const blank = await unseen.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
+			expect(blank.discoveredAuthwits).toEqual([])
+			await expect(
+				unseen.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, {
+					...CTX,
+					previewId: blank.previewId,
+				}),
+			).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
+			expect(unseen.proveAndSend).not.toHaveBeenCalled()
+		})
+
+		test("the account's own request the app carried a witness for is listed as given by the account, and nothing is signed", async () => {
+			const h = observing([record("own"), consumed("b")])
+			carry(h.base.built, "own")
+			const estimate = await h.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
+			expect(estimate.discoveredAuthwits).toEqual([own("own"), consumed("b")])
+			await h.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: estimate.previewId })
+			expect(h.proveAndSend).toHaveBeenCalledTimes(1)
+			expect(h.base.built.account.createAuthWit).not.toHaveBeenCalled()
+		})
+
+		test("a confirm holds only another account's records: the account's own carried one sends with no preview, or changed since it", async () => {
+			const missing = observing([record("own")])
+			carry(missing.base.built, "own")
+			await missing.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, CTX)
+			expect(missing.proveAndSend).toHaveBeenCalledTimes(1)
+
+			const drifted = observing([record("a")], [record("c")])
+			carry(drifted.base.built, "a")
+			carry(drifted.base.built, "c")
+			const estimate = await drifted.executor.estimateOperationFee(appPaidOp(), EMBEDDED, undefined, CTX)
+			expect(estimate.discoveredAuthwits).toEqual([own("a")])
+			await drifted.executor.executeAztecSendTx(appPaidOp(), ORIGIN, undefined, undefined, FENCE, {
+				...CTX,
+				previewId: estimate.previewId,
+			})
+			expect(drifted.proveAndSend).toHaveBeenCalledTimes(1)
+		})
 	})
 
 	test("the silent path (no envelope) is never held to a preview", async () => {
