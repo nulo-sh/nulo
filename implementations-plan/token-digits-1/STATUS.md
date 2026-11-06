@@ -1,0 +1,4 @@
+- 2026-11-06: recon done (2 Sonnet explorers); plan drafted at 002b76fc7; panel round 1 next.
+- 2026-11-06: panel round 1: Codex reject (D3/D5 as asks; Fact 3; bounds claim; I1 coverage; gate commands); fixes folded, D3/D5 argued back; Opus leg pending.
+- 2026-11-06: Opus R1 conditional approve folded; Codex R1 resumed: approve (D3-D5 settled from the picks' words); final fresh Codex pass next.
+- 2026-11-06: final fresh Codex pass approve; Opus withdrew D3-D5; plan committed; arc 1 next (auto-continue, OWNER-ASKS none).
