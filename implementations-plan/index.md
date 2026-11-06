@@ -4,3 +4,4 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
 
 - [lows-1](lows-1/plan.md) — arc 1 in review — a passkey answer, or a body it unlocked, is used in the step that collected it
+- [p116-build-1](p116-build-1/plan.md) — planned, arc 1 next — the Receive QR at 240 px and the Holdings header on one row, as page 116 picked
