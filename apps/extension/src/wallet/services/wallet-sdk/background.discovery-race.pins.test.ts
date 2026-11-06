@@ -75,6 +75,7 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 				timedLookupRequested.resolve()
 				return timedLookup
 			},
+			allowsNewSite: async () => false,
 			addDappSession: async () => {
 				log.push("session:add")
 				return { id: "s1", profileId: "p1" }
