@@ -190,9 +190,11 @@ const STUBS = {
 		props: ["accountLabel", "networkLabel", "status", "warn"],
 	},
 	DappIdentityBlock: {
-		template: '<div data-testid="identity-block" :data-action="actionLabel" />',
+		template: '<div data-testid="identity-block" :data-action="actionLabel" :data-name="dapp?.name" />',
 		props: ["dapp", "actionLabel", "hostnameTestId", "nameTestId"],
 	},
+	SectionLabel: { props: ["label"], template: "<div>{{ label }}</div>" },
+	ItemsContainer: { template: "<div><slot /></div>" },
 	DappCancelledOverlay: {
 		props: ["message"],
 		emits: ["dismiss"],
@@ -494,6 +496,22 @@ describe("discover popup — what Allow reveals", () => {
 		expect(w.text()).not.toContain("General → Sessions")
 	})
 
+	test("the body reads in the signed order: the sentence, If you allow over the three facts, then the remember line", async () => {
+		const w = await ready()
+		const page = shownText(w.element)
+		const at = (text: string) => page.indexOf(text)
+		const order = [
+			"Allowing lets this site discover Nulo.",
+			"If you allow",
+			"This site learns Nulo is installed.",
+			"It can then ask to connect.",
+			"It sees nothing else.",
+			"Nulo remembers this site on",
+		].map(at)
+		expect(order.every((i) => i >= 0)).toBe(true)
+		expect(order).toEqual([...order].sort((a, b) => a - b))
+	})
+
 	test("the two dotted terms define themselves from the glossary", async () => {
 		const w = await ready()
 		const terms = w.findAll('[data-testid="discover-scope"] [aria-describedby]')
@@ -512,6 +530,7 @@ describe("discover popup — what Allow reveals", () => {
 		payloadChainId = String(chainInfoToChainId({ chainInfo }))
 		payloadDapp = { name: "nulo-playground", url: "https://playground.nulo.sh" }
 		const w = await ready()
+		expect(w.get('[data-testid="identity-block"]').attributes("data-name")).toBe("nulo-playground")
 		expect(shown(w, "discover-remember")).toBe(
 			"Nulo remembers this site on Testnet for 7 days. Revoke it in Settings → Connected Apps.",
 		)
