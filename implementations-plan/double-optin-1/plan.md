@@ -11,6 +11,21 @@ trunk: dev
 base: 4291a8c98
 ---
 
+## Outcome
+
+- **Date:** 2026-11-06. Planned and built 2026-11-05; the owner's answers and Phase 5 on 2026-11-06; one arc.
+- **Status:** completed. #1695 into `dev` carries the change and this close-out; its merge closes #1236 and archives this plan.
+- **Shipped:** `nulo-subscribe` sends one confirmation email with an HMAC-signed, 24 h link (`src/token.ts`, `src/confirmation.ts`) and creates the contact on `POST /api/confirm`; the landing forwards both paths, `/confirm` posts the fragment's token as it opens with the Confirm button as the retry (D13), the form and `/subscribed` say "check your inbox"; website notice 1.2 drafted with 1.1 archived; `CONSENT_VERSION` 1.2; the README checklist names `CONFIRM_SECRET`.
+- **Owner's answers:** decision page 114 (2026-11-06, 14:27 UTC): OA1, OA3, OA5 approved as written, OA2, OA6, OA7, OA8 "A"; page 116 (17:04 UTC): OA4 "C" (D13). Quoted in [OWNER-ASKS.md](OWNER-ASKS.md) and under UI impact.
+- **Review loop:** plan: Codex and Opus conditional approve, the final fresh Codex `approve`; diff: Codex and Opus approve, resumed `approve`; Phase 5: Codex approve, resumed `approve`.
+- **Gates:** `infra/subscribe` `bun test` 91/91 with a cold transpiler cache, the landing 173 + 1 skip and its build, lint, `typecheck:all`, `test:all`, `check:plans`, all at retry 0; the browser check of C 18/18 ([lessons/phase-5.md](lessons/phase-5.md)).
+- **Dropped:** a no-JavaScript button that confirms (D14: it needs the token where the server reads it, against notice § 3.1); the Opus lowercase-and-strip send key (D4); outlines B and C.
+- **Accepted trades:** a mail scanner that runs the page's script confirms the address it opens (D13, the owner's pick); confirming needs JavaScript; Inferences (a), (d), (e) are recorded at the promote (`BEFORE-LAUNCH.md`).
+- **Known limits:** #1704 (a flood spends the daily confirmation-email quota: honest signups wait, a send-only 503 tells new from listed, bounces risk the account).
+- **Open items:** `BEFORE-LAUNCH.md` § "Due at the release that publishes website notice 1.2" (OA9, the § 3.5 sentence on the press; the effective date; `CONFIRM_SECRET`; the acceptance checks).
+- **Lessons:** none promoted; `lessons.md` is at its budget and nothing here generalizes past this plan.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
+
 # double-optin-1 — the mailing list confirms each signup by email before it counts
 
 The nulo.sh form adds any syntactically valid address to the Resend launch list today, so anyone can
