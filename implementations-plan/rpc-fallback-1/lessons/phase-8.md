@@ -50,3 +50,65 @@
 - Run 2 (157 s): red on `network/service.test.ts`'s storage-read test, which lists the 5 s clients built. `singleAttempt` subtracted elapsed time even with nothing to admit, so a millisecond tick built an uncached client at 4999 ms. Reproduced with a ticking clock and fixed in `805ab3fd9`: only an admission spends the budget. Codex round 3: approve.
 - Run 3 on `805ab3fd9`: green (182 s; aztec-runtime 562, extension 17572). Lint 5 s, `typecheck:all` 60 s.
 - E2E on `805ab3fd9`, once each at retry 0 through `e2e:agent`, run one after another: the sandbox suite 8/8 (305 s test, 386 s wall; S3 and S3b unchanged under D36); E1 proverless on Chrome green (198 s test, 293 s wall; peak per 10 s A 54, B 21) and on Firefox green (211 s test, 318 s wall; A 52, B 19). Host load 115 to 140 throughout.
+
+## Verify round (the owner's P118-04 A, at ×3)
+
+Head `26d7a9e36`, unchanged by the round. Every run through `bun run e2e:agent` at retry 0, one at a time, on 2026-11-06.
+
+### Soak
+
+| # | File | Browser | Result | Test | Wall | load1 at start |
+|---|---|---|---|---|---|---|
+| 1 | `rpc-routing.sandbox` | Chrome | 8/8 | 312 s | 428 s | 334 |
+| 2 | `rpc-routing.sandbox` | Chrome | 8/8 | 302 s | 380 s | 49 |
+| 3 | `rpc-routing.sandbox` | Chrome | 8/8 | 305 s | 401 s | 111 |
+| 4 | `rpc-failover-send`, proverless | Chrome | 1/1 | 189 s | 276 s | 101 |
+| 5 | `rpc-failover-send`, proverless | Chrome | 1/1 | 187 s | 262 s | 64 |
+| 6 | `rpc-failover-send`, proverless | Chrome | 1/1 | 186 s | 259 s | 57 |
+| 7 | `rpc-failover-send`, proverless | Firefox | 1/1 | 198 s | 270 s | 37 |
+| 8 | `rpc-failover-send`, proverless | Firefox | 1/1 | 193 s | 268 s | 35 |
+| 9 | `rpc-failover-send`, proverless | Firefox | 1/1 | 196 s | 273 s | 27 |
+
+- No red. In E1 the held simulation finished 177 to 237 ms after B's release in every run, refused with the kernel's nullifier reason.
+- Peak requests per 10 s, A then B: Chrome 61/22, 74/23, 74/24; Firefox 54/21, 67/21, 69/22. The highest is 74, above the earlier runs' 71 and under the relay's 100.
+
+### One-endpoint parity, the stack's base against its head
+
+- **Builds.** The base is `4b250dfe4`, the merge base of `origin/dev` and the branch, built from a `git archive` export. `origin/dev` was 24 commits further on, and some of those commits change the same request paths (the fee pricing of the simulations, the balance batch failures). A tip build would have counted their requests as the stack's. The head is `26d7a9e36`. Both runs used the same uncommitted spec on a proverless Chrome build, with the relay copied into the base's fixtures.
+- **Shape.** The Local Network has one endpoint, the relay. The relay is pass-through and sits in front of a recorder (one line per HTTP request: its arrival time and its batch's method names), and the recorder sits in front of the sandbox. The profile is created and unlocked with 1000 public, and 100 more are minted privately. The endpoint is edited to the relay in Settings, and the wallet settles until the balance row reads 1000/100. Then the measured flow runs: lock, unlock and Home settled; a private-to-private send of 10 to self; mined; 12 s of pending and finality polling; a Refresh balances. Ids and hashes are ignored.
+- **The edit goes through the UI.** In a first pair, the endpoint was rewritten in storage instead. On the base, `NetworkService.getNode` keeps its per-chain client until the service's own edit or a profile change evicts it. Its public reads stayed on the old URL while the PXE moved, so the settle and unlock phases differed. The send, mined, poll and refresh phases matched, apart from one more receipt tick on the head, which was mining latency. That pair is a harness artifact and is not the comparison below.
+
+| Phase | Base requests / entries | Head requests / entries | Method counts that differ |
+|---|---|---|---|
+| edit (before the settle) | 4 / 4 | 3 / 3 | getL1ContractAddresses 1→0 |
+| settle | 32 / 33 | 33 / 34 | getL1ContractAddresses 0→1 |
+| unlock | 16 / 17 | 16 / 17 | none |
+| send | 40 / 48 | 40 / 48 | none |
+| mined | 4 / 4 | 7 / 7 | getBlock 0→2, getChainTips 0→1 |
+| poll | 31 / 37 | 28 / 34 | getBlock 3→1, getChainTips 5→4 |
+| refresh | 5 / 5 | 5 / 5 | none |
+| **whole run** | 132 / 148 | 132 / 148 | none |
+
+- **Reading.** The whole run is identical in method counts and has the same 8 batches with the same members (four of two `getPrivateLogsByTags`, two of four, one of five `getPublicDataWitness`, one witness triple). Each per-phase difference is one request that landed on the other side of a phase mark: the edit's `getL1ContractAddresses` and one block sync (`getChainTips`, `getBlock` ×2) around the confirmation. A few concurrent requests swapped order. D13 did not show, because no attempt failed. F3 did not show either: `sendTx` went out alone in both runs, with no read queued in the same batch window.
+- **Sequences** (× collapses repeats, brackets are one batch):
+  - **edit**
+    - base: getNodeInfo getL1ContractAddresses getNodeInfo×2
+    - head: getNodeInfo×3
+  - **settle**
+    - base: getNodeInfo×2 getBlock getChainTips×2 getBlock×2 getContract×2 getPrivateLogsByTags×2 [getPrivateLogsByTags,getPrivateLogsByTags] findLeavesIndexes getContract×2 getNodeInfo getBlock getCurrentMinFees getBlockHashMembershipWitness simulatePublicCalls getChainTips findLeavesIndexes getBlockNumber getPublicLogsByTags getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips
+    - head: getL1ContractAddresses getNodeInfo×2 getBlock getChainTips×2 getBlock×2 getContract×2 getPrivateLogsByTags×2 [getPrivateLogsByTags,getPrivateLogsByTags] findLeavesIndexes getContract getNodeInfo getContract getBlock getCurrentMinFees getBlockHashMembershipWitness simulatePublicCalls getChainTips findLeavesIndexes getBlockNumber getPublicLogsByTags getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips
+  - **unlock**
+    - base: getNodeInfo getChainTips getNodeInfo getChainTips getBlockNumber getPublicLogsByTags getNodeInfo getChainTips getCurrentMinFees getContract simulatePublicCalls [getPrivateLogsByTags,getPrivateLogsByTags] getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips
+    - head: getNodeInfo getChainTips getNodeInfo getChainTips getBlockNumber getPublicLogsByTags getNodeInfo getCurrentMinFees getChainTips getContract simulatePublicCalls [getPrivateLogsByTags,getPrivateLogsByTags] getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips
+  - **send**
+    - base: getChainTips getNodeInfo getCurrentMinFees simulatePublicCalls getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips getNodeInfo getContract×2 getCurrentMinFees getNullifierMembershipWitness getChainTips getContract×2 [getPrivateLogsByTags,getPrivateLogsByTags] findLeavesIndexes getPrivateLogsByTags getContract [getPrivateLogsByTags,getPrivateLogsByTags] findLeavesIndexes getPublicStorageAt getPublicDataWitness getPrivateLogsByTags×3 findLeavesIndexes isValidTx getPredictedMinFees getPublicStorageAt getChainTips getNodeInfo getPredictedMinFees getChainTips getPrivateLogsByTags×2 [getPublicDataWitness,getPublicDataWitness,getPublicDataWitness,getPublicDataWitness,getPublicDataWitness] [getNoteHashMembershipWitness,getNullifierMembershipWitness,getNullifierMembershipWitness] sendTx
+    - head: getChainTips getNodeInfo getCurrentMinFees simulatePublicCalls getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips getNodeInfo getContract×2 getCurrentMinFees getNullifierMembershipWitness getChainTips getContract×2 [getPrivateLogsByTags,getPrivateLogsByTags] findLeavesIndexes getPrivateLogsByTags getContract [getPrivateLogsByTags,getPrivateLogsByTags] findLeavesIndexes getPublicStorageAt getPublicDataWitness getPrivateLogsByTags×3 findLeavesIndexes isValidTx getPredictedMinFees getPublicStorageAt getNodeInfo getChainTips getPredictedMinFees getChainTips getPrivateLogsByTags×2 [getPublicDataWitness,getPublicDataWitness,getPublicDataWitness,getPublicDataWitness,getPublicDataWitness] [getNoteHashMembershipWitness,getNullifierMembershipWitness,getNullifierMembershipWitness] sendTx
+  - **mined**
+    - base: getTxReceipt×3 getBlockNumber
+    - head: getTxReceipt×3 getBlockNumber getChainTips getBlock×2
+  - **poll**
+    - base: getChainTips getBlock×2 getContract×2 getPrivateLogsByTags×2 findLeavesIndexes [getPrivateLogsByTags,getPrivateLogsByTags,getPrivateLogsByTags,getPrivateLogsByTags] getNodeInfo getCurrentMinFees simulatePublicCalls getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips getContract findLeavesIndexes [getPrivateLogsByTags,getPrivateLogsByTags,getPrivateLogsByTags,getPrivateLogsByTags] findLeavesIndexes×2 getChainTips×2 getContract×2 getChainTips getBlockHashMembershipWitness getBlock getBlockNumber getPublicLogsByTags getBlockData
+    - head: getContract×2 getPrivateLogsByTags×2 findLeavesIndexes [getPrivateLogsByTags,getPrivateLogsByTags,getPrivateLogsByTags,getPrivateLogsByTags] getNodeInfo getCurrentMinFees simulatePublicCalls getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips getContract findLeavesIndexes [getPrivateLogsByTags,getPrivateLogsByTags,getPrivateLogsByTags,getPrivateLogsByTags] findLeavesIndexes×2 getChainTips×2 getContract×2 getBlockHashMembershipWitness getChainTips getBlockNumber getPublicLogsByTags getBlock getBlockData
+  - **refresh**
+    - base: getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips×2
+    - head: getNodeInfo getCurrentMinFees simulatePublicCalls getChainTips×2
