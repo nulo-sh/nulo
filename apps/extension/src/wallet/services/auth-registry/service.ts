@@ -500,7 +500,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const task = this.taskService.startNewTask(new StepContent("Sync auth registry"))
 		try {
 			const node = await this.networkService.getNodeFor(network)
-			await Promise.all([this.syncAuthwits(node, scope, task), this.syncStatus(node, scope, task)])
+			await Promise.all([this.syncAuthwits(network, node, scope, task), this.syncStatus(node, scope, task)])
 			task.complete()
 		} catch (error) {
 			task.fail(error)
@@ -530,11 +530,11 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		throw new Error(`waitForTxProven: tx ${txHash} (block ${target}) not proven within ${timeoutMs}ms`)
 	}
 
-	private async syncAuthwits(node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask) {
+	private async syncAuthwits(network: Network, node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask) {
 		const task = parentTask.startSubtask(new StepContent("Sync authwits"))
 		try {
 			const authwits = await this.rowsForScope(scope)
-			await Promise.all(authwits.map((authwit) => this.syncAuthwit(node, scope, authwit, task)))
+			await Promise.all(authwits.map((authwit) => this.syncAuthwit(network, node, scope, authwit, task)))
 			task.complete()
 		} catch (error) {
 			task.fail(error)
@@ -542,12 +542,12 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		}
 	}
 
-	private async syncAuthwit(node: AztecNode, scope: AuthwitScope, authwit: Authwit, parentTask: WrappedTask) {
+	private async syncAuthwit(network: Network, node: AztecNode, scope: AuthwitScope, authwit: Authwit, parentTask: WrappedTask) {
 		// A `pending` row's grant may still land, so a node that reads its hash unauthorized proves
 		// nothing about it: its tx outcome reconciles it, or a revoke that saw the grant's block
 		// prunes it. Skipped before the subtask starts, so no open subtask blocks the parent.
 		if (authwit.pending) return
-		if (await isAuthwitConsumable(node, authwit.account, authwit.hash)) return
+		if (await this.stillConsumable(network, node, authwit)) return
 		const task = parentTask.startSubtask(new StepContent(`Sync authwit #${authwit.id}`))
 		try {
 			await this.deleteTracked(scope, authwit, { confirmedOnly: true })
@@ -556,6 +556,16 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 			task.fail(error)
 			throw error
 		}
+	}
+
+	/** Whether a confirmed row's grant is still live. With two or more endpoints the route's answer may
+	 *  come from one that has not reached the grant's block, so an unauthorized read is asked again of
+	 *  the endpoint the grant went out through, which reported it proven; one endpoint asks nothing more. */
+	private async stillConsumable(network: Network, node: AztecNode, authwit: Authwit): Promise<boolean> {
+		if (await isAuthwitConsumable(node, authwit.account, authwit.hash)) return true
+		if (network.endpoints.length < 2 || !authwit.txHash) return false
+		const grantNode = await this.grantNodeFor(network, authwit.txHash)
+		return grantNode !== undefined && (await isAuthwitConsumable(grantNode, authwit.account, authwit.hash))
 	}
 
 	/** Deletes `authwit`'s row under the lock only while it still holds the same scope, hash and grant

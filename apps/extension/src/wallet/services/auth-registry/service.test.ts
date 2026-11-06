@@ -1083,6 +1083,28 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		vi.restoreAllMocks()
 	})
 
+	test.each([
+		{ label: "two endpoints: kept while the endpoint its grant went out through reads it consumable", endpoints: 2, kept: true },
+		{ label: "one endpoint (control): deleted, with nothing else asked", endpoints: 1, kept: false },
+	])("a confirmed row the route reads unauthorized, on $label", async ({ endpoints, kept }) => {
+		const node = {}
+		const grantNode = {}
+		const h = await makeHarness({ node, grantNode })
+		const row = await h.getNetwork()
+		h.getNetwork.mockResolvedValue({ ...row, endpoints: row.endpoints.slice(0, endpoints) })
+		const util = await import("@/wallet/utils/auth-registry")
+		vi.spyOn(util, "isAuthwitConsumable").mockImplementation(async (read) => read === grantNode)
+		vi.spyOn(util, "isAuthRegistryEnabled").mockResolvedValue(true)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xconfirmed", content }], "0xtxa", LIVE_EPOCH)
+		await h.service.reconcileAuthwits(P1, "0xtxa", "mined")
+
+		await h.service.syncRegistry("net-1", A)
+
+		expect((await h.service.getAuthwits(1, A)).map((r) => r.hash)).toEqual(kept ? ["0xconfirmed"] : [])
+		expect(h.grantNodeForUrl.mock.calls).toEqual(kept ? [["http://n/1"]] : [])
+		vi.restoreAllMocks()
+	})
+
 	test("a deferred node reply during which the row's id is replaced by a foreign-tuple row deletes NOTHING", async () => {
 		const node = {}
 		const h = await makeHarness({ node })
