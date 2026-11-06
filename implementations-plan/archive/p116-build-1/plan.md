@@ -116,7 +116,7 @@ CSS and one computed in two SFCs, plus tests. No new state, storage key, RPC, de
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `002b76fc7`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `002b76fc7`. Plan-specific values:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2, single arc: once, over `git diff origin/dev...HEAD` after gate 3 is green. Run `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then resume with `resume-codex.sh`. Send both verbatim rules and the adversarial ask. Stop at three rounds and report. Alongside round 1, run one Opus `general-purpose` review of the same diff.
