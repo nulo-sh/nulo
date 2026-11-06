@@ -2024,6 +2024,37 @@
 			"shape": "tokenIdHighWater",
 			"key": "nulo:core:token-id-high-water",
 			"value": 1
+		},
+		{
+			"id": "discoveryPolicy.full",
+			"stamp": 4,
+			"shape": "discoveryPolicy",
+			"key": "nulo:core:discoveryPolicy@3f9a2c71",
+			"value": {
+				"everySite": true,
+				"checkRefused": ["https://app.example", "http://localhost:5173"]
+			}
+		},
+		{
+			"id": "discoveryPolicy.minimal",
+			"stamp": 4,
+			"shape": "discoveryPolicy",
+			"key": "nulo:core:discoveryPolicy@b04e6d18",
+			"value": {
+				"everySite": true,
+				"checkRefused": []
+			}
+		},
+		{
+			"id": "discoveryPolicy.sealed",
+			"stamp": 4,
+			"shape": "discoveryPolicy",
+			"key": "nulo:core:discoveryPolicy@5c8e1f27",
+			"value": {
+				"profileId": "5c8e1f27",
+				"sealed": "AVsoBajZMN7HJzspj9NlfXcss29GF+mD/h8OMpQUVnbljv8MHUbE+kinie8poSdTj/kaE6c/u6AOBxEP3J3YfUdWJXVXX419reUuAZ1Ex+5ylw6dCXo="
+			},
+			"sealed": true
 		}
 	]
 }

@@ -18,6 +18,7 @@ export class DappSessionServiceClient extends ServiceClient<Methods, Events> imp
 	public readonly onDappSessionDeleted = new EventHandler<DappSession>()
 	public readonly onVerificationRefused = new EventHandler<{ origin: string; chainId: string; profileId: string }>()
 	public readonly onVerificationConfirmed = new EventHandler<{ verificationHash: string }>()
+	public readonly onEverySiteChanged = new EventHandler<{ profileId: string; on: boolean }>()
 
 	public constructor(name?: string) {
 		super(DAPP_SESSION_SERVICE_NAME, documentLogger(), name)
@@ -41,4 +42,6 @@ definePassthroughsExhaustive<Methods>()(DappSessionServiceClient.prototype, [
 	"setCapabilityRejections",
 	"getCapabilityRejections",
 	"applyCapabilityDecision",
+	"getEverySite",
+	"setEverySite",
 ])
