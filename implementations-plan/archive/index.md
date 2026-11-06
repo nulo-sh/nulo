@@ -541,3 +541,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [popup-dedupe-1](popup-dedupe-1/plan.md) — completed — one helper for Send's side rule (#1470) and the entity forms' shared rules (#1449), no behaviour change (#1674)
 - [e2e-flakes-3](e2e-flakes-3/plan.md) — completed — the onboarding spec counts the setup tab through `chrome.tabs`; a simulation's default fee cap pads the predicted worst minimum (#1667, #1590)
 - [update-from-1.2.0](update-from-1.2.0/plan.md) — completed — the update scenarios run from v1.2.0: its pins, a `sponsor` trait that pays its sandbox send from bridged Fee Juice, and its Chrome recording; all five runs green (closes #1680)
+- [release-notes-1](release-notes-1/plan.md) — completed — per-version release notes atop the GitHub Release and on AMO, composed and checked in CI (#1668)

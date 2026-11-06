@@ -15,7 +15,15 @@ import { SOURCE_COMMIT } from "../release/attach-assets-run"
 
 const ROOT = join(import.meta.dir, "..", "..")
 
-type Step = { id?: string; uses?: string; with?: Record<string, unknown>; run?: string; if?: unknown; "working-directory"?: string }
+type Step = {
+	id?: string
+	uses?: string
+	with?: Record<string, unknown>
+	env?: Record<string, unknown>
+	run?: string
+	if?: unknown
+	"working-directory"?: string
+}
 type Defaults = { run?: { "working-directory"?: string } }
 type Job = {
 	uses?: string
@@ -349,6 +357,7 @@ const NO_INSTALL = [
 	"release.yml#auto-unstick",
 	"release.yml#publish-chrome-store",
 	"release.yml#publish-firefox-amo",
+	"release.yml#release-notes",
 	"release.yml#select-assets",
 	"release.yml#sync-main-to-dev",
 	"source-rebuild.yml#rebuild-arm64",
@@ -491,6 +500,28 @@ function notesFindings(tree: Tree): string[] {
 		.filter(({ where, job }) => !allowed.has(where) && (job.steps ?? []).some((s) => s.uses?.startsWith("orhun/git-cliff-action@")))
 		.map(({ where }) => `${where}: runs git-cliff`)
 	return [...NOTES.flatMap((entry) => notesJobFindings(tree, entry)), ...cliff]
+}
+
+const COMPOSE = "bun --no-install scripts/release/release-notes-run.ts compose"
+
+/**
+ * The stable body is composed between git-cliff and the upload, from the file git-cliff writes into
+ * the file the upload ships, for the resolved version: a slip here first shows after the tag exists.
+ */
+function composeFindings(tree: Tree): string[] {
+	const where = "release.yml#release-notes"
+	const steps = tree.workflows["release.yml"].jobs["release-notes"]?.steps ?? []
+	const cliff = steps.findIndex((s) => s.uses?.startsWith("orhun/git-cliff-action@"))
+	const compose = steps.findIndex((s) => s.run?.trim() === COMPOSE)
+	const upload = steps.findIndex((s) => s.uses?.startsWith("actions/upload-artifact@"))
+	if (cliff < 0 || compose < 0 || upload < 0) return [`${where}: git-cliff, the composer or the upload is missing`]
+	const findings: string[] = []
+	if (!(cliff < compose && compose < upload)) findings.push(`${where}: the composer does not run between git-cliff and the upload`)
+	const env = steps[compose].env ?? {}
+	if (env.CLIFF !== steps[cliff].env?.OUTPUT) findings.push(`${where}: the composer reads ${String(env.CLIFF)}, not git-cliff's output`)
+	if (env.OUT !== steps[upload].with?.path) findings.push(`${where}: the composer writes ${String(env.OUT)}, not the uploaded body`)
+	if (env.VERSION !== "${{ needs.resolve.outputs.version }}") findings.push(`${where}: the composer's VERSION is not the resolved one`)
+	return findings
 }
 
 const ATTEST = "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8"
@@ -1268,6 +1299,25 @@ describe("release notes", () => {
 		],
 	])("finds %s", (_, edit) => {
 		expect(notesFindings(mutated(edit)).length).toBeGreaterThan(0)
+	})
+
+	test("the stable body is composed from git-cliff's output into the uploaded file, for the resolved version", () => {
+		expect(composeFindings(TREE)).toEqual([])
+	})
+	const composer = (t: Tree) => t.workflows["release.yml"].jobs["release-notes"].steps?.find((s) => s.run?.trim() === COMPOSE) ?? {}
+	test.each([
+		["a composer reading another file", (t: Tree) => Object.assign(composer(t).env ?? {}, { CLIFF: "/tmp/other.md" })],
+		["a composer writing a file the upload never ships", (t: Tree) => Object.assign(composer(t).env ?? {}, { OUT: "/tmp/body.md" })],
+		["a composer without the resolved version", (t: Tree) => unset(composer(t).env, "VERSION")],
+		[
+			"a composer after the upload",
+			(t: Tree) => {
+				const steps = t.workflows["release.yml"].jobs["release-notes"].steps ?? []
+				steps.push(...steps.splice(steps.indexOf(composer(t)), 1))
+			},
+		],
+	])("finds %s", (_, edit) => {
+		expect(composeFindings(mutated(edit)).length).toBeGreaterThan(0)
 	})
 })
 

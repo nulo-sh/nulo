@@ -369,8 +369,10 @@ jobs:
         run: bun run --cwd apps/extension build-storybook
 
   # A stable release at or above 1.0.0 is a launch: a promote or Release PR into main at such a version
-  # must leave no «FILL» in the legal documents, while dev stays open to legal drafts. A retarget
-  # starts no run here, so auto-unstick repeats the check before it creates a stable tag.
+  # must leave no «FILL» in the legal documents, while dev stays open to legal drafts. A stable must
+  # also carry its user-facing release notes; the Release PR's tree names the new version, so that is
+  # where the notes check binds. A retarget starts no run here, so auto-unstick repeats both checks
+  # before it creates a stable tag.
   launch-legal:
     name: Launch legal check
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
@@ -392,6 +394,8 @@ jobs:
         env:
           NULO_LAUNCH_GATE: "1"
         run: bun run test scripts/legal-pages.test.ts
+      - name: Refuse a stable release without its release notes
+        run: bun scripts/release/release-notes-run.ts check
 
   # Extension smoke e2e lives in its own pr-extension-smoke-e2e.yml workflow:
   # auto-runs on PRs to main, on changes within the `smoke-surface`
