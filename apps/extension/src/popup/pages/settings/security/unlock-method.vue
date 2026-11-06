@@ -278,7 +278,10 @@ onBeforeMount(() => {
 
 onBeforeUnmount(() => {
 	managers.profile.onProfileUpdated.remove(onProfileUpdated)
-	reset()
+	// A lock that closes the session over a saved change can land the window on its lock screen
+	// before the change answers; an own window keeps its flow there, so the answer still ends it.
+	if (commit && handsBackToPanel()) clearStep()
+	else reset()
 })
 </script>
 

@@ -508,6 +508,27 @@ describe("how a change ends", () => {
 		expect(router.push).not.toHaveBeenCalled()
 	})
 
+	test.each([true, false])(
+		"a lock that unmounts the page before a saved change answers still ends an own window's flow (own window: %s)",
+		async (own) => {
+			surface.handsBack = own
+			const held = Promise.withResolvers<void>()
+			profile.changeUnlockMethod.mockReturnValueOnce(held.promise)
+			const w = mountPage("passkey")
+			await flushPromises()
+			await click(w, "unlock-method-new-passkey")
+			useAppStore().isLogined = false
+			await flushPromises()
+			wrappers.splice(wrappers.indexOf(w), 1)
+			w.unmount()
+			held.reject(new UnlockMethodChangedError())
+			await flushPromises()
+			expect(surface.handBack.mock.calls).toEqual(own ? [["/popup/general"]] : [])
+			expect(openToast).not.toHaveBeenCalled()
+			stayed()
+		},
+	)
+
 	test("in Firefox's toolbar panel the page moves to its own window first", async () => {
 		surface.panel = true
 		mountPage("password")
