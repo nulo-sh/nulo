@@ -62,3 +62,64 @@ A fresh Testnet account pays nothing for a drip: the dApp embeds the SponsoredFP
 ## The keyed-run pin
 
 `env-exec request` refuses a dirty tree or a HEAD that is not a remote branch tip; at run time it re-checks both and that HEAD equals the approved commit (`keyed_pin`, `cmd_receive`). The run executes in the request's work tree. So a harness filed from the lane worktree would freeze it for up to six hours; a detached worktree at the pushed commit leaves the lane worktree free, provided the branch tip does not move on the remote.
+
+## Probe (Phase 1, 2026-11-06)
+
+Instrument as in D5. The recorded config shows the flag `true` for Testnet (chain 685146337) in every on session and `false` in every off session. The node wrapper sits on the runtime's node, which the PXE and the wallet's own readers share, so its counts include the wallet's polling. Deltas are on minus off, so negative means the on arm was faster (D2's saving is the negation). Medians weight every pass or send equally. Speculative syncs: no operation failed with `Speculative syncs failed` (instrument, lab and Testnet), and the 13 Testnet log buffers read held no `Speculative sync of` warning; the fourteenth session lost its browser before its buffer was read.
+
+### Lab: local network, proverless, `createPXE` direct (blocks 44-81, load1 95-203)
+
+| Workload (N) | Pairs | Median on / off (ms) | Paired deltas (ms) | On faster | Node calls on / off | Outside spans on / off |
+|---|---|---|---|---|---|---|
+| (b) one pass of 12 `balance_of_private` | 6 | 1888 / 2407 | -642, -29, -244, +29, -1378, -395 (median -319) | 5/6 | 103 / 103 in every pair | 51 / 51-52 |
+| (a) one private transfer, SponsoredFPC | 5 | 4703 / 5320 | -194, -798, +280, -87, -617 (median -194) | 4/5 | 50-53, equal in every pair | 31 / 31 on send 1; 22-24 / 28-30 after |
+| (c) a new PXE's first pass, 12 tokens | 3 | 3273 / 4240 | -2024, +2141, +100 (median +100) | 1/3 | 116 / 116 | 66 / 66 |
+
+Per operation, sends 2-5: `simulateTx` 717 / 909 ms with 13 / 20 round trips, `proveTx` 857 / 976 ms with 3 / 3. The flag changes one thing: a trained send's simulation folds seven round trips. A refresh pass or a first sync folds at most one, and the number of node calls never changes.
+
+### Testnet: the built-in network, one throwaway profile restored per session (blocks 21163-21236, load1 29-379, 19:36-20:47 UTC)
+
+Setup, off build: the four defaults, SIGNAL and NOISE added through the tools app, then each dripped private and public (1,000 SIGNAL and 1 NOISE each way). Eight drips in all; two failed setup attempts used four (`lessons/phase-1.md`). Tokens per workload: (c4) the four defaults and fee juice, (c6) those plus SIGNAL and NOISE, (b) six per pass, (a) SIGNAL.
+
+| Stage | Pairs | Median on / off (ms) | Median paired delta (ms) | Sign agreement | Node calls | Spans on / off |
+|---|---|---|---|---|---|---|
+| (c4) first sync | 4 | 17862 / 19586 | -1437 (+3725, -3112, -1433, -1441) | 3/4 | -9.4 % | 62-71 / 63-74 |
+| (c6) two custom tokens | 4 | 10890 / 9846 | +1140 (+2645, -83, +110, +2171) | 3/4, on slower | +28 % | 45-70 / 40-45 |
+| (b) refresh, trained passes | 12 | 6156 / 6564 | -364 | 7/12 | -1.2 % | 28 / 28-29 |
+| (a) estimate, send 1 | 3 | 3585 / 3478 | +94 | 2/3 | equal (22) | 19 / 19, once 28 off |
+| (a) estimate, send 2 (D3: still training) | 3 | 2338 / 2606 | -137 (-339, -137, +65) | 2/3 | equal (17) | 11 / 13 in every send |
+| (a) estimate, send 3, unpaired | 0 | 2270 / 2718, 2651 | none | - | equal | 11 / 13 |
+| (a) proof, send 1 | 3 | 17591 / 12757 | +4831 (+4906, -186, +4831) | 2/3, on slower | 35-37 / 11 where re-synced | 19-23 / 4 in two on sessions |
+| (a) proof, send 2 | 3 | 9323 / 7955 | +1241 (+2144, +51, +1241) | 3/3, on slower | equal (11) | 4 / 4 |
+| (a) proof, send 3, unpaired | 0 | 8286 / 8892, 7958 | none | - | equal | 4 / 4 |
+
+Every (b) delta, pair/pass: 1/1 -2016, 1/2 -545, 2/1 -881, 2/2 +568, 2/3 -242, 2/4 -546, 2/5 -1025, 2/6 -994, 3/1 -87, 3/2 +19, 3/3 -486, 3/4 -612, 3/5 +23, 3/6 -488, 4/1 -1544, 4/2 +567, 4/3 +66, 4/4 +1077, 4/5 +609, 4/6 +3. These are 20 pass comparisons nested in four session pairs, one of them cut to two passes. They are consistent with an order effect: with on second (pairs 2 and 3) on led in 9 of 12; with on first (pair 4) it trailed in 5 of 6. The c4 deltas do not follow order (pair 4 favoured on with on first). The (a) sessions' own first syncs, before their sends: c4 -2217, -1567, +278; c6 +3111, +1614, +481.
+
+Losses. Pair 1's off session lost its browser connection after two passes, so its passes 3-6 have no pair. Three (a) sessions lost one send each to a stale "Transaction submitted" toast that ended the wait early. The stage rows take each completed send's own `simulateTx` and `proveTx` timing and pair sends by their order in the session: 15 of 18 planned sends completed (on 2, 3, 2; off 3, 2, 3 in pairs 1-3), so send 2 has three pairs and send 3 none. Ordinal pairing does not prove the arms had matching anchor histories. The first proof's extra round trips in two on sessions are a block and contract re-sync inside `proveTx` (`getContract` 4, `findLeavesIndexes` 6, `getPrivateLogsByTags` 11) that no off proof made. Whether a block landed between estimate and proof only in those sessions was not recorded, so the cause is open.
+
+Offscreen JS heap, MB, before and after six passes: on 186→95, 152→90, 144→89, 116→93; off 115→90, 136→96, 144→95. No retained-heap increase was observed at these endpoints.
+
+Lab spans saved times Testnet's mean span (149 ms), a magnitude, not a measured saving: (a) estimate 7 × 149 ≈ 1.0 s, against the 0.14-0.32 s measured, because Testnet's off arm needed 13 round trips, not the lab's 20; (b) 1 × 149 ≈ 0.15 s; (c) 0.
+
+### Caching (D7)
+
+| Pass (n) | Calls | (i) Repeats inside it | (ii) Repeated hash-pinned or content-addressed requests | Tip, freshness and metadata repeats | Spans (mean ms) |
+|---|---|---|---|---|---|
+| Testnet (b), trained (28) | 42.3 | 7.1 | 0 | 6.9: `getChainTips` 5.6, `getBlockNumber` 1.3 | 28 (149) |
+| Testnet (c4) (8) | 99.4 | 42.8 | 0 | 39.3: `getBlockNumber` 19.8, `getChainTips` 14.9, `getNodeInfo` 4.6 | 66 (159) |
+| Testnet (c6) (8) | 130.0 | 61.5 | 0 | 58.1: `getBlockNumber` 44.9, `getChainTips` 13.2 | 45 (162) |
+| Lab (b), N = 12 (6) | 103 | 11 | 0 | 11: `getChainTips` | 51 |
+
+- No repeated hash-pinned or content-addressed request was observed inside a pass, so (ii) is zero as measured; that fits PXE's own cache sitting above the recorder for those reads (§ The flag), though absence alone does not prove why. Zero in that narrow class is not zero cache opportunity: `getNodeInfo` repeats (4.6 per c4 pass) are node metadata a per-pass memo could probably share, unassessed here, and the tip queries are freshness checks whose reuse would trade staleness for calls. The other repeats are `getPublicLogsByTags` (3.5 per c4 pass, 3.0 per c6), whose reference block a digest cannot show, and a current-instance `getContract` (0.4 per c6 pass); both are conditional.
+- Contract-sync reads did not repeat across the observed passes, each at a new anchor (a block about every 60 s): `getContract` (6.9 per pass), `findLeavesIndexes` (9.9), `getPrivateLogsByTags` (14.0). Because the node client is shared with the wallet's polling, call counts also grow with a pass's duration.
+- The fast-arm public balances and the fee-juice reads never reached the wrapped node, so they are outside this coverage.
+- (iii) A batched read of N balances: a refresh's `executeUtility` makes 5 calls in 4 spans, 1 of them its block sync. One shared block sync for N = 6 removes at most 5 calls and 5 spans, about 0.75 s of a 6.2 s pass. Overlapping every later token's whole sync is a deliberately loose ceiling of 20 of 28 spans, about 3 s, not an achievable target, since distinct tokens still need distinct reads. The flag reaches neither.
+
+### Verdict (D2)
+
+**Hold**, by D2 as written, with a recommendation to **close** the flag without shipping it; departing from D2's letter is the owner's call.
+
+- No stage ships. (c4) is the only Testnet stage with a median saving of at least 1 s (1.44 s, three of four pairs, calls down 9.4 %), but the lab shows no fewer spans on its nearest workload (66 / 66 in every pair), which D2 requires. That workload is not the same (twelve private reads against the extension's own start with four defaults, fee juice and its polling), so the lab does not refute c4's saving; it fails to corroborate it.
+- Close's letter fails on the same stage: 1.44 s is not under 0.5 s. Every other measured, paired stage saved under 0.5 s or ran slower. No paired trained-send comparison survived: under D3 send 2 is still training, and send 3 has no pair.
+- Why close is still the recommendation (moderate confidence, a judgment, not D2's letter): the one mechanism the lab shows, a send's simulation after its first folding contract-sync round trips (20 to 13 in the lab's trained sends, 13 to 11 in Testnet's second sends), is worth about 0.1-0.3 s on Testnet. (c6) ran slower by about as much as c4 ran faster. Both proof stages ran slower on the on arm, observed and unexplained. A refresh pass, the stage a person repeats most, gains nothing the lab can explain. The bridge leg (OA-1) was still pending when this was written and is outside the verdict.
+

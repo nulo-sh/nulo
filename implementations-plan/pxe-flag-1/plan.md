@@ -1,7 +1,7 @@
 ---
 plan: pxe-flag-1
 tier: light
-status: approved (2026-11-06); Phase 1 (the measurement) next
+status: measured (2026-11-06); D2 hold, recommendation close (owner's call); bridge leg (OA-1) pending
 issues: none (a probe on the owner's page 116 pick A, "Measure first, no UI")
 driver: claude-code
 claude_model: opus
