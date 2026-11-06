@@ -133,7 +133,8 @@ describe("the pages", () => {
 	const [index = "", latest = "", earlier = ""] = pages.map((p) => p.html)
 
 	test("a release page: one external module script, its canonical URL, five numbered cards, the notes", () => {
-		expect([...latest.matchAll(/<script\b[^>]*>/g)].map((m) => m[0])).toEqual(['<script type="module" src="/src/changelog.ts">'])
+		expect(latest.split("<script").length - 1).toBe(1)
+		expect(latest).toContain('<script type="module" src="/src/changelog.ts"></script>')
 		expect(latest).toContain('<link rel="canonical" href="https://nulo.sh/changelog/v1.2.0/" />')
 		expect(latest).toContain("<title>Nulo 1.2.0: A title | NULO</title>")
 		expect([...latest.matchAll(/<span class="eb">([^<]*)<\/span>/g)].map((m) => m[1])).toEqual(
@@ -151,6 +152,14 @@ describe("the pages", () => {
 			"/changelog/v1.1.0/",
 		])
 		expect(index.match(/<span class="k-release-lead">The lead line\.<\/span>/g)).toHaveLength(2)
+	})
+
+	test("the description is the lead line as plain text", () => {
+		const markdown = "A **bold** `lead` & more.\n\n- One.\n"
+		const [, html = ""] = plan({ sources: [{ ...source("1.2.0"), markdown }], siteVersion: "1.2.0", production: true }).map(
+			(p) => p.html,
+		)
+		expect(html).toContain('<meta name="description" content="A bold lead &amp; more." />')
 	})
 
 	test("a quote in a raw HTML lead stays inside the description attribute", () => {

@@ -162,7 +162,9 @@ export function pairSources(
 }
 
 const releaseHref = (version: string): string => `/changelog/v${version}/`
-const plainText = (html: string): string => html.replace(/<[^>]*>/g, "")
+/** The notes allow no attribute, so these six strings are every tag a lead line can hold. */
+const INLINE_TAGS = ["<strong>", "</strong>", "<em>", "</em>", "<code>", "</code>"]
+const plainText = (lead: string): string => INLINE_TAGS.reduce((text, tag) => text.replaceAll(tag, ""), lead)
 
 /** A wallet glyph as inline SVG; stroked paths carry `pathLength="1"` so CSS can draw them in. */
 function icon(name: GlyphName): string {
@@ -174,7 +176,7 @@ function icon(name: GlyphName): string {
 
 interface ShellOptions {
 	readonly title: string
-	/** HTML text: entities kept, no tags. A raw HTML block in the notes keeps its literal `"`. */
+	/** HTML text, entities kept. A raw HTML block in the notes keeps its literal `"`. */
 	readonly description: string
 	readonly path: string
 	readonly current: "page" | "true"
@@ -183,7 +185,7 @@ interface ShellOptions {
 }
 
 function shell(o: ShellOptions): string {
-	const description = o.description.replaceAll('"', "&quot;")
+	const description = o.description.replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;")
 	return `<!doctype html>
 <html lang="en">
 	<head>

@@ -125,6 +125,7 @@ Each finding's path: `lessons/phase-0.md`.
 - **Fix loop round 1** (Codex gpt-6.1-sol high, fresh session; Opus 5.5 diff review beside it): both found that a raw `<p>` block in the notes kept a literal `"` that broke out of the meta description into a meta refresh (demonstrated); fixed, the shell encodes `"`, with a regression test. Also accepted: a TOML syntax error names its file (both), the em dash check reads the rendered notes (Opus), an unclosed lead `<p>` is refused, and trimmed comments (Codex).
 - **Fix loop round 2** (resumed): one finding, demonstrated: an em dash entity in a raw HTML block; fixed.
 - **Fix loop round 3** (resumed, the cap): one finding, demonstrated: a numeric reference with no semicolon. Fixed at the cause: the notes refuse any character reference but the four Bun's markdown text emits, so every raw-block encoding is closed; the loop stops here.
+- **CodeQL on the PR**: two High alerts in new code, a test regex over `<script` tags and the regex tag-strip feeding the meta description; neither reachable (the notes allow six attribute-free inline tags, the sink is a quoted attribute). Fixed at the source: string removal of those six tags, the sink encodes `<`, `>` and `"`, the test counts by split (`lessons/phase-2.md`).
 
 ## Seeds
 
