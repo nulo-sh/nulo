@@ -10,6 +10,18 @@ eli5_mode: skipped (orchestrator-owned)
 base: dev at 0bfd2c088
 ---
 
+## Outcome
+
+- **Date:** 2026-11-06.
+- **Status:** completed; delivered in #1724, whose merge closes the plan.
+- **Shipped:** #1724. After an update to a new minor, Home shows one dismissible row, "Nulo X.Y.Z. See what changed", between the restore banner and Get started; a tap opens the version's changelog page and Dismiss hides it for good. Settings → About links the same page on every build (P117-08 A with D's About row). The device-wide marker `nulo:ui:whatsNewSeen` is an additive stored-shape stamp; the worker stamps it on install and update. Unit, component, smoke (Chrome and Firefox) and the update replay's first case cover it.
+- **Dropped or rejected:** the smoke test's exact-URL check (D11), replaced by the component test, since the egress guard keeps hosts and `OpenedTab` exposes no URL; a TS `WhatsNewRow.vue` (D12), plain `<script setup>` instead.
+- **Left as it is:** #1691 (the landing's changelog page) stays open with a comment: #1713 closes it, and the first stable carrying this row must ship after #1713 merges.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. Both gotchas met here are already documented: a `dist/` that `audit:vue` or the update candidate rebuilt unarmed is refused by the smoke setup, which names the armed build command (`apps/extension/tests/e2e/README.md`), and the vue-tsc slot gotcha is a `lessons.md` line.
+- **Seeds retired:** no `/goal` or `/loop` seed of this plan is live.
+
 # whats-new-1: the wallet tells you it was updated
 
 After an update to a new minor version, Home shows one dismissible row, "Nulo 1.3.0. See what changed", that opens the version's changelog page on a tap; Settings → About keeps a permanent "What's new in 1.3.0" row with the same link.
