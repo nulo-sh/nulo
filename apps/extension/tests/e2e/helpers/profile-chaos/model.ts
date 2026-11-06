@@ -191,8 +191,8 @@ export interface ParamsMap {
 		credential?: CredentialRef
 		duplicate?: "confirm" | "decline"
 	}
-	/** A passkey profile's file asks its passkey, then a file password (`password`); `short` is one
-	 *  under the wallet's rule, `refuse` and `other` answer the passkey's prompt. */
+	/** A passkey profile's file asks its file password (`password`), then its passkey at Save; `short`
+	 *  is one under the wallet's rule, `refuse` and `other` answer the passkey's prompt. */
 	exportAccountFile: {
 		file: FileRef
 		which: AccountChoice
@@ -409,13 +409,15 @@ const METHOD_ENDS_WITH_SESSION = cite(UNLOCK_METHOD, 249, "if (!logged) onSessio
 const METHOD_DROPS_PROMPT = cite(UNLOCK_METHOD, 101, 'onCeremonyReject(new Error("The unlock method page started over"))')
 const METHOD_CHANGED_ELSEWHERE = cite(UNLOCK_METHOD, 85, "if (!renamed) onChangedElsewhere()")
 const ACCOUNT_PAGE = "src/popup/pages/settings/security/export/account.vue"
-const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 224, '{ profileId, step: "accountFile", profileName: () => name }')
-const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 229, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
-const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 233, "handleCancelOrUnconfirmed(error, openToast)) return")
-const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 93, "const canSaveFile = computed(() => isNewPasswordValid(")
+const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 217, '{ profileId, step: "accountFile", profileName: () => name }')
+const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 233, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
+const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 222, "if (isCurrent() && !handleCancelOrUnconfirmed(error, openToast))")
+const ACCOUNT_FILE_FAILS = cite(ACCOUNT_PAGE, 247, 'openToast({ kind: "error", label: "Failed to create the file" })')
+const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 90, "const canSaveFile = computed(() => isNewPasswordValid(")
 const ACCOUNT_FILE_PASSWORD = cite("src/wallet/services/account/service.ts", 111, "The file password needs at least 8 characters")
-const ACCOUNT_FILE_TYPE_RESETS = cite(ACCOUNT_PAGE, 163, "() => appStore.profile?.type,")
-const ACCOUNT_FILE_NETWORK_RESETS = cite(ACCOUNT_PAGE, 182, "() => appStore.network?.chainId,")
+const ACCOUNT_FILE_CLEARS = cite(ACCOUNT_PAGE, 111, "clearFilePassword()")
+const ACCOUNT_FILE_TYPE_RESETS = cite(ACCOUNT_PAGE, 159, "() => appStore.profile?.type,")
+const ACCOUNT_FILE_NETWORK_RESETS = cite(ACCOUNT_PAGE, 178, "() => appStore.network?.chainId,")
 /** A session opened in place re-runs the window's bootstrap, which clears the network first. */
 const BOOTSTRAP_CLEARS_NETWORK = cite("src/composables/useProfileBootstrap.ts", 152, "appStore.network = undefined")
 const EXPORT_CHECK_REFUSES = cite(SERVICE, 1226, "await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {")
@@ -1041,8 +1043,8 @@ function accountChoiceInvalid(open: ModelProfile, which: AccountChoice): string 
 	return Number.isInteger(i) && i >= 0 && i < open.derived ? undefined : `no derived account ${i}`
 }
 
-/** A password profile's file opens with its password. A passkey profile's asks its passkey, then a
- *  file password under the wallet's rule, and the file opens with that file password alone. */
+/** A password profile's file opens with its password. A passkey profile's asks a file password under
+ *  the wallet's rule, then its passkey at Save, and the file opens with that file password alone. */
 const exportAccountFile: ActionSpec<"exportAccountFile"> = {
 	name: "exportAccountFile",
 	family: "account-file",
@@ -1074,11 +1076,12 @@ const exportAccountFile: ActionSpec<"exportAccountFile"> = {
 	expect: (w, p) => {
 		const from = openProfile(w) as ModelProfile
 		if (p.variant === "refuse") return unchanged(w, "cancelled", [ACCOUNT_FILE_PASSKEY, ACCOUNT_FILE_CANCEL, PROMPT_DISMISSED])
-		if (p.variant === "other") return unchanged(w, "refused", [ACCOUNT_FILE_PASSKEY, ACCOUNT_FILE_CHECKS, EXPORT_CHECK_REFUSES])
+		if (p.variant === "other")
+			return unchanged(w, "refused", [ACCOUNT_FILE_PASSKEY, ACCOUNT_FILE_CHECKS, EXPORT_CHECK_REFUSES, ACCOUNT_FILE_FAILS])
 		const next = clone(w)
 		if (p.variant === "short") {
 			bump(next, { secret: 1 })
-			return result(next, ["refused"], [], "unchanged", [ACCOUNT_FILE_PASSKEY, ACCOUNT_FILE_RULE])
+			return result(next, ["refused"], [], "unchanged", [ACCOUNT_FILE_RULE])
 		}
 		const passkey = from.method === "passkey"
 		next.files.push({
@@ -1655,9 +1658,9 @@ const raceMethodChangeElsewhere: ActionSpec<"raceMethodChangeElsewhere"> = {
 	},
 }
 
-/** The account file page holds an approval for the unlock the anchor replaces, and starts over
- *  before Save: on a change to a password by its type, on a new passkey by its network, which the
- *  window's bootstrap after the in-place reopen clears. The typed file password's secret is spent. */
+/** The account file page holds a typed file password for the unlock the anchor replaces, and starts
+ *  over before Save: on a change to a password by its type, on a new passkey by its network, which
+ *  the window's bootstrap after the in-place reopen clears. The typed file password's secret is spent. */
 const raceMethodChangeDuringExport: ActionSpec<"raceMethodChangeDuringExport"> = {
 	name: "raceMethodChangeDuringExport",
 	family: "race",
@@ -1680,7 +1683,7 @@ const raceMethodChangeDuringExport: ActionSpec<"raceMethodChangeDuringExport"> =
 		const next = clone(competitor.next)
 		bump(next, { secret: 1 })
 		const reset = p.change.change === "password" ? [ACCOUNT_FILE_TYPE_RESETS] : [BOOTSTRAP_CLEARS_NETWORK, ACCOUNT_FILE_NETWORK_RESETS]
-		return result(next, ["cancelled"], competitor.writes, competitor.settle, [...competitor.sources, ACCOUNT_FILE_PASSKEY, ...reset])
+		return result(next, ["cancelled"], competitor.writes, competitor.settle, [...competitor.sources, ACCOUNT_FILE_CLEARS, ...reset])
 	},
 }
 
