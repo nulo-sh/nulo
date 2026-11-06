@@ -6,7 +6,7 @@ describe("KNOWN_JOB_ERROR_KINDS (drift guard)", () => {
 	test("contains every literal a producer actually emits", () => {
 		// If a producer emits a kind absent here, the open union silently loses
 		// its known-set value for that kind. Sources: normalizeError literals,
-		// wallet-sdk popup_bound, scope_refused, malformed_request, terms_refused and wallet_refused, execution's
+		// wallet-sdk popup_bound, the three scope kinds, malformed_request, terms_refused and wallet_refused, execution's
 		// session_ended, the reaper, and classifyTokenImportError.
 		const produced = [
 			"transfer",
@@ -18,6 +18,7 @@ describe("KNOWN_JOB_ERROR_KINDS (drift guard)", () => {
 			"popup_bound",
 			"scope_refused",
 			"registry_refused",
+			"unattached_refused",
 			"malformed_request",
 			"terms_refused",
 			"wallet_refused",
