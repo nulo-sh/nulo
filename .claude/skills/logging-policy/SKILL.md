@@ -1,6 +1,6 @@
 ---
 name: logging-policy
-description: What may reach a log line in the Nulo extension, and how. Use when adding or changing a `console.*` or `this.log*` call, passing a value or a caught error to a log, touching the redactor `trim()`, `REDACTED_KEYS` or `URL_KEYS`, `scrubUrls`, `log-payload-ban.test.ts`, the `debugMode` or `developerMode` flags, or the log viewer and its CSV export.
+description: What may reach a log line in the Nulo extension, and how. Use when adding or changing a `console.*` or `this.log*` call, passing a value or a caught error to a log, touching the redactor `trim()`, `REDACTED_KEYS` or `URL_KEYS`, `scrubUrls`, `log-payload-ban.test.ts`, the `debugMode` or `developerMode` flags, the log viewer and its CSV export, a dApp request's `walletTraceId` tag, its capture (`RequestLog`), the text pass `scrubReportText`, or the one-request report file.
 ---
 
 # Logging policy (what may reach a log line)
@@ -81,9 +81,23 @@ to log something sensitive.
   is memory-backed — a browser restart, extension update or reload clears it, so a log is a
   short-lived in-session artifact, not a disk record.
 - **Reading them**: with Developer Mode on, Settings → Developer shows a Logs row that opens the
-  viewer window (`popup/windows/logger/`), which renders the buffer and exports it as CSV. That
-  export is the reason this policy exists — it is the path by which a user's logs become a public
-  bug report.
+  viewer window (`popup/windows/logger/`), which renders the buffer and exports the lines its
+  filters show as CSV. That export is the reason this policy exists — it is the path by which a
+  user's logs become a public bug report.
+- **One request, one file.** Each dApp request gets an 8-hex `walletTraceId` at arrival: every
+  error the dApp receives carries it in `data.walletTraceId`, and every line the request's path
+  logs passes it as a `{ walletTraceId }` property (`traceTag` in `wallet/logger/request-log.ts`),
+  never inside a finished string. With Developer Mode on, `RequestLog` keeps one capture per
+  request: its stages, the worker lines tagged with its id, and its envelope. A capture no journal
+  row names is deleted when the request ends; at most 50 stay, in `chrome.storage.session` under
+  `nulo:request-logs`, cleared with the logs and purged when Developer Mode goes off. A line enters
+  a capture only through `scrubReportText` (`wallet/logger/utils.ts`), which blanks every `0x`
+  run of 9 or more hex digits, every bare run of 32 or more, and every shortened, grouped or split
+  address as `[hex]`, keeps a URL's scheme and host, shows line breaks and drops controls; the
+  report builder (`request-report.ts`) runs it again over every line of the file. The file holds
+  the wallet version, the browser, the network name, the trace id, the dApp's origin host, the
+  stages with their outcomes, the scrubbed lines and the envelope, and nothing else. A tagged line
+  is still a log line: every rule above applies, and the text pass is a backstop, never a licence.
 
 When adding a sensitive field to a type, add its name to `REDACTED_KEYS` in
 `wallet/logger/utils.ts` — in camelCase *and* the kebab-case spelling used by exported backup JSON

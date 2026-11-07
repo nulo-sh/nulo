@@ -10,3 +10,9 @@
 
 - The golden (`request-report.golden.txt`) was written by hand from the OA-2 template, not generated from the code, and the code matched it on the first run.
 - **Deviation:** the timeline is sorted by start, ties kept in arrival order. Stages are appended when they finish, so the request's own stage, which opens first and closes last, would otherwise read last.
+
+# Phase 4: the buttons
+
+- **Found in the pictures:** `Button`'s `left-icon` is absolutely positioned for wide buttons and overlapped the label of a small chip; nothing else in the extension uses it. The glyph is an `Icon` inside the slot, spaced by the wrapper's flex gap.
+- **Found at retry 0:** a popup opened right after the connect fixture can still be routing when `setDeveloperMode` navigates to Settings, and the toggle never shows. The test waits for `#/popup/general` first, as the other network tests that turn developer mode on do.
+- The pictures came from one run of the scope-refusal e2e with `NULO_E2E_SHOT_DIR` set, a temporary runtime switch between the three looks and temporary shot steps, all reverted. The History file of that run holds one log line, the ingress's debug failure line; the refusal itself shows as the `fee estimate` stage. Without Debug Mode that file would hold no line (OA-2 says so).

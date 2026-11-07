@@ -473,3 +473,25 @@ describe("LogsViewer opened at a log", () => {
 		wrapper.unmount()
 	})
 })
+
+describe("LogsViewer CSV export", () => {
+	test("writes only the lines the filters show", async () => {
+		const { LogLevel } = await import("@/wallet/logger")
+		const { downloadFile } = await import("@/utils")
+		const t = Date.now()
+		H.getLogs.mockResolvedValue([
+			{ id: 1, timestamp: t, source: "wallet-sdk", level: LogLevel.Info, data: ["shown-info"] },
+			{ id: 2, timestamp: t, source: "wallet-sdk", level: LogLevel.Error, data: ["shown-error"] },
+		])
+		const wrapper = mountViewer()
+		await vi.advanceTimersByTimeAsync(0)
+		const toolbar = wrapper.findComponent({ name: "LogsToolbar" })
+		toolbar.vm.$emit("toggleFilter", "level", "INFO")
+		toolbar.vm.$emit("exportCsv")
+		await vi.advanceTimersByTimeAsync(0)
+		const csv = vi.mocked(downloadFile).mock.calls.at(-1)?.[0].data ?? ""
+		expect(csv).toContain("shown-error")
+		expect(csv).not.toContain("shown-info")
+		wrapper.unmount()
+	})
+})
