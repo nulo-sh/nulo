@@ -377,10 +377,10 @@ explicit and per-Network.
 
 ### Provider keys and the RPC proxy
 
-No wallet build holds a provider key: the default endpoints are dRPC's keyless ones. The paid
-dRPC endpoints, whose key sits in the URL path, are reached only through `nulo-rpc-proxy`
-(`infra/rpc-proxy/`, at `rpc.nulo.sh` and `testnet.rpc.nulo.sh`), which no wallet build
-references yet. The keys are Worker secrets set by the owner in the dashboard, in no file, CI
+No wallet build holds a provider key: each default network's first endpoint is dRPC's keyless
+one. The paid dRPC endpoints, whose key sits in the URL path, are reached only through
+`nulo-rpc-proxy` (`infra/rpc-proxy/`, at `rpc.nulo.sh` and `testnet.rpc.nulo.sh`), which Alpha and
+Testnet list second, as Nulo's relay. The keys are Worker secrets set by the owner in the dashboard, in no file, CI
 job or agent. Each hostname is bound to one secret, so no caller picks the upstream; a web
 page's Origin is refused server-side (only Chrome and Firefox extension origins, or none, pass);
 every call must name an Aztec node method; the body is capped while streaming; nothing is
