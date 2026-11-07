@@ -1,7 +1,7 @@
 ---
 plan: chips-3
 tier: light
-status: approved by the panel (Codex final verdict: approve); arc 1 merged (#1723); arc 2 in progress
+status: completed
 issues: "#657 (closed; pages 117 and 118 reopened its row)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,22 @@ base: origin/dev at 0bfd2c088 (arc 2: 24d59880f)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-07.
+- **Status:** completed. Arc 1 shipped in #1723 (merged). Arc 2 ships in the PR titled `feat(activity): no symbol where the title names the token; in-flight sends draw their pair`, whose merge closes the plan.
+- **Shipped:**
+  - Arc 1, P117-01 C2 at P118-01 C2S: settled and received rows draw their two sides and a corner way badge in the icon box; the direction chip and the receipt's kind chip leave the title row, their words kept as hidden text under the same testids.
+  - Arc 2, P120-01 A: a row titled by its token (a send, a move, a receipt, a dApp's transfer, a send in flight or failed) shows no symbol under its amount; a mint keeps it. One layout flag, set by each card from the branch that builds its title (D11).
+  - Arc 2, P120-02 C2: queued, proving, failed and cancelled sends, and the running task's card, draw the settled row's pair and way badge from the start; the way comes from the request's own account and recipient, through the one move rule in `transferDirection` (D12, D13).
+- **Review loop:** plan, Codex three rounds ending `approve`. Arc 1, Codex three rounds ending clean, one Opus review folded. Arc 2, Codex two rounds ending clean, one Opus review folded. Details under Audit verdicts.
+- **Gates:** each PR body states its runs; arc 2's are in [lessons/phase-4.md](lessons/phase-4.md).
+- **Dropped:** nothing the owner picked. The detail pages (`tx/[id]`, `journal/[id]`) keep their own direction chip: they are not activity rows and no pick named them.
+- **Known limits:** none.
+- **Open items:** none. #657 stays closed (decided 2026-10-18); both PRs reference it.
+- **Lessons:** nothing promoted to `lessons.md`; this plan's gotchas are local to its seeds and captures ([lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-3.md](lessons/phase-3.md), [lessons/phase-4.md](lessons/phase-4.md)).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # chips-3: the direction chip becomes C2 at the C2S size
 
@@ -195,6 +211,7 @@ Arc 1's fix loop (Codex gpt-6.1-sol, high, read-only; one Opus review beside rou
 Arc 2's fix loop (the same reviewer and settings, over `git diff origin/dev...HEAD` on `chips-3-a2`; one Opus review beside round 1):
 
 - **Round 1.** Codex, 3 low, all fixed: the orphan task card's test used two malformed addresses, so it could not see a lost move (now valid addresses, `out`, `self` in another hex case and a malformed control); a producer comment still named `formatTransferType`; a doc sentence restated the template. Opus, 1 medium and 3 low, all fixed: History's pending cards had no test of the two new bindings; the same orphan gap; stale comments in the journal spec, the receipt card's prop and a test name; a layout test that duplicated another, merged with the mint control. Opus also noted the move rule written three times; `transferDirection` now takes the two addresses, so the rule lives once. "No production behavior defect found" (Codex).
+- **Round 2.** Codex: "All round-1 fixes hold … findings: 0 … clean".
 
 ## Delivery
 
