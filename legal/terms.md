@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Version 1.2.2 — effective «FILL: effective date»**
+**Version 1.2.3 — effective «FILL: effective date»**
 
 These Terms are a binding agreement between you and the developer of Nulo. Read them before you
 install or use Nulo. If you do not agree, do not install or use it.
@@ -227,7 +227,9 @@ Nulo is a client. To be useful, it talks to things the Developer does not contro
 **7.1 Nodes and network endpoints.** Nulo ships with default Aztec node endpoints purely as a
 convenience so the wallet works out of the box. They are operated by third parties under their own
 terms, may log your requests, may be slow, wrong, unavailable or hostile, and may be changed or
-withdrawn at any time. You can change the endpoint in Settings → Networks. When a network has more than one endpoint, Nulo uses the primary first and, while it fails, the others in the order Settings → Networks lists them. Each endpoint you add can receive the requests described above. **Pending transactions may
+withdrawn at any time. Nulo's relay, the second default on Alpha and Testnet, is operated by me
+rather than a third party; it passes your requests to a third-party provider (Privacy Policy
+§ 5.12). You can change the endpoint in Settings → Networks. When a network has more than one endpoint, Nulo uses the primary first and, while it fails, the others in the order Settings → Networks lists them. Each endpoint you add can receive the requests described above. **Pending transactions may
 continue to be checked through the endpoint used to submit them, including after you change or
 remove that endpoint**, and changing an endpoint does not withdraw information already disclosed. A
 default is not an endorsement, a recommendation or a warranty.
@@ -570,3 +572,4 @@ public feedback forms.
 | 1.2 | 27 October 2026 | Passkey profiles now have a recovery phrase. A full backup of a passkey profile is always protected with a file password. |
 | 1.2.1 | 5 November 2026 | The summary box names the default network as Nulo shows it, Alpha. |
 | 1.2.2 | «FILL: effective date» | When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails; each endpoint you add can receive its requests (§ 7.1). |
+| 1.2.3 | «FILL: effective date» | The second default endpoint of Alpha and Testnet is Nulo's relay, operated by the Developer, which passes requests to a third-party provider (§ 7.1). |

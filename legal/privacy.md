@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.11 — effective «FILL: effective date»**
+**Version 1.3 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -26,8 +26,8 @@ Nulo is maintained by **Alejo Amiras**, a natural person resident in Argentina (
 "**I**"). There is no company.
 
 Where applicable data-protection law applies, I am responsible as controller for processing carried
-out for the Nulo website, the passkey relying-party host, the token-list host, and correspondence
-described below.
+out for the Nulo website, the passkey relying-party host, the token-list host, Nulo's node relay,
+and correspondence described below.
 Independent providers are responsible for processing they determine themselves; providers acting on
 my instructions are processors.
 
@@ -40,8 +40,10 @@ Contact: **hello@nulo.sh**
 
 ## 2. No wallet telemetry; limited website and correspondence processing
 
-I do not operate a backend for the wallet. The one host of mine it contacts by itself,
-`tokens.nulo.sh`, serves the same signed file to every wallet and receives no wallet data (§ 5.11).
+I do not operate a backend that stores wallet data. Two hosts of mine are contacted by the wallet by
+itself: `tokens.nulo.sh`, which serves the same signed file to every wallet and receives no wallet
+data (§ 5.11), and Nulo's relay, which passes a network's node requests to a provider while the
+endpoint before it fails and writes no log of them (§ 5.12).
 Nulo requires no Developer-hosted account or sign-up. It
 creates local identifiers for wallet operation, including profile identifiers, but does not use them
 for wallet telemetry.
@@ -110,7 +112,8 @@ below.
 
 **What it is:** to read chain data and submit transactions, Nulo sends requests to the configured
 Aztec node. Remote endpoints use HTTPS; loopback endpoints may use HTTP. Nulo ships with default
-endpoints operated by a third-party provider so the wallet works on first run.
+endpoints so the wallet works on first run: on each network, one operated by a third-party provider
+first and, on Alpha and Testnet, Nulo's relay second (§ 5.12).
 
 **What the node receives:** protocol-defined transaction data, including proofs, public effects and
 encrypted data, plus ordinary request metadata — your IP address, user agent, timing, and the shape
@@ -126,11 +129,9 @@ yourself. When a network has more than one endpoint, Nulo uses the primary first
 them, including after you change or remove that endpoint.** Changing an endpoint does not withdraw
 information already disclosed.
 
-**What the Developer can see:** the default Testnet endpoint uses a provider account belonging to
-the Developer. Information available to the Developer through that account is aggregate usage
-statistics — request counts, compute units and cost by network, method, key and request type, and
-average latency — over selectable periods, and an error log that groups failed requests from the
-past 3 days by error, method and network.
+**What the Developer can see:** nothing through the default endpoints a third-party provider
+operates, which use no provider account of the Developer's. What the Developer can see of requests
+that reach Nulo's relay is described in § 5.12.
 
 ### 5.2 Price data (CoinGecko)
 
@@ -187,15 +188,16 @@ The website `nulo.sh`, including its mailing list, is described in the
 [Website Privacy Notice](website-privacy.md). The extension opens it only on uninstall (below) and
 when you follow a link to it.
 
-Hosting for `passkey.nulo.sh` and `tokens.nulo.sh`, the hosts the wallet's functions involve, is
+Hosting for `passkey.nulo.sh`, `tokens.nulo.sh`, and Nulo's relay at `rpc.nulo.sh` and
+`testnet.rpc.nulo.sh`, the hosts the wallet's functions involve, is
 provided by Cloudflare, Inc. ([privacy policy](https://www.cloudflare.com/privacypolicy/)), which
 also hosts `nulo.sh`. Requests to them expose IP addresses,
 requested URLs and ordinary browser headers to the hosting provider. Information available to the
 Developer through hosting tools is aggregate traffic statistics (requests, bandwidth, unique visitors
 and countries) and, for up to the past 30 days, a sample of individual requests showing the time, IP
 address, country, network, user agent, method, protocol, hostname, requested path, and how the
-request was cached or filtered. Request logging on the `passkey.nulo.sh` and `tokens.nulo.sh` applications is
-turned off, and the hosting provider's browser analytics are not enabled. This processing supports delivery and
+request was cached or filtered. Request logging on the `passkey.nulo.sh`, `tokens.nulo.sh` and relay
+applications is turned off, and the hosting provider's browser analytics are not enabled. This processing supports delivery and
 security of the
 hosts, relying on legitimate interests where applicable. The retention information below and the
 international-processing information in § 12 cover these hosting records.
@@ -313,6 +315,41 @@ token you remove stays removed.
 **Legal basis (GDPR):** legitimate interests — delivering a verified list of default tokens and keeping
 its host available and secure — under Article 6(1)(f).
 
+### 5.12 `rpc.nulo.sh` and `testnet.rpc.nulo.sh` — Nulo's relay
+
+**What it is:** on Alpha and Testnet, the second default endpoint is a relay I operate:
+`https://rpc.nulo.sh` for Alpha and `https://testnet.rpc.nulo.sh` for Testnet. It passes each request
+it accepts to a node of the provider dRPC, under my account there, and returns the provider's answer.
+Nulo sends it a network's requests only while the endpoints before it fail, as § 5.1 describes, and
+the checks of a transaction submitted through it. A new profile, and a profile restored from a
+backup, starts with it; a profile made before it is given it once, on a network whose first endpoint
+is still the one Nulo set. Once you remove it from a profile, Nulo does not add it back to that
+profile.
+
+**What it receives:** the requests § 5.1 describes, with your IP address, the time and ordinary
+browser headers such as the user agent and, depending on the browser, an `Origin` header naming the
+extension. It refuses a request whose `Origin` is not a browser extension's.
+
+**What it passes on:** the content of the request, with no cookie, `Origin`, user agent or IP address
+of yours. The provider sees a Cloudflare address instead of yours, and a header Cloudflare adds that
+names `nulo.sh`.
+
+**What it keeps:** the relay application writes no log of the requests; its logging is turned off.
+To limit abuse, it counts each IP address's requests over ten seconds and refuses more than 100.
+Cloudflare, Inc. hosts it, and the hosting records § 5.5 describes apply to it as to my other
+hosts.
+
+**What the Developer can see:** what § 5.5 describes for its hosts and, through the provider account,
+aggregate usage statistics — request counts, compute units and cost by network, method, key and
+request type, and average latency — over selectable periods, and an error log that groups failed
+requests from the past 3 days by error, method and network.
+
+**Your control:** Settings → Networks lets you remove the relay from a network or put your own
+endpoints before it.
+
+**Legal basis (GDPR):** legitimate interests — keeping the wallet working when a network's first
+endpoint fails, and keeping the relay available and secure — under Article 6(1)(f).
+
 ## 6. Browser permissions, and what they do and do not cover
 
 | Permission | Why |
@@ -389,7 +426,7 @@ the [Terms of Use](terms.md) § 3.
 Providers used for website hosting and correspondence may process personal data outside your
 country. For transfers for which I am responsible, the destinations and applicable safeguards are:
 
-- **Cloudflare, Inc.** (hosting; the United States and Cloudflare's global network): the EU Standard
+- **Cloudflare, Inc.** (hosting, Nulo's relay included; the United States and Cloudflare's global network): the EU Standard
   Contractual Clauses with the UK Addendum, and Cloudflare's participation in the EU–US Data Privacy
   Framework, under [Cloudflare's Data Processing Addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
 - **Google LLC** (email; the United States): the Standard Contractual Clauses, or another recognised
@@ -401,7 +438,7 @@ Contact me for information about those safeguards.
 
 Independent providers — including the node provider, the price API and the block explorer you reach
 directly from your own browser — describe their own international processing in their privacy
-notices.
+notices. The provider behind Nulo's relay receives its requests without your IP address (§ 5.12).
 
 ## 13. Security
 
@@ -475,3 +512,4 @@ described in § 5.
 | 1.2.9 | 5 November 2026 | The token list is downloaded about every six hours, retried within minutes then less often after a failure, and on request in Settings → Tokens (§§ 5.11, 6). |
 | 1.2.10 | «FILL: effective date» | When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails; each endpoint you add can receive its requests (§ 5.1). |
 | 1.2.11 | «FILL: effective date» | With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7). |
+| 1.3 | «FILL: effective date» | Nulo's relay, which the Developer operates, is the second default endpoint of Alpha and Testnet and receives the requests the endpoint before it fails to answer (§§ 1, 2, 5.1, 5.5, 5.12, 12). |
