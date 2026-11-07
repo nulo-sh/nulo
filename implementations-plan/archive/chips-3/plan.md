@@ -221,7 +221,7 @@ Arc 2's fix loop (the same reviewer and settings, over `git diff origin/dev...HE
 
 ## Post-implementation
 
-The steps are [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 0bfd2c088. Specific to this plan:
+The steps are [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 0bfd2c088. Specific to this plan:
 - **Code review:** off.
 - **Review loop:** one per arc, over `git diff origin/dev...HEAD`, after Phase 2's gate and before the PR. Run `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh`. Stop after three rounds and surface what is left.
 - **Opus review:** one Opus `general-purpose` review runs beside round 1.
