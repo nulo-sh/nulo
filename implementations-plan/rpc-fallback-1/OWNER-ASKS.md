@@ -4,7 +4,17 @@
 
 **Answer, 2026-11-06** (decision page 117, P117-11, signed 18:13 UTC, no note; issue #1624): "A: Numbered rows with a drag handle and a status dot each, replacing today's checkbox; while a row is lifted every number shows the place a drop would give it; the edit sheet opens with the dot, the state word and, for a failing endpoint, a red error line ('No answer since 1 min ago. The connection failed.'). A tap still makes a row primary." It supersedes OA-3 below; arc 4 builds it (plan Phase 9). OA-4 stays open: arc 4 ships its "ships now" (nothing on Home), and it goes on the next decision page.
 
-Eight asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA-2 and OA-8; arc 4 needs OA-3 and OA-4; arc 5 needs OA-5, OA-6 and OA-7 and `rpc-proxy-1`'s Worker. "Ships now" is what an arc builds if the ask is still open when it reaches it; an arc that changes a surface stops for the answer instead (§ UI changes need explicit owner sign-off).
+**Answers, 2026-11-06** (decision page 112, signed 14:18 UTC; issue #1624):
+
+- **OA-5 (P112-03): D.** "A, but the append happens only on a row whose primary is still the default endpoint the wallet seeded. A person who replaced it with their own node never gets the relay, so the Developer never becomes a recipient they did not choose." The owner's note: "It's not the first time (We did this with Alpha V6 renaming to Alpha) that we need to work on this type of migrations: I understand we used to have a migrations architecture / scaffolding. Why does this not apply to that? What other parts of our stack can't have "one-time" migrations? I'm scared we end up scattered with randoms "ifs" and conditions just because of this types of changes of behaviors." Arc 5's PR answers it.
+- **OA-6 (P112-04):** marked read, with the note "Just "Nulo"?". Built as the label "Nulo", second on a new profile and after the row's other endpoints on a converted one; the PR shows it.
+- **OA-7 (P112-05): A.** The full legal diff is in arc 5's PR.
+
+Arc 5 builds them (plan Phase 10).
+
+**OA-4, 2026-11-07:** on decision page 121 as P121-07, open; arc 4 shipped A (nothing on Home).
+
+Nine asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA-2 and OA-8; arc 4 needs OA-3 and OA-4; arc 5 needs OA-5, OA-6 and OA-7 and `rpc-proxy-1`'s Worker. "Ships now" is what an arc builds if the ask is still open when it reaches it; an arc that changes a surface stops for the answer instead (§ UI changes need explicit owner sign-off).
 
 ## OA-1. What the network status means once a network has several endpoints (arc 3)
 
@@ -44,7 +54,7 @@ Eight asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA
 - **Ships now:** A.
 - **Recommendation: B.** It answers "why is my primary not used" with the part that sends and shows balances; C's words describe one part's view at one moment and ask people to learn five states.
 
-## OA-4. Home while the wallet runs on a backup endpoint (arc 4): open; arc 4 ships A
+## OA-4. Home while the wallet runs on a backup endpoint (arc 4): open as P121-07; arc 4 ships A
 
 - **Surface:** Home.
 - **Today:** nothing about endpoints.
@@ -54,7 +64,7 @@ Eight asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA
 - **Ships now:** A.
 - **Recommendation: A.** Nothing on Home is actionable about it; the dot and OA-3 cover the question. If OA-3 and OA-4 both pick A, arc 4 is empty and arc 3 closes #1624.
 
-## OA-5. Existing profiles and Nulo's relay (arc 5)
+## OA-5. Existing profiles and Nulo's relay (arc 5): answered D (P112-03)
 
 - **Surface:** Settings → Networks → Alpha and Testnet, on a profile created before arc 5.
 - **Today (after `rpc-proxy-1` arc 1):** each default network has one endpoint, the free provider's.
@@ -67,14 +77,14 @@ Eight asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA
 - **Note:** the append rebuilds each touched profile's account engine for that network once (a short resync at the next unlock).
 - **Recommendation: D.** People who installed in early November are the ones the free endpoint fails; D reaches them without a prompt, leaves alone anyone who chose their own node, and a deleted relay stays deleted.
 
-## OA-6. The relay row's label and place (arc 5)
+## OA-6. The relay row's label and place (arc 5): read (P112-04), built as "Nulo"
 
 - **Surface:** the relay's endpoint row on Alpha and Testnet.
 - **Options:** label **A.** "Nulo relay"; **B.** "Nulo backup"; **C.** no label (the URL shows, `rpc.nulo.sh` or `testnet.rpc.nulo.sh`). Place: second on a new profile; on an existing one (OA-5), after the row's other endpoints.
 - **Ships now:** C.
 - **Recommendation: A.** It says who runs it, which matters for privacy; "backup" is already true from its place.
 
-## OA-7. The privacy policy for the relay (arc 5)
+## OA-7. The privacy policy for the relay (arc 5): answered A (P112-05)
 
 - **Surface:** privacy policy §§ 1, 2, 5.1, 5.5 and 12, a new section for `rpc.nulo.sh`, and Terms § 7.1.
 - **What changes:** with the relay, the Developer becomes a recipient of node requests (IP address, timing, request shapes) whenever the free endpoint fails, and of every request on a profile whose primary is the relay. `rpc-proxy-1`'s plan records what the Worker logs and keeps (its OA-1 deferred this text to this lane).
@@ -90,3 +100,15 @@ Eight asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA
 - **Options:** **A.** yes, every network's endpoints fail over from arc 3 on; **B.** only networks whose endpoints the wallet seeded, until a surface (OA-3) shows the behaviour.
 - **Ships now:** nothing; arc 3 stops at Phase 6.
 - **Recommendation: A.** A person adds a second endpoint to have one to fall back to; OA-2's sentence says so.
+
+## OA-9. Terms §§ 2 and 7.5 and the relay (arc 5): open; arc 5 ships A
+
+- **Surfaces:** Terms § 2 and § 7.5. Both are outside OA-7's list, so arc 5 leaves them as they are.
+- **Today:** § 2 reads "**Nulo does not intermediate your transactions.** Transactions submitted by the extension go directly to the configured node." § 7.5 lists the supporting services: a price feed, explorer links, the proving parameters' downloads, and edge hosting for the passkey domain and the token list.
+- **After arc 5:** on Alpha and Testnet the configured endpoints include Nulo's relay, which passes requests, a transaction's submission included when the wallet sends through it, to dRPC. § 7.1 now says the Developer operates it.
+- **Options:**
+  - **A.** Leave both as they are. § 2's point, that the Developer screens and approves nothing and cannot reverse a transaction, still holds, and § 7.1 names the relay.
+  - **B.** § 2 reads "go to the configured node; on Nulo's relay, through it to its provider", and § 7.5 adds "and edge hosting for Nulo's relay". A Terms patch.
+  - **C.** Your own words.
+- **Ships now:** A.
+- **Recommendation: B, as a patch.** "Directly" stops being literally true on the relay's path, and a statement the Developer's own service contradicts reads worse than one that names it. Neither change alters an obligation, so nobody is asked to accept again.
