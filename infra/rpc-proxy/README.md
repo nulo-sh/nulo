@@ -1,6 +1,6 @@
 # @nulo/rpc-proxy
 
-The `nulo-rpc-proxy` Cloudflare Worker: a reverse proxy at `rpc.nulo.sh` (Alpha Mainnet) and `testnet.rpc.nulo.sh` (Testnet) in front of Nulo's paid dRPC Aztec endpoints, so the provider key, which dRPC puts in the URL path, lives only in this Worker's secrets. The wallet lists it as Nulo's relay, the second default endpoint of Alpha and Testnet after dRPC's keyless one (`apps/extension/src/wallet/services/network/seeds.ts`), so it is asked only while that endpoint fails, and for the receipts of a transaction sent through it (`ARCHITECTURE.md` § 15).
+The `nulo-rpc-proxy` Cloudflare Worker: a reverse proxy at `rpc.nulo.sh` (Alpha Mainnet) and `testnet.rpc.nulo.sh` (Testnet) in front of Nulo's paid dRPC Aztec endpoints, so the provider key, which dRPC puts in the URL path, lives only in this Worker's secrets. The wallet lists it as Nulo's relay, the second default endpoint of Alpha and Testnet after dRPC's keyless one (`apps/extension/src/wallet/services/network/seeds.ts`), so it is asked only while that endpoint fails, and for the receipts of a transaction sent through it, unless a person moves it first (`ARCHITECTURE.md` § 15).
 
 ## Threat model
 
@@ -74,7 +74,7 @@ Nothing here needs a token in the repository or CI, and the Worker deploys from 
 
 ## Known limits
 
-- **Shared quota** (#1632). A script with no `Origin`, or a forged extension `Origin`, from many addresses can spend each key up to its daily cap and then deny the proxy to everyone until the next day. Each admitted request carries up to 100 calls, the limiter counts requests per Cloudflare location and approximately, and every request, refused or not, is a billed Worker invocation with no ceiling of its own. A wallet asks the proxy only while the endpoint before it fails, so a spent key costs a person their fallback, never their first endpoint.
+- **Shared quota** (#1632). A script with no `Origin`, or a forged extension `Origin`, from many addresses can spend each key up to its daily cap and then deny the proxy to everyone until the next day. Each admitted request carries up to 100 calls, the limiter counts requests per Cloudflare location and approximately, and every request, refused or not, is a billed Worker invocation with no ceiling of its own. A wallet asks the proxy only while the endpoint before it fails, so a spent key costs most people their fallback; someone who moved the relay first loses their first endpoint.
 - **Provider bodies pass through unread.** An error body from the provider that quoted the request URL would carry the key to the caller; step 6 checks the node's and dRPC's refusals before the hosts go live.
 - **Duplicate keys** (#1633). The allowlist reads an entry's `method` through `JSON.parse`, which keeps a repeated key's last value, while the bytes go on unchanged; a provider parser that kept the first would run the other name, on the same chain's endpoint. The bytes forwarded stay the bytes checked, so re-serialising is no fix; it matters only if dRPC's parser keeps the first value.
 - **The rate limit is a starting value**, to be tuned against measured traffic once a release sends the wallet's fallback through it.

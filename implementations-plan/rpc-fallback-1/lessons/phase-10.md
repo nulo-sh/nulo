@@ -41,3 +41,18 @@ The owner's answers on decision page 112, signed 2026-11-06 14:18 UTC: OA-5 D, O
 - 2026-11-07, the removed-relay leg was added after the first green run. Its first version had no written estimate; this one was estimated at 20 s on Chrome and 35 s on Firefox.
   - Measured 12.6 s on Chrome and 23.7 s on Firefox, both green at retry 0.
   - Seen red on Chrome with the offer check disabled: `expected 1 to be -1` at the stays-removed assertion.
+
+## The arc's diff review, round 1
+
+- **Codex `01a1b505`**: revise, 1 P2 and 1 P3, no P1.
+  - **The P2.** A take updated its record before the write, so a failed first take let the next row's write record both offers, and the first row never got its append. A take now keeps its record only once written. A two-row service test was seen red without the fix.
+  - **The P3.** § 5.12 described a strict per-address limit. The Worker counts an IPv6 client by its /64, approximately and at each Cloudflare location; the text now says so.
+- **Opus 5.5**, fresh: approve with changes, 3 medium and 5 low.
+  - **Legal.** § 2's summary and the manifest said the relay "writes no log", while § 5.5's hosting records apply; both now say so. Terms § 2 still contradicts the relay on its path, so BEFORE-LAUNCH holds Terms 1.2.3's publication on OA-9. § 2 also said "Two hosts" for two hostnames, and § 5.1 said every network starts on a provider, which the Local Network does not.
+  - **A failed record write at seeding.** A new profile's rows carried the relay but its record write failed. The next pass recorded the kinds without the relay offer, so a relay removed after that came back at the next worker. The seeding pass now records every kind whose row holds its seed's relay (`relayHolders`). The test was seen red without it.
+  - **A reorder in the session that converts a row** is refused with the failed-update toast before the page re-reads. Added to known limit 11.
+  - **The frames.** The converted frame was the new profile's frame. Alpha now holds an endpoint of the person's before the third restart, so the converted frame shows `[dRPC, My node, Nulo]`. "My node" is written as a pre-seal row, since no smoke node passes the add form's check; its URL is loopback port 1.
+  - **Hygiene.** The shot names no longer carry a decision-page tag. The table asserts each case's takes. The id comment says why the id is derived.
+  - **Rejected:** moving the runtime out of the spec's header. The repo's e2e headers carry their estimate and measurement, and this one now carries both.
+  - **Deferred to the owner:** the "Nulo" label and its place need an explicit yes in the PR (§ UI changes need explicit owner sign-off). OA-6 was marked read with a question.
+- 2026-11-07, the round-1 fixes: network, conversion, storage and legal suites 509 + 60 green; the relay smoke green at retry 0, Chrome 13.4 s and Firefox 22.2 s.

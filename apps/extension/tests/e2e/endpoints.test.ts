@@ -295,7 +295,8 @@ async function restartAndUnlock(extension: ExtensionContext, page: Page): Promis
 // relay the person removes after that stays removed across the next one. The conversion's rules are
 // proven by the network service's tests; what only this run shows is the seed and the unlock path
 // the shipped build takes, every writer of the real boot included. No request reaches the relay:
-// the launch's guard holds both hosts. Estimated 20 s on Chrome and 35 s on Firefox.
+// the launch's guard holds both hosts. Runtime: estimated 20 s on Chrome and 35 s on Firefox;
+// measured 13 s and 24 s.
 test("Nulo's relay is each default network's second endpoint, and is given once to an earlier profile", async ({
 	registeredExtensionPerTest: extension,
 }) => {
@@ -312,7 +313,7 @@ test("Nulo's relay is each default network's second endpoint, and is given once 
 		expect(seeded.relayAt).toBe(1)
 		expect(await shownEndpointIds(page, name)).toEqual(seeded.ids)
 	}
-	await shotEndpoints(page, "p112-04-built-01")
+	await shotEndpoints(page, "relay-new-profile")
 
 	// A profile made before the relay holds no relay endpoint and a record that names no relay offer.
 	const { profileId } = await relayView(page, "testnet")
@@ -335,15 +336,22 @@ test("Nulo's relay is each default network's second endpoint, and is given once 
 	await setViewport(page, VIEWPORT)
 	await waitForHash(page, "#/popup/general")
 	expect(await shownEndpointIds(page, "Testnet")).toEqual(converted.ids)
-	await shotEndpoints(page, "p112-04-built-02")
 
 	// Removed again, it stays removed. Alpha's relay, removed with its offer forgotten, is the
 	// control: its return shows the pass ran, and the next locked read waits for the pass to end.
+	// Alpha, the active network, also holds an endpoint of the person's, written as a row from before
+	// the seal since no node here passes the add form's check, so its relay lands after that one.
 	await deleteRelay(page, "testnet", "Testnet")
 	await deleteRelay(page, "mainnet", "Alpha")
 	await forgetRelayOffer(page, profileId, "mainnet")
+	const mine = await rewriteActiveNetwork(page, (row) => {
+		if (row.kind !== "mainnet") return false
+		row.endpoints.push({ id: "mine", rpcUrl: "http://127.0.0.1:1", label: "My node" })
+		return true
+	})
+	expect(mine?.kind).toBe("mainnet")
 	page = await restartAndUnlock(extension, page)
-	await pollUntil(
+	const alpha = await pollUntil(
 		() => relayView(page, "mainnet"),
 		(view) => view.relayAt !== -1,
 		{ label: "the Alpha relay given back with its offer", timeoutMs: 30_000, intervalMs: 250 },
@@ -351,6 +359,14 @@ test("Nulo's relay is each default network's second endpoint, and is given once 
 	await callService(page, NETWORK_SERVICE_NAME, "getOrInitNetworks")
 	expect((await relayView(page, "testnet")).relayAt).toBe(-1)
 	expect((await readSeedOffers(page, profileId))?.relay).toEqual(["mainnet", "testnet"])
+	expect(alpha.labels).toEqual(["dRPC", "My node", RELAY_LABEL])
+
+	await page.close()
+	page = await openPopup(extension)
+	await setViewport(page, VIEWPORT)
+	await waitForHash(page, "#/popup/general")
+	expect(await shownEndpointIds(page, "Alpha")).toEqual(alpha.ids)
+	await shotEndpoints(page, "relay-converted")
 
 	expect(extension.pageErrors).toEqual([])
 }, 150_000)

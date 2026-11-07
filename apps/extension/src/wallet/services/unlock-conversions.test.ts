@@ -59,7 +59,15 @@ const seeded = (id: string, kind: "testnet" | "mainnet", over: Partial<Network> 
 		...over,
 	})
 
-type Case = { label: string; row: Network; rows?: Network[]; expected: Network | undefined; taken?: ChainKind[] }
+type Case = {
+	label: string
+	row: Network
+	rows?: Network[]
+	expected: Network | undefined
+	/** Offers taken before the run, and the ones the run takes. */
+	taken?: ChainKind[]
+	takes?: ChainKind[]
+}
 
 /** The contract cases per entry; each transform's edge cases stay in its own test file. */
 const TABLES: Record<string, Case[]> = {
@@ -100,11 +108,13 @@ const TABLES: Record<string, Case[]> = {
 					relay("t1", "testnet"),
 				],
 			}),
+			takes: ["testnet"],
 		},
 		{
 			label: "a seeded Alpha primary takes its own relay",
 			row: seeded("m1", "mainnet"),
 			expected: seeded("m1", "mainnet", { endpoints: [...seeded("m1", "mainnet").endpoints, relay("m1", "mainnet")] }),
+			takes: ["mainnet"],
 		},
 		{
 			label: "a primary the person replaced with their own node",
@@ -113,12 +123,14 @@ const TABLES: Record<string, Case[]> = {
 				endpoints: [...seeded("t1", "testnet").endpoints, { id: "u1", rpcUrl: "https://node.example" }],
 			}),
 			expected: undefined,
+			takes: ["testnet"],
 		},
 		{ label: "an offer already taken, the relay since removed", row: seeded("t1", "testnet"), expected: undefined, taken: ["testnet"] },
 		{
 			label: "a row that already holds the relay",
 			row: seeded("t1", "testnet", { endpoints: [...seeded("t1", "testnet").endpoints, { ...relay("x", "testnet"), id: "r9" }] }),
 			expected: undefined,
+			takes: ["testnet"],
 		},
 		{ label: "a custom network", row: network({ id: "c1" }), expected: undefined },
 	],
@@ -133,12 +145,13 @@ describe("UNLOCK_CONVERSIONS", () => {
 
 	describe.each(Object.entries(TABLES))("%s", (name, cases) => {
 		// Booleans, so a failure prints no recorded endpoint URL.
-		test.each(cases)("$label", async ({ row, rows = [row], expected, taken }) => {
+		test.each(cases)("$label", async ({ row, rows = [row], expected, taken, takes = [] }) => {
 			const before = structuredClone(row)
 			const context = { relayOffers: offers(taken) }
 			const next = await conversion(name).convert(row, rows, context)
 			expect(isDeepStrictEqual(next, expected)).toBe(true)
 			expect(isDeepStrictEqual(row, before)).toBe(true)
+			expect(context.relayOffers.takes).toEqual(takes)
 			if (next === undefined) return
 			expect(next.id === row.id && next.profileId === row.profileId).toBe(true)
 			const again = await conversion(name).convert(

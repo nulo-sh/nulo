@@ -3482,6 +3482,59 @@ describe("NetworkService — Nulo's relay on a profile made before it", () => {
 		expect((await stored(local, "tn")).endpoints).toEqual([SEEDED, MINE, RELAY])
 	})
 
+	test("a failed offer write leaves that offer pending when a later row's write lands", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		testnetRow(local)
+		storeRow(local, {
+			id: "mn",
+			chainId: CHAIN_IDS.MAINNET,
+			l1ChainId: MAINNET_L1_CHAIN_ID,
+			kind: "mainnet",
+			primaryEndpointId: "m1",
+			endpoints: [{ id: "m1", rpcUrl: seedForKind("mainnet")!.rpcUrl }],
+		})
+		local.store.set(OFFERS, JSON.stringify(BEFORE_RELAY))
+		let failures = 1
+		const writes = recordWrites(local as unknown as BrowserApi["storage"]["local"], OFFERS, undefined, () =>
+			failures-- > 0 ? Promise.reject(new Error("quota")) : undefined,
+		)
+		const relayed = async () => {
+			const kinds: string[] = []
+			for (const [id, kind] of [
+				["mn", "mainnet"],
+				["tn", "testnet"],
+			] as const) {
+				if ((await stored(local, id)).endpoints.some((e) => e.rpcUrl === RELAY_RPC_URLS[kind])) kinds.push(kind)
+			}
+			return kinds
+		}
+		await convert(service)
+		writes.restore()
+		const first = await relayed()
+		expect(first).toHaveLength(1)
+		expect(record(local).relay).toEqual(first)
+		await convert(service)
+		expect(await relayed()).toEqual(["mainnet", "testnet"])
+		expect(record(local).relay).toEqual(["mainnet", "testnet"])
+	})
+
+	test("rows seeded under a record write that failed record their relay, which once removed stays removed", async () => {
+		const h = setupServiceWithStorage({})
+		let failures = 1
+		const writes = recordWrites(h.local as unknown as BrowserApi["storage"]["local"], OFFERS, undefined, () =>
+			failures-- > 0 ? Promise.reject(new Error("quota")) : undefined,
+		)
+		await h.service.getOrInitNetworks().catch(() => undefined)
+		writes.restore()
+		expect(h.local.store.has(OFFERS)).toBe(false)
+		await h.service.getOrInitNetworks()
+		expect(record(h.local).relay).toEqual(["mainnet", "testnet"])
+		const testnet = (await h.service.getNetworksRaw("p1")).find((n) => n.kind === "testnet")!
+		await h.service.deleteEndpoint(testnet.id, testnet.endpoints[1]!.id)
+		await convert(h.service)
+		expect((await stored(h.local, testnet.id)).endpoints).toHaveLength(1)
+	})
+
 	test("every later write of the record keeps the offer", async () => {
 		const h = setupServiceWithStorage({})
 		const rows = await asEarlierBuild(() => h.service.getOrInitNetworks())

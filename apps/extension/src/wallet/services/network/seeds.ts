@@ -162,13 +162,23 @@ export function isSeedEndpointUrl(seed: DefaultSeed, rpcUrl: string): boolean {
 	return rpcUrl === normalizeRpcUrl(seed.rpcUrl) || (seed.kind === "local" && sameEndpointUrl(rpcUrl, seed.rpcUrl))
 }
 
-/** The relay's endpoint for `network`, under an id derived from the row's so a second derivation
- *  names the same endpoint, and free among the row's own. */
+/** The relay's endpoint for `network`, under an id derived from the row's and free among its own:
+ *  no random id, so the conversion stays a pure function of the row. */
 export function relayEndpointOf(network: Network, relay: SeedEndpoint): NetworkEndpoint {
 	const taken = new Set(network.endpoints.map((endpoint) => endpoint.id))
 	let id = `${network.id}-relay`
 	for (let n = 1; taken.has(id); n++) id = `${network.id}-relay${n}`
 	return { id, rpcUrl: normalizeRpcUrl(relay.rpcUrl), label: relay.label }
+}
+
+/** The kinds of `rows` that hold their seed's relay: each was given it, by a seeding whose record
+ *  write may have failed, so recording them keeps a later removal for good. */
+export function relayHolders(rows: readonly Network[]): ChainKind[] {
+	return rows.flatMap((row) => {
+		const relay = seedForKind(row.kind)?.relay
+		const holds = relay && row.endpoints.some((endpoint) => sameEndpointUrl(endpoint.rpcUrl, relay.rpcUrl))
+		return holds && row.kind ? [row.kind] : []
+	})
 }
 
 /**

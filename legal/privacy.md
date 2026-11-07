@@ -40,10 +40,11 @@ Contact: **hello@nulo.sh**
 
 ## 2. No wallet telemetry; limited website and correspondence processing
 
-I do not operate a backend that stores wallet data. Two hosts of mine are contacted by the wallet by
-itself: `tokens.nulo.sh`, which serves the same signed file to every wallet and receives no wallet
+I do not operate a backend that stores wallet data. Two services of mine are contacted by the wallet
+by itself: `tokens.nulo.sh`, which serves the same signed file to every wallet and receives no wallet
 data (§ 5.11), and Nulo's relay, which passes a network's node requests to a provider while the
-endpoint before it fails and writes no log of them (§ 5.12).
+endpoints before it fail; its application writes no log of them, and the hosting records of § 5.5
+apply (§ 5.12).
 Nulo requires no Developer-hosted account or sign-up. It
 creates local identifiers for wallet operation, including profile identifiers, but does not use them
 for wallet telemetry.
@@ -112,8 +113,8 @@ below.
 
 **What it is:** to read chain data and submit transactions, Nulo sends requests to the configured
 Aztec node. Remote endpoints use HTTPS; loopback endpoints may use HTTP. Nulo ships with default
-endpoints so the wallet works on first run: on each network, one operated by a third-party provider
-first and, on Alpha and Testnet, Nulo's relay second (§ 5.12).
+endpoints so the wallet works on first run: on Alpha and Testnet, one operated by a third-party
+provider first and Nulo's relay second (§ 5.12); on the Local Network, your own machine.
 
 **What the node receives:** protocol-defined transaction data, including proofs, public effects and
 encrypted data, plus ordinary request metadata — your IP address, user agent, timing, and the shape
@@ -336,7 +337,8 @@ of yours. The provider sees a Cloudflare address instead of yours, and a header 
 names `nulo.sh`.
 
 **What it keeps:** the relay application writes no log of the requests; its logging is turned off.
-To limit abuse, it counts each IP address's requests over ten seconds and refuses more than 100.
+To limit abuse, it counts requests over ten seconds from each IPv4 address, or each IPv6 address's
+/64 block, approximately and at each Cloudflare location, and refuses more than 100.
 Cloudflare, Inc. hosts it, and the hosting records § 5.5 describes apply to it as to my other
 hosts.
 

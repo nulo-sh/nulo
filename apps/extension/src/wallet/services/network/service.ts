@@ -41,6 +41,7 @@ import {
 	normalizeRpcUrl,
 	PRIMARY_SEED,
 	relayEndpointOf,
+	relayHolders,
 	SEED_L1_BY_KIND,
 	sameEndpointUrl,
 	seedForKind,
@@ -313,8 +314,11 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return {
 			pending: (kind) => !current.relay?.includes(kind),
 			take: async (kind) => {
-				current = { ...current, relay: [...(current.relay ?? []), kind] }
-				await writeSeedOffers(this.browserApi.storage.local, profileId, current)
+				// Kept only once written: the next take writes from it, and must not record an offer whose
+				// row never converted.
+				const next = { ...current, relay: [...(current.relay ?? []), kind] }
+				await writeSeedOffers(this.browserApi.storage.local, profileId, next)
+				current = next
 			},
 		}
 	}
@@ -362,7 +366,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			return { rows, added: [], primaryId: undefined }
 		}
 		const offered = new Set(offer.offered)
-		const relay = new Set(record.kind === "valid" ? (record.value.relay ?? []) : [])
+		const relay = new Set([...(record.kind === "valid" ? (record.value.relay ?? []) : []), ...relayHolders(rows)])
 		const added: Network[] = []
 		let primaryId: string | undefined
 		for (const seed of offer.add) {
