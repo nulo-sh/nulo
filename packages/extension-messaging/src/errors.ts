@@ -427,11 +427,7 @@ export class ContractNotFoundError extends WalletError {
 	}
 }
 
-/**
- * A request asked the default entrypoint, which runs with no account, to run a public function:
- * Nulo cannot send that, so it refuses before anything is signed, by the same check the send runs.
- * The dApp's answer stays the unclassified constant; the wallet's own surfaces read the class.
- */
+/** A no-account request whose one call is a public function. */
 export class DefaultEntrypointPublicCallError extends WalletError {
 	public static readonly CODE = "DEFAULT_ENTRYPOINT_PUBLIC_CALL"
 	public static readonly MESSAGE = "DefaultEntrypoint only supports private functions"
@@ -444,6 +440,49 @@ export class DefaultEntrypointPublicCallError extends WalletError {
 			"DefaultEntrypointPublicCallError",
 		)
 	}
+}
+
+/** A no-account request whose one call is a utility function. */
+export class DefaultEntrypointUtilityCallError extends WalletError {
+	public static readonly CODE = "DEFAULT_ENTRYPOINT_UTILITY_CALL"
+	public static readonly MESSAGE = "DefaultEntrypoint only supports private functions"
+
+	public constructor() {
+		super(
+			DefaultEntrypointUtilityCallError.CODE,
+			DefaultEntrypointUtilityCallError.MESSAGE,
+			undefined,
+			"DefaultEntrypointUtilityCallError",
+		)
+	}
+}
+
+/** A no-account request of more than one call. Constant message: the count is the dApp's input. */
+export class DefaultEntrypointMultiCallError extends WalletError {
+	public static readonly CODE = "DEFAULT_ENTRYPOINT_MULTI_CALL"
+	public static readonly MESSAGE = "DefaultEntrypoint requires exactly 1 call"
+
+	public constructor() {
+		super(DefaultEntrypointMultiCallError.CODE, DefaultEntrypointMultiCallError.MESSAGE, undefined, "DefaultEntrypointMultiCallError")
+	}
+}
+
+/**
+ * A request the default entrypoint, which runs with no account, can never build: Nulo refuses it
+ * before anything is signed, by the same check the send runs. The dApp's answer stays the
+ * unclassified constant; the wallet's own surfaces read the class.
+ */
+export type DefaultEntrypointRefusal =
+	| DefaultEntrypointPublicCallError
+	| DefaultEntrypointUtilityCallError
+	| DefaultEntrypointMultiCallError
+
+export function isDefaultEntrypointRefusal(error: unknown): error is DefaultEntrypointRefusal {
+	return (
+		error instanceof DefaultEntrypointPublicCallError ||
+		error instanceof DefaultEntrypointUtilityCallError ||
+		error instanceof DefaultEntrypointMultiCallError
+	)
 }
 
 /**
@@ -749,6 +788,8 @@ const REBUILT_AS = [
 	PxeStaleAnchorError,
 	ContractAssertionError,
 	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
+	DefaultEntrypointMultiCallError,
 	ContractNotRegisteredError,
 	ContractNotFoundError,
 	ChainNotSupportedError,

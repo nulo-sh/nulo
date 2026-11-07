@@ -36,8 +36,8 @@ import { type CancelOrFailResult, classifyOperationCatch } from "./rpc-cancel"
 import { EstimateCancelRegistry } from "./estimate-cancel-registry"
 import {
 	ContractNotRegisteredError,
-	DefaultEntrypointPublicCallError,
 	InvalidWalletArgumentsError,
+	isDefaultEntrypointRefusal,
 	JobCancelledError,
 	ScopeViolationError,
 	SessionEndedError,
@@ -850,7 +850,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		try {
 			return await run()
 		} catch (error) {
-			if (!(error instanceof ScopeViolationError || error instanceof DefaultEntrypointPublicCallError)) throw error
+			if (!(error instanceof ScopeViolationError || isDefaultEntrypointRefusal(error))) throw error
 			source.recordRefusal(interactionId, error)
 			throw source.refusalOf(interactionId) ?? error
 		}

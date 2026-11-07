@@ -1,5 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { runSealing, type SealWarn, sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
+import { type AnyUnlockConversion, runUnlockConversions, UNLOCK_CONVERSIONS } from "@/wallet/services/unlock-conversions"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
@@ -31,18 +32,7 @@ import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
 import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { ERR_NOT_RESETTABLE, ERR_RESET_PENDING, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
 import type { RawRowState } from "@/wallet/utils/raw-row"
-import {
-	DEFAULT_SEEDS,
-	type DefaultSeed,
-	isSeedChain,
-	LOCAL_NETWORK_RPC_URL,
-	PRIMARY_SEED,
-	RETIRED_DEFAULT_ENDPOINTS,
-	retireDefaultName,
-	SEED_L1_BY_KIND,
-	seedForKind,
-} from "./seeds"
-import { type RetiredEndpoint, retireEndpoints } from "./retired-endpoints"
+import { DEFAULT_SEEDS, type DefaultSeed, isSeedChain, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND, seedForKind } from "./seeds"
 import { readSeedOffers, type SeedOffers, sameSeedOffers, seedOffersKey, seedsToOffer, writeSeedOffers } from "./seed-offers"
 import {
 	type ChainKind,
@@ -276,8 +266,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			"sealing the profile's plaintext networks failed; the next worker retries",
 			async (profileId) => {
 				await this.sealLegacyRows(profileId)
-				await runSealing(warn, "moving the profile's networks off a retired default failed; the next worker retries", () =>
-					this.retireDefaults(profileId),
+				await runSealing(warn, "converting the profile's networks failed; the next worker retries", () =>
+					this.convertRows(profileId),
 				)
 			},
 		)
@@ -293,23 +283,27 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	/** A network a reset journal holds is left as captured: the reset's resume matches its primary
 	 *  against the captured URL. */
-	private async retireDefaults(profileId: string, retired: readonly RetiredEndpoint[] = RETIRED_DEFAULT_ENDPOINTS): Promise<void> {
+	private async convertRows(profileId: string, conversions: readonly AnyUnlockConversion[] = UNLOCK_CONVERSIONS): Promise<void> {
 		await this.lock.withLock(async () => {
 			const held = (await this.staleNetworks.getJournal(profileId))?.networkId
 			// Read once: a profile holds at most one row per seeded kind, so no rename here meets another.
 			const rows = (await this.storage.getValues()).filter((network) => network.profileId === profileId)
-			for (const network of rows) {
-				if (network.id === held) continue
-				const moved = await retireEndpoints(network, retired)
-				const next = retireDefaultName(moved ?? network, rows) ?? moved
-				if (next === undefined) continue
-				await this.storage.set(next.id, next)
-				network.endpoints.forEach((endpoint, i) => {
-					if (endpoint.rpcUrl !== next.endpoints[i]?.rpcUrl) this.transientNodes.delete(endpoint.rpcUrl)
-				})
-				if (moved !== undefined) this.routes.delete(next.id)
-				this.emit("onNetworkUpdated", next)
-			}
+			await runUnlockConversions("networks", rows, {
+				conversions,
+				skip: (network) => network.id === held,
+				log: (level, message, record) => (level === "warn" ? this.logWarn(message, record) : this.logDebug(message, record)),
+				commit: async (network, next) => {
+					await this.storage.set(next.id, next)
+					let moved = false
+					network.endpoints.forEach((endpoint, i) => {
+						if (endpoint.rpcUrl === next.endpoints[i]?.rpcUrl) return
+						this.transientNodes.delete(endpoint.rpcUrl)
+						moved = true
+					})
+					if (moved) this.routes.delete(next.id)
+					this.emit("onNetworkUpdated", next)
+				},
+			})
 		})
 	}
 

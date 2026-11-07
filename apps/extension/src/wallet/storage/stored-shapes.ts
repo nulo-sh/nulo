@@ -30,6 +30,7 @@ import {
 	RESTORE_OUTCOME_ROOT,
 } from "@/utils/profile-ui-keys"
 import { decodeRestoreOutcome } from "@/utils/restore-outcome"
+import { decodeSeen, SEEN_PATTERN, WHATS_NEW_SEEN_KEY } from "@/utils/whats-new"
 import { sanitizePinMap } from "@/utils/pinned-tokens"
 import { ConfigSchema } from "@/wallet/config/config"
 import { decodeStoredConfig } from "@/wallet/config/store"
@@ -254,6 +255,7 @@ export const STORED_SHAPES = {
 	// Only earlier builds wrote it; the worker moves it into the profile holding that account.
 	uiActiveAccount: { ref: value(LEGACY_SELECTED_ACCOUNT_KEY), encoding: "structured", schema: z.string(), read: asStored },
 	uiLastActiveProfile: { ref: value(LAST_ACTIVE_PROFILE_KEY), encoding: "structured", schema: z.string(), read: asStored },
+	uiWhatsNewSeen: { ref: value(WHATS_NEW_SEEN_KEY), encoding: "structured", schema: z.string().regex(SEEN_PATTERN), read: decodeSeen },
 	// `useSyncedRef("loggerWindowId")`: the log viewer's window id, or null with none open.
 	uiLoggerWindowId: { ref: value("nulo:ui:loggerWindowId"), encoding: "structured", schema: z.number().nullable(), read: asStored },
 	onboardingCompleted: {

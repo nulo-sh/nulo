@@ -29,11 +29,12 @@ const { openToast } = useToast()
 
 /** Utils */
 import { logCredentialFailure } from "@/utils/credential-refusal"
-import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, handsBackToPanel, leavePanelFor, returnToPanel } from "@/utils/own-window"
 import { askProfilePasskey } from "@/utils/profile-passkey"
 import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
 import { isNewPasswordValid } from "@/utils/password"
+import { showSnack } from "@/utils/snack"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -61,6 +62,8 @@ const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onR
 const newPasskey = useNewProfilePasskey(runCeremony)
 /** Fences every step to the profile it started for: a switch or a reset drops what it returns. */
 const runs = createRunFence()
+/** The profile whose change the teardown kept running; see `onBeforeUnmount`. */
+let keptFor
 const isNewPasswordStep = computed(() => step.value === "newPassword")
 /** The current run's own change still with the service. The update and the reopened session it
  *  causes arrive before its answer, and only that answer says whether the change was made; `updated`
@@ -134,8 +137,35 @@ async function currentPasskey(isCurrent) {
 	return askProfilePasskey(runCeremony, managers.profile, { profileId: id, step: "unlockMethod", profileName: () => name }, isCurrent)
 }
 
+/** A run the teardown kept stays current only while the window still runs this flow for the profile
+ *  it was kept for: the watchers that would end it went with the page. */
+function snapshotRun() {
+	const fenced = runs.snapshot()
+	return () => fenced() && (keptFor === undefined || (handsBackToPanel() && appStore.profile?.id === keptFor))
+}
+
 /** A new passkey's card, at an input minted for this profile. */
 const nextPasskey = () => newPasskey.ask({ step: "unlockMethod", profileName: appStore.profile.name })
+
+function leaveChanged(outcome) {
+	if (handsBackToPanel()) {
+		void returnToPanel("/popup/settings", outcome)
+		return
+	}
+	showSnack(openToast, outcome.snack)
+	leaveFor(router, "/popup/settings")
+}
+
+/** The session closed over a saved change, so the lock screen is next. A handed-back panel boots
+ *  there and opens Home after the unlock, with no line: it carries one only to an open session. */
+function leaveLocked() {
+	if (handsBackToPanel()) {
+		void returnToPanel("/popup/general")
+		return
+	}
+	openToast({ kind: "info", label: "Unlock method changed. Unlock Nulo again to continue." })
+	router.replace("/popup/auth")
+}
 
 /** Runs one change; the page stays on a cancel, and reports a failure before the save as nothing
  *  changed. A change made leaves for Settings, and one saved but not reopened ends at the lock screen.
@@ -143,20 +173,19 @@ const nextPasskey = () => newPasskey.ask({ step: "unlockMethod", profileName: ap
 async function attempt(run) {
 	if (isBusy.value || !appStore.isLogined) return
 	isBusy.value = true
-	const isCurrent = runs.snapshot()
+	const isCurrent = snapshotRun()
+	const profileId = appStore.profile.id
 	try {
 		const done = await run(isCurrent)
 		if (!isCurrent() || !done) return
 		newPasskey.forget()
 		reset()
-		openToast({ kind: "success", label: done })
-		leaveFor(router, "/popup/settings")
+		leaveChanged({ snack: { kind: "success", label: done }, profileId })
 	} catch (error) {
 		if (!isCurrent()) return
 		if (error instanceof UnlockMethodChangedError) {
 			reset()
-			openToast({ kind: "info", label: "Unlock method changed. Unlock Nulo again to continue." })
-			router.replace("/popup/auth")
+			leaveLocked()
 			return
 		}
 		if (error instanceof StaleUnlockCredentialError) {
@@ -258,7 +287,12 @@ onBeforeMount(() => {
 
 onBeforeUnmount(() => {
 	managers.profile.onProfileUpdated.remove(onProfileUpdated)
-	reset()
+	// A lock that closes the session over a saved change can land the window on its lock screen
+	// before the change answers; an own window keeps its flow there, so the answer still ends it.
+	if (commit && handsBackToPanel()) {
+		clearStep()
+		keptFor = appStore.profile?.id
+	} else reset()
 })
 </script>
 
