@@ -8,3 +8,4 @@
 2026-11-06 phase 1 step 3: harness committed (2c6ca0ad6), address-only rehearsal passed under the keyed PATH; keyed request pxe-flag-bridge-2446a428 filed
 2026-11-06 phase 1 steps 4-6: Testnet setup (8 drips, 2 failed attempts) and 4 + 3 ABBA session pairs done; zero speculative failures or warnings
 2026-11-06 phase 1 step 8: record in recon.md § Probe; Codex reviewed it. D2: hold, recommendation close (owner's call); bridge (OA-1) pending
+2026-11-07 phase 1 step 7: OA-1 unapproved after six hours (polled hourly, last pending at 00:56 UTC); bridge leg dropped, its detached worktree removed

@@ -20,7 +20,7 @@
 ## Keyed run (OA-1)
 
 - Harness, egress option and template committed at `2c6ca0ad6` and pushed; a detached worktree at that commit ran the address-only rehearsal under `env -i` with the keyed PATH (Node 26 from `/usr/bin`), green: the tools app connected, the first signature (a mint) was refused and "Token + gas", private, was selected after it.
-- Request `pxe-flag-bridge-2446a428` filed 2026-11-06 19:06 UTC; `env-exec status` polled at most hourly.
+- Request `pxe-flag-bridge-2446a428` filed 2026-11-06 19:06 UTC; `env-exec status` polled hourly (pending at 20:56, 21:56, 22:56, 23:56 and 00:56 UTC), with no run process seen in its worktree before 01:06 UTC. Dropped; `env-exec` has no cancel, so removing the request's work tree is what stops a late approval from running.
 
 ## Codex over the record (gpt-6.1-sol, high, session 01a1b2a1)
 
