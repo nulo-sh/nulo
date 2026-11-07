@@ -19,7 +19,7 @@ import { openPopup, test, waitForHash } from "../fixtures/extension"
 import { navigateToSettings, openNetworkDetail, waitForToast } from "../fixtures/helpers"
 import { rewriteActiveNetwork, type StoredNetwork } from "../fixtures/networks"
 import { pollUntil } from "../fixtures/poll"
-import { readyHolder, routeEvents } from "../fixtures/route-send"
+import { type RouteEvent, readyHolder, routeEvents } from "../fixtures/route-send"
 import { startRpcRelay } from "../fixtures/rpc-relay"
 import { callService } from "../fixtures/session"
 import { setDeveloperMode } from "../fixtures/settings"
@@ -54,14 +54,22 @@ async function waitForTones(page: Page, want: Record<string, string>, label: str
 	})
 }
 
-/** The account engine's router events since `since` once they show `id` holding the role, ready.
- *  The logger stores its lines a little after the dot can change, so the read is polled. */
-const routerHolds = (page: Page, since: number, id: string, label: string) =>
-	pollUntil(
-		() => routeEvents(page, since),
-		(events) => readyHolder(events, "pxe") === id,
-		{ label, timeoutMs: 30_000, intervalMs: 1_000 },
-	)
+/** The router events since `since`, gathered at every read: at the default log level the stored
+ *  log keeps only its last 1000 lines, which a long wait for a dot can outrun. */
+function routerTrail(page: Page, since: number) {
+	const seen = new Map<string, RouteEvent>()
+	return async (): Promise<RouteEvent[]> => {
+		for (const e of await routeEvents(page, since)) {
+			seen.set([e.timestamp, e.source, e.event, e.endpointId, e.state, e.method].join("|"), e)
+		}
+		return [...seen.values()].sort((x, y) => x.timestamp - y.timestamp)
+	}
+}
+
+/** The trail once it shows the account engine's router holding the role on `id`, ready. The logger
+ *  stores its lines a little after the dot can change, so the read is polled. */
+const routerHolds = (trail: () => Promise<RouteEvent[]>, id: string, label: string) =>
+	pollUntil(trail, (events) => readyHolder(events, "pxe") === id, { label, timeoutMs: 30_000, intervalMs: 1_000 })
 
 /** Another popup page entering Home, whose balance reads go through the account engine. */
 async function nudge(driver: Page): Promise<void> {
@@ -158,15 +166,20 @@ test.skipIf(!aztecConfig)(
 			expect(written?.primaryEndpointId).toBe(idB)
 
 			step("the next account-engine reads reach B, and its dot turns green on the open page")
-			await waitForTones(page, { [idB]: "green" }, "B green", () => nudge(driver))
-			await routerHolds(page, droppedAt, idB, "the account engine's router holds B ready")
+			const trail = routerTrail(page, droppedAt)
+			const nudgeAndRead = async () => {
+				await nudge(driver)
+				await trail()
+			}
+			await waitForTones(page, { [idB]: "green" }, "B green", nudgeAndRead)
+			await routerHolds(trail, idB, "the account engine's router holds B ready")
 			expect(await opened(), "the page was never reloaded").toBe(1)
 
 			step("B killed: B red and A green, the page still open")
 			const killedAt = Date.now()
 			await b.kill()
-			await waitForTones(page, { [idB]: "red", [idA]: "green" }, "B red, A green", () => nudge(driver))
-			const events = await routerHolds(page, droppedAt, idA, "the account engine's router holds A ready")
+			await waitForTones(page, { [idB]: "red", [idA]: "green" }, "B red, A green", nudgeAndRead)
+			const events = await routerHolds(trail, idA, "the account engine's router holds A ready")
 			expect(
 				events.some(
 					(e) =>
