@@ -1,6 +1,6 @@
 # @nulo/rpc-proxy
 
-The `nulo-rpc-proxy` Cloudflare Worker: a reverse proxy at `rpc.nulo.sh` (Alpha Mainnet) and `testnet.rpc.nulo.sh` (Testnet) in front of Nulo's paid dRPC Aztec endpoints, so the provider key, which dRPC puts in the URL path, lives only in this Worker's secrets. The wallet lists it as Nulo's relay, the second default endpoint of Alpha and Testnet after dRPC's keyless one (`apps/extension/src/wallet/services/network/seeds.ts`), so it is asked only while that endpoint fails, and for the receipts of a transaction sent through it, unless a person moves it first (`ARCHITECTURE.md` § 15).
+The `nulo-rpc-proxy` Cloudflare Worker: a reverse proxy at `rpc.nulo.sh` (Alpha Mainnet) and `testnet.rpc.nulo.sh` (Testnet) in front of Nulo's paid dRPC Aztec endpoints, so the provider key, which dRPC puts in the URL path, lives only in this Worker's secrets. The wallet lists it as Nulo's relay, the second default endpoint of Alpha and Testnet after dRPC's keyless one (`apps/extension/src/wallet/services/network/seeds.ts`), so it is asked only while that endpoint fails and until it wins the role back, and for the receipts of a transaction sent through it, unless a person moves it first (`ARCHITECTURE.md` § 15).
 
 ## Threat model
 

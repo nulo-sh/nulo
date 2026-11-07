@@ -43,8 +43,8 @@ Contact: **hello@nulo.sh**
 I do not operate a backend that stores wallet data. Two services of mine are contacted by the wallet
 by itself: `tokens.nulo.sh`, which serves the same signed file to every wallet and receives no wallet
 data (§ 5.11), and Nulo's relay, which passes a network's node requests to a provider while the
-endpoints before it fail; its application writes no log of them, and the hosting records of § 5.5
-apply (§ 5.12).
+endpoints before it fail and recover; its application writes no log of them, and the hosting
+records of § 5.5 apply (§ 5.12).
 Nulo requires no Developer-hosted account or sign-up. It
 creates local identifiers for wallet operation, including profile identifiers, but does not use them
 for wallet telemetry.
@@ -322,8 +322,9 @@ its host available and secure — under Article 6(1)(f).
 `https://rpc.nulo.sh` for Alpha and `https://testnet.rpc.nulo.sh` for Testnet. It passes each request
 it accepts to a node of the provider dRPC, under my account there, and returns the provider's answer.
 Nulo sends it a network's requests only while the endpoints listed before it fail, as § 5.1
-describes, or all of them once you move it first, and the checks of a transaction submitted through
-it. A new profile, and a profile restored from a
+describes, and afterwards until the first of them has answered two checks at least 30 seconds apart
+(up to 30 minutes apart after repeated failures); or all of them once you move it first; and the
+checks of a transaction submitted through it. A new profile, and a profile restored from a
 backup, starts with it; a profile made before it is given it once, on a network whose first endpoint
 is still the one Nulo set. Once you remove it from a profile, Nulo does not add it back to that
 profile.

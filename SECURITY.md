@@ -333,10 +333,11 @@ which makes the endpoint trust boundary explicit.
   chain (§ Authorization enforcement).
 - **Duplicate-URL guard per Network.** Adding the same `rpcUrl` twice to
   the same `Network` is rejected (`DUPLICATE_ENDPOINT`).
-- **Per-URL `AztecNode` cache** with 3-strike eviction: each unique URL
-  gets its own client; transient failures don't poison neighbours; three
-  reported failures, which a success does not reset, evict the client and
-  the next use rebuilds the same URL.
+- **Per-URL clients.** Each endpoint of a network gets its own client
+  inside that network's routed node, rebuilt when the row's endpoint list
+  changes, and a submission's recorded URL its own pinned client; a
+  failure moves calls between endpoints (`ARCHITECTURE.md` § 15) and never
+  poisons another URL's client.
 
 ### Pending-tx polling pin
 

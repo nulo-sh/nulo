@@ -313,6 +313,30 @@ describe("routing calls", () => {
 		expect(h.node.route.active()?.id).toBe("e1")
 	})
 
+	test("bounded reads start return probes too: a route only they serve returns to its primary", async () => {
+		const h = new Harness([A, B])
+		await call(h)
+		h.endpoint(A).fail = () => transport("timeout")
+		await call(h)
+		expect(h.node.route.active()?.id).toBe("e1")
+		h.endpoint(A).fail = () => undefined
+		const read = () => h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
+		const before = h.seen(A).length
+		for (let pass = 0; pass < 2; pass++) {
+			h.now += holdDownMinMs
+			await read()
+			await new Promise((resolve) => setTimeout(resolve, 0))
+		}
+		const probes = h
+			.seen(A)
+			.slice(before)
+			.filter((seen) => seen.startsWith("getNodeInfo"))
+		expect(probes).toHaveLength(2)
+		await read()
+		expect(h.node.route.active()?.id).toBe("e0")
+		expect(h.seen(A).at(-1)).toBe(`getContract@${probeTimeoutMs}`)
+	})
+
 	test("chain 0 drops every non-loopback endpoint and keeps the local one alone, with no probe", async () => {
 		const local = "http://localhost:8080"
 		const h = new Harness([A, local], { chainId: 0, l1ChainId: 31_337 })

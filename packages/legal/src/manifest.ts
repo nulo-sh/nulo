@@ -161,7 +161,7 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			material: true,
 			changes: [
 				"Nulo's relay, which the Developer operates, is the second default endpoint of Alpha and Testnet.",
-				"It receives a network's requests while the endpoints before it fail, passes them to a provider without your IP address, and its application writes no log of them; Cloudflare's hosting records apply (§ 5.12).",
+				"It receives a network's requests while the endpoints before it fail and recover, passes them to a provider without your IP address, and its application writes no log of them; Cloudflare's hosting records apply (§ 5.12).",
 			],
 		},
 	],

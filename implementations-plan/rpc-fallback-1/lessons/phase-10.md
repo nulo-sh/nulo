@@ -63,3 +63,10 @@ The owner's answers on decision page 112, signed 2026-11-06 14:18 UTC: OA-5 D, O
   - `relayHolders` records a relay already on a row and appends nothing, so a relay the person added by hand also stays removed once removed.
   - The planted Alpha row exercises sealing and then the conversion. The Testnet leg still proves the append on a sealed row.
 - The loop converged at round 2.
+
+## The lane's cross-arc review
+
+- **Codex `01a1b51b`**, fresh, over the 190 paths the lane touched, diffed from `98c0ad9bf^`: revise, 2 P2 and 2 P3, no P1.
+  - **Bounded reads and the return.** `route.singleAttempt` neither ticked the health nor started return probes. A background route served only by bounded reads (the tip gate, storage reads during a send) therefore stayed on its fallback, now the relay for every default network. It now does both before its attempt, as `call` does. The test drives the return through bounded reads alone and was seen red without the fix.
+  - **A hanging primary and the status probe.** `probeNodeStatus` gives the first endpoint the whole remaining budget. On a cold route a primary that never answers spends all 5 s, and the relay is never asked. Filed as #1754, not fixed: sharing the budget changes how long the wallet waits on an endpoint, which the approval boundary reserves.
+  - **The text.** § 5.12 also says the relay serves until the primary wins the role back. SECURITY lost its three-strike eviction bullet, which #1687 removed from the code. ARCHITECTURE's floor follows the active endpoint down as well as up.

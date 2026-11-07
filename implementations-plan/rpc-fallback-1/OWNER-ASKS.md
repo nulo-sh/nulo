@@ -111,4 +111,5 @@ Nine asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA-
   - **B.** § 2 reads "go to the configured node; on Nulo's relay, through it to its provider", and § 7.5 adds "and edge hosting for Nulo's relay". A Terms patch.
   - **C.** Your own words.
 - **Ships now:** A.
+- **Also yours, in the same answer:** privacy § 5.1's failover sentence, your OA-2 text, says the other endpoints are used "while it fails". They are also used until the primary wins the role back: two passing checks 30 s to 30 min apart. § 5.12 now says so for the relay; whether § 5.1 says it for every endpoint is your call. Arc 5 leaves it as you approved it.
 - **Recommendation: B, as a patch.** "Directly" stops being literally true on the relay's path, and a statement the Developer's own service contradicts reads worse than one that names it. Neither change alters an obligation, so nobody is asked to accept again.
