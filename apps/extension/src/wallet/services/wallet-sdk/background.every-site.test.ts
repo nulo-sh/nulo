@@ -268,9 +268,10 @@ describe("a new site with the every-site switch", () => {
 	})
 
 	test.each([
-		["a twin of a connection the switch let through spends a token: with none left it queues", true],
-		["a twin of an Allow spends none: with none left it is admitted at once (control)", false],
-	])("%s", async (_, unpaced) => {
+		["a twin of a connection the switch let through spends a token: with none left it queues", true, false],
+		["a twin queued so, when the switch is turned off meanwhile: refused once admitted", true, true],
+		["a twin of an Allow spends none: with none left it is admitted at once (control)", false, false],
+	])("%s", async (_, unpaced, offWhileQueued) => {
 		let on = true
 		let hold: Promise<void> | undefined
 		const release = deferred<void>()
@@ -301,8 +302,10 @@ describe("a new site with the every-site switch", () => {
 		expect(rejected()).toEqual([])
 		expect(approved()).toEqual([...spenders, "last", ...(unpaced ? [] : ["twin"])])
 		if (!unpaced) return
+		if (offWhileQueued) on = false
 		await vi.advanceTimersByTimeAsync(RECONNECT_REFILL_MS)
 		await discoveryRun("twin")
-		expect(approved()).toEqual([...spenders, "last", "twin"])
+		expect(approved()).toEqual([...spenders, "last", ...(offWhileQueued ? [] : ["twin"])])
+		expect(rejected()).toEqual(offWhileQueued ? ["twin"] : [])
 	})
 })
