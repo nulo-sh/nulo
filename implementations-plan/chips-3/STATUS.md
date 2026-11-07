@@ -7,3 +7,6 @@
 - 2026-11-06 phase 3 done: PR captures, page 119 frames (16 × 2 themes) with captions and options
 - 2026-11-06 rebased onto dev 4ae04b194 (index.md conflict only); final gates green on that head: lint, typecheck:all, test:all (extension 17702 passed; the first run timed out once in `export/full.test.ts`, untouched here, under host load, and the rerun was green), rows + type-roles smoke at retry 0, Chrome 172 s, Firefox 275 s
 - 2026-11-06 arc 2 starts on chips-3-a2 off dev 24d59880f: OA-1 = P120-01 A, OA-2 = P120-02 C2 (page 120, 23:33 UTC); Codex design consult picks the layout flag (D11)
+- 2026-11-07 phase 4 gate: lint, typecheck:all, test:all green (extension 17770 passed) at b9ea0177d
+- 2026-11-07 phase 4 e2e: rows + type-roles smoke at retry 0 green, Chrome 173 s, Firefox 263 s (arc 1 head: 172 s / 275 s); files unchanged
+- 2026-11-07 captures: p120-01-built-01..02 and p120-02-built-01..02, light and dark, in the shots cache; four PR frames in screenshots/
