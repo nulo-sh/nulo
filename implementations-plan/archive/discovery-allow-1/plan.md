@@ -196,7 +196,7 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 4d6bce025, with these values:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 4d6bce025, with these values:
 - **Review loop, per arc at its boundary:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, over the arc's diff; one Opus `general-purpose` review beside the first round; hard stop at three rounds, then report. Then a fresh Codex session over the net diff from 4d6bce025 for cross-arc issues.
 - **Delivery:** as above; `gh pr checks <n> --watch` to the end.
 - **Close-out:** the stack's top layer; merge `origin/dev` first and read `index.md` and `lessons.md`.
