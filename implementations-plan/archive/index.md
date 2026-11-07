@@ -553,5 +553,6 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [p110-build-1](p110-build-1/plan.md) — completed — the execute window names the app's failing assertion and refuses a no-account public call; the leaves block counts authorizations; a Sending toast's × lasts its session; the password hint keeps its space (#1706 and arc 2); #1714, #1715, #1717 known limits
 - [whats-new-1](whats-new-1/plan.md) — completed — the Home row and About row that say Nulo was updated (P117-08 A, #1724)
 - [unlock-conversions-1](unlock-conversions-1/plan.md) — completed — the unlock-time row conversions of a sealed root are entries of one ordered list, applied by one runner, with an AST guard over every unlock handler (#1726)
+- [discovery-allow-1](discovery-allow-1/plan.md) — completed (arc 1 #1722; arc 2 carries the close-out) — the connect window says what Allow reveals; an opt-in "every site may see Nulo" switch
 - [chips-3](chips-3/plan.md) — completed — activity rows draw their direction as a glyph pair and way badge in the icon box, from queued to settled; a row titled by its token drops the symbol under its amount (#1723 and arc 2)
 - [exec-empty-1](exec-empty-1/plan.md) — completed — a no-account request with no call is refused up front, as its two siblings are (P120-04 A, #1728)

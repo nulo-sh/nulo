@@ -36,6 +36,7 @@ import { ConfigSchema } from "@/wallet/config/config"
 import { decodeStoredConfig } from "@/wallet/config/store"
 import { ACCOUNT_INTEGRITY_BLOCKED_ROOT, ACCOUNT_INTEGRITY_VERIFIED_ROOT } from "@/wallet/services/account-integrity/types"
 import { decodeRegistrationCounts, RegistrationCountsSchema } from "@/wallet/services/dapp-session/registration-allowance"
+import { decodeDiscoveryPolicy, DiscoveryPolicySchema } from "@/wallet/services/dapp-session/discovery-policy"
 import { AccountIntegrityBlockedSchema, VerifiedStampSchema } from "@/wallet/services/account-integrity/types"
 import { SEED_OFFERS_ROOT, SeedOffersSchema } from "@/wallet/services/network/seed-offers"
 import { ACTIVE_NETWORK_STORAGE_ROOT, decodeActiveNetworkId } from "@/wallet/services/network/spec"
@@ -243,6 +244,8 @@ export const STORED_SHAPES = {
 	tokenList: described("tokenList", TokenListStateSchema, decodeTokenListState),
 	tokenSeeded: sealedDescribed("tokenSeeded", SeedMarkersSchema, decodeSeedMarkers),
 	dappRegistrations: sealedDescribed("dappRegistrations", RegistrationCountsSchema, decodeRegistrationCounts),
+	// The policy also reads a row as off unless it is sealed: the root never held plaintext rows.
+	discoveryPolicy: sealedDescribed("discoveryPolicy", DiscoveryPolicySchema, decodeDiscoveryPolicy),
 
 	activeNetwork: { ref: root(ACTIVE_NETWORK_STORAGE_ROOT), encoding: "structured", schema: z.string(), read: decodeActiveNetworkId },
 	legalAccepted: { ref: value(LEGAL_ACCEPTANCE_KEY), encoding: "structured", schema: LegalAcceptanceSchema, read: parseAcceptanceRecord },

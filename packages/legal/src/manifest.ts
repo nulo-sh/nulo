@@ -141,6 +141,12 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 				"When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails. Each endpoint you add can receive its requests (§ 5.1).",
 			],
 		},
+		{
+			version: "1.2.11",
+			effective: null,
+			material: false,
+			changes: ["With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7)."],
+		},
 	],
 }
 

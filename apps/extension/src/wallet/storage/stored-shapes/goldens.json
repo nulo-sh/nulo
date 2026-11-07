@@ -2038,6 +2038,37 @@
 			"shape": "uiWhatsNewSeen",
 			"key": "nulo:ui:whatsNewSeen",
 			"value": "0.0"
+		},
+		{
+			"id": "discoveryPolicy.full",
+			"stamp": 5,
+			"shape": "discoveryPolicy",
+			"key": "nulo:core:discoveryPolicy@3f9a2c71",
+			"value": {
+				"everySite": true,
+				"checkRefused": ["https://app.example", "http://localhost:5173"]
+			}
+		},
+		{
+			"id": "discoveryPolicy.minimal",
+			"stamp": 5,
+			"shape": "discoveryPolicy",
+			"key": "nulo:core:discoveryPolicy@b04e6d18",
+			"value": {
+				"everySite": true,
+				"checkRefused": []
+			}
+		},
+		{
+			"id": "discoveryPolicy.sealed",
+			"stamp": 5,
+			"shape": "discoveryPolicy",
+			"key": "nulo:core:discoveryPolicy@5c8e1f27",
+			"value": {
+				"profileId": "5c8e1f27",
+				"sealed": "AfDufEgbrrlcCtsWyUY1ybTbOvByGRRCvBiUWyUmhYvLvuR+He7IKZKMEjf/ox9xcb4pRpbxfSnUYRcpuJMSTBPHBZhL27uPBmBffUBf/wwwN9LIeUA="
+			},
+			"sealed": true
 		}
 	]
 }

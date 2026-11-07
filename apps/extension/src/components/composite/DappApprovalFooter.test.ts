@@ -29,6 +29,21 @@ const factory = (props: Record<string, unknown> = {}) =>
 	mount(DappApprovalFooter, { props: { ...base, ...props }, global: { stubs: STUBS } })
 
 describe("composite/DappApprovalFooter", () => {
+	test("the below slot renders under the two buttons, inside the strip; without it nothing follows them", () => {
+		const below = mount(DappApprovalFooter, {
+			props: base,
+			slots: { below: '<button data-testid="under">Under</button>' },
+			global: { stubs: STUBS },
+		})
+		const order = below.findAll('[data-testid="dapp-approval-footer"] button').map((b) => b.attributes("data-testid") ?? b.text())
+		expect(order).toEqual(["x-reject-btn", "x-confirm-btn", "under"])
+		expect(
+			factory()
+				.findAll("button")
+				.map((b) => b.text()),
+		).toEqual(["Reject", "Confirm"])
+	})
+
 	test("renders the reject + confirm buttons with their forwarded testids", () => {
 		const w = factory()
 		expect(w.find('[data-testid="x-reject-btn"]').exists()).toBe(true)

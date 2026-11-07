@@ -48,6 +48,11 @@ export function fakeSdkServices(
 		dappSession?: unknown
 		/** Receives the restart preparation the handler registers. */
 		setRestartPreparation?: (prepare: () => void) => void
+		/** Whether the every-site switch lets a new connection from the origin skip the connect window;
+		 *  off by default. */
+		everySite?: (origin: string) => boolean | Promise<boolean>
+		/** Runs before a row's delete; a throw leaves the row. */
+		beforeDelete?: (id: string) => Promise<void>
 	} = {},
 ): {
 	services: never
@@ -102,6 +107,7 @@ export function fakeSdkServices(
 					onVerificationRefused,
 					onVerificationConfirmed,
 					tryGetDappSessionByOriginAndChain: async (origin: string, chainId: string) => rows.get(`${origin}|${chainId}`),
+					allowsNewSite: async (_profileId: string, origin: string) => (await opts.everySite?.(origin)) ?? false,
 					addDappSession: async (metadata: { url: string }, _p: unknown, _a: unknown, _l: unknown, chainId: string) => {
 						const row = { id: `row-${++rowSeq}`, profileId: "p1", chainId }
 						rows.set(`${metadata.url}|${chainId}`, row)
@@ -109,6 +115,7 @@ export function fakeSdkServices(
 					},
 					setCapabilityGrants: opts.setCapabilityGrants ?? (async () => undefined),
 					deleteDappSession: async (id: string) => {
+						await opts.beforeDelete?.(id)
 						for (const [key, row] of rows) if (row.id === id) rows.delete(key)
 					},
 					setVerificationHash:

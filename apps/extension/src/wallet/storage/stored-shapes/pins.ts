@@ -27,6 +27,10 @@ export const PINNED_STAMPS: readonly Pin[] = [
 		stamp: "16b203aaa2701d23e8e979747e73dbac37abfbe0a5119861a1defdd5888add45",
 		goldens: "9a045bac51998888d8b92bdfbe0ccfd38258092b74bd84bbe20ece6083f9470f",
 	},
+	{
+		stamp: "3ad36e6d0d798b152b761d369434f767add95f2979450f436f17aaef29e2e549",
+		goldens: "cf4cf9257a134f5a2f910472e106865bef6492baf5fe321c6ad28dff0293ba25",
+	},
 ]
 
 /**

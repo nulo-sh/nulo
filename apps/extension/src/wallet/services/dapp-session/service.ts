@@ -7,12 +7,13 @@ import { coversAnyContract, projectStoredGrants, readConsent } from "@nulo/walle
 import type { ILogger } from "@/wallet/logger"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { commitFencedCreate } from "@/wallet/services/create-fence"
-import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
+import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { purgeRows } from "@/wallet/services/purge-rows"
 import { nextRandomId } from "@/wallet/services/id-allocators"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { DappSessionMacStorage } from "./mac-storage"
+import { DiscoveryPolicy } from "./discovery-policy"
 import { RegistrationAllowance } from "./registration-allowance"
 import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -90,6 +91,8 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		"setCapabilityRejections",
 		"getCapabilityRejections",
 		"applyCapabilityDecision",
+		"getEverySite",
+		"setEverySite",
 	)
 	public static name = DAPP_SESSION_SERVICE_NAME
 
@@ -98,10 +101,12 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	public readonly onDappSessionDeleted = new EventHandler<DappSession>()
 	public readonly onVerificationRefused = new EventHandler<{ origin: string; chainId: string; profileId: string }>()
 	public readonly onVerificationConfirmed = new EventHandler<{ verificationHash: string }>()
+	public readonly onEverySiteChanged = new EventHandler<{ profileId: string; on: boolean }>()
 
 	private readonly storage: DappSessionMacStorage
 	private readonly lock = new Lock()
 	private readonly registrations: RegistrationAllowance
+	private readonly discoveryPolicy: DiscoveryPolicy
 
 	private profileService: ProfileService = null!
 
@@ -117,6 +122,9 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		)
 		this.registrations = new RegistrationAllowance(
 			sealedEntityStorage("dappRegistrations", browserApi.storage.local, (profileId) => this.profileService.rowKeys(profileId)),
+		)
+		this.discoveryPolicy = new DiscoveryPolicy(
+			sealedEntityStorage("discoveryPolicy", browserApi.storage.local, (profileId) => this.profileService.rowKeys(profileId)),
 		)
 	}
 
@@ -144,6 +152,38 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		await this.ensureInitialized()
 		const deletion = this.profileService.getDeletionState()
 		await this.registrations.admit(fence.profileId, chainId, origin, () => deletion.assertCurrent(fence.profileId, fence.epoch))
+	}
+
+	public async getEverySite(): Promise<{ profileId: string; on: boolean }> {
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		return { profileId: profile.id, on: await this.discoveryPolicy.isOn(profile.id) }
+	}
+
+	/** The every-site switch, written only for the profile the person is in: a write for another
+	 *  profile, or one a deletion of the profile overtook, writes nothing. */
+	public async setEverySite(profileId: string, on: boolean): Promise<void> {
+		if (typeof profileId !== "string" || typeof on !== "boolean") {
+			throw new ValidationError("setEverySite takes a profile id and a boolean")
+		}
+		await this.ensureInitialized()
+		const fence = await this.profileService.captureExecutionFence()
+		if (fence.profileId !== profileId) throw new SessionEndedError()
+		const deletion = this.profileService.getDeletionState()
+		await this.discoveryPolicy.set(profileId, on, () => deletion.assertCurrent(fence.profileId, fence.epoch))
+		this.emit("onEverySiteChanged", { profileId, on })
+	}
+
+	/** Whether a new connection from `origin` skips the connect window under `profileId`. A read that
+	 *  fails is off. Not an RPC method. */
+	public async allowsNewSite(profileId: string, origin: string): Promise<boolean> {
+		try {
+			await this.ensureInitialized()
+			return await this.discoveryPolicy.allows(profileId, origin)
+		} catch (error) {
+			this.logWarn("the every-site switch could not be read; it counts as off", { error })
+			return false
+		}
 	}
 
 	public async getDappSessions(): Promise<DappSession[]> {
@@ -430,26 +470,51 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		await this.ensureInitialized()
 		return await this.lock.withLock(async () => {
 			this.emit("onVerificationRefused", { origin, chainId, profileId })
-			try {
-				const { rows: all, keyless } = await this.storage.rowsForProfile(profileId)
-				const rows = all.filter(({ row }) => row.dappMetadata?.url === origin && row.chainId === chainId)
-				await purgeRows(
-					rows,
-					({ storageId }) => this.storage.delete(storageId),
-					({ storageId, row }) => this.emit("onDappSessionDeleted", { ...row, id: storageId }),
-				)
-				// Decided by the scan, not by the keys now: an unlock during the deletes would make an
-				// unread row look tampered. A row the held keys refused is tampered and never served.
-				if (keyless.length > 0) throw new Error("sealed rows without their key")
-				return rows.length > 0 ? "revoked" : "absent"
-			} catch (err) {
-				// No delete event will follow, and an establishment that read the row before the lock
-				// may have stamped its channel since the first event: end the channels again.
-				this.emit("onVerificationRefused", { origin, chainId, profileId })
-				this.logWarn("refuseVerification: the app's channels ended but its rows could not be deleted", err)
-				return "unavailable"
-			}
+			// Queued on the policy's lock before any await, so a discovery the ended channels set off
+			// reads the refusal.
+			const recorded = this.recordCheckRefusal(profileId, origin)
+			const outcome = await this.deleteRefusedRows(origin, chainId, profileId)
+			await recorded
+			return outcome
 		})
+	}
+
+	/** Every row of the refused app under `profileId`, read raw and by storage key, under the lock. */
+	private async deleteRefusedRows(origin: string, chainId: string, profileId: string): Promise<VerificationRefusal> {
+		try {
+			const { rows: all, keyless } = await this.storage.rowsForProfile(profileId)
+			const rows = all.filter(({ row }) => row.dappMetadata?.url === origin && row.chainId === chainId)
+			await purgeRows(
+				rows,
+				({ storageId }) => this.storage.delete(storageId),
+				({ storageId, row }) => this.emit("onDappSessionDeleted", { ...row, id: storageId }),
+			)
+			// Decided by the scan, not by the keys now: an unlock during the deletes would make an
+			// unread row look tampered. A row the held keys refused is tampered and never served.
+			if (keyless.length > 0) throw new Error("sealed rows without their key")
+			return rows.length > 0 ? "revoked" : "absent"
+		} catch (err) {
+			// No delete event will follow, and an establishment that read the row before the lock
+			// may have stamped its channel since the first event: end the channels again.
+			this.emit("onVerificationRefused", { origin, chainId, profileId })
+			this.logWarn("refuseVerification: the app's channels ended but its rows could not be deleted", err)
+			return "unavailable"
+		}
+	}
+
+	/** While the every-site switch is on, the refused site gets the connect window again. Best
+	 *  effort: a record that cannot be written leaves the refusal as it is, and the site still meets
+	 *  the emoji check. */
+	private recordCheckRefusal(profileId: string, origin: string): Promise<void> {
+		const deletion = this.profileService.getDeletionState()
+		const epoch = deletion.capture(profileId)
+		const assertLive = () => {
+			if (deletion.isReserved(profileId)) throw profileDeletedError(profileId)
+			deletion.assertCurrent(profileId, epoch)
+		}
+		return this.discoveryPolicy
+			.recordCheckRefusal(profileId, origin, assertLive)
+			.catch((error: unknown) => this.logWarn("refuseVerification: the refused site could not be recorded", { error }))
 	}
 
 	/**
@@ -537,5 +602,6 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			for (const storageId of [...unopened, ...keyless]) await this.storage.delete(storageId)
 		})
 		await this.registrations.purgeProfile(profileId)
+		await this.discoveryPolicy.purgeProfile(profileId)
 	}
 }
