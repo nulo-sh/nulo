@@ -8,10 +8,12 @@ import { readErrorKind, readJournalDetail, readTerminalCard } from "../fixtures/
 import {
 	assertPgOk,
 	callExpectingNoPopup,
+	errorEnvelopeOf,
 	PLAYGROUND_TEST_URL,
 	requestPgBundle,
 	setPgInput,
 	snapshotResultSeq,
+	tracedEnvelope,
 	waitForPgResult,
 } from "../fixtures/playground"
 import { approveCapabilities, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
@@ -66,9 +68,9 @@ test.skipIf(!hasConfig)(
 		const sends = (await readSendRecords(wallet)).filter((r) => r.kind === "dapp_execute").map((r) => r.id)
 		const detail = await readJournalDetail(wallet, record.id, "refused-scope-detail")
 		const card = await readHistoryCard(wallet, "refused-scope-card")
-		expect({ status: refused.status, error: refused.errorJson, sends, detail, card }).toEqual({
+		expect({ status: refused.status, error: errorEnvelopeOf(refused), sends, detail, card }).toEqual({
 			status: "error",
-			error: { message: JSON.stringify(SCOPE_VIOLATION_ENVELOPE) },
+			error: tracedEnvelope(SCOPE_VIOLATION_ENVELOPE),
 			sends: [record.id],
 			detail: {
 				"journal-detail-category": "Not allowed",
@@ -122,14 +124,14 @@ test.skipIf(!hasConfig)(
 		const record = await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "failed", 120_000)
 		expect({
 			status: answer.status,
-			error: answer.errorJson,
+			error: errorEnvelopeOf(answer),
 			kind: await readErrorKind(wallet, record.id),
 			home: await readTerminalCard(wallet, "general", "refused-binding-card"),
 			detail: await readJournalDetail(wallet, record.id, "refused-binding-detail"),
 			card: await readHistoryCard(wallet),
 		}).toEqual({
 			status: "error",
-			error: { message: JSON.stringify(SCOPE_VIOLATION_ENVELOPE) },
+			error: tracedEnvelope(SCOPE_VIOLATION_ENVELOPE),
 			kind: "scope_refused",
 			// Titled by the function the selector runs, not the "balance_of_public" the call claimed, as its
 			// contract spells it: no build recorded the class a movement label needs.

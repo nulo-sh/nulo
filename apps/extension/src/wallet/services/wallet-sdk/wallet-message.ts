@@ -31,6 +31,7 @@ import type { ResetRunGate } from "@/wallet/services/network-reset/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import type { ILogger } from "@/wallet/logger"
+import { randomIdNotIn } from "@/wallet/services/id-allocators"
 import { LogLevel } from "@/wallet/logger"
 import { SESSION_INVALID_ERROR, toWalletResponseError } from "./error-envelope"
 import { enforceSessionProfileBinding, type ProfileSwitchEpoch } from "./profile-switch-teardown"
@@ -39,7 +40,7 @@ import { chainSendTxWithVouching } from "./queued-wait-vouching"
 import { createSessionBaton } from "./session-baton"
 import { chainInfoToChainId } from "./session-established"
 import type { SessionHolders } from "./session-holders"
-import { bindLiveSession, type LiveSession } from "./live-session"
+import { bindLiveSession, type LiveSession, traceAnswers } from "./live-session"
 import { toJsonSafe } from "./to-json-safe"
 import type { VerificationHold } from "./verification-hold"
 
@@ -75,11 +76,11 @@ export function onWalletMessage(session: ActiveSession, message: WalletMessage, 
 		)
 		return
 	}
-	const live = bindLiveSession(deps.handler, session)
+	const bound = bindLiveSession(deps.handler, session)
 	// Captured once, on arrival. Upstream reads the session before it awaits the decrypt, so a message
 	// whose session ended meanwhile arrives with the old object: it must not capture a successor's
 	// hold under the same id, and it has nowhere to be answered.
-	const hold = live.isLive() ? deps.sessions.holds.get(key) : undefined
+	const hold = bound.isLive() ? deps.sessions.holds.get(key) : undefined
 	if (hold === undefined) {
 		deps.logger.log(
 			"wallet-sdk",
@@ -88,6 +89,9 @@ export function onWalletMessage(session: ActiveSession, message: WalletMessage, 
 		)
 		return
 	}
+	// Minted whatever the developer mode: a field present only with it would tell every dApp the setting.
+	const walletTraceId = randomIdNotIn(() => false, 8)
+	const live = traceAnswers(bound, walletTraceId)
 	const release = hold.admit()
 	if (release === undefined) {
 		refuseOverPendingCap(live, key, message, deps.sessions.decryptLocks, deps.logger)
@@ -140,7 +144,7 @@ export function onWalletMessage(session: ActiveSession, message: WalletMessage, 
 		vouch: deps.executionService,
 		releaseFifo,
 		run: (queuedJournalId) =>
-			runEstablishedMessage(queuedJournalId, establishedPromise, releaseFifo, { session, live, hold }, message, deps),
+			runEstablishedMessage(queuedJournalId, establishedPromise, releaseFifo, { session, live, hold, walletTraceId }, message, deps),
 	}).then(release, release)
 	deps.sessions.sessionQueues.set(
 		key,
@@ -218,7 +222,7 @@ async function runEstablishedMessage(
 	queuedJournalId: string | undefined,
 	establishedPromise: Promise<boolean>,
 	releaseFifo: ReturnType<typeof createSessionBaton>["releaseFifo"],
-	call: { session: ActiveSession; live: LiveSession; hold: VerificationHold },
+	call: { session: ActiveSession; live: LiveSession; hold: VerificationHold; walletTraceId: string },
 	message: WalletMessage,
 	deps: MessagePipelineDeps,
 ): Promise<void> {
@@ -247,6 +251,7 @@ async function runEstablishedMessage(
 			session,
 			message,
 			live,
+			walletTraceId: call.walletTraceId,
 			hooks: {
 				// The FIFO releases once ExecutionService enqueues the approved request on the execution
 				// mutex, which keeps the session's sends in arrival order.
@@ -292,10 +297,10 @@ export type WalletMessageDeps = {
  * record is failed.
  */
 export async function handleWalletMessage(
-	request: { session: ActiveSession; message: WalletMessage; live: LiveSession; hooks?: DispatchHooks },
+	request: { session: ActiveSession; message: WalletMessage; live: LiveSession; hooks?: DispatchHooks; walletTraceId?: string },
 	deps: WalletMessageDeps,
 ): Promise<void> {
-	const { session, message, live, hooks } = request
+	const { session, message, live, hooks, walletTraceId } = request
 	const { dispatcher, profileService, operationJournal, sessionProfiles, switchEpoch, logger, legal, resetRun } = deps
 	const response: WalletResponse = {
 		messageId: message.messageId,
@@ -350,6 +355,7 @@ export async function handleWalletMessage(
 			origin: session.origin,
 			sessionId: session.sessionId,
 			fence,
+			walletTraceId,
 		}
 
 		// Once per top-level request, before the dispatcher sees a method name: no dApp request is
@@ -378,8 +384,8 @@ export async function handleWalletMessage(
 		// `new Error(JSON.stringify(error))` at `extension_wallet.ts:181`, so dApps
 		// that want to discriminate parse the message — see the wallet-bridge
 		// README for the recipe. Mapping lives in `error-envelope.ts` so it can be
-		// unit-tested in isolation; everything not recognised collapses to a
-		// string, preserving the original wire contract.
+		// unit-tested in isolation; everything not recognised collapses to one
+		// constant -32603 object.
 		response.error = toWalletResponseError(error)
 		// Pass the error as an OBJECT, never pre-stringified: a finished string is opaque to the
 		// logger's redaction, so interpolating it here would smuggle whatever the error carries

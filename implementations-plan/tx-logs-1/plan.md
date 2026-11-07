@@ -9,7 +9,7 @@ codex_model: sol
 code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
-base: origin/dev at 961f90642
+base: origin/dev at 961f90642 (plan); arc 1 on f4896bd1a
 trunk: dev
 post_implementation_hardening: not scheduled
 ---

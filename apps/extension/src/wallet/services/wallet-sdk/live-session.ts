@@ -7,6 +7,7 @@
  */
 import type { ActiveSession, BackgroundConnectionHandler } from "@aztec-labs/wallet-sdk/extension/handlers"
 import type { WalletResponse } from "@aztec-labs/wallet-sdk/types"
+import { type WalletErrorEnvelope, withWalletTraceId } from "./error-envelope"
 
 /** A call's own transport session, bound so the call acts only while that exact session is live. */
 export interface LiveSession {
@@ -33,5 +34,26 @@ export function bindLiveSession(
 		terminate: () => {
 			if (isLive()) handler.terminateSession(session.sessionId)
 		},
+	}
+}
+
+/**
+ * `live` whose every error answer carries `data.walletTraceId`. `onAnswer` sees what was answered
+ * (`undefined` for a result) before the send, whether or not the session is still live.
+ */
+export function traceAnswers(
+	live: LiveSession,
+	walletTraceId: string,
+	onAnswer?: (error: WalletErrorEnvelope | undefined) => void,
+): LiveSession {
+	return {
+		isLive: () => live.isLive(),
+		respond: (response) => {
+			// Every error this pipeline answers comes from `toWalletResponseError` or one of its constants.
+			const error = response.error === undefined ? undefined : withWalletTraceId(response.error as WalletErrorEnvelope, walletTraceId)
+			onAnswer?.(error)
+			return live.respond(error === undefined ? response : { ...response, error })
+		},
+		terminate: () => live.terminate(),
 	}
 }
