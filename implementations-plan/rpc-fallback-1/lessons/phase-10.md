@@ -56,3 +56,10 @@ The owner's answers on decision page 112, signed 2026-11-06 14:18 UTC: OA-5 D, O
   - **Rejected:** moving the runtime out of the spec's header. The repo's e2e headers carry their estimate and measurement, and this one now carries both.
   - **Deferred to the owner:** the "Nulo" label and its place need an explicit yes in the PR (§ UI changes need explicit owner sign-off). OA-6 was marked read with a question.
 - 2026-11-07, the round-1 fixes: network, conversion, storage and legal suites 509 + 60 green; the relay smoke green at retry 0, Chrome 13.4 s and Firefox 22.2 s.
+
+## Round 2
+
+- **Codex `01a1b505` resumed: approve**, nothing new. Both round-1 findings were confirmed closed.
+  - `relayHolders` records a relay already on a row and appends nothing, so a relay the person added by hand also stays removed once removed.
+  - The planted Alpha row exercises sealing and then the conversion. The Testnet leg still proves the append on a sealed row.
+- The loop converged at round 2.

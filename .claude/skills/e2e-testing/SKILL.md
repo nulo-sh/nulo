@@ -185,8 +185,12 @@ runtime env var can never arm a build-time flag.
   `ownHosts`. A held node request means a target the interception does not cover dialed the node:
   on Chrome rerun with `NULO_E2E_INTERCEPT_LOG=1` and find it; never declare the host or loosen the check.
   The smoke setup refuses an unarmed dist outside artifact runs; artifact runs are guarded too.
-  Each seeded remote node (Mainnet, the default, and Testnet) is answered by its own loopback
-  stand-in with a terminal 400 (`fixtures/node-stub.ts`); a new profile starts on Mainnet, so a spec
+  Each seeded remote node (Mainnet, the default, and Testnet, each with Nulo's relay second) is
+  answered by its own loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`). With two
+  endpoints a route admits its first with one `[getNodeInfo, getChainTips]` batch before any call,
+  and moves to the relay's stand-in when it fails, so a spec that stubs a seeded node answers both
+  (`helpers/rpc-stub.ts`'s `chainTipsResult`): one unanswered entry blackholes the whole batch.
+  A new profile starts on Mainnet, so a spec
   that needs the list's tokens, prices, the sponsor or Testnet's own accounts (the stale-network seeds
   move them) switches to Testnet first, and one that stages the active node intercepts
   `DEFAULT_NODE_ORIGIN`. The Testnet stand-in is armed in every launch but
