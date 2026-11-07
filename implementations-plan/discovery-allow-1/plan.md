@@ -213,6 +213,10 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../README
 - **Codex r2 (resumed): reject.** (1) A confirm held open across a profile switch wrote for the new profile: accepted, D19. (2) With the rollback's delete failing, a twin approved against the refused row: accepted, the twin reads the switch (D18).
 - **Codex r3 (resumed, the last round): reject.** (1) With the rollback's delete failing, a fresh retry reuses the surviving row as a remembered session: a known limit (it needs a failed storage write, like D4's; the retry still opens the emoji check), in the close-out's issue. (2) The twin's read sat before its admission wait: accepted, moved after it (D18). The loop stopped at its three rounds; the fresh cross-arc pass below verifies the last fix.
 
+**Cross-arc pass** (2026-11-07, a fresh Codex session over `4d6bce025..discovery-allow-1-a2`, carrying the standard's two rules, which the arc loops' prompts had left out):
+- **Codex r1 (gpt-6.1-sol, high): conditional approve.** (1) Medium: a profile switch during a final read still approved on the old profile's switch: accepted, the reads also check the flow's switch epoch (D18). (2) The new Toggle had no accessible name: accepted (`aria-label`, the row's title); the seven older settings Toggles lack one too, an issue at close-out. (3) The read-failure log promised a window that never opens: reworded. (4) Comments that named their callers or stated a stale invariant: trimmed; three files it flagged came from other PRs on `dev` and are out of scope.
+- **Codex r2 (resumed, verify only): approve**, no new finding (high confidence). Converged.
+
 ## Seeds (not run; orchestrator-owned)
 
 - `/goal` Phases 1-5 of implementations-plan/discovery-allow-1/plan.md ✓, each gate passing in the transcript; each arc's Codex loop and the cross-arc pass converged (a resumed pass with no new material finding quoted); the stack's PRs open against `dev`; `bun run test:all` and `bun run lint` exit 0.
