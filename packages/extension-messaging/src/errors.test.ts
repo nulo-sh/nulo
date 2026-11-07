@@ -12,6 +12,7 @@ import {
 	CLIENT_DISCONNECTED_MESSAGE,
 	ContractAssertionError,
 	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
 	DefaultEntrypointPublicCallError,
 	DefaultEntrypointUtilityCallError,
 	ContractNotRegisteredError,
@@ -270,6 +271,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			name: "DefaultEntrypointMultiCallError",
 			code: "DEFAULT_ENTRYPOINT_MULTI_CALL",
 			rebuild: { kind: "constant", message: "DefaultEntrypoint requires exactly 1 call" },
+		},
+		{
+			ctor: DefaultEntrypointNoCallError,
+			make: () => new DefaultEntrypointNoCallError(),
+			name: "DefaultEntrypointNoCallError",
+			code: "DEFAULT_ENTRYPOINT_NO_CALL",
+			rebuild: { kind: "constant", message: "DefaultEntrypoint requires exactly 1 call, got 0" },
 		},
 		{
 			ctor: ContractNotRegisteredError,
@@ -609,6 +617,7 @@ describe("remoteErrorFromResponseContent", () => {
 		["DefaultEntrypointPublicCallError", DefaultEntrypointPublicCallError, "DefaultEntrypoint only supports private functions"],
 		["DefaultEntrypointUtilityCallError", DefaultEntrypointUtilityCallError, "DefaultEntrypoint only supports private functions"],
 		["DefaultEntrypointMultiCallError", DefaultEntrypointMultiCallError, "DefaultEntrypoint requires exactly 1 call"],
+		["DefaultEntrypointNoCallError", DefaultEntrypointNoCallError, "DefaultEntrypoint requires exactly 1 call, got 0"],
 	] as const)("%s keeps its class, its refusal base and its constant message across two hops", (_, ctor, message) => {
 		const popup = hop(hop(new ctor()))
 		expect(popup.constructor).toBe(ctor)

@@ -11,6 +11,7 @@ import {
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
 	DefaultEntrypointPublicCallError,
 	DefaultEntrypointUtilityCallError,
 	InvalidWalletArgumentsError,
@@ -438,6 +439,7 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 		["a public call through the default entrypoint", "wallet_refused", new DefaultEntrypointPublicCallError(), "Transaction"],
 		["a utility call through the default entrypoint", "wallet_refused", new DefaultEntrypointUtilityCallError(), "Transaction"],
 		["several calls through the default entrypoint", "wallet_refused", new DefaultEntrypointMultiCallError(), "Transaction"],
+		["no call through the default entrypoint", "wallet_refused", new DefaultEntrypointNoCallError(), "Transaction"],
 		[
 			"no account the dApp may use",
 			"wallet_refused",

@@ -9,6 +9,7 @@ import { describe, expect, test, vi } from "vitest"
 import {
 	AuthRegistryRefusalError,
 	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
 	DefaultEntrypointPublicCallError,
 	DefaultEntrypointUtilityCallError,
 	JobCancelledError,
@@ -54,6 +55,7 @@ describe("a refusal an estimate or preview meets is the request's", () => {
 		["preview", "default-entrypoint public call", new DefaultEntrypointPublicCallError()],
 		["preview", "default-entrypoint utility call", new DefaultEntrypointUtilityCallError()],
 		["preview", "default-entrypoint several calls", new DefaultEntrypointMultiCallError()],
+		["preview", "default-entrypoint no call", new DefaultEntrypointNoCallError()],
 	] as const)(
 		"the %s that meets a %s refusal records it, and every later attempt answers it without running",
 		async (first, _, refusal) => {
