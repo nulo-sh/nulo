@@ -467,6 +467,16 @@ export class DefaultEntrypointMultiCallError extends WalletError {
 	}
 }
 
+/** A no-account request with no call. */
+export class DefaultEntrypointNoCallError extends WalletError {
+	public static readonly CODE = "DEFAULT_ENTRYPOINT_NO_CALL"
+	public static readonly MESSAGE = "DefaultEntrypoint requires exactly 1 call, got 0"
+
+	public constructor() {
+		super(DefaultEntrypointNoCallError.CODE, DefaultEntrypointNoCallError.MESSAGE, undefined, "DefaultEntrypointNoCallError")
+	}
+}
+
 /**
  * A request the default entrypoint, which runs with no account, can never build: Nulo refuses it
  * before anything is signed, by the same check the send runs. The dApp's answer stays the
@@ -476,12 +486,14 @@ export type DefaultEntrypointRefusal =
 	| DefaultEntrypointPublicCallError
 	| DefaultEntrypointUtilityCallError
 	| DefaultEntrypointMultiCallError
+	| DefaultEntrypointNoCallError
 
 export function isDefaultEntrypointRefusal(error: unknown): error is DefaultEntrypointRefusal {
 	return (
 		error instanceof DefaultEntrypointPublicCallError ||
 		error instanceof DefaultEntrypointUtilityCallError ||
-		error instanceof DefaultEntrypointMultiCallError
+		error instanceof DefaultEntrypointMultiCallError ||
+		error instanceof DefaultEntrypointNoCallError
 	)
 }
 
@@ -790,6 +802,7 @@ const REBUILT_AS = [
 	DefaultEntrypointPublicCallError,
 	DefaultEntrypointUtilityCallError,
 	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
 	ContractNotRegisteredError,
 	ContractNotFoundError,
 	ChainNotSupportedError,

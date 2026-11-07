@@ -109,6 +109,12 @@ export type Methods = {
 	 */
 	getPublicTokenClassStatus(network: NetworkInfo, contract: string, checkpointHash: string): PublicTokenClassStatus
 	/**
+	 * The endpoint to submit `tx` through, pinned to its hash so its receipts are read there alone:
+	 * the route's active endpoint while it serves, else the first that serves the chain and knows
+	 * the tx's anchor block. Never waits on the chain guard and never builds a runtime.
+	 */
+	pickSendEndpoint(network: NetworkInfo, tx: { txHash: string; anchorHash: string }): { rpcUrl: string }
+	/**
 	 * Dispose any active runtime for `(profileId, chainId)` and remove its
 	 * OPFS store at `pxe/${profileId}/${chainId}`. Called by the SW-side
 	 * NetworkService.purgeChain coordinator when a chain is removed.

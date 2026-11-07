@@ -20,9 +20,10 @@ import { FunctionCall, FunctionSelector, FunctionType } from "@aztec-labs/stdlib
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { PxeStaleAnchorError, PxeStoreKeyMissingError } from "@nulo/extension-messaging/errors"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { PxeService, type IProfileReader } from "./service"
 import { isStaleAnchorMessage, withStaleAnchorRetry } from "./stale-anchor"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const REORG_TEXT =
 	"Block hash 0x12dc not found when resolving query. If the node API has been queried with anchor block hash possibly a reorg has occurred."
@@ -130,7 +131,12 @@ describe("PxeService.executeUtility runs through the helper", () => {
 		connect: async () => {},
 		getProfiles: async () => [],
 	}
-	const network: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://localhost:8080" }
+	const network: NetworkInfo = {
+		profileId: "p1",
+		chainId: 31337,
+		l1ChainId: 31337,
+		endpoints: [{ id: "primary", rpcUrl: "http://localhost:8080" }],
+	}
 
 	beforeEach(() => {
 		vi.stubGlobal("chrome", { runtime: { onMessage: { addListener: () => {} }, sendMessage: () => {} } })
@@ -156,7 +162,9 @@ describe("PxeService.executeUtility runs through the helper", () => {
 		const executeUtility = vi.fn().mockRejectedValueOnce(new Error(REORG_TEXT)).mockResolvedValueOnce({ marker: "utility-result" })
 		const sync = vi.fn(async () => {})
 		const factory: PxeFactory = {
-			createChainRuntime: async (n) => new ChainRuntime(n.chainId, {} as never, { executeUtility, sync } as unknown as PXE, n.rpcUrl),
+			createRoute: NO_ROUTE,
+			createChainRuntime: async (n) =>
+				new ChainRuntime(n.chainId, {} as never, { executeUtility, sync } as unknown as PXE, endpointsKey(n.endpoints)),
 		}
 		const service = new PxeService(noopProfiles, noopLogger, factory)
 		;(service as unknown as { initialized: boolean }).initialized = true

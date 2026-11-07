@@ -48,6 +48,8 @@ interface Request {
 class Harness {
 	public now = 0
 	public readonly sleeps: number[] = []
+	/** Deadlines a caller set; `advance` settles the ones it passes. */
+	private readonly timers: { at: number; fire: () => void }[] = []
 	public readonly requests: Request[] = []
 	public readonly endpoints = new Map<string, FakeEndpoint>()
 	public retryWhile: () => boolean = () => true
@@ -96,10 +98,29 @@ class Harness {
 				this.now += ms
 				await this.onSleep()
 			},
+			timer: (ms) => {
+				let fire = () => {}
+				const expired = new Promise<void>((resolve) => {
+					fire = resolve
+				})
+				const entry = { at: this.now + ms, fire }
+				this.timers.push(entry)
+				const cancel = () => {
+					const at = this.timers.indexOf(entry)
+					if (at >= 0) this.timers.splice(at, 1)
+				}
+				return { expired, cancel }
+			},
 			log: () => {},
 			retryWhile: () => this.retryWhile(),
 			pins,
 		})
+	}
+
+	/** Moves the clock and settles every deadline it reaches. */
+	public advance(ms: number): void {
+		this.now += ms
+		for (const timer of this.timers.filter((t) => t.at <= this.now)) timer.fire()
 	}
 
 	public endpoint(url: string): FakeEndpoint {
@@ -236,6 +257,16 @@ describe("routing calls", () => {
 		await expect(call(h)).rejects.toThrow("fetch refused")
 		expect(h.seen(B).slice(3)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`])
 		expect(h.node.route.snapshot()[1]?.state).toBe("behind")
+	})
+
+	test("a read the freshly admitted primary refuses never moves to an endpoint behind the tip its admission saw", async () => {
+		const h = new Harness([A, B])
+		h.endpoint(A).tip = 100
+		h.endpoint(B).tip = 99
+		h.endpoint(A).fail = (m) => (m === "getPublicStorageAt" ? entryError(35) : undefined)
+		await expect(h.node.getPublicStorageAt("latest", undefined as never, undefined as never)).rejects.toThrow("entry 35")
+		expect(h.seen(B)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`])
+		expect(h.node.route.snapshot().map((e) => e.state)).toEqual(["ready", "behind"])
 	})
 
 	test("a fallback is admitted while the primary is dead; another chain and another rollup are refused", async () => {
@@ -515,17 +546,96 @@ describe("races", () => {
 		expect(belowFloor).toEqual([])
 	})
 
-	test("singleAttempt with no active endpoint fails at once and leaves admission running for the caller's next try", async () => {
+	test("singleAttempt with no active endpoint admits one first, then makes its one attempt there", async () => {
 		const h = new Harness([A, B])
-		const gate = held()
-		h.endpoint(A).hold = (m) => (m === "getNodeInfo" ? gate.promise : undefined)
 		const read = () => h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
-		await expect(read()).rejects.toThrow(/No endpoint/)
-		gate.release()
-		await vi.waitFor(() => expect(h.node.route.active()?.id).toBe("e0"))
 		await expect(read()).resolves.toBe("getContract:ok")
 		expect(h.seen(A)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`, `getContract@${probeTimeoutMs}`])
 		expect(h.seen(B)).toEqual([])
+	})
+
+	test("with no admission to run, the attempt gets the caller's whole budget however the clock moves", async () => {
+		const h = new Harness([A])
+		let tick = 0
+		Object.defineProperty(h, "now", { get: () => tick++, set: () => {} })
+		await h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
+		expect(h.seen(A)).toEqual([`getContract@${probeTimeoutMs}`])
+	})
+
+	test("admission and the attempt share the caller's budget: the attempt gets what admission left", async () => {
+		const h = new Harness([A, B])
+		h.endpoint(A).hold = (m) => {
+			if (m === "getNodeInfo") h.now += 2_000
+			return undefined
+		}
+		await expect(h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)).resolves.toBe("getContract:ok")
+		expect(h.seen(A).at(-1)).toBe(`getContract@${probeTimeoutMs - 2_000}`)
+	})
+
+	test("a probe that outlives the caller's budget ends the caller's wait at its deadline and runs on for the next read", async () => {
+		const h = new Harness([A, B])
+		h.endpoint(A).fail = (method) => (method === "getNodeInfo" ? transport("timeout") : undefined)
+		h.endpoint(A).hold = (m) => {
+			if (m === "getNodeInfo") h.now += 4_000
+			return undefined
+		}
+		let release: () => void = () => {}
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		h.endpoint(B).hold = (m) => (m === "getNodeInfo" ? held : undefined)
+		const read = h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
+		const outcome = read.then(
+			() => "resolved",
+			(error: Error) => error.message,
+		)
+		await vi.waitFor(() => expect(h.seen(B)).toContain(`getNodeInfo@${probeTimeoutMs}`))
+		h.advance(probeTimeoutMs - 4_000 - 1)
+		await Promise.resolve()
+		expect(await Promise.race([outcome, Promise.resolve("waiting")])).toBe("waiting")
+		h.advance(1)
+		expect(await outcome).toMatch(/No endpoint/)
+		expect(h.now).toBe(probeTimeoutMs)
+
+		release()
+		await expect(h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)).resolves.toBe("getContract:ok")
+		expect(h.node.route.active()?.id).toBe("e1")
+		expect(h.seen(B).filter((r) => r.startsWith("getNodeInfo"))).toHaveLength(1)
+	})
+
+	test("a shorter budget joining a running admission leaves at its own deadline; the longer one is served when the probe lands", async () => {
+		const h = new Harness([A, B])
+		let release: () => void = () => {}
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		h.endpoint(A).hold = (m) => (m === "getNodeInfo" ? held : undefined)
+		const long = h.node.route.singleAttempt(60_000).getContract(undefined as never)
+		await vi.waitFor(() => expect(h.seen(A)).toContain(`getNodeInfo@${probeTimeoutMs}`))
+		const short = h.node.route.singleAttempt(1_000).getContract(undefined as never)
+		h.advance(1_000)
+		await expect(short).rejects.toThrow(/No endpoint/)
+
+		release()
+		await expect(long).resolves.toBe("getContract:ok")
+		expect(h.seen(A).filter((r) => r.startsWith("getNodeInfo"))).toHaveLength(1)
+		expect(h.seen(A).at(-1)).toBe(`getContract@${60_000 - 1_000}`)
+		expect(h.seen(B)).toEqual([])
+	})
+
+	test("an admission that spends the budget fails the read and starts no probe past it; the next read admits the fallback", async () => {
+		const h = new Harness([A, B])
+		h.endpoint(A).fail = (method) => (method === "getNodeInfo" ? transport("timeout") : undefined)
+		h.endpoint(A).hold = (m) => {
+			if (m === "getNodeInfo") h.now += probeTimeoutMs
+			return undefined
+		}
+		const read = () => h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)
+		await expect(read()).rejects.toThrow(/No endpoint/)
+		expect(h.seen(B)).toEqual([])
+		await expect(read()).resolves.toBe("getContract:ok")
+		expect(h.node.route.active()?.id).toBe("e1")
+		expect(h.seen(B)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getChainTips@${probeTimeoutMs}`, `getContract@${probeTimeoutMs}`])
 	})
 })
 
@@ -595,6 +705,22 @@ describe("pickForSend", () => {
 		expect((await h.node.route.pickForSend(TX.toString(), ANCHOR)).id).toBe("e0")
 		expect(h.requests.length).toBe(before + 4)
 	})
+
+	test.each<TransportFailure>(["unreachable", "overloaded", "refused"])(
+		"an active endpoint whose last call failed (%s) is not taken on trust: the others are asked",
+		async (kind) => {
+			const h = new Harness([A, B])
+			await call(h)
+			h.endpoint(A).fail = () => transport(kind)
+			await call(h)
+			expect(h.node.route.active()?.id).toBe("e0")
+			expect(h.node.route.snapshot()[0]?.state).toBe("ready")
+			const [fromA, fromB] = [h.seen(A).length, h.seen(B).length]
+			expect((await h.node.route.pickForSend(TX.toString(), ANCHOR)).id).toBe("e1")
+			expect(h.seen(A).length).toBe(fromA)
+			expect(h.seen(B).slice(fromB)).toEqual([`getNodeInfo@${probeTimeoutMs}`, `getBlockData@${probeTimeoutMs}`])
+		},
+	)
 
 	test("with no active endpoint, asks the endpoints in order and picks the first that knows the anchor", async () => {
 		const h = new Harness([A, B, C])

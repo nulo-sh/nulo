@@ -3,15 +3,16 @@ import { createPXE, type PXE } from "@aztec-labs/pxe/client/bundle"
 import { createLogger } from "@aztec-labs/foundation/log"
 import type { AztecSQLiteOPFSStore } from "@aztec-labs/kv-store/sqlite-opfs"
 import { WASMSimulator } from "@aztec-labs/simulator/client"
-import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { PrestoProver, type PrestoPhase } from "@alejoamiras/presto"
 import type { ProveBackend } from "@nulo/wallet-core/jobs"
 import { PxeStoreKeyMissingError } from "@nulo/extension-messaging/errors"
 import type { NodeFactory } from "../ports/node-factory-port"
+import { createSubmissionPins, type Route, type RouteEndpoint, type RoutedNode, type SubmissionPins } from "../routing/routed-node"
 import { assertNodeServesChain } from "../utils/chain-identity"
 import type { RetryOptions } from "../utils/fetch"
 import { chainDataDir, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
-import { openChainStore } from "./opfs-store"
+import { initStoreVersionStamp, openChainStore, readStoreStamp } from "./opfs-store"
+import { PXE_NOT_SYNCED_DIAGNOSTIC } from "./stale-anchor"
 
 /** Message marker of `PxeStoreKeyMissingError` — the service's failure logger demotes it to debug;
  *  the client's recovery keys on the class, never on this text. */
@@ -80,7 +81,10 @@ export type ProductionPxeFactoryOptions =
 export interface NetworkInfo {
 	profileId: string
 	chainId: number
-	rpcUrl: string
+	/** The exact L1 chain id every endpoint must serve. */
+	l1ChainId: number
+	/** The network's endpoints in preference order, the primary first. */
+	endpoints: readonly RouteEndpoint[]
 	/** The profile row's persisted 128-bit incarnation generation,
 	 *  captured SW-side under the facade lock when the request is built and
 	 *  verified offscreen-side inside the profile barrier. A retry reuses its
@@ -89,6 +93,15 @@ export interface NetworkInfo {
 	 *  the type level (test fakes; the production client always attaches it). */
 	pxeGeneration?: string
 }
+
+/** Identifies a network's endpoint list, order included: a runtime is rebuilt when it changes,
+ *  never when its route moves between them. */
+export function endpointsKey(endpoints: readonly RouteEndpoint[]): string {
+	return JSON.stringify(endpoints.map(({ id, rpcUrl }) => [id, rpcUrl]))
+}
+
+/** What a runtime's build takes from its registry: the retry policy and the pins of its (profile, chain). */
+export type RuntimeOptions = RetryOptions & { pins?: SubmissionPins }
 
 /**
  * Holds the `AztecNode` + `PXE` pair for a single chain bound to a
@@ -101,9 +114,10 @@ export interface NetworkInfo {
 export class ChainRuntime {
 	public constructor(
 		public readonly chainId: number,
-		public readonly node: AztecNode,
+		public readonly node: RoutedNode,
 		public readonly pxe: PXE,
-		public readonly rpcUrl: string,
+		/** `endpointsKey` of the endpoint list the runtime was built for. */
+		public readonly endpointsKey: string,
 		/** The injected per-(profile, chain) encrypted store. The runtime OWNS the handle:
 		 *  dispose() closes it (releasing the SAH-pool directory lock), deleteStore() erases it.
 		 *  Undefined only for test fakes. */
@@ -143,7 +157,9 @@ export class ChainRuntime {
  *  running real PXE init. `storeKey` is the per-profile 32-byte store
  *  encryption key (required by the production factory; fakes ignore it). */
 export interface PxeFactory {
-	createChainRuntime(network: NetworkInfo, storeKey?: Uint8Array, retries?: RetryOptions): Promise<ChainRuntime>
+	createChainRuntime(network: NetworkInfo, storeKey?: Uint8Array, options?: RuntimeOptions): Promise<ChainRuntime>
+	/** A route over `network`'s endpoints alone, with no store and so no rollup to hold them to. */
+	createRoute(network: NetworkInfo, pins: SubmissionPins): Route
 }
 
 export class ProductionPxeFactory implements PxeFactory {
@@ -168,7 +184,12 @@ export class ProductionPxeFactory implements PxeFactory {
 		this.onProvePhase = options?.provingMode === "proverless" ? undefined : options?.onProvePhase
 	}
 
-	public async createChainRuntime(network: NetworkInfo, storeKey?: Uint8Array, retries?: RetryOptions): Promise<ChainRuntime> {
+	public createRoute(network: NetworkInfo, pins: SubmissionPins): Route {
+		const { chainId, l1ChainId, endpoints } = network
+		return this.nodeFactory.createRoutedNode({ chainId, l1ChainId, endpoints }, { pins }).route
+	}
+
+	public async createChainRuntime(network: NetworkInfo, storeKey?: Uint8Array, options?: RuntimeOptions): Promise<ChainRuntime> {
 		// Fail-closed: PXE state is encrypted at rest, so a chain runtime cannot boot without the
 		// profile's store key (provisioned by the SW after unlock; re-provisioned on demand when
 		// the offscreen restarts — the client recognizes this class and retries once). This is the
@@ -177,7 +198,6 @@ export class ProductionPxeFactory implements PxeFactory {
 		if (!storeKey) {
 			throw new PxeStoreKeyMissingError(`${PXE_STORE_KEY_MISSING}: no store key provisioned for profile ${network.profileId}`)
 		}
-		const node = this.nodeFactory.createNode(network.rpcUrl, retries)
 		const config = {
 			...getPXEConfig(),
 			dataDirectory: chainDataDir(network),
@@ -185,31 +205,41 @@ export class ProductionPxeFactory implements PxeFactory {
 		} as PXEConfig
 
 		// The injected per-(profile, chain) ENCRYPTED store (see opfs-store.ts for why the
-		// upstream default path must never ship). The rollup address scopes the wipe-on-reset
-		// stamp to exactly this chain's store. Chain 0 skips the identity read: nothing to compare.
-		if (network.chainId !== 0) assertNodeServesChain(network.chainId, await node.getNodeInfo())
-		const rollupAddress = (await node.getL1ContractAddresses()).rollupAddress?.toString()
-		const store = await openChainStore({
-			network,
-			rollupAddress,
-			storeKey,
-			log: createLogger("pxe:data", { actor: chainDataDir(network) }),
-		})
+		// upstream default path must never ship). It opens before any node read, so the route can
+		// refuse an endpoint on another rollup than the one the store was stamped with.
+		const log = createLogger("pxe:data", { actor: chainDataDir(network) })
+		const store = await openChainStore({ network, storeKey, log })
 		// Once the store is open it holds the pool dir's EXCLUSIVE SAH lock, so ANY throw before a
-		// ChainRuntime takes ownership (createPXE failure, the required-mode preflight) must close it
-		// — otherwise the leaked lock permanently wedges every later open of this dir AND blocks the
-		// purge's removeEntry. ChainRuntime.dispose() owns close() on the success path.
+		// ChainRuntime takes ownership (a node read, createPXE, the required-mode preflight) must
+		// close it — otherwise the leaked lock permanently wedges every later open of this dir AND
+		// blocks the purge's removeEntry. Once a runtime is built, its dispose() owns close().
+		let runtime: ChainRuntime | undefined
 		try {
-			return await this.buildRuntime(network, node, config, store)
+			const node = this.nodeFactory.createRoutedNode(
+				{
+					chainId: network.chainId,
+					l1ChainId: network.l1ChainId,
+					endpoints: network.endpoints,
+					rollupAddress: await readStoreStamp(store, log),
+				},
+				options,
+			)
+			// Chain 0 skips the identity read: nothing to compare. The rollup address scopes the
+			// stamp to exactly this chain's store.
+			if (network.chainId !== 0) assertNodeServesChain(network.chainId, await node.getNodeInfo())
+			await initStoreVersionStamp(store, (await node.getL1ContractAddresses()).rollupAddress?.toString(), log)
+			runtime = await this.buildRuntime(network, node, config, store)
+			await seedFloor(runtime)
+			return runtime
 		} catch (err) {
-			await store.close().catch(() => {})
+			await (runtime ? runtime.dispose() : store.close()).catch(() => {})
 			throw err
 		}
 	}
 
 	private async buildRuntime(
 		network: NetworkInfo,
-		node: AztecNode,
+		node: RoutedNode,
 		config: PXEConfig,
 		store: AztecSQLiteOPFSStore,
 	): Promise<ChainRuntime> {
@@ -231,7 +261,7 @@ export class ProductionPxeFactory implements PxeFactory {
 		// the bundled WASM path (same MV3 reason as above).
 		if (this.proverless) {
 			const pxe = await createPXE(node, config, { simulator, store })
-			return new ChainRuntime(network.chainId, node, pxe, network.rpcUrl, store)
+			return new ChainRuntime(network.chainId, node, pxe, endpointsKey(network.endpoints), store)
 		}
 
 		let runtime: ChainRuntime | undefined
@@ -267,9 +297,24 @@ export class ProductionPxeFactory implements PxeFactory {
 		if (this.required) await assertPrestoReady(prover)
 
 		const pxe = await createPXE(node, config, { proverOrOptions: prover, simulator, store })
-		runtime = new ChainRuntime(network.chainId, node, pxe, network.rpcUrl, store)
+		runtime = new ChainRuntime(network.chainId, node, pxe, endpointsKey(network.endpoints), store)
 		return runtime
 	}
+}
+
+/**
+ * Raises the route's floor to the block the store has synced, before any operation, so the route
+ * never serves the PXE from an endpoint behind it. A store that never synced keeps the genesis floor.
+ */
+async function seedFloor(runtime: ChainRuntime): Promise<void> {
+	let synced: number
+	try {
+		synced = (await runtime.pxe.getSyncedBlockHeader()).getBlockNumber()
+	} catch (err) {
+		if (err instanceof Error && err.message === PXE_NOT_SYNCED_DIAGNOSTIC) return
+		throw err
+	}
+	runtime.node.route.seedFloor(synced)
 }
 
 /** `secure-connection-unavailable` and `version-mismatch` precede `fallback` on the paths that
@@ -330,6 +375,7 @@ export class ChainRuntimeRegistry {
 	/** Scopes whose node calls no longer retry, counted per raise: a registry key, or a profile's
 	 *  key prefix. */
 	private readonly retriesStopped = new Map<string, number>()
+	private readonly pins = new Map<string, SubmissionPins>()
 
 	public constructor(private readonly factory: PxeFactory) {}
 
@@ -344,13 +390,33 @@ export class ChainRuntimeRegistry {
 		return this.runtimes.get(this.key(profileId, chainId))
 	}
 
-	/** URL-checked peek: the runtime for `network`'s coordinates, but only if it
-	 *  is already bound to `network.rpcUrl`. `undefined` on a miss OR an endpoint
+	/** Endpoint-checked peek: the runtime for `network`'s coordinates, but only if it
+	 *  was built for `network`'s endpoint list. `undefined` on a miss OR an endpoint
 	 *  mismatch — the caller escalates to `ensure` under the chain WRITE guard.
 	 *  Never mutates registry state, so it is safe under a chain READ. */
 	public peekMatching(network: NetworkInfo): ChainRuntime | undefined {
 		const existing = this.runtimes.get(this.key(network.profileId, network.chainId))
-		return existing && existing.rpcUrl === network.rpcUrl ? existing : undefined
+		return existing && existing.endpointsKey === endpointsKey(network.endpoints) ? existing : undefined
+	}
+
+	/** The route a send on `network` is picked on: the runtime's when it was built for `network`'s
+	 *  endpoint list, else a new one over that list holding the pair's pins. Builds no runtime, so a
+	 *  pick never waits on a rebuild and never rebinds one to a stale list. */
+	public sendRoute(network: NetworkInfo): Route {
+		const runtime = this.peekMatching(network)
+		return runtime ? runtime.node.route : this.factory.createRoute(network, this.pinsFor(network.profileId, network.chainId))
+	}
+
+	/** Which endpoint carried each transaction submitted on `(profileId, chainId)`, kept for the
+	 *  document's life and handed to every runtime built for that pair. */
+	public pinsFor(profileId: string, chainId: number): SubmissionPins {
+		const k = this.key(profileId, chainId)
+		let pins = this.pins.get(k)
+		if (!pins) {
+			pins = createSubmissionPins()
+			this.pins.set(k, pins)
+		}
+		return pins
 	}
 
 	/** Init-or-rebind for `(network.profileId, network.chainId)`.
@@ -372,13 +438,14 @@ export class ChainRuntimeRegistry {
 		const k = this.key(network.profileId, network.chainId)
 		const existing = this.runtimes.get(k)
 		if (existing) {
-			if (existing.rpcUrl === network.rpcUrl) return existing
+			if (existing.endpointsKey === endpointsKey(network.endpoints)) return existing
 			await existing.dispose()
 			this.runtimes.delete(k)
 		}
 		const prefix = chainRegistryKeyPrefix(network.profileId)
 		const retryWhile = () => !this.retriesStopped.has(k) && !this.retriesStopped.has(prefix)
-		const runtime = await this.factory.createChainRuntime(network, storeKey, { retryWhile })
+		const pins = this.pinsFor(network.profileId, network.chainId)
+		const runtime = await this.factory.createChainRuntime(network, storeKey, { retryWhile, pins })
 		this.runtimes.set(k, runtime)
 		return runtime
 	}
@@ -466,6 +533,7 @@ export class ChainRuntimeRegistry {
 	 */
 	public async disposeProfile(profileId: string): Promise<void> {
 		const prefix = chainRegistryKeyPrefix(profileId)
+		for (const k of Array.from(this.pins.keys())) if (k.startsWith(prefix)) this.pins.delete(k)
 		const victims: Array<[string, ChainRuntime]> = []
 		for (const [k, runtime] of this.runtimes) {
 			if (k.startsWith(prefix)) {

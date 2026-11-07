@@ -13,7 +13,7 @@ import { createScopeRegistrar } from "@/wallet/services/pxe/scope-registrar"
 import { ExecutionLane, type ExecutionLaneDeps } from "./execution-lane"
 
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
-const NET: NetworkInfo = { profileId: "p1", chainId: 7, rpcUrl: "http://n/1" }
+const NET: NetworkInfo = { profileId: "p1", chainId: 7, l1ChainId: 31337, endpoints: [{ id: "primary", rpcUrl: "http://n/1" }] }
 
 let wire: string[]
 let answers: Record<string, (() => unknown)[]>

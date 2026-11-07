@@ -140,6 +140,8 @@ function addr(hex: string) {
 
 /** Real receipt classes: `waitForTx` calls their status predicates, which a plain `{ status }` lacks. */
 const TX_HASH = TxHash.fromBigInt(0x1425n)
+const ANCHOR_HASH = `0x${"ab".repeat(32)}`
+const PICKED_URL = "https://rpc.picked"
 const pendingReceipt = (): TxReceipt => new PendingTxReceipt(TX_HASH, undefined as never)
 const minedReceipt = (status: TxStatus, result = TxExecutionResult.SUCCESS): TxReceipt =>
 	new MinedTxReceipt(TX_HASH, status as never, result, 0n, undefined as never, 1 as never, 1 as never, 0, 0 as never, undefined as never)
@@ -181,10 +183,13 @@ function makeHarness(
 		pendingPublicAuthwits: [],
 	}
 	const releaseSlot = vi.fn()
-	const proveAndSend = vi.fn(async (ctx: { recordTransaction: (h: string) => Promise<unknown>; onSent?: (h: string) => void }) => {
+	// The client of the endpoint the send was picked onto, which no build read goes through.
+	const sentNode = { getTxReceipt: vi.fn(async (): Promise<TxReceipt> => minedReceipt(TxStatus.CHECKPOINTED)) }
+	const proveAndSend = vi.fn(async (ctx: ProveAndSendContext) => {
+		const sentThrough = await ctx.pickSendEndpoint({ txHash: "0xhash", anchorHash: ANCHOR_HASH })
 		ctx.onSent?.("0xhash")
-		await ctx.recordTransaction("0xhash")
-		return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
+		await ctx.recordTransaction("0xhash", sentThrough.url)
+		return { txHash: { toString: () => "0xhash" }, offchainOutput: {}, sentThrough }
 	})
 	const authwit = overrides.authwit ?? {
 		discoverPrivateAuthwits: vi.fn(async () => ({ actions: [] as unknown[], discovered: [] as unknown[] })),
@@ -235,6 +240,7 @@ function makeHarness(
 		isFenceLive: vi.fn(() => true),
 		getNetwork: vi.fn(async () => network),
 		getNode: vi.fn(async () => node as never),
+		pickSendEndpoint: vi.fn(async () => ({ url: PICKED_URL, node: sentNode as never })),
 		getPXE: vi.fn(() => pxe as never),
 		getAccountContract: vi.fn(async () => account as never),
 		getPendingForAccount: vi.fn(() => [] as { hash: string }[]),
@@ -256,6 +262,7 @@ function makeHarness(
 		deps,
 		built,
 		node,
+		sentNode,
 		pxe,
 		account,
 		releaseSlot,
@@ -386,12 +393,11 @@ describe("DappSendExecutor.executeSendTransaction", () => {
 		expect(onJournalCreated).not.toHaveBeenCalled()
 	})
 
-	test("records the SUBMITTING network's primary endpoint URL (recording-site pin)", async () => {
-		// addTransaction's submittedEndpointUrl (arg 7) must come from the network the
-		// executor built+submitted against — NOT re-derived from active-profile state,
-		// which a mid-prove TTL auto-lock / profile switch would corrupt and route the
-		// pending-tx poll to the active profile's RPC (cross-profile leak).
-		const { executor, deps } = makeHarness()
+	test("records the endpoint picked on the SUBMITTING network (recording-site pin)", async () => {
+		// The pick is asked about the network the executor built against, never re-derived from
+		// active-profile state, which a mid-prove auto-lock or profile switch would change and so route
+		// the pending-tx poll to the active profile's RPC (cross-profile leak).
+		const { executor, deps, built } = makeHarness()
 		const op = {
 			kind: "send_transaction",
 			networkId: "net-1",
@@ -401,7 +407,8 @@ describe("DappSendExecutor.executeSendTransaction", () => {
 		} as never
 		await executor.executeSendTransaction(op, ORIGIN, undefined, FENCE)
 
-		expect(recordedTx(deps).submittedEndpointUrl).toBe("https://rpc.submit")
+		expect(deps.pickSendEndpoint).toHaveBeenCalledExactlyOnceWith(built.network, { txHash: "0xhash", anchorHash: ANCHOR_HASH })
+		expect(recordedTx(deps).submittedEndpointUrl).toBe(PICKED_URL)
 	})
 
 	test("failure: journal → failed with dapp_execute-normalized error, error rethrown", async () => {
@@ -679,7 +686,7 @@ describe("DappSendExecutor: the dApp's wait", () => {
 		const h = makeHarness()
 		const reads: Array<{ atMs: number; slotFree: boolean }> = []
 		const start = Date.now()
-		h.node.getTxReceipt.mockImplementation(async () => {
+		h.sentNode.getTxReceipt.mockImplementation(async () => {
 			reads.push({ atMs: Date.now() - start, slotFree: h.releaseSlot.mock.calls.length === 1 })
 			return receipts[Math.min(reads.length, receipts.length) - 1] as TxReceipt
 		})
@@ -701,9 +708,11 @@ describe("DappSendExecutor: the dApp's wait", () => {
 		["omitted, no account entrypoint", noFrom(asked(undefined))],
 	])("wait %s: the call reads past pending and proposed to the checkpointed receipt, the slot already free", async (_case, op) => {
 		const checkpointed = minedReceipt(TxStatus.CHECKPOINTED)
-		const { reads, outcome } = await waitedSend(op, [pendingReceipt(), minedReceipt(TxStatus.PROPOSED), checkpointed], 3_000)
+		const { h, reads, outcome } = await waitedSend(op, [pendingReceipt(), minedReceipt(TxStatus.PROPOSED), checkpointed], 3_000)
 		expect(outcome).toEqual({ value: expect.objectContaining({ receipt: checkpointed }) })
 		expect(reads).toEqual([1_000, 2_000, 3_000].map((atMs) => ({ atMs, slotFree: true })))
+		// Only the endpoint that carried the send is asked for its receipt.
+		expect(h.node.getTxReceipt).not.toHaveBeenCalled()
 	})
 
 	test.each([
@@ -730,7 +739,7 @@ describe("DappSendExecutor: the dApp's wait", () => {
 
 	test("never-happens: NO_WAIT reads no receipt and returns the hash", async () => {
 		const { h, outcome } = await waitedSend(standard(asked("NO_WAIT")), [], 600_000)
-		expect(h.node.getTxReceipt).not.toHaveBeenCalled()
+		expect(h.sentNode.getTxReceipt).not.toHaveBeenCalled()
 		expect(outcome).toEqual({ value: expect.objectContaining({ txHash: expect.anything() }) })
 		expect("receipt" in (outcome as { value: object }).value).toBe(false)
 	})
@@ -750,18 +759,19 @@ describe("DappSendExecutor: the submitting commit", () => {
 		["send_transaction", (e: DappSendExecutor) => e.executeSendTransaction(sendTransactionOp, ORIGIN, undefined, FENCE)],
 		["aztec_sendTx", (e: DappSendExecutor) => e.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)],
 		["default_entrypoint", (e: DappSendExecutor) => e.executeAztecSendTx(noFromOp(), ORIGIN, undefined, undefined, FENCE)],
-	])("%s commits submitting on its record with the submitting network's endpoint", async (_path, run) => {
+	])("%s commits submitting on its record with the endpoint picked for it", async (_path, run) => {
 		collectOffchainEffectsMock.mockReturnValue([])
 		const { executor, deps, proveAndSend } = makeHarness()
 		proveAndSend.mockImplementationOnce(async (ctx) => {
 			const bound = ctx as unknown as ProveAndSendContext
-			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl, expiry: EXPIRY })
-			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
+			const sentThrough = await bound.pickSendEndpoint({ txHash: "0xhash", anchorHash: ANCHOR_HASH })
+			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: sentThrough.url, expiry: EXPIRY })
+			return { txHash: { toString: () => "0xhash" }, offchainOutput: {}, sentThrough }
 		})
 		await run(executor)
 		expect(deps.lane.commitJournal).toHaveBeenCalledWith(
 			"j1",
-			{ stage: "submitting", txHash: "0xhash", submittedEndpointUrl: "https://rpc.submit", expiry: EXPIRY },
+			{ stage: "submitting", txHash: "0xhash", submittedEndpointUrl: PICKED_URL, expiry: EXPIRY },
 			undefined,
 		)
 	})
@@ -780,8 +790,9 @@ describe("DappSendExecutor: the submitting commit", () => {
 		})
 		proveAndSend.mockImplementationOnce(async (ctx) => {
 			const bound = ctx as unknown as ProveAndSendContext
-			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl, expiry: EXPIRY })
-			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
+			const sentThrough = await bound.pickSendEndpoint({ txHash: "0xhash", anchorHash: ANCHOR_HASH })
+			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: sentThrough.url, expiry: EXPIRY })
+			return { txHash: { toString: () => "0xhash" }, offchainOutput: {}, sentThrough }
 		})
 		await run(executor)
 		expect((deps.lane.commitJournal as ReturnType<typeof vi.fn>).mock.calls[0]?.[2]).toEqual({
@@ -2664,7 +2675,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			nonce: "42",
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
-			submittedEndpointUrl: "https://rpc.submit",
+			submittedEndpointUrl: PICKED_URL,
 			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
@@ -2684,7 +2695,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			nonce: "42",
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
-			submittedEndpointUrl: "https://rpc.submit",
+			submittedEndpointUrl: PICKED_URL,
 			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
@@ -2711,6 +2722,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		})
 		deps.previewSnapshots.stash("est-1", { interactionId: "i-1", index: 0, fingerprint: null, discoveredHashes: [] })
 		await executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE, APPROVAL("est-1"))
+		expect(deps.pickSendEndpoint).toHaveBeenCalledExactlyOnceWith(live, { txHash: "0xhash", anchorHash: ANCHOR_HASH })
 		expect(recordedTx(deps)).toStrictEqual({
 			origin: ORIGIN,
 			chainId: 9,
@@ -2719,7 +2731,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			nonce: "77",
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			hash: "0xhash",
-			submittedEndpointUrl: "https://rpc.live",
+			submittedEndpointUrl: PICKED_URL,
 			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
@@ -2740,7 +2752,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			nonce: Fr.ZERO.toString(),
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			hash: "0xhash",
-			submittedEndpointUrl: "https://rpc.submit",
+			submittedEndpointUrl: PICKED_URL,
 			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
@@ -2772,9 +2784,10 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 
 	test("the recorder resolves to nothing", async () => {
 		let recorded: unknown = "unset"
-		const proveAndSend = vi.fn(async (ctx: { recordTransaction: (h: string) => Promise<unknown> }) => {
-			recorded = await ctx.recordTransaction("0xhash")
-			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
+		const proveAndSend = vi.fn(async (ctx: ProveAndSendContext) => {
+			const sentThrough = await ctx.pickSendEndpoint({ txHash: "0xhash", anchorHash: ANCHOR_HASH })
+			recorded = await ctx.recordTransaction("0xhash", sentThrough.url)
+			return { txHash: { toString: () => "0xhash" }, offchainOutput: {}, sentThrough }
 		})
 		const h = makeHarness({ addTransaction: vi.fn(async () => "the-tx-row" as never) })
 		Object.assign(h.deps.coordinator, { proveAndSend })
@@ -2806,10 +2819,11 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		const h = makeHarness()
 		Object.assign(h.built, { txCalls: [{ contract: "0xc", method: "dapp_method", args: [] }, SPONSOR_CALL] })
 		let askedBeforeProve = false
-		const proveAndSend = vi.fn(async (ctx: { recordTransaction: (hash: string) => Promise<unknown> }) => {
+		const proveAndSend = vi.fn(async (ctx: ProveAndSendContext) => {
 			askedBeforeProve = vi.mocked(h.deps.protocolSponsorAddress).mock.calls.length > 0
-			await ctx.recordTransaction("0xhash")
-			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
+			const sentThrough = await ctx.pickSendEndpoint({ txHash: "0xhash", anchorHash: ANCHOR_HASH })
+			await ctx.recordTransaction("0xhash", sentThrough.url)
+			return { txHash: { toString: () => "0xhash" }, offchainOutput: {}, sentThrough }
 		})
 		Object.assign(h.deps.coordinator, { proveAndSend })
 		await send(h)
@@ -3064,9 +3078,10 @@ describe("DappSendExecutor: the journal title thunk and the offchain output", ()
 			publicInputs: { constants: { anchorBlockHeader: { globalVariables: { timestamp: 5 } } } },
 			getOffchainEffects: () => effects,
 		}
-		const proveAndSend = vi.fn(async (ctx: { wantOffchainOutput?: (p: unknown) => unknown }) => ({
+		const proveAndSend = vi.fn(async (ctx: ProveAndSendContext) => ({
 			txHash: { toString: () => "0xhash" },
-			offchainOutput: ctx.wantOffchainOutput?.(provedTx),
+			offchainOutput: ctx.wantOffchainOutput?.(provedTx as never),
+			sentThrough: await ctx.pickSendEndpoint({ txHash: "0xhash", anchorHash: ANCHOR_HASH }),
 		}))
 		const h = makeHarness()
 		Object.assign(h.deps.coordinator, { proveAndSend })
