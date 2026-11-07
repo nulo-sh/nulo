@@ -1,6 +1,7 @@
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
 import { RELAY_LABEL, RELAY_RPC_URLS } from "@/wallet/services/network/seeds"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { unlockAfterBackgroundDeath } from "./fixtures/auth"
 import { isFirefox, setViewport, stopBackground } from "./fixtures/browser"
 import { RELAY_NODE_HOSTS } from "./fixtures/egress-guard"
@@ -8,6 +9,7 @@ import { type ExtensionContext, test, openPopup, waitForHash, clickByTestId, rep
 import { navigateByHash, navigateToSettings, openNetworkDetail, rewriteActiveNetwork } from "./fixtures/helpers"
 import { pollUntil } from "./fixtures/poll"
 import { shotSend } from "./fixtures/send-page"
+import { callService } from "./fixtures/session"
 import { readSeedOffers } from "./helpers/network-arrival"
 import { readNetwork } from "./helpers/stale-network"
 
@@ -250,6 +252,36 @@ async function shotEndpoints(page: Page, name: string): Promise<void> {
 
 const VIEWPORT = isFirefox ? { width: 360, height: 600 } : { width: 360, height: 600, deviceScaleFactor: 2 }
 
+/** Removes the relay of the network of `kind` through its detail page, as a person does. */
+async function deleteRelay(page: Page, kind: "testnet" | "mainnet", name: string): Promise<void> {
+	await shownEndpointIds(page, name)
+	const view = await relayView(page, kind)
+	await page.$eval(`[data-endpoint-id="${view.ids[view.relayAt]}"] [data-testid="endpoint-delete-btn"]`, (button) =>
+		button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
+	)
+	await clickByTestId(page, "confirm-submit")
+	await pollUntil(
+		() => relayView(page, kind),
+		(next) => next.relayAt === -1,
+		{ label: `the ${name} relay deleted`, timeoutMs: 15_000, intervalMs: 200 },
+	)
+}
+
+/** The offer record as a build before the relay left it for `kind`: no relay offer named. */
+async function forgetRelayOffer(page: Page, profileId: string, kind: string): Promise<void> {
+	await page.evaluate(
+		async (key: string, forgotten: string) => {
+			const record = JSON.parse((await chrome.storage.local.get(key))[key] as string)
+			const relay = (record.relay ?? []).filter((offered: string) => offered !== forgotten)
+			// An empty list is left out, as the wallet writes the record.
+			record.relay = relay.length > 0 ? relay : undefined
+			await chrome.storage.local.set({ [key]: JSON.stringify(record) })
+		},
+		`nulo:core:network-seeded@${profileId}`,
+		kind,
+	)
+}
+
 async function restartAndUnlock(extension: ExtensionContext, page: Page): Promise<Page> {
 	await page.close()
 	await stopBackground(extension)
@@ -259,10 +291,11 @@ async function restartAndUnlock(extension: ExtensionContext, page: Page): Promis
 }
 
 // Nulo's relay in the real popup and worker: a new profile lists it after dRPC on Alpha and Testnet,
-// and a profile whose record predates it is given it, last, by the unlock of a restarted worker.
-// The record and the conversion's rules are proven by the network service's tests; what only this
-// run shows is the seed and the unlock path the shipped build takes, read back from its page. No
-// request reaches the relay: the launch's guard holds both hosts.
+// a profile whose record predates it is given it, last, by the unlock of a restarted worker, and a
+// relay the person removes after that stays removed across the next one. The conversion's rules are
+// proven by the network service's tests; what only this run shows is the seed and the unlock path
+// the shipped build takes, every writer of the real boot included. No request reaches the relay:
+// the launch's guard holds both hosts. Estimated 20 s on Chrome and 35 s on Firefox.
 test("Nulo's relay is each default network's second endpoint, and is given once to an earlier profile", async ({
 	registeredExtensionPerTest: extension,
 }) => {
@@ -281,22 +314,10 @@ test("Nulo's relay is each default network's second endpoint, and is given once 
 	}
 	await shotEndpoints(page, "p112-04-built-01")
 
-	const before = await relayView(page, "testnet")
-	const relayId = before.ids[1] as string
-	await page.$eval(`[data-endpoint-id="${relayId}"] [data-testid="endpoint-delete-btn"]`, (button) =>
-		button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
-	)
-	await clickByTestId(page, "confirm-submit")
-	await pollUntil(
-		() => relayView(page, "testnet"),
-		(view) => view.relayAt === -1,
-		{ label: "the Testnet relay deleted", timeoutMs: 15_000, intervalMs: 200 },
-	)
 	// A profile made before the relay holds no relay endpoint and a record that names no relay offer.
-	await page.evaluate(async (key: string) => {
-		const { relay: _relay, ...earlier } = JSON.parse((await chrome.storage.local.get(key))[key] as string)
-		await chrome.storage.local.set({ [key]: JSON.stringify(earlier) })
-	}, `nulo:core:network-seeded@${before.profileId}`)
+	const { profileId } = await relayView(page, "testnet")
+	await deleteRelay(page, "testnet", "Testnet")
+	await forgetRelayOffer(page, profileId, "testnet")
 
 	page = await restartAndUnlock(extension, page)
 	const converted = await pollUntil(
@@ -306,7 +327,7 @@ test("Nulo's relay is each default network's second endpoint, and is given once 
 	)
 	expect(converted.labels).toEqual(["dRPC", RELAY_LABEL])
 	expect(converted.relayAt).toBe(converted.ids.length - 1)
-	expect((await readSeedOffers(page, before.profileId))?.relay).toEqual(["mainnet", "testnet"])
+	expect((await readSeedOffers(page, profileId))?.relay).toEqual(["mainnet", "testnet"])
 	// The popup reads its networks once at unlock, which can precede the conversion's write and hears
 	// no later one, so the person meets the relay at their next open, as this one does.
 	await page.close()
@@ -316,5 +337,20 @@ test("Nulo's relay is each default network's second endpoint, and is given once 
 	expect(await shownEndpointIds(page, "Testnet")).toEqual(converted.ids)
 	await shotEndpoints(page, "p112-04-built-02")
 
+	// Removed again, it stays removed. Alpha's relay, removed with its offer forgotten, is the
+	// control: its return shows the pass ran, and the next locked read waits for the pass to end.
+	await deleteRelay(page, "testnet", "Testnet")
+	await deleteRelay(page, "mainnet", "Alpha")
+	await forgetRelayOffer(page, profileId, "mainnet")
+	page = await restartAndUnlock(extension, page)
+	await pollUntil(
+		() => relayView(page, "mainnet"),
+		(view) => view.relayAt !== -1,
+		{ label: "the Alpha relay given back with its offer", timeoutMs: 30_000, intervalMs: 250 },
+	)
+	await callService(page, NETWORK_SERVICE_NAME, "getOrInitNetworks")
+	expect((await relayView(page, "testnet")).relayAt).toBe(-1)
+	expect((await readSeedOffers(page, profileId))?.relay).toEqual(["mainnet", "testnet"])
+
 	expect(extension.pageErrors).toEqual([])
-}, 120_000)
+}, 150_000)
