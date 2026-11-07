@@ -541,7 +541,7 @@ function registerServices(
 	// _build-extension.yml negative grep is the enforcement that caught that.
 	services.add(new ExecutionService(logger, E2E_PROVERLESS ? new ChromeStorageProofGate() : undefined, undefined, logger.requests))
 	services.add(new FpcService(logger, browserApi))
-	services.add(new LogViewerService(logger))
+	services.add(new LogViewerService(logger, logger.requests))
 	services.add(new LoggerService(logger))
 	const networkService = new NetworkService(logger, browserApi, createWalletNodeFactory())
 	services.add(networkService)

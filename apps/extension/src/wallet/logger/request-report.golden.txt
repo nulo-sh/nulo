@@ -1,0 +1,25 @@
+Wallet version: 1.2.8
+Browser: Chrome 131
+Network: Local network
+Trace id: 1a2b3c4d
+dApp origin host: localhost:5174
+
+Timeline
+2026-11-07T12:00:00.000Z  1840 ms  request sendTx  failed 4100 SCOPE_VIOLATION
+2026-11-07T12:00:00.012Z  3 ms  journal created
+2026-11-07T12:00:00.015Z  1805 ms  journal pending
+2026-11-07T12:00:00.040Z  1750 ms  fee estimate  failed: This request is outside the permissions you gave this app.
+2026-11-07T12:00:01.820Z  -  journal failed  scope_refused
+
+Log lines (1)
+2026-11-07T12:00:01.830Z sw:wallet-sdk DEBUG Method sendTx failed for session 7f3e {"code":4100,"message":"This request is outside the permissions you gave this app.","data":{"walletErrorCode":"SCOPE_VIOLATION"}} {"walletTraceId":"1a2b3c4d"}
+
+Error envelope
+{
+  "code": 4100,
+  "message": "This request is outside the permissions you gave this app.",
+  "data": {
+    "walletErrorCode": "SCOPE_VIOLATION",
+    "walletTraceId": "1a2b3c4d"
+  }
+}

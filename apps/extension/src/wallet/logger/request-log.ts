@@ -121,6 +121,11 @@ export class RequestLog {
 
 	public constructor(private readonly capturing: () => boolean) {}
 
+	/** Whether captures are recorded, and so may be read: developer mode. */
+	public get enabled(): boolean {
+		return this.capturing()
+	}
+
 	public has(walletTraceId: string): boolean {
 		return this.captures.has(walletTraceId)
 	}
