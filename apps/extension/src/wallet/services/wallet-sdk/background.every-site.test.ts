@@ -243,6 +243,30 @@ describe("a new site with the every-site switch", () => {
 		expect(rows.size).toBe(0)
 	})
 
+	test("a twin of a connection refused after its write, whose row stayed, is refused too", async () => {
+		let read = 0
+		const release = deferred<void>()
+		const { discover, reads, lookups, rows } = boot({
+			everySite: async () => {
+				const n = ++read
+				if (n === 1) await release.promise
+				return n <= 2
+			},
+			beforeDelete: async () => Promise.reject(new Error("storage")),
+		})
+		discover("d1")
+		await reads.reached(1)
+		discover("twin")
+		await lookups.reached(2)
+		await flush()
+		release.resolve()
+		await discoveryRun("d1")
+		await discoveryRun("twin")
+		expect(approved()).toEqual([])
+		expect(rejected().sort()).toEqual(["d1", "twin"])
+		expect(rows.size).toBe(1)
+	})
+
 	test.each([
 		["a twin of a connection the switch let through spends a token: with none left it queues", true],
 		["a twin of an Allow spends none: with none left it is admitted at once (control)", false],

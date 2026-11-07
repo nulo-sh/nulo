@@ -270,6 +270,20 @@ describe("Settings › Connected apps — the every-site switch", () => {
 		expect(mocks.setEverySite).toHaveBeenCalledWith("p2", false)
 	})
 
+	test("a confirm answered after a profile switch writes nothing", async () => {
+		const w = await mountPage([])
+		const answer = Promise.withResolvers<boolean>()
+		mocks.askConfirm.mockReturnValueOnce(answer.promise)
+		await press(w, true)
+		mocks.getEverySite.mockResolvedValue({ profileId: "p2", on: false })
+		;(useAppStore() as unknown as { profile: { id: string } }).profile = { id: "p2" }
+		await flushPromises()
+		answer.resolve(true)
+		await flushPromises()
+		expect(mocks.setEverySite).not.toHaveBeenCalled()
+		expect(shown(w)).toEqual(["false", "false"])
+	})
+
 	test("only the latest read lands, and a failed read disables the Toggle", async () => {
 		const w = await mountPage([])
 		const [older, newer] = [Promise.withResolvers<unknown>(), Promise.withResolvers<unknown>()]

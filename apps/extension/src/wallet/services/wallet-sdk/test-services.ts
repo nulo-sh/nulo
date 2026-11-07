@@ -51,6 +51,8 @@ export function fakeSdkServices(
 		/** Whether the every-site switch lets a new connection from the origin skip the connect window;
 		 *  off by default. */
 		everySite?: (origin: string) => boolean | Promise<boolean>
+		/** Runs before a row's delete; a throw leaves the row. */
+		beforeDelete?: (id: string) => Promise<void>
 	} = {},
 ): {
 	services: never
@@ -113,6 +115,7 @@ export function fakeSdkServices(
 					},
 					setCapabilityGrants: opts.setCapabilityGrants ?? (async () => undefined),
 					deleteDappSession: async (id: string) => {
+						await opts.beforeDelete?.(id)
 						for (const [key, row] of rows) if (row.id === id) rows.delete(key)
 					},
 					setVerificationHash:

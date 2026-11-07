@@ -104,11 +104,14 @@ async function readEverySite() {
 	}
 }
 
-/** On asks first and writes only on Turn on; off writes at once. The Toggle shows what was written. */
+/** On asks first and writes only on Turn on; off writes at once. The Toggle shows what was written.
+ *  A confirm is for the profile shown when it opened: answered after a switch, it writes nothing. */
 async function onEverySiteToggle(next) {
+	const profileId = everySiteProfile.value
 	if (next && !(await askConfirm(EVERY_SITE_CONFIRM))) return
+	if (profileId === null || everySiteProfile.value !== profileId) return
 	try {
-		await dappSessionService.setEverySite(everySiteProfile.value, next)
+		await dappSessionService.setEverySite(profileId, next)
 		everySite.value = next
 	} catch {
 		openToast({ kind: "error", label: SETTING_UPDATE_FAILED })

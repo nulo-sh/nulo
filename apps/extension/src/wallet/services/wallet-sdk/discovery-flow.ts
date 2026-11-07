@@ -330,6 +330,12 @@ async function approveAfterPopup(discovery: PendingDiscovery, chainId: string, u
 		)
 		return
 	}
+	// A twin of a connection the switch let through has no Allow of its own, so it reads the switch
+	// too: a row that connection was refused for and could not roll back then serves nothing.
+	if (unpaced && !(await deps.dappSessionService.allowsNewSite(settledSession.profileId, discovery.origin))) {
+		refuseSwitchedOff(discovery, deps)
+		return
+	}
 	// A duplicate of a fresh connection verifies like one: it needs a window slot, and it spends a
 	// reconnect token only when no person's Allow paced its twin.
 	const admitted = await admitVerifyWindow(discovery, deps, unpaced)
