@@ -44,7 +44,6 @@ import {
 	sanitizeJournalSubtitle,
 } from "@/utils/journal-state"
 import { callTitle, transferDirection } from "@/utils/tx-enrichment"
-import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { buildCancelHandler, buildFocusHandler, isMatchingTask } from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
 
@@ -211,7 +210,7 @@ const executingAmountSymbol = computed(() => {
 const executingDirection = computed(() => {
 	if (!isUiTransfer.value) return null
 	const { transferType, senderAddress, recipientAddress } = executingTask.value.content
-	return transferDirection(transferType, sameFieldAddress(senderAddress, recipientAddress))
+	return transferDirection(transferType, senderAddress, recipientAddress)
 })
 
 /** Durable journal records. Survives SW restart + popup close/reopen so if

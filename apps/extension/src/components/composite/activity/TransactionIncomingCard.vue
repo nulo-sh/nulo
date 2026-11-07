@@ -6,8 +6,7 @@
  * Wraps `TransactionCardLayout` so field positions stay byte-identical with the outgoing
  * `TransactionCard`, the in-flight `TransactionAwaitingCard` and the `TransactionTerminalCard`.
  * The badge is a green `square-check`, the icon box draws the receipt's sides and its inbound way,
- * and the amount carries a "+" so the feed scans without reading direction. The title is the token,
- * so the amount carries no symbol of its own.
+ * and the amount carries a "+" so the feed scans without reading direction.
  */
 
 import { STATUS_ICON_FILL } from "./status-icon-fill"
@@ -19,7 +18,7 @@ import { isValidDecimals } from "@/utils/token-amount"
 import { dashIfBlank } from "@/utils/string"
 
 const props = defineProps({
-	/** Token symbol: the title, dashed when blank, and the amount's unit, as given. */
+	/** Token symbol: the title, dashed when blank. */
 	tokenSymbol: { type: String, default: "Token" },
 	/** Raw u128 amount (stringified decimal) from the note's `value` field. */
 	amountRaw: { type: String, required: true },

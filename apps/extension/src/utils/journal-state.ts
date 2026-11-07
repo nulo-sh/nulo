@@ -7,7 +7,6 @@
 
 // The glyph module, not the barrel: the e2e typecheck reaches this file and resolves no `.vue`.
 import type { GlyphName } from "@nulo/design/core/glyphs.ts"
-import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { formatListAmount } from "@/utils/amount.js"
 import { stageSubtitle } from "@/utils/card-subtitle"
@@ -514,13 +513,11 @@ export function journalCardOriginLabel(op: OperationRecord): string | null {
 	return sanitizeJournalSubtitle(op.subtitle) ?? DAPP_LABEL
 }
 
-/**
- * A send's direction from its record: the request's own account and recipient, which its settled
- * record copies, so the way badge holds across settlement. A missing or malformed pair is never a move.
- */
+/** A send's direction from its record: the request's own account and recipient, which its settled
+ *  record copies, so the way badge holds across settlement. */
 export function journalCardDirection(op: OperationRecord): RowDirection | null {
 	if (op.kind !== "transfer") return null
-	return transferDirection(op.transferType, sameFieldAddress(op.accountAddress ?? "", op.recipientAddress ?? ""))
+	return transferDirection(op.transferType, op.accountAddress, op.recipientAddress)
 }
 
 /** A transfer is titled by its token; a dApp op by its call. */

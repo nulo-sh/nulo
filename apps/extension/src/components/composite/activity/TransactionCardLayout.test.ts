@@ -211,12 +211,8 @@ describe("composite/TransactionCardLayout — the symbol under an amount", () =>
 		expect(column(mountLayout({ ...SEND, titleNamesToken: true }))).toEqual(["1,250", "≈ $1,250.00"])
 	})
 
-	test("a mint, titled by its kind, keeps its symbol under its amount", () => {
-		const mint = mountLayout({ ...SEND, title: "Mint (public)", amount: "50", amountFiat: null })
-		expect(column(mint)).toEqual(["50", "cUSDC"])
-	})
-
-	test("a row that does not say its title names the token keeps the symbol, whatever the title reads", () => {
+	test("without the flag the symbol stays, whatever the title reads: a mint titled by its kind, or the symbol itself", () => {
+		expect(column(mountLayout({ ...SEND, title: "Mint (public)", amount: "50", amountFiat: null }))).toEqual(["50", "cUSDC"])
 		expect(column(mountLayout(SEND))).toEqual(["1,250", "cUSDC", "≈ $1,250.00"])
 	})
 })

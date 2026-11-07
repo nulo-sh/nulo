@@ -7,7 +7,6 @@
  */
 /** Vendor */
 import type { GlyphName } from "@nulo/design"
-import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { PropType } from "vue"
 
 /** Components */
@@ -111,7 +110,7 @@ const isTransfer = computed(() => type.value === "transfer" && Boolean(transfer.
 /** A transfer that lands on its sender's own account is a move between its sides. */
 const direction = computed(() => {
 	const t = transfer.value
-	return isTransfer.value && t ? transferDirection(t.type, sameFieldAddress(t.from, t.to)) : null
+	return isTransfer.value && t ? transferDirection(t.type, t.from, t.to) : null
 })
 
 const originLabel = computed(() => getOriginLabel(props.tx.origin))

@@ -57,7 +57,7 @@ describe("composite/TransactionIncomingCard", () => {
 		expect(layout.props()).toMatchObject({ title: "cUSD", amountSymbol: "cUSD", titleNamesToken: true })
 	})
 
-	test("a blank symbol titles the row with the empty-value dash; the amount keeps the symbol as given", () => {
+	test("a blank symbol titles the row with the empty-value dash; the layout is handed the symbol as given", () => {
 		const read = (tokenSymbol: string) => {
 			const layout = mountCard({ tokenSymbol }).findComponent(STUBS.TransactionCardLayout)
 			return [layout.props("title"), layout.props("amountSymbol")]

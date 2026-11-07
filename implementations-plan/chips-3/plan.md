@@ -191,6 +191,10 @@ Arc 1's fix loop (Codex gpt-6.1-sol, high, read-only; one Opus review beside rou
 - **Round 2.** Codex, 1 low (a comment called both badges 10 px), fixed. "The six functional fixes hold."
 - **Round 3.** Codex: "findings: 0 … clean".
 
+Arc 2's fix loop (the same reviewer and settings, over `git diff origin/dev...HEAD` on `chips-3-a2`; one Opus review beside round 1):
+
+- **Round 1.** Codex, 3 low, all fixed: the orphan task card's test used two malformed addresses, so it could not see a lost move (now valid addresses, `out`, `self` in another hex case and a malformed control); a producer comment still named `formatTransferType`; a doc sentence restated the template. Opus, 1 medium and 3 low, all fixed: History's pending cards had no test of the two new bindings; the same orphan gap; stale comments in the journal spec, the receipt card's prop and a test name; a layout test that duplicated another, merged with the mint control. Opus also noted the move rule written three times; `transferDirection` now takes the two addresses, so the rule lives once. "No production behavior defect found" (Codex).
+
 ## Delivery
 
 - Arc 1: branch `worktree-chips-3`. Open one PR against `dev` with `gh pr create`, ready, no label. Title: `feat(activity): settled and received rows draw their direction in the icon box`.

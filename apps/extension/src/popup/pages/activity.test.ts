@@ -776,6 +776,8 @@ describe("pages/activity — sends in progress", () => {
 			title: "USDC",
 			amount: "10",
 			amountSymbol: "USDC",
+			titleNamesToken: true,
+			direction: { from: "private", to: "private", way: "out", label: "Private → Private" },
 			cancellable: false,
 			jobId: null,
 			hasApprovalWindow: false,

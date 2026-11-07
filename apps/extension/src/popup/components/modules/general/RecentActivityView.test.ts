@@ -693,16 +693,22 @@ describe("RecentActivityView — one feed block for token and account views", ()
 		expect(await titleFor(43)).toEqual(["—"])
 	})
 
-	test("the running Send's card draws its task's direction, titled by its token; a task with no known type draws none", async () => {
-		const cardFor = async (transferType: unknown) => {
-			const content = { kind: H.ContentKind.Transfer, senderAddress: ACCT_A, recipientAddress: "0xother", tokenId: 42, transferType }
-			H.getTasks.mockResolvedValue([{ ...uiTransferTask(ACCT_A), content }])
+	test("the running Send's card draws its task's way from its two addresses, titled by its token; no known type draws none", async () => {
+		const sender = `0x${"2b".repeat(32)}`
+		H.store.current.account = { address: sender }
+		const cardFor = async (recipientAddress: string, transferType: unknown) => {
+			const content = { kind: H.ContentKind.Transfer, senderAddress: sender, recipientAddress, tokenId: 42, transferType }
+			H.getTasks.mockResolvedValue([{ ...uiTransferTask(sender), content }])
 			const w = mountFeed()
 			await flushPromises()
 			return awaitingCards(w).map((c) => [c.props("direction"), c.props("titleNamesToken")])
 		}
-		expect(await cardFor(1)).toEqual([[{ from: "private", to: "public", way: "out", label: "Private → Public" }, true]])
-		expect(await cardFor(undefined)).toEqual([[null, true]])
+		const send = { from: "private", to: "public", way: "out", label: "Private → Public" }
+		expect(await cardFor(`0x${"1e".repeat(32)}`, 1)).toEqual([[send, true]])
+		expect(await cardFor(sender.replace(/b/g, "B"), 1)).toEqual([[{ ...send, way: "self" }, true]])
+		expect(await cardFor("0xother", 1)).toEqual([[send, true]])
+		expect(await cardFor(sender, undefined)).toEqual([[null, true]])
+		expect(await cardFor(sender, "constructor")).toEqual([[null, true]])
 	})
 
 	test("a proving op's backend subtitle outranks the executing task's label and stamps the card", async () => {
