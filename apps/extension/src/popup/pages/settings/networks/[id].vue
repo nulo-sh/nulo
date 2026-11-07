@@ -14,7 +14,7 @@ import { switchAndAnnounce } from "./switch-toast"
 import { sentenceName } from "@/utils/string"
 import * as staleCopy from "@/components/stale-network/copy"
 import { AccountType, DEFAULT_IMPORTED_ACCOUNT_NAME } from "@/wallet/services/account/client"
-import { endpointsInOrder, routeEndpoints } from "@/wallet/services/network/client"
+import { endpointsInOrder } from "@/wallet/services/network/client"
 import { endpointStatus, movedFirstWarning } from "@/utils/endpoint-status"
 
 /** Components */
@@ -70,8 +70,9 @@ const shownEndpoints = computed(() => {
 			// Another set of endpoints than the move's: the row's own order.
 		}
 	}
-	const byId = new Map(n.endpoints.map((e) => [e.id, e]))
-	return routeEndpoints(n).map((e) => byId.get(e.id))
+	// `routeEndpoints`' order, kept for a row whose primary is missing, which it refuses.
+	const primary = n.endpoints.find((e) => e.id === n.primaryEndpointId)
+	return primary ? [primary, ...n.endpoints.filter((e) => e !== primary)] : n.endpoints
 })
 /** `{ id, text }`: the row a move put first while it was not answering, for its warning line. */
 const movedFirst = ref(null)

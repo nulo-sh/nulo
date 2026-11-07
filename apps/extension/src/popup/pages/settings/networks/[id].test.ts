@@ -569,6 +569,16 @@ describe("Settings › Network detail — the endpoint order", () => {
 		expect(list(wrapper).props("warning")).toBeNull()
 	})
 
+	test("the primary first, then the rest as stored; a row whose primary is missing still lists every endpoint", async () => {
+		const wrapper = mountDetail()
+		useAppStore().networks = [ALPHA, { ...THREE, primaryEndpointId: "m3" }] as never
+		await flushPromises()
+		expect(shown(wrapper)).toEqual(["m3", "m1", "m2"])
+		useAppStore().networks = [ALPHA, { ...THREE, primaryEndpointId: "gone" }] as never
+		await flushPromises()
+		expect(shown(wrapper)).toEqual(["m1", "m2", "m3"])
+	})
+
 	test("the route read reaches the edit sheet through the cache store, and leaves with the page", async () => {
 		route.getRouteSnapshot.mockResolvedValue(READ)
 		const wrapper = await mountThree()
