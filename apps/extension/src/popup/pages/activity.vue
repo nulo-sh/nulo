@@ -27,10 +27,11 @@ import { buildActivityRows, filterPendingDoubleRender, rowOnToken } from "@/util
 import {
 	journalCardAmount,
 	journalCardAmountSymbol,
+	journalCardDirection,
 	journalCardIcon,
 	journalCardOriginLabel,
 	journalCardTitle,
-	journalCardTransferTypeLabel,
+	journalCardTitleNamesToken,
 	journalProgressWord,
 } from "@/utils/journal-state"
 import { dashIfBlank } from "@/utils/string"
@@ -248,7 +249,8 @@ onBeforeUnmount(() => {
 					:originLabel="journalCardOriginLabel(op)"
 					:amount="journalCardAmount(op, tokenById)"
 					:amountSymbol="journalCardAmountSymbol(op, tokenById)"
-					:transferTypeLabel="journalCardTransferTypeLabel(op)"
+					:titleNamesToken="journalCardTitleNamesToken(op)"
+					:direction="journalCardDirection(op)"
 					:stage="op.progress?.stage ?? null"
 					:backend="op.progress?.backend ?? null"
 					:hasApprovalWindow="false"

@@ -1,5 +1,6 @@
 import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { OriginType, TransferType } from "@/wallet/services/transaction/spec"
 import type { TxOrigin } from "@/wallet/services/transaction/spec"
 import { FEE_METHODS, pickPrimaryIndex, pickPrimaryMethod } from "./primary-method"
@@ -161,10 +162,13 @@ export function formatTransferType(type: number | string): string {
 	return Object.hasOwn(TRANSFER_TYPES, type) ? TRANSFER_TYPES[type].direction : String(type)
 }
 
-/** A sent transfer's direction by its recorded type, `self` when it lands on its own account; null
- *  for a type the wallet does not send, so a stored value never becomes the row's words. */
-export function transferDirection(type: unknown, toSelf: boolean): RowDirection | null {
+/**
+ * A sent transfer's direction by its recorded type, `self` when it lands on its sender's own account;
+ * a missing or malformed address is never a move. Null for a type the wallet does not send, so a
+ * stored value never becomes the row's words.
+ */
+export function transferDirection(type: unknown, sender: string | undefined, recipient: string | undefined): RowDirection | null {
 	if ((typeof type !== "number" && typeof type !== "string") || !Object.hasOwn(TRANSFER_TYPES, type)) return null
 	const { direction, from, to } = TRANSFER_TYPES[type]
-	return { from, to, way: toSelf ? "self" : "out", label: direction }
+	return { from, to, way: sameFieldAddress(sender ?? "", recipient ?? "") ? "self" : "out", label: direction }
 }

@@ -194,6 +194,29 @@ describe("composite/TransactionCardLayout", () => {
 	})
 })
 
+describe("composite/TransactionCardLayout — the symbol under an amount", () => {
+	/** A settled send of cUSDC as the wire carries it, titled by its token's symbol. */
+	const SEND = {
+		testId: "tx-card",
+		txHash: `0x${"5e".repeat(32)}`,
+		title: "cUSDC",
+		amount: "1,250",
+		amountSymbol: "cUSDC",
+		amountFiat: "≈ $1,250.00",
+	}
+	const column = (w: ReturnType<typeof mountLayout>) =>
+		[...w.get("[data-testid='activity-amount-col']").element.children].map((el) => el.textContent?.trim())
+
+	test("a row whose title names the amount's token draws its amount and fiat, with no symbol between them", () => {
+		expect(column(mountLayout({ ...SEND, titleNamesToken: true }))).toEqual(["1,250", "≈ $1,250.00"])
+	})
+
+	test("without the flag the symbol stays, whatever the title reads: a mint titled by its kind, or the symbol itself", () => {
+		expect(column(mountLayout({ ...SEND, title: "Mint (public)", amount: "50", amountFiat: null }))).toEqual(["50", "cUSDC"])
+		expect(column(mountLayout(SEND))).toEqual(["1,250", "cUSDC", "≈ $1,250.00"])
+	})
+})
+
 describe("composite/TransactionCardLayout — a row's direction", () => {
 	const SEND = { from: "public", to: "private", way: "out", label: "Public → Private" } as const
 	const glyphs = (w: ReturnType<typeof mountLayout>, testid: string) =>
