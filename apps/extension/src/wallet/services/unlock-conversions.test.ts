@@ -3,9 +3,29 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { isDeepStrictEqual } from "node:util"
 import { describe, expect, test } from "vitest"
-import { seedForKind } from "./network/seeds"
-import type { Network } from "./network/spec"
-import { type ConversionRecord, runUnlockConversions, UNLOCK_CONVERSIONS, type UnlockConversion } from "./unlock-conversions"
+import { RELAY_LABEL, RELAY_RPC_URLS, seedForKind } from "./network/seeds"
+import type { ChainKind, Network } from "./network/spec"
+import {
+	type ConversionRecord,
+	type RelayOffers,
+	runUnlockConversions,
+	UNLOCK_CONVERSIONS,
+	type UnlockConversion,
+} from "./unlock-conversions"
+
+/** Offers held in memory, as the network service's record holds them; `takes` lists each take. */
+function offers(taken: readonly ChainKind[] = [], readable = true): RelayOffers & { takes: ChainKind[] } {
+	const held = new Set(taken)
+	const takes: ChainKind[] = []
+	return {
+		takes,
+		pending: (kind) => readable && !held.has(kind),
+		take: async (kind) => {
+			takes.push(kind)
+			held.add(kind)
+		},
+	}
+}
 
 const network = (over: Partial<Network> & { id: string }): Network => ({
 	profileId: "p1",
@@ -28,8 +48,18 @@ const recordedTestnet = Object.entries(recorded.entries)
 	.find((row) => row.kind === "testnet") as Network
 const seedUrl = (kind: "testnet" | "mainnet") => seedForKind(kind)?.rpcUrl ?? ""
 const alpha = seedForKind("mainnet")?.name ?? ""
+const relay = (id: string, kind: "testnet" | "mainnet") => ({ id: `${id}-relay`, rpcUrl: RELAY_RPC_URLS[kind], label: RELAY_LABEL })
+const seeded = (id: string, kind: "testnet" | "mainnet", over: Partial<Network> = {}) =>
+	network({
+		id,
+		kind,
+		name: kind,
+		primaryEndpointId: "s1",
+		endpoints: [{ id: "s1", rpcUrl: seedUrl(kind), label: "dRPC" }],
+		...over,
+	})
 
-type Case = { label: string; row: Network; rows?: Network[]; expected: Network | undefined }
+type Case = { label: string; row: Network; rows?: Network[]; expected: Network | undefined; taken?: ChainKind[] }
 
 /** The contract cases per entry; each transform's edge cases stay in its own test file. */
 const TABLES: Record<string, Case[]> = {
@@ -54,6 +84,44 @@ const TABLES: Record<string, Case[]> = {
 		},
 		{ label: "a name the person chose", row: network({ id: "m1", kind: "mainnet", name: "My Alpha" }), expected: undefined },
 	],
+	"relay-endpoint": [
+		{
+			label: "a seeded Testnet primary takes the relay after the row's other endpoints",
+			row: seeded("t1", "testnet", {
+				endpoints: [
+					{ id: "s1", rpcUrl: seedUrl("testnet"), label: "dRPC" },
+					{ id: "u1", rpcUrl: "https://node.example", label: "Mine" },
+				],
+			}),
+			expected: seeded("t1", "testnet", {
+				endpoints: [
+					{ id: "s1", rpcUrl: seedUrl("testnet"), label: "dRPC" },
+					{ id: "u1", rpcUrl: "https://node.example", label: "Mine" },
+					relay("t1", "testnet"),
+				],
+			}),
+		},
+		{
+			label: "a seeded Alpha primary takes its own relay",
+			row: seeded("m1", "mainnet"),
+			expected: seeded("m1", "mainnet", { endpoints: [...seeded("m1", "mainnet").endpoints, relay("m1", "mainnet")] }),
+		},
+		{
+			label: "a primary the person replaced with their own node",
+			row: seeded("t1", "testnet", {
+				primaryEndpointId: "u1",
+				endpoints: [...seeded("t1", "testnet").endpoints, { id: "u1", rpcUrl: "https://node.example" }],
+			}),
+			expected: undefined,
+		},
+		{ label: "an offer already taken, the relay since removed", row: seeded("t1", "testnet"), expected: undefined, taken: ["testnet"] },
+		{
+			label: "a row that already holds the relay",
+			row: seeded("t1", "testnet", { endpoints: [...seeded("t1", "testnet").endpoints, { ...relay("x", "testnet"), id: "r9" }] }),
+			expected: undefined,
+		},
+		{ label: "a custom network", row: network({ id: "c1" }), expected: undefined },
+	],
 }
 
 const conversion = (name: string) => UNLOCK_CONVERSIONS.find((entry) => entry.name === name) as UnlockConversion<"networks">
@@ -65,9 +133,10 @@ describe("UNLOCK_CONVERSIONS", () => {
 
 	describe.each(Object.entries(TABLES))("%s", (name, cases) => {
 		// Booleans, so a failure prints no recorded endpoint URL.
-		test.each(cases)("$label", async ({ row, rows = [row], expected }) => {
+		test.each(cases)("$label", async ({ row, rows = [row], expected, taken }) => {
 			const before = structuredClone(row)
-			const next = await conversion(name).convert(row, rows)
+			const context = { relayOffers: offers(taken) }
+			const next = await conversion(name).convert(row, rows, context)
 			expect(isDeepStrictEqual(next, expected)).toBe(true)
 			expect(isDeepStrictEqual(row, before)).toBe(true)
 			if (next === undefined) return
@@ -75,6 +144,7 @@ describe("UNLOCK_CONVERSIONS", () => {
 			const again = await conversion(name).convert(
 				next,
 				rows.map((r) => (r.id === row.id ? next : r)),
+				context,
 			)
 			expect(again === undefined).toBe(true)
 		})
@@ -82,15 +152,23 @@ describe("UNLOCK_CONVERSIONS", () => {
 })
 
 test("the list run again over the rows it committed commits nothing", async () => {
+	const held = offers()
 	const rows = [recordedTestnet, network({ id: "m1", kind: "mainnet", name: "Alpha V6" }), network({ id: "c1" })]
 	const pass = async (input: Network[]) => {
 		const after = new Map<string, Network>()
-		await runUnlockConversions("networks", input, { commit: async (_, next) => void after.set(next.id, next), log: () => {} })
+		await runUnlockConversions("networks", input, {
+			context: { relayOffers: held },
+			commit: async (_, next) => void after.set(next.id, next),
+			log: () => {},
+		})
 		return after
 	}
 	const first = await pass(rows)
-	// A count, so a failure prints no recorded endpoint URL.
+	// A count, so a failure prints no recorded endpoint URL. v0.31.0's Testnet, moved onto its seed's
+	// endpoint, takes the relay in the same pass.
 	expect(first.size).toBe(2)
+	expect(first.get(recordedTestnet.id)?.endpoints.at(-1)?.rpcUrl === RELAY_RPC_URLS.testnet).toBe(true)
+	expect(held.takes).toEqual(["testnet", "mainnet"])
 	expect((await pass(rows.map((row) => first.get(row.id) ?? row))).size).toBe(0)
 })
 
@@ -107,6 +185,7 @@ describe("runUnlockConversions", () => {
 		const committed: Array<[string, string]> = []
 		const logged: Logged[] = []
 		await runUnlockConversions("networks", rows, {
+			context: { relayOffers: offers() },
 			conversions,
 			skip,
 			commit: async (before, after) => void committed.push([before.name, after.name]),
@@ -174,6 +253,7 @@ describe("runUnlockConversions", () => {
 		const logged: Logged[] = []
 		const failure = new Error("write failed")
 		const done = runUnlockConversions("networks", [network({ id: "a" }), network({ id: "b" }), network({ id: "c" })], {
+			context: { relayOffers: offers() },
 			conversions: [tag],
 			commit: async (row) => {
 				calls.push(`commit ${row.id}`)

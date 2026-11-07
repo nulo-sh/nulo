@@ -37,7 +37,8 @@ const REVIEWED: Record<string, readonly string[]> = {
 	],
 	"wallet/services/fpc/service.ts": ["this.lock.withLock", "this.sealLegacyRows", "this.storage.sealLegacy"],
 	"wallet/services/incoming-transfer/service.ts": ["this.repo.sealLegacy", "this.sealLegacyRows", "this.withServiceLock"],
-	// `convertRows` runs the list; its `this.storage.set` is the runner's commit.
+	// `convertRows` runs the list; its `this.storage.set` is the runner's commit, and
+	// `this.relayOffersLocked` the record the relay entry reads and takes its offer from.
 	"wallet/services/network/service.ts": [
 		"(expression).filter",
 		"network.endpoints.forEach",
@@ -46,6 +47,7 @@ const REVIEWED: Record<string, readonly string[]> = {
 		"this.convertRows",
 		"this.emit",
 		"this.lock.withLock",
+		"this.relayOffersLocked",
 		"this.routes.delete",
 		"this.sealLegacyRows",
 		"this.staleNetworks.getJournal",
@@ -194,7 +196,7 @@ const files = sourceFiles({ roots: [SRC], exts: ["ts"], skip: [TEST_FILE] }).map
 	text: readFileSync(join(REPO_ROOT, file), "utf8"),
 }))
 
-const TRANSFORMS = new Set(["retireEndpoints", "retireDefaultName"])
+const TRANSFORMS = new Set(["retireEndpoints", "retireDefaultName", "appendRelay"])
 
 describe("unlock-time conversions live in UNLOCK_CONVERSIONS", () => {
 	test("every unlock handler calls only what was reviewed", () => {

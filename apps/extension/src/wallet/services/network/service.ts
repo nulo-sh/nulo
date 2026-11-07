@@ -1,6 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { runSealing, type SealWarn, sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
-import { type AnyUnlockConversion, runUnlockConversions, UNLOCK_CONVERSIONS } from "@/wallet/services/unlock-conversions"
+import { type AnyUnlockConversion, type RelayOffers, runUnlockConversions, UNLOCK_CONVERSIONS } from "@/wallet/services/unlock-conversions"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
@@ -32,8 +32,28 @@ import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
 import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { ERR_NOT_RESETTABLE, ERR_RESET_PENDING, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
 import type { RawRowState } from "@/wallet/utils/raw-row"
-import { DEFAULT_SEEDS, type DefaultSeed, isSeedChain, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND, seedForKind } from "./seeds"
-import { readSeedOffers, type SeedOffers, sameSeedOffers, seedOffersKey, seedsToOffer, writeSeedOffers } from "./seed-offers"
+import {
+	DEFAULT_SEEDS,
+	type DefaultSeed,
+	isSeedChain,
+	isSeedEndpointUrl,
+	LOCAL_NETWORK_RPC_URL,
+	normalizeRpcUrl,
+	PRIMARY_SEED,
+	relayEndpointOf,
+	SEED_L1_BY_KIND,
+	sameEndpointUrl,
+	seedForKind,
+} from "./seeds"
+import {
+	KINDS_SEEDED_BEFORE_RECORD,
+	readSeedOffers,
+	type SeedOffers,
+	sameSeedOffers,
+	seedOffersKey,
+	seedsToOffer,
+	writeSeedOffers,
+} from "./seed-offers"
 import {
 	type ChainKind,
 	ERR_ACTIVE_NETWORK,
@@ -65,7 +85,7 @@ import {
 } from "./spec"
 
 export * from "./spec"
-export { LOCAL_NETWORK_RPC_URL } from "./seeds"
+export { isSeedEndpointUrl, LOCAL_NETWORK_RPC_URL } from "./seeds"
 
 /**
  * Per-profile active-network pointer. The service owns this state (vs. v0
@@ -73,25 +93,6 @@ export { LOCAL_NETWORK_RPC_URL } from "./seeds"
  * `getActiveNetwork()`. Stored as a single value per profile.
  */
 const activeKey = (profileId: string) => `${ACTIVE_NETWORK_STORAGE_ROOT}@${profileId}`
-
-/**
- * Strict RPC-URL equality that tolerates trailing-slash and casing differences
- * on the seed-vs-user-input comparison only. Used by the chainId-zero check
- * for the "Local Network" preset; the shared `normalizeRpcUrl` deliberately
- * preserves what the user typed (path/query/fragment verbatim), so we need a
- * more aggressive comparison here.
- */
-function sameLocalNetworkUrl(a: string, b: string): boolean {
-	try {
-		const ua = new URL(a)
-		const ub = new URL(b)
-		const pa = ua.pathname.replace(/\/+$/, "")
-		const pb = ub.pathname.replace(/\/+$/, "")
-		return ua.protocol === ub.protocol && ua.host === ub.host && pa === pb && ua.search === ub.search && ua.hash === ub.hash
-	} catch {
-		return a === b
-	}
-}
 
 /** Whether `rpcUrl`'s host is this machine (`isLoopbackHost`); a URL that does not parse is not. */
 function isLoopbackRpcUrl(rpcUrl: string): boolean {
@@ -105,7 +106,7 @@ function isLoopbackRpcUrl(rpcUrl: string): boolean {
 /** A node whose composite chain id the wallet reads as 0, the local development chain: a loopback
  *  node the caller says is local, or one at the Local Network seed's URL. */
 function isLocalNetworkTarget(rpcUrl: string, kindHint: ChainKind | undefined): boolean {
-	return isLoopbackRpcUrl(rpcUrl) && (kindHint === "local" || sameLocalNetworkUrl(rpcUrl, LOCAL_NETWORK_RPC_URL))
+	return isLoopbackRpcUrl(rpcUrl) && (kindHint === "local" || sameEndpointUrl(rpcUrl, LOCAL_NETWORK_RPC_URL))
 }
 
 /** The wallet chain id of the node at `rpcUrl` whose answer computes to `composite`. 0 belongs to the
@@ -132,11 +133,6 @@ function assertSameChainIdentity(probed: { chainId: number; l1ChainId: number },
 			`${ERR_ENDPOINT_CHAIN_MISMATCH}: This RPC reports L1 chain ${probed.l1ChainId}, but this network is L1 chain ${network.l1ChainId}.`,
 		)
 	}
-}
-
-/** Whether `rpcUrl` is `seed`'s endpoint, with Local Network's tolerance for an edited URL. */
-export function isSeedEndpointUrl(seed: DefaultSeed, rpcUrl: string): boolean {
-	return rpcUrl === normalizeRpcUrl(seed.rpcUrl) || (seed.kind === "local" && sameLocalNetworkUrl(rpcUrl, seed.rpcUrl))
 }
 
 /** Whether the row's primary is no longer the one the reset's view decided on. A view that probed
@@ -177,23 +173,6 @@ type DefaultsOffer = { rows: Network[]; added: Network[]; primaryId: string | un
 
 function trimmedLabel(label: string | undefined): string | undefined {
 	return label?.trim() || undefined
-}
-
-/** Lowercase host + protocol; preserve path/query/fragment verbatim. Falls
- *  back to the raw string if `URL` rejects it (validation runs elsewhere). */
-function normalizeRpcUrl(raw: string): string {
-	try {
-		const u = new URL(raw)
-		u.protocol = u.protocol.toLowerCase()
-		u.hostname = u.hostname.toLowerCase()
-		let s = u.toString()
-		if (!raw.endsWith("/") && s.endsWith("/") && u.pathname === "/") {
-			s = s.slice(0, -1)
-		}
-		return s
-	} catch {
-		return raw
-	}
 }
 
 export class NetworkService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
@@ -302,13 +281,15 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			const held = (await this.staleNetworks.getJournal(profileId))?.networkId
 			// Read once: a profile holds at most one row per seeded kind, so no rename here meets another.
 			const rows = (await this.storage.getValues()).filter((network) => network.profileId === profileId)
+			const relayOffers = await this.relayOffersLocked(profileId)
 			await runUnlockConversions("networks", rows, {
 				conversions,
+				context: { relayOffers },
 				skip: (network) => network.id === held,
 				log: (level, message, record) => (level === "warn" ? this.logWarn(message, record) : this.logDebug(message, record)),
 				commit: async (network, next) => {
 					await this.storage.set(next.id, next)
-					let moved = false
+					let moved = network.endpoints.length !== next.endpoints.length
 					network.endpoints.forEach((endpoint, i) => {
 						if (endpoint.rpcUrl === next.endpoints[i]?.rpcUrl) return
 						this.transientNodes.delete(endpoint.rpcUrl)
@@ -319,6 +300,23 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 				},
 			})
 		})
+	}
+
+	/** The profile's relay offers as its record reads now; each take rewrites the record at once. A
+	 *  record that does not read offers nothing: a guess could give back a relay the person removed.
+	 *  With no record, a profile with rows stands for every default seeded before it. Caller holds the
+	 *  lock, as the profile's purge does. */
+	private async relayOffersLocked(profileId: string): Promise<RelayOffers> {
+		const record = await readSeedOffers(this.browserApi.storage.local, profileId)
+		if (record.kind === "corrupt") return { pending: () => false, take: async () => {} }
+		let current: SeedOffers = record.kind === "valid" ? record.value : { offered: [...KINDS_SEEDED_BEFORE_RECORD] }
+		return {
+			pending: (kind) => !current.relay?.includes(kind),
+			take: async (kind) => {
+				current = { ...current, relay: [...(current.relay ?? []), kind] }
+				await writeSeedOffers(this.browserApi.storage.local, profileId, current)
+			},
+		}
 	}
 
 	// ── Read paths ───────────────────────────────────────────────────────
@@ -364,6 +362,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			return { rows, added: [], primaryId: undefined }
 		}
 		const offered = new Set(offer.offered)
+		const relay = new Set(record.kind === "valid" ? (record.value.relay ?? []) : [])
 		const added: Network[] = []
 		let primaryId: string | undefined
 		for (const seed of offer.add) {
@@ -373,6 +372,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 				const network = await this.seedOneNetworkLocked(profileId, seed, fence, deletion)
 				added.push(network)
 				offered.add(seed.kind)
+				if (seed.relay) relay.add(seed.kind)
 				if (seed.isPrimaryActive) primaryId = network.id
 			} catch (error) {
 				this.logError(`Failed to seed default '${seed.name}'`, error)
@@ -381,7 +381,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		// The per-seed catch above (soft-fail is right for one bad seed) also swallows the deletion
 		// compensate's throw: without this re-assert a deleted profile would read as seeded.
 		deletion.assertCurrent(fence.profileId, fence.epoch)
-		const next = { offered: [...offered], announce: offer.announce.filter((kind) => offered.has(kind)) }
+		const next = { offered: [...offered], announce: offer.announce.filter((kind) => offered.has(kind)), relay: [...relay] }
 		await this.recordOffersLocked(profileId, record, next, fence, deletion)
 		return { rows: [...rows, ...added], added, primaryId }
 	}
@@ -452,6 +452,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			seed.kind,
 			seed.endpointLabel,
 		)
+		if (seed.relay) network.endpoints.push(relayEndpointOf(network, seed.relay))
 		const write = await this.storage.prepare(network.id, network)
 		await commitFencedCreate(deletion, fence, write, () => this.storage.delete(network.id))
 		return network
@@ -790,7 +791,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const record = await readSeedOffers(this.browserApi.storage.local, network.profileId)
 		if (record.kind !== "valid" || network.kind === undefined || !record.value.announce?.includes(network.kind)) return
 		const announce = record.value.announce.filter((kind) => kind !== network.kind)
-		await this.recordOffersLocked(network.profileId, record, { offered: record.value.offered, announce }, fence, deletion)
+		await this.recordOffersLocked(network.profileId, record, { ...record.value, announce }, fence, deletion)
 	}
 
 	/** {@link servesChain} for a chain the dApp may also use now: a quarantined chain keeps its row

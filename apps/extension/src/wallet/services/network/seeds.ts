@@ -1,7 +1,7 @@
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import type { RetiredEndpoint } from "./retired-endpoints"
-import type { ChainKind, Network } from "./spec"
+import type { ChainKind, Network, NetworkEndpoint } from "./spec"
 
 /** Immutable L1 identities for the seeded kinds — the trust root `getL1ChainIdStored` validates
  *  seeded rows against (a row is mutable storage; these constants ship in code). Custom/devnet
@@ -10,6 +10,21 @@ export const SEED_L1_BY_KIND: Partial<Record<ChainKind, number>> = {
 	mainnet: MAINNET_L1_CHAIN_ID,
 	testnet: TESTNET_L1_CHAIN_ID,
 	local: LOCAL_L1_CHAIN_ID,
+}
+
+/** Nulo's relay (`infra/rpc-proxy`), by the kind of network each host serves. Keyless: the provider
+ *  key lives in the relay, never in a build. */
+export const RELAY_RPC_URLS = {
+	mainnet: "https://rpc.nulo.sh",
+	testnet: "https://testnet.rpc.nulo.sh",
+} as const
+
+/** The title Settings shows on the relay's endpoint row. */
+export const RELAY_LABEL = "Nulo"
+
+export interface SeedEndpoint {
+	readonly rpcUrl: string
+	readonly label: string
 }
 
 export interface DefaultSeed {
@@ -23,6 +38,9 @@ export interface DefaultSeed {
 	isPrimaryActive: boolean
 	/** Provider label stamped on the seeded endpoint; Settings titles the endpoint row with it. */
 	endpointLabel?: string
+	/** Nulo's relay, the seeded endpoint after `rpcUrl`. A profile made before a seed carried it is
+	 *  given it once at unlock (`appendRelay`). */
+	relay?: SeedEndpoint
 }
 
 /**
@@ -49,6 +67,7 @@ export const DEFAULT_SEEDS: DefaultSeed[] = [
 		kind: "testnet",
 		isPrimaryActive: false,
 		endpointLabel: "dRPC",
+		relay: { rpcUrl: RELAY_RPC_URLS.testnet, label: RELAY_LABEL },
 	},
 	{
 		name: "Local Network",
@@ -66,6 +85,7 @@ export const DEFAULT_SEEDS: DefaultSeed[] = [
 		kind: "mainnet",
 		isPrimaryActive: true,
 		endpointLabel: "dRPC",
+		relay: { rpcUrl: RELAY_RPC_URLS.mainnet, label: RELAY_LABEL },
 	},
 ]
 
@@ -99,6 +119,71 @@ export const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)
  *  this build carries. */
 export function seedForKind(kind: ChainKind | undefined): DefaultSeed | undefined {
 	return kind === undefined ? undefined : DEFAULT_SEEDS.find((s) => s.kind === kind)
+}
+
+/** Lowercase host + protocol; preserve path/query/fragment verbatim. Falls
+ *  back to the raw string if `URL` rejects it (validation runs elsewhere). */
+export function normalizeRpcUrl(raw: string): string {
+	try {
+		const u = new URL(raw)
+		u.protocol = u.protocol.toLowerCase()
+		u.hostname = u.hostname.toLowerCase()
+		let s = u.toString()
+		if (!raw.endsWith("/") && s.endsWith("/") && u.pathname === "/") {
+			s = s.slice(0, -1)
+		}
+		return s
+	} catch {
+		return raw
+	}
+}
+
+/**
+ * Strict RPC-URL equality that tolerates trailing-slash and casing differences
+ * on a seed-vs-stored comparison only: the chainId-zero check for the "Local
+ * Network" preset, and whether a row already holds the relay. The shared
+ * `normalizeRpcUrl` deliberately preserves what the user typed
+ * (path/query/fragment verbatim), so we need a more aggressive comparison here.
+ */
+export function sameEndpointUrl(a: string, b: string): boolean {
+	try {
+		const ua = new URL(a)
+		const ub = new URL(b)
+		const pa = ua.pathname.replace(/\/+$/, "")
+		const pb = ub.pathname.replace(/\/+$/, "")
+		return ua.protocol === ub.protocol && ua.host === ub.host && pa === pb && ua.search === ub.search && ua.hash === ub.hash
+	} catch {
+		return a === b
+	}
+}
+
+/** Whether `rpcUrl` is `seed`'s endpoint, with Local Network's tolerance for an edited URL. */
+export function isSeedEndpointUrl(seed: DefaultSeed, rpcUrl: string): boolean {
+	return rpcUrl === normalizeRpcUrl(seed.rpcUrl) || (seed.kind === "local" && sameEndpointUrl(rpcUrl, seed.rpcUrl))
+}
+
+/** The relay's endpoint for `network`, under an id derived from the row's so a second derivation
+ *  names the same endpoint, and free among the row's own. */
+export function relayEndpointOf(network: Network, relay: SeedEndpoint): NetworkEndpoint {
+	const taken = new Set(network.endpoints.map((endpoint) => endpoint.id))
+	let id = `${network.id}-relay`
+	for (let n = 1; taken.has(id); n++) id = `${network.id}-relay${n}`
+	return { id, rpcUrl: normalizeRpcUrl(relay.rpcUrl), label: relay.label }
+}
+
+/**
+ * A copy of `network` with its seed's relay after its endpoints, when the seed carries one, the
+ * row's primary is still the endpoint the seed stored, and no endpoint already holds the relay;
+ * `undefined` otherwise. A person who made their own node primary is never given the relay.
+ */
+export function appendRelay(network: Network): Network | undefined {
+	const seed = seedForKind(network.kind)
+	if (!seed?.relay) return undefined
+	const primary = network.endpoints.find((endpoint) => endpoint.id === network.primaryEndpointId)
+	if (!primary || !isSeedEndpointUrl(seed, primary.rpcUrl)) return undefined
+	const relayUrl = seed.relay.rpcUrl
+	if (network.endpoints.some((endpoint) => sameEndpointUrl(endpoint.rpcUrl, relayUrl))) return undefined
+	return { ...network, endpoints: [...network.endpoints, relayEndpointOf(network, seed.relay)] }
 }
 
 /** A copy of `network` under its seed's current name when it still carries a name an earlier build
