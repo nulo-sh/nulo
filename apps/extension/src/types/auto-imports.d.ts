@@ -97,6 +97,7 @@ declare global {
   const ROW_AMOUNT_LENGTH: typeof import('../utils/snack-amount').ROW_AMOUNT_LENGTH
   const RPC_URL_MIN_LENGTH: typeof import('../utils/entity-rules').RPC_URL_MIN_LENGTH
   const SEED_STATUS_RETRY_MS: typeof import('../composables/useSeedStatus').SEED_STATUS_RETRY_MS
+  const SEEN_PATTERN: typeof import('../utils/whats-new').SEEN_PATTERN
   const SENDS_IN_PROGRESS_KEY: typeof import('../composables/useSendsInProgress').SENDS_IN_PROGRESS_KEY
   const SEND_FEE_PICKS_ROOT: typeof import('../utils/profile-ui-keys').SEND_FEE_PICKS_ROOT
   const SETTINGS_ROWS: typeof import('../utils/settings-search').SETTINGS_ROWS
@@ -114,6 +115,7 @@ declare global {
   const UNRECOGNIZED_BACKUP: typeof import('../composables/full-backup-selection').UNRECOGNIZED_BACKUP
   const UnlockTimeoutError: typeof import('../composables/unlockWait').UnlockTimeoutError
   const VOCABULARY_SELECTORS: typeof import('../utils/token-transfer-vocabulary').VOCABULARY_SELECTORS
+  const WHATS_NEW_SEEN_KEY: typeof import('../utils/whats-new').WHATS_NEW_SEEN_KEY
   const abiNameFitsRole: typeof import('../utils/token-transfer-vocabulary').abiNameFitsRole
   const abortableSleep: typeof import('../utils/abortable-sleep').abortableSleep
   const accountStateNetworkIds: typeof import('../composables/full-backup-restore').accountStateNetworkIds
@@ -159,6 +161,7 @@ declare global {
   const captureWindowDocument: typeof import('../utils/window-document').captureWindowDocument
   const categoricalLabel: typeof import('../utils/journal-state').categoricalLabel
   const changedGetStarted: typeof import('../utils/get-started').changedGetStarted
+  const changelogUrl: typeof import('../utils/whats-new').changelogUrl
   const characterCount: typeof import('../utils/password').characterCount
   const clampDecimals: typeof import('../utils/amount').clampDecimals
   const classifyImportRow: typeof import('../utils/contact-import-rows').classifyImportRow
@@ -193,6 +196,7 @@ declare global {
   const debounce: typeof import('../utils/general').debounce
   const decodeHandback: typeof import('../utils/panel-handback').decodeHandback
   const decodeRestoreOutcome: typeof import('../utils/restore-outcome').decodeRestoreOutcome
+  const decodeSeen: typeof import('../utils/whats-new').decodeSeen
   const decompressData: typeof import('../utils/files').decompressData
   const decryptSelection: typeof import('../composables/full-backup-selection').decryptSelection
   const defaultProfileName: typeof import('../utils/profile-name').defaultProfileName
@@ -310,12 +314,14 @@ declare global {
   const isServiceReady: typeof import('../utils/core').isServiceReady
   const isSettingsRowVisible: typeof import('../utils/settings-search').isSettingsRowVisible
   const isShallow: typeof import('vue').isShallow
+  const isStable: typeof import('../utils/whats-new').isStable
   const isToolbarPopup: typeof import('../utils/browser-surface').isToolbarPopup
   const isUnknownParsedRow: typeof import('../utils/token-amount').isUnknownParsedRow
   const isUnknownRow: typeof import('../utils/token-amount').isUnknownRow
   const isValidAztecAddress: typeof import('../utils/aztec-address').isValidAztecAddress
   const isValidDecimals: typeof import('../utils/token-amount').isValidDecimals
   const isValidatedTokenClass: typeof import('../utils/token-class').isValidatedTokenClass
+  const isWhatsNewDue: typeof import('../utils/whats-new').isWhatsNewDue
   const isWindowDocument: typeof import('../utils/window-document').isWindowDocument
   const journalAdded: typeof import('../utils/journal-mirror').journalAdded
   const journalCallTitle: typeof import('../utils/journal-state').journalCallTitle
@@ -347,6 +353,7 @@ declare global {
   const matchSavedContacts: typeof import('../utils/contact-import-rows').matchSavedContacts
   const matchesQuery: typeof import('../utils/token-search').matchesQuery
   const migrationIdle: typeof import('../utils/storage').migrationIdle
+  const minorOf: typeof import('../utils/whats-new').minorOf
   const moveToOwnWindow: typeof import('../utils/own-window').moveToOwnWindow
   const networkStatusTone: typeof import('../utils/network-status').networkStatusTone
   const networkStatusWord: typeof import('../utils/network-status').networkStatusWord
@@ -437,6 +444,7 @@ declare global {
   const refreshBalances: typeof import('../utils/core').refreshBalances
   const refreshRestoredTokensStage: typeof import('../composables/full-backup-restore').refreshRestoredTokensStage
   const refuseRepeatEnter: typeof import('../composables/usePopupEntity').refuseRepeatEnter
+  const releaseCore: typeof import('../utils/whats-new').releaseCore
   const releaseOwnWindow: typeof import('../utils/own-window').releaseOwnWindow
   const relinkRestoredTokenBalances: typeof import('../composables/full-backup-restore').relinkRestoredTokenBalances
   const remapByMap: typeof import('../utils/full-backup-helpers').remapByMap
@@ -486,6 +494,7 @@ declare global {
   const scrubUrls: typeof import('../utils/scrub-urls').scrubUrls
   const sealFullBackupText: typeof import('../utils/full-backup-helpers').sealFullBackupText
   const searchSettings: typeof import('../utils/settings-search').searchSettings
+  const seenOnInstall: typeof import('../utils/whats-new').seenOnInstall
   const selectedBalanceScope: typeof import('../stores/balances.store').selectedBalanceScope
   const selectedWithin: typeof import('../utils/selection').selectedWithin
   const sendFeePicksKey: typeof import('../utils/profile-ui-keys').sendFeePicksKey
@@ -1036,6 +1045,7 @@ declare module 'vue' {
     readonly ROW_AMOUNT_LENGTH: UnwrapRef<typeof import('../utils/snack-amount')['ROW_AMOUNT_LENGTH']>
     readonly RPC_URL_MIN_LENGTH: UnwrapRef<typeof import('../utils/entity-rules')['RPC_URL_MIN_LENGTH']>
     readonly SEED_STATUS_RETRY_MS: UnwrapRef<typeof import('../composables/useSeedStatus')['SEED_STATUS_RETRY_MS']>
+    readonly SEEN_PATTERN: UnwrapRef<typeof import('../utils/whats-new')['SEEN_PATTERN']>
     readonly SENDS_IN_PROGRESS_KEY: UnwrapRef<typeof import('../composables/useSendsInProgress')['SENDS_IN_PROGRESS_KEY']>
     readonly SEND_FEE_PICKS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['SEND_FEE_PICKS_ROOT']>
     readonly SETTINGS_ROWS: UnwrapRef<typeof import('../utils/settings-search')['SETTINGS_ROWS']>
@@ -1053,6 +1063,7 @@ declare module 'vue' {
     readonly UNRECOGNIZED_BACKUP: UnwrapRef<typeof import('../composables/full-backup-selection')['UNRECOGNIZED_BACKUP']>
     readonly UnlockTimeoutError: UnwrapRef<typeof import('../composables/unlockWait')['UnlockTimeoutError']>
     readonly VOCABULARY_SELECTORS: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['VOCABULARY_SELECTORS']>
+    readonly WHATS_NEW_SEEN_KEY: UnwrapRef<typeof import('../utils/whats-new')['WHATS_NEW_SEEN_KEY']>
     readonly abiNameFitsRole: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['abiNameFitsRole']>
     readonly abortableSleep: UnwrapRef<typeof import('../utils/abortable-sleep')['abortableSleep']>
     readonly accountStateNetworkIds: UnwrapRef<typeof import('../composables/full-backup-restore')['accountStateNetworkIds']>
@@ -1098,6 +1109,7 @@ declare module 'vue' {
     readonly captureWindowDocument: UnwrapRef<typeof import('../utils/window-document')['captureWindowDocument']>
     readonly categoricalLabel: UnwrapRef<typeof import('../utils/journal-state')['categoricalLabel']>
     readonly changedGetStarted: UnwrapRef<typeof import('../utils/get-started')['changedGetStarted']>
+    readonly changelogUrl: UnwrapRef<typeof import('../utils/whats-new')['changelogUrl']>
     readonly characterCount: UnwrapRef<typeof import('../utils/password')['characterCount']>
     readonly clampDecimals: UnwrapRef<typeof import('../utils/amount')['clampDecimals']>
     readonly classifyImportRow: UnwrapRef<typeof import('../utils/contact-import-rows')['classifyImportRow']>
@@ -1132,6 +1144,7 @@ declare module 'vue' {
     readonly debounce: UnwrapRef<typeof import('../utils/general')['debounce']>
     readonly decodeHandback: UnwrapRef<typeof import('../utils/panel-handback')['decodeHandback']>
     readonly decodeRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['decodeRestoreOutcome']>
+    readonly decodeSeen: UnwrapRef<typeof import('../utils/whats-new')['decodeSeen']>
     readonly decompressData: UnwrapRef<typeof import('../utils/files')['decompressData']>
     readonly decryptSelection: UnwrapRef<typeof import('../composables/full-backup-selection')['decryptSelection']>
     readonly defaultProfileName: UnwrapRef<typeof import('../utils/profile-name')['defaultProfileName']>
@@ -1249,12 +1262,14 @@ declare module 'vue' {
     readonly isServiceReady: UnwrapRef<typeof import('../utils/core')['isServiceReady']>
     readonly isSettingsRowVisible: UnwrapRef<typeof import('../utils/settings-search')['isSettingsRowVisible']>
     readonly isShallow: UnwrapRef<typeof import('vue')['isShallow']>
+    readonly isStable: UnwrapRef<typeof import('../utils/whats-new')['isStable']>
     readonly isToolbarPopup: UnwrapRef<typeof import('../utils/browser-surface')['isToolbarPopup']>
     readonly isUnknownParsedRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownParsedRow']>
     readonly isUnknownRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownRow']>
     readonly isValidAztecAddress: UnwrapRef<typeof import('../utils/aztec-address')['isValidAztecAddress']>
     readonly isValidDecimals: UnwrapRef<typeof import('../utils/token-amount')['isValidDecimals']>
     readonly isValidatedTokenClass: UnwrapRef<typeof import('../utils/token-class')['isValidatedTokenClass']>
+    readonly isWhatsNewDue: UnwrapRef<typeof import('../utils/whats-new')['isWhatsNewDue']>
     readonly isWindowDocument: UnwrapRef<typeof import('../utils/window-document')['isWindowDocument']>
     readonly journalAdded: UnwrapRef<typeof import('../utils/journal-mirror')['journalAdded']>
     readonly journalCallTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCallTitle']>
@@ -1286,6 +1301,7 @@ declare module 'vue' {
     readonly matchSavedContacts: UnwrapRef<typeof import('../utils/contact-import-rows')['matchSavedContacts']>
     readonly matchesQuery: UnwrapRef<typeof import('../utils/token-search')['matchesQuery']>
     readonly migrationIdle: UnwrapRef<typeof import('../utils/storage')['migrationIdle']>
+    readonly minorOf: UnwrapRef<typeof import('../utils/whats-new')['minorOf']>
     readonly moveToOwnWindow: UnwrapRef<typeof import('../utils/own-window')['moveToOwnWindow']>
     readonly networkStatusTone: UnwrapRef<typeof import('../utils/network-status')['networkStatusTone']>
     readonly networkStatusWord: UnwrapRef<typeof import('../utils/network-status')['networkStatusWord']>
@@ -1376,6 +1392,7 @@ declare module 'vue' {
     readonly refreshBalances: UnwrapRef<typeof import('../utils/core')['refreshBalances']>
     readonly refreshRestoredTokensStage: UnwrapRef<typeof import('../composables/full-backup-restore')['refreshRestoredTokensStage']>
     readonly refuseRepeatEnter: UnwrapRef<typeof import('../composables/usePopupEntity')['refuseRepeatEnter']>
+    readonly releaseCore: UnwrapRef<typeof import('../utils/whats-new')['releaseCore']>
     readonly releaseOwnWindow: UnwrapRef<typeof import('../utils/own-window')['releaseOwnWindow']>
     readonly relinkRestoredTokenBalances: UnwrapRef<typeof import('../composables/full-backup-restore')['relinkRestoredTokenBalances']>
     readonly remapByMap: UnwrapRef<typeof import('../utils/full-backup-helpers')['remapByMap']>
@@ -1425,6 +1442,7 @@ declare module 'vue' {
     readonly scrubUrls: UnwrapRef<typeof import('../utils/scrub-urls')['scrubUrls']>
     readonly sealFullBackupText: UnwrapRef<typeof import('../utils/full-backup-helpers')['sealFullBackupText']>
     readonly searchSettings: UnwrapRef<typeof import('../utils/settings-search')['searchSettings']>
+    readonly seenOnInstall: UnwrapRef<typeof import('../utils/whats-new')['seenOnInstall']>
     readonly selectedBalanceScope: UnwrapRef<typeof import('../stores/balances.store')['selectedBalanceScope']>
     readonly selectedWithin: UnwrapRef<typeof import('../utils/selection')['selectedWithin']>
     readonly sendFeePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['sendFeePicksKey']>
