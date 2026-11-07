@@ -15,6 +15,7 @@ import { GasFees } from "@aztec-labs/stdlib/gas"
 import { HashedValues } from "@aztec-labs/stdlib/tx"
 import {
 	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
 	DefaultEntrypointPublicCallError,
 	DefaultEntrypointUtilityCallError,
 	ScopeViolationError,
@@ -156,9 +157,9 @@ describe("account resolution", () => {
 		{ entry: "buildStandard", run: (h: Harness) => build(h, []) },
 		{
 			entry: "buildNoFrom",
-			run: (h: Harness) =>
+			run: async (h: Harness) =>
 				h.builder.buildNoFrom(
-					{ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), exec: { calls: [] }, opts: {} } as never,
+					{ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), exec: { calls: [await oneCall()] }, opts: {} } as never,
 					FENCE,
 				),
 		},
@@ -405,7 +406,7 @@ describe("buildNoFrom pins", () => {
 				return { ...NODE_INFO, rollupVersion: 999 }
 			}),
 		} as never)
-		const op = { networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), exec: { calls: [] }, opts: {} }
+		const op = { networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), exec: { calls: [await oneCall()] }, opts: {} }
 		await expect(h.builder.buildNoFrom(op as never, FENCE)).rejects.toThrowError(/Chain identity mismatch/)
 		expect(h.calls).toEqual(["getNetwork", "getNodeInfo"])
 		expect(h.account.ensureRegistered).not.toHaveBeenCalled()
@@ -421,8 +422,8 @@ describe("buildNoFrom pins", () => {
 		expect(h.deps.pxeService.getPXE).not.toHaveBeenCalled()
 		expect(h.deps.accountService.getAccountContract).not.toHaveBeenCalled()
 
-		// Past the fence, the build stops at the single-call rule — after the account lookup.
-		await expect(h.builder.buildNoFrom(op as never, FENCE)).rejects.toThrowError(/exactly 1 call/)
+		noFromHarness()
+		await buildNoFrom(await oneCall())
 		expect(h.deps.accountService.getAccountContract).toHaveBeenCalledWith("p1", 31337, ACCOUNT_ADDR.toString())
 		expect(h.deps.profileService.getActiveProfile).not.toHaveBeenCalled()
 	})
@@ -459,6 +460,8 @@ const wireCall = (fields: Record<string, unknown>) => ({
 	args: [],
 	...fields,
 })
+
+const oneCall = async () => wireCall({ name: FN.name, selector: await selectorOf() })
 
 const buildNoFromCalls = (calls: unknown[], opts: unknown = {}) =>
 	h.builder.buildNoFrom({ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), exec: { calls }, opts } as never, FENCE)
@@ -549,23 +552,24 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		expect(built.txRequest.functionSelector.toString()).toBe(await selectorOf())
 	})
 
-	test("NO_FROM: two calls are refused, typed, before any contract is resolved or fee read; no call keeps its plain error", async () => {
+	test("NO_FROM: no call or two calls are refused, typed, before any network, PXE, contract or fee read", async () => {
 		const getCurrentMinFees = noFromHarness()
-		const call = wireCall({ name: FN.name, selector: await selectorOf() })
-		h.deps.resolver.resolveInstances.mockClear()
+		const call = await oneCall()
 
+		const none = await rejectionOf(buildNoFromCalls([]))
+		expect(none.constructor).toBe(DefaultEntrypointNoCallError)
+		expect(none.message).toBe("DefaultEntrypoint requires exactly 1 call, got 0")
 		const several = await rejectionOf(buildNoFromCalls([call, call]))
 		expect(several.constructor).toBe(DefaultEntrypointMultiCallError)
 		expect(several.message).toBe("DefaultEntrypoint requires exactly 1 call")
+		expect(h.calls).toEqual([])
+		expect(h.deps.pxeService.getPXE).not.toHaveBeenCalled()
 		expect(h.deps.resolver.resolveInstances).not.toHaveBeenCalled()
-		await buildNoFromCalls([call])
-		expect(h.deps.resolver.resolveInstances).toHaveBeenCalledTimes(1)
-
-		getCurrentMinFees.mockClear()
-		const none = await rejectionOf(buildNoFromCalls([]))
-		expect(none.constructor).toBe(Error)
-		expect(none.message).toBe("DefaultEntrypoint requires exactly 1 call, got 0")
 		expect(getCurrentMinFees).not.toHaveBeenCalled()
+
+		await buildNoFromCalls([call])
+		expect(h.calls[0]).toBe("getNetwork")
+		expect(h.deps.resolver.resolveInstances).toHaveBeenCalledTimes(1)
 	})
 
 	test("NO_FROM: an absent name never reaches the binding: the call schema refuses it", async () => {
