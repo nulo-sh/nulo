@@ -272,9 +272,10 @@ export class RequestLog {
 		})
 		this.clear()
 		// Held sends keep their own overflow room, so they never push a restored capture out.
-		const held = live.filter(isHeld)
 		const kept = [...valid, ...live.filter((capture) => !isHeld(capture))].slice(-REQUEST_LOG_LIMITS.captures)
-		for (const capture of [...kept, ...held]) {
+		const held = live.filter(isHeld)
+		const heldRoom = REQUEST_LOG_LIMITS.captures + REQUEST_LOG_LIMITS.heldSends - kept.length
+		for (const capture of [...kept, ...held.slice(Math.max(0, held.length - heldRoom))]) {
 			this.captures.set(capture.walletTraceId, capture)
 			if (capture.journalId) this.aliases.set(keyOf({ journalId: capture.journalId }), capture.walletTraceId)
 			if (capture.interactionId) this.aliases.set(keyOf({ interactionId: capture.interactionId }), capture.walletTraceId)
@@ -343,25 +344,25 @@ export class RequestLog {
 			stage: clean(stage.stage, REQUEST_LOG_LIMITS.labelChars),
 			...(stage.outcome !== undefined && { outcome: clean(stage.outcome, REQUEST_LOG_LIMITS.outcomeChars) }),
 		}
+		const previous =
+			entry.kind === "journal" || entry.kind === "prove" ? capture.stages.findLast((s) => s.kind === entry.kind) : undefined
+		const open = previous?.end === undefined ? previous : undefined
+		const end = open && Math.max(open.start, entry.start)
+		// Closing the earlier entry grows it too, so both are budgeted before either is written.
+		const growth = open ? sizeOf({ ...open, end }) - sizeOf(open) : 0
 		const stageLimit = terminal ? REQUEST_LOG_LIMITS.stages : REQUEST_LOG_LIMITS.ordinaryStages
-		if (capture.stages.length >= stageLimit || !this.fits(capture, entry, terminal)) {
+		if (capture.stages.length >= stageLimit || !this.fits(capture, entry, terminal, growth)) {
 			capture.dropped += 1
 			this.changed()
 			return
 		}
-		if (entry.kind === "journal" || entry.kind === "prove") {
-			const previous = capture.stages.findLast((s) => s.kind === entry.kind)
-			if (previous && previous.end === undefined) {
-				previous.end = Math.max(previous.start, entry.start)
-				capture.bytes += sizeOf({ end: previous.end }) - 2
-			}
-		}
+		if (open && end !== undefined) open.end = end
 		capture.stages.push(entry)
 		this.changed()
 	}
 
-	private fits(capture: RequestCapture, entry: unknown, terminal: boolean): boolean {
-		const size = sizeOf(entry)
+	private fits(capture: RequestCapture, entry: unknown, terminal: boolean, growth = 0): boolean {
+		const size = sizeOf(entry) + growth
 		if (capture.bytes + size > (terminal ? REQUEST_LOG_LIMITS.bytes : REQUEST_LOG_LIMITS.ordinaryBytes)) return false
 		capture.bytes += size
 		return true

@@ -249,6 +249,34 @@ describe("RequestLog", () => {
 		expect(serialized(restored, traceId(0))).toBeLessThanOrEqual(L.bytes)
 	})
 
+	test("a capture filled to the edge of its bound by its terminal entries is still restored", () => {
+		const log = store()
+		fillAliased(log, 1)
+		const [saved] = log.snapshot()
+		const wide = { at: 1, context: "sw", source: "x", level: 1, text: "a".repeat(3_900) }
+		const open = { kind: "journal" as const, stage: "journal proving", start: 5 }
+		for (let pad = 0; pad < 4_000; pad += 2) {
+			const filler = { ...wide, text: "a".repeat(pad) }
+			const first = store()
+			first.restore([{ ...saved, journalStage: "proving", stages: [open], lines: [...Array(15).fill(wide), filler] }])
+			if (!first.has(traceId(0))) continue
+			first.journalEvent(row(journalId(0), "failed", { terminalAt: 30, error: { kind: "app_assertion", message: "x".repeat(60) } }))
+			first.end(traceId(0), { envelope: failed })
+			const again = store()
+			again.restore(first.snapshot())
+			expect(again.has(traceId(0)), `padding ${pad}`).toBe(true)
+		}
+	})
+
+	test("restore never holds more than the cap and its overflow, however many sends are live", () => {
+		const log = store()
+		fillAliased(log, 50)
+		const restored = store()
+		for (let n = 300; n < 350; n++) restored.begin(traceId(n), meta("sendTx"))
+		restored.restore(log.snapshot())
+		expect(restored.snapshot()).toHaveLength(L.captures + L.heldSends)
+	})
+
 	test("restore keeps every saved capture beside live sends a row has not named yet", () => {
 		const log = store()
 		fillAliased(log, 50)
