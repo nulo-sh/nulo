@@ -20,8 +20,8 @@ import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { type AztecNode, AztecNodeApiSchema, createAztecNodeClient } from "@aztec-labs/stdlib/interfaces/client"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
 import { rpcTransportVerdict } from "@nulo/wallet-core/utils"
-import type { NodeFactory } from "../ports/node-factory-port"
-import { type RouteLogEvent, type RouteSpec, type RoutedNode, realTimer, routeNode, type SubmissionPins } from "../routing/routed-node"
+import type { NodeFactory, RoutedNodeOptions } from "../ports/node-factory-port"
+import { type RouteLogEvent, type RouteSpec, type RoutedNode, realTimer, routeNode } from "../routing/routed-node"
 import { makeFetchWithTimeout, makeSingleAttemptFetch, type RetryOptions } from "../utils/fetch"
 
 const noop = () => {}
@@ -103,7 +103,7 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 		return walletChainId(info.l1ChainId, info.rollupVersion)
 	}
 
-	public createRoutedNode(spec: RouteSpec, options: RetryOptions & { pins?: SubmissionPins } = {}): RoutedNode {
+	public createRoutedNode(spec: RouteSpec, options: RoutedNodeOptions = {}): RoutedNode {
 		const verdicts = spec.endpoints.map((endpoint) => isAllowedRpcUrl(endpoint.rpcUrl))
 		const refused = verdicts.find((verdict) => !verdict.ok)
 		const endpoints = spec.endpoints.filter((_, i) => verdicts[i]?.ok)
@@ -118,6 +118,7 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 				sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 				timer: realTimer,
 				log: logRouteEvent,
+				changed: options.onChange,
 				retryWhile: options.retryWhile,
 				pins: options.pins,
 			},
