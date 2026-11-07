@@ -15,6 +15,7 @@ vi.mock("./note-schemas", () => ({
 import type { ILogger } from "@nulo/wallet-core/logger"
 import type { PxeFactory } from "./chain-runtime"
 import { PxeService, type IProfileReader } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const noopProfiles: IProfileReader = { connect: async () => {}, getProfiles: async () => [] }
@@ -35,6 +36,7 @@ type Internals = {
 
 function makeService(): PxeService {
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async () => {
 			throw new Error("not used")
 		},

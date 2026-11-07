@@ -101,6 +101,8 @@ interface RouteEndpointHealth extends EndpointHealth {
 	/** Lost the role after a return; doubles once another endpoint serves in its place. */
 	fellAfterReturn: boolean
 	heldSince: number | undefined
+	/** Its latest call or probe failed in transport, a 429 or a refusal included. */
+	unanswered: boolean
 }
 
 export type ProbeAnswer =
@@ -133,6 +135,7 @@ export class RouteHealth {
 			hasFallen: false,
 			fellAfterReturn: false,
 			heldSince: undefined,
+			unanswered: false,
 		}))
 		if (this.lone) this.activeIndex = 0
 	}
@@ -160,6 +163,11 @@ export class RouteHealth {
 
 	public holdDownMs(index: number): number {
 		return this.at(index).holdDownMs
+	}
+
+	/** Its latest call or probe answered. */
+	public answeredLast(index: number): boolean {
+		return !this.at(index).unanswered
 	}
 
 	public isAdmitted(index: number): boolean {
@@ -201,6 +209,7 @@ export class RouteHealth {
 	/** A call answered on `index`, the node's own error answers included. */
 	public succeeded(index: number, now: number): void {
 		const health = this.at(index)
+		health.unanswered = false
 		if (recordSuccess(health, now)) this.onChange({ kind: "state", index, state: "ready" })
 		if (this.activeIndex === undefined && this.qualifies(index)) this.setActive(index, now)
 		if (index === this.activeIndex) this.settleFalls(index)
@@ -208,6 +217,7 @@ export class RouteHealth {
 
 	public failed(index: number, failure: TransportFailure, cause: object, now: number, attemptMs?: number): void {
 		const health = this.at(index)
+		health.unanswered = true
 		if (!recordFailure(health, failure, cause, now, attemptMs)) return
 		this.onChange({ kind: "state", index, state: "down", failure })
 		if (index === this.activeIndex && !this.lone) this.loseRole(index, now, undefined)
@@ -265,6 +275,14 @@ export class RouteHealth {
 		const health = this.at(index)
 		health.admitted = true
 		health.failures = 0
+		health.unanswered = false
+		// A probe may land after a newer tip read the same endpoint served, having taken the role meanwhile:
+		// the active endpoint's probe raises its tip and the floor, never lowers them.
+		if (index === this.activeIndex) {
+			health.tip = Math.max(health.tip ?? tip, tip)
+			this.floorValue = Math.max(this.floorValue, tip)
+			return
+		}
 		health.tip = tip
 		if (tip < this.floorValue) {
 			this.markBehind(index, now)
@@ -330,10 +348,13 @@ export class RouteHealth {
 		return index < 0 ? undefined : index
 	}
 
+	/** The endpoint taking the role brings the tip it was last seen serving: a route built moments ago
+	 *  has a floor of 0, and a call moved off it must not reach an endpoint behind what it served. */
 	private setActive(index: number | undefined, now: number): void {
 		if (index === undefined || index === this.activeIndex) return
 		this.activeIndex = index
 		const health = this.at(index)
+		if (health.tip !== undefined && health.tip > this.floorValue) this.floorValue = health.tip
 		health.heldSince = now
 		health.returnPassAt = undefined
 		health.fellAfterReturn = false

@@ -18,7 +18,7 @@ import {
 import { PxeServiceClient, registerPxeGenerationProvider } from "./client"
 
 const DOCUMENT = { id: "ext", url: "chrome-extension://ext/src/offscreen/index.html" } as chrome.runtime.MessageSender
-const NET: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://n/1" }
+const NET: NetworkInfo = { profileId: "p1", chainId: 31337, l1ChainId: 31337, endpoints: [{ id: "primary", rpcUrl: "http://n/1" }] }
 const BOOT_MS = 10
 const REQUEST_DEADLINE_MS = 90_000
 const PROVE_DEADLINE_MS = 30 * 60_000

@@ -14,3 +14,21 @@
 - 2026-11-04: arc 1 review round 2: Codex revise (2, one root cause: an await between the last check and the dispatch); fixed, routing/adapters/utils 174/174, lint 0, typecheck 0
 - 2026-11-04: arc 1 review round 3: Codex revise (1 major), fixed after the round; the loop stopped at its three-round cap
 - 2026-11-04: arc 1 final gates on 9d1691aad: lint 0, typecheck:all 0, test:all 0 (aztec-runtime 535, extension 17452), check:plans 0
+- 2026-11-04: Phase 3 gate pass (lint, typecheck:all, scripts/e2e/rpc-relay 11/11). Deviation D29 in the ledger.
+- 2026-11-04: Phase 4 gate pass (lint, typecheck:all, relay 11/11, sandbox suite 8/8 twice at retry 0: 325.9 s and 330.3 s). Router fix D30 found by S4.
+- 2026-11-04: arc 2 review round 1: Codex revise (3 majors, 1 minor), Opus approve with changes; all fixed; sandbox suite 8/8 at retry 0 (303.4 s)
+- 2026-11-04: arc 2 review round 2: Codex approve, no new finding
+- 2026-11-04: arc 2 final gates on 260c90548: lint 0, typecheck:all 0, test:all 0 (aztec-runtime 538, extension 17466), relay 11/11, sandbox 8/8 (303.4 s)
+- 2026-11-04: #1669 CI green at 6a36c40af after one rerun of a Firefox smoke flake (onboarding-tab); sandbox suite 8/8 on CI Chrome (298.0 s)
+- 2026-11-04: post-sync CI: #1669 green at 90c9577; #1664 quality-status red on a re-issued minimatch advisory (stale ack on dev), network shard 2/5 flake rerun green
+- 2026-11-05: Phase 5 gate pass (lint, typecheck:all, aztec-runtime src/pxe 296/296, bun run test green on its second run after the two projection tests were updated).
+- 2026-11-05: owner answers in: OA-1 B, OA-8 A, OA-2 the proposed text.
+- 2026-11-05: Phase 6 gate pass (lint, typecheck:all, pxe+routing 360, Phase 6 suites 936, bun run test green on its second run). Deviation D31 (singleAttempt admits within the caller's budget).
+- 2026-11-05: Phase 7 gate pass (lint, typecheck:all, pxe+routing+adapters, Phase 6 and 7 suites, test:all green on its second run). Deviation D33 (pick on the matching runtime, URL membership checks).
+- 2026-11-05: stack synced onto dev 4b250df after #1671 merged (one conflict, implementations-plan/index.md, kept the plan line); pushed a1 8a1ab62, a2 4065a28, a3 af65e6d
+- 2026-11-05: E1 green on Chrome (190 s) and Firefox (202 s), red with the offscreen pin removed; legal 1.2.10/1.2.2 and ARCHITECTURE § 15 committed.
+- 2026-11-05: arc 3 diff review converged (Codex revise then approve; Opus approve with changes, folded in as D34 and known limit 7); Phase 8 gate green on both browsers; final test:all and audit:vue green on 6d29f3a1b.
+- 2026-11-06: cross-arc fix round 1: Codex fresh revise (1 P1, fixed), Opus approve with changes (D38 built), Codex cross-arc resumed approve; F1 D36, F2 D37, F3 recorded D35
+- 2026-11-06: fix round 1 gates on 805ab3fd9: lint, typecheck:all, routing+adapters 130, execution+network+auth-registry, test:all green (third run); sandbox 8/8 386 s, E1 Chrome 293 s, E1 Firefox 318 s
+- 2026-11-06: a2 and a3 rebased onto dev after #1664 landed; `retireDefaults` keeps dev's seeded-name rename and drops a row's route only when its endpoints moved; dev's `simulate-assertion.test.ts` takes the routed `NetworkInfo` and `createRoute` in the two commits that changed them; gates on 7586c6a12: lint, typecheck:all, check:plans, aztec-runtime 567, extension 17749, sandbox 8/8 at retry 0 (311 s)
+- 2026-11-07: fix round 2 (CI: `network-arrival` Mainnet request at the egress guard, Chrome): D39, test-only fix plus a `service.test.ts` pin; Codex approve, Opus lens approve. Gates on c1a4b31b8 plus the diff: lint, typecheck:all, aztec-runtime 567, extension 17765, `network-arrival` Chrome 10/10 and Firefox 1/1, sandbox 8/8 302 s, E1 Chrome 191 s

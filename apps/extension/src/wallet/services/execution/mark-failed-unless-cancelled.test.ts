@@ -13,6 +13,7 @@ import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError }
 import {
 	AuthRegistryRefusalError,
 	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
 	DefaultEntrypointPublicCallError,
 	DefaultEntrypointUtilityCallError,
 	DuplicateInitializationError,
@@ -117,6 +118,7 @@ describe("markFailedUnlessCancelled", () => {
 			new DefaultEntrypointPublicCallError(),
 			new DefaultEntrypointUtilityCallError(),
 			new DefaultEntrypointMultiCallError(),
+			new DefaultEntrypointNoCallError(),
 		]) {
 			await markFailedUnlessCancelled(error, "j1", lane)
 			expect(lane.markJournal).toHaveBeenLastCalledWith("j1", { stage: "failed" }, normalizeError(error, "wallet_refused"), undefined)
