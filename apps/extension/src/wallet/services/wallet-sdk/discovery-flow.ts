@@ -168,14 +168,14 @@ async function handleSecureDiscovery(discovery: PendingDiscovery, deps: Discover
 		// outcome of a chain-A discovery (which is what would happen with
 		// origin-only keying).
 		if (pendingWindow) {
-			if (served) await awaitPendingPopupDedupe(pendingWindow.settled, discovery, chainId, dedupeKey, deps)
+			if (served) await awaitPendingPopupDedupe(pendingWindow.settled, discovery, chainId, dedupeKey, entryEpoch, deps)
 			else rejectBehindNotice(discovery, chainId, deps)
 			return
 		}
 
 		if (checkDiscoveryPopupCaps(discovery, deps)) return
 
-		if (served) await runDiscoveryPopup(discovery, chainId, dedupeKey, profile.id, deps)
+		if (served) await runDiscoveryPopup(discovery, chainId, dedupeKey, profile.id, entryEpoch, deps)
 		else await runNetworkUnavailableNotice(discovery, chainId, dedupeKey, { staleSession: existingSession, entryEpoch }, deps)
 	} catch (error) {
 		rejectFailedDiscovery(discovery, error, deps)
@@ -295,6 +295,7 @@ async function awaitPendingPopupDedupe(
 	discovery: PendingDiscovery,
 	chainId: string,
 	dedupeKey: string,
+	entryEpoch: number,
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const waiting = deps.dedupeWaiters.get(dedupeKey) ?? 0
@@ -305,7 +306,7 @@ async function awaitPendingPopupDedupe(
 	deps.dedupeWaiters.set(dedupeKey, waiting + 1)
 	try {
 		const unpaced = (await pendingPopup) === true
-		await approveAfterPopup(discovery, chainId, unpaced, deps)
+		await approveAfterPopup(discovery, chainId, unpaced, entryEpoch, deps)
 	} finally {
 		const left = (deps.dedupeWaiters.get(dedupeKey) ?? 1) - 1
 		if (left > 0) deps.dedupeWaiters.set(dedupeKey, left)
@@ -313,7 +314,13 @@ async function awaitPendingPopupDedupe(
 	}
 }
 
-async function approveAfterPopup(discovery: PendingDiscovery, chainId: string, unpaced: boolean, deps: DiscoveryDeps): Promise<void> {
+async function approveAfterPopup(
+	discovery: PendingDiscovery,
+	chainId: string,
+	unpaced: boolean,
+	entryEpoch: number,
+	deps: DiscoveryDeps,
+): Promise<void> {
 	// The popup may have resolved with rejection (or with approval
 	// for a different chain — impossible under tuple keying, but
 	// defense in depth): re-check the session exists for THIS
@@ -337,7 +344,7 @@ async function approveAfterPopup(discovery: PendingDiscovery, chainId: string, u
 	// A twin of a connection the switch let through has no Allow of its own, so it reads the switch
 	// once admitted, as the last await before its approval: a row that connection was refused for
 	// and could not roll back then serves nothing.
-	if (unpaced && !(await stillAllowed(discovery, settledSession.profileId, admitted, deps))) return
+	if (unpaced && !(await stillAllowed(discovery, { profileId: settledSession.profileId, entryEpoch }, admitted, deps))) return
 	approveAdmitted(discovery, chainId, deps, admitted, "pending popup resolved")
 }
 
@@ -362,16 +369,18 @@ function checkDiscoveryPopupCaps(discovery: PendingDiscovery, deps: DiscoveryDep
 
 /** New dApp → show discovery popup (Allow/Deny), or none when the every-site switch lets the site
  *  through, then persist + approve. The dedupe registration, the durable writes and the `finally`
- *  release are one unit: no await separates registering the popup promise from creating it.
+ *  release are one unit: the popup promise is registered before the first await.
  *  An Allow closes the connect window, so what follows it answers only the app. */
 async function runDiscoveryPopup(
 	discovery: PendingDiscovery,
 	chainId: string,
 	dedupeKey: string,
 	profileId: string,
+	entryEpoch: number,
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { pendingDiscoveryPromises } = deps
+	const consent: SwitchConsent = { profileId, entryEpoch }
 	const params: DiscoveryParams = { dappMetadata: discoveryDappMetadata(discovery), chainId }
 
 	// Store a promise that resolves when the popup completes so duplicate
@@ -400,15 +409,14 @@ async function runDiscoveryPopup(
 		// that is still queued for its slot.
 		const admitted = await admitVerifyWindow(discovery, deps, unpaced)
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
-		if (unpaced && !(await stillAllowed(discovery, profileId, admitted, deps))) return
-		await persistAndApprove(discovery, chainId, params, profileId, admitted, unpaced, deps)
+		if (unpaced && !(await stillAllowed(discovery, consent, admitted, deps))) return
+		await persistAndApprove(discovery, chainId, params, profileId, admitted, unpaced ? consent : undefined, deps)
 	} finally {
 		resolvePopup(unpaced)
 		pendingDiscoveryPromises.delete(dedupeKey)
 	}
 }
 
-/** The connect window's answer; a Deny refuses the discovery. */
 async function askedAndAllowed(discovery: PendingDiscovery, params: DiscoveryParams, deps: DiscoveryDeps): Promise<boolean> {
 	const result = await deps.dappInteractionService.discover(params, discovery.requestId)
 	if (result.approved) return true
@@ -417,30 +425,39 @@ async function askedAndAllowed(discovery: PendingDiscovery, params: DiscoveryPar
 	return false
 }
 
+/** The profile whose switch let a connection through, and the switch epoch when its discovery came
+ *  in: a read of that switch consents only while no profile switch has landed since. */
+type SwitchConsent = { profileId: string; entryEpoch: number }
+
+async function switchStillOn(discovery: PendingDiscovery, consent: SwitchConsent, deps: DiscoveryDeps): Promise<boolean> {
+	const on = await deps.dappSessionService.allowsNewSite(consent.profileId, discovery.origin)
+	return on && deps.switchEpoch.current() === consent.entryEpoch
+}
+
 /** A connection the switch let through waits for its slot after reading it: one the person turned
- *  the switch off for meanwhile is refused before anything is written. */
+ *  the switch off for meanwhile, or switched profile under, is refused before anything is written. */
 async function stillAllowed(
 	discovery: PendingDiscovery,
-	profileId: string,
+	consent: SwitchConsent,
 	reservation: WindowReservation,
 	deps: DiscoveryDeps,
 ): Promise<boolean> {
-	if (await deps.dappSessionService.allowsNewSite(profileId, discovery.origin)) return true
+	if (await switchStillOn(discovery, consent, deps)) return true
 	reservation.releaseIfUnstarted()
 	refuseSwitchedOff(discovery, deps)
 	return false
 }
 
 /** The switch read once more after the row is written, as the last await before the approval: an
- *  off that resolved before this read refuses the connection and rolls its row back; a later one
- *  leaves the site connected, for Disconnect to remove. */
+ *  off or a profile switch that landed before this read refuses the connection and rolls its row
+ *  back; a later one leaves the site connected, for Disconnect to remove. */
 async function switchedOffSinceWrite(
 	discovery: PendingDiscovery,
-	profileId: string,
+	consent: SwitchConsent,
 	sessionId: string,
 	deps: DiscoveryDeps,
 ): Promise<boolean> {
-	if (await deps.dappSessionService.allowsNewSite(profileId, discovery.origin)) return false
+	if (await switchStillOn(discovery, consent, deps)) return false
 	await rollBackDiscoverySession((id) => deps.dappSessionService.deleteDappSession(id), sessionId, "every-site", deps.logger)
 	refuseSwitchedOff(discovery, deps)
 	return true
@@ -451,7 +468,7 @@ function refuseSwitchedOff(discovery: PendingDiscovery, deps: DiscoveryDeps): vo
 	deps.logger.log(
 		"wallet-sdk",
 		LogLevel.Info,
-		`Discovery rejected (every site may no longer see Nulo): request ${describeExternalId(discovery.requestId)}`,
+		`Discovery rejected (the every-site switch no longer lets it through): request ${describeExternalId(discovery.requestId)}`,
 	)
 }
 
@@ -528,7 +545,8 @@ async function persistAndApprove(
 	params: DiscoveryParams,
 	profileId: string,
 	reservation: WindowReservation,
-	unpaced: boolean,
+	/** Set when the switch let the connection through, not a person's Allow. */
+	consent: SwitchConsent | undefined,
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { handler, dappSessionService, logger } = deps
@@ -575,7 +593,7 @@ async function persistAndApprove(
 			await rollBackDiscoverySession(deleteSession, newSession.id, "ungranted", logger)
 			throw error
 		}
-		if (unpaced && (await switchedOffSinceWrite(discovery, profileId, newSession.id, deps))) return
+		if (consent && (await switchedOffSinceWrite(discovery, consent, newSession.id, deps))) return
 
 		// Re-check freshness AFTER the durable writes (which can
 		// themselves cross the deadline) and approve, or roll back + reject.

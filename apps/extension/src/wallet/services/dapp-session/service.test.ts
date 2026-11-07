@@ -800,7 +800,7 @@ describe("the every-site switch", () => {
 		expect(await service.allowsNewSite("p1", ORIGIN)).toBe(true)
 	})
 
-	test("a failed read asks the person", async () => {
+	test("a failed read is off", async () => {
 		const { service, browserApi } = await makeService()
 		await service.setEverySite("p1", true)
 		browserApi.storage.local.get = async () => {

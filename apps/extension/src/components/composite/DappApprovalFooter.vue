@@ -35,7 +35,7 @@ defineProps({
 const emit = defineEmits(["reject", "approve"])
 
 defineSlots<{
-	/** Under the two buttons, inside the strip: the discover window's "Allow every site". */
+	/** Under the two buttons, inside the strip. */
 	below?: () => unknown
 }>()
 </script>

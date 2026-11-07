@@ -204,6 +204,7 @@ describe("Settings › Connected apps — the every-site switch", () => {
 		expectOwnedRows(w, "/popup/settings/connected-apps", settingsContext())
 		const order = w.findAll('[data-testid="privacy-row-every-site"], h2').map((el) => el.element.tagName)
 		expect(order).toEqual(["DIV", "H2"])
+		expect(toggle(w).attributes("aria-label")).toBe("Let every site see that Nulo is installed")
 	})
 
 	test("the Toggle is disabled until the switch is read, then shows it", async () => {

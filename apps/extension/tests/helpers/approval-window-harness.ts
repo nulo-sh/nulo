@@ -120,7 +120,6 @@ export function interactionClientModule(decision: () => Record<string, unknown>)
 	return { DappInteractionServiceClient: vi.fn(interactionClient) }
 }
 
-/** The dApp-session client the discover window connects for its "Allow every site". */
 export function sessionClientModule(methods: () => Record<string, unknown>) {
 	function sessionClient() {
 		return { connect: sessionServiceConnectMock, disconnect: sessionServiceDisconnectMock, ...methods() }

@@ -193,6 +193,7 @@ onBeforeUnmount(() => {
 			:class="$style.every_site"
 		>
 			<Toggle
+				:aria-label="everySiteRow.title"
 				:modelValue="everySite"
 				:disabled="everySiteProfile === null"
 				@update:modelValue="onEverySiteToggle"

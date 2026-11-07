@@ -175,13 +175,13 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	}
 
 	/** Whether a new connection from `origin` skips the connect window under `profileId`. A read that
-	 *  fails asks the person. Not an RPC method. */
+	 *  fails is off. Not an RPC method. */
 	public async allowsNewSite(profileId: string, origin: string): Promise<boolean> {
 		try {
 			await this.ensureInitialized()
 			return await this.discoveryPolicy.allows(profileId, origin)
 		} catch (error) {
-			this.logWarn("the every-site switch could not be read; the connect window asks", { error })
+			this.logWarn("the every-site switch could not be read; it counts as off", { error })
 			return false
 		}
 	}

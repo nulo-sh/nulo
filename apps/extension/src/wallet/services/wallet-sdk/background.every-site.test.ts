@@ -98,7 +98,7 @@ function boot(opts: Opts & { everySite: (origin: string) => boolean | Promise<bo
 		reads.hit()
 		return opts.everySite(origin)
 	})
-	const { services, rows } = fakeSdkServices({ ...opts, popup, notice, everySite })
+	const { services, rows, onActiveProfileChanged } = fakeSdkServices({ ...opts, popup, notice, everySite })
 	const sessions = (services as { get: (name: string) => Record<string, (...args: never[]) => unknown> }).get("dapp-session")
 	const counted = {
 		get: (name: string) => {
@@ -132,7 +132,8 @@ function boot(opts: Opts & { everySite: (origin: string) => boolean | Promise<bo
 		await captured?.onSessionEstablished(session)
 		for (const listener of onRemoved) listener(created)
 	}
-	return { discover, establishAndClose, popup, notice, everySite, reads, lookups, rows, windowsCreated: () => created }
+	const switchProfile = (id: string) => onActiveProfileChanged.invoke({ id })
+	return { discover, establishAndClose, popup, notice, everySite, reads, lookups, rows, switchProfile, windowsCreated: () => created }
 }
 
 /** Turns in which an effect a regression defers past a decision can surface. */
@@ -238,6 +239,20 @@ describe("a new site with the every-site switch", () => {
 		discover("d1")
 		await discoveryRun("d1")
 		expect(read).toBe(3)
+		expect(approved()).toEqual([])
+		expect(rejected()).toEqual(["d1"])
+		expect(rows.size).toBe(0)
+	})
+
+	test("a profile switch while the switch is read after the write: refused, and the row rolled back", async () => {
+		let read = 0
+		const third = deferred<boolean>()
+		const { discover, reads, rows, switchProfile } = boot({ everySite: () => (++read === 3 ? third.promise : true) })
+		discover("d1")
+		await reads.reached(3)
+		switchProfile("p2")
+		third.resolve(true)
+		await discoveryRun("d1")
 		expect(approved()).toEqual([])
 		expect(rejected()).toEqual(["d1"])
 		expect(rows.size).toBe(0)
