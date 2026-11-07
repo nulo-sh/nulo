@@ -1,6 +1,7 @@
 /**
- * `PxeService.pickSendEndpoint`: the endpoint a send goes through, picked on the route the proof
- * read through, with the real router over fake per-URL clients.
+ * `PxeService.pickSendEndpoint`, the endpoint a send goes through, picked on the route the proof
+ * read through, and `getRouteSnapshot` with `onRouteChanged`, what the endpoint list shows of that
+ * route: the real router over fake per-URL clients.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
@@ -22,6 +23,7 @@ import { walletChainId } from "@nulo/wallet-core/chain-id"
 import { realTimer, type RouteSpec, routeNode, type SubmissionPins } from "../routing/routed-node"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { StoreErasedError } from "./lifecycle-coordinator"
+import { RouteSnapshotSchema } from "./schemas"
 import { PxeService } from "./service"
 
 const L1 = 11_155_111
@@ -69,9 +71,10 @@ function fixture(): Fixture {
 							}
 						},
 		})
-	const route = (endpoints: NetworkInfo["endpoints"], pins?: SubmissionPins) => {
+	const route = (endpoints: NetworkInfo["endpoints"], pins?: SubmissionPins, changed?: () => void) => {
 		const spec: RouteSpec = { chainId: CHAIN_ID, l1ChainId: L1, endpoints }
-		return routeNode((url) => client(url), spec, { now: Date.now, sleep: async () => {}, timer: realTimer, log: () => {}, pins })
+		const deps = { now: Date.now, sleep: async () => {}, timer: realTimer, log: () => {}, pins, changed }
+		return routeNode((url) => client(url), spec, deps)
 	}
 	let releaseWrite: () => void = () => {}
 	const held = new Promise<void>((resolve) => {
@@ -88,7 +91,7 @@ function fixture(): Fixture {
 				f.built.push(n)
 				if (options?.pins) f.runtimePins.push(options.pins)
 				const pxe = { registerTaggingSecretSource: () => held } as unknown as PXE
-				return new ChainRuntime(n.chainId, route(n.endpoints, options?.pins), pxe, endpointsKey(n.endpoints))
+				return new ChainRuntime(n.chainId, route(n.endpoints, options?.pins, options?.onChange), pxe, endpointsKey(n.endpoints))
 			},
 			createRoute: (n, pins) => {
 				f.routes.push({ network: n, pins })
@@ -168,5 +171,66 @@ describe("PxeService.pickSendEndpoint", () => {
 			s.pickSendEndpoint({ ...networkOf(A, B), pxeGeneration: "gen-1" }, { txHash: TX_HASH, anchorHash: ANCHOR }),
 		).rejects.toBeInstanceOf(StoreErasedError)
 		expect(f.routes).toEqual([])
+	})
+})
+
+describe("PxeService.getRouteSnapshot", () => {
+	test("answers null and builds nothing while no runtime exists for the request's endpoint list", async () => {
+		const f = fixture()
+		const s = service(f)
+		await expect(s.getRouteSnapshot(networkOf(A, B))).resolves.toBeNull()
+		await s.getLatestBlockNumber(networkOf(A))
+		await expect(s.getRouteSnapshot(networkOf(A, B))).resolves.toBeNull()
+		expect(f.built).toHaveLength(1)
+		expect(f.routes).toEqual([])
+	})
+
+	test("on the runtime built for the list it answers ids, states, times and failure kinds, never a URL, and asks no endpoint", async () => {
+		const f = fixture()
+		const s = service(f)
+		const network = networkOf(A, B)
+		await s.getLatestBlockNumber(network)
+		const before = structuredClone(Object.fromEntries(f.seen))
+		const snapshot = await s.getRouteSnapshot(network)
+		expect(snapshot).toEqual({
+			activeId: "a",
+			endpoints: [
+				{ id: "a", state: "ready", since: expect.any(Number), failure: undefined },
+				{ id: "b", state: "unknown", since: expect.any(Number), failure: undefined },
+			],
+		})
+		expect(JSON.stringify(snapshot)).not.toContain("example")
+		expect(Object.fromEntries(f.seen)).toEqual(before)
+	})
+
+	test("onRouteChanged names the pair when a runtime is built, when its route moves and when a rebind drops it", async () => {
+		const f = fixture()
+		const s = service(f)
+		const changed = vi.fn()
+		s.onRouteChanged.add(changed)
+		await s.getLatestBlockNumber(networkOf(A, B))
+		expect(changed).toHaveBeenCalledWith({ profileId: "p1", chainId: CHAIN_ID })
+		const built = changed.mock.calls.length
+		expect(built, "the build, then the route's own change as A answers its first read").toBeGreaterThan(1)
+		const lone = vi.fn()
+		s.onRouteChanged.remove(changed)
+		s.onRouteChanged.add(lone)
+		await s.getLatestBlockNumber(networkOf(A))
+		expect(lone, "the rebind's drop, then the lone endpoint's build: its route itself never moves").toHaveBeenCalledTimes(2)
+		expect(changed.mock.calls.length).toBe(built)
+	})
+
+	test("the client's schema takes the answer and refuses an entry carrying any other key", () => {
+		const entry = { id: "a", state: "down", since: 1, failure: "timeout" }
+		expect(RouteSnapshotSchema.parse({ activeId: "b", endpoints: [entry] })).toEqual({ activeId: "b", endpoints: [entry] })
+		expect(RouteSnapshotSchema.parse(null)).toBeNull()
+		expect(() => RouteSnapshotSchema.parse({ activeId: null, endpoints: [{ ...entry, rpcUrl: A.rpcUrl }] })).toThrow()
+	})
+
+	test("refuses an erased generation's capture", async () => {
+		const f = fixture()
+		const s = service(f)
+		await s.clearProfileState("p1", "gen-1")
+		await expect(s.getRouteSnapshot({ ...networkOf(A, B), pxeGeneration: "gen-1" })).rejects.toBeInstanceOf(StoreErasedError)
 	})
 })

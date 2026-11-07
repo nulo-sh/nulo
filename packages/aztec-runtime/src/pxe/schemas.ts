@@ -8,6 +8,9 @@ import { inTxSchema, TxHash } from "@aztec-labs/stdlib/tx"
 import { BlockNumberSchema } from "@aztec-labs/foundation/branded-types"
 import type { PackedPrivateEvent, NotesFilter } from "@aztec-labs/pxe/client/bundle"
 import z from "zod"
+import type { EndpointState } from "../routing/endpoint-health"
+import type { TransportFailure } from "../utils/fetch"
+import type { RouteSnapshot } from "./spec"
 
 export const NoteDaoSchema = z.object({
 	note: Note.schema,
@@ -41,3 +44,31 @@ export const NotesFilterSchema = z.object({
 	siloedNullifier: Fr.schema.optional(),
 	scopes: z.array(AztecAddress.schema),
 }) satisfies ZodFor<NotesFilter>
+
+const ENDPOINT_STATES = ["unknown", "ready", "down", "behind", "wrong-chain"] as const satisfies readonly EndpointState[]
+const TRANSPORT_FAILURES = [
+	"unreachable",
+	"timeout",
+	"server",
+	"malformed",
+	"overloaded",
+	"refused",
+] as const satisfies readonly TransportFailure[]
+
+/** `getRouteSnapshot`'s answer. An object key beyond these is refused, so a URL never rides along. */
+export const RouteSnapshotSchema: z.ZodType<RouteSnapshot | null> = z
+	.object({
+		activeId: z.string().nullable(),
+		endpoints: z.array(
+			z
+				.object({
+					id: z.string(),
+					state: z.enum(ENDPOINT_STATES),
+					since: z.number(),
+					failure: z.enum(TRANSPORT_FAILURES).optional(),
+				})
+				.strict(),
+		),
+	})
+	.strict()
+	.nullable()

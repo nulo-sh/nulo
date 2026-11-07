@@ -2,6 +2,8 @@
 
 **Answers, 2026-11-05** (the owner's whole message: "OA-1: B. OA-8: A. OA-2: ok, perfect."): OA-1 B; OA-8 A, the hold-down cap left at 30 minutes; OA-2 the proposed text, as privacy 1.2.10 and Terms 1.2.2 (1.2.0 ships privacy 1.2.9 and Terms 1.2.1, so option A no longer exists). OA-3 to OA-7 stay open for arcs 4 and 5.
 
+**Answer, 2026-11-06** (decision page 117, P117-11, signed 18:13 UTC, no note; issue #1624): "A: Numbered rows with a drag handle and a status dot each, replacing today's checkbox; while a row is lifted every number shows the place a drop would give it; the edit sheet opens with the dot, the state word and, for a failing endpoint, a red error line ('No answer since 1 min ago. The connection failed.'). A tap still makes a row primary." It supersedes OA-3 below; arc 4 builds it (plan Phase 9). OA-4 stays open: arc 4 ships its "ships now" (nothing on Home), and it goes on the next decision page.
+
 Eight asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA-2 and OA-8; arc 4 needs OA-3 and OA-4; arc 5 needs OA-5, OA-6 and OA-7 and `rpc-proxy-1`'s Worker. "Ships now" is what an arc builds if the ask is still open when it reaches it; an arc that changes a surface stops for the answer instead (§ UI changes need explicit owner sign-off).
 
 ## OA-1. What the network status means once a network has several endpoints (arc 3)
@@ -30,7 +32,7 @@ Eight asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA
 - **Ships now:** nothing; arc 3 stops at Phase 8 step 2.
 - **Recommendation: A** if 1.2.8 is still unpublished when arc 3 lands, else B. A patch, not a minor: it describes the endpoints the person configured, so it asks no one to accept again.
 
-## OA-3. Settings → Networks → a network: which endpoint is in use (arc 4, closes #1624)
+## OA-3. Settings → Networks → a network: which endpoint is in use (arc 4, closes #1624): answered by P117-11 A
 
 - **Surface:** the Endpoints list on a network's page.
 - **Today:** each row shows its label (or URL), the URL under a label, and a filled checkbox on the primary; a tap makes a row primary. Nothing shows whether an endpoint answers.
@@ -42,7 +44,7 @@ Eight asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA
 - **Ships now:** A.
 - **Recommendation: B.** It answers "why is my primary not used" with the part that sends and shows balances; C's words describe one part's view at one moment and ask people to learn five states.
 
-## OA-4. Home while the wallet runs on a backup endpoint (arc 4)
+## OA-4. Home while the wallet runs on a backup endpoint (arc 4): open; arc 4 ships A
 
 - **Surface:** Home.
 - **Today:** nothing about endpoints.

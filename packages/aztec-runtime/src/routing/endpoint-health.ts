@@ -39,6 +39,8 @@ export interface EndpointHealth {
 	readonly counted: WeakSet<object>
 	nextProbeAt: number
 	holdDownMs: number
+	/** The latest failure that counted toward `down`: what explains a down endpoint now. */
+	lastFailure?: TransportFailure
 }
 
 export function newEndpointHealth(state: EndpointState, now: number): EndpointHealth {
@@ -66,6 +68,7 @@ export function recordFailure(
 	if (!countsTowardDown(failure) || health.counted.has(cause)) return false
 	health.counted.add(cause)
 	health.failures++
+	health.lastFailure = failure
 	if (health.state === "down") return false
 	const atOnce = failure === "timeout" && attemptMs >= ROUTE_TIMING.callTimeoutMs
 	if (!atOnce && health.failures < ROUTE_TIMING.downAfterFailures) return false
@@ -112,6 +115,8 @@ export type ProbeAnswer =
 export type HealthChange =
 	| { readonly kind: "state"; readonly index: number; readonly state: EndpointState; readonly failure?: TransportFailure }
 	| { readonly kind: "active"; readonly index: number | undefined }
+	/** A down endpoint failed again in another way. */
+	| { readonly kind: "failure"; readonly index: number; readonly failure: TransportFailure }
 
 export class RouteHealth {
 	public readonly lone: boolean
@@ -155,6 +160,10 @@ export class RouteHealth {
 
 	public since(index: number): number {
 		return this.at(index).since
+	}
+
+	public lastFailure(index: number): TransportFailure | undefined {
+		return this.at(index).lastFailure
 	}
 
 	public nextProbeAt(index: number): number {
@@ -218,7 +227,12 @@ export class RouteHealth {
 	public failed(index: number, failure: TransportFailure, cause: object, now: number, attemptMs?: number): void {
 		const health = this.at(index)
 		health.unanswered = true
-		if (!recordFailure(health, failure, cause, now, attemptMs)) return
+		const wasDown = health.state === "down"
+		const before = health.lastFailure
+		if (!recordFailure(health, failure, cause, now, attemptMs)) {
+			if (wasDown && health.lastFailure !== before) this.onChange({ kind: "failure", index, failure })
+			return
+		}
 		this.onChange({ kind: "state", index, state: "down", failure })
 		if (index === this.activeIndex && !this.lone) this.loseRole(index, now, undefined)
 		health.nextProbeAt = now + health.holdDownMs

@@ -128,6 +128,7 @@ declare global {
   const addressEnds: typeof import('../utils/string').addressEnds
   const admitRestoreOutcome: typeof import('../utils/restore-outcome').admitRestoreOutcome
   const aggregateFiat: typeof import('../utils/token-aggregate').aggregateFiat
+  const ago: typeof import('../utils/endpoint-status').ago
   const applyAccountRow: typeof import('../utils/account-rows').applyAccountRow
   const applyFeePickUpdate: typeof import('../utils/fee-picks').applyFeePickUpdate
   const applyOutcome: typeof import('../composables/full-backup-restore').applyOutcome
@@ -210,6 +211,7 @@ declare global {
   const downloadFile: typeof import('../utils/files').downloadFile
   const effectScope: typeof import('vue').effectScope
   const endLanding: typeof import('../utils/panel-handback').endLanding
+  const endpointStatus: typeof import('../utils/endpoint-status').endpointStatus
   const endsSelection: typeof import('../utils/selection').endsSelection
   const ensureAccountClient: typeof import('../utils/core').ensureAccountClient
   const entityListReducers: typeof import('../utils/entity-list').entityListReducers
@@ -355,7 +357,9 @@ declare global {
   const matchesQuery: typeof import('../utils/token-search').matchesQuery
   const migrationIdle: typeof import('../utils/storage').migrationIdle
   const minorOf: typeof import('../utils/whats-new').minorOf
+  const moveId: typeof import('../utils/endpoint-order').moveId
   const moveToOwnWindow: typeof import('../utils/own-window').moveToOwnWindow
+  const movedFirstWarning: typeof import('../utils/endpoint-status').movedFirstWarning
   const networkStatusTone: typeof import('../utils/network-status').networkStatusTone
   const networkStatusWord: typeof import('../utils/network-status').networkStatusWord
   const neverOpened: typeof import('../composables/useStaleNetwork').neverOpened
@@ -409,6 +413,7 @@ declare global {
   const pickPrimaryWireCall: typeof import('../utils/primary-method').pickPrimaryWireCall
   const pinScopeOf: typeof import('../composables/usePinnedTokens').pinScopeOf
   const pinnedTokensKey: typeof import('../utils/profile-ui-keys').pinnedTokensKey
+  const placesWhileLifted: typeof import('../utils/endpoint-order').placesWhileLifted
   const plainMethodName: typeof import('../utils/tx-enrichment').plainMethodName
   const planImportWrites: typeof import('../utils/contact-import-rows').planImportWrites
   const planRestoreAgain: typeof import('../composables/full-backup-restore').planRestoreAgain
@@ -474,6 +479,7 @@ declare global {
   const retryReplacedRows: typeof import('../composables/full-backup-restore').retryReplacedRows
   const returnToPanel: typeof import('../utils/own-window').returnToPanel
   const rollbackCreatedProfile: typeof import('../composables/full-backup-restore').rollbackCreatedProfile
+  const routeOrder: typeof import('../utils/endpoint-order').routeOrder
   const rowDescriptionFor: typeof import('../utils/presto-ui-state').rowDescriptionFor
   const rowOnToken: typeof import('../utils/activity-rows').rowOnToken
   const rulerWidth: typeof import('../utils/hero-ruler').rulerWidth
@@ -535,6 +541,7 @@ declare global {
   const stringCompare: typeof import('../utils/string').stringCompare
   const stripBidiAndZeroWidth: typeof import('../utils/string').stripBidiAndZeroWidth
   const supersedeProfileActivations: typeof import('../composables/useProfileBootstrap').supersedeProfileActivations
+  const tapOrder: typeof import('../utils/endpoint-order').tapOrder
   const toRaw: typeof import('vue').toRaw
   const toRef: typeof import('vue').toRef
   const toRefs: typeof import('vue').toRefs
@@ -618,6 +625,7 @@ declare global {
   const useReceiptFee: typeof import('../composables/useReceiptFee').useReceiptFee
   const useRestoreAgain: typeof import('../composables/useRestoreAgain').useRestoreAgain
   const useRoute: typeof import('vue-router').useRoute
+  const useRouteSnapshot: typeof import('../composables/useRouteSnapshot').useRouteSnapshot
   const useRouter: typeof import('vue-router').useRouter
   const useScopedTokens: typeof import('../composables/useScopedTokens').useScopedTokens
   const useScrollRemaining: typeof import('../composables/useScrollRemaining').useScrollRemaining
@@ -780,6 +788,9 @@ declare global {
   export type { RestoreAgainProfileClient, UseRestoreAgainOptions, UseRestoreAgainResult } from '../composables/useRestoreAgain'
   import('../composables/useRestoreAgain')
   // @ts-ignore
+  export type { UseRouteSnapshotDeps, NetworkRouteView, UseRouteSnapshot } from '../composables/useRouteSnapshot'
+  import('../composables/useRouteSnapshot')
+  // @ts-ignore
   export type { TokenScope, UseScopedTokensOptions, UseScopedTokensResult } from '../composables/useScopedTokens'
   import('../composables/useScopedTokens')
   // @ts-ignore
@@ -848,6 +859,9 @@ declare global {
   // @ts-ignore
   export type { AppServices } from '../utils/core'
   import('../utils/core')
+  // @ts-ignore
+  export type { RouteView, EndpointState, EndpointTone, EndpointStatus } from '../utils/endpoint-status'
+  import('../utils/endpoint-status')
   // @ts-ignore
   export type { EstimateRequeue } from '../utils/estimate-when-clear'
   import('../utils/estimate-when-clear')
@@ -1077,6 +1091,7 @@ declare module 'vue' {
     readonly addressEnds: UnwrapRef<typeof import('../utils/string')['addressEnds']>
     readonly admitRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['admitRestoreOutcome']>
     readonly aggregateFiat: UnwrapRef<typeof import('../utils/token-aggregate')['aggregateFiat']>
+    readonly ago: UnwrapRef<typeof import('../utils/endpoint-status')['ago']>
     readonly applyAccountRow: UnwrapRef<typeof import('../utils/account-rows')['applyAccountRow']>
     readonly applyFeePickUpdate: UnwrapRef<typeof import('../utils/fee-picks')['applyFeePickUpdate']>
     readonly applyOutcome: UnwrapRef<typeof import('../composables/full-backup-restore')['applyOutcome']>
@@ -1159,6 +1174,7 @@ declare module 'vue' {
     readonly downloadFile: UnwrapRef<typeof import('../utils/files')['downloadFile']>
     readonly effectScope: UnwrapRef<typeof import('vue')['effectScope']>
     readonly endLanding: UnwrapRef<typeof import('../utils/panel-handback')['endLanding']>
+    readonly endpointStatus: UnwrapRef<typeof import('../utils/endpoint-status')['endpointStatus']>
     readonly endsSelection: UnwrapRef<typeof import('../utils/selection')['endsSelection']>
     readonly ensureAccountClient: UnwrapRef<typeof import('../utils/core')['ensureAccountClient']>
     readonly entityListReducers: UnwrapRef<typeof import('../utils/entity-list')['entityListReducers']>
@@ -1304,7 +1320,9 @@ declare module 'vue' {
     readonly matchesQuery: UnwrapRef<typeof import('../utils/token-search')['matchesQuery']>
     readonly migrationIdle: UnwrapRef<typeof import('../utils/storage')['migrationIdle']>
     readonly minorOf: UnwrapRef<typeof import('../utils/whats-new')['minorOf']>
+    readonly moveId: UnwrapRef<typeof import('../utils/endpoint-order')['moveId']>
     readonly moveToOwnWindow: UnwrapRef<typeof import('../utils/own-window')['moveToOwnWindow']>
+    readonly movedFirstWarning: UnwrapRef<typeof import('../utils/endpoint-status')['movedFirstWarning']>
     readonly networkStatusTone: UnwrapRef<typeof import('../utils/network-status')['networkStatusTone']>
     readonly networkStatusWord: UnwrapRef<typeof import('../utils/network-status')['networkStatusWord']>
     readonly neverOpened: UnwrapRef<typeof import('../composables/useStaleNetwork')['neverOpened']>
@@ -1358,6 +1376,7 @@ declare module 'vue' {
     readonly pickPrimaryWireCall: UnwrapRef<typeof import('../utils/primary-method')['pickPrimaryWireCall']>
     readonly pinScopeOf: UnwrapRef<typeof import('../composables/usePinnedTokens')['pinScopeOf']>
     readonly pinnedTokensKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['pinnedTokensKey']>
+    readonly placesWhileLifted: UnwrapRef<typeof import('../utils/endpoint-order')['placesWhileLifted']>
     readonly plainMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['plainMethodName']>
     readonly planImportWrites: UnwrapRef<typeof import('../utils/contact-import-rows')['planImportWrites']>
     readonly planRestoreAgain: UnwrapRef<typeof import('../composables/full-backup-restore')['planRestoreAgain']>
@@ -1423,6 +1442,7 @@ declare module 'vue' {
     readonly retryReplacedRows: UnwrapRef<typeof import('../composables/full-backup-restore')['retryReplacedRows']>
     readonly returnToPanel: UnwrapRef<typeof import('../utils/own-window')['returnToPanel']>
     readonly rollbackCreatedProfile: UnwrapRef<typeof import('../composables/full-backup-restore')['rollbackCreatedProfile']>
+    readonly routeOrder: UnwrapRef<typeof import('../utils/endpoint-order')['routeOrder']>
     readonly rowDescriptionFor: UnwrapRef<typeof import('../utils/presto-ui-state')['rowDescriptionFor']>
     readonly rowOnToken: UnwrapRef<typeof import('../utils/activity-rows')['rowOnToken']>
     readonly rulerWidth: UnwrapRef<typeof import('../utils/hero-ruler')['rulerWidth']>
@@ -1484,6 +1504,7 @@ declare module 'vue' {
     readonly stringCompare: UnwrapRef<typeof import('../utils/string')['stringCompare']>
     readonly stripBidiAndZeroWidth: UnwrapRef<typeof import('../utils/string')['stripBidiAndZeroWidth']>
     readonly supersedeProfileActivations: UnwrapRef<typeof import('../composables/useProfileBootstrap')['supersedeProfileActivations']>
+    readonly tapOrder: UnwrapRef<typeof import('../utils/endpoint-order')['tapOrder']>
     readonly toRaw: UnwrapRef<typeof import('vue')['toRaw']>
     readonly toRef: UnwrapRef<typeof import('vue')['toRef']>
     readonly toRefs: UnwrapRef<typeof import('vue')['toRefs']>
@@ -1567,6 +1588,7 @@ declare module 'vue' {
     readonly useReceiptFee: UnwrapRef<typeof import('../composables/useReceiptFee')['useReceiptFee']>
     readonly useRestoreAgain: UnwrapRef<typeof import('../composables/useRestoreAgain')['useRestoreAgain']>
     readonly useRoute: UnwrapRef<typeof import('vue-router')['useRoute']>
+    readonly useRouteSnapshot: UnwrapRef<typeof import('../composables/useRouteSnapshot')['useRouteSnapshot']>
     readonly useRouter: UnwrapRef<typeof import('vue-router')['useRouter']>
     readonly useScopedTokens: UnwrapRef<typeof import('../composables/useScopedTokens')['useScopedTokens']>
     readonly useScrollRemaining: UnwrapRef<typeof import('../composables/useScrollRemaining')['useScrollRemaining']>

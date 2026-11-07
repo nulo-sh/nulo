@@ -18,6 +18,8 @@ import type {
 	TxSimulationResult,
 	UtilityExecutionResult,
 } from "@aztec-labs/stdlib/tx"
+import type { EndpointState } from "../routing/endpoint-health"
+import type { TransportFailure } from "../utils/fetch"
 import type { NetworkInfo, ProvePhaseEvent } from "./chain-runtime"
 import type { PublicScanTips, PublicTokenClassStatus, PublicTransferFetchArgs, PublicTransferPage } from "./public-events"
 export type {
@@ -31,10 +33,18 @@ export type {
 
 export const PXE_SERVICE_NAME = "pxe"
 
-/** Offscreen → SW events. The phase stream of the prove attempt identified by
- *  `proveId`; `seq` and `backend` are stamped at the source (chain-runtime). */
+/** Offscreen → SW events. `onProvePhase`: the phase stream of the prove attempt identified by
+ *  `proveId`; `seq` and `backend` are stamped at the source (chain-runtime). `onRouteChanged`: what
+ *  `getRouteSnapshot` answers for the pair may have changed; a lost one leaves a stale view, nothing more. */
 export type PxeEvents = {
 	onProvePhase: ProvePhaseEvent
+	onRouteChanged: { profileId: string; chainId: number }
+}
+
+/** The account engine's route as the endpoint list shows it: endpoint ids, never URLs. */
+export interface RouteSnapshot {
+	activeId: string | null
+	endpoints: { id: string; state: EndpointState; since: number; failure?: TransportFailure }[]
 }
 
 export type Methods = {
@@ -114,6 +124,9 @@ export type Methods = {
 	 * the tx's anchor block. Never waits on the chain guard and never builds a runtime.
 	 */
 	pickSendEndpoint(network: NetworkInfo, tx: { txHash: string; anchorHash: string }): { rpcUrl: string }
+	/** The route of the runtime built for `network`'s endpoint list, or `null` with none. Builds
+	 *  nothing and asks no endpoint. */
+	getRouteSnapshot(network: NetworkInfo): RouteSnapshot | null
 	/**
 	 * Dispose any active runtime for `(profileId, chainId)` and remove its
 	 * OPFS store at `pxe/${profileId}/${chainId}`. Called by the SW-side

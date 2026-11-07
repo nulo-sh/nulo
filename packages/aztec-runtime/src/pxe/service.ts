@@ -45,7 +45,7 @@ import { ArtifactRegistry } from "./artifact-registry"
 import { PxeLifecycleCoordinator, StoreErasedError } from "./lifecycle-coordinator"
 import { loadProductionKnownArtifacts } from "./known-artifacts"
 import { loadProductionNoteSchemas, type NoteSchema } from "./note-schemas"
-import { type Methods, PXE_SERVICE_NAME, type PxeEvents } from "./spec"
+import { type Methods, PXE_SERVICE_NAME, type PxeEvents, type RouteSnapshot } from "./spec"
 import type { ProvePhaseSink } from "./prove-phase-sink"
 import { type PrivateEventFilter, PrivateEventFilterSchema } from "@aztec-labs/aztec.js/wallet"
 import { NotesFilterSchema } from "./schemas"
@@ -105,6 +105,7 @@ const SendPickSchema = z.object({ txHash: HASH32, anchorHash: HASH32 }).strict()
 export class PxeService extends Service<Methods, PxeEvents> implements ServiceSpec<Methods, PxeEvents> {
 	public static name = PXE_SERVICE_NAME
 	public readonly onProvePhase = new EventHandler<ProvePhaseEvent>()
+	public readonly onRouteChanged = new EventHandler<PxeEvents["onRouteChanged"]>()
 
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getContractInstance",
@@ -131,6 +132,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		"getLatestBlockNumber",
 		"getPublicTokenClassStatus",
 		"pickSendEndpoint",
+		"getRouteSnapshot",
 		"clearChainState",
 		"clearProfileState",
 		"provisionChainStoreKey",
@@ -199,7 +201,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		this.profiles = profiles
 		this.guardLogger = logger
 		this.artifacts = new ArtifactRegistry(loadProductionKnownArtifacts, { logger })
-		this.registry = new ChainRuntimeRegistry(factory)
+		this.registry = new ChainRuntimeRegistry(factory, (profileId, chainId) => this.emit("onRouteChanged", { profileId, chainId }))
 		// A dead SW loses the event (the transport swallows the rejection); the
 		// journal only ever goes stale, never wrong, so no retry.
 		provePhaseSink?.subscribe((payload) => this.emit("onProvePhase", payload))
@@ -725,6 +727,17 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			this.logOpFailure("READ", "pickSendEndpoint", start, err)
 			throw err
 		}
+	}
+
+	/** Reads only the registry's in-memory route, no PXE or store state, so the profile barrier's
+	 *  read side suffices: a chain's proof never holds it up. */
+	public async getRouteSnapshot(network: NetworkInfo): Promise<RouteSnapshot | null> {
+		return this.getProfileBarrier(network.profileId).read(async () => {
+			this.assertGenerationCurrent(network)
+			const route = this.registry.peekMatching(network)?.node.route
+			if (!route) return null
+			return { activeId: route.active()?.id ?? null, endpoints: route.snapshot().map((entry) => ({ ...entry })) }
+		})
 	}
 
 	/**

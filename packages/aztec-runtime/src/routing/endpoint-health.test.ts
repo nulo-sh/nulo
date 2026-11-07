@@ -91,6 +91,35 @@ describe("down", () => {
 	})
 })
 
+describe("the last failure", () => {
+	test("keeps the latest counted kind, never a 429, a refusal or a batch already counted, and announces a new kind on a down endpoint", () => {
+		const changes: HealthChange[] = []
+		const health = new RouteHealth(2, 0, (change) => changes.push(change))
+		health.probed(0, passing(10), 0)
+		health.probed(1, passing(10), 0)
+		expect(health.lastFailure(1)).toBeUndefined()
+		health.failed(1, "server", new Error("a"), 1)
+		health.failed(1, "overloaded", new Error("429"), 2)
+		health.failed(1, "refused", new Error("400"), 3)
+		expect(health.lastFailure(1)).toBe("server")
+		const batch = new Error("refused")
+		health.failed(1, "unreachable", batch, 4)
+		health.failed(1, "unreachable", new Error("b"), 5)
+		expect(health.state(1)).toBe("down")
+		expect(health.lastFailure(1)).toBe("unreachable")
+		const before = changes.length
+		health.failed(1, "timeout", batch, 6)
+		expect(health.lastFailure(1)).toBe("unreachable")
+		health.failed(1, "unreachable", new Error("c"), 7)
+		expect(changes.length).toBe(before)
+		health.failed(1, "timeout", new Error("abort"), 8)
+		expect(health.lastFailure(1)).toBe("timeout")
+		expect(changes.slice(before)).toEqual([{ kind: "failure", index: 1, failure: "timeout" }])
+		expect(health.state(1)).toBe("down")
+		expect(health.since(1)).toBe(5)
+	})
+})
+
 describe("the active role", () => {
 	test("returns to the primary only after two passing probes holdDown apart, each meeting identity and the floor", () => {
 		const health = admittedPair()

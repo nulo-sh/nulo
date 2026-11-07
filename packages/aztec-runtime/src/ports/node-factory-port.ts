@@ -59,5 +59,11 @@ export interface NodeFactory {
 	 * router owns the retries. An endpoint whose URL the transport rule refuses is dropped; throws
 	 * when none is left. `pins` carries submitted transactions' endpoints across the nodes a caller builds.
 	 */
-	createRoutedNode(spec: RouteSpec, options?: RetryOptions & { pins?: SubmissionPins }): RoutedNode
+	createRoutedNode(spec: RouteSpec, options?: RoutedNodeOptions): RoutedNode
+}
+
+export type RoutedNodeOptions = RetryOptions & {
+	pins?: SubmissionPins
+	/** Told after any change the route's snapshot shows; never for a moved call. */
+	onChange?: () => void
 }
