@@ -22,6 +22,9 @@ const props = defineProps({
 	icon: { type: String as PropType<GlyphName>, required: true },
 	amount: { type: String as PropType<string | null>, default: null },
 	amountSymbol: { type: String as PropType<string | null>, default: null },
+	/** The title is the amount's token, so the symbol under the amount would repeat it. Off, the
+	 *  symbol shows: a row whose title names something else (a mint's kind) keeps its unit. */
+	titleNamesToken: { type: Boolean, default: false },
 	/** `≈ $x.xx` line under the amount — omitted (null) when unpriced. */
 	amountFiat: { type: String as PropType<string | null>, default: null },
 	testId: { type: String, default: undefined },
@@ -131,7 +134,7 @@ function hasActionsContent() {
 
 		<Flex v-if="amount" direction="column" align="end" gap="2" :class="$style.amount_col" data-testid="activity-amount-col">
 			<span :class="[$style.amount, arriving && $style['n-amt']]" data-testid="activity-amount">{{ amount }}</span>
-			<span v-if="amountSymbol" :class="$style.amount_symbol">{{ amountSymbol }}</span>
+			<span v-if="amountSymbol && !titleNamesToken" :class="$style.amount_symbol">{{ amountSymbol }}</span>
 			<!-- Raised above the target so its title shows; `.stop` so a press opens the row once. -->
 			<span
 				v-if="amountFiat"

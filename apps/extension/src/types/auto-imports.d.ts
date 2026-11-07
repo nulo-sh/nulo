@@ -327,10 +327,11 @@ declare global {
   const journalCallTitle: typeof import('../utils/journal-state').journalCallTitle
   const journalCardAmount: typeof import('../utils/journal-state').journalCardAmount
   const journalCardAmountSymbol: typeof import('../utils/journal-state').journalCardAmountSymbol
+  const journalCardDirection: typeof import('../utils/journal-state').journalCardDirection
   const journalCardIcon: typeof import('../utils/journal-state').journalCardIcon
   const journalCardOriginLabel: typeof import('../utils/journal-state').journalCardOriginLabel
   const journalCardTitle: typeof import('../utils/journal-state').journalCardTitle
-  const journalCardTransferTypeLabel: typeof import('../utils/journal-state').journalCardTransferTypeLabel
+  const journalCardTitleNamesToken: typeof import('../utils/journal-state').journalCardTitleNamesToken
   const journalDeleted: typeof import('../utils/journal-mirror').journalDeleted
   const journalProgressWord: typeof import('../utils/journal-state').journalProgressWord
   const journalRecordInScope: typeof import('../utils/activity-rows').journalRecordInScope
@@ -1274,10 +1275,11 @@ declare module 'vue' {
     readonly journalCallTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCallTitle']>
     readonly journalCardAmount: UnwrapRef<typeof import('../utils/journal-state')['journalCardAmount']>
     readonly journalCardAmountSymbol: UnwrapRef<typeof import('../utils/journal-state')['journalCardAmountSymbol']>
+    readonly journalCardDirection: UnwrapRef<typeof import('../utils/journal-state')['journalCardDirection']>
     readonly journalCardIcon: UnwrapRef<typeof import('../utils/journal-state')['journalCardIcon']>
     readonly journalCardOriginLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardOriginLabel']>
     readonly journalCardTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitle']>
-    readonly journalCardTransferTypeLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardTransferTypeLabel']>
+    readonly journalCardTitleNamesToken: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitleNamesToken']>
     readonly journalDeleted: UnwrapRef<typeof import('../utils/journal-mirror')['journalDeleted']>
     readonly journalProgressWord: UnwrapRef<typeof import('../utils/journal-state')['journalProgressWord']>
     readonly journalRecordInScope: UnwrapRef<typeof import('../utils/activity-rows')['journalRecordInScope']>

@@ -632,8 +632,7 @@ export class TransferExecutor {
 				// `balanceFormatted(rawAmount, decimals, length)`.
 				amountRaw: req.amount.toString(),
 				recipientAddress: req.recipientAddress,
-				// Persist the privacy direction so the in-flight and failed
-				// cards can name it, via `formatTransferType()` consumer-side.
+				// The in-flight and failed cards draw the transfer's sides from it.
 				transferType: req.transferType,
 				initialStage: { stage: queued ? "queued" : "pending" },
 			})

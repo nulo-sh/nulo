@@ -8,6 +8,7 @@ import { resolve } from "node:path"
 import type { GlyphName } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
+import type { RowDirection } from "@/utils/row-direction"
 import TransactionTerminalCard from "./TransactionTerminalCard.vue"
 
 /** Test runs answer every CSS-module name with a class, so a color's missing rule shows only here. */
@@ -34,7 +35,7 @@ const STUBS = {
 				<span class="symbol">{{ amountSymbol }}</span>
 			</div>
 		`,
-		props: ["title", "icon", "amount", "amountSymbol", "testId", "to", "oneLineTitle"],
+		props: ["title", "icon", "amount", "amountSymbol", "titleNamesToken", "direction", "testId", "to", "oneLineTitle"],
 	},
 }
 
@@ -45,9 +46,10 @@ type CardProps = {
 	color: "gray" | "amber" | "red" | "green"
 	activityIcon?: GlyphName
 	originLabel?: string | null
-	transferTypeLabel?: string | null
+	direction?: RowDirection | null
 	amount?: string | null
 	amountSymbol?: string | null
+	titleNamesToken?: boolean
 	oneLineTitle?: boolean
 	to?: string
 }
@@ -129,18 +131,27 @@ describe("composite/TransactionTerminalCard", () => {
 		expect(w.find('[data-testid="activity-app-chip"]').text()).toBe(host)
 	})
 
-	test("a transfer keeps its whole title and the direction chip, never the app chip", () => {
-		const w = mountCard({ ...CANCELLED, transferTypeLabel: "Private → Private" })
-		expect(w.text()).toContain("Private → Private")
-		expect(w.html()).toMatch(/chip/)
-		expect(w.findComponent(STUBS.TransactionCardLayout).props("oneLineTitle")).toBe(false)
+	test("a failed send hands the layout its direction and title flag, and says the direction in hidden words outside the live status line", () => {
+		const direction: RowDirection = { from: "private", to: "private", way: "out", label: "Private → Private" }
+		const w = mountCard({ ...FAILED, direction, titleNamesToken: true })
+		expect(w.findComponent(STUBS.TransactionCardLayout).props()).toMatchObject({
+			direction,
+			titleNamesToken: true,
+			oneLineTitle: false,
+		})
+		const words = w.get("[data-testid='activity-direction-chip']")
+		expect(words.element.textContent).toBe("Private → Private")
+		expect(words.attributes("class")).toMatch(/_direction_/)
+		expect(w.get('[role="status"]').find("[data-testid='activity-direction-chip']").exists()).toBe(false)
+		expect(w.find("[data-testid='activity-title-sep']").exists()).toBe(false)
 		expect(w.find('[data-testid="activity-app-chip"]').exists()).toBe(false)
 	})
 
-	test("suppresses chip when neither originLabel nor transferTypeLabel is set", () => {
+	test("suppresses the separator and the hidden words when neither originLabel nor direction is set", () => {
 		const w = mountCard(FAILED)
 		expect(w.text()).not.toContain("undefined")
 		expect(w.html()).not.toMatch(/title_sep/)
+		expect(w.find("[data-testid='activity-direction-chip']").exists()).toBe(false)
 	})
 
 	test("amount + amountSymbol flow through to the layout (transfer card case)", () => {

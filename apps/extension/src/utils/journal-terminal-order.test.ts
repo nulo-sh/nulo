@@ -1,6 +1,6 @@
 /**
  * The journal cards' evaluation order. The terminal card makes one token lookup and formats the
- * amount before it reads the title and the transfer type; neither card touches the token lookup
+ * amount before it reads the title and the direction; neither card touches the token lookup
  * for a dApp op. A Vue render tracks whatever it reads before a throw, so the order is behaviour.
  */
 
@@ -8,7 +8,7 @@ import { describe, expect, test } from "vitest"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { buildJournalTerminalCardProps, journalCardTitle } from "./journal-state"
 
-const CARD_KEYS = new Set(["tokenId", "amountRaw", "transferType", "title", "subtitle", "call"])
+const CARD_KEYS = new Set(["tokenId", "amountRaw", "transferType", "accountAddress", "recipientAddress", "title", "subtitle", "call"])
 
 function recorded<T extends object>(target: T, name: string, log: string[], keys?: Set<string>): T {
 	return new Proxy(target, {
@@ -54,7 +54,7 @@ function build(op: OperationRecord, log: string[]) {
 }
 
 describe("buildJournalTerminalCardProps — evaluation order", () => {
-	test("a transfer card looks its token up once and formats the amount before the title and type", () => {
+	test("a transfer card looks its token up once and formats the amount before the title and the direction", () => {
 		const log: string[] = []
 		const { run, lookups } = build(terminal({ tokenId: 42, amountRaw: "1500000", transferType: 0 }), log)
 		expect(run()).toMatchObject({ title: "USDC", amount: "1.5", amountSymbol: "USDC" })
@@ -72,11 +72,12 @@ describe("buildJournalTerminalCardProps — evaluation order", () => {
 			"token.symbol",
 			"token.symbol",
 			"op.transferType",
-			"op.transferType",
+			"op.accountAddress",
+			"op.recipientAddress",
 		])
 	})
 
-	test("an amount that fails to format throws before the title or the transfer type is read", () => {
+	test("an amount that fails to format throws before the title or the direction is read", () => {
 		const log: string[] = []
 		const { run, lookups } = build(terminal({ tokenId: 42, amountRaw: "bad", transferType: 0 }), log)
 		expect(run).toThrow()
