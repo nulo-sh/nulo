@@ -12,18 +12,21 @@ import type { Socket } from "node:net"
 import { listenClaimed } from "./egress-guard"
 
 /** What a matching request gets instead of the upstream's answer. `kill` resets its connection and
- *  stops the relay listening until `restore`. */
+ *  stops the relay listening until `restore`; `hold` parks the request until `release` forwards it. */
 export type RelayFault =
 	| { readonly kind: "reply"; readonly status: number; readonly body: string }
 	| { readonly kind: "blackhole" }
 	| { readonly kind: "delay"; readonly ms: number }
 	| { readonly kind: "kill" }
+	| { readonly kind: "hold" }
 
 export interface RelayRule {
 	readonly fault: RelayFault
 	/** Bare method names (`getBlock`, not `aztec_getBlock`); a request matches when any of its
 	 *  entries calls one. Every request matches when absent. */
 	readonly methods?: readonly string[]
+	/** A request matches only when its body contains this text, compared case-insensitively. */
+	readonly carrying?: string
 	/** How many matching requests the rule takes before it retires; unlimited when absent. */
 	readonly times?: number
 }
@@ -47,9 +50,15 @@ export interface RpcRelay {
 	methods(): readonly string[]
 	/** How many received bodies contain `text`, compared case-insensitively. */
 	carried(text: string): number
+	/** When each request arrived (`Date.now()`), in order. */
+	arrivals(): readonly number[]
+	/** Requests a `hold` parks whose client still waits for the answer. */
+	held(): number
+	/** Forwards every parked request whose client still waits; resolves once each is answered. */
+	release(): Promise<void>
 	/** Adds a rule; the newest matching rule wins. */
 	fail(rule: RelayRule): void
-	/** Drops every rule; requests already held by a blackhole stay held. */
+	/** Drops every rule; requests already held by a blackhole or a hold stay held. */
 	clear(): void
 	/** Answers a batch of more than `maxEntries` entries with `refusal` instead of forwarding it. */
 	cap(maxEntries: number | undefined, refusal?: RelayFault): void
@@ -69,6 +78,12 @@ interface Entry {
 	readonly method: string
 }
 
+interface Parked {
+	readonly body: string
+	readonly entries: readonly Entry[] | undefined
+	readonly res: ServerResponse
+}
+
 const FROZEN = new Set(["getChainTips", "getBlockNumber"])
 
 /** The method's name without its namespace: `aztec_getBlock` → `getBlock`. */
@@ -85,6 +100,13 @@ function entriesOf(body: string): Entry[] | undefined {
 	} catch {
 		return undefined
 	}
+}
+
+/** `body` is lower-cased. */
+function matches(rule: RelayRule, entries: readonly Entry[] | undefined, body: string): boolean {
+	const names = rule.methods
+	if (names && !entries?.some((e) => names.includes(bare(e.method)))) return false
+	return rule.carrying === undefined || body.includes(rule.carrying.toLowerCase())
 }
 
 async function readBody(req: IncomingMessage): Promise<string> {
@@ -119,18 +141,18 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 	let requests = 0
 	const methods: string[] = []
 	const bodies: string[] = []
+	const arrivals: number[] = []
+	const parked = new Set<Parked>()
 	let rules: Array<RelayRule & { left: number }> = []
 	let batchCap: { max: number; refusal: RelayFault } | undefined
 	let frozen: Map<string, unknown> | undefined
 	const sockets = new Set<Socket>()
 
-	const take = (entries: readonly Entry[] | undefined): RelayFault | undefined => {
+	const take = (entries: readonly Entry[] | undefined, body: string): RelayFault | undefined => {
 		if (batchCap && entries && entries.length > batchCap.max) return batchCap.refusal
 		for (let i = rules.length - 1; i >= 0; i--) {
 			const rule = rules[i]
-			if (!rule || rule.left <= 0) continue
-			const names = rule.methods
-			if (names && !entries?.some((e) => names.includes(bare(e.method)))) continue
+			if (!rule || rule.left <= 0 || !matches(rule, entries, body)) continue
 			rule.left--
 			return rule.fault
 		}
@@ -146,11 +168,18 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 	const handle = async (req: IncomingMessage, res: ServerResponse) => {
 		const body = await readBody(req)
 		requests++
+		arrivals.push(Date.now())
 		bodies.push(body.toLowerCase())
 		const entries = entriesOf(body)
 		for (const entry of entries ?? [{ id: null, method: "<unparsed>" }]) methods.push(entry.method)
-		const fault = take(entries)
+		const fault = take(entries, body.toLowerCase())
 		if (fault?.kind === "blackhole") return
+		if (fault?.kind === "hold") {
+			const held: Parked = { body, entries, res }
+			parked.add(held)
+			res.once("close", () => parked.delete(held))
+			return
+		}
 		if (fault?.kind === "kill") {
 			req.socket.destroy()
 			await relay.kill()
@@ -182,6 +211,13 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 		requests: () => requests,
 		methods: () => [...methods],
 		carried: (text) => bodies.filter((b) => b.includes(text.toLowerCase())).length,
+		arrivals: () => [...arrivals],
+		held: () => parked.size,
+		release: async () => {
+			const waiting = [...parked]
+			parked.clear()
+			await Promise.all(waiting.map((p) => forward(p.body, p.entries, p.res).catch(() => p.res.destroy())))
+		},
 		fail: (rule) => {
 			rules.push({ ...rule, left: rule.times ?? Number.POSITIVE_INFINITY })
 		},

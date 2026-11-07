@@ -13,12 +13,13 @@ const SW_ONLY = [
 	"getPublicScanTips",
 	"getLatestBlockNumber",
 	"getPublicTokenClassStatus",
+	"pickSendEndpoint",
 ] as const
 
 describe("PXE_METHOD_DESCRIPTORS", () => {
-	test("covers the full 26-method surface with every flag explicit", () => {
+	test("covers the full 27-method surface with every flag explicit", () => {
 		const names = Object.keys(PXE_METHOD_DESCRIPTORS)
-		expect(names).toHaveLength(26)
+		expect(names).toHaveLength(27)
 		for (const name of names) {
 			const d = PXE_METHOD_DESCRIPTORS[name as keyof typeof PXE_METHOD_DESCRIPTORS]
 			expect(typeof d.rpc).toBe("boolean")

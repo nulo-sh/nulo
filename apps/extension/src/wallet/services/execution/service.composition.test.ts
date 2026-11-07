@@ -85,7 +85,13 @@ const SPONSOR = { id: "fpc-1", type: 1, isProtocol: true, chainId: NETWORK.chain
 
 /** A proven tx as `proveAndSend` reads it: its hash, and the expiry part of its kernel outputs. */
 function provenTx(hash: string) {
-	const anchorBlockHeader = BlockHeader.empty({ globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(5) }) })
+	const anchorBlockHeader = Object.assign(
+		BlockHeader.empty({ globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(5) }) }),
+		{
+			// The real hash runs poseidon on the bb WASM, which no composition test loads.
+			hash: async () => ({ toString: () => `0x${"ab".repeat(32)}` }),
+		},
+	)
 	return {
 		getTxHash: () => ({ toString: (): string => hash }),
 		data: { constants: { anchorBlockHeader }, expirationTimestamp: 1_750_003_600n, getNonEmptyNullifiers: () => [new Fr(2n)] },
@@ -108,7 +114,12 @@ async function makeHarness() {
 	} as unknown as never
 	const proveTx = vi.fn(async () => ({ toTx }))
 	const fakeIPXE = { proveTx } as unknown as ReturnType<PxeServiceClient["getPXE"]>
-	const fakePxeClient = { getPXE: () => fakeIPXE, onProvePhase: { add: () => {} } } as unknown as PxeServiceClient
+	const pickSendEndpoint = vi.fn(async (_network: unknown, _tx: unknown) => ({ rpcUrl: NETWORK.endpoints[0]?.rpcUrl }))
+	const fakePxeClient = {
+		getPXE: () => fakeIPXE,
+		pickSendEndpoint,
+		onProvePhase: { add: () => {} },
+	} as unknown as PxeServiceClient
 
 	const ctrl = makeControllableGate()
 	const legalAssertCurrent = vi.fn(async () => {})
@@ -172,7 +183,7 @@ async function makeHarness() {
 				},
 				onActiveProfileChanged: profileChanged,
 			},
-			network: { getNetwork, getNode: async () => fakeNode },
+			network: { getNetwork, getNode: async () => fakeNode, getNodeForUrl: async () => fakeNode },
 			account: { getAccountContract },
 			transactions: {
 				getPendingForAccount: () => [],
@@ -288,6 +299,7 @@ async function makeHarness() {
 		stages,
 		sendTx,
 		toTx,
+		pickSendEndpoint,
 		getJournalId: () => journalId,
 		captureExecutionFence,
 		isFenceLive,
@@ -507,6 +519,104 @@ async function expectEndedUnder(h: Harness, journalId: string, profileId: string
 	// Written after the session ended, under the keys the worker keeps across it.
 	expect(parseEnvelope(JSON.parse(String(await h.storedJournalRow(journalId))))?.profileId).toBe(profileId)
 }
+
+describe("ExecutionService composition — the endpoint a send goes out through", () => {
+	test("the network's own endpoint the offscreen picked is the one dialed and recorded", async () => {
+		const h = await makeHarness()
+		const run = transfer(h)
+		await waitFor(() => h.ctrl.entered)
+		h.ctrl.release()
+		expect(await run).toBe("0xhash")
+		expect(h.pickSendEndpoint).toHaveBeenCalledOnce()
+		expect(h.sendTx).toHaveBeenCalledOnce()
+		expect(h.addTransaction).toHaveBeenCalledWith(expect.objectContaining({ hash: "0xhash", submittedEndpointUrl: "http://fake" }))
+	}, 15_000)
+
+	test("a pick naming an endpoint the network does not list is refused: nothing is committed, sent or recorded", async () => {
+		const h = await makeHarness()
+		h.pickSendEndpoint.mockResolvedValueOnce({ rpcUrl: "https://elsewhere.example" })
+		const run = transfer(h)
+		await waitFor(() => h.ctrl.entered)
+		h.ctrl.release()
+		const refused = await run
+		expect(refused).toBeInstanceOf(JournaledRejection)
+		expect(h.sendTx).not.toHaveBeenCalled()
+		expect(h.addTransaction).not.toHaveBeenCalled()
+		expect((await h.journal.getOperation(h.getJournalId()))?.progress).toEqual({ stage: "failed", from: "proving" })
+	}, 15_000)
+
+	test.each([
+		{ label: "the build's endpoint, removed while it proved: refused", picks: "http://fake", sent: false },
+		{ label: "control: the endpoint added while it proved: dialed and recorded", picks: "http://added", sent: true },
+	])(
+		"the pick is asked over the network's live row; a pick of $label",
+		async ({ picks, sent }) => {
+			const h = await makeHarness()
+			const run = transfer(h)
+			await waitFor(() => h.ctrl.entered)
+			const live = { ...NETWORK, primaryEndpointId: "ep2", endpoints: [{ id: "ep2", rpcUrl: "http://added" }] }
+			h.getNetwork.mockResolvedValue(live)
+			h.pickSendEndpoint.mockResolvedValueOnce({ rpcUrl: picks })
+			h.ctrl.release()
+			const outcome = await run
+			expect(h.pickSendEndpoint.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ endpoints: live.endpoints }))
+			if (sent) {
+				expect(outcome).toBe("0xhash")
+				expect(h.addTransaction).toHaveBeenCalledWith(expect.objectContaining({ submittedEndpointUrl: "http://added" }))
+			} else {
+				expect(outcome).toBeInstanceOf(JournaledRejection)
+				expect(h.sendTx).not.toHaveBeenCalled()
+				expect(h.addTransaction).not.toHaveBeenCalled()
+			}
+		},
+		15_000,
+	)
+
+	test.each([
+		{ label: "removes the picked endpoint: refused before anything is committed", after: "removed", sent: false },
+		{ label: "moves the network to another chain: refused before anything is committed", after: "rechained", sent: false },
+		{ label: "keeps the picked endpoint (control): dialed and recorded", after: "kept", sent: true },
+	] as const)(
+		"a row edit landing while the pick waits that $label",
+		async ({ after, sent }) => {
+			const h = await makeHarness()
+			const rows = {
+				removed: { ...NETWORK, primaryEndpointId: "ep2", endpoints: [{ id: "ep2", rpcUrl: "http://added" }] },
+				rechained: { ...NETWORK, chainId: NETWORK.chainId + 1 },
+				kept: { ...NETWORK, endpoints: [...NETWORK.endpoints, { id: "ep2", rpcUrl: "http://added" }] },
+			}
+			h.pickSendEndpoint.mockImplementationOnce(async () => {
+				h.getNetwork.mockResolvedValue(rows[after])
+				return { rpcUrl: "http://fake" }
+			})
+			const run = transfer(h)
+			await waitFor(() => h.ctrl.entered)
+			h.ctrl.release()
+			const outcome = await run
+			if (sent) {
+				expect(outcome).toBe("0xhash")
+				expect(h.addTransaction).toHaveBeenCalledWith(expect.objectContaining({ submittedEndpointUrl: "http://fake" }))
+				return
+			}
+			expect(outcome).toBeInstanceOf(JournaledRejection)
+			expect(h.sendTx).not.toHaveBeenCalled()
+			expect(h.addTransaction).not.toHaveBeenCalled()
+			expect((await h.journal.getOperation(h.getJournalId()))?.progress).toEqual({ stage: "failed", from: "proving" })
+		},
+		15_000,
+	)
+
+	test("a network moved to another chain while the send proved is refused before the pick", async () => {
+		const h = await makeHarness()
+		const run = transfer(h)
+		await waitFor(() => h.ctrl.entered)
+		h.getNetwork.mockResolvedValue({ ...NETWORK, chainId: NETWORK.chainId + 1 })
+		h.ctrl.release()
+		expect(await run).toBeInstanceOf(JournaledRejection)
+		expect(h.pickSendEndpoint).not.toHaveBeenCalled()
+		expect(h.sendTx).not.toHaveBeenCalled()
+	}, 15_000)
+})
 
 describe("ExecutionService composition — work runs only while the session that authorized it lives", () => {
 	test.each([

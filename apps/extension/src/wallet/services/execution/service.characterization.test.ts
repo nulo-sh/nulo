@@ -147,6 +147,7 @@ describe("slot-for-executeSendTransaction", () => {
 			isFenceLive: vi.fn(() => true),
 			getNetwork: vi.fn(async () => ({ chainId: 0 })) as never,
 			getNode: vi.fn() as never,
+			pickSendEndpoint: vi.fn() as never,
 			readPublicStorageOnce: vi.fn() as never,
 			getPXE: vi.fn() as never,
 			getAccountContract: vi.fn() as never,

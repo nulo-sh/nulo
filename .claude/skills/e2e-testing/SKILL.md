@@ -879,7 +879,10 @@ alarms, opens the dApp page (a content script injects without messaging), closes
 closes Chrome's offscreen document from a scratch page (`closePxeHost`; left open, its clients
 reconnected and woke a successor 50 to 350 ms after the kill, as measured) and closes the scratch
 page, so the click is provably the first wake event; it asserts `backgroundAlive(ext)` is false
-before clicking. Then
+before clicking. The same close is what clears in-flight PXE work: the offscreen document keeps
+running the operations it holds through a background kill, and their node reads land in the window
+where `stopBackground` lets the launch's interceptions go, reaching the egress guard
+(`network-arrival.test.ts`). Then
 gate on the strictly-newer heartbeat from an extension page (§2), and expect the popup's boot path
 (`popup/boot-session.ts`, `auth-guard.ts`): under strict security a restart drops the session, so
 `ensureUnlocked` with a budget sized to the bootstrap (120s on the prover-ON canary) is the

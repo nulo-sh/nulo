@@ -255,7 +255,13 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 	let tip = 10
 	let proofs = 0
 	const submitted: string[] = []
-	const anchorBlockHeader = BlockHeader.empty({ globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(5) }) })
+	const anchorBlockHeader = Object.assign(
+		BlockHeader.empty({ globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(5) }) }),
+		{
+			// The real hash runs poseidon on the bb WASM, which no composition test loads.
+			hash: async () => ({ toString: () => `0x${"ab".repeat(32)}` }),
+		},
+	)
 	const provenTx = (hash: string) => ({
 		getTxHash: () => ({ toString: (): string => hash }),
 		data: { constants: { anchorBlockHeader }, expirationTimestamp: 1_750_003_600n, getNonEmptyNullifiers: () => [new Fr(2n)] },
@@ -280,6 +286,7 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 	const pxeClient = {
 		marker: FEE_RACE_PXE_FAKE_BUNDLE_MARKER,
 		getPXE: () => pxe,
+		pickSendEndpoint: async () => ({ rpcUrl: NETWORK.endpoints[0]?.rpcUrl }),
 		onProvePhase: { add: () => {} },
 		offscreenSettled: async () => {},
 	} as unknown as PxeServiceClient
@@ -321,6 +328,7 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 			network: {
 				getNetwork: async () => NETWORK,
 				getNode: async () => node,
+				getNodeForUrl: async () => node,
 				readChainTip: async () => tip,
 			},
 			account: { getAccountContract: async () => ({ address: ACCOUNT }) },

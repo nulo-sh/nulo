@@ -3861,7 +3861,7 @@ describe("warm PXE runtime — admission is decided in the SW by the PRODUCTION 
 			const p = await service.createProfile("P", "pass1234")
 			const healthyRow = await readRawRow(api, p.id)
 			const client = new PxeServiceClient({ log: () => {} } as never)
-			const net = { profileId: p.id, chainId: 31337, rpcUrl: "http://n/1" }
+			const net = { profileId: p.id, chainId: 31337, l1ChainId: 31337, endpoints: [{ id: "primary", rpcUrl: "http://n/1" }] }
 
 			await client.getSenders(net)
 			expect(wire).toEqual(["getSenders"])

@@ -2,7 +2,7 @@
 
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
-- [rpc-fallback-1](rpc-fallback-1/plan.md) — arc 1 in review (#1664), arc 2 in review (stacked on it); arc 3 waits on OA-1, OA-2, OA-8 — each network fails over to its next endpoint and returns to its primary; then Nulo's relay as the second endpoint (#1624)
+- [rpc-fallback-1](rpc-fallback-1/plan.md) — arcs 1 to 3 in review (#1664, #1669, #1687, stacked); arc 4 waits on OA-3 and OA-4 — each network fails over to its next endpoint and returns to its primary; then Nulo's relay as the second endpoint (#1624)
 
 - [discovery-allow-1](discovery-allow-1/plan.md) — arc 1 in review (#1722) — the connect window says what Allow reveals; an opt-in "every site may see Nulo" switch
 - [chips-3](chips-3/plan.md) — arc 1 in review (#1723) — the direction chip becomes C2 at the C2S size; the token-symbol question

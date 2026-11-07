@@ -59,6 +59,7 @@ function makeExecutor(): DappSendExecutor {
 		isFenceLive: unreachable as never,
 		getNetwork: unreachable as never,
 		getNode: unreachable as never,
+		pickSendEndpoint: unreachable as never,
 		readPublicStorageOnce: unreachable as never,
 		getPXE: unreachable as never,
 		getAccountContract: unreachable as never,

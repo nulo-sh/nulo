@@ -276,6 +276,13 @@ export class RouteHealth {
 		health.admitted = true
 		health.failures = 0
 		health.unanswered = false
+		// A probe may land after a newer tip read the same endpoint served, having taken the role meanwhile:
+		// the active endpoint's probe raises its tip and the floor, never lowers them.
+		if (index === this.activeIndex) {
+			health.tip = Math.max(health.tip ?? tip, tip)
+			this.floorValue = Math.max(this.floorValue, tip)
+			return
+		}
 		health.tip = tip
 		if (tip < this.floorValue) {
 			this.markBehind(index, now)
@@ -341,10 +348,13 @@ export class RouteHealth {
 		return index < 0 ? undefined : index
 	}
 
+	/** The endpoint taking the role brings the tip it was last seen serving: a route built moments ago
+	 *  has a floor of 0, and a call moved off it must not reach an endpoint behind what it served. */
 	private setActive(index: number | undefined, now: number): void {
 		if (index === undefined || index === this.activeIndex) return
 		this.activeIndex = index
 		const health = this.at(index)
+		if (health.tip !== undefined && health.tip > this.floorValue) this.floorValue = health.tip
 		health.heldSince = now
 		health.returnPassAt = undefined
 		health.fellAfterReturn = false

@@ -236,6 +236,14 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		return tx
 	}
 
+	/** The endpoint `hash` went out through, read from a row `profileId` owns: an ownerless row may be
+	 *  another profile's, so it names none. */
+	public async recordedEndpointOf(hash: string, profileId: string): Promise<string | undefined> {
+		await this.ensureInitialized()
+		const tx = await this.txs.get(hash, profileId)
+		return tx?.profileId === profileId ? tx.submittedEndpointUrl : undefined
+	}
+
 	/** The rows of `account` that `profileId` reads: its own, and the ownerless ones it may own. A
 	 *  read that named no profile would answer with whichever profiles' keys this worker holds. */
 	public async transactionsOf(account: string, profileId: string): Promise<Tx[]> {
@@ -298,12 +306,11 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				throw new Error("duplicated hash")
 			}
 			const now = Date.now()
-			// `submittedEndpointUrl` is resolved by the EXECUTOR from the network it
-			// actually built+submitted against (captured before prove/send), then
-			// passed in. It is NOT re-derived here from active-profile state: a TTL
-			// auto-lock or profile switch DURING the (slow) prove would make an
-			// active-profile lookup throw or resolve the wrong profile's endpoint,
-			// recording a wrong/undefined URL — which at poll time routes the receipt
+			// `submittedEndpointUrl` is the endpoint the send was picked and submitted
+			// through, passed in by the executor. It is NOT re-derived here from
+			// active-profile state: a TTL auto-lock or profile switch DURING the (slow)
+			// prove would make an active-profile lookup throw or resolve the wrong
+			// profile's endpoint, recording a wrong/undefined URL — which at poll time routes the receipt
 			// fetch to the active profile's RPC (a cross-profile leak). See
 			// `NetworkService.getNodeForUrl`.
 			const tx: Tx = {
@@ -574,31 +581,19 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 
 	private async updateTx(tx: Tx) {
 		this.logDebug(`Sync tx ${tx.hash.slice(0, 8)}`)
-		// Pin polling to the endpoint that submitted this tx: staying on the
-		// originating endpoint avoids transient receipt-not-yet-indexed issues
-		// when the user swaps the network's primary endpoint mid-pending, and —
-		// critically — keeps a pending tx's receipt fetch on ITS OWN profile's
-		// endpoint after a profile switch, instead of leaking the tx hash to the
-		// now-active profile's RPC. `getNodeForUrl` never falls back to the
-		// active profile. Legacy txs with no recorded endpoint have no URL to
-		// pin to, so they still resolve via the active profile's node.
+		// A recorded endpoint is read only through its own URL: a pending hash never reaches another
+		// endpoint or another profile's. Every due poll is awaited before the next tick, so one
+		// attempt bounds how long a dead endpoint holds the others. A row with no recorded endpoint
+		// has nothing to pin and reads through the network's route.
 		const node = tx.submittedEndpointUrl
-			? await this.networkService.getNodeForUrl(tx.submittedEndpointUrl)
+			? await this.networkService.getSingleAttemptNodeForUrl(tx.submittedEndpointUrl)
 			: await this.networkService.getNode(tx.chainId)
 		if (!node) {
 			this.logError("Unknown network")
 			return
 		}
 
-		let receipt: Awaited<ReturnType<typeof node.getTxReceipt>>
-		try {
-			receipt = await node.getTxReceipt(TxHash.fromString(tx.hash))
-		} catch (err) {
-			if (tx.submittedEndpointUrl) {
-				this.networkService.reportEndpointFailure(tx.submittedEndpointUrl)
-			}
-			throw err
-		}
+		const receipt = await node.getTxReceipt(TxHash.fromString(tx.hash))
 		const status = txStatusFromReceipt(receipt.status)
 		const executionResult = executionResultFromReceipt(receipt.executionResult)
 
