@@ -79,3 +79,11 @@ The owner's answers on decision page 112, signed 2026-11-06 14:18 UTC: OA-5 D, O
   - Two sentences still described the old behaviour. The relay README's quota line said the relay is asked only while the endpoint before it fails. SECURITY's pending-poll paragraph named `getNodeForUrl` and a three-strike rebuild that #1687 removed. Both now say what the code does: the poll reads through `getSingleAttemptNodeForUrl`, one attempt per tick.
 - The cross-arc loop closed at round 2. Its remaining changes were text only, so no round 3.
 
+## The PR's first CI run
+
+- 2026-11-07, PR CI at `3c0997f96`: two specs red on both browsers, neither in the arc's local gate.
+  - `received-fee-privacy` (smoke) answered every call with `null`, `getNodeInfo` included. With Alpha's relay second, the route probes its primary before any call; the `null` failed that probe, the relay's stand-in refused, and the receipt lookup never left (`expected 0 to be 1`).
+  - `backup-import-stalled-network` (network) answered `getNodeInfo` and blackholed the rest, chain tips included. The probe timed out after 5 s, the relay refused, and each Testnet row failed with "No endpoint of this network can take the call" instead of waiting out the restore's 30 s budget.
+  - Both stubs now answer the probe with the network's identity and tips; the stall still ends at the deadline, since an attempt times out at 60 s. Green at retry 0 on Chrome and Firefox: 9 s and 13 s, 96 s and 104 s.
+- The lesson: a default network with two endpoints changes every spec that stubs a seeded origin, not only the specs that name endpoints. The local gate ran the files the arc touched; a sweep for `interceptRpc` on a seeded origin would have found these two. The `e2e-testing` skill now says so.
+

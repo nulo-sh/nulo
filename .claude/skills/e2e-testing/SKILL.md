@@ -189,7 +189,9 @@ runtime env var can never arm a build-time flag.
   answered by its own loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`). With two
   endpoints a route admits its first with one `[getNodeInfo, getChainTips]` batch before any call,
   and moves to the relay's stand-in when it fails, so a spec that stubs a seeded node answers both
-  (`helpers/rpc-stub.ts`'s `chainTipsResult`): one unanswered entry blackholes the whole batch.
+  with the network's own identity (`helpers/rpc-stub.ts`'s `nodeInfoResult` and `chainTipsResult`):
+  one unanswered entry blackholes the whole batch, and a `null` fails it as surely. The call the spec
+  waits for then never leaves, or fails fast where it meant to hang.
   A new profile starts on Mainnet, so a spec
   that needs the list's tokens, prices, the sponsor or Testnet's own accounts (the stale-network seeds
   move them) switches to Testnet first, and one that stages the active node intercepts
