@@ -70,9 +70,9 @@ export interface Route {
 	seedFloor(proposedBlockNumber: number): void
 	/**
 	 * The endpoint to submit `txHash` through, pinned for its receipts: the active endpoint while
-	 * it is ready (no request), else the first endpoint in preference order serving this chain and
-	 * knowing `anchorHash`, else the active one. Refuses when every answer is another chain, and
-	 * when there is no active endpoint and none answers.
+	 * it is ready and its latest call answered (no request), else the first endpoint in preference
+	 * order serving this chain and knowing `anchorHash`, else the active one. Refuses when every
+	 * answer is another chain, and when there is no active endpoint and none answers.
 	 */
 	pickForSend(txHash: string, anchorHash: string): Promise<RouteEndpoint>
 	snapshot(): readonly { readonly id: string; readonly state: EndpointState; readonly since: number }[]
@@ -242,10 +242,10 @@ class Router implements Route {
 		const pinned = this.pins.byTxHash.get(key)
 		if (pinned) return pinned
 		const active = this.health.active()
-		const picked =
-			active !== undefined && this.health.state(active) === "ready"
-				? this.endpoints[active]
-				: await this.pickByAnchor(active, anchorHash)
+		// The active endpoint is the proof's own only while its latest call answered: a failure that
+		// leaves it `ready` (a 429, a refusal, one failed batch) still moved the proof's later reads.
+		const trusted = active !== undefined && this.health.state(active) === "ready" && this.health.answeredLast(active)
+		const picked = trusted ? this.endpoints[active] : await this.pickByAnchor(active, anchorHash)
 		if (!picked) throw noEndpoint("the transaction")
 		const raced = this.pins.byTxHash.get(key)
 		if (raced) return raced

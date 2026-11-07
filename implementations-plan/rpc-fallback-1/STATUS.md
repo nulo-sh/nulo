@@ -14,3 +14,10 @@
 - 2026-11-04: arc 1 review round 2: Codex revise (2, one root cause: an await between the last check and the dispatch); fixed, routing/adapters/utils 174/174, lint 0, typecheck 0
 - 2026-11-04: arc 1 review round 3: Codex revise (1 major), fixed after the round; the loop stopped at its three-round cap
 - 2026-11-04: arc 1 final gates on 9d1691aad: lint 0, typecheck:all 0, test:all 0 (aztec-runtime 535, extension 17452), check:plans 0
+- 2026-11-04: Phase 3 gate pass (lint, typecheck:all, scripts/e2e/rpc-relay 11/11). Deviation D29 in the ledger.
+- 2026-11-04: Phase 4 gate pass (lint, typecheck:all, relay 11/11, sandbox suite 8/8 twice at retry 0: 325.9 s and 330.3 s). Router fix D30 found by S4.
+- 2026-11-04: arc 2 review round 1: Codex revise (3 majors, 1 minor), Opus approve with changes; all fixed; sandbox suite 8/8 at retry 0 (303.4 s)
+- 2026-11-04: arc 2 review round 2: Codex approve, no new finding
+- 2026-11-04: arc 2 final gates on 260c90548: lint 0, typecheck:all 0, test:all 0 (aztec-runtime 538, extension 17466), relay 11/11, sandbox 8/8 (303.4 s)
+- 2026-11-04: #1669 CI green at 6a36c40af after one rerun of a Firefox smoke flake (onboarding-tab); sandbox suite 8/8 on CI Chrome (298.0 s)
+- 2026-11-04: post-sync CI: #1669 green at 90c9577; #1664 quality-status red on a re-issued minimatch advisory (stale ack on dev), network shard 2/5 flake rerun green
