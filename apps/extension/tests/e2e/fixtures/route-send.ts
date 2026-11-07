@@ -167,15 +167,31 @@ export type RouteEvent = {
 	method?: string
 }
 
-/** How many lines the logger keeps in session storage, the oldest dropped first. */
-const STORED_LINES = 2_000
+/** The most lines the logger writes to session storage. */
+const PERSISTED_LINES = 2_000
+/** The logger's ring below Debug, and so the most lines stored then: `ringSize` in `logger/store.ts`. */
+const INFO_RING_LINES = 1_000
+
+/** How many lines the stored log holds once full, at the level the wallet logs at now. */
+async function storedLogCapacity(wallet: Page): Promise<number> {
+	const debug = await wallet.evaluate(async () => {
+		const raw = (await chrome.storage.local.get("nulo:config"))["nulo:config"]
+		try {
+			return (typeof raw === "string" ? JSON.parse(raw) : raw)?.debugMode === true
+		} catch {
+			return false
+		}
+	})
+	return debug ? PERSISTED_LINES : INFO_RING_LINES
+}
 
 /** The router's stored events since `since`, oldest first. Throws when the stored log has dropped
  *  lines from after `since`, rather than answer from part of the run. */
 export async function routeEvents(wallet: Page, since: number): Promise<RouteEvent[]> {
-	const read = await readSwLogTrail(wallet, { limit: STORED_LINES })
+	const capacity = await storedLogCapacity(wallet)
+	const read = await readSwLogTrail(wallet, { limit: PERSISTED_LINES })
 	const stored = Array.isArray(read) ? (read as { source?: string; timestamp?: number; data?: unknown }[]) : []
-	if (stored.length >= STORED_LINES && Number(stored[0]?.timestamp) > since) {
+	if (stored.length >= capacity && Number(stored[0]?.timestamp) > since) {
 		throw new Error(`the stored log starts after ${since}: its oldest router lines are gone`)
 	}
 	const lines = stored.filter((line) => JSON.stringify(line.data ?? []).includes("[route]"))

@@ -1584,7 +1584,7 @@ async function asEarlierBuild<T>(open: () => Promise<T>): Promise<T> {
 	const at = DEFAULT_SEEDS.indexOf(MAINNET)
 	DEFAULT_SEEDS.splice(at, 1)
 	const relays = DEFAULT_SEEDS.map((seed) => seed.relay)
-	for (const seed of DEFAULT_SEEDS) delete seed.relay
+	for (const seed of DEFAULT_SEEDS) seed.relay = undefined
 	try {
 		return await open()
 	} finally {

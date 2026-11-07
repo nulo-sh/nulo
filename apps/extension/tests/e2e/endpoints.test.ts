@@ -1,8 +1,15 @@
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
-import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
-import { navigateToSettings, openNetworkDetail, rewriteActiveNetwork } from "./fixtures/helpers"
+import { RELAY_LABEL, RELAY_RPC_URLS } from "@/wallet/services/network/seeds"
+import { unlockAfterBackgroundDeath } from "./fixtures/auth"
+import { isFirefox, setViewport, stopBackground } from "./fixtures/browser"
+import { RELAY_NODE_HOSTS } from "./fixtures/egress-guard"
+import { type ExtensionContext, test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
+import { navigateByHash, navigateToSettings, openNetworkDetail, rewriteActiveNetwork } from "./fixtures/helpers"
+import { pollUntil } from "./fixtures/poll"
 import { shotSend } from "./fixtures/send-page"
+import { readSeedOffers } from "./helpers/network-arrival"
+import { readNetwork } from "./helpers/stale-network"
 
 // Scope note: `addEndpoint` / `updateEndpoint` probe the candidate URL
 // via Aztec `getNodeInfo()` and reject on chainId mismatch — the
@@ -101,13 +108,14 @@ test("Single-endpoint network hides the delete-endpoint icon (last-endpoint guar
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await openFirstNetworkDetail(page)
+	await navigateToSettings(page, "networks")
+	await openNetworkDetail(page, "Local Network")
 	await page.waitForSelector('[data-testid="endpoint-row"]', { visible: true, timeout: 5_000 })
 
 	const endpointCount = (await page.$$('[data-testid="endpoint-row"]')).length
 	const deleteCount = (await page.$$('[data-testid="endpoint-delete-btn"]')).length
 
-	// Default seeds give one endpoint per network. The delete icon is
+	// The Local Network seeds one endpoint. The delete icon is
 	// rendered v-if="not-primary AND endpoints.length > 1" — so on a single-
 	// endpoint network, no delete icon appears anywhere.
 	expect(endpointCount).toBe(1)
@@ -201,3 +209,112 @@ test("a saved http://[::1] node URL leaves the popup starting and the endpoint l
 
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 })
+
+/** The endpoints of the network of `kind` as stored and as its detail page lists them. Carries no
+ *  URL, so neither an assertion nor a poll's timeout prints a provider's. */
+async function relayView(page: Page, kind: "testnet" | "mainnet") {
+	const row = await readNetwork(page, kind)
+	const relay = RELAY_RPC_URLS[kind]
+	return {
+		profileId: row.profileId,
+		ids: row.endpoints.map((endpoint) => endpoint.id),
+		labels: row.endpoints.map((endpoint) => endpoint.label),
+		relayAt: row.endpoints.findIndex((endpoint) => endpoint.rpcUrl === relay),
+	}
+}
+
+async function shownEndpointIds(page: Page, name: string): Promise<(string | null)[]> {
+	await navigateByHash(page, "#/popup/general")
+	await navigateToSettings(page, "networks")
+	await openNetworkDetail(page, name)
+	await page.waitForSelector('[data-testid="endpoint-row"]', { visible: true, timeout: 5_000 })
+	return page.$$eval('[data-testid="endpoint-row"]', (rows) => rows.map((row) => row.getAttribute("data-endpoint-id")))
+}
+
+/** A frame shows the relay's URL only: every other endpoint URL line is blurred before the shot. */
+async function shotEndpoints(page: Page, name: string): Promise<void> {
+	if (!process.env.NULO_E2E_SHOT_DIR) return
+	await page.$$eval(
+		'[data-testid="endpoint-row"] span',
+		(spans, relayHosts) => {
+			for (const span of spans as HTMLElement[]) {
+				const text = span.textContent ?? ""
+				const url = span.children.length === 0 && /^https?:\/\//.test(text)
+				if (url && !relayHosts.some((host) => text.startsWith(`https://${host}`))) span.style.filter = "blur(8px)"
+			}
+		},
+		RELAY_NODE_HOSTS,
+	)
+	await shotSend(page, name, "endpoint-row")
+}
+
+const VIEWPORT = isFirefox ? { width: 360, height: 600 } : { width: 360, height: 600, deviceScaleFactor: 2 }
+
+async function restartAndUnlock(extension: ExtensionContext, page: Page): Promise<Page> {
+	await page.close()
+	await stopBackground(extension)
+	const next = await openPopup(extension)
+	await unlockAfterBackgroundDeath(next)
+	return next
+}
+
+// Nulo's relay in the real popup and worker: a new profile lists it after dRPC on Alpha and Testnet,
+// and a profile whose record predates it is given it, last, by the unlock of a restarted worker.
+// The record and the conversion's rules are proven by the network service's tests; what only this
+// run shows is the seed and the unlock path the shipped build takes, read back from its page. No
+// request reaches the relay: the launch's guard holds both hosts.
+test("Nulo's relay is each default network's second endpoint, and is given once to an earlier profile", async ({
+	registeredExtensionPerTest: extension,
+}) => {
+	let page = await openPopup(extension)
+	await setViewport(page, VIEWPORT)
+	await waitForHash(page, "#/popup/general")
+
+	for (const [kind, name] of [
+		["mainnet", "Alpha"],
+		["testnet", "Testnet"],
+	] as const) {
+		const seeded = await relayView(page, kind)
+		expect(seeded.labels).toEqual(["dRPC", RELAY_LABEL])
+		expect(seeded.relayAt).toBe(1)
+		expect(await shownEndpointIds(page, name)).toEqual(seeded.ids)
+	}
+	await shotEndpoints(page, "p112-04-built-01")
+
+	const before = await relayView(page, "testnet")
+	const relayId = before.ids[1] as string
+	await page.$eval(`[data-endpoint-id="${relayId}"] [data-testid="endpoint-delete-btn"]`, (button) =>
+		button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
+	)
+	await clickByTestId(page, "confirm-submit")
+	await pollUntil(
+		() => relayView(page, "testnet"),
+		(view) => view.relayAt === -1,
+		{ label: "the Testnet relay deleted", timeoutMs: 15_000, intervalMs: 200 },
+	)
+	// A profile made before the relay holds no relay endpoint and a record that names no relay offer.
+	await page.evaluate(async (key: string) => {
+		const { relay: _relay, ...earlier } = JSON.parse((await chrome.storage.local.get(key))[key] as string)
+		await chrome.storage.local.set({ [key]: JSON.stringify(earlier) })
+	}, `nulo:core:network-seeded@${before.profileId}`)
+
+	page = await restartAndUnlock(extension, page)
+	const converted = await pollUntil(
+		() => relayView(page, "testnet"),
+		(view) => view.relayAt !== -1,
+		{ label: "the Testnet relay given at unlock", timeoutMs: 30_000, intervalMs: 250 },
+	)
+	expect(converted.labels).toEqual(["dRPC", RELAY_LABEL])
+	expect(converted.relayAt).toBe(converted.ids.length - 1)
+	expect((await readSeedOffers(page, before.profileId))?.relay).toEqual(["mainnet", "testnet"])
+	// The popup reads its networks once at unlock, which can precede the conversion's write and hears
+	// no later one, so the person meets the relay at their next open, as this one does.
+	await page.close()
+	page = await openPopup(extension)
+	await setViewport(page, VIEWPORT)
+	await waitForHash(page, "#/popup/general")
+	expect(await shownEndpointIds(page, "Testnet")).toEqual(converted.ids)
+	await shotEndpoints(page, "p112-04-built-02")
+
+	expect(extension.pageErrors).toEqual([])
+}, 120_000)
