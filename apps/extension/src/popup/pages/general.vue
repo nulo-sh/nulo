@@ -21,6 +21,7 @@ import RecentActivityView from "../components/modules/general/RecentActivityView
 import RecoveryModeBanner from "../components/modules/general/RecoveryModeBanner.vue"
 import RestoreOutcomeBanner from "../components/modules/general/RestoreOutcomeBanner.vue"
 import TokensView from "../components/modules/general/TokensView.vue"
+import WhatsNewRow from "../components/modules/general/WhatsNewRow.vue"
 
 /** Composables */
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
@@ -165,6 +166,7 @@ onBeforeUnmount(() => {
 			<Flex direction="column" gap="16" :class="$style.content">
 				<RecoveryModeBanner />
 				<RestoreOutcomeBanner />
+				<WhatsNewRow />
 				<GetStartedCard
 					v-if="reminders?.steps.length"
 					:steps="reminders.steps"

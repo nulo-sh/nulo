@@ -51,17 +51,13 @@ describe("composite/TransactionCardLayout", () => {
 		expect(mountLayout().get("[data-testid='activity-title']").attributes("class")).not.toMatch(cut)
 	})
 
-	test("title-trailing slot renders in the group beside the title; `wrapTrailing` lets the group drop under it at any width", () => {
+	test("title-trailing slot renders in the group beside the title, and no group renders without it", () => {
 		const slots = { "title-trailing": "<span data-testid='trailing'>↗</span>" }
 		const row = (w: ReturnType<typeof mountLayout>) => w.get("[data-testid='activity-title']").element.parentElement as HTMLElement
-		const group = (w: ReturnType<typeof mountLayout>) => w.get("[data-testid='trailing']").element.parentElement as HTMLElement
 		const inline = mountLayout({}, slots)
-		expect(group(inline).className).toMatch(/_trailing_inline_/)
-		expect(group(inline).parentElement).toBe(row(inline))
-		expect(row(inline).className).not.toMatch(/_title_row_wrap_/)
-		const wrapping = mountLayout({ wrapTrailing: true }, slots)
-		expect(group(wrapping).className).toMatch(/_trailing_(?!inline)/)
-		expect(row(wrapping).className).toMatch(/_title_row_wrap_/)
+		const group = inline.get("[data-testid='trailing']").element.parentElement as HTMLElement
+		expect(group.className).toMatch(/_trailing_inline_/)
+		expect(group.parentElement).toBe(row(inline))
 		expect(row(mountLayout()).querySelector("[class*='_trailing_']")).toBeNull()
 	})
 
@@ -195,6 +191,40 @@ describe("composite/TransactionCardLayout", () => {
 		await nextTick()
 		expect(w.html()).toMatch(/wrapper_has_actions/)
 		expect(w.find("[data-testid='x']").exists()).toBe(true)
+	})
+})
+
+describe("composite/TransactionCardLayout — a row's direction", () => {
+	const SEND = { from: "public", to: "private", way: "out", label: "Public → Private" } as const
+	const glyphs = (w: ReturnType<typeof mountLayout>, testid: string) =>
+		w.findAll(`[data-testid='${testid}'] [data-testid='stub-icon']`).map((i) => i.attributes("data-name"))
+
+	test("the box draws the two sides around the arrow and the way's badge, hidden from assistive tech, in place of the icon", () => {
+		const w = mountLayout({ icon: "send", direction: SEND }, { badge: "<span data-testid='status'>✓</span>" })
+		const pair = w.get("[data-testid='activity-icon-pair']")
+		expect(glyphs(w, "activity-icon-pair")).toEqual(["public", "forward", "private"])
+		expect(pair.attributes("aria-hidden")).toBe("true")
+		const way = w.get("[data-testid='activity-way-badge']")
+		expect(glyphs(w, "activity-way-badge")).toEqual(["send"])
+		expect(way.attributes()).toMatchObject({ "aria-hidden": "true", "data-way": "out" })
+		expect(way.attributes("class")).toMatch(/_badge_way_/)
+		expect(w.find("[data-testid='status']").exists()).toBe(true)
+	})
+
+	test("each way has its glyph, and an unknown sending side draws the arrow and the destination only", () => {
+		for (const [way, glyph] of [
+			["in", "receive"],
+			["self", "swap"],
+		] as const)
+			expect(glyphs(mountLayout({ direction: { ...SEND, way } }), "activity-way-badge")).toEqual([glyph])
+		expect(glyphs(mountLayout({ direction: { ...SEND, from: null } }), "activity-icon-pair")).toEqual(["forward", "private"])
+	})
+
+	test("without a direction the box draws its icon alone and no way badge", () => {
+		const w = mountLayout({ icon: "zap" })
+		expect(w.findAll("[data-testid='activity-icon'] [data-testid='stub-icon']").map((i) => i.attributes("data-name"))).toEqual(["zap"])
+		expect(w.find("[data-testid='activity-icon-pair']").exists()).toBe(false)
+		expect(w.find("[data-testid='activity-way-badge']").exists()).toBe(false)
 	})
 })
 

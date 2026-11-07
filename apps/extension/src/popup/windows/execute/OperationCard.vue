@@ -156,12 +156,14 @@ const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: 
 	return (op.exec.calls as WireCall[]).map((call, j) => ({ call, surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)) }))
 }
 const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
-/** What this account signs away by authorization, read as the authorizations block reads it. */
-const signedAuthorizations = computed(() =>
-	(summaryAuthwits.value ?? [])
-		.filter(({ authwit }) => authwit.onBehalfOf === undefined)
-		.map(({ authwit, surface }) => ({ call: { to: authwit.consumer }, surface, caller: authwit.caller })),
-)
+/** What this account gives away by authorization, read as the authorizations block reads it: what the
+ *  wallet signs for it, and its own the app carries. Another account's moves that account's tokens. */
+const signedAuthorizations = computed(() => {
+	const sender = props.op.kind === "aztec_sendTx" ? props.op.accountAddress : ""
+	return (summaryAuthwits.value ?? [])
+		.filter(({ authwit }) => authwit.onBehalfOf === undefined || sameFieldAddress(authwit.onBehalfOf, sender))
+		.map(({ authwit, surface }) => ({ call: { to: authwit.consumer }, surface, caller: authwit.caller }))
+})
 const outflows = computed(() =>
 	props.op.kind === "aztec_sendTx"
 		? accountOutflows(sendTxRows.value, props.op.accountAddress, props.tokens, props.op.network?.chainId, signedAuthorizations.value)

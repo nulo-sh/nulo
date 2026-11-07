@@ -23,7 +23,9 @@ import {
 	PxeScopeUnregisteredError,
 	PxeStaleAnchorError,
 	ContractAssertionError,
+	DefaultEntrypointMultiCallError,
 	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import { unwrapOperationResult } from "@nulo/wallet-bridge"
@@ -297,8 +299,14 @@ describe("stale-anchor and unregistered-contract arms", () => {
 		expect(env).toBe(UNCLASSIFIED_ERROR_MESSAGE)
 	})
 
-	test("DefaultEntrypointPublicCallError keeps the answer its plain error gave: unclassified", () => {
-		expect(toWalletResponseError(new DefaultEntrypointPublicCallError())).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+	test("each default-entrypoint refusal keeps the answer its plain error gave: unclassified", () => {
+		for (const error of [
+			new DefaultEntrypointPublicCallError(),
+			new DefaultEntrypointUtilityCallError(),
+			new DefaultEntrypointMultiCallError(),
+		]) {
+			expect(toWalletResponseError(error)).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		}
 	})
 
 	test("InvalidWalletArgumentsError → {code:-32602, INVALID_PARAMS} with a constant message naming no method", () => {
@@ -364,6 +372,8 @@ describe("stale-anchor and unregistered-contract arms", () => {
 		const assertion = rethrown(new ContractAssertionError("Assertion failed: secret text", { assertion: "secret text", frames: [] }))
 		expect(toWalletResponseError(assertion)).toBe(UNCLASSIFIED_ERROR_MESSAGE)
 		expect(toWalletResponseError(rethrown(new DefaultEntrypointPublicCallError()))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError(rethrown(new DefaultEntrypointUtilityCallError()))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError(rethrown(new DefaultEntrypointMultiCallError()))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
 	})
 })
 

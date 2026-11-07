@@ -5,6 +5,7 @@ import { OriginType, TransferType, type TxCall, type TxTransfer } from "@/wallet
 import {
 	FEE_METHODS,
 	formatTransferType,
+	transferDirection,
 	getMethodLabel,
 	getOriginLabel,
 	getPrimaryCall,
@@ -108,6 +109,7 @@ describe("a dApp's function named like an Object.prototype member gets no wallet
 		expect(tokenMovementLabel(name)).toBeNull()
 		expect(humanizeMethodName(name)).toBe(plainMethodName(name))
 		expect(formatTransferType(name)).toBe(name)
+		expect(transferDirection(name, false)).toBeNull()
 	})
 
 	test("constructor is title-cased; a curated name keeps its label", () => {
@@ -296,5 +298,21 @@ describe("formatTransferType — enum and string keys", () => {
 	test("unknown → stringified input", () => {
 		expect(formatTransferType(999)).toBe("999")
 		expect(formatTransferType("bogus")).toBe("bogus")
+	})
+})
+
+describe("transferDirection — a sent transfer's sides and way", () => {
+	test.each([
+		[0, "Private", "private", "private", "Private → Private"],
+		[1, "PrivateToPublic", "private", "public", "Private → Public"],
+		[2, "Public", "public", "public", "Public → Public"],
+		[3, "PublicToPrivate", "public", "private", "Public → Private"],
+	])("type %s (%s): %s to %s", (type, name, from, to, label) => {
+		expect(transferDirection(type, false)).toEqual({ from, to, way: "out", label })
+		expect(transferDirection(name, true)).toEqual({ from, to, way: "self", label })
+	})
+
+	test("a type the wallet does not send has no direction", () => {
+		for (const type of [999, "bogus", undefined, null, {}, [1]]) expect(transferDirection(type, false)).toBeNull()
 	})
 })

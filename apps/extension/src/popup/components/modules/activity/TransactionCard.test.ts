@@ -1,12 +1,9 @@
 /**
  * TransactionCard (settled) — colocated unit tests.
  *
- * The settled card derives its two title-row chips from independent sources
- * (call shape → transferTypeLabel; tx.origin → originLabel), unlike the
- * journal-driven awaiting + terminal cards where the two are mutually
- * exclusive. This test pins the dApp-initiated-transfer case where BOTH
- * fields are set, to guard against a regression
- * (a `||` template silently dropped the dApp origin chip on dApp transfers).
+ * The settled card derives its direction and its app chip from independent sources (call shape →
+ * direction; tx.origin → originLabel), unlike the journal-driven awaiting + terminal cards where
+ * the two are mutually exclusive. A dApp-initiated transfer sets both, and must show both.
  */
 
 import { mount } from "@vue/test-utils"
@@ -23,7 +20,7 @@ vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({ network: { chainId: CHAIN_IDS.TESTNET }, defaultExplorer: "aztecscan" }),
 }))
 
-// Controllable price feed for the D2 fiat case.
+// Controllable price feed for the fiat case.
 let mockQuotes: Record<string, unknown> = {}
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
@@ -69,6 +66,7 @@ const STUBS = {
 			"txHash",
 			"to",
 			"oneLineTitle",
+			"direction",
 		],
 	},
 }
@@ -124,13 +122,53 @@ describe("modules/activity/TransactionCard (settled)", () => {
 		expect(read(dappTransferTx)).toEqual(["USDC", "USDC"])
 	})
 
-	test("dApp-initiated transfer renders BOTH transferTypeLabel and originLabel chips (regression pin)", () => {
+	test("a dApp-initiated transfer keeps both its direction and its app chip", () => {
 		const w = mountCard(dappTransferTx)
-		// transferTypeLabel from call.transfers[0].type
-		expect(w.text()).toContain("Private → Public")
-		// originLabel from tx.origin.name — must NOT be silently dropped by
-		// the `||` template when the call shape ALSO produces a transferType.
-		expect(w.text()).toContain("example.dapp.io")
+		expect(w.findComponent(STUBS.TransactionCardLayout).props("direction")).toEqual({
+			from: "private",
+			to: "public",
+			way: "out",
+			label: "Private → Public",
+		})
+		expect(w.get('[data-testid="activity-direction-chip"]').text()).toBe("Private → Public")
+		expect(w.get('[data-testid="activity-app-chip"]').text()).toBe("example.dapp.io")
+	})
+
+	describe("the direction's way", () => {
+		const ACCOUNT = `0x${"0a".repeat(32)}`
+		const sentTo = (from: string, to: string, type: unknown = TransferType.PrivateToPublic) => {
+			const [call] = dappTransferTx.calls
+			const tx = { ...dappTransferTx, calls: [{ ...call, transfers: [{ ...call.transfers[0], type, from, to }] }] }
+			return mountCard(tx).findComponent(STUBS.TransactionCardLayout)
+		}
+
+		test("a transfer to its own sender is a move, whatever the hex case; to another account it goes out", () => {
+			expect(sentTo(ACCOUNT, ACCOUNT.replace(/a/g, "A")).props("direction")?.way).toBe("self")
+			expect(sentTo(ACCOUNT, `0x${"0b".repeat(32)}`).props("direction")?.way).toBe("out")
+		})
+
+		test("a move's hidden words say the value stayed in the account; the row's transfer type keeps the label", () => {
+			const moved = sentTo(ACCOUNT, ACCOUNT)
+			expect(moved.find('[data-testid="activity-direction-chip"]').text()).toBe("Private → Public, within this account")
+			expect(moved.props("txTransferTypeLabel")).toBe("Private → Public")
+			expect(
+				sentTo(ACCOUNT, `0x${"0b".repeat(32)}`)
+					.find('[data-testid="activity-direction-chip"]')
+					.text(),
+			).toBe("Private → Public")
+		})
+
+		test("two equal addresses that are no address never make a move", () => {
+			expect(sentTo("", "").props("direction")?.way).toBe("out")
+		})
+
+		test("a type the wallet does not send draws no direction, and the transfer's title stays whole", () => {
+			const layout = sentTo(ACCOUNT, ACCOUNT, "constructor")
+			expect(layout.props("direction")).toBeNull()
+			expect(layout.props("oneLineTitle")).toBe(false)
+			expect(layout.props("txTransferTypeLabel")).toBeNull()
+			expect(layout.find('[data-testid="activity-direction-chip"]').exists()).toBe(false)
+		})
 	})
 
 	describe("the title row, with a dApp's function and host as the wire carries them", () => {
@@ -160,16 +198,19 @@ describe("modules/activity/TransactionCard (settled)", () => {
 			expect(w.html()).not.toMatch(/app_slot/)
 		})
 
-		test("a dApp's transfer keeps its symbol whole and groups the direction with a slot that holds the app chip", () => {
+		test("a dApp's transfer keeps its symbol whole: its app chip sits alone in a slot that gives way, and no direction chip shows", () => {
 			const w = mountCard({ ...dappTransferTx, origin: { type: OriginType.DAPP, name: HOST } })
 			expect(layout(w).props("oneLineTitle")).toBe(false)
 			const slot = w.find('[data-testid="activity-app-chip"]').element.parentElement
 			expect(slot?.className).toMatch(/app_slot/)
 			expect(slot?.textContent).toBe(HOST)
-			const group = slot?.parentElement
-			expect(group?.className).toMatch(/chips/)
-			expect([...(group?.children ?? [])]).toEqual([w.find('[data-testid="activity-direction-chip"]').element, slot])
-			expect(group?.textContent).toBe(`Private → Public${HOST}`)
+			expect(slot?.previousElementSibling?.getAttribute("data-testid")).toBe("activity-title-sep")
+			expect(
+				w
+					.get('[data-testid="activity-direction-chip"]')
+					.classes()
+					.some((c) => c.includes("direction")),
+			).toBe(true)
 		})
 
 		test("a dApp's transfer drops the spaces its name leads with, which nothing else would collapse there", () => {

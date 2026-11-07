@@ -38,7 +38,15 @@ import { downloadPasskeyBackup, FILE_PASSWORD } from "./helpers/backup-export"
 import { contactsFiles, LONG_IMPORT_ROWS, longImportContacts, storedContacts } from "./helpers/contacts"
 import { expectFitsNarrow } from "./fixtures/type-roles"
 import { completeResetRitual } from "./helpers/crash-truth"
-import { readActiveAccount, submitEncryptedFullBackup, waitForActiveAccount, writeBackupToTemp } from "./helpers/import-drivers"
+import {
+	CANONICAL_SEED_24,
+	readActiveAccount,
+	setInputs,
+	submitEncryptedFullBackup,
+	submitWhenEnabled,
+	waitForActiveAccount,
+	writeBackupToTemp,
+} from "./helpers/import-drivers"
 import { pickOnLockScreen } from "./helpers/profile-chaos/ui"
 import { HANDBACK_KEY } from "@/utils/panel-handback"
 import { POPUP_RETURN_FOCUS_MS } from "@/wallet/utils/toolbar-popup"
@@ -298,7 +306,7 @@ async function watchHandback(control: Page): Promise<void> {
 	}, HANDBACK_KEY)
 }
 
-/** The card window's return as the control page sees it, without moving focus. */
+/** An own window's return as the control page sees it, without moving focus. */
 const returnState = (control: Page, windowId: number) =>
 	control.evaluate(
 		async (key: string, id: number) => ({
@@ -310,6 +318,36 @@ const returnState = (control: Page, windowId: number) =>
 		HANDBACK_KEY,
 		windowId,
 	)
+
+interface HandedBack {
+	windowId: number
+	route: string
+	label: string
+	profileId: string
+	timeoutMs?: number
+}
+
+/** Reads from the control page until the panel is up: a read in the panel moves focus. */
+async function expectHandedBack(
+	browser: Browser,
+	control: Page,
+	{ windowId, route, label, profileId, timeoutMs = 60_000 }: HandedBack,
+): Promise<void> {
+	const returned = await pollUntil(
+		() => returnState(control, windowId),
+		(state) => !state.windowOpen && state.record === null && state.panels === 1,
+		{ label: "the window closed, the record consumed, one panel open", timeoutMs, intervalMs: 100, show: JSON.stringify },
+	)
+	expect(returned.handbacks).toEqual([{ route, snack: { kind: "success", label, profileId } }, null])
+	await panelOn(browser, `#${route}`)
+	await untilInPanel<true>(
+		browser,
+		`return [...content.document.querySelectorAll('${sel("snackbar-title")}')].some((el) => el.textContent.includes(${JSON.stringify(label)})) || null;`,
+		`showed "${label}"`,
+	)
+	await sleep(POPUP_RETURN_FOCUS_MS)
+	expect(await control.evaluate(() => chrome.extension.getViews({ type: "popup" }).length), "panels after the return").toBe(1)
+}
 
 const sessionProfile = (control: Page) =>
 	control.evaluate(async () => JSON.parse((await chrome.storage.session.get("nulo:core:session"))["nulo:core:session"]).profile as string)
@@ -601,32 +639,13 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			expect(await returnState(control, cardWindowId)).toMatchObject({ windowOpen: true, record: null, panels: 0, handbacks: [] })
 			expect((await importInWindow(contactsWindow)).written, "still counting after the read").toBeLessThan(LONG_IMPORT_ROWS)
 
-			// Read from the control page before any read in the panel, which would move focus.
-			const returned = await pollUntil(
-				() => returnState(control, cardWindowId),
-				(state) => !state.windowOpen && state.record === null && state.panels === 1,
-				{
-					label: "the window closed, the record consumed, one panel open",
-					timeoutMs: 120_000,
-					intervalMs: 100,
-					show: JSON.stringify,
-				},
-			)
-			expect(returned.handbacks).toEqual([
-				{
-					route: "/popup/settings/contacts",
-					snack: { kind: "success", label: "Import completed successfully", profileId: profile },
-				},
-				null,
-			])
-			await panelOn(browser, CONTACTS)
-			await untilInPanel<true>(
-				browser,
-				`return [...content.document.querySelectorAll('${sel("snackbar-title")}')].some((el) => el.textContent.includes("Import completed successfully")) || null;`,
-				"showed the import's snack",
-			)
-			await sleep(POPUP_RETURN_FOCUS_MS)
-			expect(await control.evaluate(() => chrome.extension.getViews({ type: "popup" }).length), "panels after the return").toBe(1)
+			await expectHandedBack(browser, control, {
+				windowId: cardWindowId,
+				route: "/popup/settings/contacts",
+				label: "Import completed successfully",
+				profileId: profile,
+				timeoutMs: 120_000,
+			})
 			expect(await storedContacts(control)).toHaveLength(LONG_IMPORT_ROWS)
 			await closeActionPopup(browser)
 			await openActionPopup(browser)
@@ -647,6 +666,45 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await auth.cleanup()
 		}
 	}, 360_000)
+
+	test("a phrase imported from the panel with a passkey it already has closes its window, and the panel reopens on Home with its line", async ({
+		freshExtensionPerTest: ctx,
+	}) => {
+		const { browser } = ctx
+		const control = await openPopup(ctx)
+		const auth = await sessionAuthenticator(browser)
+		try {
+			await registerPasskeyProfile(control)
+			const main = await sessionProfile(control)
+			await clickByTestId(control, "header-lock")
+			await waitForHash(control, "#/popup/auth", 15_000)
+
+			await openActionPopup(browser)
+			await panelOn(browser, "#/popup/auth")
+			for (const testid of IMPORT_FROM_LOCK_SCREEN) await clickInPanel(browser, testid)
+			const importWindow = await toOwnWindow(ctx, control, () => clickInPanel(browser, "import-option-seed"))
+			await importWindow.waitForSelector('[data-session-checked="true"]', { timeout: 60_000 })
+			await importWindow.waitForSelector(`${sel("import-seed-input")} input`, { visible: true, timeout: 15_000 })
+			const windowId = await windowIdOf(importWindow)
+			await setInputs(importWindow, { [`${sel("import-seed-input")} input`]: CANONICAL_SEED_24 })
+
+			// Main's is the only passkey on the authenticator, so the window's discovery answers with it.
+			await watchSessionWrites(control)
+			await watchHandback(control)
+			await submitWhenEnabled(importWindow, "import-seed-passkey-reuse")
+			const opened = await sessionOpened(control, main)
+			expect(opened.popupViews, "panels alive when the session opened").toBe(0)
+			await expectHandedBack(browser, control, {
+				windowId,
+				route: "/popup/general",
+				label: "Profile imported",
+				profileId: opened.profile as string,
+			})
+			expect((await readProfileNames(control)).sort()).toEqual(["Main", "Profile 2"])
+		} finally {
+			await auth.cleanup()
+		}
+	}, 240_000)
 
 	test("a second export from the panel focuses its open window; a window that left the flow is not reused", async ({
 		freshExtensionPerTest: ctx,
@@ -746,10 +804,18 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				await panelOn(browser, "#/popup/auth")
 				for (const testid of IMPORT_FROM_LOCK_SCREEN) await clickInPanel(browser, testid)
 				const restoreWindow = await toOwnWindow(ctx, control, () => clickInPanel(browser, "import-option-full-backup"))
+				const windowId = await windowIdOf(restoreWindow)
+				await watchHandback(control)
 				// The file opens with its own password, and restores under a new passkey in that window.
-				await submitEncryptedFullBackup(restoreWindow, file, FILE_PASSWORD, 300_000, "passkey")
+				expect(await submitEncryptedFullBackup(restoreWindow, file, FILE_PASSWORD, 300_000, "passkey")).toBe("closed")
 				await waitForActiveAccount(control, address, 60_000)
 				expect((await readProfileNames(control)).sort()).toEqual(["Main", "Profile 2"])
+				await expectHandedBack(browser, control, {
+					windowId,
+					route: "/popup/general",
+					label: "Profile imported",
+					profileId: await sessionProfile(control),
+				})
 			} finally {
 				await auth.cleanup()
 			}
