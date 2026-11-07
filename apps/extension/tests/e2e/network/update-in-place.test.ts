@@ -33,7 +33,7 @@
  * Fee Juice, 133 s and 184 s.
  */
 import type { Page } from "puppeteer"
-import { expect, inject } from "vitest"
+import { afterEach, expect, inject } from "vitest"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { LEGACY_SELECTED_ACCOUNT_KEY } from "@/wallet/services/ui-preference/spec"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
@@ -83,7 +83,7 @@ import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mini
 import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
 import { openSend } from "../fixtures/send-page"
 import { pollUntil } from "../fixtures/poll"
-import { RELAY_REPLIES, type RelayRuleHandle, type RpcRelay, sendTxCount, startRpcRelay } from "../fixtures/rpc-relay"
+import { callsOf, RELAY_REPLIES, type RelayRuleHandle, type RpcRelay, sendTxCount, startRpcRelay } from "../fixtures/rpc-relay"
 import { reconnectPlayground, runApprovedPgCall } from "../fixtures/send"
 import { callService } from "../fixtures/session"
 import { inPlaceUpdate, readLocalStorage, updateBuilds } from "../fixtures/update/in-place"
@@ -443,8 +443,19 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
  */
 type PendingSend = { chainInfo: ChainInfo; account: string; hash: string; before: Record<string, unknown> }
 
-/** Non-sync reads with arguments of their own, refused on A so the candidate's routes move them to B
- *  while A keeps the role and every read of the pending hash. */
+/** Mining released and the relays closed after each case, a timed-out one included, whose body
+ *  never reaches its own cleanup. */
+const caseRelays: RpcRelay[] = []
+afterEach(async () => {
+	try {
+		await releaseMining()
+	} finally {
+		await Promise.all(caseRelays.splice(0).map((relay) => relay.close()))
+	}
+})
+
+/** Non-sync reads with arguments of their own, refused on A so the candidate's routes move them to
+ *  B. A refusal never takes an endpoint down, so the pending hash's reads stay with A. */
 const MOVABLE = [
 	"getContract",
 	"getContractClass",
@@ -460,7 +471,7 @@ async function addEndpoint(page: Page, network: string, rpcUrl: string): Promise
 	await openNetworkDetail(page, network)
 	await clickByTestId(page, "endpoint-add-btn")
 	await page.waitForSelector('[data-testid="add-endpoint-submit"]', { visible: true, timeout: 5_000 })
-	await replaceInputValue(page, '[data-testid="endpoint-rpc-input"] input', rpcUrl)
+	await replaceInputValue(page, '[data-testid="endpoint-rpc-input"]', rpcUrl)
 	await clickByTestId(page, "add-endpoint-submit")
 	await waitForToast(page, "Endpoint added", 60_000)
 	await page.waitForFunction(() => document.querySelectorAll('[data-testid="endpoint-row"]').length === 2, { timeout: 15_000 })
@@ -519,14 +530,16 @@ async function populatePending(
 	return { chainInfo, account, hash: txHashOf(sent.resultJson).toLowerCase(), before: await readLocalStorage(ctx) }
 }
 
-/** Whether B received a request with the arguments of one A refused: the same call, moved. */
+/** Whether B received, after A refused it, a call with the same method and arguments: the call, moved. */
 function movedToB(refused: RelayRuleHandle, b: RpcRelay): boolean {
-	return refused.bodies().some((body) =>
-		(JSON.parse(body) as { params?: unknown }[]).some((entry) => {
-			const args = JSON.stringify(entry.params ?? [])
-			return args.length > 20 && b.carried(args) > 0
-		}),
-	)
+	const onB = b.received()
+	return refused
+		.took()
+		.some((request) =>
+			callsOf(request).some(({ method, params }) =>
+				onB.some((later) => later.seq > request.seq && callsOf(later).some((c) => c.method === method && c.params === params)),
+			),
+		)
 }
 
 type TxView = { hash: string; status?: number; submittedEndpointUrl?: string }
@@ -630,17 +643,16 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM || !aztecConfig)(
 		const builds = updateBuilds(BROWSER)
 		if (!builds) throw new Error("unreachable: skipIf guards")
 		const release = releaseTraits(builds.tag)
-		const relays = { a: await startRpcRelay(cfg.nodeUrl, "rpc-relay-a"), b: await startRpcRelay(cfg.nodeUrl, "rpc-relay-b") }
-		try {
-			await inPlaceUpdate({
-				builds,
-				populate: (ctx) => populatePending(ctx, cfg, release, relays),
-				verify: (ctx, pending) => verifyPending(ctx, cfg, pending, relays),
-			})
-		} finally {
-			await releaseMining()
-			await relays.a.close()
-			await relays.b.close()
+		const opened = async (service: string) => {
+			const relay = await startRpcRelay(cfg.nodeUrl, service)
+			caseRelays.push(relay)
+			return relay
 		}
+		const relays = { a: await opened("rpc-relay-a"), b: await opened("rpc-relay-b") }
+		await inPlaceUpdate({
+			builds,
+			populate: (ctx) => populatePending(ctx, cfg, release, relays),
+			verify: (ctx, pending) => verifyPending(ctx, cfg, pending, relays),
+		})
 	},
 )

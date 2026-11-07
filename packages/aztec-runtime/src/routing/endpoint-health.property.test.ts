@@ -56,7 +56,8 @@ interface Model {
 	streak: number[]
 	/** Its latest identity answer was another chain. */
 	otherChain: boolean[]
-	/** When each passing probe of the current uninterrupted run landed. */
+	/** When each passing probe of the current run landed. A run restarts on a probe that does not pass
+	 *  and on a role change, as the router's does; a failed call leaves it. */
 	run: number[][]
 	/** When it last took the role. */
 	heldSince: (number | undefined)[]
@@ -64,6 +65,10 @@ interface Model {
 	falls: number[]
 	/** A re-fall that doubles once another endpoint serves in its place. */
 	pendingFall: boolean[]
+	/** The tip it last served or a probe of it answered. */
+	tip: (number | undefined)[]
+	/** A probe of it last answered this chain. */
+	admitted: boolean[]
 }
 
 interface Snapshot {
@@ -326,7 +331,31 @@ function holderRule({ n, after, event, health }: Step): string[] {
 	return after.qualifies.some(Boolean) ? ["no endpoint holds the role while one qualifies"] : []
 }
 
-const RULES = [downRule, refusalRule, roleMoveRule, holdDownRule, otherChainRule, floorRule, holderRule]
+/** Only an endpoint a same-chain probe admitted, last seen at or above the floor, qualifies. */
+function eligibilityRule({ n, all, before, after, event, model }: Step): string[] {
+	if (n === 1) return []
+	return all.flatMap((i) => {
+		if (!after.qualifies[i]) return []
+		if (!admittedAfter(model, event, i)) return [`endpoint ${i} qualifies with no same-chain probe since its last other-chain answer`]
+		const tip = tipAfter(model, event, before.active, i)
+		return tip !== undefined && tip >= after.floor ? [] : [`endpoint ${i} qualifies at tip ${tip}, under the floor ${after.floor}`]
+	})
+}
+
+const RULES = [downRule, refusalRule, roleMoveRule, holdDownRule, otherChainRule, floorRule, holderRule, eligibilityRule]
+
+/** `i`'s tip, this event's included: a probe of the active endpoint only ever raises it. */
+function tipAfter(model: Model, event: Timed, active: number | undefined, i: number): number | undefined {
+	const was = model.tip[i]
+	if (event.kind === "answered" && event.index === i && event.tip !== undefined) return event.tip
+	if (event.kind !== "probe" || event.index !== i || event.answer !== "same") return was
+	return i === active ? Math.max(was ?? event.tip, event.tip) : event.tip
+}
+
+function admittedAfter(model: Model, event: Timed, i: number): boolean {
+	const identity = event.kind === "probe" && event.index === i && (event.answer === "same" || event.answer === "other")
+	return identity ? event.answer === "same" : (model.admitted[i] ?? false)
+}
 
 /** A probe handing the role from its holder to that more preferred endpoint: a return. */
 function isReturn(before: Snapshot, after: Snapshot, event: Timed): boolean {
@@ -342,6 +371,10 @@ function otherChainAfter(model: Model, event: Timed, i: number): boolean {
 }
 
 function noteAnswers(model: Model, before: Snapshot, event: Timed): void {
+	for (let i = 0; i < model.tip.length; i++) {
+		model.tip[i] = tipAfter(model, event, before.active, i)
+		model.admitted[i] = admittedAfter(model, event, i)
+	}
 	const fail = countedFailure(event)
 	if (fail && counting(fail.failure) && !model.counted[fail.index]?.has(fail.cause)) {
 		model.counted[fail.index]?.add(fail.cause)
@@ -437,6 +470,8 @@ function freshModel(n: number, now: number): Model {
 		heldSince: Array.from({ length: n }, (_, i) => (n === 1 && i === 0 ? now : undefined)),
 		falls: Array(n).fill(0),
 		pendingFall: Array(n).fill(false),
+		tip: Array(n).fill(undefined),
+		admitted: Array(n).fill(false),
 	}
 }
 

@@ -48,7 +48,7 @@ afterEach(releaseMining)
 
 /** Most requests the relay received in any `windowMs` from `since` on. */
 function peakPer(relay: RpcRelay, since: number, windowMs: number): number {
-	const times = relay.arrivals().filter((t) => t >= since)
+	const times = relay.received().flatMap(({ at }) => (at >= since ? [at] : []))
 	let peak = 0
 	let start = 0
 	for (let end = 0; end < times.length; end++) {
@@ -86,7 +86,7 @@ test.skipIf(!hasConfig)(
 			const { wallet, primaryId, routedSince } = await prepareRoutedMint(ctx, config, a, b)
 
 			step("a first mint X→R, mined: the handshake the next one reuses")
-			const warm = await await sendMint(ctx)
+			const warm = await sendMint(ctx)
 			await assertPgOk(dapp, warm, "warm-up mint")
 			await waitForTxMined(config, hashOf(warm), 240_000)
 
@@ -98,7 +98,7 @@ test.skipIf(!hasConfig)(
 			let killedAt = 0
 			let sent: PgResult
 			try {
-				const result = await sendMint(ctx, async () => {
+				sent = await sendMint(ctx, async () => {
 					const held = await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "proving", 90_000)
 					await a.kill()
 					killedAt = Date.now()
@@ -107,7 +107,6 @@ test.skipIf(!hasConfig)(
 					)
 					await releaseProofGate(wallet)
 				})
-				sent = await result
 			} finally {
 				await releaseProofGate(wallet)
 			}

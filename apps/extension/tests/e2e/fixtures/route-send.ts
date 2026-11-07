@@ -113,9 +113,9 @@ export async function prepareRoutedMint(ctx: MintCtx, config: AztecTestConfig, a
 	}
 }
 
-/** Clicks the phase section's send, approves its execute window, runs `approved` and returns the
- *  pending result row. */
-export async function sendMint(ctx: MintCtx, approved?: () => Promise<void>): Promise<Promise<PgResult>> {
+/** Clicks the phase section's send, approves its execute window, runs `approved`, then waits for
+ *  the result row. */
+export async function sendMint(ctx: MintCtx, approved?: () => Promise<void>): Promise<PgResult> {
 	const page = ctx.playgroundPage
 	const seq = await snapshotResultSeq(page)
 	const result = waitForPgResult(page, "phase.send", seq, 300_000)
@@ -167,10 +167,18 @@ export type RouteEvent = {
 	method?: string
 }
 
-/** The router's stored events since `since`, oldest first. */
+/** How many lines the logger keeps in session storage, the oldest dropped first. */
+const STORED_LINES = 2_000
+
+/** The router's stored events since `since`, oldest first. Throws when the stored log has dropped
+ *  lines from after `since`, rather than answer from part of the run. */
 export async function routeEvents(wallet: Page, since: number): Promise<RouteEvent[]> {
-	const read = await readSwLogTrail(wallet, { match: "\\[route\\]", limit: 2_000 })
-	const lines = Array.isArray(read) ? (read as { source?: string; timestamp?: number; data?: unknown }[]) : []
+	const read = await readSwLogTrail(wallet, { limit: STORED_LINES })
+	const stored = Array.isArray(read) ? (read as { source?: string; timestamp?: number; data?: unknown }[]) : []
+	if (stored.length >= STORED_LINES && Number(stored[0]?.timestamp) > since) {
+		throw new Error(`the stored log starts after ${since}: its oldest router lines are gone`)
+	}
+	const lines = stored.filter((line) => JSON.stringify(line.data ?? []).includes("[route]"))
 	return lines.flatMap((line) => {
 		const source = line.source === "pxe" || line.source === "wallet" ? line.source : undefined
 		const timestamp = Number(line.timestamp)
@@ -191,13 +199,11 @@ export async function routeEvents(wallet: Page, since: number): Promise<RouteEve
 	})
 }
 
-/** The endpoint `source`'s router holds the role on, by its last `active` event, while no later
- *  `state` event has taken that endpoint out of `ready`; undefined otherwise. */
+/** The endpoint `source`'s router holds the role on, by its last `active` event, when that
+ *  endpoint's last `state` event reads `ready`; undefined otherwise. */
 export function readyHolder(events: readonly RouteEvent[], source: RouteSource): string | undefined {
 	const own = events.filter((e) => e.source === source)
-	const last = own.findLastIndex((e) => e.event === "active")
-	const holder = own[last]?.endpointId
-	if (holder === undefined) return undefined
-	const later = own.slice(last + 1).filter((e) => e.event === "state" && e.endpointId === holder)
-	return later.every((e) => e.state === "ready") ? holder : undefined
+	const holder = own.findLast((e) => e.event === "active")?.endpointId
+	const state = own.findLast((e) => e.event === "state" && e.endpointId === holder)?.state
+	return holder !== undefined && state === "ready" ? holder : undefined
 }

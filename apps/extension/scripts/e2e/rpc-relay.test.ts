@@ -123,7 +123,7 @@ test("a rule lets its first `after` matches through, takes only batches made who
 	expect((await rpc(r, ["getContract"])).status).toBe(400)
 	expect((await rpc(r, ["getBlock"])).status).toBe(200)
 	expect(taken.taken()).toBe(2)
-	expect(taken.bodies().map((b) => JSON.parse(b).map((e: { method: string }) => e.method))).toEqual([
+	expect(taken.took().map((t) => JSON.parse(t.body).map((e: { method: string }) => e.method))).toEqual([
 		["aztec_getblock", "aztec_getcontract"],
 		["aztec_getcontract"],
 	])
@@ -169,7 +169,9 @@ test("a hold parks only the requests carrying its text until release, and stops 
 	await r.release()
 	expect(results((await waiting).text)).toEqual(["aztec_getTxReceipt:ok"])
 	expect(r.held()).toBe(0)
-	expect(r.arrivals()).toHaveLength(3)
+	expect(r.received()).toHaveLength(3)
+	const [first, second, third] = r.received().map((request) => request.seq)
+	expect((first as number) < (second as number) && (second as number) < (third as number)).toBe(true)
 	const answered = rpc(r, ["getTxReceipt"], ["0xabc"])
 	await expect.poll(() => r.held()).toBe(1)
 	await r.release(RELAY_REPLIES.overloaded)

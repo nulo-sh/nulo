@@ -13,8 +13,9 @@
  * Settings page and no two contexts; the floor's own seeding on a handover, before any tip read,
  * is pinned by `routing/routed-node.test.ts` and `routing/endpoint-health.test.ts`.
  *
- * Runs on Chrome only: no step here depends on the browser (the gate, the relays, a settings click),
- * and Firefox's lanes already run `rpc-failover-send.test.ts`, which shares every fixture.
+ * Chrome only, a runtime choice rather than a missing capability, so it skips in-file and not through
+ * `CHROME_ONLY`: no step depends on the browser (the gate, the relays, a settings click), and
+ * Firefox's lanes run `rpc-failover-send.test.ts`, which shares every fixture.
  *
  * @requires-proverless — the proof gate parks the send; the agent runner refuses this file without
  * `NULO_E2E_PROVERLESS=1`. Run it with `NULO_E2E_RETRY=0`: it spends on-chain and PXE state.
@@ -22,7 +23,7 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { type AztecTestConfig, createSponsoredFeeOptions, createTestWallet, mintPublicTokens, waitForTxMined } from "../fixtures/aztec"
-import { BROWSER } from "../fixtures/browser"
+import { isFirefox } from "../fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { navigateToSettings, openNetworkDetail, setDebugMode, waitForToast } from "../fixtures/helpers"
 import { readSendRecords, waitForSendRecord } from "../fixtures/journal"
@@ -40,7 +41,7 @@ import {
 	txRow,
 	WITNESS_READS,
 } from "../fixtures/route-send"
-import { RELAY_REPLIES, type RpcRelay, sendTxCount, startRpcRelay } from "../fixtures/rpc-relay"
+import { callsOf, RELAY_REPLIES, type RpcRelay, sendTxCount, startRpcRelay } from "../fixtures/rpc-relay"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
@@ -48,7 +49,8 @@ const SPEC = "rpc-edit-mid-proof"
 const step = (message: string) => console.log(`[${SPEC}] ${message}`)
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** How long the send must stay unsent with the proof's read parked, longer than the whole proof. */
+/** How long the send must stay unsent with the proof's read parked. A heuristic: what ties the send
+ *  to the parked read is that only a proof makes a witness read. */
 const OWNERSHIP_MS = 5_000
 /** What an admission probe asks: the only methods a behind endpoint may receive. */
 const PROBE = new Set(["aztec_getNodeInfo", "aztec_getChainTips"])
@@ -81,11 +83,15 @@ async function advanceChain(config: AztecTestConfig): Promise<void> {
 	}
 }
 
-/** Whether `relay` received `first` immediately followed by `then` before its first `sendTx`. */
-function askedBeforeSend(relay: RpcRelay, first: string, then: string): boolean {
-	const methods = relay.methods()
-	const sent = methods.indexOf("aztec_sendTx")
-	return methods.slice(0, sent < 0 ? undefined : sent).some((m, i, all) => m === first && all[i + 1] === then)
+/** Whether `relay` received the pick's anchor question, one batch of exactly `getNodeInfo` and
+ *  `getBlockData`, before its first `sendTx`. Which anchor it names is pinned by the routed node's
+ *  unit tests. */
+function askedForAnchorBeforeSend(relay: RpcRelay): boolean {
+	const requests = relay.received().map(callsOf)
+	const sent = requests.findIndex((calls) => calls.some((c) => c.method === "aztec_sendtx"))
+	return requests
+		.slice(0, sent < 0 ? undefined : sent)
+		.some((calls) => calls.map((c) => c.method).join() === "aztec_getnodeinfo,aztec_getblockdata")
 }
 
 /**
@@ -111,6 +117,14 @@ async function behindAfterHandover(
 	)
 	b.clear()
 	expect(refused.taken(), `B refused the ${control.source} read`).toBe(1)
+	step(
+		`${control.source}: B refused ${JSON.stringify(
+			refused
+				.took()
+				.flatMap(callsOf)
+				.map((c) => c.method),
+		)}`,
+	)
 	const onA = methodsAfter(a, seenOnA)
 	step(`${control.source}: A received ${JSON.stringify(onA)}`)
 	expect(
@@ -124,7 +138,7 @@ async function behindAfterHandover(
 	expect(events.filter((e) => e.source === control.source && e.event === "active").map((e) => e.endpointId)).not.toContain(mint.primaryId)
 }
 
-test.skipIf(!aztecConfig || BROWSER === "firefox")(
+test.skipIf(!aztecConfig || isFirefox)(
 	"rpc-edit-mid-proof — making the fallback primary inside a proof: one send on it, its hash read only there, the demoted endpoint kept out behind the floor",
 	{ timeout: 900_000, retry: 0 },
 	async ({ dappConnectedExtensionWithFirstTwoAccountsContractsCap: ctx }) => {
@@ -152,7 +166,7 @@ test.skipIf(!aztecConfig || BROWSER === "firefox")(
 			await holdProofGate(mint.wallet)
 			const sent = await (async () => {
 				try {
-					return await await sendMint(ctx as MintCtx, async () => {
+					return await sendMint(ctx as MintCtx, async () => {
 						await waitForSendRecord(mint.wallet, (r) => r.kind === "dapp_execute" && r.stage === "proving", 90_000)
 						a.fail({ methods: WITNESS_READS, times: 1, fault: { kind: "hold" } })
 						await releaseProofGate(mint.wallet)
@@ -179,7 +193,7 @@ test.skipIf(!aztecConfig || BROWSER === "firefox")(
 			const hash = hashOf(sent)
 
 			expect([sendTxCount(a), sendTxCount(b)], "one submission, on the new primary").toEqual([0, 1])
-			expect(askedBeforeSend(b, "aztec_getNodeInfo", "aztec_getBlockData"), "the pick asked B for the anchor").toBe(true)
+			expect(askedForAnchorBeforeSend(b), "the pick asked B for the anchor").toBe(true)
 			await waitForTxMined(config, hash, 240_000)
 			const row = await pollUntil(
 				() => txRow(mint.wallet, hash),
@@ -191,12 +205,14 @@ test.skipIf(!aztecConfig || BROWSER === "firefox")(
 
 			step("A behind the floor in each context, one at a time")
 			const dapp = ctx.playgroundPage
+			// Only the offscreen's PXE reads private logs; the background's finality reads also send
+			// `findLeavesIndexes`, which could take the one refusal meant for the PXE.
 			await behindAfterHandover(
 				mint,
 				{ a, b },
 				{
 					source: "pxe",
-					methods: ["getPrivateLogsByTags", "findLeavesIndexes"],
+					methods: ["getPrivateLogsByTags"],
 					drive: async () => {
 						await setPgInput(dapp, "phase-recipient", "")
 						await callExpectingNoPopup(ctx, dapp, "phase.balance", () => clickByTestId(dapp, "pg-btn-phase-balance"), 90_000)
@@ -222,6 +238,7 @@ test.skipIf(!aztecConfig || BROWSER === "firefox")(
 				},
 			)
 			expect(a.carried(hash), "the hash stays off A").toBe(0)
+			expect([sendTxCount(a), sendTxCount(b)], "still one submission").toEqual([0, 1])
 			await settings.close()
 		} finally {
 			a.unfreeze()

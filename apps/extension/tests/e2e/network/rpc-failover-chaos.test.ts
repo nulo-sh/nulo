@@ -44,7 +44,15 @@ import {
 	txRow,
 	WITNESS_READS,
 } from "../fixtures/route-send"
-import { RELAY_REPLIES, type RelayRuleHandle, type RpcRelay, sendTxCount, startRpcRelay } from "../fixtures/rpc-relay"
+import {
+	callsOf,
+	RELAY_REPLIES,
+	type RelayRuleHandle,
+	type RpcRelay,
+	receiptReads,
+	sendTxCount,
+	startRpcRelay,
+} from "../fixtures/rpc-relay"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const enabled = aztecConfig !== undefined && process.env.NULO_E2E_CHAOS === "1"
@@ -58,7 +66,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 /** The witness reads of the mint's proof the onset may land on, and the receipt reads before mining. */
 const PROOF_ONSETS = 2
 const RECEIPT_ONSETS = 3
-/** How long the send must stay unsent with the proof's read parked, longer than the whole proof. */
+/** How long the send must stay unsent with the proof's read parked. A heuristic: what ties the send
+ *  to the parked read is that only a proof makes a witness read. */
 const OWNERSHIP_MS = 5_000
 /** A 429 span ends after its requests or this long, whichever comes first. */
 const SPAN_LIMIT_MS = 60_000
@@ -113,10 +122,10 @@ async function sendWithProofOnset(
 ): Promise<{ sent: PgResult; onset: RelayRuleHandle }> {
 	const { a, b } = relays
 	let onset: RelayRuleHandle | undefined
-	let span: RelayRuleHandle | undefined
+	let ended: Promise<void> | undefined
 	await holdProofGate(wallet)
 	try {
-		const result = await sendMint(ctx, async () => {
+		const sent = await sendMint(ctx, async () => {
 			await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "proving", 90_000)
 			onset = a.fail({ methods: WITNESS_READS, after: plan.onset.k - 1, times: 1, fault: { kind: "hold" } })
 			await releaseProofGate(wallet)
@@ -132,31 +141,43 @@ async function sendWithProofOnset(
 				records.filter((r) => r.kind === "dapp_execute").map((r) => r.stage),
 				"the send waits on the parked read",
 			).toContain("proving")
-			span = overloadSpan(a, plan.fault)
+			const span = overloadSpan(a, plan.fault)
 			if (plan.fault.kind === "kill") await a.kill()
 			else await a.release(RELAY_REPLIES.overloaded)
 			step(`onset: the proof's witness read ${plan.onset.k} on A, ${plan.fault.kind}`)
+			ended = endSpan(a, plan.fault, span)
+			ended.catch(() => {})
 		})
-		const ended = endSpan(a, plan.fault, span)
-		const sent = await result
 		await ended
 		return { sent, onset: onset as RelayRuleHandle }
 	} finally {
-		await releaseProofGate(wallet)
+		// A failed send, or a failed release, must not leave a restore pending past the relays' teardown.
+		try {
+			await releaseProofGate(wallet)
+		} finally {
+			await ended?.catch(() => {})
+		}
 	}
 }
 
-/** The mint accepted with mining held, then the onset on A's k-th receipt read carrying its hash. */
+/** The mint accepted with mining held, then the onset on A's k-th receipt read. The rule is armed
+ *  before the send, when no receipt is pending, so k counts from the submission; the read it took
+ *  must carry the accepted hash. */
 async function sendWithReceiptOnset(ctx: MintCtx, a: RpcRelay, plan: Draw): Promise<{ sent: PgResult; onset: RelayRuleHandle }> {
 	await holdMining()
-	const sent = await await sendMint(ctx)
 	const fault = plan.fault.kind === "kill" ? ({ kind: "kill" } as const) : RELAY_REPLIES.overloaded
-	const onset = a.fail({ methods: ["getTxReceipt"], carrying: hashOf(sent), after: plan.onset.k - 1, times: 1, fault })
+	const onset = a.fail({ methods: ["getTxReceipt"], after: plan.onset.k - 1, times: 1, fault })
+	const sent = await sendMint(ctx)
 	await pollUntil(
 		async () => onset.taken(),
 		(n) => n >= 1,
 		{ label: `A's receipt read ${plan.onset.k} of the accepted hash`, timeoutMs: 90_000, intervalMs: 50 },
 	)
+	const [took] = onset.took()
+	expect(
+		took && callsOf(took).some((c) => c.method === "aztec_gettxreceipt" && c.params.includes(hashOf(sent))),
+		"the onset read the accepted hash",
+	).toBe(true)
 	step(`onset: A's receipt read ${plan.onset.k} of the hash, ${plan.fault.kind}`)
 	await endSpan(a, plan.fault, overloadSpan(a, plan.fault))
 	await releaseMining()
@@ -195,7 +216,7 @@ test.skipIf(!enabled)(
 			expect(sends.a + sends.b, "one submission across both endpoints").toBe(1)
 			const [carrier, other] = sends.a === 1 ? [a, b] : [b, a]
 			expect(row?.submittedEndpointUrl, "recorded on the endpoint that carried it").toBe(carrier.url)
-			expect(carrier.carried(hash), "its receipt is read where it went").toBeGreaterThan(0)
+			expect(receiptReads(carrier, hash), "its receipt is read where it went").toBeGreaterThan(0)
 			expect(other.carried(hash), "and nowhere else").toBe(0)
 
 			step("a served read in each context, then each router's holder")
@@ -206,7 +227,9 @@ test.skipIf(!enabled)(
 			await header.close()
 			const events = await routeEvents(mint.wallet, mint.routedSince)
 			for (const source of ["wallet", "pxe"] as const) {
-				expect(readyHolder(events, source), `the ${source} router ends on a ready endpoint`).toBeDefined()
+				expect([mint.primaryId, mint.fallbackId], `the ${source} router ends on a ready endpoint`).toContain(
+					readyHolder(events, source),
+				)
 			}
 			expect(other.carried(hash), "the hash stays off the other endpoint").toBe(0)
 		} finally {
