@@ -1,6 +1,6 @@
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { describe, expect, test, vi } from "vitest"
-import type { Network, RouteSnapshot } from "@/wallet/services/network/client"
+import type { Network, RouteEndpoint, RouteSnapshot } from "@/wallet/services/network/client"
 import { useRouteSnapshot } from "./useRouteSnapshot"
 
 /** As stored: 8-hex endpoint ids, the primary first in the route. */
@@ -27,7 +27,7 @@ const SNAPSHOT: RouteSnapshot = {
 
 function setup(row: Network | null = ROW) {
 	const client = {
-		getRouteSnapshot: vi.fn(async (_id: string): Promise<RouteSnapshot | null> => SNAPSHOT),
+		getRouteSnapshot: vi.fn(async (_id: string, _shown: readonly RouteEndpoint[]): Promise<RouteSnapshot | null> => SNAPSHOT),
 		onRouteChanged: new EventHandler<{ profileId: string; chainId: number }>(),
 		onConnected: new EventHandler<void>(),
 	}
@@ -39,10 +39,13 @@ function setup(row: Network | null = ROW) {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe("useRouteSnapshot", () => {
-	test("a refresh reads the row's route and keeps when it was read", async () => {
-		const { client, route } = setup()
+	test("a refresh reads the route of the list it shows, in route order, and keeps when it was read", async () => {
+		const { client, state, route } = setup()
 		await route.refresh()
-		expect(client.getRouteSnapshot).toHaveBeenCalledWith(ROW.id)
+		expect(client.getRouteSnapshot).toHaveBeenCalledWith(ROW.id, ROW.endpoints)
+		state.row = { ...ROW, primaryEndpointId: "b07d44a1" }
+		await route.refresh()
+		expect(client.getRouteSnapshot).toHaveBeenLastCalledWith(ROW.id, [ROW.endpoints[1], ROW.endpoints[0]])
 		expect(route.view.value).toEqual({ networkId: ROW.id, snapshot: SNAPSHOT, readAt: 1_000 })
 	})
 
@@ -82,15 +85,43 @@ describe("useRouteSnapshot", () => {
 		expect(route.view.value?.snapshot).toEqual(SNAPSHOT)
 	})
 
-	test("an older read that lands after a newer one is dropped", async () => {
+	test("reads never overlap: signals during one ask for one more after it, whose answer is shown", async () => {
 		const { client, route } = setup()
 		const slow = deferred<RouteSnapshot | null>()
 		client.getRouteSnapshot.mockReturnValueOnce(slow.promise)
 		const first = route.refresh()
-		await route.refresh()
+		const second = route.refresh()
+		void route.refresh()
+		expect(client.getRouteSnapshot).toHaveBeenCalledTimes(1)
 		slow.resolve({ activeId: null, endpoints: [] })
-		await first
+		await Promise.all([first, second])
+		expect(client.getRouteSnapshot).toHaveBeenCalledTimes(2)
 		expect(route.view.value?.snapshot).toEqual(SNAPSHOT)
+	})
+
+	test("a signal landing just after a run's last read starts a new run", async () => {
+		const { client, state, route } = setup(null)
+		void route.refresh()
+		await Promise.resolve()
+		state.row = ROW
+		await route.refresh()
+		expect(client.getRouteSnapshot).toHaveBeenCalledTimes(1)
+		expect(route.view.value?.snapshot).toEqual(SNAPSHOT)
+	})
+
+	test("an answer is kept when the read a signal asked for after it fails", async () => {
+		const { client, route } = setup()
+		const down: RouteSnapshot = {
+			activeId: "b07d44a1",
+			endpoints: [{ id: "3f9a1c2e", state: "down", since: 4, failure: "unreachable" }],
+		}
+		const slow = deferred<RouteSnapshot | null>()
+		client.getRouteSnapshot.mockReturnValueOnce(slow.promise).mockRejectedValueOnce(new Error("port closed"))
+		const first = route.refresh()
+		void route.refresh()
+		slow.resolve(down)
+		await first
+		expect(route.view.value?.snapshot).toEqual(down)
 	})
 
 	test("an edited endpoint list clears the view at once, and a read of the old list landing after is dropped", async () => {
@@ -100,12 +131,16 @@ describe("useRouteSnapshot", () => {
 		client.getRouteSnapshot.mockReturnValueOnce(slow.promise)
 		const old = route.refresh()
 		state.row = { ...ROW, primaryEndpointId: "b07d44a1" }
-		client.getRouteSnapshot.mockReturnValueOnce(new Promise(() => {}))
+		const next = deferred<RouteSnapshot | null>()
+		client.getRouteSnapshot.mockReturnValueOnce(next.promise)
 		void route.refresh()
 		expect(route.view.value).toBeNull()
 		slow.resolve({ activeId: "3f9a1c2e", endpoints: [{ id: "3f9a1c2e", state: "down", since: 1 }] })
-		await old
+		await settle()
 		expect(route.view.value).toBeNull()
+		next.resolve(null)
+		await old
+		expect(route.view.value).toEqual({ networkId: ROW.id, snapshot: null, readAt: 1_000 })
 	})
 
 	test("a read that lands after the list changed, with no newer read begun, is dropped too", async () => {

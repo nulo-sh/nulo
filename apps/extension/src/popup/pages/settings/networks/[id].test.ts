@@ -560,6 +560,30 @@ describe("Settings › Network detail — the endpoint order", () => {
 		expect(list(wrapper).props("warning")).toBeNull()
 	})
 
+	test("a move among the fallbacks keeps the line, and a later one queued behind its write does not cost it", async () => {
+		route.getRouteSnapshot.mockResolvedValueOnce(READ).mockResolvedValue(null)
+		getNetworks.mockResolvedValueOnce([ALPHA, stored(["m2", "m1", "m3"])]).mockResolvedValue([ALPHA, stored(["m2", "m3", "m1"])])
+		const written = deferred<unknown>()
+		reorderEndpoints.mockReturnValueOnce(written.promise)
+		const wrapper = await mountThree()
+		await move(wrapper, ["m2", "m1", "m3"])
+		await move(wrapper, ["m2", "m3", "m1"])
+		written.resolve(undefined)
+		await flushPromises()
+		expect(shown(wrapper)).toEqual(["m2", "m3", "m1"])
+		expect(list(wrapper).props("warning")).toEqual({
+			id: "m2",
+			text: "This endpoint was not answering. The wallet will try another if needed.",
+		})
+	})
+
+	test("a write that landed is not reported failed when the re-read after it fails", async () => {
+		getNetworks.mockRejectedValue(new Error("port closed"))
+		const wrapper = await mountThree()
+		await move(wrapper, ["m2", "m1", "m3"])
+		expect(openToast.mock.calls).toEqual([[{ kind: "success", label: "Primary endpoint updated" }]])
+	})
+
 	test("a row that was answering, or a move among the fallbacks, carries no line", async () => {
 		route.getRouteSnapshot.mockResolvedValue(READ)
 		getNetworks.mockResolvedValueOnce([ALPHA, stored(["m1", "m3", "m2"])]).mockResolvedValue([ALPHA, stored(["m3", "m1", "m2"])])
@@ -582,7 +606,10 @@ describe("Settings › Network detail — the endpoint order", () => {
 	test("the route read reaches the edit sheet through the cache store, and leaves with the page", async () => {
 		route.getRouteSnapshot.mockResolvedValue(READ)
 		const wrapper = await mountThree()
-		expect(route.getRouteSnapshot).toHaveBeenCalledWith("mine")
+		expect(route.getRouteSnapshot).toHaveBeenLastCalledWith(
+			"mine",
+			THREE.endpoints.map(({ id, rpcUrl }) => ({ id, rpcUrl })),
+		)
 		expect(useCacheStore().endpointRoute).toMatchObject({ networkId: "mine", snapshot: READ })
 		wrapper.unmount()
 		expect(useCacheStore().endpointRoute).toBeNull()

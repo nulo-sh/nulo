@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { moveId, placesWhileLifted, tapOrder } from "./endpoint-order"
+import { moveId, placesWhileLifted, routeOrder, tapOrder } from "./endpoint-order"
 
 const IDS = ["3f9a1c2e", "b07d44a1", "c1d2e3f4", "d4e5f6a7"]
 
@@ -27,5 +27,13 @@ describe("tapOrder", () => {
 	test("puts the tapped row first and keeps the others as shown", () => {
 		expect(tapOrder(["c1d2e3f4", "3f9a1c2e", "b07d44a1"], "b07d44a1")).toEqual(["b07d44a1", "c1d2e3f4", "3f9a1c2e"])
 		expect(tapOrder(IDS, "3f9a1c2e")).toEqual(IDS)
+	})
+})
+
+describe("routeOrder", () => {
+	const rows = [{ id: "3f9a1c2e" }, { id: "b07d44a1" }, { id: "c1d2e3f4" }]
+	test("the primary first, then the rest as stored; a missing primary keeps the stored order", () => {
+		expect(routeOrder(rows, "c1d2e3f4").map((e) => e.id)).toEqual(["c1d2e3f4", "3f9a1c2e", "b07d44a1"])
+		expect(routeOrder(rows, "gone").map((e) => e.id)).toEqual(["3f9a1c2e", "b07d44a1", "c1d2e3f4"])
 	})
 })

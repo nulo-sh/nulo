@@ -21,6 +21,9 @@ const props = defineProps({
 	held: { type: Boolean, default: false },
 	/** `{ id, text }`: the line the row moved first carries. */
 	warning: { type: Object, default: null },
+	/** The stored primary: while a move is written it may not be the first shown, and neither has a
+	 *  delete. */
+	primaryId: { type: String, default: null },
 })
 const emit = defineEmits(["reorder", "edit", "remove"])
 
@@ -29,14 +32,18 @@ const hintId = useId()
 const ids = computed(() => props.endpoints.map((e) => e.id))
 const movable = computed(() => !props.held && props.endpoints.length > 1)
 
-/** The lifted row: `by` the pointer, following it by `dy`, or by the keyboard, one place per arrow. */
-const lift = reactive({ id: null, by: null, from: 0, to: 0, startY: 0, dy: 0, height: 0, pointerId: null })
+/** The lifted row: `by` the pointer, following it by `dy`, or by the keyboard, one place per arrow.
+ *  `heights` are the rows' as shown at the lift: a row with a warning line is taller. */
+const lift = reactive({ id: null, by: null, from: 0, to: 0, startY: 0, dy: 0, heights: [], pointerId: null })
 const places = computed(() => (lift.id === null ? null : placesWhileLifted(ids.value, lift.from, lift.to)))
 const announcement = ref("")
 
 const handles = new Map()
-/** The handle a keyboard drop moved; refocused when a re-render drops focus to the page. */
-let refocusId = null
+/** The control a keyboard move acted from, `{ id, part }`: a re-render moves its row's node, which
+ *  drops focus to the page, so it is focused again. */
+let refocus = null
+/** A press began on a handle: the click that ends it, wherever it lands, is not a tap. */
+let handlePressed = false
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 const titleOf = (endpoint) => endpoint.label || endpoint.rpcUrl
@@ -56,14 +63,27 @@ const say = (text) => {
 const sayPlace = (prefix) => say(`${prefix}, position ${lift.to + 1} of ${ids.value.length}.`)
 
 function reset() {
-	Object.assign(lift, { id: null, by: null, from: 0, to: 0, startY: 0, dy: 0, height: 0, pointerId: null })
+	Object.assign(lift, { id: null, by: null, from: 0, to: 0, startY: 0, dy: 0, heights: [], pointerId: null })
 }
+
+function measure(el) {
+	const rows = [...(el.closest('[data-testid="endpoint-row"]')?.parentElement?.children ?? [])].filter((r) =>
+		r.matches('[data-testid="endpoint-row"]'),
+	)
+	if (rows.length !== ids.value.length) return ids.value.map(() => 1)
+	return rows.map((r) => r.getBoundingClientRect().height || 1)
+}
+
+/** The height of the rows shown at places `from` to `to`, `to` excluded. */
+const span = (from, to) => lift.heights.slice(from, to).reduce((sum, h) => sum + h, 0)
+
+/** Where the lifted row sits, relative to its own place, when it would drop at `to`. */
+const offsetTo = (to) => (to < lift.from ? -span(to, lift.from) : span(lift.from + 1, to + 1))
 
 function begin(endpoint, by, el) {
 	const from = ids.value.indexOf(endpoint.id)
-	const row = el.closest('[data-testid="endpoint-row"]')
-	Object.assign(lift, { id: endpoint.id, by, from, to: from, dy: 0, height: row?.getBoundingClientRect().height || 1 })
-	refocusId = null
+	Object.assign(lift, { id: endpoint.id, by, from, to: from, dy: 0, heights: measure(el) })
+	refocus = null
 	sayPlace(`${titleOf(endpoint)} lifted`)
 }
 
@@ -80,13 +100,16 @@ function drop() {
 	reset()
 	if (from === to) return say("Order unchanged.")
 	say(`${title} dropped, position ${to + 1} of ${ids.value.length}.`)
-	if (by === "key") refocusId = id
+	if (by === "key") refocus = { id, part: "handle" }
 	emit("reorder", moveId(ids.value, from, to))
 }
 
 function onPointerDown(endpoint, e) {
 	if (!movable.value || e.button !== 0 || lift.id !== null) return
 	e.preventDefault()
+	handlePressed = true
+	// Focused, so an Escape during the drag reaches the handle's own listener.
+	e.currentTarget.focus({ preventScroll: true })
 	e.currentTarget.setPointerCapture?.(e.pointerId)
 	begin(endpoint, "pointer", e.currentTarget)
 	lift.startY = e.clientY
@@ -95,10 +118,14 @@ function onPointerDown(endpoint, e) {
 
 function onPointerMove(e) {
 	if (lift.by !== "pointer" || e.pointerId !== lift.pointerId) return
-	const span = ids.value.length - 1
-	const half = lift.height / 2
-	lift.dy = clamp(e.clientY - lift.startY, -lift.from * lift.height - half, (span - lift.from) * lift.height + half)
-	lift.to = clamp(lift.from + Math.round(lift.dy / lift.height), 0, span)
+	const own = lift.heights[lift.from]
+	const above = span(0, lift.from)
+	lift.dy = clamp(e.clientY - lift.startY, -above - own / 2, span(lift.from + 1, lift.heights.length) + own / 2)
+	// The drop place is below every row whose middle stays above the lifted row's; reaching a row's
+	// middle passes it, in either direction.
+	const middle = above + own / 2 + lift.dy
+	const staysAbove = (h, i) => (i < lift.from ? span(0, i) + h / 2 < middle : span(0, i) + h / 2 <= middle)
+	lift.to = lift.heights.filter((h, i) => i !== lift.from && staysAbove(h, i)).length
 }
 
 function onPointerUp(e) {
@@ -114,7 +141,7 @@ function onArrow(endpoint, e) {
 	if (lift.by !== "key" || lift.id !== endpoint.id) return
 	e.preventDefault()
 	lift.to = clamp(lift.to + (e.key === "ArrowUp" ? -1 : 1), 0, ids.value.length - 1)
-	lift.dy = (lift.to - lift.from) * lift.height
+	lift.dy = offsetTo(lift.to)
 	sayPlace(titleOf(endpoint))
 }
 
@@ -143,12 +170,28 @@ function onHandleKeydown(endpoint, e) {
 
 function onHandleBlur(endpoint, e) {
 	if (lift.by === "key" && lift.id === endpoint.id) cancel()
-	if (e.relatedTarget) refocusId = null
+	if (e.relatedTarget) refocus = null
 }
 
-function onTap(endpoint) {
+/** A press anywhere but a handle ends the handle's claim on the next click. */
+function onAnyPointerDown(e) {
+	if (!e.target?.closest?.('[data-testid="endpoint-drag-handle"]')) handlePressed = false
+}
+
+/** A keyboard press (`detail` 0) is always the row's own; a pointer click a handle press began is not. */
+function onTap(endpoint, e) {
+	if (e?.detail > 0 && handlePressed) {
+		handlePressed = false
+		return
+	}
 	if (lift.id !== null || ids.value[0] === endpoint.id) return
+	if (e?.detail === 0) refocus = { id: endpoint.id, part: "row" }
 	emit("reorder", tapOrder(ids.value, endpoint.id))
+}
+
+const focusTarget = ({ id, part }) => {
+	const handle = handles.get(id)
+	return part === "handle" ? handle : handle?.closest('[data-testid="endpoint-row"]')?.querySelector("[data-row-target]")
 }
 
 /** While a row is lifted the rows it passes make room for it. */
@@ -156,8 +199,9 @@ function rowStyle(endpoint) {
 	if (lift.id === null) return undefined
 	if (endpoint.id === lift.id) return { transform: `translateY(${lift.dy}px)` }
 	const at = ids.value.indexOf(endpoint.id)
-	if (lift.from < lift.to && at > lift.from && at <= lift.to) return { transform: `translateY(${-lift.height}px)` }
-	if (lift.to < lift.from && at >= lift.to && at < lift.from) return { transform: `translateY(${lift.height}px)` }
+	const own = lift.heights[lift.from]
+	if (lift.from < lift.to && at > lift.from && at <= lift.to) return { transform: `translateY(${-own}px)` }
+	if (lift.to < lift.from && at >= lift.to && at < lift.from) return { transform: `translateY(${own}px)` }
 	return undefined
 }
 
@@ -169,7 +213,7 @@ watch([() => ids.value.join(), movable], () => {
 watch(
 	() => ids.value.join(),
 	() => {
-		const el = refocusId ? handles.get(refocusId) : undefined
+		const el = refocus ? focusTarget(refocus) : undefined
 		if (el && (document.activeElement === null || document.activeElement === document.body)) el.focus()
 	},
 	{ flush: "post" },
@@ -182,7 +226,12 @@ watch(
 	},
 )
 
-onBeforeUnmount(reset)
+onMounted(() => window.addEventListener("pointerdown", onAnyPointerDown, true))
+
+onBeforeUnmount(() => {
+	window.removeEventListener("pointerdown", onAnyPointerDown, true)
+	reset()
+})
 </script>
 
 <template>
@@ -194,7 +243,7 @@ onBeforeUnmount(reset)
 			:title="titleOf(endpoint)"
 			:description="endpoint.label ? endpoint.rpcUrl : undefined"
 			:wrapDescription="!!warningFor(endpoint)"
-			:onClick="held ? undefined : () => onTap(endpoint)"
+			:onClick="held ? undefined : (e) => onTap(endpoint, e)"
 			:class="[$style.row, lift.id === endpoint.id && $style.lifted, lift.id !== null && lift.id !== endpoint.id && $style.making_room]"
 			:style="rowStyle(endpoint)"
 			data-testid="endpoint-row"
@@ -242,7 +291,7 @@ onBeforeUnmount(reset)
 						</RowAction>
 						<template #content>Edit endpoint</template>
 					</Tooltip>
-					<Tooltip v-if="index > 0" position="end" delay="350">
+					<Tooltip v-if="index > 0 && endpoint.id !== primaryId" position="end" delay="350">
 						<RowAction label="Delete endpoint" data-testid="endpoint-delete-btn" @click="emit('remove', endpoint)">
 							<Icon name="close" size="14" color="tertiary" />
 						</RowAction>

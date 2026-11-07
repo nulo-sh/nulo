@@ -13,6 +13,7 @@ import {
 	NETWORK_SERVICE_NAME,
 	NetworkMethodSchemas,
 	type NodeStatus,
+	type RouteEndpoint,
 	type RouteSnapshot,
 } from "./spec"
 
@@ -125,8 +126,8 @@ export class NetworkServiceClient extends ServiceClient<Methods, Events> impleme
 		return this.call("reorderEndpoints", [networkId, endpointIds])
 	}
 
-	public async getRouteSnapshot(networkId: string): Promise<RouteSnapshot | null> {
-		return this.call("getRouteSnapshot", [networkId])
+	public async getRouteSnapshot(networkId: string, shown: readonly RouteEndpoint[]): Promise<RouteSnapshot | null> {
+		return this.call("getRouteSnapshot", [networkId, shown])
 	}
 
 	public async getNodeStatus(networkId: string): Promise<NodeStatus> {

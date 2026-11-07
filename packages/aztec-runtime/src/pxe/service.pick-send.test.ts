@@ -211,6 +211,7 @@ describe("PxeService.getRouteSnapshot", () => {
 		await s.getLatestBlockNumber(networkOf(A, B))
 		expect(changed).toHaveBeenCalledWith({ profileId: "p1", chainId: CHAIN_ID })
 		const built = changed.mock.calls.length
+		expect(built, "the build, then the route's own change as A answers its first read").toBeGreaterThan(1)
 		const lone = vi.fn()
 		s.onRouteChanged.remove(changed)
 		s.onRouteChanged.add(lone)

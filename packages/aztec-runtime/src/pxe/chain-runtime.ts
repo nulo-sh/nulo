@@ -499,10 +499,12 @@ export class ChainRuntimeRegistry {
 		const results = await Promise.allSettled(entries.map(([, r]) => r.dispose()))
 		const errors: unknown[] = []
 		results.forEach((res, i) => {
+			const [k, runtime] = entries[i]
 			if (res.status === "rejected") {
 				errors.push(res.reason)
-				const [k, runtime] = entries[i]
 				this.runtimes.set(k, runtime)
+			} else {
+				this.routeChanged(k.slice(0, k.lastIndexOf(":")), runtime.chainId)
 			}
 		})
 		if (errors.length) {

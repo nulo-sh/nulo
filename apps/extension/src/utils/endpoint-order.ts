@@ -16,3 +16,10 @@ export function placesWhileLifted(ids: readonly string[], from: number, to: numb
 export function tapOrder(ids: readonly string[], tapped: string): string[] {
 	return [tapped, ...ids.filter((id) => id !== tapped)]
 }
+
+/** The order Settings shows and the route asks: the primary, then the rest as stored. A list whose
+ *  primary is missing keeps its stored order. */
+export function routeOrder<E extends { id: string }>(endpoints: readonly E[], primaryId: string): E[] {
+	const primary = endpoints.find((e) => e.id === primaryId)
+	return primary ? [primary, ...endpoints.filter((e) => e !== primary)] : [...endpoints]
+}

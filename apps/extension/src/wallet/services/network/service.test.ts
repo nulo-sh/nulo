@@ -34,6 +34,7 @@ import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ProfileService } from "@/wallet/services/profile/service"
+import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { type ChainResetHooks, type ChainResetRequest, LOCAL_NETWORK_RPC_URL, NetworkService } from "./service"
 import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
 import {
@@ -1266,40 +1267,64 @@ describe("NetworkService public API", () => {
 			const getRouteSnapshot = vi.fn(async () => snapshot)
 			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 			;(service as any).pxeServiceClient = { getRouteSnapshot }
-			await expect(service.getRouteSnapshot(row.id)).resolves.toBe(snapshot)
-			expect(getRouteSnapshot).toHaveBeenCalledWith({
-				profileId: "p1",
-				chainId: 7,
-				l1ChainId: 11,
-				endpoints: [
-					{ id: "e2", rpcUrl: "https://rpc.test/2" },
-					{ id: "e1", rpcUrl: "https://rpc.test/1" },
-				],
-			})
-			await expect(service.getRouteSnapshot("theirs")).rejects.toThrow()
+			const shown = [
+				{ id: "e2", rpcUrl: "https://rpc.test/2" },
+				{ id: "e1", rpcUrl: "https://rpc.test/1" },
+			]
+			await expect(service.getRouteSnapshot(row.id, shown)).resolves.toBe(snapshot)
+			expect(getRouteSnapshot).toHaveBeenCalledWith({ profileId: "p1", chainId: 7, l1ChainId: 11, endpoints: shown })
+			await expect(service.getRouteSnapshot("theirs", shown)).rejects.toThrow()
 			expect(getRouteSnapshot).toHaveBeenCalledTimes(1)
 		})
 
-		test("relays the account engine's route changes, listening before the client connects", async () => {
+		test("a list the caller shows that is not the row's, a URL edit or another order, is answered for no route", async () => {
+			const { service, local } = setupServiceWithStorage({})
+			const row = storeRow(local, {
+				id: "two",
+				primaryEndpointId: "e1",
+				endpoints: [
+					{ id: "e1", rpcUrl: "https://rpc.test/1" },
+					{ id: "e2", rpcUrl: "https://rpc.test/2" },
+				],
+			})
+			const getRouteSnapshot = vi.fn(async () => ({ activeId: "e1", endpoints: [] }))
+			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+			;(service as any).pxeServiceClient = { getRouteSnapshot }
+			const stale = [
+				[
+					{ id: "e1", rpcUrl: "https://rpc.test/old" },
+					{ id: "e2", rpcUrl: "https://rpc.test/2" },
+				],
+				[
+					{ id: "e2", rpcUrl: "https://rpc.test/2" },
+					{ id: "e1", rpcUrl: "https://rpc.test/1" },
+				],
+				[{ id: "e1", rpcUrl: "https://rpc.test/1" }],
+			]
+			for (const shown of stale) await expect(service.getRouteSnapshot(row.id, shown)).resolves.toBeNull()
+			expect(getRouteSnapshot).not.toHaveBeenCalled()
+		})
+
+		test("init relays the account engine's route changes, listening before its client connects", async () => {
 			const { service } = setupServiceWithStorage({})
-			const order: string[] = []
-			let relay: (change: { profileId: string; chainId: number }) => void = () => {}
-			const client = {
-				onRouteChanged: {
-					add: vi.fn((fn: typeof relay) => {
-						order.push("listen")
-						relay = fn
-					}),
-				},
-				connect: vi.fn(() => void order.push("connect")),
-			}
+			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+			const internals = service as any
 			const heard: unknown[] = []
 			service.onRouteChanged.add(async (e) => void heard.push(e))
-			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-			;(service as any).listenToRoutes(client)
-			relay({ profileId: "p1", chainId: 7 })
-			expect(order).toEqual(["listen", "connect"])
-			expect(heard).toEqual([{ profileId: "p1", chainId: 7 }])
+			const connect = vi.spyOn(PxeServiceClient.prototype, "connect").mockImplementation(function (this: PxeServiceClient) {
+				this.onRouteChanged.invoke({ profileId: "p1", chainId: 0 })
+			})
+			try {
+				await internals.init({ get: () => Object.assign(internals.profileService, { onRowKeysReady: new EventHandler<string>() }) })
+				expect(connect).toHaveBeenCalledTimes(1)
+				internals.pxeServiceClient.onRouteChanged.invoke({ profileId: "p1", chainId: 7 })
+				expect(heard).toEqual([
+					{ profileId: "p1", chainId: 0 },
+					{ profileId: "p1", chainId: 7 },
+				])
+			} finally {
+				connect.mockRestore()
+			}
 		})
 	})
 

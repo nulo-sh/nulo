@@ -308,7 +308,7 @@ export const NetworkMethodSchemas = {
 		result: NetworkSchema,
 	},
 	getRouteSnapshot: {
-		params: z.tuple([z.string().min(1)]),
+		params: z.tuple([z.string().min(1), z.array(z.object({ id: z.string(), rpcUrl: z.string() }).strict())]),
 		result: RouteSnapshotSchema,
 	},
 	getNodeStatus: {
@@ -405,8 +405,9 @@ export type Methods = {
 	 */
 	reorderEndpoints(networkId: string, endpointIds: string[]): Network
 	/** The account engine's route for the network's current endpoint list, by endpoint id; `null`
-	 *  until it has built one. Asks no endpoint. */
-	getRouteSnapshot(networkId: string): RouteSnapshot | null
+	 *  until it has built one, or when `shown`, the caller's list in route order, is not the row's.
+	 *  Asks no endpoint. */
+	getRouteSnapshot(networkId: string, shown: readonly RouteEndpoint[]): RouteSnapshot | null
 	/** Probes the network's primary endpoint and returns Active/Inactive/InvalidChain. */
 	getNodeStatus(networkId: string): NodeStatus
 	/**

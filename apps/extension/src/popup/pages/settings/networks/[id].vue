@@ -15,6 +15,7 @@ import { sentenceName } from "@/utils/string"
 import * as staleCopy from "@/components/stale-network/copy"
 import { AccountType, DEFAULT_IMPORTED_ACCOUNT_NAME } from "@/wallet/services/account/client"
 import { endpointsInOrder } from "@/wallet/services/network/client"
+import { routeOrder } from "@/utils/endpoint-order"
 import { endpointStatus, movedFirstWarning } from "@/utils/endpoint-status"
 
 /** Components */
@@ -70,9 +71,7 @@ const shownEndpoints = computed(() => {
 			// Another set of endpoints than the move's: the row's own order.
 		}
 	}
-	// `routeEndpoints`' order, kept for a row whose primary is missing, which it refuses.
-	const primary = n.endpoints.find((e) => e.id === n.primaryEndpointId)
-	return primary ? [primary, ...n.endpoints.filter((e) => e !== primary)] : n.endpoints
+	return routeOrder(n.endpoints, n.primaryEndpointId)
 })
 /** `{ id, text }`: the row a move put first while it was not answering, for its warning line. */
 const movedFirst = ref(null)
@@ -170,20 +169,23 @@ const handleEditEndpoint = (endpoint) => {
 /** Moves are written one at a time, in the order they were made. */
 let writes = Promise.resolve()
 let moves = 0
+/** The latest move that changed the first row: only its warning may show. */
+let firstMove = 0
 
 /** Writes `ids` as the row's order. Only a move that changes the first row toasts a success; a
- *  failed one re-reads the row, which another window may have changed meanwhile. */
+ *  refused one re-reads the row, which another window may have changed meanwhile. A re-read that
+ *  fails after a write landed does not make the write a failure. */
 async function writeOrder(id, ids, firstChanged) {
 	try {
 		await managers.network.reorderEndpoints(id, ids)
-		await refreshNetworks()
-		if (firstChanged) openToast({ kind: "success", label: "Primary endpoint updated" })
-		return true
 	} catch {
 		await refreshNetworks().catch(() => {})
 		openToast({ kind: "error", label: firstChanged ? "Failed to update primary endpoint" : "Failed to update the endpoint order" })
 		return false
 	}
+	await refreshNetworks().catch(() => {})
+	if (firstChanged) openToast({ kind: "success", label: "Primary endpoint updated" })
+	return true
 }
 
 const handleReorder = (ids) => {
@@ -194,12 +196,15 @@ const handleReorder = (ids) => {
 	// Judged on the dot before the move: the rebuilt route starts every endpoint unasked.
 	const before = routeView.value?.snapshot?.endpoints.find((e) => e.id === ids[0])?.state
 	const warning = firstChanged ? movedFirstWarning(before) : null
-	movedFirst.value = null
+	if (firstChanged) {
+		firstMove = move
+		movedFirst.value = null
+	}
 	pendingOrder.value = ids
 	writes = writes
 		.then(() => writeOrder(target.id, ids, firstChanged))
 		.then((written) => {
-			if (written && warning && move === moves) movedFirst.value = { id: ids[0], text: warning }
+			if (written && warning && move === firstMove) movedFirst.value = { id: ids[0], text: warning }
 		})
 		.finally(() => {
 			if (move === moves) pendingOrder.value = null
@@ -369,6 +374,7 @@ onBeforeUnmount(() => {
 				:view="routeView"
 				:held="!!heldReset"
 				:warning="movedFirst"
+				:primaryId="network.primaryEndpointId"
 				@reorder="handleReorder"
 				@edit="handleEditEndpoint"
 				@remove="handleDeleteEndpoint"

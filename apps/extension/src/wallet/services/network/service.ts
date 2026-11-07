@@ -57,6 +57,7 @@ import {
 	endpointsInOrder,
 	networkInfoFrom,
 	NodeStatus,
+	type RouteEndpoint,
 	type RouteSnapshot,
 	routeEndpoints,
 	ACTIVE_NETWORK_STORAGE_ROOT,
@@ -980,12 +981,16 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		})
 	}
 
-	public async getRouteSnapshot(networkId: string): Promise<RouteSnapshot | null> {
-		validateParams(NetworkMethodSchemas.getRouteSnapshot.params, [networkId], "getRouteSnapshot")
+	public async getRouteSnapshot(networkId: string, shown: readonly RouteEndpoint[]): Promise<RouteSnapshot | null> {
+		validateParams(NetworkMethodSchemas.getRouteSnapshot.params, [networkId, shown], "getRouteSnapshot")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
 		const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-		return this.pxeServiceClient.getRouteSnapshot(networkInfoFrom(network))
+		const info = networkInfoFrom(network)
+		// A list another window has since edited is answered for no route: ids outlive a URL edit.
+		const same =
+			info.endpoints.length === shown.length && info.endpoints.every((e, i) => e.id === shown[i]?.id && e.rpcUrl === shown[i]?.rpcUrl)
+		return same ? this.pxeServiceClient.getRouteSnapshot(info) : null
 	}
 
 	/** A reset's resume keeps the primary endpoint only while it is the one the capture probed, and

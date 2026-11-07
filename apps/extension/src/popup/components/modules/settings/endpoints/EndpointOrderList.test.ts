@@ -123,6 +123,11 @@ describe("EndpointOrderList — the rows at rest", () => {
 		expect(reorders(w)).toEqual([[C.id, A.id, B.id]])
 	})
 
+	test("while a move is written, neither the first shown nor the stored primary has a delete", async () => {
+		const w = mountList({ endpoints: [C, A, B], primaryId: A.id })
+		expect(rows(w).map((r) => r.find('[data-testid="endpoint-delete-btn"]').exists())).toEqual([false, false, true])
+	})
+
 	test("edit and delete reach the page, never the row's tap", async () => {
 		const w = mountList()
 		await rows(w)[1]!.get('[data-testid="endpoint-edit-btn"]').trigger("click")
@@ -212,6 +217,72 @@ describe("EndpointOrderList — the pointer drag", () => {
 		await pointer(w, 2, "pointerup", { pointerId: 7 })
 		expect(reorders(w)).toEqual([])
 	})
+
+	test("the pointer is captured and the handle focused at the lift, so an Escape reaches it", async () => {
+		const capture = vi.fn()
+		HTMLElement.prototype.setPointerCapture = capture
+		try {
+			const w = mountList()
+			await press(w, 1, 200)
+			expect(capture).toHaveBeenCalledWith(7)
+			expect(document.activeElement).toBe(handle(w, 1).element)
+		} finally {
+			delete (HTMLElement.prototype as { setPointerCapture?: unknown }).setPointerCapture
+		}
+	})
+
+	test("an Escape during a pointer drag puts the row back and is marked handled; the release and its click write nothing", async () => {
+		const w = mountList()
+		await press(w, 2, 300)
+		await move(w, 2, 300 - 2 * ROW_HEIGHT)
+		const pressed = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+		document.activeElement?.dispatchEvent(pressed)
+		await w.vm.$nextTick()
+		expect(pressed.defaultPrevented).toBe(true)
+		expect(numbers(w)).toEqual(["1", "2", "3"])
+		await pointer(w, 2, "pointerup", { pointerId: 7 })
+		rows(w)[2]!.element.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+		expect(reorders(w)).toEqual([])
+	})
+
+	test("a click on a handle never taps its row; a drop's click writes only the drop", async () => {
+		const w = mountList()
+		await press(w, 2, 300)
+		await pointer(w, 2, "pointerup", { pointerId: 7 })
+		handle(w, 2).element.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+		expect(reorders(w)).toEqual([])
+		await press(w, 0, 100)
+		await move(w, 0, 100 + ROW_HEIGHT)
+		await pointer(w, 0, "pointerup", { pointerId: 7 })
+		handle(w, 0).element.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+		expect(reorders(w)).toEqual([[B.id, A.id, C.id]])
+	})
+
+	test("a press elsewhere ends a handle press's claim: the next click on a row taps it", async () => {
+		const w = mountList()
+		await press(w, 1, 200)
+		await pointer(w, 1, "pointerup", { pointerId: 7 })
+		rows(w)[2]!.element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }))
+		rows(w)[2]!.element.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+		expect(reorders(w)).toEqual([[C.id, A.id, B.id]])
+	})
+
+	test("rows of unequal height: the drop place follows the rows' middles, and the rows passed make room by the lifted one's height", async () => {
+		const tall = { [A.id]: 120, [B.id]: 60, [C.id]: 60 } as Record<string, number>
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+			return { height: tall[this.dataset.endpointId ?? ""] ?? 24 } as DOMRect
+		})
+		const w = mountList()
+		await press(w, 2, 210)
+		await move(w, 2, 210 - 90)
+		expect(numbers(w), "past B's middle, short of A's").toEqual(["1", "3", "2"])
+		expect(rows(w)[1]!.attributes("style")).toContain("translateY(60px)")
+		await move(w, 2, 210 - 151)
+		expect(numbers(w), "past A's middle").toEqual(["2", "3", "1"])
+		expect(rows(w)[0]!.attributes("style")).toContain("translateY(60px)")
+		await pointer(w, 2, "pointerup", { pointerId: 7 })
+		expect(reorders(w)).toEqual([[C.id, A.id, B.id]])
+	})
 })
 
 describe("EndpointOrderList — the keyboard", () => {
@@ -284,5 +355,29 @@ describe("EndpointOrderList — the keyboard", () => {
 		await w.vm.$nextTick()
 		expect(document.activeElement).toBe(handle(w, 0).element)
 		expect(handle(w, 0).attributes("aria-label")).toBe(`Move ${C.rpcUrl}, position 1 of 3`)
+	})
+
+	test("a keyboard lift past a taller row moves by that row's height", async () => {
+		const tall = { [A.id]: 120, [B.id]: 60, [C.id]: 60 } as Record<string, number>
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+			return { height: tall[this.dataset.endpointId ?? ""] ?? 24 } as DOMRect
+		})
+		const w = mountList()
+		await key(w, 2, " ")
+		await key(w, 2, "ArrowUp")
+		await key(w, 2, "ArrowUp")
+		expect(rows(w)[2]!.attributes("style")).toContain("translateY(-180px)")
+	})
+
+	test("Enter on a row moves it first and keeps focus on it once the list re-renders", async () => {
+		const w = mountList()
+		const target = rows(w)[2]!.get("[data-row-target]")
+		;(target.element as HTMLElement).focus()
+		await target.trigger("click")
+		const [order] = reorders(w)
+		expect(order).toEqual([C.id, A.id, B.id])
+		await w.setProps({ endpoints: (order as string[]).map((id) => [A, B, C].find((e) => e.id === id)) })
+		await w.vm.$nextTick()
+		expect(document.activeElement).toBe(rows(w)[0]!.get("[data-row-target]").element)
 	})
 })

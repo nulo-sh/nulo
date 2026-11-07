@@ -594,7 +594,7 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 		expect(createSubmissionPins().byTxHash.size).toBe(0)
 	})
 
-	test("announces a runtime built, dropped by a rebind (a failed rebuild included) or disposed, and hands the build its route's onChange; a throwing listener fails nothing", async () => {
+	test("announces a runtime built, dropped by a rebind (a failed rebuild included), disposed, or torn down with its profile or by a clear, and hands the build its route's onChange; a throwing listener fails nothing", async () => {
 		const heard: string[] = []
 		const changes: (() => void)[] = []
 		let refuse = false
@@ -624,6 +624,16 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 		await reg.ensure(netAt(1, B, A))
 		await reg.dispose(P, 1)
 		expect(heard).toHaveLength(5)
+
+		await reg.ensure(netAt(1, A))
+		await reg.ensure(netAt(2, A))
+		heard.length = 0
+		await reg.disposeProfile(P)
+		expect(heard.sort(), "a profile's teardown announces each of its runtimes").toEqual([`${P}/1`, `${P}/2`])
+		await reg.ensure(netAt(3, A))
+		heard.length = 0
+		await reg.clear()
+		expect(heard, "so does a clear").toEqual([`${P}/3`])
 	})
 
 	test("ensure keeps the old runtime referenced when its dispose fails (retry handle, no double-open)", async () => {

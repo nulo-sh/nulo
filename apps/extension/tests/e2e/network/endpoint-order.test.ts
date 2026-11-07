@@ -14,7 +14,7 @@ import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { bringToFront, setViewport } from "../fixtures/browser"
+import { bringToFront, isFirefox, setViewport } from "../fixtures/browser"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import { navigateToSettings, openNetworkDetail, waitForToast } from "../fixtures/helpers"
 import { rewriteActiveNetwork, type StoredNetwork } from "../fixtures/networks"
@@ -30,7 +30,8 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const SPEC = "endpoint-order"
 const step = (message: string) => console.log(`[${SPEC}] ${message}`)
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-const VIEWPORT = { width: 360, height: 600, deviceScaleFactor: 2 }
+/** The popup's size; Firefox's resize takes no scale factor. */
+const VIEWPORT = isFirefox ? { width: 360, height: 600 } : { width: 360, height: 600, deviceScaleFactor: 2 }
 
 const row = (id: string) => `[data-testid="endpoint-row"][data-endpoint-id="${id}"]`
 
@@ -52,6 +53,15 @@ async function waitForTones(page: Page, want: Record<string, string>, label: str
 		between,
 	})
 }
+
+/** The account engine's router events since `since` once they show `id` holding the role, ready.
+ *  The logger stores its lines a little after the dot can change, so the read is polled. */
+const routerHolds = (page: Page, since: number, id: string, label: string) =>
+	pollUntil(
+		() => routeEvents(page, since),
+		(events) => readyHolder(events, "pxe") === id,
+		{ label, timeoutMs: 30_000, intervalMs: 1_000 },
+	)
 
 /** Another popup page entering Home, whose balance reads go through the account engine. */
 async function nudge(driver: Page): Promise<void> {
@@ -149,12 +159,21 @@ test.skipIf(!aztecConfig)(
 
 			step("the next account-engine reads reach B, and its dot turns green on the open page")
 			await waitForTones(page, { [idB]: "green" }, "B green", () => nudge(driver))
-			expect(readyHolder(await routeEvents(page, droppedAt), "pxe"), "the account engine's router holds B ready").toBe(idB)
+			await routerHolds(page, droppedAt, idB, "the account engine's router holds B ready")
 			expect(await opened(), "the page was never reloaded").toBe(1)
 
 			step("B killed: B red and A green, the page still open")
+			const killedAt = Date.now()
 			await b.kill()
 			await waitForTones(page, { [idB]: "red", [idA]: "green" }, "B red, A green", () => nudge(driver))
+			const events = await routerHolds(page, droppedAt, idA, "the account engine's router holds A ready")
+			expect(
+				events.some(
+					(e) =>
+						e.source === "pxe" && e.event === "state" && e.endpointId === idB && e.state === "down" && e.timestamp >= killedAt,
+				),
+				"the account engine's router took B down after the kill",
+			).toBe(true)
 			expect(await opened(), "the page was never reloaded").toBe(1)
 			await bringToFront(page)
 			await shotSend(page, "endpoint-order-primary-killed", "endpoint-add-btn")
