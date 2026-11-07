@@ -23,15 +23,58 @@ export type RelayFault =
 export interface RelayRule {
 	readonly fault: RelayFault
 	/** Bare method names (`getBlock`, not `aztec_getBlock`); a request matches when any of its
-	 *  entries calls one. Every request matches when absent. */
+	 *  entries calls one, or every entry with `entries: "every"`. Every request matches when absent. */
 	readonly methods?: readonly string[]
+	readonly entries?: "any" | "every"
 	/** A request matches only when its body contains this text, compared case-insensitively. */
 	readonly carrying?: string
+	/** How many matching requests the rule lets through to older rules and the upstream first. */
+	readonly after?: number
 	/** How many matching requests the rule takes before it retires; unlimited when absent. */
 	readonly times?: number
 }
 
+/** A request as the relay received it: when (`Date.now()`), its place in the order every relay
+ *  of this process received requests, and its body, lower-cased. */
+export interface Received {
+	readonly at: number
+	readonly seq: number
+	readonly body: string
+}
+
+/** Orders requests across relays where two can share a millisecond. */
+let receivedSoFar = 0
+
+export interface RelayRuleHandle {
+	/** How many requests the rule has answered with its fault. */
+	taken(): number
+	/** The requests it took, in order. */
+	took(): readonly Received[]
+}
+
+type RelayReply = Extract<RelayFault, { kind: "reply" }>
+
 const errorBody = (code: number, message: string) => JSON.stringify({ jsonrpc: "2.0", id: null, error: { code, message } })
+
+/** A received request's calls, each its method as sent and its params as JSON, lower-cased;
+ *  empty for a body that is not JSON-RPC. */
+export function callsOf(request: Received): { method: string; params: string }[] {
+	try {
+		const parsed = JSON.parse(request.body) as unknown
+		const entries = (Array.isArray(parsed) ? parsed : [parsed]) as { method?: unknown; params?: unknown }[]
+		return entries.map((e) => ({ method: String(e.method), params: JSON.stringify(e.params ?? []) }))
+	} catch {
+		return []
+	}
+}
+
+/** How many requests carried a receipt read of `txHash`, a batch counted once. */
+export const receiptReads = (relay: RpcRelay, txHash: string): number =>
+	relay.received().filter((r) => callsOf(r).some((c) => c.method === "aztec_gettxreceipt" && c.params.includes(txHash.toLowerCase())))
+		.length
+
+/** How many submissions the relay received, a batch's entries counted one by one. */
+export const sendTxCount = (relay: RpcRelay): number => relay.methods().filter((m) => m.endsWith("_sendTx")).length
 
 /** The answers a failing endpoint gives, each classified by the node fetch as the kind it names. */
 export const RELAY_REPLIES = {
@@ -50,14 +93,15 @@ export interface RpcRelay {
 	methods(): readonly string[]
 	/** How many received bodies contain `text`, compared case-insensitively. */
 	carried(text: string): number
-	/** When each request arrived (`Date.now()`), in order. */
-	arrivals(): readonly number[]
+	/** Every request received, in order. */
+	received(): readonly Received[]
 	/** Requests a `hold` parks whose client still waits for the answer. */
 	held(): number
-	/** Forwards every parked request whose client still waits; resolves once each is answered. */
-	release(): Promise<void>
+	/** Forwards every parked request whose client still waits, or gives each `answer` instead;
+	 *  resolves once each is answered. */
+	release(answer?: RelayReply): Promise<void>
 	/** Adds a rule; the newest matching rule wins. */
-	fail(rule: RelayRule): void
+	fail(rule: RelayRule): RelayRuleHandle
 	/** Drops every rule; requests already held by a blackhole or a hold stay held. */
 	clear(): void
 	/** Answers a batch of more than `maxEntries` entries with `refusal` instead of forwarding it. */
@@ -105,8 +149,13 @@ function entriesOf(body: string): Entry[] | undefined {
 /** `body` is lower-cased. */
 function matches(rule: RelayRule, entries: readonly Entry[] | undefined, body: string): boolean {
 	const names = rule.methods
-	if (names && !entries?.some((e) => names.includes(bare(e.method)))) return false
+	const calls = (e: Entry) => names?.includes(bare(e.method)) === true
+	if (names && !(rule.entries === "every" ? entries?.length && entries.every(calls) : entries?.some(calls))) return false
 	return rule.carrying === undefined || body.includes(rule.carrying.toLowerCase())
+}
+
+function reply(res: ServerResponse, answer: RelayReply): void {
+	res.writeHead(answer.status, { "content-type": "application/json" }).end(answer.body)
 }
 
 async function readBody(req: IncomingMessage): Promise<string> {
@@ -140,20 +189,24 @@ function patchFrozen(text: string, entries: readonly Entry[], frozen: ReadonlyMa
 export async function startRpcRelay(upstream: string, service = "rpc-relay"): Promise<RpcRelay> {
 	let requests = 0
 	const methods: string[] = []
-	const bodies: string[] = []
-	const arrivals: number[] = []
+	const received: Received[] = []
 	const parked = new Set<Parked>()
-	let rules: Array<RelayRule & { left: number }> = []
+	let rules: Array<RelayRule & { skip: number; left: number; took: Received[] }> = []
 	let batchCap: { max: number; refusal: RelayFault } | undefined
 	let frozen: Map<string, unknown> | undefined
 	const sockets = new Set<Socket>()
 
-	const take = (entries: readonly Entry[] | undefined, body: string): RelayFault | undefined => {
+	const take = (entries: readonly Entry[] | undefined, request: Received): RelayFault | undefined => {
 		if (batchCap && entries && entries.length > batchCap.max) return batchCap.refusal
 		for (let i = rules.length - 1; i >= 0; i--) {
 			const rule = rules[i]
-			if (!rule || rule.left <= 0 || !matches(rule, entries, body)) continue
+			if (!rule || rule.left <= 0 || !matches(rule, entries, request.body)) continue
+			if (rule.skip > 0) {
+				rule.skip--
+				continue
+			}
 			rule.left--
+			rule.took.push(request)
 			return rule.fault
 		}
 		return undefined
@@ -168,11 +221,11 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 	const handle = async (req: IncomingMessage, res: ServerResponse) => {
 		const body = await readBody(req)
 		requests++
-		arrivals.push(Date.now())
-		bodies.push(body.toLowerCase())
+		const request = { at: Date.now(), seq: ++receivedSoFar, body: body.toLowerCase() }
+		received.push(request)
 		const entries = entriesOf(body)
 		for (const entry of entries ?? [{ id: null, method: "<unparsed>" }]) methods.push(entry.method)
-		const fault = take(entries, body.toLowerCase())
+		const fault = take(entries, request)
 		if (fault?.kind === "blackhole") return
 		if (fault?.kind === "hold") {
 			const held: Parked = { body, entries, res }
@@ -186,7 +239,7 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 			return
 		}
 		if (fault?.kind === "reply") {
-			res.writeHead(fault.status, { "content-type": "application/json" }).end(fault.body)
+			reply(res, fault)
 			return
 		}
 		if (fault?.kind === "delay") await new Promise((resolve) => setTimeout(resolve, fault.ms))
@@ -210,16 +263,19 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 		url: `http://127.0.0.1:${port}`,
 		requests: () => requests,
 		methods: () => [...methods],
-		carried: (text) => bodies.filter((b) => b.includes(text.toLowerCase())).length,
-		arrivals: () => [...arrivals],
+		carried: (text) => received.filter((r) => r.body.includes(text.toLowerCase())).length,
+		received: () => [...received],
 		held: () => parked.size,
-		release: async () => {
+		release: async (answer) => {
 			const waiting = [...parked]
 			parked.clear()
-			await Promise.all(waiting.map((p) => forward(p.body, p.entries, p.res).catch(() => p.res.destroy())))
+			const settle = async (p: Parked) => (answer ? reply(p.res, answer) : forward(p.body, p.entries, p.res))
+			await Promise.all(waiting.map((p) => settle(p).catch(() => p.res.destroy())))
 		},
 		fail: (rule) => {
-			rules.push({ ...rule, left: rule.times ?? Number.POSITIVE_INFINITY })
+			const added = { ...rule, skip: rule.after ?? 0, left: rule.times ?? Number.POSITIVE_INFINITY, took: [] }
+			rules.push(added)
+			return { taken: () => added.took.length, took: () => [...added.took] }
 		},
 		clear: () => {
 			rules = []

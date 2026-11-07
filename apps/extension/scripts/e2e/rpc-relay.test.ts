@@ -114,6 +114,21 @@ test("a rule on chosen methods takes only requests calling one, as many times as
 	expect((await rpc(r, ["getBlock"])).status).toBe(200)
 })
 
+test("a rule lets its first `after` matches through, takes only batches made wholly of its methods with `every`, and counts what it took", async () => {
+	const r = await start()
+	const taken = r.fail({ methods: ["getBlock", "getContract"], entries: "every", after: 1, times: 2, fault: RELAY_REPLIES.refused })
+	expect((await rpc(r, ["getBlock"])).status).toBe(200)
+	expect((await rpc(r, ["getChainTips", "getBlock"])).status).toBe(200)
+	expect((await rpc(r, ["getBlock", "getContract"])).status).toBe(400)
+	expect((await rpc(r, ["getContract"])).status).toBe(400)
+	expect((await rpc(r, ["getBlock"])).status).toBe(200)
+	expect(taken.taken()).toBe(2)
+	expect(taken.took().map((t) => JSON.parse(t.body).map((e: { method: string }) => e.method))).toEqual([
+		["aztec_getblock", "aztec_getcontract"],
+		["aztec_getcontract"],
+	])
+})
+
 test("a batch cap refuses a larger batch and forwards one within it", async () => {
 	const r = await start()
 	r.cap(2)
@@ -154,5 +169,11 @@ test("a hold parks only the requests carrying its text until release, and stops 
 	await r.release()
 	expect(results((await waiting).text)).toEqual(["aztec_getTxReceipt:ok"])
 	expect(r.held()).toBe(0)
-	expect(r.arrivals()).toHaveLength(3)
+	expect(r.received()).toHaveLength(3)
+	const [first, second, third] = r.received().map((request) => request.seq)
+	expect((first as number) < (second as number) && (second as number) < (third as number)).toBe(true)
+	const answered = rpc(r, ["getTxReceipt"], ["0xabc"])
+	await expect.poll(() => r.held()).toBe(1)
+	await r.release(RELAY_REPLIES.overloaded)
+	expect(await answered).toEqual({ status: 429, text: RELAY_REPLIES.overloaded.body })
 })

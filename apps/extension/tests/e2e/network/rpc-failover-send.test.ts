@@ -18,32 +18,19 @@
  * `NULO_E2E_PROVERLESS=1`. Run it with `NULO_E2E_RETRY=0`: it spends on-chain and PXE state that a
  * retry would find half-consumed.
  */
-import { createAztecNodeClient } from "@aztec-labs/aztec.js/node"
 import type { Page } from "puppeteer"
 import { afterEach, expect, inject } from "vitest"
-import { type AztecTestConfig, createTestWallet, fundPublicFeeJuice, waitForTxMined } from "../fixtures/aztec"
+import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
 import { ensureUnlocked, lockWallet } from "../fixtures/auth"
-import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
+import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { navigateToSettings } from "../fixtures/navigation"
 import { readSwLogTrail, waitForSendRecord } from "../fixtures/journal"
 import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
-import { rewriteActiveNetwork } from "../fixtures/networks"
-import {
-	assertPgOk,
-	callExpectingNoPopup,
-	type PgResult,
-	setPgInput,
-	setPgTextarea,
-	snapshotResultSeq,
-	waitForPgResult,
-} from "../fixtures/playground"
+import { assertPgOk, type PgResult, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { pollUntil } from "../fixtures/poll"
-import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { PROOF_GATE_HOLD_MS, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
-import { type RpcRelay, startRpcRelay } from "../fixtures/rpc-relay"
-import { readSealedRows } from "../fixtures/sealed-rows"
-import { deployMinterToken } from "../fixtures/selfpay-phase"
-import { setDeveloperMode } from "../fixtures/settings"
+import { hashOf, prepareRoutedMint, readPhaseBalance, routeEvents, sendMint, settledStatus, txRow } from "../fixtures/route-send"
+import { type RpcRelay, sendTxCount, startRpcRelay } from "../fixtures/rpc-relay"
 import { shotSend } from "../fixtures/shots"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -57,21 +44,11 @@ const HELD_SIMULATION_MS = 10_000
 const PEAK_WINDOW_MS = 10_000
 const IDLE_MS = 60_000
 
-type Ctx = ExtensionContext & { playgroundPage: Page }
-
 afterEach(releaseMining)
-
-const hashOf = (r: PgResult): string => {
-	const h = (r.resultJson as { txHash?: string } | undefined)?.txHash
-	if (typeof h !== "string") throw new Error(`send result carries no txHash: ${JSON.stringify(r.resultJson).slice(0, 200)}`)
-	return h.toLowerCase()
-}
-
-const sendTxCount = (relay: RpcRelay) => relay.methods().filter((m) => m.endsWith("_sendTx")).length
 
 /** Most requests the relay received in any `windowMs` from `since` on. */
 function peakPer(relay: RpcRelay, since: number, windowMs: number): number {
-	const times = relay.arrivals().filter((t) => t >= since)
+	const times = relay.received().flatMap(({ at }) => (at >= since ? [at] : []))
 	let peak = 0
 	let start = 0
 	for (let end = 0; end < times.length; end++) {
@@ -79,26 +56,6 @@ function peakPer(relay: RpcRelay, since: number, windowMs: number): number {
 		peak = Math.max(peak, end - start + 1)
 	}
 	return peak
-}
-
-/** Clicks the phase section's send, approves its execute window, and returns the result row. */
-async function sendMint(ctx: Ctx, approved?: () => Promise<void>): Promise<Promise<PgResult>> {
-	const page = ctx.playgroundPage
-	const seq = await snapshotResultSeq(page)
-	const result = waitForPgResult(page, "phase.send", seq, 300_000)
-	result.catch(() => {})
-	const popup = waitForPopup(ctx, "execute", { timeout: 90_000 })
-	await clickByTestId(page, "pg-btn-phase-send")
-	const execute = await popup
-	await waitForExecuteContent(execute)
-	await approveExecute(execute, { approvableTimeoutMs: 120_000 })
-	await approved?.()
-	return result
-}
-
-async function txRow(wallet: Page, hash: string): Promise<{ status?: number; submittedEndpointUrl?: string } | undefined> {
-	const rows = await readSealedRows<{ status?: number; submittedEndpointUrl?: string }>(wallet, "txs")
-	return rows.find((r) => r.naturalId.toLowerCase() === hash)?.row
 }
 
 /** The offscreen's logged reason for a simulation that failed since `since`; the dApp sees only the
@@ -110,27 +67,9 @@ async function simulateFailure(wallet: Page, since: number): Promise<string | un
 	return line ? JSON.stringify(line.data ?? []) : undefined
 }
 
-/** The header's network status once startup's syncs settle, read in the evaluation that sees it. */
-async function settledStatus(page: Page): Promise<string> {
-	const settled = await page.waitForFunction(
-		() => {
-			const status = document.querySelector('[data-testid="network-button"]')?.getAttribute("data-status")
-			return status && status !== "sync" ? status : false
-		},
-		{ timeout: 60_000 },
-	)
-	return (await settled.jsonValue()) as string
-}
-
 /** Whether the offscreen's router has logged `endpointId` taking the active role since `since`. */
 async function offscreenActive(wallet: Page, endpointId: string, since: number): Promise<boolean> {
-	const read = await readSwLogTrail(wallet, { match: "endpoint routing changed", limit: 500 })
-	const lines = Array.isArray(read) ? (read as { source?: string; timestamp?: number; data?: unknown }[]) : []
-	return lines.some((line) => {
-		if (line.source !== "pxe" || Number(line.timestamp) < since) return false
-		const text = JSON.stringify(line.data ?? [])
-		return text.includes('"event":"active"') && text.includes(`"endpointId":"${endpointId}"`)
-	})
+	return (await routeEvents(wallet, since)).some((e) => e.source === "pxe" && e.event === "active" && e.endpointId === endpointId)
 }
 
 test.skipIf(!hasConfig)(
@@ -138,54 +77,16 @@ test.skipIf(!hasConfig)(
 	{ timeout: 1_200_000, retry: 0 },
 	async ({ dappConnectedExtensionWithFirstTwoAccountsContractsCap: ctx }) => {
 		const config = aztecConfig as AztecTestConfig
-		const { playgroundPage: dapp, accountAddresses } = ctx
-		const X = accountAddresses[0] as string
+		const { playgroundPage: dapp } = ctx
 		const R = config.minterAddress
 		const a = await startRpcRelay(config.nodeUrl, "rpc-relay-a")
 		const b = await startRpcRelay(config.nodeUrl, "rpc-relay-b")
 		try {
-			step("setup: a token X mints, and public Fee Juice for X")
-			const token = await deployMinterToken(config, X)
-			const scripted = await createTestWallet(config.nodeUrl)
-			try {
-				const scriptAccount = scripted.accounts[0]
-				if (!scriptAccount) throw new Error("expected a sandbox-deployed account")
-				await fundPublicFeeJuice(scripted.wallet, createAztecNodeClient(config.nodeUrl), scriptAccount, config, X)
-			} finally {
-				await scripted.cleanup()
-			}
-
-			const wallet = await openPopup(ctx)
-			await waitForHash(wallet, "#/popup/general", 30_000)
-			await setDeveloperMode(wallet, true)
-			const fallbackId = crypto.randomUUID()
-			const network = await rewriteActiveNetwork(wallet, (row) => {
-				const primary = row.endpoints.find((e) => e.id === row.primaryEndpointId)
-				if (row.kind !== "local" || !primary) return false
-				primary.rpcUrl = a.url
-				row.endpoints = [primary, { ...primary, id: fallbackId, rpcUrl: b.url }]
-				return true
-			})
-			if (!network) throw new Error("the active network is not the Local Network")
-			const primaryId = network.primaryEndpointId
-			const routedSince = Date.now()
-
-			await setPgTextarea(dapp, "phase-tokenInstance", token.instanceJson)
-			await setPgInput(dapp, "phase-from", X)
-			await setPgInput(dapp, "phase-feePayer", X)
-			await setPgInput(dapp, "phase-amount", "1")
-			const registered = await callExpectingNoPopup(
-				ctx,
-				dapp,
-				"phase.register",
-				() => clickByTestId(dapp, "pg-btn-phase-register"),
-				90_000,
-			)
-			await assertPgOk(dapp, registered, "phase.register")
+			step("setup: a token X mints, public Fee Juice for X, the endpoints on the relays")
+			const { wallet, primaryId, routedSince } = await prepareRoutedMint(ctx, config, a, b)
 
 			step("a first mint X→R, mined: the handshake the next one reuses")
-			await setPgInput(dapp, "phase-recipient", R)
-			const warm = await await sendMint(ctx)
+			const warm = await sendMint(ctx)
 			await assertPgOk(dapp, warm, "warm-up mint")
 			await waitForTxMined(config, hashOf(warm), 240_000)
 
@@ -197,7 +98,7 @@ test.skipIf(!hasConfig)(
 			let killedAt = 0
 			let sent: PgResult
 			try {
-				const result = await sendMint(ctx, async () => {
+				sent = await sendMint(ctx, async () => {
 					const held = await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "proving", 90_000)
 					await a.kill()
 					killedAt = Date.now()
@@ -206,7 +107,6 @@ test.skipIf(!hasConfig)(
 					)
 					await releaseProofGate(wallet)
 				})
-				sent = await result
 			} finally {
 				await releaseProofGate(wallet)
 			}
@@ -244,17 +144,9 @@ test.skipIf(!hasConfig)(
 			expect(a.carried(hash), "A never sees the hash").toBe(0)
 
 			step("offscreen reads until its router hands the active role back to A")
-			await setPgInput(dapp, "phase-recipient", "")
 			await pollUntil(
 				async () => {
-					const read = await callExpectingNoPopup(
-						ctx,
-						dapp,
-						"phase.balance",
-						() => clickByTestId(dapp, "pg-btn-phase-balance"),
-						90_000,
-					)
-					await assertPgOk(dapp, read, "phase.balance")
+					await readPhaseBalance(ctx)
 					return offscreenActive(wallet, primaryId, restoredAt)
 				},
 				(back) => back,
