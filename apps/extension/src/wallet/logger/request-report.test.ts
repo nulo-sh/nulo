@@ -26,7 +26,7 @@ const CAPTURE: RequestCapture = {
 			stage: "fee estimate",
 			start: T0 + 40,
 			end: T0 + 1_790,
-			outcome: "failed: This request is outside the permissions you gave this app.",
+			outcome: "failed: Scope violation: call name does not match selector's function",
 		},
 		{ kind: "journal", stage: "journal failed", start: T0 + 1_820, outcome: "scope_refused" },
 		{ kind: "request", stage: "request sendTx", start: T0, end: T0 + 1_840, outcome: "failed 4100 SCOPE_VIOLATION" },
@@ -42,7 +42,7 @@ const CAPTURE: RequestCapture = {
 	],
 	dropped: 0,
 	bytes: 0,
-	journalError: "This request is outside the permissions you gave this app.",
+	journalError: "Scope violation: call name does not match selector's function",
 	envelope: {
 		code: 4100,
 		message: "This request is outside the permissions you gave this app.",

@@ -92,9 +92,10 @@ export function onWalletMessage(session: ActiveSession, message: WalletMessage, 
 		)
 		return
 	}
-	const live = beginRequest(bound, session, message, deps.requests)
-	const { walletTraceId } = live
 	const admitted = hold.admit()
+	// A call over the pending cap is answered with its id but never captured, so a burst churns no capture.
+	const live = beginRequest(bound, session, message, admitted === undefined ? undefined : deps.requests)
+	const { walletTraceId } = live
 	if (admitted === undefined) {
 		refuseOverPendingCap(live, key, message, deps.sessions.decryptLocks, deps.logger)
 		return

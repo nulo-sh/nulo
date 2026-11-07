@@ -1,7 +1,8 @@
 /**
- * One request's stages, from every producer the runtime wires, land in its own capture: the real
- * task tree and the capture store, over a journal that emits a queued row before the alias exists,
- * as the ingress does.
+ * One request's stages land in its own capture: the real task tree and the runtime's wiring
+ * (`wireRequestCaptures`) over a journal that emits a queued row before the alias exists, as the
+ * ingress does, beside prove entries added the way the coordinator's sink adds them. The estimate
+ * and prove producers are proven at their own layer.
  */
 import { describe, expect, test } from "vitest"
 import { EventHandler } from "@nulo/wallet-core/utils"

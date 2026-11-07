@@ -62,7 +62,7 @@ describe("RequestLogButton", () => {
 		expect(H.openToast).toHaveBeenCalledWith({ kind: "success", label: "Logs downloaded successfully" })
 	})
 
-	test("a report the wallet no longer has shows the error toast and downloads nothing", async () => {
+	test("a report the wallet no longer has shows the error toast, downloads nothing and hides the button", async () => {
 		H.findRequestTrace.mockResolvedValue("1a2b3c4d")
 		H.getRequestReport.mockResolvedValue(undefined)
 		const wrapper = mountButton({ journalId: "0123456789abcdef" })
@@ -71,6 +71,7 @@ describe("RequestLogButton", () => {
 		await flushPromises()
 		expect(H.downloadFile).not.toHaveBeenCalled()
 		expect(H.openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to download logs" })
+		expect(wrapper.find('[data-testid="request-log-download"]').exists()).toBe(false)
 	})
 
 	test("disconnects its client on unmount", async () => {

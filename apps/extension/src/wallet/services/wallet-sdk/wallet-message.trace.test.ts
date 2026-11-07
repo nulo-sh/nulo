@@ -9,7 +9,15 @@ import { type MessagePipelineDeps, onWalletMessage } from "./wallet-message"
 
 const SESSION = { sessionId: "s1", origin: "https://app.example", chainInfo: { chainId: "0x7a69", version: "0x1" } } as never
 
-function harness(opts: { established?: boolean; switchMidDispatch?: boolean; dispatch?: () => Promise<unknown>; session?: never } = {}) {
+function harness(
+	opts: {
+		established?: boolean
+		switchMidDispatch?: boolean
+		dispatch?: () => Promise<unknown>
+		session?: never
+		overCap?: boolean
+	} = {},
+) {
 	const session = opts.session ?? SESSION
 	const sent: Array<{ error?: { data?: { walletTraceId?: string } } }> = []
 	const settled = Promise.withResolvers<void>()
@@ -17,7 +25,7 @@ function harness(opts: { established?: boolean; switchMidDispatch?: boolean; dis
 	const requests = new RequestLog(() => true)
 	const end = vi.spyOn(requests, "end")
 	const begin = vi.spyOn(requests, "begin")
-	const hold = { admit: () => () => settled.resolve(), outcome: Promise.resolve("released" as const) }
+	const hold = { admit: () => (opts.overCap ? undefined : () => settled.resolve()), outcome: Promise.resolve("released" as const) }
 	const deps = {
 		handler: {
 			getSession: () => session,
@@ -46,7 +54,7 @@ function harness(opts: { established?: boolean; switchMidDispatch?: boolean; dis
 	} as unknown as MessagePipelineDeps
 	onWalletMessage(session, { type: "getChainInfo", args: [], messageId: "m1" } as never, deps)
 	const walletTraceId = () => begin.mock.calls[0]?.[0]
-	return { sent, end, walletTraceId, done: settled.promise }
+	return { sent, begin, end, walletTraceId, done: settled.promise }
 }
 
 describe("onWalletMessage: the request capture ends once, with its own outcome", () => {
@@ -73,6 +81,13 @@ describe("onWalletMessage: the request capture ends once, with its own outcome",
 		const [first] = h.end.mock.calls
 		expect(first).toEqual([h.walletTraceId(), { envelope: expect.objectContaining({ code: -32603 }) }])
 		expect(h.sent[0].error?.data?.walletTraceId).toBe(h.walletTraceId())
+	})
+
+	test("a call over the pending cap is answered with an id but never captured", async () => {
+		const h = harness({ overCap: true })
+		await vi.waitFor(() => expect(h.sent).toHaveLength(1))
+		expect(h.sent[0].error?.data?.walletTraceId).toMatch(/^[0-9a-f]{8}$/)
+		expect(h.begin).not.toHaveBeenCalled()
 	})
 
 	test.each([

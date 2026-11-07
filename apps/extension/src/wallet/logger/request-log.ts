@@ -52,6 +52,8 @@ export type JournalSnapshot = {
 
 export const REQUEST_LOG_LIMITS = {
 	captures: 50,
+	/** Sends held past `captures` until a journal row names them. */
+	heldSends: 10,
 	lines: 300,
 	stages: 100,
 	bytes: 64 * 1024,
@@ -81,6 +83,12 @@ function cap(text: string, max: number): string {
 }
 
 const clean = (text: string, max: number): string => cap(scrubReportText(text), max)
+
+/** What the incremental accounting would hold for `capture`, and never less. */
+function accountedBytes(capture: RequestCapture): number {
+	const entries: unknown[] = [...capture.stages, ...capture.lines, capture.envelope, capture.journalError]
+	return entries.reduce<number>((total, entry) => (entry === undefined ? total : total + sizeOf(entry)), REQUEST_LOG_LIMITS.recordBytes)
+}
 
 /** The data properties that tag a worker line with its request: a plain object owning a `walletTraceId`. */
 export function traceTag(walletTraceId: string | undefined): [{ walletTraceId: string }] | [] {
@@ -147,12 +155,19 @@ export class RequestLog {
 		this.changed()
 	}
 
+	/** A later ref of the same kind replaces the earlier one, which then finds nothing. */
 	public alias(walletTraceId: string, ref: RequestRef): void {
 		const capture = this.captures.get(walletTraceId)
 		if (!capture) return
-		if ("journalId" in ref) capture.journalId = ref.journalId
-		else capture.interactionId = ref.interactionId
+		if ("journalId" in ref) {
+			if (capture.journalId !== undefined) this.aliases.delete(keyOf({ journalId: capture.journalId }))
+			capture.journalId = ref.journalId
+		} else {
+			if (capture.interactionId !== undefined) this.aliases.delete(keyOf({ interactionId: capture.interactionId }))
+			capture.interactionId = ref.interactionId
+		}
 		this.aliases.set(keyOf(ref), walletTraceId)
+		if ("journalId" in ref) this.settle(walletTraceId)
 		this.changed()
 	}
 
@@ -239,15 +254,18 @@ export class RequestLog {
 		return [...this.captures.values()]
 	}
 
-	/** Restores persisted captures ahead of this worker's own, within the same bounds; an invalid one is dropped. */
+	/**
+	 * Restores persisted captures ahead of this worker's own, within the same bounds. Only a capture a
+	 * journal row names comes back: no handler is left to end any other. Its size is counted again.
+	 */
 	public restore(saved: unknown): void {
 		if (!Array.isArray(saved)) return
 		const live = [...this.captures.values()]
 		const valid = saved.flatMap((raw) => {
 			const parsed = CaptureSchema.safeParse(raw)
-			return parsed.success && sizeOf(parsed.data) <= REQUEST_LOG_LIMITS.bytes && !this.captures.has(parsed.data.walletTraceId)
-				? [parsed.data as RequestCapture]
-				: []
+			if (!parsed.success || parsed.data.journalId === undefined || this.captures.has(parsed.data.walletTraceId)) return []
+			const capture = { ...parsed.data, bytes: accountedBytes(parsed.data as RequestCapture) } as RequestCapture
+			return capture.bytes <= REQUEST_LOG_LIMITS.bytes ? [capture] : []
 		})
 		this.clear()
 		for (const capture of [...valid, ...live].slice(-REQUEST_LOG_LIMITS.captures)) {
@@ -259,15 +277,35 @@ export class RequestLog {
 
 	/**
 	 * Room for one more capture. The oldest capture with no alias that is not a send candidate goes
-	 * first; with none, only a send candidate may evict the oldest capture, and any other request
-	 * is not captured. So no run of ordinary calls displaces a send's capture.
+	 * first; with none, a send candidate is held past the cap and any other request is not captured.
+	 * A held send evicts only once a journal row names it (`settle`), so neither a run of ordinary
+	 * calls nor a burst of sends refused before any row displaces a kept capture.
 	 */
 	private makeRoom(method: string): boolean {
 		if (this.captures.size < REQUEST_LOG_LIMITS.captures) return true
-		const victim = this.oldestOrdinary() ?? (SEND_CANDIDATES.has(method) ? this.captures.keys().next().value : undefined)
-		if (victim === undefined) return false
-		this.remove(victim)
-		return true
+		const victim = this.oldestOrdinary()
+		if (victim !== undefined) {
+			this.remove(victim)
+			return true
+		}
+		return SEND_CANDIDATES.has(method) && this.captures.size < REQUEST_LOG_LIMITS.captures + REQUEST_LOG_LIMITS.heldSends
+	}
+
+	/** A held send just named by a journal row takes a place: the oldest ordinary, else the oldest named capture, goes. */
+	private settle(walletTraceId: string): void {
+		const held = () => [...this.captures.values()].filter((c) => !c.journalId && SEND_CANDIDATES.has(c.method)).length
+		while (this.captures.size - held() > REQUEST_LOG_LIMITS.captures) {
+			const victim = this.oldestOrdinary() ?? this.oldestNamed(walletTraceId)
+			if (victim === undefined) return
+			this.remove(victim)
+		}
+	}
+
+	private oldestNamed(except: string): string | undefined {
+		for (const capture of this.captures.values()) {
+			if (capture.journalId && capture.walletTraceId !== except) return capture.walletTraceId
+		}
+		return undefined
 	}
 
 	private oldestOrdinary(): string | undefined {

@@ -31,6 +31,10 @@ export function buildRequestReport(capture: RequestCapture, context: ReportConte
 	const network = (context.networkName ?? "unknown").slice(0, NETWORK_NAME_CHARS)
 	const counted = capture.dropped > 0 ? `${capture.lines.length}, ${capture.dropped} dropped` : `${capture.lines.length}`
 	const envelope = capture.envelope ? JSON.stringify(capture.envelope, null, 2).split("\n") : ["(no answer yet)"]
+	// The send's recorded error is its terminal journal entry's outcome, kept apart for its larger cap.
+	const terminal = capture.journalError === undefined ? undefined : capture.stages.findLast((stage) => stage.kind === "journal")
+	const withCause = (stage: RequestStage): RequestStage =>
+		stage === terminal ? { ...stage, outcome: [stage.outcome, capture.journalError].filter(Boolean).join(": ") } : stage
 	const lines = [
 		`Wallet version: ${context.walletVersion}`,
 		`Browser: ${context.browser}`,
@@ -40,7 +44,7 @@ export function buildRequestReport(capture: RequestCapture, context: ReportConte
 		"",
 		"Timeline",
 		// Stages are appended as they finish; the timeline reads by start, ties in arrival order.
-		...[...capture.stages].sort((a, b) => a.start - b.start).map(timelineLine),
+		...[...capture.stages].sort((a, b) => a.start - b.start).map((stage) => timelineLine(withCause(stage))),
 		"",
 		`Log lines (${counted})`,
 		...capture.lines.map((line) => `${iso(line.at)} ${line.context}:${line.source} ${getLogLevelName(line.level)} ${line.text}`),

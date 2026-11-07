@@ -33,6 +33,17 @@ describe("LogViewerService request reports", () => {
 		expect(await service.getRequestReport("1a2b3c4d")).toBeUndefined()
 	})
 
+	test("a report whose capture is purged while its network name is read answers nothing", async () => {
+		const { service, set } = harness(true)
+		const read = Promise.withResolvers<{ name: string }[]>()
+		Object.assign(service, { networkService: { getNetworks: () => read.promise } })
+		const report = service.getRequestReport("1a2b3c4d")
+		await Promise.resolve()
+		set(false)
+		read.resolve([{ name: "Local network" }])
+		expect(await report).toBeUndefined()
+	})
+
 	test.each([
 		["findRequestTrace", [{ journalId: "not-hex" }]],
 		["findRequestTrace", [{ journalId: JOURNAL, interactionId: JOURNAL }]],

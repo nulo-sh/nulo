@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import type { Log } from "@nulo/wallet-core/logger"
-import { REQUEST_LOG_LIMITS as L, RequestLog, type JournalSnapshot } from "./request-log"
+import { REQUEST_LOG_LIMITS as L, RequestLog, type JournalSnapshot, type RequestCapture } from "./request-log"
+import { buildRequestReport } from "./request-report"
 import { trim } from "./utils"
 
 const ADDRESS = "0x1f2e3d4c5b6a79881f2e3d4c5b6a79881f2e3d4c5b6a79881f2e3d4c5b6a7988"
@@ -103,6 +104,16 @@ describe("RequestLog", () => {
 		expect(captured.text).toContain("[32 bytes]")
 	})
 
+	test("a simulator error quoting JSON whose address a formatter split by tabs renders none of it", () => {
+		const log = store()
+		fillAliased(log, 1)
+		const split = `0x${ADDRESS.slice(2).match(/.{8}/g)?.join("\t")}`
+		log.take(line(traceId(0), { error: new Error(`simulation failed: ${JSON.stringify({ owner: split })}`) }))
+		const report = buildRequestReport(log.get(traceId(0)) as RequestCapture, { walletVersion: "1", browser: "x", networkName: "n" })
+		for (const piece of ADDRESS.slice(2).match(/.{8}/g) ?? []) expect(report).not.toContain(piece)
+		expect(report).toContain("simulation failed")
+	})
+
 	test("past every ordinary bound, the request's end, its envelope and the journal's terminal entry still land", () => {
 		const log = store()
 		fillAliased(log, 1)
@@ -127,6 +138,25 @@ describe("RequestLog", () => {
 		for (let n = 100; n < 160; n++) log.begin(traceId(n), meta())
 		for (let n = 100; n < 160; n += 2) log.end(traceId(n), {})
 		expect(log.snapshot().map((c) => c.walletTraceId)).toEqual(Array.from({ length: 50 }, (_, n) => traceId(n)))
+	})
+
+	test("with 50 sends retained, a burst of 60 sends refused before any journal row evicts none of them", () => {
+		const log = store()
+		fillAliased(log, 50)
+		for (let n = 300; n < 360; n++) log.begin(traceId(n), meta("sendTx"))
+		for (let n = 300; n < 360; n++) log.end(traceId(n), { envelope: failed })
+		expect(log.snapshot().map((c) => c.walletTraceId)).toEqual(Array.from({ length: 50 }, (_, n) => traceId(n)))
+	})
+
+	test("a second interaction id replaces the first, which then finds nothing, even after the capture is gone", () => {
+		const log = store()
+		log.begin(traceId(1), meta("createAuthWit"))
+		log.alias(traceId(1), { interactionId: journalId(1) })
+		log.alias(traceId(1), { interactionId: journalId(2) })
+		expect(log.find({ interactionId: journalId(1) })).toBeUndefined()
+		expect(log.find({ interactionId: journalId(2) })).toBe(traceId(1))
+		log.end(traceId(1), {})
+		expect(log.find({ interactionId: journalId(2) })).toBeUndefined()
 	})
 
 	test("with 49 sends retained, two overlapping ordinary requests evict none of the 49", () => {
@@ -171,14 +201,26 @@ describe("RequestLog", () => {
 		expect(log.get(traceId(0))?.journalError).toBe("bad [hex]")
 	})
 
-	test("restores valid captures and drops an invalid or oversized one", () => {
+	test("restores a capture a journal row names, its size counted again, and drops an invalid, oversized or unnamed one", () => {
 		const log = store()
 		fillAliased(log, 2)
+		log.take(line(traceId(0), "kept"))
 		const [good, other] = log.snapshot()
+		const wide = { at: 1, context: "sw", source: "x", level: 1, text: "a".repeat(L.lineChars) }
+		const unnamed = { ...other, walletTraceId: traceId(7), journalId: undefined }
+		const oversized = { ...other, walletTraceId: traceId(8), journalId: journalId(8), lines: Array(20).fill(wide), bytes: 0 }
 		const restored = store()
-		restored.restore([good, { ...other, walletTraceId: "not-hex" }, { ...other, lines: [{ ...good, text: 1 }] }, "junk"])
+		restored.restore([
+			{ ...good, bytes: 0 },
+			{ ...other, walletTraceId: "not-hex" },
+			{ ...other, lines: [{ ...good, text: 1 }] },
+			unnamed,
+			oversized,
+			"junk",
+		])
 		expect(restored.snapshot().map((c) => c.walletTraceId)).toEqual([traceId(0)])
 		expect(restored.find({ journalId: journalId(0) })).toBe(traceId(0))
+		expect(restored.get(traceId(0))?.bytes).toBe(good.bytes)
 	})
 
 	test("clear empties the store, and an event for a cleared capture creates nothing", () => {

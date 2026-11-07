@@ -16,3 +16,9 @@
 - **Found in the pictures:** `Button`'s `left-icon` is absolutely positioned for wide buttons and overlapped the label of a small chip; nothing else in the extension uses it. The glyph is an `Icon` inside the slot, spaced by the wrapper's flex gap.
 - **Found at retry 0:** a popup opened right after the connect fixture can still be routing when `setDeveloperMode` navigates to Settings, and the toggle never shows. The test waits for `#/popup/general` first, as the other network tests that turn developer mode on do.
 - The pictures came from one run of the scope-refusal e2e with `NULO_E2E_SHOT_DIR` set, a temporary runtime switch between the three looks and temporary shot steps, all reverted. The History file of that run holds one log line, the ingress's debug failure line; the refusal itself shows as the `fee estimate` stage. Without Debug Mode that file would hold no line (OA-2 says so).
+
+# Review loop, round 1
+
+- Codex round 1 rejected with seven local findings, and the Opus review found the burst eviction. All were folded with a test each that fails on the pre-fix code (checked by swapping the five pre-fix sources back in: 9 of the new tests failed, all passed after). The plan's audit verdicts list them.
+- **Round 1's prompt left out the standard's two verbatim rules and its adversarial question**; round 2 carries them.
+- **Held sends.** `makeRoom` holds a send past the cap instead of evicting at `begin`, and `settle` evicts when the journal alias lands. The cap counts captures that are not held sends, so two held sends aliasing one after the other evict one each, and a held send refused before any row evicts nothing.

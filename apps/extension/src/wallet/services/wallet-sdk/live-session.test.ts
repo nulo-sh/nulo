@@ -57,18 +57,19 @@ describe("traceAnswers", () => {
 		expect(answered).toEqual([traced, undefined])
 	})
 
-	test("reports the answer even once the session ended, and sends nothing", async () => {
+	test("reports an answer only when it is sent: once the session ended, nothing is sent or reported", async () => {
 		const bound = session()
 		const sessions = new Map<string, unknown>([["s1", bound]])
 		const handler = handlerOver(sessions)
 		const onAnswer = vi.fn()
 		const live = traceAnswers(bindLiveSession(handler, bound), "1a2b3c4d", onAnswer)
+		await live.respond({ messageId: "m1", walletId: "nulo", result: "ok" })
 		sessions.delete("s1")
-		await live.respond({ messageId: "m1", walletId: "nulo", error: SCOPE_VIOLATION_ENVELOPE })
+		await live.respond({ messageId: "m2", walletId: "nulo", error: SCOPE_VIOLATION_ENVELOPE })
 		live.terminate()
 		expect(live.isLive()).toBe(false)
-		expect(onAnswer).toHaveBeenCalledTimes(1)
-		expect(handler.sendResponse).not.toHaveBeenCalled()
+		expect(onAnswer.mock.calls).toEqual([[undefined]])
+		expect(handler.sendResponse).toHaveBeenCalledTimes(1)
 		expect(handler.terminateSession).not.toHaveBeenCalled()
 	})
 })

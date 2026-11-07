@@ -92,12 +92,15 @@ to log something sensitive.
   row names is deleted when the request ends; at most 50 stay, in `chrome.storage.session` under
   `nulo:request-logs`, cleared with the logs and purged when Developer Mode goes off. A line enters
   a capture only through `scrubReportText` (`wallet/logger/utils.ts`), which blanks every `0x`
-  run of 9 or more hex digits, every bare run of 32 or more, and every shortened, grouped or split
-  address as `[hex]`, keeps a URL's scheme and host, shows line breaks and drops controls; the
-  report builder (`request-report.ts`) runs it again over every line of the file. The file holds
-  the wallet version, the browser, the network name, the trace id, the dApp's origin host, the
-  stages with their outcomes, the scrubbed lines and the envelope, and nothing else. A tagged line
-  is still a log line: every rule above applies, and the text pass is a backstop, never a licence.
+  run of 9 or more hex digits, every bare run of 32 or more, a shortened `0x` value and a `0x`
+  value split by whitespace (raw or JSON-escaped) as `[hex]`, keeps a URL's scheme and host,
+  blanks an extension URL whole (a Firefox install's host is its own), shows line breaks and drops
+  controls; the report builder (`request-report.ts`) runs it again over every line of the file. A
+  value split by anything else, or into chunks under 4 digits, passes. The file holds the wallet
+  version, the browser, the network name, the trace id, the dApp's origin host, the stages with
+  their outcomes and the send's recorded error, the scrubbed lines and the envelope, and nothing
+  else. A tagged line is still a log line: every rule above applies, and the text pass is a
+  backstop, never a licence.
 
 When adding a sensitive field to a type, add its name to `REDACTED_KEYS` in
 `wallet/logger/utils.ts` — in camelCase *and* the kebab-case spelling used by exported backup JSON

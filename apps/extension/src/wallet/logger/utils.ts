@@ -308,10 +308,12 @@ export const scrubHex32 = (value: unknown): unknown => {
 const LINE_BREAKS = /\r\n|[\r\n\u2028\u2029]/g
 /** `trimAddress` and `maskedAddress` output: both ends of a value with the middle elided. */
 const SHORTENED_HEX = /0x[0-9a-f]{4,}(?:\.{2,3}|\u2026)[0-9a-f]{4,}/gi
-/** A `0x` value cut into chunks by spaces or escaped line breaks, as a formatter or a wrap leaves it. */
-const CHUNKED_HEX = /0x[0-9a-f]{4,}(?:(?:\s|\\+n)+[0-9a-f]{4,})+/gi
+/** A `0x` value cut into chunks by whitespace, raw or JSON-escaped at any depth, as a formatter or a wrap leaves it. */
+const CHUNKED_HEX = /0x[0-9a-f]{4,}(?:(?:\s|\\+[nrt])+[0-9a-f]{4,})+/gi
 const LONG_HEX = /0x[0-9a-f]{9,}/gi
 const UNPREFIXED_HEX = /[0-9a-f]{32,}/gi
+/** Firefox gives each install its own extension host, so an extension URL fingerprints the person. */
+const EXTENSION_URL = /\b(?:moz|chrome|safari-web)-extension:\/\/[^\s"'<>\\]*/gi
 /** Fewer hex digits than this across the chunks is an ordinary value beside a word, not a hash. */
 const CHUNKED_MIN_DIGITS = 16
 
@@ -323,6 +325,7 @@ const CHUNKED_MIN_DIGITS = 16
 export function scrubReportText(text: string): string {
 	const visible = stripWireControl(text.replace(LINE_BREAKS, "\\n"))
 	return scrubUrls(visible)
+		.replace(EXTENSION_URL, "[extension-url]")
 		.replace(SHORTENED_HEX, "[hex]")
 		.replace(CHUNKED_HEX, (run) => (run.replace(/0x|[^0-9a-f]/gi, "").length >= CHUNKED_MIN_DIGITS ? "[hex]" : run))
 		.replace(LONG_HEX, "[hex]")

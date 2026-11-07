@@ -53,12 +53,16 @@ export class LogViewerService extends Service<Methods, Events> implements Servic
 
 	public async getRequestReport(walletTraceId: string): Promise<RequestReport | undefined> {
 		const [id] = validateParams(LogViewerMethodSchemas.getRequestReport, [walletTraceId], "getRequestReport")
+		const chainId = this.requests?.enabled ? this.requests.get(id)?.chainId : undefined
+		if (chainId === undefined) return undefined
+		const networkName = await this.networkNameOf(chainId)
+		// Read again after the await: developer mode off or Clear logs in the gap leaves nothing to report.
 		const capture = this.requests?.enabled ? this.requests.get(id) : undefined
 		if (!capture) return undefined
 		const text = buildRequestReport(capture, {
 			walletVersion: __VERSION__,
 			browser: browserOf(globalThis.navigator?.userAgent ?? ""),
-			networkName: await this.networkNameOf(capture.chainId),
+			networkName,
 		})
 		return { fileName: requestReportFileName(id), text }
 	}

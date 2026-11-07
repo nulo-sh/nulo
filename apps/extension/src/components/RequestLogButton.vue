@@ -27,7 +27,11 @@ async function download() {
 	downloading.value = true
 	try {
 		const report = await logViewerService.getRequestReport(walletTraceId.value)
-		if (!report) throw new Error("The request's logs are no longer kept")
+		if (!report) {
+			// Developer mode went off or the logs were cleared since this window asked.
+			walletTraceId.value = undefined
+			throw new Error("The request's logs are no longer kept")
+		}
 		await downloadFile({ data: report.text, filename: report.fileName })
 		openToast({ kind: "success", label: "Logs downloaded successfully" })
 	} catch (error) {

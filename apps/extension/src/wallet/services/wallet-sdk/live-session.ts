@@ -39,7 +39,7 @@ export function bindLiveSession(
 
 /**
  * `live` whose every error answer carries `data.walletTraceId`. `onAnswer` sees what was answered
- * (`undefined` for a result) before the send, whether or not the session is still live.
+ * (`undefined` for a result) only when it is sent: an answer to an ended session is never delivered.
  */
 export function traceAnswers(
 	live: LiveSession,
@@ -51,7 +51,8 @@ export function traceAnswers(
 		respond: (response) => {
 			// Every error this pipeline answers comes from `toWalletResponseError` or one of its constants.
 			const error = response.error === undefined ? undefined : withWalletTraceId(response.error as WalletErrorEnvelope, walletTraceId)
-			onAnswer?.(error)
+			// Checked in the same turn as `live.respond`'s own check, so the two agree.
+			if (live.isLive()) onAnswer?.(error)
 			return live.respond(error === undefined ? response : { ...response, error })
 		},
 		terminate: () => live.terminate(),

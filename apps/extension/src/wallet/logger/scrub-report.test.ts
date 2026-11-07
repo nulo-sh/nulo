@@ -24,6 +24,7 @@ describe("scrubReportText", () => {
 		["an address a formatter grouped by four", `owner 0x${chunks(DIGITS, 4).join(" ")} end`],
 		["an address split by U+200B", `owner 0x${chunks(DIGITS, 6).join("​")} end`],
 		["an address split by tabs", `owner 0x${chunks(DIGITS, 8).join("\t")} end`],
+		["an address split by tabs, JSON-escaped twice", JSON.stringify(JSON.stringify({ owner: `0x${chunks(DIGITS, 8).join("\t")}` }))],
 		["an unprefixed hash", `hash ${DIGITS} end`],
 		["an L1 address", "recipient 0x52908400098527886E0F7030069857D2E4169EE7 end"],
 	])("blanks %s", (_label, line) => {
@@ -35,6 +36,13 @@ describe("scrubReportText", () => {
 	test("keeps a URL's scheme and host only, its token gone", () => {
 		const out = scrubReportText("fetch failed: https://rpc.example.com/v2/sk-live-abc123?apiKey=s3cr3t done")
 		expect(out).toBe("fetch failed: https://rpc.example.com done")
+	})
+
+	test("blanks an extension URL whole: a Firefox install's host is its own", () => {
+		const out = scrubReportText(
+			"import failed: moz-extension://0e9f1c2a-3b4d-4e5f-8a6b-7c8d9e0f1a2b/assets/pxe.js and blob:chrome-extension://abc/x",
+		)
+		expect(out).toBe("import failed: [extension-url] and blob:[extension-url]")
 	})
 
 	test("a nested envelope string loses its address and URL and keeps its code", () => {
