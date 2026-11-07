@@ -615,6 +615,14 @@ const confirmBlocked = computed(
 		processingError.value?.type === "error",
 )
 
+/** A failure the window shows before approval: the request's logs are worth a download then. */
+const showsFailure = computed(
+	() =>
+		refusal.value !== undefined ||
+		operations.value.some((_, i) => failedFeeEstimates.value[i] || failedAuthwitPreviews.value[i]) ||
+		processingError.value?.type === "error",
+)
+
 const showJson = () => {
 	if (requestId.value) openJsonWindow(requestId.value)
 }
@@ -752,6 +760,10 @@ onUnmounted(() => {
 			</Flex>
 		</Flex>
 
+		<Flex v-if="showsFailure && requestId" wide :class="$style.request_log_row">
+			<RequestLogButton :interaction-id="requestId" />
+		</Flex>
+
 		<DappApprovalFooter
 			:processing-error="grantRefusal ?? processingError"
 			reject-testid="execute-reject-btn"
@@ -790,6 +802,10 @@ onUnmounted(() => {
 
 .sections {
 	padding: 16px;
+}
+
+.request_log_row {
+	padding: 0 16px 8px;
 }
 
 /* The action repeats a typed name on a line of its own, so the whole banner breaks a word wider

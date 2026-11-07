@@ -343,6 +343,9 @@ onBeforeUnmount(() => {
 					:class="$style.code_block"
 					data-testid="journal-detail-error-raw"
 				>{{ errorNormalizedRaw }}</pre>
+				<Flex v-if="idFromRoute">
+					<RequestLogButton :journal-id="String(idFromRoute)" />
+				</Flex>
 			</Flex>
 		</Flex>
 

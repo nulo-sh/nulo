@@ -1,10 +1,18 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { UNCLASSIFIED_ERROR_MESSAGE } from "@/wallet/services/wallet-sdk/error-envelope"
+import { UNCLASSIFIED_ERROR_ENVELOPE } from "@/wallet/services/wallet-sdk/error-envelope"
 import { waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, type ExtensionContext, grantCapBundle, openPopup, test } from "../fixtures/extension"
 import { readSendRecords, type SendRecordView, waitForDappExecuteOutcomes, waitForSendRecord } from "../fixtures/journal"
-import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult, waitForPgResults } from "../fixtures/playground"
+import {
+	assertPgOk,
+	errorEnvelopeOf,
+	setPgInput,
+	snapshotResultSeq,
+	tracedEnvelope,
+	waitForPgResult,
+	waitForPgResults,
+} from "../fixtures/playground"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 import { shotSend } from "../fixtures/send-page"
 import { expectWindowHeldBehindProof, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
@@ -71,9 +79,9 @@ test.skipIf(!hasConfig)(
 		await waitForPopupClosed(execute)
 
 		const result = await waitForPgResult(page, "sendTx", seqTx, 60_000)
-		expect({ status: result.status, error: result.errorJson }).toEqual({
+		expect({ status: result.status, error: errorEnvelopeOf(result) }).toEqual({
 			status: "error",
-			error: { message: JSON.stringify(UNCLASSIFIED_ERROR_MESSAGE) },
+			error: tracedEnvelope(UNCLASSIFIED_ERROR_ENVELOPE),
 		})
 		const wallet = await openPopup(ctx)
 		const outcomes = await waitForDappExecuteOutcomes(wallet, "the refused request's record", (rows) =>

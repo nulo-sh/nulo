@@ -75,6 +75,8 @@ export interface IExecutionHooks {
 	originKey?: string
 	/** Called once, when the send's journal record exists. */
 	onJournalCreated?: (journalId: string) => void
+	/** The dApp request's `SessionContext.walletTraceId`; the operation's root task carries it. */
+	walletTraceId?: string
 }
 
 export interface IExecutionRunner {

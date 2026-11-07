@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 	getOperation: vi.fn(),
 	updated: [] as Array<(op: OperationRecord) => void>,
 	tokens: [] as Array<Record<string, unknown>>,
+	props: [] as Array<{ key: string; value: unknown }>,
 }))
 
 vi.mock("vue-router", () => ({
@@ -26,7 +27,7 @@ vi.mock("@/wallet/services/price/client", () => ({
 }))
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: vi.fn(function () {
-		return { getProps: vi.fn(async () => []), disconnect: vi.fn() }
+		return { getProps: vi.fn(async () => mocks.props), disconnect: vi.fn() }
 	}),
 }))
 vi.mock("@/wallet/services/token/client", () => ({
@@ -64,6 +65,7 @@ afterEach(() => {
 	vi.unstubAllGlobals()
 	vi.clearAllMocks()
 	mocks.updated.length = 0
+	mocks.props = []
 })
 
 const ACCOUNT = `0x${"0a".repeat(32)}`
@@ -108,6 +110,7 @@ async function mountPage(record: OperationRecord, app: Record<string, unknown> =
 			],
 			stubs: {
 				SubPageHeader: true,
+				RequestLogButton: true,
 				Flex: { inheritAttrs: false, template: "<div v-bind='$attrs'><slot /></div>" },
 			},
 		},
@@ -268,5 +271,24 @@ describe("the journal page's title", () => {
 		expect(await title()).toBe("TST")
 		mocks.tokens = [{ id: 7, symbol: "   ", decimals: 0, hasDecimals: true }]
 		expect(await title()).toBe("—")
+	})
+})
+
+describe("the developer box offers the request's logs", () => {
+	const button = (w: Awaited<ReturnType<typeof mountPage>>) => w.find("request-log-button-stub")
+
+	test("a failed row in developer mode carries the button for its own journal id, inside the box", async () => {
+		mocks.props = [{ key: "developerMode", value: true }]
+		const w = await mountPage(failedSend())
+		expect(button(w).attributes("journal-id")).toBe("j1")
+		expect(row(w, "error-message").element.parentElement?.contains(button(w).element)).toBe(true)
+	})
+
+	test("a row with no error, or developer mode off, shows no button", async () => {
+		mocks.props = [{ key: "developerMode", value: true }]
+		const settled = { ...failedSend(), progress: { stage: "succeeded" }, error: null } as unknown as OperationRecord
+		expect(button(await mountPage(settled)).exists()).toBe(false)
+		mocks.props = []
+		expect(button(await mountPage(failedSend())).exists()).toBe(false)
 	})
 })

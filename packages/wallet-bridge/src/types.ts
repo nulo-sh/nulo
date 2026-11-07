@@ -21,4 +21,7 @@ export type SessionContext = {
 	 *  switch, re-unlock or same-id re-import parked between admission and commit fails
 	 *  closed. Optional on the type; the wire handler always sets it. */
 	fence?: ExecutionFence
+	/** The 8-hex id the wallet minted for this message on arrival, never read from the dApp: every
+	 *  error it answers carries it, and the request's log capture keys on it. Batch legs share it. */
+	walletTraceId?: string
 }

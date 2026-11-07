@@ -6,9 +6,11 @@ import { readStoredCapability } from "../fixtures/dappSession"
 import {
 	assertPgOk,
 	callExpectingNoPopup,
+	errorEnvelopeOf,
 	PLAYGROUND_TEST_URL,
 	requestPgBundle,
 	snapshotResultSeq,
+	tracedEnvelope,
 	waitForPgResult,
 } from "../fixtures/playground"
 import { approveCapabilities, readCapabilitySwitch, waitForPopup } from "../fixtures/popups"
@@ -31,7 +33,7 @@ const hasConfig = aztecConfig !== undefined
 type Connected = ExtensionContext & { playgroundPage: Page }
 
 /** The playground records the SDK's error message, which is the wallet's error JSON-encoded. */
-const SCOPE_REFUSED = { message: JSON.stringify(SCOPE_VIOLATION_ENVELOPE) }
+const SCOPE_REFUSED = tracedEnvelope(SCOPE_VIOLATION_ENVELOPE)
 
 /** Request `data`, check private events start Off, set that switch, and return the answer's `data` entry. */
 async function grantData(ctx: Connected, privateEvents: boolean): Promise<Record<string, unknown> | undefined> {
@@ -54,7 +56,7 @@ async function expectRefusedSilently(ctx: Connected): Promise<void> {
 	const page = ctx.playgroundPage
 	const result = await callExpectingNoPopup(ctx, page, "getPrivateEvents", () => clickByTestId(page, "pg-btn-getPrivateEvents"))
 	expect(result.status).toBe("error")
-	expect(result.errorJson).toEqual(SCOPE_REFUSED)
+	expect(errorEnvelopeOf(result)).toEqual(SCOPE_REFUSED)
 }
 
 test.skipIf(!hasConfig)(

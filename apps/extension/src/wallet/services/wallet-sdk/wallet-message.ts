@@ -31,6 +31,8 @@ import type { ResetRunGate } from "@/wallet/services/network-reset/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import type { ILogger } from "@/wallet/logger"
+import { type RequestLog, traceTag } from "@/wallet/logger/request-log"
+import { randomIdNotIn } from "@/wallet/services/id-allocators"
 import { LogLevel } from "@/wallet/logger"
 import { SESSION_INVALID_ERROR, toWalletResponseError } from "./error-envelope"
 import { enforceSessionProfileBinding, type ProfileSwitchEpoch } from "./profile-switch-teardown"
@@ -39,7 +41,7 @@ import { chainSendTxWithVouching } from "./queued-wait-vouching"
 import { createSessionBaton } from "./session-baton"
 import { chainInfoToChainId } from "./session-established"
 import type { SessionHolders } from "./session-holders"
-import { bindLiveSession, type LiveSession } from "./live-session"
+import { bindLiveSession, type LiveSession, traceAnswers } from "./live-session"
 import { toJsonSafe } from "./to-json-safe"
 import type { VerificationHold } from "./verification-hold"
 
@@ -58,6 +60,8 @@ export type MessagePipelineDeps = {
 	legal: LegalAdmission
 	resetRun: ResetRunGate
 	logger: ILogger
+	/** Each request's capture; absent, nothing is recorded. */
+	requests?: RequestLog
 }
 
 /** A queued row's developer line when its call's session ended before the call ran. */
@@ -75,11 +79,11 @@ export function onWalletMessage(session: ActiveSession, message: WalletMessage, 
 		)
 		return
 	}
-	const live = bindLiveSession(deps.handler, session)
+	const bound = bindLiveSession(deps.handler, session)
 	// Captured once, on arrival. Upstream reads the session before it awaits the decrypt, so a message
 	// whose session ended meanwhile arrives with the old object: it must not capture a successor's
 	// hold under the same id, and it has nowhere to be answered.
-	const hold = live.isLive() ? deps.sessions.holds.get(key) : undefined
+	const hold = bound.isLive() ? deps.sessions.holds.get(key) : undefined
 	if (hold === undefined) {
 		deps.logger.log(
 			"wallet-sdk",
@@ -88,10 +92,18 @@ export function onWalletMessage(session: ActiveSession, message: WalletMessage, 
 		)
 		return
 	}
-	const release = hold.admit()
-	if (release === undefined) {
+	const admitted = hold.admit()
+	// A call over the pending cap is answered with its id but never captured, so a burst churns no capture.
+	const live = beginRequest(bound, session, message, admitted === undefined ? undefined : deps.requests)
+	const { walletTraceId } = live
+	if (admitted === undefined) {
 		refuseOverPendingCap(live, key, message, deps.sessions.decryptLocks, deps.logger)
 		return
+	}
+	// A request never answered (dropped, suppressed, or its session gone) ends here; an answered one ended first.
+	const release = () => {
+		admitted()
+		deps.requests?.end(walletTraceId, "dropped")
 	}
 	const prev = deps.sessions.sessionQueues.get(key) ?? Promise.resolve()
 
@@ -126,6 +138,11 @@ export function onWalletMessage(session: ActiveSession, message: WalletMessage, 
 		message.type === "sendTx"
 			? establishedPromise.then((ok) => createQueuedJournalIfStamped(ok, message, session, deps))
 			: Promise.resolve(undefined)
+	// Registered before the run's own continuation, so the row is aliased before the call runs.
+	queuedJournalIdPromise.then(
+		(journalId) => journalId && deps.requests?.alias(walletTraceId, { journalId }),
+		() => {},
+	)
 
 	// Pre-claim liveness: the record ages in `queued` through the whole
 	// session-FIFO wait + its own approval popup — a legitimate wait
@@ -146,6 +163,38 @@ export function onWalletMessage(session: ActiveSession, message: WalletMessage, 
 		key,
 		baton.catch(() => {}),
 	)
+}
+
+/** The call's session, answering every error with `walletTraceId`, which is minted whatever the developer
+ *  mode: a field present only with it would tell every dApp the setting. */
+type TracedSession = LiveSession & { walletTraceId: string }
+
+function beginRequest(bound: LiveSession, session: ActiveSession, message: WalletMessage, requests: RequestLog | undefined): TracedSession {
+	const walletTraceId = randomIdNotIn((id) => requests?.has(id) === true, 8)
+	requests?.begin(walletTraceId, {
+		method: describeWireMethod(message.type),
+		originHost: hostOf(session.origin),
+		chainId: chainIdOf(session),
+	})
+	const live = traceAnswers(bound, walletTraceId, (envelope) => requests?.end(walletTraceId, { envelope }))
+	return { ...live, walletTraceId }
+}
+
+/** The capture's chain, `-1` for a malformed `chainInfo`: the handler refuses that call itself, typed. */
+function chainIdOf(session: ActiveSession): number {
+	try {
+		return chainInfoToChainId(session)
+	} catch {
+		return -1
+	}
+}
+
+function hostOf(origin: string): string {
+	try {
+		return new URL(origin).host
+	} catch {
+		return "[unknown]"
+	}
 }
 
 /** The stamp guard runs BEFORE the durable journal write: this path
@@ -205,11 +254,13 @@ async function dropUnrunMessage(
 	kind: QueuedFailureKind,
 	operationJournal: OperationJournalService,
 	logger: ILogger,
+	walletTraceId?: string,
 ): Promise<void> {
 	logger.log(
 		"wallet-sdk",
 		LogLevel.Debug,
 		`Dropping ${describeWireMethod(message.type)} for session ${describeExternalId(sessionId)}: the session ended before it ran`,
+		...traceTag(walletTraceId),
 	)
 	if (queuedJournalId) await failQueuedIfUnclaimed(operationJournal, queuedJournalId, SESSION_NO_LONGER_VALID, logger, kind)
 }
@@ -218,11 +269,12 @@ async function runEstablishedMessage(
 	queuedJournalId: string | undefined,
 	establishedPromise: Promise<boolean>,
 	releaseFifo: ReturnType<typeof createSessionBaton>["releaseFifo"],
-	call: { session: ActiveSession; live: LiveSession; hold: VerificationHold },
+	call: { session: ActiveSession; live: TracedSession; hold: VerificationHold },
 	message: WalletMessage,
 	deps: MessagePipelineDeps,
 ): Promise<void> {
 	const { session, live } = call
+	const tag = traceTag(live.walletTraceId)
 	// Re-gate execution behind the baton. A session that
 	// failed/lost establishment must not execute either — not just skip
 	// its journal. Same promise as the journal gate, so it resolves once.
@@ -231,6 +283,7 @@ async function runEstablishedMessage(
 			"wallet-sdk",
 			LogLevel.Warn,
 			`Dropping message for session ${describeExternalId(session.sessionId)}: failed/lost establishment validation`,
+			...tag,
 		)
 		return
 	}
@@ -240,18 +293,20 @@ async function runEstablishedMessage(
 	const outcome = await call.hold.outcome
 	if (outcome !== "released" || !live.isLive()) {
 		const kind = outcome === "released" ? "wallet_refused" : outcome
-		return dropUnrunMessage(message, session.sessionId, queuedJournalId, kind, deps.operationJournal, deps.logger)
+		return dropUnrunMessage(message, session.sessionId, queuedJournalId, kind, deps.operationJournal, deps.logger, live.walletTraceId)
 	}
 	return handleWalletMessage(
 		{
 			session,
 			message,
 			live,
+			walletTraceId: live.walletTraceId,
 			hooks: {
 				// The FIFO releases once ExecutionService enqueues the approved request on the execution
 				// mutex, which keeps the session's sends in arrival order.
 				onExecutionEnqueued: releaseFifo,
 				queuedJournalId,
+				onJournalCreated: (journalId) => deps.requests?.alias(live.walletTraceId, { journalId }),
 			},
 		},
 		{
@@ -292,10 +347,10 @@ export type WalletMessageDeps = {
  * record is failed.
  */
 export async function handleWalletMessage(
-	request: { session: ActiveSession; message: WalletMessage; live: LiveSession; hooks?: DispatchHooks },
+	request: { session: ActiveSession; message: WalletMessage; live: LiveSession; hooks?: DispatchHooks; walletTraceId?: string },
 	deps: WalletMessageDeps,
 ): Promise<void> {
-	const { session, message, live, hooks } = request
+	const { session, message, live, hooks, walletTraceId } = request
 	const { dispatcher, profileService, operationJournal, sessionProfiles, switchEpoch, logger, legal, resetRun } = deps
 	const response: WalletResponse = {
 		messageId: message.messageId,
@@ -350,6 +405,7 @@ export async function handleWalletMessage(
 			origin: session.origin,
 			sessionId: session.sessionId,
 			fence,
+			walletTraceId,
 		}
 
 		// Once per top-level request, before the dispatcher sees a method name: no dApp request is
@@ -362,7 +418,15 @@ export async function handleWalletMessage(
 		// The last await before the dispatch: the session can end, and its id re-key, inside any of
 		// the reads above.
 		if (!live.isLive()) {
-			return dropUnrunMessage(message, session.sessionId, hooks?.queuedJournalId, "wallet_refused", operationJournal, logger)
+			return dropUnrunMessage(
+				message,
+				session.sessionId,
+				hooks?.queuedJournalId,
+				"wallet_refused",
+				operationJournal,
+				logger,
+				walletTraceId,
+			)
 		}
 
 		// Hooks ride as an internal 4th arg — deliberately NOT on `ctx` so
@@ -378,8 +442,8 @@ export async function handleWalletMessage(
 		// `new Error(JSON.stringify(error))` at `extension_wallet.ts:181`, so dApps
 		// that want to discriminate parse the message — see the wallet-bridge
 		// README for the recipe. Mapping lives in `error-envelope.ts` so it can be
-		// unit-tested in isolation; everything not recognised collapses to a
-		// string, preserving the original wire contract.
+		// unit-tested in isolation; everything not recognised collapses to one
+		// constant -32603 object.
 		response.error = toWalletResponseError(error)
 		// Pass the error as an OBJECT, never pre-stringified: a finished string is opaque to the
 		// logger's redaction, so interpolating it here would smuggle whatever the error carries
@@ -389,6 +453,7 @@ export async function handleWalletMessage(
 			isExpectedRefusal(error) ? LogLevel.Debug : LogLevel.Error,
 			`Method ${describeWireMethod(message.type)} failed for session ${describeExternalId(session.sessionId)}`,
 			response.error,
+			...traceTag(walletTraceId),
 		)
 
 		if (hooks?.queuedJournalId) {
@@ -409,6 +474,7 @@ export async function handleWalletMessage(
 			"wallet-sdk",
 			LogLevel.Warn,
 			`Suppressing ${describeWireMethod(message.type)} response for session ${describeExternalId(session.sessionId)}: profile switched mid-dispatch`,
+			...traceTag(walletTraceId),
 		)
 		return
 	}

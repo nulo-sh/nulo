@@ -359,7 +359,7 @@ const RESTORE_ROLLS_BACK = cite(
 )
 const RESTORE_FINALIZES = cite(IMPORT, 343, "restoreRun = await finalizeWithReminder(")
 const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
-const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 373, "discoveryQueue.drain(")
+const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 375, "discoveryQueue.drain(")
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
 const REVEAL_PASSKEY = cite(SEED_PAGE, 125, '{ profileId, step: "reveal", profileName: () => name }')
 const REVEAL_CANCEL = cite(SEED_PAGE, 132, "handleCancelOrUnconfirmed(error, openToast)")
