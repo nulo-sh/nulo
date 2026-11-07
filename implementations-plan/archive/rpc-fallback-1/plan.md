@@ -336,7 +336,7 @@ The owner's P118-04 A (2026-11-06): "add the ones that make sense. Don't over-en
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `3b845ef02`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `3b845ef02`. Specific here:
 
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc at its boundary over `git diff <arc base>...HEAD` with `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside each arc's round 1. Hard stop at three rounds. After the last arc, one fresh Codex session over the net diff for cross-arc issues. Prompts under `~/.cache/nulo-backlog/rpc-fallback-1/`.
 - **Approval boundary (a plan change; stop):** a persisted field or a write to a network row other than arc 5's approved one and arc 4's endpoint order (P117-11 A); a timer, alarm or background task; any change to a timeout or retry count; a send moved to another endpoint; a pending check moved off its recorded URL; a new workflow or required check; a UI change beyond the owner's answers; any `legal/` text beyond the owner's.

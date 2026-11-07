@@ -556,3 +556,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [discovery-allow-1](discovery-allow-1/plan.md) — completed (arc 1 #1722; arc 2 carries the close-out) — the connect window says what Allow reveals; an opt-in "every site may see Nulo" switch
 - [chips-3](chips-3/plan.md) — completed — activity rows draw their direction as a glyph pair and way badge in the icon box, from queued to settled; a row titled by its token drops the symbol under its amount (#1723 and arc 2)
 - [exec-empty-1](exec-empty-1/plan.md) — completed — a no-account request with no call is refused up front, as its two siblings are (P120-04 A, #1728)
+- [rpc-fallback-1](rpc-fallback-1/plan.md) — completed — each network fails over to its next endpoint and returns to its primary; Nulo's relay second on Alpha and Testnet (#1624)
