@@ -34,3 +34,4 @@
 - 2026-11-07: fix round 2 (CI: `network-arrival` Mainnet request at the egress guard, Chrome): D39, test-only fix plus a `service.test.ts` pin; Codex approve, Opus lens approve. Gates on c1a4b31b8 plus the diff: lint, typecheck:all, aztec-runtime 567, extension 17765, `network-arrival` Chrome 10/10 and Firefox 1/1, sandbox 8/8 302 s, E1 Chrome 191 s
 - 2026-11-07: tests1 design audit: Codex 01a1b389 revise, then approve with changes (D40-D44); F4 a known limit
 - 2026-11-07: tests1 built, diff review Codex 01a1b3ba three rounds (revise, revise, revise with 1 P2 applied as given) and Opus approve with changes; known limits #1736, #1737
+- 2026-11-07: tests1 gates on 71ce00c46: lint, typecheck:all, test:all (156 s), routing 70, relay 13; test1 x3 seeds, test2 x3 from v1.2.0, test3 x3, E1 193 s, sandbox 8/8 300 s, all retry 0 green

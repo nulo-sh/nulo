@@ -70,3 +70,16 @@
 - **Codex round 3: revise, 1 P2.** A failed gate release still skipped the pending restore. Fixed with Codex's own `try`/`finally`. Not re-reviewed: the loop stops at three rounds.
 - **Test 3's sensitivity.** Mutated `endpoint-health.ts` to drop the floor guard: no `behind` on a probe below the floor, and `atFloor` ignoring the floor. The run was red at the PXE control. B's refused `getPrivateLogsByTags` moved, and A read `ready` instead of `behind`. Reverted with `git checkout`, no build or review in flight.
 - **Test 1, seed 347737410** (receipt, k = 1, 429 ×17), after the review fixes: green, test 64.4 s. The rule armed before the send took the first receipt read, which carried the hash.
+
+## Gate (on `71ce00c46`)
+
+- `bun run lint`, `bun run typecheck:all` and `bun run test:all` (156 s; aztec-runtime 568, extension 17859) all passed.
+- Every e2e ran at retry 0 through `e2e:agent` on Chrome:
+
+  | Suite | Runs | Test time |
+  |---|---|---|
+  | Test 1 | seeds 441604806, 528905624, 490360462 | 62.6 s, 50.8 s, 52.1 s |
+  | Test 3 | three | 61.0 s, 65.6 s, 65.3 s |
+  | Test 2 | three, v1.2.0 to a candidate built at `71ce00c46` | 74.9 s, 78.3 s, 85.6 s |
+  | E1 (failover send) | one | 193.0 s, wall 270 s |
+  | Sandbox suite | one, 8 of 8 | 300.1 s, wall 365 s |
