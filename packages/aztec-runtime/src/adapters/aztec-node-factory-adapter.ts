@@ -21,7 +21,7 @@ import { type AztecNode, AztecNodeApiSchema, createAztecNodeClient } from "@azte
 import { walletChainId } from "@nulo/wallet-core/chain-id"
 import { rpcTransportVerdict } from "@nulo/wallet-core/utils"
 import type { NodeFactory } from "../ports/node-factory-port"
-import { type RouteLogEvent, type RouteSpec, type RoutedNode, routeNode, type SubmissionPins } from "../routing/routed-node"
+import { type RouteLogEvent, type RouteSpec, type RoutedNode, realTimer, routeNode, type SubmissionPins } from "../routing/routed-node"
 import { makeFetchWithTimeout, makeSingleAttemptFetch, type RetryOptions } from "../utils/fetch"
 
 const noop = () => {}
@@ -116,6 +116,7 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 			{
 				now: Date.now,
 				sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+				timer: realTimer,
 				log: logRouteEvent,
 				retryWhile: options.retryWhile,
 				pins: options.pins,

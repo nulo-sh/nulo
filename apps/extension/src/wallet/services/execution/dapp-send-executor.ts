@@ -52,7 +52,7 @@ import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 import { feeDisplay } from "@/utils/fee-estimation"
 import { pickPrimaryIndex, pickPrimaryWireCall } from "@/utils/primary-method"
 import { type JournalAuthwits, type JournalCallCarrier, journalCallOf } from "@/wallet/services/operation-journal/spec"
-import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
+import { findPrimaryEndpoint } from "@/wallet/services/network/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AddTransactionInput, LocalTxOrigin, Tx } from "@/wallet/services/transaction/service"
@@ -733,9 +733,9 @@ export class DappSendExecutor {
 	 *  whatever its outcome, and the record's error, when there is one, is the one the caller sees.
 	 *  The journal row holds the grants until this write lands, so a send stopped before it lands is
 	 *  listed by the send check once it reads the send went through. */
-	private sentTxRecorder(sent: SentTx): (hash: string) => Promise<void> {
+	private sentTxRecorder(sent: SentTx): (hash: string, submittedEndpointUrl: string) => Promise<void> {
 		const feeChoice = this.feeChoiceFor(sent.feeChosenBy, sent.network.chainId, sent.txCalls)
-		return async (hash) => {
+		return async (hash, submittedEndpointUrl) => {
 			const account = sent.account.address.toString()
 			let recordFailed = false
 			let recordError: unknown
@@ -748,7 +748,7 @@ export class DappSendExecutor {
 					nonce: sent.nonce.toString(),
 					feePaymentMethod: sent.feePaymentMethod,
 					hash,
-					submittedEndpointUrl: primaryEndpointUrl(sent.network),
+					submittedEndpointUrl,
 					estimatedFee: getEstimatedFee(sent.txRequest),
 					gasDetails: getGasDetails(sent.txRequest),
 					fence: sent.fence,
@@ -872,8 +872,7 @@ export class DappSendExecutor {
 		ctx: SlotRun,
 		built: FeeEstimate,
 	): Promise<string> {
-		const { txRequest, node, pxe, account, network, nonce, txCalls, feePaymentMethod, pendingPublicAuthwits, initializesAccount } =
-			built
+		const { txRequest, pxe, account, network, nonce, txCalls, feePaymentMethod, pendingPublicAuthwits, initializesAccount } = built
 		ctx.leaveLine()
 		const sent: SentTx = {
 			origin,
@@ -891,7 +890,7 @@ export class DappSendExecutor {
 		}
 		const { txHash } = await this.deps.coordinator.proveAndSend({
 			pxe,
-			node,
+			pickSendEndpoint: (tx) => this.deps.pickSendEndpoint(network, tx),
 			txRequest,
 			initializesAccount,
 			scopes: [account.address],
@@ -901,7 +900,6 @@ export class DappSendExecutor {
 			...fenceChecks(this.deps, fence),
 			markJournal: ctx.markJournal,
 			commitSubmitting: (patch) => ctx.commitSubmitting(patch, journalAuthwitsOf(sent)),
-			submittedEndpointUrl: primaryEndpointUrl(network),
 			onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 			recordTransaction: this.sentTxRecorder(sent),
 		})
@@ -1094,19 +1092,8 @@ export class DappSendExecutor {
 		ctx: SlotRun,
 		built: StandardBuild,
 	): Promise<Submitted> {
-		const {
-			txRequest,
-			node,
-			pxe,
-			account,
-			scopes,
-			network,
-			nonce,
-			txCalls,
-			feePaymentMethod,
-			pendingPublicAuthwits,
-			initializesAccount,
-		} = built
+		const { txRequest, pxe, account, scopes, network, nonce, txCalls, feePaymentMethod, pendingPublicAuthwits, initializesAccount } =
+			built
 		ctx.leaveLine()
 		const sent: SentTx = {
 			origin,
@@ -1122,9 +1109,9 @@ export class DappSendExecutor {
 			feeChosenBy: feeChooserOf(op.feeSettings),
 			journalId: ctx.journalId,
 		}
-		const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
+		const { txHash, offchainOutput, sentThrough } = await this.deps.coordinator.proveAndSend({
 			pxe,
-			node,
+			pickSendEndpoint: (tx) => this.deps.pickSendEndpoint(network, tx),
 			txRequest,
 			initializesAccount,
 			scopes,
@@ -1134,12 +1121,11 @@ export class DappSendExecutor {
 			...fenceChecks(this.deps, fence),
 			markJournal: ctx.markJournal,
 			commitSubmitting: (patch) => ctx.commitSubmitting(patch, journalAuthwitsOf(sent)),
-			submittedEndpointUrl: primaryEndpointUrl(network),
 			onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 			wantOffchainOutput: offchainOutputOf,
 			recordTransaction: this.sentTxRecorder(sent),
 		})
-		return { txHash, offchainOutput, node }
+		return { txHash, offchainOutput, node: sentThrough.node }
 	}
 
 	/**
@@ -1291,9 +1277,9 @@ export class DappSendExecutor {
 				})
 				leaveLine()
 
-				const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
+				const { txHash, offchainOutput, sentThrough } = await this.deps.coordinator.proveAndSend({
 					pxe,
-					node,
+					pickSendEndpoint: (tx) => this.deps.pickSendEndpoint(network, tx),
 					txRequest,
 					scopes: scopesWithAccount,
 					parentTask,
@@ -1302,12 +1288,11 @@ export class DappSendExecutor {
 					...fenceChecks(this.deps, fence),
 					markJournal,
 					commitSubmitting,
-					submittedEndpointUrl: primaryEndpointUrl(network),
 					onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 					wantOffchainOutput: offchainOutputOf,
 					recordTransaction,
 				})
-				return { txHash, offchainOutput, node }
+				return { txHash, offchainOutput, node: sentThrough.node }
 			},
 		)
 	}
@@ -1436,7 +1421,8 @@ function primaryMethodCalls(op: AztecSendTxOperation): JournalCallCarrier[] | un
 	return [{ method: primary.name, call: journalCallOf(to?.toString(), args) }]
 }
 
-/** A send the node accepted, handed out of its slot for the dApp's wait. */
+/** A send the node accepted, handed out of its slot for the dApp's wait, with the client of the
+ *  endpoint that carried it: its receipt is read there alone. */
 type Submitted = { txHash: TxHash; offchainOutput: ReturnType<typeof offchainOutputOf> | undefined; node: AztecNode }
 
 /** Below a second a dApp's poll is a tight loop on the node. `retryUntil` reads the deadline only

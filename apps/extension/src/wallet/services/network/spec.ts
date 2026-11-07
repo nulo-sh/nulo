@@ -84,26 +84,30 @@ const networkShape = {
  *  at the add/update/restore boundaries). */
 export const NetworkRowSchema: z.ZodType<Network> = z.object(networkShape)
 
-/**
- * Synthesized at lookup-time from `(Network, primaryEndpoint.rpcUrl)`. Kept
- * structurally identical to the prior `Network` shape on the PXE-facing
- * boundary so `chain-runtime.ts` keeps working unchanged.
- */
+/** One endpoint as the router sees it: no label. */
+export type RouteEndpoint = { id: string; rpcUrl: string }
+
+/** What the offscreen PXE needs of a network: its identity and its endpoints in preference order. */
 export type NetworkInfo = {
 	profileId: string
 	chainId: number
-	rpcUrl: string
+	l1ChainId: number
+	endpoints: readonly RouteEndpoint[]
 }
 
 /**
- * Helper: project a Network down to the legacy `NetworkInfo` shape using
- * its primary endpoint's URL. Throws if the network has no primary
- * endpoint (data-shape invariant violation).
+ * The network's endpoints in the order Settings shows them: the primary first, then the rest as
+ * stored. Throws if the network has no primary endpoint.
  */
-export function networkInfoFrom(network: Network): NetworkInfo {
+export function routeEndpoints(network: Network): RouteEndpoint[] {
 	const primary = findPrimaryEndpoint(network)
 	if (!primary) throw new Error(`Network ${network.id} has no primary endpoint`)
-	return { profileId: network.profileId, chainId: network.chainId, rpcUrl: primary.rpcUrl }
+	return [primary, ...network.endpoints.filter((e) => e.id !== primary.id)].map(({ id, rpcUrl }) => ({ id, rpcUrl }))
+}
+
+/** Projects a Network onto what the offscreen PXE takes. Throws if it has no primary endpoint. */
+export function networkInfoFrom(network: Network): NetworkInfo {
+	return { profileId: network.profileId, chainId: network.chainId, l1ChainId: network.l1ChainId, endpoints: routeEndpoints(network) }
 }
 
 /**

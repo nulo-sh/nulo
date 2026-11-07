@@ -58,6 +58,7 @@ const STUBS = {
 			"icon",
 			"amount",
 			"amountSymbol",
+			"titleNamesToken",
 			"amountFiat",
 			"testId",
 			"txAmountDisplay",
@@ -243,10 +244,38 @@ describe("modules/activity/TransactionCard (settled)", () => {
 			origin: { type: OriginType.DAPP, name: "example.dapp.io" },
 		})
 
-		test("of a listed 18-decimal token reads 1 and its symbol", () => {
+		test("of a listed 18-decimal token reads 1 and its symbol, which its kind's title does not name", () => {
 			const w = mountCard(mintTx(10n ** 18n), { tokens })
 			expect(w.find(".amount").text()).toBe("1")
 			expect(w.find(".symbol").text()).toBe("TST")
+			expect(w.findComponent(STUBS.TransactionCardLayout).props("titleNamesToken")).toBe(false)
+		})
+
+		test("a transfer of the same token is titled by its symbol, so the layout is told the title names it", () => {
+			const transfer = {
+				hash: field(0x7a7an),
+				status: TxStatus.Proposed,
+				calls: [
+					{
+						contract: TOKEN,
+						method: "transfer_private_to_public",
+						args: [RECIPIENT, `0x${"1e".repeat(32)}`, field(10n ** 18n)],
+						classId: CLASS,
+						transfers: [
+							{
+								token: { name: "Test", symbol: "TST", decimals: 18 },
+								type: 1,
+								from: RECIPIENT,
+								to: `0x${"1e".repeat(32)}`,
+								amount: "1000000000000000000",
+							},
+						],
+					},
+				],
+				origin: { type: OriginType.UI },
+			}
+			const layout = mountCard(transfer, { tokens }).findComponent(STUBS.TransactionCardLayout)
+			expect(layout.props()).toMatchObject({ title: "TST", amountSymbol: "TST", titleNamesToken: true })
 		})
 
 		test("of an unlisted token shows no amount", () => {

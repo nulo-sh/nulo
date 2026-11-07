@@ -17,7 +17,7 @@ import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError, 
 import { JournaledRejection, OperationNotRecordedError, SessionEndedError, WalletError } from "@nulo/extension-messaging/errors"
 import type { IAccountContract } from "@nulo/aztec-runtime/account"
 import type { Network } from "@/wallet/services/network/service"
-import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
+import { findPrimaryEndpoint } from "@/wallet/services/network/spec"
 import type { NewOperationInput, OperationRecord } from "@/wallet/services/operation-journal/spec"
 import type { ProfileInfo } from "@/wallet/services/profile/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
@@ -248,10 +248,10 @@ export class TransferExecutor {
 			const journal = { journalId: created.journalId, controller: controller as AbortController }
 			run = { ...journal, req, fence, line: held, sponsored: sequence.sponsored, task: transferTask, markJournal, checkCancelled }
 			const built = await this.buildWithinCap(run, queued, precomputedEstimateId, figure)
-			const { txRequest, node, pxe, account, initializesAccount } = built
+			const { txRequest, pxe, account, initializesAccount } = built
 			const { txHash } = await this.deps.coordinator.proveAndSend({
 				pxe,
-				node,
+				pickSendEndpoint: (tx) => this.deps.pickSendEndpoint(built.network, tx),
 				txRequest,
 				initializesAccount,
 				scopes: [account.address],
@@ -263,9 +263,8 @@ export class TransferExecutor {
 				commitSubmitting: async (patch) => {
 					await this.deps.transitionJournal(created.journalId, { stage: "submitting", ...patch })
 				},
-				submittedEndpointUrl: primaryEndpointUrl(built.network),
 				onSent: (hash) => held.ticket.sent(hash),
-				recordTransaction: (hash) => this.recordTransfer(hash, req, built, origin, fence, held.sequence.feeSpender),
+				recordTransaction: (hash, url) => this.recordTransfer(hash, url, req, built, origin, fence, held.sequence.feeSpender),
 			})
 			// Released at submit, as a dApp send's: the ticket, not the slot, holds until inclusion.
 			run.release?.()
@@ -426,6 +425,7 @@ export class TransferExecutor {
 	 */
 	private recordTransfer(
 		hash: string,
+		submittedEndpointUrl: string,
 		req: TransferRequest,
 		built: TransferBuildInputs,
 		origin: LocalTxOrigin,
@@ -456,7 +456,7 @@ export class TransferExecutor {
 			nonce: nonce.toString(),
 			feePaymentMethod,
 			hash,
-			submittedEndpointUrl: primaryEndpointUrl(network),
+			submittedEndpointUrl,
 			estimatedFee: getEstimatedFee(txRequest),
 			gasDetails: getGasDetails(txRequest),
 			fence,
@@ -632,8 +632,7 @@ export class TransferExecutor {
 				// `balanceFormatted(rawAmount, decimals, length)`.
 				amountRaw: req.amount.toString(),
 				recipientAddress: req.recipientAddress,
-				// Persist the privacy direction so the in-flight and failed
-				// cards can name it, via `formatTransferType()` consumer-side.
+				// The in-flight and failed cards draw the transfer's sides from it.
 				transferType: req.transferType,
 				initialStage: { stage: queued ? "queued" : "pending" },
 			})

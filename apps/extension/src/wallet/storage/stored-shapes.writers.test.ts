@@ -50,6 +50,7 @@ import {
 	type RegistrationCounts,
 	RegistrationCountsSchema,
 } from "@/wallet/services/dapp-session/registration-allowance"
+import { DiscoveryPolicy, DiscoveryPolicySchema, type StoredDiscoveryPolicy } from "@/wallet/services/dapp-session/discovery-policy"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ACTIVE_NETWORK_STORAGE_ROOT } from "@/wallet/services/network/spec"
@@ -167,10 +168,11 @@ describe("described schemas match their writers' types", () => {
 			Equivalent<Registered<"onboardingCompleted">, boolean>,
 			Equivalent<Registered<"tokenIdHighWater">, number>,
 			Equivalent<Registered<"uiWhatsNewSeen">, string>,
-		] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
+			Equivalent<Out<typeof DiscoveryPolicySchema>, StoredDiscoveryPolicy>,
+		] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
 		const controls: [Equivalent<{ a: string }, { a?: string }>, Equivalent<{ a: string; b?: string }, { a: string }>] = [false, false]
 		// The check is the typecheck of these two assignments; the run only records that they compiled.
-		expect([checks.length, controls.length]).toEqual([20, 2])
+		expect([checks.length, controls.length]).toEqual([21, 2])
 	})
 
 	// Entries built through `described()` or `engine()` are typed `StoredShape`, whose schema is any
@@ -181,6 +183,7 @@ describe("described schemas match their writers' types", () => {
 		expect(STORED_SHAPES.tokenList.schema).toBe(TokenListStateSchema)
 		expect(STORED_SHAPES.tokenSeeded.schema).toBe(SeedMarkersSchema)
 		expect(STORED_SHAPES.dappRegistrations.schema).toBe(RegistrationCountsSchema)
+		expect(STORED_SHAPES.discoveryPolicy.schema).toBe(DiscoveryPolicySchema)
 		expect(STORED_SHAPES.uiPinnedTokens.schema).toBe(PinMapSchema)
 		expect(STORED_SHAPES.uiFeePicks.schema).toBe(AppPicksSchema)
 		expect(STORED_SHAPES.uiSendFeePicks.schema).toBe(SendPicksSchema)
@@ -337,6 +340,18 @@ describe("what each writer stores parses back to itself", () => {
 		// Sealed at rest: the registered schema describes the opened row.
 		expect(isSealedText((await area.get("nulo:core:dappRegistrations@p1"))["nulo:core:dappRegistrations@p1"])).toBe(true)
 		expectDescribed("dappRegistrations", JSON.stringify(await rows.get("p1")))
+	})
+
+	test("discoveryPolicy: DiscoveryPolicy.set, then two refusals at the emoji check", async () => {
+		const area = new MemoryStorageArea()
+		const rows = sealedEntityStorage("discoveryPolicy", area, (await rowKeysForEveryProfile()).rowKeys)
+		const policy = new DiscoveryPolicy(rows)
+		await policy.set("p1", true, () => {})
+		expectDescribed("discoveryPolicy", JSON.stringify(await rows.get("p1")))
+		await policy.recordCheckRefusal("p1", "https://a.example", () => {})
+		await policy.recordCheckRefusal("p1", "https://b.example", () => {})
+		expect(isSealedText((await area.get("nulo:core:discoveryPolicy@p1"))["nulo:core:discoveryPolicy@p1"])).toBe(true)
+		expectDescribed("discoveryPolicy", JSON.stringify(await rows.get("p1")))
 	})
 
 	test("activeNetwork: NetworkService.getOrInitNetworks points the profile at its primary seed", async () => {

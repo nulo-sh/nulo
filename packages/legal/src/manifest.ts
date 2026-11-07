@@ -36,6 +36,14 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			material: false,
 			changes: ["The summary box names the default network as Nulo shows it, Alpha."],
 		},
+		{
+			version: "1.2.2",
+			effective: null,
+			material: false,
+			changes: [
+				"When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails. Each endpoint you add can receive its requests (§ 7.1).",
+			],
+		},
 	],
 	privacy: [
 		{ version: "1.0", effective: "23 September 2026", material: true, changes: ["First published version."] },
@@ -124,6 +132,20 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			changes: [
 				"The token list is downloaded about every six hours, retried within minutes then less often after a failure, and on request in Settings → Tokens (§§ 5.11, 6).",
 			],
+		},
+		{
+			version: "1.2.10",
+			effective: null,
+			material: false,
+			changes: [
+				"When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails. Each endpoint you add can receive its requests (§ 5.1).",
+			],
+		},
+		{
+			version: "1.2.11",
+			effective: null,
+			material: false,
+			changes: ["With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7)."],
 		},
 	],
 }

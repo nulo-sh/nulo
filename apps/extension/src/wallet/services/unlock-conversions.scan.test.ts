@@ -40,14 +40,13 @@ const REVIEWED: Record<string, readonly string[]> = {
 	// `convertRows` runs the list; its `this.storage.set` is the runner's commit.
 	"wallet/services/network/service.ts": [
 		"(expression).filter",
-		"findPrimaryEndpoint",
 		"network.endpoints.forEach",
 		"runSealing",
 		"runUnlockConversions",
 		"this.convertRows",
 		"this.emit",
 		"this.lock.withLock",
-		"this.nodes.delete",
+		"this.routes.delete",
 		"this.sealLegacyRows",
 		"this.staleNetworks.getJournal",
 		"this.storage.getValues",

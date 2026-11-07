@@ -83,9 +83,8 @@ async function boot(api: FakeBrowserApi, chain: Nodes = nodes()) {
 			registerChainPurgeSubscriber: () => {},
 			getNetworksRaw: none,
 			purgeForProfile: noop,
-			getNodeForUrl: async (url: string) => chain.node(url),
+			getSingleAttemptNodeForUrl: async (url: string) => chain.node(url),
 			getNode: async () => undefined,
-			reportEndpointFailure: () => {},
 		}),
 	)
 	const accounts = new AccountService(logger, api)

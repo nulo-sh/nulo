@@ -105,7 +105,7 @@ import { TxRequestBuilder } from "./tx-request-builder"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps, OnBuilt } from "./fee/fee-strategy"
 import { appPriorityOf } from "./fee/fee-strategy"
 import { buildFeeStrategies } from "./fee/build-fee-strategies"
-import { ExecutionCoordinator } from "./execution-coordinator"
+import { ExecutionCoordinator, type PickedEndpoint } from "./execution-coordinator"
 import { type ProofGate, NOOP_PROOF_GATE } from "@/e2e/proof-gate"
 
 export * from "./spec"
@@ -408,6 +408,28 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		return { l1ChainId: info.l1ChainId, rollupVersion: info.rollupVersion }
 	}
 
+	/** Submits only through an endpoint the network lists once the pick has answered, not when the
+	 *  build began or the pick was asked: the pick may wait seconds on a candidate's anchor read, so
+	 *  the row is read again after it, and an answer naming a URL that row does not list is refused
+	 *  before anything is recorded or sent. */
+	private async pickSendEndpoint(built: Network, tx: { txHash: string; anchorHash: string }): Promise<PickedEndpoint> {
+		const asked = await this.sameChainRow(built)
+		const { rpcUrl } = await this.pxeService.pickSendEndpoint(networkInfoFrom(asked), tx)
+		const live = await this.sameChainRow(built)
+		if (!live.endpoints.some((endpoint) => endpoint.rpcUrl === rpcUrl)) {
+			throw new Error(`The endpoint picked for the send is not one of network ${live.id}'s`)
+		}
+		return { url: rpcUrl, node: await this.networkService.getNodeForUrl(rpcUrl) }
+	}
+
+	private async sameChainRow(built: Network): Promise<Network> {
+		const network = await this.networkService.getNetwork(built.id)
+		if (network.chainId !== built.chainId || network.l1ChainId !== built.l1ChainId) {
+			throw new Error(`Network ${built.id} moved to another chain while the send was built`)
+		}
+		return network
+	}
+
 	/** The lane and the builder come first: the executors and the fee strategies capture both eagerly. */
 	private wireExecutors(): void {
 		this.wireLaneAndBuilder()
@@ -419,6 +441,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			isFenceLive: (fence) => this.profileService.isFenceLive(fence),
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
+			pickSendEndpoint: (network, tx) => this.pickSendEndpoint(network, tx),
 			readPublicStorageOnce: (network, contract, slot, timeoutMs) =>
 				this.networkService.readPublicStorageOnce(network, contract, slot, timeoutMs),
 			getPXE: (network) => this.pxeService.getPXE(networkInfoFrom(network)),

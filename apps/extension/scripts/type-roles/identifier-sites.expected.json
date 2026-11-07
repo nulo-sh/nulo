@@ -21,7 +21,7 @@
 				}
 			],
 			"digests": {
-				"apps/extension/src/wallet/services/auth-registry/service.ts": "196e310a3dacf05241f53a666bb3b70c4de2f9d3b06ee6bd284ec04515d90f9d",
+				"apps/extension/src/wallet/services/auth-registry/service.ts": "7b2f59422a531ffa4bbbc469df0eabd3d3d1660d915800928d8b91b6d7cb35fd",
 				"apps/extension/src/wallet/services/execution/operation-planner.ts": "3bdb4c1538359fe7d11572c82d19fa07677be5b74a40429ea7cb64e02d47d1ec",
 				"packages/wallet-bridge/src/dispatcher.ts": "a7a81b849e72d78ec910e2d883faac29b117233f98554a7d98f748e5e1443b41"
 			},

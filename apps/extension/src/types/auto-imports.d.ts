@@ -28,6 +28,7 @@ declare global {
   const DAPP_LABEL: typeof import('../utils/tx-enrichment').DAPP_LABEL
   const DECRYPTION_FAILED: typeof import('../composables/full-backup-selection').DECRYPTION_FAILED
   const END_ACK_TIMEOUT_MS: typeof import('../composables/useDappApprovalWindow').END_ACK_TIMEOUT_MS
+  const EVERY_SITE_CONFIRM: typeof import('../utils/every-site').EVERY_SITE_CONFIRM
   const EffectScope: typeof import('vue').EffectScope
   const EnsureSuperseded: typeof import('../stores/balances.store').EnsureSuperseded
   const EstimateRequeue: typeof import('../utils/estimate-when-clear').EstimateRequeue
@@ -327,10 +328,11 @@ declare global {
   const journalCallTitle: typeof import('../utils/journal-state').journalCallTitle
   const journalCardAmount: typeof import('../utils/journal-state').journalCardAmount
   const journalCardAmountSymbol: typeof import('../utils/journal-state').journalCardAmountSymbol
+  const journalCardDirection: typeof import('../utils/journal-state').journalCardDirection
   const journalCardIcon: typeof import('../utils/journal-state').journalCardIcon
   const journalCardOriginLabel: typeof import('../utils/journal-state').journalCardOriginLabel
   const journalCardTitle: typeof import('../utils/journal-state').journalCardTitle
-  const journalCardTransferTypeLabel: typeof import('../utils/journal-state').journalCardTransferTypeLabel
+  const journalCardTitleNamesToken: typeof import('../utils/journal-state').journalCardTitleNamesToken
   const journalDeleted: typeof import('../utils/journal-mirror').journalDeleted
   const journalProgressWord: typeof import('../utils/journal-state').journalProgressWord
   const journalRecordInScope: typeof import('../utils/activity-rows').journalRecordInScope
@@ -975,6 +977,7 @@ declare module 'vue' {
     readonly DAPP_LABEL: UnwrapRef<typeof import('../utils/tx-enrichment')['DAPP_LABEL']>
     readonly DECRYPTION_FAILED: UnwrapRef<typeof import('../composables/full-backup-selection')['DECRYPTION_FAILED']>
     readonly END_ACK_TIMEOUT_MS: UnwrapRef<typeof import('../composables/useDappApprovalWindow')['END_ACK_TIMEOUT_MS']>
+    readonly EVERY_SITE_CONFIRM: UnwrapRef<typeof import('../utils/every-site')['EVERY_SITE_CONFIRM']>
     readonly EffectScope: UnwrapRef<typeof import('vue')['EffectScope']>
     readonly EnsureSuperseded: UnwrapRef<typeof import('../stores/balances.store')['EnsureSuperseded']>
     readonly EstimateRequeue: UnwrapRef<typeof import('../utils/estimate-when-clear')['EstimateRequeue']>
@@ -1274,10 +1277,11 @@ declare module 'vue' {
     readonly journalCallTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCallTitle']>
     readonly journalCardAmount: UnwrapRef<typeof import('../utils/journal-state')['journalCardAmount']>
     readonly journalCardAmountSymbol: UnwrapRef<typeof import('../utils/journal-state')['journalCardAmountSymbol']>
+    readonly journalCardDirection: UnwrapRef<typeof import('../utils/journal-state')['journalCardDirection']>
     readonly journalCardIcon: UnwrapRef<typeof import('../utils/journal-state')['journalCardIcon']>
     readonly journalCardOriginLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardOriginLabel']>
     readonly journalCardTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitle']>
-    readonly journalCardTransferTypeLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardTransferTypeLabel']>
+    readonly journalCardTitleNamesToken: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitleNamesToken']>
     readonly journalDeleted: UnwrapRef<typeof import('../utils/journal-mirror')['journalDeleted']>
     readonly journalProgressWord: UnwrapRef<typeof import('../utils/journal-state')['journalProgressWord']>
     readonly journalRecordInScope: UnwrapRef<typeof import('../utils/activity-rows')['journalRecordInScope']>

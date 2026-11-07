@@ -80,6 +80,8 @@ const profileServiceConnectMock = vi.fn(() => callLog.push("profile.connect"))
 const profileServiceDisconnectMock = vi.fn(() => callLog.push("profile.disconnect"))
 const interactionServiceConnectMock = vi.fn(() => callLog.push("interaction.connect"))
 const interactionServiceDisconnectMock = vi.fn(() => callLog.push("interaction.disconnect"))
+const sessionServiceConnectMock = vi.fn(() => callLog.push("session.connect"))
+const sessionServiceDisconnectMock = vi.fn(() => callLog.push("session.disconnect"))
 export const onActiveProfileChangedAddMock = vi.fn()
 export const windowsRemoveMock = vi.fn(() => callLog.push("windows.remove"))
 const routerMock = {
@@ -116,6 +118,13 @@ export function interactionClientModule(decision: () => Record<string, unknown>)
 		return { connect: interactionServiceConnectMock, disconnect: interactionServiceDisconnectMock, ...decision() }
 	}
 	return { DappInteractionServiceClient: vi.fn(interactionClient) }
+}
+
+export function sessionClientModule(methods: () => Record<string, unknown>) {
+	function sessionClient() {
+		return { connect: sessionServiceConnectMock, disconnect: sessionServiceDisconnectMock, ...methods() }
+	}
+	return { DappSessionServiceClient: vi.fn(sessionClient) }
 }
 
 export const appStoreModule = { useAppStore: () => approval.appStore }

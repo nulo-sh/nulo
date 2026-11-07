@@ -357,6 +357,11 @@ export const FAMILY_GROUPS = {
 	tokenIdHighWater: background("value:nulo:core:token-id-high-water", "the token seeder reserves ids on its own schedule"),
 	tokenSeeded: background("root:nulo:core:token-seeded", "the token seeder records its markers on its own schedule", SEALED),
 	dappRegistrations: action("root:nulo:core:dappRegistrations", "a dApp's registration call writes it", SEALED),
+	discoveryPolicy: action(
+		"root:nulo:core:discoveryPolicy",
+		"a person's every-site switch and the emoji check's refusal write it",
+		SEALED,
+	),
 	activeNetwork: action("root:nulo:core:active-network", "created with a profile and moved by a person's network switch"),
 	legalAccepted: device("value:nulo:legal:accepted", "written only by accepting the Terms"),
 	uiActiveAccount: device("value:nulo:ui:activeAccount", "only earlier builds wrote it"),

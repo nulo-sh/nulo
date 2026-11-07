@@ -1,7 +1,7 @@
 ---
 plan: discovery-allow-1
 tier: mid
-status: approved by the panel (final Codex pass approve); OA-1, OA-2 and OA-3 answered on page 119; arc 1 in build
+status: completed (arc 1 #1722; arc 2 carries this close-out)
 issues: none (decision pages 116, 117, 118)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 4d6bce025
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-07.
+- **Status:** arc 1 merged as #1722; arc 2 is one ready PR against `dev` (off `dev`, not stacked: D17) that carries this close-out; its merge closes the plan.
+- **Shipped:** arc 1, the connect window's explanation (P117-06 D) and the glossary's Discover and Connection check rows (P119-01 A). Arc 2, the sealed per-profile root `nulo:core:discoveryPolicy` (`DiscoveryPolicy`, only a sealed row counts, storage stamp 5 additive with three goldens and a pin); `DappSessionService`'s `getEverySite`, `setEverySite` and `allowsNewSite`, the refusal record in `refuseVerification`; the flow's no-window path with its token, its re-reads and the twin's read (D5, D18); the Settings → Connected Apps row (P116-07 B, P118-02 C) that follows the active profile (D19); the connect window's "Allow every site" (P117-07 A4) through the footer's new slot; privacy 1.2.11 § 5.7 (P119-02 A, undated, a `BEFORE-LAUNCH.md` entry; #1687 took 1.2.10 first, D16); SECURITY.md, ARCHITECTURE.md and CLAUDE.md.
+- **Review loop:** arc 1, Codex approve twice and Opus approve. Arc 2, Codex rejected three rounds running (each a new interleaving, each fixed with a test the old code reds, or a stated limit) beside an Opus approve; then a fresh cross-arc Codex pass, conditional approve, fixed, then approve. Details under Audit verdicts.
+- **Gates at the head:** after merging `origin/dev` at `b23eb0d79`: lint, `typecheck:all`, `test:all`, `packages/legal` tests exit 0; network `connect-every-site`, `connect-check-window` and `connect-deny` at retry 0 on Chrome (10 s, 33 s, 65 s) and Firefox (17 s, 42 s, 69 s); smoke `settings-routes` on both.
+- **Known limits:** #1731 (a refused site after eviction or a failed write, a connection already in flight, a row whose rollback failed).
+- **Open items:** #1732 (OA-4, what a Connected Apps row names: an owner decision), #1733 (the older settings switches have no accessible name); `BEFORE-LAUNCH.md`, "Due at the release that publishes privacy 1.2.11".
+- **Dropped or superseded:** the close-out as its own stacked layer (D17: arc 1 had merged, so arc 2 carries it); the arc 2 stamp 4 (`dev` took 4 first, re-cut as 5); the arc loops' prompts lacked the standard's two verbatim rules, which the cross-arc pass carried over the net diff.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # discovery-allow-1: the connect window says what Allow reveals; an opt-in "every site may see Nulo" switch
 
@@ -56,7 +68,7 @@ Good enough: no "Until I revoke", no remembered Deny, no change to the emoji che
 - **D2. The switch lives in `DappSessionService`, as a sibling of the registration counts.** A class `DiscoveryPolicy` (`src/wallet/services/dapp-session/discovery-policy.ts`) over a sealed root `nulo:core:discoveryPolicy`, one row per profile (`PROFILE_ROW_LAYOUT`). The flow already holds the service, purge and refusal live there, and the Connected Apps page already has its client. Rejected: `nulo:config` (device-wide, plaintext, writable on Firefox by any context that can write `storage.local`: P116-07 B signed "sealed per profile"); a new service (a spec, a client, a coordinator purge and a `DiscoveryDeps` field for one flag); `UiPreferenceService` (a popup-preference service the worker does not hold).
 - **D3. Only a sealed row counts.** The policy reads its row with `readStorageId` and treats it as on only when `located.sealed` holds and the row parses; a plaintext row, a row that does not open or parse, and a keyless read are off. The class never calls `sealLegacy`: the root had no plaintext era. Rejected: a `legacy: "none"` option on `SealedEntityStorage` (a shared-layer change for one root).
 - **D4. A site refused at the emoji check is remembered in the same row.** Row: `{ everySite: true, checkRefused: string[] }` (at most 32 origins, newest last). `refuseVerification` keeps its documented order (the app's channels end first): it emits, then starts `recordCheckRefusal` with no await between, and awaits it after the purge. The policy's lock queues its waiter synchronously and `allows` reads under the same lock, so a discovery set off by the ended channel reads the record (Opus r1); only while the switch is on (no row for people who never turn it on); best-effort (a keyless write is logged at `warn`, the refusal's outcome is unchanged). Turning the switch off deletes the row, refusals included. The guarantee is bounded, and the plan says so (Codex r1): a refused origin is auto-allowed again after 32 later refusals evict it, or when its record could not be written (no row keys: a worker restart with the check open); either way its next connection still opens the emoji check. Filed as one closed `known-limit` at close-out (reopens on a report of a refused site allowed with no window). Rejected: a worker-memory map (an MV3 worker restart forgets it, and the refused page can wait it out: the signed rule would hold only by luck); clearing an entry on a later manual Allow (one more write path for no signed behaviour; eviction at 32 and turning off clear it).
-- **D5. The flow chooses after the registration.** In `runDiscoveryPopup`, after `pendingDiscoveryPromises.set`, `unpaced = await dappSessionService.allowsNewSite(profileId, origin)`; when true, no window, `admitVerifyWindow(..., consumesToken: true)` (no person paced it), then today's `persistAndApprove`. `handleSecureDiscovery` and `persistAndApprove` are untouched. The connect variant's `settled` resolves with `unpaced`, so a twin waiting on an unpaced connection spends a token too (`approveAfterPopup`). A failed read is off (asks the person). After admission, an unpaced connection reads the switch again and is refused (its slot given back) if it is off now, so a request queued behind the token budget cannot reveal Nulo after the person turned the switch off ("off is immediate"; final Codex pass). Rejected: reading before the session lookup (breaks the no-yield window and the 80-line budget).
+- **D5. The flow chooses after the registration.** In `runDiscoveryPopup`, after `pendingDiscoveryPromises.set`, `unpaced = await dappSessionService.allowsNewSite(profileId, origin)`; when true, no window, `admitVerifyWindow(..., consumesToken: true)` (no person paced it), then today's `persistAndApprove`. `handleSecureDiscovery` is untouched; `persistAndApprove` gains the post-write read (D18). The connect variant's `settled` resolves with `unpaced`, so a twin waiting on an unpaced connection spends a token too (`approveAfterPopup`). A failed read is off (asks the person). After admission, an unpaced connection reads the switch again and is refused (its slot given back) if it is off now, so a request queued behind the token budget cannot reveal Nulo after the person turned the switch off ("off is immediate"; final Codex pass). Rejected: reading before the session lookup (breaks the no-yield window and the 80-line budget).
 - **D6. The window grants through a separate RPC, then resolves as Allow.** `setEverySite(profileId, true)` on `DappSessionService` (refused unless `profileId` is the active profile; the write runs under the profile-deletion fence), then `resolveInteraction(requestId, { approved: true })`. The interaction result keeps its one field. A write that fails resolves nothing. Turn on always writes, even when the app cancelled its request while the confirm was open: the confirm asks about every site, the window cannot know of a cancellation the worker has not yet sent (Codex r1), and one rule beats two that depend on timing; the cancelled overlay then shows as for any refused Allow. Rejected (Opus r1's option B): carrying `everySite` in the interaction result, which reopens the one-field rule pinned by `dapp-interaction/service.test.ts` and turns a Settings write into a dApp-window protocol field.
 - **D7. One confirm object for both callers**, `EVERY_SITE_CONFIRM` in `src/utils/every-site.ts`, passed to `askConfirm` by the page and the window, so the two cannot drift.
 - **D8. The Settings row stays in sync through an event.** `onEverySiteChanged` (`{ profileId, on }`) on the service; the page re-reads on it. A popup kept open (Firefox's sidebar, an expanded tab) would otherwise show off while the window turned it on.
@@ -64,6 +76,13 @@ Good enough: no "Until I revoke", no remembered Deny, no change to the emoji che
 - **D10. The tooltip on "discover" keeps opening below**, covering the sentence's second line (the brief's first option). Opening above would need `DottedTerm` to pass `Tooltip`'s `side="top"` for one caller, and would cover the dApp's origin and name, which the person must be able to read.
 - **D11. Privacy § 5.7: an owner ask (OA-1).** The brief allows one sentence; Codex r1 read `legal/README.md`'s rule (what leaves the device is material) as a minor bump, against the patch precedent of 1.2.8 and 1.2.9. Both the words and the kind are read by people, so they are the owner's. Answered: P119-02 A, a patch version, no notice.
 - **D12. The footer gains one optional slot under its buttons** (`#below`); the capabilities and execute windows pass nothing and render as today.
+- **D13 (arc 2, the tree over the draft). `getEverySite()` answers `{ profileId, on }`.** The Settings page writes for the profile it read, and one read gives both, so the page needs no profile client.
+- **D14 (arc 2). The goldens follow the registry's convention:** `full` and `minimal` are the decoder's input in plaintext, as every sealed root's are (`stores.test.ts` and `snapshot.test.ts` read them so), and `discoveryPolicy.sealed` is the at-rest form. The class still refuses a plaintext row (D3); `stored-shapes.ts` says so beside the entry.
+- **D15 (arc 2). The confirm carries no `confirm_color`.** Strict mode's `"red"` reaches the confirm `Button` as an HTML `type` attribute and paints nothing; without it the button is the same accent one (`a2-settings-confirm` against p118-02-c-02).
+- **D16 (arc 2). Privacy 1.2.10, undated** (`«FILL: effective date»`, `effective: null`, a `BEFORE-LAUNCH.md` entry, 1.2.9 archived), as 1.2.9 shipped. Open PR #1687 claims 1.2.10 too; whichever lands second renumbers. #1687 landed first, so this change ships as 1.2.11 with 1.2.10 archived.
+- **D17 (arc 2, the orchestrator's word). Arc 1 merged before arc 2 began**, so arc 2 branches off `dev` as `discovery-allow-1-a2` (no stack) and carries the close-out in its own PR.
+- **D18 (arc 2, the review loop). Off is checked where it can still refuse.** A connection the switch let through reads it three times: to skip the window, after admission (D5), and once its row is written, as the last await before the approval (`switchedOffSinceWrite`: off then rolls the row back and refuses). A twin of such a connection has no Allow of its own, so it reads the switch too, once admitted, as the last await before its approval. The policy's one lock orders each read against an off: an off that resolved before the read refuses; a later one finds the site connected, as one connected a moment earlier would be. A profile switch since the discovery came in (the flow's switch epoch) refuses at either final read too, since a read of a profile no longer active consents for nobody (the cross-arc pass). Rejected: holding the policy lock across the session write (a cross-service lock for the same guarantee).
+- **D19 (arc 2, the review loop). The Settings switch follows the active profile.** The page re-reads on a profile change (`appStore.profile?.id`, as `settings/fpcs/index.vue` does), keeps only the latest read, disables the Toggle on a failed read, and re-reads after a refused write; a confirm writes for the profile shown when it opened, or nothing after a switch. Rejected (Codex r1's second finding): re-checking the session at the policy write's commit. `setEverySite` is authorized when called, as `addDappSession` is; a late write is the person's own Turn on for that profile, and `purgeProfile` takes the same lock, so a deletion cannot be outrun (Codex r2 agreed).
 
 ## Architecture & Implementation
 
@@ -135,7 +154,7 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`; `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/connect-check-window.test.ts` from the repo root (the real window opens, renders and connects; no e2e sweeps its type roles, `type-role-ban.test.ts` checks the source) and `cd apps/extension && bun run test:e2e -- tooltips-glossary --retry=0` (smoke: the Glossary page's order), both green at retry 0, Chrome; `bun run check:plans` after staging. Pass: every command exits 0. Layers: lint, typecheck, unit, component, network e2e (Chrome).
 
-## Phase 2: the switch's storage and service (arc 2)
+## Phase 2: the switch's storage and service (arc 2) ✓
 
 1. Add the root, `DiscoveryPolicy` and its test. Cases: absent is off (control: a sealed on-row allows); a plaintext on-row is off; a row that does not parse is off; keyless reads off and `set` throws `WalletLockedError`; a refusal while on refuses that origin only, while off writes nothing; the 33rd refusal evicts the oldest, a repeat moves to newest; off then on starts with no refusals; a refusal and an off started together end off (one lock); a write whose fence fails writes nothing; `purgeProfile` deletes. The schema uses `.strict()`, as `src` does.
 2. Wire it into `DappSessionService`: the RPC pair, the event, `allowsNewSite`, the refusal record (D4), the purge; both writes pass `deletion.assertCurrent` for the profile, as `admitDappRegistration` does. `service.test.ts`: `setEverySite` refuses a non-active profile id and writes nothing; it emits once on success; a discovery read started from an `onVerificationRefused` listener sees the refused origin (the ordering D4 relies on); a failing record leaves the outcome `revoked`; `purgeForProfile` removes the row; a plaintext on-row stays off after the profile's unlock runs `sealOnRowKeysReady` (control: a sealed on-row allows).
@@ -143,7 +162,7 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all` (the snapshot, goldens, census, scan and writers tests, and `apps/extension/scripts/e2e/profile-chaos-model.test.ts`, included). Pass: all exit 0. Layers: lint, typecheck, unit, storage.
 
-## Phase 3: the flow (arc 2)
+## Phase 3: the flow (arc 2) ✓
 
 1. Apply D5 in `discovery-flow.ts`. Add the `everySite` option to `fakeSdkServices`; add `allowsNewSite` to the three hand-rolled stubs.
 2. `background.every-site.test.ts`: on, a new site gets no window, a row, an approval, one token spent, and its check at establishment (control: off asks the window); on with stale Terms is refused with no row; a read that throws asks the window; a profile switch during the read refuses with no row; the switch turned off while the connection waits for admission refuses it with no row; a twin of an unpaced connection spends a token, shown by behaviour: with the origin's tokens spent it queues (control: a twin of an Allow is admitted at once); on with an unserved chain shows the notice.
@@ -151,14 +170,14 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`. Pass: all exit 0, the existing `background.*` tests unchanged. Layers: lint, typecheck, unit.
 
-## Phase 4: the Settings row (arc 2)
+## Phase 4: the Settings row (arc 2) ✓
 
 1. Add `EVERY_SITE_CONFIRM` and the `SETTINGS_ROWS` entry. Build the row on Connected Apps: read on mount (Toggle disabled until read), re-read on `onEverySiteChanged`, on asks `askConfirm` and writes only on Turn on, off writes at once, a failed write opens the shared failure toast and leaves the Toggle as it was.
 2. `connected-apps/index.test.ts`: `expectOwnedRows`; each path of step 1 once; the confirm object is `EVERY_SITE_CONFIRM`. `settings-search.test.ts`: "discover" finds the row on Connected Apps.
 
 **Validation gate.** `bun run lint`; `bun run typecheck:all`; `bun run test`. Pass: exit 0. Layers: lint, typecheck, component.
 
-## Phase 5: the window's button, e2e, docs (arc 2)
+## Phase 5: the window's button, e2e, docs (arc 2) ✓
 
 1. Add the footer slot (+ one test). Add the button and `allowEverySite` to the window; connect the session client in `connectServices` and update the lifecycle test's order. `index.test.ts`: disabled until ready; cancel writes and resolves nothing; Turn on writes, then resolves `{ approved: true }`, in that order, then closes; a failed write resolves nothing; Turn on writes even when `resolveInteraction` then throws `JobCancelledError`, and the cancelled overlay shows.
 2. `connect-every-site.test.ts` (Chrome and Firefox): connect, press "Allow every site", the confirm shows in the window, Escape closes it with nothing written, press again, Turn on; the check opens, They match; Settings → Connected Apps shows the Toggle on; disconnect the session; connect again: no connect window, the check opens. It proves what no cheaper layer can: a confirm inside a window, and a row the window's RPC sealed read by the worker on the real page path, on both browsers. Estimate 60-90 s per browser; the PR states it measured.
@@ -177,7 +196,7 @@ Control flow with the switch on: `handleDiscovery` (secure origin) → `handleSe
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 4d6bce025, with these values:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 4d6bce025, with these values:
 - **Review loop, per arc at its boundary:** `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, over the arc's diff; one Opus `general-purpose` review beside the first round; hard stop at three rounds, then report. Then a fresh Codex session over the net diff from 4d6bce025 for cross-arc issues.
 - **Delivery:** as above; `gh pr checks <n> --watch` to the end.
 - **Close-out:** the stack's top layer; merge `origin/dev` first and read `index.md` and `lessons.md`.
@@ -199,6 +218,16 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../README
 - **Codex r1 (gpt-6.1-sol, high): approve**, two low findings, both accepted: the body's order and "If you allow" were unpinned (a test now checks the signed order, with `SectionLabel` and `ItemsContainer` stubbed so the label renders); `DAPP_SESSION_DAYS`'s comment named its caller (dropped).
 - **Opus 5.5 (general-purpose): approve**, low findings, accepted: the same unpinned label; the wire test's raw `appId` was never read (it now checks the identity block receives it unchanged); nothing tied the stored expiry to the constant (a `service.test.ts` case now does).
 - **Codex r2 (resumed, verify only): approve**, no new finding. Converged.
+
+**Arc 2 review loop** (2026-11-07, the diff `961f90642..discovery-allow-1-a2`):
+- **Codex r1 (gpt-6.1-sol, high): reject.** (1) An off landing after the last read, while the row was written, still admitted: accepted, D18's post-write read. (2) A Turn on could land after a lock or a profile switch: rejected, D19 (Codex r2 accepted the reasoning). (3) Settings kept a previous profile's switch: accepted, D19.
+- **Opus 5.5 (general-purpose): approve**, seven lows. The post-write gap (as Codex 1). A test for an app cancelling while the confirm is open: added. The capitals: they match frame p117-07-a4-01, no change. A site's own name in a Connected Apps row with no tap: OA-4, open, not a merge gate. A stale Toggle after a failed re-read: D19. A same-site connection for another chain already past its read when the check refuses, and a failed write leaving only Deny (the window's existing error state): the first goes into the known-limit issue, the second stays.
+- **Codex r2 (resumed): reject.** (1) A confirm held open across a profile switch wrote for the new profile: accepted, D19. (2) With the rollback's delete failing, a twin approved against the refused row: accepted, the twin reads the switch (D18).
+- **Codex r3 (resumed, the last round): reject.** (1) With the rollback's delete failing, a fresh retry reuses the surviving row as a remembered session: a known limit (it needs a failed storage write, like D4's; the retry still opens the emoji check), in the close-out's issue. (2) The twin's read sat before its admission wait: accepted, moved after it (D18). The loop stopped at its three rounds; the fresh cross-arc pass below verifies the last fix.
+
+**Cross-arc pass** (2026-11-07, a fresh Codex session over `4d6bce025..discovery-allow-1-a2`, carrying the standard's two rules, which the arc loops' prompts had left out):
+- **Codex r1 (gpt-6.1-sol, high): conditional approve.** (1) Medium: a profile switch during a final read still approved on the old profile's switch: accepted, the reads also check the flow's switch epoch (D18). (2) The new Toggle had no accessible name: accepted (`aria-label`, the row's title); the seven older settings Toggles lack one too, an issue at close-out. (3) The read-failure log promised a window that never opens: reworded. (4) Comments that named their callers or stated a stale invariant: trimmed; three files it flagged came from other PRs on `dev` and are out of scope.
+- **Codex r2 (resumed, verify only): approve**, no new finding (high confidence). Converged.
 
 ## Seeds (not run; orchestrator-owned)
 

@@ -20,6 +20,7 @@ import {
 	humanizeErrorKind,
 	journalCallTitle,
 	journalCardAmount,
+	journalCardDirection,
 	journalCardOriginLabel,
 	journalCardTitle,
 	type JournalTerminalDisplay,
@@ -248,6 +249,7 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(props?.amountSymbol).toBe("USDC")
 		expect(props?.state).toBe("cancelled")
 		expect(props?.oneLineTitle).toBe(false)
+		expect(props?.titleNamesToken).toBe(true)
 	})
 
 	test("transfer + failed → title=token symbol, state=failed, amount present", () => {
@@ -365,7 +367,7 @@ describe("buildJournalTerminalCardProps", () => {
 			{ tokenById, tokens: [] },
 		)
 		expect(tokenById).not.toHaveBeenCalled()
-		expect(props).toMatchObject({ title: "Swap", amount: null, amountSymbol: null, transferTypeLabel: null })
+		expect(props).toMatchObject({ title: "Swap", amount: null, amountSymbol: null, direction: null, titleNamesToken: false })
 	})
 
 	test("a token whose decimals the wallet does not know shows no amount and no symbol; known, it shows both", () => {
@@ -408,9 +410,45 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(journalCardTitle(transferRecord(), ctx)).toBe("—")
 	})
 
-	test("the transfer-type chip reads type 0 (private) and is absent without a type", () => {
-		expect(buildJournalTerminalCardProps(transferRecord({ transferType: 0 }), TEST_CTX)?.transferTypeLabel).toBe("Private → Private")
-		expect(buildJournalTerminalCardProps(transferRecord(), TEST_CTX)?.transferTypeLabel).toBeNull()
+	test("the card carries its send's direction: type 0 (private), and none without a type", () => {
+		const send = transferRecord({ transferType: 0, accountAddress: ACCOUNT, recipientAddress: OUTSIDE })
+		expect(buildJournalTerminalCardProps(send, TEST_CTX)?.direction).toEqual({
+			from: "private",
+			to: "private",
+			way: "out",
+			label: "Private → Private",
+		})
+		expect(buildJournalTerminalCardProps(transferRecord(), TEST_CTX)?.direction).toBeNull()
+	})
+})
+
+const ACCOUNT = `0x${"2b".repeat(32)}`
+const OUTSIDE = `0x${"1e".repeat(32)}`
+
+describe("journalCardDirection", () => {
+	const way = (over: Partial<OperationRecord>) => journalCardDirection(transferRecord({ transferType: 2, ...over }))?.way
+
+	test("its two addresses decide the way: another account is out, the sender in another hex case a move", () => {
+		expect(journalCardDirection(transferRecord({ transferType: 2, accountAddress: ACCOUNT, recipientAddress: OUTSIDE }))).toEqual({
+			from: "public",
+			to: "public",
+			way: "out",
+			label: "Public → Public",
+		})
+		expect(way({ accountAddress: ACCOUNT, recipientAddress: ACCOUNT.toUpperCase().replace("0X", "0x") })).toBe("self")
+	})
+
+	test("a missing or malformed pair is never a move", () => {
+		expect(way({ accountAddress: undefined, recipientAddress: undefined })).toBe("out")
+		expect(way({ accountAddress: "0xrecipient", recipientAddress: "0xrecipient" })).toBe("out")
+		expect(way({ accountAddress: ACCOUNT, recipientAddress: undefined })).toBe("out")
+	})
+
+	test("no known type, or a dApp record carrying one, has no direction", () => {
+		expect(journalCardDirection(transferRecord({ accountAddress: ACCOUNT, recipientAddress: OUTSIDE }))).toBeNull()
+		expect(journalCardDirection(transferRecord({ transferType: 9 as never }))).toBeNull()
+		const dapp = recordWith({ kind: "dapp_execute", transferType: 0, accountAddress: ACCOUNT, recipientAddress: ACCOUNT })
+		expect(journalCardDirection(dapp)).toBeNull()
 	})
 })
 
@@ -512,9 +550,10 @@ describe("a failed send that may have reached the network reads as its check's a
 			title: "Transfer (public)",
 			activityIcon: "zap",
 			originLabel: "playground.aztec.example",
-			transferTypeLabel: null,
+			direction: null,
 			amount: null,
 			amountSymbol: null,
+			titleNamesToken: false,
 			oneLineTitle: true,
 		})
 	})

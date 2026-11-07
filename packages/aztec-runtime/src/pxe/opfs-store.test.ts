@@ -4,7 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { EthAddress } from "@aztec-labs/foundation/eth-address"
 import { DatabaseVersion } from "@aztec-labs/stdlib/database-version/version"
 import type { AztecSQLiteOPFSStore } from "@aztec-labs/kv-store/sqlite-opfs"
-import { initStoreVersionStamp, listChainStoreDirs, PxeStoreVersionMismatch, PXE_DATA_SCHEMA_VERSION_PIN } from "./opfs-store"
+import {
+	initStoreVersionStamp,
+	listChainStoreDirs,
+	PxeStoreVersionMismatch,
+	PXE_DATA_SCHEMA_VERSION_PIN,
+	readStoreStamp,
+} from "./opfs-store"
 
 const nullLog = { warn: () => {}, info: () => {}, debug: () => {}, error: () => {}, verbose: () => {}, fatal: () => {} } as never
 
@@ -114,6 +120,36 @@ describe("initStoreVersionStamp — refuse-and-preserve on mismatch (D-B2v3, 5.0
 		expect(calls.cleared).toBe(false)
 		// The parser's message quotes the stored bytes, which the log line must never carry.
 		expect(warn.mock.calls).toEqual([[REFUSAL, { reason: "stamp failed to parse" }]])
+	})
+})
+
+describe("readStoreStamp — the stamped rollup, read before any node is asked", () => {
+	const stampFor = (schemaVersion: number, rollup: string) =>
+		new DatabaseVersion(schemaVersion, EthAddress.fromString(rollup)).toBuffer().toString("utf-8")
+
+	it("returns the stamped rollup and writes nothing", async () => {
+		const { store, calls } = fakeStore(stampFor(PXE_DATA_SCHEMA_VERSION_PIN, ROLLUP))
+		await expect(readStoreStamp(store, nullLog)).resolves.toBe(EthAddress.fromString(ROLLUP).toString())
+		expect(calls.set).toBeUndefined()
+	})
+
+	it.each([
+		["a fresh store", undefined],
+		["a store stamped with no rollup", stampFor(PXE_DATA_SCHEMA_VERSION_PIN, EthAddress.ZERO.toString())],
+	])("returns undefined for %s", async (_name, stamp) => {
+		const { store, calls } = fakeStore(stamp)
+		await expect(readStoreStamp(store, nullLog)).resolves.toBeUndefined()
+		expect(calls.set).toBeUndefined()
+	})
+
+	it.each([
+		["another schema", stampFor(PXE_DATA_SCHEMA_VERSION_PIN - 1, ROLLUP)],
+		["a stamp that does not parse", "not-a-valid-database-version-stamp"],
+	])("refuses %s, never wiping", async (_name, stamp) => {
+		const { store, calls } = fakeStore(stamp)
+		await expect(readStoreStamp(store, spyLog().log)).rejects.toBeInstanceOf(PxeStoreVersionMismatch)
+		expect(calls.cleared).toBe(false)
+		expect(calls.set).toBeUndefined()
 	})
 })
 

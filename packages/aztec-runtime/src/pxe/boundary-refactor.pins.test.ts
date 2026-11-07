@@ -24,12 +24,18 @@ import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { PxeService, type IProfileReader } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const KEY_B64 = btoa(String.fromCharCode(...new Uint8Array(32)))
-const network: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://localhost:8080" }
+const network: NetworkInfo = {
+	profileId: "p1",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [{ id: "primary", rpcUrl: "http://localhost:8080" }],
+}
 const address = "0x000000000000000000000000000000000000000000000000000000000000ab12" as unknown as AztecAddress
 
 beforeEach(() => {
@@ -45,6 +51,7 @@ describe("getContractInstance pxeOnly pin", () => {
 		let nodeCalls = 0
 		let knownCalls = 0
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n: NetworkInfo) => {
 				const pxe = { getContractInstance: async () => undefined } as unknown as PXE
 				const node = {
@@ -53,7 +60,7 @@ describe("getContractInstance pxeOnly pin", () => {
 						return undefined
 					},
 				} as unknown as AztecNode
-				return new ChainRuntime(n.chainId, node, pxe, n.rpcUrl)
+				return new ChainRuntime(n.chainId, node as never, pxe, endpointsKey(n.endpoints))
 			},
 		}
 		const service = new PxeService(
@@ -88,6 +95,7 @@ describe("orphan sweep barrier-pending pin", () => {
 			getProfiles: async () => [],
 		}
 		service = new PxeService(profiles, noopLogger, {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async () => {
 				throw new Error("unused")
 			},

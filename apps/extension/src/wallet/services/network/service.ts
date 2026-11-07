@@ -11,8 +11,8 @@ import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
-import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { NodeFactory } from "@nulo/aztec-runtime/ports"
+import type { RoutedNode } from "@nulo/aztec-runtime/routing"
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
 import type { ILogger } from "@/wallet/logger"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -56,7 +56,7 @@ import {
 	NetworkMethodSchemas,
 	networkInfoFrom,
 	NodeStatus,
-	primaryEndpointUrl,
+	routeEndpoints,
 	ACTIVE_NETWORK_STORAGE_ROOT,
 	decodeActiveNetworkId,
 } from "./spec"
@@ -226,10 +226,12 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	private readonly storage: SealedEntityStorage<Network>
 	private readonly staleNetworks: StaleNetworkRepository
-	private readonly nodes = new Map<number, AztecNode>()
-	/** URL-keyed transient cache for pending-tx polling pin. */
-	private readonly transientNodes = new Map<string, { node: AztecNode; failures: number }>()
-	/** Never evicted: the keys are only the endpoints failed sends went through. */
+	/** One routed node per network row, with the endpoint list it was built for. */
+	private readonly routes = new Map<string, { key: string; node: RoutedNode }>()
+	/** The retrying client of each endpoint a transaction was submitted through: the send, its dApp
+	 *  `wait` and the registry's receipt reads. */
+	private readonly transientNodes = new Map<string, AztecNode>()
+	/** Never evicted: the keys are only endpoints a transaction was recorded on. */
 	private readonly singleAttemptNodes = new Map<string, AztecNode>()
 	private readonly lock: Lock
 	private readonly nodeFactory: NodeFactory
@@ -292,10 +294,13 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 				log: (level, message, record) => (level === "warn" ? this.logWarn(message, record) : this.logDebug(message, record)),
 				commit: async (network, next) => {
 					await this.storage.set(next.id, next)
+					let moved = false
 					network.endpoints.forEach((endpoint, i) => {
-						if (endpoint.rpcUrl !== next.endpoints[i]?.rpcUrl) this.transientNodes.delete(endpoint.rpcUrl)
+						if (endpoint.rpcUrl === next.endpoints[i]?.rpcUrl) return
+						this.transientNodes.delete(endpoint.rpcUrl)
+						moved = true
 					})
-					if (findPrimaryEndpoint(network)?.rpcUrl !== findPrimaryEndpoint(next)?.rpcUrl) this.nodes.delete(next.chainId)
+					if (moved) this.routes.delete(next.id)
 					this.emit("onNetworkUpdated", next)
 				},
 			})
@@ -451,9 +456,6 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		if (!activeId) return
 		deletion.assertCurrent(fence.profileId, fence.epoch)
 		await this._writeActive(profileId, activeId)
-		const active = seeded.find((n) => n.id === activeId)!
-		const primaryEndpoint = findPrimaryEndpoint(active)!
-		this.nodes.set(active.chainId, this.nodeFactory.createNode(primaryEndpoint.rpcUrl))
 	}
 
 	public async getNetworks(chainId?: number): Promise<Network[]> {
@@ -667,7 +669,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			} finally {
 				this.deletingNetworks.delete(id)
 			}
-			this.nodes.delete(network.chainId)
+			this.routes.delete(network.id)
 			this.emit("onNetworkDeleted", network)
 			return network
 		})
@@ -815,15 +817,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 					this.logError("Failed to answer a network arrival", { error })
 				}
 			}
-			const primaryEndpoint = findPrimaryEndpoint(network)
-			// A stored URL the transport rule refuses must fail where an unreachable node fails, at the
-			// first read: thrown here, it would stop popup start before Settings could fix it.
-			if (primaryEndpoint && isAllowedRpcUrl(primaryEndpoint.rpcUrl).ok) {
-				this.nodes.set(network.chainId, this.nodeFactory.createNode(primaryEndpoint.rpcUrl))
-			} else if (primaryEndpoint) {
-				this.nodes.delete(network.chainId)
-				this.logDebug("active network's primary endpoint refused by the transport rule")
-			}
+			// The route is built at the first read, so a stored URL the transport rule refuses fails where
+			// an unreachable node fails, never popup start before Settings could fix it.
+			this.routes.delete(network.id)
 			this.emit("onActiveNetworkChanged", network)
 			return network
 		})
@@ -854,6 +850,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			}
 			network.endpoints.push(endpoint)
 			await this.storage.set(network.id, network)
+			this.routes.delete(network.id)
 			this.emit("onNetworkUpdated", network)
 			return endpoint
 		})
@@ -893,12 +890,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			}
 			network.endpoints[idx] = updated
 			await this.storage.set(network.id, network)
-			// Evict transient cache for the OLD URL, plus the chain's primary node
-			// cache if this endpoint is the primary.
 			this.transientNodes.delete(oldUrl)
-			if (network.primaryEndpointId === endpointId) {
-				this.nodes.delete(network.chainId)
-			}
+			this.routes.delete(network.id)
 			this.emit("onNetworkUpdated", network)
 			return updated
 		})
@@ -922,6 +915,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			const removed = network.endpoints.splice(idx, 1)[0]!
 			await this.storage.set(network.id, network)
 			this.transientNodes.delete(removed.rpcUrl)
+			this.routes.delete(network.id)
 			this.emit("onNetworkUpdated", network)
 			return removed
 		})
@@ -942,7 +936,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			if (network.primaryEndpointId === endpointId) return network
 			network.primaryEndpointId = endpointId
 			await this.storage.set(network.id, network)
-			this.nodes.delete(network.chainId)
+			this.routes.delete(network.id)
 			this.emit("onPrimaryEndpointChanged", { networkId: network.id, endpointId })
 			this.emit("onNetworkUpdated", network)
 			return network
@@ -960,92 +954,113 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	// ── Status / node accessors ──────────────────────────────────────────
 
+	/** `Active` while any endpoint of the network answers for its chain, read through its route;
+	 *  `InvalidChain` when every endpoint that answered serves another chain. */
 	public async getNodeStatus(networkId: string): Promise<NodeStatus> {
 		validateParams(NetworkMethodSchemas.getNodeStatus.params, [networkId], "getNodeStatus")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
 		const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-		const primary = findPrimaryEndpoint(network)
-		if (!primary) return NodeStatus.Inactive
+		if (!findPrimaryEndpoint(network)) return NodeStatus.Inactive
+		let node: RoutedNode | undefined
 		try {
-			const probedChainId = await this._getChainId(primary.rpcUrl, network.kind)
-			if (probedChainId !== network.chainId) return NodeStatus.InvalidChain
-			return NodeStatus.Active
+			node = await this.getNodeFor(network)
+			const info = await node.getNodeInfo()
+			const url = network.endpoints.find((e) => e.id === node?.route.active()?.id)?.rpcUrl ?? ""
+			return nodeChainId(url, network.kind, walletChainId(info.l1ChainId, info.rollupVersion)) === network.chainId
+				? NodeStatus.Active
+				: NodeStatus.InvalidChain
 		} catch {
-			return NodeStatus.Inactive
+			const states = node?.route.snapshot().map((e) => e.state) ?? []
+			const served = states.some((state) => state === "ready" || state === "behind")
+			return states.includes("wrong-chain") && !served ? NodeStatus.InvalidChain : NodeStatus.Inactive
 		}
 	}
 
+	/**
+	 * `getNodeStatus` within `timeoutMs`: one bounded identity probe per endpoint, the route's active
+	 * endpoint first, then the rest in preference order, stopping at the first that serves the chain.
+	 * While the active endpoint answers, nothing else is asked.
+	 */
 	public async probeNodeStatus(networkId: string, timeoutMs: number): Promise<NodeStatus> {
 		validateParams(NetworkMethodSchemas.probeNodeStatus.params, [networkId, timeoutMs], "probeNodeStatus")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
 		const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-		const primary = findPrimaryEndpoint(network)
-		if (!primary) return NodeStatus.Inactive
-		try {
-			const probed = await this.nodeFactory.probeChainId(primary.rpcUrl, timeoutMs)
-			if (nodeChainId(primary.rpcUrl, network.kind, probed) !== network.chainId) return NodeStatus.InvalidChain
-			return NodeStatus.Active
-		} catch {
-			return NodeStatus.Inactive
+		if (!findPrimaryEndpoint(network)) return NodeStatus.Inactive
+		const deadline = Date.now() + timeoutMs
+		const active = this.routes.get(network.id)?.node.route.active()?.id
+		const endpoints = routeEndpoints(network).sort((a, b) => Number(b.id === active) - Number(a.id === active))
+		let otherChain = false
+		for (const endpoint of endpoints) {
+			const left = deadline - Date.now()
+			if (left <= 0) break
+			try {
+				const probed = await this.nodeFactory.probeChainId(endpoint.rpcUrl, left)
+				if (nodeChainId(endpoint.rpcUrl, network.kind, probed) === network.chainId) return NodeStatus.Active
+				otherChain = true
+			} catch {
+				// Unreachable within the budget: the next endpoint may serve.
+			}
 		}
+		return otherChain ? NodeStatus.InvalidChain : NodeStatus.Inactive
 	}
 
+	/** The active profile's network on `chainId`, routed across its endpoints. */
 	public async getNode(chainId: number): Promise<AztecNode> {
 		await this.ensureInitialized()
-		return await this.lock.withLock(async () => {
-			let node = this.nodes.get(chainId)
-			if (!node) {
-				const profile = await requireActiveProfile(this.profileService)
-				const network = (await this.storage.getValues()).find((n) => n.profileId === profile.id && n.chainId === chainId)
-				if (!network) throw new Error(`No network configured for chainId ${chainId}`)
-				const primary = findPrimaryEndpoint(network)
-				if (!primary) throw new Error(`Network ${network.id} has no primary endpoint`)
-				node = this.nodeFactory.createNode(primary.rpcUrl)
-				this.nodes.set(chainId, node)
-			}
-			return node
+		const network = await this.lock.withLock(async () => {
+			const profile = await requireActiveProfile(this.profileService)
+			const row = (await this.storage.getValues()).find((n) => n.profileId === profile.id && n.chainId === chainId)
+			if (!row) throw new Error(`No network configured for chainId ${chainId}`)
+			return row
 		})
-	}
-
-	/** One bounded, silent storage read at `network`'s primary endpoint (see
-	 *  `NodeFactory.readPublicStorageOnce`). Background-only: not an RPC method. */
-	public async readPublicStorageOnce(network: Network, contract: AztecAddress, slot: Fr, timeoutMs: number): Promise<Fr> {
-		const rpcUrl = primaryEndpointUrl(network)
-		if (!rpcUrl) throw new Error(`Network ${network.id} has no primary endpoint`)
-		return this.nodeFactory.readPublicStorageOnce(rpcUrl, contract, slot, timeoutMs)
+		return this.getNodeFor(network)
 	}
 
 	/**
-	 * Returns a transient AztecNode bound to `url` — used by pending-tx
-	 * polling so receipt fetches ALWAYS stay on the endpoint the tx was
-	 * submitted to, even after the user swaps the primary OR switches profiles
-	 * while the tx is still pending.
-	 *
-	 * Polling is pinned to the submitted URL and NEVER falls back to the active
-	 * profile's node. The previous fallback routed one profile's tx hash to
-	 * another profile's RPC provider (a cross-profile isolation leak) whenever
-	 * the submitted endpoint wasn't the active profile's — on a profile switch,
-	 * or after the submitting endpoint was edited/deleted. `url` is internal:
-	 * captured at submit time from a configured (allowlist-validated) endpoint
-	 * and reused verbatim, so dialing it without consulting the active profile
-	 * is the correct ownership model for a pending tx. (The only trust this
-	 * places is in the persisted `submittedEndpointUrl`, a wallet-written
-	 * field; the active-profile fallback survives only for the legacy
-	 * no-recorded-endpoint path in `TransactionService.updateTx`, where there
-	 * is no URL to pin to.)
-	 *
-	 * Failures are reported via `reportEndpointFailure(url)`; after 3
-	 * reported failures, which a success does not reset, the cache entry is
-	 * evicted and the next poll rebuilds the same URL.
+	 * The routed node of `network`'s own row, never the active profile's: a profile switch mid-call
+	 * must not send this row's reads to a provider the other profile chose. Rebuilt when the row's
+	 * chain identity or endpoint list differs from the one the cached route was built for.
+	 */
+	public async getNodeFor(network: Network): Promise<RoutedNode> {
+		await this.ensureInitialized()
+		const endpoints = routeEndpoints(network)
+		const key = JSON.stringify([network.chainId, network.l1ChainId, endpoints])
+		const cached = this.routes.get(network.id)
+		if (cached?.key === key) return cached.node
+		const node = this.nodeFactory.createRoutedNode({ chainId: network.chainId, l1ChainId: network.l1ChainId, endpoints })
+		this.routes.set(network.id, { key, node })
+		return node
+	}
+
+	/** One attempt at `network`'s active endpoint within the caller's own budget, fed into its
+	 *  route's health and never moved. */
+	public async getSingleAttemptNodeFor(network: Network, timeoutMs: number): Promise<AztecNode> {
+		return (await this.getNodeFor(network)).route.singleAttempt(timeoutMs)
+	}
+
+	/** One bounded, silent storage read at the latest block of `network`'s active endpoint.
+	 *  Background-only: not an RPC method. Throws on a timeout, a refusal or no value. */
+	public async readPublicStorageOnce(network: Network, contract: AztecAddress, slot: Fr, timeoutMs: number): Promise<Fr> {
+		const node = await this.getSingleAttemptNodeFor(network, timeoutMs)
+		const value = await node.getPublicStorageAt("latest", contract, slot)
+		// The SDK resolves a `null` result as `undefined` rather than rejecting it.
+		if (value === undefined) throw new Error(`Network ${network.id} read no value`)
+		return value
+	}
+
+	/**
+	 * The retrying client for `url` alone, never the active profile's node: a submission and the
+	 * receipts read on its recorded endpoint stay there through a primary swap, a failover or a
+	 * profile switch. `url` is wallet-written, captured from an allowlisted endpoint at submit time.
 	 */
 	public async getNodeForUrl(url: string): Promise<AztecNode> {
 		await this.ensureInitialized()
-		const entry = this.transientNodes.get(url)
-		if (entry) return entry.node
+		const cached = this.transientNodes.get(url)
+		if (cached) return cached
 		const created = this.nodeFactory.createNode(url)
-		this.transientNodes.set(url, { node: created, failures: 0 })
+		this.transientNodes.set(url, created)
 		return created
 	}
 
@@ -1062,26 +1077,14 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return created
 	}
 
-	/** The proposed tip of the node the network's PXE syncs from (its primary endpoint), read past the
-	 *  PXE's chain guard, which would wait behind a proof, through a node that dials once and logs
-	 *  nothing. Background-only: not an RPC method. */
+	/** The proposed tip of the network's active endpoint, read past the PXE's chain guard, which would
+	 *  wait behind a proof, in one silent attempt. Background-only: not an RPC method. */
 	public async readChainTip(networkId: string): Promise<number> {
-		const node = await this.getSingleAttemptNodeForUrl(networkInfoFrom(await this.getNetwork(networkId)).rpcUrl)
+		const node = await this.getSingleAttemptNodeFor(await this.getNetwork(networkId), DEFAULT_REQUEST_TIMEOUT_MS)
 		return Number(await node.getBlockNumber())
 	}
 
-	public reportEndpointFailure(url: string): void {
-		const entry = this.transientNodes.get(url)
-		if (!entry) return
-		entry.failures += 1
-		if (entry.failures >= 3) this.transientNodes.delete(url)
-	}
-
-	/**
-	 * Synthesizes the legacy NetworkInfo struct from a Network's primary
-	 * endpoint. PXE-facing callers (account-state, execution, etc.) consume
-	 * this without knowing about endpoints.
-	 */
+	/** The network as the offscreen PXE takes it: its identity and its endpoints in preference order. */
 	public async getNetworkInfo(networkId: string): Promise<NetworkInfo> {
 		await this.ensureInitialized()
 		return networkInfoFrom(await this.getNetwork(networkId))
@@ -1181,8 +1184,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		row.l1ChainId = seed.l1ChainId
 		this.applyResetEndpoint(row, seed, req)
 		await this.storage.set(row.id, row)
-		this.nodes.delete(req.fromChainId)
-		this.nodes.delete(req.toChainId)
+		this.routes.delete(row.id)
 		if (row.primaryEndpointId !== primaryBefore) {
 			this.emit("onPrimaryEndpointChanged", { networkId: row.id, endpointId: row.primaryEndpointId })
 		}
@@ -1271,7 +1273,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	private readonly onActiveProfileChanged = async () => {
 		await this.lock.withLock(async () => {
-			this.nodes.clear()
+			this.routes.clear()
 			this.transientNodes.clear()
 		})
 	}
@@ -1285,7 +1287,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		this.logDebug(`purgeForProfile ${profileId}: purge chains + remove networks`)
 		await this.lock.withLock(async () => {
-			this.nodes.clear()
+			this.routes.clear()
 			this.transientNodes.clear()
 			const networks = (await this.storage.getValues()).filter((n) => n.profileId === profileId)
 			for (const network of networks) {
@@ -1346,14 +1348,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return randomIdNotIn((id) => seen.has(id))
 	}
 
-	/** A caller that knows the network is local passes `kindHint`, so a Local Network endpoint
-	 *  edited to another loopback URL still reads as chain 0. */
-	private async _getChainId(rpcUrl: string, kindHint?: ChainKind): Promise<number> {
-		return (await this._probeChainIdentity(rpcUrl, kindHint)).chainId
-	}
-
 	/** One probe, both identities: the XOR composite (storage scoping) AND the exact `l1ChainId`
-	 *  (key derivation). The local carve-outs zero only the COMPOSITE — the probed l1ChainId is
+	 *  (key derivation). A caller that knows the network is local passes `kindHint`, so a Local
+	 *  Network endpoint edited to another loopback URL still reads as chain 0. The local carve-outs zero only the COMPOSITE — the probed l1ChainId is
 	 *  reported as-is, because derivation must never receive a synthetic 0. */
 	private async _probeChainIdentity(rpcUrl: string, kindHint?: ChainKind): Promise<{ chainId: number; l1ChainId: number }> {
 		let info: Awaited<ReturnType<AztecNode["getNodeInfo"]>>

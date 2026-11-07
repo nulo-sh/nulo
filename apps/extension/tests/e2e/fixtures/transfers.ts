@@ -268,7 +268,8 @@ export async function selectFeeMethod(
 		const state = await page.evaluate((id: string) => {
 			const el = document.querySelector(`[data-testid="${id}"]`)
 			if (!el) return "absent"
-			return el.getAttribute("aria-disabled") === "true" ? "disabled" : "enabled"
+			const text = el.textContent?.replace(/\s+/g, " ").trim()
+			return el.getAttribute("aria-disabled") === "true" ? `disabled: ${text}` : "enabled"
 		}, row)
 		return `selectFeeMethod: ${row} was not selectable within ${mountTimeoutMs}ms (now ${state})`
 	})

@@ -25,7 +25,7 @@ const STUBS = {
 				<span v-if="amountFiat" data-testid="activity-fiat">{{ amountFiat }}</span>
 			</div>
 		`,
-		props: ["title", "icon", "amount", "amountSymbol", "amountFiat", "testId", "txHash", "direction"],
+		props: ["title", "icon", "amount", "amountSymbol", "titleNamesToken", "amountFiat", "testId", "txHash", "direction"],
 	},
 }
 
@@ -52,12 +52,12 @@ describe("composite/TransactionIncomingCard", () => {
 		expect(w.find(".amount").text()).toBe("+500")
 	})
 
-	test("renders the token symbol column", () => {
-		const w = mountCard()
-		expect(w.find(".symbol").text()).toBe("cUSD")
+	test("hands the layout the symbol and tells it the title already names the token", () => {
+		const layout = mountCard().findComponent(STUBS.TransactionCardLayout)
+		expect(layout.props()).toMatchObject({ title: "cUSD", amountSymbol: "cUSD", titleNamesToken: true })
 	})
 
-	test("a blank symbol titles the row with the empty-value dash; the amount keeps the symbol as given", () => {
+	test("a blank symbol titles the row with the empty-value dash; the layout is handed the symbol as given", () => {
 		const read = (tokenSymbol: string) => {
 			const layout = mountCard({ tokenSymbol }).findComponent(STUBS.TransactionCardLayout)
 			return [layout.props("title"), layout.props("amountSymbol")]

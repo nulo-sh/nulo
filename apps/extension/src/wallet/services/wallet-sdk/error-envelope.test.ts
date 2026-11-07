@@ -24,6 +24,7 @@ import {
 	PxeStaleAnchorError,
 	ContractAssertionError,
 	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
 	DefaultEntrypointPublicCallError,
 	DefaultEntrypointUtilityCallError,
 	UnsupportedMethodError,
@@ -305,6 +306,7 @@ describe("stale-anchor and unregistered-contract arms", () => {
 			new DefaultEntrypointPublicCallError(),
 			new DefaultEntrypointUtilityCallError(),
 			new DefaultEntrypointMultiCallError(),
+			new DefaultEntrypointNoCallError(),
 		]) {
 			expect(toWalletResponseError(error)).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 		}
@@ -375,6 +377,7 @@ describe("stale-anchor and unregistered-contract arms", () => {
 		expect(toWalletResponseError(rethrown(new DefaultEntrypointPublicCallError()))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 		expect(toWalletResponseError(rethrown(new DefaultEntrypointUtilityCallError()))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 		expect(toWalletResponseError(rethrown(new DefaultEntrypointMultiCallError()))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+		expect(toWalletResponseError(rethrown(new DefaultEntrypointNoCallError()))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 	})
 })
 

@@ -5,6 +5,7 @@ import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-
 import type { IPXE } from "@/wallet/services/pxe/client"
 import type { TransactionService } from "@/wallet/services/transaction/service"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
+import type { PickedEndpoint } from "./execution-coordinator"
 
 /** The profile, fence, network and history access both send executors take from the facade, wired
  *  once. Widths are the narrowest either executor reads; an executor may narrow a member further. */
@@ -15,6 +16,8 @@ export interface SharedSendDeps {
 	isFenceLive(fence: ExecutionFence): boolean
 	getNetwork(networkId: string): Promise<Network>
 	getNode(chainId: number): Promise<AztecNode>
+	/** The endpoint `tx` goes out through, picked where its proof read and pinned to its hash. */
+	pickSendEndpoint(network: Network, tx: { txHash: string; anchorHash: string }): Promise<PickedEndpoint>
 	/** The sponsor probe's read: bounded and silent, unlike the build's retrying `node`. */
 	readPublicStorageOnce: PublicStorageReader
 	getPXE(network: Network): IPXE

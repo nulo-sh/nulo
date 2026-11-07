@@ -1638,6 +1638,8 @@ describe("execute window — a request the wallet refused", () => {
 	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
 	const OWNER = `0x${"0a".repeat(32)}`
 	const send = { kind: "aztec_sendTx", account: `aztec:1:${OWNER}`, exec: { calls: [] }, opts: { from: OWNER } }
+	// As the dispatcher hands the window a no-account request: the sentinel stays in `from`.
+	const noFrom = { ...send, opts: { from: "NO_FROM" }, executionMode: "default_entrypoint" }
 	// As the worker's refusal crosses the RPC hop.
 	const REGISTRY = walletErrorFromPayload({
 		code: "SCOPE_VIOLATION",
@@ -1663,10 +1665,15 @@ describe("execute window — a request the wallet refused", () => {
 		code: "DEFAULT_ENTRYPOINT_MULTI_CALL",
 		message: "DefaultEntrypoint requires exactly 1 call",
 	})
+	const NO_CALL = walletErrorFromPayload({
+		code: "DEFAULT_ENTRYPOINT_NO_CALL",
+		message: "DefaultEntrypoint requires exactly 1 call, got 0",
+	})
 	const REASON = {
 		public: "This transaction runs a public call without an account, which Nulo can't send. Reject tells the app.",
 		utility: "This app asked for a utility call without an account. Nulo can only run it from an account.",
 		several: "This app asked for several calls without an account. Nulo can only run one call this way.",
+		none: "This app asked Nulo to run nothing, with no account. There is nothing to approve.",
 		registry:
 			"This transaction asks your account to change its public authorizations from inside another contract. Apps are never allowed to, so it can't be sent. Reject tells the app.",
 		call: "A call in this transaction does not run the function it names. Nulo never sends such a call, so it can't be sent. Reject tells the app.",
@@ -1747,8 +1754,9 @@ describe("execute window — a request the wallet refused", () => {
 		["public", PUBLIC_CALL],
 		["utility", UTILITY_CALL],
 		["several", SEVERAL_CALLS],
+		["none", NO_CALL],
 	] as const)("a preview refused by the %s check: the same notice", async (kind, error) => {
-		const window = await opened({ ...send, executionMode: "default_entrypoint" })
+		const window = await opened(noFrom)
 		feeMapInstances[1]!.opts.onError?.(0, error)
 		await expectRefused(kind, window)
 	})
@@ -1761,7 +1769,7 @@ describe("execute window — a request the wallet refused", () => {
 	})
 
 	test("a preview failing with the public-call text on a plain error keeps today's toast and Confirm: classified by class", async () => {
-		const { refused, notice, confirm } = await opened({ ...send, executionMode: "default_entrypoint" })
+		const { refused, notice, confirm } = await opened(noFrom)
 		feeMapInstances[1]!.opts.onError?.(0, new Error("DefaultEntrypoint only supports private functions"))
 		await flushPromises()
 		expect(toastMocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't preview authorizations. Try again." })

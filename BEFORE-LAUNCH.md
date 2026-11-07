@@ -233,6 +233,32 @@ place; its effective date is the day the promote publishes it, so until then it 
 - [ ] The Chrome Web Store's `alarms` justification is re-pasted from `apps/extension/store/listing.md`
       § Permissions, which now says the token list refreshes about every six hours
 
+**Due at the release that publishes privacy 1.2.10 and Terms 1.2.2:** privacy § 5.1 and Terms § 7.1
+say that a network with more than one endpoint uses the primary first and, while it fails, the
+others in the order Settings → Networks lists them, and that each endpoint added can receive the
+requests. Both are patches, so nobody is asked to accept again. Both versions are archived and in
+place; their effective dates are the day the promote publishes them, so until then they read
+`«FILL: effective date»`:
+
+- [ ] `legal/privacy.md` and `legal/terms.md` — the version lines and the 1.2.10 and 1.2.2 history
+      rows, dated the day they are published
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.10 and `terms` 1.2.2, same date
+- [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.2.10/`, `nulo.sh/terms` and
+      `nulo.sh/terms/v1.2.2/` show no DRAFT banner, and AMO's Privacy policy field carries the
+      1.2.10 text (`apps/extension/store/listing.md` § Privacy policy text)
+
+**Due at the release that publishes privacy 1.2.11:** § 5.7 says that with Let every site see that
+Nulo is installed on, any site you open, and the scripts it runs, learns that Nulo is installed and
+its version without asking. A patch, so nobody is asked to accept again (the owner's pick, decision
+page 119). The version is archived and in place; its effective date is the day the promote publishes
+it, so until then it reads `«FILL: effective date»`:
+
+- [ ] `legal/privacy.md` — the version line and the 1.2.11 history row, dated the day it is published
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.11 (now `null`), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.11/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.11 text (`apps/extension/store/listing.md`
+      § Privacy policy text)
+
 **Due at the release that publishes website notice 1.1:** the notice drops the email at store
 launch and says replies reach hello@nulo.sh. It is dated for the promote that publishes it, 5
 November 2026; the landing and `nulo-subscribe` both deploy from that promote's push to `main`:
