@@ -47,8 +47,8 @@ import {
 } from "./spec"
 import type { Network, NetworkEndpoint } from "./spec"
 import { classifyChains } from "@/wallet/services/stale-network/classify"
-import { seedOffersKey } from "./seed-offers"
-import { DEFAULT_SEEDS, seedForKind } from "./seeds"
+import { KINDS_SEEDED_BEFORE_RECORD, seedOffersKey } from "./seed-offers"
+import { DEFAULT_SEEDS, RELAY_LABEL, RELAY_RPC_URLS, seedForKind } from "./seeds"
 import { retiredEndpointsConversion, UNLOCK_CONVERSIONS } from "@/wallet/services/unlock-conversions"
 
 /** One key for every profile, as the profile fakes hold it. */
@@ -1578,13 +1578,19 @@ describe("NetworkService liveness reads overlapped by a reservation", () => {
 
 const MAINNET = seedForKind("mainnet")!
 
-/** Runs `open` as a build that predates the Mainnet seed: the defaults every released build seeded. */
+/** Runs `open` as a build that predates the Mainnet seed and the relay: the defaults every released
+ *  build seeded. */
 async function asEarlierBuild<T>(open: () => Promise<T>): Promise<T> {
 	const at = DEFAULT_SEEDS.indexOf(MAINNET)
 	DEFAULT_SEEDS.splice(at, 1)
+	const relays = DEFAULT_SEEDS.map((seed) => seed.relay)
+	for (const seed of DEFAULT_SEEDS) seed.relay = undefined
 	try {
 		return await open()
 	} finally {
+		DEFAULT_SEEDS.forEach((seed, i) => {
+			if (relays[i]) seed.relay = relays[i]
+		})
 		DEFAULT_SEEDS.splice(at, 0, MAINNET)
 	}
 }
@@ -1600,6 +1606,21 @@ describe("NetworkService default seeding", () => {
 		expect(byName.get("Testnet")?.endpoints[0]?.label).toBe("dRPC")
 		expect(byName.get("Alpha")?.endpoints[0]?.label).toBe("dRPC")
 		expect(byName.get("Local Network")?.endpoints[0]?.label).toBeUndefined()
+	})
+
+	test("Alpha and Testnet carry Nulo's relay second, recorded as offered; Local Network has none", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		const byKind = new Map((await service.getOrInitNetworks()).map((n) => [n.kind, n]))
+		for (const kind of ["mainnet", "testnet"] as const) {
+			const row = byKind.get(kind)!
+			expect(row.endpoints.map(({ rpcUrl, label }) => ({ rpcUrl, label }))).toEqual([
+				{ rpcUrl: seedForKind(kind)!.rpcUrl, label: "dRPC" },
+				{ rpcUrl: RELAY_RPC_URLS[kind], label: RELAY_LABEL },
+			])
+			expect(row.primaryEndpointId).toBe(row.endpoints[0]?.id)
+		}
+		expect(byKind.get("local")?.endpoints).toHaveLength(1)
+		expect(JSON.parse(local.store.get(seedOffersKey("p1")) as string).relay).toEqual(["mainnet", "testnet"])
 	})
 })
 
@@ -1761,7 +1782,10 @@ describe("NetworkService — Mainnet, the default this build adds", () => {
 		const internals = h.service as unknown as { profileService: { getProfiles: () => Promise<unknown[]> } }
 		internals.profileService.getProfiles = async () => [{ id: "p2", name: "p2", type: "password" }]
 		await h.service.seedDefaultsForProfile("p2")
-		expect(JSON.parse(h.local.store.get(seedOffersKey("p2")) as string)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+		expect(JSON.parse(h.local.store.get(seedOffersKey("p2")) as string)).toEqual({
+			offered: ["local", "mainnet", "testnet"],
+			relay: ["mainnet", "testnet"],
+		})
 	})
 
 	test("a dApp is served the new default's chain before the open, and refused it once offered and deleted", async () => {
@@ -1908,7 +1932,10 @@ describe("NetworkService — Mainnet, the default this build adds", () => {
 			const internals = h.service as unknown as { profileService: { getProfiles: () => Promise<unknown[]> } }
 			internals.profileService.getProfiles = async () => [{ id: "p2", name: "p2", type: "password" }]
 			await h.service.seedDefaultsForProfile("p2")
-			expect(JSON.parse(h.local.store.get(seedOffersKey("p2")) as string)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+			expect(JSON.parse(h.local.store.get(seedOffersKey("p2")) as string)).toEqual({
+				offered: ["local", "mainnet", "testnet"],
+				relay: ["mainnet", "testnet"],
+			})
 		})
 
 		test("a row of the default an interrupted open left is announced", async () => {
@@ -1937,7 +1964,7 @@ describe("NetworkService — Mainnet, the default this build adds", () => {
 
 			await h.service.answerNetworkArrival(extra!.id)
 
-			expect(h.local.store.get(OFFERS_KEY)).toBe(JSON.stringify({ offered: ["local", "mainnet", "testnet"] }))
+			expect(h.local.store.get(OFFERS_KEY)).toBe(JSON.stringify({ offered: ["local", "mainnet", "testnet"], relay: ["mainnet"] }))
 			expect(await h.service.getNetworkArrival()).toBeNull()
 			await h.service.getOrInitNetworks()
 			expect(await h.service.getNetworkArrival()).toBeNull()
@@ -1966,7 +1993,7 @@ describe("NetworkService — Mainnet, the default this build adds", () => {
 			await h.service.setActiveNetwork(testnet.id)
 			expect(record(h).announce).toEqual(["mainnet"])
 			await h.service.setActiveNetwork(extra!.id)
-			expect(record(h)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+			expect(record(h)).toEqual({ offered: ["local", "mainnet", "testnet"], relay: ["mainnet"] })
 		})
 
 		test("a corrupt record shows no arrival, and answering it leaves its bytes", async () => {
@@ -2014,6 +2041,7 @@ describe("NetworkService — this build's defaults on an existing profile", () =
 		expect(JSON.parse(h.local.store.get(seedOffersKey("p1")) as string)).toEqual({
 			offered: ["local", "mainnet", "testnet"],
 			announce: ["mainnet"],
+			relay: ["mainnet"],
 		})
 	})
 })
@@ -3284,7 +3312,11 @@ describe("NetworkService — a retired default", () => {
 		expect(await stored(local, "mn")).toMatchObject({ name: "Alpha", chainId: CHAIN_IDS.MAINNET, kind: "mainnet" })
 		expect(updated.find((network) => network.id === "mn")?.name).toBe("Alpha")
 		expect((await stored(local, "other-mn")).name).toBe("Alpha V6")
-		expect((await stored(local, "tn")).endpoints).toEqual([{ id: "seed1", rpcUrl: REPLACEMENT, label: "dRPC" }])
+		// Moved onto the seed's endpoint, the row is offered the relay in the same pass.
+		expect((await stored(local, "tn")).endpoints).toEqual([
+			{ id: "seed1", rpcUrl: REPLACEMENT, label: "dRPC" },
+			{ id: "tn-relay", rpcUrl: RELAY_RPC_URLS.testnet, label: RELAY_LABEL },
+		])
 		expect((await stored(local, "other")).endpoints[0]?.rpcUrl).toBe(RETIRED_URL)
 		const rebuilt = await service.getNode(CHAIN_IDS.TESTNET)
 		expect(rebuilt).not.toBe(before)
@@ -3326,5 +3358,192 @@ describe("NetworkService — a retired default", () => {
 		await retire(service)
 		expect((await stored(local, "tn")).endpoints[0]?.rpcUrl).toBe(RETIRED_URL)
 		expect(updated).toEqual([])
+	})
+})
+
+describe("NetworkService — Nulo's relay on a profile made before it", () => {
+	const OFFERS = seedOffersKey("p1")
+	const SEEDED = { id: "s1", rpcUrl: seedForKind("testnet")!.rpcUrl, label: "dRPC" }
+	const MINE = { id: "u1", rpcUrl: "https://node.example", label: "Mine" }
+	const RELAY = { id: "tn-relay", rpcUrl: RELAY_RPC_URLS.testnet, label: RELAY_LABEL }
+	const BEFORE_RELAY = { offered: ["local", "mainnet", "testnet"], announce: ["mainnet"] }
+	const testnetRow = (local: FakeStorageArea, over: Partial<Network> = {}) =>
+		storeRow(local, {
+			id: "tn",
+			name: "Testnet",
+			chainId: CHAIN_IDS.TESTNET,
+			l1ChainId: TESTNET_L1_CHAIN_ID,
+			kind: "testnet",
+			primaryEndpointId: "s1",
+			endpoints: [SEEDED, MINE],
+			...over,
+		})
+	const convert = (service: NetworkService) =>
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+		(service as any).convertRows("p1") as Promise<void>
+	const record = (local: FakeStorageArea) => JSON.parse(local.store.get(OFFERS) as string)
+
+	test("a seeded primary takes it after the row's endpoints, the offer written first, the route rebuilt, once", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		testnetRow(local)
+		local.store.set(OFFERS, JSON.stringify(BEFORE_RELAY))
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+		const routes = (service as any).routes as Map<string, unknown>
+		await service.getNodeFor(await stored(local, "tn"))
+		const updated: Network[] = []
+		service.onNetworkUpdated.add((network) => updated.push(network))
+		const writes = recordWrites(local as unknown as BrowserApi["storage"]["local"], "nulo:core:")
+
+		await convert(service)
+
+		expect((await stored(local, "tn")).endpoints).toEqual([SEEDED, MINE, RELAY])
+		expect(record(local)).toEqual({ ...BEFORE_RELAY, relay: ["testnet"] })
+		expect(writes.log).toEqual([`set:${OFFERS}`, "set:nulo:core:networks@tn"])
+		expect(routes.has("tn")).toBe(false)
+		expect(updated.map((network) => network.endpoints.length)).toEqual([3])
+
+		// Removed, it stays removed at every later unlock.
+		testnetRow(local)
+		writes.log.length = 0
+		await convert(service)
+		expect((await stored(local, "tn")).endpoints).toEqual([SEEDED, MINE])
+		expect(writes.log).toEqual([])
+		writes.restore()
+	})
+
+	test("a primary the person replaced is passed over for good; a row the relay is on is recorded and left", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		testnetRow(local, { primaryEndpointId: "u1" })
+		storeRow(local, {
+			id: "mn",
+			chainId: CHAIN_IDS.MAINNET,
+			l1ChainId: MAINNET_L1_CHAIN_ID,
+			kind: "mainnet",
+			primaryEndpointId: "m1",
+			// A hostile row: the relay stored with another case and a trailing slash.
+			endpoints: [
+				{ id: "m1", rpcUrl: seedForKind("mainnet")!.rpcUrl },
+				{ id: "r1", rpcUrl: "https://RPC.nulo.sh/" },
+			],
+		})
+		local.store.set(OFFERS, JSON.stringify(BEFORE_RELAY))
+		await convert(service)
+		expect((await stored(local, "tn")).endpoints).toEqual([SEEDED, MINE])
+		expect((await stored(local, "mn")).endpoints).toHaveLength(2)
+		expect(record(local).relay).toEqual(["mainnet", "testnet"])
+
+		// The primary made the seed's again later: the offer is spent.
+		testnetRow(local)
+		await convert(service)
+		expect((await stored(local, "tn")).endpoints).toEqual([SEEDED, MINE])
+	})
+
+	test("a row a reset journal holds is skipped and keeps its offer for a later unlock", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		testnetRow(local)
+		local.store.set(OFFERS, JSON.stringify(BEFORE_RELAY))
+		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
+		await convert(service)
+		expect((await stored(local, "tn")).endpoints).toEqual([SEEDED, MINE])
+		expect(record(local)).toEqual(BEFORE_RELAY)
+
+		local.store.delete("nulo:core:network-reset@p1")
+		await convert(service)
+		expect((await stored(local, "tn")).endpoints).toEqual([SEEDED, MINE, RELAY])
+	})
+
+	test("an unreadable record offers nothing and stays as stored; with none, the profile stands for every earlier default", async () => {
+		const corrupt = setupServiceWithStorage({})
+		testnetRow(corrupt.local)
+		corrupt.local.store.set(OFFERS, "{not json")
+		await convert(corrupt.service)
+		expect((await stored(corrupt.local, "tn")).endpoints).toEqual([SEEDED, MINE])
+		expect(corrupt.local.store.get(OFFERS)).toBe("{not json")
+
+		const absent = setupServiceWithStorage({})
+		testnetRow(absent.local)
+		await convert(absent.service)
+		expect((await stored(absent.local, "tn")).endpoints).toEqual([SEEDED, MINE, RELAY])
+		expect(record(absent.local)).toEqual({ offered: [...KINDS_SEEDED_BEFORE_RECORD].sort(), relay: ["testnet"] })
+	})
+
+	test("a failed offer write appends nothing, and the next worker offers it again", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		testnetRow(local)
+		local.store.set(OFFERS, JSON.stringify(BEFORE_RELAY))
+		const writes = recordWrites(local as unknown as BrowserApi["storage"]["local"], OFFERS, undefined, () =>
+			Promise.reject(new Error("quota")),
+		)
+		await convert(service)
+		writes.restore()
+		expect((await stored(local, "tn")).endpoints).toEqual([SEEDED, MINE])
+		expect(record(local)).toEqual(BEFORE_RELAY)
+		await convert(service)
+		expect((await stored(local, "tn")).endpoints).toEqual([SEEDED, MINE, RELAY])
+	})
+
+	test("a failed offer write leaves that offer pending when a later row's write lands", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		testnetRow(local)
+		storeRow(local, {
+			id: "mn",
+			chainId: CHAIN_IDS.MAINNET,
+			l1ChainId: MAINNET_L1_CHAIN_ID,
+			kind: "mainnet",
+			primaryEndpointId: "m1",
+			endpoints: [{ id: "m1", rpcUrl: seedForKind("mainnet")!.rpcUrl }],
+		})
+		local.store.set(OFFERS, JSON.stringify(BEFORE_RELAY))
+		let failures = 1
+		const writes = recordWrites(local as unknown as BrowserApi["storage"]["local"], OFFERS, undefined, () =>
+			failures-- > 0 ? Promise.reject(new Error("quota")) : undefined,
+		)
+		const relayed = async () => {
+			const kinds: string[] = []
+			for (const [id, kind] of [
+				["mn", "mainnet"],
+				["tn", "testnet"],
+			] as const) {
+				if ((await stored(local, id)).endpoints.some((e) => e.rpcUrl === RELAY_RPC_URLS[kind])) kinds.push(kind)
+			}
+			return kinds
+		}
+		await convert(service)
+		writes.restore()
+		const first = await relayed()
+		expect(first).toHaveLength(1)
+		expect(record(local).relay).toEqual(first)
+		await convert(service)
+		expect(await relayed()).toEqual(["mainnet", "testnet"])
+		expect(record(local).relay).toEqual(["mainnet", "testnet"])
+	})
+
+	test("rows seeded under a record write that failed record their relay, which once removed stays removed", async () => {
+		const h = setupServiceWithStorage({})
+		let failures = 1
+		const writes = recordWrites(h.local as unknown as BrowserApi["storage"]["local"], OFFERS, undefined, () =>
+			failures-- > 0 ? Promise.reject(new Error("quota")) : undefined,
+		)
+		await h.service.getOrInitNetworks().catch(() => undefined)
+		writes.restore()
+		expect(h.local.store.has(OFFERS)).toBe(false)
+		await h.service.getOrInitNetworks()
+		expect(record(h.local).relay).toEqual(["mainnet", "testnet"])
+		const testnet = (await h.service.getNetworksRaw("p1")).find((n) => n.kind === "testnet")!
+		await h.service.deleteEndpoint(testnet.id, testnet.endpoints[1]!.id)
+		await convert(h.service)
+		expect((await stored(h.local, testnet.id)).endpoints).toHaveLength(1)
+	})
+
+	test("every later write of the record keeps the offer", async () => {
+		const h = setupServiceWithStorage({})
+		const rows = await asEarlierBuild(() => h.service.getOrInitNetworks())
+		h.local.store.set(OFFERS, JSON.stringify({ offered: ["local", "testnet"], relay: ["testnet"] }))
+		await h.service.getOrInitNetworks()
+		expect(record(h.local)).toEqual({ offered: ["local", "mainnet", "testnet"], announce: ["mainnet"], relay: ["mainnet", "testnet"] })
+		const mainnet = (await h.service.getNetworksRaw("p1")).find((n) => n.kind === "mainnet")!
+		await h.service.answerNetworkArrival(mainnet.id)
+		expect(record(h.local)).toEqual({ offered: ["local", "mainnet", "testnet"], relay: ["mainnet", "testnet"] })
+		expect(rows.find((n) => n.kind === "testnet")?.endpoints).toHaveLength(1)
 	})
 })

@@ -25,7 +25,8 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { readyToast } from "@/components/stale-network/copy"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
-import { type DefaultSeed, seedForKind } from "@/wallet/services/network/seeds"
+import { appendRelay, type DefaultSeed, seedForKind } from "@/wallet/services/network/seeds"
+import type { Network } from "@/wallet/services/network/spec"
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
 import { BROWSER, openScratchPage } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
@@ -53,8 +54,10 @@ const ARRIVING: DefaultSeed = (() => {
 	if (!seed) throw new Error("this build seeds no Mainnet")
 	return seed
 })()
-/** The record once the arrival is answered: every kind the release was offered, and the new one. */
-const OFFERED = { offered: ["local", ARRIVING.kind, "testnet"].sort() }
+/** The record once the arrival is answered: every kind the release was offered, and the new one.
+ *  Nulo's relay is offered on both: given to the release's Testnet at the unlock, and seeded with
+ *  the new default. */
+const OFFERED = { offered: ["local", ARRIVING.kind, "testnet"].sort(), relay: [ARRIVING.kind, "testnet"].sort() }
 const ANNOUNCED = { ...OFFERED, announce: [ARRIVING.kind] }
 
 type Entries = Record<string, unknown>
@@ -215,9 +218,9 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM)(
 				const added = read.filter((row) => row.kind === ARRIVING.kind)
 				expect(added.map(identity)).toEqual([identity(ARRIVING)])
 				// The deleted default stays deleted, and the release's own row is left as it was, but for
-				// the chain the reset moves it to.
+				// the chain the reset moves it to and the relay the unlock gives it.
 				expect(read.filter((row) => row.kind !== ARRIVING.kind)).toEqual(
-					networks(before).map((row) => ({ ...row, chainId: CHAIN_IDS.TESTNET })),
+					networks(before).map((row) => ({ ...(appendRelay(row as unknown as Network) ?? row), chainId: CHAIN_IDS.TESTNET })),
 				)
 
 				// Closed unanswered, it is back at the next open.

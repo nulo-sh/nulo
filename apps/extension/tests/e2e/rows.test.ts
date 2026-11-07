@@ -455,8 +455,8 @@ test("a click-mode Settings row opens on Enter and on Space; an action inside a 
 	const page = await openPopup(listedExtension)
 	await waitForHash(page, "#/popup/general")
 	await navigateToSettings(page, "networks")
-	const firstName = await page.$eval(sel("network-row"), (el) => el.getAttribute("data-network-name"))
-	await openNetworkDetail(page, firstName ?? "")
+	// One endpoint, so no reorder handle sits between its row and its action.
+	await openNetworkDetail(page, "Local Network")
 	await bringToFront(page)
 
 	await tabTo(page, "network-detail-rename", 12)
@@ -467,8 +467,8 @@ test("a click-mode Settings row opens on Enter and on Space; an action inside a 
 		await waitForFocus(page, "network-detail-rename")
 	}
 
-	// The disabled active-network row above and the raw Chain ID row below the rename row hold no
-	// stop: the next two are the endpoint row's target and its first action.
+	// The active-network row above and the raw Chain ID row below the rename row hold no stop after
+	// it: the next two are the endpoint row's target and its first action.
 	await recordClicks(page)
 	expect(await tabAround(page, 2)).toEqual(["endpoint-row", "endpoint-edit-btn"])
 	for (const [i, key] of (["Enter", SPACE] as const).entries()) {

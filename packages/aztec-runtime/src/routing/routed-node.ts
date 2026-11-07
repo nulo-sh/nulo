@@ -248,6 +248,10 @@ class Router implements Route {
 		const cached = this.singleAttempts.get(timeoutMs)
 		if (cached) return cached
 		const node = nodeOf(async (method, args) => {
+			// A bounded read is a routed call too: a route only these reads serve still returns to its primary.
+			const now = this.deps.now()
+			this.health.tick(now)
+			this.startReturnProbes(now)
 			const pinned = method === "getTxReceipt" ? this.pins.byTxHash.get(pinKey(args[0])) : undefined
 			if (pinned) return this.pinnedReceipt(pinned, args, timeoutMs, 1)
 			const left = await this.budgetAfterAdmission(timeoutMs)

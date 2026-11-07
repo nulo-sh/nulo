@@ -198,7 +198,7 @@ The activity record is written by `recordTransfer` (`transfer-executor.ts:459`) 
 > I do not sell personal information or share it for cross-context behavioural advertising. I and the
 > providers identified below process the limited website, correspondence and service data described in
 > this policy. The website `nulo.sh` and its mailing list are described in the separate
-> [Website Privacy Notice](../../../legal/website-privacy.md).
+> [Website Privacy Notice](../../../../legal/website-privacy.md).
 
 **§ 5 lead and § 5.1 (`legal/privacy.md:104-133`)**
 > ## 5. What leaves your device, and to whom
@@ -236,7 +236,7 @@ The activity record is written by `recordTransfer` (`transfer-executor.ts:459`) 
 > ### 5.5 `passkey.nulo.sh` and `tokens.nulo.sh` hosting, contacting me, and the uninstall page
 >
 > The website `nulo.sh`, including its mailing list, is described in the
-> [Website Privacy Notice](../../../legal/website-privacy.md). The extension opens it only on uninstall (below) and
+> [Website Privacy Notice](../../../../legal/website-privacy.md). The extension opens it only on uninstall (below) and
 > when you follow a link to it.
 >
 > Hosting for `passkey.nulo.sh` and `tokens.nulo.sh`, the hosts the wallet's functions involve, is

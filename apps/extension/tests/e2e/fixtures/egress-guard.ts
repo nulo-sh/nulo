@@ -9,6 +9,7 @@
 import { randomBytes } from "node:crypto"
 import { type Server, type Socket, createServer } from "node:net"
 import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { RELAY_RPC_URLS } from "@/wallet/services/network/seeds"
 import { TOKEN_LIST_URL } from "@/wallet/services/token-list/spec"
 import { HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 import { reservePort } from "../../../scripts/e2e/resolve-ports"
@@ -72,6 +73,9 @@ export const MALFORMED = "<malformed>"
 export const LIVE_NODE_HOST = new URL(TESTNET_RPC_URL).hostname
 /** The default Mainnet node's host, which no launch sends direct. */
 export const MAINNET_NODE_HOST = new URL(MAINNET_RPC_URL).hostname
+/** Nulo's relay hosts, the seeded second endpoint of Alpha and Testnet, which no launch sends
+ *  direct: no e2e run reaches the relay. */
+export const RELAY_NODE_HOSTS: readonly string[] = Object.values(RELAY_RPC_URLS).map((url) => new URL(url).hostname)
 /** The published token list's host, which the live launch also sends direct. */
 export const LIVE_LIST_HOST = new URL(TOKEN_LIST_URL).hostname
 
@@ -104,6 +108,10 @@ export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 		"the seeded Testnet node: the background reads the active network's status at popup start, the offscreen PXE on Home, and a full backup or contacts export reads every network's. The launch's stand-in answers it once settled; a request from before that, from a background kill or while a spec's own interception has the origin is refused here, and one that arrives while the stand-in holds the origin, before the close begins, fails the close",
 	],
 	[MAINNET_NODE_HOST, "the seeded Mainnet node, the default: read as the Testnet node is, and held by its own stand-in the same way"],
+	...RELAY_NODE_HOSTS.map((host): [string, string] => [
+		host,
+		"Nulo's relay, the seeded second endpoint of Alpha and Testnet: probed once the stand-in before it refuses a route's admission, and held by its own stand-in the same way",
+	]),
 	["api.coingecko.com", "the price fetch on profile create, unlock, popup open with an incomplete cache, and every 3 min"],
 	[
 		LIVE_LIST_HOST,
