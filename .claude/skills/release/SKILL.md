@@ -55,6 +55,7 @@ Every stable version ships a user-facing notes file, `release-notes/X.Y.Z.md`. T
 - **Where it binds**: `launch-legal` on every PR into main checks the version the tree would release (on the Release PR the new one; on a promote the last release's, already present); `auto-unstick` checks again at the merge commit before it tags, and `tag-by-hand-run.ts` before a manual stable tag; the `release-notes` job reads the file from the tag's tree. A tag is permanent and the job reads only the tagged tree, so a stable tagged without its notes can never publish.
 - **AMO's span**: AMO's notes for a version cover everything since the last version AMO listed. When the previous stable was not submitted to AMO (1.0.0 was not), paste a combined text into the version's Release notes in the Developer Hub after the Firefox job.
 - **Live check**: `gh release view vX.Y.Z --json body -q .body | head` opens with the notes, and the Firefox job logs `release notes: N chars`.
+- **The wallet links its page**: a stable build's Home What's new row (once per minor) and its About row open `https://nulo.sh/changelog/vX.Y.Z/` for the running version, so before the store submission `curl -sI https://nulo.sh/changelog/vX.Y.Z/ | head -1` answers 200. The landing redeploys from the `main` push the Release PR makes.
 
 ## Stable release (from `main`)
 

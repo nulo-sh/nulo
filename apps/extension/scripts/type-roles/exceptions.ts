@@ -32,10 +32,6 @@ const APP = "apps/extension/src/popup/app.vue"
 const BRUTALIST = "packages/design/src/ui/BrutalistTitle.vue"
 const BALANCE = "apps/extension/src/popup/components/modules/general/BalanceView.vue"
 const BUTTON = "packages/design/src/ui/Button.vue"
-const TX_CARD = "apps/extension/src/popup/components/modules/activity/TransactionCard.vue"
-const TWO_CHIPS = ".chips > .chip, .app_slot > .app_chip"
-const TWO_CHIP_SCOPE =
-	'[data-testid="activity-direction-chip"]:has(+ span > [data-testid="activity-app-chip"]), [data-testid="activity-direction-chip"] + span > [data-testid="activity-app-chip"]'
 const PUBLISH_STRIP = "apps/extension/src/components/composite/send/PublishStrip.vue"
 const PUBLISH_FACTS = '[data-testid="send-publish-strip"] [data-cell]'
 const ROLELESS = ".wrapper:is(.secondary, .ghost, .text)"
@@ -226,32 +222,5 @@ export const OVERRIDES: Override[] = [
 		value: "0.08em",
 		role: "label-section",
 		why: "a publish fact keeps the names' tracking",
-	},
-	{
-		file: TX_CARD,
-		selector: TWO_CHIPS,
-		scope: TWO_CHIP_SCOPE,
-		property: "font-size",
-		value: "10px",
-		role: "label-section",
-		why: "a dApp transfer's two chips fit its row only at 10px",
-	},
-	{
-		file: TX_CARD,
-		selector: TWO_CHIPS,
-		scope: TWO_CHIP_SCOPE,
-		property: "font-weight",
-		value: "600",
-		role: "label-section",
-		why: "a dApp transfer's two chips pair semibold with their 10px",
-	},
-	{
-		file: TX_CARD,
-		selector: TWO_CHIPS,
-		scope: TWO_CHIP_SCOPE,
-		property: "letter-spacing",
-		value: "0.08em",
-		role: "label-section",
-		why: "a dApp transfer's two chips pair 0.08em with their 10px",
 	},
 ]

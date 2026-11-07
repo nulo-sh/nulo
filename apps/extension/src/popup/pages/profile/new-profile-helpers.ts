@@ -6,6 +6,7 @@ import { isPopupSubmitKey } from "@/composables/usePopupEntity"
 import type { useAppStore } from "@/stores/app.store"
 import { ensureAccountClient, initTransactionService, managers, requireAccount } from "@/utils/core"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { landOpenedProfile } from "@/popup/opening-flow"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 
 type AppStore = ReturnType<typeof useAppStore>
@@ -46,7 +47,7 @@ export async function activateCreatedProfile(profile: ProfileInfo, deps: CreateA
 	}
 }
 
-async function openCreatedProfile(profile: ProfileInfo, { appStore, router, flowLive }: CreateActivationDeps): Promise<void> {
+async function openCreatedProfile(profile: ProfileInfo, { appStore, router, openToast, flowLive }: CreateActivationDeps): Promise<void> {
 	// An ended flow stays ended: the same profile opening again later is the shell's, not this page's.
 	const assertActive = () => {
 		if (!flowLive() || !appStore.isLogined || appStore.profile?.id !== profile.id) throw new ActivationSupersededError()
@@ -72,7 +73,7 @@ async function openCreatedProfile(profile: ProfileInfo, { appStore, router, flow
 	if (appStore.account) await managers.uiPreference.setSelectedAccount(profile.id, appStore.account.address)
 	assertActive()
 
-	router.push("/popup/general")
+	landOpenedProfile(router, openToast, { profileId: profile.id, route: "/popup/general" })
 }
 
 /**

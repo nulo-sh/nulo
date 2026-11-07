@@ -2026,8 +2026,22 @@
 			"value": 1
 		},
 		{
-			"id": "discoveryPolicy.full",
+			"id": "uiWhatsNewSeen.full",
 			"stamp": 4,
+			"shape": "uiWhatsNewSeen",
+			"key": "nulo:ui:whatsNewSeen",
+			"value": "1.12"
+		},
+		{
+			"id": "uiWhatsNewSeen.minimal",
+			"stamp": 4,
+			"shape": "uiWhatsNewSeen",
+			"key": "nulo:ui:whatsNewSeen",
+			"value": "0.0"
+		},
+		{
+			"id": "discoveryPolicy.full",
+			"stamp": 5,
 			"shape": "discoveryPolicy",
 			"key": "nulo:core:discoveryPolicy@3f9a2c71",
 			"value": {
@@ -2037,7 +2051,7 @@
 		},
 		{
 			"id": "discoveryPolicy.minimal",
-			"stamp": 4,
+			"stamp": 5,
 			"shape": "discoveryPolicy",
 			"key": "nulo:core:discoveryPolicy@b04e6d18",
 			"value": {
@@ -2047,12 +2061,12 @@
 		},
 		{
 			"id": "discoveryPolicy.sealed",
-			"stamp": 4,
+			"stamp": 5,
 			"shape": "discoveryPolicy",
 			"key": "nulo:core:discoveryPolicy@5c8e1f27",
 			"value": {
 				"profileId": "5c8e1f27",
-				"sealed": "AVsoBajZMN7HJzspj9NlfXcss29GF+mD/h8OMpQUVnbljv8MHUbE+kinie8poSdTj/kaE6c/u6AOBxEP3J3YfUdWJXVXX419reUuAZ1Ex+5ylw6dCXo="
+				"sealed": "AfDufEgbrrlcCtsWyUY1ybTbOvByGRRCvBiUWyUmhYvLvuR+He7IKZKMEjf/ox9xcb4pRpbxfSnUYRcpuJMSTBPHBZhL27uPBmBffUBf/wwwN9LIeUA="
 			},
 			"sealed": true
 		}

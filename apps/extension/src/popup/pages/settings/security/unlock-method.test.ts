@@ -54,12 +54,19 @@ const openToast = vi.hoisted(() => vi.fn())
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast }) }))
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ meta: {}, query: {} }) }))
-const surface = vi.hoisted(() => ({ panel: false, move: vi.fn(async (_route: string) => true) }))
+const surface = vi.hoisted(() => ({
+	panel: false,
+	move: vi.fn(async (_route: string) => true),
+	handsBack: false,
+	handBack: vi.fn(async (..._args: unknown[]) => true),
+}))
 vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.panel }))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
 	moveToOwnWindow: (route: string) => surface.move(route),
 	leavePanelFor: async (route: string) => surface.panel && (await surface.move(route)),
+	handsBackToPanel: () => surface.handsBack,
+	returnToPanel: (...args: unknown[]) => surface.handBack(...args),
 }))
 
 import { useAppStore } from "@/stores/app.store"
@@ -120,6 +127,7 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	ceremony.run.mockReset().mockImplementation(async (req) => (req.mode === "get" ? CURRENT : NEXT))
 	surface.panel = false
+	surface.handsBack = false
 	installChromeStorage({}, { persist: false })
 })
 afterEach(() => {
@@ -379,6 +387,7 @@ describe("a passkey profile", () => {
 	})
 
 	test("a change that ends after a switch to another profile tells the new one nothing", async () => {
+		surface.handsBack = true
 		const held = Promise.withResolvers<void>()
 		profile.changeUnlockMethod.mockReturnValueOnce(held.promise)
 		const w = await atPasskey()
@@ -388,6 +397,7 @@ describe("a passkey profile", () => {
 		held.resolve()
 		await flushPromises()
 		expect(openToast).not.toHaveBeenCalled()
+		expect(surface.handBack).not.toHaveBeenCalled()
 		stayed()
 		expect(disabled(w, "unlock-method-new-passkey")).toBe(false)
 	})
@@ -459,6 +469,20 @@ describe("how a change ends", () => {
 		nothingChanged()
 	})
 
+	test("in its own window a made change hands Settings and its line back to the panel, and neither toasts nor routes", async () => {
+		surface.handsBack = true
+		const w = mountPage("passkey")
+		await flushPromises()
+		await click(w, "unlock-method-new-passkey")
+		expect(profile.changeUnlockMethod).toHaveBeenCalledOnce()
+		expect(surface.handBack).toHaveBeenCalledExactlyOnceWith("/popup/settings", {
+			snack: { kind: "success", label: "Now unlocks with your new passkey" },
+			profileId: "p1",
+		})
+		expect(openToast).not.toHaveBeenCalled()
+		stayed()
+	})
+
 	test("a change saved but not reopened says so and goes to the lock screen", async () => {
 		profile.changeUnlockMethod.mockRejectedValueOnce(new UnlockMethodChangedError())
 		const w = mountPage("passkey")
@@ -469,6 +493,72 @@ describe("how a change ends", () => {
 			label: "Unlock method changed. Unlock Nulo again to continue.",
 		})
 		expect(router.replace).toHaveBeenCalledExactlyOnceWith("/popup/auth")
+		expect(surface.handBack).not.toHaveBeenCalled()
+	})
+
+	test("in its own window a change saved but not reopened hands Home back with no line, and neither toasts nor routes", async () => {
+		surface.handsBack = true
+		profile.changeUnlockMethod.mockRejectedValueOnce(new UnlockMethodChangedError())
+		const w = mountPage("passkey")
+		await flushPromises()
+		await click(w, "unlock-method-new-passkey")
+		expect(surface.handBack).toHaveBeenCalledExactlyOnceWith("/popup/general")
+		expect(openToast).not.toHaveBeenCalled()
+		stayed()
+		expect(router.push).not.toHaveBeenCalled()
+	})
+
+	describe("a lock that unmounts the page before a change saved but not reopened answers", () => {
+		async function lockedBeforeTheAnswer(own: boolean) {
+			surface.handsBack = own
+			const held = Promise.withResolvers<void>()
+			profile.changeUnlockMethod.mockReturnValueOnce(held.promise)
+			const w = mountPage("passkey")
+			await flushPromises()
+			await click(w, "unlock-method-new-passkey")
+			useAppStore().isLogined = false
+			await flushPromises()
+			wrappers.splice(wrappers.indexOf(w), 1)
+			w.unmount()
+			return async () => {
+				held.reject(new UnlockMethodChangedError())
+				await flushPromises()
+			}
+		}
+		const showsNothing = () => {
+			expect(openToast).not.toHaveBeenCalled()
+			stayed()
+		}
+
+		test("an own window still in its flow hands Home back", async () => {
+			const answer = await lockedBeforeTheAnswer(true)
+			await answer()
+			expect(surface.handBack).toHaveBeenCalledExactlyOnceWith("/popup/general")
+			showsNothing()
+		})
+
+		test("an own window that left its flow meanwhile drops the answer", async () => {
+			const answer = await lockedBeforeTheAnswer(true)
+			surface.handsBack = false
+			await answer()
+			expect(surface.handBack).not.toHaveBeenCalled()
+			showsNothing()
+		})
+
+		test("an own window whose lock screen selected another profile meanwhile drops the answer", async () => {
+			const answer = await lockedBeforeTheAnswer(true)
+			useAppStore().profile = { id: "p2", name: "Other", type: "password" } as never
+			await answer()
+			expect(surface.handBack).not.toHaveBeenCalled()
+			showsNothing()
+		})
+
+		test("elsewhere the page's teardown drops the run", async () => {
+			const answer = await lockedBeforeTheAnswer(false)
+			await answer()
+			expect(surface.handBack).not.toHaveBeenCalled()
+			showsNothing()
+		})
 	})
 
 	test("in Firefox's toolbar panel the page moves to its own window first", async () => {

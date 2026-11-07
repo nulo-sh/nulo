@@ -5,8 +5,8 @@
  *
  * Wraps `TransactionCardLayout` so field positions stay byte-identical with the outgoing
  * `TransactionCard`, the in-flight `TransactionAwaitingCard` and the `TransactionTerminalCard`.
- * The badge is a green `square-check`, the title row carries the receipt's kind chip, and the
- * amount carries a "+" so the feed scans without reading direction.
+ * The badge is a green `square-check`, the icon box draws the receipt's sides and its inbound way,
+ * and the amount carries a "+" so the feed scans without reading direction.
  */
 
 import { STATUS_ICON_FILL } from "./status-icon-fill"
@@ -28,9 +28,9 @@ const props = defineProps({
 	amountFiat: { type: String, default: null },
 	/** Transaction hash that delivered the note (for hash-slice rendering). */
 	txHash: { type: String, default: null },
-	/** Receiver-honest kind label ("Received privately" / "Public → Public" /
-	 *  "Private → Public" / "Mint (public)"), derived from the resolved type. */
-	receivedLabel: { type: String, default: "Received" },
+	/** The receipt's sides, inbound, with its receiver-honest kind label ("Received privately",
+	 *  "Public → Public", "Private → Public", "Mint (public)") as its words. */
+	direction: { type: Object, default: null },
 	/** The route the row opens. */
 	to: { type: String, default: undefined },
 	/** The receipt is arriving now: the row slides in and glows. */
@@ -58,38 +58,23 @@ const hashSlice = computed(() => {
 		:amountFiat="amountFiat"
 		:to="to"
 		:arriving="arriving"
-		wrapTrailing
+		:direction="direction"
 		testId="tx-incoming-card"
 	>
 		<template #badge>
 			<Icon name="square-check" size="12" :color="STATUS_ICON_FILL.green" data-testid="activity-status-icon" />
 		</template>
 
-		<template #title-trailing>
-			<span :class="$style.title_sep" data-testid="tx-incoming-kind-sep">·</span>
-			<span :class="$style.chip" data-testid="tx-incoming-kind-chip">{{ receivedLabel }}</span>
-		</template>
-
 		<template #secondary>
+			<span v-if="direction" :class="$style.direction" data-testid="tx-incoming-kind-chip">{{ direction.label }}</span>
 			<span v-if="hashSlice" data-testid="activity-incoming-hash" :class="$style.hash">{{ hashSlice }}</span>
 		</template>
 	</TransactionCardLayout>
 </template>
 
 <style module>
-.title_sep {
-	composes: title_sep from "./activity-card.module.css";
-}
-
-.chip {
-	composes: type--label-section from global;
-	flex-shrink: 0;
-	white-space: nowrap;
-
-	color: var(--green, var(--nulo-accent));
-	background: var(--nulo-surface-low);
-	border: 1px solid var(--hairline-soft);
-	padding: 1px 4px;
+.direction {
+	composes: visually_hidden from "./activity-card.module.css";
 }
 
 .hash {

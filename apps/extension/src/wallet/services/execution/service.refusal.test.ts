@@ -8,7 +8,9 @@
 import { describe, expect, test, vi } from "vitest"
 import {
 	AuthRegistryRefusalError,
+	DefaultEntrypointMultiCallError,
 	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
 	JobCancelledError,
 	ScopeViolationError,
 } from "@nulo/extension-messaging/errors"
@@ -50,6 +52,8 @@ describe("a refusal an estimate or preview meets is the request's", () => {
 		["estimate", "registry", new AuthRegistryRefusalError(REGISTRY)],
 		["preview", "call binding", new ScopeViolationError("Scope violation: call name does not match selector's function")],
 		["preview", "default-entrypoint public call", new DefaultEntrypointPublicCallError()],
+		["preview", "default-entrypoint utility call", new DefaultEntrypointUtilityCallError()],
+		["preview", "default-entrypoint several calls", new DefaultEntrypointMultiCallError()],
 	] as const)(
 		"the %s that meets a %s refusal records it, and every later attempt answers it without running",
 		async (first, _, refusal) => {

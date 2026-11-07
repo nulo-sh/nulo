@@ -604,9 +604,8 @@ export const NARROW_ACCEPTED: readonly { testid: string; why: string }[] = [
 	{ testid: "account-address-text", why: "leaves with the account's name, as above; Receive shows and copies the whole address" },
 	{
 		testid: "activity-title-sep",
-		why: "a row's chips wrapped under its title leave their separator left of the row's clip, as wrapTrailing rows do",
+		why: "a row's chips wrapped under its title below 359 px leave their separator left of the row's clip",
 	},
-	{ testid: "tx-incoming-kind-sep", why: "a receipt's kind chip wrapped under its title leaves its separator left of the row's clip" },
 	{ testid: "identity-sep", why: "a dApp window's network goes under its account below 359 px, with no separator between them" },
 ]
 

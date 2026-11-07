@@ -442,9 +442,11 @@ which fails on a family that is neither sealed nor reviewed:
 - Records that name accounts only while their work runs: a profile deletion's
   tombstone (addresses, token and network ids), the network-reset journal
   (accounts and the probed endpoint) and an account-integrity block.
-- The popup's `nulo:ui:*` preferences: per-profile Get Started flags and how
-  the last restore ended. A pin or fee-pick map an earlier build stored is
-  plaintext until its profile's next unlock seals it in place, and the
+- The popup's `nulo:ui:*` preferences: per-profile Get Started flags, how
+  the last restore ended, and the last minor version the device was told
+  about (`nulo:ui:whatsNewSeen`, device-wide). A pin or fee-pick map an
+  earlier build stored is plaintext until its profile's next unlock seals it
+  in place, and the
   selected account an earlier build stored (`nulo:ui:activeAccount`, an
   address) until a profile holding that account claims it or a selection
   overwrites it.

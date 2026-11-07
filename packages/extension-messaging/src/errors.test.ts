@@ -11,13 +11,16 @@ import {
 	CapabilityNotGrantedError,
 	CLIENT_DISCONNECTED_MESSAGE,
 	ContractAssertionError,
+	DefaultEntrypointMultiCallError,
 	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
 	ContractNotRegisteredError,
 	ContractNotFoundError,
 	DuplicateInitializationError,
 	InvalidPasswordError,
 	InvalidWalletArgumentsError,
 	isClientDisconnectRejection,
+	isDefaultEntrypointRefusal,
 	isReceiverGoneRejection,
 	RECEIVER_GONE_MESSAGE,
 	JobCancelledError,
@@ -253,6 +256,20 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			name: "DefaultEntrypointPublicCallError",
 			code: "DEFAULT_ENTRYPOINT_PUBLIC_CALL",
 			rebuild: { kind: "constant", message: "DefaultEntrypoint only supports private functions" },
+		},
+		{
+			ctor: DefaultEntrypointUtilityCallError,
+			make: () => new DefaultEntrypointUtilityCallError(),
+			name: "DefaultEntrypointUtilityCallError",
+			code: "DEFAULT_ENTRYPOINT_UTILITY_CALL",
+			rebuild: { kind: "constant", message: "DefaultEntrypoint only supports private functions" },
+		},
+		{
+			ctor: DefaultEntrypointMultiCallError,
+			make: () => new DefaultEntrypointMultiCallError(),
+			name: "DefaultEntrypointMultiCallError",
+			code: "DEFAULT_ENTRYPOINT_MULTI_CALL",
+			rebuild: { kind: "constant", message: "DefaultEntrypoint requires exactly 1 call" },
 		},
 		{
 			ctor: ContractNotRegisteredError,
@@ -588,10 +605,15 @@ describe("remoteErrorFromResponseContent", () => {
 		expect((popup as ContractAssertionError).details).toStrictEqual({ assertion: "Balance too low", frames })
 	})
 
-	test("DefaultEntrypointPublicCallError keeps its class and constant message across two hops", () => {
-		const popup = hop(hop(new DefaultEntrypointPublicCallError()))
-		expect(popup).toBeInstanceOf(DefaultEntrypointPublicCallError)
-		expect(popup.message).toBe("DefaultEntrypoint only supports private functions")
+	test.each([
+		["DefaultEntrypointPublicCallError", DefaultEntrypointPublicCallError, "DefaultEntrypoint only supports private functions"],
+		["DefaultEntrypointUtilityCallError", DefaultEntrypointUtilityCallError, "DefaultEntrypoint only supports private functions"],
+		["DefaultEntrypointMultiCallError", DefaultEntrypointMultiCallError, "DefaultEntrypoint requires exactly 1 call"],
+	] as const)("%s keeps its class, its refusal base and its constant message across two hops", (_, ctor, message) => {
+		const popup = hop(hop(new ctor()))
+		expect(popup.constructor).toBe(ctor)
+		expect(isDefaultEntrypointRefusal(popup)).toBe(true)
+		expect(popup.message).toBe(message)
 	})
 
 	test("a hostile CONTRACT_ASSERTION payload rebuilds bounded", () => {

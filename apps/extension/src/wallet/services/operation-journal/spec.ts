@@ -96,8 +96,8 @@ export interface JournalMetadata {
 	contractAddress?: string
 	/**
 	 * `TransferType` enum value for `kind: "transfer"` records. Lets the
-	 * in-flight `TransactionAwaitingCard` render the same Private/Public
-	 * direction chip the settled card shows via `formatTransferType()`.
+	 * in-flight and failed cards name the transfer's Private/Public
+	 * direction, via `formatTransferType()`.
 	 * Undefined for non-transfer kinds AND for legacy records persisted
 	 * before this field existed — gate consumers on `=== undefined` because
 	 * `TransferType.Private === 0` (a truthy check would silently drop the

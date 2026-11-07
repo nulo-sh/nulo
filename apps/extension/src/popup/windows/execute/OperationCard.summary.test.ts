@@ -670,4 +670,17 @@ describe("OperationCard — what leaves the account opens the fee section", () =
 		expect(rows(raised)).toEqual([["1 authorization", "25 USDC"]])
 		raised.unmount()
 	})
+
+	test("on an app-paid send, the account's own authorization the app carries counts as one; another account's naming this account's tokens does not", async () => {
+		const { decodedAuthwits } = await decodeFixture()
+		const { op, decodedCalls } = request([exit])
+		const appPaid = { ...op, exec: { ...op.exec, feePayer: VAULT } }
+		// As the estimate lists a carried record of the sender's: named as given by the sending account.
+		const carried: DiscoveredAuthwit = { ...AUTHWITS[0]!, onBehalfOf: MAIN }
+		const forged: DiscoveredAuthwit = { ...CONSUMED, caller: HUB, args: [MAIN, ...CONSUMED.args.slice(1)], messageHash: field(0xf0f0n) }
+		decodedAuthwits.set(forged.messageHash, await decodeAuthwit(forged))
+		const w = await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([carried, forged]) }, appPaid)
+		expect(rows(w)).toEqual([["1 authorization", "25 USDC"]])
+		expect(rows(await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([forged]) }, appPaid))).toEqual([])
+	})
 })
