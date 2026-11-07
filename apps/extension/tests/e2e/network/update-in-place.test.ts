@@ -493,6 +493,10 @@ async function populatePending(
 		baselineUpdatedAt: baseline,
 		timeoutMs: 180_000,
 	})
+	// The release keeps an account's gas balances for minutes and reads them again on a Send mount,
+	// so the app window's fee row sees the funding only after one.
+	await openSend(page)
+	await selectFeeMethod(page, sandboxFeeMethod(release))
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)
