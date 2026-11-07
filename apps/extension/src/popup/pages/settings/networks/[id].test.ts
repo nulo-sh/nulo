@@ -577,11 +577,13 @@ describe("Settings › Network detail — the endpoint order", () => {
 		})
 	})
 
-	test("a write that landed is not reported failed when the re-read after it fails", async () => {
+	test("a write that landed is neither reported failed nor shown undone when the re-read after it fails", async () => {
 		getNetworks.mockRejectedValue(new Error("port closed"))
+		reorderEndpoints.mockResolvedValueOnce(stored(["m2", "m1", "m3"]))
 		const wrapper = await mountThree()
 		await move(wrapper, ["m2", "m1", "m3"])
 		expect(openToast.mock.calls).toEqual([[{ kind: "success", label: "Primary endpoint updated" }]])
+		expect(shown(wrapper)).toEqual(["m2", "m1", "m3"])
 	})
 
 	test("a row that was answering, or a move among the fallbacks, carries no line", async () => {

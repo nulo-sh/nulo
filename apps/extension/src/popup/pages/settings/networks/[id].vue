@@ -176,13 +176,16 @@ let firstMove = 0
  *  refused one re-reads the row, which another window may have changed meanwhile. A re-read that
  *  fails after a write landed does not make the write a failure. */
 async function writeOrder(id, ids, firstChanged) {
+	let written
 	try {
-		await managers.network.reorderEndpoints(id, ids)
+		written = await managers.network.reorderEndpoints(id, ids)
 	} catch {
 		await refreshNetworks().catch(() => {})
 		openToast({ kind: "error", label: firstChanged ? "Failed to update primary endpoint" : "Failed to update the endpoint order" })
 		return false
 	}
+	// The written row stands in until the re-read lands, so a failed re-read never shows the old order.
+	if (written?.id === id) appStore.networks = appStore.networks.map((n) => (n.id === id ? written : n))
 	await refreshNetworks().catch(() => {})
 	if (firstChanged) openToast({ kind: "success", label: "Primary endpoint updated" })
 	return true

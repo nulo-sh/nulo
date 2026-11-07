@@ -742,6 +742,7 @@
     "retryReplacedRows": true,
     "returnToPanel": true,
     "rollbackCreatedProfile": true,
+    "routeOrder": true,
     "rowDescriptionFor": true,
     "rowOnToken": true,
     "rulerWidth": true,

@@ -44,6 +44,8 @@ const handles = new Map()
 let refocus = null
 /** A press began on a handle: the click that ends it, wherever it lands, is not a tap. */
 let handlePressed = false
+/** The handle a pointer drag holds the capture on. */
+let draggedHandle = null
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 const titleOf = (endpoint) => endpoint.label || endpoint.rpcUrl
@@ -63,7 +65,18 @@ const say = (text) => {
 const sayPlace = (prefix) => say(`${prefix}, position ${lift.to + 1} of ${ids.value.length}.`)
 
 function reset() {
+	document.removeEventListener("keydown", onDragKey, true)
+	draggedHandle = null
 	Object.assign(lift, { id: null, by: null, from: 0, to: 0, startY: 0, dy: 0, heights: [], pointerId: null })
+}
+
+/** A pointer drag leaves focus where it was, so its Escape is taken wherever it lands. Chrome closes
+ *  the toolbar popup on an Escape the page leaves unhandled. */
+function onDragKey(e) {
+	if (e.key !== "Escape" || lift.by !== "pointer") return
+	e.preventDefault()
+	draggedHandle?.releasePointerCapture?.(lift.pointerId)
+	cancel()
 }
 
 function measure(el) {
@@ -108,10 +121,10 @@ function onPointerDown(endpoint, e) {
 	if (!movable.value || e.button !== 0 || lift.id !== null) return
 	e.preventDefault()
 	handlePressed = true
-	// Focused, so an Escape during the drag reaches the handle's own listener.
-	e.currentTarget.focus({ preventScroll: true })
 	e.currentTarget.setPointerCapture?.(e.pointerId)
 	begin(endpoint, "pointer", e.currentTarget)
+	draggedHandle = e.currentTarget
+	document.addEventListener("keydown", onDragKey, true)
 	lift.startY = e.clientY
 	lift.pointerId = e.pointerId
 }
@@ -173,8 +186,10 @@ function onHandleBlur(endpoint, e) {
 	if (e.relatedTarget) refocus = null
 }
 
-/** A press anywhere but a handle ends the handle's claim on the next click. */
+/** A press anywhere ends a keyboard move's claim on focus, and, off a handle, a handle's claim on
+ *  the next click. */
 function onAnyPointerDown(e) {
+	refocus = null
 	if (!e.target?.closest?.('[data-testid="endpoint-drag-handle"]')) handlePressed = false
 }
 

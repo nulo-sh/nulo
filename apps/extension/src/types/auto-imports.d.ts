@@ -479,6 +479,7 @@ declare global {
   const retryReplacedRows: typeof import('../composables/full-backup-restore').retryReplacedRows
   const returnToPanel: typeof import('../utils/own-window').returnToPanel
   const rollbackCreatedProfile: typeof import('../composables/full-backup-restore').rollbackCreatedProfile
+  const routeOrder: typeof import('../utils/endpoint-order').routeOrder
   const rowDescriptionFor: typeof import('../utils/presto-ui-state').rowDescriptionFor
   const rowOnToken: typeof import('../utils/activity-rows').rowOnToken
   const rulerWidth: typeof import('../utils/hero-ruler').rulerWidth
@@ -1441,6 +1442,7 @@ declare module 'vue' {
     readonly retryReplacedRows: UnwrapRef<typeof import('../composables/full-backup-restore')['retryReplacedRows']>
     readonly returnToPanel: UnwrapRef<typeof import('../utils/own-window')['returnToPanel']>
     readonly rollbackCreatedProfile: UnwrapRef<typeof import('../composables/full-backup-restore')['rollbackCreatedProfile']>
+    readonly routeOrder: UnwrapRef<typeof import('../utils/endpoint-order')['routeOrder']>
     readonly rowDescriptionFor: UnwrapRef<typeof import('../utils/presto-ui-state')['rowDescriptionFor']>
     readonly rowOnToken: UnwrapRef<typeof import('../utils/activity-rows')['rowOnToken']>
     readonly rulerWidth: UnwrapRef<typeof import('../utils/hero-ruler')['rulerWidth']>

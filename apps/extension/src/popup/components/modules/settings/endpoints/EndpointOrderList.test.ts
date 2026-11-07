@@ -218,14 +218,14 @@ describe("EndpointOrderList — the pointer drag", () => {
 		expect(reorders(w)).toEqual([])
 	})
 
-	test("the pointer is captured and the handle focused at the lift, so an Escape reaches it", async () => {
+	test("the pointer is captured at the lift, and focus stays where it was", async () => {
 		const capture = vi.fn()
 		HTMLElement.prototype.setPointerCapture = capture
 		try {
 			const w = mountList()
 			await press(w, 1, 200)
 			expect(capture).toHaveBeenCalledWith(7)
-			expect(document.activeElement).toBe(handle(w, 1).element)
+			expect(document.activeElement).toBe(document.body)
 		} finally {
 			delete (HTMLElement.prototype as { setPointerCapture?: unknown }).setPointerCapture
 		}
@@ -236,10 +236,13 @@ describe("EndpointOrderList — the pointer drag", () => {
 		await press(w, 2, 300)
 		await move(w, 2, 300 - 2 * ROW_HEIGHT)
 		const pressed = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
-		document.activeElement?.dispatchEvent(pressed)
+		document.body.dispatchEvent(pressed)
 		await w.vm.$nextTick()
 		expect(pressed.defaultPrevented).toBe(true)
 		expect(numbers(w)).toEqual(["1", "2", "3"])
+		const after = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+		document.body.dispatchEvent(after)
+		expect(after.defaultPrevented, "an Escape with nothing lifted is left to the page").toBe(false)
 		await pointer(w, 2, "pointerup", { pointerId: 7 })
 		rows(w)[2]!.element.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
 		expect(reorders(w)).toEqual([])
@@ -367,6 +370,20 @@ describe("EndpointOrderList — the keyboard", () => {
 		await key(w, 2, "ArrowUp")
 		await key(w, 2, "ArrowUp")
 		expect(rows(w)[2]!.attributes("style")).toContain("translateY(-180px)")
+	})
+
+	test("a pointer press after a keyboard move ends its claim on focus", async () => {
+		const w = mountList()
+		const target = rows(w)[2]!.get("[data-row-target]")
+		;(target.element as HTMLElement).focus()
+		await target.trigger("click")
+		const reorder = (ids: string[]) => w.setProps({ endpoints: ids.map((id) => [A, B, C].find((e) => e.id === id)) })
+		await reorder([C.id, A.id, B.id])
+		;(document.activeElement as HTMLElement | null)?.blur()
+		rows(w)[2]!.element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }))
+		await reorder([B.id, C.id, A.id])
+		await w.vm.$nextTick()
+		expect(document.activeElement).toBe(document.body)
 	})
 
 	test("Enter on a row moves it first and keeps focus on it once the list re-renders", async () => {
