@@ -12,7 +12,7 @@
 
 Arc 5 builds them (plan Phase 10).
 
-**OA-4, 2026-11-07:** on decision page 121 as P121-07, open; arc 4 shipped A (nothing on Home).
+**OA-4, 2026-11-07:** on decision page 121 as P121-07, open as #1755; arc 4 shipped A (nothing on Home). **OA-9** is open as #1756; arc 5 ships A.
 
 Nine asks. Arcs 1 and 2 touch no surface and wait on none. Arc 3 needs OA-1, OA-2 and OA-8; arc 4 needs OA-3 and OA-4; arc 5 needs OA-5, OA-6 and OA-7 and `rpc-proxy-1`'s Worker. "Ships now" is what an arc builds if the ask is still open when it reaches it; an arc that changes a surface stops for the answer instead (§ UI changes need explicit owner sign-off).
 

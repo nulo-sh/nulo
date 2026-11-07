@@ -277,7 +277,7 @@ dates are the day the promote publishes them, so until then they read `«FILL: e
       destination of the node's requests
 - [ ] Before Terms 1.2.3 is published, the owner reads Terms § 2 ("go directly to the configured
       node") and § 7.5 (supporting services) against the relay; neither changed with it
-      (`implementations-plan/archive/rpc-fallback-1/OWNER-ASKS.md`, OA-9)
+      (#1756; `implementations-plan/archive/rpc-fallback-1/OWNER-ASKS.md`, OA-9)
 
 **Due at the release that publishes website notice 1.1:** the notice drops the email at store
 launch and says replies reach hello@nulo.sh. It is dated for the promote that publishes it, 5

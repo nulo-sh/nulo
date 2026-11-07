@@ -1,7 +1,7 @@
 ---
 plan: rpc-fallback-1
 tier: mega-deep (the orchestrator's spawn; above the common brief's `mid`)
-status: approved (Codex round 5: approve); arcs 1 to 3 and tests1 merged (#1664, #1669, #1687, #1738); arc 4 building on OA-3 = P117-11 A; arc 5 waits on OA-5 to OA-7 and rpc-proxy-1
+status: completed (arcs 1 to 4 and tests1 merged as #1664, #1669, #1687, #1741 and #1738; arc 5 carries this close-out)
 issues: "#1624 (spec); context #1607 #1609"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 3b845ef02 (#1622, lane rpc-proxy-1 arc 1, merged); research 
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-07.
+- **Status:** arcs 1 to 4 and tests1 merged (#1664, #1669, #1687, #1741, #1738). Arc 5 is one ready PR against `dev`, off `dev` and not stacked, that carries this close-out; its merge closes the plan.
+- **Shipped:** arc 1, the routed node: typed transport failures, admission in order, failover to the next endpoint, the return after two passing probes a hold-down apart, the floor and the pins. Arc 2, the fault relay and the sandbox suite. Arc 3, the offscreen and background routes, the send path pinned to its endpoint, privacy § 5.1 and Terms § 7.1 (OA-1, OA-2, OA-8). Tests1, failover chaos, a pending send across the update and an edit mid-proof (P118-04 A). Arc 4, the endpoints list's order, status and drag to reorder (OA-3 = P117-11 A). Arc 5, Nulo's relay second on each default network: new-profile seeds, the `relay-endpoint` unlock conversion for a row whose primary is still the seeded default (OA-5 D), the SeedOffers `relay` field (storage stamp 6, additive, with its pin and golden), the label "Nulo" (OA-6), privacy 1.3 with § 5.12 and Terms 1.2.3 (OA-7 A), bounded reads that start return probes, and #1740's log-capacity fixture.
+- **Review loop:** the plan took five Codex rounds to approve. Arcs 2, 3 and 5 ended at approve and arc 4 at approve with changes; arc 1 and tests1 reached the three-round cap at revise (one major, one P2), and the cross-arc passes after each ended at approve. Arc 5's cross-arc pass ended at approve with text changes, made. Every arc had an Opus leg. Details under Audit verdicts.
+- **Known limits:** #1736, #1737, #1744, #1745, #1746, #1747, #1748, #1749, #1750, #1751, #1752, #1753; limit 11 on #1698, the same cause.
+- **Open items:** #1754 (a bounded status probe gives a hanging primary the whole budget: a timeout change, the owner's), #1755 (OA-4, P121-07: Home while a backup endpoint serves), #1756 (OA-9: Terms §§ 2 and 7.5 and privacy § 5.1 against the relay); `BEFORE-LAUNCH.md` § 4, "Due at the release that publishes privacy 1.3 and Terms 1.2.3".
+- **Dropped or superseded:** the three-strike client eviction (#1687 replaced it with the route's health); the stacked close-out layer (arc 4 had merged, so arc 5 carries it); the bulk offer pre-write in `convertRows` (the entry takes each offer itself).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # rpc-fallback-1: a network with several endpoints fails over to the next and returns to its primary
 
