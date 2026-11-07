@@ -72,4 +72,14 @@ describe("traceAnswers", () => {
 		expect(handler.sendResponse).toHaveBeenCalledTimes(1)
 		expect(handler.terminateSession).not.toHaveBeenCalled()
 	})
+
+	test("a send the transport refuses is not reported as answered", async () => {
+		const bound = session()
+		const handler = handlerOver(new Map([["s1", bound]]))
+		handler.sendResponse.mockRejectedValueOnce(new Error("port closed"))
+		const onAnswer = vi.fn()
+		const live = traceAnswers(bindLiveSession(handler, bound), "1a2b3c4d", onAnswer)
+		await expect(live.respond({ messageId: "m1", walletId: "nulo", error: SCOPE_VIOLATION_ENVELOPE })).rejects.toThrow("port closed")
+		expect(onAnswer).not.toHaveBeenCalled()
+	})
 })

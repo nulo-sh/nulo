@@ -148,6 +148,19 @@ describe("RequestLog", () => {
 		expect(log.snapshot().map((c) => c.walletTraceId)).toEqual(Array.from({ length: 50 }, (_, n) => traceId(n)))
 	})
 
+	test("with 50 open windows captured, a send named by its row takes the oldest window's place", () => {
+		const log = store()
+		for (let n = 0; n < 50; n++) {
+			log.begin(traceId(n), meta("createAuthWit"))
+			log.alias(traceId(n), { interactionId: journalId(n) })
+		}
+		log.begin(traceId(200), meta("sendTx"))
+		log.alias(traceId(200), { journalId: journalId(200) })
+		expect(log.snapshot()).toHaveLength(50)
+		expect(log.get(traceId(0))).toBeUndefined()
+		expect(log.find({ journalId: journalId(200) })).toBe(traceId(200))
+	})
+
 	test("a second interaction id replaces the first, which then finds nothing, even after the capture is gone", () => {
 		const log = store()
 		log.begin(traceId(1), meta("createAuthWit"))
@@ -221,6 +234,32 @@ describe("RequestLog", () => {
 		expect(restored.snapshot().map((c) => c.walletTraceId)).toEqual([traceId(0)])
 		expect(restored.find({ journalId: journalId(0) })).toBe(traceId(0))
 		expect(restored.get(traceId(0))?.bytes).toBe(good.bytes)
+	})
+
+	test("a restored capture near the bound stays within it when its terminal entries arrive", () => {
+		const log = store()
+		fillAliased(log, 1)
+		const [saved] = log.snapshot()
+		const wide = { at: 1, context: "sw", source: "x", level: 1, text: "a".repeat(3_900) }
+		const restored = store()
+		restored.restore([{ ...saved, lines: Array(16).fill(wide), bytes: 0 }])
+		expect(restored.has(traceId(0))).toBe(true)
+		restored.journalEvent(row(journalId(0), "failed", { terminalAt: 30, error: { kind: "app_assertion", message: "€".repeat(2_000) } }))
+		restored.end(traceId(0), { envelope: { ...failed, message: "€".repeat(2_000) } })
+		expect(serialized(restored, traceId(0))).toBeLessThanOrEqual(L.bytes)
+	})
+
+	test("restore keeps every saved capture beside live sends a row has not named yet", () => {
+		const log = store()
+		fillAliased(log, 50)
+		const restored = store()
+		restored.begin(traceId(300), meta("sendTx"))
+		restored.begin(traceId(301), meta("sendTx"))
+		restored.restore(log.snapshot())
+		expect(restored.snapshot()).toHaveLength(52)
+		restored.end(traceId(300), { envelope: failed })
+		restored.end(traceId(301), { envelope: failed })
+		expect(restored.snapshot().map((c) => c.walletTraceId)).toEqual(Array.from({ length: 50 }, (_, n) => traceId(n)))
 	})
 
 	test("clear empties the store, and an event for a cleared capture creates nothing", () => {

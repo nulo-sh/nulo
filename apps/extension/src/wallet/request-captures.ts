@@ -1,4 +1,3 @@
-/** Feeds each dApp request's capture from the task tree and the operation journal. */
 import type { ServiceCollection } from "./base"
 import type { RequestLog, RequestStage } from "./logger/request-log"
 import { OperationJournalService } from "./services/operation-journal/service"

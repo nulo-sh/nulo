@@ -69,7 +69,7 @@ export const REQUEST_LOG_LIMITS = {
 	hostChars: 255,
 } as const
 
-/** The two methods that can earn a journal alias, after `begin`: a capacity eviction never takes one. */
+/** The two methods that can earn a journal alias, after `begin`: until a row names one, no eviction takes it. */
 const SEND_CANDIDATES: ReadonlySet<string> = new Set(["sendTx", "grantPublicAuthwit"])
 
 const utf8 = new TextEncoder()
@@ -83,6 +83,8 @@ function cap(text: string, max: number): string {
 }
 
 const clean = (text: string, max: number): string => cap(scrubReportText(text), max)
+
+const isHeld = (capture: RequestCapture): boolean => !capture.journalId && SEND_CANDIDATES.has(capture.method)
 
 /** What the incremental accounting would hold for `capture`, and never less. */
 function accountedBytes(capture: RequestCapture): number {
@@ -138,7 +140,6 @@ export class RequestLog {
 		return this.captures.has(walletTraceId)
 	}
 
-	/** Opens the request's capture while developer mode is on; a full store makes room by `makeRoom`'s rule. */
 	public begin(walletTraceId: string, meta: { method: string; originHost: string; chainId: number }): void {
 		if (!this.capturing() || this.captures.has(walletTraceId) || !this.makeRoom(meta.method)) return
 		this.captures.set(walletTraceId, {
@@ -194,8 +195,9 @@ export class RequestLog {
 		capture.journalStage = stage
 		const terminal = record.terminalAt !== null
 		if (terminal && record.error) {
-			capture.journalError = clean(record.error.message, REQUEST_LOG_LIMITS.journalErrorChars)
-			capture.bytes += sizeOf(capture.journalError)
+			const journalError = clean(record.error.message, REQUEST_LOG_LIMITS.journalErrorChars)
+			if (this.fits(capture, journalError, true)) capture.journalError = journalError
+			else capture.dropped += 1
 		}
 		const start = record.terminalAt ?? record.updatedAt
 		this.addStage(capture, { kind: "journal", stage: `journal ${stage}`, start, outcome: record.error?.kind }, terminal)
@@ -237,8 +239,9 @@ export class RequestLog {
 			return
 		}
 		if (answer !== "dropped" && answer.envelope) {
-			capture.envelope = envelopeOf(answer.envelope)
-			capture.bytes += sizeOf(capture.envelope)
+			const envelope = envelopeOf(answer.envelope)
+			if (this.fits(capture, envelope, true)) capture.envelope = envelope
+			else capture.dropped += 1
 		}
 		const request = { kind: "request" as const, stage: `request ${capture.method}`, start: capture.startedAt, end: capture.endedAt }
 		this.addStage(capture, { ...request, outcome: outcomeOf(answer) }, true)
@@ -268,19 +271,17 @@ export class RequestLog {
 			return capture.bytes <= REQUEST_LOG_LIMITS.bytes ? [capture] : []
 		})
 		this.clear()
-		for (const capture of [...valid, ...live].slice(-REQUEST_LOG_LIMITS.captures)) {
+		// Held sends keep their own overflow room, so they never push a restored capture out.
+		const held = live.filter(isHeld)
+		const kept = [...valid, ...live.filter((capture) => !isHeld(capture))].slice(-REQUEST_LOG_LIMITS.captures)
+		for (const capture of [...kept, ...held]) {
 			this.captures.set(capture.walletTraceId, capture)
 			if (capture.journalId) this.aliases.set(keyOf({ journalId: capture.journalId }), capture.walletTraceId)
 			if (capture.interactionId) this.aliases.set(keyOf({ interactionId: capture.interactionId }), capture.walletTraceId)
 		}
 	}
 
-	/**
-	 * Room for one more capture. The oldest capture with no alias that is not a send candidate goes
-	 * first; with none, a send candidate is held past the cap and any other request is not captured.
-	 * A held send evicts only once a journal row names it (`settle`), so neither a run of ordinary
-	 * calls nor a burst of sends refused before any row displaces a kept capture.
-	 */
+	/** An unnamed send takes overflow room and evicts only once named (`settle`), so no burst of refusals displaces a kept send. */
 	private makeRoom(method: string): boolean {
 		if (this.captures.size < REQUEST_LOG_LIMITS.captures) return true
 		const victim = this.oldestOrdinary()
@@ -291,14 +292,21 @@ export class RequestLog {
 		return SEND_CANDIDATES.has(method) && this.captures.size < REQUEST_LOG_LIMITS.captures + REQUEST_LOG_LIMITS.heldSends
 	}
 
-	/** A held send just named by a journal row takes a place: the oldest ordinary, else the oldest named capture, goes. */
 	private settle(walletTraceId: string): void {
-		const held = () => [...this.captures.values()].filter((c) => !c.journalId && SEND_CANDIDATES.has(c.method)).length
+		const held = () => [...this.captures.values()].filter(isHeld).length
 		while (this.captures.size - held() > REQUEST_LOG_LIMITS.captures) {
-			const victim = this.oldestOrdinary() ?? this.oldestNamed(walletTraceId)
+			const victim = this.oldestOrdinary() ?? this.oldestUnnamed() ?? this.oldestNamed(walletTraceId)
 			if (victim === undefined) return
 			this.remove(victim)
 		}
+	}
+
+	/** A capture an open window names but no journal row does. */
+	private oldestUnnamed(): string | undefined {
+		for (const capture of this.captures.values()) {
+			if (!capture.journalId && !isHeld(capture)) return capture.walletTraceId
+		}
+		return undefined
 	}
 
 	private oldestNamed(except: string): string | undefined {
@@ -343,7 +351,10 @@ export class RequestLog {
 		}
 		if (entry.kind === "journal" || entry.kind === "prove") {
 			const previous = capture.stages.findLast((s) => s.kind === entry.kind)
-			if (previous && previous.end === undefined) previous.end = Math.max(previous.start, entry.start)
+			if (previous && previous.end === undefined) {
+				previous.end = Math.max(previous.start, entry.start)
+				capture.bytes += sizeOf({ end: previous.end }) - 2
+			}
 		}
 		capture.stages.push(entry)
 		this.changed()

@@ -1,4 +1,3 @@
-/** The text file one dApp request downloads as: a header, the timeline, the log lines, the envelope. */
 import { getLogLevelName } from "./format"
 import type { RequestCapture, RequestStage } from "./request-log"
 import { scrubReportText } from "./utils"
