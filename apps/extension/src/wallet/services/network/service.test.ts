@@ -1705,6 +1705,40 @@ describe("NetworkService — Mainnet, the default this build adds", () => {
 			expect((await h.service.getNetworkArrival())?.id).toBe(extra!.id)
 		})
 
+		test("sends nothing to any node: not the open that adds it, its route, or Stay; the active network's first read does", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			const sent: string[] = []
+			const createNode = h.factory.createNode.bind(h.factory)
+			vi.spyOn(h.factory, "createNode").mockImplementation((rpcUrl) => {
+				const node = createNode(rpcUrl)
+				return new Proxy(node, {
+					get(target, prop) {
+						const value = Reflect.get(target, prop)
+						if (typeof value !== "function") return value
+						return (...args: unknown[]) => {
+							sent.push(`${rpcUrl} ${String(prop)}`)
+							return value(...args)
+						}
+					},
+				})
+			})
+
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+			expect((await h.service.getNetworkArrival())?.id).toBe(extra!.id)
+			await h.service.getNodeFor(extra!)
+			await h.service.answerNetworkArrival(extra!.id)
+			expect(sent).toEqual([])
+
+			const active = (await h.service.getActiveNetwork())!
+			const activeUrl = findPrimaryEndpoint(active)!.rpcUrl
+			expect(active.kind).toBe("testnet")
+			h.factory.setOverrides(activeUrl, { getBlockNumber: vi.fn().mockResolvedValue(7) as unknown as AztecNode["getBlockNumber"] })
+			await (await h.service.getNode(active.chainId)).getBlockNumber()
+			expect(sent).toEqual([`${activeUrl} getBlockNumber`])
+		})
+
 		test("a new profile and a restored one announce nothing", async () => {
 			const h = setupServiceWithStorage({})
 			await h.service.getOrInitNetworks()

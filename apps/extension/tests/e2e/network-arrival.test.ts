@@ -10,7 +10,8 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS, MAINNET_L1_CHAIN_ID, MAINNET_ROLLUP_VERSION } from "@/utils/chain-ids"
-import { interceptRpc, isFirefox, setViewport, stopBackground } from "./fixtures/browser"
+import { closePxeHost, interceptRpc, isFirefox, openScratchPage, pxeHostState, setViewport, stopBackground } from "./fixtures/browser"
+import { pollUntil } from "./fixtures/poll"
 import { MAINNET_NODE_HOST } from "./fixtures/egress-guard"
 import { waitForSelectedAccount } from "./fixtures/accounts"
 import { clickByTestId, type ExtensionContext, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
@@ -66,13 +67,24 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		await waitForHash(page, "#/popup/general", 30_000)
 		const { profileId } = await seedNetworkArrival(page)
 		// A profile made before Mainnet has no Mainnet work in flight; this one started there, as a new
-		// profile does, so the background restarts before the count's baseline.
+		// profile does, so the PXE host and the background restart before the count's baseline, as an
+		// update restarts them. Chrome's offscreen document outlives the background and would run the
+		// Mainnet builds it holds into the stop, while the launch's interceptions are let go. The
+		// registration's first tip read asked for the host, so one is open to close.
 		await page.close()
+		const scratch = await openScratchPage(extension.browser, extension.extensionId)
+		await pollUntil(
+			() => pxeHostState(scratch),
+			({ count }) => count > 0,
+			{ label: "the PXE host", timeoutMs: 30_000, intervalMs: 100 },
+		)
+		await closePxeHost(scratch)
+		await scratch.close()
 		await stopBackground(extension)
+		const mainnetBefore = mainnetRequests(extension)
 		page = await openPopup(extension)
 		await unlockAfterBackgroundDeath(page)
 		await reloadWithLegalState(page, "stale")
-		const mainnetBefore = mainnetRequests(extension)
 		await traceSurfaces(page)
 
 		await waitForSheet(page, "changed")
