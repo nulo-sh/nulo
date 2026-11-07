@@ -388,8 +388,8 @@ export class TxRequestBuilder {
 	/**
 	 * Parse + validate the single NO_FROM call (`refuseNoFromCallCount` held the count): bind the
 	 * dApp-supplied name to the selector's real ABI function, and derive the function type from the
-	 * ABI — never trust call.name/type. The NO_FROM path resolved no artifact, so a dApp could name
-	 * a benign function while running a different selector.
+	 * ABI — never trust call.name/type: a dApp could name a benign function while running a
+	 * different selector.
 	 */
 	private async resolveNoFromCall(
 		op: AztecSendTxOperation,
