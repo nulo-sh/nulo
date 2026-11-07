@@ -30,6 +30,7 @@ import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { TaskService, type WrappedTask, ExecuteOperationContent } from "@/wallet/services/task/service"
 import type { ILogger } from "@/wallet/logger"
+import { type RequestLog, traceTag } from "@/wallet/logger/request-log"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { type CancelOrFailResult, classifyOperationCatch } from "./rpc-cancel"
@@ -287,6 +288,8 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		 *  Aztec sandbox. (Rollout: extract an `ExecutionPxePort` interface to
 		 *  drop the test-side cast — deferred.) */
 		private readonly pxeClientFactory: (logger: ILogger) => PxeServiceClient = DEFAULT_PXE_CLIENT_FACTORY,
+		/** Each dApp request's capture; absent, nothing is recorded. */
+		private readonly requests?: RequestLog,
 	) {
 		super(EXECUTION_SERVICE_NAME, logger)
 	}
@@ -317,6 +320,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		this.authwit = new AuthwitDiscoverer(this.logger)
 		this.coordinator = new ExecutionCoordinator(this.taskService, this.logger, this.legal, this.proofGate, {
 			updateProvingBackend: (journalId, backend) => this.operationJournal.updateProvingBackend(journalId, backend),
+			provePhase: (journalId, phase, backend) => this.requests?.provePhase(journalId, phase, backend),
 		})
 		this.pxeService.onProvePhase.add((event) => void this.coordinator.onProvePhase(event))
 		this.wireGasBalancesAndEstimateCaches()
@@ -764,7 +768,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		flowKey?: string,
 	): Promise<TransferFeeEstimate | TransferFeeQueued> {
 		await this.ensureInitialized()
-		return this.refusalBound(interactionId, () =>
+		return this.refusalBound(interactionId, "fee estimate", () =>
 			this.withStoredRequestSlot(interactionId, index, feeSettings, estimateToken, flowKey ?? "op", (operation, signal) =>
 				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
 			),
@@ -778,7 +782,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		flowKey?: string,
 	): Promise<OperationAuthwitPreview | TransferFeeQueued> {
 		await this.ensureInitialized()
-		return this.refusalBound(interactionId, () =>
+		return this.refusalBound(interactionId, "authwit preview", () =>
 			this.withStoredRequestSlot(interactionId, index, undefined, estimateToken, flowKey ?? "op", (operation, signal) =>
 				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
 			),
@@ -820,13 +824,21 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 	/** A refusal is the request's, not one attempt's: the attempt that met it may be one the window
 	 *  already dropped as superseded, so every attempt answers the first one recorded, the window
 	 *  and the dApp's answer agreeing on it. */
-	private async refusalBound<T>(interactionId: string, run: () => Promise<T>): Promise<T> {
+	private async refusalBound<T>(interactionId: string, label: string, run: () => Promise<T>): Promise<T> {
 		const source = this.interactionOperations()
 		const recorded = source.refusalOf(interactionId)
 		if (recorded) throw recorded
+		const walletTraceId = this.requests?.find({ interactionId })
+		const start = Date.now()
+		const record = (outcome: string) => {
+			if (walletTraceId) this.requests?.stage(walletTraceId, { kind: "estimate", stage: label, start, end: Date.now(), outcome })
+		}
 		try {
-			return await run()
+			const result = await run()
+			record((result as { queued?: unknown }).queued === true ? "queued" : "ok")
+			return result
 		} catch (error) {
+			record(`failed: ${getErrorMessage(error)}`)
 			if (!(error instanceof ScopeViolationError || isDefaultEntrypointRefusal(error))) throw error
 			source.recordRefusal(interactionId, error)
 			throw source.refusalOf(interactionId) ?? error
@@ -939,11 +951,14 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 				continue
 			}
 
-			const traceId = crypto.randomUUID().slice(0, 8)
-			this.logDebug(`[${traceId}] executeOperations: starting ${operation.kind}`)
+			const tag = traceTag(hooks?.walletTraceId)
+			const traceId = hooks?.walletTraceId ?? crypto.randomUUID().slice(0, 8)
+			this.logDebug(`[${traceId}] executeOperations: starting ${operation.kind}`, ...tag)
 
 			const content = new ExecuteOperationContent(operation.kind, this.planner.extractPrimaryMethod(operation))
-			const operationTask = parentTask ? parentTask.startSubtask(content) : this.taskService.startNewTask(content, undefined, origin)
+			const operationTask = parentTask
+				? parentTask.startSubtask(content)
+				: this.taskService.startNewTask(content, undefined, origin, hooks?.walletTraceId)
 
 			try {
 				const result = await this.dispatchOperation(
@@ -957,11 +972,11 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 				// A broadcast stands even when a profile switch has cleared its task meanwhile.
 				if (BROADCASTING_OPERATION_KINDS.has(operation.kind)) operationTask.completeIfTracked()
 				else operationTask.complete()
-				this.logDebug(`[${traceId}] executeOperations: ${operation.kind} completed`)
+				this.logDebug(`[${traceId}] executeOperations: ${operation.kind} completed`, ...tag)
 				results.push({ status: "ok", result })
 			} catch (error) {
 				const classified = classifyOperationCatch(error, operationTask, getErrorMessage)
-				this.logOperationOutcome(traceId, operation.kind, classified)
+				this.logOperationOutcome(traceId, operation.kind, classified, tag)
 				results.push(classified)
 			}
 		}
@@ -970,21 +985,21 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 
 	/** Level by reach: a Terms, scope, argument, capacity or unsupported-method refusal is expected,
 	 *  and a connected dApp can repeat any of them, so at `error` they would fill every user's log buffer. */
-	private logOperationOutcome(traceId: string, kind: Operation["kind"], classified: CancelOrFailResult): void {
+	private logOperationOutcome(traceId: string, kind: Operation["kind"], classified: CancelOrFailResult, tag: unknown[]): void {
 		if (classified.status === "cancelled") {
-			this.logInfo(`[${traceId}] executeOperations: ${kind} cancelled by user`)
+			this.logInfo(`[${traceId}] executeOperations: ${kind} cancelled by user`, ...tag)
 		} else if (classified.code === TermsAcceptanceRequiredError.CODE) {
-			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: terms not accepted`)
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: terms not accepted`, ...tag)
 		} else if (classified.code === ScopeViolationError.CODE) {
-			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: outside its grant`)
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: outside its grant`, ...tag)
 		} else if (classified.code === InvalidWalletArgumentsError.CODE) {
-			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: invalid arguments`)
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: invalid arguments`, ...tag)
 		} else if (classified.code === TooManyPendingError.CODE) {
-			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: too many pending`)
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: too many pending`, ...tag)
 		} else if (classified.code === UnsupportedMethodError.CODE) {
-			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: unsupported method`)
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: unsupported method`, ...tag)
 		} else {
-			this.logError(`[${traceId}] executeOperations: ${kind} failed:`, classified.error)
+			this.logError(`[${traceId}] executeOperations: ${kind} failed:`, classified.error, ...tag)
 		}
 	}
 

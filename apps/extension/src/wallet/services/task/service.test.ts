@@ -167,6 +167,15 @@ describe("Task Tree Implementation", () => {
 			expect(subtask.origin).toBe(origin)
 			expect(subtask.task.origin).toBe(origin)
 		})
+
+		test("a subtask takes its root's dApp request id, a root without one leaves it unset", async () => {
+			const { service } = await createTestSetup()
+			const traced = service.startNewTask(new StepContent("Root"), undefined, undefined, "1a2b3c4d")
+			const step = traced.startSubtask(new StepContent("Step")).startSubtask(new StepContent("Inner"))
+			const plain = service.startNewTask(new StepContent("Other")).startSubtask(new StepContent("Step"))
+			expect(step.task.walletTraceId).toBe("1a2b3c4d")
+			expect(plain.task.walletTraceId).toBeUndefined()
+		})
 	})
 
 	describe("Task Status Management", () => {

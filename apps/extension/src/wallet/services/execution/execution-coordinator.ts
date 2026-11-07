@@ -73,6 +73,8 @@ export const ProvePhaseEventSchema = z.object({
 /** The journal seam the coordinator writes backend evidence through. */
 export interface ProveEvidenceSink {
 	updateProvingBackend(journalId: string, backend: ProveBackend): Promise<unknown>
+	/** Every accepted phase of the row's proof, the ones that leave its backend unchanged included. */
+	provePhase?(journalId: string, phase: string, backend: ProveBackend | undefined): void
 }
 
 interface ProveAttempt {
@@ -223,6 +225,7 @@ export class ExecutionCoordinator {
 		attempt.lastSeq = event.seq
 		const at = Date.now()
 		this.lastProveOutcome = { at, phase: event.phase, backend: event.backend }
+		this.evidence?.provePhase?.(attempt.journalId, event.phase, event.backend)
 		if (event.phase === "denied") {
 			this.denialGeneration += 1
 			this.lastDenial = { at }

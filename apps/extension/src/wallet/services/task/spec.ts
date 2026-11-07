@@ -26,6 +26,8 @@ export type Task = {
 	finishedAt?: number
 	result?: ITaskResult
 	error?: string
+	/** The dApp request this task runs for; a subtask takes its parent's. */
+	walletTraceId?: string
 }
 
 export enum ContentKind {

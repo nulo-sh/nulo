@@ -72,6 +72,7 @@ import { createScopeRegistrar } from "./services/pxe/scope-registrar"
 import { asMasterSecretBytes, derivePxeStoreKey, type ImportedKeysDek, zeroize } from "@nulo/wallet-crypto"
 import { RecoveryModeError } from "@nulo/extension-messaging/errors"
 import { TaskService } from "./services/task/service"
+import { wireRequestCaptures } from "./request-captures"
 import { TokenService } from "./services/token/service"
 import { TokenBalanceService } from "./services/token-balance/service"
 import { TransactionService } from "./services/transaction/service"
@@ -303,7 +304,8 @@ async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection,
 	// Wallet-sdk protocol handler (discovery, key exchange, encrypted channel).
 	// Still reaches for chrome.runtime.onMessage internally; will be
 	// port-migrated alongside its own refactor.
-	initWalletSdkHandler(services, logger, { windows, clock })
+	initWalletSdkHandler(services, logger, { windows, clock, requests: logger.requests })
+	wireRequestCaptures(services, logger.requests)
 
 	writeInitialLiveness(browserApi, clock, logger)
 	// Heartbeat — keeps the MV3 service worker alive long enough for cross-SW
@@ -526,7 +528,7 @@ function registerServices(
 	const windowManager = new WindowManager(windows, clock, logger)
 	services.add(new ContactService(logger, browserApi, restoreGate))
 	services.add(new UiPreferenceService(logger, browserApi))
-	services.add(new DappInteractionService(logger, windowManager))
+	services.add(new DappInteractionService(logger, windowManager, logger.requests))
 	services.add(new DappSessionService(logger, browserApi))
 	// E2E_PROVERLESS injects a chrome.storage-backed proof gate into the SW
 	// ExecutionCoordinator (the SW has chrome.storage; the offscreen does not).
@@ -537,7 +539,7 @@ function registerServices(
 	// tried and REJECTED — rollup emits a code-split chunk for it that SHIPS
 	// even when the call is dead, leaking the gate into prod dist. The
 	// _build-extension.yml negative grep is the enforcement that caught that.
-	services.add(new ExecutionService(logger, E2E_PROVERLESS ? new ChromeStorageProofGate() : undefined))
+	services.add(new ExecutionService(logger, E2E_PROVERLESS ? new ChromeStorageProofGate() : undefined, undefined, logger.requests))
 	services.add(new FpcService(logger, browserApi))
 	services.add(new LogViewerService(logger))
 	services.add(new LoggerService(logger))

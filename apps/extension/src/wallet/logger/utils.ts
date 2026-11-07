@@ -1,6 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { type ILogger, type Log, LogLevel } from "."
 import { scrubUrls } from "@/utils/scrub-urls"
+import { stripWireControl } from "@/wallet/services/dapp-session/capability-meta"
 
 export class DummyLogger implements ILogger {
 	log() {}
@@ -301,6 +302,47 @@ export const scrubHex32 = (value: unknown): unknown => {
 		return Object.fromEntries(Object.entries(value).map(([key, entry]) => [scrubHex32(key), scrubHex32(entry)]))
 	}
 	return value
+}
+
+/** CR, LF and the Unicode line and paragraph separators, each shown as a visible `\n`. */
+const LINE_BREAKS = /\r\n|[\r\n\u2028\u2029]/g
+/** `trimAddress` and `maskedAddress` output: both ends of a value with the middle elided. */
+const SHORTENED_HEX = /0x[0-9a-f]{4,}(?:\.{2,3}|\u2026)[0-9a-f]{4,}/gi
+/** A `0x` value cut into chunks by spaces or escaped line breaks, as a formatter or a wrap leaves it. */
+const CHUNKED_HEX = /0x[0-9a-f]{4,}(?:(?:\s|\\+n)+[0-9a-f]{4,})+/gi
+const LONG_HEX = /0x[0-9a-f]{9,}/gi
+const UNPREFIXED_HEX = /[0-9a-f]{32,}/gi
+/** Fewer hex digits than this across the chunks is an ordinary value beside a word, not a hash. */
+const CHUNKED_MIN_DIGITS = 16
+
+/**
+ * The text pass every string of a request report takes. Line breaks become visible first and the
+ * invisible and control characters go next, so no stripped character can join two halves of a value
+ * after the hex rules ran. Kept: function selectors (`0x` + 8) and 8- and 16-hex ids.
+ */
+export function scrubReportText(text: string): string {
+	const visible = stripWireControl(text.replace(LINE_BREAKS, "\\n"))
+	return scrubUrls(visible)
+		.replace(SHORTENED_HEX, "[hex]")
+		.replace(CHUNKED_HEX, (run) => (run.replace(/0x|[^0-9a-f]/gi, "").length >= CHUNKED_MIN_DIGITS ? "[hex]" : run))
+		.replace(LONG_HEX, "[hex]")
+		.replace(UNPREFIXED_HEX, "[hex]")
+}
+
+const MAX_REPORT_DATA_DEPTH = 8
+
+/**
+ * The structural pass over a line's trimmed data, before it is rendered: every string and key takes
+ * the text pass while raw, since rendering escapes a tab or a line break into text no later pass can
+ * strip, and a field-sized bigint is blanked. Its output holds no bigint.
+ */
+export function scrubReportData(value: unknown, depth = 0): unknown {
+	if (typeof value === "string") return scrubReportText(value)
+	if (typeof value === "bigint") return value >= FIELD_SIZED ? "[32 bytes]" : value.toString()
+	if (value === null || typeof value !== "object") return value
+	if (depth >= MAX_REPORT_DATA_DEPTH) return "[depth]"
+	if (Array.isArray(value)) return value.map((entry) => scrubReportData(entry, depth + 1))
+	return Object.fromEntries(Object.entries(value).map(([key, entry]) => [scrubReportText(key), scrubReportData(entry, depth + 1)]))
 }
 
 export const print = (log: Log) => {
