@@ -207,6 +207,16 @@ export const glyphs = {
 	},
 	"no-signal": { s: ["M 6 18v-3", "M 10 18v-6", "M 14 18v-4", "M 14 10v-1", "M 18 14v-8", "M 3 3l18 18"] },
 	swap: { s: ["M 21 17l-18 0", "M 6 10l-3 -3l3 -3", "M 3 7l18 0", "M 18 20l3 -3l-3 -3"] },
+	grip: {
+		s: [
+			"M 8 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0",
+			"M 8 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0",
+			"M 8 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0",
+			"M 14 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0",
+			"M 14 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0",
+			"M 14 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0",
+		],
+	},
 } as const satisfies Record<string, Glyph>
 
 export type GlyphName = keyof typeof glyphs
