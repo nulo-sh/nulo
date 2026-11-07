@@ -179,14 +179,29 @@ test.skipIf(!aztecConfig)(
 			const killedAt = Date.now()
 			await b.kill()
 			await waitForTones(page, { [idB]: "red", [idA]: "green" }, "B red, A green", nudgeAndRead)
-			const events = await routerHolds(trail, idA, "the account engine's router holds A ready")
-			expect(
-				events.some(
-					(e) =>
-						e.source === "pxe" && e.event === "state" && e.endpointId === idB && e.state === "down" && e.timestamp >= killedAt,
-				),
-				"the account engine's router took B down after the kill",
-			).toBe(true)
+			await routerHolds(trail, idA, "the account engine's router holds A ready")
+			const name = (id?: string) => (id === idA ? "A" : id === idB ? "B" : id)
+			await pollUntil(
+				trail,
+				(events) =>
+					events.some(
+						(e) =>
+							e.source === "pxe" &&
+							e.event === "state" &&
+							e.endpointId === idB &&
+							e.state === "down" &&
+							e.timestamp >= killedAt,
+					),
+				{
+					label: "the account engine's router took B down after the kill",
+					timeoutMs: 30_000,
+					intervalMs: 1_000,
+					show: (events) =>
+						events
+							.map((e) => `${e.source} ${e.timestamp - killedAt} ms ${e.event} ${name(e.endpointId)} ${e.state ?? ""}`)
+							.join("; "),
+				},
+			)
 			expect(await opened(), "the page was never reloaded").toBe(1)
 			await bringToFront(page)
 			await shotSend(page, "endpoint-order-primary-killed", "endpoint-add-btn")
