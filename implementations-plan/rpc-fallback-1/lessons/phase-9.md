@@ -65,3 +65,11 @@ The owner's P117-11 A, decision page 117, signed 2026-11-06 18:13 UTC with no no
   - The P3: a key pressed on a control focused before a pointer drag could open a sheet over the drag. The sheet's Escape then also cancelled the drag.
   - Fixed after the round: a popup opening (`popupStore.len` rising) ends a pointer drag where it started. The test was seen red without it.
   - The three-round cap ended the loop, so this fix has no Codex verdict.
+
+## Final gates
+
+- 2026-11-07, on `d52aad84e`: lint, typecheck:all, audit:vue and test:all green; Chrome `endpoint-order` 99 s (86 s after the fixture) and `rpc-edit-mid-proof` 62 s, green at retry 0.
+- 2026-11-07, Firefox `endpoint-order`, retry 0: red at "the account engine's router took B down after the kill", after the page had shown B red and A green and the router's log showed A holding the role.
+  - **Cause.** Below Debug the logger's ring keeps 1000 lines, and `routeEvents` only refuses a partial log at 2000 lines, so it never refuses one at the default level. Firefox's dots follow the router more slowly, the wait for them sent more nudges, and B's `down` line left the stored log before the single read after it.
+  - **Fix.** The test reads the router's events at every nudge and keeps what it has seen, so a line is read within a poll of being stored. The fixture's guard is #1740: the other network tests that read the log once after a long run are still exposed.
+- 2026-11-07, on `4183c9b36` (the fix): lint, typecheck:all, audit:vue (149 s) and test:all (150 s) green; Chrome `endpoint-order` 99 s and `rpc-edit-mid-proof` 63 s, Firefox `endpoint-order` 199 s (182 s after the fixture), all at retry 0. The frames in `screenshots/` are this run's.
