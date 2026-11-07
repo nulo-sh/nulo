@@ -296,7 +296,7 @@ async function restartAndUnlock(extension: ExtensionContext, page: Page): Promis
 // proven by the network service's tests; what only this run shows is the seed and the unlock path
 // the shipped build takes, every writer of the real boot included. No request reaches the relay:
 // the launch's guard holds both hosts. Runtime: estimated 20 s on Chrome and 35 s on Firefox;
-// measured 13 s and 24 s.
+// measured 13 s and 22 s.
 test("Nulo's relay is each default network's second endpoint, and is given once to an earlier profile", async ({
 	registeredExtensionPerTest: extension,
 }) => {

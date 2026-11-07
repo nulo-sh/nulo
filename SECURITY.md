@@ -343,15 +343,15 @@ which makes the endpoint trust boundary explicit.
 
 Once a transaction is submitted, the receipt poller is **pinned to the URL
 the tx was sent on** (`Tx.submittedEndpointUrl`). Even if the user swaps the
-chain's primary endpoint mid-flight, the poll keeps targeting the original
-URL via `getNodeForUrl`. This avoids:
+chain's primary endpoint mid-flight or the route fails over, the poll keeps
+targeting the original URL via `getSingleAttemptNodeForUrl`. This avoids:
 
 - a freshly-promoted endpoint reporting "tx not found" because it hasn't
   seen the bundle yet, and
 - a malicious endpoint shadowing receipts for txs it never received.
 
-Three reported failures rebuild that URL's client; the poll never moves to
-another endpoint.
+Each poll is one attempt on that URL's client, and a failed one waits for the
+next tick; the poll never moves to another endpoint.
 
 ### What endpoints can still do
 

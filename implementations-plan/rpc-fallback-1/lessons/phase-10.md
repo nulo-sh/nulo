@@ -70,3 +70,12 @@ The owner's answers on decision page 112, signed 2026-11-06 14:18 UTC: OA-5 D, O
   - **Bounded reads and the return.** `route.singleAttempt` neither ticked the health nor started return probes. A background route served only by bounded reads (the tip gate, storage reads during a send) therefore stayed on its fallback, now the relay for every default network. It now does both before its attempt, as `call` does. The test drives the return through bounded reads alone and was seen red without the fix.
   - **A hanging primary and the status probe.** `probeNodeStatus` gives the first endpoint the whole remaining budget. On a cold route a primary that never answers spends all 5 s, and the relay is never asked. Filed as #1754, not fixed: sharing the budget changes how long the wallet waits on an endpoint, which the approval boundary reserves.
   - **The text.** § 5.12 also says the relay serves until the primary wins the role back. SECURITY lost its three-strike eviction bullet, which #1687 removed from the code. ARCHITECTURE's floor follows the active endpoint down as well as up.
+
+## The cross-arc review, round 2
+
+- **Codex `01a1b51b` resumed: approve with changes**, no P1.
+  - The bounded-read fix closed finding 1: probes are unawaited and deduplicated, pins keep their one attempt, and a route with no active endpoint keeps its admission order.
+  - #1754 stays open; deferring it was accepted, since sharing the budget is a timeout change.
+  - Two sentences still described the old behaviour. The relay README's quota line said the relay is asked only while the endpoint before it fails. SECURITY's pending-poll paragraph named `getNodeForUrl` and a three-strike rebuild that #1687 removed. Both now say what the code does: the poll reads through `getSingleAttemptNodeForUrl`, one attempt per tick.
+- The cross-arc loop closed at round 2. Its remaining changes were text only, so no round 3.
+
