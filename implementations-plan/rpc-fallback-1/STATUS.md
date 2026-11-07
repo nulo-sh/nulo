@@ -35,3 +35,4 @@
 - 2026-11-07: tests1 design audit: Codex 01a1b389 revise, then approve with changes (D40-D44); F4 a known limit
 - 2026-11-07: tests1 built, diff review Codex 01a1b3ba three rounds (revise, revise, revise with 1 P2 applied as given) and Opus approve with changes; known limits #1736, #1737
 - 2026-11-07: tests1 gates on 71ce00c46: lint, typecheck:all, test:all (156 s), routing 70, relay 13; test1 x3 seeds, test2 x3 from v1.2.0, test3 x3, E1 193 s, sandbox 8/8 300 s, all retry 0 green
+- 2026-11-07: arc 4 started on P117-11 A (OA-3); Phase 9 rewritten; design consult Codex 01a1b416 revise, D49-D59
