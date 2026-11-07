@@ -23,15 +23,30 @@ export type RelayFault =
 export interface RelayRule {
 	readonly fault: RelayFault
 	/** Bare method names (`getBlock`, not `aztec_getBlock`); a request matches when any of its
-	 *  entries calls one. Every request matches when absent. */
+	 *  entries calls one, or every entry with `entries: "every"`. Every request matches when absent. */
 	readonly methods?: readonly string[]
+	readonly entries?: "any" | "every"
 	/** A request matches only when its body contains this text, compared case-insensitively. */
 	readonly carrying?: string
+	/** How many matching requests the rule lets through to older rules and the upstream first. */
+	readonly after?: number
 	/** How many matching requests the rule takes before it retires; unlimited when absent. */
 	readonly times?: number
 }
 
+export interface RelayRuleHandle {
+	/** How many requests the rule has answered with its fault. */
+	taken(): number
+	/** The bodies of the requests it took, lower-cased, in order. */
+	bodies(): readonly string[]
+}
+
+type RelayReply = Extract<RelayFault, { kind: "reply" }>
+
 const errorBody = (code: number, message: string) => JSON.stringify({ jsonrpc: "2.0", id: null, error: { code, message } })
+
+/** How many submissions the relay received, a batch's entries counted one by one. */
+export const sendTxCount = (relay: RpcRelay): number => relay.methods().filter((m) => m.endsWith("_sendTx")).length
 
 /** The answers a failing endpoint gives, each classified by the node fetch as the kind it names. */
 export const RELAY_REPLIES = {
@@ -54,10 +69,11 @@ export interface RpcRelay {
 	arrivals(): readonly number[]
 	/** Requests a `hold` parks whose client still waits for the answer. */
 	held(): number
-	/** Forwards every parked request whose client still waits; resolves once each is answered. */
-	release(): Promise<void>
+	/** Forwards every parked request whose client still waits, or gives each `answer` instead;
+	 *  resolves once each is answered. */
+	release(answer?: RelayReply): Promise<void>
 	/** Adds a rule; the newest matching rule wins. */
-	fail(rule: RelayRule): void
+	fail(rule: RelayRule): RelayRuleHandle
 	/** Drops every rule; requests already held by a blackhole or a hold stay held. */
 	clear(): void
 	/** Answers a batch of more than `maxEntries` entries with `refusal` instead of forwarding it. */
@@ -105,8 +121,13 @@ function entriesOf(body: string): Entry[] | undefined {
 /** `body` is lower-cased. */
 function matches(rule: RelayRule, entries: readonly Entry[] | undefined, body: string): boolean {
 	const names = rule.methods
-	if (names && !entries?.some((e) => names.includes(bare(e.method)))) return false
+	const calls = (e: Entry) => names?.includes(bare(e.method)) === true
+	if (names && !(rule.entries === "every" ? entries?.length && entries.every(calls) : entries?.some(calls))) return false
 	return rule.carrying === undefined || body.includes(rule.carrying.toLowerCase())
+}
+
+function reply(res: ServerResponse, answer: RelayReply): void {
+	res.writeHead(answer.status, { "content-type": "application/json" }).end(answer.body)
 }
 
 async function readBody(req: IncomingMessage): Promise<string> {
@@ -143,7 +164,7 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 	const bodies: string[] = []
 	const arrivals: number[] = []
 	const parked = new Set<Parked>()
-	let rules: Array<RelayRule & { left: number }> = []
+	let rules: Array<RelayRule & { skip: number; left: number; took: string[] }> = []
 	let batchCap: { max: number; refusal: RelayFault } | undefined
 	let frozen: Map<string, unknown> | undefined
 	const sockets = new Set<Socket>()
@@ -153,7 +174,12 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 		for (let i = rules.length - 1; i >= 0; i--) {
 			const rule = rules[i]
 			if (!rule || rule.left <= 0 || !matches(rule, entries, body)) continue
+			if (rule.skip > 0) {
+				rule.skip--
+				continue
+			}
 			rule.left--
+			rule.took.push(body)
 			return rule.fault
 		}
 		return undefined
@@ -186,7 +212,7 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 			return
 		}
 		if (fault?.kind === "reply") {
-			res.writeHead(fault.status, { "content-type": "application/json" }).end(fault.body)
+			reply(res, fault)
 			return
 		}
 		if (fault?.kind === "delay") await new Promise((resolve) => setTimeout(resolve, fault.ms))
@@ -213,13 +239,16 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 		carried: (text) => bodies.filter((b) => b.includes(text.toLowerCase())).length,
 		arrivals: () => [...arrivals],
 		held: () => parked.size,
-		release: async () => {
+		release: async (answer) => {
 			const waiting = [...parked]
 			parked.clear()
-			await Promise.all(waiting.map((p) => forward(p.body, p.entries, p.res).catch(() => p.res.destroy())))
+			const settle = async (p: Parked) => (answer ? reply(p.res, answer) : forward(p.body, p.entries, p.res))
+			await Promise.all(waiting.map((p) => settle(p).catch(() => p.res.destroy())))
 		},
 		fail: (rule) => {
-			rules.push({ ...rule, left: rule.times ?? Number.POSITIVE_INFINITY })
+			const added = { ...rule, skip: rule.after ?? 0, left: rule.times ?? Number.POSITIVE_INFINITY, took: [] }
+			rules.push(added)
+			return { taken: () => added.took.length, bodies: () => [...added.took] }
 		},
 		clear: () => {
 			rules = []
