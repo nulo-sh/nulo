@@ -144,7 +144,8 @@ Tests (colocated, updated in place):
 Change map (paths under `apps/extension/src/`):
 - `components/composite/activity/TransactionCardLayout.vue`: `titleNamesToken` (default false) hides `amountSymbol`.
 - `popup/components/modules/activity/TransactionCard.vue`: `titleNamesToken` is the branch that titles the row by its symbol; a mint's title is its kind, so it keeps the symbol. `TransactionIncomingCard.vue`: always, its title is its token.
-- `utils/journal-state.ts`: `journalCardDirection(op)` = `transferDirection(op.transferType, sameFieldAddress(op.accountAddress, op.recipientAddress))` for a transfer, else null; `journalCardTitleNamesToken(op)`; `JournalTerminalCardProps` trades `transferTypeLabel` for `direction` and gains `titleNamesToken`; `journalCardTransferTypeLabel` retires.
+- `utils/tx-enrichment.ts`: `transferDirection(type, sender, recipient)` takes the two addresses, so the move rule (`sameFieldAddress`) lives once for the settled, journal and task rows.
+- `utils/journal-state.ts`: `journalCardDirection(op)` = `transferDirection(op.transferType, op.accountAddress, op.recipientAddress)` for a transfer, else null; `journalCardTitleNamesToken(op)`; `JournalTerminalCardProps` trades `transferTypeLabel` for `direction` and gains `titleNamesToken`; `journalCardTransferTypeLabel` retires.
 - `TransactionAwaitingCard.vue`, `TransactionTerminalCard.vue`: `direction` replaces `transferTypeLabel`; the chip goes; `#secondary` opens with the hidden words under `activity-direction-chip` (`directionWords`), outside the live status span.
 - `popup/components/modules/general/RecentActivityView.vue`, `popup/pages/activity.vue`: pass both; the orphan task card takes the task's type and two addresses the same way.
 - The stories follow their props.
