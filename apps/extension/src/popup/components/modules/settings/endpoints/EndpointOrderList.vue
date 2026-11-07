@@ -7,6 +7,9 @@
 /** Components */
 import EndpointStatusDot from "./EndpointStatusDot.vue"
 
+/** Store */
+import { usePopupStore } from "@/stores/popup.store"
+
 /** Utils */
 import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 import { moveId, placesWhileLifted, tapOrder } from "@/utils/endpoint-order"
@@ -26,6 +29,8 @@ const props = defineProps({
 	primaryId: { type: String, default: null },
 })
 const emit = defineEmits(["reorder", "edit", "remove"])
+
+const popupStore = usePopupStore()
 
 const hintId = useId()
 
@@ -232,6 +237,15 @@ watch(
 		if (el && (document.activeElement === null || document.activeElement === document.body)) el.focus()
 	},
 	{ flush: "post" },
+)
+
+/** A sheet opened over a pointer drag (a key pressed on a control focused before it) takes the keys
+ *  from it: the drag ends where it started, and the sheet's Escape is its own. */
+watch(
+	() => popupStore.len,
+	(open, was) => {
+		if (open > was && lift.by === "pointer") cancel()
+	},
 )
 
 watch(

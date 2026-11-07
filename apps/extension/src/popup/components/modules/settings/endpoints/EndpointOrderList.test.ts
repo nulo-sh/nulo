@@ -1,8 +1,10 @@
 import { Flex, RowAction, Text } from "@nulo/design"
+import { createTestingPinia } from "@pinia/testing"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
 import SettingItem from "@/components/ui/Settings/SettingItem.vue"
+import { usePopupStore } from "@/stores/popup.store"
 import type { RouteView } from "@/utils/endpoint-status"
 import EndpointOrderList from "./EndpointOrderList.vue"
 
@@ -23,6 +25,7 @@ function mountList(props: Record<string, unknown> = {}) {
 		attachTo: document.body,
 		props: { endpoints: [A, B, C], view: null, ...props },
 		global: {
+			plugins: [createTestingPinia({ createSpy: vi.fn })],
 			components: { Flex, Text, RowAction, SettingItem, ItemsContainer },
 			stubs: { Icon: { template: "<i />" }, Tooltip: { template: "<span><slot /></span>" } },
 		},
@@ -245,6 +248,20 @@ describe("EndpointOrderList — the pointer drag", () => {
 		expect(after.defaultPrevented, "an Escape with nothing lifted is left to the page").toBe(false)
 		await pointer(w, 2, "pointerup", { pointerId: 7 })
 		rows(w)[2]!.element.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+		expect(reorders(w)).toEqual([])
+	})
+
+	test("a sheet opening over a pointer drag ends it, and leaves the Escape to the sheet", async () => {
+		const w = mountList()
+		await press(w, 2, 300)
+		await move(w, 2, 300 - 2 * ROW_HEIGHT)
+		usePopupStore().popups = { edit_endpoint: { order: 0 } } as never
+		await w.vm.$nextTick()
+		expect(numbers(w)).toEqual(["1", "2", "3"])
+		const pressed = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+		document.body.dispatchEvent(pressed)
+		expect(pressed.defaultPrevented).toBe(false)
+		await pointer(w, 2, "pointerup", { pointerId: 7 })
 		expect(reorders(w)).toEqual([])
 	})
 
