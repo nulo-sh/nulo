@@ -1,7 +1,7 @@
 ---
 plan: discovery-allow-1
 tier: mid
-status: approved by the panel (final Codex pass approve); OA-1, OA-2 and OA-3 answered on page 119; arc 1 merged (#1722); arc 2 in build
+status: completed (arc 1 #1722; arc 2 carries this close-out)
 issues: none (decision pages 116, 117, 118)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 4d6bce025
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-07.
+- **Status:** arc 1 merged as #1722; arc 2 is one ready PR against `dev` (off `dev`, not stacked: D17) that carries this close-out; its merge closes the plan.
+- **Shipped:** arc 1, the connect window's explanation (P117-06 D) and the glossary's Discover and Connection check rows (P119-01 A). Arc 2, the sealed per-profile root `nulo:core:discoveryPolicy` (`DiscoveryPolicy`, only a sealed row counts, storage stamp 5 additive with three goldens and a pin); `DappSessionService`'s `getEverySite`, `setEverySite` and `allowsNewSite`, the refusal record in `refuseVerification`; the flow's no-window path with its token, its re-reads and the twin's read (D5, D18); the Settings → Connected Apps row (P116-07 B, P118-02 C) that follows the active profile (D19); the connect window's "Allow every site" (P117-07 A4) through the footer's new slot; privacy 1.2.10 § 5.7 (P119-02 A, undated, a `BEFORE-LAUNCH.md` entry); SECURITY.md, ARCHITECTURE.md and CLAUDE.md.
+- **Review loop:** arc 1, Codex approve twice and Opus approve. Arc 2, Codex rejected three rounds running (each a new interleaving, each fixed with a test the old code reds, or a stated limit) beside an Opus approve; then a fresh cross-arc Codex pass, conditional approve, fixed, then approve. Details under Audit verdicts.
+- **Gates at the head:** after merging `origin/dev` at `b23eb0d79`: lint, `typecheck:all`, `test:all`, `packages/legal` tests exit 0; network `connect-every-site`, `connect-check-window` and `connect-deny` at retry 0 on Chrome (10 s, 33 s, 65 s) and Firefox (17 s, 42 s, 69 s); smoke `settings-routes` on both.
+- **Known limits:** #1731 (a refused site after eviction or a failed write, a connection already in flight, a row whose rollback failed).
+- **Open items:** #1732 (OA-4, what a Connected Apps row names: an owner decision), #1733 (the older settings switches have no accessible name); `BEFORE-LAUNCH.md`, "Due at the release that publishes privacy 1.2.10". Open PR #1687 also claims privacy 1.2.10; whichever lands second renumbers (D16).
+- **Dropped or superseded:** the close-out as its own stacked layer (D17: arc 1 had merged, so arc 2 carries it); the arc 2 stamp 4 (`dev` took 4 first, re-cut as 5); the arc loops' prompts lacked the standard's two verbatim rules, which the cross-arc pass carried over the net diff.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # discovery-allow-1: the connect window says what Allow reveals; an opt-in "every site may see Nulo" switch
 
