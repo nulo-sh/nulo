@@ -3,10 +3,7 @@ import { ago, endpointStatus, movedFirstWarning, type RouteView } from "./endpoi
 
 const READ_AT = 10_000_000
 /** As the wire carries it: the stored 8-hex endpoint ids, the router's state names, `failure` absent until one counted. */
-const view = (
-	endpoints: RouteView["snapshot"] extends infer S ? NonNullable<S>["endpoints"] : never,
-	activeId: string | null,
-): RouteView => ({
+const view = (endpoints: NonNullable<RouteView["snapshot"]>["endpoints"], activeId: string | null): RouteView => ({
 	snapshot: { activeId, endpoints },
 	readAt: READ_AT,
 })

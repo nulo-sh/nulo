@@ -4,6 +4,10 @@ import { FieldWarning } from "@nulo/design"
 import { managers } from "@/utils/core"
 import { RPC_URL_MIN_LENGTH } from "@/utils/entity-rules"
 import { endpointErrorText } from "./endpoint-error-text"
+import { endpointStatus } from "@/utils/endpoint-status"
+
+/** Components */
+import EndpointStatusDot from "@/popup/components/modules/settings/endpoints/EndpointStatusDot.vue"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -24,6 +28,15 @@ const props = defineProps({
 
 const network = computed(() => appStore.networks.find((n) => n.id === cacheStore.endpointEditNetworkId))
 const endpoint = computed(() => network.value?.endpoints.find((e) => e.id === cacheStore.endpointEditId))
+
+/** When the sheet opened: its line says how long ago as of then, or of a later read, and never ticks. */
+const openedAt = ref(Date.now())
+const routeStatus = computed(() => {
+	const view = cacheStore.endpointRoute
+	const id = endpoint.value?.id
+	if (!id || !view || view.networkId !== network.value?.id) return endpointStatus(null, "")
+	return endpointStatus({ snapshot: view.snapshot, readAt: Math.max(view.readAt, openedAt.value) }, id)
+})
 
 const form = useFormState({
 	label: { initial: "" },
@@ -76,7 +89,10 @@ const handleSave = async () => {
 
 usePopupEntity(() => props.show, {
 	submit: handleSave,
-	onShow: fillFromEndpoint,
+	onShow: () => {
+		openedAt.value = Date.now()
+		fillFromEndpoint()
+	},
 })
 </script>
 
@@ -99,6 +115,16 @@ usePopupEntity(() => props.show, {
 				<Text v-if="network" color="tertiary"> · {{ network.name }}</Text>
 			</Text>
 		</template>
+
+		<Flex direction="column" gap="6" data-testid="endpoint-edit-status" :data-tone="routeStatus.tone">
+			<Flex align="center" gap="8">
+				<EndpointStatusDot :tone="routeStatus.tone" />
+				<Text variant="row-title" color="primary" data-testid="endpoint-edit-status-word">{{ routeStatus.word }}</Text>
+			</Flex>
+			<Text v-if="routeStatus.detail" variant="body" color="txt-danger" height="140" data-testid="endpoint-edit-status-detail">
+				{{ routeStatus.detail }}
+			</Text>
+		</Flex>
 
 		<Input
 			label="Label"

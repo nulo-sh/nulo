@@ -14,12 +14,18 @@ import { switchAndAnnounce } from "./switch-toast"
 import { sentenceName } from "@/utils/string"
 import * as staleCopy from "@/components/stale-network/copy"
 import { AccountType, DEFAULT_IMPORTED_ACCOUNT_NAME } from "@/wallet/services/account/client"
+import { endpointsInOrder, routeEndpoints } from "@/wallet/services/network/client"
+import { endpointStatus, movedFirstWarning } from "@/utils/endpoint-status"
+
+/** Components */
+import EndpointOrderList from "@/popup/components/modules/settings/endpoints/EndpointOrderList.vue"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfirm } from "@/composables/useConfirm"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
 import { exportsHeld } from "@/composables/useStaleNetwork"
+import { useRouteSnapshot } from "@/composables/useRouteSnapshot"
 const { openToast } = useToast()
 const { requestConfirm } = useConfirm()
 const { activate: activateNetwork } = useNetworkActivation({
@@ -27,6 +33,11 @@ const { activate: activateNetwork } = useNetworkActivation({
 	read: () => managers.network.getActiveNetwork(),
 })
 const switchSettled = inject(SWITCH_SETTLED_KEY)
+const {
+	view: routeView,
+	refresh: refreshRoute,
+	dispose: disposeRoute,
+} = useRouteSnapshot({ client: managers.network, getNetwork: () => network.value })
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -45,6 +56,25 @@ const networkId = computed(() => route.params.id)
 const network = computed(() => appStore.networks.find((n) => n.id === networkId.value))
 const isActive = computed(() => appStore.network?.id === networkId.value)
 const canDelete = computed(() => !isActive.value && appStore.networks.length > 1)
+
+/** The order a move asked for, shown until its write settles; one naming another set of endpoints
+ *  than the row's is ignored. */
+const pendingOrder = ref(null)
+const shownEndpoints = computed(() => {
+	const n = network.value
+	if (!n) return []
+	if (pendingOrder.value) {
+		try {
+			return endpointsInOrder(n, pendingOrder.value)
+		} catch {
+			// Another set of endpoints than the move's: the row's own order.
+		}
+	}
+	const byId = new Map(n.endpoints.map((e) => [e.id, e]))
+	return routeEndpoints(n).map((e) => byId.get(e.id))
+})
+/** `{ id, text }`: the row a move put first while it was not answering, for its warning line. */
+const movedFirst = ref(null)
 
 /** The hold a reset puts on network `id`, with the imported accounts deleting it would delete. A
  *  running reset's takeover covers this page, so only a paused one's view is read. */
@@ -136,16 +166,43 @@ const handleEditEndpoint = (endpoint) => {
 	popupStore.open("edit_endpoint")
 }
 
-const handleSetPrimary = async (endpoint) => {
-	if (!network.value) return
-	if (network.value.primaryEndpointId === endpoint.id) return
+/** Moves are written one at a time, in the order they were made. */
+let writes = Promise.resolve()
+let moves = 0
+
+/** Writes `ids` as the row's order. Only a move that changes the first row toasts a success; a
+ *  failed one re-reads the row, which another window may have changed meanwhile. */
+async function writeOrder(id, ids, firstChanged) {
 	try {
-		await managers.network.setPrimaryEndpoint(network.value.id, endpoint.id)
+		await managers.network.reorderEndpoints(id, ids)
 		await refreshNetworks()
-		openToast({ kind: "success", label: "Primary endpoint updated" })
+		if (firstChanged) openToast({ kind: "success", label: "Primary endpoint updated" })
+		return true
 	} catch {
-		openToast({ kind: "error", label: "Failed to update primary endpoint" })
+		await refreshNetworks().catch(() => {})
+		openToast({ kind: "error", label: firstChanged ? "Failed to update primary endpoint" : "Failed to update the endpoint order" })
+		return false
 	}
+}
+
+const handleReorder = (ids) => {
+	const target = network.value
+	if (!target || heldReset.value) return
+	const move = ++moves
+	const firstChanged = shownEndpoints.value[0]?.id !== ids[0]
+	// Judged on the dot before the move: the rebuilt route starts every endpoint unasked.
+	const before = routeView.value?.snapshot?.endpoints.find((e) => e.id === ids[0])?.state
+	const warning = firstChanged ? movedFirstWarning(before) : null
+	movedFirst.value = null
+	pendingOrder.value = ids
+	writes = writes
+		.then(() => writeOrder(target.id, ids, firstChanged))
+		.then((written) => {
+			if (written && warning && move === moves) movedFirst.value = { id: ids[0], text: warning }
+		})
+		.finally(() => {
+			if (move === moves) pendingOrder.value = null
+		})
 }
 
 const handleDeleteEndpoint = (endpoint) => {
@@ -234,12 +291,32 @@ watch(network, (n) => {
 // The router reuses this page across network ids; a hold read for one must never show on another.
 watch(networkId, () => {
 	heldReset.value = null
+	movedFirst.value = null
+	pendingOrder.value = null
 	void syncHeldReset()
+})
+
+// Every change to the row may be a change to its route, whose old answer is then cleared.
+watch(network, () => void refreshRoute(), { immediate: true })
+watch(
+	routeView,
+	(view) => {
+		cacheStore.endpointRoute = view
+	},
+	{ immediate: true },
+)
+
+// The warning is the move's: it goes once the row is no longer first or the router finds it answering.
+watch([() => shownEndpoints.value[0]?.id, routeView], ([first, view]) => {
+	const moved = movedFirst.value
+	if (moved && (first !== moved.id || endpointStatus(view, moved.id).tone === "green")) movedFirst.value = null
 })
 
 onBeforeUnmount(() => {
 	disposed = true
 	managers.networkReset.onStaleNetworkChanged.remove(syncHeldReset)
+	disposeRoute()
+	cacheStore.endpointRoute = null
 })
 </script>
 
@@ -286,42 +363,15 @@ onBeforeUnmount(() => {
 				<Icon name="warning" size="12" color="orange" aria-hidden="true" :class="$style.reason_icon" />
 				<Text variant="body" color="secondary" height="140">{{ staleCopy.endpointsHeld(network.name) }}</Text>
 			</Flex>
-			<ItemsContainer>
-				<!-- A bound onClick, not @click: SettingItem renders a row inert only with no click listener. -->
-				<SettingItem
-					v-for="endpoint in network.endpoints"
-					:key="endpoint.id"
-					:title="endpoint.label || endpoint.rpcUrl"
-					:description="endpoint.label ? endpoint.rpcUrl : undefined"
-					:icon="network.primaryEndpointId === endpoint.id ? 'square-check' : 'square'"
-					:iconFillColor="network.primaryEndpointId === endpoint.id ? 'primary' : 'tertiary'"
-					iconBgColor="transparent"
-					:onClick="heldReset ? undefined : () => handleSetPrimary(endpoint)"
-					data-testid="endpoint-row"
-					:data-endpoint-id="endpoint.id"
-				>
-					<template v-if="!heldReset" #right>
-						<Flex align="center" gap="8">
-							<Tooltip position="end" delay="350">
-								<RowAction label="Edit endpoint" data-testid="endpoint-edit-btn" @click="handleEditEndpoint(endpoint)">
-									<Icon name="edit" size="14" color="tertiary" />
-								</RowAction>
-								<template #content>Edit endpoint</template>
-							</Tooltip>
-							<Tooltip
-								position="end"
-								delay="350"
-								v-if="network.primaryEndpointId !== endpoint.id && network.endpoints.length > 1"
-							>
-								<RowAction label="Delete endpoint" data-testid="endpoint-delete-btn" @click="handleDeleteEndpoint(endpoint)">
-									<Icon name="close" size="14" color="tertiary" />
-								</RowAction>
-								<template #content>Delete endpoint</template>
-							</Tooltip>
-						</Flex>
-					</template>
-				</SettingItem>
-			</ItemsContainer>
+			<EndpointOrderList
+				:endpoints="shownEndpoints"
+				:view="routeView"
+				:held="!!heldReset"
+				:warning="movedFirst"
+				@reorder="handleReorder"
+				@edit="handleEditEndpoint"
+				@remove="handleDeleteEndpoint"
+			/>
 
 			<Button
 				@click="handleAddEndpoint"
