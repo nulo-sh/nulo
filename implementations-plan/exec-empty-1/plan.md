@@ -1,7 +1,7 @@
 ---
 plan: exec-empty-1
 tier: light
-status: approved by the panel (Codex round 2: approve); phase 1 in progress
+status: completed
 issues: "#1728"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 24d59880f
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-07.
+- **Status:** completed. Ships in the PR titled `fix(execute): refuse a no-account request with no call up front`, whose merge closes #1728 and this plan.
+- **Shipped:** P120-04 A. A `from: "NO_FROM"` request with no call is refused at the default entrypoint's first shape check with `DefaultEntrypointNoCallError`; it is recorded as the request's refusal, filed `wallet_refused`, answered with the wallet's constant, and the window shows the owner's two sentences with only Reject.
+- **Deviation:** a third pins fixture fed `calls: []` to reach the account lookup and got one call too (`lessons/phase-1.md`).
+- **Rejected:** the Opus diff review's one Low (keep a second count guard in `resolveNoFromCall`): it needs a second caller that does not exist.
+- **Lessons:** none promoted; nothing here generalizes beyond this change.
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` seed in Post-implementation; there was no `/loop` seed.
 
 # exec-empty-1: refuse a no-account request with no call, up front
 
@@ -117,3 +129,7 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 - Asks: none new; the reason's placement is recorded as the siblings' inherited card. Checked and holding: a missing, null, non-array or sparse `calls` fails the upstream schema; the private resolver has one caller; no sibling registration is missed.
 
 **Codex plan audit, round 2** (the same session, resumed): `approve`. All three folds present; no new material finding; the folds add no state, lifecycle, protocol, recovery policy or public contract; no owner ask.
+
+**Diff review, round 1** (Codex gpt-6.1-sol, high, fresh session, over 24d59880f..0f1f5ad6d): `approve`, one Low, demonstrated: `resolveNoFromCall`'s doc comment kept a sentence about behaviour the code no longer has. Folded in ed8ae66b7 (the why stays, the history goes).
+**Opus diff review** (beside round 1): `approve`, one Low, needs unsupported conditions: with the inner count check gone, a second caller that skipped `refuseNoFromCallCount` would take the first call silently. Rejected: one caller, which runs the check first, and the doc comment states the precondition. Checked and holding: only a NO_FROM empty request reaches the refusal; no site lists three siblings and misses the fourth; no test weakened; the copy is verbatim.
+**Diff review, round 2** (Codex, resumed): `approve`, no findings. The loop converged in two rounds.
