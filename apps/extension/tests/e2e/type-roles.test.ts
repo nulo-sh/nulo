@@ -1042,6 +1042,7 @@ test("Send with a recipient typed, the Settings hub, Display, a network, Manage 
 	await expectButtons(page, "contacts-new-btn")
 	await openAndSweep(page, "contacts-new-btn", "contact-address-input", "New contact", [["popup:new_contact", ""]])
 	await expectButtons(page, "new-contact-submit")
+	await closeByEscape(page, "contact-address-input")
 
 	// A host is the line that tells a site's own words from the wallet's: whole at every width.
 	await seedConnectedApps(page)
@@ -1049,6 +1050,7 @@ test("Send with a recipient typed, the Settings hub, Display, a network, Manage 
 	expect(await readLongHost(page)).toEqual({ text: LONG_APP.host, hidden: false })
 	await atWidth(page, NARROW_WIDTH, async () => {
 		expect(await readLongHost(page)).toEqual({ text: LONG_APP.host, hidden: false })
+		await shotSend(page, "connected-apps-hosts-240", "connected-app-row-host")
 	})
 	await shotSend(page, "connected-apps-hosts", "connected-app-row-host")
 	await page.close()
