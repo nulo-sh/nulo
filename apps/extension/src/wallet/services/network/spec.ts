@@ -316,8 +316,8 @@ export const NetworkMethodSchemas = {
 		result: NodeStatusSchema,
 	},
 	probeNodeStatus: {
-		// timeoutMs bounds ONE non-retrying attempt; clamped well under the
-		// popup→SW request ceiling so the probe can never outlive its caller.
+		// timeoutMs bounds the whole probe, one non-retrying attempt per endpoint; clamped well
+		// under the popup→SW request ceiling so the probe can never outlive its caller.
 		params: z.tuple([z.string().min(1), z.number().int().min(100).max(30_000)]),
 		result: NodeStatusSchema,
 	},
