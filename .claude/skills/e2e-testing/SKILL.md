@@ -185,8 +185,14 @@ runtime env var can never arm a build-time flag.
   `ownHosts`. A held node request means a target the interception does not cover dialed the node:
   on Chrome rerun with `NULO_E2E_INTERCEPT_LOG=1` and find it; never declare the host or loosen the check.
   The smoke setup refuses an unarmed dist outside artifact runs; artifact runs are guarded too.
-  Each seeded remote node (Mainnet, the default, and Testnet) is answered by its own loopback
-  stand-in with a terminal 400 (`fixtures/node-stub.ts`); a new profile starts on Mainnet, so a spec
+  Each seeded remote node (Mainnet, the default, and Testnet, each with Nulo's relay second) is
+  answered by its own loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`). With two
+  endpoints a route admits its first with one `[getNodeInfo, getChainTips]` batch before any call,
+  and moves to the relay's stand-in when it fails, so a spec that stubs a seeded node answers both
+  with the network's own identity (`helpers/rpc-stub.ts`'s `nodeInfoResult` and `chainTipsResult`):
+  one unanswered entry blackholes the whole batch, and a `null` fails it as surely. The call the spec
+  waits for then never leaves, or fails fast where it meant to hang.
+  A new profile starts on Mainnet, so a spec
   that needs the list's tokens, prices, the sponsor or Testnet's own accounts (the stale-network seeds
   move them) switches to Testnet first, and one that stages the active node intercepts
   `DEFAULT_NODE_ORIGIN`. The Testnet stand-in is armed in every launch but
@@ -487,6 +493,12 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   leaving `<Transition>` is visible while `isOpen` is already false. Gate on `data-dropdown-open`
   (open a menu through `openDropdown`, which clicks only a closed one), `data-toggle-active`,
   `data-restore-stage`, `data-boot-outcome`; add one if it is missing.
+- **A layout shift is a document offset when the page is scrolled.** A row dropped above an element
+  on a page scrolled to its bottom moves the content above it on screen. Scroll clamping keeps the
+  element's own viewport top, so `getBoundingClientRect().top` alone reads no shift. Compare
+  `top + document.scrollingElement.scrollTop` before and after, and prove the check with a mutation
+  that restores the shift (`onboarding-tab.test.ts`'s password create;
+  `implementations-plan/archive/p110-build-1/lessons/phase-6.md`).
 - **Freshness-gated balances.** An imported backup already carries the expected value. Capture
   `captureBalanceBaseline` first and require `updatedAt` newer AND the exact raw value AND the
   token-scoped render (`waitForFreshBalanceRow`, `waitForTokenCardAmount`); body-text scans
@@ -753,6 +765,9 @@ the pattern.
   builds it from the element's other attributes. To stop a theme flip's transitions before a quick shot, `finish()` each of
   `document.getAnimations()`; a looping one throws and is left alone. A popup's `document.body` can
   still be null when `waitForPopup` resolves: observe `document.documentElement`.
+- **History shows only the selected account's records.** `readJournalDetail` on another account's
+  send waits out its timeout on an empty page (`src/popup/pages/journal/journal-detail-scope.ts`):
+  switch to that account first (`switchAccountByAddress`), as `network/tx-sendTx-fields.test.ts` does.
 - **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a
   glyph's middle and about half a pixel right of it, and a drag of one single move leaves a bare
   caret: press a quarter in from a character's outer edge and move in steps
@@ -870,7 +885,10 @@ alarms, opens the dApp page (a content script injects without messaging), closes
 closes Chrome's offscreen document from a scratch page (`closePxeHost`; left open, its clients
 reconnected and woke a successor 50 to 350 ms after the kill, as measured) and closes the scratch
 page, so the click is provably the first wake event; it asserts `backgroundAlive(ext)` is false
-before clicking. Then
+before clicking. The same close is what clears in-flight PXE work: the offscreen document keeps
+running the operations it holds through a background kill, and their node reads land in the window
+where `stopBackground` lets the launch's interceptions go, reaching the egress guard
+(`network-arrival.test.ts`). Then
 gate on the strictly-newer heartbeat from an extension page (§2), and expect the popup's boot path
 (`popup/boot-session.ts`, `auth-guard.ts`): under strict security a restart drops the session, so
 `ensureUnlocked` with a budget sized to the bootstrap (120s on the prover-ON canary) is the

@@ -89,15 +89,16 @@ function releaseOpenSlot(dir: string, entry: { state: OpenState }): void {
 
 export interface OpenChainStoreOptions {
 	network: ChainCoordinates
-	/** The chain's rollup address — a redeploy (rollupVersion change) wipes THIS store only. */
-	rollupAddress: string | undefined
 	/** 32-byte per-profile key. COPIED before open (upstream transfers the buffer to its worker). */
 	storeKey: Uint8Array
 	log: Logger
 }
 
-/** Open (or create) the encrypted per-(profile, chain) store, with the upstream init mirrored. */
-export async function openChainStore({ network, rollupAddress, storeKey, log }: OpenChainStoreOptions): Promise<AztecSQLiteOPFSStore> {
+/**
+ * Open (or create) the encrypted per-(profile, chain) store. Its version stamp is the caller's:
+ * `readStoreStamp` before any node read, `initStoreVersionStamp` once the node has answered.
+ */
+export async function openChainStore({ network, storeKey, log }: OpenChainStoreOptions): Promise<AztecSQLiteOPFSStore> {
 	if (storeKey.length !== 32) {
 		throw new Error(`openChainStore: storeKey must be 32 bytes (got ${storeKey.length})`)
 	}
@@ -164,15 +165,6 @@ export async function openChainStore({ network, rollupAddress, storeKey, log }: 
 
 	// Normal resolution: this caller owns the store — free the dir for the next open.
 	releaseOpenSlot(dir, entry)
-	try {
-		// NOT single-flighted: `rollupAddress` is RPC-derived, so sharing this step
-		// across callers could recreate the stale-URL hazard the runtime-level dedup
-		// was removed to avoid (chain-runtime.ts).
-		await initStoreVersionStamp(store, rollupAddress, log)
-	} catch (err) {
-		await store.close().catch(() => {})
-		throw err
-	}
 	return store
 }
 
@@ -187,6 +179,18 @@ export class PxeStoreVersionMismatch extends Error {
 const UNPARSEABLE_STAMP = "stamp failed to parse"
 
 /**
+ * The rollup a store was stamped with, read before any node is asked: `undefined` on a fresh store
+ * or one stamped with no rollup. Refuses, as `initStoreVersionStamp` does, a stamp that does not
+ * parse or names another schema.
+ */
+export async function readStoreStamp(store: AztecSQLiteOPFSStore, log: Logger): Promise<string | undefined> {
+	const stored = await storedVersion(store, log)
+	if (!stored) return undefined
+	refuseOn(stored.schemaVersion !== PXE_DATA_SCHEMA_VERSION_PIN ? schemaMismatch(stored.schemaVersion) : undefined, log)
+	return stored.rollupAddress.isZero() ? undefined : stored.rollupAddress.toString()
+}
+
+/**
  * 5.0.1-aligned version guard for OUR injected store. Upstream 5.0.1 moved from wipe-on-mismatch to
  * REFUSE-and-preserve (`initStoreForRollupAndSchemaVersion` no longer clears), and the flip is right
  * here: the store holds user state whose backup is optional, and the rollupAddress input is node-derived (a lying RPC could wipe-loop). So
@@ -195,33 +199,44 @@ const UNPARSEABLE_STAMP = "stamp failed to parse"
  */
 export async function initStoreVersionStamp(store: AztecSQLiteOPFSStore, rollupAddress: string | undefined, log: Logger): Promise<void> {
 	const target = new DatabaseVersion(PXE_DATA_SCHEMA_VERSION_PIN, rollupAddress ? EthAddress.fromString(rollupAddress) : EthAddress.ZERO)
-	const dbVersion = store.openSingleton<string>("dbVersion")
-	const stored = await dbVersion.getAsync()
+	const stored = await storedVersion(store, log)
 	if (stored) {
-		let mismatch: string | undefined
-		let parseFailure: { cause: unknown } | undefined
-		try {
-			const storedVersion = DatabaseVersion.fromBuffer(Buffer.from(stored, "utf-8"))
-			const cmp = storedVersion.cmp(target)
-			if (cmp === undefined) {
-				mismatch = `rollup address changed (stored ${storedVersion.rollupAddress.toString()} != current ${target.rollupAddress.toString()})`
-			} else if (cmp !== 0) {
-				mismatch = `schema version changed (stored ${storedVersion.schemaVersion} != current ${PXE_DATA_SCHEMA_VERSION_PIN})`
-			}
-		} catch (err) {
-			parseFailure = { cause: err }
-			mismatch = UNPARSEABLE_STAMP
-		}
-		if (mismatch) {
-			// REFUSE, do not wipe (D-B2v3). The store's bytes are preserved for the operator.
-			// The parser's message quotes the stored stamp, so it rides only as the `cause`, which
-			// neither the log nor the offscreen hop reads.
-			const data = parseFailure ? { reason: UNPARSEABLE_STAMP } : { detail: mismatch }
-			log.warn("PXE store version mismatch — refusing to open (preserving data)", data)
-			throw new PxeStoreVersionMismatch(`PXE store version mismatch. Refusing to open (preserving data): ${mismatch}`, parseFailure)
+		const cmp = stored.cmp(target)
+		if (cmp === undefined) {
+			refuseOn(
+				`rollup address changed (stored ${stored.rollupAddress.toString()} != current ${target.rollupAddress.toString()})`,
+				log,
+			)
+		} else if (cmp !== 0) {
+			refuseOn(schemaMismatch(stored.schemaVersion), log)
 		}
 	}
-	await dbVersion.set(target.toBuffer().toString("utf-8"))
+	await store.openSingleton<string>("dbVersion").set(target.toBuffer().toString("utf-8"))
+}
+
+const schemaMismatch = (stored: number) => `schema version changed (stored ${stored} != current ${PXE_DATA_SCHEMA_VERSION_PIN})`
+
+/** The stored stamp, `undefined` when absent; a stamp that does not parse is refused. */
+async function storedVersion(store: AztecSQLiteOPFSStore, log: Logger): Promise<DatabaseVersion | undefined> {
+	const stored = await store.openSingleton<string>("dbVersion").getAsync()
+	if (!stored) return undefined
+	try {
+		return DatabaseVersion.fromBuffer(Buffer.from(stored, "utf-8"))
+	} catch (err) {
+		// The parser's message quotes the stored stamp, so it rides only as the `cause`, which
+		// neither the log nor the offscreen hop reads.
+		log.warn("PXE store version mismatch — refusing to open (preserving data)", { reason: UNPARSEABLE_STAMP })
+		throw new PxeStoreVersionMismatch(`PXE store version mismatch. Refusing to open (preserving data): ${UNPARSEABLE_STAMP}`, {
+			cause: err,
+		})
+	}
+}
+
+/** REFUSE, do not wipe: the store's bytes are preserved for the operator. */
+function refuseOn(mismatch: string | undefined, log: Logger): void {
+	if (mismatch === undefined) return
+	log.warn("PXE store version mismatch — refusing to open (preserving data)", { detail: mismatch })
+	throw new PxeStoreVersionMismatch(`PXE store version mismatch. Refusing to open (preserving data): ${mismatch}`)
 }
 
 /** The OPFS root directory name holding every per-chain pool dir ("pxe"). */

@@ -73,6 +73,7 @@ const STUBS = {
 	RecentActivityView: true,
 	RecoveryModeBanner: true,
 	RestoreOutcomeBanner: true,
+	WhatsNewRow: true,
 	Flex: { template: "<div><slot /></div>" },
 	Icon: true,
 	SectionLabel: { template: "<span>{{ label }}</span>", props: ["label"] },

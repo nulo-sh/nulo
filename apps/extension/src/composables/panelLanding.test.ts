@@ -71,6 +71,19 @@ describe("settling the landing", () => {
 		expect(postAuthRoute()).toBe("/popup/general")
 	})
 
+	test("a Home hand-back with no line meets the lock screen, whose unlock lands Home with nothing shown", async () => {
+		const { route, state, shown } = await bootWith({ route: "/popup/general" })
+		expect(route).toBe("/popup/general")
+		Object.assign(state, { path: "/popup/auth" })
+		await flushPromises()
+		expect(postAuthRoute()).toBe("/popup/general")
+
+		await arrive(state, SNACK.profileId, "/popup/general")
+		expect(session.has(HANDBACK_KEY)).toBe(false)
+		expect(landingRoute()).toBeUndefined()
+		expect(shown).toEqual([])
+	})
+
 	test("another profile's session removes the record and never shows its snack; the same profile does", async () => {
 		const other = await bootWith({ route: CONTACTS, snack: SNACK })
 		await arrive(other.state, "e5f6a7b8")

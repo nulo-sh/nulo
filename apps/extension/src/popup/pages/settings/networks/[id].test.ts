@@ -9,9 +9,17 @@ import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
 import { type Account, AccountType } from "@/wallet/services/account/client"
 import type { PendingReset, StaleNetworkView } from "@/wallet/services/network-reset/client"
 import { SWITCH_SETTLED_KEY } from "@/popup/network-switch"
+import EndpointOrderList from "@/popup/components/modules/settings/endpoints/EndpointOrderList.vue"
 import NetworkDetail from "./[id].vue"
 
-const setPrimaryEndpoint = vi.hoisted(() => vi.fn(async () => undefined))
+const reorderEndpoints = vi.hoisted(() => vi.fn(async (_id: string, _ids: string[]): Promise<unknown> => undefined))
+const getNetworks = vi.hoisted(() => vi.fn(async (): Promise<unknown[]> => []))
+const route = vi.hoisted(() => ({
+	getRouteSnapshot: vi.fn(async (_id: string): Promise<unknown> => null),
+	rebuildRoute: vi.fn(async (_id: string, _shown: unknown[]): Promise<void> => {}),
+	onRouteChanged: { add: vi.fn(), remove: vi.fn() },
+	onConnected: { add: vi.fn(), remove: vi.fn() },
+}))
 const openToast = vi.hoisted(() => vi.fn())
 const networkReset = vi.hoisted(() => ({
 	getPendingReset: vi.fn(async (): Promise<PendingReset | null> => null),
@@ -21,7 +29,7 @@ const networkReset = vi.hoisted(() => ({
 const accounts = vi.hoisted(() => ({ getAccounts: vi.fn(async (_p: string, _c: number, _all: boolean): Promise<Account[]> => []) }))
 vi.mock("@/utils/core", () => ({
 	managers: {
-		network: { getNetworks: vi.fn(async () => []), setActiveNetwork: vi.fn(), getActiveNetwork: vi.fn(), setPrimaryEndpoint },
+		network: { getNetworks, setActiveNetwork: vi.fn(), getActiveNetwork: vi.fn(), reorderEndpoints, ...route },
 		networkReset,
 	},
 	requireAccount: () => accounts,
@@ -45,7 +53,11 @@ vi.mock("@/wallet/services/config/client", () => ({
 
 beforeEach(() => {
 	routing.route.params.id = "mine"
-	setPrimaryEndpoint.mockClear()
+	reorderEndpoints.mockReset().mockResolvedValue(undefined)
+	getNetworks.mockReset().mockResolvedValue([])
+	route.getRouteSnapshot.mockReset().mockResolvedValue(null)
+	route.rebuildRoute.mockReset().mockResolvedValue(undefined)
+	route.onRouteChanged.add.mockClear()
 	openToast.mockClear()
 	activate.mockReset().mockResolvedValue("activated")
 	networkReset.getPendingReset.mockReset().mockResolvedValue(null)
@@ -220,7 +232,7 @@ describe("Settings › Network detail — a paused reset of this network", () =>
 		expect(wrapper.find('[data-testid="endpoint-delete-btn"]').exists()).toBe(false)
 		expect(wrapper.get('[data-testid="endpoint-add-btn"]').attributes("disabled")).toBeDefined()
 		await wrapper.findAll('[data-testid="endpoint-row"]')[1]!.trigger("click")
-		expect(setPrimaryEndpoint).not.toHaveBeenCalled()
+		expect(reorderEndpoints).not.toHaveBeenCalled()
 	})
 
 	test("a reset of another network holds nothing here", async () => {
@@ -232,7 +244,8 @@ describe("Settings › Network detail — a paused reset of this network", () =>
 		expect(wrapper.findAll('[data-testid="endpoint-row"]').map((r) => r.attributes("data-clickable"))).toEqual(["true", "true"])
 		expect(wrapper.get('[data-testid="endpoint-add-btn"]').attributes("disabled")).toBeUndefined()
 		await wrapper.findAll('[data-testid="endpoint-row"]')[1]!.trigger("click")
-		expect(setPrimaryEndpoint).toHaveBeenCalledWith("mine", "m2")
+		await flushPromises()
+		expect(reorderEndpoints).toHaveBeenCalledWith("mine", ["m2", "m1"])
 	})
 
 	test("a Delete chain clicked before the page's read lands still names the imported accounts", async () => {
@@ -440,5 +453,178 @@ describe("Settings › Network detail — the live imported accounts Delete chai
 		accounts.getAccounts.mockRejectedValue(new Error("worker gone"))
 		expect(await confirmFor("password")).toBeUndefined()
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to delete chain" })
+	})
+})
+
+describe("Settings › Network detail — the endpoint order", () => {
+	const THREE = { ...MINE, profileId: "p1", endpoints: [...MINE.endpoints, { id: "m3", rpcUrl: "https://m3/" }] }
+	const stored = (ids: string[]) => ({
+		...THREE,
+		endpoints: ids.map((id) => THREE.endpoints.find((e) => e.id === id)),
+		primaryEndpointId: ids[0],
+	})
+	const READ = {
+		activeId: "m1",
+		endpoints: [
+			{ id: "m1", state: "ready", since: 1 },
+			{ id: "m2", state: "down", since: 1, failure: "unreachable" },
+		],
+	}
+
+	async function mountThree() {
+		const wrapper = mountDetail()
+		useAppStore().networks = [ALPHA, THREE] as never
+		await flushPromises()
+		return wrapper
+	}
+	const list = (w: ReturnType<typeof mountDetail>) => w.findComponent(EndpointOrderList)
+	const shown = (w: ReturnType<typeof mountDetail>) => (list(w).props("endpoints") as { id: string }[]).map((e) => e.id)
+	const move = async (w: ReturnType<typeof mountDetail>, ids: string[]) => {
+		list(w).vm.$emit("reorder", ids)
+		await flushPromises()
+	}
+
+	test("a move among the fallbacks shows at once, writes the whole order once, and toasts nothing", async () => {
+		const written = deferred<unknown>()
+		reorderEndpoints.mockReturnValueOnce(written.promise)
+		getNetworks.mockResolvedValue([ALPHA, stored(["m1", "m3", "m2"])])
+		const wrapper = await mountThree()
+		await move(wrapper, ["m1", "m3", "m2"])
+		expect(shown(wrapper)).toEqual(["m1", "m3", "m2"])
+		written.resolve(undefined)
+		await flushPromises()
+		expect(reorderEndpoints.mock.calls).toEqual([["mine", ["m1", "m3", "m2"]]])
+		expect(shown(wrapper)).toEqual(["m1", "m3", "m2"])
+		expect(openToast).not.toHaveBeenCalled()
+	})
+
+	test("a move that changes the first row keeps the primary's toast", async () => {
+		getNetworks.mockResolvedValue([ALPHA, stored(["m2", "m1", "m3"])])
+		const wrapper = await mountThree()
+		await move(wrapper, ["m2", "m1", "m3"])
+		expect(openToast.mock.calls).toEqual([[{ kind: "success", label: "Primary endpoint updated" }]])
+	})
+
+	test("a move that landed asks the account engine once for the route over the written order", async () => {
+		getNetworks.mockResolvedValue([ALPHA, stored(["m2", "m1", "m3"])])
+		const wrapper = await mountThree()
+		expect(route.rebuildRoute, "opening the page is no edit").not.toHaveBeenCalled()
+		await move(wrapper, ["m2", "m1", "m3"])
+		expect(route.rebuildRoute.mock.calls).toEqual([["mine", ["m2", "m1", "m3"].map((id) => ({ id, rpcUrl: `https://${id}/` }))]])
+	})
+
+	test("a failed write re-reads the row and says which write failed", async () => {
+		reorderEndpoints.mockRejectedValue(new Error("Invalid endpoint order"))
+		getNetworks.mockResolvedValue([ALPHA, THREE])
+		const wrapper = await mountThree()
+		await move(wrapper, ["m1", "m3", "m2"])
+		await move(wrapper, ["m3", "m1", "m2"])
+		expect(getNetworks).toHaveBeenCalledTimes(2)
+		expect(shown(wrapper)).toEqual(["m1", "m2", "m3"])
+		expect(openToast.mock.calls).toEqual([
+			[{ kind: "error", label: "Failed to update the endpoint order" }],
+			[{ kind: "error", label: "Failed to update primary endpoint" }],
+		])
+	})
+
+	test("moves are written one at a time, in the order made, and the last one stays shown", async () => {
+		const first = deferred<unknown>()
+		const second = deferred<unknown>()
+		reorderEndpoints.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+		getNetworks.mockResolvedValueOnce([ALPHA, stored(["m1", "m3", "m2"])]).mockResolvedValue([ALPHA, stored(["m3", "m1", "m2"])])
+		const wrapper = await mountThree()
+		await move(wrapper, ["m1", "m3", "m2"])
+		await move(wrapper, ["m3", "m1", "m2"])
+		expect(reorderEndpoints).toHaveBeenCalledTimes(1)
+		first.resolve(undefined)
+		await flushPromises()
+		expect(shown(wrapper), "the first write landing never shows its order over the later move's").toEqual(["m3", "m1", "m2"])
+		second.resolve(undefined)
+		await flushPromises()
+		expect(shown(wrapper)).toEqual(["m3", "m1", "m2"])
+		expect(reorderEndpoints.mock.calls.map(([, ids]) => ids)).toEqual([
+			["m1", "m3", "m2"],
+			["m3", "m1", "m2"],
+		])
+	})
+
+	test("a row moved first while down carries the line once the write lands, until the router finds it answering", async () => {
+		route.getRouteSnapshot.mockResolvedValueOnce(READ).mockResolvedValue(null)
+		getNetworks.mockResolvedValue([ALPHA, stored(["m2", "m1", "m3"])])
+		const written = deferred<unknown>()
+		reorderEndpoints.mockReturnValueOnce(written.promise)
+		const wrapper = await mountThree()
+		await move(wrapper, ["m2", "m1", "m3"])
+		expect(list(wrapper).props("warning")).toBeNull()
+		written.resolve(undefined)
+		await flushPromises()
+		expect(list(wrapper).props("warning")).toEqual({
+			id: "m2",
+			text: "This endpoint was not answering. The wallet will try another if needed.",
+		})
+
+		route.getRouteSnapshot.mockResolvedValue({ activeId: "m2", endpoints: [{ id: "m2", state: "ready", since: 2 }] })
+		const changed = route.onRouteChanged.add.mock.calls[0]?.[0] as (c: { profileId: string; chainId: number }) => void
+		changed({ profileId: "p1", chainId: THREE.chainId })
+		await flushPromises()
+		expect(list(wrapper).props("warning")).toBeNull()
+	})
+
+	test("a move among the fallbacks keeps the line, and a later one queued behind its write does not cost it", async () => {
+		route.getRouteSnapshot.mockResolvedValueOnce(READ).mockResolvedValue(null)
+		getNetworks.mockResolvedValueOnce([ALPHA, stored(["m2", "m1", "m3"])]).mockResolvedValue([ALPHA, stored(["m2", "m3", "m1"])])
+		const written = deferred<unknown>()
+		reorderEndpoints.mockReturnValueOnce(written.promise)
+		const wrapper = await mountThree()
+		await move(wrapper, ["m2", "m1", "m3"])
+		await move(wrapper, ["m2", "m3", "m1"])
+		written.resolve(undefined)
+		await flushPromises()
+		expect(shown(wrapper)).toEqual(["m2", "m3", "m1"])
+		expect(list(wrapper).props("warning")).toEqual({
+			id: "m2",
+			text: "This endpoint was not answering. The wallet will try another if needed.",
+		})
+	})
+
+	test("a write that landed is neither reported failed nor shown undone when the re-read after it fails", async () => {
+		getNetworks.mockRejectedValue(new Error("port closed"))
+		reorderEndpoints.mockResolvedValueOnce(stored(["m2", "m1", "m3"]))
+		const wrapper = await mountThree()
+		await move(wrapper, ["m2", "m1", "m3"])
+		expect(openToast.mock.calls).toEqual([[{ kind: "success", label: "Primary endpoint updated" }]])
+		expect(shown(wrapper)).toEqual(["m2", "m1", "m3"])
+	})
+
+	test("a row that was answering, or a move among the fallbacks, carries no line", async () => {
+		route.getRouteSnapshot.mockResolvedValue(READ)
+		getNetworks.mockResolvedValueOnce([ALPHA, stored(["m1", "m3", "m2"])]).mockResolvedValue([ALPHA, stored(["m3", "m1", "m2"])])
+		const wrapper = await mountThree()
+		await move(wrapper, ["m1", "m3", "m2"])
+		await move(wrapper, ["m3", "m1", "m2"])
+		expect(list(wrapper).props("warning")).toBeNull()
+	})
+
+	test("the primary first, then the rest as stored; a row whose primary is missing still lists every endpoint", async () => {
+		const wrapper = mountDetail()
+		useAppStore().networks = [ALPHA, { ...THREE, primaryEndpointId: "m3" }] as never
+		await flushPromises()
+		expect(shown(wrapper)).toEqual(["m3", "m1", "m2"])
+		useAppStore().networks = [ALPHA, { ...THREE, primaryEndpointId: "gone" }] as never
+		await flushPromises()
+		expect(shown(wrapper)).toEqual(["m1", "m2", "m3"])
+	})
+
+	test("the route read reaches the edit sheet through the cache store, and leaves with the page", async () => {
+		route.getRouteSnapshot.mockResolvedValue(READ)
+		const wrapper = await mountThree()
+		expect(route.getRouteSnapshot).toHaveBeenLastCalledWith(
+			"mine",
+			THREE.endpoints.map(({ id, rpcUrl }) => ({ id, rpcUrl })),
+		)
+		expect(useCacheStore().endpointRoute).toMatchObject({ networkId: "mine", snapshot: READ })
+		wrapper.unmount()
+		expect(useCacheStore().endpointRoute).toBeNull()
+		expect(route.onRouteChanged.remove).toHaveBeenCalledWith(route.onRouteChanged.add.mock.calls[0]?.[0])
 	})
 })

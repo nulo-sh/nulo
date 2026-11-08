@@ -24,7 +24,7 @@ import { AccessLevel, DappSessionService } from "./service"
 import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { asImportedKeysDek, asMasterSecretBytes, deriveDappSessionMacKey, deriveRowKeys, type RowKeys, sealRow } from "@nulo/wallet-crypto"
 import { signDappSession } from "./integrity"
-import type { CapabilityDecision, DappSession, GrantedCapabilityRecord } from "./spec"
+import { type CapabilityDecision, DAPP_SESSION_DAYS, type DappSession, type GrantedCapabilityRecord } from "./spec"
 
 let activeProfile: { id: string } | undefined
 
@@ -251,6 +251,17 @@ describe("DappSessionService active-profile guards (preservation pins)", () => {
 		expect(h.writes).toEqual([`set:${ROW_ROOT}@${row.id}`])
 		expect(h.emitted).toEqual([row])
 	})
+})
+
+test("addDappSession: the session expires DAPP_SESSION_DAYS days after the Allow", async () => {
+	const { service: svc } = await makeService()
+	const day = 24 * 60 * 60 * 1000
+	const before = Date.now()
+	await svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1", "p1")
+	const after = Date.now()
+	const session = await svc.tryGetDappSessionByOriginAndChain("https://dapp.example", "1", "p1")
+	expect(session?.expiry).toBeGreaterThanOrEqual(before + DAPP_SESSION_DAYS * day)
+	expect(session?.expiry).toBeLessThanOrEqual(after + DAPP_SESSION_DAYS * day)
 })
 
 describe("applyCapabilityDecision requiresGrant", () => {
@@ -719,5 +730,114 @@ describe("purgeForChain", () => {
 		expect((await service.getDappSessions()).map((s) => s.id)).toEqual([other.id])
 		activeProfile = { id: "p1" }
 		expect((await service.getDappSessions()).map((s) => s.id)).toEqual([kept.id])
+	})
+})
+
+describe("the every-site switch", () => {
+	const ORIGIN = "https://dapp.example"
+	const POLICY_KEY = "nulo:core:discoveryPolicy@p1"
+	const policyRow = async (browserApi: FakeBrowserApi) => (await browserApi.storage.local.get(POLICY_KEY))[POLICY_KEY]
+
+	test("turning on writes the active profile's row and emits once; a new site is then allowed", async () => {
+		const { service, browserApi } = await makeService()
+		const changes: unknown[] = []
+		service.onEverySiteChanged.add((change) => changes.push(change))
+		expect(await service.allowsNewSite("p1", ORIGIN)).toBe(false)
+		await service.setEverySite("p1", true)
+		expect(changes).toEqual([{ profileId: "p1", on: true }])
+		expect(await service.getEverySite()).toEqual({ profileId: "p1", on: true })
+		expect(await service.allowsNewSite("p1", ORIGIN)).toBe(true)
+		expect(await service.allowsNewSite("p2", ORIGIN)).toBe(false)
+		expect(await policyRow(browserApi)).toBeDefined()
+	})
+
+	test.each([
+		["another profile's id", "p2", () => ({ id: "p1" }), SessionEndedError],
+		["a locked wallet", "p1", () => undefined, Error],
+	])("a write for %s is refused and writes nothing", async (_, profileId, active, error) => {
+		const { service, browserApi } = await makeService()
+		const changes: unknown[] = []
+		service.onEverySiteChanged.add((change) => changes.push(change))
+		activeProfile = active()
+		await expect(service.setEverySite(profileId, true)).rejects.toBeInstanceOf(error)
+		expect(Object.keys((await browserApi.storage.local.get(null)) as object)).toEqual([])
+		expect(changes).toEqual([])
+	})
+
+	test("a write a deletion of the profile overtook writes nothing", async () => {
+		const { service, profileStub, browserApi } = await makeService()
+		profileStub.captureExecutionFence.mockImplementationOnce(async () => {
+			const fence = { profileId: "p1", epoch: profileStub.deletionState.capture("p1") }
+			profileStub.deletionState.beginDeletion("p1")
+			return fence
+		})
+		await expect(service.setEverySite("p1", true)).rejects.toThrow("being deleted")
+		expect(await policyRow(browserApi)).toBeUndefined()
+	})
+
+	test("a read from an onVerificationRefused listener sees the refused site", async () => {
+		const { service } = await makeService()
+		await service.setEverySite("p1", true)
+		let read: Promise<boolean> | undefined
+		service.onVerificationRefused.add(({ origin, profileId }) => {
+			read ??= service.allowsNewSite(profileId, origin)
+		})
+		expect(await service.refuseVerification({ origin: ORIGIN, chainId: "1", profileId: "p1" })).toBe("absent")
+		expect(await read).toBe(false)
+		expect(await service.allowsNewSite("p1", "https://other.example")).toBe(true)
+	})
+
+	test("a refusal whose record cannot be written keeps its outcome", async () => {
+		const { service, browserApi } = await makeService()
+		await plantRowSignedBy(browserApi, rowFor("p1"), "p1")
+		await service.setEverySite("p1", true)
+		const set = browserApi.storage.local.set.bind(browserApi.storage.local)
+		browserApi.storage.local.set = async (items) => {
+			if (POLICY_KEY in items) throw new Error("quota")
+			return set(items)
+		}
+		expect(await service.refuseVerification({ origin: ORIGIN, chainId: "1", profileId: "p1" })).toBe("revoked")
+		expect(await service.allowsNewSite("p1", ORIGIN)).toBe(true)
+	})
+
+	test("a failed read is off", async () => {
+		const { service, browserApi } = await makeService()
+		await service.setEverySite("p1", true)
+		browserApi.storage.local.get = async () => {
+			throw new Error("storage gone")
+		}
+		expect(await service.allowsNewSite("p1", ORIGIN)).toBe(false)
+	})
+
+	test("turning off deletes the row at once and emits", async () => {
+		const { service, browserApi } = await makeService()
+		await service.setEverySite("p1", true)
+		const changes: unknown[] = []
+		service.onEverySiteChanged.add((change) => changes.push(change))
+		await service.setEverySite("p1", false)
+		expect(await policyRow(browserApi)).toBeUndefined()
+		expect(changes).toEqual([{ profileId: "p1", on: false }])
+		expect(await service.allowsNewSite("p1", ORIGIN)).toBe(false)
+	})
+
+	test("purgeForProfile removes the profile's row", async () => {
+		const { service, browserApi } = await makeService()
+		await service.setEverySite("p1", true)
+		await service.purgeForProfile("p1")
+		expect(await policyRow(browserApi)).toBeUndefined()
+	})
+
+	test("a plaintext on-row stays off after the profile's unlock seals its rows; a sealed one allows", async () => {
+		const { service, profileStub, browserApi } = await makeService()
+		const plaintext = JSON.stringify({ everySite: true, checkRefused: [] })
+		const countsKey = "nulo:core:dappRegistrations@p1"
+		await browserApi.storage.local.set({ [POLICY_KEY]: plaintext, [countsKey]: JSON.stringify({}) })
+		profileStub.onRowKeysReady.invoke("p1")
+		// The registration counts seal last of the profile's rows: once they are sealed, so is all else.
+		await vi.waitFor(async () => expect((await browserApi.storage.local.get(countsKey))[countsKey]).not.toBe(JSON.stringify({})))
+		expect(await policyRow(browserApi)).toBe(plaintext)
+		expect(await service.allowsNewSite("p1", ORIGIN)).toBe(false)
+		await service.setEverySite("p1", true)
+		expect(await service.allowsNewSite("p1", ORIGIN)).toBe(true)
 	})
 })

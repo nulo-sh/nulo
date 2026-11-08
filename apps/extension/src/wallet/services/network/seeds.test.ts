@@ -9,6 +9,9 @@ import {
 	DRPC_FREE_PLAN_BATCH_LIMIT,
 	LOCAL_NETWORK_RPC_URL,
 	maxBatchSizeFor,
+	DEFAULT_SEEDS,
+	RELAY_LABEL,
+	RELAY_RPC_URLS,
 	RETIRED_DEFAULT_ENDPOINTS,
 	retireDefaultName,
 	seedForKind,
@@ -32,6 +35,23 @@ describe("the remote defaults' batches", () => {
 		const sent = entriesPerRequest()
 		expect(sent.reduce((sum, n) => sum + n, 0)).toBe(calls)
 		expect(Math.max(...sent)).toBeLessThanOrEqual(DRPC_FREE_PLAN_BATCH_LIMIT)
+	})
+})
+
+describe("Nulo's relay", () => {
+	test("is the seeded second endpoint of Alpha and Testnet alone, over HTTPS, titled Nulo", () => {
+		expect(Object.fromEntries(DEFAULT_SEEDS.map((seed) => [seed.kind, seed.relay]))).toEqual({
+			mainnet: { rpcUrl: "https://rpc.nulo.sh", label: "Nulo" },
+			testnet: { rpcUrl: "https://testnet.rpc.nulo.sh", label: "Nulo" },
+			local: undefined,
+		})
+		expect(RELAY_RPC_URLS).toEqual({ mainnet: "https://rpc.nulo.sh", testnet: "https://testnet.rpc.nulo.sh" })
+		expect(RELAY_LABEL).toBe("Nulo")
+	})
+
+	// The relay refuses a body of more than 100 calls, the client's own batch size.
+	test.each(Object.values(RELAY_RPC_URLS))("%s takes the client's own batch size", (url) => {
+		expect(maxBatchSizeFor(url)).toBeUndefined()
 	})
 })
 

@@ -1,13 +1,12 @@
 <script setup lang="ts">
 /**
- * In-flight phase of an activity card. Wraps `TransactionCardLayout` so its
- * field positions stay byte-identical with `TransactionCard` (the settled
- * phase). The only visible difference between phases is the badge slot
- * (spinner here vs. status icon there) and the secondary-row content.
+ * In-flight phase of an activity card. Wraps `TransactionCardLayout`, as the
+ * settled `TransactionCard` does, so every field keeps its place between phases.
  */
 import { computed, type PropType } from "vue"
 import type { GlyphName } from "@nulo/design"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
+import { directionWords, type RowDirection } from "@/utils/row-direction"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
 const props = defineProps({
@@ -23,10 +22,9 @@ const props = defineProps({
 	icon: { type: String as PropType<GlyphName>, default: "zap" },
 	amount: { type: String, default: null },
 	amountSymbol: { type: String, default: null },
-	/** Privacy-direction chip ("Private → Public" etc.). Suppressed when null —
-	 *  e.g. dApp ops we don't synthesize a transfer type for. The parent
-	 *  resolves it via `formatTransferType(op.transferType)`. */
-	transferTypeLabel: { type: String, default: null },
+	titleNamesToken: { type: Boolean, default: false },
+	/** A send's sides and way, drawn as its settled row draws them; null for a dApp op. */
+	direction: { type: Object as PropType<RowDirection | null>, default: null },
 	/** Enable the Cancel button. Renders only when `cancellable && jobId && stage !== "submitting"`. */
 	cancellable: { type: Boolean, default: false },
 	/** Journal id to cancel. Emitted with the `cancel` event so multi-card
@@ -66,6 +64,8 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 			:icon="icon"
 			:amount="amount"
 			:amountSymbol="amountSymbol"
+			:titleNamesToken="titleNamesToken"
+			:direction="direction"
 			:stage="stage"
 			:backend="backend"
 			:opens="focusable || Boolean(reaskLine && jobId)"
@@ -78,13 +78,13 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 				<Spinner size="10" color="--nulo-accent" />
 			</template>
 
-			<template v-if="transferTypeLabel || originLabel" #title-trailing>
+			<template v-if="originLabel" #title-trailing>
 				<span :class="$style.title_sep" data-testid="activity-title-sep">·</span>
-				<span v-if="transferTypeLabel" :class="$style.transfer_chip">{{ transferTypeLabel }}</span>
-				<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
+				<span :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 			</template>
 
 			<template #secondary>
+				<span v-if="direction" :class="$style.direction" data-testid="activity-direction-chip">{{ directionWords(direction) }}</span>
 				<span :class="$style.subtitle" role="status" aria-live="polite" aria-atomic="true" data-testid="tx-awaiting-subtitle"><template v-if="reaskLine">{{ reaskLine }}</template><template v-else-if="subtitle">{{ subtitle }}</template><Skeleton v-else :width="92" :height="9" /></span>
 			</template>
 
@@ -137,8 +137,8 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 	composes: title_sep from "./activity-card.module.css";
 }
 
-.transfer_chip {
-	composes: chip from "./activity-card.module.css";
+.direction {
+	composes: visually_hidden from "./activity-card.module.css";
 }
 
 .app_chip {

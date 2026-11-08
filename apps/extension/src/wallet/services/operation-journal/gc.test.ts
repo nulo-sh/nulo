@@ -93,7 +93,15 @@ async function restamp(api: FakeBrowserApi, service: OperationJournalService, id
 	}
 }
 
-const REFUSAL_KINDS = ["scope_refused", "registry_refused", "malformed_request", "terms_refused", "wallet_refused", "too_many_pending"]
+const REFUSAL_KINDS = [
+	"scope_refused",
+	"registry_refused",
+	"unattached_refused",
+	"malformed_request",
+	"terms_refused",
+	"wallet_refused",
+	"too_many_pending",
+]
 
 async function makeCancelled(service: OperationJournalService, input: NewOperationInput): Promise<string> {
 	const rec = await service.createOperation(input)

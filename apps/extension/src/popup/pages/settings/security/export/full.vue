@@ -26,6 +26,7 @@ import { OWN_WINDOW_ROUTES, leavePanelFor, ownWindowRoute } from "@/utils/own-wi
 import { goBack } from "@/utils/page-back"
 import { pluralize } from "@/utils/plural"
 import { backupNotice } from "@/components/stale-network/copy"
+import { watchLockStart } from "@/popup/locked-state"
 
 /** Composables */
 import { useFullBackupExport } from "@/composables/useFullBackupExport"
@@ -106,16 +107,14 @@ function onProfileUpdated(profile) {
 }
 
 const handleAgree = () => {
-	if (pendingReset.value) return
-	isAgreed.value = true
-	if (isPasskeyProfile.value) handleBackup()
+	if (!pendingReset.value) isAgreed.value = true
 }
 
 /** After a failed passkey step: back, or in an own window, which has no page behind it, the
- *  agreement step. */
+ *  agreement step, the file password dropped with the rest of the run. */
 function leaveAfterPasskeyFailure() {
 	if (ownWindowRoute() === undefined) router.go(-1)
-	else isAgreed.value = false
+	else reset()
 }
 
 const onKeydown = (e) => {
@@ -158,6 +157,16 @@ watch(
 		void syncPendingReset()
 	},
 	{ flush: "sync" },
+)
+
+// A lock can leave this page mounted (an unlock from another window supersedes it before the
+// landing): what was typed, asked or made belongs to the session that ended.
+watchLockStart(
+	() => appStore.isLogined,
+	() => {
+		reset()
+		onCeremonyReject(new Error("The wallet locked"))
+	},
 )
 
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey export moves
@@ -208,7 +217,7 @@ onBeforeUnmount(() => {
 			</div>
 		</template>
 
-		<!-- Password-profile unlock gate -->
+		<!-- Password-profile unlock gate; a passkey profile's file password, typed before its passkey -->
 		<template v-else-if="isAgreed">
 			<SecretUnlockSection
 				v-if="!isPasskeyProfile && !backupStatus"
@@ -217,12 +226,12 @@ onBeforeUnmount(() => {
 				@clearError="isWrongPassword = false"
 			/>
 
-			<!--
-			Passkey-profile waiting state is now owned by the in-page modal
-			(`PasskeyCeremonyDialog`, mounted below). No bespoke inline UI
-			needed — the modal renders the spinner + "Waiting for passkey…"
-			and dismisses itself when WebAuthn resolves.
-			-->
+			<FilePasswordSection
+				v-else-if="isPasskeyProfile && !backupStatus"
+				v-model:password="password"
+				v-model:repeatedPassword="repeatedPassword"
+				testid="backup-encrypt-password"
+			/>
 
 			<template v-else-if="backupStatus">
 				<div
@@ -308,13 +317,6 @@ onBeforeUnmount(() => {
 						</template>
 					</Banner>
 				</div>
-
-				<FilePasswordSection
-					v-if="isPasskeyProfile && backupStatus === 'finished'"
-					v-model:password="password"
-					v-model:repeatedPassword="repeatedPassword"
-					testid="backup-encrypt-password"
-				/>
 			</template>
 		</template>
 
@@ -333,6 +335,17 @@ onBeforeUnmount(() => {
 				data-testid="unlock-submit-btn"
 			>
 				Create Backup
+			</Button>
+
+			<Button
+				v-else-if="isAgreed && !backupStatus"
+				@click="handleBackup"
+				@keydown.enter="refuseRepeatEnter"
+				:disabled="!canEncrypt || isBusy"
+				variant="cta"
+				data-testid="create-protected-backup-btn"
+			>
+				Create protected backup
 			</Button>
 
 			<Flex
@@ -354,7 +367,7 @@ onBeforeUnmount(() => {
 					v-else
 					@click="protectAndDownload()"
 					@keydown.enter="refuseRepeatEnter"
-					:disabled="isBusy || isDownloading || !canEncrypt"
+					:disabled="isBusy || isDownloading"
 					variant="cta"
 					data-testid="download-backup-btn"
 				>
@@ -364,10 +377,7 @@ onBeforeUnmount(() => {
 		</template>
 	</CollapsingHeroLayout>
 
-	<!-- Path A: in-page passkey ceremony for backup-export. Mounts only
-	     while a ceremony is in flight; emits resolve/reject back through
-	     `usePasskeyCeremony`. Cancel resets `isAgreed` so the user can
-	     re-confirm without bouncing off the page. -->
+	<!-- A cancelled card returns to the typed file password. -->
 	<PasskeyCeremonyDialog
 		v-if="ceremonyRequest"
 		:request="ceremonyRequest"

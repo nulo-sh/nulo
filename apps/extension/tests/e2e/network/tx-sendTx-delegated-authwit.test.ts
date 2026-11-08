@@ -8,6 +8,7 @@ import { waitForDappExecuteWorked } from "../fixtures/journal"
 import { assertPgOk, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, openExecuteDetails, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { serializeInstance } from "../fixtures/selfpay-phase"
+import { shotSend } from "../fixtures/send-page"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -115,6 +116,16 @@ test.skipIf(!hasConfig)(
 			to: trimAddress(consumerAddress),
 			amount: "5 PULL",
 		})
+		// What the donation signs away opens the fee section: one authorization, the pulled amount.
+		const leaves = await execPopup.$$eval('[data-testid="execute-op-leaves-row"]', (rows) =>
+			rows.map((row) =>
+				["execute-op-leaves-count", "execute-op-leaves-amount"].map((id) =>
+					row.querySelector(`[data-testid="${id}"]`)?.textContent?.replace(/\s+/g, " ").trim(),
+				),
+			),
+		)
+		expect(leaves).toEqual([["1 authorization", "5 PULL"]])
+		await shotSend(execPopup, "execute-leaves-authorization", "execute-op-leaves-account")
 
 		await approveExecute(execPopup)
 

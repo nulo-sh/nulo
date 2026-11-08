@@ -18,6 +18,8 @@ import type {
 	TxSimulationResult,
 	UtilityExecutionResult,
 } from "@aztec-labs/stdlib/tx"
+import type { EndpointState } from "../routing/endpoint-health"
+import type { TransportFailure } from "../utils/fetch"
 import type { NetworkInfo, ProvePhaseEvent } from "./chain-runtime"
 import type { PublicScanTips, PublicTokenClassStatus, PublicTransferFetchArgs, PublicTransferPage } from "./public-events"
 export type {
@@ -31,10 +33,18 @@ export type {
 
 export const PXE_SERVICE_NAME = "pxe"
 
-/** Offscreen → SW events. The phase stream of the prove attempt identified by
- *  `proveId`; `seq` and `backend` are stamped at the source (chain-runtime). */
+/** Offscreen → SW events. `onProvePhase`: the phase stream of the prove attempt identified by
+ *  `proveId`; `seq` and `backend` are stamped at the source (chain-runtime). `onRouteChanged`: what
+ *  `getRouteSnapshot` answers for the pair may have changed; a lost one leaves a stale view, nothing more. */
 export type PxeEvents = {
 	onProvePhase: ProvePhaseEvent
+	onRouteChanged: { profileId: string; chainId: number }
+}
+
+/** The account engine's route as the endpoint list shows it: endpoint ids, never URLs. */
+export interface RouteSnapshot {
+	activeId: string | null
+	endpoints: { id: string; state: EndpointState; since: number; failure?: TransportFailure }[]
 }
 
 export type Methods = {
@@ -108,6 +118,19 @@ export type Methods = {
 	 * `non-standard` = a resolved non-Token / upgraded class (fail closed, cacheable).
 	 */
 	getPublicTokenClassStatus(network: NetworkInfo, contract: string, checkpointHash: string): PublicTokenClassStatus
+	/**
+	 * The endpoint to submit `tx` through, pinned to its hash so its receipts are read there alone:
+	 * the route's active endpoint while it serves, else the first that serves the chain and knows
+	 * the tx's anchor block. Never waits on the chain guard and never builds a runtime.
+	 */
+	pickSendEndpoint(network: NetworkInfo, tx: { txHash: string; anchorHash: string }): { rpcUrl: string }
+	/** The route of the runtime built for `network`'s endpoint list, or `null` with none. Builds
+	 *  nothing and asks no endpoint. */
+	getRouteSnapshot(network: NetworkInfo): RouteSnapshot | null
+	/** Rebinds the chain's runtime to `network`'s endpoint list when it was built for another, as the
+	 *  chain's next operation would, only if no operation holds or awaits the chain; never queues.
+	 *  Builds none for a chain with no runtime. */
+	rebuildRoute(network: NetworkInfo): void
 	/**
 	 * Dispose any active runtime for `(profileId, chainId)` and remove its
 	 * OPFS store at `pxe/${profileId}/${chainId}`. Called by the SW-side

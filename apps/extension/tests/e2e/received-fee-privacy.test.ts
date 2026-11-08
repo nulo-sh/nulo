@@ -3,18 +3,20 @@
  * that names the transaction, and only a press of "Show fee" sends the lookup; with it off, opening
  * the page sends it. Component tests mock the client, so only here does a request visibly leave.
  *
- * The default network is active; its node's origin is redirected to a stub that logs every method
- * and answers each with `null`, a reply every caller refuses at once, so no lookup hangs or retries
- * and each one is one logged request.
+ * The default network is active; its node's origin is redirected to a stub that logs every method.
+ * It answers the route's admission probe (Mainnet's identity and its tips), without which the route
+ * admits no endpoint of a network that lists two, and every other call with `null`, a reply every
+ * caller refuses at once, so no lookup hangs or retries and each one is one logged request.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
+import { MAINNET_L1_CHAIN_ID, MAINNET_ROLLUP_VERSION } from "@/utils/chain-ids"
 import { interceptRpc } from "./fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
 import { navigateByHash, navigateToSettings } from "./fixtures/helpers"
 import { DEFAULT_NODE_ORIGIN } from "./fixtures/networks"
 import { readActivityScope, seedPublicReceipt, seedTokenRow } from "./helpers/activity-seeds"
-import { startStub } from "./helpers/rpc-stub"
+import { chainTipsResult, nodeInfoResult, startStub } from "./helpers/rpc-stub"
 
 const RECEIPT_LOOKUP = "aztec_getTxReceipt"
 const TOKEN_ID = 911
@@ -45,7 +47,10 @@ test("privacy mode holds the receipt fee lookup until Show fee; with it off, ope
 	timeout: 180_000,
 	retry: 0,
 }, async ({ registeredExtensionPerTest: ctx }) => {
-	const stub = await startStub(() => null)
+	const stub = await startStub((method) => {
+		if (method === "aztec_getNodeInfo") return nodeInfoResult(MAINNET_L1_CHAIN_ID, MAINNET_ROLLUP_VERSION)
+		return method === "aztec_getChainTips" ? chainTipsResult(1) : null
+	})
 	const lookups = () => stub.methods.filter((m) => m === RECEIPT_LOOKUP).length
 	try {
 		const node = await interceptRpc(ctx.browser, ctx.extensionId, DEFAULT_NODE_ORIGIN, { kind: "redirect", to: stub.url })

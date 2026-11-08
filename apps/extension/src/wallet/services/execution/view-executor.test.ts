@@ -112,7 +112,7 @@ function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 		networkService: {
 			getNetwork: vi.fn(async () => network),
 			getNode: vi.fn(async () => node),
-			getNodeForUrl: vi.fn(async () => node),
+			getNodeFor: vi.fn(async () => node),
 		} as never,
 		accountService: { getAccountContract: vi.fn(async () => account) } as never,
 		contactService: { getContacts: vi.fn(async () => []) } as never,
@@ -292,7 +292,7 @@ describe("ViewExecutor.executeAztecGetContractClassMetadata", () => {
 		node.getContractClass.mockResolvedValueOnce({ id: CLASS_ID })
 		expect(await run(executor)).toEqual({ isContractClassPubliclyRegistered: true, isArtifactRegistered: false })
 		expect(String(node.getContractClass.mock.calls[0]?.[0])).toBe(CLASS_ID)
-		expect(deps.networkService.getNodeForUrl).toHaveBeenCalledWith("http://primary")
+		expect(deps.networkService.getNodeFor).toHaveBeenCalledWith(expect.objectContaining({ id: "net-1" }))
 		expect(deps.networkService.getNode).not.toHaveBeenCalled()
 	})
 
@@ -350,7 +350,7 @@ describe("ViewExecutor.executeAztecGetContractMetadata", () => {
 		expect(node.getContract.mock.calls.map(([address]) => address.toString())).toEqual([HIDDEN, FRESH])
 		expect(deps.pxeService.getContractArtifact).not.toHaveBeenCalled()
 		expect(deps.accountService.getAccounts).toHaveBeenCalledWith("p1", 7, true)
-		expect(deps.networkService.getNodeForUrl).toHaveBeenCalledWith("http://primary")
+		expect(deps.networkService.getNodeFor).toHaveBeenCalledWith(expect.objectContaining({ id: "net-1" }))
 		expect(deps.networkService.getNode).not.toHaveBeenCalled()
 	})
 

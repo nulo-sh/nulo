@@ -29,11 +29,12 @@ const { openToast } = useToast()
 
 /** Utils */
 import { logCredentialFailure } from "@/utils/credential-refusal"
-import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, handsBackToPanel, leavePanelFor, returnToPanel } from "@/utils/own-window"
 import { askProfilePasskey } from "@/utils/profile-passkey"
 import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
 import { isNewPasswordValid } from "@/utils/password"
+import { showSnack } from "@/utils/snack"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -45,7 +46,8 @@ const isPasskey = computed(() => appStore.profile?.type === "passkey")
 /** A profile open in recovery mode has no imported-keys key, which every reseal needs: the page says
  *  so before any prompt and offers no change, since a retry cannot succeed. */
 const cannotChange = computed(() => !!appStore.profile?.recoveryMode)
-/** "" | "enterPassword": a password profile's check before its passkey. */
+/** "" | "enterPassword" | "newPassword": a password profile's check before its passkey, or a passkey
+ *  profile's new password, typed before its card. */
 const step = ref("")
 const password = ref("")
 const isPasswordHidden = ref(true)
@@ -60,10 +62,9 @@ const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onR
 const newPasskey = useNewProfilePasskey(runCeremony)
 /** Fences every step to the profile it started for: a switch or a reset drops what it returns. */
 const runs = createRunFence()
-/** The current passkey's answer, held from its card to Save; while held, the page is a passkey
- *  profile's new-password step. Shallow: the answer itself is never made reactive. */
-const heldAnswer = shallowRef(null)
-const isNewPasswordStep = computed(() => heldAnswer.value !== null)
+/** The profile whose change the teardown kept running; see `onBeforeUnmount`. */
+let keptFor
+const isNewPasswordStep = computed(() => step.value === "newPassword")
 /** The current run's own change still with the service. The update and the reopened session it
  *  causes arrive before its answer, and only that answer says whether the change was made; `updated`
  *  marks an update for this profile meanwhile, which after a failure was another window's. */
@@ -93,7 +94,6 @@ function clearStep() {
 	isWrongPassword.value = false
 	newPassword.value = ""
 	repeatedNewPassword.value = ""
-	heldAnswer.value = null
 }
 
 function reset() {
@@ -137,28 +137,55 @@ async function currentPasskey(isCurrent) {
 	return askProfilePasskey(runCeremony, managers.profile, { profileId: id, step: "unlockMethod", profileName: () => name }, isCurrent)
 }
 
+/** A run the teardown kept stays current only while the window still runs this flow for the profile
+ *  it was kept for: the watchers that would end it went with the page. */
+function snapshotRun() {
+	const fenced = runs.snapshot()
+	return () => fenced() && (keptFor === undefined || (handsBackToPanel() && appStore.profile?.id === keptFor))
+}
+
 /** A new passkey's card, at an input minted for this profile. */
 const nextPasskey = () => newPasskey.ask({ step: "unlockMethod", profileName: appStore.profile.name })
 
+function leaveChanged(outcome) {
+	if (handsBackToPanel()) {
+		void returnToPanel("/popup/settings", outcome)
+		return
+	}
+	showSnack(openToast, outcome.snack)
+	leaveFor(router, "/popup/settings")
+}
+
+/** The session closed over a saved change, so the lock screen is next. A handed-back panel boots
+ *  there and opens Home after the unlock, with no line: it carries one only to an open session. */
+function leaveLocked() {
+	if (handsBackToPanel()) {
+		void returnToPanel("/popup/general")
+		return
+	}
+	openToast({ kind: "info", label: "Unlock method changed. Unlock Nulo again to continue." })
+	router.replace("/popup/auth")
+}
+
 /** Runs one change; the page stays on a cancel, and reports a failure before the save as nothing
- *  changed. A change made leaves for Settings, and one saved but not reopened ends at the lock screen. */
+ *  changed. A change made leaves for Settings, and one saved but not reopened ends at the lock screen.
+ *  Every card a change asks runs inside its attempt, so no answer outlives the press that asked it. */
 async function attempt(run) {
-	if (isBusy.value) return
+	if (isBusy.value || !appStore.isLogined) return
 	isBusy.value = true
-	const isCurrent = runs.snapshot()
+	const isCurrent = snapshotRun()
+	const profileId = appStore.profile.id
 	try {
 		const done = await run(isCurrent)
 		if (!isCurrent() || !done) return
 		newPasskey.forget()
 		reset()
-		openToast({ kind: "success", label: done })
-		leaveFor(router, "/popup/settings")
+		leaveChanged({ snack: { kind: "success", label: done }, profileId })
 	} catch (error) {
 		if (!isCurrent()) return
 		if (error instanceof UnlockMethodChangedError) {
 			reset()
-			openToast({ kind: "info", label: "Unlock method changed. Unlock Nulo again to continue." })
-			router.replace("/popup/auth")
+			leaveLocked()
 			return
 		}
 		if (error instanceof StaleUnlockCredentialError) {
@@ -195,34 +222,39 @@ const handleContinue = () =>
 		return "Now unlocks with your passkey"
 	})
 
-/** The current passkey must open the profile, as the change needs it, before a new one is made. */
+/** The current passkey must open the profile, as the change needs it. It is asked after the new one,
+ *  so its answer goes to the change at once; a cancel there leaves the new passkey unused. */
 const handleNewPasskey = () =>
 	attempt(async (isCurrent) => {
 		const id = appStore.profile.id
+		const next = await nextPasskey()
+		if (!isCurrent()) return undefined
 		const current = await currentPasskey(isCurrent)
 		if (!isCurrent()) return undefined
 		await managers.profile.verifyUnlockCredential(id, { passkey: current })
-		if (!isCurrent()) return undefined
-		const next = await nextPasskey()
 		if (!isCurrent()) return undefined
 		await changeUnlockMethod(isCurrent, id, { passkey: current }, { passkey: next })
 		return "Now unlocks with your new passkey"
 	})
 
-const handleUsePassword = () =>
-	attempt(async (isCurrent) => {
-		const answer = await currentPasskey(isCurrent)
-		if (!isCurrent()) return undefined
-		await managers.profile.verifyUnlockCredential(appStore.profile.id, { passkey: answer })
-		if (!isCurrent()) return undefined
-		heldAnswer.value = answer
-		return undefined
-	})
+const handleUsePassword = () => {
+	if (!isBusy.value) step.value = "newPassword"
+}
 
+/** The pair is checked and read at the press, before the card: the change uses the password typed
+ *  then, whatever the fields hold once the card answers. A failed Save keeps the pair, and the next
+ *  asks the card again. */
 const handleSavePassword = () =>
 	attempt(async (isCurrent) => {
-		if (!canSaveNewPassword.value || !heldAnswer.value) return undefined
-		await changeUnlockMethod(isCurrent, appStore.profile.id, { passkey: heldAnswer.value }, { password: newPassword.value })
+		if (!canSaveNewPassword.value) return undefined
+		const next = newPassword.value
+		const id = appStore.profile.id
+		const current = await currentPasskey(isCurrent)
+		if (!isCurrent()) return undefined
+		// The check keeps a passkey that cannot open the profile on its passkey copy; the change re-checks.
+		await managers.profile.verifyUnlockCredential(id, { passkey: current })
+		if (!isCurrent()) return undefined
+		await changeUnlockMethod(isCurrent, id, { passkey: current }, { password: next })
 		return isCurrent() ? "Now unlocks with your password" : undefined
 	})
 
@@ -255,13 +287,18 @@ onBeforeMount(() => {
 
 onBeforeUnmount(() => {
 	managers.profile.onProfileUpdated.remove(onProfileUpdated)
-	reset()
+	// A lock that closes the session over a saved change can land the window on its lock screen
+	// before the change answers; an own window keeps its flow there, so the answer still ends it.
+	if (commit && handsBackToPanel()) {
+		clearStep()
+		keptFor = appStore.profile?.id
+	} else reset()
 })
 </script>
 
 <template>
 	<CollapsingHeroLayout heroMain="Unlock" heroSub="Method" collapsingLabel="Unlock Method" backTo="/popup/settings" moreBelow @keydown="onKeydown">
-		<div :class="step || isNewPasswordStep ? 'export_section' : 'export_section_last'" data-scroll-section>
+		<div :class="step ? 'export_section' : 'export_section_last'" data-scroll-section>
 			<Text variant="body" height="150" color="body" data-testid="unlock-method-current">
 				{{ currentLine }}
 			</Text>

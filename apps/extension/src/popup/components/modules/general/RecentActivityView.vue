@@ -23,7 +23,7 @@ import { useJournalMirror } from "@/composables/useJournalMirror"
 
 /** Utils */
 import { usePrices } from "@/composables/usePrices"
-import { balanceFormatted } from "@/utils/amount.js"
+import { formatListAmount } from "@/utils/amount.js"
 import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { knownDecimals } from "@/utils/token-amount"
 import { dashIfBlank, isBlank } from "@/utils/string"
@@ -35,14 +35,15 @@ import {
 	isQueuedTransfer,
 	journalCardAmount,
 	journalCardAmountSymbol,
+	journalCardDirection,
 	journalProgressWord,
 	journalCardIcon,
 	journalCardOriginLabel,
 	journalCardTitle,
-	journalCardTransferTypeLabel,
+	journalCardTitleNamesToken,
 	sanitizeJournalSubtitle,
 } from "@/utils/journal-state"
-import { callTitle } from "@/utils/tx-enrichment"
+import { callTitle, transferDirection } from "@/utils/tx-enrichment"
 import { buildCancelHandler, buildFocusHandler, isMatchingTask } from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
 
@@ -199,11 +200,17 @@ const executingAmount = computed(() => {
 	if (!isUiTransfer.value) return null
 	const decimals = knownDecimals(tokenById(executingTask.value.content.tokenId))
 	if (decimals === null) return null
-	return balanceFormatted(String(executingTask.value.content.amount), decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
+	return formatListAmount(String(executingTask.value.content.amount), decimals, ROW_AMOUNT_LENGTH)
 })
 const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null
 	return tokenById(executingTask.value.content.tokenId)?.symbol || null
+})
+/** The task holds the request's own sender and recipient, as the send's journal record does. */
+const executingDirection = computed(() => {
+	if (!isUiTransfer.value) return null
+	const { transferType, senderAddress, recipientAddress } = executingTask.value.content
+	return transferDirection(transferType, senderAddress, recipientAddress)
 })
 
 /** Durable journal records. Survives SW restart + popup close/reopen so if
@@ -626,7 +633,8 @@ onBeforeUnmount(() => {
 				:originLabel="journalCardOriginLabel(op)"
 				:amount="cardAmountFor(op)"
 				:amountSymbol="cardAmountSymbolFor(op)"
-				:transferTypeLabel="journalCardTransferTypeLabel(op)"
+				:titleNamesToken="journalCardTitleNamesToken(op)"
+				:direction="journalCardDirection(op)"
 				:cancellable="true"
 				:jobId="op.id"
 				:stage="op.progress?.stage ?? null"
@@ -649,6 +657,8 @@ onBeforeUnmount(() => {
 				:originLabel="executingOriginLabel"
 				:amount="executingAmount"
 				:amountSymbol="executingAmountSymbol"
+				:titleNamesToken="isUiTransfer"
+				:direction="executingDirection"
 				:oneLineTitle="!isUiTransfer"
 			/>
 			<TransactionAwaitingCard v-else-if="!renderedInFlightOps.length && showFallbackAwaiting" />

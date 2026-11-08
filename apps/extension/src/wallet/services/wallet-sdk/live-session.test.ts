@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest"
-import { bindLiveSession } from "./live-session"
+import { SCOPE_VIOLATION_ENVELOPE } from "./error-envelope"
+import { bindLiveSession, traceAnswers } from "./live-session"
 
 const session = (sessionId = "s1") => ({ sessionId, origin: "https://dapp.example", tabId: 7 }) as never
 
@@ -37,5 +38,48 @@ describe("bindLiveSession", () => {
 		live.terminate()
 		expect(handler.sendResponse).not.toHaveBeenCalled()
 		expect(handler.terminateSession).not.toHaveBeenCalled()
+	})
+})
+
+describe("traceAnswers", () => {
+	test("an error answer carries the id beside its own data; a result passes untouched", async () => {
+		const bound = session()
+		const handler = handlerOver(new Map([["s1", bound]]))
+		const answered: unknown[] = []
+		const live = traceAnswers(bindLiveSession(handler, bound), "1a2b3c4d", (error) => answered.push(error))
+		await live.respond({ messageId: "m1", walletId: "nulo", error: SCOPE_VIOLATION_ENVELOPE })
+		await live.respond({ messageId: "m2", walletId: "nulo", result: 1 })
+		const traced = { ...SCOPE_VIOLATION_ENVELOPE, data: { ...SCOPE_VIOLATION_ENVELOPE.data, walletTraceId: "1a2b3c4d" } }
+		expect(handler.sendResponse.mock.calls).toEqual([
+			["s1", { messageId: "m1", walletId: "nulo", error: traced }],
+			["s1", { messageId: "m2", walletId: "nulo", result: 1 }],
+		])
+		expect(answered).toEqual([traced, undefined])
+	})
+
+	test("reports an answer only when it is sent: once the session ended, nothing is sent or reported", async () => {
+		const bound = session()
+		const sessions = new Map<string, unknown>([["s1", bound]])
+		const handler = handlerOver(sessions)
+		const onAnswer = vi.fn()
+		const live = traceAnswers(bindLiveSession(handler, bound), "1a2b3c4d", onAnswer)
+		await live.respond({ messageId: "m1", walletId: "nulo", result: "ok" })
+		sessions.delete("s1")
+		await live.respond({ messageId: "m2", walletId: "nulo", error: SCOPE_VIOLATION_ENVELOPE })
+		live.terminate()
+		expect(live.isLive()).toBe(false)
+		expect(onAnswer.mock.calls).toEqual([[undefined]])
+		expect(handler.sendResponse).toHaveBeenCalledTimes(1)
+		expect(handler.terminateSession).not.toHaveBeenCalled()
+	})
+
+	test("a send the transport refuses is not reported as answered", async () => {
+		const bound = session()
+		const handler = handlerOver(new Map([["s1", bound]]))
+		handler.sendResponse.mockRejectedValueOnce(new Error("port closed"))
+		const onAnswer = vi.fn()
+		const live = traceAnswers(bindLiveSession(handler, bound), "1a2b3c4d", onAnswer)
+		await expect(live.respond({ messageId: "m1", walletId: "nulo", error: SCOPE_VIOLATION_ENVELOPE })).rejects.toThrow("port closed")
+		expect(onAnswer).not.toHaveBeenCalled()
 	})
 })

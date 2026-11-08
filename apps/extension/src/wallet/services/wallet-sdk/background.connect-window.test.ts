@@ -108,6 +108,8 @@ import { MAX_PENDING_PER_SESSION } from "./verification-hold"
 import { FAKE_DAPP_ORIGIN as ORIGIN, FAKE_SENDER, type FakeDappSessionRow, fakeSdkServices } from "./test-services"
 
 const OTHER_ORIGIN = "https://other.example"
+/** Every error answer carries the 8-hex id the wallet minted on arrival. */
+const TRACE_ID = expect.stringMatching(/^[0-9a-f]{8}$/)
 const noopLogger = { log: () => {} } as never
 const tabRemoved: Array<(tabId: number) => void> = []
 const admit = vi.spyOn(VerifyAdmissionGate.prototype, "admit")
@@ -1088,7 +1090,10 @@ describe("an app's calls wait for the person to confirm the check", () => {
 				sessionId: "r1",
 				response: expect.objectContaining({
 					messageId: "over",
-					error: expect.objectContaining({ code: -32005, data: { walletErrorCode: "TOO_MANY_PENDING" } }),
+					error: expect.objectContaining({
+						code: -32005,
+						data: { walletErrorCode: "TOO_MANY_PENDING", walletTraceId: TRACE_ID },
+					}),
 				}),
 			},
 		])
@@ -1098,6 +1103,23 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		h.confirm(hashOf("r1"))
 		await vi.waitFor(() => expect(dispatched()).toHaveLength(32))
 		expect(dispatched()).not.toContain("r1:sendTx")
+	})
+
+	test("two refusals at once carry two different trace ids, and an answered call carries none", async () => {
+		const h = boot()
+		remember(h)
+		await reconnect(h, "r1")
+		for (let i = 0; i < 32; i++) h.send("r1", "getChainInfo", `m${i}`)
+		h.send("r1", "sendTx", "over-a")
+		h.send("r1", "sendTx", "over-b")
+		await flush()
+		const ids = responses.map((r) => (r.response.error as { data?: { walletTraceId?: string } }).data?.walletTraceId)
+		expect(ids).toEqual([TRACE_ID, TRACE_ID])
+		expect(new Set(ids).size).toBe(2)
+
+		h.confirm(hashOf("r1"))
+		await vi.waitFor(() => expect(responses.some((r) => r.response.messageId === "m0")).toBe(true))
+		expect(JSON.stringify(responses.find((r) => r.response.messageId === "m0"))).not.toContain("walletTraceId")
 	})
 
 	test("a hold dropped while the held send's row is still being written fails that row once the write lands", async () => {
@@ -1315,7 +1337,13 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			expect(sessions.get("r1")).toBe(successor)
 		} else {
 			expect(responses).toEqual([
-				{ sessionId: "r1", response: expect.objectContaining({ messageId: "g", error: SESSION_INVALID_ERROR }) },
+				{
+					sessionId: "r1",
+					response: expect.objectContaining({
+						messageId: "g",
+						error: { ...SESSION_INVALID_ERROR, data: { ...SESSION_INVALID_ERROR.data, walletTraceId: TRACE_ID } },
+					}),
+				},
 			])
 			expect(terminated()).toEqual(["r1"])
 			expect(sessions.has("r1")).toBe(false)

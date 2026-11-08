@@ -10,12 +10,18 @@ import {
 	RestoreTornError,
 	CapabilityNotGrantedError,
 	CLIENT_DISCONNECTED_MESSAGE,
+	ContractAssertionError,
+	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
+	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
 	ContractNotRegisteredError,
 	ContractNotFoundError,
 	DuplicateInitializationError,
 	InvalidPasswordError,
 	InvalidWalletArgumentsError,
 	isClientDisconnectRejection,
+	isDefaultEntrypointRefusal,
 	isReceiverGoneRejection,
 	RECEIVER_GONE_MESSAGE,
 	JobCancelledError,
@@ -46,6 +52,7 @@ import {
 	walletErrorFromPayload,
 } from "./errors"
 import * as errorsModule from "./errors"
+import { buildErrorResponseContent } from "./core/error-response"
 
 describe("walletErrorFromPayload", () => {
 	test("JobCancelledError round-trips with code + jobId preserved", () => {
@@ -141,9 +148,10 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		| { kind: "capability" } // see the capabilityType table
 		| { kind: "base" } // not rebuilt: a plain WalletError keeps code, message and details
 		| { kind: "by-message" } // rebuilt only from its own messages; any other is its parent's
+		| { kind: "bounded" } // message as sent, details re-read through the class's bounds
 	type Ctor = new (...args: never[]) => WalletError
 	type Row = { ctor: Ctor; make: () => WalletError; name: string; code: string; rebuild: Rebuild }
-	type Expected = { ctor: Ctor; name: string; message: string; details: unknown }
+	type Expected = { ctor: Ctor; name: string; message: string; details: unknown; fresh?: true }
 
 	const pass: Rebuild = { kind: "pass" }
 	const base: Rebuild = { kind: "base" }
@@ -235,6 +243,41 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			name: "PxeStaleAnchorError",
 			code: "PXE_STALE_ANCHOR",
 			rebuild: pass,
+		},
+		{
+			ctor: ContractAssertionError,
+			make: () => new ContractAssertionError("a", { assertion: "Balance too low", frames: [{ contract: `0x${"ab".repeat(32)}` }] }),
+			name: "ContractAssertionError",
+			code: "CONTRACT_ASSERTION",
+			rebuild: { kind: "bounded" },
+		},
+		{
+			ctor: DefaultEntrypointPublicCallError,
+			make: () => new DefaultEntrypointPublicCallError(),
+			name: "DefaultEntrypointPublicCallError",
+			code: "DEFAULT_ENTRYPOINT_PUBLIC_CALL",
+			rebuild: { kind: "constant", message: "DefaultEntrypoint only supports private functions" },
+		},
+		{
+			ctor: DefaultEntrypointUtilityCallError,
+			make: () => new DefaultEntrypointUtilityCallError(),
+			name: "DefaultEntrypointUtilityCallError",
+			code: "DEFAULT_ENTRYPOINT_UTILITY_CALL",
+			rebuild: { kind: "constant", message: "DefaultEntrypoint only supports private functions" },
+		},
+		{
+			ctor: DefaultEntrypointMultiCallError,
+			make: () => new DefaultEntrypointMultiCallError(),
+			name: "DefaultEntrypointMultiCallError",
+			code: "DEFAULT_ENTRYPOINT_MULTI_CALL",
+			rebuild: { kind: "constant", message: "DefaultEntrypoint requires exactly 1 call" },
+		},
+		{
+			ctor: DefaultEntrypointNoCallError,
+			make: () => new DefaultEntrypointNoCallError(),
+			name: "DefaultEntrypointNoCallError",
+			code: "DEFAULT_ENTRYPOINT_NO_CALL",
+			rebuild: { kind: "constant", message: "DefaultEntrypoint requires exactly 1 call, got 0" },
 		},
 		{
 			ctor: ContractNotRegisteredError,
@@ -385,6 +428,9 @@ describe("every WalletError subclass: identity and wire shape", () => {
 				return { ctor: WalletError, name: "WalletError", message: payload.message, details: payload.details }
 			case "by-message":
 				return { ctor: ScopeViolationError, name: "ScopeViolationError", message: payload.message, details: undefined }
+			case "bounded":
+				// None of the shapes below carries an assertion string or a frames array.
+				return { ...own, message: payload.message, details: { assertion: "", frames: [] }, fresh: true }
 		}
 	}
 
@@ -396,7 +442,8 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		expect(rebuilt.name).toBe(want.name)
 		expect(rebuilt.code).toBe(payload.code)
 		expect(rebuilt.message).toBe(want.message)
-		expect(rebuilt.details).toBe(want.details)
+		if (want.fresh) expect(rebuilt.details).toStrictEqual(want.details)
+		else expect(rebuilt.details).toBe(want.details)
 	}
 
 	test("the table lists exactly the module's exported WalletError subclasses", () => {
@@ -548,6 +595,59 @@ describe("remoteErrorFromResponseContent", () => {
 
 	test("neither payload nor message → Error('Unknown error')", () => {
 		expect(remoteErrorFromResponseContent({}).message).toBe("Unknown error")
+	})
+
+	// Offscreen → worker → popup: each hop serializes what the last one rebuilt.
+	const hop = (error: Error): Error => remoteErrorFromResponseContent(JSON.parse(JSON.stringify(buildErrorResponseContent(error))))
+	const field = (n: number) => `0x${n.toString(16).padStart(64, "0")}`
+
+	test("ContractAssertionError keeps its class, message and frames across two hops", () => {
+		const frames = [{ contract: field(1), selector: "0x0a0b0c0d" }, { contract: field(2) }]
+		const sent = new ContractAssertionError("Assertion failed: Balance too low 'x'\nContext:\nop", {
+			assertion: "Balance too low",
+			frames,
+		})
+		const popup = hop(hop(sent))
+		expect(popup).toBeInstanceOf(ContractAssertionError)
+		expect(popup.message).toBe(sent.message)
+		expect((popup as ContractAssertionError).details).toStrictEqual({ assertion: "Balance too low", frames })
+	})
+
+	test.each([
+		["DefaultEntrypointPublicCallError", DefaultEntrypointPublicCallError, "DefaultEntrypoint only supports private functions"],
+		["DefaultEntrypointUtilityCallError", DefaultEntrypointUtilityCallError, "DefaultEntrypoint only supports private functions"],
+		["DefaultEntrypointMultiCallError", DefaultEntrypointMultiCallError, "DefaultEntrypoint requires exactly 1 call"],
+		["DefaultEntrypointNoCallError", DefaultEntrypointNoCallError, "DefaultEntrypoint requires exactly 1 call, got 0"],
+	] as const)("%s keeps its class, its refusal base and its constant message across two hops", (_, ctor, message) => {
+		const popup = hop(hop(new ctor()))
+		expect(popup.constructor).toBe(ctor)
+		expect(isDefaultEntrypointRefusal(popup)).toBe(true)
+		expect(popup.message).toBe(message)
+	})
+
+	test("a hostile CONTRACT_ASSERTION payload rebuilds bounded", () => {
+		const frames = [
+			{ contract: `0x${"a".repeat(70)}` },
+			7,
+			null,
+			{ contract: 5, selector: "0x0a0b0c0d" },
+			...Array.from({ length: 100 }, (_, i) => ({ contract: field(i), selector: i === 0 ? "0x0a0b0c0d" : "0xZZ" })),
+		]
+		const assertion = `${"\u{1F600}".repeat(1_023)}xyz`
+		const rebuilt = hop(
+			remoteErrorFromResponseContent({ errorPayload: { code: "CONTRACT_ASSERTION", message: "m", details: { assertion, frames } } }),
+		)
+		const details = (rebuilt as ContractAssertionError).details
+		expect(rebuilt).toBeInstanceOf(ContractAssertionError)
+		expect([...details.assertion]).toHaveLength(1_024)
+		expect(details.assertion.endsWith("\u{1F600}x")).toBe(true)
+		// Sixteen kept, outermost first; the four malformed ones among them dropped.
+		expect(details.frames).toStrictEqual([
+			{ contract: field(0), selector: "0x0a0b0c0d" },
+			...Array.from({ length: 11 }, (_, i) => ({ contract: field(i + 1) })),
+		])
+		const odd = walletErrorFromPayload({ code: "CONTRACT_ASSERTION", message: "m", details: { assertion: 5, frames: "x" } })
+		expect(odd.details).toStrictEqual({ assertion: "", frames: [] })
 	})
 })
 

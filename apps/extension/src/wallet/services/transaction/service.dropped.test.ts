@@ -13,6 +13,7 @@
  * worker tick-by-tick (each 1000ms advance = one poll of every due tx).
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler, type Lock } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
@@ -71,6 +72,8 @@ describe("TransactionService — DROPPED debounce + resurrection", () => {
 	let receiptQueue: unknown[]
 	let defaultReceipt: () => unknown
 	let getTxReceipt: ReturnType<typeof vi.fn>
+	// The node the poll reads a recorded endpoint through, by accessor.
+	let nodeFor: (url: string, accessor: "retrying" | "single-attempt") => unknown
 
 	const buildService = async () => {
 		const services = new ServiceCollection()
@@ -97,9 +100,9 @@ describe("TransactionService — DROPPED debounce + resurrection", () => {
 		)
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
-				getNodeForUrl: async () => ({ getTxReceipt }),
+				getNodeForUrl: async (url: string) => nodeFor(url, "retrying"),
+				getSingleAttemptNodeForUrl: async (url: string) => nodeFor(url, "single-attempt"),
 				getNode: async () => ({ getTxReceipt }),
-				reportEndpointFailure: () => {},
 			}),
 		)
 		const built = new TransactionService(new LoggerStore(new ConfigStore()), api)
@@ -117,6 +120,7 @@ describe("TransactionService — DROPPED debounce + resurrection", () => {
 		receiptQueue = []
 		defaultReceipt = dropped
 		getTxReceipt = vi.fn(async () => (receiptQueue.length ? receiptQueue.shift() : defaultReceipt()))
+		nodeFor = () => ({ getTxReceipt })
 		service = await buildService()
 		updates = []
 		service.onTransactionUpdated.add((tx) => updates.push({ ...tx }))
@@ -126,7 +130,7 @@ describe("TransactionService — DROPPED debounce + resurrection", () => {
 		vi.useRealTimers()
 	})
 
-	const add = (hash = HASH) =>
+	const add = (hash = HASH, submittedEndpointUrl = ENDPOINT) =>
 		service.addTransaction({
 			origin: { type: 0 } as never,
 			chainId: 1,
@@ -135,7 +139,7 @@ describe("TransactionService — DROPPED debounce + resurrection", () => {
 			nonce: "0",
 			feePaymentMethod: 0 as never,
 			hash,
-			submittedEndpointUrl: ENDPOINT,
+			submittedEndpointUrl,
 			fence: { profileId: "p1", epoch: 0, session: 1 },
 		})
 	/** One worker poll per second of fake time. A poll's write seals on real WebCrypto, which settles
@@ -146,6 +150,27 @@ describe("TransactionService — DROPPED debounce + resurrection", () => {
 			for (const built of builtServices) await (built as unknown as { lock: Lock }).lock.withLock(async () => {})
 		}
 	}
+
+	test("a blackholed recorded endpoint holds the other pending polls for one attempt at most", async () => {
+		const DEAD = "https://rpc.dead.test"
+		const OTHER = `0x${"22".repeat(32)}`
+		// The retrying client spends four 60 s attempts and 6 s of sleeps on a blackhole.
+		const hang = (ms: number) => () => new Promise((_, reject) => setTimeout(() => reject(new Error("aborted")), ms))
+		const deadReads = { retrying: vi.fn(hang(246_000)), "single-attempt": vi.fn(hang(DEFAULT_REQUEST_TIMEOUT_MS)) }
+		nodeFor = (url, accessor) => (url === DEAD ? { getTxReceipt: deadReads[accessor] } : { getTxReceipt })
+		defaultReceipt = stillPending
+		await add(HASH, DEAD)
+		await add(OTHER)
+
+		await tick(1_000)
+		const before = getTxReceipt.mock.calls.length
+		await tick(DEFAULT_REQUEST_TIMEOUT_MS + 2_000)
+
+		expect(getTxReceipt.mock.calls.length).toBeGreaterThan(before)
+		expect(deadReads.retrying).not.toHaveBeenCalled()
+		expect(deadReads["single-attempt"]).toHaveBeenCalledTimes(2)
+		expect((await service.getTransaction(HASH)).status).toBe(TxStatus.Pending)
+	})
 
 	test("DROPPED inside the grace window never finalizes; past grace + streak it does", async () => {
 		await add()

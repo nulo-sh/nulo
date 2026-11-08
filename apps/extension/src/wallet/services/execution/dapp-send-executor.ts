@@ -52,7 +52,7 @@ import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 import { feeDisplay } from "@/utils/fee-estimation"
 import { pickPrimaryIndex, pickPrimaryWireCall } from "@/utils/primary-method"
 import { type JournalAuthwits, type JournalCallCarrier, journalCallOf } from "@/wallet/services/operation-journal/spec"
-import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
+import { findPrimaryEndpoint } from "@/wallet/services/network/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AddTransactionInput, LocalTxOrigin, Tx } from "@/wallet/services/transaction/service"
@@ -551,8 +551,8 @@ export class DappSendExecutor {
 	}
 
 	/** An embedded fee payment skips discovery, as its confirm does: the app's own fee calls conflict
-	 *  with the discovery simulation's dummy fee method. Its validated run lists what another account's
-	 *  carried witness covers. */
+	 *  with the discovery simulation's dummy fee method. Its validated run lists each authorization
+	 *  whose witness the request carries, the account's own included. */
 	private async buildForEstimate(
 		operation: Operation,
 		actions: Action[],
@@ -568,7 +568,7 @@ export class DappSendExecutor {
 		const op = { ...(operation as SendTransactionOperation), actions: [...actions], fee }
 		const probe = new CollectingDiscoveryProbe()
 		const built = await this.deps.buildAndEstimateValidated(op, feeSettings, fence, undefined, signal, undefined, probe)
-		return { built, discovered: consumedOf(probe) }
+		return { built, discovered: attachedOf(probe, built) }
 	}
 
 	/**
@@ -733,9 +733,9 @@ export class DappSendExecutor {
 	 *  whatever its outcome, and the record's error, when there is one, is the one the caller sees.
 	 *  The journal row holds the grants until this write lands, so a send stopped before it lands is
 	 *  listed by the send check once it reads the send went through. */
-	private sentTxRecorder(sent: SentTx): (hash: string) => Promise<void> {
+	private sentTxRecorder(sent: SentTx): (hash: string, submittedEndpointUrl: string) => Promise<void> {
 		const feeChoice = this.feeChoiceFor(sent.feeChosenBy, sent.network.chainId, sent.txCalls)
-		return async (hash) => {
+		return async (hash, submittedEndpointUrl) => {
 			const account = sent.account.address.toString()
 			let recordFailed = false
 			let recordError: unknown
@@ -748,7 +748,7 @@ export class DappSendExecutor {
 					nonce: sent.nonce.toString(),
 					feePaymentMethod: sent.feePaymentMethod,
 					hash,
-					submittedEndpointUrl: primaryEndpointUrl(sent.network),
+					submittedEndpointUrl,
 					estimatedFee: getEstimatedFee(sent.txRequest),
 					gasDetails: getGasDetails(sent.txRequest),
 					fence: sent.fence,
@@ -872,8 +872,7 @@ export class DappSendExecutor {
 		ctx: SlotRun,
 		built: FeeEstimate,
 	): Promise<string> {
-		const { txRequest, node, pxe, account, network, nonce, txCalls, feePaymentMethod, pendingPublicAuthwits, initializesAccount } =
-			built
+		const { txRequest, pxe, account, network, nonce, txCalls, feePaymentMethod, pendingPublicAuthwits, initializesAccount } = built
 		ctx.leaveLine()
 		const sent: SentTx = {
 			origin,
@@ -891,7 +890,7 @@ export class DappSendExecutor {
 		}
 		const { txHash } = await this.deps.coordinator.proveAndSend({
 			pxe,
-			node,
+			pickSendEndpoint: (tx) => this.deps.pickSendEndpoint(network, tx),
 			txRequest,
 			initializesAccount,
 			scopes: [account.address],
@@ -901,7 +900,6 @@ export class DappSendExecutor {
 			...fenceChecks(this.deps, fence),
 			markJournal: ctx.markJournal,
 			commitSubmitting: (patch) => ctx.commitSubmitting(patch, journalAuthwitsOf(sent)),
-			submittedEndpointUrl: primaryEndpointUrl(network),
 			onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 			recordTransaction: this.sentTxRecorder(sent),
 		})
@@ -1094,19 +1092,8 @@ export class DappSendExecutor {
 		ctx: SlotRun,
 		built: StandardBuild,
 	): Promise<Submitted> {
-		const {
-			txRequest,
-			node,
-			pxe,
-			account,
-			scopes,
-			network,
-			nonce,
-			txCalls,
-			feePaymentMethod,
-			pendingPublicAuthwits,
-			initializesAccount,
-		} = built
+		const { txRequest, pxe, account, scopes, network, nonce, txCalls, feePaymentMethod, pendingPublicAuthwits, initializesAccount } =
+			built
 		ctx.leaveLine()
 		const sent: SentTx = {
 			origin,
@@ -1122,9 +1109,9 @@ export class DappSendExecutor {
 			feeChosenBy: feeChooserOf(op.feeSettings),
 			journalId: ctx.journalId,
 		}
-		const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
+		const { txHash, offchainOutput, sentThrough } = await this.deps.coordinator.proveAndSend({
 			pxe,
-			node,
+			pickSendEndpoint: (tx) => this.deps.pickSendEndpoint(network, tx),
 			txRequest,
 			initializesAccount,
 			scopes,
@@ -1134,12 +1121,11 @@ export class DappSendExecutor {
 			...fenceChecks(this.deps, fence),
 			markJournal: ctx.markJournal,
 			commitSubmitting: (patch) => ctx.commitSubmitting(patch, journalAuthwitsOf(sent)),
-			submittedEndpointUrl: primaryEndpointUrl(network),
 			onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 			wantOffchainOutput: offchainOutputOf,
 			recordTransaction: this.sentTxRecorder(sent),
 		})
-		return { txHash, offchainOutput, node }
+		return { txHash, offchainOutput, node: sentThrough.node }
 	}
 
 	/**
@@ -1201,7 +1187,7 @@ export class DappSendExecutor {
 				onBuilt,
 				probe,
 			)
-			return { ...built, discoveredHashes: consumedOf(probe).map(listedKey) }
+			return { ...built, discoveredHashes: attachedOf(probe, built).map(listedKey) }
 		}
 		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(
 			op,
@@ -1291,9 +1277,9 @@ export class DappSendExecutor {
 				})
 				leaveLine()
 
-				const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
+				const { txHash, offchainOutput, sentThrough } = await this.deps.coordinator.proveAndSend({
 					pxe,
-					node,
+					pickSendEndpoint: (tx) => this.deps.pickSendEndpoint(network, tx),
 					txRequest,
 					scopes: scopesWithAccount,
 					parentTask,
@@ -1302,12 +1288,11 @@ export class DappSendExecutor {
 					...fenceChecks(this.deps, fence),
 					markJournal,
 					commitSubmitting,
-					submittedEndpointUrl: primaryEndpointUrl(network),
 					onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 					wantOffchainOutput: offchainOutputOf,
 					recordTransaction,
 				})
-				return { txHash, offchainOutput, node }
+				return { txHash, offchainOutput, node: sentThrough.node }
 			},
 		)
 	}
@@ -1395,9 +1380,16 @@ function listedRecords(decoded: Pick<DecodedAuthwits, "signable" | "consumed">):
 	return [...decoded.signable.map(({ record }) => record), ...decoded.consumed]
 }
 
-/** What an app-paid send lists: it signs nothing, so only what another account's carried witness covers. */
-function consumedOf(probe: CollectingDiscoveryProbe): DiscoveredAuthwit[] {
-	return probe.discovered.filter((record) => record.onBehalfOf !== undefined)
+/** What an app-paid send lists, and holds its confirm to: the send signs nothing, so each request
+ *  whose witness it carries, the account's own named as given by the account. A carried hash is not
+ *  a checked signature: only a contract that checks the request makes the validated run check it. */
+function attachedOf(probe: CollectingDiscoveryProbe, built: Pick<FeeEstimate, "account" | "txRequest">): DiscoveredAuthwit[] {
+	const carried = carriedHashes(built.txRequest)
+	const account = built.account.address.toString()
+	return probe.discovered.flatMap((record) => {
+		if (record.onBehalfOf !== undefined) return [record]
+		return carried.has(record.messageHash) ? [{ ...record, onBehalfOf: account }] : []
+	})
 }
 
 /** The journal's copy of a send's grants, scoped as the recorder writes them; none for a send that
@@ -1429,7 +1421,8 @@ function primaryMethodCalls(op: AztecSendTxOperation): JournalCallCarrier[] | un
 	return [{ method: primary.name, call: journalCallOf(to?.toString(), args) }]
 }
 
-/** A send the node accepted, handed out of its slot for the dApp's wait. */
+/** A send the node accepted, handed out of its slot for the dApp's wait, with the client of the
+ *  endpoint that carried it: its receipt is read there alone. */
 type Submitted = { txHash: TxHash; offchainOutput: ReturnType<typeof offchainOutputOf> | undefined; node: AztecNode }
 
 /** Below a second a dApp's poll is a tight loop on the node. `retryUntil` reads the deadline only

@@ -1,6 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { defineStore } from "pinia"
 import type { Ref } from "vue"
+import type { NetworkRouteView } from "@/composables/useRouteSnapshot"
 
 /** What ConfirmPopup renders. `toggle.model` is a caller-owned ref the dialog's switch binds. */
 export interface ConfirmRequest {
@@ -35,6 +36,8 @@ export const useCacheStore = defineStore("cache", () => {
 	/** Per-`Network` detail page → endpoint popups context. */
 	const endpointEditNetworkId = ref<string | null>(null)
 	const endpointEditId = ref<string | null>(null)
+	/** The endpoint list's last read of the account engine's route, for the edit sheet it opens. */
+	const endpointRoute = ref<NetworkRouteView | null>(null)
 	const accountToEditIdx = ref()
 	const contactToEditIdx = ref()
 	const fpcToEditIdx = ref()
@@ -58,6 +61,7 @@ export const useCacheStore = defineStore("cache", () => {
 		networkToEditIdx,
 		endpointEditNetworkId,
 		endpointEditId,
+		endpointRoute,
 		accountToEditIdx,
 		contactToEditIdx,
 		fpcToEditIdx,

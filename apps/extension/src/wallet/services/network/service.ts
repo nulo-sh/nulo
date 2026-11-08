@@ -1,5 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { runSealing, type SealWarn, sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
+import { type AnyUnlockConversion, type RelayOffers, runUnlockConversions, UNLOCK_CONVERSIONS } from "@/wallet/services/unlock-conversions"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
@@ -10,8 +11,8 @@ import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
-import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { NodeFactory } from "@nulo/aztec-runtime/ports"
+import type { RoutedNode } from "@nulo/aztec-runtime/routing"
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
 import type { ILogger } from "@/wallet/logger"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -35,15 +36,25 @@ import {
 	DEFAULT_SEEDS,
 	type DefaultSeed,
 	isSeedChain,
+	isSeedEndpointUrl,
 	LOCAL_NETWORK_RPC_URL,
+	normalizeRpcUrl,
 	PRIMARY_SEED,
-	RETIRED_DEFAULT_ENDPOINTS,
-	retireDefaultName,
+	relayEndpointOf,
+	relayHolders,
 	SEED_L1_BY_KIND,
+	sameEndpointUrl,
 	seedForKind,
 } from "./seeds"
-import { type RetiredEndpoint, retireEndpoints } from "./retired-endpoints"
-import { readSeedOffers, type SeedOffers, sameSeedOffers, seedOffersKey, seedsToOffer, writeSeedOffers } from "./seed-offers"
+import {
+	KINDS_SEEDED_BEFORE_RECORD,
+	readSeedOffers,
+	type SeedOffers,
+	sameSeedOffers,
+	seedOffersKey,
+	seedsToOffer,
+	writeSeedOffers,
+} from "./seed-offers"
 import {
 	type ChainKind,
 	ERR_ACTIVE_NETWORK,
@@ -64,15 +75,18 @@ import {
 	type NetworkInfo,
 	NETWORK_SERVICE_NAME,
 	NetworkMethodSchemas,
+	endpointsInOrder,
 	networkInfoFrom,
 	NodeStatus,
-	primaryEndpointUrl,
+	type RouteEndpoint,
+	type RouteSnapshot,
+	routeEndpoints,
 	ACTIVE_NETWORK_STORAGE_ROOT,
 	decodeActiveNetworkId,
 } from "./spec"
 
 export * from "./spec"
-export { LOCAL_NETWORK_RPC_URL } from "./seeds"
+export { isSeedEndpointUrl, LOCAL_NETWORK_RPC_URL } from "./seeds"
 
 /**
  * Per-profile active-network pointer. The service owns this state (vs. v0
@@ -80,25 +94,6 @@ export { LOCAL_NETWORK_RPC_URL } from "./seeds"
  * `getActiveNetwork()`. Stored as a single value per profile.
  */
 const activeKey = (profileId: string) => `${ACTIVE_NETWORK_STORAGE_ROOT}@${profileId}`
-
-/**
- * Strict RPC-URL equality that tolerates trailing-slash and casing differences
- * on the seed-vs-user-input comparison only. Used by the chainId-zero check
- * for the "Local Network" preset; the shared `normalizeRpcUrl` deliberately
- * preserves what the user typed (path/query/fragment verbatim), so we need a
- * more aggressive comparison here.
- */
-function sameLocalNetworkUrl(a: string, b: string): boolean {
-	try {
-		const ua = new URL(a)
-		const ub = new URL(b)
-		const pa = ua.pathname.replace(/\/+$/, "")
-		const pb = ub.pathname.replace(/\/+$/, "")
-		return ua.protocol === ub.protocol && ua.host === ub.host && pa === pb && ua.search === ub.search && ua.hash === ub.hash
-	} catch {
-		return a === b
-	}
-}
 
 /** Whether `rpcUrl`'s host is this machine (`isLoopbackHost`); a URL that does not parse is not. */
 function isLoopbackRpcUrl(rpcUrl: string): boolean {
@@ -112,7 +107,7 @@ function isLoopbackRpcUrl(rpcUrl: string): boolean {
 /** A node whose composite chain id the wallet reads as 0, the local development chain: a loopback
  *  node the caller says is local, or one at the Local Network seed's URL. */
 function isLocalNetworkTarget(rpcUrl: string, kindHint: ChainKind | undefined): boolean {
-	return isLoopbackRpcUrl(rpcUrl) && (kindHint === "local" || sameLocalNetworkUrl(rpcUrl, LOCAL_NETWORK_RPC_URL))
+	return isLoopbackRpcUrl(rpcUrl) && (kindHint === "local" || sameEndpointUrl(rpcUrl, LOCAL_NETWORK_RPC_URL))
 }
 
 /** The wallet chain id of the node at `rpcUrl` whose answer computes to `composite`. 0 belongs to the
@@ -139,11 +134,6 @@ function assertSameChainIdentity(probed: { chainId: number; l1ChainId: number },
 			`${ERR_ENDPOINT_CHAIN_MISMATCH}: This RPC reports L1 chain ${probed.l1ChainId}, but this network is L1 chain ${network.l1ChainId}.`,
 		)
 	}
-}
-
-/** Whether `rpcUrl` is `seed`'s endpoint, with Local Network's tolerance for an edited URL. */
-export function isSeedEndpointUrl(seed: DefaultSeed, rpcUrl: string): boolean {
-	return rpcUrl === normalizeRpcUrl(seed.rpcUrl) || (seed.kind === "local" && sameLocalNetworkUrl(rpcUrl, seed.rpcUrl))
 }
 
 /** Whether the row's primary is no longer the one the reset's view decided on. A view that probed
@@ -186,23 +176,6 @@ function trimmedLabel(label: string | undefined): string | undefined {
 	return label?.trim() || undefined
 }
 
-/** Lowercase host + protocol; preserve path/query/fragment verbatim. Falls
- *  back to the raw string if `URL` rejects it (validation runs elsewhere). */
-function normalizeRpcUrl(raw: string): string {
-	try {
-		const u = new URL(raw)
-		u.protocol = u.protocol.toLowerCase()
-		u.hostname = u.hostname.toLowerCase()
-		let s = u.toString()
-		if (!raw.endsWith("/") && s.endsWith("/") && u.pathname === "/") {
-			s = s.slice(0, -1)
-		}
-		return s
-	} catch {
-		return raw
-	}
-}
-
 export class NetworkService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getOrInitNetworks",
@@ -222,6 +195,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		"updateEndpoint",
 		"deleteEndpoint",
 		"setPrimaryEndpoint",
+		"reorderEndpoints",
+		"getRouteSnapshot",
+		"rebuildRoute",
 		"getNodeStatus",
 		"probeNodeStatus",
 	)
@@ -233,13 +209,16 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	public readonly onActiveNetworkChanged = new EventHandler<Network>()
 	public readonly onPrimaryEndpointChanged = new EventHandler<{ networkId: string; endpointId: string }>()
 	public readonly onChainPurged = new EventHandler<{ profileId: string; chainId: number }>()
+	public readonly onRouteChanged = new EventHandler<{ profileId: string; chainId: number }>()
 
 	private readonly storage: SealedEntityStorage<Network>
 	private readonly staleNetworks: StaleNetworkRepository
-	private readonly nodes = new Map<number, AztecNode>()
-	/** URL-keyed transient cache for pending-tx polling pin. */
-	private readonly transientNodes = new Map<string, { node: AztecNode; failures: number }>()
-	/** Never evicted: the keys are only the endpoints failed sends went through. */
+	/** One routed node per network row, with the endpoint list it was built for. */
+	private readonly routes = new Map<string, { key: string; node: RoutedNode }>()
+	/** The retrying client of each endpoint a transaction was submitted through: the send, its dApp
+	 *  `wait` and the registry's receipt reads. */
+	private readonly transientNodes = new Map<string, AztecNode>()
+	/** Never evicted: the keys are only endpoints a transaction was recorded on. */
 	private readonly singleAttemptNodes = new Map<string, AztecNode>()
 	private readonly lock: Lock
 	private readonly nodeFactory: NodeFactory
@@ -274,13 +253,21 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			"sealing the profile's plaintext networks failed; the next worker retries",
 			async (profileId) => {
 				await this.sealLegacyRows(profileId)
-				await runSealing(warn, "moving the profile's networks off a retired default failed; the next worker retries", () =>
-					this.retireDefaults(profileId),
+				await runSealing(warn, "converting the profile's networks failed; the next worker retries", () =>
+					this.convertRows(profileId),
 				)
 			},
 		)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.pxeServiceClient = new PxeServiceClient(this.logger)
+		this.listenToRoutes(this.pxeServiceClient)
+	}
+
+	/** Relays the account engine's route changes to the endpoint list. An offscreen client hears
+	 *  events only once connected, which otherwise waits for its first request. */
+	private listenToRoutes(client: Pick<PxeServiceClient, "onRouteChanged" | "connect">): void {
+		client.onRouteChanged.add((change) => this.emit("onRouteChanged", change))
+		client.connect()
 	}
 
 	/** Seals the profile's plaintext networks under the lock every network writer holds, so no write
@@ -291,24 +278,50 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	/** A network a reset journal holds is left as captured: the reset's resume matches its primary
 	 *  against the captured URL. */
-	private async retireDefaults(profileId: string, retired: readonly RetiredEndpoint[] = RETIRED_DEFAULT_ENDPOINTS): Promise<void> {
+	private async convertRows(profileId: string, conversions: readonly AnyUnlockConversion[] = UNLOCK_CONVERSIONS): Promise<void> {
 		await this.lock.withLock(async () => {
 			const held = (await this.staleNetworks.getJournal(profileId))?.networkId
 			// Read once: a profile holds at most one row per seeded kind, so no rename here meets another.
 			const rows = (await this.storage.getValues()).filter((network) => network.profileId === profileId)
-			for (const network of rows) {
-				if (network.id === held) continue
-				const moved = await retireEndpoints(network, retired)
-				const next = retireDefaultName(moved ?? network, rows) ?? moved
-				if (next === undefined) continue
-				await this.storage.set(next.id, next)
-				network.endpoints.forEach((endpoint, i) => {
-					if (endpoint.rpcUrl !== next.endpoints[i]?.rpcUrl) this.transientNodes.delete(endpoint.rpcUrl)
-				})
-				if (findPrimaryEndpoint(network)?.rpcUrl !== findPrimaryEndpoint(next)?.rpcUrl) this.nodes.delete(next.chainId)
-				this.emit("onNetworkUpdated", next)
-			}
+			const relayOffers = await this.relayOffersLocked(profileId)
+			await runUnlockConversions("networks", rows, {
+				conversions,
+				context: { relayOffers },
+				skip: (network) => network.id === held,
+				log: (level, message, record) => (level === "warn" ? this.logWarn(message, record) : this.logDebug(message, record)),
+				commit: async (network, next) => {
+					await this.storage.set(next.id, next)
+					let moved = network.endpoints.length !== next.endpoints.length
+					network.endpoints.forEach((endpoint, i) => {
+						if (endpoint.rpcUrl === next.endpoints[i]?.rpcUrl) return
+						this.transientNodes.delete(endpoint.rpcUrl)
+						moved = true
+					})
+					if (moved) this.routes.delete(next.id)
+					this.emit("onNetworkUpdated", next)
+				},
+			})
 		})
+	}
+
+	/** The profile's relay offers as its record reads now; each take rewrites the record at once. A
+	 *  record that does not read offers nothing: a guess could give back a relay the person removed.
+	 *  With no record, a profile with rows stands for every default seeded before it. Caller holds the
+	 *  lock, as the profile's purge does. */
+	private async relayOffersLocked(profileId: string): Promise<RelayOffers> {
+		const record = await readSeedOffers(this.browserApi.storage.local, profileId)
+		if (record.kind === "corrupt") return { pending: () => false, take: async () => {} }
+		let current: SeedOffers = record.kind === "valid" ? record.value : { offered: [...KINDS_SEEDED_BEFORE_RECORD] }
+		return {
+			pending: (kind) => !current.relay?.includes(kind),
+			take: async (kind) => {
+				// Kept only once written: the next take writes from it, and must not record an offer whose
+				// row never converted.
+				const next = { ...current, relay: [...(current.relay ?? []), kind] }
+				await writeSeedOffers(this.browserApi.storage.local, profileId, next)
+				current = next
+			},
+		}
 	}
 
 	// ── Read paths ───────────────────────────────────────────────────────
@@ -354,6 +367,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			return { rows, added: [], primaryId: undefined }
 		}
 		const offered = new Set(offer.offered)
+		const relay = new Set([...(record.kind === "valid" ? (record.value.relay ?? []) : []), ...relayHolders(rows)])
 		const added: Network[] = []
 		let primaryId: string | undefined
 		for (const seed of offer.add) {
@@ -363,6 +377,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 				const network = await this.seedOneNetworkLocked(profileId, seed, fence, deletion)
 				added.push(network)
 				offered.add(seed.kind)
+				if (seed.relay) relay.add(seed.kind)
 				if (seed.isPrimaryActive) primaryId = network.id
 			} catch (error) {
 				this.logError(`Failed to seed default '${seed.name}'`, error)
@@ -371,7 +386,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		// The per-seed catch above (soft-fail is right for one bad seed) also swallows the deletion
 		// compensate's throw: without this re-assert a deleted profile would read as seeded.
 		deletion.assertCurrent(fence.profileId, fence.epoch)
-		const next = { offered: [...offered], announce: offer.announce.filter((kind) => offered.has(kind)) }
+		const next = { offered: [...offered], announce: offer.announce.filter((kind) => offered.has(kind)), relay: [...relay] }
 		await this.recordOffersLocked(profileId, record, next, fence, deletion)
 		return { rows: [...rows, ...added], added, primaryId }
 	}
@@ -442,6 +457,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			seed.kind,
 			seed.endpointLabel,
 		)
+		if (seed.relay) network.endpoints.push(relayEndpointOf(network, seed.relay))
 		const write = await this.storage.prepare(network.id, network)
 		await commitFencedCreate(deletion, fence, write, () => this.storage.delete(network.id))
 		return network
@@ -460,9 +476,6 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		if (!activeId) return
 		deletion.assertCurrent(fence.profileId, fence.epoch)
 		await this._writeActive(profileId, activeId)
-		const active = seeded.find((n) => n.id === activeId)!
-		const primaryEndpoint = findPrimaryEndpoint(active)!
-		this.nodes.set(active.chainId, this.nodeFactory.createNode(primaryEndpoint.rpcUrl))
 	}
 
 	public async getNetworks(chainId?: number): Promise<Network[]> {
@@ -676,7 +689,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			} finally {
 				this.deletingNetworks.delete(id)
 			}
-			this.nodes.delete(network.chainId)
+			this.routes.delete(network.id)
 			this.emit("onNetworkDeleted", network)
 			return network
 		})
@@ -783,7 +796,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const record = await readSeedOffers(this.browserApi.storage.local, network.profileId)
 		if (record.kind !== "valid" || network.kind === undefined || !record.value.announce?.includes(network.kind)) return
 		const announce = record.value.announce.filter((kind) => kind !== network.kind)
-		await this.recordOffersLocked(network.profileId, record, { offered: record.value.offered, announce }, fence, deletion)
+		await this.recordOffersLocked(network.profileId, record, { ...record.value, announce }, fence, deletion)
 	}
 
 	/** {@link servesChain} for a chain the dApp may also use now: a quarantined chain keeps its row
@@ -824,15 +837,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 					this.logError("Failed to answer a network arrival", { error })
 				}
 			}
-			const primaryEndpoint = findPrimaryEndpoint(network)
-			// A stored URL the transport rule refuses must fail where an unreachable node fails, at the
-			// first read: thrown here, it would stop popup start before Settings could fix it.
-			if (primaryEndpoint && isAllowedRpcUrl(primaryEndpoint.rpcUrl).ok) {
-				this.nodes.set(network.chainId, this.nodeFactory.createNode(primaryEndpoint.rpcUrl))
-			} else if (primaryEndpoint) {
-				this.nodes.delete(network.chainId)
-				this.logDebug("active network's primary endpoint refused by the transport rule")
-			}
+			// The route is built at the first read, so a stored URL the transport rule refuses fails where
+			// an unreachable node fails, never popup start before Settings could fix it.
+			this.routes.delete(network.id)
 			this.emit("onActiveNetworkChanged", network)
 			return network
 		})
@@ -863,6 +870,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			}
 			network.endpoints.push(endpoint)
 			await this.storage.set(network.id, network)
+			this.routes.delete(network.id)
 			this.emit("onNetworkUpdated", network)
 			return endpoint
 		})
@@ -902,12 +910,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			}
 			network.endpoints[idx] = updated
 			await this.storage.set(network.id, network)
-			// Evict transient cache for the OLD URL, plus the chain's primary node
-			// cache if this endpoint is the primary.
 			this.transientNodes.delete(oldUrl)
-			if (network.primaryEndpointId === endpointId) {
-				this.nodes.delete(network.chainId)
-			}
+			this.routes.delete(network.id)
 			this.emit("onNetworkUpdated", network)
 			return updated
 		})
@@ -931,6 +935,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			const removed = network.endpoints.splice(idx, 1)[0]!
 			await this.storage.set(network.id, network)
 			this.transientNodes.delete(removed.rpcUrl)
+			this.routes.delete(network.id)
 			this.emit("onNetworkUpdated", network)
 			return removed
 		})
@@ -951,11 +956,58 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			if (network.primaryEndpointId === endpointId) return network
 			network.primaryEndpointId = endpointId
 			await this.storage.set(network.id, network)
-			this.nodes.delete(network.chainId)
+			this.routes.delete(network.id)
 			this.emit("onPrimaryEndpointChanged", { networkId: network.id, endpointId })
 			this.emit("onNetworkUpdated", network)
 			return network
 		})
+	}
+
+	public async reorderEndpoints(networkId: string, endpointIds: string[]): Promise<Network> {
+		validateParams(NetworkMethodSchemas.reorderEndpoints.params, [networkId, endpointIds], "reorderEndpoints")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		return await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+			await this.refuseWhileResetHolds(profile.id, networkId)
+			const endpoints = endpointsInOrder(network, endpointIds)
+			const first = endpoints[0]!
+			if (network.chainId === 0 && !isLocalNetworkTarget(first.rpcUrl, network.kind)) {
+				throw new Error(`${ERR_ENDPOINT_CHAIN_MISMATCH}: Only a node on this machine can serve chain 0.`)
+			}
+			if (routeEndpoints(network).every((e, i) => e.id === endpointIds[i])) return network
+			const primaryMoved = network.primaryEndpointId !== first.id
+			network.endpoints = endpoints
+			network.primaryEndpointId = first.id
+			await this.storage.set(network.id, network)
+			this.routes.delete(network.id)
+			if (primaryMoved) this.emit("onPrimaryEndpointChanged", { networkId: network.id, endpointId: first.id })
+			this.emit("onNetworkUpdated", network)
+			return network
+		})
+	}
+
+	public async getRouteSnapshot(networkId: string, shown: readonly RouteEndpoint[]): Promise<RouteSnapshot | null> {
+		validateParams(NetworkMethodSchemas.getRouteSnapshot.params, [networkId, shown], "getRouteSnapshot")
+		const info = await this.routeShown(networkId, shown)
+		return info ? this.pxeServiceClient.getRouteSnapshot(info) : null
+	}
+
+	public async rebuildRoute(networkId: string, shown: readonly RouteEndpoint[]): Promise<void> {
+		validateParams(NetworkMethodSchemas.rebuildRoute.params, [networkId, shown], "rebuildRoute")
+		const info = await this.routeShown(networkId, shown)
+		if (info) await this.pxeServiceClient.rebuildRoute(info)
+	}
+
+	/** The owned row's route while `shown` is its endpoint list in route order, else null: ids outlive
+	 *  a URL edit, so a list another window has since edited names another route. */
+	private async routeShown(networkId: string, shown: readonly RouteEndpoint[]): Promise<NetworkInfo | null> {
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		const info = networkInfoFrom(requireOwnedRow(await this.storage.get(networkId), profile.id))
+		const same =
+			info.endpoints.length === shown.length && info.endpoints.every((e, i) => e.id === shown[i]?.id && e.rpcUrl === shown[i]?.rpcUrl)
+		return same ? info : null
 	}
 
 	/** A reset's resume keeps the primary endpoint only while it is the one the capture probed, and
@@ -969,92 +1021,114 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	// ── Status / node accessors ──────────────────────────────────────────
 
+	/** `Active` while any endpoint of the network answers for its chain, read through its route;
+	 *  `InvalidChain` when every endpoint that answered serves another chain. */
 	public async getNodeStatus(networkId: string): Promise<NodeStatus> {
 		validateParams(NetworkMethodSchemas.getNodeStatus.params, [networkId], "getNodeStatus")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
 		const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-		const primary = findPrimaryEndpoint(network)
-		if (!primary) return NodeStatus.Inactive
+		if (!findPrimaryEndpoint(network)) return NodeStatus.Inactive
+		let node: RoutedNode | undefined
 		try {
-			const probedChainId = await this._getChainId(primary.rpcUrl, network.kind)
-			if (probedChainId !== network.chainId) return NodeStatus.InvalidChain
-			return NodeStatus.Active
+			node = await this.getNodeFor(network)
+			const info = await node.getNodeInfo()
+			const url = network.endpoints.find((e) => e.id === node?.route.active()?.id)?.rpcUrl ?? ""
+			return nodeChainId(url, network.kind, walletChainId(info.l1ChainId, info.rollupVersion)) === network.chainId
+				? NodeStatus.Active
+				: NodeStatus.InvalidChain
 		} catch {
-			return NodeStatus.Inactive
+			const states = node?.route.snapshot().map((e) => e.state) ?? []
+			const served = states.some((state) => state === "ready" || state === "behind")
+			return states.includes("wrong-chain") && !served ? NodeStatus.InvalidChain : NodeStatus.Inactive
 		}
 	}
 
+	/**
+	 * `getNodeStatus` within `timeoutMs`: one bounded identity probe per endpoint, the route's active
+	 * endpoint first, then the rest in preference order, stopping at the first that serves the chain.
+	 * While the active endpoint answers, nothing else is asked. Each probe gets at most an equal share
+	 * of the time left among the endpoints still to ask, so a hanging one cannot spend the next one's.
+	 */
 	public async probeNodeStatus(networkId: string, timeoutMs: number): Promise<NodeStatus> {
 		validateParams(NetworkMethodSchemas.probeNodeStatus.params, [networkId, timeoutMs], "probeNodeStatus")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
 		const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-		const primary = findPrimaryEndpoint(network)
-		if (!primary) return NodeStatus.Inactive
-		try {
-			const probed = await this.nodeFactory.probeChainId(primary.rpcUrl, timeoutMs)
-			if (nodeChainId(primary.rpcUrl, network.kind, probed) !== network.chainId) return NodeStatus.InvalidChain
-			return NodeStatus.Active
-		} catch {
-			return NodeStatus.Inactive
+		if (!findPrimaryEndpoint(network)) return NodeStatus.Inactive
+		const deadline = Date.now() + timeoutMs
+		const active = this.routes.get(network.id)?.node.route.active()?.id
+		const endpoints = routeEndpoints(network).sort((a, b) => Number(b.id === active) - Number(a.id === active))
+		let otherChain = false
+		for (const [index, endpoint] of endpoints.entries()) {
+			const left = deadline - Date.now()
+			if (left <= 0) break
+			try {
+				const probed = await this.nodeFactory.probeChainId(endpoint.rpcUrl, Math.floor(left / (endpoints.length - index)))
+				if (nodeChainId(endpoint.rpcUrl, network.kind, probed) === network.chainId) return NodeStatus.Active
+				otherChain = true
+			} catch {
+				// Unreachable within the budget: the next endpoint may serve.
+			}
 		}
+		return otherChain ? NodeStatus.InvalidChain : NodeStatus.Inactive
 	}
 
+	/** The active profile's network on `chainId`, routed across its endpoints. */
 	public async getNode(chainId: number): Promise<AztecNode> {
 		await this.ensureInitialized()
-		return await this.lock.withLock(async () => {
-			let node = this.nodes.get(chainId)
-			if (!node) {
-				const profile = await requireActiveProfile(this.profileService)
-				const network = (await this.storage.getValues()).find((n) => n.profileId === profile.id && n.chainId === chainId)
-				if (!network) throw new Error(`No network configured for chainId ${chainId}`)
-				const primary = findPrimaryEndpoint(network)
-				if (!primary) throw new Error(`Network ${network.id} has no primary endpoint`)
-				node = this.nodeFactory.createNode(primary.rpcUrl)
-				this.nodes.set(chainId, node)
-			}
-			return node
+		const network = await this.lock.withLock(async () => {
+			const profile = await requireActiveProfile(this.profileService)
+			const row = (await this.storage.getValues()).find((n) => n.profileId === profile.id && n.chainId === chainId)
+			if (!row) throw new Error(`No network configured for chainId ${chainId}`)
+			return row
 		})
-	}
-
-	/** One bounded, silent storage read at `network`'s primary endpoint (see
-	 *  `NodeFactory.readPublicStorageOnce`). Background-only: not an RPC method. */
-	public async readPublicStorageOnce(network: Network, contract: AztecAddress, slot: Fr, timeoutMs: number): Promise<Fr> {
-		const rpcUrl = primaryEndpointUrl(network)
-		if (!rpcUrl) throw new Error(`Network ${network.id} has no primary endpoint`)
-		return this.nodeFactory.readPublicStorageOnce(rpcUrl, contract, slot, timeoutMs)
+		return this.getNodeFor(network)
 	}
 
 	/**
-	 * Returns a transient AztecNode bound to `url` — used by pending-tx
-	 * polling so receipt fetches ALWAYS stay on the endpoint the tx was
-	 * submitted to, even after the user swaps the primary OR switches profiles
-	 * while the tx is still pending.
-	 *
-	 * Polling is pinned to the submitted URL and NEVER falls back to the active
-	 * profile's node. The previous fallback routed one profile's tx hash to
-	 * another profile's RPC provider (a cross-profile isolation leak) whenever
-	 * the submitted endpoint wasn't the active profile's — on a profile switch,
-	 * or after the submitting endpoint was edited/deleted. `url` is internal:
-	 * captured at submit time from a configured (allowlist-validated) endpoint
-	 * and reused verbatim, so dialing it without consulting the active profile
-	 * is the correct ownership model for a pending tx. (The only trust this
-	 * places is in the persisted `submittedEndpointUrl`, a wallet-written
-	 * field; the active-profile fallback survives only for the legacy
-	 * no-recorded-endpoint path in `TransactionService.updateTx`, where there
-	 * is no URL to pin to.)
-	 *
-	 * Failures are reported via `reportEndpointFailure(url)`; after 3
-	 * reported failures, which a success does not reset, the cache entry is
-	 * evicted and the next poll rebuilds the same URL.
+	 * The routed node of `network`'s own row, never the active profile's: a profile switch mid-call
+	 * must not send this row's reads to a provider the other profile chose. Rebuilt when the row's
+	 * chain identity or endpoint list differs from the one the cached route was built for.
+	 */
+	public async getNodeFor(network: Network): Promise<RoutedNode> {
+		await this.ensureInitialized()
+		const endpoints = routeEndpoints(network)
+		const key = JSON.stringify([network.chainId, network.l1ChainId, endpoints])
+		const cached = this.routes.get(network.id)
+		if (cached?.key === key) return cached.node
+		const node = this.nodeFactory.createRoutedNode({ chainId: network.chainId, l1ChainId: network.l1ChainId, endpoints })
+		this.routes.set(network.id, { key, node })
+		return node
+	}
+
+	/** One attempt at `network`'s active endpoint within the caller's own budget, fed into its
+	 *  route's health and never moved. */
+	public async getSingleAttemptNodeFor(network: Network, timeoutMs: number): Promise<AztecNode> {
+		return (await this.getNodeFor(network)).route.singleAttempt(timeoutMs)
+	}
+
+	/** One bounded, silent storage read at the latest block of `network`'s active endpoint.
+	 *  Background-only: not an RPC method. Throws on a timeout, a refusal or no value. */
+	public async readPublicStorageOnce(network: Network, contract: AztecAddress, slot: Fr, timeoutMs: number): Promise<Fr> {
+		const node = await this.getSingleAttemptNodeFor(network, timeoutMs)
+		const value = await node.getPublicStorageAt("latest", contract, slot)
+		// The SDK resolves a `null` result as `undefined` rather than rejecting it.
+		if (value === undefined) throw new Error(`Network ${network.id} read no value`)
+		return value
+	}
+
+	/**
+	 * The retrying client for `url` alone, never the active profile's node: a submission and the
+	 * receipts read on its recorded endpoint stay there through a primary swap, a failover or a
+	 * profile switch. `url` is wallet-written, captured from an allowlisted endpoint at submit time.
 	 */
 	public async getNodeForUrl(url: string): Promise<AztecNode> {
 		await this.ensureInitialized()
-		const entry = this.transientNodes.get(url)
-		if (entry) return entry.node
+		const cached = this.transientNodes.get(url)
+		if (cached) return cached
 		const created = this.nodeFactory.createNode(url)
-		this.transientNodes.set(url, { node: created, failures: 0 })
+		this.transientNodes.set(url, created)
 		return created
 	}
 
@@ -1071,26 +1145,14 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return created
 	}
 
-	/** The proposed tip of the node the network's PXE syncs from (its primary endpoint), read past the
-	 *  PXE's chain guard, which would wait behind a proof, through a node that dials once and logs
-	 *  nothing. Background-only: not an RPC method. */
+	/** The proposed tip of the network's active endpoint, read past the PXE's chain guard, which would
+	 *  wait behind a proof, in one silent attempt. Background-only: not an RPC method. */
 	public async readChainTip(networkId: string): Promise<number> {
-		const node = await this.getSingleAttemptNodeForUrl(networkInfoFrom(await this.getNetwork(networkId)).rpcUrl)
+		const node = await this.getSingleAttemptNodeFor(await this.getNetwork(networkId), DEFAULT_REQUEST_TIMEOUT_MS)
 		return Number(await node.getBlockNumber())
 	}
 
-	public reportEndpointFailure(url: string): void {
-		const entry = this.transientNodes.get(url)
-		if (!entry) return
-		entry.failures += 1
-		if (entry.failures >= 3) this.transientNodes.delete(url)
-	}
-
-	/**
-	 * Synthesizes the legacy NetworkInfo struct from a Network's primary
-	 * endpoint. PXE-facing callers (account-state, execution, etc.) consume
-	 * this without knowing about endpoints.
-	 */
+	/** The network as the offscreen PXE takes it: its identity and its endpoints in preference order. */
 	public async getNetworkInfo(networkId: string): Promise<NetworkInfo> {
 		await this.ensureInitialized()
 		return networkInfoFrom(await this.getNetwork(networkId))
@@ -1190,8 +1252,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		row.l1ChainId = seed.l1ChainId
 		this.applyResetEndpoint(row, seed, req)
 		await this.storage.set(row.id, row)
-		this.nodes.delete(req.fromChainId)
-		this.nodes.delete(req.toChainId)
+		this.routes.delete(row.id)
 		if (row.primaryEndpointId !== primaryBefore) {
 			this.emit("onPrimaryEndpointChanged", { networkId: row.id, endpointId: row.primaryEndpointId })
 		}
@@ -1280,7 +1341,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	private readonly onActiveProfileChanged = async () => {
 		await this.lock.withLock(async () => {
-			this.nodes.clear()
+			this.routes.clear()
 			this.transientNodes.clear()
 		})
 	}
@@ -1294,7 +1355,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		this.logDebug(`purgeForProfile ${profileId}: purge chains + remove networks`)
 		await this.lock.withLock(async () => {
-			this.nodes.clear()
+			this.routes.clear()
 			this.transientNodes.clear()
 			const networks = (await this.storage.getValues()).filter((n) => n.profileId === profileId)
 			for (const network of networks) {
@@ -1355,14 +1416,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return randomIdNotIn((id) => seen.has(id))
 	}
 
-	/** A caller that knows the network is local passes `kindHint`, so a Local Network endpoint
-	 *  edited to another loopback URL still reads as chain 0. */
-	private async _getChainId(rpcUrl: string, kindHint?: ChainKind): Promise<number> {
-		return (await this._probeChainIdentity(rpcUrl, kindHint)).chainId
-	}
-
 	/** One probe, both identities: the XOR composite (storage scoping) AND the exact `l1ChainId`
-	 *  (key derivation). The local carve-outs zero only the COMPOSITE — the probed l1ChainId is
+	 *  (key derivation). A caller that knows the network is local passes `kindHint`, so a Local
+	 *  Network endpoint edited to another loopback URL still reads as chain 0. The local carve-outs zero only the COMPOSITE — the probed l1ChainId is
 	 *  reported as-is, because derivation must never receive a synthetic 0. */
 	private async _probeChainIdentity(rpcUrl: string, kindHint?: ChainKind): Promise<{ chainId: number; l1ChainId: number }> {
 		let info: Awaited<ReturnType<AztecNode["getNodeInfo"]>>

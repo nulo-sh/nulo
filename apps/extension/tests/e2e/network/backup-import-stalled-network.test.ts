@@ -4,8 +4,10 @@
  * The funded wallet's backup keeps its local-chain account-state item, which gains a fresh sender,
  * and carries a copy of that item relabelled to Testnet, first in the slice, with Testnet as the
  * active network: the production shape, where the restored wallet opens on a public network. The
- * fresh extension reroutes the Testnet seed's origin to a stub that answers Testnet's identity probe
- * and blackholes every other call, so Testnet's PXE boot hangs while the local network restores.
+ * fresh extension reroutes the Testnet seed's origin to a stub that answers the route's admission
+ * probe (Testnet's identity and its tips) and blackholes every other call, so Testnet's PXE boot
+ * hangs while the local network restores. Unanswered, the probe would fail the endpoint over to the
+ * relay's stand-in, which refuses at once, and no call would hang.
  * A backup carries no networks (the built-ins reseed on import), so the seed is the only public
  * network an import can restore into.
  *
@@ -39,7 +41,7 @@ import { type PlainBackup, sealPlainBackup } from "../helpers/backup-seal"
 import { readStage } from "../helpers/crash-truth"
 import { gotoPopupImport, POPUP_IMPORT_SHELL, submitFullBackupImport, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
 import { pressEscape } from "../helpers/pointer-probes"
-import { nodeInfoResult, startStub } from "../helpers/rpc-stub"
+import { chainTipsResult, nodeInfoResult, startStub } from "../helpers/rpc-stub"
 import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -161,9 +163,10 @@ test.skipIf(!hasConfig)(
 		const tokenAddress = aztecConfig!.tokenAddress
 		const filePath = stalledTestnetBackup(await exportBackupContent(tokenReadyExtension), funded, tokenAddress, sender)
 
-		const stub = await startStub((method) =>
-			method === "aztec_getNodeInfo" ? nodeInfoResult(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION) : undefined,
-		)
+		const stub = await startStub((method) => {
+			if (method === "aztec_getNodeInfo") return nodeInfoResult(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION)
+			return method === "aztec_getChainTips" ? chainTipsResult(1) : undefined
+		})
 		const profileDir = mkdtempSync(join(tmpdir(), "nulo-stalled-network-"))
 		let ctx2: ExtensionContext | undefined
 		let armed: ArmedInterception | undefined

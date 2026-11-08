@@ -2,16 +2,19 @@ import { expect, inject } from "vitest"
 import { SCOPE_VIOLATION_ENVELOPE } from "@/wallet/services/wallet-sdk/error-envelope"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { readStoredCapability } from "../fixtures/dappSession"
-import { setDeveloperMode } from "../fixtures/helpers"
+import { setDebugMode, setDeveloperMode } from "../fixtures/helpers"
+import { armDownloadCapture, readCapturedFile } from "../helpers/download-capture"
 import { readSendRecords, waitForSendRecord } from "../fixtures/journal"
 import { readErrorKind, readJournalDetail, readTerminalCard } from "../fixtures/journal-page"
 import {
 	assertPgOk,
 	callExpectingNoPopup,
+	errorEnvelopeOf,
 	PLAYGROUND_TEST_URL,
 	requestPgBundle,
 	setPgInput,
 	snapshotResultSeq,
+	tracedEnvelope,
 	waitForPgResult,
 } from "../fixtures/playground"
 import { approveCapabilities, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
@@ -28,11 +31,33 @@ const hasConfig = aztecConfig !== undefined
  * its window estimates the fee: the window offers only Reject, which answers the same refusal.
  * A refused row is titled by what the wallet resolved, never by the name the app claimed:
  * "Transaction" when nothing resolved it, the selector's function otherwise.
+ * With developer mode on, that refused request's logs download from the window and from History,
+ * named by the trace id the app's error carries, and naming no address and no URL path.
  */
 
 const OTHER = `0x${"0a".repeat(32)}`
 const LISTED = { type: "transaction", scope: [{ contract: OTHER, function: "transfer_public_to_public" }] }
 const readHistoryCard = (page: Parameters<typeof readTerminalCard>[0], shot?: string) => readTerminalCard(page, "activity", shot)
+
+type Page = Parameters<typeof armDownloadCapture>[0]
+
+/** Presses `page`'s "Download logs" and returns the file it wrote. */
+async function downloadRequestLogs(page: Page): Promise<{ name: string; text: string }> {
+	await page.waitForSelector('[data-testid="request-log-download"]', { visible: true, timeout: 30_000 })
+	await armDownloadCapture(page, { gzip: false })
+	await clickByTestId(page, "request-log-download")
+	const { name, bytes } = await readCapturedFile(page)
+	return { name, text: bytes.toString("utf8") }
+}
+
+/** No address, hash or URL path survives into a request's file. */
+function expectNothingNamed(text: string, addresses: string[]): void {
+	expect(text).not.toMatch(/0x[0-9a-f]{9,}/i)
+	expect(text).not.toMatch(/\b(?:https?|wss?):\/\/[^\s/"]+\/[^\s"]/i)
+	for (const address of addresses) {
+		for (const piece of address.slice(2).match(/.{8}/g) ?? []) expect(text.toLowerCase()).not.toContain(piece.toLowerCase())
+	}
+}
 
 test.skipIf(!hasConfig)(
 	"scope-refusal — a send outside the listed scope is refused without a window and filed as not allowed",
@@ -66,9 +91,9 @@ test.skipIf(!hasConfig)(
 		const sends = (await readSendRecords(wallet)).filter((r) => r.kind === "dapp_execute").map((r) => r.id)
 		const detail = await readJournalDetail(wallet, record.id, "refused-scope-detail")
 		const card = await readHistoryCard(wallet, "refused-scope-card")
-		expect({ status: refused.status, error: refused.errorJson, sends, detail, card }).toEqual({
+		expect({ status: refused.status, error: errorEnvelopeOf(refused), sends, detail, card }).toEqual({
 			status: "error",
-			error: { message: JSON.stringify(SCOPE_VIOLATION_ENVELOPE) },
+			error: tracedEnvelope(SCOPE_VIOLATION_ENVELOPE),
 			sends: [record.id],
 			detail: {
 				"journal-detail-category": "Not allowed",
@@ -93,6 +118,12 @@ test.skipIf(!hasConfig)(
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const config = aztecConfig as AztecTestConfig
 		const page = ctx.playgroundPage
+		const settings = await openPopup(ctx)
+		await waitForHash(settings, "#/popup/general", 30_000)
+		await setDeveloperMode(settings, true)
+		// Expected refusals log at debug: without it the file holds its timeline and envelope only.
+		await setDebugMode(settings, true)
+		await settings.close()
 		await setPgInput(page, "tokenAddress", config.tokenAddress)
 		await setPgInput(page, "recipient", config.minterAddress)
 		await setPgInput(page, "amount", "1")
@@ -114,6 +145,7 @@ test.skipIf(!hasConfig)(
 		await execute.waitForSelector('[data-testid="execute-op-refusal"]', { visible: true, timeout: 120_000 })
 		expect(await execute.$eval('[data-testid="execute-op-refusal"]', (el) => el.getAttribute("data-kind"))).toBe("call")
 		expect(await execute.$('[data-testid="execute-confirm-btn"]')).toBeNull()
+		const fromWindow = await downloadRequestLogs(execute)
 		await rejectExecute(execute)
 		const answer = await waitForPgResult(page, "sendTx", seq, 120_000)
 
@@ -122,14 +154,14 @@ test.skipIf(!hasConfig)(
 		const record = await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "failed", 120_000)
 		expect({
 			status: answer.status,
-			error: answer.errorJson,
+			error: errorEnvelopeOf(answer),
 			kind: await readErrorKind(wallet, record.id),
 			home: await readTerminalCard(wallet, "general", "refused-binding-card"),
 			detail: await readJournalDetail(wallet, record.id, "refused-binding-detail"),
 			card: await readHistoryCard(wallet),
 		}).toEqual({
 			status: "error",
-			error: { message: JSON.stringify(SCOPE_VIOLATION_ENVELOPE) },
+			error: tracedEnvelope(SCOPE_VIOLATION_ENVELOPE),
 			kind: "scope_refused",
 			// Titled by the function the selector runs, not the "balance_of_public" the call claimed, as its
 			// contract spells it: no build recorded the class a movement label needs.
@@ -139,15 +171,30 @@ test.skipIf(!hasConfig)(
 				"journal-detail-context": "The app asked for more than you allowed. Nothing was sent.",
 				"journal-detail-state": "Failed",
 				"journal-detail-method": "Transfer Public To Public",
-				"journal-detail-error-message": null,
+				"journal-detail-error-message": "Scope violation: call name does not match selector's function",
 			},
 			card: { title: "Transfer Public To Public", subtitle: "Not allowed" },
 		})
 
-		await setDeveloperMode(wallet, true)
-		const detail = await readJournalDetail(wallet, record.id)
-		expect(detail["journal-detail-error-message"]).toBe("Scope violation: call name does not match selector's function")
+		await readJournalDetail(wallet, record.id)
 		// Refused before any claim, so the record carries no raw error.
 		expect(await wallet.$('[data-testid="journal-detail-error-raw"]')).toBeNull()
+		const fromHistory = await downloadRequestLogs(wallet)
+
+		const envelope = errorEnvelopeOf(answer) as { data: { walletTraceId: string } }
+		const name = `nulo-request-${envelope.data.walletTraceId}.txt`
+		expect([fromWindow.name, fromHistory.name]).toEqual([name, name])
+		for (const file of [fromWindow, fromHistory]) {
+			expect(file.text).toContain(`Trace id: ${envelope.data.walletTraceId}\n`)
+			expect(file.text).toContain(`dApp origin host: ${new URL(PLAYGROUND_TEST_URL).host}\n`)
+			expectNothingNamed(file.text, [ctx.accountAddress, config.tokenAddress, config.minterAddress])
+		}
+		expect(fromWindow.text).toMatch(/ {2}(?:fee estimate|authwit preview) {2}failed: Scope violation/)
+		expect(fromWindow.text.endsWith("Error envelope\n(no answer yet)\n")).toBe(true)
+		for (const stage of ["request sendTx", "journal created", "journal failed"]) expect(fromHistory.text).toContain(`  ${stage}`)
+		const counted = /^Log lines \((\d+)/m.exec(fromHistory.text)
+		expect(Number(counted?.[1])).toBeGreaterThan(0)
+		console.info(`scope-refusal: the History file holds ${counted?.[1]} log lines`)
+		expect(JSON.parse(fromHistory.text.split("Error envelope\n")[1] ?? "null")).toEqual(envelope)
 	},
 )

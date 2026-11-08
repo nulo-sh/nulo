@@ -15,20 +15,25 @@ vi.mock("./note-schemas", () => ({
 }))
 
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
-import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import { jsonStringify } from "@aztec-labs/foundation/json-rpc"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import { ChainRuntime, type ActiveProve, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { ChainRuntime, endpointsKey, type ActiveProve, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { createProvePhaseSink } from "./prove-phase-sink"
 import { PxeService, type IProfileReader } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const noopProfiles: IProfileReader = {
 	connect: async () => {},
 	getProfiles: async () => [],
 }
-const network: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://localhost:8080" }
+const network: NetworkInfo = {
+	profileId: "p1",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [{ id: "primary", rpcUrl: "http://localhost:8080" }],
+}
 const scope = "0x000000000000000000000000000000000000000000000000000000000000ab12"
 const PROVE_ID = "11111111-2222-4333-8444-555555555555"
 
@@ -44,8 +49,9 @@ function harness(opts: { throws?: boolean } = {}) {
 		}),
 	} as unknown as PXE
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n) => {
-			runtime = new ChainRuntime(n.chainId, {} as AztecNode, pxe, n.rpcUrl)
+			runtime = new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints))
 			return runtime
 		},
 	}

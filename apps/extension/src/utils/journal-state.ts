@@ -8,13 +8,14 @@
 // The glyph module, not the barrel: the e2e typecheck reaches this file and resolves no `.vue`.
 import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
-import { balanceFormatted } from "@/utils/amount.js"
+import { formatListAmount } from "@/utils/amount.js"
 import { stageSubtitle } from "@/utils/card-subtitle"
+import type { RowDirection } from "@/utils/row-direction"
 import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { dashIfBlank } from "@/utils/string"
 import { knownDecimals, parseSide } from "@/utils/token-amount"
 import type { ListedToken } from "@/utils/tx-amount"
-import { DAPP_LABEL, callTitle, formatTransferType, settledCallTitle } from "@/utils/tx-enrichment"
+import { DAPP_LABEL, callTitle, settledCallTitle, transferDirection } from "@/utils/tx-enrichment"
 import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
 
 /**
@@ -77,7 +78,7 @@ export function journalCardAmount(op: OperationRecord, tokenById: (id: number) =
 	const amount = journalTransferAmount(op, tokenById(op.tokenId))
 	const units = amount ? parseSide(amount.raw) : undefined
 	if (!amount || units === undefined) return null
-	return balanceFormatted(units, amount.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
+	return formatListAmount(units, amount.decimals, ROW_AMOUNT_LENGTH)
 }
 
 /** An in-flight send's symbol, set whenever its token is known, amount or not. */
@@ -311,6 +312,11 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 			return { label: "Not allowed", context: "The app asked for more than you allowed. Nothing was sent." }
 		case "registry_refused":
 			return { label: "Not allowed", context: "Apps cannot change your public authorizations. Nothing was sent." }
+		case "unattached_refused":
+			return {
+				label: "Not allowed",
+				context: "The app did not include an authorization from another of your accounts. Nothing was sent.",
+			}
 		case "malformed_request":
 			return { label: "Couldn't read request", context: "The app sent a request the wallet could not read. Nothing was sent." }
 		case "terms_refused":
@@ -371,6 +377,7 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 			return "Stopped when the wallet locked"
 		case "scope_refused":
 		case "registry_refused":
+		case "unattached_refused":
 			return "Not allowed"
 		case "malformed_request":
 			return "Couldn't read request"
@@ -406,14 +413,12 @@ export interface JournalTerminalCardProps {
 	title: string
 	activityIcon: GlyphName
 	originLabel: string | null
-	/** Privacy-direction chip ("Private → Public" etc.) for transfer ops.
-	 *  Mutually exclusive with originLabel — the terminal card renders
-	 *  whichever is set in the title-trailing slot. Null for non-transfer
-	 *  kinds AND for transfer records persisted before the v0.17 schema
-	 *  added `transferType` (gracefully degrades to no chip). */
-	transferTypeLabel: string | null
+	/** A transfer's sides and way, as its settled row will draw them. Null for a dApp op and for a
+	 *  transfer record that names no known type. */
+	direction: RowDirection | null
 	amount: string | null
 	amountSymbol: string | null
+	titleNamesToken: boolean
 	/** The title names the function a dApp called, whether or not the dApp's name survived. */
 	oneLineTitle: boolean
 	state: JournalTerminalVisualState
@@ -447,7 +452,7 @@ export function buildJournalTerminalCardProps(op: OperationRecord, ctx: JournalT
 
 type JournalCardFields = Pick<
 	JournalTerminalCardProps,
-	"title" | "activityIcon" | "originLabel" | "transferTypeLabel" | "amount" | "amountSymbol" | "oneLineTitle"
+	"title" | "activityIcon" | "originLabel" | "direction" | "amount" | "amountSymbol" | "titleNamesToken" | "oneLineTitle"
 >
 
 /** One token lookup, and the amount formatted before the title and the transfer type are read. */
@@ -458,7 +463,7 @@ function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): J
 	let amountSymbol: string | null = null
 	const stored = journalTransferAmount(op, token)
 	if (stored && token) {
-		amount = balanceFormatted(stored.raw, stored.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
+		amount = formatListAmount(stored.raw, stored.decimals, ROW_AMOUNT_LENGTH)
 		amountSymbol = token.symbol ?? null
 	}
 
@@ -466,9 +471,10 @@ function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): J
 		title: transferTitle(token),
 		activityIcon: "send",
 		originLabel: null,
-		transferTypeLabel: transferTypeLabel(op),
+		direction: journalCardDirection(op),
 		amount,
 		amountSymbol,
+		titleNamesToken: journalCardTitleNamesToken(op),
 		oneLineTitle: false,
 	}
 }
@@ -478,9 +484,10 @@ function dappCardFields(op: OperationRecord, tokens: readonly ListedToken[]): Jo
 		title: journalCallTitle(op, tokens),
 		activityIcon: "zap",
 		originLabel: journalCardOriginLabel(op),
-		transferTypeLabel: null,
+		direction: null,
 		amount: null,
 		amountSymbol: null,
+		titleNamesToken: journalCardTitleNamesToken(op),
 		oneLineTitle: true,
 	}
 }
@@ -506,9 +513,16 @@ export function journalCardOriginLabel(op: OperationRecord): string | null {
 	return sanitizeJournalSubtitle(op.subtitle) ?? DAPP_LABEL
 }
 
-export function journalCardTransferTypeLabel(op: OperationRecord): string | null {
+/** A send's direction from its record: the request's own account and recipient, which its settled
+ *  record copies, so the way badge holds across settlement. */
+export function journalCardDirection(op: OperationRecord): RowDirection | null {
 	if (op.kind !== "transfer") return null
-	return transferTypeLabel(op)
+	return transferDirection(op.transferType, op.accountAddress, op.recipientAddress)
+}
+
+/** A transfer is titled by its token; a dApp op by its call. */
+export function journalCardTitleNamesToken(op: OperationRecord): boolean {
+	return op.kind === "transfer"
 }
 
 function transferTitle(token: TokenForCardProps | undefined): string {
@@ -525,9 +539,4 @@ export function journalCallTitle(op: OperationRecord, tokens: readonly ListedTok
 	if (!op.call) return callTitle(op.title, undefined, false)
 	const { contract, argCount, classId } = op.call
 	return settledCallTitle({ contract, method: op.title, args: { length: argCount }, classId }, tokens)
-}
-
-function transferTypeLabel(op: OperationRecord): string | null {
-	// `TransferType.Private` is 0, so a truthy check would drop the Private → Private chip.
-	return op.transferType !== undefined ? formatTransferType(op.transferType) : null
 }

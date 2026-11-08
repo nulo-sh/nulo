@@ -191,8 +191,8 @@ export interface ParamsMap {
 		credential?: CredentialRef
 		duplicate?: "confirm" | "decline"
 	}
-	/** A passkey profile's file asks its passkey, then a file password (`password`); `short` is one
-	 *  under the wallet's rule, `refuse` and `other` answer the passkey's prompt. */
+	/** A passkey profile's file asks its file password (`password`), then its passkey at Save; `short`
+	 *  is one under the wallet's rule, `refuse` and `other` answer the passkey's prompt. */
 	exportAccountFile: {
 		file: FileRef
 		which: AccountChoice
@@ -241,8 +241,10 @@ export interface ParamsMap {
 	/**
 	 * Settings → Unlock method. A change to `passkey` (from a password, `current` right or wrong) or to
 	 * a `new-passkey` (from a passkey, `current` approve or refuse) mints `credential`; one to `password`
-	 * (from a passkey, `current` approve, refuse or `other`) sets `password`. Every new passkey's prompt
-	 * approves. Not `to`, which the agent session reads as a profile.
+	 * (from a passkey, `current` approve, refuse or `other`) sets `password`, typed before its prompt.
+	 * `refuse` dismisses the change's first prompt: the new passkey's for `new-passkey`, which then
+	 * mints nothing, the current passkey's at Save for `password`. Not `to`, which the agent session
+	 * reads as a profile.
 	 */
 	changeUnlockMethod: {
 		change: "passkey" | "new-passkey" | "password"
@@ -251,13 +253,13 @@ export interface ParamsMap {
 		password?: SecretRef
 		other?: CredentialRef
 	}
-	/** Unlock method's current-passkey prompt held while another window locks. */
+	/** Unlock method's current-passkey prompt, asked by Save, held while another window locks. */
 	raceLockDuringMethodChange: Record<string, never>
-	/** Unlock method's current-passkey prompt held on a second page while the anchor deletes the
-	 *  profile or makes an approved change. */
+	/** Unlock method's current-passkey prompt, asked by Save, held on a second page while the anchor
+	 *  deletes the profile or makes an approved change. */
 	raceMethodChangeElsewhere: Competitor
-	/** The account file page approved by the passkey, its file `password` typed, on a second page
-	 *  while the anchor makes an approved change; then Save, if the page still offers it. */
+	/** The account file page at its file `password`, typed with no card asked, on a second page while
+	 *  the anchor makes an approved change; then Save, if the page still offers it. */
 	raceMethodChangeDuringExport: { password: SecretRef; change: ParamsMap["changeUnlockMethod"] }
 	verifyAll: Record<string, never>
 }
@@ -305,21 +307,21 @@ const CODEC = "src/wallet/services/profile/profile-secret-codec.ts"
 const IMPORT = "src/composables/useFullBackupImport.ts"
 const SELECTION = "src/composables/full-backup-selection.ts"
 const GATE = "src/wallet/services/backup/trust-gate.ts"
-const CREATE_OPENS = cite(SERVICE, 650, "public async createProfile(")
-const PASSKEY_CREATE_OPENS = cite(SERVICE, 751, "public async createPasskeyProfile(")
-const PASSKEY_CREATE_PHRASE = cite(SERVICE, 781, "deriveMasterFromMnemonic(await getMnemonic(entropy))")
-const UNLOCK_REFUSES = cite(SERVICE, 712, "withOpenedSlots(snapshot, { password }, invalidPassword")
-const PASSKEY_UNLOCK_BINDS = cite(SERVICE, 836, "answer.credential.id !== snapshot.credentialId")
-const LOCK_CLOSES = cite(SERVICE, 895, "public async lockActiveProfile(")
-const RENAME = cite(SERVICE, 1015, "public async changeProfileName(")
-const PASSWORD_CHANGE = cite(SERVICE, 1170, "{ password: oldPassword }, invalidOldPassword")
-const PASSWORD_CHANGE_REOPENS = cite(SERVICE, 1196, "this.reopenAfterPasswordChangeHoldingLock(")
-const DELETE = cite(SERVICE, 1657, "public async deleteProfile(")
-const PHRASE_IMPORT = cite(SERVICE, 1868, "public async importMnemonic(")
-const PHRASE_EXPORT = cite(SERVICE, 2038, "withOpenedSlots(profile, key, invalidOldPassword")
-const DUPLICATE_WARNS = cite(SERVICE, 2070, "throw new DuplicateWalletError(")
-const RESTORE_CLONE = cite(SERVICE, 2213, "CLONE DIVERGENCE")
-const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2156, "if (!credentialData && !password) {")
+const CREATE_OPENS = cite(SERVICE, 652, "public async createProfile(")
+const PASSKEY_CREATE_OPENS = cite(SERVICE, 753, "public async createPasskeyProfile(")
+const PASSKEY_CREATE_PHRASE = cite(SERVICE, 783, "deriveMasterFromMnemonic(await getMnemonic(entropy))")
+const UNLOCK_REFUSES = cite(SERVICE, 714, "withOpenedSlots(snapshot, { password }, invalidPassword")
+const PASSKEY_UNLOCK_BINDS = cite(SERVICE, 838, "answer.credential.id !== snapshot.credentialId")
+const LOCK_CLOSES = cite(SERVICE, 897, "public async lockActiveProfile(")
+const RENAME = cite(SERVICE, 1017, "public async changeProfileName(")
+const PASSWORD_CHANGE = cite(SERVICE, 1172, "{ password: oldPassword }, invalidOldPassword")
+const PASSWORD_CHANGE_REOPENS = cite(SERVICE, 1198, "this.reopenAfterPasswordChangeHoldingLock(")
+const DELETE = cite(SERVICE, 1659, "public async deleteProfile(")
+const PHRASE_IMPORT = cite(SERVICE, 1871, "public async importMnemonic(")
+const PHRASE_EXPORT = cite(SERVICE, 2041, "withOpenedSlots(profile, key, invalidOldPassword")
+const DUPLICATE_WARNS = cite(SERVICE, 2073, "throw new DuplicateWalletError(")
+const RESTORE_CLONE = cite(SERVICE, 2216, "CLONE DIVERGENCE")
+const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2159, "if (!credentialData && !password) {")
 const OPEN_BEARER = cite(SESSIONS, 299, "const bearer = !this.strictSecurityMode && dek")
 const SESSION_RESTORE = cite(SESSIONS, 611, "session.passhash || (this.strictSecurityMode && session.bearer) || !session.bearer")
 const LOCK_DELETES_ROW = cite(SESSIONS, 428, "this.deletePersistedSession()")
@@ -333,9 +335,11 @@ const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 122, "if (!ext
 const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 86, 'inner.name === "NotAllowedError") return "not-confirmed"')
 const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 303, "public async createAccount(")
 const EXPORT = "src/composables/useFullBackupExport.ts"
-const FULL_EXPORT = cite(EXPORT, 388, "sealFullBackupText(plaintext as string, state.password.value as string)")
-const FILE_PASSWORD_RULE = cite(EXPORT, 561, "!isPasskeyProfile.value || isNewPasswordValid(")
-const FILE_PASSWORD_BLOCKED = cite(EXPORT, 379, "if (filePasswordBlocked(ctx)) return")
+const FULL_EXPORT = cite(EXPORT, 313, "const sealed = await sealFullBackupText(compact, password)")
+/** A passkey profile's run seals under the file password read at its press, and publishes only the sealed file. */
+const PASSKEY_SEALS_IN_RUN = cite(EXPORT, 376, "return await sealInRun(ctx, isCurrent, result.compact, filePassword)")
+const FILE_PASSWORD_RULE = cite(EXPORT, 599, "!isPasskeyProfile.value || isNewPasswordValid(")
+const FILE_PASSWORD_BLOCKED = cite(EXPORT, 399, "filePasswordBlocked(ctx)) return")
 const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 681, "public async exportAccount(")
 const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 765, "public async importAccount(")
 const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 837, "This account is already in your wallet")
@@ -353,9 +357,9 @@ const RESTORE_ROLLS_BACK = cite(
 	946,
 	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
 )
-const RESTORE_FINALIZES = cite(IMPORT, 338, "restoreRun = await finalizeWithReminder(")
+const RESTORE_FINALIZES = cite(IMPORT, 343, "restoreRun = await finalizeWithReminder(")
 const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
-const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 373, "discoveryQueue.drain(")
+const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 375, "discoveryQueue.drain(")
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
 const REVEAL_PASSKEY = cite(SEED_PAGE, 125, '{ profileId, step: "reveal", profileName: () => name }')
 const REVEAL_CANCEL = cite(SEED_PAGE, 132, "handleCancelOrUnconfirmed(error, openToast)")
@@ -365,10 +369,10 @@ const PASSKEY_SLOTS_REFUSE = cite(CODEC, 117, '"passkey" in key ? new PasskeyNot
 const PASSKEY_KIND_GATE = cite(SERVICE, 114, 'if (row.type === "password") throw new Error("Profile requires password")')
 const RETIRED_UNLOCK = cite(SERVICE, 109, 'if (kind === "retired") throw new RetiredProfileError()')
 const RETIRED_SLOTS = cite(CODEC, 86, 'if (classified.kind === "retired") throw new RetiredProfileError()')
-const RETIRED_EXPORTS = cite(SERVICE, 414, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_LISTED = cite(SERVICE, 2135, 'classifyProfileRow(profile).kind === "retired")')
-const RETIRED_RESEAL = cite(SERVICE, 1160, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_FINALIZE = cite(SERVICE, 2313, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_EXPORTS = cite(SERVICE, 416, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_LISTED = cite(SERVICE, 2138, 'classifyProfileRow(profile).kind === "retired")')
+const RETIRED_RESEAL = cite(SERVICE, 1162, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_FINALIZE = cite(SERVICE, 2316, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 393, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 150, 'stage.value = "phrase"')
@@ -379,38 +383,44 @@ const EARLIER_AT_DECRYPT = cite(SELECTION, 89, "refuse(selected, banner, EARLIER
 const EARLIER_SHAPE = cite(GATE, 75, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
 const IMPORT_FLOW = "src/composables/useProfileImportFlow.ts"
 const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 195, 'await deps.unlockFor(admitted, { step: "import", profileName: name }, existing)')
-const RESTORE_CARD = cite(IMPORT, 275, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
-const PASSKEY_IMPORT_SEALS = cite(SERVICE, 1887, "seal = await this.newRowSeal(password, credentialData)")
-const RESTORE_SEALS = cite(SERVICE, 2189, "seal = await this.newRowSeal(password, credentialData)")
+const RESTORE_CARD = cite(IMPORT, 280, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
+const PASSKEY_IMPORT_SEALS = cite(SERVICE, 1890, "seal = await this.newRowSeal(password, credentialData)")
+const RESTORE_SEALS = cite(SERVICE, 2192, "seal = await this.newRowSeal(password, credentialData)")
 const DISCOVERS = cite("src/wallet/utils/passkey-ceremony.ts", 117, "credentialId === undefined ? buildDiscoverOptions(prfSalt)")
 const UNLOCK_METHOD = "src/popup/pages/settings/security/unlock-method.vue"
-const METHOD_CHANGE = cite(SERVICE, 1242, "public async changeUnlockMethod(")
-const METHOD_CHANGE_WRITES = cite(SERVICE, 1356, "await this.repo.set(original.id, replacement)")
-const METHOD_CHANGE_REOPENS = cite(SERVICE, 1374, "await this.openSessionVerified(replacement, secret, dek)")
-const METHOD_VERIFY_REFUSES = cite(SERVICE, 1224, "await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {")
-const METHOD_WRONG_PASSWORD = cite(UNLOCK_METHOD, 188, "if (isCurrent()) isWrongPassword.value = true")
+const METHOD_CHANGE = cite(SERVICE, 1244, "public async changeUnlockMethod(")
+const METHOD_CHANGE_WRITES = cite(SERVICE, 1358, "await this.repo.set(original.id, replacement)")
+const METHOD_CHANGE_REOPENS = cite(SERVICE, 1376, "await this.openSessionVerified(replacement, secret, dek)")
+const METHOD_VERIFY_REFUSES = cite(SERVICE, 1226, "await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {")
+const METHOD_WRONG_PASSWORD = cite(UNLOCK_METHOD, 215, "if (isCurrent()) isWrongPassword.value = true")
 /** A password profile's change checks the password before it makes a passkey, so a wrong one mints none. */
-const METHOD_PASSWORD_FIRST = cite(UNLOCK_METHOD, 185, "await managers.profile.verifyUnlockCredential(id, { password: typed })")
-const METHOD_THEN_MINTS = cite(UNLOCK_METHOD, 192, "const next = await nextPasskey()")
-const METHOD_NEW_PASSKEY = cite(UNLOCK_METHOD, 141, "const nextPasskey = () => newPasskey.ask(")
-const METHOD_CHECKS_PASSKEY = cite(UNLOCK_METHOD, 204, "await managers.profile.verifyUnlockCredential(id, { passkey: current })")
-const METHOD_CHECKS_HELD = cite(UNLOCK_METHOD, 216, "verifyUnlockCredential(appStore.profile.id, { passkey: answer })")
-const METHOD_CANCEL = cite(UNLOCK_METHOD, 169, "if (handleCancelOrUnconfirmed(error, openToast)) return")
-const METHOD_LEAVES = cite(UNLOCK_METHOD, 155, 'leaveFor(router, "/popup/settings")')
-const METHOD_ENDS_WITH_SESSION = cite(UNLOCK_METHOD, 246, "if (!logged) onSessionEnded()")
+const METHOD_PASSWORD_FIRST = cite(UNLOCK_METHOD, 212, "await managers.profile.verifyUnlockCredential(id, { password: typed })")
+const METHOD_THEN_MINTS = cite(UNLOCK_METHOD, 219, "const next = await nextPasskey()")
+const METHOD_NEW_PASSKEY = cite(UNLOCK_METHOD, 148, "const nextPasskey = () => newPasskey.ask(")
+const METHOD_CHECKS_PASSKEY = cite(UNLOCK_METHOD, 234, "await managers.profile.verifyUnlockCredential(id, { passkey: current })")
+/** A new passkey is asked before the current one, so a dismissed first prompt mints none. */
+const METHOD_ASKS_NEW_FIRST = cite(UNLOCK_METHOD, 230, "const next = await nextPasskey()")
+/** Save asks the current passkey only once the pair is typed, and checks its answer in that press. */
+const METHOD_SAVE_ASKS = cite(UNLOCK_METHOD, 252, "const current = await currentPasskey(isCurrent)")
+const METHOD_SAVE_CHECKS = cite(UNLOCK_METHOD, 255, "await managers.profile.verifyUnlockCredential(id, { passkey: current })")
+const METHOD_CANCEL = cite(UNLOCK_METHOD, 196, "if (handleCancelOrUnconfirmed(error, openToast)) return")
+const METHOD_LEAVES = cite(UNLOCK_METHOD, 156, 'leaveFor(router, "/popup/settings")')
+const METHOD_ENDS_WITH_SESSION = cite(UNLOCK_METHOD, 278, "if (!logged) onSessionEnded()")
 const METHOD_DROPS_PROMPT = cite(UNLOCK_METHOD, 104, 'onCeremonyReject(new Error("The unlock method page started over"))')
-const METHOD_CHANGED_ELSEWHERE = cite(UNLOCK_METHOD, 87, "if (!renamed) onChangedElsewhere()")
+const METHOD_CHANGED_ELSEWHERE = cite(UNLOCK_METHOD, 88, "if (!renamed) onChangedElsewhere()")
 const ACCOUNT_PAGE = "src/popup/pages/settings/security/export/account.vue"
-const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 224, '{ profileId, step: "accountFile", profileName: () => name }')
-const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 229, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
-const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 233, "handleCancelOrUnconfirmed(error, openToast)) return")
-const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 93, "const canSaveFile = computed(() => isNewPasswordValid(")
+const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 217, '{ profileId, step: "accountFile", profileName: () => name }')
+const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 233, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
+const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 222, "if (isCurrent() && !handleCancelOrUnconfirmed(error, openToast))")
+const ACCOUNT_FILE_FAILS = cite(ACCOUNT_PAGE, 247, 'openToast({ kind: "error", label: "Failed to create the file" })')
+const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 90, "const canSaveFile = computed(() => isNewPasswordValid(")
 const ACCOUNT_FILE_PASSWORD = cite("src/wallet/services/account/service.ts", 111, "The file password needs at least 8 characters")
-const ACCOUNT_FILE_TYPE_RESETS = cite(ACCOUNT_PAGE, 163, "() => appStore.profile?.type,")
-const ACCOUNT_FILE_NETWORK_RESETS = cite(ACCOUNT_PAGE, 182, "() => appStore.network?.chainId,")
+const ACCOUNT_FILE_CLEARS = cite(ACCOUNT_PAGE, 111, "clearFilePassword()")
+const ACCOUNT_FILE_TYPE_RESETS = cite(ACCOUNT_PAGE, 159, "() => appStore.profile?.type,")
+const ACCOUNT_FILE_NETWORK_RESETS = cite(ACCOUNT_PAGE, 178, "() => appStore.network?.chainId,")
 /** A session opened in place re-runs the window's bootstrap, which clears the network first. */
 const BOOTSTRAP_CLEARS_NETWORK = cite("src/composables/useProfileBootstrap.ts", 152, "appStore.network = undefined")
-const EXPORT_CHECK_REFUSES = cite(SERVICE, 1224, "await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {")
+const EXPORT_CHECK_REFUSES = cite(SERVICE, 1226, "await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {")
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
 export const EARLIER_TITLE = "Backup from an earlier version"
 const EARLIER_TITLE_SOURCE = cite(GATE, 63, `title: "${EARLIER_TITLE}"`)
@@ -905,7 +915,7 @@ const addAccount: ActionSpec<"addAccount"> = {
 // ── full backups ────────────────────────────────────────────────────────
 
 /** A password profile's file opens with its password; a passkey profile's with a file password of
- *  its own, which the page asks under the wallet's rule before it encrypts anything. */
+ *  its own, which the page asks under the wallet's rule before it asks the passkey. */
 const exportBackup: ActionSpec<"exportBackup"> = {
 	name: "exportBackup",
 	family: "backup",
@@ -951,7 +961,7 @@ const exportBackup: ActionSpec<"exportBackup"> = {
 			["committed"],
 			writes,
 			"unchanged",
-			from.method === "password" ? [FULL_EXPORT] : [FULL_EXPORT, FILE_PASSWORD_RULE, "decision:P86-06"],
+			from.method === "password" ? [FULL_EXPORT] : [FULL_EXPORT, PASSKEY_SEALS_IN_RUN, FILE_PASSWORD_RULE, "decision:P86-06"],
 		)
 	},
 }
@@ -1033,8 +1043,8 @@ function accountChoiceInvalid(open: ModelProfile, which: AccountChoice): string 
 	return Number.isInteger(i) && i >= 0 && i < open.derived ? undefined : `no derived account ${i}`
 }
 
-/** A password profile's file opens with its password. A passkey profile's asks its passkey, then a
- *  file password under the wallet's rule, and the file opens with that file password alone. */
+/** A password profile's file opens with its password. A passkey profile's asks a file password under
+ *  the wallet's rule, then its passkey at Save, and the file opens with that file password alone. */
 const exportAccountFile: ActionSpec<"exportAccountFile"> = {
 	name: "exportAccountFile",
 	family: "account-file",
@@ -1066,11 +1076,12 @@ const exportAccountFile: ActionSpec<"exportAccountFile"> = {
 	expect: (w, p) => {
 		const from = openProfile(w) as ModelProfile
 		if (p.variant === "refuse") return unchanged(w, "cancelled", [ACCOUNT_FILE_PASSKEY, ACCOUNT_FILE_CANCEL, PROMPT_DISMISSED])
-		if (p.variant === "other") return unchanged(w, "refused", [ACCOUNT_FILE_PASSKEY, ACCOUNT_FILE_CHECKS, EXPORT_CHECK_REFUSES])
+		if (p.variant === "other")
+			return unchanged(w, "refused", [ACCOUNT_FILE_PASSKEY, ACCOUNT_FILE_CHECKS, EXPORT_CHECK_REFUSES, ACCOUNT_FILE_FAILS])
 		const next = clone(w)
 		if (p.variant === "short") {
 			bump(next, { secret: 1 })
-			return result(next, ["refused"], [], "unchanged", [ACCOUNT_FILE_PASSKEY, ACCOUNT_FILE_RULE])
+			return result(next, ["refused"], [], "unchanged", [ACCOUNT_FILE_RULE])
 		}
 		const passkey = from.method === "passkey"
 		next.files.push({
@@ -1511,8 +1522,8 @@ const CURRENT_ANSWERS: Record<MethodChange["change"], readonly MethodChange["cur
 	password: ["approve", "refuse", "other"],
 }
 
-/** The page checks the current unlock before it asks anything new, so only a change whose current
- *  unlock opens the profile reaches the new passkey's prompt. */
+/** A password profile's page checks the password before it asks a passkey, and a passkey profile's
+ *  asks the new passkey first, so only a right password or an approved first prompt mints. */
 const changeMints = (p: MethodChange): boolean => p.change !== "password" && (p.current === "right" || p.current === "approve")
 
 /** The fields a change names beside its current answer: the next credential for a passkey, a fresh
@@ -1567,8 +1578,9 @@ const changeUnlockMethod: ActionSpec<"changeUnlockMethod"> = {
 	expect: (w, p) => {
 		if (p.current === "wrong")
 			return unchanged(w, "refused", [METHOD_PASSWORD_FIRST, METHOD_VERIFY_REFUSES, METHOD_WRONG_PASSWORD, METHOD_THEN_MINTS])
-		const checks = p.change === "new-passkey" ? METHOD_CHECKS_PASSKEY : METHOD_CHECKS_HELD
-		if (p.current === "refuse") return unchanged(w, "cancelled", [checks, METHOD_CANCEL, PROMPT_DISMISSED])
+		const checks = p.change === "new-passkey" ? METHOD_CHECKS_PASSKEY : METHOD_SAVE_CHECKS
+		const asks = p.change === "new-passkey" ? METHOD_ASKS_NEW_FIRST : METHOD_SAVE_ASKS
+		if (p.current === "refuse") return unchanged(w, "cancelled", [asks, METHOD_CANCEL, PROMPT_DISMISSED])
 		if (p.current === "other") return unchanged(w, "refused", [checks, SLOTS_BIND_PASSKEY, METHOD_VERIFY_REFUSES])
 		const next = clone(w)
 		const { password: _password, credential: _credential, ...kept } = openProfile(w) as ModelProfile
@@ -1646,9 +1658,9 @@ const raceMethodChangeElsewhere: ActionSpec<"raceMethodChangeElsewhere"> = {
 	},
 }
 
-/** The account file page holds an approval for the unlock the anchor replaces, and starts over
- *  before Save: on a change to a password by its type, on a new passkey by its network, which the
- *  window's bootstrap after the in-place reopen clears. The typed file password's secret is spent. */
+/** The account file page holds a typed file password for the unlock the anchor replaces, and starts
+ *  over before Save: on a change to a password by its type, on a new passkey by its network, which
+ *  the window's bootstrap after the in-place reopen clears. The typed file password's secret is spent. */
 const raceMethodChangeDuringExport: ActionSpec<"raceMethodChangeDuringExport"> = {
 	name: "raceMethodChangeDuringExport",
 	family: "race",
@@ -1671,7 +1683,7 @@ const raceMethodChangeDuringExport: ActionSpec<"raceMethodChangeDuringExport"> =
 		const next = clone(competitor.next)
 		bump(next, { secret: 1 })
 		const reset = p.change.change === "password" ? [ACCOUNT_FILE_TYPE_RESETS] : [BOOTSTRAP_CLEARS_NETWORK, ACCOUNT_FILE_NETWORK_RESETS]
-		return result(next, ["cancelled"], competitor.writes, competitor.settle, [...competitor.sources, ACCOUNT_FILE_PASSKEY, ...reset])
+		return result(next, ["cancelled"], competitor.writes, competitor.settle, [...competitor.sources, ACCOUNT_FILE_CLEARS, ...reset])
 	},
 }
 

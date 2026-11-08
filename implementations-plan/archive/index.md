@@ -14,6 +14,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [amount-honesty](amount-honesty/plan.md) — completed — the wallet never guesses an amount's magnitude, and what it cannot state exactly it does not state
 - [approval-card-decoding](approval-card-decoding/plan.md) — completed — a readable execute-window approval card that decodes call arguments without guessing
 - [approval-scope-follow](approval-scope-follow/plan.md) — completed — a dApp transaction runs in the scope the dApp pinned, with a banner when the wallet's view differs
+- [authwit-copy-1](authwit-copy-1/plan.md) — completed — an app-paid window names the sender's attached authorization; an unattached refusal gets its own History text and app error
 - [authwit-index-1](authwit-index-1/plan.md) — completed — a dApp send's public authwits reach the index whatever History's write does, and are listed once the network took the send
 - [authwit-lifecycle-and-execution-followups](authwit-lifecycle-and-execution-followups/plan.md) — completed — a testable public-authwit lifecycle, plus the previous arc's execution follow-ups
 - [aztec-4.2.0-bump](aztec-4.2.0-bump/plan.md) — superseded by aztec-5.0-upgrade — move the Aztec packages from the last 4.2.0 nightly to the 4.2.0 stable release
@@ -48,6 +49,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [capabilities-popup-quality](capabilities-popup-quality/plan.md) — completed — the capabilities popup and connected-apps page say only what the protocol does
 - [capture-await-write-sweep](capture-await-write-sweep/plan.md) — completed — a hunt for the capture, await, stale-write race shape, with each hit fenced
 - [chain-endpoints](chain-endpoints/plan.md) — completed — a smoke suite that reaches no outside host (#171); hidden characters refused in node URLs, plain HTTP only to this computer and no inline styles in the extension CSP (#200, #101); a missing price reads as unavailable on Home (#116)
+- [changelog-1-build](changelog-1-build/plan.md) — completed — changelog pages on nulo.sh in direction D2, one per stable release, from release-notes and an editorial TOML (#1691); #1711 and #1712 owner asks
 - [chrome-store-launch](chrome-store-launch/plan.md) — completed — every Chrome and Firefox store-submission input built inside the repository
 - [ci-cd](ci-cd/plan.md) — completed — CI bring-up: two long-lived branches with change-detected gates
 - [ci-dedupe-1](ci-dedupe-1/plan.md) — completed — one reusable network lane workflow holds the partition and seeds (#537); a store dispatch smokes the published zips it ships (#527)
@@ -147,6 +149,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [firefox-background-kill](firefox-background-kill/plan.md) — completed — the e2e suite ends the Firefox background page through the browser driver
 - [firefox-files-1](firefox-files-1/plan.md) — completed — file pickers leave Firefox's toolbar panel for the wallet's own window (contacts, account file, Restore again), the full backup's "Saved to your downloads" done state with Close, the contacts export probed at once in 5 s with a working card (#160); known limits #960 #961
 - [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome
+- [firefox-import-window-1](firefox-import-window-1/plan.md) — completed — an import and an unlock-method change on Firefox's toolbar panel close their window, and the panel reopens on Home, Settings or the lock screen (#1716); known limits #1718 #1719 #1720 #1725
 - [firefox-passkey-unlock](firefox-passkey-unlock/plan.md) — completed — passkey steps started in Firefox's toolbar panel run in a window, and every passkey failure shows a way out
 - [firefox-pin-1](firefox-pin-1/plan.md) — completed — the e2e suite's Firefox pin on Puppeteer's 158, its four extension-page differences absorbed on the driver (#1111)
 - [first-account-token-seeding](first-account-token-seeding/plan.md) — completed — default tokens seeded on the first account through an account-added subscription
@@ -543,3 +546,16 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [update-from-1.2.0](update-from-1.2.0/plan.md) — completed — the update scenarios run from v1.2.0: its pins, a `sponsor` trait that pays its sandbox send from bridged Fee Juice, and its Chrome recording; all five runs green (closes #1680)
 - [release-notes-1](release-notes-1/plan.md) — completed — per-version release notes atop the GitHub Release and on AMO, composed and checked in CI (#1668)
 - [network-rename-1](network-rename-1/plan.md) — completed — a seeded default row still named "Alpha V6" or "Mainnet" takes "Alpha" at unlock (closes #1364)
+- [double-optin-1](double-optin-1/plan.md) — completed — the mailing list confirms each signup by email before it counts (#1236)
+- [lows-1](lows-1/plan.md) — completed — a passkey answer is used in the step that collected it: three passkey flows take the new secret first, and any restore opens only on its own admission (#1693 and arc 2)
+- [prover-warm-1](prover-warm-1/plan.md) — completed — a kept-warm browser prover saves under 1 s at the median, so nothing ships; #1623 a known limit
+- [p116-build-1](p116-build-1/plan.md) — completed — the Receive QR at 240 px and the Holdings header on one row, the count alone, as page 116 picked (#1709)
+- [token-digits-1](token-digits-1/plan.md) — completed — list amounts follow one tiered digits rule, truncated ahead of the width cut, and a split side never reads 0 (#1702); #1708 a known limit
+- [p110-build-1](p110-build-1/plan.md) — completed — the execute window names the app's failing assertion and refuses a no-account public call; the leaves block counts authorizations; a Sending toast's × lasts its session; the password hint keeps its space (#1706 and arc 2); #1714, #1715, #1717 known limits
+- [whats-new-1](whats-new-1/plan.md) — completed — the Home row and About row that say Nulo was updated (P117-08 A, #1724)
+- [unlock-conversions-1](unlock-conversions-1/plan.md) — completed — the unlock-time row conversions of a sealed root are entries of one ordered list, applied by one runner, with an AST guard over every unlock handler (#1726)
+- [discovery-allow-1](discovery-allow-1/plan.md) — completed (arc 1 #1722; arc 2 carries the close-out) — the connect window says what Allow reveals; an opt-in "every site may see Nulo" switch
+- [chips-3](chips-3/plan.md) — completed — activity rows draw their direction as a glyph pair and way badge in the icon box, from queued to settled; a row titled by its token drops the symbol under its amount (#1723 and arc 2)
+- [exec-empty-1](exec-empty-1/plan.md) — completed — a no-account request with no call is refused up front, as its two siblings are (P120-04 A, #1728)
+- [rpc-fallback-1](rpc-fallback-1/plan.md) — completed — each network fails over to its next endpoint and returns to its primary; Nulo's relay second on Alpha and Testnet (#1624)
+- [tx-logs-1](tx-logs-1/plan.md) — completed — developer mode downloads one failed request's logs as a scrubbed file, behind a full-width outline bar; every dApp error carries the trace id (P116-15 B, P117-03 A, P121, #1739)

@@ -1,8 +1,10 @@
 import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { OriginType, TransferType } from "@/wallet/services/transaction/spec"
 import type { TxOrigin } from "@/wallet/services/transaction/spec"
 import { FEE_METHODS, pickPrimaryIndex, pickPrimaryMethod } from "./primary-method"
+import type { RowDirection, Side } from "./row-direction"
 import { TRANSFER_LABELS, type TransferKind, transferLabel } from "./token-transfer-vocabulary"
 import { type ListedToken, type SettledCall, settledReading } from "./tx-amount"
 
@@ -107,20 +109,22 @@ export function getTxCategory(calls: SettledCall[], tokens: readonly ListedToken
 	return call === undefined ? "tx" : (settledReading(call, tokens) ?? "tx")
 }
 
-/** Each of the wallet's own transfer types: the token function it runs and its direction, by the
- *  enum's number and by its name, since a stored row may carry either; `0` and `"0"` share an own
- *  key, which a `Map` would split. */
-const TRANSFER_TYPES: Readonly<Record<number | string, { kind: TransferKind; direction: string }>> = Object.fromEntries(
+type TransferTypeInfo = { kind: TransferKind; direction: string; from: Side; to: Side }
+
+/** Each of the wallet's own transfer types: the token function it runs, its direction and its two
+ *  sides, by the enum's number and by its name, since a stored row may carry either; `0` and `"0"`
+ *  share an own key, which a `Map` would split. */
+const TRANSFER_TYPES: Readonly<Record<number | string, TransferTypeInfo>> = Object.fromEntries(
 	(
 		[
-			[TransferType.Private, "transferPrivate", "Private → Private"],
-			[TransferType.PrivateToPublic, "transferPrivateToPublic", "Private → Public"],
-			[TransferType.Public, "transferPublic", "Public → Public"],
-			[TransferType.PublicToPrivate, "transferPublicToPrivate", "Public → Private"],
+			[TransferType.Private, "transferPrivate", "Private → Private", "private", "private"],
+			[TransferType.PrivateToPublic, "transferPrivateToPublic", "Private → Public", "private", "public"],
+			[TransferType.Public, "transferPublic", "Public → Public", "public", "public"],
+			[TransferType.PublicToPrivate, "transferPublicToPrivate", "Public → Private", "public", "private"],
 		] as const
-	).flatMap(([type, kind, direction]) => [
-		[type, { kind, direction }],
-		[TransferType[type], { kind, direction }],
+	).flatMap(([type, kind, direction, from, to]) => [
+		[type, { kind, direction, from, to }],
+		[TransferType[type], { kind, direction, from, to }],
 	]),
 )
 
@@ -156,4 +160,15 @@ export function getOriginLabel(origin?: TxOrigin): string | null {
  */
 export function formatTransferType(type: number | string): string {
 	return Object.hasOwn(TRANSFER_TYPES, type) ? TRANSFER_TYPES[type].direction : String(type)
+}
+
+/**
+ * A sent transfer's direction by its recorded type, `self` when it lands on its sender's own account;
+ * a missing or malformed address is never a move. Null for a type the wallet does not send, so a
+ * stored value never becomes the row's words.
+ */
+export function transferDirection(type: unknown, sender: string | undefined, recipient: string | undefined): RowDirection | null {
+	if ((typeof type !== "number" && typeof type !== "string") || !Object.hasOwn(TRANSFER_TYPES, type)) return null
+	const { direction, from, to } = TRANSFER_TYPES[type]
+	return { from, to, way: sameFieldAddress(sender ?? "", recipient ?? "") ? "self" : "out", label: direction }
 }

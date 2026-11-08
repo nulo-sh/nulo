@@ -1,14 +1,15 @@
 # Website Privacy Notice
 
-**Version 1.1 — effective 5 November 2026**
+**Version 1.2 — effective «FILL: effective date»**
 
 This notice explains what happens to information when you visit `nulo.sh` or join its mailing list.
 The Nulo wallet itself is covered by the [Privacy Policy](privacy.md); this notice adds nothing to
 what the wallet does.
 
 > **The short version.** The website runs no analytics, no tracking and no third-party scripts, and
-> sets no cookies of mine. If you join the mailing list, I keep your email address, the time you
-> joined and the version of this notice then in effect. Resend stores the list and sends the emails.
+> sets no cookies of mine. If you join the mailing list and confirm your address from the email I
+> send, I keep your email address, the time you confirmed and the version of this notice then in
+> effect. Resend stores the list and sends the emails.
 > You get occasional product updates, and you can leave in one click.
 >
 > *This box is a summary. The sections below are the notice.*
@@ -50,13 +51,16 @@ in its dashboard (currently up to 30 days); I do not export or copy them.
 
 ### 3.1 What I collect
 
-When you submit the sign-up form, I keep your **email address**, the **time** you submitted it, the
-**version of this notice** in effect at that time, and the fact that you joined **from the website**.
-Nothing else: no name, no IP address, no wallet information.
+When you submit the sign-up form, I send one email to the address asking you to confirm it
+(§ 3.5). When you confirm, I keep your **email address**, the **time** you confirmed, the **version
+of this notice** in effect at that time, and the fact that you joined **from the website**. Nothing
+else: no name, no IP address, no wallet information. If you do not confirm, your address is not
+added to the list; Resend's records of the request and the email expire after 30 days (§ 3.3).
 
-Your address travels in the body of the request, so it does not appear in the request records of
-§ 2. To limit repeated submissions, Cloudflare counts sign-ups from your IP address for about a
-minute. That count is not stored with your address, and I do not log your IP address or your email
+Your address travels in the body of each request, and the confirmation link carries it in a part of
+the link your browser does not send to the website, so it does not appear in the request records of
+§ 2. To limit repeated submissions, Cloudflare counts sign-ups and confirmations from your IP
+address for about a minute. That count is not stored with your address, and I do not log your IP address or your email
 address.
 
 ### 3.2 Why, and on what basis
@@ -72,26 +76,27 @@ emails on my instructions, under its [Data Processing Addendum](https://resend.c
 subprocessors are listed at [resend.com/legal/subprocessors](https://resend.com/legal/subprocessors).
 Resend stores account data, including the list, in the United States. The emails are sent from its
 servers in Ireland. Resend also keeps a log of each request the sign-up service sends it, including
-your address, for 30 days.
+your address, and a copy of the confirmation email, for 30 days.
 
 ### 3.4 What you receive
 
-Occasional product updates, from `hello@news.nulo.sh`. Nothing is sent when you sign up.
-Replies reach hello@nulo.sh.
+Occasional product updates, from `hello@news.nulo.sh`. When you sign up, you receive one email from
+the same address asking you to confirm. Replies reach hello@nulo.sh.
 
 Open and click tracking are turned off: the emails carry no tracking pixel, and their links are not
 rewritten.
 
-### 3.5 No confirmation email
+### 3.5 Confirming your address
 
-I do not send a confirmation email when you sign up, so I cannot check that the address belongs to
-the person who entered it. If someone enters your address, the first email you receive says why you
-received it and lets you leave in one click. Before each send I review the list and remove
-entries that are plainly not real.
+When you sign up, I send one email to the address you entered, with a link that works for 24 hours.
+Your address joins the list only when you open the link and press Confirm. If you did not ask,
+ignore the email: your address is not added. The form sends at most one confirmation email to the
+same address in 24 hours, and none to an address already on the list or one that left it (§ 3.6).
+Before each product update I review the list and remove entries that are plainly not real.
 
 ### 3.6 Leaving the list, and how long I keep your address
 
-Every email has a link that takes you off the list in one click. You can also write to
+Every product update has a link that takes you off the list in one click. You can also write to
 hello@nulo.sh.
 
 I keep your address while you are on the list. When you leave, Resend keeps your address, marked as
@@ -121,7 +126,7 @@ are:
 - **Cloudflare, Inc.** (hosting; the United States and Cloudflare's global network): the EU Standard
   Contractual Clauses with the UK Addendum, and Cloudflare's participation in the EU–US Data Privacy
   Framework, under [Cloudflare's Data Processing Addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
-- **Plus Five Five, Inc.**, which operates Resend (the mailing list; the United States, with sending from Ireland): the EU Standard
+- **Plus Five Five, Inc.**, which operates Resend (the mailing list and its confirmation emails; the United States, with sending from Ireland): the EU Standard
   Contractual Clauses with the UK Addendum, and Resend's participation in the EU–US Data Privacy
   Framework, under [Resend's Data Processing Addendum](https://resend.com/legal/dpa).
 
@@ -150,3 +155,4 @@ describe, I will ask for your consent.
 |---|---|---|
 | 1.0 | 27 October 2026 | First published version. |
 | 1.1 | 5 November 2026 | Drops the one-time email at store launch (summary, §§ 3.2 and 3.4); replies reach hello@nulo.sh (§ 3.4); the list is reviewed before each send (§ 3.5). |
+| 1.2 | «FILL: effective date» | Sign-ups are confirmed by email before they join the list (summary, §§ 3.1, 3.3, 3.4, 3.5, 3.6 and 6). |

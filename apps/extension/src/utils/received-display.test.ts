@@ -3,7 +3,14 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { describe, expect, test, vi } from "vitest"
 import type { IncomingNoteRecord, IncomingPublicEventRecord } from "@/wallet/services/incoming-transfer/spec"
 import type { TokenInfo } from "@/wallet/services/token/spec"
-import { buildIncomingCardProps, receivedLabel, resolveFromDisplay, resolveReceivedType, tokenForReceipt } from "./received-display"
+import {
+	buildIncomingCardProps,
+	receivedDirection,
+	receivedLabel,
+	resolveFromDisplay,
+	resolveReceivedType,
+	tokenForReceipt,
+} from "./received-display"
 
 const ZERO = AztecAddress.ZERO.toString()
 const REAL = AztecAddress.fromBigIntUnsafe(0xabcn).toString()
@@ -62,6 +69,17 @@ describe("resolveReceivedType + receivedLabel", () => {
 	})
 })
 
+describe("receivedDirection: a receipt's sides, always inbound, in its label's words", () => {
+	test.each([
+		["received-privately", null, "private", "Received privately"],
+		["public-to-public", "public", "public", "Public → Public"],
+		["private-to-public", "private", "public", "Private → Public"],
+		["minted", null, "public", "Mint (public)"],
+	] as const)("%s", (type, from, to, label) => {
+		expect(receivedDirection(type)).toEqual({ from, to, way: "in", label })
+	})
+})
+
 describe("resolveFromDisplay", () => {
 	test("note kind → redacted (sender not disclosed)", () => {
 		expect(resolveFromDisplay(noteRec())).toEqual({ kind: "redacted" })
@@ -99,6 +117,7 @@ describe("tokenForReceipt + buildIncomingCardProps", () => {
 	test("a known token gives the row its symbol, its decimals and a dollar value for the amount", () => {
 		const props = buildIncomingCardProps(noteRec(), [token({ decimals: 6 })], fiatLabel)
 		expect(props).toMatchObject({ tokenSymbol: "TST", amountRaw: "100", tokenDecimals: 6, amountFiat: "≈ 100", txHash: "0xtx" })
+		expect(props.direction).toEqual(receivedDirection("received-privately"))
 	})
 
 	test("no token: no decimals, so the card draws no amount, and no dollar value", () => {

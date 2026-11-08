@@ -357,6 +357,48 @@ export class PxeStaleAnchorError extends WalletError {
 	}
 }
 
+/** A contract assertion's own text and the failing call path, outermost frame first. */
+export interface ContractAssertionDetails {
+	readonly assertion: string
+	readonly frames: readonly { readonly contract: string; readonly selector?: string }[]
+}
+
+const ASSERTION_MAX = 1_024
+const FRAMES_MAX = 16
+const FIELD_ADDRESS = /^0x[0-9a-fA-F]{64}$/
+const SELECTOR = /^0x[0-9a-fA-F]{8}$/
+
+function frameOf(frame: unknown): ContractAssertionDetails["frames"] {
+	const { contract, selector } = (typeof frame === "object" && frame !== null ? frame : {}) as Record<string, unknown>
+	if (typeof contract !== "string" || !FIELD_ADDRESS.test(contract)) return []
+	return [typeof selector === "string" && SELECTOR.test(selector) ? { contract, selector } : { contract }]
+}
+
+/** Wire details are unvalidated, so the bound is applied on every construction, a rebuild included. */
+function boundedAssertion(details: unknown): ContractAssertionDetails {
+	const { assertion, frames } = (typeof details === "object" && details !== null ? details : {}) as Record<string, unknown>
+	return {
+		// Cut by code point, so a cap never leaves half a surrogate pair.
+		assertion: typeof assertion === "string" ? [...assertion.slice(0, 2 * ASSERTION_MAX)].slice(0, ASSERTION_MAX).join("") : "",
+		frames: Array.isArray(frames) ? frames.slice(0, FRAMES_MAX).flatMap(frameOf) : [],
+	}
+}
+
+/**
+ * A simulation failed on a contract's own assertion. Built where the PXE runs, the only process that
+ * holds the failing call path; the message is the simulator's, unchanged. The assertion text is the
+ * contract's, so a reader shows it only as the app's words, sanitized, and only when a frame names
+ * one of the request's own calls.
+ */
+export class ContractAssertionError extends WalletError {
+	public static readonly CODE = "CONTRACT_ASSERTION"
+	declare public readonly details: ContractAssertionDetails
+
+	public constructor(message: string, details?: unknown) {
+		super(ContractAssertionError.CODE, message, boundedAssertion(details), "ContractAssertionError")
+	}
+}
+
 /**
  * A request named a contract instance or class the wallet's PXE does not hold. Raised while
  * resolving contracts — before proving, before any broadcast — so a dApp may register the contract
@@ -383,6 +425,76 @@ export class ContractNotFoundError extends WalletError {
 	public constructor() {
 		super(ContractNotFoundError.CODE, ContractNotFoundError.MESSAGE, undefined, "ContractNotFoundError")
 	}
+}
+
+/** A no-account request whose one call is a public function. */
+export class DefaultEntrypointPublicCallError extends WalletError {
+	public static readonly CODE = "DEFAULT_ENTRYPOINT_PUBLIC_CALL"
+	public static readonly MESSAGE = "DefaultEntrypoint only supports private functions"
+
+	public constructor() {
+		super(
+			DefaultEntrypointPublicCallError.CODE,
+			DefaultEntrypointPublicCallError.MESSAGE,
+			undefined,
+			"DefaultEntrypointPublicCallError",
+		)
+	}
+}
+
+/** A no-account request whose one call is a utility function. */
+export class DefaultEntrypointUtilityCallError extends WalletError {
+	public static readonly CODE = "DEFAULT_ENTRYPOINT_UTILITY_CALL"
+	public static readonly MESSAGE = "DefaultEntrypoint only supports private functions"
+
+	public constructor() {
+		super(
+			DefaultEntrypointUtilityCallError.CODE,
+			DefaultEntrypointUtilityCallError.MESSAGE,
+			undefined,
+			"DefaultEntrypointUtilityCallError",
+		)
+	}
+}
+
+/** A no-account request of more than one call. Constant message: the count is the dApp's input. */
+export class DefaultEntrypointMultiCallError extends WalletError {
+	public static readonly CODE = "DEFAULT_ENTRYPOINT_MULTI_CALL"
+	public static readonly MESSAGE = "DefaultEntrypoint requires exactly 1 call"
+
+	public constructor() {
+		super(DefaultEntrypointMultiCallError.CODE, DefaultEntrypointMultiCallError.MESSAGE, undefined, "DefaultEntrypointMultiCallError")
+	}
+}
+
+/** A no-account request with no call. */
+export class DefaultEntrypointNoCallError extends WalletError {
+	public static readonly CODE = "DEFAULT_ENTRYPOINT_NO_CALL"
+	public static readonly MESSAGE = "DefaultEntrypoint requires exactly 1 call, got 0"
+
+	public constructor() {
+		super(DefaultEntrypointNoCallError.CODE, DefaultEntrypointNoCallError.MESSAGE, undefined, "DefaultEntrypointNoCallError")
+	}
+}
+
+/**
+ * A request the default entrypoint, which runs with no account, can never build: Nulo refuses it
+ * before anything is signed, by the same check the send runs. The dApp's answer stays the
+ * unclassified constant; the wallet's own surfaces read the class.
+ */
+export type DefaultEntrypointRefusal =
+	| DefaultEntrypointPublicCallError
+	| DefaultEntrypointUtilityCallError
+	| DefaultEntrypointMultiCallError
+	| DefaultEntrypointNoCallError
+
+export function isDefaultEntrypointRefusal(error: unknown): error is DefaultEntrypointRefusal {
+	return (
+		error instanceof DefaultEntrypointPublicCallError ||
+		error instanceof DefaultEntrypointUtilityCallError ||
+		error instanceof DefaultEntrypointMultiCallError ||
+		error instanceof DefaultEntrypointNoCallError
+	)
 }
 
 /**
@@ -444,7 +556,7 @@ export class TermsAcceptanceRequiredError extends WalletError {
 
 /**
  * The session that authorized an operation ended — a lock, an auto-lock, or another unlock, the same
- * profile's included — before the operation reached the network; or a passkey restore ended before
+ * profile's included — before the operation reached the network; or a restore ended before
  * it opened the profile it wrote. Constant message and no details: it rides the message-only
  * operation-result channel, and names nothing a dApp could probe.
  */
@@ -686,6 +798,11 @@ const REBUILT_AS = [
 	UnsupportedMethodError,
 	InvalidWalletArgumentsError,
 	PxeStaleAnchorError,
+	ContractAssertionError,
+	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
+	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
 	ContractNotRegisteredError,
 	ContractNotFoundError,
 	ChainNotSupportedError,

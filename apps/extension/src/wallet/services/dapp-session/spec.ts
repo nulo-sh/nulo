@@ -10,6 +10,9 @@ import {
 
 export const DAPP_SESSION_SERVICE_NAME = "dapp-session"
 
+/** How long an app's session row lives from its write. */
+export const DAPP_SESSION_DAYS = 7
+
 /** EntityStorage root for dApp session rows. Frozen: renaming detaches every connected session. */
 export const DAPP_SESSION_STORAGE_ROOT = "nulo:core:dappSessions"
 
@@ -20,6 +23,14 @@ export const DAPP_REGISTRATIONS_STORAGE_ROOT = "nulo:core:dappRegistrations"
 /** A profile's registration counts as their sealed root reads them: any JSON. The allowance's own
  *  decoder is its read, so a chain's entry that does not parse drops only itself. */
 export const RegistrationCountsRowSchema = z.unknown()
+
+/** Sealed root, one row per profile at the profile's id: whether every site may see Nulo with no
+ *  connect window, and the sites the emoji check refused since (`discovery-policy.ts`). */
+export const DISCOVERY_POLICY_STORAGE_ROOT = "nulo:core:discoveryPolicy"
+
+/** A profile's discovery policy as its sealed root reads it: any JSON. The policy's own decoder is
+ *  its read, so a row that does not parse reads as off. */
+export const DiscoveryPolicyRowSchema = z.unknown()
 
 /**
  * Capability + scope types + AccessLevel + DappPermissions live in
@@ -149,6 +160,10 @@ export type Methods = {
 	setCapabilityRejections(sessionId: string, rejections: RejectedCapabilityRecord[]): DappSession
 	getCapabilityRejections(sessionId: string): RejectedCapabilityRecord[]
 	applyCapabilityDecision(sessionId: string, decision: CapabilityDecision): DappSession
+	/** The active profile and its "every site may see Nulo" switch. */
+	getEverySite(): { profileId: string; on: boolean }
+	/** Refused unless `profileId` is the active profile. */
+	setEverySite(profileId: string, on: boolean): void
 }
 
 export type Events = {
@@ -157,4 +172,5 @@ export type Events = {
 	onDappSessionDeleted: DappSession
 	onVerificationRefused: { origin: string; chainId: string; profileId: string }
 	onVerificationConfirmed: { verificationHash: string }
+	onEverySiteChanged: { profileId: string; on: boolean }
 }

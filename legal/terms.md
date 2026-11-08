@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Version 1.2.1 — effective 5 November 2026**
+**Version 1.2.4 — effective «FILL: effective date»**
 
 These Terms are a binding agreement between you and the developer of Nulo. Read them before you
 install or use Nulo. If you do not agree, do not install or use it.
@@ -64,8 +64,9 @@ assets.** I hold no account for you and no assets of yours. Legal obligations co
 actions otherwise within the Developer's possession or control remain unaffected by this.
 
 **Nulo does not intermediate your transactions.** Transactions submitted by the extension go
-directly to the configured node. The Developer does not operate a transaction-approval or screening
-service and cannot unilaterally reverse finalised transactions on the network. Nothing in these
+to the configured node; on Nulo's relay, through it to its provider. The Developer does not operate a
+transaction-approval or screening service and cannot unilaterally reverse finalised transactions on
+the network. Nothing in these
 Terms should be read as the Developer assuming a duty to monitor, review or intervene in what you or
 anyone else does with Nulo.
 
@@ -227,7 +228,9 @@ Nulo is a client. To be useful, it talks to things the Developer does not contro
 **7.1 Nodes and network endpoints.** Nulo ships with default Aztec node endpoints purely as a
 convenience so the wallet works out of the box. They are operated by third parties under their own
 terms, may log your requests, may be slow, wrong, unavailable or hostile, and may be changed or
-withdrawn at any time. You can change the endpoint in Settings → Networks. **Pending transactions may
+withdrawn at any time. Nulo's relay, the second default on Alpha and Testnet, is operated by me
+rather than a third party; it passes your requests to a third-party provider (Privacy Policy
+§ 5.12). You can change the endpoint in Settings → Networks. When a network has more than one endpoint, Nulo uses the primary first and, while it fails, the others in the order Settings → Networks lists them. Each endpoint you add can receive the requests described above. **Pending transactions may
 continue to be checked through the endpoint used to submit them, including after you change or
 remove that endpoint**, and changing an endpoint does not withdraw information already disclosed. A
 default is not an endorsement, a recommendation or a warranty.
@@ -246,7 +249,7 @@ on that contract and its operator. They may charge what they like, fail, or stop
 
 **7.5 Supporting services.** Nulo uses a small number of third-party services — a price feed, links
 to a block explorer, downloads of public proving parameters, and edge hosting for the passkey
-relying-party domain and for the token list the wallet downloads. These are described in the [Privacy Policy](privacy.md). They are governed by
+relying-party domain, for the token list the wallet downloads, and for Nulo's relay. These are described in the [Privacy Policy](privacy.md). They are governed by
 their own terms and privacy practices. The Developer does not control them or guarantee their
 performance; this does not exclude responsibility imposed by law for the Developer's own
 implementation, statements, selection or configuration.
@@ -569,3 +572,6 @@ public feedback forms.
 | 1.1 | 26 October 2026 | First version in effect. |
 | 1.2 | 27 October 2026 | Passkey profiles now have a recovery phrase. A full backup of a passkey profile is always protected with a file password. |
 | 1.2.1 | 5 November 2026 | The summary box names the default network as Nulo shows it, Alpha. |
+| 1.2.2 | «FILL: effective date» | When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails; each endpoint you add can receive its requests (§ 7.1). |
+| 1.2.3 | «FILL: effective date» | The second default endpoint of Alpha and Testnet is Nulo's relay, operated by the Developer, which passes requests to a third-party provider (§ 7.1). |
+| 1.2.4 | «FILL: effective date» | Transactions sent through Nulo's relay go through it to its provider (§ 2), and edge hosting for Nulo's relay is among the supporting services (§ 7.5). |

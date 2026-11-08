@@ -12,6 +12,7 @@ import {
 	ScopeViolationError,
 	SessionEndedError,
 	TooManyPendingError,
+	UnattachedAuthorizationRefusalError,
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
 import {
@@ -21,6 +22,11 @@ import {
 	DuplicateInitializationError,
 	PxeScopeUnregisteredError,
 	PxeStaleAnchorError,
+	ContractAssertionError,
+	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
+	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import { unwrapOperationResult } from "@nulo/wallet-bridge"
@@ -31,7 +37,10 @@ import {
 	OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE,
 	SCOPE_VIOLATION_ENVELOPE,
 	toWalletResponseError,
+	UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE,
+	UNCLASSIFIED_ERROR_ENVELOPE,
 	UNCLASSIFIED_ERROR_MESSAGE,
+	withWalletTraceId,
 } from "./error-envelope"
 
 describe("toWalletResponseError", () => {
@@ -83,7 +92,7 @@ describe("toWalletResponseError", () => {
 		// One frozen object answers every refusal, so no sink can edit what the next dApp receives.
 		expect(env === SCOPE_VIOLATION_ENVELOPE && Object.isFrozen(env) && Object.isFrozen(SCOPE_VIOLATION_ENVELOPE.data)).toBe(true)
 		// The same words on a plain Error are not a refusal: the fall-through stays constant.
-		expect(toWalletResponseError(new Error(refusal.message))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError(new Error(refusal.message))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 	})
 
 	test("a registry refusal keeps the scope refusal's code with its own constant text", () => {
@@ -114,6 +123,24 @@ describe("toWalletResponseError", () => {
 		).toBe(true)
 	})
 
+	test("a missing witness for another account keeps the scope refusal's code with its own text, naming no account", () => {
+		const refusal = new UnattachedAuthorizationRefusalError()
+		const env = toWalletResponseError(refusal)
+		expect(env).toEqual({
+			code: 4100,
+			message:
+				"This transaction uses another account's authorization, and the request carries no witness for it. Attach the witness.",
+			data: { walletErrorCode: "SCOPE_VIOLATION" },
+		})
+		const wire = JSON.stringify(env)
+		expect({ address: /0x[0-9a-f]/i.test(wire), own: wire.includes(refusal.message) }).toEqual({ address: false, own: false })
+		expect(
+			env === UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE &&
+				Object.isFrozen(env) &&
+				Object.isFrozen(UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE.data),
+		).toBe(true)
+	})
+
 	test("SessionEndedError → {code:4900, walletErrorCode SESSION_ENDED} with the constant message; only the class maps", () => {
 		expect(toWalletResponseError(new SessionEndedError())).toEqual({
 			code: 4900,
@@ -121,7 +148,7 @@ describe("toWalletResponseError", () => {
 			data: { walletErrorCode: SessionEndedError.CODE },
 		})
 		// The same words on a plain Error are not a session end: the fall-through stays constant.
-		expect(toWalletResponseError(new Error(SessionEndedError.MESSAGE))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError(new Error(SessionEndedError.MESSAGE))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 	})
 
 	test("ChainNotSupportedError → {code:4901, walletErrorCode CHAIN_NOT_SUPPORTED} with the constant message; only the class maps", () => {
@@ -131,7 +158,7 @@ describe("toWalletResponseError", () => {
 			data: { walletErrorCode: ChainNotSupportedError.CODE },
 		})
 		// The untyped throw it replaced still flattens: a served chain list can never ride a message.
-		expect(toWalletResponseError(new Error("No network configured for chainId 1816023401"))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError(new Error("No network configured for chainId 1816023401"))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 	})
 
 	test("envelope round-trips through new Error(JSON.stringify(env)) — dApp parse recipe works", () => {
@@ -200,17 +227,16 @@ describe("toWalletResponseError", () => {
 		expect(wire).not.toContain("p1")
 	})
 
-	test("plain Error → constant string (preserves the string wire contract, not the content)", () => {
-		// The SHAPE contract — a plain string for unrecognised throws — is what dApps depend on;
-		// the CONTENT was internal text crossing into an untrusted caller.
+	test("plain Error → the constant -32603 object, the integrity arm's shape", () => {
 		const env = toWalletResponseError(new Error("boom"))
-		expect(typeof env).toBe("string")
-		expect(env).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(env).toEqual({ code: -32603, message: UNCLASSIFIED_ERROR_MESSAGE })
+		expect(env).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+		expect(Object.isFrozen(env)).toBe(true)
 	})
 
 	test("non-Error throw → the same constant", () => {
-		expect(toWalletResponseError("nope")).toBe(UNCLASSIFIED_ERROR_MESSAGE)
-		expect(toWalletResponseError(42)).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError("nope")).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+		expect(toWalletResponseError(42)).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 	})
 
 	test("UnsupportedMethodError → {code:-32601, walletErrorCode} keeping the method name", () => {
@@ -264,8 +290,26 @@ describe("stale-anchor and unregistered-contract arms", () => {
 	})
 
 	test("ContractNotFoundError stays unclassified, as the plain error it replaced did: no new dApp contract", () => {
-		expect(toWalletResponseError(new ContractNotFoundError())).toBe(UNCLASSIFIED_ERROR_MESSAGE)
-		expect(toWalletResponseError(new Error(ContractNotFoundError.MESSAGE))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError(new ContractNotFoundError())).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+		expect(toWalletResponseError(new Error(ContractNotFoundError.MESSAGE))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+	})
+
+	test("ContractAssertionError stays unclassified: a contract's text never reaches the dApp", () => {
+		const env = toWalletResponseError(
+			new ContractAssertionError("Assertion failed: secret text", { assertion: "secret text", frames: [] }),
+		)
+		expect(env).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+	})
+
+	test("each default-entrypoint refusal keeps the answer its plain error gave: unclassified", () => {
+		for (const error of [
+			new DefaultEntrypointPublicCallError(),
+			new DefaultEntrypointUtilityCallError(),
+			new DefaultEntrypointMultiCallError(),
+			new DefaultEntrypointNoCallError(),
+		]) {
+			expect(toWalletResponseError(error)).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+		}
 	})
 
 	test("InvalidWalletArgumentsError → {code:-32602, INVALID_PARAMS} with a constant message naming no method", () => {
@@ -327,6 +371,13 @@ describe("stale-anchor and unregistered-contract arms", () => {
 		)
 		expect(registry).toBeInstanceOf(AuthRegistryRefusalError)
 		expect(toWalletResponseError(registry)).toBe(AUTH_REGISTRY_REFUSAL_ENVELOPE)
+
+		const assertion = rethrown(new ContractAssertionError("Assertion failed: secret text", { assertion: "secret text", frames: [] }))
+		expect(toWalletResponseError(assertion)).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+		expect(toWalletResponseError(rethrown(new DefaultEntrypointPublicCallError()))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+		expect(toWalletResponseError(rethrown(new DefaultEntrypointUtilityCallError()))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+		expect(toWalletResponseError(rethrown(new DefaultEntrypointMultiCallError()))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+		expect(toWalletResponseError(rethrown(new DefaultEntrypointNoCallError()))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 	})
 })
 
@@ -368,7 +419,7 @@ describe("duplicate-initialization envelope reachability", () => {
 			}
 		})()
 		expect(thrown).not.toBeInstanceOf(DuplicateInitializationError)
-		expect(toWalletResponseError(thrown)).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError(thrown)).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 	})
 
 	/**
@@ -383,21 +434,21 @@ describe("duplicate-initialization envelope reachability", () => {
 		test("an endpoint URL with an API key never reaches the dApp", () => {
 			const out = toWalletResponseError(new Error("fetch failed: https://eth.example.com/v2/SECRET-KEY-123?apiKey=abc"))
 
-			expect(out).toBe(UNCLASSIFIED_ERROR_MESSAGE)
-			expect(out).not.toContain("SECRET-KEY-123")
-			expect(out).not.toContain("eth.example.com")
+			expect(out).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+			expect(JSON.stringify(out)).not.toContain("SECRET-KEY-123")
+			expect(JSON.stringify(out)).not.toContain("eth.example.com")
 		})
 
 		test("a secret in the message body never reaches the dApp — a cap would not have stopped this", () => {
 			const out = toWalletResponseError(new Error("private note: correct-horse-battery-staple"))
 
-			expect(out).toBe(UNCLASSIFIED_ERROR_MESSAGE)
-			expect(out).not.toContain("correct-horse")
+			expect(out).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+			expect(JSON.stringify(out)).not.toContain("correct-horse")
 		})
 
-		test("stays a plain string, which is the actual wire contract", () => {
-			expect(typeof toWalletResponseError(new Error("x".repeat(10_000)))).toBe("string")
-			expect(typeof toWalletResponseError("not an error")).toBe("string")
+		test("is the one constant object whatever was thrown", () => {
+			expect(toWalletResponseError(new Error("x".repeat(10_000)))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+			expect(toWalletResponseError("not an error")).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 		})
 
 		test("classified errors are unaffected — they keep their code and message", () => {
@@ -405,5 +456,25 @@ describe("duplicate-initialization envelope reachability", () => {
 
 			expect(env).toMatchObject({ code: -32603, data: { walletErrorCode: RpcTimeoutError.CODE } })
 		})
+	})
+})
+
+describe("withWalletTraceId", () => {
+	test("adds the id beside the envelope's own data and leaves the frozen original unchanged", () => {
+		const traced = withWalletTraceId(SCOPE_VIOLATION_ENVELOPE, "1a2b3c4d")
+		expect(traced).toEqual({
+			...SCOPE_VIOLATION_ENVELOPE,
+			data: { walletErrorCode: ScopeViolationError.CODE, walletTraceId: "1a2b3c4d" },
+		})
+		expect(SCOPE_VIOLATION_ENVELOPE.data).toEqual({ walletErrorCode: ScopeViolationError.CODE })
+	})
+
+	test("gives an envelope without data a data object holding only the id", () => {
+		expect(withWalletTraceId(UNCLASSIFIED_ERROR_ENVELOPE, "00ff00ff")).toEqual({
+			code: -32603,
+			message: UNCLASSIFIED_ERROR_MESSAGE,
+			data: { walletTraceId: "00ff00ff" },
+		})
+		expect(UNCLASSIFIED_ERROR_ENVELOPE).not.toHaveProperty("data")
 	})
 })

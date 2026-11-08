@@ -19,6 +19,7 @@ import type { DecodedCall, DiscoveredAuthwit } from "@/wallet/services/execution
 import {
 	AUTHWITS,
 	CONSUMED,
+	decodeAuthwit,
 	decodeConsumed,
 	decodeFixture,
 	feeEstimateWith,
@@ -485,6 +486,34 @@ describe("OperationCard — an authorization another account of the profile alre
 		expect(rows(await mountListing([OWN, CONSUMED], appPaid))).toEqual([CONSUMED_ROW])
 		expect(rows(await mountListing([OWN], appPaid))).toEqual([])
 	})
+
+	test("an app-paid send names the account's own attached authorization as the account's, in a details group of its own", async () => {
+		const op = fixtureOp() as unknown as { exec: object }
+		const appPaid = { ...op, exec: { ...op.exec, feePayer: VAULT } }
+		const ATTACHED = { ...OWN, onBehalfOf: MAIN }
+		const w = await mountListing([ATTACHED, CONSUMED], appPaid)
+		expect(read(w, "execute-discovered-authwit-line")).toEqual([
+			`Lets ${trimAddress(HUB)} move 25 USDC from Main to ${trimAddress(HUB)}`,
+			`Lets Main move 1 USDC from Savings to ${trimAddress(RECIPIENT)}`,
+		])
+		expect(rows(w)).toEqual([{ hash: OWN.messageHash, onBehalf: MAIN, line: "Already authorized by Main." }, CONSUMED_ROW])
+		await toggle(w).trigger("click")
+		const GROUPS = ["execute-op-discovered-authwits", "execute-op-sender-authwits", "execute-op-consumed-authwits"]
+		const groups = w.findAll(GROUPS.map((id) => `[data-testid="${id}"]`).join(", ")).map((group) => ({
+			group: group.attributes("data-testid"),
+			label: group.find("span").text(),
+			hashes: group.findAll('[data-testid="execute-op-discovered-authwit"]').map((row) => row.attributes("data-message-hash")),
+		}))
+		expect(groups).toEqual([
+			{ group: "execute-op-sender-authwits", label: "Authorizations this account already gave", hashes: [OWN.messageHash] },
+			{
+				group: "execute-op-consumed-authwits",
+				label: "Authorizations your other accounts already gave",
+				hashes: [CONSUMED.messageHash],
+			},
+		])
+		expect(read(w, "execute-discovered-authorized-by")).toEqual(["Main", "Savings"])
+	})
 })
 
 describe("OperationCard — a default-entrypoint send whose authorization preview failed", () => {
@@ -603,7 +632,7 @@ describe("OperationCard — what leaves the account opens the fee section", () =
 		expect(leaves(w).element.compareDocumentPosition(fee) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 	})
 
-	test("nothing this account sends, or a block that replaces the fee section: no rows; the same sends otherwise show them", async () => {
+	test("nothing this account sends: no rows; a block a window draws in the fee's place: the rows open it", async () => {
 		const others = request([transfer(VAULT, RECIPIENT, 4n * e18), exit])
 		expect(leaves(await mountCard({ tokens: [TST], decodedCalls: others.decodedCalls }, others.op)).exists()).toBe(false)
 
@@ -614,7 +643,44 @@ describe("OperationCard — what leaves the account opens the fee section", () =
 			global: { stubs, components: { AddressDisplay, SectionLabel } },
 		})
 		await flushPromises()
-		expect([leaves(replaced).exists(), replaced.find('[data-testid="refusal"]').exists()]).toEqual([false, true])
-		expect(rows(await mountCard({ tokens: [TST], decodedCalls: own.decodedCalls }, own.op))).toEqual([["1 transfer", "4 TST"]])
+		expect(rows(replaced)).toEqual([["1 transfer", "4 TST"]])
+		const block = replaced.get('[data-testid="refusal"]').element
+		expect(leaves(replaced).element.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		replaced.unmount()
+	})
+
+	test("an authorization the account signs counts as one, from the estimate or the raised-fee window's list; another account's does not", async () => {
+		const { decodedAuthwits } = await decodeFixture()
+		decodedAuthwits.set(CONSUMED.messageHash, await decodeConsumed())
+		const { op, decodedCalls } = request([exit])
+		const estimated = await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([...AUTHWITS, CONSUMED]) }, op)
+		expect(rows(estimated)).toEqual([["1 authorization", "25 USDC"]])
+		// Another account's signature naming this account's tokens, called by a contract: still not this account's.
+		const forged: DiscoveredAuthwit = { ...CONSUMED, caller: HUB, args: [MAIN, ...CONSUMED.args.slice(1)], messageHash: field(0xf0f0n) }
+		decodedAuthwits.set(forged.messageHash, await decodeAuthwit(forged))
+		const withForged = await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([...AUTHWITS, forged]) }, op)
+		expect(rows(withForged)).toEqual([["1 authorization", "25 USDC"]])
+
+		const raised = mount(OperationCard, {
+			props: { op: op as never, index: 0, tokens: [USDC_TOKEN], decodedCalls, decodedAuthwits, approvedAuthwits: AUTHWITS },
+			slots: { fee: '<div data-testid="raised-fee" />' },
+			global: { stubs, components: { AddressDisplay, SectionLabel } },
+		})
+		await flushPromises()
+		expect(rows(raised)).toEqual([["1 authorization", "25 USDC"]])
+		raised.unmount()
+	})
+
+	test("on an app-paid send, the account's own authorization the app carries counts as one; another account's naming this account's tokens does not", async () => {
+		const { decodedAuthwits } = await decodeFixture()
+		const { op, decodedCalls } = request([exit])
+		const appPaid = { ...op, exec: { ...op.exec, feePayer: VAULT } }
+		// As the estimate lists a carried record of the sender's: named as given by the sending account.
+		const carried: DiscoveredAuthwit = { ...AUTHWITS[0]!, onBehalfOf: MAIN }
+		const forged: DiscoveredAuthwit = { ...CONSUMED, caller: HUB, args: [MAIN, ...CONSUMED.args.slice(1)], messageHash: field(0xf0f0n) }
+		decodedAuthwits.set(forged.messageHash, await decodeAuthwit(forged))
+		const w = await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([carried, forged]) }, appPaid)
+		expect(rows(w)).toEqual([["1 authorization", "25 USDC"]])
+		expect(rows(await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([forged]) }, appPaid))).toEqual([])
 	})
 })

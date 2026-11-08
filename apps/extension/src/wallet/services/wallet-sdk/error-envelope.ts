@@ -1,9 +1,9 @@
 /**
  * Convert an internal exception into the `WalletResponse.error` shape expected
  * by `@aztec-labs/wallet-sdk`. Structured errors get EIP-1193 codes plus a
- * `walletErrorCode` discriminator; everything else collapses to a plain string
- * so the existing wire contract (string error for unrecognised throws) is
- * preserved.
+ * `walletErrorCode` discriminator; everything else collapses to one constant
+ * -32603 object. Every envelope is an object, so the request's
+ * `data.walletTraceId` has somewhere to ride.
  *
  * Pure — no I/O, no logger, no service dependencies. Lives next to
  * `background.ts` because the EIP-1193 mapping is a wallet-sdk transport
@@ -34,10 +34,17 @@ import {
 	TermsAcceptanceRequiredError,
 	TooManyPendingError,
 	DuplicateInitializationError,
+	UnattachedAuthorizationRefusalError,
 	UnsupportedMethodError,
 	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
-import type { WalletResponse } from "@aztec-labs/wallet-sdk/types"
+
+/** What a dApp receives as `WalletResponse.error`. */
+export type WalletErrorEnvelope = {
+	readonly code: number
+	readonly message: string
+	readonly data?: Readonly<Record<string, unknown>>
+}
 
 /** Every schema refusal's dApp text: one sentence that names no method and no argument value. */
 export const INVALID_PARAMS_MESSAGE = "The request's arguments do not match the wallet API."
@@ -61,7 +68,7 @@ const CONSTANT_ENVELOPES = [
 	[InvalidWalletArgumentsError, -32602, INVALID_PARAMS_MESSAGE],
 ] as const
 
-export function toWalletResponseError(error: unknown): WalletResponse["error"] {
+export function toWalletResponseError(error: unknown): WalletErrorEnvelope {
 	if (error instanceof JobCancelledError) {
 		return {
 			code: 4001,
@@ -156,10 +163,7 @@ export function toWalletResponseError(error: unknown): WalletResponse["error"] {
 		// The integrity blocking state is a wallet-UI concern. A dApp gets a fully generic
 		// internal failure — no mismatch detail, no discriminator code — so the condition can't
 		// be probed or used to fingerprint a wallet install.
-		return {
-			code: -32603,
-			message: "The wallet could not process the request.",
-		}
+		return UNCLASSIFIED_ERROR_ENVELOPE
 	}
 	if (error instanceof TooManyPendingError) {
 		// -32005 = JSON-RPC "Limit exceeded" (closest standard; EIP-1193 has no
@@ -204,22 +208,30 @@ export function toWalletResponseError(error: unknown): WalletResponse["error"] {
 	//
 	// An error a dApp is meant to act on has to be classified above and carry a `walletErrorCode`;
 	// an unclassified one has no defined meaning to the caller, so a constant loses nothing it
-	// could legitimately use. The wire contract (a plain string for unrecognised throws) is
-	// preserved — only the content is not.
+	// could legitimately use. It is the integrity arm's object, so the two generic failures read
+	// alike and both can carry the request's trace id.
 	//
 	// The obligation runs the other way too, and twice already it was not met: a `SESSION_INVALID`
 	// and an unsupported-method rejection both reached here as bare `Error`s and were flattened
 	// into this constant, leaving the dApp unable to tell an actionable refusal from a wallet
 	// fault. Adding an actionable throw means adding its class above, not relying on its text.
-	return UNCLASSIFIED_ERROR_MESSAGE
+	return UNCLASSIFIED_ERROR_ENVELOPE
 }
 
 /**
- * The single string handed to a dApp for any error we did not classify.
+ * The single text handed to a dApp for any error we did not classify.
  *
  * Deliberately constant: it is the only shape that cannot carry internal state outward.
  */
 export const UNCLASSIFIED_ERROR_MESSAGE = "The wallet could not process the request."
+
+/** Every unclassified failure's envelope: no discriminator, so the condition cannot be probed. */
+export const UNCLASSIFIED_ERROR_ENVELOPE: WalletErrorEnvelope = Object.freeze({ code: -32603, message: UNCLASSIFIED_ERROR_MESSAGE })
+
+/** A copy of `envelope` whose `data` names the request's trace id; a frozen constant stays as it is. */
+export function withWalletTraceId(envelope: WalletErrorEnvelope, walletTraceId: string): WalletErrorEnvelope {
+	return { ...envelope, data: { ...envelope.data, walletTraceId } }
+}
 
 /** Every scope refusal's dApp text, never the refusal's own: dApps may show or match it, so it is a
  *  public contract. */
@@ -254,9 +266,22 @@ export const OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE = Object.freeze({
 	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
 })
 
-function scopeViolationEnvelope(error: ScopeViolationError): WalletResponse["error"] {
+/** A transaction whose authorization request names another approved account and carries no witness
+ *  for it: the scope refusal's code with its own text, a public contract like
+ *  `SCOPE_VIOLATION_MESSAGE`. It names no account, so the app learns only what it left out. */
+export const UNATTACHED_AUTHORIZATION_REFUSAL_MESSAGE =
+	"This transaction uses another account's authorization, and the request carries no witness for it. Attach the witness."
+
+export const UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE = Object.freeze({
+	code: 4100,
+	message: UNATTACHED_AUTHORIZATION_REFUSAL_MESSAGE,
+	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
+})
+
+function scopeViolationEnvelope(error: ScopeViolationError): WalletErrorEnvelope {
 	if (error instanceof AuthRegistryRefusalError) return AUTH_REGISTRY_REFUSAL_ENVELOPE
 	if (error instanceof OwnAccountIntentRefusalError) return OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE
+	if (error instanceof UnattachedAuthorizationRefusalError) return UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE
 	return SCOPE_VIOLATION_ENVELOPE
 }
 
@@ -276,7 +301,7 @@ function scopeViolationEnvelope(error: ScopeViolationError): WalletResponse["err
  * `terminateSession()` call that follows this response is what actually triggers reconnection. The
  * code carries the meaning; the teardown carries the behavior.
  */
-export const SESSION_INVALID_ERROR: WalletResponse["error"] = {
+export const SESSION_INVALID_ERROR: WalletErrorEnvelope = {
 	code: 4900,
 	message: "Session no longer valid — reconnect",
 	data: { walletErrorCode: "SESSION_INVALID" },

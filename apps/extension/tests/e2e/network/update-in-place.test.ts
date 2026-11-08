@@ -33,9 +33,11 @@
  * Fee Juice, 133 s and 184 s.
  */
 import type { Page } from "puppeteer"
-import { expect, inject } from "vitest"
+import { afterEach, expect, inject } from "vitest"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { LEGACY_SELECTED_ACCOUNT_KEY } from "@/wallet/services/ui-preference/spec"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
+import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { STORES } from "@/wallet/storage/stores"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
 import type { AztecTestConfig } from "../fixtures/aztec"
@@ -66,6 +68,7 @@ import {
 	importToken,
 	navigateByHash,
 	navigateToTokenDetail,
+	openNetworkDetail,
 	pinFromTokenPage,
 	selectFeeMethod,
 	selectedAccount,
@@ -76,10 +79,13 @@ import {
 	waitForShownAccount,
 	waitForToast,
 } from "../fixtures/helpers"
+import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
 import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
 import { openSend } from "../fixtures/send-page"
 import { pollUntil } from "../fixtures/poll"
+import { callsOf, RELAY_REPLIES, type RelayRuleHandle, type RpcRelay, sendTxCount, startRpcRelay } from "../fixtures/rpc-relay"
 import { reconnectPlayground, runApprovedPgCall } from "../fixtures/send"
+import { callService } from "../fixtures/session"
 import { inPlaceUpdate, readLocalStorage, updateBuilds } from "../fixtures/update/in-place"
 import { moveEndpointsToLoopback } from "../fixtures/update/loopback-endpoints"
 import { expectReleasePreferences, plaintextPreferences } from "../fixtures/update/preferences"
@@ -424,6 +430,181 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	expect(await updateProblems(populated.before, await readLocalStorage(ctx), allowed)).toEqual([])
 }
 
+/**
+ * The pending case. Failure mode: a send the release confirmed, and the node has not yet mined when
+ * the browser updates the extension, is sent again, lost or doubled by the candidate's boot; or the
+ * candidate's routes leave out an endpoint the release stored but never used. Only an in-place
+ * update holds rows the released code wrote. Its sandbox network's endpoints are two relays in
+ * front of the node, A the primary and B a second one added through the release's own detail page.
+ * With A active the candidate's poll reads A however it picks its node, so this case proves the
+ * resumed poll and the recorded endpoint it reads, and leaves the dial to `transaction/service.test.ts`.
+ *
+ * Runtime: estimated 3 min on Chrome, the release's real proof of the account's deployment included.
+ */
+type PendingSend = { chainInfo: ChainInfo; account: string; hash: string; before: Record<string, unknown> }
+
+/** Mining released and the relays closed after each case, a timed-out one included, whose body
+ *  never reaches its own cleanup. */
+const caseRelays: RpcRelay[] = []
+afterEach(async () => {
+	try {
+		await releaseMining()
+	} finally {
+		await Promise.all(caseRelays.splice(0).map((relay) => relay.close()))
+	}
+})
+
+/** Non-sync reads with arguments of their own, refused on A so the candidate's routes move them to
+ *  B. A refusal never takes an endpoint down, so the pending hash's reads stay with A. */
+const MOVABLE = [
+	"getContract",
+	"getContractClass",
+	"getPublicStorageAt",
+	"simulatePublicCalls",
+	"getPrivateLogsByTags",
+	"getPublicLogsByTags",
+	"findLeavesIndexes",
+]
+
+async function addEndpoint(page: Page, network: string, rpcUrl: string): Promise<void> {
+	await navigateByHash(page, "#/popup/settings/networks", 15_000)
+	await openNetworkDetail(page, network)
+	await clickByTestId(page, "endpoint-add-btn")
+	await page.waitForSelector('[data-testid="add-endpoint-submit"]', { visible: true, timeout: 5_000 })
+	await replaceInputValue(page, '[data-testid="endpoint-rpc-input"]', rpcUrl)
+	await clickByTestId(page, "add-endpoint-submit")
+	await waitForToast(page, "Endpoint added", 60_000)
+	await page.waitForFunction(() => document.querySelectorAll('[data-testid="endpoint-row"]').length === 2, { timeout: 15_000 })
+}
+
+/** On the release, through its UI: the sandbox on A with B added, funds, and one dApp send left
+ *  pending with mining held. */
+async function populatePending(
+	ctx: ExtensionContext,
+	cfg: AztecTestConfig,
+	release: ReleaseTraits,
+	relays: { a: RpcRelay; b: RpcRelay },
+): Promise<PendingSend> {
+	const { a, b } = relays
+	await registerProfile(ctx)
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general", 30_000)
+	const chainInfo = await sandboxChainInfo(cfg.nodeUrl)
+	const account = await addSandboxNetwork(page, a.url, chainInfo, release)
+	await addEndpoint(page, SANDBOX, b.url)
+	await navigateByHash(page, "#/popup/general", 15_000)
+	const baseline = await captureBalanceBaseline(page, account, cfg.tokenAddress)
+	await importToken(page, cfg.tokenAddress)
+	await receiveOnSandbox(cfg, account, release)
+	await waitForFreshBalanceRow(page, {
+		account,
+		tokenContract: cfg.tokenAddress,
+		expectedPublicRaw: PUBLIC.toString(),
+		expectedPrivateRaw: PRIVATE.toString(),
+		baselineUpdatedAt: baseline,
+		timeoutMs: 180_000,
+	})
+	// The release keeps an account's gas balances for minutes and reads them again on a Send mount,
+	// so the app window's fee row sees the funding only after one.
+	await openSend(page)
+	await selectFeeMethod(page, sandboxFeeMethod(release))
+	await page.close()
+
+	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)
+	await grantCapBundle(ctx, dapp, "transaction", async (ids) => {
+		if (!ids.includes(account)) throw new Error(`the capabilities window offers ${ids.join(", ")}, not ${account}`)
+		return [account]
+	})
+	await waitForEmptyMempool(cfg.nodeUrl)
+	await holdMining()
+	await setPgInputs(dapp, { tokenAddress: cfg.tokenAddress, recipient: cfg.minterAddress, amount: SENT.toString() })
+	const sent = await runApprovedPgCall(ctx, dapp, {
+		button: "sendTx-default",
+		method: "sendTx",
+		label: "update-in-place:pending-send",
+		popupTimeoutMs: 180_000,
+		feeMethod: sandboxFeeMethod(release),
+	})
+	await dapp.close()
+	expect([sendTxCount(a), sendTxCount(b)], "the release sent once, on its primary").toEqual([1, 0])
+	return { chainInfo, account, hash: txHashOf(sent.resultJson).toLowerCase(), before: await readLocalStorage(ctx) }
+}
+
+/** Whether B received, after A refused it, a call with the same method and arguments: the call, moved. */
+function movedToB(refused: RelayRuleHandle, b: RpcRelay): boolean {
+	const onB = b.received()
+	return refused
+		.took()
+		.some((request) =>
+			callsOf(request).some(({ method, params }) =>
+				onB.some((later) => later.seq > request.seq && callsOf(later).some((c) => c.method === method && c.params === params)),
+			),
+		)
+}
+
+type TxView = { hash: string; status?: number; submittedEndpointUrl?: string }
+
+async function txView(page: Page, account: string, hash: string): Promise<TxView | undefined> {
+	const txs = await callService<TxView[]>(page, TRANSACTION_SERVICE_NAME, "getTransactions", [account], 30_000)
+	return txs.find((tx) => tx.hash.toLowerCase() === hash)
+}
+
+async function verifyPending(
+	ctx: ExtensionContext,
+	cfg: AztecTestConfig,
+	pending: PendingSend,
+	relays: { a: RpcRelay; b: RpcRelay },
+): Promise<void> {
+	const { a, b } = relays
+	const { account, hash, before } = pending
+	const polledOnRelease = a.carried(hash)
+	const refused = a.fail({ methods: MOVABLE, entries: "every", times: 3, fault: RELAY_REPLIES.refused })
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/auth", 30_000)
+	await ensureUnlocked(page)
+	await waitForHash(page, "#/popup/general", 30_000)
+	await answerUpdatedTerms(page, before)
+	await answerArrival(page, before)
+
+	await pollUntil(
+		async () => a.carried(hash) - polledOnRelease,
+		(n) => n >= 2,
+		{ label: "the candidate polling the release's pending send on A", timeoutMs: 120_000, intervalMs: 500 },
+	)
+	const resumed = await txView(page, account, hash)
+	expect(resumed?.status, "still pending, mining held").toBe(0)
+	expect(resumed?.submittedEndpointUrl, "the release's recorded endpoint, read by the candidate").toBe(a.url)
+	await pollUntil(
+		async () => refused.taken() > 0 && movedToB(refused, b),
+		(moved) => moved,
+		{ label: "a read A refused, served by B", timeoutMs: 120_000, intervalMs: 500 },
+	)
+
+	await releaseMining()
+	const { waitForTxMined } = await import("../fixtures/aztec")
+	await waitForTxMined(cfg, hash, 300_000)
+	const mined = await pollUntil(
+		() => txView(page, account, hash),
+		(tx) => (tx?.status ?? -1) >= 2,
+		{ label: "the candidate's row for the send in a block", timeoutMs: 180_000, intervalMs: 1_000 },
+	)
+	expect(mined?.submittedEndpointUrl).toBe(a.url)
+	expect([sendTxCount(a), sendTxCount(b)], "one submission in the whole run, the release's").toEqual([1, 0])
+	expect(b.carried(hash), "the pending hash never reaches B").toBe(0)
+	const txs = await callService<TxView[]>(page, TRANSACTION_SERVICE_NAME, "getTransactions", [account], 30_000)
+	expect(
+		txs.filter((tx) => tx.hash.toLowerCase() === hash),
+		"one transaction row",
+	).toHaveLength(1)
+	const journal = await callService<unknown[]>(page, OPERATION_JOURNAL_SERVICE_NAME, "getOperations", [], 30_000)
+	expect(
+		journal.filter((op) => JSON.stringify(op).toLowerCase().includes(hash)),
+		"one journal row",
+	).toHaveLength(1)
+	expect(await shownOverlays(page)).toEqual([])
+	await page.close()
+}
+
 test.skipIf(!process.env.NULO_E2E_UPDATE_FROM || !aztecConfig)(
 	"a populated release install updates in place to the candidate and reads everything it held",
 	{ timeout: 900_000, retry: 0 },
@@ -451,5 +632,27 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM || !aztecConfig)(
 		} finally {
 			await Promise.all(standIns.splice(0).map((standIn) => standIn.stop()))
 		}
+	},
+)
+
+test.skipIf(!process.env.NULO_E2E_UPDATE_FROM || !aztecConfig)(
+	"a send the release confirmed and the node had not mined settles on the candidate, sent once, through the routes of both stored endpoints",
+	{ timeout: 900_000, retry: 0 },
+	async () => {
+		const cfg = aztecConfig as AztecTestConfig
+		const builds = updateBuilds(BROWSER)
+		if (!builds) throw new Error("unreachable: skipIf guards")
+		const release = releaseTraits(builds.tag)
+		const opened = async (service: string) => {
+			const relay = await startRpcRelay(cfg.nodeUrl, service)
+			caseRelays.push(relay)
+			return relay
+		}
+		const relays = { a: await opened("rpc-relay-a"), b: await opened("rpc-relay-b") }
+		await inPlaceUpdate({
+			builds,
+			populate: (ctx) => populatePending(ctx, cfg, release, relays),
+			verify: (ctx, pending) => verifyPending(ctx, cfg, pending, relays),
+		})
 	},
 )

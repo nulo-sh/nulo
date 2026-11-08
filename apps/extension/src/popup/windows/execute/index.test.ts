@@ -11,7 +11,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { JobCancelledError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import { ContractAssertionError, JobCancelledError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, ref, type Ref } from "vue"
@@ -221,7 +221,16 @@ const STUBS = {
 	},
 	SectionLabel: { template: "<div />" },
 	OperationCard: {
-		props: ["refused", "tokenFlagged", "tokenFlagAcknowledged", "isQueued", "estimateFailed", "previewFailed", "decodedCalls"],
+		props: [
+			"refused",
+			"tokenFlagged",
+			"tokenFlagAcknowledged",
+			"isQueued",
+			"estimateFailed",
+			"previewFailed",
+			"decodedCalls",
+			"appFailure",
+		],
 		template: '<div><slot name="fee" /></div>',
 	},
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
@@ -234,6 +243,7 @@ const STUBS = {
 		emits: ["dismiss"],
 		template: `<div data-testid="dapp-cancelled-overlay" :data-message="message" @click="$emit('dismiss')" />`,
 	},
+	RequestLogButton: { props: ["interactionId"], template: '<div data-testid="request-log-stub" :data-interaction="interactionId" />' },
 }
 
 // Lazy import after vi.mock hoist
@@ -1628,6 +1638,8 @@ describe("execute window — a request the wallet refused", () => {
 	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
 	const OWNER = `0x${"0a".repeat(32)}`
 	const send = { kind: "aztec_sendTx", account: `aztec:1:${OWNER}`, exec: { calls: [] }, opts: { from: OWNER } }
+	// As the dispatcher hands the window a no-account request: the sentinel stays in `from`.
+	const noFrom = { ...send, opts: { from: "NO_FROM" }, executionMode: "default_entrypoint" }
 	// As the worker's refusal crosses the RPC hop.
 	const REGISTRY = walletErrorFromPayload({
 		code: "SCOPE_VIOLATION",
@@ -1641,7 +1653,27 @@ describe("execute window — a request the wallet refused", () => {
 		code: "SCOPE_VIOLATION",
 		message: "Scope violation: a transaction's authorization request names another account and carries no witness for it",
 	})
+	const PUBLIC_CALL = walletErrorFromPayload({
+		code: "DEFAULT_ENTRYPOINT_PUBLIC_CALL",
+		message: "DefaultEntrypoint only supports private functions",
+	})
+	const UTILITY_CALL = walletErrorFromPayload({
+		code: "DEFAULT_ENTRYPOINT_UTILITY_CALL",
+		message: "DefaultEntrypoint only supports private functions",
+	})
+	const SEVERAL_CALLS = walletErrorFromPayload({
+		code: "DEFAULT_ENTRYPOINT_MULTI_CALL",
+		message: "DefaultEntrypoint requires exactly 1 call",
+	})
+	const NO_CALL = walletErrorFromPayload({
+		code: "DEFAULT_ENTRYPOINT_NO_CALL",
+		message: "DefaultEntrypoint requires exactly 1 call, got 0",
+	})
 	const REASON = {
+		public: "This transaction runs a public call without an account, which Nulo can't send. Reject tells the app.",
+		utility: "This app asked for a utility call without an account. Nulo can only run it from an account.",
+		several: "This app asked for several calls without an account. Nulo can only run one call this way.",
+		none: "This app asked Nulo to run nothing, with no account. There is nothing to approve.",
 		registry:
 			"This transaction asks your account to change its public authorizations from inside another contract. Apps are never allowed to, so it can't be sent. Reject tells the app.",
 		call: "A call in this transaction does not run the function it names. Nulo never sends such a call, so it can't be sent. Reject tells the app.",
@@ -1697,6 +1729,15 @@ describe("execute window — a request the wallet refused", () => {
 		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "reject")
 	}
 
+	test("the request's logs are offered only once a refusal stands, for this window's request", async () => {
+		await opened()
+		const offer = () => w!.find('[data-testid="request-log-stub"]')
+		expect(offer().exists()).toBe(false)
+		feeMapInstances[0]!.opts.onError?.(0, REGISTRY)
+		await flushPromises()
+		expect(offer().attributes("data-interaction")).toBe(approval.requestId.value)
+	})
+
 	test.each([
 		["registry", REGISTRY],
 		["call", BINDING],
@@ -1710,8 +1751,12 @@ describe("execute window — a request the wallet refused", () => {
 	test.each([
 		["registry", REGISTRY],
 		["unattached", UNATTACHED],
+		["public", PUBLIC_CALL],
+		["utility", UTILITY_CALL],
+		["several", SEVERAL_CALLS],
+		["none", NO_CALL],
 	] as const)("a preview refused by the %s check: the same notice", async (kind, error) => {
-		const window = await opened({ ...send, executionMode: "default_entrypoint" })
+		const window = await opened(noFrom)
 		feeMapInstances[1]!.opts.onError?.(0, error)
 		await expectRefused(kind, window)
 	})
@@ -1721,6 +1766,16 @@ describe("execute window — a request the wallet refused", () => {
 		approveInteractionMock.mockRejectedValueOnce(BINDING as never)
 		await window.vm.approve()
 		await expectRefused("call", window)
+	})
+
+	test("a preview failing with the public-call text on a plain error keeps today's toast and Confirm: classified by class", async () => {
+		const { refused, notice, confirm } = await opened(noFrom)
+		feeMapInstances[1]!.opts.onError?.(0, new Error("DefaultEntrypoint only supports private functions"))
+		await flushPromises()
+		expect(toastMocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't preview authorizations. Try again." })
+		expect(notice().exists()).toBe(false)
+		expect(refused()).toBe(false)
+		expect(confirm().exists()).toBe(true)
 	})
 
 	test("any other estimate failure keeps today's toast and Confirm", async () => {
@@ -1803,7 +1858,13 @@ describe("execute window — a failed fee estimate's retry", () => {
 			fees.api.estimating.value = Object.fromEntries(keys.map((key) => [key, false]))
 			await flushPromises()
 		}
-		return { vm, fees, cards, fail, confirm: () => w!.find('[data-testid="execute-confirm-btn"]') }
+		const failAs = async (key: number, error: unknown) => {
+			fees.api.failed.value[key] = true
+			fees.opts.onError?.(key, error)
+			fees.api.estimating.value = { ...fees.api.estimating.value, [key]: false }
+			await flushPromises()
+		}
+		return { vm, fees, cards, fail, failAs, confirm: () => w!.find('[data-testid="execute-confirm-btn"]') }
 	}
 
 	test("a call whose string the card cannot print whole reaches the card as decoded, and Confirm still turns on", async () => {
@@ -1892,7 +1953,69 @@ describe("execute window — a failed fee estimate's retry", () => {
 		expect(confirm().attributes("disabled")).toBeDefined()
 	})
 
-	test("a failed authorization preview reaches the card, whose Try again asks the preview once more; the snack stays", async () => {
+	/** As the PXE host types it: the assertion's text and the failing path, outermost first. */
+	const assertion = (text: string, frames: { contract: string; selector?: string }[]) =>
+		new ContractAssertionError(`Assertion failed: ${text} 'assert(x)'`, { assertion: text, frames })
+	const inCall = (text: string) =>
+		assertion(text, [
+			{ contract: OWNER, selector: "0x27e740b2" },
+			{ contract: CALL.to, selector: CALL.selector },
+		])
+
+	test("an estimate failing inside the app's call hands its card the text and opens no snack; elsewhere, or untyped, it opens the snack", async () => {
+		const { vm, cards, failAs } = await opened([send, send, send])
+		for (const i of [0, 1, 2]) vm.handleFeeUpdate(i, FJ)
+		toastMocks.openToast.mockClear()
+		await failAs(0, inCall("Balance too low"))
+		expect(toastMocks.openToast).not.toHaveBeenCalled()
+		expect(cards()[0]!.props("appFailure")).toBe("Balance too low")
+
+		await failAs(1, assertion("Balance too low", [{ contract: `0x${"3e".repeat(32)}`, selector: CALL.selector }]))
+		expect(toastMocks.openToast).toHaveBeenCalledWith({ kind: "error", label: FAILURE })
+		expect(cards()[1]!.props("appFailure")).toBeUndefined()
+		toastMocks.openToast.mockClear()
+		await failAs(2, new Error("Assertion failed: Balance too low 'assert(x)'"))
+		expect(toastMocks.openToast).toHaveBeenCalledWith({ kind: "error", label: FAILURE })
+		expect(cards()[2]!.props("appFailure")).toBeUndefined()
+	})
+
+	test("the line leaves with its failure when the estimate is asked again, and a new failure brings its own text", async () => {
+		const { vm, cards, failAs } = await opened([send])
+		vm.handleFeeUpdate(0, FJ)
+		await failAs(0, inCall("Balance too low"))
+		expect(cards()[0]!.props("appFailure")).toBe("Balance too low")
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj", queue: true } })
+		await flushPromises()
+		expect(cards()[0]!.props("appFailure")).toBeUndefined()
+		await failAs(0, inCall("Amount too low to cover gas cost"))
+		expect(cards()[0]!.props("appFailure")).toBe("Amount too low to cover gas cost")
+	})
+
+	test("retrying the failure the snack reported closes it while another card's line stands; a second reported one keeps it", async () => {
+		const { vm, cards, fail, failAs } = await opened([send, send, send])
+		for (const i of [0, 1, 2]) vm.handleFeeUpdate(i, FJ)
+		await fail(0)
+		await failAs(1, inCall("Balance too low"))
+		expect(toast.value).toMatchObject({ kind: "error", label: FAILURE })
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(toast.value).toBeNull()
+		expect(cards()[1]!.props("appFailure")).toBe("Balance too low")
+
+		await failAs(0, new Error("node down"))
+		await failAs(2, new Error("node down"))
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(toast.value).toMatchObject({ kind: "error", label: FAILURE })
+	})
+
+	test("an app-paid row, which has no fee card, never takes the line", async () => {
+		const { cards, failAs } = await opened([ownCap])
+		await failAs(0, inCall("Balance too low"))
+		expect(cards()[0]!.props("appFailure")).toBeUndefined()
+	})
+
+	test("a failed authorization preview reaches the card, whose Try again asks the preview once more and closes its snack", async () => {
 		const { cards } = await opened([{ ...send, executionMode: "default_entrypoint" }])
 		const previews = feeMapInstances[1]!
 		expect(previews.api.estimate.mock.calls).toEqual([[0, { index: 0 }]])
@@ -1908,7 +2031,34 @@ describe("execute window — a failed fee estimate's retry", () => {
 		await flushPromises()
 		expect(previews.api.estimate.mock.calls).toEqual([[0, { index: 0 }]])
 		expect(cards()[0]!.props("previewFailed")).toBe(false)
-		expect(toast.value).toMatchObject(snack)
+		expect(toast.value).toBeNull()
+	})
+
+	test("with two failed previews the snack closes once both are asked again; a snack that replaced it is never closed", async () => {
+		const noFrom = { ...send, executionMode: "default_entrypoint" }
+		const { cards } = await opened([noFrom, noFrom])
+		const previews = feeMapInstances[1]!
+		const failBoth = async () => {
+			for (const key of [0, 1]) {
+				previews.api.failed.value[key] = true
+				previews.opts.onError?.(key, new Error("node down"))
+			}
+			await flushPromises()
+		}
+		await failBoth()
+		cards()[0]!.vm.$emit("retryPreview", 0)
+		await flushPromises()
+		expect(toast.value?.label).toBe("Couldn't preview authorizations. Try again.")
+		cards()[1]!.vm.$emit("retryPreview", 1)
+		await flushPromises()
+		expect(toast.value).toBeNull()
+
+		await failBoth()
+		openToast({ kind: "info", label: "A newer message" })
+		cards()[0]!.vm.$emit("retryPreview", 0)
+		cards()[1]!.vm.$emit("retryPreview", 1)
+		await flushPromises()
+		expect(toast.value?.label).toBe("A newer message")
 	})
 
 	test("settings the card withdraws end the failure: the estimate is cancelled and the snack closes", async () => {

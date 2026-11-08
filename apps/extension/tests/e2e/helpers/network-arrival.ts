@@ -57,7 +57,10 @@ export async function answerArrival(page: Page, entries: Record<string, unknown>
 }
 
 /** The stored offer record of `profileId`, parsed. */
-export async function readSeedOffers(page: Page, profileId: string): Promise<{ offered: string[]; announce?: string[] } | null> {
+export async function readSeedOffers(
+	page: Page,
+	profileId: string,
+): Promise<{ offered: string[]; announce?: string[]; relay?: string[] } | null> {
 	const raw = await page.evaluate(async (key: string) => (await chrome.storage.local.get(key))[key], `${OFFERS}${profileId}`)
 	return typeof raw === "string" ? JSON.parse(raw) : null
 }

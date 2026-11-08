@@ -90,6 +90,7 @@ declare module 'vue' {
     PublishStrip: typeof import('./../components/composite/send/PublishStrip.vue')['default']
     RecipientCard: typeof import('./../components/composite/send/RecipientCard.vue')['default']
     RecoveryPhraseGrid: typeof import('./../components/composite/RecoveryPhraseGrid.vue')['default']
+    RequestLogButton: typeof import('./../components/RequestLogButton.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     RowAction: typeof import('@nulo/design')['RowAction']

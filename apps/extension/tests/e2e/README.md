@@ -112,6 +112,15 @@ What an e2e build does instead of each outside host:
 
 Not covered: UDP and WebRTC, which the wallet does not use. The stand-in answers every node call with an error, so no smoke spec but the live one sees a node that answers: a value only a node gives is seeded, or proven in the network suite. A host on a driver's `ownHosts` that the wallet starts calling is refused but does not fail the run; reviewing a new list entry is what catches that.
 
+### Routing between endpoints (the fault relay)
+
+`network/rpc-routing.sandbox.test.ts` proves the routed node (`@nulo/aztec-runtime/routing`) against the run's real sandbox, with no browser: the real node adapter and router, and a server-entrypoint PXE (proverless, LMDB under `~/.cache/nulo-e2e/`), behind two fault relays standing for a network's primary (A) and fallback (B). It skips itself on the Firefox lane, so each PR runs it once.
+
+- **The relay** (`fixtures/rpc-relay.ts`, unit-tested by `scripts/e2e/rpc-relay.test.ts`) forwards each JSON-RPC request to the node unchanged unless a rule matches: `fail({ fault, methods?, times? })` with a status and body (`RELAY_REPLIES`: a 500, a JSON 429, a gateway refusal, a malformed 200), a blackhole, a delay or a kill; `cap(n)` refuses a larger batch; `freeze()` answers `getChainTips` and `getBlockNumber` with the node's values at that moment. `kill()` and `restore()` keep the URL: the port stays claimed in the registry until `close()`. Its counters (`requests()`, `methods()`, `carried(text)`) are what a scenario asserts on, a transaction hash reaching an endpoint included.
+- **Sends** go through `route.pickForSend` and are submitted on the endpoint it returns, as the wallet's send path does; the routed node itself refuses `sendTx`. The sender is the sandbox's third genesis account, which no other network file uses.
+- **The sandbox mines only when a transaction arrives**: a scenario that needs the chain to move (`advance(n)`) sends public mints straight to the node, past both relays.
+- **Two private sends to one recipient**: the first performs the tagging handshake, whose nullifier repeats on every send to that recipient until one is mined, and a constrained delivery reads the nullifier of the recipient's previous message, so a second send while the first is unmined fails in the kernel (`Nullifier read request … unknown nullifier`). A scenario that needs the PXE's sender sync to read a pending transaction simulates the next mint instead of sending it.
+
 ### Home open timing (opt-in)
 
 `NULO_E2E_HOME_TIMING=1` runs the second case of `sealed-storage.test.ts`: popup open → Home ready
@@ -230,7 +239,7 @@ source smoke run.
 
 ## Chaos runs
 
-A chaos file runs only when `NULO_E2E_CHAOS=1` arms it. The network lane's chaos job arms `send-chaos.test.ts` alone, for its fixed seeds ([`CI.md`](../../../../CI.md)); no lane arms the profile chaos files.
+A chaos file runs only when `NULO_E2E_CHAOS=1` arms it. The network lane's chaos job arms `send-chaos.test.ts` alone, for its fixed seeds, and the nightly's advisory rpc leg arms `rpc-failover-chaos.test.ts` at one fixed seed ([`CI.md`](../../../../CI.md)); no lane arms the profile chaos files.
 
 ### Profile chaos
 
