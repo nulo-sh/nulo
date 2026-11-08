@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.3 — effective «FILL: effective date»**
+**Version 1.3.1 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -126,7 +126,7 @@ intentionally discloses it. Protocol privacy does not eliminate inference, and d
 information that a transaction makes public.
 
 **Your control:** Settings → Networks lets you replace any endpoint with one you trust or run
-yourself. When a network has more than one endpoint, Nulo uses the primary first and, while it fails, the others in the order Settings → Networks lists them. Each endpoint you add can receive the requests described above. **Pending transactions may continue to be checked through the endpoint used to submit
+yourself. When a network has more than one endpoint, Nulo uses the primary first and, while it fails, the others in the order Settings → Networks lists them, and afterwards until the first endpoint has answered two checks at least 30 seconds apart (up to 30 minutes apart after repeated failures), as § 5.12 already says for the relay. Each endpoint you add can receive the requests described above. **Pending transactions may continue to be checked through the endpoint used to submit
 them, including after you change or remove that endpoint.** Changing an endpoint does not withdraw
 information already disclosed.
 
@@ -517,3 +517,4 @@ described in § 5.
 | 1.2.10 | «FILL: effective date» | When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails; each endpoint you add can receive its requests (§ 5.1). |
 | 1.2.11 | «FILL: effective date» | With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7). |
 | 1.3 | «FILL: effective date» | Nulo's relay, which the Developer operates, is the second default endpoint of Alpha and Testnet and receives the requests the endpoint before it fails to answer (§§ 1, 2, 5.1, 5.5, 5.12, 12). |
+| 1.3.1 | «FILL: effective date» | After the primary endpoint fails, the others are used until it has answered two checks at least 30 seconds apart, up to 30 minutes apart after repeated failures (§ 5.1). |
