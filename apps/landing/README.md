@@ -21,6 +21,7 @@ Marketing landing page for the wallet (nulo.sh). Standalone Vite app; ships inde
 | `src/clips/` | The page's three clips. `player.ts` wires each `[data-clip]` card (play from a press only, `preload="none"`, seek, a captions line, one clip speaking at a time, paused in a hidden tab); `timeline.ts` is the pure clock (scene at a time, cues, captions, WebVTT); `draw.ts` and `kit.ts` draw plates, mono labels and the wallet's glyphs on a 640×360 SVG stage; `private-balances.ts`, `proofs.ts` and `fees.ts` are the scenes, each a pure function of time cued to spoken words, and each clip ends on `kit.ts`'s `recap`: the stage clears and a plate of the clip's points appears, one row per spoken phrase. `media/` holds each narration (`.mp3`), its word timings (`.timings.json`) and its captions track (`.vtt`, generated from the timings and pinned by `clips.test.ts`, which also pins the cues, the transcripts and the media budget). |
 | `src/styles/overrides.css` | The few corrections a web page needs on top of `@nulo/design/base.css` (link colour, focus ring, selectable text, visible scrollbars). |
 | `src/styles/page.css` | Page presentation: plates, bar, hero overlay, sections, breakpoints. |
+| `src/changelog.ts`, `src/styles/changelog.css` | The changelog pages' entry and sheet: the cards' staggered reveal (an `IntersectionObserver`, skipped under reduced motion, so nothing is hidden without script), hover in CSS only, and the light theme by `prefers-color-scheme`. |
 | `scripts/headers.ts` | Parses the site-wide block of `public/_headers` so `vite preview` serves the production CSP. |
 | `public/` | `_headers` (CSP and caching, applied by Cloudflare), favicon, robots, sitemap, and `og.png`, the 1200×630 link-preview image: the desktop hero captured with reduced motion and the clock hidden. Recapture it when the hero changes. `og-video.mp4` is the og:video, a silent 10 s teaser at 1280×720 (the feed finds a subject, enhances twice, finds nothing, then the mark; no date, so it outlives the launch). Discord and some other apps play it in a nulo.sh link preview; X ignores og:video and shows `og.png`. |
 | `vite.config.ts` | Vite config, including `preview.headers` from `_headers`. |
@@ -34,7 +35,7 @@ Marketing landing page for the wallet (nulo.sh). Standalone Vite app; ships inde
 | `bun run build` | Production build → `dist/`. |
 | `bun run preview` | Preview the production build with the production response headers. |
 | `bun run typecheck` | `tsc --noEmit`. |
-| `bun run test` | Unit tests (renderer, headers parser and the production policy, legal pages, browser detection, the clips' clock and markup, the signup markup and a scratch production build's origins, the signup module, the Worker's routing and `wrangler.jsonc`). |
+| `bun run test` | Unit tests (renderer, headers parser and the production policy, legal and changelog pages, browser detection, the clips' clock and markup, the signup markup and a scratch production build's origins, the signup module, the Worker's routing and `wrangler.jsonc`). |
 | `bun run deploy:dry` | Validate `wrangler.jsonc` against the built `dist/`; needs no credentials. |
 | `bun run deploy`, `bun run deploy:preview` | The production (`main`) and other-branch commands to configure when connecting Workers Builds in the Cloudflare dashboard. By hand only to create the Worker. |
 
@@ -48,7 +49,7 @@ Marketing landing page for the wallet (nulo.sh). Standalone Vite app; ships inde
 - **CSP.** `public/_headers` is the policy; preview applies it too. No inline scripts, no CDN, no remote fonts. `form-action 'self'` keeps a form post on this origin; `connect-src 'self'` keeps the signup's `fetch` there.
 - **The updates signup.** The page's second action: a form under the hero's store buttons (its field keeps a `scroll-margin-top`, so a link to `#email-hero` shared while the nav pointed there still lands with the label clear of the sticky bar) and the same form on a plate in `#get`, above its store row, whose small print links `/website-privacy`. Each is a plain `<form method="post" action="/api/subscribe">` with an off-screen honeypot named `website` (`tabindex="-1"`, `aria-hidden`), so it works without script. A submission sends one confirmation email; the address joins the list only when `/confirm`, the page its link opens, posts the token back, which its script does as it opens. `vite dev` and `vite preview` run no Worker, so a submission there shows the retry error; `wrangler dev` runs the Worker, and its binding answers 503 until a local `nulo-subscribe` runs too.
 - **Deploy order.** Cloudflare refuses to upload a Worker whose service binding names a Worker that does not exist, so until `nulo-subscribe` is deployed every build of the landing fails, the branch previews (`wrangler versions upload`) as well as `main`. Branch previews reach the same binding; the subscribe Worker refuses their `Origin`.
-- **Independent ship.** Builds and deploys from `main` without the extension: the `nulo-landing` Worker serves `nulo.sh` and builds from Git pushes only (Workers Builds, no hook). The install buttons link the store listings, never a release, so a release needs nothing from the landing, and the build reaches no network. CI lints, typechecks and unit-tests this package on every PR, and builds it when the PR touches it or `legal/`.
+- **Independent ship.** Builds and deploys from `main` without the extension: the `nulo-landing` Worker serves `nulo.sh` and builds from Git pushes only (Workers Builds, no hook). The install buttons link the store listings, never a release, so a release needs nothing from the landing, and the build reaches no network. CI lints, typechecks and unit-tests this package on every PR, and builds it when the PR touches it, `legal/` or `release-notes/`.
 
 ## Legal pages
 
@@ -60,5 +61,22 @@ or the wallet's acceptance flow. The outputs (`terms.html`, `privacy.html`, `web
 their version directories, `src/generated/legal-pages.json`) are gitignored; `vite.config.ts` reads
 the JSON list as its extra HTML entries. Rendering rules — raw HTML rejected, `.md` links rewritten,
 DRAFT banner + `noindex` while a placeholder survives — are in `scripts/legal-pages.ts` and pinned by
-`scripts/legal-pages.test.ts`. `quality-status` builds the
-landing on every PR that touches it or `legal/`.
+`scripts/legal-pages.test.ts`; the rendered-HTML check itself is `scripts/markdown.ts`, shared with the
+changelog.
+
+## Changelog pages
+
+`/changelog/` and a page per stable release (`/changelog/v1.2.0/`, the URL the wallet's What's new row
+opens) are generated by `scripts/build-changelog.ts`, which `predev` and `prebuild` run, from two files
+per release: [`release-notes/X.Y.Z.md`](../../release-notes), rendered as the GitHub Release shows it,
+and `content/changelog/X.Y.Z.toml`, the page's top part (`version`, `date`, `title`, `lede`, then three
+to five `[[change]]` tables, one to five for a patch release, of `icon`, a glyph of `@nulo/design`'s
+`core/glyphs.ts`, `area`, `title` and `line`). Whoever writes the notes writes the TOML in the same PR, and the owner signs off both on
+the Workers Builds preview. The build refuses either file without the other, an unknown key or glyph,
+an em dash, and any markup in the notes beyond `p`, `ul`, `ol`, `li`, `strong`, `em` and `code`
+(`scripts/changelog-pages.ts`, pinned by `scripts/changelog-pages.test.ts`).
+
+A release above the root `package.json` version is a draft. A production build (Workers Builds sets
+`WORKERS_CI_BRANCH=main`) leaves drafts out; every other build renders them and marks every changelog
+page `noindex`, so a page goes live when the Release PR's version bump reaches `main`. The outputs
+(`changelog/`, `src/generated/changelog-pages.json`) are gitignored.

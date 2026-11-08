@@ -1,0 +1,434 @@
+/* Vite emits this sheet before the one holding base.css and page.css, so an override here carries an
+ * extra selector to win on specificity rather than order. */
+
+/* The wallet's light values: CSS cannot apply base.css's `[theme="light"]` block under a media query. */
+@media (prefers-color-scheme: light) {
+	html:root {
+		color-scheme: light;
+		--app-bg: #f5f5f7;
+		--card-bg: #fff;
+		--nulo-surface: #ffffff;
+		--nulo-surface-low: #f0efec;
+		--nulo-surface-high: #e7e5e1;
+		--nulo-surface-highest: #dcd9d3;
+		--nulo-accent: #a8480c;
+		--nulo-outline: #c9c5bd;
+		--nulo-border: #d8d4cc;
+		--nulo-secondary: #6b655c;
+		--nulo-track: #8f8a82;
+		--txt-primary: rgba(0, 0, 0, 88%);
+		--txt-secondary: rgba(0, 0, 0, 60%);
+		--txt-body: rgba(0, 0, 0, 62%);
+		--line: rgba(20, 18, 15, 0.24);
+		--line2: rgba(20, 18, 15, 0.1);
+		--dim: #6b655c;
+	}
+
+	.cl .grain {
+		color: #dedad2;
+	}
+}
+
+.cl .btn:hover {
+	background: var(--txt-primary);
+	opacity: 0.86;
+}
+
+/* A release page sits inside the changelog, so its nav link reads as current without naming this page. */
+.cl .bar nav a[aria-current="true"] {
+	color: var(--txt-primary);
+	text-decoration: underline;
+	text-underline-offset: 6px;
+}
+
+.gl {
+	display: block;
+	width: 24px;
+	height: 24px;
+	flex: none;
+}
+
+.gl-s {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.gl-f {
+	fill: currentColor;
+}
+
+.k-hero {
+	padding: 88px 0 36px;
+}
+
+.k-title {
+	font-size: clamp(42px, 6.6vw, 88px);
+	line-height: 0.98;
+	font-weight: 700;
+	max-width: 17ch;
+	margin: 16px 0 16px;
+	text-shadow:
+		0 0 14px var(--app-bg),
+		0 0 5px var(--app-bg);
+}
+
+.k-chip {
+	display: inline-block;
+	vertical-align: middle;
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 13px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	line-height: 1;
+	padding: 9px 12px;
+	margin-right: 6px;
+	background: var(--txt-primary);
+	color: var(--app-bg);
+	transform: translateY(-0.55em);
+	text-shadow: none;
+}
+
+.k-lede {
+	font-size: 18px;
+	color: var(--txt-body);
+	max-width: 52ch;
+	text-shadow:
+		0 0 12px var(--app-bg),
+		0 0 4px var(--app-bg);
+}
+
+.k-grid {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 20px;
+}
+
+.k-card {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	min-height: 236px;
+	transition:
+		transform 0.5s var(--bezier),
+		border-color 0.3s,
+		background-color 0.3s;
+}
+
+.k-card:first-child {
+	grid-column: span 2;
+}
+
+.k-card::before,
+.k-card::after {
+	transition:
+		width 0.45s var(--bezier),
+		height 0.45s var(--bezier);
+}
+
+.k-card:hover {
+	transform: translateY(-6px);
+	border-color: var(--txt-primary);
+	background: var(--nulo-surface-low);
+}
+
+.k-card:hover::before,
+.k-card:hover::after {
+	width: 26px;
+	height: 26px;
+}
+
+.k-card__top {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 12px;
+	margin-bottom: auto;
+}
+
+.k-icon {
+	width: 56px;
+	height: 56px;
+	flex: none;
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--line);
+	background: var(--nulo-surface-low);
+	transition:
+		transform 0.5s var(--bezier),
+		background-color 0.3s,
+		color 0.3s;
+}
+
+.k-icon .gl {
+	width: 28px;
+	height: 28px;
+}
+
+.k-icons .k-icon {
+	width: 48px;
+	height: 48px;
+}
+
+.k-icons .gl {
+	width: 24px;
+	height: 24px;
+}
+
+.k-card:hover .k-icon {
+	transform: rotate(-6deg) scale(1.06);
+	background: var(--txt-primary);
+	color: var(--app-bg);
+}
+
+.k-card h2 {
+	font-size: 26px;
+	line-height: 1.08;
+	margin-top: 18px;
+}
+
+.k-card:first-child h2 {
+	font-size: clamp(30px, 3.4vw, 44px);
+	max-width: 16ch;
+}
+
+.k-card p {
+	color: var(--txt-body);
+	max-width: 52ch;
+}
+
+.cl-motion [data-reveal] {
+	opacity: 0;
+	transform: translateY(32px) scale(0.98);
+	transition:
+		opacity 0.7s var(--bezier),
+		transform 0.9s var(--bezier),
+		border-color 0.3s,
+		background-color 0.3s;
+	transition-delay: calc(var(--i) * 90ms);
+}
+
+.cl-motion [data-reveal].in {
+	opacity: 1;
+	transform: none;
+}
+
+.cl-motion [data-reveal].in:hover {
+	transform: translateY(-6px);
+	transition-delay: 0s;
+}
+
+.cl-motion [data-reveal].in .gl-s {
+	animation: cl-draw 1.1s var(--bezier) both;
+	animation-delay: calc(var(--i) * 90ms + 200ms);
+}
+
+/* A second name for the same keyframes: switching `animation-name` is what restarts the draw on hover. */
+.cl-motion .k-card:hover .gl-s {
+	animation: cl-redraw 0.8s var(--bezier) both;
+}
+
+@keyframes cl-draw {
+	from {
+		stroke-dasharray: 1;
+		stroke-dashoffset: 1;
+	}
+	to {
+		stroke-dasharray: 1;
+		stroke-dashoffset: 0;
+	}
+}
+
+@keyframes cl-redraw {
+	from {
+		stroke-dasharray: 1;
+		stroke-dashoffset: 1;
+	}
+	to {
+		stroke-dasharray: 1;
+		stroke-dashoffset: 0;
+	}
+}
+
+.cl-notes {
+	padding: 72px 0 96px;
+}
+
+.cl-notes__title {
+	font-size: clamp(28px, 3.4vw, 38px);
+	line-height: 1.05;
+	font-weight: 700;
+	margin: 10px 0 20px;
+	text-shadow:
+		0 0 12px var(--app-bg),
+		0 0 4px var(--app-bg);
+}
+
+/* No frame, but a solid backing, so the grain never runs under the text. Left unpositioned so its
+ * halo paints beneath the links that follow it. */
+.cl-notes__body {
+	max-width: 68ch;
+	background: var(--app-bg);
+	box-shadow: 0 0 0 20px var(--app-bg);
+	font-size: 16px;
+	line-height: 1.65;
+	color: var(--txt-primary);
+}
+
+.cl-notes__body > p:first-child {
+	font-family: var(--font-headline);
+	font-size: 22px;
+	line-height: 1.35;
+	font-weight: 600;
+	margin-bottom: 18px;
+}
+
+.cl-notes__body ul {
+	margin: 0;
+	padding-left: 22px;
+}
+
+.cl-notes__body li {
+	margin-bottom: 10px;
+	padding-left: 4px;
+}
+
+.cl-notes__body li::marker {
+	color: var(--nulo-secondary);
+}
+
+.cl-notes__more,
+.cl-pager {
+	max-width: 76ch;
+	font-family: var(--font-mono);
+	font-size: 12px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+/* The body's 20 px halo plus the 16 px gap, so the link clears the backing instead of sitting on its edge. */
+.cl-notes__more {
+	margin-top: 36px;
+}
+
+.cl-pager {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-top: 28px;
+}
+
+.cl-notes__more a,
+.cl-pager a {
+	display: inline-block;
+	background: var(--app-bg);
+	border: 1px solid var(--line);
+	padding: 10px 14px;
+	text-decoration: none;
+}
+
+.cl-notes__more a:hover,
+.cl-pager a:hover {
+	border-color: var(--txt-primary);
+}
+
+.k-grid--index {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	margin-bottom: 80px;
+}
+
+.k-grid--index .k-card:first-child {
+	grid-column: auto;
+}
+
+.k-card--release a {
+	display: grid;
+	gap: 14px;
+	text-decoration: none;
+	height: 100%;
+}
+
+.k-release-title {
+	font-family: var(--font-headline);
+	font-weight: 700;
+	font-size: clamp(30px, 3.2vw, 40px);
+	line-height: 1.04;
+	letter-spacing: -0.03em;
+}
+
+.k-icons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.k-release-lead {
+	color: var(--txt-body);
+}
+
+@media (max-width: 900px) {
+	.k-grid,
+	.k-grid--index {
+		grid-template-columns: 1fr;
+	}
+
+	.k-card:first-child {
+		grid-column: auto;
+	}
+}
+
+@media (max-width: 640px) {
+	.cl .wrap {
+		padding: 0 20px;
+	}
+
+	.cl footer .wrap {
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.k-hero {
+		padding: 56px 0 24px;
+	}
+
+	.cl .k-card {
+		min-height: 0;
+		padding: 22px 20px;
+	}
+
+	.k-card h2,
+	.k-card:first-child h2 {
+		font-size: 24px;
+	}
+
+	.k-chip {
+		font-size: 11px;
+		transform: translateY(-0.3em);
+	}
+
+	.cl-notes {
+		padding: 56px 0 72px;
+	}
+
+	.cl-notes__body {
+		font-size: 15px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.k-card,
+	.k-icon {
+		transition: none;
+	}
+
+	.k-card:hover,
+	.k-card:hover .k-icon {
+		transform: none;
+	}
+}
