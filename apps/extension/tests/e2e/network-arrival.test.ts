@@ -13,13 +13,14 @@ import { CHAIN_IDS, MAINNET_L1_CHAIN_ID, MAINNET_ROLLUP_VERSION } from "@/utils/
 import { closePxeHost, interceptRpc, isFirefox, openScratchPage, pxeHostState, setViewport, stopBackground } from "./fixtures/browser"
 import { pollUntil } from "./fixtures/poll"
 import { MAINNET_NODE_HOST } from "./fixtures/egress-guard"
+import { RELAY_RPC_URLS } from "@/wallet/services/network/seeds"
 import { waitForSelectedAccount } from "./fixtures/accounts"
 import { clickByTestId, type ExtensionContext, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
 import { unlockAfterBackgroundDeath } from "./fixtures/auth"
 import { switchToNetwork } from "./fixtures/networks"
 import { pointerClick, reloadWithLegalState, waitForSheet } from "./helpers/legal-drivers"
 import { ARRIVAL, readSeedOffers, readSurfaceTrace, seedNetworkArrival, traceSurfaces } from "./helpers/network-arrival"
-import { nodeInfoResult, startStub } from "./helpers/rpc-stub"
+import { chainTipsResult, nodeInfoResult, startStub } from "./helpers/rpc-stub"
 import { readNetwork } from "./helpers/stale-network"
 import { CAPTURE_VIEWPORT, capture } from "./helpers/stale-network-capture"
 
@@ -27,19 +28,24 @@ const CAPTURES = process.env.NETWORK_ARRIVAL_CAPTURES === "1"
 const HOME = '[data-testid="tokens-menu-trigger"]'
 
 const textOf = (page: Page, testid: string) => page.$eval(`[data-testid="${testid}"]`, (el) => el.textContent?.trim())
-const mainnetRequests = (extension: ExtensionContext) => extension.egress?.nodes.find(({ host }) => host === MAINNET_NODE_HOST)?.requests()
+/** Mainnet's seeded node and Nulo's relay after it. */
+const MAINNET_HOSTS = [MAINNET_NODE_HOST, new URL(RELAY_RPC_URLS.mainnet).hostname]
+const mainnetRequests = (extension: ExtensionContext) =>
+	extension.egress?.nodes.filter(({ host }) => MAINNET_HOSTS.includes(host)).reduce((sum, node) => sum + node.requests(), 0)
 /** The rollup the public Mainnet node serves until its v6 upgrade executes. */
 const ALPHA_ROLLUP_VERSION = 4248422647
 
-/** Runs `body` with the Mainnet node answering as `rollupVersion`; every other call fails. */
+/** Runs `body` with the Mainnet node answering as `rollupVersion`, its tips included; every other
+ *  call fails. */
 async function onMainnetRollup(
 	extension: ExtensionContext,
 	rollupVersion: number,
 	body: (methods: readonly string[]) => Promise<void>,
 ): Promise<void> {
-	const stub = await startStub((method) =>
-		method === "aztec_getNodeInfo" ? nodeInfoResult(MAINNET_L1_CHAIN_ID, rollupVersion) : undefined,
-	)
+	const stub = await startStub((method) => {
+		if (method === "aztec_getNodeInfo") return nodeInfoResult(MAINNET_L1_CHAIN_ID, rollupVersion)
+		return method === "aztec_getChainTips" ? chainTipsResult(1) : undefined
+	})
 	const node = await interceptRpc(extension.browser, extension.extensionId, `https://${MAINNET_NODE_HOST}`, {
 		kind: "redirect",
 		to: stub.url,
@@ -102,7 +108,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		await pointerClick(page, "network-arrival-stay")
 		await page.waitForSelector(HOME, { visible: true, timeout: 15_000 })
 		expect(await page.$(ARRIVAL)).toBeNull()
-		expect(await readSeedOffers(page, profileId)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+		expect(await readSeedOffers(page, profileId)).toEqual({ offered: ["local", "mainnet", "testnet"], relay: ["mainnet", "testnet"] })
 
 		page = await reopen(extension, page)
 		await traceSurfaces(page)
@@ -111,7 +117,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		await page.close()
 		expect(mainnetBefore).toBeTypeOf("number")
 		expect(mainnetRequests(extension)).toBe(mainnetBefore)
-		expect(extension.egress?.guard.attempts().filter(({ host }) => host === MAINNET_NODE_HOST)).toEqual([])
+		expect(extension.egress?.guard.attempts().filter(({ host }) => MAINNET_HOSTS.includes(host))).toEqual([])
 	}, 180_000)
 
 	test.for([

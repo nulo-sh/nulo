@@ -45,6 +45,14 @@ export function nodeInfoResult(l1ChainId: number, rollupVersion: number): Record
 	}
 }
 
+/** Schema-valid `getChainTips` result (L2TipsSchema) with every tier at `block`: a route of two or
+ *  more endpoints asks its first endpoint for it with `getNodeInfo` before any call. */
+export function chainTipsResult(block: number): Record<string, unknown> {
+	const id = { number: block, hash: ZERO_AZTEC }
+	const tier = { block: id, checkpoint: { number: block, hash: ZERO_AZTEC } }
+	return { proposed: id, checkpointed: tier, proven: tier, finalized: tier }
+}
+
 export interface StubServer {
 	url: string
 	methods: string[]

@@ -42,9 +42,12 @@ import { readSealedRows } from "./sealed-rows"
 import { heldListStorage } from "./token-list"
 import { PollTimeoutError, pollUntil } from "./poll"
 
-/** Every seeded remote node, which a guarded launch holds a stand-in for unless it sends that host
- *  direct: the default network's node, and the one a spec switches to, both answer at once. */
-const SEEDED_NODE_URLS: readonly string[] = DEFAULT_SEEDS.filter((seed) => seed.kind !== "local").map((seed) => seed.rpcUrl)
+/** Every seeded remote node, Nulo's relay included, which a guarded launch holds a stand-in for unless
+ *  it sends that host direct: the default network's node, and the one a spec switches to, both
+ *  answer at once. */
+const SEEDED_NODE_URLS: readonly string[] = DEFAULT_SEEDS.filter((seed) => seed.kind !== "local").flatMap((seed) =>
+	seed.relay ? [seed.rpcUrl, seed.relay.rpcUrl] : [seed.rpcUrl],
+)
 
 // Specs reach the page primitives and the popup openers through this hub; they live in leaves so
 // the modules the hub imports can use them without importing the hub back.

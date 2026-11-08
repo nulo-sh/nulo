@@ -333,24 +333,25 @@ which makes the endpoint trust boundary explicit.
   chain (§ Authorization enforcement).
 - **Duplicate-URL guard per Network.** Adding the same `rpcUrl` twice to
   the same `Network` is rejected (`DUPLICATE_ENDPOINT`).
-- **Per-URL `AztecNode` cache** with 3-strike eviction: each unique URL
-  gets its own client; transient failures don't poison neighbours; three
-  reported failures, which a success does not reset, evict the client and
-  the next use rebuilds the same URL.
+- **Per-URL clients.** Each endpoint of a network gets its own client
+  inside that network's routed node, rebuilt when the row's endpoint list
+  changes, and a submission's recorded URL its own pinned client; a
+  failure moves calls between endpoints (`ARCHITECTURE.md` § 15) and never
+  poisons another URL's client.
 
 ### Pending-tx polling pin
 
 Once a transaction is submitted, the receipt poller is **pinned to the URL
 the tx was sent on** (`Tx.submittedEndpointUrl`). Even if the user swaps the
-chain's primary endpoint mid-flight, the poll keeps targeting the original
-URL via `getNodeForUrl`. This avoids:
+chain's primary endpoint mid-flight or the route fails over, the poll keeps
+targeting the original URL via `getSingleAttemptNodeForUrl`. This avoids:
 
 - a freshly-promoted endpoint reporting "tx not found" because it hasn't
   seen the bundle yet, and
 - a malicious endpoint shadowing receipts for txs it never received.
 
-Three reported failures rebuild that URL's client; the poll never moves to
-another endpoint.
+Each poll is one attempt on that URL's client, and a failed one waits for the
+next tick; the poll never moves to another endpoint.
 
 ### What endpoints can still do
 
@@ -377,10 +378,10 @@ explicit and per-Network.
 
 ### Provider keys and the RPC proxy
 
-No wallet build holds a provider key: the default endpoints are dRPC's keyless ones. The paid
-dRPC endpoints, whose key sits in the URL path, are reached only through `nulo-rpc-proxy`
-(`infra/rpc-proxy/`, at `rpc.nulo.sh` and `testnet.rpc.nulo.sh`), which no wallet build
-references yet. The keys are Worker secrets set by the owner in the dashboard, in no file, CI
+No wallet build holds a provider key: each default network's first endpoint is dRPC's keyless
+one. The paid dRPC endpoints, whose key sits in the URL path, are reached only through
+`nulo-rpc-proxy` (`infra/rpc-proxy/`, at `rpc.nulo.sh` and `testnet.rpc.nulo.sh`), which Alpha and
+Testnet list second, as Nulo's relay. The keys are Worker secrets set by the owner in the dashboard, in no file, CI
 job or agent. Each hostname is bound to one secret, so no caller picks the upstream; a web
 page's Origin is refused server-side (only Chrome and Firefox extension origins, or none, pass);
 every call must name an Aztec node method; the body is capped while streaming; nothing is
