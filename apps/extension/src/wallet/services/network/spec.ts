@@ -230,6 +230,9 @@ export const RouteSnapshotSchema: z.ZodType<RouteSnapshot | null> = z
 	.strict()
 	.nullable()
 
+/** A network id and the caller's endpoint list in route order, which the row must still hold. */
+const ROUTE_SHOWN_PARAMS = z.tuple([z.string().min(1), z.array(z.object({ id: z.string(), rpcUrl: z.string() }).strict())])
+
 /**
  * Per-method schemas. Tuples preserve positional-param ordering (our wire
  * format sends params as a positional list).
@@ -308,8 +311,12 @@ export const NetworkMethodSchemas = {
 		result: NetworkSchema,
 	},
 	getRouteSnapshot: {
-		params: z.tuple([z.string().min(1), z.array(z.object({ id: z.string(), rpcUrl: z.string() }).strict())]),
+		params: ROUTE_SHOWN_PARAMS,
 		result: RouteSnapshotSchema,
+	},
+	rebuildRoute: {
+		params: ROUTE_SHOWN_PARAMS,
+		result: z.void(),
 	},
 	getNodeStatus: {
 		params: z.tuple([z.string().min(1)]),
@@ -408,6 +415,10 @@ export type Methods = {
 	 *  until it has built one, or when `shown`, the caller's list in route order, is not the row's.
 	 *  Asks no endpoint. */
 	getRouteSnapshot(networkId: string, shown: readonly RouteEndpoint[]): RouteSnapshot | null
+	/** Rebuilds the account engine's route over the network's current endpoint list now, as the
+	 *  network's next use would, when it holds one built for an earlier list; builds none otherwise.
+	 *  Does nothing when `shown` is not the row's list. */
+	rebuildRoute(networkId: string, shown: readonly RouteEndpoint[]): void
 	/** Probes the network's primary endpoint and returns Active/Inactive/InvalidChain. */
 	getNodeStatus(networkId: string): NodeStatus
 	/**

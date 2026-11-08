@@ -1305,6 +1305,35 @@ describe("NetworkService public API", () => {
 			expect(getRouteSnapshot).not.toHaveBeenCalled()
 		})
 
+		test("rebuildRoute asks the account engine for the owned row's list only while the caller shows that list", async () => {
+			const { service, local } = setupServiceWithStorage({})
+			const row = storeRow(local, {
+				id: "two",
+				chainId: 7,
+				l1ChainId: 11,
+				primaryEndpointId: "e2",
+				endpoints: [
+					{ id: "e1", rpcUrl: "https://rpc.test/1" },
+					{ id: "e2", rpcUrl: "https://rpc.test/2" },
+				],
+			})
+			storeRow(local, { id: "theirs", profileId: "p2" })
+			const rebuildRoute = vi.fn(async () => {})
+			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+			;(service as any).pxeServiceClient = { rebuildRoute }
+			const shown = [
+				{ id: "e2", rpcUrl: "https://rpc.test/2" },
+				{ id: "e1", rpcUrl: "https://rpc.test/1" },
+			]
+			await service.rebuildRoute(row.id, [{ id: "e2", rpcUrl: "https://rpc.test/old" }, shown[1]!])
+			await service.rebuildRoute(row.id, [shown[1]!, shown[0]!])
+			expect(rebuildRoute, "another list names another route").not.toHaveBeenCalled()
+			await expect(service.rebuildRoute("theirs", shown)).rejects.toThrow()
+			await service.rebuildRoute(row.id, shown)
+			expect(rebuildRoute).toHaveBeenCalledTimes(1)
+			expect(rebuildRoute).toHaveBeenCalledWith({ profileId: "p1", chainId: 7, l1ChainId: 11, endpoints: shown })
+		})
+
 		test("init relays the account engine's route changes, listening before its client connects", async () => {
 			const { service } = setupServiceWithStorage({})
 			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in

@@ -133,6 +133,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		"getPublicTokenClassStatus",
 		"pickSendEndpoint",
 		"getRouteSnapshot",
+		"rebuildRoute",
 		"clearChainState",
 		"clearProfileState",
 		"provisionChainStoreKey",
@@ -738,6 +739,30 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			if (!route) return null
 			return { activeId: route.active()?.id ?? null, endpoints: route.snapshot().map((entry) => ({ ...entry })) }
 		})
+	}
+
+	/** What the chain's next operation would do to its runtime, and nothing else: rebinds one built
+	 *  for another endpoint list, under the guards and fences of `withPxeWrite`. A chain with no
+	 *  runtime gets none, so no store opens and no PXE starts for a chain the wallet is not using. */
+	public async rebuildRoute(network: NetworkInfo): Promise<void> {
+		const start = Date.now()
+		const chainKey = this.chainKey(network.profileId, network.chainId)
+		const purgeEpochAtEntry = this.lifecycle.current(chainKey)
+		try {
+			await this.getProfileBarrier(network.profileId).read(async () => {
+				await this.getChainGuard(network.profileId, network.chainId).write(async () => {
+					this.assertGenerationCurrent(network)
+					this.lifecycle.assertUnchanged(chainKey, purgeEpochAtEntry, "rebuildRoute")
+					if (!this.registry.peek(network.profileId, network.chainId)) return
+					await this.reopeningCorruptStore(network, { spent: false }, () =>
+						this.registry.ensure(network, this.storeKeys.get(network.profileId)),
+					)
+				})
+			})
+		} catch (err) {
+			this.logOpFailure("WRITE", "rebuildRoute", start, err)
+			throw err
+		}
 	}
 
 	/**

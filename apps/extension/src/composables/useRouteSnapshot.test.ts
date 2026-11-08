@@ -28,6 +28,7 @@ const SNAPSHOT: RouteSnapshot = {
 function setup(row: Network | null = ROW) {
 	const client = {
 		getRouteSnapshot: vi.fn(async (_id: string, _shown: readonly RouteEndpoint[]): Promise<RouteSnapshot | null> => SNAPSHOT),
+		rebuildRoute: vi.fn(async (_id: string, _shown: readonly RouteEndpoint[]): Promise<void> => {}),
 		onRouteChanged: new EventHandler<{ profileId: string; chainId: number }>(),
 		onConnected: new EventHandler<void>(),
 	}
@@ -168,6 +169,94 @@ describe("useRouteSnapshot", () => {
 		await route.refresh()
 		expect(client.getRouteSnapshot).not.toHaveBeenCalled()
 		expect(route.view.value).toBeNull()
+	})
+
+	test("an edit landing under the open page asks once for the route over the new list, then reads it", async () => {
+		const { client, state, route } = setup()
+		await route.refresh()
+		expect(client.rebuildRoute, "a first read is no edit").not.toHaveBeenCalled()
+		const rebuilt = deferred<void>()
+		client.rebuildRoute.mockReturnValueOnce(rebuilt.promise)
+		state.row = { ...ROW, primaryEndpointId: "b07d44a1" }
+		await route.refresh()
+		await route.refresh()
+		const moved = [ROW.endpoints[1], ROW.endpoints[0]]
+		expect(client.rebuildRoute).toHaveBeenCalledTimes(1)
+		expect(client.rebuildRoute).toHaveBeenCalledWith(ROW.id, moved)
+		const reads = client.getRouteSnapshot.mock.calls.length
+		rebuilt.resolve()
+		await settle()
+		expect(client.getRouteSnapshot, "the read after the rebuild, should its route event be lost").toHaveBeenCalledTimes(reads + 1)
+		expect(route.view.value?.snapshot).toEqual(SNAPSHOT)
+		expect(client.rebuildRoute).toHaveBeenCalledTimes(1)
+	})
+
+	test("edits during a rebuild ask for one more after it, over the list then current, never two at once", async () => {
+		const { client, state, route } = setup()
+		await route.refresh()
+		const rebuilt = deferred<void>()
+		client.rebuildRoute.mockReturnValueOnce(rebuilt.promise)
+		state.row = { ...ROW, primaryEndpointId: "b07d44a1" }
+		await route.refresh()
+		state.row = { ...ROW, endpoints: [...ROW.endpoints, { id: "c1d2e3f4", rpcUrl: "http://127.0.0.1:8082" }] }
+		await route.refresh()
+		state.row = {
+			...ROW,
+			primaryEndpointId: "c1d2e3f4",
+			endpoints: [...ROW.endpoints, { id: "c1d2e3f4", rpcUrl: "http://127.0.0.1:8082" }],
+		}
+		await route.refresh()
+		expect(client.rebuildRoute).toHaveBeenCalledTimes(1)
+		rebuilt.resolve()
+		await settle()
+		expect(client.rebuildRoute).toHaveBeenCalledTimes(2)
+		expect(client.rebuildRoute).toHaveBeenLastCalledWith(ROW.id, [
+			{ id: "c1d2e3f4", rpcUrl: "http://127.0.0.1:8082" },
+			...ROW.endpoints,
+		])
+	})
+
+	test("another network's row, another profile or chain, a row that goes away, a rename and a failed rebuild ask for nothing more", async () => {
+		const { client, state, route } = setup()
+		await route.refresh()
+		state.row = { ...ROW, name: "Renamed" }
+		await route.refresh()
+		state.row = { ...ROW, id: "e5f6a7b8" }
+		await route.refresh()
+		state.row = { ...ROW, profileId: "p2", primaryEndpointId: "b07d44a1" }
+		await route.refresh()
+		state.row = { ...ROW, profileId: "p2", chainId: 7 }
+		await route.refresh()
+		state.row = undefined
+		await route.refresh()
+		state.row = ROW
+		await route.refresh()
+		expect(client.rebuildRoute).not.toHaveBeenCalled()
+		client.rebuildRoute.mockRejectedValueOnce(new Error("port closed"))
+		state.row = { ...ROW, primaryEndpointId: "b07d44a1" }
+		await route.refresh()
+		await settle()
+		expect(client.rebuildRoute, "a failure is not retried").toHaveBeenCalledTimes(1)
+		expect(route.view.value?.snapshot).toEqual(SNAPSHOT)
+	})
+
+	test("with the page gone, a rebuild in flight starts no other and an edit asks for none", async () => {
+		const { client, state, route } = setup()
+		await route.refresh()
+		const rebuilt = deferred<void>()
+		client.rebuildRoute.mockReturnValueOnce(rebuilt.promise)
+		state.row = { ...ROW, primaryEndpointId: "b07d44a1" }
+		await route.refresh()
+		state.row = ROW
+		await route.refresh()
+		route.dispose()
+		const reads = client.getRouteSnapshot.mock.calls.length
+		rebuilt.resolve()
+		await settle()
+		state.row = { ...ROW, primaryEndpointId: "b07d44a1" }
+		await route.refresh()
+		expect(client.rebuildRoute).toHaveBeenCalledTimes(1)
+		expect(client.getRouteSnapshot).toHaveBeenCalledTimes(reads)
 	})
 
 	test("dispose stops listening, and a read in flight lands nowhere", async () => {
