@@ -995,7 +995,8 @@ const LONG_APP = {
 }
 
 /** Two rows as discovery writes them, through the call it makes: one whose connection check passed,
- *  and one a site wrote with no tap, as the every-site switch lets it, that never connected. */
+ *  and one a site wrote with no tap, as the every-site switch lets it, that never connected. They stay
+ *  in the extension this file's later tests share. */
 async function seedConnectedApps(page: Page): Promise<void> {
 	const profile = await peekSession(page)
 	const add = (name: string, url: string) =>

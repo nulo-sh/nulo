@@ -182,8 +182,8 @@ describe("Settings › Connected apps — the host under each app's name", () =>
 	const labelOf = (target: { element: Element; attributes: (name: string) => string | undefined }) =>
 		rowOf(target).querySelector(`[id="${target.attributes("labelledby")}"]`)?.textContent
 
-	// As discovery stores a row: the name sanitized to 64 characters, the url the origin the browser
-	// reported. The path and query stand for anything past the host, which the row must not print.
+	// As discovery stores a row: the name sanitized to 64 characters. The long url adds a path, query
+	// and fragment no origin carries, standing for anything past the host the row must not print.
 	const NAME = "Nulo support: restore your wallet at the link below before it ex"
 	const LABEL = "a".repeat(63)
 	const wire = (id: string, url?: string): Session => ({

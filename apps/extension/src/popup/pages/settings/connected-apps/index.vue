@@ -43,8 +43,7 @@ const formatGrantSummary = (grants) => {
 	return grants.map((g) => getSafeDisplay(g.capability.type).shortLabel).join(" \u00B7 ")
 }
 
-/** The host of the origin the browser reported, never the name the site sent: the row shows it under
- *  that name, and e2e picks a row by it. A URL with no host gives "". */
+/** The host of the origin discovery stored, never text the site sent; "" when the URL has none. */
 const appHost = (session) => {
 	try {
 		return new URL(session.dappMetadata?.url ?? "").host
