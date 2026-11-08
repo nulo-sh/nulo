@@ -63,7 +63,7 @@ A fresh Testnet account pays nothing for a drip: the dApp embeds the SponsoredFP
 
 `env-exec request` refuses a dirty tree or a HEAD that is not a remote branch tip; at run time it re-checks both and that HEAD equals the approved commit (`keyed_pin`, `cmd_receive`). The run executes in the request's work tree. So a harness filed from the lane worktree would freeze it for up to six hours; a detached worktree at the pushed commit leaves the lane worktree free, provided the branch tip does not move on the remote.
 
-## Probe (Phase 1, 2026-11-06)
+## Probe (Phase 1, 2026-11-06; bridged stages 2026-11-08)
 
 Instrument as in D5. The recorded config shows the flag `true` for Testnet (chain 685146337) in every on session and `false` in every off session. The node wrapper sits on the runtime's node, which the PXE and the wallet's own readers share, so its counts include the wallet's polling. Deltas are on minus off, so negative means the on arm was faster (D2's saving is the negation). Medians weight every pass or send equally. Speculative syncs: no operation failed with `Speculative syncs failed` (instrument, lab and Testnet), and the 13 Testnet log buffers read held no `Speculative sync of` warning; the fourteenth session lost its browser before its buffer was read.
 
@@ -101,6 +101,24 @@ Offscreen JS heap, MB, before and after six passes: on 186→95, 152→90, 144�
 
 Lab spans saved times Testnet's mean span (149 ms), a magnitude, not a measured saving: (a) estimate 7 × 149 ≈ 1.0 s, against the 0.14-0.32 s measured, because Testnet's off arm needed 13 round trips, not the lab's 20; (b) 1 × 149 ≈ 0.15 s; (c) 0.
 
+### Testnet, bridged tokens: funded run 3 (blocks 23319-23330, load1 10-43, 13:45-13:59 UTC on 2026-11-08)
+
+Run 3 (§ Bridge leg) left the four defaults each holding a private balance. The on build then ran six refreshes on the profile that had just bridged EURC and GBPC; the off build restored the same account into an empty browser profile, timed its first sync and ran six refreshes. One session per arm, in a fixed order (on first), with different histories, so nothing here is a pair: deltas are by pass ordinal. The on build's first sync over bridged tokens was not measured, by the run's design: it restored its profile before bridging. The recorded config shows the flag as built in every row. Tokens per workload: the four defaults, plus fee juice for (c4); (c6) is a no-op on this profile (no custom token: 158 ms, no PXE operation).
+
+| Stage | Pairs | Median on / off (ms) | Ordinal deltas (ms) | On faster | Node calls on / off | Spans on / off |
+|---|---|---|---|---|---|---|
+| (c4) first sync, four funded tokens | 0, off only | not measured / 21837 | none | - | - / 129 | - / 87 |
+| (b) refresh, passes 1-6 | 0 | 5040 / 5292 | +3092, -502, -1501, -590, +362, +501 (median -70) | 3/6 | 36, 31, 59, 31, 31, 31 / 8, 31, 38, 31, 31, 31 | 19-28 / 6, then 20-23 |
+| (b) passes 2-6 | 0 | 5040 / 5542 | median -502 | 3/5 | equal (31) in four of five | 19-28 / 20-23 |
+| (b) trained passes (D3: 3-6) | 0 | 5038 / 5336 | median -114 | 2/4 | equal (31) in three of four | 19-28 / 20-23 |
+
+- Each pass sat at its own anchor, one block apart. Off pass 1 shared the first sync's anchor (block 23325), so its contract syncs were cached: 2024 ms, 6 spans.
+- On pass 1 also held a `simulateTx` (1.1 s, 5 calls) that started with it. On pass 3's four reads began 3.1 s after the press and made 8 calls; the other 51 calls ran before them.
+- load1 was 10-18 for the on passes and 34-43 for the off passes and the off first sync (34). Host load moves CPU-bound time (I5), which here favours on.
+- Offscreen JS heap before and after six passes, MB: on 130→98, off 128→95.
+- Against the four 2026-11-06 off (c) sessions over the same tokens unfunded (17.7-21.7 s, 94-110 calls, 63-74 spans), a first sync with funded tokens made more calls and spans: 21.8 s, 129, 87.
+- Speculative syncs: every PXE operation the two bridged records hold completed, so none failed with `Speculative syncs failed`. The bridge mode read no log buffer, so the `Speculative sync of` warning count was not made there.
+
 ### Caching (D7)
 
 | Pass (n) | Calls | (i) Repeats inside it | (ii) Repeated hash-pinned or content-addressed requests | Tip, freshness and metadata repeats | Spans (mean ms) |
@@ -115,16 +133,17 @@ Lab spans saved times Testnet's mean span (149 ms), a magnitude, not a measured 
 - The fast-arm public balances and the fee-juice reads never reached the wrapped node, so they are outside this coverage.
 - (iii) A batched read of N balances: a refresh's `executeUtility` makes 5 calls in 4 spans, 1 of them its block sync. One shared block sync for N = 6 removes at most 5 calls and 5 spans, about 0.75 s of a 6.2 s pass. Overlapping every later token's whole sync is a deliberately loose ceiling of 20 of 28 spans, about 3 s, not an achievable target, since distinct tokens still need distinct reads. The flag reaches neither.
 
-### Verdict (D2)
+### Verdict (D2): closed, no switch ships
 
-**Open until the bridged stages are measured** (the owner's decision P121-04, below). The record as of 2026-11-06 read **hold** by D2 as written, with a recommendation to **close** the flag without shipping it; departing from D2's letter is the owner's call.
+**The owner closed it on page 123, item P123-01, signed 2026-11-08 18:29 UTC: A, close**, with no note. The page's recommendation, which the owner accepted: "A switch for a saving nobody can feel costs a UI change, a glossary line and a failure mode a user can hit: a failed speculation fails the person's own operation. The bridged refresh adds nothing to the flag's case, the one first-sync saving stayed at 1.4 s of 18 with no mechanism behind it, and the proofs ran slower with it on." The record as of 2026-11-06 had read **hold** by D2's letter, with a recommendation to close; the owner deferred that call to the bridge leg (P121-04, below).
 
-- No stage ships. (c4) is the only Testnet stage with a median saving of at least 1 s (1.44 s, three of four pairs, calls down 9.4 %), but the lab shows no fewer spans on its nearest workload (66 / 66 in every pair), which D2 requires. That workload is not the same (twelve private reads against the extension's own start with four defaults, fee juice and its polling), so the lab does not refute c4's saving; it fails to corroborate it.
-- Close's letter fails on the same stage: 1.44 s is not under 0.5 s. Every other measured, paired stage saved under 0.5 s or ran slower. No paired trained-send comparison survived: under D3 send 2 is still training, and send 3 has no pair.
-- Why close is still the recommendation (moderate confidence, a judgment, not D2's letter): the one mechanism the lab shows, a send's simulation after its first folding contract-sync round trips (20 to 13 in the lab's trained sends, 13 to 11 in Testnet's second sends), is worth about 0.1-0.3 s on Testnet. (c6) ran slower by about as much as c4 ran faster. Both proof stages ran slower on the on arm, observed and unexplained. A refresh pass, the stage a person repeats most, gains nothing the lab can explain. The bridge leg (OA-1) lapsed unapproved after six hours; its later run is below.
-- If a stage ever ships, its shape is decided (P121-04): a Developer-mode switch marked experimental, off by default (the research's Route B). D2's ship branch names that and nothing else.
+- **D2's letter reads hold.** (c4) is the only Testnet stage with a median saving of at least 1 s (1.44 s, three of four pairs, calls down 9.4 %), but the lab shows no fewer spans on its nearest workload (66 / 66 in every pair), which ship requires, so the lab fails to corroborate the saving without refuting it. Close's letter fails on the same stage: 1.44 s is not under 0.5 s. Every other paired stage saved under 0.5 s or ran slower, and no paired trained-send comparison survived D3's split.
+- **The bridged stages add nothing.** The refresh has no pairs; its ordinal deltas split in sign (median -70 ms over six passes, -114 ms over the four trained ones), node calls are equal in most passes, and the off passes ran under about three times the on passes' host load. The on build's first sync over funded tokens was not measured.
+- **Why close.** The one mechanism the lab shows, a trained send's simulation folding contract-sync round trips (20 to 13 in the lab, 13 to 11 in Testnet's second sends), is worth about 0.1-0.3 s on Testnet. (c6) ran slower by about as much as (c4) ran faster, and both proof stages ran slower on the on arm, observed and unexplained.
+- **Reopening condition:** an Aztec line that changes the flag's implementation (`ContractSyncService` and `ContractCallGraph` in `@aztec-labs/pxe`), or a user who reports slow first syncs with many tokens.
+- **If a stage ever ships**, it ships as a Developer-mode switch marked experimental, off by default (P121-04), and nothing else.
 
-### Bridge leg: the failed funded run and the fix (2026-11-06, 2026-11-08)
+### Bridge leg: the failed funded run, the fix and the funded runs (2026-11-06, 2026-11-08)
 
 **The owner's decision, page 121 item P121-04** (signed 2026-11-08 12:09 UTC): **C, run the bridge leg first, then decide**, with this note, verbatim: "The developer that implemented this is pretty great, so I kinda trust his work, let's test a little bit more before killing the idea. Even if it helps, at starters I'd always set it as experimental on developer mode, and off by default." So the verdict waits for the bridged first sync and refresh, and any ship is Route B only.
 
@@ -139,3 +158,15 @@ Lab spans saved times Testnet's mean span (149 ms), a magnitude, not a measured 
 
 **Rehearsal row** (address-only: the funded run's own address, which still holds the 100 USDC its mint landed, and a public Sepolia node for reads; the wallet runs every check and then refuses; no funds; the off build on Testnet, smoke lane, retry 0, at 4c4c9013e, load1 26): connected through discover, verify and capabilities; balance 100.0 USDC against 90.0 needed, so no mint; Confirm at +1.2 s; three silent PXE operations; the seal's `personal_sign` at +5.3 s passed every check and was refused; the review showed "Rejected in wallet." at +6.3 s and the step stopped with a screenshot. `agent.sh` cannot run it: it builds and boots a local network and runs only the network lane (F6), so the rehearsal runs as the funded leg does.
 
+**The funded runs (2026-11-08).** The orchestrator ran the fixed harness twice with the owner-authorized disposable key, the same command and variables as the failed run, and the lane's prebuilt off and on bundles.
+
+- **Run 2 (13:05-13:21 UTC) stopped at the EURC mint.** The off build bridged USDC and USDT (Confirm to receipt 118 and 119 s). The on build's EURC mint landed on Sepolia within 20 s by the orchestrator's chain read, but the tools app's balance tile kept its old figure for 10 minutes, since the app's own one-shot receipt wait had failed and only a reload reads the balance again. So `ensureBalance` timed out and the step stopped with a screenshot, before any EURC deposit.
+- **Between the runs** the harness got one reload of the tools app when the chain holds the mint but the tile is still stale 45 s later, through an `openBridge` helper shared with its opening sequence, logged as an `l1-tile-stale` row. It was a scratch patch and left with the harness.
+- **Run 3 (13:33-13:59 UTC) was green.** Its USDT mint hit the stale tile once (47 s past the chain) and recovered through the reload. Every deposit took the wallet's two seal signatures, one permit and the deposit; no request was refused, and every Nulo window opened was approved. A deposit's time is L1 inclusion, the L1 → L2 message and the claim's own inclusion, not the PXE: the wallet's claim window took 3.4-4.1 s. Two deposits per build characterize the bridge; they do not compare the builds (D9). The refreshes and the first sync that followed are in § Probe.
+
+| Token | Build | Confirm to receipt (s) | PXE operations | Node calls | Spans | Claim window (ms) |
+|---|---|---|---|---|---|---|
+| USDC | off | 140 | 29 | 358 | 166 | 4098 |
+| USDT | off | 112 | 25 | 361 | 171 | 3504 |
+| EURC | on | 101 | 26 | 358 | 178 | 3529 |
+| GBPC | on | 167 | 33 | 470 | 188 | 3396 |

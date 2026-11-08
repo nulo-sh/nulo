@@ -1,7 +1,7 @@
 ---
 plan: pxe-flag-1
 tier: light
-status: measured (2026-11-06); verdict open per P121-04 C (bridge leg first, then decide); bridge step fixed (2026-11-08), funded rerun with the orchestrator
+status: completed (2026-11-08): no switch ships, per the owner's P123-01 A
 issues: none (a probe on the owner's page 116 pick A, "Measure first, no UI")
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 002b76fc7
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-08
+- **Status**: closed with no switch shipped, on the owner's decision P123-01 A (signed 2026-11-08 18:29 UTC), which accepted the page's recommendation over D2's letter (hold). One docs-only PR.
+- **Measured**: the flag on and off in the lab (12 tokens: six refresh pairs, five send pairs, three first-sync pairs), on Testnet (four first-sync pairs over four and six tokens, 20 refresh comparisons, three send pairs) and after the funded bridge leg (four private deposits, then six refreshes per build and the off build's first sync over four funded tokens). Only Testnet's first sync over four tokens saved 1 s or more (1.44 s, three of four pairs), with no lab corroboration; the bridged refresh split in sign. Numbers in [recon.md](recon.md) § Probe and § Bridge leg; D2's reading in § Verdict (D2).
+- **Shipped**: nothing in the product. The probe harness, the egress guard's extra-hosts option and the keyed template left the branch in the record commit, so the PR changes only `implementations-plan/`; they stay readable in this PR's commits and never reached `dev`. The scratch instruments stayed outside the repository (D1).
+- **Reopening condition**: an Aztec line that changes the flag's implementation (`ContractSyncService` and `ContractCallGraph` in `@aztec-labs/pxe`), or a user who reports slow first syncs with many tokens. If a stage ever ships, it ships as a Developer-mode switch marked experimental, off by default (P121-04).
+- **Known limits**: none filed. The plan's run-time exposures (a tools page misusing an allowed call, a deposit left unclaimed, a same-user process reading a throwaway phrase) ended with the runs: every deposit made was claimed, the profiles lived in memory only, and the orchestrator shredded the key.
+- **Open items**: none.
+- **Dispositions**: the caching question (D7) is answered with numbers and asks for no follow-up: no repeated hash-pinned read inside a pass, `getNodeInfo` repeats unassessed ([recon.md](recon.md) § Caching). No `lessons.md` promotion: its two candidates, the tools app's stale balance tile after a landed mint and approving a keyed run before a lane starts, are an external app's behaviour and an orchestration rule, and no line in the file, which sits at its budget, is superseded.
+- **Seeds retired**: the `/goal` and `/loop` seeds below.
 
 # pxe-flag-1: measure PXE's experimental concurrent contract sync, in the lab and on Testnet
 
