@@ -15,7 +15,7 @@
  * test against the production adapter.
  */
 
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { recordWrites } from "../storage-write-log"
@@ -2584,7 +2584,7 @@ describe("NetworkService node status: getNodeStatus and probeNodeStatus", () => 
 			twoEndpointRow(local, "https://a.example", "https://b.example")
 			const r = await bothStatuses(service, factory, "two")
 			expect(r.probed).toBe(NodeStatus.Active)
-			expect(r.probeCalls).toEqual([["https://a.example", 5_000]])
+			expect(r.probeCalls).toEqual([["https://a.example", 2_500]])
 		})
 
 		test("the probe asks the route's active endpoint first and shares one budget", async () => {
@@ -2595,7 +2595,7 @@ describe("NetworkService node status: getNodeStatus and probeNodeStatus", () => 
 			expect(await service.getNodeStatus("two")).toBe(NodeStatus.Active)
 			const probe = vi.spyOn(factory, "probeChainId")
 			expect(await service.probeNodeStatus("two", 5_000)).toBe(NodeStatus.Active)
-			expect(probe.mock.calls).toEqual([["https://b.example", 5_000]])
+			expect(probe.mock.calls).toEqual([["https://b.example", 2_500]])
 		})
 	})
 
@@ -2604,6 +2604,96 @@ describe("NetworkService node status: getNodeStatus and probeNodeStatus", () => 
 		storeRow(local, { id: "theirs", profileId: "p2" })
 		await expect(service.getNodeStatus("theirs")).rejects.toThrow(new Error("Invalid id"))
 		await expect(service.probeNodeStatus("theirs", 5_000)).rejects.toThrow(new Error("Invalid id"))
+	})
+})
+
+/** How one endpoint answers a probe: its chain after `after` ms, never, or a refusal at once. */
+type ProbeReply = { chainId: number; after: number } | "hang" | "refuse"
+
+/** `probeChainId` under its contract on the fake clock: a probe rejects as a timeout once its own
+ *  budget runs out before the endpoint answers. `asked` settles on the first probe, so the clock
+ *  moves only after the service's real-async reads are done. */
+function probesOnFakeClock(factory: FakeNodeFactory, replies: Record<string, ProbeReply>) {
+	let onAsked = () => {}
+	const asked = new Promise<void>((resolve) => {
+		onAsked = resolve
+	})
+	const probe = vi.spyOn(factory, "probeChainId").mockImplementation((rpcUrl, timeoutMs) => {
+		onAsked()
+		const reply = replies[rpcUrl] ?? "refuse"
+		return new Promise<number>((resolve, reject) => {
+			if (reply === "refuse") return reject(transportFailure("refused"))
+			if (reply !== "hang" && reply.after < timeoutMs) setTimeout(() => resolve(reply.chainId), reply.after)
+			else setTimeout(() => reject(transportFailure("timeout")), timeoutMs)
+		})
+	})
+	return { probe, asked }
+}
+
+/** The status and the fake time it took. The clock runs to twice the budget, so an overrun shows
+ *  in `elapsed` instead of hanging the test. */
+async function timedProbe(service: NetworkService, asked: Promise<void>, networkId: string, timeoutMs: number) {
+	const start = Date.now()
+	const result = service.probeNodeStatus(networkId, timeoutMs).then((status) => ({ status, elapsed: Date.now() - start }))
+	await asked
+	await vi.advanceTimersByTimeAsync(timeoutMs * 2)
+	return result
+}
+
+describe("NetworkService.probeNodeStatus shares its budget across the endpoints still to ask", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("a cold route whose primary hangs asks the next endpoint in time and answers Active inside the budget", async () => {
+		const { service, factory, local } = setupServiceWithStorage({})
+		twoEndpointRow(local, "https://a.example", "https://b.example")
+		const { probe, asked } = probesOnFakeClock(factory, {
+			"https://a.example": "hang",
+			"https://b.example": { chainId: 7, after: 100 },
+		})
+		expect(await timedProbe(service, asked, "two", 5_000)).toEqual({ status: NodeStatus.Active, elapsed: 2_600 })
+		expect(probe.mock.calls).toEqual([
+			["https://a.example", 2_500],
+			["https://b.example", 2_500],
+		])
+	})
+
+	test("a refusing primary falls through at once and the next endpoint gets the whole remainder", async () => {
+		const { service, factory, local } = setupServiceWithStorage({})
+		twoEndpointRow(local, "https://a.example", "https://b.example")
+		const { probe, asked } = probesOnFakeClock(factory, {
+			"https://a.example": "refuse",
+			"https://b.example": { chainId: 7, after: 4_000 },
+		})
+		expect(await timedProbe(service, asked, "two", 5_000)).toEqual({ status: NodeStatus.Active, elapsed: 4_000 })
+		expect(probe.mock.calls).toEqual([
+			["https://a.example", 2_500],
+			["https://b.example", 5_000],
+		])
+	})
+
+	test("with every endpoint hanging it answers Inactive at the deadline, never past it", async () => {
+		const { service, factory, local } = setupServiceWithStorage({})
+		storeRow(local, {
+			id: "three",
+			chainId: 7,
+			endpoints: ["a", "b", "c"].map((name, i) => ({ id: `e${i + 1}`, rpcUrl: `https://${name}.example` })),
+		})
+		const { probe, asked } = probesOnFakeClock(factory, {
+			"https://a.example": "hang",
+			"https://b.example": "hang",
+			"https://c.example": "hang",
+		})
+		expect(await timedProbe(service, asked, "three", 5_000)).toEqual({ status: NodeStatus.Inactive, elapsed: 5_000 })
+		expect(probe.mock.calls).toEqual([
+			["https://a.example", 1_666],
+			["https://b.example", 1_667],
+			["https://c.example", 1_667],
+		])
 	})
 })
 

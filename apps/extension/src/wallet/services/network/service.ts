@@ -1035,7 +1035,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	/**
 	 * `getNodeStatus` within `timeoutMs`: one bounded identity probe per endpoint, the route's active
 	 * endpoint first, then the rest in preference order, stopping at the first that serves the chain.
-	 * While the active endpoint answers, nothing else is asked.
+	 * While the active endpoint answers, nothing else is asked. Each probe gets at most an equal share
+	 * of the time left among the endpoints still to ask, so a hanging one cannot spend the next one's.
 	 */
 	public async probeNodeStatus(networkId: string, timeoutMs: number): Promise<NodeStatus> {
 		validateParams(NetworkMethodSchemas.probeNodeStatus.params, [networkId, timeoutMs], "probeNodeStatus")
@@ -1047,11 +1048,11 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const active = this.routes.get(network.id)?.node.route.active()?.id
 		const endpoints = routeEndpoints(network).sort((a, b) => Number(b.id === active) - Number(a.id === active))
 		let otherChain = false
-		for (const endpoint of endpoints) {
+		for (const [index, endpoint] of endpoints.entries()) {
 			const left = deadline - Date.now()
 			if (left <= 0) break
 			try {
-				const probed = await this.nodeFactory.probeChainId(endpoint.rpcUrl, left)
+				const probed = await this.nodeFactory.probeChainId(endpoint.rpcUrl, Math.floor(left / (endpoints.length - index)))
 				if (nodeChainId(endpoint.rpcUrl, network.kind, probed) === network.chainId) return NodeStatus.Active
 				otherChain = true
 			} catch {
