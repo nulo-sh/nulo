@@ -275,9 +275,24 @@ dates are the day the promote publishes them, so until then they read `«FILL: e
 - [ ] The Chrome Web Store's Privacy tab and the Firefox data-collection declaration are re-read
       against the relay, which `apps/extension/store/listing.md` § Data inventory now names as a
       destination of the node's requests
-- [ ] Before Terms 1.2.3 is published, the owner reads Terms § 2 ("go directly to the configured
-      node") and § 7.5 (supporting services) against the relay; neither changed with it
-      (#1756; `implementations-plan/archive/rpc-fallback-1/OWNER-ASKS.md`, OA-9)
+
+**Due at the release that publishes privacy 1.3.1 and Terms 1.2.4:** privacy § 5.1 says the other
+endpoints are also used until the first endpoint has answered two checks at least 30 seconds apart,
+Terms § 2 says a transaction sent through Nulo's relay goes through it to its provider, and Terms
+§ 7.5 lists the relay's edge hosting (the owner's pick, decision page 122, P122-03 B). Both are
+patches, so nobody is asked to accept again. Both versions are archived and in place; their
+effective dates are the day the promote publishes them, so until then they read
+`«FILL: effective date»`. A promote that publishes them with privacy 1.3 and Terms 1.2.3 dates all
+four, and the archived `legal/archive/privacy-1.3.md` and `legal/archive/terms-1.2.3.md` with them,
+since they were archived before their dates were known:
+
+- [ ] `legal/privacy.md` and `legal/terms.md` — the version lines and the 1.3.1 and 1.2.4 history
+      rows, dated the day they are published
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3.1 and `terms` 1.2.4 (now
+      `null`), same date
+- [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.3.1/`, `nulo.sh/terms` and
+      `nulo.sh/terms/v1.2.4/` show no DRAFT banner, and AMO's Privacy policy field carries the 1.3.1
+      text (`apps/extension/store/listing.md` § Privacy policy text)
 
 **Due at the release that publishes website notice 1.1:** the notice drops the email at store
 launch and says replies reach hello@nulo.sh. It is dated for the promote that publishes it, 5

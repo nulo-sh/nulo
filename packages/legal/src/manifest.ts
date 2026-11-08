@@ -52,6 +52,14 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 				"The second default endpoint of Alpha and Testnet is Nulo's relay, operated by the Developer, which passes requests to a third-party provider (§ 7.1).",
 			],
 		},
+		{
+			version: "1.2.4",
+			effective: null,
+			material: false,
+			changes: [
+				"Transactions sent through Nulo's relay go through it to its provider (§ 2), and edge hosting for Nulo's relay is among the supporting services (§ 7.5).",
+			],
+		},
 	],
 	privacy: [
 		{ version: "1.0", effective: "23 September 2026", material: true, changes: ["First published version."] },
@@ -162,6 +170,14 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			changes: [
 				"Nulo's relay, which the Developer operates, is the second default endpoint of Alpha and Testnet.",
 				"It receives a network's requests while the endpoints before it fail and recover, passes them to a provider without your IP address, and its application writes no log of them; Cloudflare's hosting records apply (§ 5.12).",
+			],
+		},
+		{
+			version: "1.3.1",
+			effective: null,
+			material: false,
+			changes: [
+				"After the primary endpoint fails, the others are used until it has answered two checks at least 30 seconds apart, up to 30 minutes apart after repeated failures (§ 5.1).",
 			],
 		},
 	],
