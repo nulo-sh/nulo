@@ -239,7 +239,7 @@ source smoke run.
 
 ## Chaos runs
 
-A chaos file runs only when `NULO_E2E_CHAOS=1` arms it. The network lane's chaos job arms `send-chaos.test.ts` alone, for its fixed seeds ([`CI.md`](../../../../CI.md)); no lane arms the profile chaos files.
+A chaos file runs only when `NULO_E2E_CHAOS=1` arms it. The network lane's chaos job arms `send-chaos.test.ts` alone, for its fixed seeds, and the nightly's advisory rpc leg arms `rpc-failover-chaos.test.ts` at one fixed seed ([`CI.md`](../../../../CI.md)); no lane arms the profile chaos files.
 
 ### Profile chaos
 

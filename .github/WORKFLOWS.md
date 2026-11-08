@@ -23,7 +23,7 @@ These `status` aggregators are what branch protection on `main` / `dev` requires
 | `publish-packages.yml` | — | — | manual `workflow_dispatch` (`version`, `dry_run`) | tests, stages, packs and digest-checks the three `@nulo-sh/*` npm packages; with `dry_run` false and the `npm-publish` environment approved, publishes them with provenance (no npm token) and verifies the provenance the registry serves |
 | `publish-token-list.yml` | — | — | push to `dev` changing `infra/token-list/list.source.json` + manual `workflow_dispatch` from `dev` | checks the token-list tree and writes the review summary, with an advisory live check of each entry on a public node; with the `token-list` environment approved, signs the list and opens the `chore(token-list): publish sequence <n>` PR through the release App |
 | `extension-network-e2e-soak.yml` | `Status` (not required) | — | manual `workflow_dispatch` (`test_files`, `repeats`, `retry`, `proverless`, `disable_presto`) | the branch-level flake check: the named network files `repeats` times in sequence at retry 0 on Chrome; GitHub refuses a blank list at dispatch; `prep` refuses a token that is not a network test file at that commit, and `repeats` or `retry` out of range; every named test must pass in every iteration. The whole suite on a branch is a dispatch of the two PR network workflows; `nightly.yml` builds `dev` only ([`CI.md`](../CI.md#extension-network-e2e-soakyml)) |
-| `nightly.yml` | `status` (not required) | — | schedule (daily) + manual dispatch | full quality bar incl. the network suite and send-chaos on Chrome and Firefox, plus an advisory run of the canary files on the in-browser prover → prerelease GitHub Release from dev (`v<ver>-nightly.<YYDDD>`), keeping the newest fourteen |
+| `nightly.yml` | `status` (not required) | — | schedule (daily) + manual dispatch | full quality bar incl. the network suite and send-chaos on Chrome and Firefox, plus two advisory runs, the canary files on the in-browser prover and the rpc failover chaos file at its fixed seed (Chrome) → prerelease GitHub Release from dev (`v<ver>-nightly.<YYDDD>`), keeping the newest fourteen |
 
 Each required check-run is `app_id`-pinned to GitHub Actions in `required_status_checks.checks`, so only a check produced by Actions (not a same-named check from another app) can satisfy the gate.
 
@@ -39,7 +39,7 @@ Reusables live as `.github/workflows/_*.yml` and are called from top-level workf
 | `_release-pr-lockfile.yml` | `release`, `release-prerelease` |
 | `_extension-smoke-e2e.yml` | `pr-extension-smoke-e2e`, `pr-extension-smoke-e2e-firefox`, `release`, `nightly` |
 | `_extension-network-e2e-lane.yml` | `pr-extension-network-e2e`, `pr-extension-network-e2e-firefox`, `nightly` (both browsers), `release` (opt-in: `workflow_dispatch` with `run_network_e2e=true`): the network suite's one partition, shard pool + dedicated jobs + chaos seeds, each a call of the suite below |
-| `_extension-network-e2e.yml` | `_extension-network-e2e-lane`, `extension-network-e2e-soak`, `nightly` (its advisory in-browser canary leg) |
+| `_extension-network-e2e.yml` | `_extension-network-e2e-lane`, `extension-network-e2e-soak`, `nightly` (its two advisory legs: the in-browser canary and the rpc failover chaos seed) |
 
 The two suites and the lane take a `browser` input (`chrome` default, `firefox`); log-artifact and browser-cache names carry the browser so a Firefox lane can neither overwrite nor restore a Chrome lane's.
 
