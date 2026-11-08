@@ -86,6 +86,14 @@ async function offscreen<T>(ctx: ExtensionContext, expression: string): Promise<
 	}
 }
 
+/** The instrument's PXE operations from index `from` on, read without draining: kind, function, outcome, time. */
+function peekOps(ctx: ExtensionContext, from: number): Promise<{ op: string; fn: string; ok: boolean; ms: number }[]> {
+	return offscreen(
+		ctx,
+		`(() => { const p = globalThis.__pxeFlagProbe; return p ? p.ops.slice(${Math.trunc(from)}).map((o) => ({ op: o.op, fn: o.fn, ok: o.ok, ms: o.t1 - o.t0 })) : [] })()`,
+	).then((rows) => (Array.isArray(rows) ? rows : []))
+}
+
 /** Takes everything the instrument recorded since the last drain. */
 function drain(ctx: ExtensionContext): Promise<Probe> {
 	return offscreen<Probe>(
@@ -367,6 +375,10 @@ async function session(arm: Arm, words: readonly string[], custom: readonly stri
 	}
 }
 
+function legOf(ctx: ExtensionContext) {
+	return { ctx, record, shotDir: join(SCRATCH, "testnet"), drain: () => drain(ctx), peek: (from: number) => peekOps(ctx, from) }
+}
+
 /** Unset on every run but the probe's own, so a suite run never reaches Testnet through this file. */
 const MODE = process.env.PXE_FLAG_MODE
 
@@ -390,7 +402,7 @@ describe.skipIf(inject("liveLeg") !== true || MODE === undefined)("pxe-flag prob
 			const page = await openTestnetHome(ctx)
 			await switchToNetwork(page, "Testnet")
 			await waitSettled(page, 4)
-			await bridgeTokens({ ctx, signer, symbols: ["USDC", "USDT"], arm: "off", record, drain: () => drain(ctx) })
+			await bridgeTokens({ ...legOf(ctx), signer, symbols: ["USDC", "USDT"], arm: "off" })
 		} finally {
 			await ctx.close()
 		}
@@ -401,7 +413,7 @@ describe.skipIf(inject("liveLeg") !== true || MODE === undefined)("pxe-flag prob
 			const page = await openTestnetHome(on)
 			await switchToNetwork(page, "Testnet")
 			await waitSettled(page, 4)
-			await bridgeTokens({ ctx: on, signer, symbols: ["EURC", "GBPC"], arm: "on", record, drain: () => drain(on) })
+			await bridgeTokens({ ...legOf(on), signer, symbols: ["EURC", "GBPC"], arm: "on" })
 			await refreshPasses(on, page, "on", 6, { funded: true })
 		} finally {
 			await on.close()
