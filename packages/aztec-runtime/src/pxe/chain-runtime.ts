@@ -6,10 +6,9 @@ import { WASMSimulator } from "@aztec-labs/simulator/client"
 import { PrestoProver, type PrestoPhase } from "@alejoamiras/presto"
 import type { ProveBackend } from "@nulo/wallet-core/jobs"
 import { PxeStoreKeyMissingError } from "@nulo/extension-messaging/errors"
-import type { NodeFactory } from "../ports/node-factory-port"
+import type { NodeFactory, RoutedNodeOptions } from "../ports/node-factory-port"
 import { createSubmissionPins, type Route, type RouteEndpoint, type RoutedNode, type SubmissionPins } from "../routing/routed-node"
 import { assertNodeServesChain } from "../utils/chain-identity"
-import type { RetryOptions } from "../utils/fetch"
 import { chainDataDir, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
 import { initStoreVersionStamp, openChainStore, readStoreStamp } from "./opfs-store"
 import { PXE_NOT_SYNCED_DIAGNOSTIC } from "./stale-anchor"
@@ -101,7 +100,7 @@ export function endpointsKey(endpoints: readonly RouteEndpoint[]): string {
 }
 
 /** What a runtime's build takes from its registry: the retry policy and the pins of its (profile, chain). */
-export type RuntimeOptions = RetryOptions & { pins?: SubmissionPins }
+export type RuntimeOptions = RoutedNodeOptions
 
 /**
  * Holds the `AztecNode` + `PXE` pair for a single chain bound to a
@@ -377,7 +376,19 @@ export class ChainRuntimeRegistry {
 	private readonly retriesStopped = new Map<string, number>()
 	private readonly pins = new Map<string, SubmissionPins>()
 
-	public constructor(private readonly factory: PxeFactory) {}
+	/** `onRouteChange` hears when a runtime's route moves, and when a runtime is built for a pair or
+	 *  dropped from it: what `peekMatching` answers changes then too. */
+	public constructor(
+		private readonly factory: PxeFactory,
+		private readonly onRouteChange: (profileId: string, chainId: number) => void = () => {},
+	) {}
+
+	private routeChanged(profileId: string, chainId: number): void {
+		// An observer's failure must never fail the build, the drop or the call that moved the route.
+		try {
+			this.onRouteChange(profileId, chainId)
+		} catch {}
+	}
 
 	private key(profileId: string, chainId: number): string {
 		return chainRegistryKey({ profileId, chainId })
@@ -441,12 +452,15 @@ export class ChainRuntimeRegistry {
 			if (existing.endpointsKey === endpointsKey(network.endpoints)) return existing
 			await existing.dispose()
 			this.runtimes.delete(k)
+			this.routeChanged(network.profileId, network.chainId)
 		}
 		const prefix = chainRegistryKeyPrefix(network.profileId)
 		const retryWhile = () => !this.retriesStopped.has(k) && !this.retriesStopped.has(prefix)
 		const pins = this.pinsFor(network.profileId, network.chainId)
-		const runtime = await this.factory.createChainRuntime(network, storeKey, { retryWhile, pins })
+		const onChange = () => this.routeChanged(network.profileId, network.chainId)
+		const runtime = await this.factory.createChainRuntime(network, storeKey, { retryWhile, pins, onChange })
 		this.runtimes.set(k, runtime)
+		this.routeChanged(network.profileId, network.chainId)
 		return runtime
 	}
 
@@ -485,10 +499,12 @@ export class ChainRuntimeRegistry {
 		const results = await Promise.allSettled(entries.map(([, r]) => r.dispose()))
 		const errors: unknown[] = []
 		results.forEach((res, i) => {
+			const [k, runtime] = entries[i]
 			if (res.status === "rejected") {
 				errors.push(res.reason)
-				const [k, runtime] = entries[i]
 				this.runtimes.set(k, runtime)
+			} else {
+				this.routeChanged(k.slice(0, k.lastIndexOf(":")), runtime.chainId)
 			}
 		})
 		if (errors.length) {
@@ -518,6 +534,7 @@ export class ChainRuntimeRegistry {
 		// with no recovery path.
 		await runtime.dispose()
 		this.runtimes.delete(k)
+		this.routeChanged(profileId, chainId)
 	}
 
 	/**

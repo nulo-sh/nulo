@@ -67,4 +67,5 @@ export const glyphSources = {
 	pause: "player-pause",
 	"no-signal": "antenna-bars-off",
 	swap: "arrows-left-right",
+	grip: "grip-vertical",
 } as const satisfies Record<string, string>

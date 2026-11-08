@@ -35,3 +35,6 @@
 - 2026-11-07: tests1 design audit: Codex 01a1b389 revise, then approve with changes (D40-D44); F4 a known limit
 - 2026-11-07: tests1 built, diff review Codex 01a1b3ba three rounds (revise, revise, revise with 1 P2 applied as given) and Opus approve with changes; known limits #1736, #1737
 - 2026-11-07: tests1 gates on 71ce00c46: lint, typecheck:all, test:all (156 s), routing 70, relay 13; test1 x3 seeds, test2 x3 from v1.2.0, test3 x3, E1 193 s, sandbox 8/8 300 s, all retry 0 green
+- 2026-11-07: arc 4 started on P117-11 A (OA-3); Phase 9 rewritten; design consult Codex 01a1b416 revise, D49-D59
+- 2026-11-07: arc 4 built on P117-11 A; diff review Codex three rounds (revise, revise, approve with changes; the round-3 P3 fixed after the round) and Opus approve with changes; gates on 4183c9b36: lint, typecheck:all, audit:vue, test:all, Chrome endpoint-order 99 s and rpc-edit-mid-proof 63 s, Firefox endpoint-order 199 s, smoke endpoints+rows 17/17 on both browsers, all retry 0 (a first Firefox run went red at the check for B's down line; CI then showed the line can land after the later ones, so the check polls since 8963fb04e; the fixture's guard is #1740)
+- 2026-11-07: PR #1741 opened; CI on 8963fb04e all green (an unrelated unit clock flake #1742 green on rerun at f6002b97c); network wall-clock Chrome 19.3 to 21.9 min, Firefox 20.5 to 23.2 min

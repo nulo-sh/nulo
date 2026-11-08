@@ -75,7 +75,15 @@ export interface Route {
 	 * answer is another chain, and when there is no active endpoint and none answers.
 	 */
 	pickForSend(txHash: string, anchorHash: string): Promise<RouteEndpoint>
-	snapshot(): readonly { readonly id: string; readonly state: EndpointState; readonly since: number }[]
+	/** Each endpoint's state, when it took it, and the latest failure that counted toward `down`. */
+	snapshot(): readonly RouteSnapshotEntry[]
+}
+
+export interface RouteSnapshotEntry {
+	readonly id: string
+	readonly state: EndpointState
+	readonly since: number
+	readonly failure: TransportFailure | undefined
 }
 
 export type RoutedNode = AztecNode & { readonly route: Route }
@@ -110,6 +118,8 @@ export interface RouteDeps {
 	/** Bounds a caller's wait on work it shares with other callers, which keeps running past it. */
 	timer(ms: number): RouteTimer
 	log(event: RouteLogEvent): void
+	/** Told after any change a snapshot shows: a state, the active role, a down endpoint's failure kind. */
+	changed?: () => void
 	/** Asked before every move, before every sleep and after it; `false` ends the call with its last error. */
 	retryWhile?: () => boolean
 	pins?: SubmissionPins
@@ -213,7 +223,7 @@ class Router implements Route {
 		private readonly deps: RouteDeps,
 	) {
 		this.pins = deps.pins ?? createSubmissionPins()
-		this.health = new RouteHealth(endpoints.length, deps.now(), (change) => this.logChange(change))
+		this.health = new RouteHealth(endpoints.length, deps.now(), (change) => this.onHealthChange(change))
 	}
 
 	public active(): RouteEndpoint | undefined {
@@ -225,11 +235,12 @@ class Router implements Route {
 		this.health.seedFloor(proposedBlockNumber, this.deps.now())
 	}
 
-	public snapshot(): readonly { id: string; state: EndpointState; since: number }[] {
+	public snapshot(): readonly RouteSnapshotEntry[] {
 		return this.endpoints.map((endpoint, index) => ({
 			id: endpoint.id,
 			state: this.health.state(index),
 			since: this.health.since(index),
+			failure: this.health.lastFailure(index),
 		}))
 	}
 
@@ -655,6 +666,14 @@ class Router implements Route {
 		return client
 	}
 
+	private onHealthChange(change: HealthChange): void {
+		this.logChange(change)
+		// An observer's failure must never fail the call whose answer moved the health.
+		try {
+			this.deps.changed?.()
+		} catch {}
+	}
+
 	private logChange(change: HealthChange): void {
 		const chainId = this.spec.chainId
 		if (change.kind === "active") {
@@ -662,6 +681,7 @@ class Router implements Route {
 			this.deps.log({ event: "active", chainId, endpointId })
 			return
 		}
+		if (change.kind === "failure") return
 		const endpointId = this.endpoints[change.index]?.id ?? String(change.index)
 		this.deps.log({ event: "state", chainId, endpointId, state: change.state, failure: change.failure })
 	}

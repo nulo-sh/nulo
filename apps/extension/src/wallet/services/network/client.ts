@@ -13,6 +13,8 @@ import {
 	NETWORK_SERVICE_NAME,
 	NetworkMethodSchemas,
 	type NodeStatus,
+	type RouteEndpoint,
+	type RouteSnapshot,
 } from "./spec"
 
 export * from "./spec"
@@ -29,6 +31,7 @@ export class NetworkServiceClient extends ServiceClient<Methods, Events> impleme
 	public readonly onActiveNetworkChanged = new EventHandler<Network>()
 	public readonly onPrimaryEndpointChanged = new EventHandler<{ networkId: string; endpointId: string }>()
 	public readonly onChainPurged = new EventHandler<{ profileId: string; chainId: number }>()
+	public readonly onRouteChanged = new EventHandler<{ profileId: string; chainId: number }>()
 
 	public constructor(name?: string) {
 		super(NETWORK_SERVICE_NAME, documentLogger(), name)
@@ -117,6 +120,14 @@ export class NetworkServiceClient extends ServiceClient<Methods, Events> impleme
 
 	public async setPrimaryEndpoint(networkId: string, endpointId: string): Promise<Network> {
 		return this.call("setPrimaryEndpoint", [networkId, endpointId])
+	}
+
+	public async reorderEndpoints(networkId: string, endpointIds: string[]): Promise<Network> {
+		return this.call("reorderEndpoints", [networkId, endpointIds])
+	}
+
+	public async getRouteSnapshot(networkId: string, shown: readonly RouteEndpoint[]): Promise<RouteSnapshot | null> {
+		return this.call("getRouteSnapshot", [networkId, shown])
 	}
 
 	public async getNodeStatus(networkId: string): Promise<NodeStatus> {

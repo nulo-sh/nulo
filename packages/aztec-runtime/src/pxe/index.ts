@@ -33,7 +33,7 @@ export {
 	verifyArtifactClassId,
 } from "./artifact-class-id"
 export type { IPXE } from "./ipxe"
-export { PXE_SERVICE_NAME, type Methods, type NotesFilter, type PxeEvents } from "./spec"
+export { PXE_SERVICE_NAME, type Methods, type NotesFilter, type PxeEvents, type RouteSnapshot } from "./spec"
 export {
 	PRIVATE_ADDRESS_MAGIC_VALUE,
 	PublicEventCursorSchema,

@@ -6,6 +6,7 @@ export type {
 	RouteDeps,
 	RouteEndpoint,
 	RouteLogEvent,
+	RouteSnapshotEntry,
 	RouteSpec,
 	RouteTimer,
 	RoutedNode,

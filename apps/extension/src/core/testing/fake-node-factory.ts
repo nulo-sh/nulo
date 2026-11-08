@@ -18,9 +18,9 @@
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
-import type { NodeFactory } from "@nulo/aztec-runtime/ports"
-import { type RouteSpec, type RoutedNode, realTimer, routeNode, type SubmissionPins } from "@nulo/aztec-runtime/routing"
-import { type RetryOptions, type TransportFailure, withTransportFailure } from "@nulo/aztec-runtime/utils"
+import type { NodeFactory, RoutedNodeOptions } from "@nulo/aztec-runtime/ports"
+import { type RouteSpec, type RoutedNode, realTimer, routeNode } from "@nulo/aztec-runtime/routing"
+import { type TransportFailure, withTransportFailure } from "@nulo/aztec-runtime/utils"
 import { walletChainId } from "@/utils/chain-ids"
 
 /** The error a node client's caller sees when its request failed in transport with `kind`: the SDK
@@ -78,7 +78,7 @@ export class FakeNodeFactory implements NodeFactory {
 
 	/** The real router over this factory's fake nodes, one per endpoint URL. A lone endpoint is
 	 *  never probed, so a one-endpoint consumer needs no `getNodeInfo` or `getChainTips` stub. */
-	public createRoutedNode(spec: RouteSpec, options: RetryOptions & { pins?: SubmissionPins } = {}): RoutedNode {
+	public createRoutedNode(spec: RouteSpec, options: RoutedNodeOptions = {}): RoutedNode {
 		return routeNode(
 			(rpcUrl, timeoutMs) => {
 				this.routedClients.push({ rpcUrl, timeoutMs })
@@ -90,6 +90,7 @@ export class FakeNodeFactory implements NodeFactory {
 				sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 				timer: realTimer,
 				log: () => {},
+				changed: options.onChange,
 				retryWhile: options.retryWhile,
 				pins: options.pins,
 			},

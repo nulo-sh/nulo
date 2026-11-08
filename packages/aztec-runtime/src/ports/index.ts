@@ -1,1 +1,1 @@
-export type { NodeFactory } from "./node-factory-port"
+export type { NodeFactory, RoutedNodeOptions } from "./node-factory-port"

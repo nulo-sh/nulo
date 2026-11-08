@@ -1,6 +1,9 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { hasHiddenUrlCharacter, rpcTransportVerdict } from "@nulo/wallet-core/utils"
+import type { RouteSnapshot } from "@nulo/aztec-runtime/pxe"
 import { z } from "zod"
+
+export type { RouteSnapshot }
 
 export const NETWORK_SERVICE_NAME = "network"
 
@@ -105,6 +108,16 @@ export function routeEndpoints(network: Network): RouteEndpoint[] {
 	return [primary, ...network.endpoints.filter((e) => e.id !== primary.id)].map(({ id, rpcUrl }) => ({ id, rpcUrl }))
 }
 
+/** `network`'s endpoints in `ids` order. Throws unless `ids` names each of them exactly once. */
+export function endpointsInOrder(network: Network, ids: readonly string[]): NetworkEndpoint[] {
+	const byId = new Map(network.endpoints.map((e) => [e.id, e]))
+	const ordered = ids.flatMap((id) => byId.get(id) ?? [])
+	if (ids.length !== network.endpoints.length || new Set(ids).size !== ids.length || ordered.length !== ids.length) {
+		throw new Error("Invalid endpoint order")
+	}
+	return ordered
+}
+
 /** Projects a Network onto what the offscreen PXE takes. Throws if it has no primary endpoint. */
 export function networkInfoFrom(network: Network): NetworkInfo {
 	return { profileId: network.profileId, chainId: network.chainId, l1ChainId: network.l1ChainId, endpoints: routeEndpoints(network) }
@@ -192,6 +205,31 @@ export const NetworkSchema: z.ZodType<Network> = z.object({
 
 export const NodeStatusSchema: z.ZodType<NodeStatus> = z.enum(NodeStatus)
 
+const ENDPOINT_STATES = [
+	"unknown",
+	"ready",
+	"down",
+	"behind",
+	"wrong-chain",
+] as const satisfies readonly RouteSnapshot["endpoints"][number]["state"][]
+const FAILURE_KINDS = ["unreachable", "timeout", "server", "malformed", "overloaded", "refused"] as const satisfies readonly NonNullable<
+	RouteSnapshot["endpoints"][number]["failure"]
+>[]
+
+/** The account engine's route as the endpoint list reads it; any other key is refused, so a URL
+ *  never reaches the page. */
+export const RouteSnapshotSchema: z.ZodType<RouteSnapshot | null> = z
+	.object({
+		activeId: z.string().nullable(),
+		endpoints: z.array(
+			z
+				.object({ id: z.string(), state: z.enum(ENDPOINT_STATES), since: z.number(), failure: z.enum(FAILURE_KINDS).optional() })
+				.strict(),
+		),
+	})
+	.strict()
+	.nullable()
+
 /**
  * Per-method schemas. Tuples preserve positional-param ordering (our wire
  * format sends params as a positional list).
@@ -264,6 +302,14 @@ export const NetworkMethodSchemas = {
 	setPrimaryEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
 		result: NetworkSchema,
+	},
+	reorderEndpoints: {
+		params: z.tuple([z.string().min(1), z.array(z.string().min(1)).min(1)]),
+		result: NetworkSchema,
+	},
+	getRouteSnapshot: {
+		params: z.tuple([z.string().min(1), z.array(z.object({ id: z.string(), rpcUrl: z.string() }).strict())]),
+		result: RouteSnapshotSchema,
 	},
 	getNodeStatus: {
 		params: z.tuple([z.string().min(1)]),
@@ -352,6 +398,16 @@ export type Methods = {
 	deleteEndpoint(networkId: string, endpointId: string): NetworkEndpoint
 	/** Sets the primary endpoint for a network. Evicts the AztecNode cache. */
 	setPrimaryEndpoint(networkId: string, endpointId: string): Network
+	/**
+	 * Stores the network's endpoints in `endpointIds` order, the first as the primary: the order the
+	 * route tries them in. Rejects anything but a permutation of the row's endpoint ids. An order the
+	 * row already routes writes nothing.
+	 */
+	reorderEndpoints(networkId: string, endpointIds: string[]): Network
+	/** The account engine's route for the network's current endpoint list, by endpoint id; `null`
+	 *  until it has built one, or when `shown`, the caller's list in route order, is not the row's.
+	 *  Asks no endpoint. */
+	getRouteSnapshot(networkId: string, shown: readonly RouteEndpoint[]): RouteSnapshot | null
 	/** Probes the network's primary endpoint and returns Active/Inactive/InvalidChain. */
 	getNodeStatus(networkId: string): NodeStatus
 	/**
@@ -373,6 +429,8 @@ export type Events = {
 	onActiveNetworkChanged: Network
 	/** Emitted when a network's primary endpoint changes. */
 	onPrimaryEndpointChanged: { networkId: string; endpointId: string }
+	/** What `getRouteSnapshot` answers for the pair may have changed. A lost one leaves a stale view. */
+	onRouteChanged: { profileId: string; chainId: number }
 	/**
 	 * Emitted after `purgeChain` finishes wiping chain-scoped state. UI uses
 	 * this to refresh views (account list, tx list, etc.).

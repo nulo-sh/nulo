@@ -321,6 +321,20 @@ describe("createRoutedNode", () => {
 		expect(printed).not.toContain(SENTINEL)
 	})
 
+	test("tells the caller's onChange about the route's state and role, never about a lone endpoint's call", async () => {
+		globalThis.fetch = vi.fn(async (_url: string, init: RequestInit) => {
+			const calls = JSON.parse(String(init.body)) as { id: number; method: string }[]
+			return reply(calls.map((c) => ({ jsonrpc: "2.0", id: c.id, result: result(c.method) })))
+		}) as unknown as typeof fetch
+		const factory = new AztecNodeFactoryAdapter(uncapped)
+		const onChange = vi.fn()
+		await factory.createRoutedNode(spec([URL, OTHER]), { onChange }).getChainTips()
+		expect(onChange).toHaveBeenCalled()
+		const lone = vi.fn()
+		await factory.createRoutedNode(spec([URL]), { onChange: lone }).getChainTips()
+		expect(lone).not.toHaveBeenCalled()
+	})
+
 	test("refuses when no endpoint is allowed, and drops a refused one beside an allowed one", () => {
 		const factory = new AztecNodeFactoryAdapter(uncapped)
 		expect(() => factory.createRoutedNode(spec(["http://example.com"]))).toThrow(/refused/)

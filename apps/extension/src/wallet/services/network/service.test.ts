@@ -34,6 +34,7 @@ import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ProfileService } from "@/wallet/services/profile/service"
+import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { type ChainResetHooks, type ChainResetRequest, LOCAL_NETWORK_RPC_URL, NetworkService } from "./service"
 import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
 import {
@@ -1169,6 +1170,164 @@ describe("NetworkService public API", () => {
 		})
 	})
 
+	describe("reorderEndpoints", () => {
+		const URLS = ["https://rpc.test/1", "https://rpc.test/2", "https://rpc.test/3"]
+		/** A chain-7 row stored as `[e1, e2, e3]` with `primary` primary; storing it probes nothing. */
+		function threeEndpointRow(local: FakeStorageArea, primary = "e1"): Network {
+			return storeRow(local, {
+				id: "three",
+				chainId: 7,
+				primaryEndpointId: primary,
+				endpoints: URLS.map((rpcUrl, i) => ({ id: `e${i + 1}`, rpcUrl })),
+			})
+		}
+		function listen(service: NetworkService) {
+			const primary: unknown[] = []
+			const updated: Network[] = []
+			service.onPrimaryEndpointChanged.add(async (e) => void primary.push(e))
+			service.onNetworkUpdated.add(async (n) => void updated.push(n))
+			return { primary, updated }
+		}
+
+		test("stores the order with the first as primary, evicts the route once, and the next read routes the new first", async () => {
+			const { service, factory, local } = setupServiceWithStorage({})
+			for (const url of URLS) factory.setOverrides(url, routable(7))
+			factory.setOverrides(URLS[2] as string, {
+				...routable(7),
+				getBlockNumber: (async () => 3) as unknown as AztecNode["getBlockNumber"],
+			})
+			const row = threeEndpointRow(local)
+			const before = await service.getNodeFor(row)
+			const { primary, updated } = listen(service)
+
+			const stored = await service.reorderEndpoints(row.id, ["e3", "e1", "e2"])
+
+			expect(stored.endpoints.map((e) => e.id)).toEqual(["e3", "e1", "e2"])
+			expect(stored.primaryEndpointId).toBe("e3")
+			expect((await service.getNetwork(row.id)).endpoints.map((e) => e.id)).toEqual(["e3", "e1", "e2"])
+			expect(primary).toEqual([{ networkId: row.id, endpointId: "e3" }])
+			expect(updated.map((n) => n.id)).toEqual([row.id])
+			const builds = vi.spyOn(factory, "createRoutedNode")
+			const after = await service.getNodeFor(await service.getNetwork(row.id))
+			expect(after).not.toBe(before)
+			expect(await service.getNodeFor(await service.getNetwork(row.id))).toBe(after)
+			expect(builds).toHaveBeenCalledTimes(1)
+			expect(builds.mock.calls[0]?.[0].endpoints.map((e) => e.id)).toEqual(["e3", "e1", "e2"])
+			expect(await after.getBlockNumber()).toBe(3)
+		})
+
+		test("a move among the fallbacks keeps the primary and tells no primary change", async () => {
+			const { service, local } = setupServiceWithStorage({})
+			const row = threeEndpointRow(local)
+			const { primary, updated } = listen(service)
+			await expect(service.reorderEndpoints(row.id, ["e1", "e3", "e2"])).resolves.toMatchObject({ primaryEndpointId: "e1" })
+			expect(primary).toEqual([])
+			expect(updated).toHaveLength(1)
+		})
+
+		test("the order the row already routes writes nothing, though the primary is not stored first", async () => {
+			const { service, local } = setupServiceWithStorage({})
+			const row = threeEndpointRow(local, "e3")
+			const before = local.store.get(`nulo:core:networks@${row.id}`)
+			const { primary, updated } = listen(service)
+			await service.reorderEndpoints(row.id, ["e3", "e1", "e2"])
+			expect(local.store.get(`nulo:core:networks@${row.id}`)).toBe(before)
+			expect([primary, updated]).toEqual([[], []])
+		})
+
+		test.each<[string, string[]]>([
+			["an id missing", ["e2", "e1"]],
+			["an id twice", ["e2", "e1", "e1"]],
+			["an unknown id", ["e2", "e1", "zz"]],
+			["an extra id", ["e2", "e1", "e3", "e4"]],
+		])("refuses %s and leaves the row as it was", async (_label, ids) => {
+			const { service, local } = setupServiceWithStorage({})
+			const row = threeEndpointRow(local)
+			const before = local.store.get(`nulo:core:networks@${row.id}`)
+			await expect(service.reorderEndpoints(row.id, ids)).rejects.toThrow(/Invalid endpoint order/)
+			expect(local.store.get(`nulo:core:networks@${row.id}`)).toBe(before)
+		})
+	})
+
+	describe("getRouteSnapshot", () => {
+		test("asks the account engine with the owned row's endpoints in route order, and refuses another profile's row", async () => {
+			const { service, local } = setupServiceWithStorage({})
+			const row = storeRow(local, {
+				id: "three",
+				chainId: 7,
+				l1ChainId: 11,
+				primaryEndpointId: "e2",
+				endpoints: [
+					{ id: "e1", rpcUrl: "https://rpc.test/1" },
+					{ id: "e2", rpcUrl: "https://rpc.test/2" },
+				],
+			})
+			storeRow(local, { id: "theirs", profileId: "p2" })
+			const snapshot = { activeId: "e2", endpoints: [{ id: "e2", state: "ready", since: 1 }] }
+			const getRouteSnapshot = vi.fn(async () => snapshot)
+			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+			;(service as any).pxeServiceClient = { getRouteSnapshot }
+			const shown = [
+				{ id: "e2", rpcUrl: "https://rpc.test/2" },
+				{ id: "e1", rpcUrl: "https://rpc.test/1" },
+			]
+			await expect(service.getRouteSnapshot(row.id, shown)).resolves.toBe(snapshot)
+			expect(getRouteSnapshot).toHaveBeenCalledWith({ profileId: "p1", chainId: 7, l1ChainId: 11, endpoints: shown })
+			await expect(service.getRouteSnapshot("theirs", shown)).rejects.toThrow()
+			expect(getRouteSnapshot).toHaveBeenCalledTimes(1)
+		})
+
+		test("a list the caller shows that is not the row's, a URL edit or another order, is answered for no route", async () => {
+			const { service, local } = setupServiceWithStorage({})
+			const row = storeRow(local, {
+				id: "two",
+				primaryEndpointId: "e1",
+				endpoints: [
+					{ id: "e1", rpcUrl: "https://rpc.test/1" },
+					{ id: "e2", rpcUrl: "https://rpc.test/2" },
+				],
+			})
+			const getRouteSnapshot = vi.fn(async () => ({ activeId: "e1", endpoints: [] }))
+			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+			;(service as any).pxeServiceClient = { getRouteSnapshot }
+			const stale = [
+				[
+					{ id: "e1", rpcUrl: "https://rpc.test/old" },
+					{ id: "e2", rpcUrl: "https://rpc.test/2" },
+				],
+				[
+					{ id: "e2", rpcUrl: "https://rpc.test/2" },
+					{ id: "e1", rpcUrl: "https://rpc.test/1" },
+				],
+				[{ id: "e1", rpcUrl: "https://rpc.test/1" }],
+			]
+			for (const shown of stale) await expect(service.getRouteSnapshot(row.id, shown)).resolves.toBeNull()
+			expect(getRouteSnapshot).not.toHaveBeenCalled()
+		})
+
+		test("init relays the account engine's route changes, listening before its client connects", async () => {
+			const { service } = setupServiceWithStorage({})
+			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+			const internals = service as any
+			const heard: unknown[] = []
+			service.onRouteChanged.add(async (e) => void heard.push(e))
+			const connect = vi.spyOn(PxeServiceClient.prototype, "connect").mockImplementation(function (this: PxeServiceClient) {
+				this.onRouteChanged.invoke({ profileId: "p1", chainId: 0 })
+			})
+			try {
+				await internals.init({ get: () => Object.assign(internals.profileService, { onRowKeysReady: new EventHandler<string>() }) })
+				expect(connect).toHaveBeenCalledTimes(1)
+				internals.pxeServiceClient.onRouteChanged.invoke({ profileId: "p1", chainId: 7 })
+				expect(heard).toEqual([
+					{ profileId: "p1", chainId: 0 },
+					{ profileId: "p1", chainId: 7 },
+				])
+			} finally {
+				connect.mockRestore()
+			}
+		})
+	})
+
 	describe("deleteEndpoint", () => {
 		test("rejects PRIMARY_ENDPOINT", async () => {
 			const { service } = setupServiceWithStorage({
@@ -2134,6 +2293,7 @@ describe("NetworkService routes", () => {
 		],
 		["deleteEndpoint", (service, row, extra) => service.deleteEndpoint(row.id, extra)],
 		["setPrimaryEndpoint", (service, row, extra) => service.setPrimaryEndpoint(row.id, extra)],
+		["reorderEndpoints", (service, row, extra) => service.reorderEndpoints(row.id, [extra, row.primaryEndpointId])],
 		["setActiveNetwork", (service, row) => service.setActiveNetwork(row.id)],
 	])("%s evicts the network's route", async (_name, mutate) => {
 		const { service, factory } = setupServiceWithStorage({})
@@ -2553,6 +2713,19 @@ describe("NetworkService chain 0: the local L1 on a loopback node", () => {
 		await expect(service.setPrimaryEndpoint("loc", "e2")).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
 		expect((await service.getNetwork("loc")).primaryEndpointId).toBe(primaryEndpointId)
 		expect(changed).not.toHaveBeenCalled()
+	})
+
+	test("a local row refuses a reorder that puts a remote endpoint first, and takes one that keeps a loopback first", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		localRow(local, {
+			endpoints: [
+				{ id: "e1", rpcUrl: NON_SEED_LOCAL_URL },
+				{ id: "e2", rpcUrl: REMOTE },
+				{ id: "e3", rpcUrl: "http://127.0.0.1:18081" },
+			],
+		})
+		await expect(service.reorderEndpoints("loc", ["e2", "e1", "e3"])).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		await expect(service.reorderEndpoints("loc", ["e3", "e2", "e1"])).resolves.toMatchObject({ primaryEndpointId: "e3" })
 	})
 
 	test("a local row promotes a loopback endpoint", async () => {
@@ -2991,6 +3164,7 @@ describe("NetworkService in-place reset", () => {
 		["updateEndpoint", (service) => service.updateEndpoint("tn", "u2", "Other", ADDED)],
 		["deleteEndpoint", (service) => service.deleteEndpoint("tn", "u2")],
 		["setPrimaryEndpoint", (service) => service.setPrimaryEndpoint("tn", "u2")],
+		["reorderEndpoints", (service) => service.reorderEndpoints("tn", ["u2", "u1"])],
 	]
 
 	test.each(endpointEdits)("%s refuses while a reset journal names the network, and leaves the row as it was", async (_m, edit) => {

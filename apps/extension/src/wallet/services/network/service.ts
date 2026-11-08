@@ -54,8 +54,11 @@ import {
 	type NetworkInfo,
 	NETWORK_SERVICE_NAME,
 	NetworkMethodSchemas,
+	endpointsInOrder,
 	networkInfoFrom,
 	NodeStatus,
+	type RouteEndpoint,
+	type RouteSnapshot,
 	routeEndpoints,
 	ACTIVE_NETWORK_STORAGE_ROOT,
 	decodeActiveNetworkId,
@@ -212,6 +215,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		"updateEndpoint",
 		"deleteEndpoint",
 		"setPrimaryEndpoint",
+		"reorderEndpoints",
+		"getRouteSnapshot",
 		"getNodeStatus",
 		"probeNodeStatus",
 	)
@@ -223,6 +228,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	public readonly onActiveNetworkChanged = new EventHandler<Network>()
 	public readonly onPrimaryEndpointChanged = new EventHandler<{ networkId: string; endpointId: string }>()
 	public readonly onChainPurged = new EventHandler<{ profileId: string; chainId: number }>()
+	public readonly onRouteChanged = new EventHandler<{ profileId: string; chainId: number }>()
 
 	private readonly storage: SealedEntityStorage<Network>
 	private readonly staleNetworks: StaleNetworkRepository
@@ -273,6 +279,14 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.pxeServiceClient = new PxeServiceClient(this.logger)
+		this.listenToRoutes(this.pxeServiceClient)
+	}
+
+	/** Relays the account engine's route changes to the endpoint list. An offscreen client hears
+	 *  events only once connected, which otherwise waits for its first request. */
+	private listenToRoutes(client: Pick<PxeServiceClient, "onRouteChanged" | "connect">): void {
+		client.onRouteChanged.add((change) => this.emit("onRouteChanged", change))
+		client.connect()
 	}
 
 	/** Seals the profile's plaintext networks under the lock every network writer holds, so no write
@@ -941,6 +955,42 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			this.emit("onNetworkUpdated", network)
 			return network
 		})
+	}
+
+	public async reorderEndpoints(networkId: string, endpointIds: string[]): Promise<Network> {
+		validateParams(NetworkMethodSchemas.reorderEndpoints.params, [networkId, endpointIds], "reorderEndpoints")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		return await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+			await this.refuseWhileResetHolds(profile.id, networkId)
+			const endpoints = endpointsInOrder(network, endpointIds)
+			const first = endpoints[0]!
+			if (network.chainId === 0 && !isLocalNetworkTarget(first.rpcUrl, network.kind)) {
+				throw new Error(`${ERR_ENDPOINT_CHAIN_MISMATCH}: Only a node on this machine can serve chain 0.`)
+			}
+			if (routeEndpoints(network).every((e, i) => e.id === endpointIds[i])) return network
+			const primaryMoved = network.primaryEndpointId !== first.id
+			network.endpoints = endpoints
+			network.primaryEndpointId = first.id
+			await this.storage.set(network.id, network)
+			this.routes.delete(network.id)
+			if (primaryMoved) this.emit("onPrimaryEndpointChanged", { networkId: network.id, endpointId: first.id })
+			this.emit("onNetworkUpdated", network)
+			return network
+		})
+	}
+
+	public async getRouteSnapshot(networkId: string, shown: readonly RouteEndpoint[]): Promise<RouteSnapshot | null> {
+		validateParams(NetworkMethodSchemas.getRouteSnapshot.params, [networkId, shown], "getRouteSnapshot")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+		const info = networkInfoFrom(network)
+		// A list another window has since edited is answered for no route: ids outlive a URL edit.
+		const same =
+			info.endpoints.length === shown.length && info.endpoints.every((e, i) => e.id === shown[i]?.id && e.rpcUrl === shown[i]?.rpcUrl)
+		return same ? this.pxeServiceClient.getRouteSnapshot(info) : null
 	}
 
 	/** A reset's resume keeps the primary endpoint only while it is the one the capture probed, and

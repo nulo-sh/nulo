@@ -57,6 +57,9 @@ class Harness {
 	/** Flags a test's injected race sets. */
 	public stopped = false
 	public raised = false
+	/** How many times the route said its snapshot changed. */
+	public changes = 0
+	public onChanged: () => void = () => {}
 	public node!: RoutedNode
 
 	public constructor(
@@ -112,6 +115,10 @@ class Harness {
 				return { expired, cancel }
 			},
 			log: () => {},
+			changed: () => {
+				this.changes++
+				this.onChanged()
+			},
 			retryWhile: () => this.retryWhile(),
 			pins,
 		})
@@ -335,6 +342,43 @@ describe("routing calls", () => {
 		await expect(read()).rejects.toThrow("fetch timeout")
 		expect(h.node.route.snapshot()[0]?.state).toBe("down")
 		expect(h.seen(B)).toEqual([])
+	})
+})
+
+describe("the snapshot", () => {
+	test("carries each endpoint's latest counted failure and no URL; a state, role or failure-kind change is announced, a moved call is not", async () => {
+		const h = new Harness([A, B])
+		await call(h)
+		expect(h.changes).toBeGreaterThan(0)
+		const admitted = h.changes
+		h.endpoint(A).fail = (m) => (m === "getContract" ? transport("server") : undefined)
+		await call(h)
+		expect(h.changes - admitted, "the move admits B, its one state change; A keeps the role").toBe(1)
+		const moved = h.changes
+		await call(h)
+		await call(h)
+		expect(h.changes - moved, "A down: its state, then the role passing to B").toBe(2)
+		const down = h.changes
+		expect(h.node.route.snapshot()).toEqual([
+			{ id: "e0", state: "down", since: 0, failure: "server" },
+			{ id: "e1", state: "ready", since: 0, failure: undefined },
+		])
+		expect(JSON.stringify(h.node.route.snapshot())).not.toContain("example")
+		h.endpoint(A).fail = () => transport("unreachable")
+		h.advance(holdDownMinMs)
+		await call(h)
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		expect(h.node.route.snapshot()[0]).toMatchObject({ state: "down", failure: "unreachable" })
+		expect(h.changes - down, "the failure kind moved while A stayed down").toBe(1)
+	})
+
+	test("a listener that throws never fails the call", async () => {
+		const h = new Harness([A, B])
+		h.onChanged = () => {
+			throw new Error("observer")
+		}
+		await expect(call(h)).resolves.toBe("getContract:ok")
+		expect(h.node.route.active()?.id).toBe("e0")
 	})
 })
 
