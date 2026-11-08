@@ -61,8 +61,9 @@ onBeforeUnmount(() => {
 <template>
 	<Button
 		v-if="walletTraceId"
-		variant="secondary"
-		size="small"
+		wide
+		variant="primary_outline"
+		size="medium"
 		:loading="downloading"
 		data-testid="request-log-download"
 		@click="download"

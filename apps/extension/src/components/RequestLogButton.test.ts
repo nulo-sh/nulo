@@ -19,7 +19,11 @@ vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: H.openToas
 
 import RequestLogButton from "./RequestLogButton.vue"
 
-const ButtonStub = { name: "Button", props: ["variant", "size", "loading"], template: "<button v-bind='$attrs'><slot /></button>" }
+const ButtonStub = {
+	name: "Button",
+	props: { variant: String, size: String, wide: Boolean, loading: Boolean },
+	template: "<button v-bind='$attrs'><slot /></button>",
+}
 const IconStub = { name: "Icon", props: ["name", "size"], template: "<i />" }
 
 function mountButton(props: { journalId?: string; interactionId?: string }) {
@@ -39,14 +43,14 @@ describe("RequestLogButton", () => {
 		expect(wrapper.find('[data-testid="request-log-download"]').exists()).toBe(false)
 	})
 
-	test("asks by interaction in the execute window, and shows the download chip once a trace is found", async () => {
+	test("asks by interaction in the execute window, and shows the full-width download button once a trace is found", async () => {
 		H.findRequestTrace.mockResolvedValue("1a2b3c4d")
 		const wrapper = mountButton({ interactionId: "fedcba9876543210" })
 		await flushPromises()
 		expect(H.findRequestTrace).toHaveBeenCalledWith({ interactionId: "fedcba9876543210" })
 		const button = wrapper.findComponent(ButtonStub)
 		expect(button.text()).toBe("Download logs")
-		expect(button.props()).toMatchObject({ variant: "secondary", size: "small" })
+		expect(button.props()).toMatchObject({ variant: "primary_outline", size: "medium", wide: true })
 		expect(button.findComponent(IconStub).props("name")).toBe("download")
 	})
 
