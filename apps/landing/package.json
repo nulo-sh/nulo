@@ -5,9 +5,9 @@
 	"license": "Apache-2.0",
 	"type": "module",
 	"scripts": {
-		"predev": "bun run scripts/build-legal.ts",
+		"predev": "bun run scripts/build-legal.ts && bun run scripts/build-changelog.ts",
 		"dev": "vite",
-		"prebuild": "bun run scripts/build-legal.ts",
+		"prebuild": "bun run scripts/build-legal.ts && bun run scripts/build-changelog.ts",
 		"build": "vite build",
 		"preview": "vite preview",
 		"typecheck": "tsc --noEmit",

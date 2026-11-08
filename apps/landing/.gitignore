@@ -1,6 +1,7 @@
 dist
 .wrangler/
 src/generated/legal-pages.json
+src/generated/changelog-pages.json
 # Written by scripts/build-legal.ts from legal/*.md
 /terms.html
 /privacy.html
@@ -8,3 +9,5 @@ src/generated/legal-pages.json
 /terms/
 /privacy/
 /website-privacy/
+# Written by scripts/build-changelog.ts from release-notes/*.md and content/changelog/*.toml
+/changelog/
