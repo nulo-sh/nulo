@@ -1,7 +1,7 @@
 ---
 plan: tx-logs-1
 tier: mid
-status: approved (Codex reject → folded; Opus conditional approve → folded; final fresh Codex pass approve with nits, round 3)
+status: completed
 issues: none; the work is the owner's picks P116-15 B and P117-03 A
 driver: claude-code
 claude_model: opus
@@ -13,6 +13,19 @@ base: origin/dev at 961f90642 (plan); arc 1 on f4896bd1a
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-08.
+- **Status:** completed. Ships in #1739, `feat(logs): developer mode downloads the logs of one failed request`, whose merge closes this plan. No issue closes.
+- **Shipped:** P116-15 B, P117-03 A and the three page 121 picks. Every dApp error carries an 8-hex `data.walletTraceId`, and the unclassified failure is now an object. With Developer Mode on, each request gets a bounded, scrubbed capture in `chrome.storage.session`, downloadable as `nulo-request-<id>.txt` from the execute window's failure row and a failed send's History detail through a full-width "Download logs" outline bar (P121-01: B). The file's words and limits ship as drafted (P121-02), and the CSV export writes the filtered lines (P121-03).
+- **Deviations:** `begin` records under the id the ingress mints, and the timeline sorts by start ([lessons/phase-2.md](lessons/phase-2.md)); the glyph sits in the button's slot, since `left-icon` overlaps a label; look A shipped in the draft until page 121 picked B.
+- **Left out:** the Opus review's cosmetic nit (`CHUNKED_HEX` blanks hex-letter words after a selector); PXE-page and request-window lines stay unattributed (D8), since nobody asked for them; outline B, slicing the ring (D2).
+- **Review:** the arc's Codex loop rejected three times (7, 5 and 2 findings, all fixed with failing-first tests) and stopped at its cap with round 3's fixes not re-reviewed; the finishing Codex pass over the look B and close-out diff is under Audit verdicts.
+- **Lessons:** none promoted to `lessons.md`. The one rule that generalizes, the scrub order (controls before any scrubber, strings before `JSON.stringify`), went to its owning skill, logging-policy.
+- **Known limits:** #1758 (capture capacity), #1759 (what the scrubber passes).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # tx-logs-1: developer mode downloads the logs of one failed request
 
