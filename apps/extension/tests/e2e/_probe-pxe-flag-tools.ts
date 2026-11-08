@@ -1,8 +1,8 @@
 /**
  * The probe's drivers for the unleashed tools app: its connect flow, every Nulo approval window it
  * raises, and an EIP-1193 Sepolia wallet answered from Node. The wallet signs only the bridge's own
- * requests (a test-token mint, a Permit2 approval, the recovery-key message that seals a private
- * deposit, a Permit2 witness for the router, `bridgeWithPermit`), one deposit per arming, and refuses
+ * requests (a test-token mint the probe asked for, a Permit2 approval, the recovery-key text that
+ * seals a private deposit, a Permit2 witness for the router, `bridgeWithPermit`), one deposit per arming, and refuses
  * everything else; an allowed request can still carry what the page chose, so the throwaway key's
  * Sepolia ETH and test tokens stay exposed to the page, a known limit.
  */
@@ -46,6 +46,8 @@ const BRIDGE = {
 		EURC: "0x6535a0f1426524a8ed5bb64692e7645c033d15cc",
 		GBPC: "0x717ae3636685489c87cf331af663cfa75723d0d9",
 	} as Record<string, Address>,
+	/** The Aztec hub every seal binds to. */
+	hub: "0x1d500beb91a75ccd2e5376d14980b0cabd494fe3397e710faddc371376de7530",
 } as const
 /** All four bridged test tokens have 6 decimals. */
 const DECIMALS = 6
@@ -54,6 +56,42 @@ const SEPOLIA_HEX = "0xaa36a7"
 const BRIDGE_WITH_PERMIT = "0xefdd760e"
 const ERC20_WRITES = parseAbi(["function approve(address spender, uint256 amount)", "function mint(address to, uint256 amount)"])
 const BALANCE_OF = parseAbi(["function balanceOf(address owner) view returns (uint256)"])
+/** Permit2's witness transfer bound to the router's `DepositWitness`, field for field. */
+const PERMIT_TYPES: Record<string, { name: string; type: string }[]> = {
+	PermitWitnessTransferFrom: [
+		{ name: "permitted", type: "TokenPermissions" },
+		{ name: "spender", type: "address" },
+		{ name: "nonce", type: "uint256" },
+		{ name: "deadline", type: "uint256" },
+		{ name: "witness", type: "DepositWitness" },
+	],
+	TokenPermissions: [
+		{ name: "token", type: "address" },
+		{ name: "amount", type: "uint256" },
+	],
+	DepositWitness: [
+		{ name: "aztecRecipient", type: "bytes32" },
+		{ name: "tokenSecretHash", type: "bytes32" },
+		{ name: "isPrivate", type: "bool" },
+		{ name: "fuelSlice", type: "uint256" },
+		{ name: "fuelRecipient", type: "bytes32" },
+		{ name: "fuelSecretHash", type: "bytes32" },
+		{ name: "minFuelOutput", type: "uint256" },
+		{ name: "swapDataHash", type: "bytes32" },
+	],
+	EIP712Domain: [
+		{ name: "name", type: "string" },
+		{ name: "chainId", type: "uint256" },
+		{ name: "verifyingContract", type: "address" },
+	],
+}
+
+/** Every type is Permit2's and the router's, field for field; the domain type is optional, as EIP-712 derives it. */
+function canonicalTypes(types: Record<string, unknown>): boolean {
+	const names = Object.keys(types).filter((n) => n !== "EIP712Domain" || types[n] !== undefined)
+	const want = Object.keys(PERMIT_TYPES).filter((n) => n !== "EIP712Domain" || names.includes(n))
+	return names.length === want.length && want.every((n) => JSON.stringify(types[n]) === JSON.stringify(PERMIT_TYPES[n]))
+}
 const READS = new Set([
 	"eth_blockNumber",
 	"eth_call",
@@ -98,6 +136,8 @@ export interface L1Signer {
 	readonly signed: number
 	/** Allows ONE deposit of at most `units` of `symbol`: its approval, seals, permit and router call. */
 	arm(symbol: string, units: bigint): void
+	/** Allows one mint of `symbol`, which the probe asks for only when the address holds too little. */
+	allowMint(symbol: string): void
 	/** The address's balance of `symbol`; undefined when the run has no L1 reader. */
 	balanceOf(symbol: string): Promise<bigint | undefined>
 	onStep(fn: (step: L1Step) => void): void
@@ -111,10 +151,10 @@ type Sign = {
 }
 type Read = (method: string, params: unknown[]) => Promise<unknown>
 
-/** What the wallet may still sign: a mint and an approval once per token, one deposit per arming. */
+/** What the wallet may still sign: a mint the probe asked for, an approval once per token, one deposit per arming. */
 interface Budget {
-	armed?: { symbol: string; units: bigint; permit: boolean; deposit: boolean }
-	minted: Set<string>
+	armed?: { symbol: string; units: bigint; permit: boolean; deposit: boolean; seal?: string; seals: number }
+	mintable?: string
 	approved: Set<string>
 }
 
@@ -131,8 +171,8 @@ function checkTokenWrite(to: string, data: Hex, self: Address, budget: Budget): 
 	const call = decodeFunctionData({ abi: ERC20_WRITES, data })
 	if (call.functionName === "mint") {
 		if (lower(call.args[0]) !== lower(self)) throw refusal("a mint to another address")
-		if (budget.minted.has(symbol)) throw refusal(`a second ${symbol} mint`)
-		budget.minted.add(symbol)
+		if (budget.mintable !== symbol) throw refusal(`a ${symbol} mint the probe did not ask for`)
+		budget.mintable = undefined
 		return "mint-signed"
 	}
 	if (lower(call.args[0]) !== BRIDGE.permit2) throw refusal("an approval to a spender other than Permit2")
@@ -155,10 +195,17 @@ function checkTx(tx: Record<string, string | undefined>, self: Address, budget: 
 }
 
 function checkTyped(data: Record<string, unknown>, budget: Budget): string {
-	const domain = data.domain as { chainId?: unknown; verifyingContract?: unknown } | undefined
+	const domain = data.domain as { name?: unknown; chainId?: unknown; verifyingContract?: unknown } | undefined
 	const message = data.message as { spender?: unknown; permitted?: { token?: unknown; amount?: unknown } } | undefined
-	if (data.primaryType !== "PermitWitnessTransferFrom") throw refusal("typed data other than a Permit2 witness transfer")
-	if (lower(domain?.verifyingContract) !== BRIDGE.permit2 || Number(domain?.chainId) !== SEPOLIA_ID)
+	if (data.primaryType !== "PermitWitnessTransferFrom" || !canonicalTypes((data.types ?? {}) as Record<string, unknown>))
+		throw refusal("typed data other than the router's Permit2 witness transfer")
+	if (
+		Object.keys(domain ?? {})
+			.sort()
+			.join() !== "chainId,name,verifyingContract"
+	)
+		throw refusal("a domain shaped other than Permit2's")
+	if (domain?.name !== "Permit2" || lower(domain?.verifyingContract) !== BRIDGE.permit2 || Number(domain?.chainId) !== SEPOLIA_ID)
 		throw refusal("a domain other than Sepolia's Permit2")
 	if (lower(message?.spender) !== BRIDGE.depositRouter) throw refusal("a spender other than the deposit router")
 	const armed = armedFor(budget, "a permit")
@@ -169,23 +216,33 @@ function checkTyped(data: Record<string, unknown>, budget: Budget): string {
 	return "permit-signed"
 }
 
-/** The tools app's recovery-key text (its site and legacy forms), naming the armed token's Sepolia portal. */
+/** The tools app's recovery-key text for one transfer of the armed token, line for line. */
+function sealLines(portal: string): (string | RegExp)[] {
+	return [
+		"Unleashed: unlock one transfer's recovery data",
+		"",
+		`Sign this only on ${TOOLS_ORIGIN}. The signature locks and unlocks the recovery data of one bridge transfer.`,
+		"",
+		`Site: ${TOOLS_ORIGIN}`,
+		`Chain: ${SEPOLIA_ID}`,
+		/^Transfer: 0x[0-9a-f]{64}$/,
+		`Portal: ${portal}`,
+		`Bridge: ${BRIDGE.hub}`,
+		"",
+		"Signing is free. It is not a transaction and moves no funds.",
+	]
+}
+
+/** A deposit seals with at most two signatures over one text: the seal, then its determinism check. */
 function checkSeal(text: string, budget: Budget): string {
 	const armed = armedFor(budget, "a recovery-key signature")
-	const portal = BRIDGE.portal[armed.symbol]
+	const want = sealLines(BRIDGE.portal[armed.symbol] as string)
 	const lines = text.split("\n")
-	const site =
-		lines[0] === "Unleashed: unlock one transfer's recovery data" &&
-		lines.includes(`Site: ${TOOLS_ORIGIN}`) &&
-		lines.includes(`Chain: ${SEPOLIA_ID}`) &&
-		lines.includes(`Portal: ${portal}`) &&
-		lines.at(-1) === "Signing is free. It is not a transaction and moves no funds."
-	const legacy =
-		lines.length === 3 &&
-		lines[0]?.startsWith("Unleashed Bridge recovery key v1") === true &&
-		lines[1] === "This is not a transaction and costs nothing." &&
-		new RegExp(`^chain=${SEPOLIA_ID} portal=${portal} bridge=0x[0-9a-f]+ record=0x[0-9a-f]+$`).test(lines[2] ?? "")
-	if (!site && !legacy) throw refusal("a message other than the armed deposit's recovery key")
+	const shaped = lines.length === want.length && want.every((w, i) => (typeof w === "string" ? lines[i] === w : w.test(lines[i] ?? "")))
+	if (!shaped) throw refusal("a message other than the armed deposit's recovery key")
+	if ((armed.seal ?? text) !== text || armed.seals >= 2) throw refusal("a recovery-key signature beyond the armed deposit's two")
+	armed.seal = text
+	armed.seals++
 	return "seal-signed"
 }
 
@@ -224,7 +281,7 @@ function localAnswers(address: Address): Record<string, (params: unknown[]) => u
 
 function makeSigner(address: Address, sign: Sign | undefined, read: Read | undefined): L1Signer {
 	const counts = { refused: 0, signed: 0 }
-	const budget: Budget = { minted: new Set(), approved: new Set() }
+	const budget: Budget = { approved: new Set() }
 	const listeners: ((step: L1Step) => void)[] = []
 	const emit = (step: L1Step) => {
 		for (const fn of listeners) fn(step)
@@ -255,7 +312,10 @@ function makeSigner(address: Address, sign: Sign | undefined, read: Read | undef
 			return counts.signed
 		},
 		arm(symbol, units) {
-			budget.armed = { symbol, units, permit: false, deposit: false }
+			budget.armed = { symbol, units, permit: false, deposit: false, seals: 0 }
+		},
+		allowMint(symbol) {
+			budget.mintable = symbol
 		},
 		async balanceOf(symbol) {
 			if (!read) return undefined
@@ -664,12 +724,26 @@ async function confirmAndWait(leg: Leg): Promise<string> {
 	return "the review was stood down four times in a row"
 }
 
+/** Cuts every URL out of the page's text and fields, so a capture shows no node address. */
+function redactUrls(page: Page): Promise<void> {
+	return page.evaluate(() => {
+		const url = /\b(?:https?|wss?):\/\/\S+/gi
+		const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+		for (let n = walker.nextNode(); n; n = walker.nextNode()) n.textContent = (n.textContent ?? "").replace(url, "<url>")
+		for (const field of document.querySelectorAll("input, textarea")) {
+			const f = field as HTMLInputElement
+			f.value = f.value.replace(url, "<url>")
+		}
+	})
+}
+
 /** Full-page captures of the tools app and every open Nulo window; returns the file names. */
 async function saveShots(leg: Leg, why: string): Promise<string[]> {
 	mkdirSync(leg.run.shotDir, { recursive: true })
 	const stem = `bridge-${leg.run.arm}-${leg.symbol}-${Date.now()}`
 	const names: string[] = []
 	const shoot = async (page: Page, name: string) => {
+		await redactUrls(page)
 		await page.screenshot({ path: join(leg.run.shotDir, name), fullPage: true })
 		names.push(name)
 	}
@@ -707,6 +781,7 @@ async function ensureBalance(leg: Leg, units: bigint): Promise<void> {
 	const held = await run.signer.balanceOf(symbol).catch(() => undefined)
 	note(leg, { w: "l1-balance", units: held?.toString() ?? null, needed: units.toString() })
 	if (held !== undefined && held >= units) return
+	run.signer.allowMint(symbol)
 	const shown = () => app.$eval(`${tile} ${tid("tl-send-token-balance")}`, (el) => el.textContent ?? "").catch(() => "")
 	const before = { signed: run.signer.signed, refused: run.signer.refused, text: await shown() }
 	await app.click(`${tid("tl-mint-l1-card")} ${tid("tl-mint-l1")}[data-symbol="${symbol}"]`)
@@ -720,12 +795,8 @@ async function ensureBalance(leg: Leg, units: bigint): Promise<void> {
 	throw new Error(`the ${symbol} mint did not land within 10 min`)
 }
 
-/**
- * One private "Token + gas" deposit, timed from Confirm to the receipt; the claim is approved in
- * Nulo. Every step lands as a row with its elapsed time; a stop or the deadline saves screenshots
- * and throws.
- */
-async function depositOne(leg: Leg): Promise<void> {
+/** Funds, chooses and reviews the deposit, then confirms it; `at.confirm` is when Confirm was first pressable. */
+async function toReceipt(leg: Leg, at: { confirm: number }): Promise<string> {
 	const { app, run, symbol } = leg
 	const amount = run.amount ?? "90"
 	const units = parseUnits(amount, DECIMALS)
@@ -735,14 +806,25 @@ async function depositOne(leg: Leg): Promise<void> {
 	await run.drain()
 	leg.opsSeen = 0
 	run.signer.arm(symbol, units)
-	const t0 = Date.now()
-	const outcome = await confirmAndWait(leg)
+	at.confirm = Date.now()
+	return confirmAndWait(leg)
+}
+
+/**
+ * One private "Token + gas" deposit, timed from Confirm to the receipt; the claim is approved in
+ * Nulo. Every step lands as a row with its elapsed time; any stop, error or the deadline saves
+ * screenshots and throws.
+ */
+async function depositOne(leg: Leg): Promise<void> {
+	const { app, run, symbol } = leg
+	const at = { confirm: 0 }
+	const outcome = await toReceipt(leg, at).catch((error) => scrub((error as Error)?.message).slice(0, 200))
 	if (outcome !== "receipt") {
 		await observe(leg)
 		await saveShots(leg, outcome)
 		throw new Error(`the ${symbol} deposit stopped: ${outcome}`)
 	}
-	run.record({ w: "bridge", arm: run.arm, symbol, wallMs: Date.now() - t0, probe: await run.drain() })
+	run.record({ w: "bridge", arm: run.arm, symbol, wallMs: Date.now() - at.confirm, probe: await run.drain() })
 	await app.click(tid("tl-receipt-new-bridge"))
 	await waitVisible(app, tid("tl-send-step-token"), 60_000)
 }
