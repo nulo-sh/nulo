@@ -34,6 +34,9 @@ export interface UseRouteSnapshot {
 const routeKeyOf = (n: Network | undefined) =>
 	n ? JSON.stringify([n.id, n.profileId, n.chainId, n.primaryEndpointId, n.endpoints.map((e) => [e.id, e.rpcUrl])]) : ""
 
+/** Which network row a route belongs to; empty for none. */
+const rowOf = (n: Network | undefined) => (n ? JSON.stringify([n.id, n.profileId, n.chainId]) : "")
+
 /** The row's endpoint list in route order, as the background checks it against the row. */
 const shownOf = (n: Network) => routeOrder(n.endpoints, n.primaryEndpointId).map(({ id, rpcUrl }) => ({ id, rpcUrl }))
 
@@ -70,10 +73,11 @@ function serialized(task: () => Promise<void>, stopped: () => boolean): () => Pr
  * for a newer read that then fails. A read that fails changes nothing; one that never answers holds
  * the next until the client's request deadline fails it.
  *
- * An edit evicts the route, so the row's route changing under the open page asks the engine to
- * rebuild it over the new list once, as the network's next use would, instead of leaving every dot
- * grey until then. Those requests run one at a time too, each over the list current when it starts,
- * so a burst of edits costs at most two; none starts once the page is gone.
+ * An edit leaves the engine's route on the old list, which answers for no other, so every dot would
+ * stay grey until the network's next use. The row's route list changing under the open page asks
+ * the engine instead to rebuild it once over the new list, as that use would. Those requests run one
+ * at a time too, each over the row's list when it starts and only while the page still shows the
+ * row whose edit asked; none starts once the page is gone.
  */
 export function useRouteSnapshot(deps: UseRouteSnapshotDeps): UseRouteSnapshot {
 	const view = shallowRef<NetworkRouteView | null>(null)
@@ -81,6 +85,8 @@ export function useRouteSnapshot(deps: UseRouteSnapshotDeps): UseRouteSnapshot {
 	let disposed = false
 	let shownKey = ""
 	let shownRow = ""
+	/** The row whose edit the next rebuild is for. */
+	let editedRow = ""
 	const stopped = () => disposed
 
 	/** Clears the view once the row's route is another: its answer describes a route that is gone. A
@@ -89,12 +95,15 @@ export function useRouteSnapshot(deps: UseRouteSnapshotDeps): UseRouteSnapshot {
 		const network = deps.getNetwork()
 		const key = routeKeyOf(network)
 		if (key !== shownKey) {
-			const row = network ? JSON.stringify([network.id, network.profileId, network.chainId]) : ""
+			const row = rowOf(network)
 			const edited = row !== "" && row === shownRow
 			shownKey = key
 			shownRow = row
 			view.value = null
-			if (edited) void rebuild()
+			if (edited) {
+				editedRow = row
+				void rebuild()
+			}
 		}
 		return { network, key }
 	}
@@ -117,7 +126,7 @@ export function useRouteSnapshot(deps: UseRouteSnapshotDeps): UseRouteSnapshot {
 	// The rebuilt route announces itself by the route event; the read after it stands in for a lost one.
 	const rebuildOnce = async () => {
 		const network = deps.getNetwork()
-		if (!network) return
+		if (!network || rowOf(network) !== editedRow) return
 		await deps.client.rebuildRoute(network.id, shownOf(network)).catch(() => {})
 		void refresh()
 	}

@@ -281,6 +281,23 @@ describe("PxeService.rebuildRoute", () => {
 		await expect(s.getRouteSnapshot(networkOf(B, A))).resolves.toBeNull()
 	})
 
+	test("does nothing while a write holds the chain, and nothing runs once it ends", async () => {
+		const f = fixture()
+		const builds = readingBuilds(f)
+		const s = service(f)
+		const network = networkOf(A, B)
+		await s.getLatestBlockNumber(network)
+		const write = s.registerSender(network, SENDER as never)
+		const edited = networkOf(B, A)
+
+		await s.rebuildRoute(edited)
+		f.releaseWrite()
+		await write
+
+		expect(builds.started).toBe(1)
+		await expect(s.getRouteSnapshot(edited)).resolves.toBeNull()
+	})
+
 	test("a second request during the rebuild starts no other, and a send's pick meanwhile never waits for it", async () => {
 		const f = fixture()
 		const builds = readingBuilds(f)

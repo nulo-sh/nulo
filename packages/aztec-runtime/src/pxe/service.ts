@@ -742,22 +742,22 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	}
 
 	/** What the chain's next operation would do to its runtime, and nothing else: rebinds one built
-	 *  for another endpoint list, under the guards and fences of `withPxeWrite`. A chain with no
-	 *  runtime gets none, so no store opens and no PXE starts for a chain the wallet is not using. */
+	 *  for another endpoint list. A chain with no runtime gets none, so no store opens and no PXE
+	 *  starts for a chain the wallet is not using. It never waits behind another write: after a proof,
+	 *  a later edit may have replaced this list and the page that asked may be gone, and the
+	 *  operation that follows rebinds on its own. */
 	public async rebuildRoute(network: NetworkInfo): Promise<void> {
+		const { profileId, chainId } = network
+		if (!this.registry.peek(profileId, chainId) || this.registry.peekMatching(network)) return
+		if (this.getChainGuard(profileId, chainId).writing) return
 		const start = Date.now()
-		const chainKey = this.chainKey(network.profileId, network.chainId)
-		const purgeEpochAtEntry = this.lifecycle.current(chainKey)
+		const purgeEpochAtEntry = this.lifecycle.current(this.chainKey(profileId, chainId))
 		try {
-			await this.getProfileBarrier(network.profileId).read(async () => {
-				await this.getChainGuard(network.profileId, network.chainId).write(async () => {
-					this.assertGenerationCurrent(network)
-					this.lifecycle.assertUnchanged(chainKey, purgeEpochAtEntry, "rebuildRoute")
-					if (!this.registry.peek(network.profileId, network.chainId)) return
-					await this.reopeningCorruptStore(network, { spent: false }, () =>
-						this.registry.ensure(network, this.storeKeys.get(network.profileId)),
-					)
-				})
+			await this.underChainWrite(network, "rebuildRoute", purgeEpochAtEntry, async () => {
+				if (!this.registry.peek(profileId, chainId)) return
+				await this.reopeningCorruptStore(network, { spent: false }, () =>
+					this.registry.ensure(network, this.storeKeys.get(profileId)),
+				)
 			})
 		} catch (err) {
 			this.logOpFailure("WRITE", "rebuildRoute", start, err)
@@ -1015,24 +1015,15 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 					this.logDebug(`[DEBUG] [READ] ${label} completed (${Date.now() - start}ms)`)
 					return result as T
 				}
-				await barrier.read(async () => {
-					await chainGuard.write(async () => {
-						// A stale op parked at this rebind can outlive a clearProfileState
-						// (which never bumps the CHAIN purge epoch) — without re-asserting
-						// the generation here, `ensure` would rebuild a runtime/store for
-						// the erased incarnation using the successor's key. Same assert,
-						// same placement, as withPxeWrite's ensure.
-						this.assertGenerationCurrent(network)
-						this.lifecycle.assertUnchanged(chainKey, purgeEpochAtEntry, label)
-						// Another op may have purged and reopened the store meanwhile: only a still-bound
-						// corrupt runtime is purged, never the fresh one.
-						if (corrupt && this.registry.peek(network.profileId, network.chainId) === corrupt) {
-							await this.purgeCorruptStore(network)
-						}
-						await this.reopeningCorruptStore(network, recovery, () =>
-							this.registry.ensure(network, this.storeKeys.get(network.profileId)),
-						)
-					})
+				await this.underChainWrite(network, label, purgeEpochAtEntry, async () => {
+					// Another op may have purged and reopened the store meanwhile: only a still-bound
+					// corrupt runtime is purged, never the fresh one.
+					if (corrupt && this.registry.peek(network.profileId, network.chainId) === corrupt) {
+						await this.purgeCorruptStore(network)
+					}
+					await this.reopeningCorruptStore(network, recovery, () =>
+						this.registry.ensure(network, this.storeKeys.get(network.profileId)),
+					)
 				})
 			}
 			throw new Error(`${label}: chain runtime kept rebinding/vanishing after ${PxeService.MAX_RUNTIME_BIND_ATTEMPTS} attempts`)
@@ -1073,33 +1064,39 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		fn: (pxe: PXE, node: AztecNode, runtime: ChainRuntime) => Promise<T>,
 	): Promise<T> {
 		const start = Date.now()
-		const barrier = this.getProfileBarrier(network.profileId)
-		const chainGuard = this.getChainGuard(network.profileId, network.chainId)
-		const chainKey = this.chainKey(network.profileId, network.chainId)
-		const purgeEpochAtEntry = this.lifecycle.current(chainKey)
+		const purgeEpochAtEntry = this.lifecycle.current(this.chainKey(network.profileId, network.chainId))
 		try {
 			this.logDebug(`[DEBUG] [WRITE] ${label} waiting for lock`)
-			return await barrier.read(async () => {
-				return chainGuard.write(async () => {
-					this.assertGenerationCurrent(network)
-					// A write op that captured NetworkInfo before a mid-flight clearChainState must
-					// NOT resurrect the purged chain by re-creating its runtime + a fresh OPFS store
-					// (the read path fenced this but the write path called ensure directly). Same epoch check as withPxeRead — now the shared fence.
-					this.lifecycle.assertUnchanged(chainKey, purgeEpochAtEntry, label)
-					return this.reopeningCorruptStore(network, { spent: false }, async () => {
-						// Already under the chain WRITE guard — `ensure` may rebind here.
-						const runtime = await this.registry.ensure(network, this.storeKeys.get(network.profileId))
-						this.logDebug(`[DEBUG] [WRITE] ${label} lock acquired, executing`)
-						const result = await fn(runtime.pxe, runtime.node, runtime)
-						this.logDebug(`[DEBUG] [WRITE] ${label} completed (${Date.now() - start}ms)`)
-						return result
-					})
-				})
-			})
+			return await this.underChainWrite(network, label, purgeEpochAtEntry, () =>
+				this.reopeningCorruptStore(network, { spent: false }, async () => {
+					const runtime = await this.registry.ensure(network, this.storeKeys.get(network.profileId))
+					this.logDebug(`[DEBUG] [WRITE] ${label} lock acquired, executing`)
+					const result = await fn(runtime.pxe, runtime.node, runtime)
+					this.logDebug(`[DEBUG] [WRITE] ${label} completed (${Date.now() - start}ms)`)
+					return result
+				}),
+			)
 		} catch (err) {
 			this.logOpFailure("WRITE", label, start, err)
 			throw err
 		}
+	}
+
+	/**
+	 * Runs `fn` under the profile barrier's read side and the chain's WRITE guard, where `ensure` may
+	 * build or rebind a runtime, once the op's incarnation is still live and the chain's purge epoch is
+	 * the one captured at its entry. An op parked here can outlive a clearProfileState (which bumps no
+	 * chain epoch) or a clearChainState; without both checks `ensure` would recreate the erased
+	 * runtime and store, the first under the successor's key.
+	 */
+	private underChainWrite<T>(network: NetworkInfo, label: string, purgeEpochAtEntry: number, fn: () => Promise<T>): Promise<T> {
+		return this.getProfileBarrier(network.profileId).read(() =>
+			this.getChainGuard(network.profileId, network.chainId).write(async () => {
+				this.assertGenerationCurrent(network)
+				this.lifecycle.assertUnchanged(this.chainKey(network.profileId, network.chainId), purgeEpochAtEntry, label)
+				return fn()
+			}),
+		)
 	}
 
 	/**

@@ -145,6 +145,24 @@ describe("ReadWriteGuard", () => {
 		expect(writeRan).toBe(true)
 	})
 
+	test("writing reports a writer holding the guard or queued for it, never a reader alone", async () => {
+		const guard = new ReadWriteGuard()
+		const reading = deferred()
+		const read = guard.read(() => reading.promise)
+		expect(guard.writing).toBe(false)
+		const write = guard.write(async () => {})
+		expect(guard.writing, "queued behind the reader").toBe(true)
+		reading.resolve()
+		await Promise.all([read, write])
+		expect(guard.writing).toBe(false)
+		const held = deferred()
+		const holding = guard.write(() => held.promise)
+		expect(guard.writing).toBe(true)
+		held.resolve()
+		await holding
+		expect(guard.writing).toBe(false)
+	})
+
 	test("read returns fn result, write returns fn result", async () => {
 		const guard = new ReadWriteGuard()
 

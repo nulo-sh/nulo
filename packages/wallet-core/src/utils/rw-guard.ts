@@ -67,6 +67,11 @@ export class ReadWriteGuard {
 		return this.readerTokens.size
 	}
 
+	/** Whether a writer holds the guard or waits for it: a write asked for now would run after it. */
+	get writing(): boolean {
+		return this.writeActive || this.writeWaiters.length > 0
+	}
+
 	async read<T>(fn: () => Promise<T>): Promise<T> {
 		// Re-check after every wake (condition-variable discipline): a writer can
 		// acquire SYNCHRONOUSLY between releaseWrite's resolve loop and this

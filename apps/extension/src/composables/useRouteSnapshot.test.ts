@@ -240,6 +240,22 @@ describe("useRouteSnapshot", () => {
 		expect(route.view.value?.snapshot).toEqual(SNAPSHOT)
 	})
 
+	test("a rebuild still asked for when the page moves to another network is dropped, not sent for that one", async () => {
+		const { client, state, route } = setup()
+		await route.refresh()
+		const rebuilt = deferred<void>()
+		client.rebuildRoute.mockReturnValueOnce(rebuilt.promise)
+		state.row = { ...ROW, primaryEndpointId: "b07d44a1" }
+		await route.refresh()
+		state.row = ROW
+		await route.refresh()
+		state.row = { ...ROW, id: "e5f6a7b8", primaryEndpointId: "b07d44a1" }
+		await route.refresh()
+		rebuilt.resolve()
+		await settle()
+		expect(client.rebuildRoute.mock.calls).toEqual([[ROW.id, [ROW.endpoints[1], ROW.endpoints[0]]]])
+	})
+
 	test("with the page gone, a rebuild in flight starts no other and an edit asks for none", async () => {
 		const { client, state, route } = setup()
 		await route.refresh()
