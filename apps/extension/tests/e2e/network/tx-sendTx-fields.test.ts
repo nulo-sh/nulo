@@ -7,7 +7,7 @@ import { waitForSendRecord } from "../fixtures/journal"
 import { readJournalDetail } from "../fixtures/journal-page"
 import { shotSend } from "../fixtures/shots"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { assertPgOk, setPgInputs, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { assertPgOk, errorEnvelopeOf, setPgInputs, snapshotResultSeq, tracedEnvelope, waitForPgResult } from "../fixtures/playground"
 import { readyAuthwitOwner } from "../fixtures/send"
 import { approveExecute, rejectExecute, waitForExecuteApprovable, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 
@@ -52,9 +52,9 @@ test.skipIf(!hasConfig)(
 		await shotSend(refused, "unattached-refusal", "execute-op-refusal")
 		await rejectExecute(refused)
 		const answer = await waitForPgResult(page, "sendTx", refusedSeq, 120_000)
-		expect({ status: answer.status, error: answer.errorJson }).toEqual({
+		expect({ status: answer.status, error: errorEnvelopeOf(answer) }).toEqual({
 			status: "error",
-			error: { message: JSON.stringify(UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE) },
+			error: tracedEnvelope(UNATTACHED_AUTHORIZATION_REFUSAL_ENVELOPE),
 		})
 
 		const seq = await snapshotResultSeq(page)

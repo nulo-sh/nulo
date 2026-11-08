@@ -3,6 +3,7 @@ import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
+import { type RequestLog, traceTag } from "@/wallet/logger/request-log"
 import { ProfileService } from "@/wallet/services/profile/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { NetworkService } from "@/wallet/services/network/service"
@@ -158,6 +159,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	public constructor(
 		logger: ILogger,
 		private readonly windowManager: WindowManager,
+		/** Each dApp request's capture; absent, nothing is recorded. */
+		private readonly requests?: RequestLog,
 	) {
 		super(DAPP_INTERACTION_SERVICE_NAME, logger)
 	}
@@ -447,7 +450,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 			this.logInfo(`executeAndResolve: resolved [${kinds}]`)
 			this.windowManager.settle(interaction.handleId, result)
 		} catch (error) {
-			this.windowManager.cancel(interaction.handleId, this.describeApprovalFailure(kinds, error))
+			this.windowManager.cancel(interaction.handleId, this.describeApprovalFailure(kinds, error, interaction.hooks?.walletTraceId))
 		} finally {
 			this.approved.delete(interaction.id)
 			releasePreviews()
@@ -484,16 +487,17 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	 * their class, so the ingress answers with the typed envelope and the record reads as either, and
 	 * log at `debug`: both are expected.
 	 */
-	private describeApprovalFailure(kinds: string, error: unknown): string | Error {
+	private describeApprovalFailure(kinds: string, error: unknown, walletTraceId: string | undefined): string | Error {
+		const tag = traceTag(walletTraceId)
 		if (error instanceof TermsAcceptanceRequiredError) {
-			this.logDebug(`executeAndResolve: refused [${kinds}]: terms not accepted`)
+			this.logDebug(`executeAndResolve: refused [${kinds}]: terms not accepted`, ...tag)
 			return error
 		}
 		if (error instanceof WindowEndedError) {
-			this.logDebug(`executeAndResolve: ended [${kinds}]: the app was disconnected`)
+			this.logDebug(`executeAndResolve: ended [${kinds}]: the app was disconnected`, ...tag)
 			return error
 		}
-		this.logError(`executeAndResolve: failed [${kinds}]`, error)
+		this.logError(`executeAndResolve: failed [${kinds}]`, error, ...tag)
 		return error instanceof Error ? error.message : "Execution failed"
 	}
 
@@ -673,6 +677,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 
 			this.storage.set(id, interaction)
 			registeredId = id
+			if (hooks?.walletTraceId) this.requests?.alias(hooks.walletTraceId, { interactionId: id })
 
 			pending = handle.promise
 				.catch((error: unknown) => {

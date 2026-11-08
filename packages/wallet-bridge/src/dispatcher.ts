@@ -133,9 +133,10 @@ import type {
  * off `SessionContext` because the ctx reaches recursive batch-leg dispatches,
  * where hooks would break the batch's sequential-completion contract.
  *
- * Currently consumed only by the `sendTx` path (forwarded to
+ * Consumed by the `sendTx` path (forwarded to
  * `DappInteractionService.execute` → `executionService.executeOperations`
- * → `executeAztecSendTx` / `executeNoFromSendTx`). Other methods ignore.
+ * → `executeAztecSendTx` / `executeNoFromSendTx`); `grantPublicAuthwit` takes
+ * `onJournalCreated` too. Other methods ignore.
  */
 export interface DispatchHooks {
 	/**
@@ -154,6 +155,9 @@ export interface DispatchHooks {
 	 * the request immediately on message arrival.
 	 */
 	queuedJournalId?: string
+	/** Called once, when the send's journal record exists (claimed queued row or fresh one).
+	 *  Forwarded only on the paths that write one: `sendTx` and `grantPublicAuthwit`. */
+	onJournalCreated?: (journalId: string) => void
 }
 
 declare const __VERSION__: string
@@ -251,7 +255,8 @@ export class WalletSdkDispatcher {
 		const origin: LocalTxOrigin = { type: OriginType.DAPP, name: ctx.origin }
 
 		// Under the admission fence, so a registration counts against the session that authorized it.
-		const results = await this.executionService.executeOperations([operation], origin, undefined, undefined, undefined, ctx.fence)
+		const traceHooks = { walletTraceId: ctx.walletTraceId }
+		const results = await this.executionService.executeOperations([operation], origin, undefined, traceHooks, undefined, ctx.fence)
 		return unwrapOperationResult(results[0])
 	}
 
@@ -355,7 +360,7 @@ export class WalletSdkDispatcher {
 			return this.handleRegisterToken(args, ctx, dappSession)
 		}
 		if (methodName === "grantPublicAuthwit") {
-			return this.handleGrantPublicAuthwit(args, ctx, dappSession)
+			return this.handleGrantPublicAuthwit(args, ctx, dappSession, hooks)
 		}
 		if (methodName === "createAuthWit") {
 			return this.handleCreateAuthWit(args, ctx, dappSession, grants)
@@ -523,7 +528,13 @@ export class WalletSdkDispatcher {
 			// backpressure cap applies to every dApp sendTx, even ones that arrive
 			// without the FIFO-baton hooks.
 			undefined,
-			{ onExecutionEnqueued: hooks?.onExecutionEnqueued, queuedJournalId: hooks?.queuedJournalId, originKey: ctx.origin },
+			{
+				onExecutionEnqueued: hooks?.onExecutionEnqueued,
+				queuedJournalId: hooks?.queuedJournalId,
+				originKey: ctx.origin,
+				onJournalCreated: hooks?.onJournalCreated,
+				walletTraceId: ctx.walletTraceId,
+			},
 		)
 
 		return unwrapOperationResult(results[0])
@@ -571,7 +582,8 @@ export class WalletSdkDispatcher {
 				messageHashOrIntent,
 			}
 			const origin: LocalTxOrigin = { type: OriginType.DAPP, name: ctx.origin }
-			const results = await this.executionService.executeOperations([operation], origin, undefined, undefined, undefined, ctx.fence)
+			const traceHooks = { walletTraceId: ctx.walletTraceId }
+			const results = await this.executionService.executeOperations([operation], origin, undefined, traceHooks, undefined, ctx.fence)
 			return unwrapOperationResult(results[0])
 		}
 
@@ -580,9 +592,8 @@ export class WalletSdkDispatcher {
 			account: formatCaipAccount(ctx.chainId, account.address),
 			messageHashOrIntent,
 		}
-		const results = await this.dappInteractionService.execute({
-			sessionId: dappSession.id,
-			operations: [authwitReq],
+		const results = await this.dappInteractionService.execute({ sessionId: dappSession.id, operations: [authwitReq] }, undefined, {
+			walletTraceId: ctx.walletTraceId,
 		})
 		return unwrapOperationResult(results[0])
 	}
@@ -625,10 +636,11 @@ export class WalletSdkDispatcher {
 			address: tokenAddress,
 		}
 
-		const results: ExecutionResult = await this.dappInteractionService.execute({
-			sessionId: dappSession.id,
-			operations: [registerOp],
-		})
+		const results: ExecutionResult = await this.dappInteractionService.execute(
+			{ sessionId: dappSession.id, operations: [registerOp] },
+			undefined,
+			{ walletTraceId: ctx.walletTraceId },
+		)
 
 		return unwrapOperationResult(results[0])
 	}
@@ -645,6 +657,7 @@ export class WalletSdkDispatcher {
 		args: unknown[],
 		ctx: SessionContext,
 		dappSession: IDappSessionRef | undefined,
+		hooks: DispatchHooks | undefined,
 	): Promise<unknown> {
 		this.requireSession(dappSession, ctx)
 
@@ -680,7 +693,7 @@ export class WalletSdkDispatcher {
 			// matching sendTx; without it the execution lane buckets the grant
 			// under "__no_origin__" and loses per-origin fairness.
 			undefined,
-			{ originKey: ctx.origin },
+			{ originKey: ctx.origin, onJournalCreated: hooks?.onJournalCreated, walletTraceId: ctx.walletTraceId },
 		)
 
 		return unwrapOperationResult(results[0])

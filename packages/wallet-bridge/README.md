@@ -139,9 +139,23 @@ collapse) is:
 
 ### What other error shapes look like
 
-For other failures (network errors, simulation failures, etc.), the dApp
-receives `err.message` as a plain non-JSON string. The recipe's
-`try { info = JSON.parse(...) } catch { ... }` falls through gracefully.
+Every error is a JSON object, and its `data.walletTraceId` is the 8-hex id the
+wallet minted for that request. A user with developer mode on downloads that
+request's logs as `nulo-request-<walletTraceId>.txt`, so quote the id in an
+issue. A failure the wallet does not classify (a network error, a simulation
+failure) answers one constant envelope:
+
+```jsonc
+{
+  "code": -32603,                                // JSON-RPC internal error
+  "message": "The wallet could not process the request.",
+  "data": { "walletTraceId": "1a2b3c4d" }
+}
+```
+
+A wallet build from before the trace id answered that failure as the bare
+string, which the recipe's `try { info = JSON.parse(...) } catch { ... }`
+still handles.
 
 A request its stored grant does not cover (a contract, call, class, account
 or sender outside the grant, or a flag the grant does not set) is refused

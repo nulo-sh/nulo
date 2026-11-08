@@ -243,6 +243,7 @@ const STUBS = {
 		emits: ["dismiss"],
 		template: `<div data-testid="dapp-cancelled-overlay" :data-message="message" @click="$emit('dismiss')" />`,
 	},
+	RequestLogButton: { props: ["interactionId"], template: '<div data-testid="request-log-stub" :data-interaction="interactionId" />' },
 }
 
 // Lazy import after vi.mock hoist
@@ -1727,6 +1728,15 @@ describe("execute window — a request the wallet refused", () => {
 		await w!.find('[data-testid="execute-reject-btn"]').trigger("click")
 		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "reject")
 	}
+
+	test("the request's logs are offered only once a refusal stands, for this window's request", async () => {
+		await opened()
+		const offer = () => w!.find('[data-testid="request-log-stub"]')
+		expect(offer().exists()).toBe(false)
+		feeMapInstances[0]!.opts.onError?.(0, REGISTRY)
+		await flushPromises()
+		expect(offer().attributes("data-interaction")).toBe(approval.requestId.value)
+	})
 
 	test.each([
 		["registry", REGISTRY],
