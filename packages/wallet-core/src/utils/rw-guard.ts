@@ -67,9 +67,9 @@ export class ReadWriteGuard {
 		return this.readerTokens.size
 	}
 
-	/** Whether a writer holds the guard or waits for it: a write asked for now would run after it. */
-	get writing(): boolean {
-		return this.writeActive || this.writeWaiters.length > 0
+	/** Whether nothing holds the guard or waits for it, so a write asked for now runs at once. */
+	get idle(): boolean {
+		return !this.writeActive && this.writeWaiters.length === 0 && this.readers === 0
 	}
 
 	async read<T>(fn: () => Promise<T>): Promise<T> {

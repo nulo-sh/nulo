@@ -21,7 +21,7 @@ vi.mock("./opfs-store", async (importOriginal) => ({
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
-import { deferred } from "@nulo/wallet-core/utils"
+import { deferred, type ReadWriteGuard } from "@nulo/wallet-core/utils"
 import { realTimer, type RouteSpec, routeNode, type SubmissionPins } from "../routing/routed-node"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { StoreErasedError } from "./lifecycle-coordinator"
@@ -281,21 +281,28 @@ describe("PxeService.rebuildRoute", () => {
 		await expect(s.getRouteSnapshot(networkOf(B, A))).resolves.toBeNull()
 	})
 
-	test("does nothing while a write holds the chain, and nothing runs once it ends", async () => {
+	test("does nothing while a write or a read holds the chain, and nothing runs once they end", async () => {
 		const f = fixture()
 		const builds = readingBuilds(f)
 		const s = service(f)
 		const network = networkOf(A, B)
 		await s.getLatestBlockNumber(network)
-		const write = s.registerSender(network, SENDER as never)
 		const edited = networkOf(B, A)
-
+		const write = s.registerSender(network, SENDER as never)
 		await s.rebuildRoute(edited)
 		f.releaseWrite()
 		await write
+		const reading = deferred()
+		const chain = (s as unknown as { getChainGuard: (p: string, c: number) => ReadWriteGuard }).getChainGuard("p1", CHAIN_ID)
+		const read = chain.read(() => reading.promise)
+		await s.rebuildRoute(edited)
+		reading.resolve()
+		await read
 
 		expect(builds.started).toBe(1)
 		await expect(s.getRouteSnapshot(edited)).resolves.toBeNull()
+		await s.rebuildRoute(edited)
+		expect(builds.started, "the success control: an idle chain rebuilds").toBe(2)
 	})
 
 	test("a second request during the rebuild starts no other, and a send's pick meanwhile never waits for it", async () => {

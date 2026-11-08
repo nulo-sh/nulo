@@ -416,8 +416,8 @@ export type Methods = {
 	 *  Asks no endpoint. */
 	getRouteSnapshot(networkId: string, shown: readonly RouteEndpoint[]): RouteSnapshot | null
 	/** Rebuilds the account engine's route over the network's current endpoint list now, as the
-	 *  network's next use would, when it holds one built for an earlier list; builds none otherwise.
-	 *  Does nothing when `shown` is not the row's list. */
+	 *  network's next use would, when it holds one built for an earlier list and is not using the
+	 *  network; does nothing otherwise, or when `shown` is not the row's list. */
 	rebuildRoute(networkId: string, shown: readonly RouteEndpoint[]): void
 	/** Probes the network's primary endpoint and returns Active/Inactive/InvalidChain. */
 	getNodeStatus(networkId: string): NodeStatus

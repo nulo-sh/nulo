@@ -743,13 +743,14 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 
 	/** What the chain's next operation would do to its runtime, and nothing else: rebinds one built
 	 *  for another endpoint list. A chain with no runtime gets none, so no store opens and no PXE
-	 *  starts for a chain the wallet is not using. It never waits behind another write: after a proof,
-	 *  a later edit may have replaced this list and the page that asked may be gone, and the
-	 *  operation that follows rebinds on its own. */
+	 *  starts for a chain the wallet is not using. It runs at once on an idle chain or not at all:
+	 *  queued behind another operation, it could run after a later edit replaced this list or after
+	 *  the page that asked is gone, and the operation in the way rebinds on its own or before the
+	 *  next. */
 	public async rebuildRoute(network: NetworkInfo): Promise<void> {
 		const { profileId, chainId } = network
 		if (!this.registry.peek(profileId, chainId) || this.registry.peekMatching(network)) return
-		if (this.getChainGuard(profileId, chainId).writing) return
+		if (!this.getChainGuard(profileId, chainId).idle) return
 		const start = Date.now()
 		const purgeEpochAtEntry = this.lifecycle.current(this.chainKey(profileId, chainId))
 		try {

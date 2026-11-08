@@ -526,7 +526,8 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 		return await RouteSnapshotSchema.parseAsync(await this.request("getRouteSnapshot", network))
 	}
 
-	/** Rebinds the chain's runtime to `network`'s endpoint list if it was built for another; builds none. */
+	/** Rebinds the chain's runtime to `network`'s endpoint list if it was built for another and the
+	 *  chain is idle; builds none. */
 	public async rebuildRoute(network: NetworkInfo): Promise<void> {
 		await this.request("rebuildRoute", network)
 	}
