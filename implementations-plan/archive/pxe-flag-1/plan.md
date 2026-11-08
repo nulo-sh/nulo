@@ -111,7 +111,7 @@ No PR from the probe. The plan commit, the record commit and the revert of D9's 
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at 002b76fc7, with:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at 002b76fc7, with:
 - **Review loop:** none; no code ships. Codex reads the record once with the plan before the report, at `high`, and its verdict is logged in lessons/phase-1.md.
 - **Close-out:** a docs-only PR when the orchestrator asks: the Outcome block, `git mv` into `archive/`, the index line moved; merge `origin/dev` in first and read `index.md` and `lessons.md`.
 - **Teardown:** after that merge, `agent-worktree done pxe-flag-1 --merged`; remove the detached worktree of D9 first.
