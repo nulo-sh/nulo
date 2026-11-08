@@ -526,6 +526,12 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 		return await RouteSnapshotSchema.parseAsync(await this.request("getRouteSnapshot", network))
 	}
 
+	/** Rebinds the chain's runtime to `network`'s endpoint list if it was built for another and the
+	 *  chain is idle; builds none. */
+	public async rebuildRoute(network: NetworkInfo): Promise<void> {
+		await this.request("rebuildRoute", network)
+	}
+
 	/** Dispose the offscreen runtime for `(profileId, chainId)` and remove
 	 *  its OPFS store. SW-side cascade entry-point for `NetworkService.purgeChain`. */
 	public async clearChainState(profileId: string, chainId: number): Promise<void> {

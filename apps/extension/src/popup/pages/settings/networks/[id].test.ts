@@ -16,6 +16,7 @@ const reorderEndpoints = vi.hoisted(() => vi.fn(async (_id: string, _ids: string
 const getNetworks = vi.hoisted(() => vi.fn(async (): Promise<unknown[]> => []))
 const route = vi.hoisted(() => ({
 	getRouteSnapshot: vi.fn(async (_id: string): Promise<unknown> => null),
+	rebuildRoute: vi.fn(async (_id: string, _shown: unknown[]): Promise<void> => {}),
 	onRouteChanged: { add: vi.fn(), remove: vi.fn() },
 	onConnected: { add: vi.fn(), remove: vi.fn() },
 }))
@@ -55,6 +56,7 @@ beforeEach(() => {
 	reorderEndpoints.mockReset().mockResolvedValue(undefined)
 	getNetworks.mockReset().mockResolvedValue([])
 	route.getRouteSnapshot.mockReset().mockResolvedValue(null)
+	route.rebuildRoute.mockReset().mockResolvedValue(undefined)
 	route.onRouteChanged.add.mockClear()
 	openToast.mockClear()
 	activate.mockReset().mockResolvedValue("activated")
@@ -501,6 +503,14 @@ describe("Settings › Network detail — the endpoint order", () => {
 		const wrapper = await mountThree()
 		await move(wrapper, ["m2", "m1", "m3"])
 		expect(openToast.mock.calls).toEqual([[{ kind: "success", label: "Primary endpoint updated" }]])
+	})
+
+	test("a move that landed asks the account engine once for the route over the written order", async () => {
+		getNetworks.mockResolvedValue([ALPHA, stored(["m2", "m1", "m3"])])
+		const wrapper = await mountThree()
+		expect(route.rebuildRoute, "opening the page is no edit").not.toHaveBeenCalled()
+		await move(wrapper, ["m2", "m1", "m3"])
+		expect(route.rebuildRoute.mock.calls).toEqual([["mine", ["m2", "m1", "m3"].map((id) => ({ id, rpcUrl: `https://${id}/` }))]])
 	})
 
 	test("a failed write re-reads the row and says which write failed", async () => {

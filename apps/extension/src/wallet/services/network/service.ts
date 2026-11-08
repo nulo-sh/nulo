@@ -197,6 +197,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		"setPrimaryEndpoint",
 		"reorderEndpoints",
 		"getRouteSnapshot",
+		"rebuildRoute",
 		"getNodeStatus",
 		"probeNodeStatus",
 	)
@@ -988,14 +989,25 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	public async getRouteSnapshot(networkId: string, shown: readonly RouteEndpoint[]): Promise<RouteSnapshot | null> {
 		validateParams(NetworkMethodSchemas.getRouteSnapshot.params, [networkId, shown], "getRouteSnapshot")
+		const info = await this.routeShown(networkId, shown)
+		return info ? this.pxeServiceClient.getRouteSnapshot(info) : null
+	}
+
+	public async rebuildRoute(networkId: string, shown: readonly RouteEndpoint[]): Promise<void> {
+		validateParams(NetworkMethodSchemas.rebuildRoute.params, [networkId, shown], "rebuildRoute")
+		const info = await this.routeShown(networkId, shown)
+		if (info) await this.pxeServiceClient.rebuildRoute(info)
+	}
+
+	/** The owned row's route while `shown` is its endpoint list in route order, else null: ids outlive
+	 *  a URL edit, so a list another window has since edited names another route. */
+	private async routeShown(networkId: string, shown: readonly RouteEndpoint[]): Promise<NetworkInfo | null> {
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-		const info = networkInfoFrom(network)
-		// A list another window has since edited is answered for no route: ids outlive a URL edit.
+		const info = networkInfoFrom(requireOwnedRow(await this.storage.get(networkId), profile.id))
 		const same =
 			info.endpoints.length === shown.length && info.endpoints.every((e, i) => e.id === shown[i]?.id && e.rpcUrl === shown[i]?.rpcUrl)
-		return same ? this.pxeServiceClient.getRouteSnapshot(info) : null
+		return same ? info : null
 	}
 
 	/** A reset's resume keeps the primary endpoint only while it is the one the capture probed, and

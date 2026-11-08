@@ -1,14 +1,16 @@
 /**
  * The Local Network's endpoint list on two relays in front of the local node, A first and B second,
  * with the network page left open throughout. B is dragged to the first place: the order is written,
- * the account engine's rebuilt route reaches B on its next reads and B's dot turns green on the open
- * page. B is then killed: its dot turns red and A's green, still without reopening the page, and B's
- * edit sheet shows the error line.
+ * the page asks the account engine to rebuild its route over the new order, so B's dot turns green
+ * with no read from Home, and the engine's next reads reach B. B is then killed: its dot turns red
+ * and A's green, still without reopening the page, and B's edit sheet shows the error line.
  *
- * Failure mode: a reorder written to the row that never reaches the routed runtime, or a page whose
- * dots never follow the router once it is open. The unit and component layers fake one side of each:
- * the write and the router run in two contexts and the dots cross three, which only the extension
- * has. Account-engine reads come from a second popup page entering Home, never from the network page.
+ * Failure mode: a reorder written to the row that never reaches the routed runtime, a page whose
+ * dots stay grey after its own edit until something else uses the network, or dots that never follow
+ * the router once the page is open. The unit and component layers fake one side of each: the write
+ * and the router run in two contexts and the dots cross three, which only the extension has.
+ * Account-engine reads come from a second popup page entering Home; the network page asks only for
+ * the rebuild after its own edit.
  */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
@@ -165,8 +167,12 @@ test.skipIf(!aztecConfig)(
 			).toEqual([idB, idA])
 			expect(written?.primaryEndpointId).toBe(idB)
 
-			step("the next account-engine reads reach B, and its dot turns green on the open page")
+			step("the page's own request rebuilds the route: B's dot turns green with no read from Home")
 			const trail = routerTrail(page, droppedAt)
+			await waitForTones(page, { [idB]: "green" }, "B green with no read from Home", trail)
+			step(`B green ${Date.now() - droppedAt} ms after the drop`)
+
+			step("the next account-engine reads reach B, and its dot stays green on the open page")
 			const nudgeAndRead = async () => {
 				await nudge(driver)
 				await trail()

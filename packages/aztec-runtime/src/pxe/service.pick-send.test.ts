@@ -1,7 +1,8 @@
 /**
  * `PxeService.pickSendEndpoint`, the endpoint a send goes through, picked on the route the proof
- * read through, and `getRouteSnapshot` with `onRouteChanged`, what the endpoint list shows of that
- * route: the real router over fake per-URL clients.
+ * read through, `getRouteSnapshot` with `onRouteChanged`, what the endpoint list shows of that
+ * route, and `rebuildRoute`, the list's request after an edit: the real router over fake per-URL
+ * clients.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
@@ -20,6 +21,7 @@ vi.mock("./opfs-store", async (importOriginal) => ({
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
+import { deferred, type ReadWriteGuard } from "@nulo/wallet-core/utils"
 import { realTimer, type RouteSpec, routeNode, type SubmissionPins } from "../routing/routed-node"
 import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { StoreErasedError } from "./lifecycle-coordinator"
@@ -232,5 +234,98 @@ describe("PxeService.getRouteSnapshot", () => {
 		const s = service(f)
 		await s.clearProfileState("p1", "gen-1")
 		await expect(s.getRouteSnapshot({ ...networkOf(A, B), pxeGeneration: "gen-1" })).rejects.toBeInstanceOf(StoreErasedError)
+	})
+})
+
+/** Builds that wait for `hold` when it is set, then read the node's identity through the new route
+ *  as the production build does, so the primary answers before the runtime is bound. */
+function readingBuilds(f: Fixture) {
+	const builds = { started: 0, hold: null as Promise<void> | null }
+	const build = f.factory.createChainRuntime
+	f.factory.createChainRuntime = async (n, key, options) => {
+		builds.started += 1
+		if (builds.hold) await builds.hold
+		const runtime = await build(n, key, options)
+		await runtime.node.getNodeInfo()
+		return runtime
+	}
+	return builds
+}
+
+describe("PxeService.rebuildRoute", () => {
+	test("rebinds the runtime an edit left on the old list, once, and the snapshot then shows the new primary answering", async () => {
+		const f = fixture()
+		const builds = readingBuilds(f)
+		const s = service(f)
+		await s.getLatestBlockNumber(networkOf(A, B))
+		const edited = networkOf(B, A)
+		await expect(s.getRouteSnapshot(edited), "the edit evicted the route").resolves.toBeNull()
+
+		await s.rebuildRoute(edited)
+		await s.rebuildRoute(edited)
+
+		expect(builds.started).toBe(2)
+		expect(f.built.at(-1)).toEqual(edited)
+		const snapshot = await s.getRouteSnapshot(edited)
+		expect(snapshot?.activeId).toBe("b")
+		expect(snapshot?.endpoints[0]).toEqual({ id: "b", state: "ready", since: expect.any(Number), failure: undefined })
+	})
+
+	test("builds nothing and asks no endpoint for a chain with no runtime", async () => {
+		const f = fixture()
+		const builds = readingBuilds(f)
+		const s = service(f)
+		await s.rebuildRoute(networkOf(B, A))
+		expect(builds.started).toBe(0)
+		expect(f.seen.size).toBe(0)
+		await expect(s.getRouteSnapshot(networkOf(B, A))).resolves.toBeNull()
+	})
+
+	test("does nothing while a write or a read holds the chain, and nothing runs once they end", async () => {
+		const f = fixture()
+		const builds = readingBuilds(f)
+		const s = service(f)
+		const network = networkOf(A, B)
+		await s.getLatestBlockNumber(network)
+		const edited = networkOf(B, A)
+		const write = s.registerSender(network, SENDER as never)
+		await s.rebuildRoute(edited)
+		f.releaseWrite()
+		await write
+		const reading = deferred()
+		const chain = (s as unknown as { getChainGuard: (p: string, c: number) => ReadWriteGuard }).getChainGuard("p1", CHAIN_ID)
+		const read = chain.read(() => reading.promise)
+		await s.rebuildRoute(edited)
+		reading.resolve()
+		await read
+
+		expect(builds.started).toBe(1)
+		await expect(s.getRouteSnapshot(edited)).resolves.toBeNull()
+		await s.rebuildRoute(edited)
+		expect(builds.started, "the success control: an idle chain rebuilds").toBe(2)
+	})
+
+	test("a second request during the rebuild starts no other, and a send's pick meanwhile never waits for it", async () => {
+		const f = fixture()
+		const builds = readingBuilds(f)
+		const s = service(f)
+		await s.getLatestBlockNumber(networkOf(A, B))
+		const held = deferred()
+		builds.hold = held.promise
+		const edited = networkOf(B, A)
+		const first = s.rebuildRoute(edited)
+		const second = s.rebuildRoute(edited)
+		await vi.waitFor(() => expect(builds.started).toBe(2))
+
+		await expect(s.pickSendEndpoint(edited, { txHash: TX_HASH, anchorHash: ANCHOR })).resolves.toEqual({ rpcUrl: B.rpcUrl })
+		expect(
+			f.routes.map((r) => r.network),
+			"the pick's own route over the new list",
+		).toEqual([edited])
+
+		held.resolve()
+		await Promise.all([first, second])
+		expect(builds.started).toBe(2)
+		expect((await s.getRouteSnapshot(edited))?.activeId).toBe("b")
 	})
 })

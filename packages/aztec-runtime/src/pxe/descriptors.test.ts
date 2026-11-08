@@ -15,12 +15,13 @@ const SW_ONLY = [
 	"getPublicTokenClassStatus",
 	"pickSendEndpoint",
 	"getRouteSnapshot",
+	"rebuildRoute",
 ] as const
 
 describe("PXE_METHOD_DESCRIPTORS", () => {
-	test("covers the full 28-method surface with every flag explicit", () => {
+	test("covers the full 29-method surface with every flag explicit", () => {
 		const names = Object.keys(PXE_METHOD_DESCRIPTORS)
-		expect(names).toHaveLength(28)
+		expect(names).toHaveLength(29)
 		for (const name of names) {
 			const d = PXE_METHOD_DESCRIPTORS[name as keyof typeof PXE_METHOD_DESCRIPTORS]
 			expect(typeof d.rpc).toBe("boolean")

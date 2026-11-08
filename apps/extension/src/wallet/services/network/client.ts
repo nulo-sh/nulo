@@ -130,6 +130,10 @@ export class NetworkServiceClient extends ServiceClient<Methods, Events> impleme
 		return this.call("getRouteSnapshot", [networkId, shown])
 	}
 
+	public async rebuildRoute(networkId: string, shown: readonly RouteEndpoint[]): Promise<void> {
+		return this.call("rebuildRoute", [networkId, shown])
+	}
+
 	public async getNodeStatus(networkId: string): Promise<NodeStatus> {
 		return this.call("getNodeStatus", [networkId])
 	}

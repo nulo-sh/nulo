@@ -127,6 +127,10 @@ export type Methods = {
 	/** The route of the runtime built for `network`'s endpoint list, or `null` with none. Builds
 	 *  nothing and asks no endpoint. */
 	getRouteSnapshot(network: NetworkInfo): RouteSnapshot | null
+	/** Rebinds the chain's runtime to `network`'s endpoint list when it was built for another, as the
+	 *  chain's next operation would, only if no operation holds or awaits the chain; never queues.
+	 *  Builds none for a chain with no runtime. */
+	rebuildRoute(network: NetworkInfo): void
 	/**
 	 * Dispose any active runtime for `(profileId, chainId)` and remove its
 	 * OPFS store at `pxe/${profileId}/${chainId}`. Called by the SW-side
