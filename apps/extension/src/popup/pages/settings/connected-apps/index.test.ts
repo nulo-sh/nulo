@@ -175,6 +175,43 @@ describe("Settings › Connected apps — a row no connection reached", () => {
 	})
 })
 
+describe("Settings › Connected apps — the host under each app's name", () => {
+	const HOST = '[data-testid="connected-app-row-host"]'
+	const rowOf = (target: { element: Element }) => target.element.parentElement as HTMLElement
+	/** The text of the element the row's target is labelled by. */
+	const labelOf = (target: { element: Element; attributes: (name: string) => string | undefined }) =>
+		rowOf(target).querySelector(`[id="${target.attributes("labelledby")}"]`)?.textContent
+
+	// As discovery stores a row: the name sanitized to 64 characters, the url the origin the browser
+	// reported. The path and query stand for anything past the host, which the row must not print.
+	const NAME = "Nulo support: restore your wallet at the link below before it ex"
+	const LABEL = "a".repeat(63)
+	const wire = (id: string, url?: string): Session => ({
+		id,
+		expiry: 1,
+		dappMetadata: { name: NAME, ...(url === undefined ? {} : { url }) } as Session["dappMetadata"],
+	})
+
+	test("shows the parsed host of a long origin under the name, and the row is still named by the name", async () => {
+		expect(NAME).toHaveLength(64)
+		const w = await mountPage([wire("s1", `https://${LABEL}.example:8443/connect?from=nulo#x`)])
+		const [target] = w.findAll('[data-testid="connected-app-row"]')
+		expect(rowOf(target!).querySelector(HOST)?.textContent).toBe(`${LABEL}.example:8443`)
+		expect(target!.attributes("data-app-host")).toBe(`${LABEL}.example:8443`)
+		expect(labelOf(target!)).toBe(NAME)
+	})
+
+	test.each([
+		["no url", undefined],
+		["an opaque origin", "null"],
+		["a file origin", "file:///etc/passwd"],
+	])("a row with %s shows no host line; a row with a host shows one (control)", async (_, url) => {
+		const w = await mountPage([wire("s1", url), wire("s2", "https://dapp.example")])
+		const rows = w.findAll('[data-testid="connected-app-row"]').map(rowOf)
+		expect(rows.map((row) => row.querySelector(HOST)?.textContent ?? null)).toEqual([null, "dapp.example"])
+	})
+})
+
 describe("Settings › Connected apps — Disconnect all", () => {
 	const confirmText = async (sessions: Session[]) => {
 		const w = await mountPage(sessions)
