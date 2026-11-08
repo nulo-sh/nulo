@@ -75,6 +75,7 @@ import {
 	withBlockedAccount,
 } from "./fixtures/type-roles"
 import { TEST_PASSWORD } from "./fixtures/constants"
+import { callService, peekSession } from "./fixtures/session"
 import { shotSend } from "./fixtures/shots"
 import { skipUnlessListPrices } from "./fixtures/token-list"
 import {
@@ -987,7 +988,37 @@ test("a seeded wallet's Home, Holdings, Activity, its tx, receipt and send detai
 	expect(ctx.pageErrors).toEqual([])
 }, 300_000)
 
-test("Send with a recipient typed, the Settings hub, Display, a network, Manage accounts, Reset, Contacts and New contact", async ({
+/** A name as discovery sanitizes it (64 characters), from a host whose first label is the longest DNS allows. */
+const LONG_APP = {
+	name: "Nulo support: restore your wallet at the link below before it ex",
+	host: `${"nulo-support-restore-your-wallet-before-it-expires-".padEnd(63, "x")}.example`,
+}
+
+/** Two rows as discovery writes them, through the call it makes: one whose connection check passed,
+ *  and one a site wrote with no tap, as the every-site switch lets it, that never connected. They stay
+ *  in the extension this file's later tests share. */
+async function seedConnectedApps(page: Page): Promise<void> {
+	const profile = await peekSession(page)
+	const add = (name: string, url: string) =>
+		callService<{ id: string }>(page, "dapp-session", "addDappSession", [{ name, url }, [{ methods: [] }], [], 5, "1", profile!.id])
+	const allowed = await add("Playground", "https://playground.example")
+	await callService(page, "dapp-session", "setVerificationHash", [allowed.id, "ab".repeat(32)])
+	await add(LONG_APP.name, `https://${LONG_APP.host}`)
+}
+
+/** The long host's text, and whether its box cuts any of it sideways. Only the width is read: Firefox
+ *  counts a mono glyph's content area past the 16 px line in `scrollHeight`, with nothing hidden. */
+const readLongHost = (page: Page) =>
+	page.$$eval(
+		sel("connected-app-row-host"),
+		(els, host) => {
+			const el = els.find((e) => e.textContent === host)
+			return el ? { text: el.textContent, cut: el.scrollWidth > el.clientWidth + 0.5 } : null
+		},
+		LONG_APP.host,
+	)
+
+test("Send with a recipient typed, the Settings hub, Display, a network, Manage accounts, Reset, Contacts, New contact and Connected Apps", async ({
 	registeredExtension: ctx,
 }) => {
 	const page = await openHome(ctx)
@@ -1013,6 +1044,17 @@ test("Send with a recipient typed, the Settings hub, Display, a network, Manage 
 	await expectButtons(page, "contacts-new-btn")
 	await openAndSweep(page, "contacts-new-btn", "contact-address-input", "New contact", [["popup:new_contact", ""]])
 	await expectButtons(page, "new-contact-submit")
+	await closeByEscape(page, "contact-address-input")
+
+	// A host is the line that tells a site's own words from the wallet's: whole at every width.
+	await seedConnectedApps(page)
+	await goAndSweep(page, "#/popup/settings/connected-apps", "connected-app-row-host", "Connected Apps, a long host")
+	expect(await readLongHost(page)).toEqual({ text: LONG_APP.host, cut: false })
+	await atWidth(page, NARROW_WIDTH, async () => {
+		expect(await readLongHost(page)).toEqual({ text: LONG_APP.host, cut: false })
+		await shotSend(page, "connected-apps-hosts-240", "connected-app-row-host")
+	})
+	await shotSend(page, "connected-apps-hosts", "connected-app-row-host")
 	await page.close()
 	expect(ctx.pageErrors).toEqual([])
 }, 180_000)
