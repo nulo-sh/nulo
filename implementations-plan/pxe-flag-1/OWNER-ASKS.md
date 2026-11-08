@@ -10,3 +10,9 @@
 - **Exact command:** `bun run --cwd apps/extension test:e2e tests/e2e/_probe-pxe-flag.test.ts --retry=0`, from the root of a detached worktree at that commit.
 - **Your two lines:** `op-remote create <host> pxe-flag-bridge-2446a428`, then `op-remote <host> pxe-flag-bridge-2446a428`.
 - **Outcome:** no approval within six hours, so the probe finished without the bridge leg and its detached worktree was removed; a late `op-remote` on this id now fails before the command runs. To measure the bridge after all, file a new request from a detached worktree at `2c6ca0ad6` (the harness and template are there).
+
+## P121-04: the probe's next step (decided 2026-11-08 12:09 UTC)
+
+- **Decision:** **C, run the bridge leg first, then decide.** The owner's note, verbatim: "The developer that implemented this is pretty great, so I kinda trust his work, let's test a little bit more before killing the idea. Even if it helps, at starters I'd always set it as experimental on developer mode, and off by default."
+- **What follows:** the verdict stays open until the bridged first sync and refresh are measured, and the numbers go back on a page. If a stage ever ships, it ships as a Developer-mode switch marked experimental, off by default (the research's Route B), and nothing else. Nothing ships from this lane now.
+- **The funded rerun:** the orchestrator runs it with the owner-authorized disposable key, from a fresh detached worktree at this branch's final commit, with the same command as OA-1 (`bun run --cwd apps/extension test:e2e tests/e2e/_probe-pxe-flag.test.ts --retry=0`) and the variables the template names (`implementations-plan/pxe-flag-1/keyed/bridge.env.example`) plus `EXTENSION_PATH` pointing at the lane's prebuilt off bundle. The first funded run and the fix are in [recon.md](recon.md) § Bridge leg.

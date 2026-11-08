@@ -9,3 +9,5 @@
 2026-11-06 phase 1 steps 4-6: Testnet setup (8 drips, 2 failed attempts) and 4 + 3 ABBA session pairs done; zero speculative failures or warnings
 2026-11-06 phase 1 step 8: record in recon.md § Probe; Codex reviewed it. D2: hold, recommendation close (owner's call); bridge (OA-1) pending
 2026-11-07 phase 1 step 7: OA-1 unapproved after six hours (polled hourly, last pending at 00:56 UTC); bridge leg dropped, its detached worktree removed
+2026-11-08 bridge fix: funded run of 2026-11-06 (orchestrator, out of band) stopped at the private seal; harness restored (959624b4a), fixed (b0f60e3ad, 4c4c9013e); address-only rehearsal green on Testnet at retry 0; Codex r1 five findings applied, r2 all hold
+2026-11-08 P121-04 C recorded (bridge leg first, then decide; any ship is Route B, off by default); funded rerun handed to the orchestrator
