@@ -22,7 +22,9 @@ The wallet mints an 8-hex `walletTraceId` when a dApp message arrives and return
 
 - **P116-15 B** (page 116, 2026-11-06 17:04 UTC): "A, plus a random walletTraceId returned to the dApp in the error envelope's data, so a developer can quote it and find the request in the wallet (a dApp-facing wire change that reveals nothing about the wallet)." A: "A trace id minted when a request enters; every tagged line and a structured timeline (journal transitions, prove phases, the error envelope) kept per request in the log store (about 300 lines or 64 KB each, 50 requests, memory plus session storage in developer mode); 'Download logs' on the History detail of a failed send and on the execute window's failure block; a scrubbed .txt." The owner's note: "provide some proposals on how you'll do it. a ".txt" or csv? or… whatever logs already use?"
 - **P117-03 A** (page 117, 18:18 UTC): "One .txt per request: a header (wallet version, browser, network name, the trace id, the dApp's origin host), the timeline (stage, start, duration, outcome), then the scrubbed log lines in order, and the error envelope as a JSON block at the end."
-- **Not signed:** the buttons' look and label (OA-1), the file's label words and what it can still hold (OA-2), the CSV export honouring filters (OA-3). The PR stays a draft until all three are answered.
+- **P121-01: B** (page 121, 2026-11-08 12:09 UTC): the buttons are the full-width `primary_outline` bar labelled "Download logs", on both surfaces, as `screenshots/look-b-*.png` show (OA-1).
+- **P121-02: approved** (page 121, 2026-11-08 12:09 UTC), no note: the file's label words and what it can still hold, as [OWNER-ASKS.md](OWNER-ASKS.md) and the golden state them (OA-2).
+- **P121-03: approved** (page 121, 2026-11-08 12:09 UTC), no note: the CSV export writes the lines the filters show (OA-3).
 
 ## The brief, checked
 
@@ -60,7 +62,7 @@ The wallet mints an 8-hex `walletTraceId` when a dApp message arrives and return
 - I2. `chrome.storage.session` (10 MB on both browsers) holds the captures beside the ring's 2,000 lines: only sends' captures (failed or not) outlive their request, at most 50 × 64 KB. Unit test bounds the serialized size; not measured in a browser.
 - I3. `navigator.userAgent` in the worker carries `Chrome/<major>` or `Firefox/<major>` (Brave and Edge read as Chrome). The e2e checks the header line on both browsers.
 
-**Asks** (none blocks the build; each ships its "what ships now" form; all three gate the PR's ready state): OA-1 the buttons' look and label, OA-2 the file's words and limits, OA-3 the CSV filters. See [OWNER-ASKS.md](OWNER-ASKS.md).
+**Asks**, all answered on page 121 (see Sign-offs): OA-1 the buttons' look and label (B), OA-2 the file's words and limits (approved), OA-3 the CSV filters (approved). See [OWNER-ASKS.md](OWNER-ASKS.md).
 
 ## Architecture & Implementation
 
@@ -168,11 +170,11 @@ withWalletTraceId(envelope, walletTraceId): WalletErrorEnvelope    // a copy, da
 
 ## UI impact
 
-- **History detail** (`/popup/journal/:id`, developer mode, a failed send whose request was captured): before, "Error (developer mode)" shows the message and the raw error; after, a "Download logs" button under them (OA-1).
-- **Execute window** (developer mode, a refusal, a failed estimate or a processing error before approval): a row with the same button above the footer (OA-1).
-- **Logs viewer:** "Export logs to CSV" writes the lines the filters show (OA-3); nothing on screen changes.
+- **History detail** (`/popup/journal/:id`, developer mode, a failed send whose request was captured): before, "Error (developer mode)" shows the message and the raw error; after, a full-width "Download logs" outline bar under them (P121-01: B).
+- **Execute window** (developer mode, a refusal, a failed estimate or a processing error before approval): a row with the same full-width outline bar above Reject and Confirm (P121-01: B).
+- **Logs viewer:** "Export logs to CSV" writes the lines the filters show (P121-03: approved); nothing on screen changes.
 - **dApp-facing:** every error carries `data.walletTraceId`; the unclassified error is an object (P116-15 B).
-- **The downloaded file:** new (P117-03 A; words OA-2).
+- **The downloaded file:** new (P117-03 A; words P121-02: approved).
 
 ## Phases
 
@@ -222,7 +224,7 @@ withWalletTraceId(envelope, walletTraceId): WalletErrorEnvelope    // a copy, da
 ## Delivery
 
 - One arc, one PR. Branch `tx-logs-1-a1` off `origin/dev`, carrying the plan commit. `gh pr create`, no label at creation; add `e2e:extension-network` afterwards only if the path filter would skip the network suite. Title: `feat(logs): developer mode downloads the logs of one failed request` (69 chars). Body: what and why; the validation runs and outcomes; `scope-refusal`'s wall-clock before and after per browser; the sign-off quotes, P116-15 B quoted for the unclassified string's change; the accessibility calls; the pictures. No issue closes.
-- **Draft until OA-1, OA-2 and OA-3 are answered.** The session that applies the answers adjusts the look and words, re-runs Phase 4's gate, writes the close-out as the PR's final commits, and readies the PR.
+- **Draft until OA-1, OA-2 and OA-3 are answered.** The session that applies the answers adjusts the look and words, re-runs Phase 4's gate, writes the close-out as the PR's final commits, and readies the PR. Answered on page 121; only the look changed (A → B).
 - `code_review: off`. No lanes: the phases share `wallet-message.ts`, `store.ts` and the reach test, so they run in order.
 
 ## Decision ledger
@@ -245,6 +247,7 @@ withWalletTraceId(envelope, walletTraceId): WalletErrorEnvelope    // a copy, da
 | D14 | Where the id joins the answer | wrap the call's `LiveSession` | every answer goes through it; `handleWalletMessage` sits at 73 of 80 lines |
 | D15 | Which captures outlive their request | those aliased to a journal row | no surface opens any other once its window is closed |
 | D16 | `Task.walletTraceId` over RPC | keep the field | the popup is a trusted context that can call `getRequestReport` anyway; a private map would add a lifecycle |
+| D17 | The buttons' look | B: `wide`, `primary_outline`, `medium`, the footer's Reject sizing, with the glyph in the slot | P121-01: B; the History box's wrapper takes `wide` so the bar spans it |
 
 ## Audit verdicts
 
