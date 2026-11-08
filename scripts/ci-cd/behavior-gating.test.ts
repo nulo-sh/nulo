@@ -712,6 +712,7 @@ describe("CI behavior-gating guard", () => {
 	test("landing build covers the landing graph and the documents it renders, and is wired into the aggregator", () => {
 		assertGraphCovered(quick.landing, "landing", "landing")
 		expect(quick.landing, "a Terms edit must rebuild the pages generated from it").toContain("legal/**")
+		expect(quick.landing, "a release-notes edit must rebuild the changelog generated from it").toContain("release-notes/**")
 		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 		const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows/pr-quick.yml"), "utf8")) as any
 		expect(wf.jobs["build-landing"].if).toContain("needs-landing-build")

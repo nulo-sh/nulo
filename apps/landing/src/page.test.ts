@@ -183,6 +183,21 @@ describe.each(["index.html", "how-aztec-works.html", "subscribed.html"])("%s foo
 	})
 })
 
+describe("index.html footer", () => {
+	it("links the changelog index between the release list and the privacy policy", () => {
+		const footer = element(source("index.html"), "footer", "<footer")
+		expect(startTags(footer, "a").map((a) => a.href)).toEqual([
+			"https://github.com/nulo-sh/nulo",
+			"https://github.com/nulo-sh/nulo/releases",
+			"/changelog/",
+			"/privacy",
+			"/website-privacy",
+			"/terms",
+		])
+		expect(text(element(footer, "a", 'href="/changelog/"'))).toBe("changelog")
+	})
+})
+
 describe("the built site", () => {
 	const OUT = resolve(ROOT, `node_modules/.cache/page-test-${process.pid}`)
 	const files = (ext: string) =>
@@ -190,11 +205,12 @@ describe("the built site", () => {
 			.filter((f) => f.endsWith(ext))
 			.map((f) => join(OUT, f))
 
-	// The production build's two steps, the legal pages first so the scan covers them too; a sync
+	// The production build's steps, the generated pages first so the scan covers them too; a sync
 	// spawn blocks vitest's own timeout, so each child gets one.
 	beforeAll(() => {
 		for (const args of [
 			["scripts/build-legal.ts"],
+			["scripts/build-changelog.ts"],
 			["--bun", "./node_modules/.bin/vite", "build", "--outDir", OUT, "--emptyOutDir", "--logLevel", "error"],
 		]) {
 			const run = spawnSync("bun", args, { cwd: ROOT, encoding: "utf8", timeout: 120_000 })
@@ -215,7 +231,15 @@ describe("the built site", () => {
 
 	it("loads nothing from another origin: every resource reference in the HTML is this site's", () => {
 		const pages = files(".html")
-		for (const page of ["index.html", "how-aztec-works.html", "subscribed.html", "terms.html", "privacy.html"]) {
+		for (const page of [
+			"index.html",
+			"how-aztec-works.html",
+			"subscribed.html",
+			"terms.html",
+			"privacy.html",
+			"changelog/index.html",
+			"changelog/v1.2.0/index.html",
+		]) {
 			expect(pages).toContain(join(OUT, page))
 		}
 		for (const file of pages) {

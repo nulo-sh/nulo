@@ -108,10 +108,11 @@ jobs:
             playground:
               - 'apps/playground/**'
             landing:
-              # Built target — landing (whole package) + the legal documents it renders and
-              # the dep libs it builds from.
+              # Built target — landing (whole package) + the legal documents and release notes
+              # it renders and the dep libs it builds from.
               - 'apps/landing/**'
               - 'legal/**'
+              - 'release-notes/**'
               - 'packages/legal/src/**'
               - 'packages/legal/package.json'
               - 'packages/design/src/**'
@@ -329,7 +330,8 @@ jobs:
 
   # The landing deploys from Cloudflare's own Git integration, so without this job the first
   # build of a change is the production one. `bun run build` is the production build: `prebuild`
-  # generates the legal pages from legal/*.md, and nothing in it reaches the network.
+  # generates the legal pages from legal/*.md and the changelog from release-notes/*.md, and
+  # nothing in it reaches the network.
   build-landing:
     name: Build Landing
     needs: changes
@@ -347,7 +349,7 @@ jobs:
       - name: Verify the pages shipped
         working-directory: apps/landing
         run: |
-          for f in how-aztec-works.html subscribed.html terms.html privacy.html website-privacy.html terms/v1.0/index.html privacy/v1.0/index.html website-privacy/v1.0/index.html; do
+          for f in how-aztec-works.html subscribed.html terms.html privacy.html website-privacy.html terms/v1.0/index.html privacy/v1.0/index.html website-privacy/v1.0/index.html website-privacy/v1.1/index.html changelog/index.html changelog/v1.1.0/index.html changelog/v1.2.0/index.html; do
             test -s "dist/$f" || { echo "::error::missing dist/$f"; exit 1; }
           done
 
