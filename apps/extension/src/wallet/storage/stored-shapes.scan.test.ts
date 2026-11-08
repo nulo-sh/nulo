@@ -26,6 +26,7 @@ type NotLocalKind = "session" | "local-storage" | "lock" | "alarm" | "message" |
 const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; files?: readonly string[] }> = {
 	"nulo:core:session": { kind: "session", reason: "the unlocked session, chrome.storage.session" },
 	"nulo:logs": { kind: "session", reason: "the log buffer, chrome.storage.session" },
+	"nulo:request-logs": { kind: "session", reason: "the per-request log captures, chrome.storage.session" },
 	"nulo:liveness": { kind: "session", reason: "the background heartbeat, chrome.storage.session" },
 	"nulo:incoming:scan-episodes": { kind: "session", reason: "receive-scan episodes, chrome.storage.session" },
 	"nulo:onboarding:tab-id": { kind: "session", reason: "the onboarding tab, chrome.storage.session" },

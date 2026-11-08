@@ -66,6 +66,7 @@ import { MAX_PENDING_PER_SESSION, wireVerificationHold } from "./verification-ho
 import { type MessagePipelineDeps, onWalletMessage } from "./wallet-message"
 import { SessionHolders } from "./session-holders"
 import type { ILogger } from "@/wallet/logger"
+import type { RequestLog } from "@/wallet/logger/request-log"
 import { LogLevel } from "@/wallet/logger"
 
 declare const __VERSION__: string
@@ -79,9 +80,9 @@ declare const __VERSION__: string
 export function initWalletSdkHandler(
 	services: ServiceCollection,
 	logger: ILogger,
-	ports: { windows: TrackedWindowPort; clock: ClockPort },
+	ports: { windows: TrackedWindowPort; clock: ClockPort; requests?: RequestLog },
 ): BackgroundConnectionHandler {
-	const deps = resolveSdkDeps(services, logger)
+	const deps = { ...resolveSdkDeps(services, logger), requests: ports.requests }
 	const state = createSdkHandlerState(ports)
 
 	const handler = new BackgroundConnectionHandler(
@@ -173,6 +174,7 @@ type SdkDeps = {
 	resetRun: ResetRunGate
 	dispatcher: WalletSdkDispatcher
 	logger: ILogger
+	requests?: RequestLog
 }
 
 /** The dispatcher's one network read. A quarantined chain resolves to no network, so every dApp
@@ -426,5 +428,6 @@ function messagePipelineDeps(deps: SdkDeps, state: SdkHandlerState): MessagePipe
 		legal: deps.legal,
 		resetRun: deps.resetRun,
 		logger: deps.logger,
+		requests: deps.requests,
 	}
 }

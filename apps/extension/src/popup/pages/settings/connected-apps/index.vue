@@ -43,7 +43,7 @@ const formatGrantSummary = (grants) => {
 	return grants.map((g) => getSafeDisplay(g.capability.type).shortLabel).join(" \u00B7 ")
 }
 
-/** The app's host, so e2e can pick one app's row without reading its text. */
+/** The host of the origin discovery stored, never text the site sent; "" when the URL has none. */
 const appHost = (session) => {
 	try {
 		return new URL(session.dappMetadata?.url ?? "").host
@@ -221,6 +221,7 @@ onBeforeUnmount(() => {
 
 					<Flex direction="column" gap="2" wide :class="$style.row_text">
 						<span :id="`${rowIdBase}-${i}`" :class="$style.row_name">{{ ds.dappMetadata.name }}</span>
+						<span v-if="appHost(ds)" data-testid="connected-app-row-host" :class="$style.row_host">{{ appHost(ds) }}</span>
 						<!-- Establishment writes the hash, so a row without one was allowed and never connected. -->
 						<span v-if="!ds.verificationHash" data-testid="connected-app-row-not-connected" :class="$style.row_grants">
 							Allowed. Not connected yet.
@@ -287,6 +288,18 @@ onBeforeUnmount(() => {
 .row_grants {
 	composes: type--caption from global;
 	composes: row_sub from "../../../../components/ui/Settings/settings-row.module.css";
+}
+
+.row_host {
+	composes: type--data-lead from global;
+	composes: row_sub from "../../../../components/ui/Settings/settings-row.module.css";
+}
+
+/* A host wraps at every width, never cut: its end names the site's owner, the part a long
+ * lookalike prefix would push out of sight. */
+.row .row_host {
+	white-space: normal;
+	overflow-wrap: anywhere;
 }
 
 .actions {

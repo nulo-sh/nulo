@@ -18,6 +18,7 @@ import {
 import type { FeeSettings } from "@nulo/wallet-bridge"
 import type { WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { DappInteractionService } from "@/wallet/services/dapp-interaction/service"
+import { RequestLog } from "@/wallet/logger/request-log"
 import { ExecutionService } from "./service"
 
 const FEE = { paymentMethod: { kind: "sponsored" } } as unknown as FeeSettings
@@ -47,6 +48,23 @@ function makeSelf() {
 	}) as ExecutionService
 	return { self, interactions, dappSendExecutor, materializeStoredOperation }
 }
+
+describe("an estimate and a preview of a traced request are its stages", () => {
+	test("each records its label and outcome in the capture the interaction names", async () => {
+		const { self, dappSendExecutor } = makeSelf()
+		const requests = new RequestLog(() => true)
+		requests.begin("1a2b3c4d", { method: "sendTx", originHost: "app.example", chainId: 7 })
+		requests.alias("1a2b3c4d", { interactionId: "req-1" })
+		Object.assign(self, { requests })
+		dappSendExecutor.estimateOperationFee.mockRejectedValueOnce(new Error("Assertion failed: balance too low"))
+		await expect(self.estimateOperationFee("req-1", 0, FEE)).rejects.toThrow()
+		await self.previewOperationAuthwits("req-1", 0)
+		expect(requests.get("1a2b3c4d")?.stages.map(({ kind, stage, outcome }) => ({ kind, stage, outcome }))).toEqual([
+			{ kind: "estimate", stage: "fee estimate", outcome: "failed: Assertion failed: balance too low" },
+			{ kind: "estimate", stage: "authwit preview", outcome: "ok" },
+		])
+	})
+})
 
 describe("a refusal an estimate or preview meets is the request's", () => {
 	test.each([

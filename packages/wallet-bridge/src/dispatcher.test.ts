@@ -4137,3 +4137,70 @@ describe("dispatcher — a chain the wallet does not serve answers CHAIN_NOT_SUP
 		expect(touched).toEqual([])
 	})
 })
+
+describe("dispatcher — the request's trace id", () => {
+	const ACCOUNT = wireAddress("0a")
+	const TOKEN = wireAddress("0b")
+	const OTHER = wireAddress("0c")
+	const traced = { ...ctx, walletTraceId: "1a2b3c4d" }
+	const GRANTS = [
+		{ capability: { type: "accounts", canGet: true, canCreateAuthWit: true }, grantedAt: 1 },
+		{ capability: { type: "transaction", scope: "*" }, grantedAt: 1 },
+		{ capability: { type: "simulation", transactions: { scope: "*" }, utilities: { scope: "*" } }, grantedAt: 1 },
+	] as GrantedCapabilityRecord[]
+
+	function harness(authorizationsWithoutAsking?: { broad: boolean }) {
+		const { writer } = makeSessionWriter(
+			makeSession({ capabilityGrants: GRANTS, accounts: [`aztec:0:${ACCOUNT}`], authorizationsWithoutAsking } as never),
+		)
+		const seen: Array<{ via: "window" | "runner"; hooks: IExecutionHooks | undefined }> = []
+		const interaction: Partial<IDappInteractionRunner> = {
+			execute: async (_params, _token, hooks) => {
+				seen.push({ via: "window", hooks })
+				return [{ status: "ok", result: "0xtx" }] as never
+			},
+		}
+		const execution: IExecutionRunner = {
+			executeOperations: async (_ops, _origin, _parent, hooks) => {
+				seen.push({ via: "runner", hooks })
+				return [{ status: "ok", result: "0xr" }] as OperationResult[]
+			},
+		}
+		const account: AccountFake = {
+			provisionDefaultAccount: declineProvision,
+			getAccounts: async () => [{ address: ACCOUNT, name: "A", chainId: 0 }],
+		}
+		const dispatcher = makeDispatcher({ account, execution, interaction, sessionWriter: writer })
+		return { dispatcher, seen }
+	}
+
+	const onJournalCreated = () => {}
+	const enqueued = () => {}
+	const top = { onExecutionEnqueued: enqueued, queuedJournalId: "q-1", onJournalCreated }
+	const calls: Array<[string, unknown[], "window" | "runner", { broad: boolean } | undefined]> = [
+		["sendTx", [wirePayload([]), { from: ACCOUNT }], "window", undefined],
+		["grantPublicAuthwit", [ACCOUNT, { caller: OTHER, contract: TOKEN, method: "transfer_public", args: [] }], "window", undefined],
+		["registerToken", [ACCOUNT, TOKEN], "window", undefined],
+		["createAuthWit", [ACCOUNT, { consumer: TOKEN, innerHash: onWire(new Fr(0x0cn)) }], "window", undefined],
+		["createAuthWit", [ACCOUNT, { caller: OTHER, call: wireCall(TOKEN, "transfer") }], "runner", { broad: true }],
+		["simulateTx", [wirePayload([]), { from: ACCOUNT }], "runner", undefined],
+	]
+
+	test.each(calls)("%s reaches its executor (%s, via %s) carrying ctx.walletTraceId", async (method, args, via, consent) => {
+		const h = harness(consent)
+		await h.dispatcher.dispatch(method, args, traced, top)
+		expect(h.seen).toHaveLength(1)
+		expect(h.seen[0].via).toBe(via)
+		expect(h.seen[0].hooks?.walletTraceId).toBe("1a2b3c4d")
+		// The baton release stays sendTx's; the journal callback goes only where a row is written.
+		expect(h.seen[0].hooks?.onExecutionEnqueued).toBe(method === "sendTx" ? enqueued : undefined)
+		const writesRow = method === "sendTx" || method === "grantPublicAuthwit"
+		expect(h.seen[0].hooks?.onJournalCreated).toBe(writesRow ? onJournalCreated : undefined)
+	})
+
+	test("a batch leg carries the parent's id and none of its hooks", async () => {
+		const h = harness()
+		await h.dispatcher.dispatch("batch", [[{ name: "simulateTx", args: [wirePayload([]), { from: ACCOUNT }] }]], traced, top)
+		expect(h.seen).toEqual([{ via: "runner", hooks: { walletTraceId: "1a2b3c4d" } }])
+	})
+})
