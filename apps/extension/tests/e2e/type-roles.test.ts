@@ -1005,13 +1005,14 @@ async function seedConnectedApps(page: Page): Promise<void> {
 	await add(LONG_APP.name, `https://${LONG_APP.host}`)
 }
 
-/** The long host's text, and whether its box hides any of it. */
+/** The long host's text, and whether its box cuts any of it sideways. Only the width is read: Firefox
+ *  counts a mono glyph's content area past the 16 px line in `scrollHeight`, with nothing hidden. */
 const readLongHost = (page: Page) =>
 	page.$$eval(
 		sel("connected-app-row-host"),
 		(els, host) => {
 			const el = els.find((e) => e.textContent === host)
-			return el ? { text: el.textContent, hidden: el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight } : null
+			return el ? { text: el.textContent, cut: el.scrollWidth > el.clientWidth + 0.5 } : null
 		},
 		LONG_APP.host,
 	)
@@ -1047,9 +1048,9 @@ test("Send with a recipient typed, the Settings hub, Display, a network, Manage 
 	// A host is the line that tells a site's own words from the wallet's: whole at every width.
 	await seedConnectedApps(page)
 	await goAndSweep(page, "#/popup/settings/connected-apps", "connected-app-row-host", "Connected Apps, a long host")
-	expect(await readLongHost(page)).toEqual({ text: LONG_APP.host, hidden: false })
+	expect(await readLongHost(page)).toEqual({ text: LONG_APP.host, cut: false })
 	await atWidth(page, NARROW_WIDTH, async () => {
-		expect(await readLongHost(page)).toEqual({ text: LONG_APP.host, hidden: false })
+		expect(await readLongHost(page)).toEqual({ text: LONG_APP.host, cut: false })
 		await shotSend(page, "connected-apps-hosts-240", "connected-app-row-host")
 	})
 	await shotSend(page, "connected-apps-hosts", "connected-app-row-host")
