@@ -137,6 +137,8 @@ const NETWORK_SUITE = "_extension-network-e2e.yml"
 const NETWORK_LANE = "_extension-network-e2e-lane.yml"
 /** Nightly's advisory rerun of the canary files on the in-browser prover; it belongs to no lane. */
 const WASM_LEG = "network-e2e-canary-wasm"
+/** Nightly's advisory run of the rpc failover chaos file at one fixed seed; it belongs to no lane. */
+const RPC_CHAOS_LEG = "network-e2e-rpc-chaos"
 
 type CallerJob = {
 	name?: string
@@ -1434,12 +1436,13 @@ describe("network lane", () => {
 		).toEqual(["nightly.yml", "nightly.yml"])
 	})
 
-	test("nothing calls the suite but the lane, the soak and nightly's in-browser leg", () => {
+	test("nothing calls the suite but the lane, the soak and nightly's two legs", () => {
 		expect(callersOf(NETWORK_SUITE)).toEqual(
 			[
 				...laneJobs.map(([id]) => `${NETWORK_LANE} → ${id}`),
 				"extension-network-e2e-soak.yml → soak",
 				`nightly.yml → ${WASM_LEG}`,
+				`nightly.yml → ${RPC_CHAOS_LEG}`,
 			].sort(),
 		)
 	})
@@ -1502,6 +1505,44 @@ describe("network lane", () => {
 		const env = workflowOf(NETWORK_SUITE).jobs["network-e2e"].env
 		expect(env.NULO_E2E_PROVERLESS).toBe("${{ inputs.proverless && '1' || '' }}")
 		expect(env.VITE_NULO_PRESTO_REQUIRED).toBe("${{ (inputs.disable_presto == false && inputs.proverless == false) && '1' || '' }}")
+	})
+
+	// 441604806 is the draw the leg exists for: the proof's second witness read on the primary, then
+	// the primary killed for 15.2 s. The file arms on NULO_E2E_CHAOS and seeds from NULO_E2E_CHAOS_SEED,
+	// so a renamed variable would skip it or draw at random; armed, its one test must pass the results
+	// assertion. No `browser` is the suite's Chrome default. aggregators.test.ts holds it advisory.
+	test("nightly's rpc chaos leg runs the failover chaos file armed at its fixed seed, proverless on Chrome", () => {
+		const { jobs } = workflowOf("nightly.yml")
+		const [leg, call] = [jobs[RPC_CHAOS_LEG], jobs["network-e2e"]]
+		expect(Object.keys(leg).sort()).toEqual(["if", "name", "needs", "uses", "with"])
+		expect(leg.uses).toBe(`./.github/workflows/${NETWORK_SUITE}`)
+		expect(leg.needs).toEqual(call.needs)
+		expect(leg.if).toBe(call.if)
+		expect(leg.name).toBe("Run / chaos / rpc failover (seed 441604806)")
+		expect(leg.with).toStrictEqual({
+			ref: call.with.ref,
+			shard_label: "chaos-rpc",
+			test_files: "tests/e2e/network/rpc-failover-chaos.test.ts",
+			proverless: true,
+			chaos: true,
+			chaos_seed: "441604806",
+		})
+		const suite = workflowOf(NETWORK_SUITE)
+		expect(suite.on.workflow_call.inputs.browser.default).toBe("chrome")
+		expect(suite.jobs["network-e2e"].env).toMatchObject({
+			NULO_E2E_CHAOS: "${{ inputs.chaos && '1' || '' }}",
+			NULO_E2E_CHAOS_SEED: "${{ inputs.chaos_seed }}",
+		})
+		const source = readFileSync(join(ROOT, "apps/extension", leg.with.test_files), "utf8")
+		expect(source).toContain('process.env.NULO_E2E_CHAOS === "1"')
+		expect(source).toContain("chaosSeed(process.env.NULO_E2E_CHAOS_SEED)")
+	})
+
+	// A second upload under a run's artifact name fails, and the red job it belongs to loses its logs.
+	test("every network suite call of a nightly run uploads its logs under its own name", () => {
+		const names = suiteCalls("nightly.yml").map(({ inputs }) => `${inputs.browser ?? "chrome"}/${inputs.shard_label || "full"}`)
+		expect(names.length).toBeGreaterThan(2)
+		expect(names.filter((name, i) => names.indexOf(name) !== i)).toEqual([])
 	})
 
 	// A file in a dedicated job's list but not the pool's runs twice; one in neither never runs.
