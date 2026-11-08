@@ -1,0 +1,25 @@
+# pxe-flag-1: owner asks
+
+## OA-1: approve the bridge's keyed run (filed 2026-11-06 19:06 UTC; lapsed unapproved at 01:06 UTC on 2026-11-07)
+
+- **What it does:** one run of a scratch smoke-lane test that creates a throwaway Nulo profile in memory and bridges Sepolia USDC and USDT (flag off), then EURC and GBPC (flag on), to it, each privately as "Token + gas", through unleashed's tools app, with Nulo as the Aztec wallet and an L1 wallet answered from Node; then six balance refreshes in each build on the funded profile. It signs with a throwaway L1 key that 1Password generates; no other key is involved. The L1 wallet works on Sepolia only and signs four things: a test-token `mint` to its own address, an ERC-20 `approve` whose spender is Permit2, the router's `bridgeWithPermit`, and a Permit2 witness transfer whose spender is the router and whose token is one of the four. It sends no ETH and refuses everything else. An allowed call can still carry an amount the page chose, so the most at stake is the throwaway key's Sepolia ETH and free test tokens, a known limit.
+- **What you do:** `op-remote create <host> <id>` once (creates the `Nulo-Probe-Testnet` item from the template's `generate eth-key` directive; prints no value), then `op-remote <host> <id>`. The run prints the key's L1 address first and waits up to 60 minutes for Sepolia ETH (about 0.05 is plenty: mints, approvals and four deposits); send it from any Sepolia wallet.
+- **What the pin covers:** the pushed commit's sources (the harness and the template). The extension builds and `node_modules` it loads are outside the pin.
+- **If you do not approve within six hours:** the probe finishes without the bridge; the verdict does not depend on it.
+- **Request id:** `pxe-flag-bridge-2446a428`, at commit `2c6ca0ad6ec8` on `worktree-pxe-flag-1`, template `implementations-plan/pxe-flag-1/keyed/bridge.env.example`.
+- **Exact command:** `bun run --cwd apps/extension test:e2e tests/e2e/_probe-pxe-flag.test.ts --retry=0`, from the root of a detached worktree at that commit.
+- **Your two lines:** `op-remote create <host> pxe-flag-bridge-2446a428`, then `op-remote <host> pxe-flag-bridge-2446a428`.
+- **Outcome:** no approval within six hours, so the probe finished without the bridge leg and its detached worktree was removed; a late `op-remote` on this id now fails before the command runs. To measure the bridge after all, file a new request from a detached worktree at `2c6ca0ad6` (the harness and template are there).
+
+## P121-04: the probe's next step (decided 2026-11-08 12:09 UTC)
+
+- **Decision:** **C, run the bridge leg first, then decide.** The owner's note, verbatim: "The developer that implemented this is pretty great, so I kinda trust his work, let's test a little bit more before killing the idea. Even if it helps, at starters I'd always set it as experimental on developer mode, and off by default."
+- **What follows:** the verdict stays open until the bridged first sync and refresh are measured, and the numbers go back on a page. If a stage ever ships, it ships as a Developer-mode switch marked experimental, off by default (the research's Route B), and nothing else. Nothing ships from this lane now.
+- **The funded rerun:** the orchestrator runs it with the owner-authorized disposable key, from a fresh detached worktree at this branch's final commit, with the same command as OA-1 (`bun run --cwd apps/extension test:e2e tests/e2e/_probe-pxe-flag.test.ts --retry=0`) and the variables the template names (`implementations-plan/pxe-flag-1/keyed/bridge.env.example`) plus `EXTENSION_PATH` pointing at the lane's prebuilt off bundle. The first funded run and the fix are in [recon.md](recon.md) § Bridge leg.
+- **Outcome:** run 2 stopped at the EURC mint behind a stale balance tile; run 3 bridged all four and measured the refreshes and the off build's first sync ([recon.md](recon.md) § Bridge leg and § Probe). The numbers went on page 123.
+
+## P123-01: the verdict (decided 2026-11-08 18:29 UTC)
+
+- **Decision:** **A, close**, with no note. The item's A text, verbatim: "Close: no switch ships. The lane writes these numbers into its record, removes the probe harness, archives the plan with a reopening condition (an Aztec line that changes the flag's implementation, or a user who reports slow first syncs with many tokens), and the disposable key is shredded."
+- **The page's recommendation, accepted:** "A switch for a saving nobody can feel costs a UI change, a glossary line and a failure mode a user can hit: a failed speculation fails the person's own operation. The bridged refresh adds nothing to the flag's case, the one first-sync saving stayed at 1.4 s of 18 with no mechanism behind it, and the proofs ran slower with it on."
+- **What follows:** the bridged numbers are in [recon.md](recon.md) § Probe and § Bridge leg, and § Verdict (D2) records the close. The harness and its keyed template leave the branch, and the plan is archived with the reopening condition. The orchestrator shredded the disposable key after the signature. Nothing ships.
