@@ -131,6 +131,8 @@ Per [`implementations-plan/README.md` § Post-implementation standard](../../REA
 
 **Bridge step fix** (2026-11-08; Codex gpt-6.1-sol, high, session 01a1bb35, over the diff): r1 five findings (screenshots only on the deadline; a loose seal match with no count; typed data unchecked against the types; an unrequested mint; URLs in captures), all applied; r2 all hold, no regressions.
 
+**Close-out** (2026-11-08; Codex gpt-6.1-sol, high, session 01a1bc78, over the record against the two run files): **conditional approve**; numbers, D2's reading and the reopening condition verified. Three findings fixed (a secret-manager reference left in recon.md, a wrong call-count range, the first pass's `simulateTx` timing); one rejected (`/usr/bin` is a system path). Log in [lessons/phase-1.md](lessons/phase-1.md).
+
 ## Seeds (not run; orchestrator-owned)
 
 ```

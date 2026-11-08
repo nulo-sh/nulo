@@ -53,7 +53,7 @@ Base: `origin/dev` at 002b76fc7. Two Sonnet explorers (the lab's mechanics; the 
 
 Read from its clone at `main` 7de51e7; nothing here imports it.
 - **Faucet:** route `/faucet` (`apps/tools/src/composables/useShell.ts:28`), view `DripView.vue`. `useDrip.ts` calls `drip_to_public` or `drip_to_private` on a Dripper contract through the wallet's `sendTx`, with the SponsoredFPC embedded. SIGNAL (6 decimals, 1,000 per drip) and NOISE (18 decimals, 1 per drip) (`packages/bridge-core/src/faucet-catalog.ts`, `apps/tools/src/constants/tokens.ts`). No cooldown in the app; the contract's own limit is unverified. "Add to wallet" calls the wallet's `registerToken`. Testids: `tl-btn-connect`, `tl-btn-drip-public`, `tl-btn-drip-private`, `tl-drip-status`, `tl-btn-add-to-wallet` (`apps/tools/src/lib/testids.ts`). No create-token flow.
-- **Bridge:** the Send wizard (`components/send/SendWizard.vue`) uses an injected EIP-1193 wallet for L1 writes and reads; Sepolia USDC, USDT, EURC and GBPC are `permissionless-mint` `MintableERC20` (`apps/tools/public/testnet-bridge.json`), minted 100 per click (`MintStrip.vue:30`); a bridge journal resumes a claim. Its browser tests answer `window.ethereum` from Node with a viem wallet (`apps/tools/tests/browser/fixtures/l1-wallet.ts`, Playwright). The CLIs in `packages/bridge-core/scripts/` refuse any L1 signer but the pinned one, and none targets an arbitrary L2 recipient. Its keyed templates name `op://Keyed-Runs/Unleashed-Testnet/SEPOLIA_RPC_URL` (`packages/bridge-core/testnet-rpc.env.example`).
+- **Bridge:** the Send wizard (`components/send/SendWizard.vue`) uses an injected EIP-1193 wallet for L1 writes and reads; Sepolia USDC, USDT, EURC and GBPC are `permissionless-mint` `MintableERC20` (`apps/tools/public/testnet-bridge.json`), minted 100 per click (`MintStrip.vue:30`); a bridge journal resumes a claim. Its browser tests answer `window.ethereum` from Node with a viem wallet (`apps/tools/tests/browser/fixtures/l1-wallet.ts`, Playwright). The CLIs in `packages/bridge-core/scripts/` refuse any L1 signer but the pinned one, and none targets an arbitrary L2 recipient. Its keyed templates name the existing Sepolia RPC reference (`packages/bridge-core/testnet-rpc.env.example`).
 
 ## Fees on Testnet
 
@@ -113,7 +113,7 @@ Run 3 (§ Bridge leg) left the four defaults each holding a private balance. The
 | (b) trained passes (D3: 3-6) | 0 | 5038 / 5336 | median -114 | 2/4 | equal (31) in three of four | 19-28 / 20-23 |
 
 - Each pass sat at its own anchor, one block apart. Off pass 1 shared the first sync's anchor (block 23325), so its contract syncs were cached: 2024 ms, 6 spans.
-- On pass 1 also held a `simulateTx` (1.1 s, 5 calls) that started with it. On pass 3's four reads began 3.1 s after the press and made 8 calls; the other 51 calls ran before them.
+- On pass 1's record also holds a `simulateTx` (1.1 s, 5 calls) that began just before the press. On pass 3's four reads began about 3 s after the press and made 8 calls; the other 51 calls fell outside them, 39 before the first.
 - load1 was 10-18 for the on passes and 34-43 for the off passes and the off first sync (34). Host load moves CPU-bound time (I5), which here favours on.
 - Offscreen JS heap before and after six passes, MB: on 130→98, off 128→95.
 - Against the four 2026-11-06 off (c) sessions over the same tokens unfunded (17.7-21.7 s, 94-110 calls, 63-74 spans), a first sync with funded tokens made more calls and spans: 21.8 s, 129, 87.
