@@ -17,7 +17,7 @@ const EXTENSION_PATH = process.env.EXTENSION_PATH
 	? path.resolve(process.env.EXTENSION_PATH)
 	: path.resolve(__dirname, "../../dist", BROWSER)
 
-const ARMED_BUILD = `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:${BROWSER}`
+const ARMED_BUILD = `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_EXECUTE_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:${BROWSER}`
 
 /**
  * A source run loads the armed build, whose token-list fetcher reads its host and key only from a
@@ -25,12 +25,13 @@ const ARMED_BUILD = `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS
  * token-seed stamp is what `_extension-smoke-e2e.yml` greps for after its armed build.
  */
 function assertArmedSmokeBuild(stamped: (stamp: string) => boolean): void {
-	if (stamped("NULO_E2E_TOKEN_SEEDS_BUILD_STAMP") && stamped("NULO_E2E_TOKEN_LIST_BUILD_STAMP")) return
+	const stamps = ["NULO_E2E_TOKEN_SEEDS_BUILD_STAMP", "NULO_E2E_TOKEN_LIST_BUILD_STAMP", "NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP"]
+	if (stamps.every(stamped)) return
 	throw new Error(
 		[
 			`${EXTENSION_PATH} is not the armed smoke build. Build it with:`,
 			`  ${ARMED_BUILD}`,
-			"and run with NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1, or set NULO_E2E_ARTIFACT_RUN=1 to smoke a release build.",
+			"and run with NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_EXECUTE_FIXTURE=1 NULO_E2E_CSP_REPORT=1, or set NULO_E2E_ARTIFACT_RUN=1 to smoke a release build.",
 		].join("\n"),
 	)
 }

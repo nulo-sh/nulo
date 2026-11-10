@@ -43,6 +43,8 @@ import {
 	resolveForProfile,
 } from "./operation-display"
 import { openJsonWindow } from "@/utils/json-window"
+import { E2E_EXECUTE_FIXTURE_BUILD_STAMP } from "@/e2e/config"
+import { armedExecuteFixture } from "@/e2e/execute-fixture-gate"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
@@ -93,6 +95,14 @@ const appStore = useAppStore()
 const profile = ref<ProfileInfo>()
 
 const router = useRouter()
+
+/**
+ * Armed builds only: the fixture the route names, shown in place of a stored request. It answers no
+ * request: `requestId` stays unset, so Confirm, Reject and the unload reach none, and its estimates
+ * come from the fixture, never the worker.
+ */
+const fixtureName = armedExecuteFixture ? router.currentRoute.value.query.fixture?.toString() : undefined
+let fixtureEstimates: readonly TransferFeeEstimate[] | undefined
 
 const session = ref()
 const operations = ref<UIOperation[]>([])
@@ -221,12 +231,15 @@ const {
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
 	estimate: (params, estimateToken, flowKey, signal) =>
-		estimateWhenClear(
-			() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
-			signal,
-			queueWatch(params.index, estimateToken, signal),
-		),
-	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
+		armedExecuteFixture && fixtureEstimates
+			? Promise.resolve(fixtureEstimates[params.index])
+			: estimateWhenClear(
+					() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
+					signal,
+					queueWatch(params.index, estimateToken, signal),
+				),
+	cancelRemote: (estimateToken) =>
+		armedExecuteFixture && fixtureEstimates ? undefined : executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 500,
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
@@ -370,6 +383,7 @@ const {
 const init = async () => {
 	try {
 		profile.value = await profileService.getActiveProfile()
+		if (armedExecuteFixture && fixtureName) return showFixture(armedExecuteFixture, fixtureName)
 		await loadInteractionPayload()
 		if (!payload.value) return
 
@@ -384,11 +398,7 @@ const init = async () => {
 		// is dismissed mid-init (cancel from another window) we want the
 		// approve gate to stay closed.
 		initComplete.value = resolved.operations.length > 0
-		for (const [index, op] of resolved.operations.entries()) {
-			if (op.kind === "aztec_sendTx" && op.executionMode === "default_entrypoint") scheduleAuthwitPreview(index, { index })
-			// No fee card asks for these: the estimate runs once, to check the app's own fee contract.
-			else if (isAppPaid(op)) scheduleFeeEstimate(index, { index, feeSettings: { paymentMethod: { kind: "embedded" } } })
-		}
+		askOpeningEstimates(resolved.operations)
 		// None is awaited here. A call's decode never gates Confirm: a slow one leaves the card on its
 		// vocabulary reading or "Reading arguments…", and a failed one falls back to the raw fields.
 		void decodeOperationArguments(resolved.operations, executionService, (index, decoded) => decodedCalls.value.set(index, decoded))
@@ -411,6 +421,33 @@ const init = async () => {
 		console.error("Failed to initialize execution", { error })
 		setError("Something went wrong")
 	}
+}
+
+/** The asks no fee card makes: the previews of a send the dApp pays, and the one estimate of a send
+ *  its app pays, which checks the app's own fee contract. */
+function askOpeningEstimates(ops: UIOperation[]): void {
+	for (const [index, op] of ops.entries()) {
+		if (op.kind === "aztec_sendTx" && op.executionMode === "default_entrypoint") scheduleAuthwitPreview(index, { index })
+		else if (isAppPaid(op)) scheduleFeeEstimate(index, { index, feeSettings: { paymentMethod: { kind: "embedded" } } })
+	}
+}
+
+/** Commits the named fixture as `init` commits a loaded request, with no request behind it. */
+function showFixture(executeFixture: NonNullable<typeof armedExecuteFixture>, name: string): void {
+	const { account, network } = appStore
+	const fixture = account && network ? executeFixture(name, account, network) : undefined
+	if (!account || !fixture) return
+	;(globalThis as { __NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP__?: string | null }).__NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP__ =
+		E2E_EXECUTE_FIXTURE_BUILD_STAMP
+	fixtureEstimates = fixture.feeEstimates
+	dapp.value = fixture.dapp
+	knownTokens.value = fixture.tokens
+	decodedAuthwits.value = new Map(fixture.decodedAuthwits)
+	for (const [index, decoded] of fixture.decodedCalls.entries()) decodedCalls.value.set(index, decoded)
+	accounts.value = [account]
+	operations.value = fixture.operations
+	initComplete.value = true
+	askOpeningEstimates(fixture.operations)
 }
 
 /** Best-effort per-op metadata prefetch; a failed preview records its error
@@ -603,6 +640,7 @@ const needsFeeSelection = computed(() =>
 /** Every hold on Confirm but the fee pick, which approve() answers with a warning instead. */
 const confirmBlocked = computed(
 	() =>
+		!requestId.value ||
 		isInteractionCancelled.value ||
 		!initComplete.value ||
 		operations.value.length === 0 ||

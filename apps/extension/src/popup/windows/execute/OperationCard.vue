@@ -54,6 +54,7 @@ import {
 	outflowLabel,
 	authwitTitle,
 	callSurface,
+	rawRows,
 	rowTitle,
 	tokenAt,
 	wire,
@@ -419,7 +420,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 							<Text variant="meta" color="primary">{{ rowTitle(call, surface) }}</Text>
 							<Text variant="caption" color="secondary">on <AddressDisplay :address="call.to" data-testid="execute-op-call-to" /></Text>
 						</Flex>
-						<CallArguments :surface="surface" :contract="call.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-op" json-view />
+						<CallArguments :surface="surface" :contract="call.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-op" json-view :raw="rawRows(call.args)" />
 					</Flex>
 					<Flex
 						v-for="group in authwitGroups"
@@ -464,7 +465,15 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 								@click="toggleAuthwit(a)"
 							/>
 							<Flex v-if="isAuthwitOpen(a)" :id="`${detailsId}-${k}`" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
-								<CallArguments :surface="authwitArgs(a)" :contract="a.consumer" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-discovered-authwit" :advice="adviceOnAuthwit(k)" />
+								<CallArguments
+									:surface="authwitArgs(a)"
+									:contract="a.consumer"
+									:chainId="op.network?.chainId"
+									:tokens="tokens"
+									prefix="execute-discovered-authwit"
+									:advice="adviceOnAuthwit(k)"
+									:raw="rawRows(a.args, Number.POSITIVE_INFINITY)"
+								/>
 								<Flex justify="between" :class="$style.row">
 									<Text variant="label-section" color="secondary">Inner hash:</Text>
 									<Text variant="meta" color="primary" :title="safeWire(a.innerHash, 80)" data-testid="execute-discovered-inner-hash">{{ trimAddress(safeWire(a.innerHash, 80), 10, 6) }}</Text>
