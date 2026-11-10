@@ -7,7 +7,7 @@
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { reloadExtensionPage, setViewport } from "./fixtures/browser"
+import { BROWSER, reloadExtensionPage, setViewport } from "./fixtures/browser"
 import { clickByTestId, openPopup, test } from "./fixtures/extension"
 import { shotSend } from "./fixtures/shots"
 
@@ -92,7 +92,9 @@ describe.skipIf(!ARMED)("the execute window's value tree, over the fixtures", ()
 					await openFixture(page, name, width)
 					await openDetails(page, name)
 					expect(await textPastCard(page), `${name} at ${width} px`).toEqual([])
-					if (name === "batch" || name === "deep") await shotSend(page, `a1-${name}-details-${width}`, "execute-op-details")
+					// Firefox refuses a capture of an extension page (`FIREFOX.md`).
+					if (BROWSER === "chrome" && (name === "batch" || name === "deep"))
+						await shotSend(page, `execute-${name}-details-${width}`, "execute-op-details")
 				}
 			}
 		} finally {

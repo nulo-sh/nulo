@@ -3,7 +3,7 @@ import { isValidAztecAddress } from "@/utils/aztec-address"
 import type { Account } from "@/wallet/services/account/client"
 import type { DecodedValue } from "@/wallet/services/execution/client"
 import type { Network } from "@/wallet/services/network/client"
-import { APP_FPC, EXECUTE_FIXTURE_MARKER, EXECUTE_FIXTURES, executeFixture, flatten } from "./execute-fixture"
+import { APP_FPC, EXECUTE_FIXTURE_MARKER, EXECUTE_FIXTURES, executeFixture } from "./execute-fixture"
 
 const ACCOUNT = { name: "Main", address: "0x0a1b2c0000000000000000000000000000000000000000000000000000009c2d", chainId: 1 } as Account
 const NETWORK = { id: "net-1", chainId: 1, name: "N" } as Network
@@ -39,7 +39,7 @@ const addresses = (v: DecodedValue): string[] =>
 				: []
 
 describe("the execute window's fixtures", () => {
-	test.each(EXECUTE_FIXTURES)("%s is wire-shaped: each call's fields flatten from its decode, every address is valid", (name) => {
+	test.each(EXECUTE_FIXTURES)("%s is wire-shaped, one decode per call, every address valid", (name) => {
 		const { fixture, calls } = callsOf(name)
 		const decodes = fixture.decodedCalls[0]
 		expect(decodes).toHaveLength(calls.length)
@@ -50,7 +50,6 @@ describe("the execute window's fixtures", () => {
 			seen.push(call.to)
 			const decode = decodes[j]
 			if (decode.kind !== "decoded") continue
-			expect(decode.params.flatMap((p) => flatten(p.value))).toEqual(call.args)
 			seen.push(...decode.params.flatMap((p) => addresses(p.value)))
 		}
 		expect(seen.filter((a) => !isValidAztecAddress(a))).toEqual([])

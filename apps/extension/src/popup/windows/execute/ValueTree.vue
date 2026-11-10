@@ -91,7 +91,6 @@ const indent = computed(() => (props.depth + 1 > 6 ? "tight" : props.depth + 1 >
 	text-align: right;
 }
 
-/* A whole value takes the row's full width, under its name. */
 .full {
 	flex-direction: column;
 	gap: 2px;
@@ -130,7 +129,7 @@ const indent = computed(() => (props.depth + 1 > 6 ? "tight" : props.depth + 1 >
 		row-gap: 2px;
 
 		> .name {
-			max-width: none;
+			max-width: 100%;
 			overflow-wrap: break-word;
 		}
 

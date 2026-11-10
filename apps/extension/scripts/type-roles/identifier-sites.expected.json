@@ -91,7 +91,7 @@
 				}
 			],
 			"digests": {
-				"apps/extension/src/e2e/execute-fixture.ts": "9d6b217f7d4972ef40a6374956b79899ec02e05db50ecd90926c764601c8182e",
+				"apps/extension/src/e2e/execute-fixture.ts": "3b514ba17bbf333ae490baa33748628511ba4402b19b8a68f13df8a440e979f2",
 				"packages/wallet-bridge/src/dispatcher.ts": "a7a81b849e72d78ec910e2d883faac29b117233f98554a7d98f748e5e1443b41"
 			},
 			"evidence": [

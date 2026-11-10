@@ -509,7 +509,12 @@ describe("execute window — an armed build's fixture", () => {
 		w = factory()
 		await completeInit({ id: "p1" })
 		expect(approval.requestId.value).toBe("req-123")
-		expect(estimateOperationFeeMock).not.toHaveBeenCalled()
+		const fees = feeMapInstances[0]
+		const feeSettings = { paymentMethod: { kind: "embedded" } }
+		await fees.opts.estimate({ index: 0, feeSettings }, "t", "f", new AbortController().signal)
+		fees.opts.cancelRemote?.("t")
+		expect(estimateOperationFeeMock).toHaveBeenCalledWith("req-123", 0, feeSettings, "t", "f")
+		expect(cancelEstimateMock).toHaveBeenCalledWith("t")
 	})
 })
 

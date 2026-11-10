@@ -3,8 +3,7 @@
  * (`VITE_NULO_E2E_EXECUTE_FIXTURE=1`, see `./config.ts`) when its route names one
  * (`#/windows/execute?fixture=batch`): the smoke suite's way to lay out what no live dApp sends, a
  * struct, a deep value, the decoder's hostile extremes. Every call is wire-shaped (`0x` + 64 hex per
- * field, flattened from its decode in ABI order) and every decode is a record the decoder returns.
- * The component tests feed the same requests.
+ * field, flattened from its decode in ABI order). The component tests feed the same requests.
  */
 import type { DraftUIOperation } from "@/popup/windows/execute/types"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
@@ -75,7 +74,7 @@ const st = (fields: Record<string, DecodedValue>): DecodedValue => ({
 })
 
 /** The fields a decoded value encodes into, in ABI order. */
-export const flatten = (v: DecodedValue): string[] => {
+const flatten = (v: DecodedValue): string[] => {
 	switch (v.kind) {
 		case "address":
 		case "field":
@@ -155,9 +154,11 @@ const depthSpec = (): Spec => ({
 	params: { config: nest(31, st({ limit: int(42) }), (inner, level) => st({ [`level_${32 - level}`]: inner })) },
 })
 
-/** Two leaves of one name past the sixth level, under parents of one name, told apart only by ancestry. */
+/** Two leaves of one name past the sixth level, under parents of one name, told apart only by ancestry;
+ *  beside each, a name of the 32 characters a row prints, with no break opportunity. */
 const ancestrySpec = (): Spec => {
-	const branch = (amount: number) => nest(6, st({ amount: int(amount) }), (inner) => st({ leg: inner }))
+	const branch = (amount: number) =>
+		nest(6, st({ amount: int(amount), maximum_slippage_basis_points_in: int(30) }), (inner) => st({ leg: inner }))
 	return {
 		name: "rebalance",
 		to: ROUTER,
