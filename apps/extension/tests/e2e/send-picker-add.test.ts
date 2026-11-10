@@ -7,9 +7,9 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { clickByTestId, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
-import { getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
+import { getAccountAddress, navigateByHash, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
-import { heldListEntries, skipUnlessListPrices } from "./fixtures/token-list"
+import { E2E_LIST_TOKENS, heldListEntries, skipUnlessListPrices } from "./fixtures/token-list"
 import { waitForNewTokenAddress } from "./fixtures/tokens"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
 import { focusInPopupOf, pressEscape, waitForFocus } from "./helpers/pointer-probes"
@@ -54,6 +54,9 @@ test("the Send picker: New token opened from a pasted address's add row closes b
 	await page.waitForSelector(sel("send-token-symbol"), VISIBLE)
 	await replaceInputValue(page, `${sel("send-destination-field")} input`, recipient)
 	const pictured = heldListEntries().some((e) => e.address === scope.token.contract && e.icon !== undefined)
+	expect(pictured || !E2E_LIST_TOKENS.some((e) => e.address === scope.token.contract), "a source run's list pictures its tokens").toBe(
+		true,
+	)
 	const listedMark = pictured ? { kind: "logo", width: expect.any(Number) } : { kind: "initials", width: 0 }
 	const asset = await drawnMark(page, sel("send-token-trigger"))
 	expect(asset).toEqual(listedMark)
@@ -64,12 +67,6 @@ test("the Send picker: New token opened from a pasted address's add row closes b
 	await page.focus(sel("send-token-trigger"))
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(sel("select-token-search"), VISIBLE)
-	const row = (symbol: string) => `${sel("select-token-row")}[data-symbol="${symbol}"]`
-	const listedRow = await drawnMark(page, row(scope.token.symbol))
-	expect(listedRow).toEqual(listedMark)
-	if (pictured) expect(listedRow.width).toBeGreaterThan(0)
-	expect(await drawnMark(page, row(ADDED.symbol))).toEqual({ kind: "initials", width: 0 })
-	await shotSend(page, "send-picker-marks", "select-token-search")
 	await replaceInputValue(page, sel("select-token-search"), UNLISTED)
 	await page.waitForSelector(sel("select-token-add-token"), VISIBLE)
 	// No list flags this address, in either run mode.
@@ -95,6 +92,15 @@ test("the Send picker: New token opened from a pasted address's add row closes b
 	await waitForFocus(page, "send-token-trigger")
 	expect(await page.$eval(sel("send-token-symbol"), (el) => el.textContent?.trim())).toBe(scope.token.symbol)
 	expect((await readSendInputs(page)).destination).toBe(recipient)
+
+	await navigateByHash(page, "#/popup/tokens/2", 10_000)
+	await page.waitForFunction(
+		(s: string, symbol: string) => document.querySelector(s)?.textContent?.trim() === symbol,
+		{ timeout: 10_000 },
+		sel("subpage-title"),
+		ADDED.symbol,
+	)
+	expect(await drawnMark(page, `:has(> ${sel("subpage-title")})`)).toEqual({ kind: "initials", width: 0 })
 
 	expect(ctx.consoleErrors).toEqual([])
 	expect(ctx.pageErrors).toEqual([])

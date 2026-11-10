@@ -5,14 +5,14 @@
 import { type TokenListPair, tokenKey } from "@nulo/token-list"
 
 /** The one key a list pair and a row meet on; `tokenIconsOf` keys pictures with it too. */
-export const keyOf = (chainId: number, address: string): string => tokenKey(chainId, `0x${address.replace(/^0x/i, "")}`)
+export const listKeyOf = (chainId: number, address: string): string => tokenKey(chainId, `0x${address.replace(/^0x/i, "")}`)
 
 /** The keys the worker sends; the popup matches rows against them with {@link isFlaggedToken}. */
 export function flaggedKeysOf(pairs: readonly TokenListPair[]): string[] {
-	return pairs.map((pair) => keyOf(pair.chainId, pair.address))
+	return pairs.map((pair) => listKeyOf(pair.chainId, pair.address))
 }
 
 export function isFlaggedToken(flagged: ReadonlySet<string>, token: { chainId?: number; contract?: string } | undefined): boolean {
 	if (typeof token?.chainId !== "number" || typeof token.contract !== "string") return false
-	return flagged.has(keyOf(token.chainId, token.contract))
+	return flagged.has(listKeyOf(token.chainId, token.contract))
 }

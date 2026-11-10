@@ -9,7 +9,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { ImportedAccountUnusableError, JobCancelledError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
 import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
-import { flaggedKeysOf, keyOf } from "@/utils/token-flag"
+import { flaggedKeysOf, listKeyOf } from "@/utils/token-flag"
 import { TEST_FLAGGED, TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
 
 const ACCOUNT = "0xacct"
@@ -2126,7 +2126,7 @@ describe("send page — a token the signed list flags", () => {
 	test("the token card is handed the active token's flag and the list's picture for it", async () => {
 		const scam = { ...TOKEN, id: 8, symbol: "SCAM", contract: TEST_FLAGGED.address }
 		mocks.flagged.current = flaggedKeysOf([{ chainId: TOKEN.chainId, address: TEST_FLAGGED.address }])
-		mocks.icons.current = { [keyOf(TOKEN.chainId, TOKEN.contract)]: TEST_ICONS.USDC }
+		mocks.icons.current = { [listKeyOf(TOKEN.chainId, TOKEN.contract)]: TEST_ICONS.USDC }
 		mocks.getTokens.mockResolvedValue([TOKEN, scam])
 		const { w, cacheStore } = await mountSend()
 		const card = () => w.findComponent({ name: "SelectTokenCard" })

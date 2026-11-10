@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, reactive } from "vue"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
-import { flaggedKeysOf, keyOf } from "@/utils/token-flag"
+import { flaggedKeysOf, listKeyOf } from "@/utils/token-flag"
 import { TEST_FLAGGED, TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
 
 const { pinStore } = await vi.hoisted(() => import("../../../../tests/helpers/ui-preference-fake"))
@@ -288,7 +288,7 @@ describe("token page — the header's mark", () => {
 		})
 		H.cache.current = reactive({ confirm: {}, activeTokenIdx: undefined })
 		H.flagged.current = flaggedKeysOf([{ chainId: 7, address: TEST_FLAGGED.address }])
-		H.icons.current = { [keyOf(7, addr(1))]: TEST_ICONS.USDC }
+		H.icons.current = { [listKeyOf(7, addr(1))]: TEST_ICONS.USDC }
 	})
 
 	const mark = (w: ReturnType<typeof mount>) => w.get('[data-testid="token-mark"]')

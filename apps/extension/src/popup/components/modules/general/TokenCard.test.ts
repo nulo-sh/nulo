@@ -6,7 +6,7 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import type { PriceState } from "@/wallet/services/price/spec"
 import TokenCard from "./TokenCard.vue"
 import { boundAttr, declarationsOf, elementByTestid, parseSource, walkElements } from "../../../../../scripts/type-roles/source-scan"
-import { flaggedKeysOf, keyOf } from "@/utils/token-flag"
+import { flaggedKeysOf, listKeyOf } from "@/utils/token-flag"
 import { TEST_FLAGGED, TEST_ICONS, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 // TokenCard imports useAppStore but never reads from it. The store body calls
@@ -447,7 +447,7 @@ describe("TokenCard — the token's mark", () => {
 
 	test("a listed token leads with the list's picture at 32 px; a token not on the list with its initials", async () => {
 		mockQuotes = {}
-		mockIcons = { [keyOf(TEST_FLAGGED.chainId, TEST_USDC)]: TEST_ICONS.USDC }
+		mockIcons = { [listKeyOf(TEST_FLAGGED.chainId, TEST_USDC)]: TEST_ICONS.USDC }
 		try {
 			const listed = factory({ updatedAt: 1 }, { chainId: TEST_FLAGGED.chainId, contract: TEST_USDC, symbol: "USDC" })
 			const custom = factory({ updatedAt: 1 }, { chainId: TEST_FLAGGED.chainId, symbol: "mine" })
