@@ -128,3 +128,28 @@ describe("e2e-wallet-clocks config", () => {
 		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBe("NULO_E2E_WALLET_CLOCKS_BUILD_STAMP")
 	})
 })
+
+/** The execute fixtures: a build without the flag has neither the fixture route nor the stamp. */
+describe("e2e-execute-fixture config", () => {
+	beforeEach(() => {
+		vi.resetModules()
+	})
+	afterEach(() => {
+		vi.unstubAllEnvs()
+		vi.resetModules()
+	})
+
+	test("unset → off, no build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXECUTE_FIXTURE", "")
+		const mod = await import("./config")
+		expect(mod.E2E_EXECUTE_FIXTURE).toBe(false)
+		expect(mod.E2E_EXECUTE_FIXTURE_BUILD_STAMP).toBeNull()
+	})
+
+	test("1 → on, with the build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXECUTE_FIXTURE", "1")
+		const mod = await import("./config")
+		expect(mod.E2E_EXECUTE_FIXTURE).toBe(true)
+		expect(mod.E2E_EXECUTE_FIXTURE_BUILD_STAMP).toBe("NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP")
+	})
+})

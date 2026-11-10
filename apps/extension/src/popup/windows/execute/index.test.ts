@@ -28,6 +28,7 @@ import {
 	onActiveProfileChangedAddMock,
 	rejectViaInteractionServiceMock,
 	resetWindowHarness,
+	routerModule,
 	windowsRemoveMock,
 } from "../../../../tests/helpers/approval-window-harness"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
@@ -177,6 +178,14 @@ vi.mock("@/wallet/services/dapp-interaction/client", async () =>
 	})),
 )
 vi.mock("@/stores/app.store", async () => (await import("../../../../tests/helpers/approval-window-harness")).appStoreModule)
+/** Whether the build under test is armed with the execute fixtures; read at each mount. */
+const fixtureBuild = vi.hoisted(() => ({ armed: false }))
+vi.mock("@/e2e/config", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/e2e/config")>()),
+	get E2E_EXECUTE_FIXTURE() {
+		return fixtureBuild.armed
+	},
+}))
 vi.mock("vue-router", async (importOriginal) => ({
 	...(await importOriginal<typeof import("vue-router")>()),
 	...(await import("../../../../tests/helpers/approval-window-harness")).routerModule,
@@ -439,6 +448,67 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		window.dispatchEvent(new Event("beforeunload"))
 		await flushPromises()
 		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "lock")
+	})
+})
+
+/**
+ * An armed build shows the fixture its route names. The route may also carry a live request's id (a
+ * window opened for a real request, its URL edited): the fixture is never bound to it, so nothing the
+ * window does reaches that request or the worker's estimates.
+ */
+describe("execute window — an armed build's fixture", () => {
+	const route = routerModule.useRouter().currentRoute.value as { query: Record<string, string> }
+	const liveQuery = route.query
+	const fixtureAccount = { name: "Main", address: "0x0a1b2c0000000000000000000000000000000000000000000000000000009c2d", chainId: 1 }
+
+	beforeEach(() => {
+		route.query = { ...liveQuery, fixture: "batch" }
+		Object.assign(approval.appStore, { account: fixtureAccount, network: { id: "net-1", chainId: 1, name: "N" } })
+	})
+	afterEach(() => {
+		fixtureBuild.armed = false
+		route.query = liveQuery
+	})
+
+	test("renders the fixture and answers no request: Confirm, Reject and the unload send nothing", async () => {
+		fixtureBuild.armed = true
+		w = factory()
+		await flushPromises()
+		approval.resolveProfile?.({ id: "p1" })
+		await vi.dynamicImportSettled()
+		await flushPromises()
+		const vm = w.vm as unknown as ExecVm
+		expect(approval.resolveLoad).toBeUndefined()
+		expect(approval.requestId.value).toBeUndefined()
+		expect(vm.operations).toHaveLength(1)
+		expect(vm.initComplete).toBe(true)
+
+		// The app-paid fixture's opening estimate is answered by the fixture, never the worker.
+		const fees = feeMapInstances[0]
+		expect(fees.api.estimate).toHaveBeenCalledWith(0, { index: 0, feeSettings: { paymentMethod: { kind: "embedded" } } })
+		const answered = (await fees.opts.estimate({ index: 0 }, "t", "f", new AbortController().signal)) as {
+			discoveredAuthwits: unknown[]
+		}
+		expect(answered.discoveredAuthwits).toHaveLength(2)
+		fees.opts.cancelRemote?.("t")
+		expect(estimateOperationFeeMock).not.toHaveBeenCalled()
+		expect(cancelEstimateMock).not.toHaveBeenCalled()
+
+		expect(w.find('[data-testid="execute-confirm-btn"]').attributes("disabled")).toBeDefined()
+		await vm.approve()
+		await vm.reject("reject")
+		window.dispatchEvent(new Event("beforeunload"))
+		await flushPromises()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
+		expect(windowsRemoveMock).not.toHaveBeenCalled()
+	})
+
+	test("control: the same route on a build without the fixtures loads its request", async () => {
+		w = factory()
+		await completeInit({ id: "p1" })
+		expect(approval.requestId.value).toBe("req-123")
+		expect(estimateOperationFeeMock).not.toHaveBeenCalled()
 	})
 })
 
