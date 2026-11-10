@@ -1,0 +1,6 @@
+# Phase 5: a2 e2e, browser proof and gates
+
+- The first armed Chrome run of `execute-steps.test.ts` walked past the node to `body`: the fixture loads no request, so Reject (`!requestId`) and Confirm (`confirmBlocked`) are disabled, and D17 forbids the fixture a request id. The prototype counted 9 and 19 because it set one. The spec now walks the card's stops (7 at rest, 17 open) and asserts the footer's two buttons follow the card, held; under a request they add two, 9 and 19.
+- The second run walked from the node, not the top: a `blur()` leaves the browser's sequential focus start point at the last element pressed. `tabWalk` now focuses a `tabindex="-1"` anchor prepended to `body`, then removes it.
+- `expectCallCaptionsWhole` kept "the address on one line, inside its step" and dropped "the address beside on": the signed 240 px frame breaks the line after "on".
+- Dev runs, armed, retry 0, load1 about 200 on 188 cores: Chrome 9 green and 1 capture test (69.8 s); Firefox 9 green (93.8 s). Paint after one press: `wide` 32,769 rows 3,395 ms Chrome, 3,105 ms Firefox; `wide-authwits` 65,538 rows 6,275 ms Chrome, 5,448 ms Firefox (saturated host, inconclusive as a1's measure).

@@ -12,3 +12,5 @@
 - 2026-11-10: a1 final gates on bc63c57aa: audit:vue, test:all, test:release (local zip), check:plans green; smoke Chrome armed green (30.1 s), release-build negative green; network Chrome green (13/13, at 788458d63).
 - 2026-11-10: a1 network Firefox green (13/13, final code); all a1 gates green; opening the PR.
 - 2026-11-10: a1 PR #1776 open, ready, every check green at 81277dd; wide 1,342 ms on CI Chrome. a1 done.
+- 2026-11-10: a2 Phase 4 gate green on c7003ddf8 (lint, typecheck:all, test, test:components, test:all; test:all red once on an untouched 5 s timeout at load1 261/188, green on its one retry).
+- 2026-11-10: a2 Phase 5 e2e written; dev runs of execute-steps armed green on Chrome and Firefox after two spec fixes (the footer is held in a fixture; the Tab walk starts from an anchor).
