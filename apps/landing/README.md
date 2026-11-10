@@ -22,6 +22,7 @@ Marketing landing page for the wallet (nulo.sh). Standalone Vite app; ships inde
 | `src/styles/overrides.css` | The few corrections a web page needs on top of `@nulo/design/base.css` (link colour, focus ring, selectable text, visible scrollbars). |
 | `src/styles/page.css` | Page presentation: plates, bar, hero overlay, sections, breakpoints. |
 | `src/changelog.ts`, `src/styles/changelog.css` | The changelog pages' entry and sheet: the cards' staggered reveal (an `IntersectionObserver`, skipped under reduced motion, so nothing is hidden without script), hover in CSS only, and the light theme by `prefers-color-scheme`. |
+| `scripts/og-card.ts`, `scripts/png.ts`, `scripts/render-og-cards.ts` | The changelog's Open Graph cards (§ Changelog pages): the card document, the PNG size and `tEXt` stamp, and the hand-run Puppeteer renderer. |
 | `scripts/headers.ts` | Parses the site-wide block of `public/_headers` so `vite preview` serves the production CSP. |
 | `public/` | `_headers` (CSP and caching, applied by Cloudflare), favicon, robots, sitemap, and `og.png`, the 1200×630 link-preview image: the desktop hero captured with reduced motion and the clock hidden. Recapture it when the hero changes. `og-video.mp4` is the og:video, a silent 10 s teaser at 1280×720 (the feed finds a subject, enhances twice, finds nothing, then the mark; no date, so it outlives the launch). Discord and some other apps play it in a nulo.sh link preview; X ignores og:video and shows `og.png`. |
 | `vite.config.ts` | Vite config, including `preview.headers` from `_headers`. |
@@ -35,7 +36,8 @@ Marketing landing page for the wallet (nulo.sh). Standalone Vite app; ships inde
 | `bun run build` | Production build → `dist/`. |
 | `bun run preview` | Preview the production build with the production response headers. |
 | `bun run typecheck` | `tsc --noEmit`. |
-| `bun run test` | Unit tests (renderer, headers parser and the production policy, legal and changelog pages, browser detection, the clips' clock and markup, the signup markup and a scratch production build's origins, the signup module, the Worker's routing and `wrangler.jsonc`). |
+| `bun run og:cards` | Renders each missing or stale changelog card into `content/changelog/` (local only; needs Puppeteer's Chrome). |
+| `bun run test` | Unit tests (renderer, headers parser and the production policy, legal and changelog pages, the changelog cards and their PNG stamp, browser detection, the clips' clock and markup, the signup markup and a scratch production build's origins, the signup module, the Worker's routing and `wrangler.jsonc`). |
 | `bun run deploy:dry` | Validate `wrangler.jsonc` against the built `dist/`; needs no credentials. |
 | `bun run deploy`, `bun run deploy:preview` | The production (`main`) and other-branch commands to configure when connecting Workers Builds in the Cloudflare dashboard. By hand only to create the Worker. |
 
@@ -80,3 +82,15 @@ A release above the root `package.json` version is a draft. A production build (
 `WORKERS_CI_BRANCH=main`) leaves drafts out; every other build renders them and marks every changelog
 page `noindex`, so a page goes live when the Release PR's version bump reaches `main`. The outputs
 (`changelog/`, `src/generated/changelog-pages.json`) are gitignored.
+
+Each page names its own Open Graph card: `content/changelog/X.Y.Z.og.png` for a release and
+`index.og.png` for the index, which shows the newest TOML, a draft's too. `bun run og:cards`
+renders them, 1200×630, from the TOML alone (version, date, title, the change titles and glyphs),
+with every word inside the middle 1200×600 that a 2:1 crop keeps. It refuses a text box over its
+line budget, wider than its column or outside that area, and any request beyond the card's own
+inline fonts; it rewrites only a missing or stale card and deletes one whose TOML is gone. Each
+card carries the SHA-256 of the document it was drawn from in a `tEXt` chunk, so
+`scripts/og-card.test.ts` refuses a missing, mis-sized or stale card without a browser; it proves
+staleness only, so review the picture itself. The build copies each listed page's card to
+`public/changelog/` (gitignored), served as `/changelog/vX.Y.Z/og.png` and `/changelog/og.png`, and
+fails on a missing one.
