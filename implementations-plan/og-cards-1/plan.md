@@ -1,7 +1,7 @@
 ---
 plan: og-cards-1
 tier: light
-status: arc 1 in review (2026-11-10); waits for the owner on OA1 to OA3
+status: completed
 issues: "#1775"
 driver: claude-code
 claude_model: opus
@@ -15,9 +15,22 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-11-10.
+- **Status:** completed. Ships in #1777 (`feat(landing): a committed open graph card per changelog release`), whose merge closes #1775 and this plan; the final code commit is `8c2e86fe1`, and the close-out commits on top merge `origin/dev` at `b557cb159` and touch only `implementations-plan/`. The plan runs 155 lines, over light's 150 by this block; § Audit verdicts holds the review loop.
+- **Shipped:** O2. A hand-run Puppeteer renderer (`bun run --cwd apps/landing og:cards`) writes a 1200×630 card per release and one for the index into `apps/landing/content/changelog/`, stamped with its document's SHA-256 in a `tEXt` chunk; `og-card.test.ts` refuses a missing, mis-sized, unstamped or stale card with no browser; every changelog page carries the 13 `og:`/`twitter:` tags naming its own card, which the build copies to a gitignored `public/changelog/`; the release skill's § Release notes and the landing README name the step. The 1.1.0, 1.2.0 and index cards ship as rendered.
+- **Owner's sign-off:** decision page 132, signed 2026-11-10 21:09 UTC (`OWNER-ASKS.md`). P132-02 (approve): "Land #1777 as drawn: a committed Open Graph card per changelog release (your O2). The three cards' look and their alt text", so OA1 and OA3 are signed as shown. P132-03 = A: "As built: the word Changelog, then the newest release's version, date, title and tiles. Can run ahead of the page between a promote and the Release PR's merge.", so OA2 is A and nothing re-renders.
+- **Gates at the final code commit:** lint, `typecheck:all`, `test:all` (one load-timed extension test outside the diff passed on its retry), the landing's `test` and `build` (13 tags, the cards byte-equal in `dist/`), `check:plans`; every PR check green, the Workers Builds preview included. No e2e path touched.
+- **Deviations:** D11 (a declared line budget per box), D12 (the PNG tests in `og-card.test.ts`), the card size constants in `changelog-pages.ts` (`lessons/phase-2.md`).
+- **Known limits:** #1779 (D6: the index card can name the next release before production lists it).
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` holds 8192 of its 8192 bytes and no entry is superseded; the `spawnSync` 1 MiB reply cap is guarded where it bit (`cardStamps`) and recorded in `lessons/phase-2.md`.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
+
 # og-cards-1: a committed Open Graph card per changelog release
 
-A shared `/changelog/vX.Y.Z/` link previews as the site's generic `og.png`, and the changelog pages lack `og:url`, the image size and alt, and every `twitter:*` tag (#1775). The owner picked O2 on 2026-11-10 ("O2 sounds like the best way"): a hand-run script renders a 1200×630 card per release from its TOML into `apps/landing/content/changelog/`, a test refuses a missing, mis-sized or stale card, and the page names its own card. The pick signs the mechanism; the cards' look waits for the owner's sign-off on the PR body's pictures. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/landing/` unless they say otherwise.
+A shared `/changelog/vX.Y.Z/` link previews as the site's generic `og.png`, and the changelog pages lack `og:url`, the image size and alt, and every `twitter:*` tag (#1775). The owner picked O2 on 2026-11-10 ("O2 sounds like the best way"): a hand-run script renders a 1200×630 card per release from its TOML into `apps/landing/content/changelog/`, a test refuses a missing, mis-sized or stale card, and the page names its own card. The pick signs the mechanism; decision page 132 (2026-11-10 21:09 UTC) signed the cards' look, their alt text and the index card's form. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/landing/` unless they say otherwise.
 
 ## Outcome & Quality Bar
 
@@ -40,9 +53,9 @@ A shared `/changelog/vX.Y.Z/` link previews as the site's generic `og.png`, and 
 - I1. Adding `puppeteer` `^25.14.0` to the landing's devDependencies adds no package to `bun.lock`: proved when the lock diff touches only the landing workspace's `devDependencies`. The non-frozen `bun install` after the edit re-gates the landing's tree (CLAUDE.md § Dependency policy), so its success is the age-gate proof. Workers Builds' install is configured in the dashboard, outside the repo; Bun installs every workspace from any member directory, and the extension already declares Puppeteer (whose postinstall fetches Chrome), so the landing build's package set and downloads stay as they are (plausible, moderate confidence; the PR's Workers Builds preview build is the check).
 - I2. The stamp is written after Chrome encodes the PNG and the test reads the committed file, so nothing downstream needs to keep the chunk.
 
-**Asks** (no owner to ask; working assumption stated, owner sees it in the PR body)
-- A1. The index card shows the word Changelog, the newest TOML's version and title, and its change icons (the lane brief). The window in D6 is the owner's call: `OWNER-ASKS.md` OA2 blocks the merge with OA1. Working assumption: build the brief's form.
-- A2. Alt text: `Nulo 1.2.0: Read before you sign.` on a release page, `Nulo changelog: Nulo 1.2.0, Read before you sign.` on the index (TOML words only). Working assumption: ship it; it is in the PR body for sign-off.
+**Asks** (no owner to ask while building; both answered by page 132)
+- A1. The index card shows the word Changelog, the newest TOML's version and title, and its change icons (the lane brief). The window in D6 is the owner's call: `OWNER-ASKS.md` OA2 blocks the merge with OA1. Answered: P132-03 = A, as built.
+- A2. Alt text: `Nulo 1.2.0: Read before you sign.` on a release page, `Nulo changelog: Nulo 1.2.0, Read before you sign.` on the index (TOML words only). Answered: signed by P132-02, as shown.
 
 ## Architecture & Implementation
 
@@ -71,7 +84,7 @@ A shared `/changelog/vX.Y.Z/` link previews as the site's generic `og.png`, and 
 | D3 | What the hash covers | SHA-256 of the whole card document, so the TOML fields the card shows, the template, the glyph paths and the font bytes all count, and a TOML comment or `line` edit does not | the TOML bytes plus a hand-bumped template version: a forgotten bump passes a stale card |
 | D4 | Share `store-art.ts`'s `render` | copy its twelve lines | a new workspace package for two callers in two apps: a layer for twelve lines |
 | D5 | Ship the card in `dist/` | copy into a gitignored `public/changelog/` at `prebuild` | a Vite `emitFile` plugin: more code for the same copy; committing under `public/`: two homes per card |
-| D6 | The index card in the promote → release window | the owner decides (OA2, merge-blocking with OA1): production lists the previous release while the committed index card names the new one, until the Release PR merges, which nothing bounds; on acceptance, a closed `known-limit` issue at close-out | a build-time fallback to the previous card: a recovery branch the owner did not ask for |
+| D6 | The index card in the promote → release window | the owner's A (P132-03, page 132, signed 2026-11-10 21:09 UTC): "As built: the word Changelog, then the newest release's version, date, title and tiles. Can run ahead of the page between a promote and the Release PR's merge." Production lists the previous release while the committed index card names the new one, until the Release PR merges, which nothing bounds: known limit #1779 | a build-time fallback to the previous card: a recovery branch the owner did not ask for |
 | D7 | A title too long for the card | the renderer refuses on either axis or outside the safe rectangle, and names the box | auto-shrink or clamp: hides or distorts the author's words |
 | D8 | Nothing outside the document | interception aborts every non-`data:` request and the run fails if one happened (Puppeteer reports `data:` loads as requests it cannot intercept), so the hash covers all that is drawn | trust the template: one stray `url()` makes the hash a lie |
 | D9 | What the stamp proves | accidental staleness only: a PR can commit any picture with a matching stamp, as it can any binary; review of the image diff is the control | signing the cards: a key and a lifecycle for a review problem |
@@ -98,7 +111,7 @@ A shared `/changelog/vX.Y.Z/` link previews as the site's generic `og.png`, and 
 
 ## UI impact
 
-- **The link previews of `/changelog/` and `/changelog/vX.Y.Z/`**: before, the site's generic camera-feed image at most as a small card on X; after, the release's own card (layout above), as a large card. Needs the owner's sign-off on the three cards in the PR body (full size, plus 2:1 and 1.91:1 crop overlays) before the PR lands. The pages themselves do not change.
+- **The link previews of `/changelog/` and `/changelog/vX.Y.Z/`**: before, the site's generic camera-feed image at most as a small card on X; after, the release's own card (layout above), as a large card. Signed by P132-02 ("The three cards' look and their alt text") on the three cards in the PR body (full size, plus 2:1 and 1.91:1 crop overlays). The pages themselves do not change.
 
 ## Phase 1: the card, its check and the three renders ✓
 
