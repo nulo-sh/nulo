@@ -5,3 +5,5 @@
 - `expectCallCaptionsWhole` kept "the address on one line, inside its step" and dropped "the address beside on": the signed 240 px frame breaks the line after "on".
 - Dev runs, armed, retry 0, load1 about 200 on 188 cores: Chrome 9 green and 1 capture test (69.8 s); Firefox 9 green (93.8 s). Paint after one press: `wide` 32,769 rows 3,395 ms Chrome, 3,105 ms Firefox; `wide-authwits` 65,538 rows 6,275 ms Chrome, 5,448 ms Firefox (saturated host, inconclusive as a1's measure).
 - Review round 1 (Codex approve, Opus conditional approve; fixes in `6fe158029`): a unit assertion on an auto-imported component reads 0 unless the mount registers it, since the vitest config has no components plugin, so a count of 0 proves nothing; a write into a wrapper's `textContent` drops the component inside it. The armed Chrome dev run of the three changed cases is green.
+- Review round 2 (Codex resumed on `6fe158029`): approve, no findings; a2's loop converged.
+- Cross-arc pass (fresh Codex, net diff from `32fd50e60`): conditional approve, two minors adopted in `f62e24d29`, one rejected (D3); resumed: approve, no findings.

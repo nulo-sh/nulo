@@ -239,6 +239,14 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 **Arc a2, Opus 5.5 (general-purpose), alongside round 1: conditional approve.** No material product bug; it traced the guard, the ids, the advice, the Set state and the two presses as holding.
 - Adopted: (1) the "no tooltip" half could not fail: `DottedTerm` uses an unregistered `Tooltip`, so the count was 0 on every fixture, demonstrated → `Tooltip` registered, one per term; (2) `stretchPayload` overwrote a step's `execute-op-call-to` wrapper and dropped the address inside it, demonstrated → the write goes into the address; (3) an empty slot still read as a group named "Authorizations" → named only while it holds something; (4) a selection a drag left in a row held a press on its own textless button → that press toggles; (5) the node's row announced no count → described by its label; (6) comments as Codex (3), and StepRow's padding comment corrected.
 
+**Arc a2, round 2, Codex (resumed, on `6fe158029`): approve**, no findings. The loop converged.
+
+**Cross-arc pass, Codex (GPT-6.1 Sol, high, read-only, fresh context, net diff from `32fd50e60`): conditional approve**, no material finding and no fixture path into a release build.
+- Adopted: (2) the four-fixture facts test checked integer leaves call-wide, so a raw field could answer it and a dropped boolean passed, demonstrated → every decoded row is read in its own row (a mutation that misprints `notify: true` turns it red); (3) `ValueTree`'s header narrated its branches → its two constraints kept.
+- Rejected: (1) a nested address's full value as a `title`: D3 dropped the struct titles, a nested address now reads as a top-level one, which had none, and a hover is no keyboard path; the full value stays one press away in the JSON view and, under a send, in the raw layer. A new hover disclosure is a UI change outside the picks.
+
+**Cross-arc pass, round 2, Codex (resumed, on `f62e24d29`): approve**, no findings. The cross-arc pass converged.
+
 ## Seeds
 
 ```

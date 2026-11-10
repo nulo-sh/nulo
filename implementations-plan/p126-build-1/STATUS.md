@@ -14,3 +14,4 @@
 - 2026-11-10: a1 PR #1776 open, ready, every check green at 81277dd; wide 1,342 ms on CI Chrome. a1 done.
 - 2026-11-10: a2 Phase 4 gate green on c7003ddf8 (lint, typecheck:all, test, test:components, test:all; test:all red once on an untouched 5 s timeout at load1 261/188, green on its one retry).
 - 2026-11-10: a2 Phase 5 e2e written; dev runs of execute-steps armed green on Chrome and Firefox after two spec fixes (the footer is held in a fixture; the Tab walk starts from an anchor).
+- 2026-11-10: a2 review: Codex r1 approve (3 adopted), Opus conditional approve (6 adopted), Codex r2 approve; cross-arc pass conditional approve (2 adopted, 1 rejected), resumed approve. Final gates next on f62e24d29.
