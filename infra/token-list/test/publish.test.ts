@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { dirname, extname, join } from "node:path"
 import type { TokenListEntry } from "@nulo/token-list"
@@ -427,6 +428,17 @@ describe("the prepare summary", () => {
 		expect(diff.changed.map(({ from, to }) => [from.name, to.name])).toEqual([["Token 2", "Renamed | x"]])
 		expect(renderDiff(diff)).toContain("Renamed \\| x")
 		expect(renderDiff(tokenDiff([token(1)], [token(1)]))).toBe("No token changes against the served list.\n")
+	})
+
+	test("shows each picture's size and digest prefix, and a changed picture as a was/now pair", () => {
+		const picture = (svg: string) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
+		const [before, after] = [picture("<svg><g/></svg>"), picture("<svg><path/></svg>")]
+		const prefix = (svg: string) => createHash("sha256").update(svg).digest("hex").slice(0, 16)
+		const rendered = renderDiff(tokenDiff([token(1, { icon: before })], [token(1, { icon: after }), token(2)]))
+		expect(rendered).toContain(`| was | 1 |`)
+		expect(rendered).toContain(`svg 15 B \`${prefix("<svg><g/></svg>")}\` |`)
+		expect(rendered).toContain(`svg 18 B \`${prefix("<svg><path/></svg>")}\` |`)
+		expect(rendered).toMatch(/\| \+ \| 1 \| .* \| none \|$/m)
 	})
 
 	test("shows the signed text verbatim, with no markup the approver cannot see", () => {
