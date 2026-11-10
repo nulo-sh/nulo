@@ -8,12 +8,10 @@
 
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
-import { type Change, type Editorial, byVersionDesc, icon, parseEditorial } from "./changelog-pages"
+import { CARD_HEIGHT, CARD_WIDTH, type Change, type Editorial, byVersionDesc, icon, parseEditorial } from "./changelog-pages"
 import { escapeHtml as esc } from "./markdown"
 import { pngChunks, pngSize, pngText } from "./png"
 
-export const CARD_WIDTH = 1200
-export const CARD_HEIGHT = 630
 /** Every box stays inside this rectangle, which lies within the middle 1200×600 a 2:1 crop keeps. */
 export const SAFE = { left: 64, top: 48, right: 1136, bottom: 582 } as const
 export const STAMP_KEYWORD = "nulo-og-inputs"

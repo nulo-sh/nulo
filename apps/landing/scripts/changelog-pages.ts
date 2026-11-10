@@ -48,7 +48,21 @@ export interface ChangelogPage {
 	/** Path relative to the landing root, e.g. `changelog/v1.2.0/index.html`. */
 	readonly path: string
 	readonly html: string
+	readonly card: PageCard
 }
+
+/** The Open Graph card a page names: a committed file and where the site serves it. */
+export interface PageCard {
+	/** Under `content/changelog/`, e.g. `1.2.0.og.png`. */
+	readonly source: string
+	/** Under the site root, e.g. `changelog/v1.2.0/og.png`. */
+	readonly path: string
+	readonly alt: string
+}
+
+/** The size every card is rendered at and every page declares. */
+export const CARD_WIDTH = 1200
+export const CARD_HEIGHT = 630
 
 const STABLE = /^(\d+)\.(\d+)\.(\d+)$/
 const SITE_VERSION = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/
@@ -186,6 +200,7 @@ interface ShellOptions {
 	/** HTML text, entities kept. A raw HTML block in the notes keeps its literal `"`. */
 	readonly description: string
 	readonly path: string
+	readonly card: PageCard
 	readonly current: "page" | "true"
 	readonly indexable: boolean
 	readonly body: string
@@ -203,9 +218,19 @@ function shell(o: ShellOptions): string {
 		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0908" />
 		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F5F5F7" />
 		${o.indexable ? "" : `<meta name="robots" content="noindex" />`}
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content="${SITE}${o.path}" />
+		<meta property="og:site_name" content="NULO" />
 		<meta property="og:title" content="${esc(o.title)}" />
 		<meta property="og:description" content="${description}" />
-		<meta property="og:image" content="${SITE}/og.png" />
+		<meta property="og:image" content="${SITE}/${o.card.path}" />
+		<meta property="og:image:width" content="${CARD_WIDTH}" />
+		<meta property="og:image:height" content="${CARD_HEIGHT}" />
+		<meta property="og:image:alt" content="${esc(o.card.alt)}" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:image" content="${SITE}/${o.card.path}" />
+		<meta name="twitter:title" content="${esc(o.title)}" />
+		<meta name="twitter:description" content="${description}" />
 		<link rel="canonical" href="${SITE}${o.path}" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 	</head>
@@ -315,12 +340,21 @@ export function planChangelogPages({ sources, siteVersion, production }: PlanOpt
 		.map((s) => ({ version: s.version, editorial: parseEditorial(s.toml, s.version), notes: renderNotes(s.markdown, s.version) }))
 		.filter((r) => !(production && isDraft(r.version, siteVersion)))
 		.sort(byVersionDesc)
+	// The index card shows the newest TOML, a draft's too (og-card.ts); its alt names only what the page lists.
+	const latest = releases[0]?.editorial
+	const indexCard: PageCard = {
+		source: "index.og.png",
+		path: "changelog/og.png",
+		alt: latest ? `Nulo changelog: Nulo ${latest.version}, ${latest.title}` : "Nulo changelog",
+	}
 	const index: ChangelogPage = {
 		path: "changelog/index.html",
+		card: indexCard,
 		html: shell({
 			title: "Changelog | NULO",
 			description: "What changed in each stable release of Nulo.",
 			path: "/changelog/",
+			card: indexCard,
 			current: "page",
 			indexable: production,
 			body: indexBody(releases),
@@ -328,16 +362,25 @@ export function planChangelogPages({ sources, siteVersion, production }: PlanOpt
 	}
 	return [
 		index,
-		...releases.map((r, i) => ({
-			path: `changelog/v${r.version}/index.html`,
-			html: shell({
-				title: `Nulo ${r.version}: ${r.editorial.title.replace(/\.$/, "")} | NULO`,
-				description: plainText(r.notes.lead),
-				path: releaseHref(r.version),
-				current: "true",
-				indexable: production,
-				body: `${hero(r)}\n\t\t${notesSection(r, releases[i - 1], releases[i + 1])}`,
-			}),
-		})),
+		...releases.map((r, i) => {
+			const card: PageCard = {
+				source: `${r.version}.og.png`,
+				path: `changelog/v${r.version}/og.png`,
+				alt: `Nulo ${r.version}: ${r.editorial.title}`,
+			}
+			return {
+				path: `changelog/v${r.version}/index.html`,
+				card,
+				html: shell({
+					title: `Nulo ${r.version}: ${r.editorial.title.replace(/\.$/, "")} | NULO`,
+					description: plainText(r.notes.lead),
+					path: releaseHref(r.version),
+					card,
+					current: "true",
+					indexable: production,
+					body: `${hero(r)}\n\t\t${notesSection(r, releases[i - 1], releases[i + 1])}`,
+				}),
+			}
+		}),
 	]
 }

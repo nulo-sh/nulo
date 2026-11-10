@@ -5,3 +5,5 @@
 - 2026-11-10 phase 0: Codex round 2 approve.
 - 2026-11-10 phase 0: Codex final fresh pass approve; plan approved by the panel.
 - 2026-11-10 arc 1 phase 1: gate green (landing typecheck, landing test 231 passed, lint); three cards rendered.
+- 2026-11-10 arc 1 phase 2: lint, typecheck:all, landing build green; test:all first run red on one load-timed extension test outside the diff, retrying once.
+- 2026-11-10 arc 1 phase 2: test:all retry green (load1 233); landing build green; phase 2 done.

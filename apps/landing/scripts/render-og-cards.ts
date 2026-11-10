@@ -11,7 +11,8 @@ import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "no
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import puppeteer, { type Browser } from "puppeteer"
-import { CARD_HEIGHT, CARD_WIDTH, SAFE, STAMP_KEYWORD, checkCard, planCards, readCardFonts } from "./og-card"
+import { CARD_HEIGHT, CARD_WIDTH } from "./changelog-pages"
+import { SAFE, STAMP_KEYWORD, checkCard, planCards, readCardFonts } from "./og-card"
 import { withPngText } from "./png"
 
 const dir = resolve(dirname(fileURLToPath(import.meta.url)), "../content/changelog")

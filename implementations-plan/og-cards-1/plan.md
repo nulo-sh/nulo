@@ -107,7 +107,7 @@ A shared `/changelog/vX.Y.Z/` link previews as the site's generic `og.png`, and 
 
 **Validation gate.** `bun install` then `bun install --frozen-lockfile --force` exit 0, and `git diff bun.lock` touches only the landing workspace's `devDependencies`; `bun run --cwd apps/landing og:cards` writes three cards; `bun run --cwd apps/landing typecheck` and `test` exit 0; step 4 shows red then green; `bun run lint` exits 0. Layers: typecheck/lint, unit.
 
-## Phase 2: the tags, the copy and the docs
+## Phase 2: the tags, the copy and the docs ✓
 
 1. Change `changelog-pages.ts`, `build-changelog.ts` and `.gitignore` as mapped; pin the full tag set for a release page and the index in `changelog-pages.test.ts`, and assert a production plan names no draft's card.
 2. In `src/page.test.ts` § "the built site": every changelog page's `og:image` is a file in the build, byte-equal to its card in `content/changelog/`, and the build holds no other changelog card.
