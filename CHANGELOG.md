@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0](https://github.com/nulo-sh/nulo/compare/v1.2.0...v1.3.0) (2026-11-10)
+
+
+### Features
+
+* **landing:** changelog pages at /changelog, one per stable release ([#1713](https://github.com/nulo-sh/nulo/issues/1713)) ([e3c30fa](https://github.com/nulo-sh/nulo/commit/e3c30fa5433c8f7715da4266dc7d6d4477d524c8))
+
+
+### Misc
+
+* **landing:** the changelog pages reach nulo.sh ahead of the next promote ([#1771](https://github.com/nulo-sh/nulo/issues/1771)) ([db2b32c](https://github.com/nulo-sh/nulo/commit/db2b32c38dd66e9c70055219d2970caf83fe1c32))
+
+
+### Docs
+
+* **release:** release notes for 1.1.0 and 1.2.0, the changelog pages' source ([8d269f4](https://github.com/nulo-sh/nulo/commit/8d269f4da8b7d9bc740e24716e87f4c8f09baaa3))
+
 ## [1.2.0](https://github.com/nulo-sh/nulo/compare/v1.1.0...v1.2.0) (2026-11-05)
 
 
