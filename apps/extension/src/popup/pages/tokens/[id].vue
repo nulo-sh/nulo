@@ -14,6 +14,7 @@ import BalanceView from "../../components/modules/general/BalanceView.vue"
 import FlaggedTokenBanner from "../../components/modules/general/FlaggedTokenBanner.vue"
 import RecentActivityView from "../../components/modules/general/RecentActivityView.vue"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
+import TokenMark from "@/components/composite/general/TokenMark.vue"
 import { Dropdown } from "@/components/ui/Dropdown"
 
 /** Vendor */
@@ -73,6 +74,7 @@ function onBalanceUpdated(tb) {
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const isFlagged = computed(() => prices.isFlagged(token.value))
+const icon = computed(() => prices.iconFor(token.value))
 
 /** Read the currently-cached balance for this (token, account). Fast path
  *  for first paint — the actual refresh is fired separately via `scheduleRefresh()`. */
@@ -227,6 +229,9 @@ onBeforeUnmount(() => {
 				:backTo="'/popup/general'"
 				leadingIcon="holdings"
 			>
+				<template v-if="token" #leading>
+					<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :size="20" :badge="isFlagged" />
+				</template>
 				<template #trailing>
 					<Tooltip position="end" :disabled="isRefreshingBalance || !tokenBalance?.updatedAt">
 						<button

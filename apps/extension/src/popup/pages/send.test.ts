@@ -9,8 +9,8 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { ImportedAccountUnusableError, JobCancelledError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
 import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
-import { flaggedKeysOf } from "@/utils/token-flag"
-import { TEST_FLAGGED } from "@/wallet/services/token-list/list.fixture"
+import { flaggedKeysOf, keyOf } from "@/utils/token-flag"
+import { TEST_FLAGGED, TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
 
 const ACCOUNT = "0xacct"
 const DESTINATION = `0x2${"b".repeat(63)}`
@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
 	refreezeQuote: vi.fn(),
 	focusAmount: vi.fn(),
 	flagged: { current: [] as string[] },
+	icons: { current: {} as Record<string, string> },
 }))
 
 vi.mock("@/wallet/services/execution/client", () => ({
@@ -98,8 +99,18 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: mocks.flagged.current })),
-			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: mocks.flagged.current })),
+			getQuotes: vi.fn(async () => ({
+				quotes: {},
+				pricedTokens: {},
+				flaggedTokens: mocks.flagged.current,
+				tokenIcons: mocks.icons.current,
+			})),
+			refreshIfStale: vi.fn(async () => ({
+				quotes: {},
+				pricedTokens: {},
+				flaggedTokens: mocks.flagged.current,
+				tokenIcons: mocks.icons.current,
+			})),
 		}
 	}),
 }))
@@ -162,7 +173,7 @@ const STUBS = {
 		name: "SelectTokenCard",
 		template:
 			"<div data-testid=\"stub-token-card\" :data-loading=\"loading ? 'true' : 'false'\" :data-failed=\"failed ? 'true' : 'false'\" :data-symbol=\"token?.symbol\" @click=\"$emit('retry')\" />",
-		props: ["token", "loading", "failed", "onTokenAdded"],
+		props: ["token", "loading", "failed", "onTokenAdded", "flagged", "icon"],
 		emits: ["retry"],
 	},
 	RecipientField: {
@@ -326,6 +337,7 @@ beforeEach(() => {
 })
 afterEach(() => {
 	mocks.flagged.current = []
+	mocks.icons.current = {}
 	vi.clearAllMocks()
 	vi.restoreAllMocks()
 	vi.useRealTimers()
@@ -1285,6 +1297,7 @@ describe("send page — a token the picker imported", () => {
 		price.onQuotesUpdated.invoke({
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
 			pricedTokens: TEST_PRICED_TOKENS,
+			tokenIcons: {},
 		})
 		await nextTick()
 		await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
@@ -2038,6 +2051,7 @@ describe("send page — Refresh quote by keyboard", () => {
 		const quote = (usd: number) => ({
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
 			pricedTokens: TEST_PRICED_TOKENS,
+			tokenIcons: {},
 		})
 		const notice = () => w.get('[data-testid="send-fiat-requote"]').element.parentElement?.textContent ?? ""
 
@@ -2066,6 +2080,7 @@ describe("send page — Refresh quote by keyboard", () => {
 		const quote = (usd: number) => ({
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
 			pricedTokens: TEST_PRICED_TOKENS,
+			tokenIcons: {},
 		})
 
 		price.onQuotesUpdated.invoke(quote(1))
@@ -2105,6 +2120,21 @@ describe("send page — a token the signed list flags", () => {
 		cacheStore.activeTokenIdx = TOKEN.id
 		await flushPromises()
 		expect(w.find('[data-testid="token-flagged-banner"]').exists()).toBe(false)
+		w.unmount()
+	})
+
+	test("the token card is handed the active token's flag and the list's picture for it", async () => {
+		const scam = { ...TOKEN, id: 8, symbol: "SCAM", contract: TEST_FLAGGED.address }
+		mocks.flagged.current = flaggedKeysOf([{ chainId: TOKEN.chainId, address: TEST_FLAGGED.address }])
+		mocks.icons.current = { [keyOf(TOKEN.chainId, TOKEN.contract)]: TEST_ICONS.USDC }
+		mocks.getTokens.mockResolvedValue([TOKEN, scam])
+		const { w, cacheStore } = await mountSend()
+		const card = () => w.findComponent({ name: "SelectTokenCard" })
+		expect(card().props()).toMatchObject({ flagged: false, icon: TEST_ICONS.USDC })
+
+		cacheStore.activeTokenIdx = scam.id
+		await flushPromises()
+		expect(card().props()).toMatchObject({ flagged: true, icon: undefined })
 		w.unmount()
 	})
 })

@@ -55,6 +55,14 @@ describe("ui/SubPageHeader", () => {
 		expect(icon.exists()).toBe(true)
 	})
 
+	test("a leading slot reaches the base in the icon's place; without one the icon stays", () => {
+		const w = mountHeader({ title: "USDC", leadingIcon: "holdings" }, { leading: '<i id="mark" />' })
+		expect(w.find("#mark").exists()).toBe(true)
+		expect(w.find('[data-name="holdings"]').exists()).toBe(false)
+		expect(w.find('[data-testid="subpage-title"]').text()).toBe("USDC")
+		expect(mountHeader({ title: "USDC", leadingIcon: "holdings" }).find('[data-name="holdings"]').exists()).toBe(true)
+	})
+
 	test("trailing slot renders inside the trailing region", () => {
 		const w = mountHeader({ title: "X" }, { trailing: '<button id="cta">Edit</button>' })
 		expect(w.find("#cta").exists()).toBe(true)
