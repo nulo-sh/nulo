@@ -7,3 +7,4 @@
 - 2026-11-10 arc 1 phase 1: gate green (landing typecheck, landing test 231 passed, lint); three cards rendered.
 - 2026-11-10 arc 1 phase 2: lint, typecheck:all, landing build green; test:all first run red on one load-timed extension test outside the diff, retrying once.
 - 2026-11-10 arc 1 phase 2: test:all retry green (load1 233); landing build green; phase 2 done.
+- 2026-11-10 arc 1 fix loop round 1: 2 Codex + 4 Opus findings accepted and fixed; landing test, typecheck, lint green.

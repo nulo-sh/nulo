@@ -2,8 +2,8 @@
  * The changelog's Open Graph cards: one 1200×630 picture per release and one for the index, drawn from
  * the release's TOML. A card is committed as `content/changelog/<file>`, stamped with the SHA-256 of
  * the document it was rendered from, so CI can tell a stale card without a browser. The document is
- * self-contained (fonts inline, no script, no URL), which is what makes that hash cover everything
- * drawn. Rendering lives in render-og-cards.ts.
+ * self-contained (fonts inline, no script, no URL), so the hash covers all it draws, save a character the
+ * inline faces lack, which Chrome takes from the machine's own fonts. Rendering lives in render-og-cards.ts.
  */
 
 import { createHash } from "node:crypto"
@@ -120,7 +120,14 @@ export function planCards(sources: readonly { version: string; toml: string }[],
 	})
 }
 
-/** What is wrong with a committed card, or `undefined` when it is the picture of `hash`'s document. */
+/** The file and stamp each committed card must carry, drawn with the real faces. Kept apart from the
+ *  documents so its answer stays small as releases accumulate. */
+export function cardStamps(sources: readonly { version: string; toml: string }[]): { file: string; hash: string }[] {
+	return planCards(sources, readCardFonts()).map(({ file, hash }) => ({ file, hash }))
+}
+
+/** What is wrong with a committed card, or `undefined` when its size and stamp match. The stamp names
+ *  the inputs; it does not prove the pixels. */
 export function checkCard(file: string, png: Uint8Array | undefined, hash: string): string | undefined {
 	const label = `content/changelog/${file}`
 	if (png === undefined) return `${label} is missing: run ${RENDER_COMMAND}`

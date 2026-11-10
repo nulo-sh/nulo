@@ -46,7 +46,16 @@ describe("png", () => {
 	const whole = tinyPng(1200, 630)
 	test.each([
 		["another format", new TextEncoder().encode("GIF89a, not a PNG at all"), /not a PNG/],
-		["a file cut inside a chunk", whole.subarray(0, whole.length - 3), /cut short|past the end/],
+		["a file cut inside a chunk's frame", whole.subarray(0, whole.length - 3), /cut short/],
+		[
+			"a chunk whose length runs past the file",
+			(() => {
+				const bytes = whole.slice()
+				new DataView(bytes.buffer).setUint32(bytes.length - 12, 1)
+				return bytes
+			})(),
+			/runs past the end/,
+		],
 		["a file cut after a whole chunk", whole.subarray(0, 8 + 25), /ends with IEND/],
 		["a first chunk other than IHDR", new Uint8Array([...whole.subarray(0, 8), ...whole.subarray(8 + 25)]), /opens with IHDR/],
 	])("refuses %s", (_name, bytes, message) => {
@@ -80,10 +89,11 @@ const FONTS = { headline: "data:font/woff2;base64,AA==", mono: "data:font/woff2;
 
 describe("planCards", () => {
 	test("a card per release and the index from the newest; TOML text is escaped, never markup", () => {
-		const cards = inBun("planCards", [{ version: "1.2.0", toml: toml("<b>Bold</b> & more.") }], FONTS)
+		const source = toml("<b>Bold</b> & more.").replace('title = "Change 1"', 'title = "<b>Bold</b> & more."')
+		const cards = inBun("planCards", [{ version: "1.2.0", toml: source }], FONTS)
 		expect(cards.map((c) => c.file)).toEqual(["1.2.0.og.png", "index.og.png"])
 		for (const card of cards) {
-			expect(card.document).toContain("&lt;b&gt;Bold&lt;/b&gt; &amp; more.")
+			expect(card.document.split("&lt;b&gt;Bold&lt;/b&gt; &amp; more.").length - 1).toBe(card.file === "index.og.png" ? 1 : 2)
 			expect(card.document).not.toContain("<b>Bold")
 		}
 	})
@@ -95,7 +105,7 @@ describe("the committed cards", () => {
 		const version = /^(\d+\.\d+\.\d+)\.toml$/.exec(file)?.[1]
 		return version === undefined ? [] : [{ version, toml: readFileSync(resolve(dir, file), "utf8") }]
 	})
-	const planned = inBun("planCards", sources, inBun("readCardFonts"))
+	const planned = inBun("cardStamps", sources)
 
 	test("every release and the index has a current card, and no card outlives its release", () => {
 		expect(planned.length).toBe(sources.length + 1)

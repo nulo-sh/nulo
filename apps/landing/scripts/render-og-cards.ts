@@ -18,14 +18,16 @@ import { withPngText } from "./png"
 const dir = resolve(dirname(fileURLToPath(import.meta.url)), "../content/changelog")
 const read = (file: string) => (existsSync(resolve(dir, file)) ? new Uint8Array(readFileSync(resolve(dir, file))) : undefined)
 
-/** In the page: each `[data-fit]` box that takes more than its `data-lines`, is wider than its column or
- *  leaves the safe rectangle, and each face that failed. Nothing is clipped, so a box grows instead. */
+/** Runs in the page. Nothing is clipped, so text that does not fit grows its box, and the box's line
+ *  count, width or position shows it. */
 function layoutProblems(safe: typeof SAFE): string[] {
 	const boxes = [...document.querySelectorAll<HTMLElement>("[data-fit]")].flatMap((box) => {
 		const r = box.getBoundingClientRect()
+		// A line-height that is not in px ("normal") makes the count NaN, which no budget check would refuse.
 		const lines = Math.round(r.height / Number.parseFloat(getComputedStyle(box).lineHeight))
 		const name = `the ${box.dataset.fit} "${box.textContent?.trim()}"`
 		return [
+			Number.isFinite(lines) ? "" : `${name} has no line-height in px to count its lines by`,
 			lines > Number(box.dataset.lines) ? `${name} takes ${lines} lines, at most ${box.dataset.lines}` : "",
 			box.scrollWidth > box.clientWidth ? `${name} is ${box.scrollWidth - box.clientWidth}px wider than its column` : "",
 			r.left < safe.left || r.top < safe.top || r.right > safe.right || r.bottom > safe.bottom ? `${name} leaves the safe area` : "",

@@ -18,8 +18,7 @@ export interface PngChunk {
 	readonly data: Uint8Array
 }
 
-/** Every chunk in file order. Refuses a file that is not a whole PNG: a bad signature, a chunk past the
- *  end, a first chunk other than IHDR, or a last one other than IEND. */
+/** Every chunk in file order; throws on anything but a whole PNG. */
 export function pngChunks(png: Uint8Array): PngChunk[] {
 	if (png.length < SIGNATURE.length || SIGNATURE.some((byte, i) => png[i] !== byte)) throw new Error("not a PNG")
 	const view = new DataView(png.buffer, png.byteOffset, png.byteLength)
