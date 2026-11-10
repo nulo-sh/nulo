@@ -125,7 +125,7 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		const values = w.findAll('[data-testid="execute-grant-decoded-param-value"]')
 		expect(values.map((v) => v.text())).toEqual([FIELD, LONG_TEXT])
 		for (const value of values) {
-			expect(value.attributes("variant")).toBe("meta")
+			expect(value.classes()).toContain("type--meta")
 			expect(value.element.parentElement?.classList).toContain(TREE.row)
 			expect(value.element.parentElement?.classList).toContain(TREE.full)
 			expect(value.element.parentElement?.lastElementChild).toBe(value.element)

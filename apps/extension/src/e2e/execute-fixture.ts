@@ -246,27 +246,20 @@ const rawSpecs = (main: string): Spec[] => [
 	},
 ]
 
-type Shape = { specs: Spec[]; appPays: boolean; authwits: ReturnType<typeof authwit>[]; maxFee: string }
+type Shape = { specs: Spec[]; authwits: ReturnType<typeof authwit>[]; maxFee: string }
 
 const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
-	const fee = (specs: Spec[], maxFee: string, authwits: ReturnType<typeof authwit>[] = [], appPays = false): Shape => ({
-		specs,
-		appPays,
-		authwits,
-		maxFee,
-	})
+	const fee = (specs: Spec[], maxFee: string, authwits: ReturnType<typeof authwit>[] = []): Shape => ({ specs, authwits, maxFee })
 	switch (name) {
 		case "one":
 			return fee([transfer(USDC, main, RECIPIENT, 25_000_000n)], "1840000000000000")
 		case "batch":
-			return fee(
-				batchSpecs(main),
-				"2310000000000000",
-				[authwit(0, HUB, main, 25_000_000n, main), authwit(1, ROUTER, main, 10_000_000n, main)],
-				true,
-			)
+			return fee(batchSpecs(main), "2310000000000000", [
+				authwit(0, HUB, main, 25_000_000n, main),
+				authwit(1, ROUTER, main, 10_000_000n, main),
+			])
 		case "deep":
-			return fee([deepSpec(main)], "2960000000000000", [authwit(2, ESCROW, main, 1_000_000n)])
+			return fee([deepSpec(main)], "2960000000000000", [authwit(2, ESCROW, main, 1_000_000n, main)])
 		case "raw":
 			return fee(rawSpecs(main), "2070000000000000")
 		case "ten":
@@ -288,25 +281,26 @@ const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
 const isFixtureName = (name: string): name is ExecuteFixtureName => (EXECUTE_FIXTURES as readonly string[]).includes(name)
 
 /** The named request, sent from `account` on `network`; `undefined` for a name no fixture has. Every
- *  operation is an account-entrypoint send, so its fee and its authorizations come from the estimate. */
+ *  operation is an account-entrypoint send its app pays for, so the window asks its one estimate at
+ *  open, with no fee pick; such a send lists only the authorizations an account already gave, so
+ *  every fixture's are the sending account's own. */
 export function executeFixture(name: string, account: Account, network: Network): ExecuteFixture | undefined {
 	if (!isFixtureName(name)) return undefined
-	const { specs, appPays, authwits, maxFee } = shapeOf(name, account.address)
+	const { specs, authwits, maxFee } = shapeOf(name, account.address)
 	const operation = {
 		kind: "aztec_sendTx",
 		networkId: network.id,
 		accountAddress: account.address,
 		account,
 		network,
-		exec: { calls: specs.map(wireCall), ...(appPays ? { feePayer: APP_FPC } : {}) },
+		exec: { calls: specs.map(wireCall), feePayer: APP_FPC },
 		opts: { from: account.address },
-		feeSettings: appPays ? undefined : { paymentMethod: { kind: "fj" } },
 	} as unknown as DraftUIOperation
 	const estimate: TransferFeeEstimate = {
 		maxFee,
 		gasDetails: { l2GasLimit: 0, daGasLimit: 0, teardownL2GasLimit: 0, teardownDaGasLimit: 0, feePerL2Gas: "1", feePerDaGas: "1" },
 		discoveredAuthwits: authwits.map((a) => a.record),
-		...(appPays ? { appPayerFunding: { address: APP_FPC, funded: true, provenShort: false } } : {}),
+		appPayerFunding: { address: APP_FPC, funded: true, provenShort: false },
 	} as TransferFeeEstimate
 	return {
 		operations: [operation],

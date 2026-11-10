@@ -1,0 +1,5 @@
+# Phase 3: a1 browser proof and gates
+
+- The smoke spec first used `page.reload()`; `scripts/e2e/browser-seam.test.ts` refuses it (Firefox strands a bare reload), so it goes through `reloadExtensionPage`.
+- The `wide` fixture (32,769 rows) on Chrome, host load1 178–238 on 188 cores: 5,164 and 7,287 ms press to rows mounted plus two frames, each row a `Flex` with two `Text`s; 3,166 ms with native `div`/`span` carrying the same global classes (`flex justify-between`, `type--… lh--100 color--…`), DOM-identical. The tree keeps the native rows.
+- Codex consult (GPT-6.1 Sol, high, read-only, session 01a1c66a-ef46-7ad3-9eb4-e821a759a6e7): pick (e), keep the native rows, reject a render function (the type-roles scanner reads templates only) and chunked rendering (a lifecycle, a plan change); the 2 s gate is inconclusive on a saturated host; restate the criterion's conditions (a quiet host, the armed Chrome build, best of three); shipping without a qualifying measure needs an explicit plan exception. Restated in the plan; the arc report carries the open gate.

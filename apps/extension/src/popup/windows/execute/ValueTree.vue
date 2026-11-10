@@ -2,7 +2,9 @@
 /**
  * One decoded value as rows: a struct or an array is its name's row, then one row per field or item
  * under a guide; any other value is one name and value row. No row holds another, so every
- * `-decoded-param` row is one name, and only the guides and the DOM carry a value's ancestry.
+ * `-decoded-param` row is one name, and only the guides and the DOM carry a value's ancestry. A
+ * decode may hold 32,769 rows, so a row is native elements carrying `Flex`'s and `Text`'s classes,
+ * not three component instances.
  */
 import type { DecodedValue } from "@/wallet/services/execution/client"
 import { safeWire } from "./humanize"
@@ -39,35 +41,30 @@ const indent = computed(() => (props.depth + 1 > 6 ? "tight" : props.depth + 1 >
 </script>
 
 <template>
-	<Flex
+	<div
 		:data-testid="`${prefix}-decoded-param`"
 		:data-param="name"
 		:data-value-kind="value.kind"
 		:data-depth="depth"
-		justify="between"
-		:class="[$style.row, full && !isBranch && $style.full]"
+		:class="['flex justify-between', $style.row, full && !isBranch && $style.full]"
 	>
-		<Text :data-testid="`${prefix}-decoded-param-name`" variant="label-section" color="secondary" :class="$style.name">{{ safeWire(name, 32) }}:</Text>
+		<span :data-testid="`${prefix}-decoded-param-name`" :class="['type--label-section lh--100 color--secondary', $style.name]">{{ safeWire(name, 32) }}:</span>
 		<template v-if="!isBranch">
-			<Text v-if="emptyText" :data-testid="`${prefix}-decoded-param-value`" variant="meta" color="primary" :class="$style.value">{{ emptyText }}</Text>
+			<span v-if="emptyText" :data-testid="`${prefix}-decoded-param-value`" :class="['type--meta lh--100 color--primary', $style.value]">{{ emptyText }}</span>
 			<AddressDisplay
 				v-else-if="scalar?.kind === 'address' && !full"
 				:data-testid="`${prefix}-decoded-param-value`"
 				:address="scalar.value"
 				:class="$style.value"
 			/>
-			<Text
+			<span
 				v-else-if="scalar"
 				:data-testid="`${prefix}-decoded-param-value`"
-				variant="meta"
-				color="primary"
 				:title="valueTitle(scalar)"
-				:class="$style.value"
-			>
-				{{ valueText(scalar, full) }}
-			</Text>
+				:class="['type--meta lh--100 color--primary', $style.value]"
+			>{{ valueText(scalar, full) }}</span>
 		</template>
-	</Flex>
+	</div>
 	<div v-if="isBranch" :class="[$style.children, $style[indent]]">
 		<ValueTree v-for="(c, i) in children" :key="i" :name="c.name" :value="c.value" :prefix="prefix" :full="full" :depth="depth + 1" />
 	</div>
