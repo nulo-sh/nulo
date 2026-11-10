@@ -75,18 +75,19 @@ artifact, kept 7 days: the floor rule does not read it (known limit #1001).
 
 Every entry's `icon` is one of these files, embedded byte for byte (`FORMAT.md` § Pictures).
 Issuers' marks are used as published, unaltered and never recoloured, on the owner's recorded
-decision of 2026-11-10, on test and bridged tokens too; a token no issuer draws for gets Nulo's
-letter mark. The tree check refuses an entry with no picture or with one whose SHA-256 has no
-row here, so changing a picture means changing its row; a picture is never bundled in the
-extension.
+decision of 2026-11-10, on test and bridged tokens too. cWETH, which no issuer draws for, carries
+Ethereum's diamond under the same rule, on the owner's decision of the same day; any other token
+with no issuer's mark gets Nulo's letter mark, a white letter on a near-black disc. The tree check
+refuses an entry with no picture or with one whose SHA-256 has no row here, so changing a picture
+means changing its row; a picture is never bundled in the extension.
 
 | Picture | Used by | Drawn by | Source | Terms | SHA-256 |
 |---|---|---|---|---|---|
 | USDC token logo | USDC, cUSDC | Circle | `https://www.circle.com/pressroom`, `usdc.zip` → `Token Logo/USDC Token.svg` | Circle's pressroom ("use approved logos as provided … do not alter") and Brand Use Policy | `fe4f9d5f34ef4ebeb5d80e1f5ff63dcaf5a0d5495f4adf206e4c3011d1f5c57d` |
 | EURC token logo | EURC | Circle | `https://www.circle.com/pressroom`, `eurc.zip` → `Token Logo/EURC Token.svg` | as USDC's | `6ae03397ca1775169d5371b1e40562714a779e9656ab0ce41ca71f79da0b3e2d` |
 | USD₮ token logo, colour | USDT | Tether | `https://tether.io/en/media`, `tether_USDt_token_v2@3x.svg` | Tether's media page (copied from Tether's materials, not altered) | `7bde6a7d982a998566c8688599615410f60453994e73d31cf7636fecf3fcde74` |
-| Letter mark "G" | GBPC | Nulo | this repository | Nulo's own | `2a0647ff2a18fd75c41d46c35d67be2cc496889c9810441890467f6b038b9093` |
-| Letter mark "W" | cWETH | Nulo | this repository | Nulo's own | `2f0b14c98984d4bdb113a7d4d26caaf83c45850897fba7e45b46a7cc937910f7` |
+| Letter mark "G" | GBPC | Nulo | this repository; the disc is the dark theme's `--app-bg`, `#0a0908` (`packages/design/src/base.css`) | Nulo's own | `7f068e3e57727bda2cf7f036041f41da59c7b6b94831c4141414b53506d34bef` |
+| ETH diamond (purple), transparent background | cWETH | Ethereum Foundation (Stiftung Ethereum) | `https://ethereum.org/assets/`, "ETH diamond (purple)" → `https://ethereum.org/images/assets/svgs/eth-diamond-purple.svg` | ethereum.org's Terms of use (`https://ethereum.org/terms-of-use/`): "Unless otherwise marked", images on its sites are "licensed under the Creative Commons Attribution 4.0 International License"; the assets page carries no notice of its own (checked 2026-11-10). The same terms reserve "the Foundation logo and all related names, logos" to the Foundation's "prior written permission", and CC BY 4.0 licenses no trademark; not altered | `7320e64e211db747308cc3e546e5360d42f3790b7a14fba0504573790e17f124` |
 
 ## Keys
 
