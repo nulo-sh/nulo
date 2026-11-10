@@ -4,3 +4,4 @@
 - 2026-11-10: dual audit round 1 (Codex conditional approve, Opus conditional approve) folded into the plan.
 - 2026-11-10: final fresh Codex pass: conditional approve, folded; resumed twice: one more demonstrated finding (the production marker list is hand-kept), folded; approve.
 - 2026-11-10: a1 Phase 1 gate green (lint, typecheck:all, window tests, test:ci-gating, lint:actions).
+- 2026-11-10: a1 Phase 2 gate green (one red in bun run test: the seam scan on the new smoke spec's page.reload, fixed, re-run green).

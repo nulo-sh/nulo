@@ -14,6 +14,7 @@ import { describe, expect, test } from "vitest"
 import CallArguments from "./CallArguments.vue"
 import OperationCard from "./OperationCard.vue"
 import SendTxSummary from "./SendTxSummary.vue"
+import ValueTree from "./ValueTree.vue"
 
 const NARROW = "i".repeat(64)
 /** The card humanizes a method name, capitalizing its first letter. */
@@ -29,12 +30,13 @@ const styleOf = (component: unknown): Record<string, string> =>
 const CARD = styleOf(OperationCard)
 const ARGS = styleOf(CallArguments)
 const SUMMARY = styleOf(SendTxSummary)
+const TREE = styleOf(ValueTree)
 
 /** A component's own `<style module>` source, read for the rules jsdom never applies. */
 const styleSource = (file: string) =>
 	postcss.parse(readFileSync(join(__dirname, file), "utf8").split("<style module>")[1]?.split("</style>")[0] ?? "")
 const CARD_STYLE = styleSource("OperationCard.vue")
-const ARGS_STYLE = styleSource("CallArguments.vue")
+const TREE_STYLE = styleSource("ValueTree.vue")
 const isRule =
 	(selector: string) =>
 	(node: ChildNode): node is Rule =>
@@ -124,13 +126,14 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		expect(values.map((v) => v.text())).toEqual([FIELD, LONG_TEXT])
 		for (const value of values) {
 			expect(value.attributes("variant")).toBe("meta")
-			expect(value.element.parentElement?.classList.contains(ARGS.row)).toBe(true)
+			expect(value.element.parentElement?.classList).toContain(TREE.row)
+			expect(value.element.parentElement?.classList).toContain(TREE.full)
 			expect(value.element.parentElement?.lastElementChild).toBe(value.element)
 		}
 		expect(w.find('[data-testid="execute-grant-decoded-args"]').classes()).toContain(ARGS.full)
-		expect(declarationsOf(".row", undefined, ARGS_STYLE)).toMatchObject({ gap: "12px" })
-		expect(declarationsOf(".full .row", undefined, ARGS_STYLE)).toEqual({ "flex-direction": "column", gap: "2px" })
-		expect(declarationsOf(".full .row", "> :last-child", ARGS_STYLE)).toEqual({ "text-align": "left" })
+		expect(declarationsOf(".row", undefined, TREE_STYLE)).toMatchObject({ gap: "12px" })
+		expect(declarationsOf(".full", undefined, TREE_STYLE)).toEqual({ "flex-direction": "column", gap: "2px" })
+		expect(declarationsOf(".full", "> .value", TREE_STYLE)).toEqual({ "text-align": "left" })
 	})
 
 	test("a call's 64-character name breaks in the call row; the contract beside it keeps its width", async () => {
@@ -249,15 +252,23 @@ describe("CallArguments — long values wrap", () => {
 	const mountArgs = (surface: unknown) =>
 		mount(CallArguments, { props: { surface: surface as never, contract: TOKEN, prefix: "t" }, global: { stubs } })
 
-	test("a decoded string value is the wrapping last child of its row", () => {
+	test("a decoded string value is the wrapping last child of its row; the name keeps its width up to 60%", () => {
 		const w = mountArgs({ kind: "decoded", fn: "f", params: [{ name: "memo", value: { kind: "string", value: NARROW } }] })
 		const value = w.find('[data-testid="t-decoded-param-value"]')
 		expect(value.text()).toContain(NARROW)
-		expect(value.element.parentElement?.classList.contains(ARGS.row)).toBe(true)
+		expect(value.classes()).toContain(TREE.value)
+		expect(value.element.parentElement?.classList).toContain(TREE.row)
 		expect(value.element.parentElement?.lastElementChild).toBe(value.element)
+		expect(w.find('[data-testid="t-decoded-param-name"]').classes()).toContain(TREE.name)
+		expect(declarationsOf(".value", undefined, TREE_STYLE)).toMatchObject({ "min-width": "0", "overflow-wrap": "anywhere" })
+		expect(declarationsOf(".name", undefined, TREE_STYLE)).toEqual({
+			flex: "0 0 auto",
+			"max-width": "60%",
+			"overflow-wrap": "anywhere",
+		})
 	})
 
-	test("under `full` a field, a long string and a list print whole; without it the row trims them", () => {
+	test("under `full` a field and a long string print whole and without it the row trims them; a list is a row per item", () => {
 		const items = Array.from({ length: 12 }, (_, i) => ({ kind: "integer", value: String(i) }))
 		const surface = {
 			kind: "decoded",
@@ -272,12 +283,8 @@ describe("CallArguments — long values wrap", () => {
 			mount(CallArguments, { props: { surface: surface as never, contract: TOKEN, prefix: "t", full }, global: { stubs } })
 				.findAll('[data-testid="t-decoded-param-value"]')
 				.map((v) => v.text())
-		expect(texts(true)).toEqual([FIELD, LONG_TEXT, `[${items.map((i) => i.value).join(", ")}]`])
-		expect(texts(false)).toEqual([
-			`${FIELD.slice(0, 10)}..${FIELD.slice(-6)}`,
-			`${"i".repeat(64)}…`,
-			"[0, 1, 2, 3, 4, 5, 6, 7, +4 more]",
-		])
+		expect(texts(true)).toEqual([FIELD, LONG_TEXT, ...items.map((i) => i.value)])
+		expect(texts(false)).toEqual([`${FIELD.slice(0, 10)}..${FIELD.slice(-6)}`, `${"i".repeat(64)}…`, ...items.map((i) => i.value)])
 	})
 
 	test("a raw text argument is the wrapping last child of its row", async () => {

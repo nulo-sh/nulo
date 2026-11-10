@@ -225,24 +225,15 @@ describe("rawRows, tokenAt, amountLabel, valueText, valueTitle", () => {
 		expect(amountLabel([{ ...USDC, symbol: BEL }], 1, TOKEN, "5000000")).toEqual({ text: "5000000" })
 	})
 
-	test("values read on one line; a long list is summarized inline and complete in the title", () => {
+	test("a scalar reads on one row, trimmed, and whole in the title when trimmed", () => {
 		expect(valueText({ kind: "integer", value: "5" })).toBe("5")
 		expect(valueText({ kind: "boolean", value: false })).toBe("false")
 		expect(valueText({ kind: "field", value: TO })).toBe(trimAddress(TO, 10, 6))
 		expect(valueText({ kind: "address", value: TO })).toBe(trimAddress(TO))
 		expect(valueText({ kind: "string", value: `hi${BEL}` })).toBe("hi")
 		expect(valueText({ kind: "none" })).toBe("none")
-		const ten: DecodedValue = {
-			kind: "array",
-			items: Array.from({ length: 10 }, (_, i) => ({ kind: "integer", value: String(i + 1) })),
-		}
-		expect(valueText(ten)).toBe("[1, 2, 3, 4, 5, 6, 7, 8, +2 more]")
-		expect(valueTitle(ten)).toBe("[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]")
-		const two: DecodedValue = { kind: "array", items: [{ kind: "integer", value: "1" }] }
-		expect(valueTitle(two)).toBeUndefined()
+		expect(valueTitle({ kind: "integer", value: "5" })).toBeUndefined()
 		expect(valueTitle({ kind: "field", value: TO })).toBe(TO)
-		expect(valueText({ kind: "struct", fields: [{ name: "a", value: { kind: "boolean", value: true } }] })).toBe("{ a: true }")
-		expect(valueTitle({ kind: "struct", fields: [{ name: "list", value: ten }] })).toContain("10]")
 	})
 })
 
@@ -265,18 +256,10 @@ describe("a wire alias cannot outrank the decoded name; hover text is complete",
 	})
 
 	test("full mode prints whole addresses, fields and strings, so a title never collapses distinct values", () => {
-		const other = `0x${"d".repeat(64)}`
-		const pair: DecodedValue = {
-			kind: "array",
-			items: [
-				{ kind: "address", value: TO },
-				{ kind: "address", value: other },
-			],
-		}
-		expect(valueText(pair)).toBe(`[${trimAddress(TO)}, ${trimAddress(other)}]`)
-		expect(valueTitle(pair)).toBe(`[${TO}, ${other}]`)
-		const nested: DecodedValue = { kind: "struct", fields: [{ name: "secret", value: { kind: "field", value: TO } }] }
-		expect(valueTitle(nested)).toBe(`{ secret: ${TO} }`)
+		const alike = `${TO.slice(0, 10)}${"d".repeat(TO.length - 16)}${TO.slice(-6)}`
+		expect(valueText({ kind: "address", value: alike })).toBe(valueText({ kind: "address", value: TO }))
+		expect(valueText({ kind: "address", value: TO }, true)).toBe(TO)
+		expect(valueTitle({ kind: "address", value: alike })).toBe(alike)
 		const long = "x".repeat(100)
 		expect(valueText({ kind: "string", value: long }).length).toBeLessThan(100)
 		expect(valueTitle({ kind: "string", value: long })).toBe(long)
