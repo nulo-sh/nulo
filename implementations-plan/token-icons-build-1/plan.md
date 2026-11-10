@@ -136,7 +136,7 @@ Each phase lands its tests with its code. Every gate also runs `bun run lint` an
 - **Tests**: `icon.test.ts`: success controls (each issuer file, each Nulo mark); one refusal per class: another scheme or media type (`data:text/html`, `data:image/png`, `https:`), non-canonical base64, one character over budget, invalid UTF-8, text not starting with `<svg`, `&#…;` in a value, a `\` escape, `<!DOCTYPE`, a prefixed tag (`<s:script>`), an unlisted tag (`<script>`, `<animate>`, `<filter>`), a `filter="blur(4px)"` attribute, a `style="filter:blur(4px)"` attribute, an `on…` attribute, an `href`, a `url(` to a URL. `parse.test.ts`: wallet keeps the entry and drops a refused icon; strict throws at `tokens[i].icon`; a list with no icons reads in both modes.
 - **Validation gate**: `bun run --cwd packages/token-list test`, `bun run test:all`, `bun run test`. Pass: exit 0.
 
-### Phase 2 — publisher (arc 1)
+### Phase 2 — publisher (arc 1) ✓
 
 - **Change map**: `infra/token-list/list.source.json`, `README.md` (§ Pictures, recovery note), `scripts/check.ts` (L3, `iconFindings`), `scripts/summary.ts` (icon column), `test/tree.test.ts`, `test/summary.test.ts`.
 - **Tests**: the tree has no finding; an entry without an icon is a finding (L3); an over-budget or non-drawing icon is refused; an icon with no README row is a finding; the summary shows the column and a changed picture as was/now rows; the six-entry envelope's size is recorded in the PR.

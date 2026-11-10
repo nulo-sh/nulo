@@ -1,9 +1,11 @@
 /** The host's tree invariants, as findings: `test/tree.test.ts` asserts none, and `prepare` runs this file. */
+import { createHash } from "node:crypto"
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
-import { PINNED_KEYS, PLACEHOLDER_PUBLIC_KEY, type PinnedKey } from "@nulo/token-list"
+import { PINNED_KEYS, PLACEHOLDER_PUBLIC_KEY, type PinnedKey, type TokenListEntry } from "@nulo/token-list"
 import { decodeBase64Url, verifyEnvelope } from "@nulo/token-list/envelope"
+import { iconBytes } from "@nulo/token-list/icon"
 import { checkSource, parsePayload } from "@nulo/token-list/parse"
 import { publishedSequence } from "@nulo/token-list/sign"
 import { FLOOR_PATH, floorText } from "./floor"
@@ -12,10 +14,29 @@ export const HOST_ROOT = fileURLToPath(new URL("..", import.meta.url))
 export const SOURCE = "list.source.json"
 export const ENVELOPE = "public/v1/list.json"
 export const FORMAT = "FORMAT.md"
+export const README = "README.md"
 const SERVED = ["_headers", "v1/list.json"]
 
 export function canonical(value: unknown): string {
 	return `${JSON.stringify(value, null, "\t")}\n`
+}
+
+export const sha256Hex = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex")
+
+/**
+ * Every entry carries a picture, so a token without one is never a listed token, and each picture's
+ * digest has a row in the README's provenance table, so swapping a picture changes a reviewed line.
+ */
+export function pictureFindings(tokens: readonly TokenListEntry[], readme: string): string[] {
+	const start = readme.indexOf("\n## Pictures\n")
+	const end = start === -1 ? -1 : readme.indexOf("\n## ", start + 1)
+	const table = start === -1 ? "" : readme.slice(start, end === -1 ? undefined : end)
+	const recorded = new Set(Array.from(table.matchAll(/`([0-9a-f]{64})`/g), (match) => match[1]))
+	return tokens.flatMap((token, i) => {
+		const bytes = iconBytes(token.icon)
+		if (!bytes) return [`${SOURCE}: tokens[${i}] has no icon`]
+		return recorded.has(sha256Hex(bytes)) ? [] : [`${SOURCE}: tokens[${i}].icon has no row in ${README} § Pictures`]
+	})
 }
 
 /** Canonical form makes a diff of the source a diff of the tokens. */
@@ -23,7 +44,9 @@ function sourceFindings(root: string): string[] {
 	const text = readFileSync(join(root, SOURCE), "utf8")
 	try {
 		const source = checkSource(JSON.parse(text))
-		return canonical(source) === text ? [] : [`${SOURCE}: not in canonical form (tab indent, payload key order, trailing newline)`]
+		const form =
+			canonical(source) === text ? [] : [`${SOURCE}: not in canonical form (tab indent, payload key order, trailing newline)`]
+		return [...form, ...pictureFindings(source.tokens, readFileSync(join(root, README), "utf8"))]
 	} catch (error) {
 		return [`${SOURCE}: ${error instanceof Error ? error.message : "unreadable"}`]
 	}

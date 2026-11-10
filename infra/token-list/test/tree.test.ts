@@ -14,6 +14,8 @@ import {
 	formatFindings,
 	HOST_ROOT,
 	keyFindings,
+	pictureFindings,
+	README,
 	SOURCE,
 	treeFindings,
 } from "../scripts/check"
@@ -40,6 +42,7 @@ async function signedTree(name: string): Promise<{ root: string; pinned: PinnedK
 	const root = join(work, name)
 	mkdirSync(join(root, "public/v1"), { recursive: true })
 	cpSync(join(HOST_ROOT, SOURCE), join(root, SOURCE))
+	cpSync(join(HOST_ROOT, README), join(root, README))
 	cpSync(join(HOST_ROOT, "public/_headers"), join(root, "public/_headers"))
 	const { seedHex, pinned } = await throwawayKey()
 	writeFileSync(join(root, FORMAT), keyTable(tableRow(pinned)))
@@ -90,6 +93,23 @@ describe("the host tree", () => {
 		expect(await treeFindings(root, [pinned])).toEqual([
 			`${SOURCE}: not in canonical form (tab indent, payload key order, trailing newline)`,
 		])
+	})
+
+	test("every entry carries a picture the README records, and the source refuses one that fails the format", async () => {
+		const tokens = JSON.parse(readFileSync(join(HOST_ROOT, SOURCE), "utf8")).tokens
+		const readme = readFileSync(join(HOST_ROOT, README), "utf8")
+		expect(pictureFindings(tokens, readme)).toEqual([])
+		const { icon: _, ...bare } = tokens[0]
+		expect(pictureFindings([bare, tokens[1]], readme)).toEqual([`${SOURCE}: tokens[0] has no icon`])
+		const unrecorded = { ...tokens[1], icon: `data:image/svg+xml;base64,${Buffer.from("<svg><g/></svg>").toString("base64")}` }
+		expect(pictureFindings([tokens[0], unrecorded], readme)).toEqual([`${SOURCE}: tokens[1].icon has no row in ${README} § Pictures`])
+		const { root, pinned } = await signedTree("picture")
+		const oversize = {
+			...tokens[0],
+			icon: `data:image/svg+xml;base64,${Buffer.from(`<svg><desc>${"a".repeat(3000)}</desc></svg>`).toString("base64")}`,
+		}
+		writeFileSync(join(root, SOURCE), canonical({ tokens: [oversize] }))
+		expect(await treeFindings(root, [pinned])).toEqual([`${SOURCE}: token list payload refused at source.tokens[0].icon`])
 	})
 
 	test("refuses a floor below 1, above the committed list, or not in canonical form", () => {
