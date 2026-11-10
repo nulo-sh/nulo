@@ -1,7 +1,7 @@
 ---
 plan: og-cards-1
 tier: light
-status: approved by the panel (2026-11-10): Codex final pass approve
+status: arc 1 in review (2026-11-10); waits for the owner on OA1 to OA3
 issues: "#1775"
 driver: claude-code
 claude_model: opus
@@ -85,6 +85,7 @@ A shared `/changelog/vX.Y.Z/` link previews as the site's generic `og.png`, and 
 - **Codex round 2** (resumed): approve; the rejection held. Two editorial fixes applied (the age-gate proof is the non-frozen install; D10 skips on `checkCard`).
 - **Codex final pass** (fresh session, full ledger): approve. One low finding applied: Phase 2's `grep -c` could not show the tag set, so the gate prints the tags and names the test as the authority. No Opus leg: tier `light` on Claude Code has one Codex audit.
 - **Implementation, Codex round 1** (gpt-6.1-sol, high) with one Opus review: two Codex findings, both accepted. The committed-cards test shipped every document through `in-bun.ts`, whose `spawnSync` caps stdout at 1 MiB, so the 14th release would red CI on a cut reply (demonstrated; fixed with `cardStamps`, which returns only file and hash); three comments overstated or restated their code (reworded). Opus found the same buffer bug plus three accepted local gaps: `in-bun.ts` ignored `run.error` on status 0, a box with a non-px line-height escaped the line budget, and the "runs past the end" PNG guard and change-title escaping had no test; its comment nit (a character the inline faces lack falls back to the machine's font) reworded the module header.
+- **Implementation, Codex round 2** (resumed): clean; the loop converged.
 
 ## Security & Adversarial Considerations
 
