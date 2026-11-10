@@ -36,8 +36,8 @@ watch(
 		:class="[$style.mark, kind === 'initials' && $style.disc]"
 		:style="{ width: `${size}px`, height: `${size}px` }"
 	>
-		<img v-if="kind === 'logo'" :src="icon" alt="" draggable="false" :class="$style.logo" @error="failed = true" />
-		<span v-else :class="$style[INITIALS_CLASS[size]]">{{ initials }}</span>
+		<img v-if="kind === 'logo'" :src="icon" alt="" draggable="false" data-testid="token-mark-logo" :class="$style.logo" @error="failed = true" />
+		<span v-else :class="[$style.initials, $style[INITIALS_CLASS[size]]]">{{ initials }}</span>
 		<Icon v-if="badge" name="warning" :size="size < 24 ? 8 : 10" color="red" :class="$style.badge" />
 	</span>
 </template>
@@ -57,10 +57,17 @@ watch(
 	background: var(--nulo-surface-high);
 }
 
+/* The issuer's file as published: no clip, background or filter. */
 .logo {
 	display: block;
 	width: 100%;
 	height: 100%;
+}
+
+/* A contract-supplied symbol may hold a letter wider than the disc; the badge sits outside it. */
+.initials {
+	max-width: 100%;
+	overflow-x: clip;
 }
 
 .initials_10 {

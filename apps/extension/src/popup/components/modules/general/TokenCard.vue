@@ -97,9 +97,9 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 			@click="pickPrefix ? emit('pick', token.id) : navigate($event)"
 			@keydown.space="pickPrefix || navigate($event)"
 		>
-			<Flex align="center" gap="12">
+			<Flex align="center" gap="12" :class="$style.lead">
 				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :size="32" :badge="isFlagged" />
-				<Flex direction="column" gap="2">
+				<Flex direction="column" gap="2" :class="$style.lead">
 					<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
 						{{ dashIfBlank(token.symbol) }}
 					</span>
@@ -192,6 +192,11 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 .minting {
 	opacity: 0.5;
 	pointer-events: none;
+}
+
+/* Lets the clipped text yield width, so the mark cannot push the balance off the row. */
+.lead {
+	min-width: 0;
 }
 
 /* The symbol and an unpriced row's name are contract-supplied: clipped so a hostile string cannot

@@ -1308,7 +1308,6 @@ declare module 'vue' {
     readonly journalTerminalDisplay: UnwrapRef<typeof import('../utils/journal-state')['journalTerminalDisplay']>
     readonly journalTransferAmount: UnwrapRef<typeof import('../utils/journal-state')['journalTransferAmount']>
     readonly journalUpdated: UnwrapRef<typeof import('../utils/journal-mirror')['journalUpdated']>
-    readonly keyOf: UnwrapRef<typeof import('../utils/token-flag')['keyOf']>
     readonly knownDecimals: UnwrapRef<typeof import('../utils/token-amount')['knownDecimals']>
     readonly landingRoute: UnwrapRef<typeof import('../utils/panel-handback')['landingRoute']>
     readonly leaveFor: UnwrapRef<typeof import('../utils/page-back')['leaveFor']>
@@ -1316,6 +1315,7 @@ declare module 'vue' {
     readonly leftToScroll: UnwrapRef<typeof import('../composables/useScrollRemaining')['leftToScroll']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly legalSheetMayCover: UnwrapRef<typeof import('../utils/legal-sheet')['legalSheetMayCover']>
+    readonly listKeyOf: UnwrapRef<typeof import('../utils/token-flag')['listKeyOf']>
     readonly listOwnAccountRow: UnwrapRef<typeof import('../utils/account-rows')['listOwnAccountRow']>
     readonly logCredentialFailure: UnwrapRef<typeof import('../utils/credential-refusal')['logCredentialFailure']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>

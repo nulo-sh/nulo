@@ -4,7 +4,7 @@
  */
 import { type TokenListPair, tokenKey } from "@nulo/token-list"
 
-/** The one key a list pair and a row meet on; `tokenIconsOf` keys pictures with it too. */
+/** The one key a list pair and a row meet on. */
 export const listKeyOf = (chainId: number, address: string): string => tokenKey(chainId, `0x${address.replace(/^0x/i, "")}`)
 
 /** The keys the worker sends; the popup matches rows against them with {@link isFlaggedToken}. */

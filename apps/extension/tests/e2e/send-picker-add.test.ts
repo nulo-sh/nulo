@@ -21,20 +21,20 @@ const UNLISTED = "0x120000000000000000000000000000000000000000000000000000000000
 /** A token the person added, on no list. */
 const ADDED = { contract: `0x${"0".repeat(62)}c5`, name: "Mine", symbol: "MINE", decimals: 6 }
 
-/** The mark inside `within` as the browser drew it, once a picture has finished: decoded or failed,
- *  a failure swapping it for initials. */
-async function drawnMark(page: Page, within: string): Promise<{ kind: string | null; width: number }> {
-	const mark = `${within} [data-testid="token-mark"]`
-	await page.waitForSelector(mark, VISIBLE)
-	await page.waitForFunction(
-		(s: string) => {
-			const el = document.querySelector(s)
-			return el?.getAttribute("data-kind") !== "logo" || (el.querySelector("img")?.complete ?? false)
-		},
-		{ timeout: 5_000 },
+/** The mark inside `within` once it shows `kind`, the list's snapshot arriving after the token, and
+ *  a picture once it has finished: decoded, or failed and about to fall back to initials. */
+async function drawnMark(page: Page, within: string, kind: "logo" | "initials"): Promise<{ kind: string | null; width: number }> {
+	const mark = `${within} ${sel("token-mark")}`
+	const logo = `${mark} ${sel("token-mark-logo")}`
+	await page.waitForSelector(`${mark}[data-kind="${kind}"]`, VISIBLE)
+	if (kind === "logo") {
+		await page.waitForFunction((s: string) => document.querySelector<HTMLImageElement>(s)?.complete !== false, { timeout: 5_000 }, logo)
+	}
+	return page.$eval(
 		mark,
+		(el, s: string) => ({ kind: el.getAttribute("data-kind"), width: document.querySelector<HTMLImageElement>(s)?.naturalWidth ?? 0 }),
+		logo,
 	)
-	return page.$eval(mark, (el) => ({ kind: el.getAttribute("data-kind"), width: el.querySelector("img")?.naturalWidth ?? 0 }))
 }
 
 test("the Send picker: New token opened from a pasted address's add row closes back onto the picker", {
@@ -57,10 +57,9 @@ test("the Send picker: New token opened from a pasted address's add row closes b
 	expect(pictured || !E2E_LIST_TOKENS.some((e) => e.address === scope.token.contract), "a source run's list pictures its tokens").toBe(
 		true,
 	)
-	const listedMark = pictured ? { kind: "logo", width: expect.any(Number) } : { kind: "initials", width: 0 }
-	const asset = await drawnMark(page, sel("send-token-trigger"))
-	expect(asset).toEqual(listedMark)
-	if (pictured) expect(asset.width).toBeGreaterThan(0)
+	const asset = await drawnMark(page, sel("send-token-trigger"), pictured ? "logo" : "initials")
+	expect(asset.kind).toBe(pictured ? "logo" : "initials")
+	if (pictured) expect(asset.width, "the listed picture decoded").toBeGreaterThan(0)
 	await shotSend(page, "send-asset-mark", "send-token-trigger")
 
 	// From the focused card, so closing the picker has a control to hand focus back to.
@@ -100,7 +99,7 @@ test("the Send picker: New token opened from a pasted address's add row closes b
 		sel("subpage-title"),
 		ADDED.symbol,
 	)
-	expect(await drawnMark(page, `:has(> ${sel("subpage-title")})`)).toEqual({ kind: "initials", width: 0 })
+	expect(await drawnMark(page, sel("token-hero"), "initials")).toEqual({ kind: "initials", width: 0 })
 
 	expect(ctx.consoleErrors).toEqual([])
 	expect(ctx.pageErrors).toEqual([])

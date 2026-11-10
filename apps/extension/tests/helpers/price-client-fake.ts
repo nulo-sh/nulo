@@ -1,9 +1,9 @@
 /**
  * A fake `@/wallet/services/price/client` for a component that owns its price client and runs the real
  * `usePrices`: every client answers with one fresh Fee Juice quote at `priceFake.usd` (none while it is
- * undefined), the list's flagged keys in `priceFake.flagged` and its pictures in `priceFake.icons`, and is kept in `priceFake.clients`, so
- * a test counts the refreshes and cache reads a screen began. `hold()` keeps every answer back until
- * `release()`.
+ * undefined), the list's flagged keys in `priceFake.flagged` and its pictures in `priceFake.icons`, and
+ * is kept in `priceFake.clients`, so a test counts the refreshes and cache reads a screen began.
+ * `hold()` keeps every answer back until `release()`.
  *
  *   vi.mock("@/wallet/services/price/client", async () => (await import("<path>/price-client-fake")).priceClientModule())
  */

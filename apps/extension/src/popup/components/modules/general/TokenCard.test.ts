@@ -499,4 +499,12 @@ describe("TokenCard — the subtitle's overflow", () => {
 			walkElements(parsed.template, (node) => void (node.tag === "span" && subtitles.push(boundAttr(node, "class") ?? "")))
 		expect(subtitles.filter((cls) => cls.includes("$style.fiat"))).toEqual(["[$style.fiat, $style.fiat_figure]", "$style.fiat"])
 	})
+
+	test("the mark and the text column may shrink below their content, so the clipped text yields to the balance", () => {
+		expect(declarationsOf(parsed, ".lead")).toEqual({ "min-width": "0" })
+		const leads: string[] = []
+		if (parsed.template)
+			walkElements(parsed.template, (node) => void (boundAttr(node, "class") === "$style.lead" && leads.push(node.tag)))
+		expect(leads).toEqual(["Flex", "Flex"])
+	})
 })

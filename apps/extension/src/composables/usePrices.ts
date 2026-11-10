@@ -195,9 +195,9 @@ export function usePrices(priceService: PriceServiceClient) {
 }
 
 /**
- * The signed list's flags alone, from the network-free read and the worker's broadcasts, for a
- * surface inside transaction execution: it never asks the worker for a price fetch (Privacy Policy
- * § 5.2). Receives the connected client, as `usePrices` does.
+ * The signed list's flags and pictures alone, from the network-free read and the worker's broadcasts,
+ * for a surface inside transaction execution: it never asks the worker for a price fetch (Privacy
+ * Policy § 5.2). Receives the connected client, as `usePrices` does.
  */
 export function useTokenFlags(priceService: PriceServiceClient) {
 	const list = listState()

@@ -18,3 +18,12 @@ Each ask names what ships now; no arc waits for an answer. Arc 1 touches no surf
 - **Why it is asked**: M1 covers issuers' logos; wrapped ether has no issuer, and the ETH diamond belongs to no issuer of `cWETH`.
 - **Options**: (a) Nulo's letter mark "W", as GBPC's (L3's rule for a token with no published logo). **Recommended.** (b) Ethereum's diamond, a third party's mark on a token it did not issue.
 - **What ships now**: (a).
+
+## A3. Home's other rows beside the token cards (arc 2)
+
+- **Surface**: Home's holdings list, which renders three kinds of row beside the token cards: a default token still being set up (`TokenSeedRow`, on a fresh profile or after a network reset), a token import in progress (`TokenImportRow`), and the loading skeleton rows.
+- **Why it is asked**: the UI impact lines and the A sign-off name the token rows; these three are not token rows, and no plan line covers them.
+- **Options**:
+  - (a) the same 32 px slot before their text: the list's picture on a seed row (it comes from the list), grey initials on an import row, a 32 px round skeleton on a loading row. Every row's text starts at one edge, and a seed row keeps its picture when it becomes a card. **Recommended.**
+  - (b) leave them as they are.
+- **What ships now**: (b). On Home, those rows' text sits 44 px left of a card's symbol, and a default token's row moves 44 px right when its setup ends and it becomes a card. Holdings and Send's picker show only token cards, so they are aligned.
