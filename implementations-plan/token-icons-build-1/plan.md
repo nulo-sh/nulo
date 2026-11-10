@@ -130,7 +130,7 @@ See the decision ledger: L3's home (D2), the channel (D3), SVG only (D4), the la
 
 Each phase lands its tests with its code. Every gate also runs `bun run lint` and `bun run typecheck:all`.
 
-### Phase 1 — format and reader (arc 1)
+### Phase 1 — format and reader (arc 1) ✓
 
 - **Change map**: `packages/token-list/src/icon.ts` (new), `icon.test.ts` (new), `parse.ts`, `parse.test.ts`, `import-closure.test.ts` (the signer's closure gains `icon.ts`), `README.md`; `infra/token-list/FORMAT.md`.
 - **Tests**: `icon.test.ts`: success controls (each issuer file, each Nulo mark); one refusal per class: another scheme or media type (`data:text/html`, `data:image/png`, `https:`), non-canonical base64, one character over budget, invalid UTF-8, text not starting with `<svg`, `&#…;` in a value, a `\` escape, `<!DOCTYPE`, a prefixed tag (`<s:script>`), an unlisted tag (`<script>`, `<animate>`, `<filter>`), a `filter="blur(4px)"` attribute, a `style="filter:blur(4px)"` attribute, an `on…` attribute, an `href`, a `url(` to a URL. `parse.test.ts`: wallet keeps the entry and drops a refused icon; strict throws at `tokens[i].icon`; a list with no icons reads in both modes.
