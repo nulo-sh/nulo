@@ -8,3 +8,5 @@
 - 2026-11-10: a1 Phase 3: wide shape 3.2 s on a saturated host (native rows; 5.2–7.3 s with component rows): gate inconclusive, Codex consult recorded; arc continues, report flags it.
 - 2026-11-10: a1 Phase 3 gates: audit:vue, test:all, check:plans green; test:release red on zip missing from this host only; release build leaked an orphan fixture chunk, fixed by a module-scope gate.
 - 2026-11-10: a1 smoke (execute-steps) green on Chrome and Firefox at retry 0; test:release green with a local zip.
+- 2026-11-10: a1 review: Codex r1 conditional approve (3 adopted), Opus conditional approve (6 adopted), Codex r2 approve; fixes in bc63c57aa.
+- 2026-11-10: a1 final gates on bc63c57aa: audit:vue, test:all, test:release (local zip), check:plans green; smoke Chrome armed green (30.1 s), release-build negative green; network Chrome green (13/13, at 788458d63).

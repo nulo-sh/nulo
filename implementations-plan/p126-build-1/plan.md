@@ -229,6 +229,8 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 - Adopted: (1) as Codex (1); (2) the unarmed control asserted only a never-call → it now drives the fee map's `estimate` and `cancelRemote` and asserts both reach the worker; (3) the flatten check re-derives `args` the way the fixture builds them, so it cannot fail → dropped with the module comment's untested claim, `flatten` unexported; (4) the capture names carried the arc's name → `execute-<fixture>-details-<width>`; (5) the volume bound is per call, not per press → recorded in D4, a2's spec to time two `wide` authorizations; (6) the gate record predated the last fix → every gate rerun on the final head.
 - Held: the fixture branch answers no request, the release build holds none of it, the raw caps, the inventory re-pins, dApp text through `safeWire`.
 
+**Arc a1, round 2, Codex (resumed, on `bc63c57aa`): approve.** The loop converged.
+
 ## Seeds
 
 ```
