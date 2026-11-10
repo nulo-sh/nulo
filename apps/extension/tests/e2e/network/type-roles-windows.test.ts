@@ -336,7 +336,8 @@ async function stretchPayload(win: Page): Promise<void> {
 			for (const el of document.querySelectorAll(selector)) el.textContent = text
 		}
 		set('[data-testid="execute-op-summary-call-title"]', `I${"i".repeat(63)}`)
-		set('[data-testid="execute-op-call-to"]', "W".repeat(25))
+		// A step's `execute-op-call-to` wraps its address: the write goes into the address itself.
+		set('[data-testid="execute-op-call-to"]:not(:has([data-testid="execute-op-summary-call-to"]))', "W".repeat(25))
 		set('[data-testid="execute-op-summary-call-to"]', "W".repeat(25))
 		set('[data-testid="execute-op-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
 		set('[data-testid="execute-op-decoded-param-value"]', "i".repeat(64))
@@ -344,8 +345,8 @@ async function stretchPayload(win: Page): Promise<void> {
 	})
 }
 
-/** Each step's contract, measured by its own text: a line may end after "on", as the signed frames
- *  draw a narrow window, but the address itself never breaks and never leaves its step. */
+/** Each step's contract, measured by its own text: a narrow window may break the line after "on",
+ *  but never inside the address, which never leaves its step. */
 async function callCaptions(win: Page): Promise<{ lines: number; inRow: boolean }[]> {
 	return win.evaluate(() =>
 		Array.from(document.querySelectorAll('[data-testid="execute-op-summary-call-head"]'), (head) => {
@@ -379,7 +380,7 @@ async function expectCallCaptionsWhole(win: Page): Promise<void> {
 	await atWidth(win, 360, async () => {
 		await whole("360 px")
 		await win.evaluate(() => {
-			for (const el of document.querySelectorAll('[data-testid="execute-op-call-to"]')) el.textContent = "W".repeat(48)
+			for (const el of document.querySelectorAll('[data-testid="execute-op-summary-call-to"]')) el.textContent = "W".repeat(48)
 		})
 		const capped = await callCaptions(win)
 		expect(

@@ -12,7 +12,7 @@ defineOptions({ inheritAttrs: false })
 
 const props = defineProps<{
 	open: boolean
-	/** The row's accessible name; the content reads after it as the description. */
+	/** The row's accessible name; `describedby` names what reads after it. */
 	name: string
 	/** The ids, space-separated, of the elements that describe the row. */
 	describedby?: string
@@ -32,7 +32,8 @@ const onClick = (event: MouseEvent): void => {
 	const control = (event.target as Element | null)?.closest("a[href], button, [tabindex]")
 	const own = control?.parentElement === row && control.hasAttribute("data-row-target")
 	if (control && row.contains(control) && !own) return
-	if (!endsSelection(event)) emit("toggle")
+	// The row's own textless button cannot end a selection, so a selection a drag left stands aside.
+	if (own || !endsSelection(event)) emit("toggle")
 }
 </script>
 
@@ -52,8 +53,8 @@ const onClick = (event: MouseEvent): void => {
 </template>
 
 <style module>
-/* The row reaches 5 px past its content on every side it can; the margin takes the padding back, so
- * nothing around it moves and a one-line row's press stands 26 px tall. */
+/* The margin takes the padding back, so nothing around the row moves and a one-line row's press stands
+ * 26 px tall. */
 .row {
 	position: relative;
 	margin: -5px -6px;

@@ -1,10 +1,7 @@
 <script setup lang="ts">
 /**
- * A send's calls as numbered steps on a rail, then the line naming the calls the wallet decoded but
- * did not read, the closing advice, and every authorization in one node at the rail's end. Each step
- * and the node open their own details; only the wallet's own reading of a transfer or mint states an
- * amount or a party. Nothing places an authorization under a call: the wallet holds no link between
- * them.
+ * Only the wallet's own reading of a transfer or mint states an amount or a party, and nothing places
+ * an authorization under a call: the wallet holds no link between them.
  */
 import type { DiscoveredAuthwit } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
@@ -92,6 +89,7 @@ const toggleStep = (j: number): void => {
 
 /** Survives a re-estimate that swaps the list for "Checking authorizations…" and back. */
 const nodeOpen = ref(false)
+const nodeLabel = `${uid}-node-label`
 const nodePanels = computed(() => authwitRows.value.map((_, k) => authwitPanel(k)).join(" "))
 
 /** Which authorizations the person closed: once the node opens, each one's arguments are open too, so
@@ -113,6 +111,7 @@ const adviceAuthwit = computed(() =>
 )
 
 const authwitSlot = ref<HTMLElement | null>(null)
+const slotHolds = computed(() => authwitRows.value.length > 0 || props.checkingAuthwits || props.previewFailed)
 /** Try again leaves with the failure, so a keyboard press keeps its place on the slot that holds the
  *  check and then the list. Read `currentTarget` inside the click's dispatch: it is null after. */
 const onRetryPreview = (event: MouseEvent): void => {
@@ -133,7 +132,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 				:data-intent-kind="row.surface.kind"
 				:class="$style.step"
 			>
-				<span :class="$style.number"><Text variant="meta" color="secondary">{{ j + 1 }}</Text></span>
+				<span data-testid="execute-op-step-number" :class="$style.number"><Text variant="meta" color="secondary">{{ j + 1 }}</Text></span>
 				<Flex direction="column" gap="8" :class="$style.body">
 					<StepRow
 						data-testid="execute-op-step-toggle"
@@ -203,12 +202,13 @@ const onRetryPreview = (event: MouseEvent): void => {
 		<Text v-if="advice === 'calls'" data-testid="execute-op-summary-unverified-advice" variant="body" color="tertiary">{{ RAW_ADVICE }}</Text>
 	</Flex>
 
-	<!-- One element through every state, so a keyboard press on Try again keeps its place here. -->
+	<!-- One element through every state, so a keyboard press on Try again keeps its place here; empty, it
+	     is no group, since an absent row must not read as a claim of absence. -->
 	<div
 		ref="authwitSlot"
 		data-testid="execute-op-authwits-slot"
-		role="group"
-		aria-label="Authorizations"
+		:role="slotHolds ? 'group' : undefined"
+		:aria-label="slotHolds ? 'Authorizations' : undefined"
 		tabindex="-1"
 		:aria-busy="checkingAuthwits && !authwitRows.length ? 'true' : undefined"
 		:class="$style.slot"
@@ -220,10 +220,11 @@ const onRetryPreview = (event: MouseEvent): void => {
 					data-testid="execute-op-authwits-toggle"
 					:open="nodeOpen"
 					name="Details of the authorizations"
+					:describedby="nodeLabel"
 					:controls="nodePanels"
 					@toggle="nodeOpen = !nodeOpen"
 				>
-					<span :class="$style.node_label">
+					<span :id="nodeLabel" :class="$style.node_label">
 						<SectionLabel label="Authorizations" :count="authwitRows.length" />&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" :class="[$style.chevron, nodeOpen && $style.chevron_open]" />
 					</span>
 				</StepRow>
@@ -304,7 +305,6 @@ const onRetryPreview = (event: MouseEvent): void => {
 	column-gap: 10px;
 }
 
-/* The rail runs from under one step's number to the next step's. */
 .step:not(:last-child)::before {
 	content: "";
 	position: absolute;
@@ -330,7 +330,6 @@ const onRetryPreview = (event: MouseEvent): void => {
 	overflow-wrap: anywhere;
 }
 
-/* What hangs under a step or an authorization: its values, its raw fields, its rows. */
 .guide {
 	margin-left: 3px;
 	padding-left: 11px;
@@ -358,7 +357,6 @@ const onRetryPreview = (event: MouseEvent): void => {
 	outline-offset: -2px;
 }
 
-/* After the unchecked line and the advice, off the steps' rail. */
 .node {
 	display: grid;
 	grid-template-columns: 20px minmax(0, 1fr);

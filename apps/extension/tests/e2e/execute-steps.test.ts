@@ -287,7 +287,7 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 		}
 	})
 
-	test("Enter on a row opens its step with focus left on the row, which does not move; the next Tab enters the step", {
+	test("Enter on a row opens its step with focus left on the row, which does not move; the next Tab enters the step, where Enter opens the raw values", {
 		timeout: 120_000,
 	}, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
@@ -303,6 +303,9 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 			await page.keyboard.press("Tab")
 			expect(await page.evaluate((s: string) => document.querySelector(s)?.contains(document.activeElement), step(1))).toBe(true)
 			expect(await focused(page)).toBe("execute-op-raw-toggle")
+			await page.keyboard.press("Enter")
+			await page.waitForSelector(`${step(1)} ${sel("execute-op-raw-args")}`, { visible: true, timeout: 10_000 })
+			expect([await focused(page), await isOpen(page, stepRow(1))]).toEqual(["execute-op-raw-toggle", true])
 		} finally {
 			await page.close()
 		}
@@ -381,8 +384,7 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 		const page = await openPopup(ctx)
 		try {
 			await openFixture(page, "ten", 400)
-			const tenth = await page.$eval(step(9), (li) => {
-				const box = li.firstElementChild!
+			const tenth = await page.$eval(`${step(9)} ${sel("execute-op-step-number")}`, (box) => {
 				const range = document.createRange()
 				range.selectNodeContents(box)
 				const text = range.getBoundingClientRect()
