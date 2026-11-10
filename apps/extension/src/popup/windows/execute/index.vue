@@ -43,7 +43,8 @@ import {
 	resolveForProfile,
 } from "./operation-display"
 import { openJsonWindow } from "@/utils/json-window"
-import { E2E_EXECUTE_FIXTURE, E2E_EXECUTE_FIXTURE_BUILD_STAMP } from "@/e2e/config"
+import { E2E_EXECUTE_FIXTURE_BUILD_STAMP } from "@/e2e/config"
+import { armedExecuteFixture } from "@/e2e/execute-fixture-gate"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
@@ -100,7 +101,7 @@ const router = useRouter()
  * request: `requestId` stays unset, so Confirm, Reject and the unload reach none, and its estimates
  * come from the fixture, never the worker.
  */
-const fixtureName = E2E_EXECUTE_FIXTURE ? router.currentRoute.value.query.fixture?.toString() : undefined
+const fixtureName = armedExecuteFixture ? router.currentRoute.value.query.fixture?.toString() : undefined
 let fixtureEstimates: readonly TransferFeeEstimate[] | undefined
 
 const session = ref()
@@ -230,7 +231,7 @@ const {
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
 	estimate: (params, estimateToken, flowKey, signal) =>
-		E2E_EXECUTE_FIXTURE && fixtureEstimates
+		armedExecuteFixture && fixtureEstimates
 			? Promise.resolve(fixtureEstimates[params.index])
 			: estimateWhenClear(
 					() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
@@ -238,7 +239,7 @@ const {
 					queueWatch(params.index, estimateToken, signal),
 				),
 	cancelRemote: (estimateToken) =>
-		E2E_EXECUTE_FIXTURE && fixtureEstimates ? undefined : executionService.cancelEstimate(estimateToken).catch(() => {}),
+		armedExecuteFixture && fixtureEstimates ? undefined : executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 500,
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
@@ -382,7 +383,7 @@ const {
 const init = async () => {
 	try {
 		profile.value = await profileService.getActiveProfile()
-		if (E2E_EXECUTE_FIXTURE && fixtureName) return await showFixture(fixtureName)
+		if (armedExecuteFixture && fixtureName) return showFixture(armedExecuteFixture, fixtureName)
 		await loadInteractionPayload()
 		if (!payload.value) return
 
@@ -432,8 +433,7 @@ function askOpeningEstimates(ops: UIOperation[]): void {
 }
 
 /** Commits the named fixture as `init` commits a loaded request, with no request behind it. */
-async function showFixture(name: string): Promise<void> {
-	const { executeFixture } = await import("@/e2e/execute-fixture")
+function showFixture(executeFixture: NonNullable<typeof armedExecuteFixture>, name: string): void {
 	const { account, network } = appStore
 	const fixture = account && network ? executeFixture(name, account, network) : undefined
 	if (!account || !fixture) return

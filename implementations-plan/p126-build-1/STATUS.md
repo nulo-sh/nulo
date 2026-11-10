@@ -6,3 +6,4 @@
 - 2026-11-10: a1 Phase 1 gate green (lint, typecheck:all, window tests, test:ci-gating, lint:actions).
 - 2026-11-10: a1 Phase 2 gate green (one red in bun run test: the seam scan on the new smoke spec's page.reload, fixed, re-run green).
 - 2026-11-10: a1 Phase 3: wide shape 3.2 s on a saturated host (native rows; 5.2–7.3 s with component rows): gate inconclusive, Codex consult recorded; arc continues, report flags it.
+- 2026-11-10: a1 Phase 3 gates: audit:vue, test:all, check:plans green; test:release red on zip missing from this host only; release build leaked an orphan fixture chunk, fixed by a module-scope gate.

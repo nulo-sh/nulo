@@ -180,12 +180,14 @@ vi.mock("@/wallet/services/dapp-interaction/client", async () =>
 vi.mock("@/stores/app.store", async () => (await import("../../../../tests/helpers/approval-window-harness")).appStoreModule)
 /** Whether the build under test is armed with the execute fixtures; read at each mount. */
 const fixtureBuild = vi.hoisted(() => ({ armed: false }))
-vi.mock("@/e2e/config", async (importOriginal) => ({
-	...(await importOriginal<typeof import("@/e2e/config")>()),
-	get E2E_EXECUTE_FIXTURE() {
-		return fixtureBuild.armed
-	},
-}))
+vi.mock("@/e2e/execute-fixture-gate", async () => {
+	const { executeFixture } = await vi.importActual<typeof import("@/e2e/execute-fixture")>("@/e2e/execute-fixture")
+	return {
+		get armedExecuteFixture() {
+			return fixtureBuild.armed ? executeFixture : undefined
+		},
+	}
+})
 vi.mock("vue-router", async (importOriginal) => ({
 	...(await importOriginal<typeof import("vue-router")>()),
 	...(await import("../../../../tests/helpers/approval-window-harness")).routerModule,
@@ -475,7 +477,6 @@ describe("execute window — an armed build's fixture", () => {
 		w = factory()
 		await flushPromises()
 		approval.resolveProfile?.({ id: "p1" })
-		await vi.dynamicImportSettled()
 		await flushPromises()
 		const vm = w.vm as unknown as ExecVm
 		expect(approval.resolveLoad).toBeUndefined()

@@ -152,4 +152,12 @@ describe("e2e-execute-fixture config", () => {
 		expect(mod.E2E_EXECUTE_FIXTURE).toBe(true)
 		expect(mod.E2E_EXECUTE_FIXTURE_BUILD_STAMP).toBe("NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP")
 	})
+
+	test("the window reaches the fixtures only through an armed build's gate", async () => {
+		vi.stubEnv("VITE_NULO_E2E_EXECUTE_FIXTURE", "")
+		expect((await import("./execute-fixture-gate")).armedExecuteFixture).toBeUndefined()
+		vi.resetModules()
+		vi.stubEnv("VITE_NULO_E2E_EXECUTE_FIXTURE", "1")
+		expect((await import("./execute-fixture-gate")).armedExecuteFixture).toBeTypeOf("function")
+	})
 })
