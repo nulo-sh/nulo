@@ -174,7 +174,7 @@ const INLINE_TAGS = ["<strong>", "</strong>", "<em>", "</em>", "<code>", "</code
 const plainText = (lead: string): string => INLINE_TAGS.reduce((text, tag) => text.replaceAll(tag, ""), lead)
 
 /** A wallet glyph as inline SVG; stroked paths carry `pathLength="1"` so CSS can draw them in. */
-function icon(name: GlyphName): string {
+export function icon(name: GlyphName): string {
 	const glyph: Glyph = glyphs[name]
 	const strokes = (glyph.s ?? []).map((d) => `<path class="gl-s" pathLength="1" d="${d}"/>`)
 	const fills = (glyph.f ?? []).map((d) => `<path class="gl-f" d="${d}"/>`)

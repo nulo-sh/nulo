@@ -75,6 +75,8 @@ A shared `/changelog/vX.Y.Z/` link previews as the site's generic `og.png`, and 
 | D7 | A title too long for the card | the renderer refuses on either axis or outside the safe rectangle, and names the box | auto-shrink or clamp: hides or distorts the author's words |
 | D8 | Nothing outside the document | interception aborts every non-`data:` request and the run fails if one happened (Puppeteer reports `data:` loads as requests it cannot intercept), so the hash covers all that is drawn | trust the template: one stray `url()` makes the hash a lie |
 | D9 | What the stamp proves | accidental staleness only: a PR can commit any picture with a matching stamp, as it can any binary; review of the image diff is the control | signing the cards: a key and a lifecycle for a review problem |
+| D11 | How the renderer measures a box (implementation) | each `[data-fit]` box declares `data-lines`; the renderer refuses more lines (height ÷ line-height), a box wider than its column, or one outside the safe rectangle; nothing is clipped | `scrollHeight > clientHeight` on fixed boxes: a display face's ink box (1.26 em for Space Grotesk) exceeds a tight line box, so it refused a one-line title |
+| D12 | Test files (implementation) | the PNG tests live in `og-card.test.ts`, sharing one minimal-PNG builder | a separate `png.test.ts` with a copy of the builder |
 | D10 | Which cards a run writes | only missing or stale ones (`checkCard`), so another machine's font rendering never churns a current card | always all: rewrites history on every release |
 
 ## Audit verdicts
@@ -96,7 +98,7 @@ A shared `/changelog/vX.Y.Z/` link previews as the site's generic `og.png`, and 
 
 - **The link previews of `/changelog/` and `/changelog/vX.Y.Z/`**: before, the site's generic camera-feed image at most as a small card on X; after, the release's own card (layout above), as a large card. Needs the owner's sign-off on the three cards in the PR body (full size, plus 2:1 and 1.91:1 crop overlays) before the PR lands. The pages themselves do not change.
 
-## Phase 1: the card, its check and the three renders
+## Phase 1: the card, its check and the three renders ✓
 
 1. Add `scripts/png.ts` and `scripts/png.test.ts`: a round trip through `withPngText` and `pngText` on a minimal PNG, `pngSize`, and a refused non-PNG.
 2. Add `scripts/og-card.ts` and `scripts/og-card.test.ts`: `checkCard` refuses a missing card, a 1200×600 card, a card without the chunk and a stale hash, with a success control; the real tree: every planned card exists and passes, and no orphan `*.og.png` stays.
