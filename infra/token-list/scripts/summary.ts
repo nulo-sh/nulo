@@ -11,9 +11,10 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { PriceFeed, PriceFeeds, TokenListEntry, TokenListPair } from "@nulo/token-list"
 import { decodeBase64Url } from "@nulo/token-list/envelope"
+import { iconBytes } from "@nulo/token-list/icon"
 import { checkFlagged, checkPriceFeeds, checkSource, checkTokens } from "@nulo/token-list/parse"
 import { listSha256 } from "@nulo/token-list/sign"
-import { ENVELOPE, HOST_ROOT, SOURCE } from "./check"
+import { ENVELOPE, HOST_ROOT, SOURCE, sha256Hex } from "./check"
 import { FLOOR_PATH, raisesFloor } from "./floor"
 
 export const REPO_ROOT = join(HOST_ROOT, "..", "..")
@@ -89,8 +90,13 @@ export function publishedList(envelopeText: string | undefined): PublishedList {
 // Backslash-escaping every ASCII punctuation mark shows the signed text verbatim: no `<!-- -->` hides
 // part of it, and no `|` or backtick reshapes the table.
 export const cell = (text: string) => text.replace(/[!-/:-@[-`{-~]/g, "\\$&")
+/** A picture as the approver can compare it with `README.md` § Pictures: its size and digest prefix. */
+function iconCell(icon: string | undefined): string {
+	const bytes = iconBytes(icon)
+	return bytes ? `svg ${bytes.length} B \`${sha256Hex(bytes).slice(0, 16)}\`` : "none"
+}
 const row = (sign: string, t: TokenListEntry) =>
-	`| ${sign} | ${t.chainId} | \`${t.address}\` | ${cell(t.symbol)} | ${cell(t.name)} | ${t.decimals} | ${t.priceId ?? "unpriced"} | \`${t.classId.slice(0, 10)}…\` |`
+	`| ${sign} | ${t.chainId} | \`${t.address}\` | ${cell(t.symbol)} | ${cell(t.name)} | ${t.decimals} | ${t.priceId ?? "unpriced"} | \`${t.classId.slice(0, 10)}…\` | ${iconCell(t.icon)} |`
 
 export function renderFlagDiff(diff: FlagDiff): string {
 	const rows = [
@@ -120,9 +126,12 @@ export function renderDiff(diff: TokenDiff): string {
 		...diff.changed.flatMap(({ from, to }) => [row("was", from), row("now", to)]),
 	]
 	if (rows.length === 0) return "No token changes against the served list.\n"
-	return ["| | chainId | address | symbol | name | decimals | price id | class |", "|---|---|---|---|---|---|---|---|", ...rows, ""].join(
-		"\n",
-	)
+	return [
+		"| | chainId | address | symbol | name | decimals | price id | class | picture |",
+		"|---|---|---|---|---|---|---|---|---|",
+		...rows,
+		"",
+	].join("\n")
 }
 
 function git(root: string, args: string[]): string {

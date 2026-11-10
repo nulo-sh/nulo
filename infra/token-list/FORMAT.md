@@ -51,7 +51,8 @@ The payload is a UTF-8 JSON object:
 			"symbol": "USDC",
 			"decimals": 6,
 			"name": "Test USDC",
-			"priceId": "usd-coin"
+			"priceId": "usd-coin",
+			"icon": "data:image/svg+xml;base64,PHN2Zy…"
 		}
 	],
 	"flagged": [
@@ -76,6 +77,7 @@ The payload is a UTF-8 JSON object:
 | `name` | 1 to 80 characters. |
 | `decimals` | Integer, 0 to 18. |
 | `priceId` | Optional CoinGecko id: 1 to 64 characters of `a-z`, `0-9` and `-`, starting with a letter or digit. Absent means unpriced. |
+| `icon` | Optional picture of the token, under [Pictures](#pictures). The Nulo publisher signs no entry without one. |
 | `flagged` | Optional array of `{chainId, address}` pairs, under the rules above: tokens the publisher flags as scams. Absent means none. |
 | `priceFeeds` | Optional object, at most 32 keys: CoinGecko id → `{min, max, ticker}`, under [Price feeds](#price-feeds). Absent means every entry is unpriced. |
 
@@ -90,6 +92,8 @@ paragraph separator characters. Each (`chainId`, `address`) pair appears once ac
   an artifact for, and checks the class, symbol and decimals against the chain before it adds a row.
 - Leave an entry unpriced when the list carries no feed for its `priceId` that you accept.
 - Use at most the first 16 entries per `chainId`. The publisher never signs more than 16.
+- Drop an `icon` you cannot accept and keep the entry. Draw an accepted one only as an image
+  (`<img src>`), never as markup.
 - Warn wherever a flagged token shows, whoever added it, and never treat a flagged pair as listed.
 
 ### Price feeds
@@ -112,6 +116,22 @@ range, a malformed ticker) leaves the entries naming it unpriced and the rest of
 included, in force. A `priceFeeds` that is not an object, or holds more than 32 keys, makes the
 whole list unreadable, as an over-long `tokens` does. A reader that knows no `priceFeeds` ignores
 the key and keeps its own table.
+
+### Pictures
+
+`icon` is `data:image/svg+xml;base64,` followed by the SVG file in standard base64 with padding and
+no whitespace, at most 3,072 characters in all. The file is a static drawing whose literal text is
+what a parser reads:
+
+- valid UTF-8, starting with `<svg`, with no `&`, `\`, `<!` or `<?` anywhere;
+- every element unprefixed and one of `svg`, `g`, `defs`, `path`, `circle`, `ellipse`, `rect`, `line`,
+  `polyline`, `polygon`, `clipPath`, `mask`, `linearGradient`, `radialGradient`, `stop`, `title`,
+  `desc`;
+- ignoring case, no `href`, `filter`, `image(`, `image-set(`, `src(` or `xml:base`, no attribute starting with `on`,
+  and no `url(` other than `url(#`.
+
+These checks do not make an SVG safe to embed as markup. A browser draws an SVG image with no script
+and no outside load; that is what makes the picture safe to show.
 
 A list is a suggestion of which contracts to show, not a statement that a token is safe or worth
 anything. The class, symbol and decimals are checked against the chain. The name is a label: Nulo

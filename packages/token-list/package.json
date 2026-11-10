@@ -7,6 +7,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./envelope": "./src/envelope.ts",
+		"./icon": "./src/icon.ts",
 		"./parse": "./src/parse.ts",
 		"./sign": "./src/sign.ts",
 		"./sign-cli": "./src/sign-cli.ts"
