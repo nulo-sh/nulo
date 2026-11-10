@@ -420,6 +420,11 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 				}
 				await openFixture(page, "batch", 240)
 				await shotSend(page, "execute-batch-rest-240", "execute-op-summary")
+				for (const name of ["batch", "deep"]) {
+					await openFixture(page, name, 240)
+					await openEverything(page, name)
+					await shotSend(page, `execute-${name}-all-open-240`, "execute-op-from-account")
+				}
 				await openFixture(page, "batch", 400)
 				await tabWalk(page, 2)
 				await shotSend(page, "execute-batch-focus-400", "execute-op-summary")

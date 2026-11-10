@@ -336,6 +336,15 @@ const onRetryPreview = (event: MouseEvent): void => {
 	border-left: 1px solid var(--nulo-border);
 }
 
+/* Below 300 px a guide indents by its line alone, as a tree level past the fourth does, so a
+ * shortened identifier under a step or an authorization keeps one line. */
+@media (width < 300px) {
+	.guide {
+		margin-left: 0;
+		padding-left: 1px;
+	}
+}
+
 .chevron {
 	vertical-align: -1px;
 	transition: transform 120ms ease;
