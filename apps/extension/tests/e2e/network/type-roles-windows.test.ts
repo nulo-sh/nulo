@@ -30,6 +30,7 @@ import {
 	approveExecute,
 	openConnectedApp,
 	openExecuteDetails,
+	openExecuteSteps,
 	rejectCapabilities,
 	rejectExecute,
 	waitCapabilitiesReady,
@@ -202,7 +203,7 @@ type Request = {
 	states: readonly string[]
 	/** The payload must stay inside the card and every hex string in a mono role. */
 	contained?: true
-	/** A send: its value rows open under the summary before `ready` is awaited. */
+	/** A send: its steps open, each its own press, before `ready` is awaited. */
 	details?: true
 	/** Approved, not rejected: what it registers, the requests after it read. */
 	approve?: true
@@ -223,7 +224,6 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddre
 			ready: `${sel("execute-op-decoded-param-value")}[data-address-shows="name"]`,
 			states: [
 				"an aztec_sendTx request (network)",
-				"an aztec_sendTx request with all details open (network)",
 				"a decoded call with an address parameter (network)",
 				"a decoded call with a field parameter (network)",
 			],
@@ -292,13 +292,16 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddre
 	]
 }
 
-/** Every element that holds dApp-supplied payload text: the summary's calls, the call or action rows and the argument rows. */
+/** Every element that holds dApp-supplied payload text: the steps, the call or action rows, the
+ *  authorizations' lines and the argument rows. */
 const PAYLOAD_TEXT = [
 	"execute-op-summary-call",
 	"execute-op-payload-row",
 	"execute-op-decoded-param",
 	"execute-op-arg",
 	"execute-op-transfer-nonce",
+	"execute-op-summary-authwit",
+	"execute-discovered-authwit-decoded-param",
 	"execute-grant-decoded-param",
 ].map(sel)
 
@@ -332,7 +335,6 @@ async function stretchPayload(win: Page): Promise<void> {
 		const set = (selector: string, text: string) => {
 			for (const el of document.querySelectorAll(selector)) el.textContent = text
 		}
-		set('[data-testid="execute-op-payload-row"] > :first-child', `I${"i".repeat(63)}`)
 		set('[data-testid="execute-op-summary-call-title"]', `I${"i".repeat(63)}`)
 		set('[data-testid="execute-op-call-to"]', "W".repeat(25))
 		set('[data-testid="execute-op-summary-call-to"]', "W".repeat(25))
@@ -342,27 +344,26 @@ async function stretchPayload(win: Page): Promise<void> {
 	})
 }
 
-/** Each font's text is measured alone: text on one line in two fonts can have different rect tops. */
-async function callCaptions(win: Page): Promise<{ lines: number; onBeside: boolean; inRow: boolean }[]> {
+/** Each step's contract, measured by its own text: a line may end after "on", as the signed frames
+ *  draw a narrow window, but the address itself never breaks and never leaves its step. */
+async function callCaptions(win: Page): Promise<{ lines: number; inRow: boolean }[]> {
 	return win.evaluate(() =>
-		Array.from(document.querySelectorAll('[data-testid="execute-op-payload-row"]'), (row) => {
-			const caption = row.lastElementChild
-			const to = caption?.querySelector('[data-testid="execute-op-call-to"]')
-			if (!caption || !to) throw new Error("a payload row with no contract")
-			const textRects = (parent: Element) =>
-				Array.from(parent.childNodes).flatMap((node) => {
-					if (node.nodeType !== 3 || (node.textContent ?? "").trim() === "") return []
-					const range = document.createRange()
-					range.selectNodeContents(node)
-					return Array.from(range.getClientRects()).filter((rect) => rect.width > 0)
-				})
-			const [address, on] = [textRects(to), textRects(caption)]
-			const first = address[0]
-			const beside = on[0]
+		Array.from(document.querySelectorAll('[data-testid="execute-op-summary-call-head"]'), (head) => {
+			const to = head.querySelector('[data-testid="execute-op-call-to"]')
+			const row = head.closest('[data-testid="execute-op-summary-call"]')
+			if (!to || !row) throw new Error("a step's sentence with no contract")
+			const rects: DOMRect[] = []
+			const text = document.createTreeWalker(to, NodeFilter.SHOW_TEXT)
+			for (let node = text.nextNode(); node; node = text.nextNode()) {
+				if ((node.textContent ?? "").trim() === "") continue
+				const range = document.createRange()
+				range.selectNodeContents(node)
+				rects.push(...Array.from(range.getClientRects()).filter((rect) => rect.width > 0))
+			}
+			const right = row.getBoundingClientRect().right
 			return {
-				lines: new Set(address.map((rect) => Math.round(rect.top))).size,
-				onBeside: Boolean(first && beside && beside.top < first.bottom && first.top < beside.bottom),
-				inRow: caption.getBoundingClientRect().right <= row.getBoundingClientRect().right + 0.5,
+				lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
+				inRow: rects.length > 0 && rects.every((rect) => rect.right <= right + 0.5),
 			}
 		}),
 	)
@@ -371,8 +372,8 @@ async function callCaptions(win: Page): Promise<{ lines: number; onBeside: boole
 async function expectCallCaptionsWhole(win: Page): Promise<void> {
 	const whole = async (label: string) => {
 		const captions = await callCaptions(win)
-		expect(captions.length, `${label}: payload rows`).toBeGreaterThan(0)
-		expect(captions, label).toEqual(captions.map(() => ({ lines: 1, onBeside: true, inRow: true })))
+		expect(captions.length, `${label}: steps`).toBeGreaterThan(0)
+		expect(captions, label).toEqual(captions.map(() => ({ lines: 1, inRow: true })))
 	}
 	await whole("the window's width")
 	await atWidth(win, 360, async () => {
@@ -431,7 +432,7 @@ async function openExecute(ctx: Connected, { button, inputs, ready, details }: R
 		if (details) {
 			await win.waitForSelector(sel("execute-op-summary"), { visible: true, timeout: 60_000 })
 			expect(await win.$(sel("execute-op-details"))).toBeNull()
-			await openExecuteDetails(win)
+			await openExecuteSteps(win)
 		}
 		await win.waitForSelector(ready, { visible: true, timeout: 60_000 })
 		// The fee readout swaps its rows when the estimate lands, which the narrow pass would read as text
@@ -566,7 +567,7 @@ test.skipIf(!hasConfig)(
 			await win.waitForSelector(sel("execute-discovered-authwit-details"), { visible: true, timeout: 10_000 })
 			await shotSend(win, "authwit-details", "execute-op-discovered-authwits")
 			const [rows, open] = await sweepWindow(win, "windows-execute", [
-				"a send with a discovered authwit, all details open (network)",
+				"a send with a discovered authwit, its authorizations open (network)",
 				"a discovered authwit with its details open (network)",
 			])
 			expect(assertedIn(rows)).toEqual(expect.arrayContaining([sel("execute-discovered-consumer"), sel("execute-discovered-caller")]))
@@ -710,7 +711,7 @@ test.skipIf(!hasConfig)(
 			await win.waitForFunction(feeSettled, { timeout: 60_000, polling: 200 })
 			await sweepWindow(win, "windows-execute", ["a send consuming another account's authwit (network)"])
 			await openExecuteDetails(win)
-			await sweepWindow(win, "windows-execute", ["a send consuming another account's authwit, all details open (network)"])
+			await sweepWindow(win, "windows-execute", ["a send consuming another account's authwit, its authorizations open (network)"])
 		} finally {
 			await dismiss(win, rejectExecute)
 		}

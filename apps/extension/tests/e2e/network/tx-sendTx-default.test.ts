@@ -180,6 +180,7 @@ test.skipIf(!hasConfig)(
 		])
 		const feePopup = await feePopupP
 		await feePopup.waitForSelector('[data-testid="fee-raised"]', { visible: true, timeout: 60_000 })
+		expect(await feePopup.evaluate(() => document.documentElement.getAttribute("data-fills-window"))).toBe("true")
 
 		// Held, unproven: the record asks the question the window shows, with the figure approved.
 		type Asked = { kind?: string; progress?: { stage?: string; reask?: { fee: string; cap: string; payer: unknown } } }

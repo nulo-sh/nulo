@@ -503,10 +503,32 @@ export async function waitForExecuteContent(page: Page, timeout = 30_000): Promi
 	await page.waitForSelector('[data-testid="execute-op-item"]', { visible: true, timeout })
 }
 
-/** Opens a send card's value rows under its summary ("Show all details"), closed at rest. */
+/** Opens every step of a send card, each its own row and closed at rest, and waits for each open. */
+export async function openExecuteSteps(page: Page, timeout = 10_000): Promise<void> {
+	const row = (index: string) => `[data-testid="execute-op-step-toggle"][data-step-index="${index}"]`
+	await page.waitForSelector('[data-testid="execute-op-step-toggle"]', { visible: true, timeout })
+	const closed = await page.$$eval('[data-testid="execute-op-step-toggle"][aria-expanded="false"]', (rows) =>
+		rows.map((el) => el.getAttribute("data-step-index") ?? ""),
+	)
+	// The row's own button, never a point on its sentence, which may hold a control of its own.
+	for (const index of closed) {
+		await clickSelector(page, row(index), { timeout })
+		await page.waitForSelector(`${row(index)}[aria-expanded="true"]`, { timeout })
+	}
+}
+
+/** Opens the authorizations' node once the wallet has listed them, and waits for it open. */
+export async function openExecuteAuthwits(page: Page, timeout = 10_000): Promise<void> {
+	await page.waitForSelector('[data-testid="execute-op-authwits-toggle"]', { visible: true, timeout })
+	const open = '[data-testid="execute-op-authwits-toggle"][aria-expanded="true"]'
+	if (!(await page.$(open))) await clickByTestId(page, "execute-op-authwits-toggle")
+	await page.waitForSelector(open, { timeout })
+}
+
+/** Opens every step and the authorizations: call it only once the authorizations are listed. */
 export async function openExecuteDetails(page: Page, timeout = 10_000): Promise<void> {
-	await clickByTestId(page, "execute-op-details-toggle")
-	await page.waitForSelector('[data-testid="execute-op-details"]', { visible: true, timeout })
+	await openExecuteSteps(page, timeout)
+	await openExecuteAuthwits(page, timeout)
 }
 
 /** Read the visible op cards: returns `{ id, kind }[]`. Waits for at least one
