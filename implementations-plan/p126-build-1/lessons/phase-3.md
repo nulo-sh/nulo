@@ -8,3 +8,4 @@
 - Gate (before the gate-module fix): audit:vue 0, test:all 0, check:plans 0, test:release 1 (environmental, above).
 - `test:release` runs on this host with Info-ZIP extracted from Ubuntu's own `zip` package into the scratch dir (`apt-get download zip`, `dpkg-deb -x`), on `PATH` for that run only: 377 pass, 0 fail.
 - Firefox smoke, armed build: the first run set `NULO_E2E_SHOT_DIR` and failed at `shotSend` (`captureScreenshot` refused in privileged scope, Chrome-only per `FIREFOX.md`); without it, 3 pass, 1 skipped, 47 s, wide 3,927 ms. A reload while the window lazily imports the glossary chunk logs an aborted dynamic import in the add-on's exceptions; it fails nothing.
+- CI, PR #1776 at `81277dd`: wide 1,342 ms on Chrome, 2,188 ms on Firefox; smoke wall-clock 10 min Chrome, 15 min Firefox (before 10 and 14).

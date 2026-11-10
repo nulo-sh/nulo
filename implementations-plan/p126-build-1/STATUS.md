@@ -11,3 +11,4 @@
 - 2026-11-10: a1 review: Codex r1 conditional approve (3 adopted), Opus conditional approve (6 adopted), Codex r2 approve; fixes in bc63c57aa.
 - 2026-11-10: a1 final gates on bc63c57aa: audit:vue, test:all, test:release (local zip), check:plans green; smoke Chrome armed green (30.1 s), release-build negative green; network Chrome green (13/13, at 788458d63).
 - 2026-11-10: a1 network Firefox green (13/13, final code); all a1 gates green; opening the PR.
+- 2026-11-10: a1 PR #1776 open, ready, every check green at 81277dd; wide 1,342 ms on CI Chrome. a1 done.
