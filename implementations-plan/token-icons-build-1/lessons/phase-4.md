@@ -9,3 +9,4 @@
 
 - Codex round 1 (session `01a1c73e`) and an Opus diff review ran in parallel. Both found the stale `keyOf` in `auto-imports.d.ts`'s `declare module 'vue'` block (`skipLibCheck` hides it; the build's generated-sources check does not): hand-editing a generated file leaves its second block behind, so rebuild and compare instead.
 - The overflow both legs traced was checked with a throwaway spec (32 `W`s for a symbol, 12,345.67 on each side): after `min-width: 0` on the two left wrappers the symbol shrinks to 88 px with its ellipsis and the split ends at the row's edge.
+- Codex round 2 (resumed over the fix commit): clean. The loop converged at round 2.

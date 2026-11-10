@@ -225,6 +225,7 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 
 - **Arc 2 review, Codex round 1** (session `01a1c73e`, gpt-6.1-sol, high): findings (1 material). Accepted: the 44 px mark could push a long symbol's row past its balance (plausible; both left wrappers now take `min-width: 0`, measured in Chrome with a 32-character symbol and 10-character figures: no overflow); the e2e helper accepted the initials a mark shows before the list's snapshot arrives (it now waits for the expected kind) and selected by structure (`:has`, `img`: now `token-hero` and `token-mark-logo`); the stale `keyOf` in the generated declarations; a narrating header comment.
 - **Arc 2 review, Opus** (general-purpose, beside Codex round 1): findings (1 material: the same stale declaration, which the build's generated-sources check would red). Accepted: the overflow (as Codex's); a very wide letter in a hostile symbol spilling out of the disc (initials now clip horizontally); the structural selector (as Codex's); three comment nits and an invariant on `.logo`. To the owner: Home's seed, import and skeleton rows carry no mark, so they sit 44 px left of the cards (`OWNER-ASKS.md` A3; ships unchanged). Not taken: rewording a local commit subject (the squash takes the PR title).
+- **Arc 2 review, Codex round 2** (same session, over `f18f7f96c`): **clean** ("No new findings. Accepted fixes verified by inspection; identity and missing-picture probes passed").
 
 ## Seeds
 

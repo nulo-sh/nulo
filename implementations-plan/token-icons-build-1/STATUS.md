@@ -9,3 +9,4 @@
 - 2026-11-10 arc 1 merged as #1778; arc 2 branch `token-icons-build-1-a2` off `dev` b557cb159
 - 2026-11-10 arc 2 phase 3 built (channel, `tokenInitials`, `TokenMark`); targeted tests, lint, typecheck:all green; the gate runs once on the final head
 - 2026-11-10 arc 2 phase 4 built (rows, Send's asset row, token page); touched smoke spec green at retry 0 on Chrome (14 s) and Firefox (27 s); captures written
+- 2026-11-10 arc 2 review: Codex round 1 + Opus folded (f18f7f96c), Codex round 2 clean
