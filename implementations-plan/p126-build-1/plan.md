@@ -248,6 +248,8 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 
 **Cross-arc pass, round 2, Codex (resumed, on `f62e24d29`): approve**, no findings. The cross-arc pass converged.
 
+**Arc a2, round 3, Codex (resumed, on `e17968365`, after the restack onto `c860df0e4` and the 240 px guide rule): approve** for the code. Adopted: OA-1's recommendation overstated (a), which leaves a nested address breaking at 240 px → reworded. The hard stop is reached with the loop converged.
+
 ## Seeds
 
 ```
