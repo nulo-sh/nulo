@@ -502,7 +502,7 @@ describe("TokenCard — the subtitle's overflow", () => {
 
 	test("the mark and the text column may shrink below their content, so the clipped text yields to the balance", () => {
 		expect(declarationsOf(parsed, ".lead")).toEqual({ "min-width": "0" })
-		const leads: string[] = []
+		const leads: (string | undefined)[] = []
 		if (parsed.template)
 			walkElements(parsed.template, (node) => void (boundAttr(node, "class") === "$style.lead" && leads.push(node.tag)))
 		expect(leads).toEqual(["Flex", "Flex"])
