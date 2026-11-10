@@ -29,6 +29,7 @@ import {
 	VAULT_DECODED_FACTS,
 	VAULT_RAW_FACTS,
 } from "./execute.fixture"
+import { valueText } from "./call-surface"
 import OperationCard from "./OperationCard.vue"
 
 const lookups = vi.hoisted(() => ({ accounts: [] as { name: string; address: string }[] }))
@@ -86,15 +87,21 @@ const unreached = async (w: VueWrapper, facts: readonly Fact[]): Promise<Fact[]>
 	return facts.filter((_, i) => found[i] > MAX_PRESSES)
 }
 
-/** A decoded value's integer leaves, as the tree prints them. */
-const integers = (v: DecodedValue): string[] =>
-	v.kind === "integer"
-		? [v.value]
-		: v.kind === "array"
-			? v.items.flatMap(integers)
-			: v.kind === "struct"
-				? v.fields.flatMap((f) => integers(f.value))
+/** Every row a decoded value draws, as the tree prints it: a branch's name, a leaf's name and value,
+ *  an address as `AddressDisplay` shows it. Read in its own row, so a raw field cannot answer it. */
+const treeRows = (row: string, name: string, v: DecodedValue): Fact[] => {
+	const own = `${row} [data-testid="execute-op-decoded-param"][data-param="${name}"]`
+	const children =
+		v.kind === "struct"
+			? v.fields.map((f) => [f.name, f.value] as const)
+			: v.kind === "array"
+				? v.items.map((item, i) => [`[${i}]`, item] as const)
 				: []
+	if (children.length) return [{ row: own, text: `${name}:` }, ...children.flatMap(([n, c]) => treeRows(row, n, c))]
+	if (v.kind === "address") return [{ row: own, text: v.value === MAIN ? "Main" : trimAddress(v.value) }]
+	const text = v.kind === "struct" ? "{}" : v.kind === "array" ? "[]" : valueText(v)
+	return [{ row: own, text: `${name}:${text}` }]
+}
 
 /** The real `AddressDisplay`, except it renders nothing for `address`: a card that drops one row's field. */
 const dropping = (address: string) =>
@@ -141,10 +148,10 @@ describe("OperationCard — every fact of a multi-call transaction within two pr
 			})
 			await flushPromises()
 			const calls = (f.operations[0] as unknown as { exec: { calls: { args: string[] }[] } }).exec.calls
-			// A token's own calls read as the wallet's transfer rows; every other decode prints its integers as given.
+			// A token's own calls read as the wallet's transfer rows; every other decode prints its tree.
 			const decoded = f.decodedCalls[0]!.flatMap((d, j) =>
 				d.kind === "decoded" && d.contract !== "Token"
-					? d.params.flatMap((p) => integers(p.value)).map((text) => ({ row: `[data-call-index="${j}"]`, text }))
+					? d.params.flatMap((p) => treeRows(`[data-call-index="${j}"]`, p.name, p.value))
 					: [],
 			)
 			const wanted = [
