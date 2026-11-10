@@ -233,6 +233,12 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 
 **Arc a1, round 2, Codex (resumed, on `bc63c57aa`): approve.** The loop converged.
 
+**Arc a2, round 1, Codex (GPT-6.1 Sol, high, read-only, on `5edb41885`): approve.**
+- Adopted: (1) the keyboard scenario reached the raw press but never activated it → Enter there opens the raw values with the step left open; (2) the tenth number was read through `li.firstElementChild` → the box carries `execute-op-step-number`; (3) comments that described the layout went, the summary's header keeps its two invariants.
+
+**Arc a2, Opus 5.5 (general-purpose), alongside round 1: conditional approve.** No material product bug; it traced the guard, the ids, the advice, the Set state and the two presses as holding.
+- Adopted: (1) the "no tooltip" half could not fail: `DottedTerm` uses an unregistered `Tooltip`, so the count was 0 on every fixture, demonstrated → `Tooltip` registered, one per term; (2) `stretchPayload` overwrote a step's `execute-op-call-to` wrapper and dropped the address inside it, demonstrated → the write goes into the address; (3) an empty slot still read as a group named "Authorizations" → named only while it holds something; (4) a selection a drag left in a row held a press on its own textless button → that press toggles; (5) the node's row announced no count → described by its label; (6) comments as Codex (3), and StepRow's padding comment corrected.
+
 ## Seeds
 
 ```
