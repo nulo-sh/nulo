@@ -137,7 +137,7 @@ Single arc, one PR to `dev`, no stack: branch `og-cards-1-a1` off `origin/dev` c
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) as of `32fd50e60`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) as of `32fd50e60`. Plan-specific values:
 
 - **Loop placement:** single arc, once over the net diff from `32fd50e60` after Phase 2 is green. Reviewer: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus (`general-purpose`) review alongside round 1. Hard stop at three rounds, then report.
 - **Approval boundaries:** the card's look and the alt text are the owner's; a review finding that changes either goes to `OWNER-ASKS.md`. A fix that adds state, a lifecycle, a protocol, a fallback or a contract stops for approval.
