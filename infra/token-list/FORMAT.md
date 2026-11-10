@@ -127,8 +127,8 @@ what a parser reads:
 - every element unprefixed and one of `svg`, `g`, `defs`, `path`, `circle`, `ellipse`, `rect`, `line`,
   `polyline`, `polygon`, `clipPath`, `mask`, `linearGradient`, `radialGradient`, `stop`, `title`,
   `desc`;
-- ignoring case, no `href`, no `filter`, no attribute starting with `on`, and no `url(` other than
-  `url(#`.
+- ignoring case, no `href`, `filter`, `image(`, `image-set(`, `src(` or `xml:base`, no attribute starting with `on`,
+  and no `url(` other than `url(#`.
 
 These checks do not make an SVG safe to embed as markup. A browser draws an SVG image with no script
 and no outside load; that is what makes the picture safe to show.

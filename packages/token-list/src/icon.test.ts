@@ -48,6 +48,7 @@ describe("isTokenIcon", () => {
 		["a letter mark", LETTER_MARK],
 		["clip paths and a same-file url", CLIPPED],
 		["fill and clip rules", EVEN_ODD],
+		["a same-file mask image and an id that spells image", svg('<rect id="image" style="mask-image:url(#m);image-rendering:auto"/>')],
 	])("accepts %s, and iconBytes returns its exact bytes", (_, text) => {
 		expect(isTokenIcon(dataUrl(text))).toBe(true)
 		expect(new TextDecoder().decode(iconBytes(dataUrl(text)))).toBe(text)
@@ -72,13 +73,13 @@ describe("isTokenIcon", () => {
 		["the URL-safe alphabet", urlSafe()],
 		["stray padding bits", strayBits()],
 		["invalid UTF-8", dataUrl(Uint8Array.from([...Buffer.from("<svg>"), 0xff, ...Buffer.from("</svg>")]))],
-		["a byte-order mark", dataUrl(`﻿${LETTER_MARK}`)],
+		["a byte-order mark", dataUrl(`\uFEFF${LETTER_MARK}`)],
 		["a prolog", dataUrl(`<?xml version="1.0"?>${LETTER_MARK}`)],
 		["a document type", dataUrl(`<!DOCTYPE svg>${LETTER_MARK}`)],
 		["a comment", dataUrl(svg("<!-- x --><g/>"))],
 		["a character reference", dataUrl(svg('<rect fill="u&#114;l(https://example.com/a)"/>'))],
 		["a CSS escape", dataUrl(svg('<rect style="fill:u\\72l(https://example.com/a)"/>'))],
-		["a prefixed element", dataUrl(svg('<s:script xmlns:s="http://www.w3.org/2000/svg">x</s:script>'))],
+		["a prefixed element", dataUrl(svg('<s:path xmlns:s="http://www.w3.org/2000/svg" d="M0 0H9"/>'))],
 		["a script", dataUrl(svg("<script>x</script>"))],
 		["an animation", dataUrl(svg('<rect><animate attributeName="opacity" dur="1ms"/></rect>'))],
 		["a style element", dataUrl(svg("<style>rect{fill:red}</style>"))],
@@ -87,8 +88,12 @@ describe("isTokenIcon", () => {
 		["a filter in a style attribute", dataUrl(svg('<rect style="filter:blur(4px)"/>'))],
 		["a foreign object", dataUrl(svg("<foreignObject/>"))],
 		["an event attribute", dataUrl(svg('<rect ONLOAD = "x"/>'))],
-		["an href", dataUrl(svg('<use xlink:href="#a"/>'))],
+		["an href", dataUrl(svg('<g href="#a"/>'))],
 		["a url outside the file", dataUrl(svg('<rect fill="url(https://example.com/a)"/>'))],
+		["an image set", dataUrl(svg("<rect style=\"mask-image:image-set('https://example.com/a' 1x)\"/>"))],
+		["an image function", dataUrl(svg("<rect style=\"mask-image:image('https://example.com/a')\"/>"))],
+		["a src function", dataUrl(svg("<rect style=\"mask:src('https://example.com/a')\"/>"))],
+		["a base URL", dataUrl(svg('<rect xml:base="https://example.com/" fill="url(#a)"/>'))],
 		["text that does not start with <svg", dataUrl(` ${LETTER_MARK}`)],
 	])("refuses %s", (_, value) => {
 		expect(isTokenIcon(value)).toBe(false)

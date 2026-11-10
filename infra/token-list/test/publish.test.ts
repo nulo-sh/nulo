@@ -433,7 +433,7 @@ describe("the prepare summary", () => {
 	test("shows each picture's size and digest prefix, and a changed picture as a was/now pair", () => {
 		const picture = (svg: string) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
 		const [before, after] = [picture("<svg><g/></svg>"), picture("<svg><path/></svg>")]
-		const prefix = (svg: string) => createHash("sha256").update(svg).digest("hex").slice(0, 8)
+		const prefix = (svg: string) => createHash("sha256").update(svg).digest("hex").slice(0, 16)
 		const rendered = renderDiff(tokenDiff([token(1, { icon: before })], [token(1, { icon: after }), token(2)]))
 		expect(rendered).toContain(`| was | 1 |`)
 		expect(rendered).toContain(`svg 15 B \`${prefix("<svg><g/></svg>")}\` |`)

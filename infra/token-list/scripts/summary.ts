@@ -93,7 +93,7 @@ export const cell = (text: string) => text.replace(/[!-/:-@[-`{-~]/g, "\\$&")
 /** A picture as the approver can compare it with `README.md` § Pictures: its size and digest prefix. */
 function iconCell(icon: string | undefined): string {
 	const bytes = iconBytes(icon)
-	return bytes ? `svg ${bytes.length} B \`${sha256Hex(bytes).slice(0, 8)}\`` : "none"
+	return bytes ? `svg ${bytes.length} B \`${sha256Hex(bytes).slice(0, 16)}\`` : "none"
 }
 const row = (sign: string, t: TokenListEntry) =>
 	`| ${sign} | ${t.chainId} | \`${t.address}\` | ${cell(t.symbol)} | ${cell(t.name)} | ${t.decimals} | ${t.priceId ?? "unpriced"} | \`${t.classId.slice(0, 10)}…\` | ${iconCell(t.icon)} |`

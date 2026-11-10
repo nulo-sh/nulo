@@ -7,7 +7,7 @@
  */
 
 export const ICON_PREFIX = "data:image/svg+xml;base64,"
-/** The whole data URL. Every issuer file the list carries fits with a third to spare. */
+/** Bounds the whole data URL, prefix included. */
 export const MAX_ICON_CHARS = 3072
 
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
@@ -31,8 +31,11 @@ const ELEMENTS: ReadonlySet<string> = new Set([
 	"title",
 	"desc",
 ])
-/** Matched in the lower-cased text. `filter` covers the element, the attribute and the CSS property. */
-const REFUSED = ["&", "\\", "<!", "<?", "href", "filter"] as const
+/**
+ * Matched in the lower-cased text. `filter` covers the element, the attribute and the CSS property;
+ * `image(`, `image-set(`, `src(` and `xml:base` close the references that never spell `url(`.
+ */
+const REFUSED = ["&", "\\", "<!", "<?", "href", "filter", "image(", "image-set(", "src(", "xml:base"] as const
 const EVENT_ATTRIBUTE = /\son[a-z]+\s*=/
 const OUTSIDE_URL = /url\((?!#)/
 const TAG = /<\/?([^\s/>]*)/g

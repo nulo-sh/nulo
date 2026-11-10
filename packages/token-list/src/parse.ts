@@ -3,13 +3,14 @@
  * signs under `bun --no-install`, with the same rules the wallet applies.
  *
  * Two modes. `wallet` reads a list a later format revision may have extended: it ignores unknown
- * keys, drops an entry's picture it cannot accept, and drops a price feed record it cannot accept, so
- * `selectEntries` leaves that record's entries unpriced and the rest of the list, flags included, still reads; a feed map that is not an
- * object or holds over `MAX_PRICE_FEEDS` keys refuses the list, as an over-long `tokens` does. `strict` is what the
- * signer and the tree tests demand: known keys only, a bundled class, at most
- * `MAX_ENTRIES_PER_CHAIN` entries per chain, and, when the list carries `priceFeeds`, a record for
- * every price id and an entry for every record. Both refuse a value they would have to normalize:
- * upper-case hex, a field element at or above the modulus, an out-of-range number.
+ * keys, drops an entry's picture it cannot accept, and drops a price feed record it cannot accept,
+ * so `selectEntries` leaves that record's entries unpriced and the rest of the list, flags included,
+ * still reads; a feed map that is not an object or holds over `MAX_PRICE_FEEDS` keys refuses the
+ * list, as an over-long `tokens` does. `strict` is what the signer and the tree tests demand: known
+ * keys only, a bundled class, at most `MAX_ENTRIES_PER_CHAIN` entries per chain, and, when the list
+ * carries `priceFeeds`, a record for every price id and an entry for every record. Both refuse a
+ * value they would have to normalize: upper-case hex, a field element at or above the modulus, an
+ * out-of-range number.
  */
 
 import { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
@@ -173,7 +174,6 @@ function checkPair(f: Fields, path: string): TokenListPair {
 	return { chainId: f.chainId as number, address: f.address as string }
 }
 
-/** Strict refuses a picture `isTokenIcon` does not accept; the wallet drops it and keeps the entry. */
 function checkIcon(value: unknown, path: string, mode: ParseMode): string | undefined {
 	if (value === undefined || isTokenIcon(value)) return value
 	ensure(mode === "wallet", path)

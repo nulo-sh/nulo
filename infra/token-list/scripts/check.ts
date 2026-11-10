@@ -23,15 +23,18 @@ export function canonical(value: unknown): string {
 
 export const sha256Hex = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex")
 
+/** Six non-empty cells, the digest last: a digest in prose records no author, source or terms. */
+const PICTURE_ROW = /^\|(?: [^\s|][^|\n]* \|){5} `([0-9a-f]{64})` \|$/gm
+
 /**
- * Every entry carries a picture, so a token without one is never a listed token, and each picture's
- * digest has a row in the README's provenance table, so swapping a picture changes a reviewed line.
+ * Publishing requires every entry to carry a picture whose digest has a row in the README's
+ * provenance table, so swapping a picture changes a reviewed line.
  */
 export function pictureFindings(tokens: readonly TokenListEntry[], readme: string): string[] {
 	const start = readme.indexOf("\n## Pictures\n")
 	const end = start === -1 ? -1 : readme.indexOf("\n## ", start + 1)
 	const table = start === -1 ? "" : readme.slice(start, end === -1 ? undefined : end)
-	const recorded = new Set(Array.from(table.matchAll(/`([0-9a-f]{64})`/g), (match) => match[1]))
+	const recorded = new Set(Array.from(table.matchAll(PICTURE_ROW), (match) => match[1]))
 	return tokens.flatMap((token, i) => {
 		const bytes = iconBytes(token.icon)
 		if (!bytes) return [`${SOURCE}: tokens[${i}] has no icon`]

@@ -75,8 +75,8 @@ artifact, kept 7 days: the floor rule does not read it (known limit #1001).
 
 Every entry's `icon` is one of these files, embedded byte for byte (`FORMAT.md` § Pictures).
 Issuers' marks are used as published, unaltered and never recoloured, on the owner's recorded
-decision of 2026-11-10 (M1), on test and bridged tokens too; a token no issuer draws for gets Nulo's
-letter mark (L3). The tree check refuses an entry with no picture or with one whose SHA-256 has no
+decision of 2026-11-10, on test and bridged tokens too; a token no issuer draws for gets Nulo's
+letter mark. The tree check refuses an entry with no picture or with one whose SHA-256 has no
 row here, so changing a picture means changing its row; a picture is never bundled in the
 extension.
 

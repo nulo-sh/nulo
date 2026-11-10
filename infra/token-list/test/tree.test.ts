@@ -2,6 +2,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { type PinnedKey, PLACEHOLDER_PUBLIC_KEY } from "@nulo/token-list"
+import { iconBytes } from "@nulo/token-list/icon"
 import { importSeed, publicKeyOf } from "@nulo/token-list/envelope"
 import { main as signCli } from "@nulo/token-list/sign-cli"
 import { afterAll, describe, expect, test } from "vitest"
@@ -17,6 +18,7 @@ import {
 	pictureFindings,
 	README,
 	SOURCE,
+	sha256Hex,
 	treeFindings,
 } from "../scripts/check"
 import { FLOOR_PATH, floorText } from "../scripts/floor"
@@ -103,6 +105,11 @@ describe("the host tree", () => {
 		expect(pictureFindings([bare, tokens[1]], readme)).toEqual([`${SOURCE}: tokens[0] has no icon`])
 		const unrecorded = { ...tokens[1], icon: `data:image/svg+xml;base64,${Buffer.from("<svg><g/></svg>").toString("base64")}` }
 		expect(pictureFindings([tokens[0], unrecorded], readme)).toEqual([`${SOURCE}: tokens[1].icon has no row in ${README} § Pictures`])
+		const digest = sha256Hex(iconBytes(tokens[0].icon) as Uint8Array)
+		const row = readme.split("\n").find((line) => line.includes(digest)) as string
+		const unrowed = [`${SOURCE}: tokens[0].icon has no row in ${README} § Pictures`]
+		expect(pictureFindings([tokens[0]], readme.replace(row, `Retired: \`${digest}\`.`))).toEqual(unrowed)
+		expect(pictureFindings([tokens[0]], readme.replace(row, row.replace(/^\| [^|]+ \|/, "|   |")))).toEqual(unrowed)
 		const { root, pinned } = await signedTree("picture")
 		const oversize = {
 			...tokens[0],
