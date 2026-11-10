@@ -120,6 +120,7 @@ declare module 'vue' {
     Text: typeof import('@nulo/design')['Text']
     ToastManager: typeof import('./../components/ui/ToastManager.vue')['default']
     Toggle: typeof import('@nulo/design')['Toggle']
+    TokenMark: typeof import('./../components/composite/general/TokenMark.vue')['default']
     Tooltip: typeof import('@nulo/design')['Tooltip']
     TransactionAwaitingCard: typeof import('./../components/composite/activity/TransactionAwaitingCard.vue')['default']
     TransactionCardLayout: typeof import('./../components/composite/activity/TransactionCardLayout.vue')['default']

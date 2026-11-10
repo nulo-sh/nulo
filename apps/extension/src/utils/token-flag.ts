@@ -4,7 +4,8 @@
  */
 import { type TokenListPair, tokenKey } from "@nulo/token-list"
 
-const keyOf = (chainId: number, address: string): string => tokenKey(chainId, `0x${address.replace(/^0x/i, "")}`)
+/** The one key a list pair and a row meet on; `tokenIconsOf` keys pictures with it too. */
+export const keyOf = (chainId: number, address: string): string => tokenKey(chainId, `0x${address.replace(/^0x/i, "")}`)
 
 /** The keys the worker sends; the popup matches rows against them with {@link isFlaggedToken}. */
 export function flaggedKeysOf(pairs: readonly TokenListPair[]): string[] {
