@@ -1,0 +1,35 @@
+# The top of the 1.2.0 changelog page. Its bottom part is release-notes/1.2.0.md.
+version = "1.2.0"
+date = "2026-11-05"
+title = "Read before you sign."
+lede = "Five changes you will notice first. The full notes are below."
+
+[[change]]
+icon = "signature"
+area = "Approvals"
+title = "Approvals add it up"
+line = "An app's approval window lists what leaves your account with the fee, and says which calls Nulo cannot check."
+
+[[change]]
+icon = "send"
+area = "Send"
+title = "Send starts from what you hold"
+line = "The token picker lists your holdings. A send in progress shows in a toast and in History."
+
+[[change]]
+icon = "square-check"
+area = "Onboarding"
+title = "Three words before Ready"
+line = "A new wallet checks three words of its recovery phrase. The phrase step closes itself after 5 minutes."
+
+[[change]]
+icon = "lock"
+area = "Recovery"
+title = "A way back from the lock screen"
+line = "The lock screen offers \"Forgot your password?\" or \"Lost your passkey?\". A protected full backup takes one step."
+
+[[change]]
+icon = "network-edit"
+area = "Testnet"
+title = "A new Testnet node"
+line = "Testnet moves to a new default node at your next unlock. A node you set yourself stays."

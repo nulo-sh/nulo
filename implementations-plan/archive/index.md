@@ -48,6 +48,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [capabilities-popup-quality](capabilities-popup-quality/plan.md) — completed — the capabilities popup and connected-apps page say only what the protocol does
 - [capture-await-write-sweep](capture-await-write-sweep/plan.md) — completed — a hunt for the capture, await, stale-write race shape, with each hit fenced
 - [chain-endpoints](chain-endpoints/plan.md) — completed — a smoke suite that reaches no outside host (#171); hidden characters refused in node URLs, plain HTTP only to this computer and no inline styles in the extension CSP (#200, #101); a missing price reads as unavailable on Home (#116)
+- [changelog-1-build](changelog-1-build/plan.md) — completed — changelog pages on nulo.sh in direction D2, one per stable release, from release-notes and an editorial TOML (#1691); #1711 and #1712 owner asks
 - [chrome-store-launch](chrome-store-launch/plan.md) — completed — every Chrome and Firefox store-submission input built inside the repository
 - [ci-cd](ci-cd/plan.md) — completed — CI bring-up: two long-lived branches with change-detected gates
 - [ci-dedupe-1](ci-dedupe-1/plan.md) — completed — one reusable network lane workflow holds the partition and seeds (#537); a store dispatch smokes the published zips it ships (#527)
