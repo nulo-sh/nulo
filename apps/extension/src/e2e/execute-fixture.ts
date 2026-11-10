@@ -16,7 +16,7 @@ import type { TokenInfo } from "@/wallet/services/token/client"
 /** Travels in every fixture's app metadata, so the release grep finds this module wherever it lands. */
 export const EXECUTE_FIXTURE_MARKER = "nulo:e2e:execute-fixture"
 
-export const EXECUTE_FIXTURES = ["one", "batch", "deep", "raw", "ten", "wide", "depth", "ancestry"] as const
+export const EXECUTE_FIXTURES = ["one", "batch", "deep", "raw", "ten", "wide", "wide-authwits", "depth", "ancestry"] as const
 export type ExecuteFixtureName = (typeof EXECUTE_FIXTURES)[number]
 
 export type ExecuteFixture = {
@@ -117,12 +117,11 @@ const transfer = (token: string, from: string, to: string, amount: bigint, nonce
 	params: { from: addr(from), to: addr(to), amount: int(amount), _nonce: fld(nonce) },
 })
 
-const authwit = (k: number, caller: string, from: string, amount: bigint, onBehalfOf?: string) => {
-	const spec = transfer(USDC, from, caller, amount, NONCES[k], "transfer_private_to_public")
+const authwitOf = (k: number, caller: string, spec: Spec, onBehalfOf?: string) => {
 	const record: DiscoveredAuthwit = {
-		consumer: USDC,
+		consumer: spec.to,
 		caller,
-		selector: vocabularySelector("transfer_private_to_public", 4) ?? "",
+		selector: spec.selector ?? vocabularySelector(spec.name, Object.keys(spec.params).length) ?? "",
 		args: Object.values(spec.params).flatMap(flatten),
 		innerHash: INNER[k],
 		messageHash: MESSAGES[k],
@@ -130,6 +129,9 @@ const authwit = (k: number, caller: string, from: string, amount: bigint, onBeha
 	}
 	return { record, decode: decodeOf(spec) }
 }
+
+const authwit = (k: number, caller: string, from: string, amount: bigint, onBehalfOf?: string) =>
+	authwitOf(k, caller, transfer(USDC, from, caller, amount, NONCES[k], "transfer_private_to_public"), onBehalfOf)
 
 /** `n` levels of `wrap` around `leaf`. */
 const nest = (n: number, leaf: DecodedValue, wrap: (inner: DecodedValue, level: number) => DecodedValue): DecodedValue =>
@@ -247,10 +249,10 @@ const rawSpecs = (main: string): Spec[] => [
 	},
 ]
 
-type Shape = { specs: Spec[]; authwits: ReturnType<typeof authwit>[]; maxFee: string }
+type Shape = { specs: Spec[]; authwits: ReturnType<typeof authwitOf>[]; maxFee: string }
 
 const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
-	const fee = (specs: Spec[], maxFee: string, authwits: ReturnType<typeof authwit>[] = []): Shape => ({ specs, authwits, maxFee })
+	const fee = (specs: Spec[], maxFee: string, authwits: ReturnType<typeof authwitOf>[] = []): Shape => ({ specs, authwits, maxFee })
 	switch (name) {
 		case "one":
 			return fee([transfer(USDC, main, RECIPIENT, 25_000_000n)], "1840000000000000")
@@ -272,6 +274,12 @@ const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
 			)
 		case "wide":
 			return fee([wideSpec()], "2500000000000000")
+		// The authorizations' node opens every authorization's rows at once.
+		case "wide-authwits":
+			return fee([transfer(USDC, main, RECIPIENT, 1_000_000n)], "2500000000000000", [
+				authwitOf(0, ROUTER, wideSpec(), main),
+				authwitOf(1, ROUTER, wideSpec(), main),
+			])
 		case "depth":
 			return fee([depthSpec()], "2500000000000000")
 		case "ancestry":

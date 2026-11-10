@@ -1,3 +1,11 @@
+<route lang="json">
+{
+	"meta": {
+		"fillsWindow": true
+	}
+}
+</route>
+
 <script setup lang="ts">
 /**
  * The question a dApp send asks when its fee came out above the figure the person approved. The
