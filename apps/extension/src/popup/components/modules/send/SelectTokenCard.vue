@@ -2,6 +2,7 @@
 <script setup>
 /** Components */
 import { Skeleton } from "@nulo/design"
+import TokenMark from "@/components/composite/general/TokenMark.vue"
 
 /** Composables */
 import { isRepeatOrComposing } from "@/composables/usePopupEntity"
@@ -30,6 +31,13 @@ const props = defineProps({
 	},
 	/** Called with a token the picker's paste-to-add imported, for the page to pick. */
 	onTokenAdded: Function,
+	/** The signed list flags the token as a scam. */
+	flagged: {
+		type: Boolean,
+		default: false,
+	},
+	/** The signed list's picture for the token. */
+	icon: String,
 })
 
 /** A token handed in is always drawn: the page passes one only once its tokens have loaded. */
@@ -101,10 +109,7 @@ onBeforeUnmount(() => {
 	>
 		<template v-if="token">
 			<Flex align="center" gap="12">
-				<Flex align="center" justify="center" :class="$style.token_icon_box">
-					<span :class="$style.token_initial">{{ dashIfBlank(token.symbol).charAt(0) }}</span>
-					<Icon v-if="isTokenBlocked" name="warning" size="10" color="red" :class="$style.type_icon" />
-				</Flex>
+				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :size="36" :badge="flagged || isTokenBlocked" />
 
 				<Flex direction="column" gap="2">
 					<span :class="$style.token_symbol" data-testid="send-token-symbol">{{ dashIfBlank(token.symbol) }}</span>
@@ -171,31 +176,6 @@ onBeforeUnmount(() => {
 /* The token row's height, so the card does not jump when the token arrives. */
 .loading_row {
 	min-height: 36px;
-}
-
-.token_icon_box {
-	position: relative;
-	width: 36px;
-	height: 36px;
-	flex-shrink: 0;
-
-	background: var(--nulo-accent);
-}
-
-.token_initial {
-	composes: type--row-title from global;
-	font-size: 16px;
-	color: var(--txt-inverse);
-}
-
-.type_icon {
-	position: absolute;
-	top: -4px;
-	right: -4px;
-
-	box-sizing: content-box;
-	background: var(--app-bg);
-	padding: 1px;
 }
 
 .token_symbol {

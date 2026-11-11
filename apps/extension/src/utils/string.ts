@@ -35,6 +35,14 @@ export function getInitials(name: string): string {
 	return (words[0][0] + words[1][0]).toUpperCase()
 }
 
+/** A token mark's letters: the symbol's first letters and digits by code point, upper case, one in a
+ *  mark under 24 px and two from 24 px; "—" when it has none. The symbol may be contract-supplied, so
+ *  a control, bidi or emoji character never reaches the mark. */
+export function tokenInitials(symbol: string, size: number): string {
+	const glyphs = Array.from(symbol.toUpperCase()).filter((c) => /^[\p{L}\p{Nd}]$/u.test(c))
+	return glyphs.slice(0, size < 24 ? 1 : 2).join("") || "—"
+}
+
 export function sanitizeString(s: string, length = 0): string {
 	if (!s) return ""
 

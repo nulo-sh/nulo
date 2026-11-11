@@ -6,8 +6,8 @@
  *
  * A source run holds and serves a fixed two-token list that also flags two pairs, signed with a
  * per-process key that the armed build reads from `nulo:e2e:token-list`, so no spec depends on what
- * the owner lists. An artifact run holds the published envelope, the only list a release build's
- * pinned keys accept.
+ * the owner lists; its two tokens carry the source's Testnet USDC and USDT pictures. An artifact run
+ * holds the published envelope, the only list a release build's pinned keys accept.
  */
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
@@ -37,9 +37,18 @@ import { pollUntil } from "./poll"
 
 const LIST_PATH = "/v1/list.json"
 const PUBLISHED_PATH = path.join(REPO_ROOT, "infra/token-list/public/v1/list.json")
+const SOURCE_PATH = path.join(REPO_ROOT, "infra/token-list/list.source.json")
 const STORAGE_KEY = "nulo:core:token-list"
 /** Inside the service's longest deadline, so it is kept, and past any spec: the held list is never refetched. */
 const HELD_FOR_MS = 12 * 60 * 60 * 1000
+
+/** The picture the committed source gives its Testnet entry of `symbol`, as the publisher signs it. */
+function sourceIcon(symbol: string): string {
+	const { tokens } = JSON.parse(readFileSync(SOURCE_PATH, "utf8")) as { tokens: TokenListEntry[] }
+	const icon = tokens.find((t) => t.chainId === CHAIN_IDS.TESTNET && t.symbol === symbol)?.icon
+	if (icon === undefined) throw new Error(`infra/token-list/list.source.json gives Testnet ${symbol} no picture`)
+	return icon
+}
 
 const fixtureToken = (byte: string, symbol: string, priceId: string): TokenListEntry => ({
 	chainId: CHAIN_IDS.TESTNET,
@@ -49,9 +58,10 @@ const fixtureToken = (byte: string, symbol: string, priceId: string): TokenListE
 	decimals: 6,
 	name: `Test ${symbol}`,
 	priceId,
+	icon: sourceIcon(symbol),
 })
 
-/** The source run's list: two Testnet tokens, the first priced as USDC. */
+/** The source run's list: two Testnet tokens with their pictures, the first priced as USDC. */
 export const E2E_LIST_TOKENS: readonly TokenListEntry[] = [fixtureToken("a1", "USDC", "usd-coin"), fixtureToken("a2", "USDT", "tether")]
 
 /** The feeds of the source run's price ids, at today's Testnet stable bands. */

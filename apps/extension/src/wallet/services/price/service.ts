@@ -8,6 +8,7 @@ import { TokenListService } from "@/wallet/services/token-list/service"
 import type { ValueStorage } from "@/wallet/storage"
 import { valueStorage } from "@/wallet/storage/stores"
 import { flaggedKeysOf } from "@/utils/token-flag"
+import { tokenIconsOf } from "@/utils/token-icon"
 import { AlarmDispatcher, EventHandler, createSerialQueue, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
 import { isFeedId } from "@nulo/token-list"
 import { inBand, type PriceTable, priceIdsOf, priceTableOf, pricedTokensOf } from "./price-map"
@@ -314,7 +315,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 	/** Reads the list as each answer is built, after any price await, and filters the quotes against
 	 *  that list's bands in the same step, so no answer pairs a quote with another list's band,
-	 *  mapping or flags. */
+	 *  mapping, flags or pictures. */
 	private snapshotOf(quotes: PriceState): PriceSnapshot {
 		const list = this.tokenList.getSnapshot()
 		const table = priceTableOf(list?.priceFeeds ?? {})
@@ -322,6 +323,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			quotes: withinTable(quotes, table),
 			pricedTokens: pricedTokensOf(list?.entries ?? [], table),
 			flaggedTokens: flaggedKeysOf(list?.flagged ?? []),
+			tokenIcons: tokenIconsOf(list?.entries ?? []),
 		}
 	}
 

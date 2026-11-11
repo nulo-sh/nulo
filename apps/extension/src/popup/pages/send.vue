@@ -862,6 +862,8 @@ onBeforeUnmount(() => {
 					<FlaggedTokenBanner v-if="prices.isFlagged(activeToken)" />
 					<SelectTokenCard
 						:token="activeToken"
+						:flagged="prices.isFlagged(activeToken)"
+						:icon="prices.iconFor(activeToken)"
 						:loading="tokensLoading"
 						:failed="tokensFailed"
 						:onTokenAdded="pickAddedToken"

@@ -51,7 +51,9 @@ defineExpose({ focusTitle: () => titleEl.value?.focus() })
 
 		<Flex align="center" justify="center" gap="8" :class="$style.title_wrapper">
 			<slot name="title">
-				<Icon v-if="leadingIcon && title" :name="leadingIcon" :size="18" :color="leadingIconColor" />
+				<slot v-if="title" name="leading">
+					<Icon v-if="leadingIcon" :name="leadingIcon" :size="18" :color="leadingIconColor" />
+				</slot>
 				<span v-if="title" ref="titleEl" tabindex="-1" :class="$style.title" data-testid="subpage-title">{{ title }}</span>
 			</slot>
 		</Flex>

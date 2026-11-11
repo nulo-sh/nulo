@@ -1,7 +1,7 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { describe, expect, test } from "vitest"
 import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
-import { addressEnds, dashIfBlank, getInitials, isBlank, stripBidiAndZeroWidth, trimAddress } from "./string"
+import { addressEnds, dashIfBlank, getInitials, isBlank, stripBidiAndZeroWidth, tokenInitials, trimAddress } from "./string"
 
 describe("trimAddress", () => {
 	const ADDR = "0x1234567890abcdef1234567890abcdef12345678"
@@ -72,6 +72,26 @@ const ZWSP = String.fromCodePoint(0x200b)
 const NBSP = String.fromCodePoint(0xa0)
 const IDEOGRAPHIC_SPACE = String.fromCodePoint(0x3000)
 const blankFields = () => ["", "   ", "\t\n", ZWSP, `${NBSP}${IDEOGRAPHIC_SPACE}`].map(fromField)
+
+describe("tokenInitials", () => {
+	test("one letter under 24 px, two from 24 px, upper case", () => {
+		expect(tokenInitials("usdc", 16)).toBe("U")
+		expect(tokenInitials("usdc", 20)).toBe("U")
+		expect(tokenInitials("usdc", 24)).toBe("US")
+		expect(tokenInitials("usdc", 36)).toBe("US")
+	})
+
+	test("only letters and digits count, by code point", () => {
+		expect(tokenInitials("$1INCH", 32)).toBe("1I")
+		expect(tokenInitials("\u202Ee\u{1F600}th", 32)).toBe("ET")
+		expect(tokenInitials("\u{1D400}\u{1D401}", 32)).toBe("\u{1D400}\u{1D401}")
+	})
+
+	test("a symbol with no letter or digit draws the empty value", () => {
+		expect(tokenInitials("", 32)).toBe("—")
+		expect(tokenInitials("$_-\u{1F600}", 16)).toBe("—")
+	})
+})
 
 describe("isBlank", () => {
 	test("holds for a value that is absent, or empty or whitespace once the sanitizer strips it", () => {
