@@ -22,7 +22,16 @@ import {
 	waitForHash,
 	waitForServiceReady,
 } from "./fixtures/extension"
-import { ensureUnlocked, lockWallet, navigateByHash, readRecoveryWords, waitForLockScreen, waitForToast } from "./fixtures/helpers"
+import {
+	ensureUnlocked,
+	getAccountAddress,
+	lockWallet,
+	navigateByHash,
+	readRecoveryWords,
+	waitForLockScreen,
+	waitForToast,
+} from "./fixtures/helpers"
+import { chooseRecipient } from "./fixtures/send-page"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import { exportAccountBody, FIRST_ACCOUNT_NAME } from "./helpers/account-io"
 import { downloadEncryptedBackup, downloadPasskeyBackup, FILE_PASSWORD, openEncryptedBackup } from "./helpers/backup-export"
@@ -194,6 +203,9 @@ describe("popup: declining never locks a person out", () => {
 			await navigateByHash(page, "#/popup/send", 15_000)
 			await page.waitForSelector('[data-testid="send-legal-banner"]', { visible: true, timeout: 15_000 })
 			expect(await isSheetPresent(page)).toBe(false)
+			// The banner stands over the person step and the form alike; the form's button stays off.
+			await chooseRecipient(page, await getAccountAddress(page))
+			expect(await page.$('[data-testid="send-legal-banner"]')).not.toBeNull()
 			expect(await page.$eval('[data-testid="send-submit"]', (el) => (el as HTMLButtonElement).disabled)).toBe(true)
 
 			// Review on the banner brings the sheet back, over Send.
@@ -277,7 +289,7 @@ describe("popup: declining never locks a person out", () => {
 		expect(record?.history).toHaveLength(2)
 
 		await navigateByHash(page, "#/popup/send", 15_000)
-		await page.waitForSelector('[data-testid="send-submit"]', { visible: true, timeout: 15_000 })
+		await page.waitForSelector('[data-testid="send-person-step"]', { visible: true, timeout: 15_000 })
 		expect(await page.$('[data-testid="send-legal-banner"]')).toBeNull()
 
 		// The stale reload is the control: told the acceptance is current, the answer must refuse.
