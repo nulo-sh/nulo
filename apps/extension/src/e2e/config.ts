@@ -122,3 +122,15 @@ export const E2E_WALLET_CLOCKS: typeof E2E_WALLET_CLOCK_VALUES | null = WALLET_C
 export const E2E_WALLET_CLOCKS_BUILD_STAMP: "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP" | null = WALLET_CLOCKS
 	? "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP"
 	: null
+
+/**
+ * E2E-only execute-window fixtures (`@/e2e/execute-fixture`). A single flag, like the migration
+ * fixture: a fixture is bound to no request, so a shipped one could approve or reject nothing, and
+ * the stamp below fails the release grep.
+ */
+export const E2E_EXECUTE_FIXTURE = (import.meta.env.VITE_NULO_E2E_EXECUTE_FIXTURE ?? "") === "1"
+
+/** Build-time marker, pinned as live data where the execute window shows a fixture. */
+export const E2E_EXECUTE_FIXTURE_BUILD_STAMP: "NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP" | null = E2E_EXECUTE_FIXTURE
+	? "NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP"
+	: null

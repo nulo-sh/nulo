@@ -55,8 +55,6 @@ export const wire = (v: unknown, max: number): string => safeWire(v === undefine
 
 /** Raw-field rows are capped: past this the JSON view is the disclosure, not a 200-row card. */
 export const MAX_ARG_ROWS = 32
-/** Array items shown inline; the full list stays available as the row's title. */
-const MAX_INLINE_ITEMS = 8
 const FULL_TEXT_MAX = 4096
 
 const rawRow = (arg: unknown): RawRow => {
@@ -257,9 +255,12 @@ export const outflowLabel = ({ transfers, authorizations }: Pick<AccountOutflow,
 		.filter(Boolean)
 		.join(", ")
 
-/** A one-line reading of a decoded value. Trimmed and summarized for the row; `full` prints every
- *  value whole, for the hover text. An address on its own row is left to `AddressDisplay`. */
-export const valueText = (v: DecodedValue, full = false): string => {
+/** A decoded value that reads on one row; a struct or an array is rows of its own (`ValueTree`). */
+export type ScalarValue = Exclude<DecodedValue, { kind: "array" | "struct" }>
+
+/** A one-row reading of a scalar value, trimmed for the row; `full` prints it whole, for the hover
+ *  text. An address on its own row is left to `AddressDisplay`. */
+export const valueText = (v: ScalarValue, full = false): string => {
 	switch (v.kind) {
 		case "integer":
 		case "selector":
@@ -274,26 +275,19 @@ export const valueText = (v: DecodedValue, full = false): string => {
 			return full ? v.value : trimAddress(v.value)
 		case "none":
 			return "none"
-		case "array": {
-			const shown = full ? v.items : v.items.slice(0, MAX_INLINE_ITEMS)
-			const more = v.items.length - shown.length
-			return `[${[...shown.map((item) => valueText(item, full)), ...(more ? [`+${more} more`] : [])].join(", ")}]`
-		}
-		case "struct":
-			return `{ ${v.fields.map((f) => `${safeWire(f.name, 32)}: ${valueText(f.value, full)}`).join(", ")} }`
 	}
 }
 
 /** An authwit nonce as the raw rows read a field: its decimal below 2^64, else the 32-byte hex. */
-export const nonceValue = (nonce: string): DecodedValue => {
+export const nonceValue = (nonce: string): ScalarValue => {
 	const decimal = smallFieldDecimal(nonce)
 	return decimal !== undefined
 		? { kind: "integer", value: decimal }
 		: { kind: "field", value: `0x${BigInt(nonce).toString(16).padStart(64, "0")}` }
 }
 
-/** What the row reveals on hover: the whole field, or the whole list when the line summarized it. */
-export const valueTitle = (v: DecodedValue): string | undefined => {
+/** What the row reveals on hover: the whole value, when the row trimmed it. */
+export const valueTitle = (v: ScalarValue): string | undefined => {
 	if (v.kind === "field") return v.value
 	const full = valueText(v, true)
 	return full === valueText(v) ? undefined : full

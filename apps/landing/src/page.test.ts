@@ -273,6 +273,22 @@ describe("the built site", () => {
 		}
 	})
 
+	it("ships each changelog page's committed card where its og:image points, and no other card", () => {
+		const shipped = files(".png").filter((f) => f.startsWith(join(OUT, "changelog/")))
+		const named = files(".html")
+			.filter((f) => f.startsWith(join(OUT, "changelog/")))
+			.map((page) => {
+				const url = startTags(readFileSync(page, "utf8"), "meta").find((a) => a.property === "og:image")?.content ?? ""
+				const card = join(OUT, url.replace(/^https:\/\/nulo\.sh\//, ""))
+				const version = /\/changelog\/v(\d+\.\d+\.\d+)\/og\.png$/.exec(url)?.[1]
+				const source = join(ROOT, "content/changelog", version ? `${version}.og.png` : "index.og.png")
+				expect(readFileSync(card).equals(readFileSync(source)), url).toBe(true)
+				return card
+			})
+		expect(named.length).toBeGreaterThan(1)
+		expect(shipped.sort()).toEqual(named.sort())
+	})
+
 	it("loads nothing from another origin: the CSS refers only to its own files", () => {
 		for (const file of files(".css")) {
 			const css = readFileSync(file, "utf8")

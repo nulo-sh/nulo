@@ -1,0 +1,242 @@
+---
+plan: p126-build-1
+tier: mid
+driver: claude-code
+claude_model: opus
+codex_model: sol
+code_review: off
+explainer: off
+eli5_mode: skipped (orchestrator-owned)
+base: dev at 32fd50e60
+status: approved
+---
+
+# p126-build-1: the approval window with many calls, as signed on pages 126 and 130
+
+One window change on the execute window (`apps/extension/src/popup/windows/execute/`) and the raised-fee window that mounts the same card (`popup/windows/fee/index.vue`): numbered steps on a rail, each step its own details, a value tree for nested arguments, raw values under every call and authorization, every authorization in one node at the rail's end, and the window at its full width. Two arcs, stacked. No issue is linked on pages 126 or 130, so no PR closes one. Recon: [`recon.md`](recon.md).
+
+## Outcome & Quality Bar
+
+**For whom.** A person approving an app's request with several calls, in the 400 px approval window or a 240 px side panel, by mouse, by keyboard or with a screen reader. They must see what each call does before they approve.
+
+**What excellent looks like.**
+1. Each call reads as one numbered sentence at the full card width. A struct or an array reads as one row per field under its parent, and a parameter's name never collapses to a letter per line, at 400 px and at 240 px.
+2. One press on a step opens only that step. Focus stays on the pressed row and the row does not move. A press on a named address, a glossary term or a raw-values press does only its own thing, by mouse and by keyboard. Dragging across the sentence selects text and opens nothing.
+3. Every fact stays within two presses. On `batch`: 9 Tab stops at rest (7 in the list), 19 with everything open, 7 presses to open every step and the node, 15 to every value, as `nested-tx-3/metrics-alr.json` measured.
+4. An unreadable call's warning prints once; the advice prints once, after the list; the decided order holds.
+
+**Good enough.** No window-wide "open everything" press. A call's raw fields past the 32nd stay in the JSON window, as today.
+
+## Decision ledger
+
+**The owner's picks (the sign-offs, verbatim).** Page 126, signed 2026-11-09, head `ccd14c85f`:
+- **P126-01 = AL**: "The same rail without nesting: every authorization in one 'Authorizations N' node at the rail's end, after the unchecked line and the advice, so the decided order holds and nothing is inferred." Owner's note: "I do like "AL" -- the only thing I'm not convinced is where the "show all details" is positioned and if it should open all transactions / steps details. It feels like it should be an expansion per/set like the raw values, doesn't it?" Answered by P130-01: details open per step; no window-wide toggle.
+- **P126-02 = V2**: "Fold the tree into the hierarchy build of P126-01, one lane, one window change." Owner's note: "I feel the best path is "V2" here -- but should I ask for a screenshot / proposal to see how it'd look?" The nested-tx-2 and nested-tx-3 frames show the tree inside AL; no further proposal is owed.
+- **P126-03 = R2**: "One press under the details for every call and authorization, closed by default, as prototyped: the same fields the JSON window shows, in place."
+- **P126-04 = AU1**: "A section of its own, after the unchecked line and the advice (the decided order), the giver groups as sections in the details; no inference anywhere."
+- **P126-05 = FW1**: "Fill the window: the execute route (and the raised-fee window, which mounts the same card) takes the full 400 px; margins come from the card, not the column."
+
+Page 130, signed 2026-11-10, head `32fd50e60`, re-signed at 15:34 UTC:
+- **P130-01 = ALR**: "The whole step is the control, the wallet's RowTarget stretched under the sentence, with a 12 px chevron in the meta tint ending the sentence's last line. The same width and height as ALN, the whole sentence as the target, the chevron as the cue at rest. Copy, a named address, the raw-values press and a glossary term inside the row keep their own presses, proved by keyboard and mouse; a build keeps the two guards the prototype adds."
+- **P130-03 = R2**: "The row's name is Details of step N and the sentence is its description, so the name stays short and the sentence still reads after it." The Authorizations row is named "Details of the authorizations". The stale note "Didnt choose ALR" predates the re-sign and is superseded.
+- **P130-02** (the cue at rest under ALN): read, note "didnt chose aln"; not applicable.
+- **P129-05 = N3** (a chevron alone at every width in AL-P's control column) is moot: ALR has no column.
+
+**Decisions that bind** (from `nested-tx-1/decisions.md`), each with the test that holds it:
+
+| Decision | Test |
+|---|---|
+| Every fact within two presses, per fact | `OperationCard.facts.test.ts` on the four fixtures, plus explicit fresh-mount paths (Phase 4) |
+| Calls keep their order; the order is list, unchecked line, advice, Authorizations | `OperationCard.rail.test.ts` "order" |
+| No authorization hidden at rest; an unreadable call keeps its warning and reason at rest | `rail` "at rest" on `batch` and `raw` |
+| Raw values closed by default | `CallArguments.test.ts` "raw closed" |
+| The advice once, after the call list; else in the last open unreadable authorization's details; never on a refusal | `OperationCard.summary.test.ts` advice cases, kept |
+| "Leaves your account" opens the fee section and reads with the fee as one bill | `OperationCard.fee.test.ts`, unchanged |
+| The three giver groups stay in the details | `rail` "groups" |
+| No new tooltip or glossary term | `rail` counts `DottedTerm` and `Tooltip` mounts against today's |
+| Account strip, app block, scope banner, "Requested operations" with its JSON icon, card title, "From account:", fee block, Reject and Confirm unchanged | `index.test.ts`, unchanged; captures |
+
+**Panel decisions** (audit records below):
+
+| # | Question | Decision | Why |
+|---|---|---|---|
+| D1 | Delivery shape | Two arcs: **a1** the value tree and raw values (V2, R2) in today's layout, with the fixture build; **a2** the rail, its per-step control, the node, the width and the carried gaps (AL, ALR, AU1, FW1). | The tree and the raw layer live in `CallArguments` and work in any layout, so a1 is revertable alone. Splitting the rail from its control would ship a window-wide toggle for one arc and rewrite its tests twice. Codex agreed. |
+| D2 | Where the rail lives | `SendTxSummary.vue` becomes the rail and owns every open state (steps, the node, each authorization's details); `OperationCard.vue` keeps the card, the fee and the authorization groups, and passes the advice's place as `"calls" | "authwits" | undefined` (the rail picks the last open unreadable authorization); two new pieces, `StepRow.vue` (the press row) and `AuthwitDetails.vue` (one authorization's rows, moved verbatim, taking the surface the parent already computed). | `SendTxSummary` already holds the decided order and the pending and failed states; the details block leaves `OperationCard` instead of being copied, and no state goes down as a prop to come back as an emit (Opus). Both audits preferred it to outline B's monolith. |
+| D3 | The tree's shape | A recursive `ValueTree.vue`: a branch is its name row (a `${prefix}-decoded-param` of its own) followed by one group element holding its children; a leaf is one name/value row; children keyed by index. `valueText` and `valueTitle` keep only the scalar kinds; `MAX_INLINE_ITEMS` goes. | Ancestry lives in the DOM (Codex), and no `decoded-param` row contains another, so today's selectors stay exact (`identifier-sites.expected.json`, Opus). Index keys survive repeated or sanitized-equal names. |
+| D4 | Caps | No cap on the decoded tree (today's flattened string drops nothing visible either way: it summarizes arrays past 8 items, the tree shows them all). The raw cap stays: a call shows 32 raw fields, then "+N more in the JSON view"; an authorization's raw fields stay uncapped. | A row cap hides a decoded value today exposes (Codex: 32 nested containers around one field leave no leaf). Worst case under the decoder (`abiNodes` counts no array container and an empty struct takes no field): 1,024 items of 31 singleton arrays around an empty struct decode from zero fields into 32,769 rows (Codex ran it through `decodeCallForDisplay`). Measured in the browser (Phase 3) against a pass criterion set first; no virtualization unless the measure fails it. Opus agreed on dropping the cap. Measured (a1, Chrome, a host at load1 178–238 on 188 cores): 5.2 and 7.3 s with a row as `Flex` and `Text` instances, 3.2 s with a row as native elements carrying the same classes (DOM-identical), which the tree keeps; Codex (consult recorded in `lessons/phase-3.md`): keep it, report the gate inconclusive, since a saturated host cannot validate the criterion either way. Firefox, the same host: 3.9 and 4.2 s. The bound is per call or per authorization, not per press: a1's "Show all details" mounts every call's tree, so k calls of `wide`'s shape draw k × 32,769 rows on one press (Opus, plausible); a2's Authorizations node opens every authorization's tree at once, so a2's spec times it with two `wide`-shaped authorizations. |
+| D5 | Hostile depth | Each level indents 15 px for the first six levels, then 2 px, each with its own guide; in a window narrower than 300 px, levels past the fourth take 2 px. Depth 32 then indents 142 px at 400 px and 116 px at 240 px (the sentence lane is about 152 px there). Every fixture of four levels or fewer draws as the frames do. | A decodable type may nest 32 levels (`call-decoder.ts:36`); 32 × 15 px pushes values out of the card, and 15 then 3 px still overflows at 240 px (Codex). Ancestry stays in the DOM (D3) and in the guides. |
+| D6 | Which hosts change | The tree replaces the flattened string wherever `CallArguments` prints a decode (the `aztec_sendTx` calls and authorizations, the grant card, the `aztec_createAuthWit` card). Raw values are added only under the rail's calls and authorizations, by a `raw` prop the host passes. | One renderer; keeping the flattener for two cards keeps the crushed-name defect there. R2 says "as prototyped", and the prototype touched only the `aztec_sendTx` card. |
+| D7 | The warning printed twice | In the rail, `CallArguments` takes `notice: false` for calls and for authorizations: no unreadable warning and reason inside a panel, and no "Reading arguments…" inside a call's panel (an authorization's keeps it: its line at rest has none); the authorization's advice fallback (`execute-discovered-authwit-unverified-advice`) renders apart from the notice, so it still prints. | The notice reads at rest one line above; an authorization's details now hang under its line, so it would print twice too; a pending call's line likewise (Opus). Each status prints exactly once (Codex). |
+| D8 | Try again's focus target | The Authorizations slot: one persistent `tabindex="-1"` element (`role="group"`, named "Authorizations", `aria-busy` while checking, no padding when empty) that holds the node, "Checking authorizations…", the failed line or nothing, through every state; focused when the press is a keyboard one, read inside the click's dispatch. | Try again leaves the DOM with the failure; the first step's row is above the press. The fee row's retry does the same (`onRetryAppEstimate`). A held Enter on the slot activates nothing. |
+| D9 | Giver groups inside the node | Each authorization's details open under its own line, led by its group's heading, as the signed AL frames draw it (`nt-batch-a-loose-details-full`). The group testid (`execute-op-{discovered,sender,consumed}-authwits`) sits on `AuthwitDetails`' root, which wraps the heading and the rows, as the unit tests query rows under it. | At rest the lines keep the listed order; regrouping on open would move them. |
+| D10 | Testids | `execute-op-details-toggle` goes; new: `execute-op-step-toggle` (`data-step-index`) on each step's `RowTarget`, `execute-op-authwits-toggle` on the node's. `execute-op-details` marks each opened panel (steps and authorizations), each with its own DOM id for `aria-controls`. `execute-op-payload-row` (with `data-call-name`, `data-call-to`, `data-intent-kind`) moves onto each opened step's call block, which is what it wrapped before; it is absent at rest, as before. `execute-op-call-to` moves onto a span around each step sentence's contract address, the call's `to`, which `execute-op-summary-call-to` also marks. | The repeated head row is not in the signed frames, and the lane brief keeps every testid the e2e suite selects; both selectors then name the same address, which no assertion needs to tell apart. |
+| D11 | Accessible names | The row's `RowTarget` is named by a visually hidden "Details of step N" (`aria-labelledby`) and described by the sentence's head and amount line (`aria-describedby`); the node's row by "Details of the authorizations". `aria-expanded`, and `aria-controls` while open. | P130-03. The name is a `hidden` span, as `DetailsTable.vue:109` and `DottedTerm.vue` name theirs; a test pins that `RowTarget` passes the three attributes to its button. |
+| D12 | The two guards | The row root's click handler returns when the press's target sits inside a focusable element (`a[href], button, [tabindex]`) that is inside the row root and is not the row's own target, or when `endsSelection` holds. Local to `StepRow`. | Containment matters: the slot (D8) is a `[tabindex]` ancestor, and an unbounded `closest` would refuse every press on the node's label (Codex). An unnamed address is plain text, so its press opens the step. `input`, `select`, `textarea`, `[role=button]` and `[contenteditable]` never sit in a step's sentence; the guard does not list them. A named address has no keyboard path (not a Tab stop, as today), so its proof is by mouse; the row, the raw press and the glossary term are proved by keyboard and mouse. |
+| D13 | Row height | The row pads 5 px vertically inside an equal negative margin, so a one-line step's press reaches 26 px and nothing moves; steps keep 14 px apart, so two rows' press areas never overlap. | The prototype reached exactly 24 px. |
+| D14 | Chevron place | A 12 px `chevron` in the meta tint ends the sentence's last line behind a no-break space: the amount line when there is one, else the head. An unreadable call's warning stays under it. Rotated 90° open; no motion under reduced motion. | As drawn (`nt3-raw-r-one-open`). |
+| D15 | Empty struct or array | One leaf row whose value reads `[]` or `{}`. | Today's flattened text prints the same; an empty branch would otherwise vanish. |
+| D16 | Hover and focus | The row takes `--nulo-surface-low` on hover and on `:focus-visible`, with the 2 px accent ring inset. | The wallet's row pattern. |
+| D17 | Browser proof | Committed, not disposable: an armed-only fixture build (`VITE_NULO_E2E_EXECUTE_FIXTURE=1`, the `src/e2e/config.ts` pattern) renders a fixture request in the real execute window, and one smoke spec, `tests/e2e/execute-steps.test.ts`, measures and asserts it on Chrome and Firefox. The network specs keep their scenarios; `openExecuteDetails` splits (Phase 5). | Layout containment, hit testing under the stretched target, the selection-ending click, the Tab walk and the row staying put need a browser, and the Playground sends no struct. A throwaway branch would leave the central evidence unrepeatable (Codex). Opus preferred no new scenario and called a test-only switch in the approval window a forged-request surface; rejected because the switch exists only in builds the production build-env guard refuses and the marker grep catches, the pattern every armed e2e hook here follows. Its contract (Codex): the build stamp `NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP` is pinned as live data and added by hand to `_build-extension.yml`'s marker list (`build-env-guard.test.ts` discovers it from the source and fails until the list refuses it); the smoke workflow's positive grep proves an armed bundle carries it; on a production artifact the spec asserts a fixture URL renders no fixture; fixture mode never reads or adopts a route's `requestId`, so Confirm, Reject and unload act on no interaction. Built (deviation): the fixture's estimates answer through the window's own estimate map (its estimator and remote cancel), so the fee and authorization holds run as for a request, and `confirmBlocked` holds Confirm while no request is loaded, as Reject already was; the fee-update handler is unchanged. |
+
+Accessibility calls made under the owner's 2026-10-19 delegation: D8, D11, D12, D13, D16 and the Tab order (one stop per step and one for the node, in reading order). a1's own: the raw-values press is the window's existing `DetailsToggle`, a native button with `aria-expanded` and `aria-controls` naming the rows it opens, one Tab stop per call or authorization in reading order; the tree's rows are static text, with no stop.
+
+## UI impact
+
+Every line below is inside the picks quoted above; captures in each PR body close the loop.
+- **Execute window, `aztec_sendTx` card** (P126-01, P126-02, P126-03, P126-04, P130-01, P130-03). Before: a numbered list at rest; one "Show all details" toggle opens "Payload" (a head row and flattened arguments per call) and three authorization groups. After: the same sentences on a rail of 20 px number boxes, each ending in a chevron; one press opens a step's value tree and its "Show N raw values" press; the Authorizations node, after the unchecked line and the advice, opens every authorization's rows under its line; no "Payload" heading, no repeated head row, no window-wide toggle.
+- **Execute window, grant and `aztec_createAuthWit` cards** (P126-02): a struct or an array argument reads as tree rows instead of one flattened string; scalar arguments render as today.
+- **Execute window and raised-fee window, width** (P126-05): the body fills 400 px; the card draws the margins. A toast in these two windows spans the window, as in the capabilities window.
+- **Raised-fee window** (P126-01 to P126-05): the same card, so the same rail.
+- **"Checking authorizations…", the failed preview with Try again, a refused request**: the same text in the node's place; captured in the new layout.
+
+## Assumptions
+
+**Facts** (verified at `32fd50e60`):
+- `OperationCard.vue:386` mounts `SendTxSummary`; `:397–405` is the one toggle; `:407–475` the details ("Payload" at `:408`, calls `:409–423`, groups `:424–474`); `fee/index.vue:251` mounts the card with a `#fee` slot and no preview props.
+- `SendTxSummary.vue:65` is the `<ol>`, its marker column 10 px (`:172`).
+- `CallArguments.vue:115–133` prints each decoded parameter as one row through `valueText`, which flattens arrays (8 inline) and structs (`call-surface.ts:262–285`); raw values show only for an unreadable call (`:141–171`); 32 rows is the default cap (`MAX_ARG_ROWS`), and a discovered authorization passes `Infinity` (`OperationCard.vue:266`).
+- The decoder refuses past 256 fields, 1,024 counted nodes or depth 32 (`call-decoder.ts:33–36`); its node count skips array containers (`:142`), so it bounds leaves, not tree rows.
+- The body is `--base-width` 360 px (`packages/design/src/base.css:68`, `popup/index.scss:21`) unless the route sets `fillsWindow` (`:32`); only the capabilities window sets it.
+- An authorization carries no link to a call (`packages/wallet-bridge/src/fee.ts:149`).
+- The retry moves focus to the toggle (`OperationCard.vue:304–307`), pinned by `OperationCard.summary.test.ts:550–571`.
+- `bun run test` also runs `scripts/**/*.test.ts` (`apps/extension/vitest.config.ts:42`), so the type-roles inventory (`scripts/type-roles/inventory.test.ts`, keyed by file, expression and branch against `identifier-sites.expected.json`) gates every moved or new identifier site; `type-roles-windows.test.ts`'s last test fails on a site no sweep state reads.
+- `AddressDisplay` stops its click whenever a name exists, in both states, and is not a Tab stop; `DottedTerm` is a `span tabindex="0"` that stops nothing.
+- The build-env guard in `_build-extension.yml` already refuses any `VITE_NULO_E2E_*` flag in a production build (`scripts/ci-cd/build-env-guard.test.ts`).
+- **Did not hold**: the lane brief's "smoke e2e" for this window (no smoke spec opens it; its e2e are network specs, recon § Gaps), and the brief's "keep every e2e-selected testid" in full: the head row `execute-op-payload-row` and `execute-op-call-to` named is gone, so both move to equivalent elements (D10).
+
+**Inferences**:
+- `RowTarget` passes `aria-expanded`, `aria-controls` and `aria-describedby` through to its button (`DetailsTable.vue:102` relies on it for `aria-expanded`); pinned by a test in Phase 4.
+- jsdom covers the guards' logic and the DOM-order Tab sequence (no positive `tabindex` exists); real hit testing, key-synthesized clicks, drag selection and layout are left to the smoke spec.
+- The worst decodable shape (32,769 rows) opens within the Phase 3 criterion; measured, not assumed.
+
+**Asks**: none. No owner ask: every visible choice is inside a quoted pick or the accessibility delegation; `OWNER-ASKS.md` says none.
+
+## Architecture & Implementation
+
+**Shape.** `OperationCard` (card, From account, fee, authorization groups, the advice's place) → `SendTxSummary` (the rail: label, steps, unchecked line, advice, the Authorizations slot; owns every open state) → per step a `StepRow` over the sentence and, when open, a guided panel holding the call's block with `CallArguments` (tree, raw); per authorization its line and, when the node is open, `AuthwitDetails` (group heading, Consumer, Authorizes, Function, Authorized by, "Show details"/"Hide details", `CallArguments`, Inner hash).
+
+**Interfaces.**
+- `ValueTree.vue`: props `name: string`, `value: DecodedValue`, `prefix: string`, `full?: boolean`, `depth?: number`. Every row keeps `${prefix}-decoded-param` (`data-param`, `data-value-kind`, `data-depth`), its first child `${prefix}-decoded-param-name`, a leaf's value `${prefix}-decoded-param-value`; names pass `safeWire(name, 32)`, array items are named `[i]`.
+- `CallArguments.vue`: new props `raw?: RawRows` (a readable reading's raw rows; the host picks the cap) and `notice?: boolean` (default `true`); one raw block serves the raw surface and `raw`.
+- `StepRow.vue`: props `open: boolean`, `name: string`, `describedby?: string`, `controls: string`; emits `toggle`; the default slot is the raised content. Root: `position: relative`, the guard (D12), `RowTarget` as its direct child, the hidden name.
+- `SendTxSummary.vue`: per authorization adds its group (label, testid); takes `advice: "calls" | "authwits" | undefined`; owns the open states; emits `retryPreview` and moves focus itself (D8).
+- `src/e2e/execute-fixture.ts` (armed-only; `config.ts` exports `E2E_EXECUTE_FIXTURE_BUILD_STAMP`, live data in the armed branch, as the token-seeds stamp is): `one`, `batch`, `deep`, `raw`, `ten` and three hostile shapes (`wide`: 1,024 items of 31 singleton arrays around an empty struct, 32,769 rows from zero fields; `depth`: one leaf 32 levels deep; `ancestry`: identically named leaves under two parents past the sixth level), each an `aztec_sendTx` operation with wire-shaped calls (`0x` + 64 hex per field, flattened from the decode in ABI order), its decode records, its authorizations and fee estimate; every address passes `isValidAztecAddress`. Component tests import the same module.
+- `index.vue`: when `E2E_EXECUTE_FIXTURE` is armed and the route's query names a fixture, `init` shows it in place of a loaded request, asks no service and never reads or adopts the route's `requestId`; unarmed, the branch is a static `false` and is stripped. Built (deviation): the window reaches the fixture through `src/e2e/execute-fixture-gate.ts`, which decides at module scope (`armedExecuteFixture`, as `migrations/index.ts` gates its fixture); a dynamic import in dead code still emitted the module as an orphan chunk in a release build, which the marker grep caught.
+
+**Flow.** Press on a sentence → the click bubbles from the raised content to the `StepRow` root → guard → `toggle` → the step enters the open set → its panel renders after the row, so focus stays and the next Tab enters the panel. Enter or Space on the `RowTarget` button → a click with `detail` 0 → the same path; a held Enter is refused (`refuseRepeatEnter`). The node's open flag survives a re-estimate that swaps the list for "Checking authorizations…" and back.
+
+**Trade-offs not taken.** The prototype's monolith in `OperationCard` (rejected for D2). A row cap on the tree (D4). A throwaway capture branch (D17). A shared visually-hidden utility in `@nulo/design` (out of scope; `composes` suffices).
+
+## Security & Adversarial Considerations
+
+- **Threat model.** A connected app controls every call's target, name, arguments and, through an artifact it registers, the decode's parameter names, struct shape and values. It cannot approve anything; it can try to make the card misread or hide a value.
+- **Injection.** Vue text interpolation only; no `v-html`. Names pass `safeWire(name, 32)`, strings `readWireString` (bidi and default-ignorable text refused), as today.
+- **Hiding by layout or ancestry.** Depth is contained (D5) and ancestry kept (D3); name and value break inside the card (`overflow-wrap: anywhere`); the smoke spec asserts every payload row, nested and authorization rows included, inside the card at 400 and 240 px.
+- **Hiding by volume.** No decoded value is cut (D4); the worst decodable shape's render is measured.
+- **Press hijack.** Opening a step never approves; the row is a `type="button"` with no form; Confirm keeps its own button and no document-level Enter. The guard keeps a nested control's press from also toggling, and never the reverse.
+- **The fixture build.** Armed only by a build flag the production build-env guard refuses; its build stamp joins `_build-extension.yml`'s marker list, which the guard's test checks against every stamp in the source, and a production artifact run proves a fixture URL renders no fixture. Unarmed, no path reaches the module. Armed, fixture mode never reads or adopts the route's `requestId`; a test opens a fixture URL that also carries a live-looking id and proves Confirm, Reject and unload send nothing for it.
+- **No inference.** No authorization is placed under a call (P126-04).
+- **Supply chain, storage, logging.** No new dependency, no `chrome.storage.local` key, no log line.
+
+## Phases
+
+**Arc a1: the value tree and raw values (V2, R2), in today's layout, with the fixture build**
+
+### Phase 1: the fixtures and the fixture build
+- Add `src/e2e/execute-fixture.ts` and `E2E_EXECUTE_FIXTURE` in `src/e2e/config.ts`; the armed branch in `popup/windows/execute/index.vue` (`init`, and the fee-update handler, which asks no estimate for a fixture).
+- CI: the flag in `_extension-smoke-e2e.yml`'s source build, with a positive grep for the stamp and the runtime declaration `NULO_E2E_EXECUTE_FIXTURE` set only on that path (the migration fixture's pattern); the stamp added to `_build-extension.yml`'s marker list (the guard's test discovers it and reds until it is there); the armed recipe in `tests/e2e/global-setup-smoke.ts` and the `e2e-testing` skill.
+- Tests: `config.test.ts` (unarmed is `false`); a fixture test (every address valid; each call's `args` flatten back from its decode); `build-env-guard.test.ts` discovers the stamp; `index.test.ts` with the flag mocked on: a fixture URL carrying a `requestId` loads, approves and rejects nothing for it (control: the same URL unarmed loads the request as today).
+- **Gate**: `bun run lint && bun run typecheck:all && bun run --cwd apps/extension test src/e2e src/popup/windows/execute && bun run test:ci-gating && bun run lint:actions`. Pass: exit 0 each.
+
+### Phase 2: `ValueTree.vue` and the raw layer
+- Add `ValueTree.vue` (D3, D5, D15): the name takes its width up to 60% and breaks only inside a word; `full` puts the whole value under its name, as today; an address leaf is `AddressDisplay` unless `full`.
+- `CallArguments.vue`: the decoded branch renders `ValueTree` per parameter (the "Labels from the contract" notice kept); `raw` adds the raw block under a readable reading (`${prefix}-raw-toggle`, `-raw-args`, `-arg`, `-arg-field`, `-args-more`).
+- `OperationCard.vue`: `:raw="rawRows(call.args)"` per call, `:raw="rawRows(a.args, Infinity)"` per discovered authorization.
+- `call-surface.ts`: scalar-only `valueText`/`valueTitle`.
+- Tests: new `CallArguments.test.ts` on `batch`, `deep` and `ancestry` (rows, names, `data-depth`, testids, ancestry by DOM parent past the sixth level, address leaf, `full`, labels notice; raw closed by default, opens to the wire fields, "+N more in the JSON view" past 32 for a call, none for an authorization; control: a scalar-only decode renders today's rows); `call-surface.test.ts` drops the flattening cases; existing tests that read a flattened string move to rows (`call-surface.test.ts:229–361`, `OperationCard.long-strings.test.ts:127–133,254,273`, whose value-row wrapping assertions follow the rows into `ValueTree.vue`, `OperationCard.wire.test.ts`); `OperationCard.facts.test.ts` reads visible text and asserts a hover title apart, and gains `deep`'s deepest leaf and `batch`'s raw values.
+- `scripts/type-roles/identifier-sites.expected.json`: the `ValueTree.vue` sites and the raw rows under a readable call, the decoded sites leaving `CallArguments.vue`; `type-roles-windows.test.ts` gains a sweep state that presses `execute-op-raw-toggle` under a readable call, so no new site goes unread. Built (deviation): one raw block serves both readings, so the raw rows stay one site (`row.short`), already read by the undecodable call's state; no sweep state is added. The armed fixture joins the `execute_window` producer set (its `aztec_sendTx` builder, re-attested), and `ValueTree.vue` takes a surfaces entry.
+- **Gate**: Phase 1 gate plus `bun run test && bun run --cwd apps/extension test:components`. Pass: exit 0.
+
+### Phase 3: a1 browser proof and gates
+- Add `tests/e2e/execute-steps.test.ts` (smoke): every payload text rectangle inside the card at 400 and 240 px on `deep`, `batch`, `ancestry` and `depth`; the raw press opens the wire fields; `wide` opens with all 32,769 rows and the next press closes it, its time from press to last row painted recorded (criterion: under 2 s on a quiet host, load1 under a quarter of its cores, the armed Chrome build, best of three; over it stops the arc for a plan decision, since a wall-clock assertion on a shared runner flakes; a saturated host's measure is recorded as inconclusive); on a production artifact (no declaration), a fixture URL renders no fixture; capture mode (`NULO_E2E_SHOT_DIR`) shoots the frames. Estimated 60 s a browser; measured.
+- Smoke on Chrome then Firefox, retry 0, from `apps/extension` after an armed build (`VITE_NULO_E2E_EXECUTE_FIXTURE=1` plus the skill's smoke flags, `bun run build:<browser>`): `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_EXECUTE_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/execute-steps.test.ts --retry=0`, then with `NULO_E2E_BROWSER=firefox`.
+- Network on Chrome then Firefox, retry 0, through `e2e:agent` from the worktree root: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/type-roles-windows.test.ts tests/e2e/network/authwit-lifecycle.test.ts tests/e2e/network/tx-transfer-row.test.ts tests/e2e/network/tx-sendTx-delegated-authwit.test.ts`, then with `NULO_E2E_BROWSER=firefox`.
+- **Gate**: `bun run audit:vue && bun run test:all && bun run test:release && bun run check:plans`, then the e2e above. Pass: exit 0 each; every e2e file green at retry 0 on both browsers.
+
+**Arc a2: the rail, each step its own details, the node, the width (AL, ALR, AU1, FW1, the carried gaps)**
+
+### Phase 4: the rail and its tests
+- `SendTxSummary.vue`: steps on a rail (20 px number box, a 1 px rail between boxes, 10 px to the sentence, 14 px between steps); each sentence inside a `StepRow` with its chevron (D14); the open step's panel (`execute-op-details`, `data-step-index`, inside the step's `li`, which keeps `data-call-index`) on a guide, holding the call's block (`execute-op-payload-row`) with `CallArguments` (`notice: false`, `raw`); the unchecked line; the advice; the slot (D8) with the node (a diamond off the rail, a `StepRow` over "Authorizations N", every line always shown, under each line when open its `AuthwitDetails` in an `execute-op-details` panel), or "Checking authorizations…", or the failed line with Try again.
+- Add `StepRow.vue` (D11–D13, D16) and `AuthwitDetails.vue` (moved from `OperationCard.vue:434–473`, its root the group testid, led by its heading, D9).
+- `OperationCard.vue`: drop the details block, `detailsOpen`, `detailsToggle`, `detailsId`, `closedAuthwits` and the "Payload" heading; pass per authorization its group, and the advice's place; forward `retryPreview`.
+- `windows/execute/index.vue` and `windows/fee/index.vue`: a `<route>` block with `"fillsWindow": true`.
+- `identifier-sites.expected.json`: the `SendTxSummary.vue`, `StepRow.vue` and `AuthwitDetails.vue` sites; the `detailsOpen`-branch entries go.
+- New `OperationCard.rail.test.ts` on the fixtures: order; at rest (every sentence, every authorization line, an unreadable warning, no panel); from a fresh mount, each `batch` step's values after its row's press (1) and its raw fields after its raw press (2), inside that step's panel; focus stays on the pressed row; the guards by mouse and keyboard (a `DottedTerm` press and Enter, a named address press, the raw press inside an open step, a click ending a selection, a text press on the node's label inside the slot; the success control: a plain press and a padding press toggle); names and descriptions (D11), `RowTarget`'s pass-through; the warning and "Reading arguments…" once; the advice fallback on a loose unreadable authorization; "Checking authorizations…", the failed line, a refused request (no advice, no Try again); Try again by keyboard focuses the slot through pending and the list, by mouse leaves focus, a held Enter there does nothing; the DOM-order tabbables on `batch`: 7 at rest, 17 with everything open; 7 presses open every step and the node; `ten` draws ten steps numbered 1 to 10; no added `DottedTerm` or `Tooltip`.
+- Existing tests: every helper that pressed `execute-op-details-toggle` (`OperationCard.{summary,fallback,discovered,long-strings,wire,fee}.test.ts`) moves to one `openAllSteps(w)` beside the fixtures; the toggle's own cases (`summary.test.ts:161–173`) and the retry-focus case (`:550–571`) are rewritten for the rows and the slot; the inner-notice cases D7 removes (`wire.test.ts:241,278`, `fallback.test.ts:283–284`, `discovered.test.ts:105`, `summary.test.ts:228,238,307`) assert the notice once, at rest; `discovered.test.ts:69` keeps the authorization's pending line, once; the title and deceptive-name checks on the removed head row (`wire.test.ts:147`, `fallback.test.ts:182`) move to the step's sentence, unweakened; `long-strings.test.ts:136–145` and its authorization rows follow their elements into `SendTxSummary.vue` and `AuthwitDetails.vue`; the facts test runs on the four fixtures; `fee/index.test.ts` and `index.test.ts` change only where a selector moved.
+- **Gate**: `bun run lint && bun run typecheck:all && bun run test && bun run --cwd apps/extension test:components && bun run test:all`. Pass: exit 0 each.
+
+### Phase 5: a2 e2e, browser proof and gates
+- `tests/e2e/fixtures/popups.ts`: `openExecuteSteps(page)` presses every closed `execute-op-step-toggle` present and waits for each `aria-expanded="true"`; `openExecuteAuthwits(page)` waits for `execute-op-authwits-toggle`, presses it if closed, waits for it open; `openExecuteDetails` runs both and is called only where the authorizations are already listed; `tx-sendTx-delegated-authwit.test.ts` waits for `execute-op-summary-authwit` before opening the node. `tx-transfer-row.test.ts:91,143`: the transfer's title read from its step. `type-roles-windows.test.ts`: `expectCallCaptionsWhole` (`:365`) re-pointed for `aztec_sendTx` to the sentence head's address beside "on"; `stretchPayload` and `PAYLOAD_TEXT` per D10, `PAYLOAD_TEXT` also reading the discovered authorizations' decoded rows; sweep states for the new sites. Comments that say "Show all details" rewritten (`tx-transfer-row.test.ts:18`, `tx-sendTx-delegated-authwit.test.ts:86`, `popups.ts:506`). One `data-fills-window="true"` line in `tx-sendTx-multicall` and one in `tx-sendTx-default`'s raised-fee window.
+- `execute-steps.test.ts` grows: the Tab walk on `batch` (9 at rest, 19 with everything open), 7 presses to open all and 15 to every value; focus and the row's top unchanged after a press; by Puppeteer key and mouse: a drag across the sentence's address selects and copies it without toggling, a press on the glossary term and on a named address leaves the step, a plain press and a padding press toggle; the row's press reaches at least 24 px; `ten`'s tenth box holds "10" inside its 20 px; every payload row inside the card at 240 px.
+- Smoke and network as in Phase 3, the network list widened to the window's other specs: `type-roles-windows`, `tx-transfer-row`, `tx-sendTx-delegated-authwit`, `tx-sendTx-multicall`, `tx-sendTx-default`, `tx-sendTx-fields`, `tx-sendTx-noFrom`, `scope-refusal`, `authwit-lifecycle` (each `tests/e2e/network/<name>.test.ts`, one `e2e:agent` call per browser).
+- **Gate**: `bun run audit:vue && bun run test:all && bun run check:plans`, then the e2e above. Pass: exit 0 each; every file green at retry 0 on both browsers.
+
+## Captures
+
+Frames come from the committed specs' capture mode (`NULO_E2E_SHOT_DIR=~/.cache/nulo-backlog/p126-build-1/shots`): the fixtures from `execute-steps.test.ts`, the raised-fee window, a refused request and the authorization states from the network specs. a1: `batch` and `deep` with details open, light and dark, 400 and 240 px. a2: the four fixtures at rest, with one step open and with everything open; `batch` at 240 px and with a row focused by keyboard (Chrome); `ten`; the raised-fee window; a refused request. Each PR body embeds them from `pr-captures/p126-build-1/`, committed in one commit and removed in the next, so none reach `dev`.
+
+## Delivery
+
+| Arc | Phases | Branch | Stacks on | PR title (≤ 92) |
+|---|---|---|---|---|
+| a1 | 1–3 | `p126-build-1-a1` (off `origin/dev`, carrying the plan commit) | `dev` | `feat(execute): a value tree and raw values under every call in the approval window` |
+| a2 | 4–5 | `p126-build-1-a2` | a1 | `feat(execute): numbered steps on a rail, each step its own details, in the approval window` |
+| close-out | — | `p126-build-1-close-out` | a2 | `docs(plans): p126-build-1 closes, the approval window as pages 126 and 130 signed` |
+
+- `code_review: off` for every arc. Start: `gh stack init --adopt p126-build-1-a1 --base dev`. a1's PR opens after its loop converges (`gh stack submit --auto`, then `gh pr edit` with the body). a2: `gh stack add p126-build-1-a2`, its loop, `gh stack submit --auto`. Then the close-out layer and `gh stack submit --auto` again.
+- Each body: what changed and why (a1's says its layout is a waypoint to a2, which lands before any promote; the grant and `aztec_createAuthWit` cards take the tree and no raw layer, as prototyped); the picks quoted above as sign-offs; the accessibility calls (D8, D11–D13, D16) as made under the owner's 2026-10-19 delegation; the gates with outcomes; the captures; the smoke suite's per-browser wall-clock before and after (a new scenario); a2's also the ten-call proof (#576 stays closed) and the measured counts. No `Closes` line. No label at creation; `e2e:extension-network` or `e2e:extension-smoke` only if a path filter skips a lane the change needs.
+- Landing in order (a1, a2, close-out) before any promote, so users see the window change once.
+- **Parallelism**: none. a2 edits every file a1 does; serial is the critical path.
+
+## Post-implementation
+
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) read at `32fd50e60`. Specific to this plan:
+- **Loop placement**: per arc at its boundary, while the arc is the stack tip, then one fresh cross-arc pass over the net diff from `32fd50e60` before the close-out.
+- **Reviewer**: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; the prompt carries the diff against the arc's base, this plan, the arc map ("arc N of 2; a2 builds the rail on a1's tree, raw layer and fixture build"), the adversarial ask and the standard's two rules verbatim. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) of the arc's diff runs alongside the first round. Until a round has no material finding; three rounds is the hard stop.
+- **While implementing**: comments state invariants only; every attempt goes to `lessons/phase-N.md`; `agent-worktree status p126-build-1 "phase N green: <next>"` at each gate; three failures on one step stop the arc.
+- **Approval boundaries**: a fix that changes what a person sees beyond the picks goes to `OWNER-ASKS.md`; persistence, a lifecycle, a protocol or a public contract stops for the orchestrator.
+- **Close-out** (the docs-only top layer): merge `origin/dev` in and read `index.md` and `lessons.md` first; the Outcome block; lessons promoted with pruning; open items filed (dedupe first) or `none`; `STATUS.md` deleted; `git mv` into `archive/` in its own commit, index line moved; `bun run check:plans`.
+- **Teardown**: once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/p126-build-1/plan.md` succeeds, run `agent-worktree done p126-build-1 --merged`; relay a refusal. Merging is the owner's call.
+
+## Audit verdicts
+
+**Round 1, Codex (GPT-6.1 Sol, high, read-only): conditional approve** ("resolve findings 1–8, retain the signed product decisions, and commit reproducible browser proof").
+- Adopted: (1) the 32-row tree cap hides a decoded value today exposes, demonstrated by trace → D4 drops it; (2) the decoder's 1,024 count is no row bound (an array of 256 under 31 singleton arrays counts 256, renders about 8,200 rows), demonstrated → Facts corrected, the render measured, no virtualization; (3) a depth clamp must keep ancestry, plausible → D3, D5; (4) an unbounded guard refuses presses inside the D8 slot, demonstrated → D12 bounded to the row root, a test added; (5) `openExecuteDetails` can open before late authorizations arrive, demonstrated ordering → the helper splits, callers wait (Phase 5); (6) keep the selected testids → `execute-op-payload-row` kept on the call block (D10); (7) the browser proof must be committed → D17; (8) the facts test accepts titles and counts layers → visible text and titles apart, fresh-mount paths (Phase 4).
+- Rejected: (6) in part, re-attaching `execute-op-call-to` to a wrapper of the sentence's own address (it would select what `execute-op-summary-call-to` selects; recorded as an Ask). Its picks on D1, D2, D6, D7 and D8 match the plan.
+
+**Round 1, Opus 5.5 (Plan agent): conditional approve** ("drop the 32-row cap; bound D12's guard to the row root and test a text press on the node inside the D8 slot; complete the change map …; record D10's departure from the lane brief as an Ask").
+- Adopted: the cap (A1, as Codex); the bounded guard (A2); index keys (A3, demonstrated hazard of repeated names); the change map (A4: `identifier-sites.expected.json`, the sweep states, `expectCallCaptionsWhole`, the pinned inner-notice and group testids, the new step and node testids, the comments); 14 px between steps (A6); the slot's `aria-busy` and no padding when empty (A7); the rail owning every open state; the `hidden` name span; "Reading arguments…" once; one raw block; Phase 4 and 5 merged so no commit leaves `bun run test` red; the D10 Ask; a1's body calls its layout a waypoint.
+- Rejected: a flat row list (D3 keeps recursion, with no nested `decoded-param`, which answers its selector concern); no committed browser proof (D17, reason in the ledger). Its fact check found the retry test ends at `:571` and recon's claim on `type-roles-windows.test.ts:348,381` false; both corrected.
+
+**Final pass, Codex (GPT-6.1 Sol, high, read-only, fresh context): conditional approve** ("correct hostile-volume and depth gates; complete D17 artifact-mode, marker and request-ID isolation proof; preserve authorization pending status; migrate the pinned unit assertions; resolve the D10 exception").
+- Adopted: the worst decodable shape is 32,769 rows, not 8,200, demonstrated through `decodeCallForDisplay` → D4, the `wide` fixture, a pass criterion set before the measure (Phase 3); 15-then-3 px overflows at 240 px, demonstrated by arithmetic → D5 at 2 px past the sixth level, past the fourth under 300 px, a `depth` fixture asserted at both widths; D17's contract (stamp discovery, a positive grep, the runtime declaration, a production-artifact negative, fixture mode never adopting a `requestId`, with an `index.test.ts` proof); an authorization's "Reading arguments…" kept (D7); the change map's missing pins (`wire.test.ts:147`, `fallback.test.ts:182`, `long-strings.test.ts:127–145`, `discovered.test.ts:69`); D10 now keeps `execute-op-call-to` on the sentence's contract address, so the round-1 Ask is closed with no ask; D12's keyboard proof scoped to controls that have a keyboard path. D3 and D17 held.
+- Resumed: `conditional approve` on one demonstrated finding, the production marker list is hardcoded (`_build-extension.yml:142`), so source discovery adds a test case, not enforcement → the stamp is added to the list by hand (D17, Security, Phase 1); recon's selectors paragraph aligned with D10.
+
+**Arc a1, round 1, Codex (GPT-6.1 Sol, high, read-only): conditional approve.**
+- Adopted: (1) a 32-character name with no break opportunity escapes the card below 359 px (`.name` keeps `flex: 0 0 auto` with no width cap), demonstrated: red on Firefox at 240 px, 119.9 px past the card, with the name added to `ancestry`; `max-width: 100%` makes it green; (2) the captures abort the Firefox containment loop (`captureScreenshot` is refused on an extension page) → captures Chrome-only; (3) a comment restating `.full` → deleted.
+
+**Arc a1, Opus 5.5 (general-purpose), alongside round 1: conditional approve.**
+- Adopted: (1) as Codex (1); (2) the unarmed control asserted only a never-call → it now drives the fee map's `estimate` and `cancelRemote` and asserts both reach the worker; (3) the flatten check re-derives `args` the way the fixture builds them, so it cannot fail → dropped with the module comment's untested claim, `flatten` unexported; (4) the capture names carried the arc's name → `execute-<fixture>-details-<width>`; (5) the volume bound is per call, not per press → recorded in D4, a2's spec to time two `wide` authorizations; (6) the gate record predated the last fix → every gate rerun on the final head.
+- Held: the fixture branch answers no request, the release build holds none of it, the raw caps, the inventory re-pins, dApp text through `safeWire`.
+
+**Arc a1, round 2, Codex (resumed, on `bc63c57aa`): approve.** The loop converged.
+
+## Seeds
+
+```
+/goal Arcs a1 and a2 of implementations-plan/p126-build-1/plan.md are ✓ (each phase gate reported passing in the transcript), each arc's Codex loop converged (a resumed pass with no new material finding, quoted), the cross-arc pass converged, the stack p126-build-1-a1 → a2 → close-out exists on GitHub (gh stack view), the close-out archived the plan (git show --stat of the move), and bun run test and bun run lint exit 0.
+```
+
+```
+/loop 15m Drive implementations-plan/p126-build-1 forward per its plan.md: reality check (plan, lessons, gh stack view, CI); next pending step; fast gates after each edit; Codex at high on gpt-6.1-sol for any decision; never change what a person sees beyond the quoted picks; at an arc boundary run the arc's loop before gh stack add; after delivery babysit CI only; once the close-out is on dev, agent-worktree done p126-build-1 --merged and stop.
+```

@@ -1,14 +1,18 @@
 /**
  * Every fact the approval card shows for a multi-call transaction stays within two presses of the
  * card at rest. The card is pressed open breadth first, only ever on a closed toggle, and each fact
- * is looked for in its own row: a value shown under another call does not count for this one.
+ * is looked for in its own row: a value shown under another call does not count for this one. Text
+ * counts only as visible text; a whole value on hover counts only as a title.
  */
 
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { defineComponent } from "vue"
 import AddressDisplay from "@/components/AddressDisplay.vue"
+import { executeFixture } from "@/e2e/execute-fixture"
 import { trimAddress } from "@/utils/string"
+import type { Account } from "@/wallet/services/account/client"
+import type { Network } from "@/wallet/services/network/client"
 import {
 	AUTHWITS,
 	decodeFixture,
@@ -19,6 +23,7 @@ import {
 	MAIN,
 	RECIPIENT,
 	stubTokenSelectors,
+	titles,
 	USDC_TOKEN,
 	VAULT_DECODED_FACTS,
 	VAULT_RAW_FACTS,
@@ -57,8 +62,10 @@ const mountCard = async ({ vaultDecoded = true, components = { AddressDisplay } 
 }
 
 const normalized = (text: string): string => text.replace(/\s+/g, " ")
-const shows = (w: VueWrapper, { row, text }: Fact): boolean =>
-	w.findAll(row).some((el) => normalized(el.text()).includes(text) || el.findAll("[title]").some((t) => t.attributes("title") === text))
+const shows = (w: VueWrapper, { row, text, title }: Fact): boolean =>
+	w
+		.findAll(row)
+		.some((el) => (title ? el.findAll("[title]").some((t) => t.attributes("title") === text) : normalized(el.text()).includes(text)))
 
 /** The press count at which each fact first shows: every closed toggle is pressed once per round. */
 const depths = async (w: VueWrapper, facts: readonly Fact[]): Promise<number[]> => {
@@ -102,6 +109,34 @@ describe("OperationCard — every fact of a multi-call transaction within two pr
 		const found = await depths(await mountCard({ vaultDecoded: false }), [...FACTS, ...VAULT_RAW_FACTS])
 		// The Vault's raw fields sit behind two toggles, so the count must reach two to be a count at all.
 		expect(Math.max(...found)).toBe(MAX_PRESSES)
+	})
+
+	test("a fixture's deepest leaf and every call's raw fields, within two presses", async () => {
+		const account = { name: "Main", address: MAIN, chainId: 1 } as Account
+		const facts = async (name: string, pick: (calls: { args: string[] }[]) => Fact[]) => {
+			const f = executeFixture(name, account, { id: "net-1", chainId: 1, name: "N" } as Network)
+			if (!f) throw new Error(name)
+			const w = mount(OperationCard, {
+				props: {
+					op: f.operations[0] as never,
+					index: 0,
+					tokens: f.tokens,
+					feeEstimate: f.feeEstimates[0] as never,
+					decodedCalls: f.decodedCalls[0] as never,
+					decodedAuthwits: f.decodedAuthwits as never,
+				},
+				global: { stubs, components: { AddressDisplay } as never },
+			})
+			await flushPromises()
+			return { w, wanted: pick((f.operations[0] as unknown as { exec: { calls: { args: string[] }[] } }).exec.calls) }
+		}
+		const deep = await facts("deep", () => [{ row: '[data-call-index="0"]', text: "2020000000000000000" }])
+		expect(await unreached(deep.w, deep.wanted)).toEqual([])
+		const batch = await facts("batch", (calls) =>
+			calls.flatMap((c, j) => titles(`[data-call-index="${j}"] [data-testid="execute-op-raw-args"]`, ...c.args)),
+		)
+		expect(batch.wanted.length).toBeGreaterThan(20)
+		expect(await unreached(batch.w, batch.wanted)).toEqual([])
 	})
 
 	test("control: a card that drops the transfer's recipient fails the same check", async () => {

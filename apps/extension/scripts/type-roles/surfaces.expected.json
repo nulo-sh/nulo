@@ -284,6 +284,16 @@
 			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
 		},
 		{
+			"id": "windows-execute-ValueTree",
+			"name": "Routed module popup/windows/execute/ValueTree.vue",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/execute/ValueTree.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
+		},
+		{
 			"id": "windows-execute-DetailsToggle",
 			"name": "Routed module popup/windows/execute/DetailsToggle.vue",
 			"kind": "route",

@@ -82,6 +82,9 @@ jobs:
       # Same single-source rule for the e2e-only CSP violation recorder: a source build carries it
       # and the run checks it; an artifact run has neither (release zips refuse the recorder).
       CSP_REPORT_ARMED: ${{ (inputs.artifact_name == '' && inputs.extension_path == '') && '1' || '' }}
+      # Same rule for the execute window's fixtures: a source build renders them and the run lays
+      # them out; an artifact run proves a release renders none.
+      EXECUTE_FIXTURE_ARMED: ${{ (inputs.artifact_name == '' && inputs.extension_path == '') && '1' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -142,6 +145,7 @@ jobs:
           VITE_NULO_E2E_TOKEN_SEEDS: "1"
           VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM: "1"
           VITE_NULO_E2E_CSP_REPORT: ${{ env.CSP_REPORT_ARMED }}
+          VITE_NULO_E2E_EXECUTE_FIXTURE: ${{ env.EXECUTE_FIXTURE_ARMED }}
 
       # Both literals, because an unused export can tree-shake away even in an
       # armed build (see price-map.ts): the stamp proves the flag propagated,
@@ -173,6 +177,21 @@ jobs:
           fi
           echo "e2e CSP violation recorder present in the smoke build"
 
+      # The stamp proves the flag propagated, the marker that the fixture module survived; without
+      # either the run would assert fixtures the build never renders.
+      - name: Assert the e2e execute fixtures propagated (source build only)
+        if: inputs.artifact_name == '' && inputs.extension_path == ''
+        env:
+          BROWSER: ${{ inputs.browser }}
+        run: |
+          for marker in "NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP" "nulo:e2e:execute-fixture"; do
+            if ! grep -rq "$marker" "apps/extension/dist/${BROWSER}"; then
+              echo "::error::execute fixtures did not propagate ($marker absent from dist/${BROWSER})" >&2
+              exit 1
+            fi
+          done
+          echo "e2e execute fixtures present in the smoke build"
+
       - name: Run smoke e2e
         run: |
           if [ -n "$SHARD" ]; then
@@ -189,6 +208,7 @@ jobs:
           # design), where migration.test.ts skips itself.
           NULO_E2E_MIGRATION_FIXTURE: ${{ env.MIGRATION_FIXTURE_ARMED }}
           NULO_E2E_CSP_REPORT: ${{ env.CSP_REPORT_ARMED }}
+          NULO_E2E_EXECUTE_FIXTURE: ${{ env.EXECUTE_FIXTURE_ARMED }}
 
       - name: Upload smoke logs on failure
         if: failure()

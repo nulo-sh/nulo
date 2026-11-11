@@ -160,13 +160,14 @@ runtime env var can never arm a build-time flag.
 - Diagnose before theorising: `grep -rl NULO_E2E_PROVERLESS_BUILD_STAMP apps/extension/dist/chrome`
   (or the stamp of the feature in question). A later plain `bun run build` — including the one at
   the end of `bun run audit:vue` — silently disarms the dist.
-- Smoke needs its fixtures armed AND the migration one declared: build with
-  `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1
+- Smoke needs its fixtures armed AND the migration and execute ones declared: build with
+  `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_EXECUTE_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1
   VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome` (the seed pair
   keeps the fresh wallet off the live seed RPC — `_extension-smoke-e2e.yml` says why), run with
-  `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`.
-  `migration.test.ts` skips without the declaration; `backup-migration.test.ts` throws with the
-  remedy.
+  `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_EXECUTE_FIXTURE=1 NULO_E2E_CSP_REPORT=1`.
+  `migration.test.ts` skips without the declaration; `execute-steps.test.ts` without its own
+  asserts a fixture route renders nothing, so a source run missing it fails;
+  `backup-migration.test.ts` throws with the remedy.
 - Journal, transaction, balance, authwit and incoming rows are sealed: read them through
   `fixtures/sealed-rows.ts` (armed by `VITE_NULO_E2E_SEALED_READ=1`, network builds only), never
   `chrome.storage.local`, and find a keyed root's row (transactions, authwit flags, the incoming
@@ -222,6 +223,7 @@ runtime env var can never arm a build-time flag.
 | `E2E_REQUIRE_SETUP=1` | sandbox/deploy failures are fatal (set by `agent.sh`) |
 | `NULO_E2E_PROVERLESS=1` | `agent.sh` arms the proverless build pair |
 | `NULO_E2E_MIGRATION_FIXTURE=1` | runtime declaration that the dist carries the migration fixture |
+| `NULO_E2E_EXECUTE_FIXTURE=1` | runtime declaration that the dist renders the execute window's fixtures (`src/e2e/execute-fixture.ts`, `#/windows/execute?fixture=<name>`); unset, `execute-steps.test.ts` asserts a fixture route renders none |
 | `NULO_E2E_CSP_REPORT=1` | runtime declaration that the dist carries the CSP violation recorder: every launch's `close` fails on a missing record or any entry (README § CSP violations) |
 | `NULO_E2E_SHOT_DIR` | capture mode: `shotSend` writes light and dark PNGs there; CI never sets it. The shot page must be shown: Chrome's `newPage` opens a tab, which hides the tab before it, and a hidden page draws no frame, so `shotSend` refuses it; bring the page to front where the spec acts on it. A wallet whose token arrives untrusted (a backup import) opens the first-receive sheet over Home's middle, so a frame of Home's card comes from a fixture that imports its token through the UI (`tokenReadyExtension`). The approval window decodes its calls after `waitForExecuteContent` returns, so a shot of its summary first waits until no `execute-op-summary-args-pending` shows, or it pictures "Reading arguments…" (`network/tx-sendTx-multicall.test.ts`) |
 | `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): guarded with the node stand-in like a source run, skips the encrypted `backup-roundtrip` spec and the armed-dist check, and provides `liveLeg`, which runs `shipped-token-list.test.ts`, the one launch that reaches the live Testnet node; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
