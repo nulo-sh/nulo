@@ -30,6 +30,7 @@ status: completed
   - Smoke `execute-steps` on Chrome and Firefox, and the release-artifact negative.
   - The nine network specs, 23/23 on each browser.
   - `snack-placement`, 5/5 on both browsers, after CI found its pinned width.
+  - CI on #1782: every check green at `6472bd5c6` (52 pass, 6 skipped by their path filters); its first run, at `dc490fcfa`, found that pinned width.
   - `lessons/phase-5.md` has every run.
 - **Measured on `batch`:**
   - Tab stops: 7 in the card at rest and 17 open, then the footer's two. Under a request that makes 9 and 19; a fixture holds the footer (D17).
