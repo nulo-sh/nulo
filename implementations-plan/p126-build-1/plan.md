@@ -250,6 +250,8 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 
 **Arc a2, round 3, Codex (resumed, on `e17968365`, after the restack onto `c860df0e4` and the 240 px guide rule): approve** for the code. Adopted: OA-1's recommendation overstated (a), which leaves a nested address breaking at 240 px → reworded. The hard stop is reached with the loop converged.
 
+**After the loop, CI on #1782:** the heavy network shard red on both browsers: `snack-placement.test.ts` pinned the execute window's snack at the 360 px column's 328 px, which FW1 widens to the window's 368 px. Test-only fix, the spec green on both browsers locally; no review round remained, and the change is one assertion reading the window's width.
+
 ## Seeds
 
 ```
