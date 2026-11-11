@@ -23,3 +23,5 @@
 
 - The full smoke suite needs the runtime `NULO_E2E_MIGRATION_FIXTURE=1` beside the armed build. Without it, `backup-migration.test.ts`'s arming guard fails at once (the before-run on Chrome), and the armed file alone passes.
 - The wall-clock is the host's load more than the suite's: the before-runs (base) took 2,781 s on Chrome and 6,043 s on Firefox, where Firefox's nine failures were all timeouts at a load of 170 to 900. The after-runs took 1,872 s and 2,717 s, both green. The touched spec's few added seconds sit inside that noise.
+- `dev` added an arming flag for the approval window's fixture: the armed smoke build now also takes `VITE_NULO_E2E_EXECUTE_FIXTURE=1`, and the run takes `NULO_E2E_EXECUTE_FIXTURE=1`. Without it the global setup refuses the build by name.
+- Merge `origin/dev` before opening the PR. A conflict, here on `index.md`, starts no `pull_request` workflow, so the checks watch sees only CodeQL and Workers Builds and exits green.
