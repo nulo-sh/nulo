@@ -22,6 +22,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 /** Helpers */
 import {
 	buildFeeMethods,
+	defaultSponsor,
 	FEE_JUICE_BRIDGE_URL,
 	feePayerOf,
 	formatGasBalance,
@@ -107,6 +108,14 @@ const queuedCapTextOut = defineModel("queuedCapText", { default: null })
 
 /** One-way child→parent: the fee read refused the account because its imported key does not open. */
 const accountUnusableOut = defineModel("accountUnusable", { type: Boolean, default: false })
+
+/** One-way child→parent: the notices this card shows, in its order, for a page that shows the card
+ *  closed. */
+const noticesOut = defineModel("notices", { type: Array, default: () => [] })
+
+/** One-way child→parent, Send only: the one payer that stops a private send's fee naming the account,
+ *  as `"private_fpc"` or `"sponsor"`, or null when none can. `applyRemedy` picks it. */
+const remedyOut = defineModel("remedy", { type: String, default: null })
 
 const methodId = getRandomHex(6)
 
@@ -205,11 +214,11 @@ const queuedCapDisplay = computed(() => {
 const nudgeCopy = computed(() =>
 	props.originPrivacy === "private"
 		? {
-				title: "You have no private gas yet",
-				body: "A private send pays its fee from private gas, so the fee contract is the payer instead of you. Bridge some to cover this send.",
-				link: "Get private gas",
+				title: "You have no private Fee Juice yet",
+				body: "A private send pays its fee from private Fee Juice, which keeps your address hidden. Bridge some to cover this send.",
+				link: "Get private Fee Juice",
 			}
-		: { title: "You have no fee juice yet", body: "Bridge some to cover the network fee.", link: "Get fee juice" },
+		: { title: "You have no Fee Juice yet", body: "Bridge some to cover the network fee.", link: "Get Fee Juice" },
 )
 
 /** What the dropdown trigger shows: the paying method, or the saved pick's row while loading. */
@@ -230,7 +239,7 @@ const SPONSOR_SHORT = "The sponsor you chose can't cover this fee right now."
 /** The payer that takes over, named by kind: a sponsor's row title can be the short one's too. */
 const takeoverName = (m) => {
 	if (m?.type === "fj") return "Public Fee Juice"
-	if (m?.type === "private_fpc") return "Private FPC"
+	if (m?.type === "private_fpc") return "Private Fee Juice"
 	return m?.type === "fpc" && m.fpc?.isProtocol === true ? "The default sponsor" : null
 }
 const sponsorShortText = computed(() => {
@@ -276,7 +285,7 @@ watch(derivedSettings, (val) => {
 watch(
 	effectiveMethod,
 	(m) => {
-		payerOut.value = m ? { type: m.type, fpcId: m.fpc?.id, isProtocol: m.fpc?.isProtocol === true } : null
+		payerOut.value = m ? { type: m.type, fpcId: m.fpc?.id, isProtocol: m.fpc?.isProtocol === true, name: m.title } : null
 	},
 	{ immediate: true },
 )
@@ -311,6 +320,27 @@ const handleMethodPicked = (m) => {
 	rules.pick(m)
 }
 
+/** Only the PrivateFPC the wallet derives, or Nulo's own sponsor: never a hand-added contract, which
+ *  may publish anything. Read from the rows at the press too, so a row that changed since is never
+ *  picked. */
+const remedyMethod = computed(() => {
+	if (props.originPrivacy !== "private" || effectiveMethod.value?.type !== "fj") return null
+	const privateRow = methods.value.find((m) => m.type === "private_fpc" && m.fpc?.isProtocol === true && !m.disabled && !m.checking)
+	return privateRow ?? defaultSponsor(methods.value) ?? null
+})
+watch(
+	remedyMethod,
+	(m) => {
+		remedyOut.value = m ? (m.type === "private_fpc" ? "private_fpc" : "sponsor") : null
+	},
+	{ immediate: true },
+)
+function applyRemedy() {
+	const m = remedyMethod.value
+	if (m) handleMethodPicked(m)
+}
+defineExpose({ applyRemedy })
+
 const onFpcUpdated = (fpc) => {
 	const before = knownFpcs.value.find((f) => f.id === fpc.id)?.address ?? ""
 	fpcEdits.set(fpc.id, fpc)
@@ -341,7 +371,7 @@ fpcService.onFpcUpdated.add(onFpcUpdated)
 const FEE_DATA_UNAVAILABLE = "Couldn't load fee data. Retrying in the background."
 /** A thrown init never committed, so no store retry can reach it: nothing runs it again on its own. */
 const FEE_INIT_FAILED = "Couldn't load fee data. Close and reopen to try again."
-const PRIVATE_GAS_UNCHECKED = "Couldn't check your private gas. Pick a fee source to continue."
+const PRIVATE_GAS_UNCHECKED = "Couldn't check your private Fee Juice. Pick a fee source to continue."
 
 /** The info row's text. A hold with a healthy store is a read that came back without a balance —
  *  nothing is retrying, so the row never promises a retry: a private origin says what to do, and a
@@ -353,6 +383,22 @@ const statusNotice = computed(() => {
 	if (sponsorShort.value) return ""
 	return held.value && props.originPrivacy === "private" ? PRIVATE_GAS_UNCHECKED : ""
 })
+
+const notices = computed(() => {
+	const shown = []
+	if (statusNotice.value) shown.push(statusNotice.value)
+	if (sponsorShort.value) shown.push(sponsorShortText.value)
+	if (shortfall.value) shown.push(`This send can cost up to ${feeText(shortfall.value.cost)}. You have ${shortfall.value.balance} FJ.`)
+	if (feeJuiceMissing.value) shown.push(nudgeCopy.value.title)
+	return shown
+})
+watch(
+	notices,
+	(shown) => {
+		if (shown.join("\n") !== noticesOut.value.join("\n")) noticesOut.value = shown
+	},
+	{ immediate: true },
+)
 
 // Keep this order: watchers one dependency triggers run in creation order.
 watchFeeSnapshot(snapshot)

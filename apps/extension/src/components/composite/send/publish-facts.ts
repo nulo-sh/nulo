@@ -55,19 +55,19 @@ const NOTICE_BODY: Record<NoticeShape, string> = {
 
 export const FACT_SENTENCES = {
 	sender: "A public origin shows the balance leaving your account, so your address is on the chain as the sender.",
-	unvouched: "This fee contract was added by hand. Nulo cannot tell what it publishes about you.",
+	unvouched: "This FPC was added by hand. Nulo cannot tell what it publishes about you.",
 	recipient: "A public destination shows the balance arriving at the recipient's address.",
 	amount: "Either side being public shows the balance change, and with it the amount.",
 } as const
 
 export const PAID_BY = {
 	account: "paid by your address",
-	contract: "paid by the fee contract",
+	contract: "paid from your private Fee Juice",
 	sponsor: "paid by the sponsor",
 } as const
 
 /** Spoken in place of a hand-added contract's fee, which is drawn as "—". */
-export const UNVOUCHED_FEE_SENTENCE = "Nulo can't tell what this fee contract charges you."
+export const UNVOUCHED_FEE_SENTENCE = "Nulo can't tell what this FPC charges you."
 
 /** Under the strip for a token whose class Nulo has not validated: the strip's words assume its code. */
 export const TOKEN_CAVEAT = "Nulo can't check this token's contract. What a send publishes depends on its code."

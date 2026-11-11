@@ -205,6 +205,48 @@
 			"why": "a hint sentence set in mono, not an identifier"
 		},
 		{
+			"file": "apps/extension/src/components/composite/send/PayeeBlock.vue",
+			"expression": "parts.start",
+			"branch": "",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "popup-send",
+			"state": "",
+			"why": "an end of the whole address, set in data-lead inside the half its line's entry reads"
+		},
+		{
+			"file": "apps/extension/src/components/composite/send/PayeeBlock.vue",
+			"expression": "parts.firstRest",
+			"branch": "",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"send-payee-half-first\"]",
+			"surface": "popup-send",
+			"state": "a chosen recipient"
+		},
+		{
+			"file": "apps/extension/src/components/composite/send/PayeeBlock.vue",
+			"expression": "parts.secondRest",
+			"branch": "",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"send-payee-half-second\"]",
+			"surface": "popup-send",
+			"state": "a chosen recipient"
+		},
+		{
+			"file": "apps/extension/src/components/composite/send/PayeeBlock.vue",
+			"expression": "parts.end",
+			"branch": "",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "popup-send",
+			"state": "",
+			"why": "an end of the whole address, set in data-lead inside the half its line's entry reads"
+		},
+		{
 			"file": "apps/extension/src/components/composite/send/RecipientCard.vue",
 			"expression": "masked",
 			"branch": "",
@@ -345,6 +387,26 @@
 			"selector": "[data-testid=\"recipient-suggestion-address\"]",
 			"surface": "popup-send",
 			"state": "a saved contact and a partial recipient typed"
+		},
+		{
+			"file": "apps/extension/src/popup/components/modules/send/SendPersonStep.vue",
+			"expression": "trimAddress(r.address, 6, 4, \"…\")",
+			"branch": "recents.length && !(r.name)",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"send-recent-address\"]",
+			"surface": "popup-send",
+			"state": "the person step after a send to an unnamed address (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/components/modules/send/SendPersonStep.vue",
+			"expression": "trimAddress(a.address, 6, 4, \"…\")",
+			"branch": "accounts.length",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"send-own-account-address\"]",
+			"surface": "popup-send",
+			"state": "the person step"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/send/SendReviewSheet.vue",

@@ -157,7 +157,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 									rel="noopener noreferrer"
 									:class="$style.remedy"
 									data-testid="send-fee-privacy-remedy"
-								>Get private gas</a>
+								>Get private Fee Juice</a>
 							</div>
 						</div>
 					</div>
