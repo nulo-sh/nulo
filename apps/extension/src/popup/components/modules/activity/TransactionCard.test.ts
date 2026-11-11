@@ -412,13 +412,19 @@ describe("TransactionCard's title mark", () => {
 	}
 	const markOf = async (tx: Record<string, unknown>) => (await layoutOf(tx)).props("titleMark")
 
-	test("a transfer of a listed token draws the list's picture; a custom one its initials; a flagged one the badge", async () => {
-		expect(await markOf(transferOf(TEST_TOKENS.USDC))).toEqual({ symbol: "USDC", icon: TEST_ICONS.USDC, badge: false })
-		expect(await markOf(transferOf(field(0xc0ffeen)))).toEqual({ symbol: "USDC", icon: undefined, badge: false })
-		expect(await markOf(transferOf(FLAGGED))).toEqual({ symbol: "USDC", icon: undefined, badge: true })
-	})
+	test.each([
+		["the wallet's", { type: OriginType.UI }],
+		["a dApp's", { type: OriginType.DAPP, name: "example.dapp.io" }],
+	])(
+		"%s transfer of a listed token draws the list's picture; a custom one its initials; a flagged one the badge",
+		async (_who, origin) => {
+			expect(await markOf(transferOf(TEST_TOKENS.USDC, origin))).toEqual({ symbol: "USDC", icon: TEST_ICONS.USDC, badge: false })
+			expect(await markOf(transferOf(field(0xc0ffeen), origin))).toEqual({ symbol: "USDC", icon: undefined, badge: false })
+			expect(await markOf(transferOf(FLAGGED, origin))).toEqual({ symbol: "USDC", icon: undefined, badge: true })
+		},
+	)
 
-	test("an outgoing mint is titled by its kind and a dApp's transfer shares its title with the app chip: neither has a mark", async () => {
+	test("an outgoing mint is titled by its kind and a dApp's call by its function: neither has a mark", async () => {
 		const CLASS = field(0xc1a55n)
 		const usdc = {
 			id: 1,
@@ -437,6 +443,13 @@ describe("TransactionCard's title mark", () => {
 		}
 		const layout = await layoutOf(mint, [usdc])
 		expect([layout.props("title"), layout.props("amount"), layout.props("titleMark")]).toEqual(["Mint (public)", "1", null])
-		expect(await markOf(transferOf(TEST_TOKENS.USDC, { type: OriginType.DAPP, name: "example.dapp.io" }))).toBeNull()
+		const call = {
+			hash: field(0x4c4cn),
+			status: TxStatus.Proposed,
+			origin: { type: OriginType.DAPP, name: "example.dapp.io" },
+			calls: [{ contract: field(0xd1n), method: "swap_exact_tokens", args: [field(1n)] }],
+		}
+		const dapp = await layoutOf(call)
+		expect([dapp.props("title"), dapp.props("titleMark")]).toEqual(["Swap Exact Tokens", null])
 	})
 })
