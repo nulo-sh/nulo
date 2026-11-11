@@ -7,6 +7,7 @@
  * box unannounced, and in Firefox's real toolbar panel the text neither clips nor moves the layout.
  */
 import { typeRoleNames, typeRoles } from "@nulo/design/tokens"
+import { DEFAULT_RPC_TIMEOUT_MS } from "@nulo/extension-messaging/background"
 import type { Page } from "puppeteer"
 import { describe, expect, vi } from "vitest"
 import { extensionUrl, FIREFOX_ONLY, isFirefox, stopBackground } from "./fixtures/browser"
@@ -21,6 +22,7 @@ import {
 	replaceInputValue,
 	test,
 	waitForHash,
+	withTimeoutMessage,
 } from "./fixtures/extension"
 import {
 	addContact,
@@ -784,6 +786,12 @@ async function openAndSweep(page: Page, opener: string, ready: string, label: st
 async function goAndSweep(page: Page, hash: string, ready: string, label: string, states: readonly SiteState[] = []): Promise<void> {
 	await navigateByHash(page, hash, 10_000)
 	await page.waitForSelector(sel(ready), VISIBLE)
+	// A list renders its page's controls while it still fetches; a sweep reads the page at rest. The
+	// fetch is a popup RPC, which settles, loaded or failed, within its own bound.
+	await withTimeoutMessage(
+		page.waitForFunction((s) => !document.querySelector(s), { timeout: DEFAULT_RPC_TIMEOUT_MS, polling: 100 }, sel("loading-state")),
+		`${label}: a list still loading after ${DEFAULT_RPC_TIMEOUT_MS / 1000} s`,
+	)
 	await expectPageClean(page, label, states)
 }
 
