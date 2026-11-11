@@ -570,8 +570,8 @@ const RECEIPT_TOKEN_ID = 1
 const DAPP_NAME = "Shielded Payroll Portal"
 /** A dApp's large transfer: its app chip is cut below its cap beside the transfer's mark and symbol. */
 const LARGE_DAPP_HASH = `0x${"6e".repeat(32)}`
-/** The large transfer's app chip at 360px, measured alike on Chrome and Firefox: the cap less the
- *  room the 16px mark and its 6px gap take from the title row. */
+/** The large transfer's app chip at 360px, measured alike on Chrome and Firefox: the transfer's mark
+ *  and its gap leave it below its cap. */
 const LARGE_APP_CHIP = 85.8
 /** The floor of a dApp transfer's app chip: its border, padding and one whole "…" at the chip's 11px. */
 const APP_CHIP_FLOOR = 20

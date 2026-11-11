@@ -500,7 +500,7 @@ describe("TokenCard — the subtitle's overflow", () => {
 		expect(subtitles.filter((cls) => cls.includes("$style.fiat"))).toEqual(["[$style.fiat, $style.fiat_figure]", "$style.fiat"])
 	})
 
-	test("each of Home's token rows puts its mark and its text column in the rows' shared lead, which may shrink below its content so clipped text yields to the balance", () => {
+	test("each of Home's token rows puts its mark and its text column in the rows' shared lead, which may shrink below its content", () => {
 		const dir = "apps/extension/src/popup/components/modules/general"
 		expect(declarationsOf(parseSource(`${dir}/token-row.module.css`), ".lead")).toEqual({ "min-width": "0" })
 		for (const row of ["TokenCard", "TokenSeedRow", "TokenImportRow"]) {
