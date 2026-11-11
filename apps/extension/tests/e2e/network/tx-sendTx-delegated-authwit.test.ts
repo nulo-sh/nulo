@@ -83,8 +83,9 @@ test.skipIf(!hasConfig)(
 		)
 		expect(ops).toEqual(["aztec_sendTx"])
 
-		// The discovered authwit sits under the card's "Show all details", closed at rest, and its
-		// values open with it once the estimate lands.
+		// The discovered authwit's rows sit under the authorizations' node, closed at rest; its values
+		// open with the node once the estimate has listed it.
+		await execPopup.waitForSelector(sel("execute-op-summary-authwit"), { visible: true, timeout: 60_000 })
 		await openExecuteDetails(execPopup)
 		await execPopup.waitForSelector(sel("execute-discovered-authwit-structured-args"), { visible: true, timeout: 60_000 })
 		// Each address fills itself in after its own contact lookup. The row is read in the same pass

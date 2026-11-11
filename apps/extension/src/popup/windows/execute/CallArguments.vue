@@ -12,6 +12,7 @@ import {
 	LABELS_LINE,
 	LABELS_TITLE,
 	nonceValue,
+	RAW_ADVICE,
 	RAW_LINE,
 	RAW_TITLE,
 	rawToggleLabel,
@@ -22,24 +23,30 @@ import ArgsNotice from "./ArgsNotice.vue"
 import DetailsToggle from "./DetailsToggle.vue"
 import ValueTree from "./ValueTree.vue"
 
-const props = defineProps<{
-	surface: CallSurface
-	/** The call's target, so an amount can be labeled with the token the wallet knows at that address. */
-	contract: unknown
-	chainId?: number
-	tokens?: readonly TokenInfo[]
-	/** Prefix for every `data-testid` in the block, so each host surface stays addressable. */
-	prefix: string
-	/** Whether the request's JSON view carries this call, so capped rows can point there. */
-	jsonView?: boolean
-	/** Every value prints whole, an address as its own text with no name in its place; the
-	 *  `this account` sender, which only a surface read with caller context carries, is not covered. */
-	full?: boolean
-	/** Carries the window's closing advice; `OperationCard` picks the one notice. */
-	advice?: boolean
-	/** The call's fields under a readable reading; an unreadable one shows its own. */
-	raw?: RawRows
-}>()
+const props = withDefaults(
+	defineProps<{
+		surface: CallSurface
+		/** The call's target, so an amount can be labeled with the token the wallet knows at that address. */
+		contract: unknown
+		chainId?: number
+		tokens?: readonly TokenInfo[]
+		/** Prefix for every `data-testid` in the block, so each host surface stays addressable. */
+		prefix: string
+		/** Whether the request's JSON view carries this call, so capped rows can point there. */
+		jsonView?: boolean
+		/** Every value prints whole, an address as its own text with no name in its place; the
+		 *  `this account` sender, which only a surface read with caller context carries, is not covered. */
+		full?: boolean
+		/** Carries the window's closing advice; the host picks the one notice. */
+		advice?: boolean
+		/** The call's fields under a readable reading; an unreadable one shows its own. */
+		raw?: RawRows
+		/** Off when the host already states a pending or unreadable reading at rest: the block then
+		 *  prints neither, and the advice stands alone. */
+		notice?: boolean
+	}>(),
+	{ notice: true },
+)
 
 const rawOpen = ref(false)
 const rawShown = computed(() => (props.surface.kind === "raw" ? props.surface : props.raw))
@@ -58,9 +65,11 @@ const nonce = computed(() =>
 </script>
 
 <template>
-	<Text v-if="surface.kind === 'pending'" :data-testid="`${prefix}-args-pending`" variant="body" color="tertiary" :class="$style.block">
-		Reading arguments…
-	</Text>
+	<template v-if="surface.kind === 'pending'">
+		<Text v-if="notice" :data-testid="`${prefix}-args-pending`" variant="body" color="tertiary" :class="$style.block">
+			Reading arguments…
+		</Text>
+	</template>
 
 	<Flex
 		v-else
@@ -122,7 +131,8 @@ const nonce = computed(() =>
 			<ValueTree v-for="(p, m) in surface.params" :key="m" :name="p.name" :value="p.value" :prefix="prefix" :full="full" />
 		</template>
 
-		<ArgsNotice v-else :title="RAW_TITLE" :body="RAW_LINE[surface.reason]" :prefix="prefix" kind="unverified" :advice="advice" />
+		<ArgsNotice v-else-if="notice" :title="RAW_TITLE" :body="RAW_LINE[surface.reason]" :prefix="prefix" kind="unverified" :advice="advice" />
+		<Text v-else-if="advice" :data-testid="`${prefix}-unverified-advice`" variant="body" color="tertiary">{{ RAW_ADVICE }}</Text>
 
 		<template v-if="rawShown?.rows.length">
 			<DetailsToggle

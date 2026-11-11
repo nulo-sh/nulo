@@ -314,6 +314,26 @@
 			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
 		},
 		{
+			"id": "windows-execute-StepRow",
+			"name": "Routed module popup/windows/execute/StepRow.vue",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/execute/StepRow.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
+		},
+		{
+			"id": "windows-execute-AuthwitDetails",
+			"name": "Routed module popup/windows/execute/AuthwitDetails.vue",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/execute/AuthwitDetails.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
+		},
+		{
 			"id": "windows-execute-ArgsNotice",
 			"name": "Routed module popup/windows/execute/ArgsNotice.vue",
 			"kind": "route",

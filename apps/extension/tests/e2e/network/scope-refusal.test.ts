@@ -18,6 +18,7 @@ import {
 	waitForPgResult,
 } from "../fixtures/playground"
 import { approveCapabilities, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { shotSend } from "../fixtures/shots"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -145,6 +146,7 @@ test.skipIf(!hasConfig)(
 		await execute.waitForSelector('[data-testid="execute-op-refusal"]', { visible: true, timeout: 120_000 })
 		expect(await execute.$eval('[data-testid="execute-op-refusal"]', (el) => el.getAttribute("data-kind"))).toBe("call")
 		expect(await execute.$('[data-testid="execute-confirm-btn"]')).toBeNull()
+		await shotSend(execute, "execute-refused-400", "execute-op-refusal")
 		const fromWindow = await downloadRequestLogs(execute)
 		await rejectExecute(execute)
 		const answer = await waitForPgResult(page, "sendTx", seq, 120_000)

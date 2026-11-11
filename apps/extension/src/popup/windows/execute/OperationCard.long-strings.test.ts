@@ -9,9 +9,11 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { mount } from "@vue/test-utils"
-import postcss, { type AtRule, type ChildNode, type Rule } from "postcss"
+import postcss, { type ChildNode, type Rule } from "postcss"
 import { describe, expect, test } from "vitest"
+import AuthwitDetails from "./AuthwitDetails.vue"
 import CallArguments from "./CallArguments.vue"
+import { openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 import SendTxSummary from "./SendTxSummary.vue"
 import ValueTree from "./ValueTree.vue"
@@ -28,6 +30,7 @@ const FIELD = `0x${"1f".repeat(32)}`
 const styleOf = (component: unknown): Record<string, string> =>
 	(component as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style
 const CARD = styleOf(OperationCard)
+const AUTHWIT = styleOf(AuthwitDetails)
 const ARGS = styleOf(CallArguments)
 const SUMMARY = styleOf(SendTxSummary)
 const TREE = styleOf(ValueTree)
@@ -111,10 +114,10 @@ const stubs = {
 
 const mountCard = (op: unknown, props: Record<string, unknown> = {}) =>
 	mount(OperationCard, { props: { op: op as never, index: 0, ...props }, global: { stubs } })
-/** A send's card with its rows open, as the person reads them after "Show all details". */
+/** A send's card with its step and its authorizations open, as the person reads them after a press on each. */
 const mountOpen = async (props: Record<string, unknown> = {}) => {
 	const w = mountCard(sendTx, props)
-	await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
+	await openAllSteps(w)
 	return w
 }
 
@@ -136,16 +139,13 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		expect(declarationsOf(".full", "> .value", TREE_STYLE)).toEqual({ "text-align": "left" })
 	})
 
-	test("a call's 64-character name breaks in the call row; the contract beside it keeps its width", async () => {
-		const row = (await mountOpen()).find('[data-testid="execute-op-payload-row"]')
-		expect(row.classes()).toContain(CARD.call_row)
-		expect(row.element.firstElementChild?.textContent).toMatch(HUMANIZED)
-		expect(row.element.lastElementChild?.querySelector(".addr")?.textContent).toBe(TOKEN)
-		expect(declarationsOf(".call_row > *")).toEqual(WRAPS)
-		expect(declarationsOf(".call_row > :last-child")).toEqual({ "flex-shrink": "0", "max-width": "calc(100% - 12px)" })
-		const wrapped = CARD_STYLE.nodes.find((node): node is AtRule => node.type === "atrule" && node.params === "(width < 359px)")
-		const narrowCaption = wrapped?.nodes?.find(isRule(".call_row > :last-child"))
-		expect(narrowCaption?.nodes.map((node) => node.toString())).toEqual(["max-width: 100%"])
+	test("an open step names its call once, in the sentence that breaks; the values under it repeat no name", async () => {
+		const w = await mountOpen()
+		const title = w.get('[data-testid="execute-op-summary-call-title"]')
+		expect(title.text()).toMatch(HUMANIZED)
+		expect(title.element.closest(`.${SUMMARY.body}`)).not.toBeNull()
+		expect(w.get('[data-testid="execute-op-payload-row"]').text()).not.toMatch(HUMANIZED)
+		expect(w.findAll('[data-testid="execute-op-summary-call-to"]').map((a) => a.text())).toEqual([TOKEN])
 	})
 
 	test.each([
@@ -172,8 +172,9 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		const w = await mountOpen(withAuthwit)
 		const value = w.find('[data-testid="execute-discovered-authwit-function"]')
 		expect(value.text()).toMatch(HUMANIZED)
-		expect(value.element.parentElement?.classList.contains(CARD.row)).toBe(true)
+		expect(value.element.parentElement?.classList.contains(AUTHWIT.row)).toBe(true)
 		expect(value.element.parentElement?.lastElementChild).toBe(value.element)
+		expect(declarationsOf(".row", "> :last-child", styleSource("AuthwitDetails.vue"))).toMatchObject(WRAPS)
 	})
 
 	test("in the summary, a call's and an authorization's 64-character names and their addresses sit in a body that may break", () => {
@@ -185,8 +186,8 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		]
 		expect(held[0]!.text()).toMatch(HUMANIZED)
 		expect(held[2]!.text()).toMatch(HUMANIZED)
-		for (const el of held) expect(el.element.closest(`.${SUMMARY.item_body}`)).not.toBeNull()
-		expect(declarationsOf(".item_body", undefined, styleSource("SendTxSummary.vue"))).toMatchObject(WRAPS)
+		for (const el of held) expect(el.element.closest(`.${SUMMARY.body}`)).not.toBeNull()
+		expect(declarationsOf(".body", undefined, styleSource("SendTxSummary.vue"))).toMatchObject(WRAPS)
 	})
 
 	test("a registered token's 31-character symbol and 64-character name break inside their value column", () => {

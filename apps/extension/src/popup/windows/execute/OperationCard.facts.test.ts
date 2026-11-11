@@ -12,6 +12,7 @@ import AddressDisplay from "@/components/AddressDisplay.vue"
 import { executeFixture } from "@/e2e/execute-fixture"
 import { trimAddress } from "@/utils/string"
 import type { Account } from "@/wallet/services/account/client"
+import type { DecodedValue } from "@/wallet/services/execution/client"
 import type { Network } from "@/wallet/services/network/client"
 import {
 	AUTHWITS,
@@ -28,6 +29,7 @@ import {
 	VAULT_DECODED_FACTS,
 	VAULT_RAW_FACTS,
 } from "./execute.fixture"
+import { valueText } from "./call-surface"
 import OperationCard from "./OperationCard.vue"
 
 const lookups = vi.hoisted(() => ({ accounts: [] as { name: string; address: string }[] }))
@@ -85,6 +87,22 @@ const unreached = async (w: VueWrapper, facts: readonly Fact[]): Promise<Fact[]>
 	return facts.filter((_, i) => found[i] > MAX_PRESSES)
 }
 
+/** Every row a decoded value draws, as the tree prints it: a branch's name, a leaf's name and value,
+ *  an address as `AddressDisplay` shows it. Read in its own row, so a raw field cannot answer it. */
+const treeRows = (row: string, name: string, v: DecodedValue): Fact[] => {
+	const own = `${row} [data-testid="execute-op-decoded-param"][data-param="${name}"]`
+	const children =
+		v.kind === "struct"
+			? v.fields.map((f) => [f.name, f.value] as const)
+			: v.kind === "array"
+				? v.items.map((item, i) => [`[${i}]`, item] as const)
+				: []
+	if (children.length) return [{ row: own, text: `${name}:` }, ...children.flatMap(([n, c]) => treeRows(row, n, c))]
+	if (v.kind === "address") return [{ row: own, text: v.value === MAIN ? "Main" : trimAddress(v.value) }]
+	const text = v.kind === "struct" ? "{}" : v.kind === "array" ? "[]" : valueText(v)
+	return [{ row: own, text: `${name}:${text}` }]
+}
+
 /** The real `AddressDisplay`, except it renders nothing for `address`: a card that drops one row's field. */
 const dropping = (address: string) =>
 	defineComponent({
@@ -111,9 +129,10 @@ describe("OperationCard — every fact of a multi-call transaction within two pr
 		expect(Math.max(...found)).toBe(MAX_PRESSES)
 	})
 
-	test("a fixture's deepest leaf and every call's raw fields, within two presses", async () => {
-		const account = { name: "Main", address: MAIN, chainId: 1 } as Account
-		const facts = async (name: string, pick: (calls: { args: string[] }[]) => Fact[]) => {
+	test.each(["one", "batch", "deep", "raw"])(
+		"%s: every call's decoded values and raw fields and every authorization's raw fields, within two presses",
+		async (name) => {
+			const account = { name: "Main", address: MAIN, chainId: 1 } as Account
 			const f = executeFixture(name, account, { id: "net-1", chainId: 1, name: "N" } as Network)
 			if (!f) throw new Error(name)
 			const w = mount(OperationCard, {
@@ -128,16 +147,24 @@ describe("OperationCard — every fact of a multi-call transaction within two pr
 				global: { stubs, components: { AddressDisplay } as never },
 			})
 			await flushPromises()
-			return { w, wanted: pick((f.operations[0] as unknown as { exec: { calls: { args: string[] }[] } }).exec.calls) }
-		}
-		const deep = await facts("deep", () => [{ row: '[data-call-index="0"]', text: "2020000000000000000" }])
-		expect(await unreached(deep.w, deep.wanted)).toEqual([])
-		const batch = await facts("batch", (calls) =>
-			calls.flatMap((c, j) => titles(`[data-call-index="${j}"] [data-testid="execute-op-raw-args"]`, ...c.args)),
-		)
-		expect(batch.wanted.length).toBeGreaterThan(20)
-		expect(await unreached(batch.w, batch.wanted)).toEqual([])
-	})
+			const calls = (f.operations[0] as unknown as { exec: { calls: { args: string[] }[] } }).exec.calls
+			// A token's own calls read as the wallet's transfer rows; every other decode prints its tree.
+			const decoded = f.decodedCalls[0]!.flatMap((d, j) =>
+				d.kind === "decoded" && d.contract !== "Token"
+					? d.params.flatMap((p) => treeRows(`[data-call-index="${j}"]`, p.name, p.value))
+					: [],
+			)
+			const wanted = [
+				...decoded,
+				...calls.flatMap((c, j) => titles(`[data-call-index="${j}"] [data-testid="execute-op-raw-args"]`, ...c.args)),
+				...(f.feeEstimates[0]!.discoveredAuthwits ?? []).flatMap((a) =>
+					titles(`[data-message-hash="${a.messageHash}"] [data-testid="execute-discovered-authwit-raw-args"]`, ...a.args),
+				),
+			]
+			expect(wanted.length).toBeGreaterThan(calls.length)
+			expect(await unreached(w, wanted)).toEqual([])
+		},
+	)
 
 	test("control: a card that drops the transfer's recipient fails the same check", async () => {
 		const missing = await unreached(await mountCard({ components: { AddressDisplay: dropping(RECIPIENT) } }), FACTS)

@@ -3,12 +3,13 @@
  * `aztec_sendTx` — from the fee estimate for a standard operation, from the
  * authorization preview for a `default_entrypoint` one. An operation with nothing
  * to list renders no block at all: `send_transaction`, whose confirm adds none, and
- * an embedded-fee standard one, whose discovery is skipped. Each entry is a summary
- * row under the card's "Show all details", its arguments and inner hash open with it.
+ * an embedded-fee standard one, whose discovery is skipped. Each entry's rows open
+ * under its line with the authorizations' node, its arguments and inner hash with them.
  */
 
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
+import { openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 
 const OWNER = "0xowner0000000000000000000000000000000000000000000000000000000cc"
@@ -48,10 +49,10 @@ const stubs = {
 	Icon: true,
 	FeeSettingsCard: true,
 }
-/** Mounts the card with its rows open, as the person reads them after "Show all details". */
+/** Mounts the card with its steps and its authorizations open, as the person reads them after a press on each. */
 const mountCard = async (op: { kind: string }, props: Record<string, unknown> = {}) => {
 	const w = mount(OperationCard, { props: { op: op as never, index: 0, ...props }, global: { stubs } })
-	if (op.kind === "aztec_sendTx") await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
+	if (op.kind === "aztec_sendTx") await openAllSteps(w)
 	return w
 }
 
@@ -67,6 +68,9 @@ describe("OperationCard — discovered authorizations", () => {
 		expect(summary).toContain("0x1234abcd")
 		const details = rows[0]!.find('[data-testid="execute-discovered-authwit-details"]')
 		expect(details.text()).toContain("Reading arguments…")
+		// Its line at rest states no pending reading, so the details say it, once.
+		const listed = w.findAll('[data-testid="execute-op-summary-authwit"]')
+		expect(listed.map((li) => li.text().split("Reading arguments…").length - 1)).toEqual([1, 1])
 		expect(details.find("[title]").attributes("title")).toBe(INNER)
 		expect(details.text()).not.toContain(INNER)
 		const panelIds = rows.map((row) => row.get('[data-testid="execute-discovered-authwit-details"]').attributes("id"))
@@ -102,7 +106,11 @@ describe("OperationCard — discovered authorizations", () => {
 		expect(a!.find('[data-testid="execute-discovered-authwit-function"]').text()).not.toContain("0x1234abcd")
 		expect(b!.find('[data-testid="execute-discovered-authwit-function"]').text()).toContain("0x1234abcd")
 		expect(a!.findAll('[data-testid="execute-discovered-authwit-decoded-param"]')).toHaveLength(1)
-		expect(b!.find('[data-testid="execute-discovered-authwit-unverified-warning"]').exists()).toBe(true)
+		// Once, under its line at rest: the open details do not say it again.
+		const bLine = w.findAll('[data-testid="execute-op-summary-authwit"]')[1]!
+		expect(bLine.findAll('[data-testid$="-unverified-warning"]').map((n) => n.attributes("data-testid"))).toEqual([
+			"execute-op-summary-authwit-unverified-warning",
+		])
 		await b!.find('[data-testid="execute-discovered-authwit-raw-toggle"]').trigger("click")
 		const html = b!.html()
 		expect(html).toContain("arg-b")
