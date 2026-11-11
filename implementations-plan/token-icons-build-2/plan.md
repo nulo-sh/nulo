@@ -70,7 +70,7 @@ Page 134 answered the four surfaces token-icons-build-1 left to the owner (its A
 
 ### Phase 1: the step's chevron (arc 1, #1789)
 
-- **Change map**: `SendTxSummary.vue`, `SendTxSummary.test.ts`, `tests/e2e/execute-steps.test.ts`.
+- **Change map**: `SendTxSummary.vue`, `OperationCard.summary.test.ts`, `tests/e2e/execute-steps.test.ts` (the chevron takes a testid).
 - **Tests**: component: on the head and on the line (an address last, and `. Caller: none` last), the chevron and a lone U+00A0 sit in one span right after the last word; red on base. Smoke: in the existing 400/240 px loop, each step's chevron shares a line with its sentence's last non-blank text fragment (`batch` at 400 px is red on base).
 - **Gate at arc 1's head**: unit gates; `execute-steps.test.ts` on the base build (red), then on arc 1's armed build, Chrome and Firefox (green).
 

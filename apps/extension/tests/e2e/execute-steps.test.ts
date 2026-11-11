@@ -87,6 +87,43 @@ async function textPastCard(page: Page): Promise<string[]> {
 	}, PAYLOAD)
 }
 
+/** Each step whose chevron starts a line of its own instead of ending its sentence's last line. */
+async function chevronsAlone(page: Page): Promise<string[]> {
+	return page.$$eval('[data-testid="execute-op-summary-call"]', (rows) => {
+		const shown = (node: Node) => node.textContent?.replace(/[\s\u00a0]/g, "") && !node.parentElement?.closest('[aria-hidden="true"]')
+		const lastTextBefore = (row: Element, chevron: Element) => {
+			const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT)
+			let last: Node | undefined
+			for (
+				let node = walker.nextNode();
+				node && node.compareDocumentPosition(chevron) & Node.DOCUMENT_POSITION_FOLLOWING;
+				node = walker.nextNode()
+			) {
+				if (shown(node)) last = node
+			}
+			return last
+		}
+		const lastLine = (node: Node) => {
+			const range = document.createRange()
+			range.selectNodeContents(node)
+			return [...range.getClientRects()].filter((rect) => rect.width > 0).at(-1)
+		}
+		return rows.flatMap((row) => {
+			const at = `step ${row.getAttribute("data-call-index")}`
+			const chevron = row.querySelector('[data-testid="execute-op-step-chevron"]')
+			const last = chevron && lastTextBefore(row, chevron)
+			if (!chevron || !last) throw new Error(`${at} has no chevron, or no text before it`)
+			const word = lastLine(last)
+			const mark = chevron.getBoundingClientRect()
+			// Text and glyph align differently, so a shared line is an overlap of their boxes, not a shared top.
+			const beside = word && mark.top < word.bottom && mark.bottom > word.top && mark.left >= word.right - 0.5
+			return beside
+				? []
+				: [`${at}: chevron at ${mark.top.toFixed(1)}, "${last.textContent?.trim().slice(-16)}" ends at ${word?.top.toFixed(1)}`]
+		})
+	})
+}
+
 /** What has focus: its testid, a step row's index, or `scroll` for a scrolling region with no testid. */
 async function focused(page: Page): Promise<string> {
 	return page.evaluate(() => {
@@ -176,7 +213,9 @@ const footerAfterCard = (page: Page) =>
 	}, FOOTER)
 
 describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
-	test("every payload line stays inside the card, at 400 and at 240 px", { timeout: 300_000 }, async ({ registeredExtension: ctx }) => {
+	test("every payload line stays inside the card and every step's chevron ends its sentence beside the last word, at 400 and at 240 px", {
+		timeout: 300_000,
+	}, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
 		try {
 			for (const width of [400, 240]) {
@@ -184,6 +223,7 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 					await openFixture(page, name, width)
 					await openEverything(page, name)
 					expect(await textPastCard(page), `${name} at ${width} px`).toEqual([])
+					expect(await chevronsAlone(page), `${name} at ${width} px`).toEqual([])
 				}
 			}
 		} finally {
