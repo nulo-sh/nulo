@@ -18,3 +18,8 @@
 - A cap is a ceiling: `max-width` cannot give room the row does not have. With `min-width: 0` on the left wrappers the text already yields everything flex can give. Every remaining lever is visible: the type size, the mark's size or gap, the figure's format or wrap point, or the balance column.
 - Codex consult (session `01a1c81b`): no cause-level fix keeps both picks; leave out the rows' mark. Done as D17, with the owner's options in OWNER-ASKS A4 and captures of option (a) kept outside the repo.
 - For arc 3: Activity rows take a 16 px mark inside rows that also carry an amount and a dollar figure. Measure their text column against the widest figure the type-roles sweep seeds before building.
+
+## The gates
+
+- The full smoke suite needs the runtime `NULO_E2E_MIGRATION_FIXTURE=1` beside the armed build. Without it, `backup-migration.test.ts`'s arming guard fails at once (the before-run on Chrome), and the armed file alone passes.
+- The wall-clock is the host's load more than the suite's: the before-runs (base) took 2,781 s on Chrome and 6,043 s on Firefox, where Firefox's nine failures were all timeouts at a load of 170 to 900. The after-runs took 1,872 s and 2,717 s, both green. The touched spec's few added seconds sit inside that noise.
