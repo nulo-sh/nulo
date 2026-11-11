@@ -11,3 +11,4 @@
 - 2026-11-10 arc 2 phase 4 built (rows, Send's asset row, token page); touched smoke spec green at retry 0 on Chrome (14 s) and Firefox (27 s); captures written
 - 2026-11-10 arc 2 review: Codex round 1 + Opus folded (f18f7f96c), Codex round 2 clean
 - 2026-11-10 arc 2 phase 4 gate red: `audit:vue` typecheck (a test's `node.tag` is `string | undefined`); fixed, every gate rerun from phase 3
+- 2026-11-11 arc 2 phase 4 gate red: the full Chrome smoke suite, `type-roles.test.ts` (the token row's $123T figure on 3 lines, P46-08's guard on 2); Codex consult: no fix keeps both picks; the rows' mark left out (D17, OWNER-ASKS A4); every gate rerun from phase 3

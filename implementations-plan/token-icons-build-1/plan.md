@@ -51,6 +51,8 @@ The signed token list carries each listed token's picture, and the wallet draws 
 
 - A1. The look of Nulo's letter mark for GBPC and `cWETH`. Ships in the list: a disc in Nulo's accent `#a8480c` with a white geometric letter. The owner sees the sheet in arc 1's PR body and decides at the `sign` approval.
 - A2. `cWETH` has no issuer logo; ships: Nulo's "W" letter mark under L3.
+- A3. Home's seed, import and skeleton rows beside the cards (arc 2); ships unchanged.
+- A4. The rows' 32 px mark against P46-08's two-line dollar figure (arc 2); ships: the rows without a mark (D17).
 
 ## Sign-offs (verbatim; the whole visible budget)
 
@@ -142,13 +144,13 @@ Each phase lands its tests with its code. Every gate also runs `bun run lint` an
 - **Tests**: the tree has no finding; an entry without an icon is a finding (L3); an over-budget or non-drawing icon is refused; an icon with no README row is a finding; the summary shows the column and a changed picture as was/now rows; the six-entry envelope's size is recorded in the PR.
 - **Validation gate**: `bun run --cwd infra/token-list check`, `bun run --cwd infra/token-list test`, `bun run test:all`, `bun run check:plans`; smoke `cd apps/extension && bun run test:e2e -- tests/e2e/token-list.test.ts --retry=0`, then with `NULO_E2E_BROWSER=firefox` (the worker reads lists through the changed parser). Pass: exit 0 at retry 0.
 
-### Phase 3 — channel and mark (arc 2)
+### Phase 3 — channel and mark (arc 2) ✓
 
 - **Change map**: `price/spec.ts`, `price/service.ts` (+ test), `utils/token-flag.ts`, `utils/token-icon.ts` (+ test), `composables/usePrices.ts` (+ test), `tests/helpers/price-client-fake.ts` and every test building a `PriceSnapshot`, `utils/string.ts` (+ test), `components/composite/general/TokenMark.vue` (+ test), `types/components.d.ts`.
 - **Tests**: the snapshot carries entries' icons only, keyed by chain and contract, with fiat off too, and drops them when a list without pictures replaces the list; `iconFor` misses another chain; `tokenInitials` cases; `TokenMark` (at least 10): logo, initials and class at each size, badge sizes, decode failure falls back, a new icon retries, no background on a logo, `aria-hidden`, testid and `data-kind`.
 - **Validation gate**: `bun run test`, `bun run --cwd apps/extension test:components`. Pass: exit 0.
 
-### Phase 4 — list rows, Send's asset row, token page (arc 2)
+### Phase 4 — list rows, Send's asset row, token page (arc 2) ✓ (the rows' mark left out, D17)
 
 - **Change map**: `TokenCard.vue` (+ test), `SelectTokenCard.vue` (+ test), `send.vue`, `tokens/[id].vue` (+ test), `packages/design/src/ui/SubPageHeaderBase.vue` (+ test), `components/ui/SubPageHeader.vue` (+ test); `tests/e2e/fixtures/token-list.ts` (fixture tokens take the source's Testnet USDC and USDT pictures); one held-list smoke spec gains the decode assertion and opt-in `shotSend` calls.
 - **Tests**: each surface: logo for a listed token, initials for a custom one, the badge for a flagged one; Send: the flag, no transfers, and both, one badge each time; the header slot falls back to the glyph. E2E: a token the held list gives an icon has an `<img>` mark with `complete` and `naturalWidth > 0`; an added token has initials; a token the held list gives no icon (an artifact run's published list before the owner publishes) expects initials. Failure mode: the issuer SVG decodes under the real CSP through the worker-to-popup channel in both engines, which jsdom cannot show. Estimate +1 s per browser, measured in the PR.
@@ -162,7 +164,7 @@ Each phase lands its tests with its code. Every gate also runs `bun run lint` an
 
 ## UI impact
 
-- **Home, Holdings, Send's picker**: before, symbol and second line; after, a 32 px logo (listed) or grey initials, the red badge when flagged. Sign-off: A ("the issuers' logos as published, round, unaltered, initials in a grey circle when there is none, the red badge when flagged"), M1.
+- **Home, Holdings, Send's picker**: before, symbol and second line; after, a 32 px logo (listed) or grey initials, the red badge when flagged. Sign-off: A ("the issuers' logos as published, round, unaltered, initials in a grey circle when there is none, the red badge when flagged"), M1. Not shipped in arc 2: the mark meets P46-08's two-line figure (`OWNER-ASKS.md` A4, D17); the rows ship unchanged.
 - **Send's asset row**: before, the first letter in a 36 px accent square; after, the 36 px mark, the no-transfers badge in its corner. Sign-off: A, M1.
 - **Token page**: before, the 18 px holdings glyph; after, the 20 px mark. Sign-off: A.
 - **Activity rows** (History and Home's recent activity, every phase of a row titled by a token): before, the title alone; after, a 16 px mark before it; the 40 px box unchanged. Sign-off: AC1 ("A 16 px mark before the row title, as prototyped; the 40 px box keeps chips-3's pair and badges").
@@ -174,7 +176,7 @@ Each phase lands its tests with its code. Every gate also runs `bun run lint` an
 | Arc | Branch | Phases | Stacks on | `/code-review` | PR title |
 |---|---|---|---|---|---|
 | 1 | `token-icons-build-1-a1` | 1, 2 | `dev` | off | `feat(token-list): each listed token carries its picture, signed with the list` |
-| 2 | `token-icons-build-1-a2` | 3, 4 | arc 1 | off | `feat(tokens): token rows, send and the token page draw each token's picture` |
+| 2 | `token-icons-build-1-a2` | 3, 4 | arc 1 | off | `feat(tokens): send's asset row and the token page draw each token's picture` (the rows left out, D17) |
 | 3 | `token-icons-build-1-a3` | 5 + close-out | arc 2 | off | `feat(activity): activity rows and the approval line draw each token's picture` |
 
 - One `gh stack`; `gh stack submit --auto`, then `gh pr edit` per body. The close-out is arc 3's final commits, not a docs-only fourth PR: the lane caps the stack at three (deviation from the standard's top layer).
@@ -213,6 +215,7 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 | D14 | Where the e2e reads the marks (arc 2) | — | — | Tree wins: Send's picker lists balances, and a seeded row has none without a worker restart, so `send-picker-add.test.ts` reads the listed mark on Send's asset row and the added token's on its token page header, not on picker rows. |
 | D15 | Mocks given `tokenIcons` (arc 2) | — | — | Only the tests that mount a surface drawing the mark; the other mocks already omit `flaggedTokens` and never call `iconFor`. |
 | D16 | The smoke runner (arc 2) | — | — | `agent.sh` runs the network config only; the touched smoke spec and the full smoke suite run through `bun run test:e2e` after the armed build, the list host claiming its port in the host registry. |
+| D17 | The rows' mark (arc 2) | leave it out (consult `01a1c81b`) | — | Left out, to the owner (`OWNER-ASKS.md` A4). `type-roles.test.ts` holds P46-08's guarantee that a $123,456,789,012,345.68 figure stays on two lines. A 32 px mark with a 12 px gap leaves it 166.6 px of the 312 px row, where it needs 179.4 px (measured in Chrome), so the figure takes a third line. Mark and gap fit only within 31.2 px. Restating the guard would decide between two owner picks, and every other fix changes what a person sees. `TokenCard.vue` and its tests stay as on `dev`, and so do the mocks that only fed it. |
 
 ## Audit verdicts
 
@@ -226,6 +229,7 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 - **Arc 2 review, Codex round 1** (session `01a1c73e`, gpt-6.1-sol, high): findings (1 material). Accepted: the 44 px mark could push a long symbol's row past its balance (plausible; both left wrappers now take `min-width: 0`, measured in Chrome with a 32-character symbol and 10-character figures: no overflow); the e2e helper accepted the initials a mark shows before the list's snapshot arrives (it now waits for the expected kind) and selected by structure (`:has`, `img`: now `token-hero` and `token-mark-logo`); the stale `keyOf` in the generated declarations; a narrating header comment.
 - **Arc 2 review, Opus** (general-purpose, beside Codex round 1): findings (1 material: the same stale declaration, which the build's generated-sources check would red). Accepted: the overflow (as Codex's); a very wide letter in a hostile symbol spilling out of the disc (initials now clip horizontally); the structural selector (as Codex's); three comment nits and an invariant on `.logo`. To the owner: Home's seed, import and skeleton rows carry no mark, so they sit 44 px left of the cards (`OWNER-ASKS.md` A3; ships unchanged). Not taken: rewording a local commit subject (the squash takes the PR title).
 - **Arc 2 review, Codex round 2** (same session, over `f18f7f96c`): **clean** ("No new findings. Accepted fixes verified by inspection; identity and missing-picture probes passed").
+- **Arc 2, the full smoke suite red, Codex consult** (session `01a1c81b`, gpt-6.1-sol, high): asked whether a fix keeps both P46-08's two-line figure and A's 32 px row mark with its 12 px gap. Its answer: "I found no cause-level fix that preserves both picks" (high confidence), so "defer only the shared row-mark integration in `TokenCard.vue`". Taken as D17. The rows' `min-width: 0` from round 1 leaves with it.
 
 ## Seeds
 
