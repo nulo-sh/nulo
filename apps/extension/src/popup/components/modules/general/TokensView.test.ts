@@ -12,7 +12,9 @@ import { effect, nextTick, stop } from "vue"
 import { createMemoryHistory, createRouter } from "vue-router"
 import { createAppStoreHarness } from "../../../../../tests/helpers/app-store-harness"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
-import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { TEST_ICONS, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { listKeyOf } from "@/utils/token-flag"
+import { declarationsOf, parseSource } from "../../../../../scripts/type-roles/source-scan"
 
 const H = vi.hoisted(() => {
 	const makeEvent = () => {
@@ -47,6 +49,7 @@ const H = vi.hoisted(() => {
 		quotesUpdated: makeEvent(),
 		priceConnected: makeEvent(),
 		quotes: { current: {} as Record<string, unknown> },
+		icons: { current: {} as Record<string, string> },
 		store: { current: null as unknown as ReturnType<typeof createAppStoreHarness> },
 	}
 })
@@ -100,8 +103,12 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: H.quotesUpdated,
 			onConnected: H.priceConnected,
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
-			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: H.quotes.current, pricedTokens: TEST_PRICED_TOKENS })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: H.icons.current })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({
+				quotes: H.quotes.current,
+				pricedTokens: TEST_PRICED_TOKENS,
+				tokenIcons: H.icons.current,
+			})),
 		}
 	}),
 }))
@@ -663,6 +670,41 @@ describe("TokensView — loading, placeholders and the empty state", () => {
 		await wrapper.setProps({ seedEntries: [seedEntry()], seedReady: true })
 		expect(ghostRows(wrapper)).toBe(0)
 		expect(seedRows(wrapper)).toEqual([SEED_CONTRACT])
+	})
+
+	test("an anonymous row leads with a 32 px round skeleton where a row's mark stands", async () => {
+		H.getTokenBalances.mockReturnValue(deferred<unknown[]>().promise)
+		wrapper = mount(TokensView, { shallow: true, props: { seedEntries: [], seedReady: false } })
+		await vi.advanceTimersByTimeAsync(300)
+		const MARK = (TokensView as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style.mark_skeleton
+		for (const row of wrapper.findAll('[data-testid="tokens-skeleton-row"]')) {
+			const first = row.find("skeleton-stub")
+			expect([first.attributes("width"), first.attributes("height"), first.classes()]).toEqual(["32", "32", [MARK]])
+		}
+		expect(ghostRows(wrapper)).toBe(2)
+		const source = parseSource("apps/extension/src/popup/components/modules/general/TokensView.vue")
+		expect(declarationsOf(source, ".mark_skeleton")).toEqual({ "border-radius": "50%" })
+	})
+
+	test("a default's placeholder draws the list's picture for its chain and contract; one of the same symbol on another contract none", async () => {
+		H.getTokenBalances.mockResolvedValue([])
+		H.icons.current = { [listKeyOf(1, SEED_CONTRACT)]: TEST_ICONS.USDC }
+		try {
+			wrapper = mount(TokensView, {
+				shallow: true,
+				props: { seedEntries: [seedEntry("seeding"), seedEntry("pending", "0xSeedBBBB")], seedReady: true },
+			})
+			await flushPromises()
+			const icons = wrapper
+				.findAllComponents(TokenSeedRow)
+				.map((c) => [(c.props("entry") as { contract: string }).contract, c.props("icon")])
+			expect(icons).toEqual([
+				[SEED_CONTRACT, TEST_ICONS.USDC],
+				["0xSeedBBBB", undefined],
+			])
+		} finally {
+			H.icons.current = {}
+		}
 	})
 
 	test("a rejected balances fetch is never an empty list: rows keep waiting, the timed retry recovers", async () => {
