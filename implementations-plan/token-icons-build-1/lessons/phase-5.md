@@ -28,3 +28,11 @@
 - `index.test.ts`'s `OperationCard` stub declares `iconFor` and `isFlagged`; an undeclared prop lands in `$attrs`, and `props()` reads undefined.
 - The History-path test was checked by mutation: with the reader not passed down, the received row's badge and the failed send's logo both go.
 - `rows.test.ts`'s test body crossed the cognitive budget (17) with the expected-mark branch; the branch moved into `listedMark`.
+
+## Review
+
+- Codex round 1 (session `01a1c8bd`): two lows, both folded: the mint negative now reaches a recognized mint (registered token, matching `classId`) before asserting no mark; the `.line_mark` comment went.
+- Opus, beside it: the fee-raised window renders the same summary with no list reader, so its line drew a listed token's initials and a flagged one with no badge. Threading `useTokenFlags` there turned four of that window's tests red: it reads no price while its session is checked or locked, and reads the cache once, from its fee card. So a summary given no reader draws no mark, and the window's line goes to the owner (D21, A6).
+- Opus also: an empty cleaned symbol drew a mark in flight but none once settled, so the title would move 22 px as the row settles; `tokenMarkOf` now returns null with no symbol, on every surface. And Home's and History's in-flight cards could lose the reader with every test green; one assertion each, red under mutation.
+- A mocked refresh that omits `tokenIcons` crashes the render once a row draws a mark (`Object.hasOwn` on undefined). The real snapshot always carries it; `RecentActivityView.test.ts`'s refresh mock now does too.
+- Codex round 2: clean. The cross-arc pass found only docs drift: A1 and A2 were answered (b) on page 132 and shipped by #1780.

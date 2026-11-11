@@ -49,8 +49,8 @@ The signed token list carries each listed token's picture, and the wallet draws 
 
 ### Asks (OWNER-ASKS.md; the arcs build the "what ships now" form)
 
-- A1. The look of Nulo's letter mark for GBPC and `cWETH`. Ships in the list: a disc in Nulo's accent `#a8480c` with a white geometric letter. The owner sees the sheet in arc 1's PR body and decides at the `sign` approval.
-- A2. `cWETH` has no issuer logo; ships: Nulo's "W" letter mark under L3.
+- A1. The look of Nulo's letter mark for GBPC and `cWETH`. Answered (b) on page 132 (P132-04): the letter on a near-black disc; #1780 replaced arc 1's accent disc, and the list was published with it.
+- A2. `cWETH` has no issuer logo. Answered (b) on page 132 (P132-05): Ethereum's diamond, in place of arc 1's "W" (#1780).
 - A3. Home's seed, import and skeleton rows beside the cards (arc 2); ships unchanged.
 - A4. The rows' 32 px mark against P46-08's two-line dollar figure (arc 2); ships: the rows without a mark (D17).
 - A5. A dApp's transfer row, where the mark would take 22 px from the app chip beside the title (arc 3); ships: that row without a mark (D18).
@@ -209,7 +209,7 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 | D6 | Wallet SVG rule | B (none: image mode is the boundary; a blocklist claims what it does not enforce, R1) | the allowlist, on literal text | **Allowlist**. The blocklist was bypassable (character references, CSS escapes, prefixes: both legs, demonstrated). Refusing `&`, `\`, `<!`, `<?` makes the literal text what the parser sees; an element allowlist then refuses script, animation and filters, which image mode would still run. The lane requires the "SVG with script" reader test, and the rule is a validator, not a rewriter. Image mode stays the boundary. |
 | D7 | Awaiting and terminal Activity rows | B, pending the owner (R5) | A (the layout's invariant) | **A**. `TransactionCardLayout.vue:8-10` and `TransactionIncomingCard.vue:5-7` keep field positions identical across a row's lifecycle; a mark only on settled rows moves the title 22 px when a row settles. AC1 says "a 16 px mark before the row title", with no phase. Shown in arc 3's captures. |
 | D8 | README provenance check | A, qualified (R3) | even; keep if small | Keep (about 15 lines), stated as a tree-check guarantee; the recovery steps say to review the table. |
-| D9 | Artwork defaults (A1, A2) | no default; ask first (R5) | ship, show the sheet, publish waits on the answer | Ship the letter marks: L3 needs a picture for every entry, and the lane names GBPC's as "a plain letter mark". The owner sees the sheet in arc 1's body and decides at the `sign` approval, the only path to a served list. |
+| D9 | Artwork defaults (A1, A2) | no default; ask first (R5) | ship, show the sheet, publish waits on the answer | Ship the letter marks: L3 needs a picture for every entry, and the lane names GBPC's as "a plain letter mark". The owner sees the sheet in arc 1's body and decides at the `sign` approval, the only path to a served list. Superseded by P132-04 and P132-05 (A1, A2 answered (b), #1780) before the list was first published. |
 | D10 | Capacity (R4, I1) | correct I1 | correct I1, known limit | Corrected I1; a closed `known-limit` issue at close-out. No aggregate budget machinery. |
 | D11 | Release lane (Opus T-2) | — | expect a logo only where the held list has one | Accepted: the artifact run holds the published list, which has no pictures until the owner publishes. |
 | D12 | Badge accessibility | — | known limit | Not filed: the words are AL1's deferral to page 125, and no surface loses a signal it has today. |
@@ -237,6 +237,11 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 - **Arc 2 review, Codex round 2** (same session, over `f18f7f96c`): **clean** ("No new findings. Accepted fixes verified by inspection; identity and missing-picture probes passed").
 - **Arc 2, the full smoke suite red, Codex consult** (session `01a1c81b`, gpt-6.1-sol, high): asked whether a fix keeps both P46-08's two-line figure and A's 32 px row mark with its 12 px gap. Its answer: "I found no cause-level fix that preserves both picks" (high confidence), so "defer only the shared row-mark integration in `TokenCard.vue`". Taken as D17. The rows' `min-width: 0` from round 1 leaves with it.
 - **Arc 2 review, Codex round 3** (session `01a1c73e`, over the D17 commits): findings (2 low, docs). Accepted: the surfaces table, Phase 4's change map, the summary and the index line still promised the rows' mark; A3's "what ships now" described an offset only the rows' mark makes. Code: "No remaining code/test/capture-helper assumption found". The hard stop at three rounds ends the loop; the fold is docs only.
+
+- **Arc 3 review, Codex round 1** (session `01a1c8bd`, gpt-6.1-sol, high): findings (2 low). Accepted: the mint negative mounted an unrecognized call, so it proved nothing about a mint (demonstrated; it now reads a registered mint's title and amount before its missing mark); the `.line_mark` comment narrated its margin (deleted).
+- **Arc 3 review, Opus** (general-purpose, beside Codex round 1): findings (1 medium, 2 low, 1 nit). Accepted: the fee-raised window shows the line with no list reader, so a listed token drew initials and a flagged one no badge (demonstrated); a summary given no reader now draws no mark, and threading the reader there, as proposed, was refused by that window's pinned price reads (D21, A6). A token whose symbol cleans to "" drew a mark in flight, failed or received but none once settled (`tokenMarkOf` now returns null with no symbol). Home's and History's in-flight cards could lose the reader with every test green (one assertion each, mutation-checked). The nit was Codex's comment.
+- **Arc 3 review, Codex round 2** (same session, over `74831faf7`): **clean** ("all accepted fixes verified by inspection; no new findings").
+- **Cross-arc pass, Codex** (fresh session `01a1c8d7`, gpt-6.1-sol, high, over arc 1's commits and `0e31082a4..HEAD`): findings (1 low, docs). Accepted: A1, A2 and the asks list still described arc 1's accent disc and "W" as shipping after P132-04/05 and #1780 (A1 and A2 recorded answered (b); D9 marked superseded). It found no second path to a picture, no symbol-keyed lookup, no duplicated rule and no stored shape.
 
 ## Seeds
 
