@@ -47,7 +47,7 @@ Each ask names what ships now; no PR waits for an answer. Page 134's picks are t
 - **Surface**: Home, Holdings and Send's picker at 240 px, a token row with no price, whose second line is the token's name (a sandbox or custom token).
 - **Why it is asked**: the name keeps the row's existing single-line ellipsis (contract-supplied text is clipped). A3 (a)'s 32 px mark and 12 px gap take 44 px from the text column, so at 240 px a name as short as "TestToken" now ends in an ellipsis where it showed whole; the narrow-width check accepts that by a reviewed exemption.
 - **Options**:
-  - (a) the existing ellipsis: the symbol stays whole above it, and the token page's Show metadata names it whole.
+  - (a) the existing ellipsis: the symbol stays above it, and the token page's Show metadata names it whole.
   - (b) the name wraps onto a second line at narrow widths.
   - (c) the mark shrinks at narrow widths.
 - **What ships now**: (a).
