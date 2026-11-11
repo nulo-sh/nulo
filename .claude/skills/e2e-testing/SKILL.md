@@ -458,6 +458,11 @@ wallet on one. When a test asserts where focus returns, open the popup with `poi
 `clickByTestId` fires `el.click()`, which never focuses
 the opener, so there is nothing to return to and the landing assertion proves nothing.
 
+**A Tab walk from the top starts at an anchor.** A `blur()` leaves the browser's sequential focus
+start point on the element last pressed, so the next Tab goes on from there: focus a
+`tabindex="-1"` element prepended to `body`, walk, then remove it (`tabWalk` in
+`execute-steps.test.ts`). Firefox also stops on a scroll area that overflows (`FIREFOX.md`).
+
 **The one sanctioned real click: `pointerClick(page, testid)`** (`helpers/legal-drivers.ts`). The
 helpers above dispatch the click in-page, which reaches an element even when an overlay covers it, so
 they cannot prove that nothing does. A lock-out proof (the Terms sheet must never cover an export
