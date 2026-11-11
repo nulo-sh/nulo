@@ -1,8 +1,5 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
-/** Components */
-import TokenMark from "@/components/composite/general/TokenMark.vue"
-
 /** Services */
 import { PriceServiceClient } from "@/wallet/services/price/client"
 
@@ -62,7 +59,6 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const fiatLabel = computed(() => (isMalformed.value ? undefined : prices.tokenFiatLabel(token.value, privateRaw.value + publicRaw.value)))
 const isFlagged = computed(() => prices.isFlagged(token.value))
-const icon = computed(() => prices.iconFor(token.value))
 onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
@@ -97,16 +93,13 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 			@click="pickPrefix ? emit('pick', token.id) : navigate($event)"
 			@keydown.space="pickPrefix || navigate($event)"
 		>
-			<Flex align="center" gap="12" :class="$style.lead">
-				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :size="32" :badge="isFlagged" />
-				<Flex direction="column" gap="2" :class="$style.lead">
-					<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
-						{{ dashIfBlank(token.symbol) }}
-					</span>
-					<span v-if="isFlagged" :data-testid="pickPrefix ? `${pickPrefix}-flagged` : 'token-flagged'" :class="$style.flagged">Flagged as a scam</span>
-					<span v-else-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
-					<span v-else data-testid="token-name" :class="$style.fiat">{{ dashIfBlank(token?.name) }}</span>
-				</Flex>
+			<Flex direction="column" gap="2">
+				<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
+					{{ dashIfBlank(token.symbol) }}
+				</span>
+				<span v-if="isFlagged" :data-testid="pickPrefix ? `${pickPrefix}-flagged` : 'token-flagged'" :class="$style.flagged">Flagged as a scam</span>
+				<span v-else-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
+				<span v-else data-testid="token-name" :class="$style.fiat">{{ dashIfBlank(token?.name) }}</span>
 			</Flex>
 
 			<Flex
@@ -192,11 +185,6 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 .minting {
 	opacity: 0.5;
 	pointer-events: none;
-}
-
-/* Lets the clipped text yield width, so the mark cannot push the balance off the row. */
-.lead {
-	min-width: 0;
 }
 
 /* The symbol and an unpriced row's name are contract-supplied: clipped so a hostile string cannot

@@ -37,7 +37,7 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 	}),
 }))
 let mockQuotes: Record<string, unknown> = {}
-const ANSWER = async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: {} })
+const ANSWER = async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS })
 let answerQuotes: () => Promise<unknown> = ANSWER
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
@@ -45,7 +45,7 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: {} })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
 			refreshIfStale: vi.fn().mockImplementation(() => answerQuotes()),
 		}
 	}),
