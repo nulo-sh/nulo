@@ -152,9 +152,10 @@ const onRetryPreview = (event: MouseEvent): void => {
 					>
 						<Flex direction="column" gap="4">
 							<!-- A sentence's spaces sit inside its text nodes: a bare newline between two tags renders none.
-							     The chevron ends the sentence's last line, held to its last word by a no-break space. -->
+							     The chevron ends the sentence's last line: its no-break space holds it to the last word, and
+							     its nowrap box removes the break a browser keeps beside an inline svg even after U+00A0. -->
 							<Text :id="part(j, 'head')" data-testid="execute-op-summary-call-head" variant="body" color="primary" height="130">
-								<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text> on <span data-testid="execute-op-call-to"><AddressDisplay :address="row.call.to" data-testid="execute-op-summary-call-to" /></span><template v-if="row.amount">:</template><template v-else>&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></template>
+								<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text> on <span data-testid="execute-op-call-to"><AddressDisplay :address="row.call.to" data-testid="execute-op-summary-call-to" /></span><template v-if="row.amount">:</template><template v-else><span :class="$style.chevron_tail">&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></span></template>
 							</Text>
 							<Text
 								v-if="row.amount && (row.surface.kind === 'transfer' || row.surface.kind === 'mint')"
@@ -170,7 +171,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 								<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'account'"> from this account</template>
 								<template v-else-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'explicit'"> from <AddressDisplay :address="row.surface.sender.address" data-testid="execute-op-line-from" /></template>
 								to <AddressDisplay :address="row.surface.to" data-testid="execute-op-line-to" />
-								<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'none'">. Caller: none</template>&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" />
+								<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'none'">. Caller: none</template><span :class="$style.chevron_tail">&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></span>
 							</Text>
 							<Text v-else-if="row.surface.kind === 'pending'" :id="part(j, 'note')" data-testid="execute-op-summary-args-pending" variant="body" color="tertiary">
 								Reading arguments…
@@ -355,6 +356,10 @@ const onRetryPreview = (event: MouseEvent): void => {
 		margin-left: 0;
 		padding-left: 1px;
 	}
+}
+
+.chevron_tail {
+	white-space: nowrap;
 }
 
 .chevron {

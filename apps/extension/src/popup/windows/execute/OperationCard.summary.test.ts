@@ -37,6 +37,8 @@ import {
 	VAULT,
 } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
+import SendTxSummary from "./SendTxSummary.vue"
+import { declarationsOf, parseSource } from "../../../../scripts/type-roles/source-scan"
 import { shownText } from "../../../../tests/helpers/shown-text"
 import { sendEvent } from "../../../../tests/helpers/send-event"
 
@@ -720,5 +722,38 @@ describe("OperationCard — what leaves the account opens the fee section", () =
 		const w = await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([carried, forged]) }, appPaid)
 		expect(rows(w)).toEqual([["1 authorization", "25 USDC"]])
 		expect(rows(await mountCard({ decodedCalls, decodedAuthwits, feeEstimate: feeEstimateWith([forged]) }, appPaid))).toEqual([])
+	})
+})
+
+describe("OperationCard — a step's chevron ends its sentence beside the last word", () => {
+	const TAIL = (SendTxSummary as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style.chevron_tail
+	/** Per step sentence: the box around its chevron, that box's text, and whether the word before it
+	 *  touches it. Vue leaves a comment for a branch not taken and empty text anchors around a fragment. */
+	const tails = (w: VueWrapper) =>
+		w.findAll('[data-testid="execute-op-summary-call"]').map((step) => {
+			const line = step.find('[data-testid="execute-op-call-line"]')
+			const sentence = (line.exists() ? line : step.get('[data-testid="execute-op-summary-call-head"]')).element
+			const box = sentence.querySelector('icon-stub[name="chevron"]')?.parentElement
+			let before = box?.previousSibling
+			while (before && (before.nodeType === Node.COMMENT_NODE || before.textContent === "")) before = before.previousSibling
+			return { box: box?.className, text: box?.textContent, touches: /\S$/.test(before?.textContent ?? "") }
+		})
+	const HELD = { box: TAIL, text: " ", touches: true }
+
+	test("each chevron shares one nowrap box with the no-break space after the last word: a call's head, a transfer to a named account, a transfer whose caller is none", async () => {
+		expect(declarationsOf(parseSource("apps/extension/src/popup/windows/execute/SendTxSummary.vue"), ".chevron_tail")).toEqual({
+			"white-space": "nowrap",
+		})
+		lookups.accounts.push({ name: "Savings for the long winter", address: RECIPIENT })
+		const fixture = tails(await mountFixture())
+		expect(fixture.length).toBeGreaterThan(1)
+		expect(fixture).toEqual(fixture.map(() => HELD))
+		const entry = tokenCall("transfer", [RECIPIENT, field(5_000_000n)], ["to", "amount"], {
+			executionMode: "default_entrypoint",
+			feeSettings: { paymentMethod: { kind: "embedded" } },
+		})
+		const w = await mountCard({ decodedCalls: entry.decodedCalls }, entry.op)
+		expect(read(w, "execute-op-call-line")).toEqual(["5 USDC to Savings for the long winter. Caller: none"])
+		expect(tails(w)).toEqual([HELD])
 	})
 })
