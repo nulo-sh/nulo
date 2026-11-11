@@ -4,8 +4,7 @@
 	min-height: 37px;
 }
 
-/* A row's lead (its mark and text column) and that column may shrink below their content: text a row
-   clips then yields to the row's trailing column instead of pushing it off the row. */
+/* Both flex ancestors need min-width: 0 to let clipped text yield to the trailing column. */
 .lead {
 	min-width: 0;
 }

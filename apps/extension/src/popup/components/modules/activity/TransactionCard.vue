@@ -148,8 +148,7 @@ const amountFiat = computed(() => {
 	)
 	return label ?? null
 })
-/** A transfer's title names its token, so its mark goes before it; a mint's names its kind. On a dApp's
- *  transfer the app chip gives way to the mark as it does to the symbol. */
+/** A transfer's title names its token, so its mark goes before it; a mint's names its kind. */
 const titleMark = computed(() =>
 	titleNamesToken.value && amount.value
 		? tokenMarkOf(prices, { symbol: amount.value.symbol, chainId: appStore.network?.chainId, contract: call.value?.contract })

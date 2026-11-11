@@ -566,12 +566,9 @@ test("History's list keeps the −8px row box inside the page: nothing scrolls s
 
 const ROWS = `${sel("tx-card")}, ${sel("tx-incoming-card")}`
 const RECEIPT_TOKEN_ID = 1
-/** A dApp's own name: at 360px its chip is cut below its cap beside the transfer's mark and symbol. */
 const DAPP_NAME = "Shielded Payroll Portal"
-/** A dApp's large transfer: its app chip is cut below its cap beside the transfer's mark and symbol. */
 const LARGE_DAPP_HASH = `0x${"6e".repeat(32)}`
-/** The large transfer's app chip at 360px, measured alike on Chrome and Firefox: the transfer's mark
- *  and its gap leave it below its cap. */
+/** Measured at 360px in Chrome and Firefox with the transfer's mark and gap. */
 const LARGE_APP_CHIP = 85.8
 /** The floor of a dApp transfer's app chip: its border, padding and one whole "…" at the chip's 11px. */
 const APP_CHIP_FLOOR = 20
@@ -794,7 +791,6 @@ async function expectDirectionRows(page: Page, where: string, mark: "logo" | "in
 	expect(boxes.map((b) => b.way).sort()).toEqual(["in", "out", "self", "self", "self"])
 	for (const box of boxes) expectIconBox(box, where)
 	expect(boxes.filter((b) => !b.titleAlone).map((b) => b.row)).toEqual(["tx-card 0x6b6b", "tx-card 0x6e6e"])
-	// Every row is titled by its token, so every row draws its mark, a dApp's transfer beside its app chip too.
 	const drawn = mark === "logo" ? "logo decoded" : "initials"
 	expect(boxes.map((b) => [b.row, b.mark])).toEqual(boxes.map((b) => [b.row, drawn]))
 	for (const box of boxes)
@@ -814,9 +810,8 @@ type AppChip = {
 	cut: boolean
 	name: string
 	besideTitle: boolean
-	/** Whether the title beside it, a transfer's symbol, is cut. */
 	titleCut: boolean
-	/** How far the chip's right edge sits from its title row's. */
+	/** Remaining pixels to the title row's right edge; negative means overflow. */
 	edge: number
 	lead: { content: string; display: string }
 }

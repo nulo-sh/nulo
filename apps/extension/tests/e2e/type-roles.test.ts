@@ -471,7 +471,7 @@ const VISIBLE = { visible: true, timeout: 15_000 } as const
 const TX_HASH = `0x1e${"5e".repeat(31)}`
 /** About 123 trillion of the scope's token: at $1, a figure Home's fit draws only below full size. */
 const longBalance = (decimals: number) => `123456789012345${"678901234567890123456789".slice(0, decimals)}`
-/** $99,999,999,999,999.99 at $1: the largest figure a token row keeps on two lines beside its mark. */
+/** $99,999,999,999,999.99 at $1 per token: this fixture's measured two-line boundary. */
 const edgeBalance = (decimals: number) => `${"9".repeat(16)}${"0".repeat(decimals - 2)}`
 /** Wire-shaped: 0x and 64 hex, the x coordinate of a Grumpkin point. */
 const RECIPIENT = "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a9459b"
@@ -548,7 +548,6 @@ async function expectPageClean(page: Page, label: string, states: readonly SiteS
 
 type TokenRowFigure = { text: string; lines: number; mark: { width: number; gap: number } }
 
-/** The dollar figure of the token row titled `symbol`, and its mark's width and distance to the text. */
 async function readTokenFiat(page: Page, symbol: string): Promise<TokenRowFigure> {
 	return page.$$eval(
 		sel("tokens-card"),
@@ -684,10 +683,10 @@ async function expectButtons(page: Page, ...testids: ButtonTestid[]): Promise<vo
 
 /**
  * Seeds a token row with its long private balance, a second at the two-line edge, their quotes, a
- * transfer to an outside address in a block, a public receipt, a send's failed record and an authwit of every kind but
- * the encoded call, then restarts the background: the balance service reads its token map only as
- * it starts. The caller holds the Testnet RPC refused, or a balance refresh writes the real zero
- * over the seed.
+ * transfer to an outside address in a block, a public receipt, a send's failed record and an
+ * authwit of every kind but the encoded call, then restarts the background: the balance service
+ * reads its token map only as it starts. The caller holds the Testnet RPC refused, or a balance
+ * refresh writes the real zero over the seed.
  */
 async function openSeededHome(ctx: ExtensionContext): Promise<{ page: Page; scope: ActivityScope; receipt: string }> {
 	const seeder = await openHome(ctx)
@@ -961,8 +960,6 @@ test("a seeded wallet's Home, Holdings, Activity, its tx, receipt and send detai
 		// lands: the sweep waits for it, or the narrow pass reads the name as gone.
 		await page.waitForSelector(sel("token-fiat"), VISIBLE)
 		await expectPageClean(page, "Home", [["overlay:Header", ""]])
-		// Beside the 32px mark and its 12px gap a figure keeps two lines up to about $100T, then takes a
-		// third, and no digit is cut.
 		const large = await readTokenFiat(page, scope.token.symbol)
 		const edge = await readTokenFiat(page, secondToken(scope).symbol)
 		expect(large.text).toMatch(/^≈ \$123,456,789,012,345\./)

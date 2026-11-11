@@ -227,7 +227,8 @@ describe("the fee question window", () => {
 		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ ($0.042)")
 		expect(confirm().text()).toBe("Send for ~0.021 FJ ($0.042)")
 		expect(byId("dapp-approval-confirm-detail").text()).toBe("($0.042)")
-		// The card's quote and the summary's marks: one cached read each, again on a reconnect.
+		// The card's quote and the summary's marks. The counts leave out the real client's read on its
+		// first Ready: this fake fires onConnected only through reconnect().
 		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
 		priceFake.reconnect()
 		await flushPromises()

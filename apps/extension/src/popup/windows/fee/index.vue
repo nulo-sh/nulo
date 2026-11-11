@@ -84,8 +84,6 @@ const tokenService = new TokenServiceClient()
 const tokenFollow = followKnownTokens(tokenService, knownTokens)
 const profileService = new ProfileServiceClient()
 const priceService = new PriceServiceClient()
-/** The signed list's reader for the summary's marks. `init` opens it, and `init` runs only once the
- *  window is signed in, so a window still checking its session or locked reads no price. */
 const marks = shallowRef<ReturnType<typeof useTokenFlags>>()
 
 const {
@@ -136,7 +134,7 @@ const grantsPending = computed(() => !!operation.value && awaitsGrantDecode(oper
 const grantRefusal = computed(() => grantRefusalRow(decodedGrants.value ?? []))
 /** Read from the question, so it needs no quote and names the fee before the card mounts. */
 const confirmLabel = computed(() => (question.value ? `Send for ${feeFigure(feeDisplay(question.value.fee, undefined))}` : "Send for FJ"))
-/** The card's own quote of the new fee: the window prices nothing, so its dollars are the card's. */
+/** Reuse the fee card's quote so the button and card cannot show different dollar amounts. */
 const nowFee = ref<FeeDisplay | null>(null)
 const confirmDetail = computed(() => (nowFee.value?.usd ? `(${nowFee.value.usd})` : undefined))
 /** The app's own payment set the fee path: no speed was picked, and its claim, not the balance, pays. */
@@ -144,6 +142,7 @@ const setByApp = computed(() => question.value?.feeSettings?.paymentMethod.kind 
 const priority = computed(() => (setByApp.value ? undefined : (question.value?.feeSettings?.priorityLevel ?? "normal")))
 
 const init = async () => {
+	// Allocate after authentication but before any await so unmount cannot precede reader ownership.
 	marks.value = useTokenFlags(priceService)
 	try {
 		profile.value = await profileService.getActiveProfile()

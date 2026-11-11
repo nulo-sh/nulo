@@ -217,8 +217,7 @@ test.skipIf(!hasConfig)(
 			}),
 		).toBe(true)
 		await shotSend(feePopup, "execute-leaves-raised-fee", "execute-op-leaves-account")
-		// The window reads the list, so the step's line draws the token's mark as the approval window
-		// did: TST's initial, since no list pictures the sandbox token.
+		// TST is absent from the list, so its mark must use initials.
 		const lineMark = '[data-testid="execute-op-call-line"] [data-testid="token-mark"]'
 		await feePopup.waitForSelector(`${lineMark}[data-kind="initials"]`, { visible: true, timeout: 15_000 })
 		expect(await feePopup.$$eval(lineMark, (marks) => marks.map((mark) => mark.textContent?.trim()))).toEqual(["T"])

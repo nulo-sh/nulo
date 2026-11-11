@@ -429,7 +429,6 @@ onBeforeUnmount(() => {
 	padding: 8px 0;
 }
 
-/* The token mark's place, as round as the mark. */
 .mark_skeleton {
 	border-radius: 50%;
 }
