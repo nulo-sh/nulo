@@ -13,6 +13,7 @@ import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { shownText } from "../../../../tests/helpers/shown-text"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { captureWindowDocument } from "@/utils/window-document"
+import { openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 
 const mocks = vi.hoisted(() => ({
@@ -587,7 +588,7 @@ describe("OperationCard — a window that only reads the request draws its own f
 		expect(w.find('[data-testid="own-fee-block"]').exists()).toBe(true)
 		expect(fee(w).exists()).toBe(false)
 		expect(w.find('[data-testid="execute-op-fee-set-badge"]').exists()).toBe(false)
-		await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
+		await openAllSteps(w)
 		expect(w.findAll('[data-testid="execute-op-payload-row"]')).toHaveLength(1)
 		expect(mocks.getGasBalances).not.toHaveBeenCalled()
 	})

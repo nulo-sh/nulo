@@ -17,6 +17,7 @@ import { trimAddress } from "@/utils/string"
 import { decodeCallForDisplay } from "@/wallet/services/execution/call-decoder"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { displayCallsOf } from "./display-calls"
+import { openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 import type { DraftUIOperation } from "./types"
 
@@ -105,7 +106,7 @@ const mountCard = async (op: DraftUIOperation, { tokens = [USDC], artifact = TOK
 			components: { AddressDisplay },
 		},
 	})
-	await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
+	await openAllSteps(w)
 	await flushPromises()
 	return w
 }
@@ -144,7 +145,7 @@ describe("OperationCard — a call as the wire carries it", () => {
 	])("%s on a registered token reads as the transfer row titled %s, from its explicit sender", async (name, title) => {
 		const w = await mountCard(sendTx(callOf(name, [OWNER, TO, field(5_000_000n), field(0n)])))
 		expect(intentKind(w)).toBe("transfer")
-		expect(one(w, "execute-op-payload-row").text()).toContain(title)
+		expect(one(w, "execute-op-summary-call-head").text()).toContain(title)
 		expect(one(w, "execute-op-transfer-sender").attributes("data-sender-kind")).toBe("explicit")
 		expect(one(w, "execute-op-amount").text()).toContain("5 USDC")
 		expect(one(w, "execute-op-transfer-nonce").exists()).toBe(false)
@@ -238,7 +239,8 @@ describe("OperationCard — a call as the wire carries it", () => {
 		const padded = await exit(2n ** 160n + L1)
 		expect(intentKind(padded)).toBe("raw")
 		expect(one(padded, "execute-op-unverified-args").attributes("data-reason")).toBe("arguments")
-		expect(one(padded, "execute-op-unverified-warning").text()).toContain("Can't read the arguments")
+		expect(one(padded, "execute-op-summary-unverified-warning").text()).toContain("Can't read the arguments")
+		expect(padded.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(1)
 		expect(decodedNames(padded)).toEqual([])
 	})
 
@@ -275,7 +277,8 @@ describe("OperationCard — a call as the wire carries it", () => {
 			expect(intentKind(w)).toBe("raw")
 			expect(one(w, "execute-op-summary-unverified-args").attributes("data-reason")).toBe("arguments")
 			expect(one(w, "execute-op-unverified-args").attributes("data-reason")).toBe("arguments")
-			expect(one(w, "execute-op-unverified-warning").text()).toBe("Can't read the arguments")
+			expect(one(w, "execute-op-summary-unverified-warning").text()).toBe("Can't read the arguments")
+			expect(w.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(1)
 			expect(one(w, "execute-op-summary-unverified-advice").exists()).toBe(true)
 			expect(one(w, "execute-op-raw-toggle").text()).toContain("Show 12 raw values")
 			expect(w.text()).not.toContain("payevil")

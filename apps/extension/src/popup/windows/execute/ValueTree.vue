@@ -1,10 +1,8 @@
 <script setup lang="ts">
 /**
- * One decoded value as rows: a struct or an array is its name's row, then one row per field or item
- * under a guide; any other value is one name and value row. No row holds another, so every
- * `-decoded-param` row is one name, and only the guides and the DOM carry a value's ancestry. A
- * decode may hold 32,769 rows, so a row is native elements carrying `Flex`'s and `Text`'s classes,
- * not three component instances.
+ * No `-decoded-param` row holds another, so each is one name and only the guides and the DOM carry a
+ * value's ancestry. A decode may hold 32,769 rows, so a row is native elements carrying `Flex`'s and
+ * `Text`'s classes, not three component instances.
  */
 import type { DecodedValue } from "@/wallet/services/execution/client"
 import { safeWire } from "./humanize"

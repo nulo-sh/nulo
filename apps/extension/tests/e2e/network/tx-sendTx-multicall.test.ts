@@ -57,6 +57,7 @@ for (const c of cases) {
 			await clickByTestId(page, c.btn)
 			const execPopup = await execPopupP
 			await waitForExecuteContent(execPopup)
+			expect(await execPopup.evaluate(() => document.documentElement.getAttribute("data-fills-window"))).toBe("true")
 
 			// The summary lists every call at rest; the value rows stay closed under it.
 			const atRest = await execPopup.evaluate(() => ({

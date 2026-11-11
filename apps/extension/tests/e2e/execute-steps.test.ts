@@ -1,18 +1,23 @@
 /**
  * The execute window over the armed build's fixtures (`src/e2e/execute-fixture.ts`), which no live
- * dApp sends: a struct's rows, the decoder's deepest and widest values, and the raw values under a
- * readable call, laid out in the real window at the approval window's width and a side panel's.
- * Layout, hit testing and paint time need a browser; the component tests hold the rows' content.
+ * dApp sends: numbered steps on a rail, each its own press row, a struct's rows, the decoder's
+ * deepest and widest values and the raw values under a readable call, laid out in the real window
+ * at the approval window's width and a side panel's. Layout, hit testing, the Tab walk, a pointer
+ * drag and paint time need a browser; the component tests hold the rows' content and order.
  * A release build, run without the declaration, renders no fixture.
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { BROWSER, reloadExtensionPage, setViewport } from "./fixtures/browser"
+import { BROWSER, bringToFront, isFirefox, reloadExtensionPage, setViewport } from "./fixtures/browser"
 import { clickByTestId, openPopup, test } from "./fixtures/extension"
+import { openExecuteAuthwits, openExecuteSteps } from "./fixtures/popups"
 import { shotSend } from "./fixtures/shots"
 
 const ARMED = process.env.NULO_E2E_EXECUTE_FIXTURE === "1"
+const SHOTS = Boolean(process.env.NULO_E2E_SHOT_DIR)
 const sel = (id: string) => `[data-testid="${id}"]`
+const stepRow = (j: number) => `${sel("execute-op-step-toggle")}[data-step-index="${j}"]`
+const step = (j: number) => `${sel("execute-op-summary-call")}[data-call-index="${j}"]`
 /** The rows the decoder's widest value draws: one parameter of 1,024 items under 31 arrays each. */
 const WIDE_ROWS = 32_769
 /** Every element that holds dApp-supplied payload text. */
@@ -21,10 +26,11 @@ const PAYLOAD = [
 	"execute-op-payload-row",
 	"execute-op-decoded-param",
 	"execute-op-arg",
+	"execute-op-summary-authwit",
 	"execute-op-discovered-authwit",
 ].map(sel)
 /** The authorizations each fixture's estimate lists. */
-const AUTHWITS: Record<string, number> = { batch: 2, deep: 1 }
+const AUTHWITS: Record<string, number> = { batch: 2, deep: 1, "wide-authwits": 2 }
 
 /** Loads the fixture's window afresh: a query change alone reuses the mounted window. */
 async function openFixture(page: Page, name: string, width: number): Promise<void> {
@@ -34,27 +40,25 @@ async function openFixture(page: Page, name: string, width: number): Promise<voi
 	}, `#/windows/execute?fixture=${name}`)
 	await reloadExtensionPage(page)
 	await page.waitForSelector(sel("execute-op-item"), { visible: true, timeout: 30_000 })
-}
-
-/** Opens the details and, once the fixture's estimate has listed them, every authorization's own. */
-async function openDetails(page: Page, name: string): Promise<void> {
-	await clickByTestId(page, "execute-op-details-toggle")
-	await page.waitForSelector(sel("execute-op-details"), { visible: true, timeout: 10_000 })
 	const listed = AUTHWITS[name] ?? 0
 	await page.waitForFunction(
 		(s: string, n: number) => document.querySelectorAll(s).length === n,
 		{ timeout: 10_000 },
-		sel("execute-op-discovered-authwit"),
+		sel("execute-op-summary-authwit"),
 		listed,
 	)
-	await page.$$eval(`${sel("execute-discovered-authwit-toggle")}[aria-expanded="false"]`, (toggles) => {
-		for (const toggle of toggles) (toggle as HTMLElement).click()
-	})
+}
+
+/** Opens every step and, once the fixture's estimate has listed them, the authorizations' node. */
+async function openEverything(page: Page, name: string): Promise<void> {
+	await openExecuteSteps(page)
+	if (!AUTHWITS[name]) return
+	await openExecuteAuthwits(page)
 	await page.waitForFunction(
 		(s: string, n: number) => document.querySelectorAll(s).length === n,
 		{ timeout: 10_000 },
 		sel("execute-discovered-authwit-details"),
-		listed,
+		AUTHWITS[name],
 	)
 }
 
@@ -83,18 +87,103 @@ async function textPastCard(page: Page): Promise<string[]> {
 	}, PAYLOAD)
 }
 
-describe.skipIf(!ARMED)("the execute window's value tree, over the fixtures", () => {
+/** What has focus: its testid, a step row's index, or `scroll` for a scrolling region with no testid. */
+async function focused(page: Page): Promise<string> {
+	return page.evaluate(() => {
+		const el = document.activeElement as HTMLElement | null
+		if (!el || el === document.body) return "body"
+		const index = el.getAttribute("data-step-index")
+		const id = el.getAttribute("data-testid")
+		if (id) return index === null ? id : `${id}#${index}`
+		const style = getComputedStyle(el)
+		return /auto|scroll/.test(style.overflowY) && el.scrollHeight > el.clientHeight ? "scroll" : el.tagName
+	})
+}
+
+/** 1 when Firefox puts the window's scrolling region in the Tab order: the region overflows. */
+const scrollStops = (page: Page): Promise<number> =>
+	page.evaluate((firefox: boolean) => {
+		for (let el = document.querySelector('[data-testid="execute-op-item"]')?.parentElement; el; el = el.parentElement) {
+			if (/auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight) return firefox ? 1 : 0
+		}
+		return 0
+	}, isFirefox)
+
+/** Tabs `presses` times from the top of the page, each stop read as `focused` reads it. A blur
+ *  leaves the browser's start point at the last press, so the walk starts from a focused anchor
+ *  ahead of everything. Firefox puts a window that overflows in the Tab order ahead of its controls
+ *  (`FIREFOX.md`); a walk never tabs past the stop it asserts, since the next press leaves the page. */
+async function tabWalk(page: Page, presses: number): Promise<string[]> {
+	await bringToFront(page)
+	await page.evaluate(() => {
+		const start = document.createElement("span")
+		start.tabIndex = -1
+		start.dataset.tabWalkStart = ""
+		document.body.prepend(start)
+		start.focus()
+	})
+	const stops: string[] = []
+	try {
+		for (let i = 0; i < presses; i++) {
+			await page.keyboard.press("Tab")
+			stops.push(await focused(page))
+		}
+	} finally {
+		await page.evaluate(() => document.querySelector("[data-tab-walk-start]")?.remove())
+	}
+	return stops
+}
+
+const isOpen = (page: Page, selector: string) => page.$eval(selector, (el) => el.getAttribute("aria-expanded") === "true")
+const rectOf = (page: Page, selector: string) =>
+	page.$eval(selector, (el) => {
+		const r = el.getBoundingClientRect()
+		return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }
+	})
+
+/** Every DOM element Tab could reach, not disabled and drawn. */
+const tabbableCount = (page: Page) =>
+	page.evaluate(
+		() =>
+			[...document.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(
+				(el) => !(el as HTMLButtonElement).disabled && el.getClientRects().length > 0,
+			).length,
+	)
+
+const AT_REST = [0, 1, 2, 3, 4, 5].map((j) => `execute-op-step-toggle#${j}`)
+const STOPS_AT_REST = [...AT_REST, "execute-op-authwits-toggle"]
+const STOPS_OPEN = [
+	...AT_REST.flatMap((row) => [row, "execute-op-raw-toggle"]),
+	"execute-op-authwits-toggle",
+	"execute-discovered-authwit-toggle",
+	"execute-discovered-authwit-raw-toggle",
+	"execute-discovered-authwit-toggle",
+	"execute-discovered-authwit-raw-toggle",
+]
+/** The footer's two stops, after every stop of the card. */
+const FOOTER = ["execute-reject-btn", "execute-confirm-btn"]
+
+/** Each footer button's testid and hold, read only if it follows the card in document order. */
+const footerAfterCard = (page: Page) =>
+	page.evaluate((ids: string[]) => {
+		const card = document.querySelector('[data-testid="execute-op-item"]')
+		if (!card) throw new Error("no execute-op-item")
+		return ids.map((id) => {
+			const button = document.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)
+			const follows = button && card.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING
+			return follows ? { id, disabled: button.disabled } : { id, missing: true }
+		})
+	}, FOOTER)
+
+describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 	test("every payload line stays inside the card, at 400 and at 240 px", { timeout: 300_000 }, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
 		try {
 			for (const width of [400, 240]) {
 				for (const name of ["batch", "deep", "ancestry", "depth"]) {
 					await openFixture(page, name, width)
-					await openDetails(page, name)
+					await openEverything(page, name)
 					expect(await textPastCard(page), `${name} at ${width} px`).toEqual([])
-					// Firefox refuses a capture of an extension page (`FIREFOX.md`).
-					if (BROWSER === "chrome" && (name === "batch" || name === "deep"))
-						await shotSend(page, `execute-${name}-details-${width}`, "execute-op-details")
 				}
 			}
 		} finally {
@@ -108,12 +197,14 @@ describe.skipIf(!ARMED)("the execute window's value tree, over the fixtures", ()
 		const page = await openPopup(ctx)
 		try {
 			await openFixture(page, "batch", 400)
-			await openDetails(page, "batch")
-			const first = '[data-call-index="0"]'
-			expect(await page.$(`${first} ${sel("execute-op-raw-args")}`)).toBeNull()
-			await page.click(`${first} ${sel("execute-op-raw-toggle")}`)
-			await page.waitForSelector(`${first} ${sel("execute-op-raw-args")}`, { visible: true, timeout: 10_000 })
-			const fields = await page.$$eval(`${first} ${sel("execute-op-arg-field")}`, (els) => els.map((el) => el.getAttribute("title")))
+			await page.$eval(stepRow(0), (el) => (el as HTMLElement).click())
+			await page.waitForSelector(`${stepRow(0)}[aria-expanded="true"]`, { timeout: 10_000 })
+			expect(await page.$(`${step(0)} ${sel("execute-op-raw-args")}`)).toBeNull()
+			await page.click(`${step(0)} ${sel("execute-op-raw-toggle")}`)
+			await page.waitForSelector(`${step(0)} ${sel("execute-op-raw-args")}`, { visible: true, timeout: 10_000 })
+			const fields = await page.$$eval(`${step(0)} ${sel("execute-op-arg-field")}`, (els) =>
+				els.map((el) => el.getAttribute("title")),
+			)
 			// `deposit` carries an order of four fields and a route of two pools, two fields each.
 			expect(fields).toHaveLength(8)
 			expect(fields.every((f) => /^0x[0-9a-f]{64}$/.test(f ?? ""))).toBe(true)
@@ -123,34 +214,251 @@ describe.skipIf(!ARMED)("the execute window's value tree, over the fixtures", ()
 		}
 	})
 
-	test("the decoder's widest value opens every row with one press and closes with the next", { timeout: 300_000 }, async ({
+	test("the decoder's widest value opens every row with one press on its step and closes with the next", { timeout: 300_000 }, async ({
 		registeredExtension: ctx,
 	}) => {
 		const page = await openPopup(ctx)
 		try {
 			await openFixture(page, "wide", 400)
-			const toPaint = await page.evaluate(async (rows: number) => {
-				const toggle = document.querySelector<HTMLElement>('[data-testid="execute-op-details-toggle"]')
-				if (!toggle) throw new Error("no details toggle")
-				const count = () => document.querySelectorAll('[data-testid="execute-op-decoded-param"]').length
-				const start = performance.now()
-				toggle.click()
-				await new Promise<void>((resolve) => {
-					const tick = () => (count() >= rows ? resolve() : requestAnimationFrame(tick))
-					tick()
-				})
-				await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-				return { ms: Math.round(performance.now() - start), rows: count() }
-			}, WIDE_ROWS)
+			const toPaint = await pressAndCount(page, stepRow(0), sel("execute-op-decoded-param"), WIDE_ROWS)
 			console.log(`[execute-steps] wide: ${toPaint.rows} rows painted ${toPaint.ms} ms after the press`)
 			expect(toPaint.rows).toBe(WIDE_ROWS)
-			await clickByTestId(page, "execute-op-details-toggle")
+			await page.$eval(stepRow(0), (el) => (el as HTMLElement).click())
 			await page.waitForFunction(() => document.querySelector('[data-testid="execute-op-details"]') === null, { timeout: 30_000 })
 		} finally {
 			await page.close()
 		}
 	})
+
+	test("the authorizations' node opens two of the widest authorizations with one press", { timeout: 300_000 }, async ({
+		registeredExtension: ctx,
+	}) => {
+		const page = await openPopup(ctx)
+		try {
+			await openFixture(page, "wide-authwits", 400)
+			const toPaint = await pressAndCount(
+				page,
+				sel("execute-op-authwits-toggle"),
+				sel("execute-discovered-authwit-decoded-param"),
+				2 * WIDE_ROWS,
+			)
+			console.log(`[execute-steps] wide-authwits: ${toPaint.rows} rows painted ${toPaint.ms} ms after the press`)
+			expect(toPaint.rows).toBe(2 * WIDE_ROWS)
+			await clickByTestId(page, "execute-op-authwits-toggle")
+			await page.waitForFunction(() => document.querySelector('[data-testid="execute-discovered-authwit-details"]') === null, {
+				timeout: 30_000,
+			})
+		} finally {
+			await page.close()
+		}
+	})
+
+	test("batch: Tab meets 7 stops in the card at rest and 17 with everything open, then the footer; 7 presses open everything, 15 reach every value", {
+		timeout: 180_000,
+	}, async ({ registeredExtension: ctx }) => {
+		const page = await openPopup(ctx)
+		try {
+			await openFixture(page, "batch", 400)
+			// A fixture answers no request, so the footer's two stops are held; under a request they
+			// follow the card's, 9 at rest and 19 open.
+			expect(await footerAfterCard(page)).toEqual(FOOTER.map((id) => ({ id, disabled: true })))
+			expect(STOPS_AT_REST.length + FOOTER.length).toBe(9)
+			const restScroll = await scrollStops(page)
+			const atRest = await tabWalk(page, STOPS_AT_REST.length + restScroll)
+			expect(atRest).toEqual([...Array(restScroll).fill("scroll"), ...STOPS_AT_REST])
+			expect(await tabbableCount(page)).toBe(STOPS_AT_REST.length)
+
+			let presses = 0
+			for (const row of [...AT_REST.map((_, j) => stepRow(j)), sel("execute-op-authwits-toggle")]) {
+				await page.$eval(row, (el) => (el as HTMLElement).click())
+				await page.waitForSelector(`${row}[aria-expanded="true"]`, { timeout: 10_000 })
+				presses++
+			}
+			expect(presses).toBe(7)
+			const raws = await page.$$(`${sel("execute-op-raw-toggle")}, ${sel("execute-discovered-authwit-raw-toggle")}`)
+			expect(presses + raws.length).toBe(15)
+			expect(await tabbableCount(page)).toBe(STOPS_OPEN.length)
+			const openScroll = await scrollStops(page)
+			const open = await tabWalk(page, STOPS_OPEN.length + openScroll)
+			expect(open).toEqual([...Array(openScroll).fill("scroll"), ...STOPS_OPEN])
+			expect(STOPS_OPEN.length + FOOTER.length).toBe(19)
+		} finally {
+			await page.close()
+		}
+	})
+
+	test("Enter on a row opens its step with focus left on the row, which does not move; the next Tab enters the step, where Enter opens the raw values", {
+		timeout: 120_000,
+	}, async ({ registeredExtension: ctx }) => {
+		const page = await openPopup(ctx)
+		try {
+			await openFixture(page, "batch", 400)
+			const scroll = await scrollStops(page)
+			expect((await tabWalk(page, 2 + scroll)).slice(scroll)).toEqual(["execute-op-step-toggle#0", "execute-op-step-toggle#1"])
+			const before = await rectOf(page, stepRow(1))
+			await page.keyboard.press("Enter")
+			await page.waitForSelector(`${stepRow(1)}[aria-expanded="true"]`, { timeout: 10_000 })
+			expect([await focused(page), (await rectOf(page, stepRow(1))).top]).toEqual(["execute-op-step-toggle#1", before.top])
+			expect([await isOpen(page, stepRow(0)), await isOpen(page, stepRow(2))]).toEqual([false, false])
+			await page.keyboard.press("Tab")
+			expect(await page.evaluate((s: string) => document.querySelector(s)?.contains(document.activeElement), step(1))).toBe(true)
+			expect(await focused(page)).toBe("execute-op-raw-toggle")
+			await page.keyboard.press("Enter")
+			await page.waitForSelector(`${step(1)} ${sel("execute-op-raw-args")}`, { visible: true, timeout: 10_000 })
+			expect([await focused(page), await isOpen(page, stepRow(1))]).toEqual(["execute-op-raw-toggle", true])
+		} finally {
+			await page.close()
+		}
+	})
+
+	test("by mouse: a drag over the address selects it and a press on a named address or the glossary term opens nothing; the text and the padding open the step", {
+		timeout: 180_000,
+	}, async ({ registeredExtension: ctx }) => {
+		const page = await openPopup(ctx)
+		try {
+			await openFixture(page, "batch", 400)
+			await bringToFront(page)
+			const address = await rectOf(page, `${step(0)} ${sel("execute-op-summary-call-to")}`)
+			const midY = address.top + address.height / 2
+			await page.mouse.move(address.left + 1, midY)
+			await page.mouse.down()
+			await page.mouse.move(address.right - 1, midY, { steps: 8 })
+			await page.mouse.up()
+			const selected = await page.evaluate(() => window.getSelection()?.toString().trim())
+			expect(selected).toBe(await page.$eval(`${step(0)} ${sel("execute-op-summary-call-to")}`, (el) => el.textContent?.trim()))
+			expect(await isOpen(page, stepRow(0))).toBe(false)
+			await page.evaluate(() => window.getSelection()?.removeAllRanges())
+
+			const named = `${step(2)} ${sel("execute-op-line-from")}[data-address-shows="name"]`
+			await page.waitForSelector(named, { visible: true, timeout: 10_000 })
+			await page.click(named)
+			expect(await isOpen(page, stepRow(2))).toBe(false)
+
+			await page.click(`${step(0)} ${sel("execute-op-summary-call-title")}`)
+			await page.waitForSelector(`${stepRow(0)}[aria-expanded="true"]`, { timeout: 10_000 })
+			// The row's padding, past its sentence: the press lands on the row's own button.
+			const row = await page.$eval(stepRow(1), (el) => {
+				const r = el.parentElement!.getBoundingClientRect()
+				return { left: r.left, top: r.top, height: r.height }
+			})
+			expect(row.height, "a one-line step's press reaches past 24 px").toBeGreaterThanOrEqual(24)
+			expect(
+				await page.evaluate(
+					(x: number, y: number) => document.elementFromPoint(x, y)?.getAttribute("data-step-index"),
+					row.left + 2,
+					row.top + 2,
+				),
+			).toBe("1")
+			await page.mouse.click(row.left + 2, row.top + 2)
+			await page.waitForSelector(`${stepRow(1)}[aria-expanded="true"]`, { timeout: 10_000 })
+
+			await openFixture(page, "raw", 400)
+			await bringToFront(page)
+			await page.click(`${step(1)} ${sel("execute-op-summary-interface-term")}`)
+			expect(await isOpen(page, stepRow(1))).toBe(false)
+			await page.click(`${step(1)} ${sel("execute-op-summary-unverified-warning")}`)
+			await page.waitForSelector(`${stepRow(1)}[aria-expanded="true"]`, { timeout: 10_000 })
+		} finally {
+			await page.close()
+		}
+	})
+
+	test("by key: Enter on the glossary term inside a row opens nothing", { timeout: 120_000 }, async ({ registeredExtension: ctx }) => {
+		const page = await openPopup(ctx)
+		try {
+			await openFixture(page, "raw", 400)
+			const scroll = await scrollStops(page)
+			expect((await tabWalk(page, 3 + scroll)).slice(scroll)).toEqual([
+				"execute-op-step-toggle#0",
+				"execute-op-step-toggle#1",
+				"execute-op-summary-interface-term",
+			])
+			await page.keyboard.press("Enter")
+			expect([await isOpen(page, stepRow(0)), await isOpen(page, stepRow(1))]).toEqual([false, false])
+		} finally {
+			await page.close()
+		}
+	})
+
+	test("ten calls: the tenth box holds 10 inside its 20 px", { timeout: 120_000 }, async ({ registeredExtension: ctx }) => {
+		const page = await openPopup(ctx)
+		try {
+			await openFixture(page, "ten", 400)
+			const tenth = await page.$eval(`${step(9)} ${sel("execute-op-step-number")}`, (box) => {
+				const range = document.createRange()
+				range.selectNodeContents(box)
+				const text = range.getBoundingClientRect()
+				const r = box.getBoundingClientRect()
+				return {
+					label: box.textContent?.trim(),
+					width: r.width,
+					height: r.height,
+					inside: text.left >= r.left && text.right <= r.right,
+				}
+			})
+			expect(tenth).toEqual({ label: "10", width: 20, height: 20, inside: true })
+		} finally {
+			await page.close()
+		}
+	})
+
+	// Firefox refuses a capture of an extension page (`FIREFOX.md`); captures are opt-in output.
+	test.skipIf(!SHOTS || BROWSER !== "chrome")(
+		"captures of the rail, light and dark",
+		{ timeout: 300_000 },
+		async ({ registeredExtension: ctx }) => {
+			const page = await openPopup(ctx)
+			try {
+				for (const name of ["one", "batch", "deep", "raw"]) {
+					await openFixture(page, name, 400)
+					await shotSend(page, `execute-${name}-rest-400`, "execute-op-summary")
+					await page.$eval(stepRow(name === "batch" ? 1 : 0), (el) => (el as HTMLElement).click())
+					await shotSend(page, `execute-${name}-one-open-400`, "execute-op-details")
+					await openFixture(page, name, 400)
+					await openEverything(page, name)
+					await shotSend(page, `execute-${name}-all-open-400`, "execute-op-from-account")
+				}
+				await openFixture(page, "batch", 240)
+				await shotSend(page, "execute-batch-rest-240", "execute-op-summary")
+				for (const name of ["batch", "deep"]) {
+					await openFixture(page, name, 240)
+					await openEverything(page, name)
+					await shotSend(page, `execute-${name}-all-open-240`, "execute-op-from-account")
+				}
+				await openFixture(page, "batch", 400)
+				await tabWalk(page, 2)
+				await shotSend(page, "execute-batch-focus-400", "execute-op-summary")
+				await openFixture(page, "ten", 400)
+				await shotSend(page, "execute-ten-rest-400", "execute-op-leaves-account")
+			} finally {
+				await page.close()
+			}
+		},
+	)
 })
+
+/** Presses `press` inside one task and counts `rows` each frame until `want` are mounted, then two
+ *  frames more, so the time spans the press to the rows painted. */
+async function pressAndCount(page: Page, press: string, rows: string, want: number): Promise<{ ms: number; rows: number }> {
+	return page.evaluate(
+		async (target: string, row: string, n: number) => {
+			const el = document.querySelector<HTMLElement>(target)
+			if (!el) throw new Error(`no ${target}`)
+			const count = () => document.querySelectorAll(row).length
+			const start = performance.now()
+			el.click()
+			await new Promise<void>((resolve) => {
+				const tick = () => (count() >= n ? resolve() : requestAnimationFrame(tick))
+				tick()
+			})
+			await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+			return { ms: Math.round(performance.now() - start), rows: count() }
+		},
+		press,
+		rows,
+		want,
+	)
+}
 
 describe.skipIf(ARMED)("a release build", () => {
 	test("renders no fixture: the route names no request, so the window reports its error", { timeout: 120_000 }, async ({

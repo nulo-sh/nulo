@@ -11,3 +11,10 @@
 - 2026-11-10: a1 review: Codex r1 conditional approve (3 adopted), Opus conditional approve (6 adopted), Codex r2 approve; fixes in bc63c57aa.
 - 2026-11-10: a1 final gates on bc63c57aa: audit:vue, test:all, test:release (local zip), check:plans green; smoke Chrome armed green (30.1 s), release-build negative green; network Chrome green (13/13, at 788458d63).
 - 2026-11-10: a1 network Firefox green (13/13, final code); all a1 gates green; opening the PR.
+- 2026-11-10: a1 PR #1776 open, ready, every check green at 81277dd; wide 1,342 ms on CI Chrome. a1 done.
+- 2026-11-10: a2 Phase 4 gate green on c7003ddf8 (lint, typecheck:all, test, test:components, test:all; test:all red once on an untouched 5 s timeout at load1 261/188, green on its one retry).
+- 2026-11-10: a2 Phase 5 e2e written; dev runs of execute-steps armed green on Chrome and Firefox after two spec fixes (the footer is held in a fixture; the Tab walk starts from an anchor).
+- 2026-11-10: a2 review: Codex r1 approve (3 adopted), Opus conditional approve (6 adopted), Codex r2 approve; cross-arc pass conditional approve (2 adopted, 1 rejected), resumed approve. Final gates next on f62e24d29.
+- 2026-11-10: a2 final gates on 7454b1c14 green through smoke and the release negative; network Chrome red (type-roles at 240 px, a2 defect, fixed, OA-1) and void after an outside checkout of a1 mid-run; a2 rebased onto c860df0e4; every final gate reruns.
+- 2026-11-10: #1776 merged (21acbab59); a2 rebased onto origin/dev f5d00cc52; its PR targets dev. Gate rerun red on host starvation (load5 565); rerun pending.
+- 2026-11-11: a2 final gates green on ff87d8472 (phase 4; phase 5 after starved reruns; smoke Chrome+Firefox; release negative; network Chrome 23/23, Firefox 23/23). Opening the PR.

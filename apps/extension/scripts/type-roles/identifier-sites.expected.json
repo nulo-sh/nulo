@@ -91,7 +91,7 @@
 				}
 			],
 			"digests": {
-				"apps/extension/src/e2e/execute-fixture.ts": "3b514ba17bbf333ae490baa33748628511ba4402b19b8a68f13df8a440e979f2",
+				"apps/extension/src/e2e/execute-fixture.ts": "6e45a2c0a7043acf5a77a422c61950d7c388eaef6cc14d56a630ca60477dc0bd",
 				"packages/wallet-bridge/src/dispatcher.ts": "a7a81b849e72d78ec910e2d883faac29b117233f98554a7d98f748e5e1443b41"
 			},
 			"evidence": [
@@ -1114,49 +1114,39 @@
 			"state": "an aztec_sendTx request (network)"
 		},
 		{
-			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
-			"expression": "call.to",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen",
-			"ordinal": 0,
-			"role": "meta",
-			"selector": "[data-testid=\"execute-op-call-to\"]",
-			"surface": "windows-execute",
-			"state": "an aztec_sendTx request with all details open (network)"
-		},
-		{
-			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
-			"expression": "a.consumer",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen",
+			"file": "apps/extension/src/popup/windows/execute/AuthwitDetails.vue",
+			"expression": "authwit.consumer",
+			"branch": "",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-consumer\"]",
 			"surface": "windows-execute",
-			"state": "a send with a discovered authwit, all details open (network)"
+			"state": "a send with a discovered authwit, its authorizations open (network)"
 		},
 		{
-			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
-			"expression": "a.caller",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen",
+			"file": "apps/extension/src/popup/windows/execute/AuthwitDetails.vue",
+			"expression": "authwit.caller",
+			"branch": "",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-caller\"]",
 			"surface": "windows-execute",
-			"state": "a send with a discovered authwit, all details open (network)"
+			"state": "a send with a discovered authwit, its authorizations open (network)"
 		},
 		{
-			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
-			"expression": "a.onBehalfOf",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && a.onBehalfOf",
+			"file": "apps/extension/src/popup/windows/execute/AuthwitDetails.vue",
+			"expression": "authwit.onBehalfOf",
+			"branch": "authwit.onBehalfOf",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-authorized-by\"]",
 			"surface": "windows-execute",
-			"state": "a send consuming another account's authwit, all details open (network)"
+			"state": "a send consuming another account's authwit, its authorizations open (network)"
 		},
 		{
-			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
-			"expression": "trimAddress(safeWire(a.innerHash, 80), 10, 6)",
-			"branch": "isSendTx(op) && op.kind === 'aztec_sendTx' && detailsOpen && isAuthwitOpen(a)",
+			"file": "apps/extension/src/popup/windows/execute/AuthwitDetails.vue",
+			"expression": "trimAddress(safeWire(authwit.innerHash, 80), 10, 6)",
+			"branch": "open",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-inner-hash\"]",
@@ -1271,7 +1261,7 @@
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
 			"expression": "call.to",
 			"branch": "!(isSendTx(op)) && (op.kind === 'aztec_simulateTx' || op.kind === 'aztec_profileTx')",
-			"ordinal": 1,
+			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-op-call-to\"]",
 			"surface": "windows-execute",

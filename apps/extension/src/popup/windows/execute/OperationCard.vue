@@ -7,8 +7,8 @@
  * - `send_transaction` + `aztec_sendTx` — header + From account +
  *   Payload list + fee settings (either the embedded "set by app"
  *   badge or a `<FeeSettingsCard>` v-modeled into the parent's
- *   `op.feeSettings`). An `aztec_sendTx` reads as its summary first;
- *   the Payload list and the authorizations' rows open under one toggle.
+ *   `op.feeSettings`). An `aztec_sendTx` reads as its steps on a rail,
+ *   each step and the authorizations opening their own details.
  * - All other read-only / register / simulate variants — header +
  *   from account (when present) + per-kind detail rows.
  *
@@ -40,9 +40,8 @@ import type { Account } from "@/wallet/services/account/client"
 import type { Network } from "@/wallet/services/network/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import CallArguments from "./CallArguments.vue"
-import DetailsToggle from "./DetailsToggle.vue"
 import OperationActionRow from "./OperationActionRow.vue"
-import SendTxSummary from "./SendTxSummary.vue"
+import SendTxSummary, { type AuthwitGroup } from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
 import { type FeePayerPick, paysFromPrivateFeeJuice, personPaysAppPayment } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
@@ -52,9 +51,7 @@ import {
 	type WireCall,
 	accountOutflows,
 	outflowLabel,
-	authwitTitle,
 	callSurface,
-	rawRows,
 	rowTitle,
 	tokenAt,
 	wire,
@@ -63,7 +60,6 @@ import { trimAddress } from "@/utils/string"
 import type { TokenMarkLookup } from "@/utils/token-icon"
 import { callTitle } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
-import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { grantContentsOf } from "./display-calls"
 
 // `DraftUIOperation` is the shared honest type. Send-like `feeSettings` is optional during user
@@ -270,75 +266,37 @@ const authwitArgs = (a: DiscoveredAuthwit): CallSurface =>
 		Number.POSITIVE_INFINITY,
 	)
 
+/** The details keep what the wallet signs apart from what an account already gave, the sending
+ *  account's own apart from another's. */
+const authwitGroup = (a: DiscoveredAuthwit): AuthwitGroup => {
+	if (a.onBehalfOf === undefined)
+		return { testid: "execute-op-discovered-authwits", label: "Authorizations the wallet will sign (found during estimation)" }
+	const sender = props.op.kind === "aztec_sendTx" ? props.op.accountAddress : ""
+	return sameFieldAddress(a.onBehalfOf, sender)
+		? { testid: "execute-op-sender-authwits", label: "Authorizations this account already gave" }
+		: { testid: "execute-op-consumed-authwits", label: "Authorizations your other accounts already gave" }
+}
+
 const summaryAuthwits = computed(() =>
-	authwits.value.kind === "list" ? authwits.value.authwits.map((authwit) => ({ authwit, surface: authwitArgs(authwit) })) : undefined,
+	authwits.value.kind === "list"
+		? authwits.value.authwits.map((authwit) => ({ authwit, surface: authwitArgs(authwit), group: authwitGroup(authwit) }))
+		: undefined,
 )
 
-/** The details keep what the wallet signs apart from what an account already gave, the sending
- *  account's own apart from another's; `k` stays each record's index in the listed order, which the
- *  advice reads. */
-const authwitGroups = computed(() => {
-	const rows = (authwits.value.kind === "list" ? authwits.value.authwits : []).map((a, k) => ({ a, k }))
-	const sender = props.op.kind === "aztec_sendTx" ? props.op.accountAddress : ""
-	const bySender = (a: DiscoveredAuthwit) => a.onBehalfOf !== undefined && sameFieldAddress(a.onBehalfOf, sender)
-	return [
-		{
-			testid: "execute-op-discovered-authwits",
-			label: "Authorizations the wallet will sign (found during estimation)",
-			rows: rows.filter(({ a }) => a.onBehalfOf === undefined),
-		},
-		{
-			testid: "execute-op-sender-authwits",
-			label: "Authorizations this account already gave",
-			rows: rows.filter(({ a }) => bySender(a)),
-		},
-		{
-			testid: "execute-op-consumed-authwits",
-			label: "Authorizations your other accounts already gave",
-			rows: rows.filter(({ a }) => a.onBehalfOf !== undefined && !bySender(a)),
-		},
-	].filter((group) => group.rows.length)
-})
-
-const detailsOpen = ref(false)
-const detailsId = useId()
-const detailsToggle = ref<{ $el: HTMLElement } | null>(null)
-/** The retry's line leaves with the failure, so a keyboard press moves on to the control after it,
- *  read inside the click's dispatch as above. */
-const onRetryPreview = (event: MouseEvent) => {
-	emit("retryPreview", props.index)
-	if ((event.currentTarget as HTMLElement).matches(":focus-visible")) detailsToggle.value?.$el.focus()
-}
-
-/** Which discovered authorizations the person closed: once the rows are open, an authorization's
- *  values are open too, so a raw one stays within two presses of the card at rest. */
-const closedAuthwits = ref(new Set<string>())
-const isAuthwitOpen = (a: DiscoveredAuthwit): boolean => !closedAuthwits.value.has(a.messageHash)
-const toggleAuthwit = (a: DiscoveredAuthwit): void => {
-	const next = new Set(closedAuthwits.value)
-	if (next.has(a.messageHash)) next.delete(a.messageHash)
-	else next.add(a.messageHash)
-	closedAuthwits.value = next
-}
-
-type AdviceSite = { on: "calls" } | { on: "authwit"; index: number }
-
-/** An unreadable grant always refuses its request, so a grant never carries the advice. The fallback
- *  takes an authorization whose details are open, so closing one hands the advice to one still shown.
- *  The bridge builds one operation per window, so once per card is once per window. */
-const adviceSite = computed((): AdviceSite | undefined => {
+/** An unreadable grant always refuses its request, so a grant never carries the advice. Past the
+ *  calls, the rail places it under the last unreadable authorization still open. The bridge builds
+ *  one operation per window, so once per card is once per window. */
+const adviceSite = computed((): "calls" | "authwits" | undefined => {
 	const op = props.op
 	if (props.refused) return undefined
 	if (op.kind === "aztec_createAuthWit") {
 		const intent = createAuthwitSurface(op.messageHashOrIntent)
-		return intent.kind === "call" && intent.args.kind === "raw" ? { on: "calls" } : undefined
+		return intent.kind === "call" && intent.args.kind === "raw" ? "calls" : undefined
 	}
 	if (op.kind !== "aztec_sendTx") return undefined
-	if (sendTxRows.value.some((row) => row.surface.kind === "raw")) return { on: "calls" }
-	const index = summaryAuthwits.value?.findLastIndex(({ authwit, surface }) => isAuthwitOpen(authwit) && surface.kind === "raw") ?? -1
-	return index < 0 ? undefined : { on: "authwit", index }
+	if (sendTxRows.value.some((row) => row.surface.kind === "raw")) return "calls"
+	return summaryAuthwits.value?.some(({ surface }) => surface.kind === "raw") ? "authwits" : undefined
 })
-const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "authwit" && adviceSite.value.index === index
 </script>
 
 <template>
@@ -395,97 +353,9 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					:chainId="op.network?.chainId"
 					:tokens="tokens"
 					:marks="marks"
-					:advice="adviceSite?.on === 'calls'"
-					@retryPreview="onRetryPreview"
+					:advice="adviceSite"
+					@retryPreview="emit('retryPreview', index)"
 				/>
-				<Flex :class="$style.group">
-					<DetailsToggle
-						ref="detailsToggle"
-						data-testid="execute-op-details-toggle"
-						:open="detailsOpen"
-						:controls="detailsId"
-						:label="detailsOpen ? 'Hide all details' : 'Show all details'"
-						@click="detailsOpen = !detailsOpen"
-						@keydown.enter="refuseRepeatEnter"
-					/>
-				</Flex>
-				<Flex v-if="detailsOpen" :id="detailsId" data-testid="execute-op-details" direction="column" wide>
-					<Flex :class="$style.group"><Text variant="label-section" color="secondary">Payload</Text></Flex>
-					<Flex v-for="({ call, surface }, j) in sendTxRows" :key="`${index}:${j}`" :data-call-index="j" direction="column" gap="4" :class="$style.call">
-						<Flex
-							data-testid="execute-op-payload-row"
-							:data-call-name="call.name ?? ''"
-							:data-call-to="call.to?.toString() ?? ''"
-							:data-intent-kind="surface.kind"
-							justify="between"
-							align="center"
-							:class="[$style.row, $style.call_row]"
-						>
-							<Text variant="meta" color="primary">{{ rowTitle(call, surface) }}</Text>
-							<Text variant="caption" color="secondary">on <AddressDisplay :address="call.to" data-testid="execute-op-call-to" /></Text>
-						</Flex>
-						<CallArguments :surface="surface" :contract="call.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-op" json-view :raw="rawRows(call.args)" />
-					</Flex>
-					<Flex
-						v-for="group in authwitGroups"
-						:key="group.testid"
-						:data-testid="group.testid"
-						direction="column"
-						gap="4"
-						:class="$style.group"
-					>
-						<Text variant="label-section" color="secondary">{{ group.label }}</Text>
-						<!-- The hash in the key remounts a re-estimated row: AddressDisplay reads its address once, at mount. -->
-						<Flex
-							v-for="{ a, k } in group.rows"
-							:key="`${k}:${a.messageHash}`"
-							data-testid="execute-op-discovered-authwit"
-							:data-message-hash="a.messageHash"
-							direction="column"
-							gap="2"
-							:class="$style.structured_args"
-						>
-							<Flex justify="between" :class="$style.row">
-								<Text variant="label-section" color="secondary">Consumer:</Text>
-								<AddressDisplay :address="a.consumer" data-testid="execute-discovered-consumer" />
-							</Flex>
-							<Flex justify="between" :class="$style.row">
-								<Text variant="label-section" color="secondary">Authorizes:</Text>
-								<AddressDisplay :address="a.caller" data-testid="execute-discovered-caller" />
-							</Flex>
-							<Flex justify="between" :class="$style.row">
-								<Text variant="label-section" color="secondary">Function:</Text>
-								<Text variant="meta" color="primary" data-testid="execute-discovered-authwit-function">{{ authwitTitle(a.selector, a.consumer, authwitArgs(a)) }}</Text>
-							</Flex>
-							<Flex v-if="a.onBehalfOf" justify="between" :class="$style.row">
-								<Text variant="label-section" color="secondary">Authorized by:</Text>
-								<AddressDisplay :address="a.onBehalfOf" data-testid="execute-discovered-authorized-by" />
-							</Flex>
-							<DetailsToggle
-								data-testid="execute-discovered-authwit-toggle"
-								:open="isAuthwitOpen(a)"
-								:controls="`${detailsId}-${k}`"
-								:label="isAuthwitOpen(a) ? 'Hide details' : 'Show details'"
-								@click="toggleAuthwit(a)"
-							/>
-							<Flex v-if="isAuthwitOpen(a)" :id="`${detailsId}-${k}`" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
-								<CallArguments
-									:surface="authwitArgs(a)"
-									:contract="a.consumer"
-									:chainId="op.network?.chainId"
-									:tokens="tokens"
-									prefix="execute-discovered-authwit"
-									:advice="adviceOnAuthwit(k)"
-									:raw="rawRows(a.args, Number.POSITIVE_INFINITY)"
-								/>
-								<Flex justify="between" :class="$style.row">
-									<Text variant="label-section" color="secondary">Inner hash:</Text>
-									<Text variant="meta" color="primary" :title="safeWire(a.innerHash, 80)" data-testid="execute-discovered-inner-hash">{{ trimAddress(safeWire(a.innerHash, 80), 10, 6) }}</Text>
-								</Flex>
-							</Flex>
-						</Flex>
-					</Flex>
-				</Flex>
 			</template>
 		</Flex>
 
@@ -777,7 +647,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					</Flex>
 					<Flex data-testid="execute-authwit-args" direction="column" gap="4" :class="$style.group">
 						<Text variant="label-section" color="secondary">Arguments</Text>
-						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view :advice="adviceSite?.on === 'calls'" />
+						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view :advice="adviceSite === 'calls'" />
 					</Flex>
 				</template>
 				<template v-else>
@@ -900,16 +770,6 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	padding-top: 12px;
 }
 
-.call {
-	width: 100%;
-	padding-top: 8px;
-}
-
-.call + .call {
-	margin-top: 8px;
-	border-top: 1px solid var(--nulo-border);
-}
-
 .row {
 	width: 100%;
 	gap: 12px;
@@ -921,25 +781,9 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	}
 }
 
-/* A dApp names the call; a long unbroken name must break inside the card, not push the address out. */
-.call_row > * {
-	min-width: 0;
-	overflow-wrap: anywhere;
-}
-
-/* The caption stays whole unless it exceeds the row less its 12 px gap; the call's name absorbs the shrink. */
-.call_row > :last-child {
-	flex-shrink: 0;
-	max-width: calc(100% - 12px);
-}
-
 .payload {
 	min-width: 0;
 	overflow-wrap: anywhere;
-}
-
-.structured_args {
-	width: 100%;
 }
 
 .title_size {
@@ -976,14 +820,6 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	.row > :last-child,
 	.prop > :last-child {
 		margin-left: auto;
-	}
-
-	.call_row > :first-child {
-		overflow-wrap: break-word;
-	}
-
-	.call_row > :last-child {
-		max-width: 100%;
 	}
 }
 </style>

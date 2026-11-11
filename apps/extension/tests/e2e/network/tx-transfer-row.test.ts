@@ -4,7 +4,7 @@ import { mintPublicTokensForAccount, type AztecTestConfig } from "../fixtures/az
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import { importTokenAndWaitForBalance } from "../fixtures/helpers"
 import { setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { openExecuteDetails, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { openExecuteSteps, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { shotSend } from "../fixtures/send-page"
 import { expectSitesClean, observeIdentifierSites } from "../fixtures/type-roles"
 
@@ -14,8 +14,8 @@ const hasConfig = aztecConfig !== undefined
 /**
  * The standard Token's `transfer_public_to_public`, whose nonce is named `_nonce`, reads as the
  * wallet's own transfer on both windows a dApp opens with it, the transaction and an authorization
- * for the same call with a random nonce: on the first as the summary's line at rest and the transfer
- * row under "Show all details", on the second as the transfer row. Each transfer function that
+ * for the same call with a random nonce: on the first as its step's sentence at rest and the transfer
+ * rows the step opens to, on the second as the transfer row. Each transfer function that
  * touches a private balance reads the same way on the transaction window. The decode, the selector
  * check and the token's units all run for real here; every window is rejected, since proving the
  * call is other files' job.
@@ -26,6 +26,8 @@ const AMOUNT = "5000000000000000000"
 /** Above 2^64, the size of nonce a dApp draws at random. */
 const NONCE = "0x0f3c7a91e24b6d08c5f1a39e7b2d40c86e9a1f53b7d20c4e8a6f91b3d5c07e2a"
 
+/** The transfer step's sentence head, which names the call: the rows it opens to name none. */
+const TRANSFER_HEAD = `${sel("execute-op-summary-call")}[data-intent-kind="transfer"] ${sel("execute-op-summary-call-head")}`
 const textOf = (page: Page, selector: string) => page.$eval(selector, (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
 /** The line's words: the token's mark before its amount is a picture, and its initials say nothing. */
 const lineWordsOf = (page: Page, selector: string) =>
@@ -88,10 +90,10 @@ test.skipIf(!hasConfig)(
 		await expectTransferLine(send, minterAddress)
 		expect(await textOf(send, sel("execute-op-summary-call-head"))).toMatch(/^Transfer \(public\) on /)
 		await shotSend(send, "transfer-line-send", "execute-op-summary")
-		await openExecuteDetails(send)
+		await openExecuteSteps(send)
 		const row = `${sel("execute-op-payload-row")}[data-intent-kind="transfer"]`
 		await send.waitForSelector(row, { visible: true, timeout: 60_000 })
-		expect(await textOf(send, row)).toMatch(/^Transfer \(public\)/)
+		expect(await textOf(send, TRANSFER_HEAD)).toMatch(/^Transfer \(public\)/)
 		expect(await senderKind(send, "execute-op-transfer-sender")).toBe("explicit")
 		expect(await textOf(send, sel("execute-op-amount"))).toBe("5 TST")
 		expect(await send.$(sel("execute-op-transfer-nonce"))).toBeNull()
@@ -140,10 +142,10 @@ test.skipIf(!hasConfig).for(PRIVATE_KINDS)(
 		const sendSeq = await snapshotResultSeq(page)
 		const send = await openWindow(ctx, page, "pg-btn-sendTx-default")
 		await expectTransferLine(send, minterAddress)
-		await openExecuteDetails(send)
+		await openExecuteSteps(send)
 		const row = `${sel("execute-op-payload-row")}[data-intent-kind="transfer"]`
 		await send.waitForSelector(row, { visible: true, timeout: 60_000 })
-		expect(await textOf(send, row)).toMatch(label)
+		expect(await textOf(send, TRANSFER_HEAD)).toMatch(label)
 		expect(await senderKind(send, "execute-op-transfer-sender")).toBe("explicit")
 		expect(await textOf(send, sel("execute-op-amount"))).toBe("5 TST")
 		await shotSend(send, `transfer-row-${fn}`, "execute-op-structured-args")

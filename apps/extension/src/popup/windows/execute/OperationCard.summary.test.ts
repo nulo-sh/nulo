@@ -1,8 +1,8 @@
 /**
  * A multi-call transaction reads as its summary at rest: each call in order with the wallet's own
  * reading or an unreadable call's warning, one line under them naming the calls it decoded but did
- * not read, and every authorization's line. The value rows open under one "Show all details". Fed
- * the wire-shaped fixture: 32-byte hex fields, real Token decodes.
+ * not read, and every authorization's line. Each step and the authorizations' node open their own
+ * details. Fed the wire-shaped fixture: 32-byte hex fields, real Token decodes.
  */
 
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
@@ -27,6 +27,7 @@ import {
 	fixtureOp,
 	HUB,
 	MAIN,
+	openAllSteps,
 	RECIPIENT,
 	SAVINGS,
 	stubTokenSelectors,
@@ -63,7 +64,8 @@ const mountCard = async (props: Record<string, unknown>, op: unknown = fixtureOp
 const mountFixture = async () => mountCard({ feeEstimate: feeEstimateWith(AUTHWITS), ...(await decodeFixture()) })
 
 const read = (w: VueWrapper, testid: string): string[] => w.findAll(`[data-testid="${testid}"]`).map((el) => el.text().replace(/\s+/g, " "))
-const toggle = (w: VueWrapper) => w.get('[data-testid="execute-op-details-toggle"]')
+const steps = (w: VueWrapper) => w.findAll('[data-testid="execute-op-step-toggle"]')
+const node = (w: VueWrapper) => w.get('[data-testid="execute-op-authwits-toggle"]')
 const advice = (w: VueWrapper) => w.findAll('[data-testid$="-unverified-advice"]')
 const testidOf = (el: Element | null | undefined) => el?.getAttribute("data-testid")
 /** The advice closes the calls: list, line, advice when the line shows; list, advice otherwise. */
@@ -152,28 +154,41 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 			`Lets ${trimAddress(HUB)} move 25 USDC from Main to ${trimAddress(HUB)}`,
 			`Lets ${trimAddress(HUB)} call Withdraw For on ${trimAddress(VAULT)}`,
 		])
-		expect(w.get('[data-testid="execute-op-summary-authwits-section"]').text()).toMatch(/^Authorizations\s*2/)
+		expect(shownText(w.get('[data-testid="execute-op-summary-authwits-section"]').element)).toMatch(/^Authorizations\s*2 Lets /)
 		expect(w.findAll('[data-testid="execute-op-summary-call"]').map((li) => li.element.tagName)).toEqual(["LI", "LI", "LI"])
 	})
 
-	test("at rest the value rows are closed behind one button; one press opens them, each authorization's details open", async () => {
+	test("at rest each step and the node are closed rows; a press opens only its own details, the node every authorization's", async () => {
 		const w = await mountFixture()
-		expect(toggle(w).element.tagName).toBe("BUTTON")
-		expect(toggle(w).attributes()).toMatchObject({ type: "button", "aria-expanded": "false" })
-		expect(toggle(w).attributes("aria-controls")).toBeUndefined()
-		expect(toggle(w).text()).toBe("Show all details")
+		expect(w.find('[data-testid="execute-op-details-toggle"]').exists()).toBe(false)
+		expect(steps(w).map((row) => [row.element.tagName, row.attributes("type"), row.attributes("aria-expanded")])).toEqual(
+			Array(3).fill(["BUTTON", "button", "false"]),
+		)
+		expect(steps(w).map((row) => row.attributes("data-step-index"))).toEqual(["0", "1", "2"])
+		for (const row of [...steps(w), node(w)]) expect(row.attributes("aria-controls")).toBeUndefined()
 		expect(w.find('[data-testid="execute-op-details"]').exists()).toBe(false)
 		expect(w.find('[data-testid="execute-op-payload-row"]').exists()).toBe(false)
 
-		await toggle(w).trigger("click")
-		expect(toggle(w).attributes("aria-expanded")).toBe("true")
-		const details = w.get('[data-testid="execute-op-details"]')
-		expect(details.attributes("id")).toBeTruthy()
-		expect(toggle(w).attributes("aria-controls")).toBe(details.attributes("id"))
-		expect(toggle(w).text()).toBe("Hide all details")
-		expect(w.findAll('[data-testid="execute-op-payload-row"]')).toHaveLength(3)
+		await steps(w)[1]!.trigger("click")
+		const panels = w.findAll('[data-testid="execute-op-details"]')
+		expect(panels.map((panel) => panel.attributes("data-step-index"))).toEqual(["1"])
+		expect(steps(w).map((row) => row.attributes("aria-expanded"))).toEqual(["false", "true", "false"])
+		expect(steps(w)[1]!.attributes("aria-controls")).toBe(panels[0]!.attributes("id"))
+		expect(panels[0]!.element.closest('[data-testid="execute-op-summary-call"]')?.getAttribute("data-call-index")).toBe("1")
+		expect(w.findAll('[data-testid="execute-op-payload-row"]').map((row) => row.attributes("data-call-to"))).toEqual([USDC])
+		expect(w.find('[data-testid="execute-discovered-authwit-details"]').exists()).toBe(false)
+
+		await node(w).trigger("click")
+		expect(node(w).attributes("aria-expanded")).toBe("true")
+		const authwitPanels = w.findAll('[data-testid="execute-op-summary-authwit"] > [data-testid="execute-op-details"]')
+		expect(authwitPanels).toHaveLength(2)
+		expect(node(w).attributes("aria-controls")).toBe(authwitPanels.map((panel) => panel.attributes("id")).join(" "))
 		expect(w.findAll('[data-testid="execute-discovered-authwit-details"]')).toHaveLength(2)
-		expect(w.findAll('[data-testid="execute-op-summary-call"]')).toHaveLength(3)
+		expect(w.findAll('[data-testid="execute-op-payload-row"]')).toHaveLength(1)
+
+		await steps(w)[1]!.trigger("click")
+		expect(w.find('[data-testid="execute-op-payload-row"]').exists()).toBe(false)
+		expect(w.findAll('[data-testid="execute-discovered-authwit-details"]')).toHaveLength(2)
 	})
 
 	test.each([
@@ -223,19 +238,21 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(advice(w).map((a) => a.text())).toEqual([ADVICE])
 		expect(afterTheCalls(w)).toEqual(AFTER_THE_CALLS)
 
-		await toggle(w).trigger("click")
+		await openAllSteps(w)
 		expect(afterTheCalls(w)).toEqual(AFTER_THE_CALLS)
-		expect(w.findAll('[data-testid="execute-op-unverified-reason"]').map((r) => shownText(r.element))).toEqual([
-			"Nulo doesn't have this contract's interface.",
-			"Nulo doesn't have this contract's interface.",
-			"This function isn't in the interface Nulo has.",
-		])
+		// Each reason reads once, under its step's sentence: an open step does not repeat it.
+		expect(w.findAll('[data-testid$="-unverified-reason"]').map((r) => r.attributes("data-testid"))).toEqual(
+			Array(3).fill("execute-op-summary-unverified-reason"),
+		)
+		expect(w.findAll('[data-testid="execute-op-raw-toggle"]')).toHaveLength(4)
 	})
 
 	test("an unreadable call and an unreadable authorization: the advice stays after the calls, with the details open", async () => {
 		const w = await mountCard({ feeEstimate: feeEstimateWith(AUTHWITS), ...(await decodeFixture({ vaultDecoded: false })) })
-		await toggle(w).trigger("click")
-		expect(w.find('[data-testid="execute-discovered-authwit-unverified-reason"]').exists()).toBe(true)
+		await openAllSteps(w)
+		expect(w.findAll('[data-testid="execute-op-summary-authwit-unverified-reason"]')).toHaveLength(1)
+		expect(w.find('[data-testid="execute-discovered-authwit-unverified-reason"]').exists()).toBe(false)
+		expect(w.findAll('[data-testid="execute-discovered-authwit-raw-toggle"]')).toHaveLength(2)
 		expect(afterTheCalls(w)).toEqual(AFTER_THE_CALLS)
 	})
 
@@ -272,10 +289,12 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(w.element.querySelector(`[id="${term.attributes("aria-describedby")}"]`)?.textContent).toBe(GLOSSARY.interface.definition)
 		expect(advice(w)).toHaveLength(0)
 
-		await toggle(w).trigger("click")
+		await openAllSteps(w)
 		expect(
 			advice(w).map((a) => a.element.closest('[data-testid="execute-op-discovered-authwit"]')?.getAttribute("data-message-hash")),
 		).toEqual([failed.messageHash])
+		// The warning reads once, under the line at rest; the advice reads alone in the details.
+		expect(w.findAll('[data-testid="execute-discovered-authwit-unverified-warning"]')).toHaveLength(0)
 	})
 
 	test("a refusal that lands while the window is open takes the advice away and leaves every warning", async () => {
@@ -300,12 +319,13 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 			},
 			{ ...(fixtureOp() as object), exec: { calls: [transfer] } },
 		)
-		await toggle(authwit).trigger("click")
+		await openAllSteps(authwit)
 		expect(advice(authwit)).toHaveLength(1)
 		await authwit.setProps({ refused: true })
 		expect(advice(authwit)).toHaveLength(0)
-		expect(authwit.find('[data-testid="execute-discovered-authwit-unverified-warning"]').exists()).toBe(true)
-		expect(authwit.find('[data-testid="execute-op-summary-authwit-unverified-warning"]').exists()).toBe(true)
+		expect(authwit.findAll('[data-testid$="-unverified-warning"]').map((n) => n.attributes("data-testid"))).toEqual([
+			"execute-op-summary-authwit-unverified-warning",
+		])
 	})
 
 	test("every call read: no line beside an app authorization, no advice and no dotted interface, until an unreadable authorization takes the advice, the last one still open", async () => {
@@ -317,7 +337,7 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 			`Lets ${trimAddress(HUB)} call Withdraw For on ${trimAddress(VAULT)}`,
 		)
 		expect(unchecked(readable)).toEqual([])
-		await toggle(readable).trigger("click")
+		await openAllSteps(readable)
 		expect(readable.find('[data-testid$="-unverified-args"]').exists()).toBe(false)
 		expect(readable.findAllComponents(DottedTerm)).toHaveLength(0)
 		expect(advice(readable)).toHaveLength(0)
@@ -336,7 +356,7 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 			},
 			op,
 		)
-		await toggle(w).trigger("click")
+		await openAllSteps(w)
 		const adviceIn = () => advice(w).map((a) => a.element.closest("[data-message-hash]")?.getAttribute("data-message-hash"))
 		expect(adviceIn()).toEqual([second.messageHash])
 		const closers = () => w.findAll('[data-testid="execute-discovered-authwit-toggle"]')
@@ -360,7 +380,7 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(read(w, "execute-op-summary-unverified-warning")).toEqual(["Can't read the arguments"])
 	})
 
-	test("a transfer the wallet does not read as one keeps the function's own name, in the summary and in the rows", async () => {
+	test("a transfer the wallet does not read as one keeps the function's own name in its step, its decoded values under it", async () => {
 		const { op, decodedCalls } = tokenCall(
 			"transfer_public_to_public",
 			[MAIN, RECIPIENT, field(5n), field(0n)],
@@ -368,8 +388,14 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		)
 		const w = await mountCard({ tokens: [], decodedCalls }, op)
 		expect(read(w, "execute-op-summary-call-head")).toEqual([`Transfer Public To Public on ${trimAddress(USDC)}`])
-		await toggle(w).trigger("click")
-		expect(read(w, "execute-op-payload-row")[0]).toMatch(/^Transfer Public To Public/)
+		await openAllSteps(w)
+		expect(w.get('[data-testid="execute-op-payload-row"]').attributes("data-intent-kind")).toBe("decoded")
+		expect(w.findAll('[data-testid="execute-op-decoded-param"]').map((p) => p.attributes("data-param"))).toEqual([
+			"from",
+			"to",
+			"amount",
+			"_nonce",
+		])
 	})
 
 	test("the line follows the token list: one unread call, two, then none once the token is listed", async () => {
@@ -469,7 +495,7 @@ describe("OperationCard — an authorization another account of the profile alre
 
 	test("the details list it apart from what the wallet will sign, naming the account that gave it", async () => {
 		const w = await mountListing([OWN, CONSUMED])
-		await toggle(w).trigger("click")
+		await openAllSteps(w)
 		const hashesIn = (group: string) =>
 			w
 				.findAll(`[data-testid="${group}"] [data-testid="execute-op-discovered-authwit"]`)
@@ -497,7 +523,7 @@ describe("OperationCard — an authorization another account of the profile alre
 			`Lets Main move 1 USDC from Savings to ${trimAddress(RECIPIENT)}`,
 		])
 		expect(rows(w)).toEqual([{ hash: OWN.messageHash, onBehalf: MAIN, line: "Already authorized by Main." }, CONSUMED_ROW])
-		await toggle(w).trigger("click")
+		await openAllSteps(w)
 		const GROUPS = ["execute-op-discovered-authwits", "execute-op-sender-authwits", "execute-op-consumed-authwits"]
 		const groups = w.findAll(GROUPS.map((id) => `[data-testid="${id}"]`).join(", ")).map((group) => ({
 			group: group.attributes("data-testid"),
@@ -547,25 +573,37 @@ describe("OperationCard — a default-entrypoint send whose authorization previe
 		expect(failedLine(await mountCard({ previewFailed: true, ...decoded }, noFrom())).exists()).toBe(true)
 	})
 
-	test("a keyboard press moves on to Show all details, which refuses a held Enter's repeat; a pointer press leaves focus", async () => {
+	test("a keyboard press keeps its place on the authorizations' slot through the check and the list; a pointer press leaves focus", async () => {
 		const w = mount(OperationCard, {
 			props: { op: noFrom() as never, index: 0, tokens: [USDC_TOKEN], previewFailed: true, ...(await decodeFixture()) },
 			global: { stubs, components: { AddressDisplay, SectionLabel } },
 			attachTo: document.body,
 		})
 		await flushPromises()
+		const slot = w.get('[data-testid="execute-op-authwits-slot"]').element as HTMLElement
+		expect([slot.getAttribute("tabindex"), slot.getAttribute("role"), slot.getAttribute("aria-label")]).toEqual([
+			"-1",
+			"group",
+			"Authorizations",
+		])
 		await retry(w).trigger("click")
-		expect(document.activeElement).not.toBe(toggle(w).element)
+		expect(document.activeElement).not.toBe(slot)
 
-		const destination = toggle(w).element
 		vi.spyOn(retry(w).element, "matches").mockImplementation((selector) => selector === ":focus-visible")
 		await retry(w).trigger("click")
 		expect(w.emitted("retryPreview")).toEqual([[0], [0]])
 		await w.setProps({ previewFailed: false, isPreviewing: true })
 		expect(failedLine(w).exists()).toBe(false)
-		expect([toggle(w).element, document.activeElement]).toEqual([destination, destination])
-		expect(sendEvent(destination, "keydown", { key: "Enter", repeat: true })?.defaultPrevented).toBe(true)
-		expect(sendEvent(destination, "keydown", { key: "Enter" })?.defaultPrevented).toBe(false)
+		expect([document.activeElement, slot.getAttribute("aria-busy")]).toEqual([slot, "true"])
+		await w.setProps({ isPreviewing: false, authwitPreview: { previewId: "pv", discoveredAuthwits: AUTHWITS } })
+		expect([document.activeElement, slot.getAttribute("aria-busy")]).toEqual([slot, null])
+		expect(slot.contains(node(w).element)).toBe(true)
+
+		// The slot is no control: a held Enter on it opens nothing and asks nothing again.
+		sendEvent(slot, "keydown", { key: "Enter", repeat: true })
+		sendEvent(slot, "keydown", { key: "Enter" })
+		await flushPromises()
+		expect([node(w).attributes("aria-expanded"), w.emitted("retryPreview")]).toEqual(["false", [[0], [0]]])
 		w.unmount()
 	})
 })
