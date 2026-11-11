@@ -31,3 +31,13 @@ Each ask names what ships now; no PR waits for an answer. Page 134's picks are t
   - (b) an empty grey disc.
 - **What ships now**: (a).
 - **Answer**: pending.
+
+## B4. An import row whose title is too long for the row
+
+- **Surface**: Home, a token being added whose contract names itself with one long, unbreakable symbol (up to 32 characters), during its import or on its failed row until dismissed.
+- **Why it is asked**: the import row's title is never cut, as a send or receive row's symbol is not (#625, a closed known limit). A3 (a)'s 32 px mark and 12 px gap take 44 px from the title, so a long title now meets the spinner or the failed × sooner. Measured on Chrome with "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345": 28 characters stay 16.9 px clear of the ×; 32 run 16.1 px over it and 2.1 px past the row's edge. Nothing scrolls sideways; glyph widths vary, so the threshold moves with the symbol.
+- **Options**:
+  - (a) uncut, as before: a title too long for the row runs under the spinner or ×.
+  - (b) cut with an ellipsis where it meets the spinner or ×, as a token row cuts its symbol. **Recommended**: the row's status stays readable, and the whole symbol is on the token's page once it lands.
+- **What ships now**: (a).
+- **Answer**: pending.

@@ -40,7 +40,7 @@ Page 134 answered the four surfaces token-icons-build-1 left to the owner (its A
 
 ### Asks
 
-- Ask 1. The lane brief makes #1789 "its own PR"; the spawn prompt says "one arc, one PR". Working assumption: two stacked PRs built in this session, one arc report listing both. `OWNER-ASKS.md` B1 to B3 each ship their "what ships now" form.
+- Ask 1. The lane brief makes #1789 "its own PR"; the spawn prompt says "one arc, one PR". Working assumption: two stacked PRs built in this session, one arc report listing both. `OWNER-ASKS.md` B1 to B4 each ship their "what ships now" form.
 
 ## Sign-offs (verbatim; the visible budget)
 
@@ -104,7 +104,7 @@ Page 134 answered the four surfaces token-icons-build-1 left to the owner (its A
 ## UI impact
 
 - **Token rows** (Home, Holdings, Send's picker): the 32 px mark and a 12 px gap before the symbol (logo, grey initials, red badge when flagged); a figure takes a third line from about $100T (measured; the sign-off allowed from about $10T), a wide split wraps under its "≈". Sign-off: P134-04 = a, P129-01 = A, P129-02 = M1.
-- **Home's seed, import and skeleton rows**: the same 32 px slot; a seed row draws the list's picture, an import row grey initials, a ghost row a 32 px round skeleton. Sign-off: P134-04's premise, A3 (a). B1 to B3 cover what A3 does not say.
+- **Home's seed, import and skeleton rows**: the same 32 px slot; a seed row draws the list's picture, an import row grey initials, a ghost row a 32 px round skeleton. Sign-off: P134-04's premise, A3 (a). B1 to B4 cover what A3 does not say.
 - **A dApp's transfer row**: the 16 px mark and 6 px gap before the symbol; the app chip up to 22 px shorter. Sign-off: P134-06 = a, P124-04 = AC1.
 - **The fee-raised window's line**: the 16 px mark before the amount, as in the approval window. Sign-off: P134-07 = a, P124-05 = AL1.
 - **The approval window's step sentence** (#1789): the chevron ends the last line beside the last word, as the template intends.
@@ -135,10 +135,13 @@ Cite `implementations-plan/README.md` § Post-implementation standard at `52e209
 | D7 | Smoke through `test:e2e` | agree | `agent.sh` runs only the network config (token-icons-build-1 D16). |
 | D8 | The type-roles guard | keep the $123T row; add a boundary row; hold the mark's geometry | Taken; its "three lines just above" is the $123T row held at three. |
 | D9 | The fee window's threading test | un-stub `OperationCard` | Rejected: the file stubs it by design, and the approval window's test reads `marks` the same way; the forwarding is pinned end to end by the network assertion. |
+| D10 | An import title too long beside the mark (Opus, arc 2) | round 2: an ellipsis is a visible decision, so approve it or defer the mark; round 3, on the measurement: ship | Ship A3's mark; the title stays uncut, as #625 records for long symbols; B4 asks for the ellipsis; the measurement goes on #625 at close-out. |
 
 ## Audit verdicts
 
 - **Codex, plan audit** (session `01a1cb58`, gpt-6.1-sol, high): conditional approve. Accepted: D2 (`init`, F5 corrected), D3 and D4 as owner asks, D5's scope, D6, D8, F3's counterexample, C1's wording, the mocks, the disposal test, the network initials assertion, the import-title classes, the per-arc gate, durations before and after. Rejected: D9. Taken as `batch`, not `one`, in the loop: the probe shows `batch` red at 400 px on base. Partly taken: the 32-character claim moves to the probe; the long named recipient stays in the component test.
+- **Fix loop, arc 1** (Codex session `01a1cb7f`): approve in round 1, no material findings.
+- **Fix loop, arc 2** (Codex session `01a1cb95`; one Opus `general-purpose` review beside round 1): round 1 approve; Opus found an import title spilling over the spinner (D10) and a chip comment's wrong arithmetic; round 2 conditional, round 3 **approve** (comments corrected, B4, #625 data point).
 - **Codex, final fresh pass** (session `01a1cb65`, gpt-6.1-sol, high): **approve** ("No material findings"; D9's rejection holds, as `tokenMarkOf` returns null without a reader, so the network initials assertion catches broken forwarding).
 
 ## Seeds

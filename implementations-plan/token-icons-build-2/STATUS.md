@@ -6,3 +6,4 @@
 2026-11-11T16:33:36Z base firefox touched specs rc=1 472s: type-roles 2 red = #1763 (pre-existing, base)
 2026-11-11T16:50:20Z arc 1 gates green; Codex round 1 approve; PR next
 2026-11-11T17:08:50Z arc 2 probe done (lessons/phase-2.md); restated specs green on Chrome; reviews next
+2026-11-11T17:28:31Z arc 2 fix loop converged (Codex r3 approve; D10, B4); gates rerun
