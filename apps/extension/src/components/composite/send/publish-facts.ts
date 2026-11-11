@@ -169,3 +169,38 @@ export function stripAriaLabel(facts: PublishFacts): string {
 	sentences.push("Open details")
 	return sentences.join(" ")
 }
+
+/** Said once on Send for a hand-added sponsor, which may publish anything about the sender. */
+export const UNVOUCHED_PUBLISH_SENTENCE = "Nulo can't tell what this FPC publishes about you."
+
+/**
+ * What anyone watching the chain can see, as one sentence in Send's form. `name` is the recipient's
+ * name, already made safe for a sentence, or null. Null while the payer is unresolved, and for a send
+ * whose fee names the account: that one reads `feeWarning` instead.
+ */
+export function publishSentence(facts: PublishFacts, name: string | null, payer: PayerKind): string | null {
+	if (facts.you === "exposed") return null
+	const theirs = name ? `${name}'s address` : "their address"
+	if (facts.you === "unknown") {
+		if (payer !== "unvouched") return null
+		return facts.recipient === "public"
+			? `${UNVOUCHED_PUBLISH_SENTENCE} Anyone can see ${theirs} and the amount.`
+			: UNVOUCHED_PUBLISH_SENTENCE
+	}
+	const shown: string[] = []
+	if (facts.you === "public") shown.push("your address as the sender")
+	if (facts.recipient === "public") shown.push(theirs)
+	if (facts.amount === "public") shown.push("the amount")
+	if (shown.length === 0) return "Nobody watching the chain can see who sent it, who got it or how much."
+	return `Anyone can see ${joinList(shown)}.`
+}
+
+/** The one warning Send gives: a private origin whose fee, paid from public Fee Juice, names the account. */
+export function feeWarning(facts: PublishFacts, name: string | null): string | null {
+	if (facts.you !== "exposed") return null
+	if (facts.recipient === "hidden") {
+		return "Paying the fee from your public Fee Juice shows your address: anyone can see this account sent something, and when."
+	}
+	const theirs = name ? `${name}'s` : "their"
+	return `Paying the fee from your public Fee Juice adds your address to ${theirs} address and the amount, so anyone can read the whole payment as yours.`
+}

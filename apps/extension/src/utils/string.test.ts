@@ -1,7 +1,7 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { describe, expect, test } from "vitest"
 import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
-import { addressEnds, dashIfBlank, getInitials, isBlank, stripBidiAndZeroWidth, tokenInitials, trimAddress } from "./string"
+import { addressEnds, addressHalves, dashIfBlank, getInitials, isBlank, stripBidiAndZeroWidth, tokenInitials, trimAddress } from "./string"
 
 describe("trimAddress", () => {
 	const ADDR = "0x1234567890abcdef1234567890abcdef12345678"
@@ -161,5 +161,22 @@ describe("addressEnds", () => {
 
 	test("an address too short to cut is all head", () => {
 		expect(addressEnds("0x12")).toEqual({ head: "0x12", middle: "", tail: "" })
+	})
+})
+
+describe("addressHalves", () => {
+	const ADDRESS = "0x13c29548b3340707017c5d1a457c23d8b6c29548b3340706e39bf608a5aab172"
+
+	test("splits a whole address into two lines of 33 that rejoin to it", () => {
+		const halves = addressHalves(ADDRESS)
+		expect(halves?.map((h) => h.length)).toEqual([33, 33])
+		expect(halves?.join("")).toBe(ADDRESS)
+		expect(halves?.[0].startsWith("0x13c29548")).toBe(true)
+		expect(halves?.[1].endsWith("a5aab172")).toBe(true)
+	})
+
+	test("refuses one character short or long", () => {
+		expect(addressHalves(ADDRESS.slice(0, 65))).toBeNull()
+		expect(addressHalves(`${ADDRESS}0`)).toBeNull()
 	})
 })

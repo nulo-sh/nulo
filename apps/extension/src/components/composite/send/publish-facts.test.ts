@@ -3,6 +3,7 @@ import {
 	FACT_SENTENCES,
 	FACT_WORDS,
 	factWord,
+	feeWarning,
 	NO_FACTS,
 	noticeBodyFor,
 	PAID_BY,
@@ -12,11 +13,13 @@ import {
 	payerKindOf,
 	publishFacts,
 	publishGlyph,
+	publishSentence,
 	rowSentence,
 	UNVOUCHED_FEE_SENTENCE,
 	stripAriaLabel,
 	TOKEN_CAVEAT,
 	type TransferSide,
+	UNVOUCHED_PUBLISH_SENTENCE,
 } from "./publish-facts"
 
 describe("publishFacts", () => {
@@ -175,5 +178,68 @@ describe("copy", () => {
 		expect(label("private", "public", "unvouched")).toBe(
 			"This send publishes the recipient and the amount. Your address: not known yet. Open details",
 		)
+	})
+})
+
+describe("Send's publish line", () => {
+	const NOBODY = "Nobody watching the chain can see who sent it, who got it or how much."
+	const ALONE = "Paying the fee from your public Fee Juice shows your address: anyone can see this account sent something, and when."
+	/** origin → destination · payer = the sentence for "Ana", or `warn` when the line is the warning; "-" = no line. */
+	const LINES: [TransferSide, TransferSide, PayerKind, string][] = [
+		["private", "private", "account", "warn"],
+		["private", "private", "contract", NOBODY],
+		["private", "private", "unvouched", UNVOUCHED_PUBLISH_SENTENCE],
+		["private", "private", null, "-"],
+		["private", "public", "account", "warn"],
+		["private", "public", "contract", "Anyone can see Ana's address and the amount."],
+		["private", "public", "unvouched", `${UNVOUCHED_PUBLISH_SENTENCE} Anyone can see Ana's address and the amount.`],
+		["private", "public", null, "-"],
+		["public", "private", "account", "Anyone can see your address as the sender and the amount."],
+		["public", "private", "contract", "Anyone can see your address as the sender and the amount."],
+		["public", "private", "unvouched", "Anyone can see your address as the sender and the amount."],
+		["public", "private", null, "Anyone can see your address as the sender and the amount."],
+		["public", "public", "account", "Anyone can see your address as the sender, Ana's address and the amount."],
+		["public", "public", "contract", "Anyone can see your address as the sender, Ana's address and the amount."],
+		["public", "public", "unvouched", "Anyone can see your address as the sender, Ana's address and the amount."],
+		["public", "public", null, "Anyone can see your address as the sender, Ana's address and the amount."],
+	]
+
+	test.each(LINES)("%s → %s, payer %s", (origin, destination, payer, expected) => {
+		const facts = publishFacts(origin, destination, payer)
+		const sentence = publishSentence(facts, "Ana", payer)
+		const warning = feeWarning(facts, "Ana")
+		// One line at most: a sentence, or the warning, never both.
+		expect(sentence !== null && warning !== null).toBe(false)
+		if (expected === "warn") expect([sentence, warning !== null]).toEqual([null, true])
+		else expect([sentence ?? "-", warning]).toEqual([expected, null])
+	})
+
+	test("the table is every cell, and the warning shows exactly where the fee names your account", () => {
+		expect(new Set(LINES.map(([o, d, p]) => `${o}/${d}/${p}`)).size).toBe(16)
+		for (const [o, d, p] of LINES)
+			expect(feeWarning(publishFacts(o, d, p), null) !== null).toBe(publishFacts(o, d, p).you === "exposed")
+	})
+
+	test("an unnamed recipient is their address", () => {
+		expect(publishSentence(publishFacts("public", "public", "account"), null, "account")).toBe(
+			"Anyone can see your address as the sender, their address and the amount.",
+		)
+		expect(publishSentence(publishFacts("private", "public", "unvouched"), null, "unvouched")).toBe(
+			`${UNVOUCHED_PUBLISH_SENTENCE} Anyone can see their address and the amount.`,
+		)
+	})
+
+	test("the warning names what the fee adds, to whom", () => {
+		expect(feeWarning(publishFacts("private", "private", "account"), "Ana")).toBe(ALONE)
+		expect(feeWarning(publishFacts("private", "public", "account"), "Ana")).toBe(
+			"Paying the fee from your public Fee Juice adds your address to Ana's address and the amount, so anyone can read the whole payment as yours.",
+		)
+		expect(feeWarning(publishFacts("private", "public", "account"), null)).toContain(
+			"adds your address to their address and the amount",
+		)
+	})
+
+	test("no sendable token, no line", () => {
+		expect([publishSentence(NO_FACTS, "Ana", null), feeWarning(NO_FACTS, "Ana")]).toEqual([null, null])
 	})
 })

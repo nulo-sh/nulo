@@ -23,6 +23,13 @@ export function addressEnds(address: string): { head: string; middle: string; ta
 	return { head: address.slice(0, 6), middle: address.slice(6, -4), tail: address.slice(-4) }
 }
 
+/** A whole address as two even lines of 33, so its first and last characters sit at the line edges a
+ *  person compares; null for anything but `0x` and 64 digits. */
+export function addressHalves(address: string): [string, string] | null {
+	if (address.length !== 66) return null
+	return [address.slice(0, 33), address.slice(33)]
+}
+
 /**
  * Initials for an entity name: first letters of the first two words, or the
  * first 1–2 characters of a single word, uppercased. Empty/whitespace → "".
