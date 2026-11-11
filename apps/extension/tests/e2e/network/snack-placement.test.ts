@@ -44,7 +44,15 @@ const hasConfig = aztecConfig !== undefined
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const SNACK = sel("snackbar")
 
-type Placement = { snackTop: number; snackBottom: number; footerTop: number; left: number; width: number; columnCentre: number }
+type Placement = {
+	snackTop: number
+	snackBottom: number
+	footerTop: number
+	left: number
+	width: number
+	columnCentre: number
+	windowWidth: number
+}
 type AtEnd = { viewport: number; inset: number; footerTop: number; footerTopAtEnd: number; snackBottom: number }
 type Hit = { id: string; hit: string; covered: boolean }
 
@@ -80,6 +88,7 @@ async function placement(page: Page, footer: string): Promise<Placement> {
 					const body = document.body.getBoundingClientRect()
 					return body.left + body.width / 2
 				})(),
+				windowWidth: document.documentElement.clientWidth,
 			}
 		},
 		SNACK,
@@ -567,8 +576,8 @@ test.skipIf(!hasConfig)(
 		console.log(`[snack-placement] execute: ${Math.round(at.footerTop - at.snackBottom)}px above the footer, ${at.width}px wide`)
 		expect(at.footerTop - at.snackBottom).toBeGreaterThanOrEqual(11.5)
 		expect(at.footerTop - at.snackBottom).toBeLessThanOrEqual(12.5)
-		// The window centres the 360px column; the card spans it less 16px a side.
-		expect(Math.abs(at.width - 328)).toBeLessThanOrEqual(0.5)
+		// The execute window fills its width, so the card spans the window less 16px a side.
+		expect(Math.abs(at.width - (at.windowWidth - 32))).toBeLessThanOrEqual(0.5)
 		expect(Math.abs(at.left + at.width / 2 - at.columnCentre)).toBeLessThanOrEqual(0.5)
 
 		const grown = await growFooter(execute, sel("dapp-approval-footer"), at)
