@@ -75,9 +75,11 @@ describe("modules/send/SendPersonStep", () => {
 	})
 
 	test("the field's pick is the choice once the field shows it, never at the model's write", async () => {
-		const w = mountStep()
+		const w = mountStep({ searchTerm: ANA })
 		await w.get('[data-testid="stub-hold"]').trigger("click")
 		expect(chosen(w)).toEqual([])
+		// A held press defers the field's match: the row under it stays where it was.
+		expect(w.find('[data-testid="send-pay-address"]').exists()).toBe(true)
 		await w.get('[data-testid="stub-pick"]').trigger("click")
 		expect(chosen(w)).toEqual([[ANA, ana]])
 	})

@@ -376,7 +376,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"send-recent-address\"]",
 			"surface": "popup-send",
-			"state": "the person step after a send to an unnamed address (network)"
+			"state": "the person step after a send to an unnamed address"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/send/SendPersonStep.vue",

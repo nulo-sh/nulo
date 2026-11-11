@@ -90,7 +90,7 @@ const notes = computed(() => {
 			<button type="button" :class="[$style.link, $style.change]" data-testid="send-fee-change" @click="emit('change')">Change</button>
 		</div>
 		<div role="status" aria-live="polite" aria-atomic="true" :class="$style.notes" data-testid="send-fee-line-note">
-			<span v-for="note in notes" :key="note" :class="$style.note">{{ note }}</span>
+			<p v-for="note in notes" :key="note" :class="$style.note">{{ note }}</p>
 		</div>
 	</div>
 </template>
@@ -163,6 +163,7 @@ const notes = computed(() => {
 
 .note {
 	composes: type--body from global;
+	margin: 0;
 	color: var(--txt-secondary);
 }
 </style>

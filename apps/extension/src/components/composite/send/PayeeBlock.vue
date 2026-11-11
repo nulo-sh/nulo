@@ -66,18 +66,18 @@ const parts = computed(() => {
 }
 
 .address {
-	composes: type--meta from global;
 	display: block;
 	width: fit-content;
 	max-width: 100%;
-	line-height: 1.45;
 	color: var(--nulo-secondary);
 }
 
 /* A half wraps only where the panel is too narrow for 33 characters, and then anywhere: it never
    scrolls sideways. */
 .half {
+	composes: type--meta from global;
 	display: block;
+	line-height: 1.45;
 	overflow-wrap: anywhere;
 }
 

@@ -32,7 +32,7 @@ const labelId = `${name}-label`
 	<div :class="$style.wrap">
 		<span :id="labelId" :class="$style.label">{{ label }}</span>
 		<div :class="[$style.group, rows && $style.rows]" role="radiogroup" :aria-labelledby="labelId" :data-testid="testid" :data-side="side">
-			<label v-for="s in SIDES" :key="s" :class="[$style.choice, side === s && $style.on, disabled?.[s] && $style.off]">
+			<label v-for="s in SIDES" :key="s" :class="[$style.choice, side === s && $style.on, disabled?.[s] && $style.off]" :data-testid="`${prefix}-${s}-choice`">
 				<input
 					type="radio"
 					:name="name"

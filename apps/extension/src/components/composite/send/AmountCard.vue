@@ -20,10 +20,10 @@ const props = defineProps({
 	},
 	tokenBalanceByType: Number,
 	/** The selected side's balance in base units, as a digit string; null until it loads. Every
-	 *  balance digit Max fills or the corner shows comes from it: `tokenBalanceByType` is a float. */
+	 *  balance digit Max fills or names comes from it: `tokenBalanceByType` is a float. */
 	balanceRawByType: { type: String, required: false, default: null },
-	/** `read` draws the balance, a zero included; `loading` draws a skeleton; `unavailable` nothing.
-	 *  Unread by default, so a parent that passes nothing never shows a zero it did not read. */
+	/** Only a `read` balance, a zero included, is named by Max; `loading` and `unavailable` are not.
+	 *  Unread by default, so a parent that passes nothing never names a zero it did not read. */
 	balanceState: { type: String, default: "loading" },
 	/** Live usable quote for the selected token ({ usd, fetchedAt }) or null.
 	 *  Null hides all fiat UI (and the fiat-input toggle). */
@@ -383,8 +383,7 @@ watch(
 watch(canUseFiatInput, (can) => {
 	if (!can && fiatMode.value) exitFiatMode({ clearAmount: true })
 })
-// After the render, so each ruler holds what its line shows; the unit switch takes the field's width,
-// the balance corner the derived line's.
+// After the render, so each ruler holds what its line shows; the unit switch takes the field's width.
 watch(
 	[
 		model,
@@ -661,12 +660,12 @@ const handleFiatBalanceAction = (divisor) => {
 	color: var(--nulo-secondary);
 }
 
-/* "≈" stays with its figure: the balance and Max wrap under it instead. */
+/* "≈" stays with its figure. */
 .fiat_label {
 	white-space: nowrap;
 }
 
-/* The derived line's room is all the row leaves beside the balance and Max, drawn there or not. */
+/* The derived line's room is the line under the field, drawn there or not. */
 .conversion_fit {
 	flex: 1;
 	min-width: 0;

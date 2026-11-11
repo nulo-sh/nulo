@@ -319,11 +319,13 @@ function choosePerson(address, candidate) {
 	personChosen.value = true
 	nextTick(focusForm)
 }
-/** The form opens on its first question: last time's send when offered, else the amount. */
+/** The form opens on its first question: last time's send when offered, else the amount, which takes
+ *  no focus with nothing to spend; then the token row. */
 function focusForm() {
 	const again = pageEl.value?.querySelector('[data-testid="send-again"]')
-	if (again) again.focus()
-	else amountCardRef.value?.focusAmount()
+	if (again) return again.focus()
+	amountCardRef.value?.focusAmount()
+	if (!pageEl.value?.contains(document.activeElement)) pageEl.value?.querySelector('[data-testid="send-token-trigger"]')?.focus()
 }
 /** Back to the person step keeps the token and the amount. */
 function backToPerson() {
@@ -463,7 +465,7 @@ const isAllowedToSend = computed(() => {
 })
 
 const payerKind = computed(() => payerKindOf(feeSettings.value, payer.value))
-// No sendable token → no facts: no strip, no tag, no review, whatever the fee card resolved.
+// No sendable token → no facts: no publish line, no tag, no warning, whatever the fee card resolved.
 const facts = computed(() =>
 	isBlockedTransfer.value ? NO_FACTS : publishFacts(selectedSendType.value, selectedReceiverType.value, payerKind.value),
 )

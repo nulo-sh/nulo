@@ -9,7 +9,7 @@ const STUBS = { Skeleton: { template: '<span data-testid="stub-bar" />' } }
 const mountLine = (props: Record<string, unknown> = {}) =>
 	mount(SendFeeLine, { props: { payer: "private_fpc", display: PRICED, ...props }, global: { stubs: STUBS } })
 const value = (w: ReturnType<typeof mountLine>) => w.get('[data-testid="send-fee-line-value"]').text()
-const notes = (w: ReturnType<typeof mountLine>) => w.findAll('[data-testid="send-fee-line-note"] span').map((n) => n.text())
+const notes = (w: ReturnType<typeof mountLine>) => w.findAll('[data-testid="send-fee-line-note"] p').map((n) => n.text())
 
 describe("modules/send/SendFeeLine", () => {
 	test("a paid fee: dollars first, then who pays", () => {

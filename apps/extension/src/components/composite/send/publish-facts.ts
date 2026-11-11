@@ -27,7 +27,7 @@ export interface PublishFacts {
 
 export type FactCell = "you" | "recipient" | "amount"
 
-/** Nothing can be sent, so nothing is published: no strip, no tag, no review. */
+/** Nothing can be sent, so nothing is published: no publish line, no tag, no warning. */
 export const NO_FACTS: Readonly<PublishFacts> = Object.freeze({
 	you: "unknown",
 	recipient: "hidden",
@@ -69,7 +69,7 @@ export const PAID_BY = {
 /** Spoken in place of a hand-added contract's fee, which is drawn as "—". */
 export const UNVOUCHED_FEE_SENTENCE = "Nulo can't tell what this FPC charges you."
 
-/** Under the strip for a token whose class Nulo has not validated: the strip's words assume its code. */
+/** Under the token for one whose class Nulo has not validated: what a send publishes assumes its code. */
 export const TOKEN_CAVEAT = "Nulo can't check this token's contract. What a send publishes depends on its code."
 
 /** The fee row while an earlier send holds the transfer's chain state. */

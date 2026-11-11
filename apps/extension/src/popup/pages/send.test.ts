@@ -656,6 +656,15 @@ describe("send page — the person step", () => {
 	const field = (w: W) => w.get('[data-testid="stub-recipient"]')
 	const onPersonStep = (w: W) => w.find('[data-testid="send-person-step"]').exists()
 
+	test("an amount that takes no focus, with nothing to spend, leaves the form on the token row", async () => {
+		const { w } = await mountSend({ realTokenCard: true })
+		await toForm(w)
+		await flushPromises()
+		expect(mocks.focusAmount).toHaveBeenCalled()
+		expect(document.activeElement).toBe(w.get('[data-testid="send-token-trigger"]').element)
+		w.unmount()
+	})
+
 	test("a pasted address opens the form; Back keeps the token and the amount, clears the person and lands in the field; Enter takes the next", async () => {
 		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
 		const { w, cacheStore } = await mountSend()

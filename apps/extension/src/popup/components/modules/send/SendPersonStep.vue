@@ -22,7 +22,8 @@ const emit = defineEmits<{ choose: [address: string, candidate: Candidate | null
 const searchTerm = defineModel<string>("searchTerm", { default: "" })
 const selectedContact = defineModel<Candidate | null>("selectedContact", { default: null })
 
-const pasted = computed(() => (selectedContact.value === null && isValidAztecAddress(searchTerm.value) ? searchTerm.value : null))
+/** Kept while a held press defers the field's own match, so nothing moves under the press. */
+const pasted = computed(() => (isValidAztecAddress(searchTerm.value) ? searchTerm.value : null))
 const candidateFor = (address: string): Candidate | null =>
 	props.candidates.find((c) => c.address.toLowerCase() === address.toLowerCase()) ?? null
 
@@ -103,6 +104,7 @@ function onEnter(e: KeyboardEvent) {
 .list {
 	display: flex;
 	flex-direction: column;
+	container: people / inline-size;
 }
 
 .person {
@@ -156,5 +158,18 @@ function onEnter(e: KeyboardEvent) {
 	composes: type--time from global;
 	flex: none;
 	color: var(--nulo-secondary);
+}
+
+/* Too narrow for the age beside the address: it takes a line of its own under them. */
+@container people (width < 260px) {
+	.person {
+		flex-wrap: wrap;
+		row-gap: 2px;
+	}
+
+	.when {
+		flex-basis: 100%;
+		padding-left: 38px;
+	}
 }
 </style>
