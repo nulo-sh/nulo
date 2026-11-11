@@ -26,7 +26,7 @@ Each ask names what ships now; no arc waits for an answer. Arc 1 touches no surf
 - **Options**:
   - (a) the same 32 px slot before their text: the list's picture on a seed row (it comes from the list), grey initials on an import row, a 32 px round skeleton on a loading row. Every row's text starts at one edge, and a seed row keeps its picture when it becomes a card. **Recommended.**
   - (b) leave them as they are.
-- **What ships now**: (b). On Home, those rows' text sits 44 px left of a card's symbol, and a default token's row moves 44 px right when its setup ends and it becomes a card. Holdings and Send's picker show only token cards, so they are aligned.
+- **What ships now**: (b), and the rows are unchanged while the cards carry no mark (A4). Once a card's mark ships, those rows' text sits a mark and gap left of a card's symbol on Home, and a default token's row moves right by that much when its setup ends and it becomes a card. Holdings and Send's picker show only token cards.
 
 ## A4. The token rows' mark meets the row's dollar figure (arc 2)
 

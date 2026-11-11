@@ -13,7 +13,7 @@ post_implementation_standard: implementations-plan/README.md § Post-implementat
 
 # token-icons-build-1: the token pictures, as signed on pages 124 and 129
 
-The signed token list carries each listed token's picture, and the wallet draws it, round and unaltered, on the six surfaces the render lanes drew. A token with no picture gets a grey circle with one or two letters. A flagged token gets the red corner badge. Three PRs, stacked: the list, then the surfaces in two parts.
+The signed token list carries each listed token's picture, and the wallet draws it, round and unaltered, on the six surfaces the render lanes drew; the token rows wait on the owner's answer to A4 (D17). A token with no picture gets a grey circle with one or two letters. A flagged token gets the red corner badge. Three PRs, stacked: the list, then the surfaces in two parts.
 
 ## Outcome & Quality Bar
 
@@ -103,7 +103,7 @@ The signed token list carries each listed token's picture, and the wallet draws 
 
 | Surface | Change | Size | Badge |
 |---|---|---|---|
-| Home, Holdings, Send's picker (`TokenCard.vue`) | mark before the symbol column, gap 12 | 32 | `isFlagged` |
+| Home, Holdings, Send's picker (`TokenCard.vue`): deferred, D17 and A4 | mark before the symbol column, gap 12 | 32 | `isFlagged` |
 | Send's asset row (`SelectTokenCard.vue`; `send.vue` passes `flagged`, `icon`) | mark replaces the accent square and draws the no-transfers badge | 36 | `flagged \|\| isTokenBlocked` |
 | Token page (`tokens/[id].vue`; `SubPageHeaderBase.vue` gains a `leading` slot, fallback today's icon; `SubPageHeader.vue` forwards it) | mark replaces the holdings glyph; `subpage-title` and `focusTitle` stay | 20 | `isFlagged` |
 | Activity (`TransactionCardLayout.vue` prop `titleMark: { symbol, icon?, badge }`; set by `TransactionCard`, `TransactionIncomingCard`, `TransactionAwaitingCard`, `TransactionTerminalCard` when the title names a token) | mark before the title; the 40 px box untouched | 16 | flag of chain and contract |
@@ -152,7 +152,7 @@ Each phase lands its tests with its code. Every gate also runs `bun run lint` an
 
 ### Phase 4 — list rows, Send's asset row, token page (arc 2) ✓ (the rows' mark left out, D17)
 
-- **Change map**: `TokenCard.vue` (+ test), `SelectTokenCard.vue` (+ test), `send.vue`, `tokens/[id].vue` (+ test), `packages/design/src/ui/SubPageHeaderBase.vue` (+ test), `components/ui/SubPageHeader.vue` (+ test); `tests/e2e/fixtures/token-list.ts` (fixture tokens take the source's Testnet USDC and USDT pictures); one held-list smoke spec gains the decode assertion and opt-in `shotSend` calls.
+- **Change map**: `SelectTokenCard.vue` (+ test), `send.vue`, `tokens/[id].vue` (+ test), `packages/design/src/ui/SubPageHeaderBase.vue` (+ test), `components/ui/SubPageHeader.vue` (+ test); `tests/e2e/fixtures/token-list.ts` (fixture tokens take the source's Testnet USDC and USDT pictures); one held-list smoke spec gains the decode assertion and opt-in `shotSend` calls. `TokenCard.vue` (+ test) is left out (D17).
 - **Tests**: each surface: logo for a listed token, initials for a custom one, the badge for a flagged one; Send: the flag, no transfers, and both, one badge each time; the header slot falls back to the glyph. E2E: a token the held list gives an icon has an `<img>` mark with `complete` and `naturalWidth > 0`; an added token has initials; a token the held list gives no icon (an artifact run's published list before the owner publishes) expects initials. Failure mode: the issuer SVG decodes under the real CSP through the worker-to-popup channel in both engines, which jsdom cannot show. Estimate +1 s per browser, measured in the PR.
 - **Validation gate**: `bun run audit:vue`, `bun run test:all`; the touched smoke spec at `--retry=0` on Chrome and Firefox; the full smoke suite once per browser before and after for the wall-clock. Pass: exit 0 at retry 0.
 
@@ -230,6 +230,7 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 - **Arc 2 review, Opus** (general-purpose, beside Codex round 1): findings (1 material: the same stale declaration, which the build's generated-sources check would red). Accepted: the overflow (as Codex's); a very wide letter in a hostile symbol spilling out of the disc (initials now clip horizontally); the structural selector (as Codex's); three comment nits and an invariant on `.logo`. To the owner: Home's seed, import and skeleton rows carry no mark, so they sit 44 px left of the cards (`OWNER-ASKS.md` A3; ships unchanged). Not taken: rewording a local commit subject (the squash takes the PR title).
 - **Arc 2 review, Codex round 2** (same session, over `f18f7f96c`): **clean** ("No new findings. Accepted fixes verified by inspection; identity and missing-picture probes passed").
 - **Arc 2, the full smoke suite red, Codex consult** (session `01a1c81b`, gpt-6.1-sol, high): asked whether a fix keeps both P46-08's two-line figure and A's 32 px row mark with its 12 px gap. Its answer: "I found no cause-level fix that preserves both picks" (high confidence), so "defer only the shared row-mark integration in `TokenCard.vue`". Taken as D17. The rows' `min-width: 0` from round 1 leaves with it.
+- **Arc 2 review, Codex round 3** (session `01a1c73e`, over the D17 commits): findings (2 low, docs). Accepted: the surfaces table, Phase 4's change map, the summary and the index line still promised the rows' mark; A3's "what ships now" described an offset only the rows' mark makes. Code: "No remaining code/test/capture-helper assumption found". The hard stop at three rounds ends the loop; the fold is docs only.
 
 ## Seeds
 
