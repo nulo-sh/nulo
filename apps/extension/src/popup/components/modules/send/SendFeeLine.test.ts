@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
+import { sendEvent } from "../../../../../tests/helpers/send-event"
 import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
 import SendFeeLine from "./SendFeeLine.vue"
 
@@ -12,6 +13,50 @@ const value = (w: ReturnType<typeof mountLine>) => w.get('[data-testid="send-fee
 const notes = (w: ReturnType<typeof mountLine>) => w.findAll('[data-testid="send-fee-line-note"] p').map((n) => n.text())
 
 describe("modules/send/SendFeeLine", () => {
+	test("a focused Try again that the retry replaces hands the keyboard to Change; an unfocused one moves nothing", async () => {
+		const w = mount(SendFeeLine, {
+			props: {
+				payer: "private_fpc" as const,
+				display: null,
+				failed: true,
+				onRetry: () => w.setProps({ failed: false, estimating: true }),
+			},
+			global: { stubs: STUBS },
+			attachTo: document.body,
+		})
+		const retry = w.get('[data-testid="send-fee-line-retry"]').element as HTMLButtonElement
+		retry.focus()
+		await w.get('[data-testid="send-fee-line-retry"]').trigger("click")
+		await w.vm.$nextTick()
+		expect(w.find('[data-testid="send-fee-line-retry"]').exists()).toBe(false)
+		expect(document.activeElement).toBe(w.get('[data-testid="send-fee-change"]').element)
+
+		await w.setProps({ estimating: false, failed: true })
+		const outside = document.body.appendChild(document.createElement("button"))
+		outside.focus()
+		await w.get('[data-testid="send-fee-line-retry"]').trigger("click")
+		await w.vm.$nextTick()
+		expect(document.activeElement).toBe(outside)
+		w.unmount()
+		outside.remove()
+	})
+
+	test("Change says it opens a dialog, and whether it is open", async () => {
+		const w = mountLine()
+		const change = () => w.get('[data-testid="send-fee-change"]')
+		expect([change().attributes("aria-haspopup"), change().attributes("aria-expanded")]).toEqual(["dialog", "false"])
+		await w.setProps({ open: true })
+		expect(change().attributes("aria-expanded")).toBe("true")
+	})
+
+	test("Change refuses the auto-repeat of an Enter that moved focus onto it; a new press is its own", () => {
+		const w = mountLine()
+		const change = w.get('[data-testid="send-fee-change"]').element
+		const repeat = sendEvent(change, "keydown", { key: "Enter", repeat: true })
+		const press = sendEvent(change, "keydown", { key: "Enter" })
+		expect([repeat?.defaultPrevented, press?.defaultPrevented]).toEqual([true, false])
+	})
+
 	test("a paid fee: dollars first, then who pays", () => {
 		const w = mountLine()
 		expect(value(w)).toBe("≈ $0.027 (0.00214 FJ), private Fee Juice")

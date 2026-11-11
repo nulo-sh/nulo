@@ -679,8 +679,10 @@ describe("send page — the person step", () => {
 		await flushPromises()
 		await w.get('[data-testid="stub-amount"]').setValue("1.5")
 
+		mocks.exitFiat.mockClear()
 		await w.get('[data-testid="subpage-back"]').trigger("click")
 		await flushPromises()
+		expect(mocks.exitFiat).toHaveBeenCalledTimes(1)
 		expect(onPersonStep(w)).toBe(true)
 		expect(w.findComponent({ name: "RecipientField" }).props()).toMatchObject({ searchTerm: "", selectedContact: null })
 		expect(document.activeElement).toBe(field(w).element)

@@ -29,6 +29,7 @@ export interface SendView {
 	/** `send-fee-line[data-payer]`. */
 	payer: string | null
 	sheetOpen: boolean
+	/** `send-fee-change[aria-expanded]`: the Fee sheet is open. */
 	feeSheetOpen: boolean
 }
 
@@ -52,7 +53,8 @@ export async function openSend(page: Page): Promise<void> {
 }
 
 /** Answers the person step with `destination` the way a paste does: the field takes it, then "Pay this
- *  address", unless the field already chose a contact or an account holding it. Waits for the form. */
+ *  address", unless the field already chose a contact or an account holding it. Waits for the form and
+ *  fails unless its payee is `destination`. */
 export async function chooseRecipient(page: Page, destination: string): Promise<void> {
 	await replaceInputValue(page, `${sel("send-destination-field")} input`, destination)
 	await withTimeoutMessage(
@@ -66,6 +68,10 @@ export async function chooseRecipient(page: Page, destination: string): Promise<
 		),
 		async () => `chooseRecipient: the form never opened for ${destination.slice(0, 10)}…; the step shows ${await stepText(page)}`,
 	)
+	const { destination: payee } = await readSendInputs(page)
+	if (payee.toLowerCase() !== destination.toLowerCase()) {
+		throw new Error(`chooseRecipient: the form pays ${payee.slice(0, 10)}…, not ${destination.slice(0, 10)}…`)
+	}
 }
 
 const stepText = (page: Page) =>
@@ -84,7 +90,7 @@ export async function readSendView(page: Page): Promise<SendView> {
 			warning: Boolean(q("send-fee-warning")),
 			payer: q("send-fee-line")?.getAttribute("data-payer") ?? null,
 			sheetOpen: q("send-review-sheet")?.getAttribute("data-open") === "true",
-			feeSheetOpen: q("send-fee-sheet-state")?.getAttribute("data-open") === "true",
+			feeSheetOpen: q("send-fee-change")?.getAttribute("aria-expanded") === "true",
 		}
 	})
 }
@@ -141,7 +147,7 @@ export async function openSendFeeSheet(page: Page): Promise<void> {
 	await pointerClick(page, "send-fee-change")
 	await page.waitForFunction(
 		() =>
-			document.querySelector('[data-testid="send-fee-sheet-state"]')?.getAttribute("data-open") === "true" &&
+			document.querySelector('[data-testid="send-fee-change"]')?.getAttribute("aria-expanded") === "true" &&
 			Boolean(document.querySelector('[data-testid="send-fee-sheet"] [data-testid="fee-settings-card"]')),
 		{ timeout: 10_000, polling: 100 },
 	)
@@ -152,13 +158,10 @@ export async function closeSendFeeSheet(page: Page): Promise<void> {
 	await page.evaluate(() =>
 		document.querySelector<HTMLElement>('[data-testid="send-fee-sheet"] [data-testid="popup-close-btn"]')?.click(),
 	)
-	await page.waitForFunction(
-		() => document.querySelector('[data-testid="send-fee-sheet-state"]')?.getAttribute("data-open") === "false",
-		{
-			timeout: 10_000,
-			polling: 100,
-		},
-	)
+	await page.waitForFunction(() => document.querySelector('[data-testid="send-fee-change"]')?.getAttribute("aria-expanded") === "false", {
+		timeout: 10_000,
+		polling: 100,
+	})
 	await settleClosedPopup(page, "send-fee-sheet")
 }
 

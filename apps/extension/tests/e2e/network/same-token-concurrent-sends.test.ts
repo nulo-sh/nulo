@@ -56,6 +56,7 @@ import {
 } from "../fixtures/helpers"
 import { openReview, shotSend, waitForReview, waitForReviewReady, waitForSendGone } from "../fixtures/send-page"
 import { pointerClick } from "../helpers/legal-drivers"
+import { settleClosedPopup } from "../fixtures/popup-leave"
 import { readDappExecuteRecords, waitForDappExecuteStagesPresent } from "../fixtures/journal"
 import { holdMining, pendingTxCount, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
 import { assertPgOk, openPlayground, type PgResult, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
@@ -652,6 +653,11 @@ baseTest.skipIf(!hasConfig)(
 			await switchToLocalNetwork(page)
 			expect(await getAccountAddress(page)).toBe(account)
 			await waitForHeldProjection(page)
+			// A restore carries no trust rows, so the restored account's first scan asks about TST over
+			// whatever page is open; it is answered, as a user would, before either send.
+			await page.waitForSelector('[data-testid="incoming-trust-allow"]', { visible: true, timeout: 60_000 })
+			await pointerClick(page, "incoming-trust-allow")
+			await settleClosedPopup(page, "incoming-trust-allow")
 
 			const a: BurstSend = {
 				token: "TST",

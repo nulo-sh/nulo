@@ -427,9 +427,10 @@ const refreezeQuote = () => {
 defineExpose({
 	refreezeQuote,
 	focusAmount: () => handleFocus(),
-	/** Ends a USD session keeping the token amount, so a write from the page outlives it. */
+	/** Ends a USD session keeping the token amount it settled on, so a write from the page outlives
+	 *  it; one still converting keeps none, since its amount is not the figure typed last. */
 	exitFiat: () => {
-		if (fiatMode.value) exitFiatMode()
+		if (fiatMode.value) exitFiatMode({ clearAmount: Boolean(fiatGuard.value?.converting) })
 	},
 })
 

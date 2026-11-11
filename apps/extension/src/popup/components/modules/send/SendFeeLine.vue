@@ -4,8 +4,9 @@
  * would say in the form, in the card's words: the cost and who pays it, the estimate's state, the queue,
  * and the card's notices on the line under it.
  */
-import { computed } from "vue"
+import { computed, nextTick, useTemplateRef } from "vue"
 import { QUEUED_FEE_COPY } from "@/components/composite/send/publish-facts"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import type { FeeDisplay } from "@/utils/fee-estimation"
 import { FEE_LINE_METHOD, type FeeLinePayer, feeLineFigure, feeLineWords } from "./fee-line-words"
 
@@ -19,23 +20,23 @@ const props = withDefaults(
 		estimating?: boolean
 		slow?: boolean
 		failed?: boolean
-		/** The card is still reading what can pay, with an amount typed. */
-		pending?: boolean
 		queued?: boolean
 		queuedCap?: { about: FeeDisplay; cap: FeeDisplay } | null
 		queuedSponsored?: boolean
 		notices?: string[]
+		/** The sheet Change opens is open. */
+		open?: boolean
 	}>(),
 	{
 		payerName: null,
 		estimating: false,
 		slow: false,
 		failed: false,
-		pending: false,
 		queued: false,
 		queuedCap: null,
 		queuedSponsored: false,
 		notices: () => [],
+		open: false,
 	},
 )
 const emit = defineEmits<{ change: []; retry: [] }>()
@@ -60,7 +61,6 @@ function queuedLine(): Line | null {
 /** The estimate's own states first, as the card's cost row orders them. */
 const line = computed<Line>(() => {
 	if (props.estimating && !props.display) return queuedLine() ?? { kind: props.slow ? "slow" : "bar" }
-	if (props.pending && !props.display) return { kind: "bar" }
 	if (props.failed && !props.display) return { kind: "failed" }
 	if (!props.payer) return { kind: "words", value: "—", note: null }
 	return { kind: "words", ...feeLineWords(props.payer, props.display, { name: props.payerName ?? undefined }) }
@@ -69,6 +69,14 @@ const notes = computed(() => {
 	const own = line.value.kind === "words" && line.value.note ? [line.value.note] : []
 	return [...own, ...props.notices]
 })
+
+const changeEl = useTemplateRef<HTMLButtonElement>("changeEl")
+/** A retry replaces its own button, so the keyboard it held moves on to Change. */
+function retry(e: Event) {
+	const held = e.currentTarget === document.activeElement
+	emit("retry")
+	if (held) nextTick(() => changeEl.value?.focus())
+}
 </script>
 
 <template>
@@ -80,14 +88,25 @@ const notes = computed(() => {
 				<Skeleton v-else-if="line.kind === 'bar'" :width="96" :height="10" />
 				<template v-else-if="line.kind === 'slow'">
 					<span :class="$style.muted">Taking longer than usual.</span>
-					<button type="button" :class="$style.link" data-testid="send-fee-line-retry" @click="emit('retry')">Try again</button>
+					<button type="button" :class="$style.link" data-testid="send-fee-line-retry" @click="retry">Try again</button>
 				</template>
 				<template v-else>
 					<span class="color--txt-danger">Couldn't estimate fee.</span>
-					<button type="button" :class="$style.link" data-testid="send-fee-line-retry" @click="emit('retry')">Try again</button>
+					<button type="button" :class="$style.link" data-testid="send-fee-line-retry" @click="retry">Try again</button>
 				</template>
 			</span>
-			<button type="button" :class="[$style.link, $style.change]" data-testid="send-fee-change" @click="emit('change')">Change</button>
+			<button
+				ref="changeEl"
+				type="button"
+				:class="[$style.link, $style.change]"
+				data-testid="send-fee-change"
+				aria-haspopup="dialog"
+				:aria-expanded="open"
+				@keydown.enter="refuseRepeatEnter"
+				@click="emit('change')"
+			>
+				Change
+			</button>
 		</div>
 		<div role="status" aria-live="polite" aria-atomic="true" :class="$style.notes" data-testid="send-fee-line-note">
 			<p v-for="note in notes" :key="note" :class="$style.note">{{ note }}</p>

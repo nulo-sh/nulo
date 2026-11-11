@@ -290,6 +290,38 @@ describe("composite/AmountCard — C3 fiat input", () => {
 			...props,
 		})
 
+	test("ending USD mode from the page keeps the token amount it settled on and drops one still converting", async () => {
+		vi.useFakeTimers()
+		try {
+			const w: ReturnType<typeof mountCard> = mountFiat({
+				"onUpdate:modelValue": (v: unknown) => w.setProps({ modelValue: v }),
+				"onUpdate:fiatMode": (v: unknown) => w.setProps({ fiatMode: v }),
+				"onUpdate:fiatGuard": (v: unknown) => w.setProps({ fiatGuard: v }),
+			})
+			const exitFiat = () => (w.vm as unknown as { exitFiat: () => void }).exitFiat()
+			const typeUsd = async (usd: string) => {
+				await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
+				await w.get("input[data-testid='send-amount-fiat-input']").setValue(usd)
+			}
+
+			await typeUsd("125")
+			await vi.advanceTimersByTimeAsync(300)
+			exitFiat()
+			await nextTick()
+			expect(w.props()).toMatchObject({ modelValue: "125.017877", fiatMode: false, fiatGuard: null })
+
+			await typeUsd("50")
+			expect(w.props("fiatGuard")).toMatchObject({ converting: true })
+			exitFiat()
+			await nextTick()
+			expect(w.props()).toMatchObject({ modelValue: "", fiatMode: false, fiatGuard: null })
+			await vi.advanceTimersByTimeAsync(300)
+			expect(w.props("modelValue")).toBe("")
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	test("toggle only offered for priced tokens", () => {
 		expect(mountFiat().find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(true)
 		expect(mountFiat({ liveQuote: null }).find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(false)

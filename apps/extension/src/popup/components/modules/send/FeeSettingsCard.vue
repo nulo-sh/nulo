@@ -105,6 +105,8 @@ const feeDisplayOut = defineModel("feeDisplay", { default: null })
 
 /** One-way child→parent: the cap as the readout words it, for the review sheet, priced once here. */
 const queuedCapTextOut = defineModel("queuedCapText", { default: null })
+/** The queued cap's two figures as the card prices them, so a line elsewhere quotes the same dollars. */
+const queuedCapFiguresOut = defineModel("queuedCapFigures", { default: null })
 
 /** One-way child→parent: the fee read refused the account because its imported key does not open. */
 const accountUnusableOut = defineModel("accountUnusable", { type: Boolean, default: false })
@@ -293,6 +295,7 @@ watch(
 	queuedCapDisplay,
 	(d) => {
 		queuedCapTextOut.value = d ? feeText(d.cap) : null
+		queuedCapFiguresOut.value = d
 	},
 	{ immediate: true },
 )

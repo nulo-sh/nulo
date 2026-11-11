@@ -38,7 +38,7 @@ import { isValidAztecAddress } from "@/utils/aztec-address"
 import { entityListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
-import { feeDisplay as priceFee, feeText } from "@/utils/fee-estimation"
+import { feeText } from "@/utils/fee-estimation"
 import { formatBaseUnits } from "@/utils/amount"
 import { goBack } from "@/utils/page-back"
 import { sentenceName } from "@/utils/string"
@@ -261,7 +261,8 @@ const tokenById = (id) => tokens.value.find((t) => t.id === id)
 function sendText(send) {
 	const token = tokenById(send.tokenId)
 	if (!token) return ""
-	const amount = formatBaseUnits(send.amountRaw, token.decimals, { maxDecimals: 8, thousandsSep: ",", decimalSep: "." })
+	// Every digit the press fills, so the words never round what it sends.
+	const amount = formatBaseUnits(send.amountRaw, token.decimals, { maxDecimals: token.decimals, thousandsSep: ",", decimalSep: "." })
 	return sendWords(amount, token.symbol, send.arrival)
 }
 const recentRows = computed(() =>
@@ -327,9 +328,11 @@ function focusForm() {
 	amountCardRef.value?.focusAmount()
 	if (!pageEl.value?.contains(document.activeElement)) pageEl.value?.querySelector('[data-testid="send-token-trigger"]')?.focus()
 }
-/** Back to the person step keeps the token and the amount. */
+/** Back to the person step keeps the token and the amount; the amount card unmounts, so a USD
+ *  session ends first, in the token amount it settled on. */
 function backToPerson() {
 	closeSheets()
+	amountCardRef.value?.exitFiat()
 	personChosen.value = false
 	selectedContact.value = null
 	searchTerm.value = ""
@@ -515,12 +518,7 @@ const feeLinePayer = computed(() => {
 	return p.isProtocol ? "sponsor" : "unvouched"
 })
 const feeLinePayerName = computed(() => (feeLinePayer.value === "unvouched" ? sentenceName(payer.value?.name ?? "", "this FPC") : null))
-const feeLineQueuedCap = computed(() => {
-	const q = queueCap.value
-	if (!q) return null
-	const usd = prices.feeJuiceQuote.value?.usd
-	return { about: priceFee(q.basis, usd), cap: priceFee(q.cap, usd) }
-})
+const feeLineQueuedCap = ref(null)
 
 const otherSide = (side) => (side === "private" ? "public" : "private")
 const fromDisabled = computed(() =>
@@ -1132,6 +1130,7 @@ onBeforeUnmount(() => {
 					:queuedCap="feeLineQueuedCap"
 					:queuedSponsored="queuedSponsored"
 					:notices="feeNotices"
+					:open="feeSheetOpen"
 					@change="openFeeSheet"
 					@retry="requestEstimate"
 				/>
@@ -1182,6 +1181,7 @@ onBeforeUnmount(() => {
 					v-model:payer="payer"
 					v-model:feeDisplay="feeDisplay"
 					v-model:queuedCapText="queuedCapText"
+					v-model:queuedCapFigures="feeLineQueuedCap"
 					v-model:accountUnusable="accountUnusable"
 					v-model:notices="feeNotices"
 					v-model:remedy="feeRemedy"
@@ -1190,7 +1190,6 @@ onBeforeUnmount(() => {
 			</Teleport>
 		</div>
 
-		<div data-testid="send-fee-sheet-state" :data-open="feeSheetOpen" hidden />
 		<Popup :show="feeSheetOpen" :displaceIdx="feeOrder" initial-focus='[data-testid="send-fee-method-trigger"]' @onClose="closeFeeSheet">
 			<PopupCard :displaceIdx="feeDepth">
 				<div role="dialog" aria-modal="true" aria-labelledby="send-fee-title" data-testid="send-fee-sheet">

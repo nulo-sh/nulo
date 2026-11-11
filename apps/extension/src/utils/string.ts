@@ -24,7 +24,7 @@ export function addressEnds(address: string): { head: string; middle: string; ta
 }
 
 /** A whole address as two even lines of 33, so its first and last characters sit at the line edges a
- *  person compares; null for anything but `0x` and 64 digits. */
+ *  person compares; null for any other length. */
 export function addressHalves(address: string): [string, string] | null {
 	if (address.length !== 66) return null
 	return [address.slice(0, 33), address.slice(33)]

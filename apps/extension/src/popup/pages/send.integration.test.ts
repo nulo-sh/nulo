@@ -787,7 +787,7 @@ describe("send page with the real fee card — the card lives with the page, its
 	/** The card logs each mount, once per instance. */
 	const cardMounts = () => vi.mocked(console.debug).mock.calls.filter(([line]) => /^\[fee:\w+\] mounting$/.test(String(line))).length
 	const inSheet = (w: W) => w.find('[data-testid="send-fee-sheet"] [data-testid="fee-settings-card"]').exists()
-	const sheetState = (w: W) => w.get('[data-testid="send-fee-sheet-state"]').attributes("data-open")
+	const sheetState = (w: W) => w.get('[data-testid="send-fee-change"]').attributes("aria-expanded")
 
 	test("opening and closing the fee sheet twice keeps one card instance, and its models flow while it is closed", async () => {
 		const picks = { [ACCOUNT]: { private: { type: "fpc", fpc: { id: "s1", name: "Sponsor" } } } }
@@ -1010,6 +1010,24 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		await flushPromises()
 		return mounted
 	}
+
+	test("the fee line quotes the queued cap in the card's own dollars, never the page's", async () => {
+		const { w } = await queuedPrivately(FUNDING["private Fee Juice only"])
+		// Every price client holds a different quote, as after a reconnect that refreshed only one.
+		vi.mocked(PriceServiceClient).mock.results.forEach(({ value }, i) => {
+			value.onQuotesUpdated.invoke({
+				quotes: { aztec: { coingeckoId: "aztec", usd: 0.01 * (i + 1), fetchedAt: Date.now(), providerUpdatedAt: null } },
+				pricedTokens: {},
+				tokenIcons: {},
+			})
+		})
+		await flushPromises()
+		const card = w.getComponent({ name: "FeeSettingsCard" })
+		const figures = card.emitted<[{ cap: { usd: string | null } } | null]>("update:queuedCapFigures")?.at(-1)?.[0]
+		expect(figures?.cap.usd).toMatch(/^\$/)
+		expect(w.get('[data-testid="send-fee-line-note"]').text()).toContain(`${figures?.cap.usd} (4.47228 FJ)`)
+		w.unmount()
+	})
 
 	test("with a cap and Private Fee Juice: the review offers Queue send, and Send now sends the cap with no estimate to reuse", async () => {
 		const { w } = await queuedPrivately(FUNDING["private Fee Juice only"])

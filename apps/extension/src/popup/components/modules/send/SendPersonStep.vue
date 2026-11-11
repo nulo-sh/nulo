@@ -31,8 +31,11 @@ function choose(address: string) {
 	emit("choose", address, candidateFor(address))
 }
 
-/** The field names a candidate once its pick may be shown: that is the choice. */
-const chooseCandidate = (c: Candidate) => emit("choose", c.address, c)
+/** The field names a candidate once its pick may be shown: that is the choice, unless its address is
+ *  no point, which stays in the field that says so. */
+const chooseCandidate = (c: Candidate) => {
+	if (isValidAztecAddress(c.address)) emit("choose", c.address, c)
+}
 
 /** Enter in the field takes a pasted address, as the button does; a suggestion's Enter is the field's. */
 function onEnter(e: KeyboardEvent) {

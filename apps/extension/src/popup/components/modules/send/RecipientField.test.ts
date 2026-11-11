@@ -538,16 +538,20 @@ describe("modules/send/RecipientField", () => {
 			expect(w.emitted("update:searchTerm")).toBeUndefined()
 		})
 
-		test("the click a release delivers outside the field ends the hold at its capture, before its target", async () => {
+		test("the click a release delivers outside the field lands while the pick is held, so its target chooses first", async () => {
 			const w = await focused({ candidates: [alice], searchTerm: alice.address })
 			const outside = document.body.appendChild(document.createElement("button"))
+			const atClick: string[][] = []
+			outside.addEventListener("click", () => atClick.push(choices(w)))
 			press("pointerdown")
 			await w.get("input").trigger("blur")
 			press("pointerup")
 			outside.click()
 			await nextTick()
+			expect(atClick).toEqual([[]])
+			expect(choices(w)).toEqual([])
+			await afterRelease()
 			expect(choices(w)).toEqual([alice.address])
-			expect(vi.getTimerCount()).toBe(0)
 		})
 
 		test("text that is no address shows the hint once the press that took the focus ends", async () => {

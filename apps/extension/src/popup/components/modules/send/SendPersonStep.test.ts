@@ -84,6 +84,12 @@ describe("modules/send/SendPersonStep", () => {
 		expect(chosen(w)).toEqual([[ANA, ana]])
 	})
 
+	test("a field pick whose address is no point is never the choice", async () => {
+		const w = mountStep({ candidates: [{ id: "9", name: "Off", address: NOT_A_POINT }] })
+		await w.get('[data-testid="stub-pick"]').trigger("click")
+		expect(chosen(w)).toEqual([])
+	})
+
 	test("Recent rows say what was sent and when, and emit their address", async () => {
 		const w = mountStep()
 		const row = w.get('[data-testid="send-recent"]')

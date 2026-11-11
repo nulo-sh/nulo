@@ -22,7 +22,7 @@ import { startNodeStub } from "./fixtures/node-stub"
 import { skipUnlessListPrices } from "./fixtures/token-list"
 import { chooseRecipient, openSend, readSendInputs, shotSend } from "./fixtures/send-page"
 import { settleClosedPopup } from "./fixtures/popup-leave"
-import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
+import { readActivityScope, seedJournalRecord, seedTokenRow } from "./helpers/activity-seeds"
 import { SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
 import { savedFeePicks } from "./helpers/ui-preferences"
 import { activeTestId, focusRing, pressEscape, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
@@ -538,4 +538,46 @@ test("a mouse press held on a suggestion while the field's blur matches another 
 	expect((await readSendInputs(page)).destination).toBe(namesake)
 	expect(await page.$(sel("token-address-field"))).toBeNull()
 	expect(await page.$(sel("select-token-search"))).toBeNull()
+})
+
+test("a mouse press held on a Recent row while the field holds a contact's whole address pays the pressed row", {
+	timeout: 120_000,
+	retry: 0,
+}, async ({ registeredExtensionPerTest: ctx }) => {
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general", 30_000)
+	await seedContacts(page, ["Alice"])
+	const alice = `0x${"1".padStart(64, "0")}`
+	const recent = `0x${"5".padStart(64, "0")}`
+	const scope = await readActivityScope(page)
+	await seedTokenRow(page, scope, 1)
+	await seedJournalRecord(page, scope, {
+		id: "5e0d5e0d5e0d5e0d",
+		tokenId: 1,
+		amount: "700000",
+		recipient: recent,
+		progress: { stage: "succeeded" },
+	})
+	await openSend(page)
+	const row = `${sel("send-recent")}[data-address="${recent}"]`
+	await page.waitForSelector(row, { visible: true, timeout: 10_000 })
+	await page.focus(DESTINATION_INPUT)
+	await page.keyboard.type(alice)
+	await waitForSuggestionRows(page, 1)
+
+	// The press blurs the field, which holds Alice's address whole, so the field would choose her; the
+	// click the release delivers lands first, on the row it began on.
+	const at = await page.$eval(row, (el) => {
+		const box = el.getBoundingClientRect()
+		const x = box.left + box.width / 2
+		const y = box.top + box.height / 2
+		return { x, y, reachable: el.contains(document.elementFromPoint(x, y)) }
+	})
+	expect(at.reachable, "the Recent row takes the press").toBe(true)
+	await page.mouse.move(at.x, at.y)
+	await page.mouse.down()
+	await new Promise((resolve) => setTimeout(resolve, 300))
+	await page.mouse.up()
+	await page.waitForSelector(sel("send-payee"), { visible: true, timeout: 5_000 })
+	expect((await readSendInputs(page)).destination).toBe(recent)
 })

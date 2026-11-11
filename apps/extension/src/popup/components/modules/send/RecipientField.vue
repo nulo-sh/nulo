@@ -124,15 +124,9 @@ const onPointerUp = (e) => {
 	if (e.pointerId !== pressId) return
 	pressId = null
 	if (!holdView.value) return
-	// A browser dispatches a press's pointerup, mouseup and click in one task: the click lands first.
+	// A browser dispatches a press's pointerup, mouseup and click in one task, so the click's target
+	// chooses first; the held pick is shown only if nothing it pressed chose another.
 	releaseTimer = setTimeout(endHold, 0)
-}
-
-// A native click runs the microtasks between its listeners, so the held pick is chosen before the
-// click reaches its target: a choice that target makes comes after it, and stands.
-const onClickCapture = (e) => {
-	if (!holdView.value || pressId !== null || fieldEl.value?.contains(e.target)) return
-	endHold()
 }
 
 const onPointerCancel = (e) => {
@@ -210,7 +204,6 @@ onMounted(() => {
 	document.addEventListener("pointerdown", onPointerDown, true)
 	document.addEventListener("pointerup", onPointerUp, true)
 	document.addEventListener("pointercancel", onPointerCancel, true)
-	document.addEventListener("click", onClickCapture, true)
 	window.addEventListener("blur", onWindowBlur)
 })
 
@@ -219,7 +212,6 @@ onBeforeUnmount(() => {
 	document.removeEventListener("pointerdown", onPointerDown, true)
 	document.removeEventListener("pointerup", onPointerUp, true)
 	document.removeEventListener("pointercancel", onPointerCancel, true)
-	document.removeEventListener("click", onClickCapture, true)
 	window.removeEventListener("blur", onWindowBlur)
 	clearTimeout(closeTimer)
 	clearTimeout(releaseTimer)
