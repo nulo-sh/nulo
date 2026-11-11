@@ -7,6 +7,7 @@ import { computed, type PropType } from "vue"
 import type { GlyphName } from "@nulo/design"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
 import { directionWords, type RowDirection } from "@/utils/row-direction"
+import type { TokenMarkOf } from "@/utils/token-icon"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
 const props = defineProps({
@@ -23,6 +24,8 @@ const props = defineProps({
 	amount: { type: String, default: null },
 	amountSymbol: { type: String, default: null },
 	titleNamesToken: { type: Boolean, default: false },
+	/** The mark of the token the title names, as the settled row draws it. */
+	titleMark: { type: Object as PropType<TokenMarkOf | null>, default: null },
 	/** A send's sides and way, drawn as its settled row draws them; null for a dApp op. */
 	direction: { type: Object as PropType<RowDirection | null>, default: null },
 	/** Enable the Cancel button. Renders only when `cancellable && jobId && stage !== "submitting"`. */
@@ -65,6 +68,7 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 			:amount="amount"
 			:amountSymbol="amountSymbol"
 			:titleNamesToken="titleNamesToken"
+			:titleMark="titleMark"
 			:direction="direction"
 			:stage="stage"
 			:backend="backend"

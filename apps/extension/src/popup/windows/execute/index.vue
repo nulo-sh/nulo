@@ -771,6 +771,7 @@ onUnmounted(() => {
 						:decodedAuthwits="decodedAuthwits"
 						:decodedGrants="decodedGrants.get(i)"
 						:tokens="knownTokens"
+						:marks="tokenFlags"
 						:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
 						:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
 						:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"

@@ -9,6 +9,7 @@
 import type { GlyphName } from "@nulo/design"
 import type { PropType } from "vue"
 import { directionWords, type RowDirection } from "@/utils/row-direction"
+import type { TokenMarkOf } from "@/utils/token-icon"
 import { STATUS_ICON_FILL, type StatusTone } from "./status-icon-fill"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
@@ -35,6 +36,8 @@ defineProps({
 	amount: { type: String as PropType<string | null>, default: null },
 	amountSymbol: { type: String as PropType<string | null>, default: null },
 	titleNamesToken: { type: Boolean, default: false },
+	/** The mark of the token the title names, as the awaiting and settled rows draw it. */
+	titleMark: { type: Object as PropType<TokenMarkOf | null>, default: null },
 	/** The title names the function a dApp called: one line, cut at its end. */
 	oneLineTitle: { type: Boolean, default: false },
 	/** The route the row opens. */
@@ -49,6 +52,7 @@ defineProps({
 		:amount="amount"
 		:amountSymbol="amountSymbol"
 		:titleNamesToken="titleNamesToken"
+		:titleMark="titleMark"
 		:direction="direction"
 		:to="to"
 		:oneLineTitle="oneLineTitle"

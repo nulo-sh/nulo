@@ -2,9 +2,11 @@
 import { Comment, type PropType, ref, useId, useSlots } from "vue"
 import type { GlyphName } from "@nulo/design"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
+import TokenMark from "@/components/composite/general/TokenMark.vue"
 import RowTarget from "@/components/ui/RowTarget.vue"
 import { vSnackFooter } from "@/composables/snackInset"
 import type { RowDirection, RowWay } from "@/utils/row-direction"
+import type { TokenMarkOf } from "@/utils/token-icon"
 /**
  * The one layout every activity card composes, so field positions stay identical across the
  * lifecycle: [activity icon + badge] [title (+ trailing) / secondary] [amount column], with an
@@ -25,6 +27,9 @@ const props = defineProps({
 	/** The title is the amount's token, so the symbol under the amount would repeat it. Off, the
 	 *  symbol shows: a row whose title names something else (a mint's kind) keeps its unit. */
 	titleNamesToken: { type: Boolean, default: false },
+	/** The mark of the token the title names, drawn before it in every phase so the title holds its
+	 *  place; null for a title that names something else. */
+	titleMark: { type: Object as PropType<TokenMarkOf | null>, default: null },
 	/** `≈ $x.xx` line under the amount — omitted (null) when unpriced. */
 	amountFiat: { type: String as PropType<string | null>, default: null },
 	testId: { type: String, default: undefined },
@@ -123,6 +128,7 @@ function hasActionsContent() {
 
 			<Flex direction="column" gap="4" :class="$style.text" data-testid="activity-text">
 				<Flex align="center" gap="6" :class="$style.title_row" data-testid="activity-title-row">
+					<TokenMark v-if="titleMark" :symbol="titleMark.symbol" :icon="titleMark.icon" :size="16" :badge="titleMark.badge" />
 					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
 					<span v-if="$slots['title-trailing']" :class="$style.trailing_inline"><slot name="title-trailing" /></span>
 				</Flex>

@@ -40,9 +40,11 @@ import {
 	journalCardIcon,
 	journalCardOriginLabel,
 	journalCardTitle,
+	journalCardTitleMark,
 	journalCardTitleNamesToken,
 	sanitizeJournalSubtitle,
 } from "@/utils/journal-state"
+import { tokenMarkOf } from "@/utils/token-icon"
 import { callTitle, transferDirection } from "@/utils/tx-enrichment"
 import { buildCancelHandler, buildFocusHandler, isMatchingTask } from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
@@ -206,6 +208,9 @@ const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null
 	return tokenById(executingTask.value.content.tokenId)?.symbol || null
 })
+const executingTitleMark = computed(() =>
+	isUiTransfer.value ? tokenMarkOf(incomingPrices, tokenById(executingTask.value.content.tokenId)) : null,
+)
 /** The task holds the request's own sender and recipient, as the send's journal record does. */
 const executingDirection = computed(() => {
 	if (!isUiTransfer.value) return null
@@ -634,6 +639,7 @@ onBeforeUnmount(() => {
 				:amount="cardAmountFor(op)"
 				:amountSymbol="cardAmountSymbolFor(op)"
 				:titleNamesToken="journalCardTitleNamesToken(op)"
+				:titleMark="journalCardTitleMark(op, { tokenById }, incomingPrices)"
 				:direction="journalCardDirection(op)"
 				:cancellable="true"
 				:jobId="op.id"
@@ -658,6 +664,7 @@ onBeforeUnmount(() => {
 				:amount="executingAmount"
 				:amountSymbol="executingAmountSymbol"
 				:titleNamesToken="isUiTransfer"
+				:titleMark="executingTitleMark"
 				:direction="executingDirection"
 				:oneLineTitle="!isUiTransfer"
 			/>
@@ -671,6 +678,8 @@ onBeforeUnmount(() => {
 				:tokens="tokens"
 				:tokenById="tokenById"
 				:fiatLabel="incomingPrices.tokenFiatLabel"
+				:iconFor="incomingPrices.iconFor"
+				:isFlagged="incomingPrices.isFlagged"
 				:isArriving="token ? undefined : arrivals?.isArriving"
 			/>
 		</div>

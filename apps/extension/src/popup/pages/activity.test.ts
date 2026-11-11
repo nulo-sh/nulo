@@ -40,6 +40,7 @@ const H = vi.hoisted(() => {
 			remove: (fn: () => void) => tokenAddedHandlers.delete(fn),
 		},
 		quotes: {} as Record<string, unknown>,
+		tokenIcons: {} as Record<string, string>,
 		store: { current: null as unknown as ReturnType<typeof createAppStoreHarness> },
 	}
 })
@@ -89,8 +90,13 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: H.event(),
 			onConnected: H.event(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
-			refreshIfStale: async () => ({ quotes: H.quotes, pricedTokens: TEST_PRICED_TOKENS }),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: [], tokenIcons: H.tokenIcons })),
+			refreshIfStale: async () => ({
+				quotes: H.quotes,
+				pricedTokens: TEST_PRICED_TOKENS,
+				flaggedTokens: [],
+				tokenIcons: H.tokenIcons,
+			}),
 		}
 	}),
 }))
@@ -100,6 +106,7 @@ import { ARRIVALS_KEY } from "@/composables/useArrivals"
 import { SENDS_IN_PROGRESS_KEY } from "@/composables/useSendsInProgress"
 import TransactionAwaitingCard from "@/components/composite/activity/TransactionAwaitingCard.vue"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { listKeyOf } from "@/utils/token-flag"
 import TransactionsList from "../components/modules/activity/TransactionsList.vue"
 import Activity from "./activity.vue"
 
@@ -728,6 +735,7 @@ describe("pages/activity — sends in progress", () => {
 
 	beforeEach(() => {
 		H.getTokens.mockResolvedValue([USDC])
+		H.tokenIcons = {}
 		records = ref<unknown[]>([])
 	})
 
@@ -783,6 +791,17 @@ describe("pages/activity — sends in progress", () => {
 			hasApprovalWindow: false,
 		})
 		expect(w.text()).not.toContain("No transactions yet")
+	})
+
+	test("a send in flight draws its token's mark from the page's own list read; a dApp operation, titled by its app, none", async () => {
+		const ICON = "data:image/svg+xml;base64,PHN2Zy8+"
+		H.tokenIcons = { [listKeyOf(USDC.chainId, USDC.contract)]: ICON }
+		records.value = [
+			inFlight("send", { createdAt: 30 }),
+			inFlight("dapp", { kind: "dapp_execute", origin: "dapp", tokenId: undefined, amountRaw: undefined, createdAt: 20 }),
+		]
+		const w = await openHistory()
+		expect(pending(w).map((c) => c.props("titleMark"))).toEqual([{ symbol: "USDC", icon: ICON, badge: false }, null])
 	})
 
 	test("a send that succeeds hands off to exactly one chain row, and one that fails to exactly one terminal row", async () => {

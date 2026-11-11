@@ -33,7 +33,7 @@ import {
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { shotSend } from "./fixtures/send-page"
 import { waitForPopup } from "./fixtures/popups"
-import { e2eSigner, serveTokenList, signTestList, skipUnlessListPrices } from "./fixtures/token-list"
+import { E2E_LIST_TOKENS, e2eSigner, heldListEntries, serveTokenList, signTestList, skipUnlessListPrices } from "./fixtures/token-list"
 import { expectFitsNarrow } from "./fixtures/type-roles"
 import { readActivityScope, seedJournalRecord, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { createProfileAcceptingTerms, pointerClick } from "./helpers/legal-drivers"
@@ -673,8 +673,10 @@ type IconBox = {
 	badge: { width: number; height: number; glyph: number; right: number; bottom: number } | null
 	/** How far the status badge's right edge sits past the box's, and its top edge above the box's. */
 	status: { right: number; top: number } | null
-	/** The title row holds its title alone, with no chip beside it. */
+	/** The title row holds its title alone, with no chip beside it; the token's mark before it aside. */
 	titleAlone: boolean
+	/** The token mark before the title: its kind, and for a logo whether the picture decoded. */
+	mark: string | null
 }
 
 /** Each direction row's icon box, measured from the inside of its 1px border. */
@@ -709,7 +711,18 @@ function readIconBoxes(page: Page): Promise<IconBox[]> {
 						bottom: r1(b.bottom - box.bottom),
 					},
 					status: status ? { right: r1(status.right - box.right), top: r1(box.top - status.top) } : null,
-					titleAlone: row.querySelector('[data-testid="activity-title-row"]')?.childElementCount === 1,
+					titleAlone:
+						[...(row.querySelector('[data-testid="activity-title-row"]')?.children ?? [])].filter(
+							(el) => el.getAttribute("data-testid") !== "token-mark",
+						).length === 1,
+					mark: (() => {
+						const mark = row.querySelector('[data-testid="activity-title-row"] > [data-testid="token-mark"]')
+						const logo = mark?.querySelector<HTMLImageElement>('[data-testid="token-mark-logo"]')
+						if (!mark) return null
+						return logo
+							? `logo ${logo.complete && logo.naturalWidth > 0 ? "decoded" : "broken"}`
+							: mark.getAttribute("data-kind")
+					})(),
 				}
 			})
 	}, ROWS)
@@ -739,7 +752,20 @@ function expectIconBox(box: IconBox, where: string): void {
 
 /** The five seeded rows: a send out, three moves to the sender (two of them a dApp's transfers, the
  *  large one cut at its cap beside its symbol) and a receipt. Only the dApp transfers carry a chip. */
-async function expectDirectionRows(page: Page, where: string): Promise<void> {
+async function expectDirectionRows(page: Page, where: string, mark: "logo" | "initials"): Promise<void> {
+	// The list's picture arrives with its snapshot, after the rows; a logo is read once it has loaded.
+	await page.waitForFunction(
+		(rowsSel: string, kind: string) =>
+			[...document.querySelectorAll(rowsSel)]
+				.filter((row) => !row.querySelector('[data-testid="activity-app-chip"]'))
+				.every((row) => {
+					const drawn = row.querySelector(`[data-testid="token-mark"][data-kind="${kind}"]`)
+					return drawn !== null && drawn.querySelector<HTMLImageElement>("img")?.complete !== false
+				}),
+		{ timeout: 15_000, polling: 100 },
+		ROWS,
+		mark,
+	)
 	const large = await readAppChip(page, LARGE_DAPP_HASH)
 	console.log(`[rows] ${where}: the large dApp transfer ${JSON.stringify(large)}`)
 	expect(large).toMatchObject({ cut: true, besideTitle: true, name: DAPP_NAME, lead: { content: '""', display: "inline-block" } })
@@ -749,6 +775,17 @@ async function expectDirectionRows(page: Page, where: string): Promise<void> {
 	expect(boxes.map((b) => b.way).sort()).toEqual(["in", "out", "self", "self", "self"])
 	for (const box of boxes) expectIconBox(box, where)
 	expect(boxes.filter((b) => !b.titleAlone).map((b) => b.row)).toEqual(["tx-card 0x6b6b", "tx-card 0x6e6e"])
+	// A row titled by its token draws the mark; a dApp's transfer, its title beside the app chip, none.
+	const drawn = mark === "logo" ? "logo decoded" : "initials"
+	expect(boxes.map((b) => [b.row, b.mark])).toEqual(boxes.map((b) => [b.row, b.titleAlone ? drawn : null]))
+}
+
+/** The mark a row of this token draws: a source run's held list pictures its tokens; an artifact
+ *  run's published list may not picture them yet. */
+function listedMark(contract: string): "logo" | "initials" {
+	const pictured = heldListEntries().some((e) => e.address === contract && e.icon !== undefined)
+	expect(pictured || !E2E_LIST_TOKENS.some((e) => e.address === contract), "a source run's list pictures its tokens").toBe(true)
+	return pictured ? "logo" : "initials"
 }
 
 type AppChip = { width: number; cut: boolean; name: string; besideTitle: boolean; lead: { content: string; display: string } }
@@ -795,6 +832,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 	const page = await openPopup(listedExtensionPerTest)
 	await waitForHash(page, "#/popup/general")
 	const scope = await readActivityScope(page, { priced: true })
+	const mark = listedMark(scope.token.contract)
 	const now = Date.now()
 	await seedTransaction(page, scope, { hash: TX_HASH, amount: "1500000", at: now, to: OUTSIDE })
 	await seedTransaction(page, scope, { hash: `0x${"6a".repeat(32)}`, amount: "123456789123456", at: now - 1_000 })
@@ -837,7 +875,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 				[],
 			)
 			for (const gap of gaps) expect.soft(gap, `${surface.name}'s row gap`).toBeCloseTo(10, 0)
-			await expectDirectionRows(page, `${theme}, ${surface.name}`)
+			await expectDirectionRows(page, `${theme}, ${surface.name}`, mark)
 			if (surface.name === "History" && theme === "dark") await shotSend(page, "dapp-transfer-rows", "activity-app-chip")
 			if (surface.name !== "History") continue
 			const clearance = await page.evaluate((rowsSel: string) => {
