@@ -51,9 +51,12 @@ async function waitForAmount(page: Page, expected: string): Promise<void> {
 	}
 }
 
-async function readTokenLine(page: Page): Promise<{ text: string; lines: number; maxAbove: boolean; inside: boolean }> {
+async function readTokenLine(
+	page: Page,
+): Promise<{ text: string; lines: number; maxAbove: boolean; inside: boolean; spans: Record<string, [number, number]> }> {
 	return page.evaluate(() => {
 		const box = (testid: string) => document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect()
+		const unit = (px: number) => Math.round(px * 60) / 60
 		const label = document.querySelector('[data-testid="send-amount-fiat-label"]')
 		const range = document.createRange()
 		if (label) range.selectNodeContents(label)
@@ -64,7 +67,10 @@ async function readTokenLine(page: Page): Promise<{ text: string; lines: number;
 			text: label?.textContent?.trim() ?? "",
 			lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
 			maxAbove: !!(max && row) && max.bottom <= row.top,
-			inside: !!row && parts.every((rect) => !!rect && rect.left >= row.left && rect.right <= row.right),
+			// Firefox lays boxes out in 1/60 px and reports them through float32, so a control set flush on
+			// the row's edge can read 0.00002 px past it: edges compare at that unit.
+			inside: !!row && parts.every((rect) => !!rect && unit(rect.left) >= unit(row.left) && unit(rect.right) <= unit(row.right)),
+			spans: Object.fromEntries(Object.entries({ fiat, max, row }).map(([k, r]) => [k, [unit(r?.left ?? -1), unit(r?.right ?? -1)]])),
 		}
 	})
 }
