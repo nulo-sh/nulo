@@ -401,15 +401,16 @@ describe("TransactionCard's title mark", () => {
 			},
 		],
 	})
-	const markOf = async (tx: Record<string, unknown>) => {
+	const layoutOf = async (tx: Record<string, unknown>, tokens: unknown[] = []) => {
 		mockList = {
 			flaggedTokens: flaggedKeysOf([{ chainId: CHAIN_IDS.TESTNET, address: FLAGGED }]),
 			tokenIcons: tokenIconsOf(TEST_LIST_ENTRIES_WITH_ICONS),
 		}
-		const w = mountCard(tx)
+		const w = mountCard(tx, { tokens })
 		await flushPromises()
-		return w.findComponent(STUBS.TransactionCardLayout).props("titleMark")
+		return w.findComponent(STUBS.TransactionCardLayout)
 	}
+	const markOf = async (tx: Record<string, unknown>) => (await layoutOf(tx)).props("titleMark")
 
 	test("a transfer of a listed token draws the list's picture; a custom one its initials; a flagged one the badge", async () => {
 		expect(await markOf(transferOf(TEST_TOKENS.USDC))).toEqual({ symbol: "USDC", icon: TEST_ICONS.USDC, badge: false })
@@ -418,13 +419,24 @@ describe("TransactionCard's title mark", () => {
 	})
 
 	test("an outgoing mint is titled by its kind and a dApp's transfer shares its title with the app chip: neither has a mark", async () => {
+		const CLASS = field(0xc1a55n)
+		const usdc = {
+			id: 1,
+			chainId: CHAIN_IDS.TESTNET,
+			contract: TEST_TOKENS.USDC,
+			classId: CLASS,
+			symbol: "USDC",
+			decimals: 6,
+			hasDecimals: true,
+		}
 		const mint = {
 			hash: field(0x3a3an),
 			status: TxStatus.Proposed,
 			origin: { type: OriginType.UI },
-			calls: [{ contract: TEST_TOKENS.USDC, method: "mint_to_public", args: [field(0xa1n), field(10n ** 6n)] }],
+			calls: [{ contract: TEST_TOKENS.USDC, method: "mint_to_public", args: [field(0xa1n), field(10n ** 6n)], classId: CLASS }],
 		}
-		expect(await markOf(mint)).toBeNull()
+		const layout = await layoutOf(mint, [usdc])
+		expect([layout.props("title"), layout.props("amount"), layout.props("titleMark")]).toEqual(["Mint (public)", "1", null])
 		expect(await markOf(transferOf(TEST_TOKENS.USDC, { type: OriginType.DAPP, name: "example.dapp.io" }))).toBeNull()
 	})
 })

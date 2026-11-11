@@ -159,7 +159,6 @@ const authwitRows = computed(() =>
 </template>
 
 <style module>
-/* Sits on the sentence's line, 6px before the amount it pictures. */
 .line_mark {
 	margin-right: 6px;
 	vertical-align: -3px;
