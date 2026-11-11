@@ -6,7 +6,7 @@
 import type { Page } from "puppeteer"
 import { clickByTestId, replaceInputValue } from "./extension"
 import { type FeeMethodSubtitle, selectFeeMethod, selectSendToken, setActiveSendType } from "./helpers"
-import { openSend, readSendView, submitSend, waitForSendGone } from "./send-page"
+import { chooseRecipient, closeSendFeeSheet, openSend, openSendFeeSheet, submitSend, waitForSendGone } from "./send-page"
 import { PollTimeoutError, pollUntil } from "./poll"
 import { readSealedRows } from "./sealed-rows"
 import { bringToFront } from "./browser"
@@ -28,12 +28,14 @@ export interface BurstSend {
 export type EstimateState = "ready" | "failed" | "queued" | "estimating"
 
 /**
- * Opens Send and fills it; the estimate is left to run. Brings the page to the front first: a
- * background tab never finishes the token sheet's close transition.
+ * Opens Send and fills it in the form's order (who, token, sides, amount, then the fee in its sheet);
+ * the estimate is left to run. Brings the page to the front first: a background tab never finishes
+ * the token sheet's close transition.
  */
 export async function startSend(page: Page, send: BurstSend): Promise<void> {
 	await bringToFront(page)
 	await openSend(page)
+	await chooseRecipient(page, send.destination)
 	await selectSendToken(page, send.token)
 	await setActiveSendType(page, "send-from-type", send.from)
 	await setActiveSendType(page, "send-to-type", send.to)
@@ -45,9 +47,11 @@ export async function startSend(page: Page, send: BurstSend): Promise<void> {
 		{ timeout: 60_000, polling: 250 },
 	)
 	await replaceInputValue(page, '[data-testid="send-amount-input"]', send.amount)
-	await replaceInputValue(page, '[data-testid="send-destination-field"] input', send.destination)
+	// The fee card is drawn, so its method and speed rows take a press, only inside its sheet.
+	await openSendFeeSheet(page)
 	await selectFeeMethod(page, send.fee)
 	if (send.speed) await clickByTestId(page, `send-fee-priority-${send.speed}`)
+	await closeSendFeeSheet(page)
 }
 
 /** The estimate's state right now: the fee row (landed or queued), or the page's "Couldn't estimate fee" snack. */
@@ -80,8 +84,8 @@ export async function waitForEstimate(page: Page, timeout = 120_000): Promise<Es
 	}
 }
 
-/** Whether Send is enabled, and whether the queued row offers to queue: against a fee cap, or with
- *  Nulo's sponsor paying; `null` when there is no Send button. */
+/** Whether "Review send" is enabled, and whether the queued row offers to queue: against a fee cap,
+ *  or with Nulo's sponsor paying; `null` when there is no such button. */
 const readQueueOffer = (page: Page) =>
 	page.evaluate(() => {
 		const send = document.querySelector<HTMLButtonElement>('[data-testid="send-submit"]')
@@ -91,8 +95,8 @@ const readQueueOffer = (page: Page) =>
 		return send ? { enabled: !send.disabled, queueable } : null
 	})
 
-/** Fails unless the fee row turns queued and stays queued for the whole window, with Send enabled
- *  exactly while it offers to queue. */
+/** Fails unless the fee row turns queued and stays queued for the whole window, with "Review send"
+ *  enabled exactly while it offers to queue. */
 export async function expectEstimateQueued(page: Page, windowMs: number): Promise<void> {
 	await pollUntil(
 		() => readEstimateState(page),
@@ -104,18 +108,17 @@ export async function expectEstimateQueued(page: Page, windowMs: number): Promis
 		const state = await readEstimateState(page)
 		if (state !== "queued") throw new Error(`the estimate was expected to stay queued, but it is ${state}`)
 		const offer = await readQueueOffer(page)
-		if (!offer) throw new Error("Send is missing while the estimate is queued")
+		if (!offer) throw new Error("Review send is missing while the estimate is queued")
 		if (offer.enabled !== offer.queueable)
-			throw new Error(`Send must be enabled exactly while the row offers to queue: ${JSON.stringify(offer)}`)
+			throw new Error(`Review send must be enabled exactly while the row offers to queue: ${JSON.stringify(offer)}`)
 		await new Promise((r) => setTimeout(r, 250))
 	}
 }
 
-/** Confirms the filled send the way the footer offers it and waits for the page to leave. */
+/** Confirms the filled send through its review and waits for the page to leave. */
 export async function confirmSend(page: Page): Promise<void> {
 	await bringToFront(page)
-	const { action } = await readSendView(page)
-	await submitSend(page, { expect: action ?? "send" })
+	await submitSend(page)
 	await waitForSendGone(page, 30_000)
 }
 

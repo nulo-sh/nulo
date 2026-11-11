@@ -1,6 +1,7 @@
 /**
  * The smoke wallet holds no balance, so the amount field and Max are disabled and out of the Tab
- * path here; Max's own stop is proven in the funded `network/send-amount-exact.test.ts`.
+ * path here; Max's own stop is proven in the funded `network/send-amount-exact.test.ts`. With
+ * nothing to spend the form opens on the token row.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
@@ -19,11 +20,12 @@ import {
 import { captureSoleProfileId, getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { startNodeStub } from "./fixtures/node-stub"
 import { skipUnlessListPrices } from "./fixtures/token-list"
-import { readSendInputs, shotSend } from "./fixtures/send-page"
+import { chooseRecipient, openSend, readSendInputs, shotSend } from "./fixtures/send-page"
+import { settleClosedPopup } from "./fixtures/popup-leave"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
 import { SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
 import { savedFeePicks } from "./helpers/ui-preferences"
-import { activeTestId, coveredAt, focusRing, pressEscape, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
+import { activeTestId, focusRing, pressEscape, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const DESTINATION_INPUT = `${sel("send-destination-field")} input`
@@ -51,9 +53,10 @@ async function seedContacts(page: Page, names: string[]): Promise<void> {
 	)
 }
 
+/** Opens Send on its person step, or with `form` on the form for the profile's own account. */
 async function openSendPage(
 	ctx: ExtensionContext,
-	{ priced = false, sponsors = false, contacts = [] as string[] } = {},
+	{ priced = false, sponsors = false, form = false, contacts = [] as string[] } = {},
 ): Promise<{ page: Page; seededFpcIds: string[] }> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
@@ -66,11 +69,12 @@ async function openSendPage(
 		expect(seededFpcIds, "the sponsor is offered on the spec's chain").toContain(SEEDED_SPONSOR_FPC_ID)
 	}
 	if (scope && priced) {
-		await seedTokenRow(page, scope, 1)
+		await seedTokenRow(page, scope, 1, { transfers: true })
 		await seedUsdQuoteAndReload(page, scope.token.priceId)
 	}
-	await clickByTestId(page, "actions-send")
+	await openSend(page)
 	await page.waitForSelector(sel("send-destination-field"), { visible: true, timeout: 15_000 })
+	if (form) await chooseRecipient(page, await getAccountAddress(page))
 	return { page, seededFpcIds }
 }
 
@@ -232,20 +236,21 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	// Up from no highlight goes to the last row, which the list scrolls to.
 	await page.keyboard.press("ArrowUp")
 	expect((await readSuggestionList(page)).active).toMatchObject({ row: 3, shown: true })
-	// A held Enter: its auto-repeat reaches the Change button the pick focuses, and must not clear it.
+	// A held Enter: its auto-repeat reaches the token row the form opens on, and must not open it.
 	await page.keyboard.down("Enter")
 	await page.keyboard.down("Enter")
 	await page.keyboard.up("Enter")
-	await page.waitForSelector(sel("recipient-card"), { timeout: 5_000 })
+	await page.waitForSelector(sel("send-payee"), { timeout: 5_000 })
 	expect((await readSendInputs(page)).destination).toBe(account)
-	await waitForFocus(page, "recipient-card-change")
-	await expectAccentRing(page, "recipient-card-change")
-	expect(await tabAround(page, 1)).toEqual(["send-token-trigger"])
+	await waitForFocus(page, "send-token-trigger")
+	await expectAccentRing(page, "send-token-trigger")
+	expect(await page.$(sel("token-address-field"))).toBeNull()
+	expect(await page.$(sel("select-token-search"))).toBeNull()
 
-	// The line shares the box with the scrolling rows: Up still reveals the last drawn row whole.
-	await clickByTestId(page, "recipient-card-change")
-	await page.waitForSelector(DESTINATION_INPUT, { timeout: 5_000 })
-	await page.focus(DESTINATION_INPUT)
+	// Back on the person step the field is empty and focused. The line shares the box with the
+	// scrolling rows: Up still reveals the last drawn row whole.
+	await clickByTestId(page, "subpage-back")
+	await waitForFocus(page, "send-destination-field")
 	await page.keyboard.type("z")
 	await waitForSuggestionRows(page, 50)
 	expect(await readMoreLine(page)).toEqual({
@@ -267,35 +272,37 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 		sel("recipient-suggestion-address"),
 	)
 	await page.keyboard.press("Enter")
-	await page.waitForSelector(sel("recipient-card"), { timeout: 5_000 })
+	await page.waitForSelector(sel("send-payee"), { timeout: 5_000 })
 	const picked = (await readSendInputs(page)).destination
 	expect(zeds.map((_, i) => `0x${String(i + 4).padStart(64, "0")}`)).toContain(picked)
 	expect(trimAddress(picked)).toBe(lastDrawn)
 
-	await clickByTestId(page, "recipient-card-change")
-	await page.waitForSelector(DESTINATION_INPUT, { timeout: 5_000 })
-	await page.focus(DESTINATION_INPUT)
+	await clickByTestId(page, "subpage-back")
+	await waitForFocus(page, "send-destination-field")
 	await page.keyboard.type("Acc")
 	await waitForSuggestionRows(page, 4)
 	// Inside the quarter second the suggestions outlive the field's blur by. The list scrolls, and a
-	// scrolling element is a Tab stop unless it opts out: Tab goes on to the token card.
+	// scrolling element is a Tab stop unless it opts out: Tab goes on to the step's own-account row,
+	// whose Enter is its own choice, never the first suggestion's.
 	await page.keyboard.press("Tab")
-	expect(await activeTestId(page)).toBe("send-token-trigger")
+	expect(await activeTestId(page)).toBe("send-own-account")
 	await page.keyboard.press("Enter")
-	expect((await readSendInputs(page)).destination).toBe("Acc")
+	await page.waitForSelector(sel("send-payee"), { timeout: 5_000 })
+	expect((await readSendInputs(page)).destination).toBe(account)
 })
 
-test("the unit switch: a Tab stop right after the token card, the accent ring, Enter and Space, a held Enter once", {
+test("the unit switch: a Tab stop right after the token card, the accent ring, Enter and Space, a held Enter once; each side group one stop its arrows move through", {
 	timeout: 180_000,
 	retry: 0,
 }, async ({ listedExtensionPerTest: ctx, skip }) => {
 	skipUnlessListPrices(skip)
-	const { page } = await openSendPage(ctx, { priced: true })
+	const { page } = await openSendPage(ctx, { priced: true, form: true })
 	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
 	await shotSend(page, "send-at-rest", "send-amount-row")
 
-	await tabTo(page, "send-token-trigger")
-	// The amount field is disabled without a balance, so the unit switch follows the token card.
+	await waitForFocus(page, "send-token-trigger")
+	// Max stands before the amount field; both are disabled without a balance, so the unit switch
+	// follows the token card.
 	expect(await tabAround(page, 1)).toEqual(["send-amount-fiat-toggle"])
 	await expectAccentRing(page, "send-amount-fiat-toggle")
 	await shotSend(page, "send-toggle-focused", "send-amount-row")
@@ -314,27 +321,49 @@ test("the unit switch: a Tab stop right after the token card, the accent ring, E
 	await waitForAmountMode(page, "usd")
 	expect(await page.$(sel("send-amount-input"))).toBeNull()
 	expect(await activeTestId(page)).toBe("send-amount-fiat-toggle")
-	// Disabled without a balance, Max is no stop: the next one is past the amount card.
-	expect((await tabAround(page, 1))[0]).not.toBe("send-amount-max")
+	// Past the amount card each side group is one stop, its checked radio, and an arrow both moves to
+	// and checks the other side.
+	expect(await tabAround(page, 1)).toEqual(["send-from-private"])
+	await page.keyboard.press("ArrowRight")
+	await waitForFocus(page, "send-from-public")
+	expect(await page.$eval(sel("send-from-type"), (el) => el.getAttribute("data-side"))).toBe("public")
+	await page.keyboard.press("ArrowLeft")
+	await waitForFocus(page, "send-from-private")
+	expect(await page.$eval(sel("send-from-type"), (el) => el.getAttribute("data-side"))).toBe("private")
+	expect(await tabAround(page, 1)).toEqual(["send-to-private"])
+	// The radio itself is invisible over its choice, which draws the ring.
+	const { ring, color } = await focusRing(page, "send-to-private-choice")
+	expect(ring).toMatch(/^solid 2px /)
+	expect(color).toBe(await tokenColor(page, "--nulo-accent"))
+	await page.keyboard.press("ArrowDown")
+	await waitForFocus(page, "send-to-public")
+	expect(await page.$eval(sel("send-to-type"), (el) => el.getAttribute("data-side"))).toBe("public")
+	await shotSend(page, "send-sides-focused", "send-to-type")
 })
 
 test("the token card draws the accent ring when focused", { timeout: 180_000, retry: 0 }, async ({ listedExtensionPerTest: ctx, skip }) => {
 	skipUnlessListPrices(skip)
-	const { page } = await openSendPage(ctx, { priced: true })
+	const { page } = await openSendPage(ctx, { priced: true, form: true })
 	await page.waitForSelector(sel("send-token-symbol"), { visible: true, timeout: 30_000 })
+	await page.focus(sel("subpage-back"))
 	await tabTo(page, "send-token-trigger")
 	await expectAccentRing(page, "send-token-trigger")
 	await shotSend(page, "send-token-focused", "send-token-trigger")
 })
 
 async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void> {
-	const { page, seededFpcIds } = await openSendPage(ctx, { priced: true, sponsors: true })
+	const { page, seededFpcIds } = await openSendPage(ctx, { priced: true, sponsors: true, form: true })
 	const account = await getAccountAddress(page)
-	await page.waitForSelector(sel("send-fee-method-trigger"), { visible: true, timeout: 30_000 })
+	await page.waitForSelector(sel("send-fee-change"), { visible: true, timeout: 30_000 })
 	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
-	await shotSend(page, "send-fee-at-rest", "send-fee-method-trigger")
+	await shotSend(page, "send-fee-at-rest", "send-fee-line")
 
-	await tabTo(page, "send-fee-method-trigger")
+	// Change opens the Fee sheet on the card's method trigger, a stop inside the sheet's trap.
+	await tabTo(page, "send-fee-change")
+	await expectAccentRing(page, "send-fee-change")
+	await page.keyboard.press("Enter")
+	await waitForFocus(page, "send-fee-method-trigger")
+	expect(await page.$(`${sel("send-fee-sheet")} ${sel("send-fee-method-trigger")}`), "the trigger is the sheet's").not.toBeNull()
 	await expectAccentRing(page, "send-fee-method-trigger")
 	await shotSend(page, "send-fee-focused", "send-fee-method-trigger")
 	const trigger = await page.$eval(sel("send-fee-method-trigger"), (el) => ({ tag: el.tagName, type: el.getAttribute("type") }))
@@ -342,6 +371,12 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(OPEN_TRIGGER, { timeout: 5_000 })
+	// The menu measures a trigger the sheet moved in: it opens 8 px beside it.
+	const gap = await feeMenuGap(page)
+	expect(
+		[gap.above, gap.below].some((edge) => Math.abs(edge - 8) <= 1),
+		JSON.stringify(gap),
+	).toBe(true)
 	// Arrow navigation has no target until at least one fee method finishes loading.
 	await page.waitForSelector("#dropdown [data-dropdown-item]", { timeout: 30_000 })
 	await page.keyboard.press("ArrowDown")
@@ -407,6 +442,11 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 	expect(await activeTestId(page), "Shift+Tab from the chosen priority").not.toMatch(/^send-fee-priority-/)
 	await page.keyboard.press("Tab")
 	await waitForFocus(page, "send-fee-priority-fast")
+
+	// Escape closes the sheet back onto Change.
+	expect(await pressEscape(page)).toBe(true)
+	await settleClosedPopup(page, "send-fee-sheet")
+	await waitForFocus(page, "send-fee-change")
 }
 
 test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrows and Enter pick, Escape returns to it", {
@@ -463,41 +503,39 @@ async function feeMenuGap(page: Page): Promise<{ above: number; below: number }>
 	)
 }
 
-test("an open destination suggestion list covers neither Max nor the fee method picker, whose first press opens it beside itself", {
+test("a mouse press held on a suggestion while the field's blur matches another destination picks the pressed one", {
 	timeout: 120_000,
 	retry: 0,
 }, async ({ registeredExtensionPerTest: ctx }) => {
+	const home = await openPopup(ctx)
+	await waitForHash(home, "#/popup/general", 30_000)
+	const account = await getAccountAddress(home)
+	// Named after the account's address, so typing that address suggests both.
+	await seedContacts(home, [`${account} fan`])
+	const namesake = `0x${"1".padStart(64, "0")}`
+	await home.close()
 	const { page } = await openSendPage(ctx)
-	await page.waitForSelector(sel("send-fee-method-trigger"), { visible: true, timeout: 30_000 })
 	await page.focus(DESTINATION_INPUT)
-	await page.keyboard.type(await getAccountAddress(page))
+	await page.keyboard.type(account)
+	await waitForSuggestionRows(page, 2)
 
-	const covered = {
-		token: await coveredAt(page, "send-token-trigger"),
-		max: await coveredAt(page, "send-amount-max"),
-		fee: await coveredAt(page, "send-fee-method-trigger"),
-	}
-	console.log(`[send-keyboard] under the open suggestion list: ${JSON.stringify(covered)}`)
-	expect(await activeTestId(page)).toBe("send-destination-field")
-	expect(await page.$(sel("send-destination-suggestions"))).not.toBeNull()
-	expect(covered.max).toBeNull()
-	expect(covered.fee).toBeNull()
-
-	// The press takes the focus from the destination, which turns into the taller card only once it
-	// ends: the menu opens on that press and sits beside the trigger where the card has put it.
-	const at = await page.$eval(sel("send-fee-method-trigger"), (el) => {
-		const box = el.getBoundingClientRect()
-		return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
-	})
+	// The press blurs the field, which matches the account; the step waits for the press to end, so
+	// its release lands on the row it began on.
+	const at = await page.$$eval(
+		sel("recipient-suggestion-address"),
+		(els, short: string) => {
+			const box = els.find((el) => el.textContent?.trim() === short)?.getBoundingClientRect()
+			return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null
+		},
+		trimAddress(namesake),
+	)
+	if (!at) throw new Error("the namesake's suggestion is not drawn")
 	await page.mouse.move(at.x, at.y)
 	await page.mouse.down()
 	await new Promise((resolve) => setTimeout(resolve, 300))
 	await page.mouse.up()
-	await page.waitForSelector(sel("recipient-card"), { visible: true, timeout: 5_000 })
-	await page.waitForSelector(OPEN_TRIGGER, { timeout: 5_000 })
-	const gap = await feeMenuGap(page)
-	expect(
-		[gap.above, gap.below].some((edge) => Math.abs(edge - 8) <= 1),
-		JSON.stringify(gap),
-	).toBe(true)
+	await page.waitForSelector(sel("send-payee"), { visible: true, timeout: 5_000 })
+	expect((await readSendInputs(page)).destination).toBe(namesake)
+	expect(await page.$(sel("token-address-field"))).toBeNull()
+	expect(await page.$(sel("select-token-search"))).toBeNull()
 })

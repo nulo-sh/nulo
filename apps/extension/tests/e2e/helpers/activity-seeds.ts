@@ -119,17 +119,28 @@ export async function seedTransaction(page: Page, scope: ActivityScope, seed: Tr
 }
 
 /** A registered token row, the scope's token unless `token` names another: a receipt shows its amount
- *  and quote only through one, and only with the decimals getter that makes its stored decimals known. */
+ *  and quote only through one, and only with the decimals getter that makes its stored decimals known.
+ *  `transfers` adds every balance and transfer function, so Send offers both sides. */
 export async function seedTokenRow(
 	page: Page,
 	scope: ActivityScope,
 	id: number,
-	opts: { token?: ActivityScope["token"]; decimalsGetter?: boolean } = {},
+	opts: { token?: ActivityScope["token"]; decimalsGetter?: boolean; transfers?: boolean } = {},
 ): Promise<void> {
 	const getter = opts.decimalsGetter === false ? {} : { getDecimalsFn: { name: "decimals", impl: 0 } }
-	const row = { id, profileId: scope.profileId, chainId: scope.chainId, ...(opts.token ?? scope.token), ...getter }
+	const transfers = opts.transfers ? Object.fromEntries(TRANSFER_FNS.map((key) => [key, { name: key, impl: 0 }])) : {}
+	const row = { id, profileId: scope.profileId, chainId: scope.chainId, ...(opts.token ?? scope.token), ...getter, ...transfers }
 	await storeRow(page, `nulo:core:tokens@${id}`, row)
 }
+
+const TRANSFER_FNS = [
+	"balanceOfPublicFn",
+	"balanceOfPrivateFn",
+	"transferPublicFn",
+	"transferPrivateFn",
+	"transferPublicToPrivateFn",
+	"transferPrivateToPublicFn",
+] as const
 
 export type ReceiptSeed = { tokenId: number; amount: string; uniqueNoteHash: string; at?: number }
 
@@ -250,13 +261,13 @@ export async function seedPublicReceipt(page: Page, scope: ActivityScope, seed: 
 type JournalSeedBase = {
 	/** 16 hex characters, as the journal mints them. */
 	id: string
-	progress: { stage: "failed" | "cancelled"; [field: string]: unknown }
+	progress: { stage: "succeeded" | "failed" | "cancelled"; [field: string]: unknown }
 	errorKind?: string
 	at?: number
 }
 
-/** A Send-page transfer: `amount` is in the token's base units. */
-type TransferJournalSeed = JournalSeedBase & { tokenId: number; amount: string }
+/** A Send-page transfer: `amount` is in the token's base units; `recipient` defaults to the account. */
+type TransferJournalSeed = JournalSeedBase & { tokenId: number; amount: string; recipient?: string }
 
 /** A dApp's call, as the queued-journal path writes it: `title` is the function's name as the dApp
  *  sent it, `subtitle` the name the dApp gave itself. */
@@ -264,7 +275,7 @@ type DappJournalSeed = JournalSeedBase & { kind: "dapp_execute"; title: string; 
 
 export type JournalSeed = TransferJournalSeed | DappJournalSeed
 
-/** An operation that ended without a settled transaction, stamped with the scope. */
+/** An operation that ended, stamped with the scope. */
 export async function seedJournalRecord(page: Page, scope: ActivityScope, seed: JournalSeed): Promise<void> {
 	const at = seed.at ?? Date.now()
 	const shape =
@@ -275,7 +286,7 @@ export async function seedJournalRecord(page: Page, scope: ActivityScope, seed: 
 					origin: "popup",
 					tokenId: seed.tokenId,
 					amountRaw: seed.amount,
-					recipientAddress: scope.account,
+					recipientAddress: seed.recipient ?? scope.account,
 					transferType: 0,
 				}
 	const record = {

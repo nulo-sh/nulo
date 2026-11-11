@@ -1,6 +1,6 @@
 import type { Page } from "puppeteer"
 import { clickByTestId, replaceInputValue, withTimeoutMessage } from "./dom"
-import { type SendAction, submitSend } from "./send-page"
+import { chooseRecipient, openSend, submitSend, waitForSendGone } from "./send-page"
 import { refreshBalances } from "./tokens"
 import { waitForToast } from "./widgets"
 
@@ -11,136 +11,95 @@ export interface SendTransferOptions {
 	toType: "public" | "private"
 	amount: string
 	destination: string
-	/** What the footer must offer this send: "send" at once, or "review" through the sheet because
-	 *  the fee names the account. The other offer fails the send (`submitSend`) — a real send is a
-	 *  check on the gate, never a detour around it. */
-	expect?: SendAction
 }
 
-/** Toggle a send-type pair (send-from-type or send-to-type) until the
- *  expected label is active. The SendTypesCard toggle handler is guarded
- *  by token capability flags that arrive asynchronously after popup
- *  mount, so an early click is a no-op. Retries the click every 500ms
- *  for up to 30s, verifying the `toggle_active` class landed on the
- *  expected span. */
-export async function setActiveSendType(page: Page, testId: string, desired: "public" | "private"): Promise<void> {
-	const targetLabel = desired.toUpperCase()
-	await page.waitForFunction(
-		({ id, label }: { id: string; label: string }) => {
-			const container = document.querySelector<HTMLElement>(`[data-testid="${id}"]`)
-			if (!container) return false
-			const spans = [...container.querySelectorAll("span")]
-			const active = spans.find((s) => (s.className ?? "").toLowerCase().includes("active"))
-			if (active?.textContent?.trim() === label) return true
-			// Kick the toggle (no-op if the handler is still guarded by
-			// missing token capabilities; we'll re-check next tick)
-			container.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
-			return false
-		},
-		{ timeout: 30_000, polling: 500 },
-		{ id: testId, label: targetLabel },
+/** Checks the `desired` radio of a side group (`send-from-type` or `send-to-type`). A side is disabled
+ *  until the token's capabilities load, so the click is retried until the radio is enabled and checked. */
+export async function setActiveSendType(
+	page: Page,
+	testId: "send-from-type" | "send-to-type",
+	desired: "public" | "private",
+): Promise<void> {
+	const radio = `${testId.replace(/-type$/, "")}-${desired}`
+	await withTimeoutMessage(
+		page.waitForFunction(
+			(id: string) => {
+				const input = document.querySelector<HTMLInputElement>(`[data-testid="${id}"]`)
+				if (!input || input.disabled) return false
+				if (!input.checked) input.click()
+				return input.checked
+			},
+			{ timeout: 30_000, polling: 500 },
+			radio,
+		),
+		async () =>
+			`setActiveSendType: ${radio} never checked (now ${await page.evaluate((id: string) => {
+				const input = document.querySelector<HTMLInputElement>(`[data-testid="${id}"]`)
+				return input ? `disabled ${input.disabled}, checked ${input.checked}` : "absent"
+			}, radio)})`,
 	)
 }
 
-/** Execute a transfer via the SendPopup. Uses data-testid selectors throughout.
- *  Opens the popup, toggles types, enters amount + destination, submits, waits for toast. */
+/** One send from Home: Send, the person, both sides, the amount, the review and Send now, then the
+ *  toast and the page gone. */
 export async function sendTransfer(page: Page, opts: SendTransferOptions): Promise<void> {
-	// When sending from private, the token-balance cache the Send
-	// popup reads may lag the on-chain state. Typical scenario: the
-	// prior test shielded value, the tx confirmed, the test closed
-	// the page, and this test opened a fresh popup whose cached
-	// private balance is still 0 or pre-shield. Without an explicit
-	// refresh, the amount input stays :disabled (gated on
-	// `tokenBalanceByType`) and `sendTransfer` hangs on the 60s
-	// amount-enabled wait. Mirror the manual recovery a user would
-	// do: refresh balances on the Assets view, give PXE a moment,
-	// then open Send. See memory/feedback_network_e2e_between_m21_prs.
-	if (opts.fromType === "private") {
-		await refreshBalances(page)
-		// No post-refresh sleep: the downstream `tokenBalanceByType > 0`
-		// wait on the amount input (60s budget, 2s polling) IS the
-		// signal we'd be waiting for. If the refresh hasn't landed by
-		// then the test fails honestly with "amount input never enabled"
-		// rather than silently proceeding on a stale balance.
-	}
+	// The Send page reads a token-balance cache that may lag the chain after a send another test made;
+	// a person refreshes Assets first, and the amount field's enabled wait below is the signal.
+	if (opts.fromType === "private") await refreshBalances(page)
 
-	// Open SendPopup
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="actions-send"]') as HTMLElement)?.click()
-	})
-
-	// Wait for SendTypesCard to mount
-	await page.waitForSelector('[data-testid="send-from-type"]', { timeout: 10_000 })
-
-	// The toggle handler is guarded by token capability flags
-	// (hasPrivateTransfers / hasPublicTransfers). On mount, these are
-	// falsy until the token loads its metadata, so an early click is a
-	// no-op. Poll via setActiveSendType — we assert the expected active
-	// label appears before proceeding.
+	await openSend(page)
+	await chooseRecipient(page, opts.destination)
 	await setActiveSendType(page, "send-from-type", opts.fromType)
 	await setActiveSendType(page, "send-to-type", opts.toType)
-
 	await fillSendForm(page, opts)
-	await submitSend(page, { expect: opts.expect ?? "send" })
+	await submitSend(page)
 
-	// Wait for submission toast + popup auto-close. The toast only appears AFTER client-side
-	// proving; native proving (the prover-ON canary) adds tens of seconds to that pipeline —
-	// especially the shield (public→private) path — so give it real headroom there. Proverless
-	// bulk shards stay tight to keep failures honest-fast.
+	// The toast only appears after client-side proving; native proving (the prover-ON canary) adds tens
+	// of seconds there, the shield path most, so it gets real headroom. Proverless shards stay tight.
 	await waitForToast(page, "Transaction submitted", process.env.NULO_E2E_PROVERLESS === "1" ? 60_000 : 300_000)
-	// Wait for popup to fully close
-	await page.waitForFunction(() => !document.querySelector('[data-testid="send-destination-field"]'), { timeout: 10_000 })
+	await waitForSendGone(page)
 }
 
-/** Types the amount and destination into the open Send form, once its amount field takes input. */
+/** Answers the person step with `destination` when it shows, then types the amount once its field
+ *  takes input (it is disabled while the chosen side's balance is 0 or loading). */
 export async function enterSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
-	// Wait for amount input to become ENABLED
-	// AmountCard has :disabled="!tokenBalanceByType" — disabled when balance for selected type is 0/loading
+	if (await page.$('[data-testid="send-person-step"]')) await chooseRecipient(page, opts.destination)
 	await page.waitForFunction(
 		() => {
-			const input = document.querySelector('[data-testid="send-amount-input"]') as HTMLInputElement
-			return input && !input.disabled
+			const input = document.querySelector<HTMLInputElement>('[data-testid="send-amount-input"]')
+			return Boolean(input) && !input?.disabled
 		},
 		{ timeout: 60_000, polling: 2_000 },
 	)
-
-	// Enter amount + destination via the v-model-aware helper; Puppeteer's
-	// triple-click + type is unreliable on our custom Input wrapper.
+	// The v-model-aware helper: Puppeteer's triple-click and type is unreliable on the Input wrapper.
 	await replaceInputValue(page, '[data-testid="send-amount-input"]', opts.amount)
-	await replaceInputValue(page, '[data-testid="send-destination-field"] input', opts.destination)
 }
 
-/** Fills the open Send form and waits until the footer is clickable — the fee estimate landed. */
+/** Fills the open Send form and waits until "Review send" is enabled: the fee estimate landed. */
 export async function fillSendForm(page: Page, opts: { amount: string; destination: string }): Promise<void> {
 	await enterSendForm(page, opts)
-
-	// Wait for send button to become clickable (pointer-events != none)
-	// This means fee estimation (which triggers simulateTx → PXE sync) completed.
 	try {
 		await page.waitForFunction(
 			() => {
-				const btn = document.querySelector('[data-testid="send-submit"]') as HTMLElement
-				return btn && getComputedStyle(btn).pointerEvents !== "none"
+				const btn = document.querySelector<HTMLButtonElement>('[data-testid="send-submit"]')
+				return Boolean(btn) && !btn?.disabled
 			},
 			{ timeout: 120_000, polling: 3_000 },
 		)
 	} catch (e) {
 		const snapshot = await page.evaluate(() => {
-			const amount = document.querySelector<HTMLInputElement>('[data-testid="send-amount-input"]')
-			const dest = document.querySelector<HTMLInputElement>('[data-testid="send-destination-field"] input')
-			const submit = document.querySelector<HTMLElement>('[data-testid="send-submit"]')
-			const feeTrigger = document.querySelector<HTMLElement>('[data-testid="send-fee-method-trigger"]')
+			const q = (t: string) => document.querySelector<HTMLElement>(`[data-testid="${t}"]`)
+			const amount = q("send-amount-input") as HTMLInputElement | null
 			return {
 				amountValue: amount?.value,
 				amountDisabled: amount?.disabled,
-				destValue: dest?.value?.slice(0, 20),
-				submitText: submit?.textContent?.trim().slice(0, 80),
-				submitPointerEvents: submit ? getComputedStyle(submit).pointerEvents : null,
-				feeMethodText: feeTrigger?.textContent?.trim().slice(0, 80),
+				payee: q("send-payee-address")?.textContent?.slice(0, 20),
+				submitText: q("send-submit")?.textContent?.trim().slice(0, 80),
+				feeLine: q("send-fee-line")?.textContent?.replace(/\s+/g, " ").trim().slice(0, 120),
 				bodySnippet: (document.body.textContent ?? "").slice(0, 400),
 			}
 		})
-		console.error("[sendTransfer] submit never became enabled. Snapshot:", JSON.stringify(snapshot, null, 2))
+		console.error("[sendTransfer] Review send never became enabled. Snapshot:", JSON.stringify(snapshot, null, 2))
 		throw e
 	}
 }

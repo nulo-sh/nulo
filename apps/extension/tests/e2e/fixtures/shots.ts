@@ -16,7 +16,7 @@ export async function settleThemeTransitions(page: Page): Promise<void> {
 /** Opt-in capture of the popup in both themes under `NULO_E2E_SHOT_DIR`: a colour that reads well on
  *  one theme only is what a row count never sees. The page must be shown on entry: a hidden one (a
  *  Chrome tab behind another) draws no frame, and its capture can hang. */
-export async function shotSend(page: Page, name: string, focus = "send-publish-strip"): Promise<void> {
+export async function shotSend(page: Page, name: string, focus = "send-publish"): Promise<void> {
 	const dir = process.env.NULO_E2E_SHOT_DIR
 	if (!dir) return
 	const visibility = await page.evaluate(() => document.visibilityState)

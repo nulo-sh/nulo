@@ -7,9 +7,9 @@ import { expect, inject } from "vitest"
 import { type AztecTestConfig, mintPublicTokensForAccount } from "../fixtures/aztec"
 import { openPopup, replaceInputValue, test, waitForHash } from "../fixtures/extension"
 import { captureBalanceBaseline, seedUsdQuoteAndReload, setActiveSendType, waitForFreshBalanceRow } from "../fixtures/helpers"
-import { closeReview, openReviewFromStrip, openSend, readSendInputs, shotSend } from "../fixtures/send-page"
+import { chooseRecipient, closeReview, openReview, openSend, readSendInputs, shotSend } from "../fixtures/send-page"
 import { pointerClick } from "../helpers/legal-drivers"
-import { activeTestId, tabTo } from "../helpers/pointer-probes"
+import { activeTestId } from "../helpers/pointer-probes"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -18,13 +18,13 @@ const MINTED = 1_234_567_123_456_789_012_345_678n
 const PUBLIC_BALANCE = 1000n * 10n ** 18n + MINTED
 const AMOUNT = '[data-testid="send-amount-input"]'
 const USD = '[data-testid="send-amount-fiat-input"]'
-const DESTINATION = '[data-testid="send-destination-field"]'
 const REVIEW_AMOUNT = '[data-testid="send-review-amount"]'
 
 /** On a timeout the error carries what the page showed, so a refused amount reads as one. */
 async function waitForEstimateAndConfirm(page: Page): Promise<void> {
 	try {
-		await page.waitForSelector('[data-testid="fee-estimate"]', { visible: true, timeout: 120_000 })
+		// The fee card stays mounted, unshown, while its sheet is closed: the estimate lands in it all the same.
+		await page.waitForSelector('[data-testid="fee-estimate"]', { timeout: 120_000 })
 		await page.waitForFunction(() => document.querySelector<HTMLButtonElement>('[data-testid="send-submit"]')?.disabled === false, {
 			timeout: 10_000,
 		})
@@ -51,19 +51,19 @@ async function waitForAmount(page: Page, expected: string): Promise<void> {
 	}
 }
 
-async function readTokenLine(page: Page): Promise<{ text: string; lines: number; below: boolean; inside: boolean }> {
+async function readTokenLine(page: Page): Promise<{ text: string; lines: number; maxAbove: boolean; inside: boolean }> {
 	return page.evaluate(() => {
 		const box = (testid: string) => document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect()
 		const label = document.querySelector('[data-testid="send-amount-fiat-label"]')
 		const range = document.createRange()
 		if (label) range.selectNodeContents(label)
 		const rects = [...range.getClientRects()].filter((rect) => rect.width > 0)
-		const [fiat, balance, max, row] = ["send-amount-fiat-label", "send-amount-balance", "send-amount-max", "send-amount-row"].map(box)
-		const parts = [fiat, balance, max]
+		const [fiat, max, row] = ["send-amount-fiat-label", "send-amount-max", "send-amount-row"].map(box)
+		const parts = [fiat, max]
 		return {
 			text: label?.textContent?.trim() ?? "",
 			lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
-			below: !!(fiat && balance && max) && balance.top >= fiat.bottom && max.top >= fiat.bottom,
+			maxAbove: !!(max && row) && max.bottom <= row.top,
 			inside: !!row && parts.every((rect) => !!rect && rect.left >= row.left && rect.right <= row.right),
 		}
 	})
@@ -107,17 +107,15 @@ type UsdLines = {
 	fontSize: number
 	derivedPx: number
 	lines: number
-	overlap: number
 	spill: number
 	belowAmount: number
-	aboveBalance: number
-	sharesBalanceRow: boolean
+	inMeta: boolean
 }
 
 /**
- * The USD field, and the derived token line against the balance: `overlap` is how far the two boxes
- * cross on both axes (positive only when they do), `spill` how far the line or Max runs past the
- * amount row, and `belowAmount` and `aboveBalance` place the line between the amount and the balance.
+ * The USD field and the derived token line: `spill` is how far the line or Max runs past the amount
+ * row, `belowAmount` how far the line sits under it, and `inMeta` whether it is drawn in the line
+ * under the field rather than a row of its own.
  */
 async function readUsdLines(page: Page): Promise<UsdLines> {
 	return page.$eval(USD, (el) => {
@@ -129,26 +127,15 @@ async function readUsdLines(page: Page): Promise<UsdLines> {
 		const nan = { top: Number.NaN, bottom: Number.NaN, left: Number.NaN, right: Number.NaN }
 		const box = (id: string) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect() ?? nan
 		const derived = document.querySelector('[data-testid="send-amount-derived"]')
-		const [line, balance, max, row] = [
-			box("send-amount-derived"),
-			box("send-amount-balance"),
-			box("send-amount-max"),
-			box("send-amount-row"),
-		]
-		const across = (a0: number, a1: number, b0: number, b1: number) => Math.min(a1, b1) - Math.max(a0, b0)
+		const [line, max, row] = [box("send-amount-derived"), box("send-amount-max"), box("send-amount-row")]
 		return {
 			hidden,
 			fontSize: Number.parseFloat(getComputedStyle(input).fontSize),
 			derivedPx: derived ? Number.parseFloat(getComputedStyle(derived).fontSize) : Number.NaN,
 			lines: derived?.getClientRects().length ?? 0,
-			overlap: Math.min(
-				across(line.left, line.right, balance.left, balance.right),
-				across(line.top, line.bottom, balance.top, balance.bottom),
-			),
 			spill: Math.max(line.right, max.right) - row.right,
 			belowAmount: line.top - row.bottom,
-			aboveBalance: balance.top - line.bottom,
-			sharesBalanceRow: across(line.top, line.bottom, balance.top, balance.bottom) > 0,
+			inMeta: Boolean(derived && document.querySelector('[data-testid="send-amount-meta"]')?.contains(derived)),
 		}
 	})
 }
@@ -198,6 +185,7 @@ test.skipIf(!hasConfig)(
 		await seedUsdQuoteAndReload(page)
 
 		await openSend(page)
+		await chooseRecipient(page, tokenReadyExtension.accountAddress)
 		await setActiveSendType(page, "send-from-type", "public")
 		await setActiveSendType(page, "send-to-type", "public")
 		await page.waitForFunction(
@@ -206,18 +194,15 @@ test.skipIf(!hasConfig)(
 			AMOUNT,
 		)
 
-		// Filling the destination moves focus, which is what leaves the amount field.
+		// Leaving the field is what rests the amount.
 		await replaceInputValue(page, AMOUNT, "1234567.123456789012345678")
-		await replaceInputValue(page, DESTINATION, tokenReadyExtension.accountAddress)
+		await page.$eval(AMOUNT, (el) => (el as HTMLInputElement).blur())
 		await waitForEstimateAndConfirm(page)
 		expect((await readSendInputs(page)).amount).toBe("1,234,567.123456789012345678")
 		// Soft, so one run reports every fit check.
 		expect.soft(await fieldShowsWholeAmount(page), `typed, at rest: ${JSON.stringify(await readField(page))}`).toBe(true)
 
-		// The destination still holds the focus: the press that leaves it turns it into the account's
-		// card, taller, and Max must still take that first press. It leaves the amount at rest, grouped
-		// and fitted at once.
-		expect(await activeTestId(page)).toBe("send-destination-field")
+		// Max leaves the amount at rest, grouped and fitted at once.
 		await pointerClick(page, "send-amount-max")
 		await waitForAmount(page, "1,235,567.123456789012345678")
 		expect.soft(await page.$eval(AMOUNT, (el) => el === document.activeElement), "Max left the field focused").toBe(false)
@@ -239,16 +224,16 @@ test.skipIf(!hasConfig)(
 		expect.soft(focused.metaTop, "the line under the field moved").toBeCloseTo(resting.metaTop, 0)
 		await page.$eval(AMOUNT, (el) => (el as HTMLInputElement).blur())
 		await waitForEstimateAndConfirm(page)
-		expect(await page.$eval('[data-testid="send-amount-balance"]', (el) => el.textContent?.trim())).toBe("1,235,567.12345678 TST")
-		// Beside this balance the dollar line has no room: "≈" stays with its figure, and the balance
-		// and Max wrap under it, within the amount's width.
+		expect(await page.$eval('[data-testid="send-from-balance-public"]', (el) => el.textContent?.trim())).toBe("1,235,567.12345678 TST")
+		// "≈" stays with its figure on one line under the field, Max sits over the field, and both
+		// stay within the amount's width.
 		const meta = await readTokenLine(page)
 		expect(meta.text).toMatch(/^≈ \$1,235,567\./)
 		expect.soft(meta.lines, `the dollar line breaks: ${JSON.stringify(meta)}`).toBe(1)
-		expect.soft(meta.below, `the balance and Max share the dollar line: ${JSON.stringify(meta)}`).toBe(true)
+		expect.soft(meta.maxAbove, `Max is not over the amount row: ${JSON.stringify(meta)}`).toBe(true)
 		expect.soft(meta.inside, `the line passes the amount's width: ${JSON.stringify(meta)}`).toBe(true)
 
-		await openReviewFromStrip(page)
+		await openReview(page)
 		await shotSend(page, "sheet-send-review", "send-review-submit")
 		const review = await readReviewAmount(page)
 		console.log(`[send-amount-exact] review amount: ${JSON.stringify(review)}`)
@@ -260,14 +245,12 @@ test.skipIf(!hasConfig)(
 		await pointerClick(page, "send-amount-fiat-toggle")
 		await page.waitForSelector('[data-testid="send-amount-derived"]', { visible: true, timeout: 10_000 })
 		expect((await page.$eval(USD, (el) => (el as HTMLInputElement).value)).length, "a long USD figure").toBeGreaterThanOrEqual(12)
-		// The whole balance's derived line would draw near 6 px beside the balance: it takes its own row.
+		// The whole balance's derived line is fitted on one line under the amount, at 8 px or more.
 		const usd = await readUsdLines(page)
 		expect.soft(usd.hidden, `USD at rest hides its tail: ${JSON.stringify(usd)}`).toBe(0)
 		expect.soft(usd.lines, `the derived line wraps: ${JSON.stringify(usd)}`).toBe(1)
-		expect.soft(usd.overlap, `the derived line runs into the balance: ${JSON.stringify(usd)}`).toBeLessThanOrEqual(0.5)
 		expect.soft(usd.spill, `the derived line or Max leaves the row: ${JSON.stringify(usd)}`).toBeLessThanOrEqual(0.5)
 		expect.soft(usd.belowAmount, `the derived line is not under the amount: ${JSON.stringify(usd)}`).toBeGreaterThanOrEqual(-0.5)
-		expect.soft(usd.aboveBalance, `the derived line is not above the balance: ${JSON.stringify(usd)}`).toBeGreaterThanOrEqual(-0.5)
 		expect.soft(usd.derivedPx, `the derived line draws below 8 px: ${JSON.stringify(usd)}`).toBeGreaterThanOrEqual(8)
 		await page.$eval(USD, (el) => (el as HTMLInputElement).focus())
 		await page
@@ -293,9 +276,11 @@ test.skipIf(!hasConfig)(
 		await page.waitForFunction(() => document.querySelector<HTMLButtonElement>('[data-testid="send-submit"]')?.disabled === true, {
 			timeout: 5_000,
 		})
-		// By keyboard: Tab from the field reaches Max, past the unit switch when the token is priced.
-		const walk = await tabTo(page, "send-amount-max", 2)
-		expect([["send-amount-max"], ["send-amount-fiat-toggle", "send-amount-max"]]).toContainEqual(walk)
+		// By keyboard: Max is the stop before the field, over it on the label line.
+		await page.keyboard.down("Shift")
+		await page.keyboard.press("Tab")
+		await page.keyboard.up("Shift")
+		expect(await activeTestId(page)).toBe("send-amount-max")
 		await shotSend(page, "send-max-focused", "send-amount-row")
 		await page.keyboard.press("Enter")
 		await waitForAmount(page, "1,235,567.123456789012345678")
@@ -315,23 +300,7 @@ test.skipIf(!hasConfig)(
 		await page.keyboard.type(",5")
 		await waitForAmount(page, "1.52")
 
-		// However long the press that leaves the destination is held, the field waits for its release.
-		await pointerClick(page, "recipient-card-change")
-		await replaceInputValue(page, DESTINATION, tokenReadyExtension.accountAddress)
-		expect(await activeTestId(page)).toBe("send-destination-field")
-		const max = await page.$eval('[data-testid="send-amount-max"]', (el) => {
-			el.scrollIntoView({ block: "center" })
-			const box = el.getBoundingClientRect()
-			return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
-		})
-		await page.mouse.move(max.x, max.y)
-		await page.mouse.down()
-		await new Promise((resolve) => setTimeout(resolve, 1_500))
-		await page.mouse.up()
-		await waitForAmount(page, "1,235,567.123456789012345678")
-		await page.waitForSelector('[data-testid="recipient-card"]', { visible: true, timeout: 5_000 })
-
-		// A short derived line keeps its full size beside the balance.
+		// A short derived line keeps its full size in the line under the field.
 		await pointerClick(page, "send-amount-fiat-toggle")
 		await replaceInputValue(page, USD, "25")
 		await page.waitForFunction(() => document.querySelector('[data-testid="send-amount-derived"]')?.textContent === "≈ 25 TST", {
@@ -339,8 +308,7 @@ test.skipIf(!hasConfig)(
 		})
 		const short = await readUsdLines(page)
 		expect.soft(short.derivedPx, `a short derived line shrinks: ${JSON.stringify(short)}`).toBe(13)
-		expect.soft(short.sharesBalanceRow, `a short derived line leaves the balance's row: ${JSON.stringify(short)}`).toBe(true)
-		expect.soft(short.overlap, `a short derived line runs into the balance: ${JSON.stringify(short)}`).toBeLessThanOrEqual(0.5)
+		expect.soft(short.inMeta, `a short derived line leaves the line under the field: ${JSON.stringify(short)}`).toBe(true)
 
 		expect(tokenReadyExtension.pageErrors).toEqual([])
 	},

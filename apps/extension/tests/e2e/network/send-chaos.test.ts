@@ -27,6 +27,7 @@ import {
 	waitForTxsMined,
 } from "../fixtures/send-burst"
 import { bringToFront } from "../fixtures/browser"
+import { openSendFeeSheet, readSendView } from "../fixtures/send-page"
 
 const enabled = aztecConfig !== undefined && process.env.NULO_E2E_CHAOS === "1"
 /** Read at load, so a value that is not a seed fails the file before the burst fixture funds anything. */
@@ -97,8 +98,10 @@ async function connectAccount(burst: Burst): Promise<Page> {
  * A send whose estimate is queued behind an earlier one cannot be confirmed until it lands, so each
  * send waits for its estimate (through any queued spell) and is confirmed the moment Send enables.
  */
-/** The fee menu as the page shows it, so a send the menu would not take names its reason. */
+/** The fee menu as the page shows it, so a send the menu would not take names its reason. The menu
+ *  lives in the Fee sheet, opened here unless the failed start left it open. */
 async function readFeeMenu(page: Page): Promise<(string | undefined)[]> {
+	if (!(await readSendView(page)).feeSheetOpen) await openSendFeeSheet(page).catch(() => undefined)
 	await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid="send-fee-method-trigger"]')?.click())
 	await new Promise((r) => setTimeout(r, 500))
 	return page.evaluate(() =>

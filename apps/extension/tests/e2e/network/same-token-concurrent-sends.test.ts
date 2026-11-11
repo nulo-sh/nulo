@@ -23,6 +23,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { afterEach, expect } from "vitest"
+import { QUEUED_SPONSORED_COPY } from "@/components/composite/send/publish-facts"
 import { queuedFeeCap } from "@/wallet/services/execution/queued-fee-cap"
 import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
 import { bringToFront, stopBackground } from "../fixtures/browser"
@@ -53,7 +54,7 @@ import {
 	unlockProfile,
 	waitForProfilePurged,
 } from "../fixtures/helpers"
-import { shotSend, waitForReview, waitForReviewReady, waitForSendGone } from "../fixtures/send-page"
+import { openReview, shotSend, waitForReview, waitForReviewReady, waitForSendGone } from "../fixtures/send-page"
 import { pointerClick } from "../helpers/legal-drivers"
 import { readDappExecuteRecords, waitForDappExecuteStagesPresent } from "../fixtures/journal"
 import { holdMining, pendingTxCount, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
@@ -245,9 +246,14 @@ test.skipIf(!hasConfig)(
 		const { page } = burst
 		await startSend(page, b)
 		await expectEstimateQueued(page, 3_000)
-		expect(await page.$eval('[data-testid="send-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
-		await shotSend(page, "send-queued-sponsored", "fee-settings-card")
-		await confirmSend(page)
+		// The form names the wait on its fee line; the review's own button offers the queue.
+		expect(await page.$eval('[data-testid="send-fee-line-note"]', (el) => el.textContent ?? "")).toContain(QUEUED_SPONSORED_COPY)
+		await shotSend(page, "send-queued-sponsored", "send-fee-line")
+		await openReview(page)
+		await waitForReviewReady(page)
+		expect(await page.$eval('[data-testid="send-review-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
+		await pointerClick(page, "send-review-submit")
+		await waitForSendGone(page, 30_000)
 		await expectStageHeld(page, raw(b.amount), "queued", HELD_MS)
 		expect((await readTxStatuses(page, [aHash]))[aHash], "A is still unmined while B waits").toBe(0)
 		await releaseMining()
@@ -755,9 +761,8 @@ test.skipIf(!hasConfig)(
 		await startSend(page, b)
 		await expectEstimateQueued(page, 3_000)
 		await page.waitForSelector('[data-testid="fee-estimate-queued-cap-line"]', { timeout: 5_000 })
-		await shotSend(page, "4-send-queued-cap", "fee-settings-card")
-		await pointerClick(page, "send-submit")
-		await waitForReview(page, true)
+		await shotSend(page, "4-send-queued-cap", "send-fee-line")
+		await openReview(page)
 		await waitForReviewReady(page)
 		expect(await page.$eval('[data-testid="send-review-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
 		await shotSend(page, "4-review-queued-cap", "send-review-fee")

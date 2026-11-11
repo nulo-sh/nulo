@@ -23,8 +23,8 @@ import {
 	waitForPgResult,
 } from "../fixtures/playground"
 import { readyAuthwitOwner } from "../fixtures/send"
-import { closeReview, openReviewFromStrip, shotSend } from "../fixtures/send-page"
-import { enterSendForm, setActiveSendType } from "../fixtures/transfers"
+import { chooseRecipient, closeReview, openReview, shotSend } from "../fixtures/send-page"
+import { fillSendForm, setActiveSendType } from "../fixtures/transfers"
 import { readScopeIdentity, seedPendingTrust } from "../helpers/activity-seeds"
 import {
 	approveExecute,
@@ -636,10 +636,12 @@ test.skipIf(!hasConfig)(
 
 			// The account's pull notes: spendable on Send, listed on the notes page.
 			await navigateByHash(wallet, `#/popup/send?tokenId=${(await tokenRowOf(wallet, pull)).id}`, 10_000)
-			await wallet.waitForSelector(sel("send-from-type"), { visible: true, timeout: 10_000 })
+			await wallet.waitForSelector(sel("send-person-step"), { visible: true, timeout: 10_000 })
+			await chooseRecipient(wallet, minter)
 			await setActiveSendType(wallet, "send-from-type", "private")
-			await enterSendForm(wallet, { amount: "1", destination: minter })
-			await openReviewFromStrip(wallet)
+			// "Review send" takes a press once the estimate has landed.
+			await fillSendForm(wallet, { amount: "1", destination: minter })
+			await openReview(wallet)
 			await sweepWindow(wallet, "popup-send", ["recipient and amount typed, review sheet open (network)"])
 			await closeReview(wallet)
 			await navigateByHash(wallet, "#/popup/settings/developer/account-state/notes", 10_000)
