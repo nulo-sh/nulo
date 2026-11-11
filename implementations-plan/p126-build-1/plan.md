@@ -82,12 +82,13 @@ Accessibility calls made under the owner's 2026-10-19 delegation: D8, D11, D12, 
 
 ## UI impact
 
-Every line below is inside the picks quoted above; captures in each PR body close the loop.
+Every line below but the last is inside the picks quoted above; captures in each PR body close the loop.
 - **Execute window, `aztec_sendTx` card** (P126-01, P126-02, P126-03, P126-04, P130-01, P130-03). Before: a numbered list at rest; one "Show all details" toggle opens "Payload" (a head row and flattened arguments per call) and three authorization groups. After: the same sentences on a rail of 20 px number boxes, each ending in a chevron; one press opens a step's value tree and its "Show N raw values" press; the Authorizations node, after the unchecked line and the advice, opens every authorization's rows under its line; no "Payload" heading, no repeated head row, no window-wide toggle.
 - **Execute window, grant and `aztec_createAuthWit` cards** (P126-02): a struct or an array argument reads as tree rows instead of one flattened string; scalar arguments render as today.
 - **Execute window and raised-fee window, width** (P126-05): the body fills 400 px; the card draws the margins. A toast in these two windows spans the window, as in the capabilities window.
 - **Raised-fee window** (P126-01 to P126-05): the same card, so the same rail.
 - **"Checking authorizations…", the failed preview with Try again, a refused request**: the same text in the node's place; captured in the new layout.
+- **Execute window below 300 px, an open step's or authorization's details** (OWNER-ASKS OA-1, answer pending): the guide indents by its line alone. Before: 3 px, the line, 11 px. After: the line, 1 px. Captured at 240 px in #1782.
 
 ## Assumptions
 
