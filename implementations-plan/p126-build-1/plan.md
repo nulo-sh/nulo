@@ -8,8 +8,49 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 32fd50e60
-status: approved
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-11.
+- **Status:** completed.
+  - Arc a1 shipped in #1776 (squash `21acbab59`).
+  - Arc a2 ships in #1782 (`feat(execute): numbered steps on a rail, each step its own details, in the approval window`). It targets `dev`, since #1776 landed while a2 ran. Its final commit is `6472bd5c6`; its last code commit is `64b12cb5b`.
+  - This close-out merges `origin/dev` at `0e31082a4` and touches only `implementations-plan/` and the e2e-testing skill.
+  - The merge of #1782 and this layer closes the plan.
+- **Shipped:** the picks of pages 126 and 130: P126-01 AL, P126-02 V2, P126-03 R2, P126-04 AU1, P126-05 FW1, P130-01 ALR and P130-03 R2.
+  - a1: the value tree, raw values under every readable call and authorization, and the armed-only fixture build that renders fixed requests in the real window.
+  - a2: numbered steps on a rail, each sentence its own press row (`StepRow.vue`, two guards); every authorization in one node after the unchecked line and the advice (`AuthwitDetails.vue`); both windows at full width; and the window-wide details toggle removed.
+  - a2 also closed the gaps the renders carried: D8's slot, the warning and a pending reading printed once, no "Payload" heading, the advice for a loose unreadable authorization, and the checking, failed, refused and empty states.
+- **Owner's sign-off:** page 126 (2026-11-09 13:44 UTC) and page 130 (2026-11-10 14:51 UTC, re-signed 15:34 UTC), quoted in the decision ledger. Page 132 (2026-11-10 21:09 UTC) landed #1776. #1782 waits for its own page, with OA-1.
+- **Gates at a2's final code:**
+  - Phase 4's gate green.
+  - Phase 5's gate: `audit:vue` and `test:all` green on their third run; the reds before were untouched tests at their 5 s limit on a host at load5 up to 671. `check:plans` green.
+  - Smoke `execute-steps` on Chrome and Firefox, and the release-artifact negative.
+  - The nine network specs, 23/23 on each browser.
+  - `snack-placement`, 5/5 on both browsers, after CI found its pinned width.
+  - `lessons/phase-5.md` has every run.
+- **Measured on `batch`:**
+  - Tab stops: 7 in the card at rest and 17 open, then the footer's two. Under a request that makes 9 and 19; a fixture holds the footer (D17).
+  - Presses: 7 open everything; 15 reach every value.
+  - `ten`'s box holds "10" (#576 stays closed).
+  - `wide` paints 32,769 rows 1,980 ms after one press on Chrome, at load1 about 170.
+- **Deviations** (each recorded in Phases 4 and 5 or § Audit verdicts):
+  - D11: a row is described by its sentence's parts.
+  - D8: the slot is a group only while it holds something.
+  - D17: the Tab counts are read in the card.
+  - D4: the `wide-authwits` fixture.
+  - `expectCallCaptionsWhole` without "beside on".
+  - The guide below 300 px (OA-1).
+  - `snack-placement`'s width.
+  - a2 targets `dev`.
+- **Known limits:** none new.
+- **Open items:**
+  - OA-1 (`OWNER-ASKS.md`), answer pending: (a) ships; (b) would also hold an address deep in a struct at 240 px.
+  - #1279: its reopen condition is met, and the evidence is commented there. Four guard scans and two cold-import tests timed out at 5 s on a saturated host.
+- **Lessons:** none promoted to `lessons.md`, which holds 8192 of its 8192 bytes with nothing superseded. The Tab walk's anchor went to the e2e-testing skill; the rest stays in `lessons/phase-4.md` and `lessons/phase-5.md`.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # p126-build-1: the approval window with many calls, as signed on pages 126 and 130
 
