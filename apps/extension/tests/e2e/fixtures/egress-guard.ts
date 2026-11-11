@@ -244,7 +244,7 @@ export async function startEgressGuard(): Promise<EgressGuard> {
 	const sockets = new Map<Socket, () => void>()
 
 	/** Under the intercept log, each request for a watched host is logged, which places it among the
-	 *  interceptions' attach lines when a failed run is read. */
+	 *  arms' attach and redirect lines when a failed run is read. */
 	const heldNow = (host: string, port: number): boolean => {
 		const holding = watched.get(host)
 		if (!holding) return false

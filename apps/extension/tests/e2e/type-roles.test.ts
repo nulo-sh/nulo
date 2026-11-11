@@ -786,7 +786,7 @@ async function openAndSweep(page: Page, opener: string, ready: string, label: st
 async function goAndSweep(page: Page, hash: string, ready: string, label: string, states: readonly SiteState[] = []): Promise<void> {
 	await navigateByHash(page, hash, 10_000)
 	await page.waitForSelector(sel(ready), VISIBLE)
-	// A list renders its page's controls while it still fetches; a sweep reads the page at rest. The
+	// A page can render its controls while its list still fetches; a sweep reads the page at rest. The
 	// fetch is a popup RPC, which settles, loaded or failed, within its own bound.
 	await withTimeoutMessage(
 		page.waitForFunction((s) => !document.querySelector(s), { timeout: DEFAULT_RPC_TIMEOUT_MS, polling: 100 }, sel("loading-state")),

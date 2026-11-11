@@ -184,7 +184,9 @@ runtime env var can never arm a build-time flag.
   origin, before the close began. A red naming a wallet or spec host means a new outside call: declare it in
   `DECLARED_REFUSALS` with why; a browser's own host goes, by exact name, in its driver's
   `ownHosts`. A held node request means a target the interception does not cover dialed the node:
-  on Chrome rerun with `NULO_E2E_INTERCEPT_LOG=1` and find it; never declare the host or loosen the check.
+  read the run's intercept log (smoke CI sets `NULO_E2E_INTERCEPT_LOG=1`; locally, rerun with it), the arms'
+  attach and redirect lines on Chrome and the guard's `held` / `not held` lines on both browsers, and
+  find it; never declare the host or loosen the check.
   The smoke setup refuses an unarmed dist outside artifact runs; artifact runs are guarded too.
   Each seeded remote node (Mainnet, the default, and Testnet, each with Nulo's relay second) is
   answered by its own loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`). With two

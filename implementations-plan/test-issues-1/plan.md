@@ -104,6 +104,8 @@ None. No screen, copy or layout changes.
   5. The guard's unit test joins Phase 2's gate; nightly and release smoke carry the log too (D2).
 - **Codex round 2** (resumed, with both legs' dispositions): **approve**. It ran the import of `DEFAULT_RPC_TIMEOUT_MS` in Node with a throwing `chrome` getter (39 modules, no `chrome` read) and confirmed the baseline assertion adds no red. Three wording fixes, applied: F3's backoffs, the baseline's "recorded at the baseline or afterward", recon's reuse verdict.
 
+- **Review loop round 1** (Codex gpt-6.1-sol high over the diff from the base; one Opus diff review alongside): Codex **approve**, no findings. Opus approve with three small fixes, all accepted: (1) the e2e-testing skill still said to rerun with the flag, now it says to read the run's log; (2) the batched-view comment repeated its callee's docs and missed the missing-method fallback, now one line naming `completeFeeOptions`'s default; (3) wording: "a page can render its controls while its list still fetches", the guard line sits among the arms' attach and redirect lines, README's Firefox sentence names the guard's lines.
+
 ## Delivery
 
 Single arc: branch `test-issues-1-a1` off `origin/dev` carrying the plan commit, one PR into `dev`, opened ready only after the review loop converges. Title (80 chars): `test: senders sweep waits for its list, probe budget on a frozen clock, and more`. The body: what changed and why, every gate run with outcomes and wall-clock, `Closes #1763`, `Closes #1742`, `Closes #1735` (one defect, filed twice), `Closes #1683`. #1743 stays open (not reproduced): the body says what the next red will show. Add `e2e:extension-smoke` after creation only if the path filter skips smoke. No parallel lanes.

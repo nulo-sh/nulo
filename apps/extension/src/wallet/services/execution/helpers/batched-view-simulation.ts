@@ -361,9 +361,8 @@ async function prepareFastArm(
 	// arms — the slow arm never re-fetches an unvalidated tuple.
 	const chainInfo: ChainInfo = liveChainInfo(network, nodeInfo)
 	try {
-		// Views carry no caller fee, so `completeFeeOptions` defaults: the node's predicted minimum fees
-		// (current ones when it predicts none), each fee's worst slot taken on its own, padded by half.
-		// Upstream `BaseWallet` takes the one slot with the worst L2 fee; this is never lower.
+		// Views carry no caller fee, so the cap is `completeFeeOptions`'s default:
+		// `predictedWorstMinFees` padded by half.
 		const gasSettings = await completeFeeOptions({ node, gasSettings: undefined, forEstimation: true })
 		return { leadingFast, slow, blockHeader, chainInfo, gasSettings }
 	} catch (err) {
