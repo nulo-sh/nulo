@@ -73,7 +73,7 @@ None. No screen, copy or layout changes.
 - Before/after evidence (scratch): a 2 ms busy-wait on `performance.now()` (which `["Date"]` does not fake) in the service's route lookup, between the deadline and the first probe. Record the budgets the three tests see on the base (expected below 5_000 and 2_500) and that they stay exact after.
 - **Validation gate**: `bun run lint`; `bun run typecheck:all`; from `apps/extension`, `bun --bun vitest run src/wallet/services/network/service.test.ts --retry=0` twenty times, every run green. Layers: lint, typecheck, unit.
 
-### Phase 4: the fee comments (#1683)
+### Phase 4: the fee comments (#1683) ✓
 - Files: `apps/extension/src/wallet/services/execution/view-executor.ts`, `apps/extension/src/wallet/services/execution/helpers/batched-view-simulation.ts`. Comments only.
 - **Validation gate**: `bun run lint`; `bun run typecheck:all`; `git diff` shows comment lines only. Layers: lint, typecheck.
 

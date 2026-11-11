@@ -10,4 +10,4 @@ A 2 ms busy-wait on `performance.now()` wrapped the service's private `routes.ge
 
 ## Gate
 
-`bun --bun vitest run src/wallet/services/network/service.test.ts --retry=0` from `apps/extension`, twenty runs: 20 of 20 green, 227 tests each, 9 18  s (min, max) per run.
+`bun --bun vitest run src/wallet/services/network/service.test.ts --retry=0` from `apps/extension`, twenty runs: 20 of 20 green, 227 tests each, 9 to 18 s per run.
