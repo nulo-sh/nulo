@@ -8,8 +8,50 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 32fd50e60
-status: approved
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-11.
+- **Status:** completed.
+  - Arc a1 shipped in #1776 (squash `21acbab59`).
+  - Arc a2 ships in #1782 (`feat(execute): numbered steps on a rail, each step its own details, in the approval window`). It targets `dev`, since #1776 landed while a2 ran. Its final commit is `6472bd5c6`; its last code commit is `64b12cb5b`.
+  - This close-out merges `origin/dev` at `0e31082a4` and touches only `implementations-plan/` and the e2e-testing skill.
+  - The merge of #1782 and this layer closes the plan.
+- **Shipped:** the picks of pages 126 and 130: P126-01 AL, P126-02 V2, P126-03 R2, P126-04 AU1, P126-05 FW1, P130-01 ALR and P130-03 R2.
+  - a1: the value tree, raw values under every readable call and authorization, and the armed-only fixture build that renders fixed requests in the real window.
+  - a2: numbered steps on a rail, each sentence its own press row (`StepRow.vue`, two guards); every authorization in one node after the unchecked line and the advice (`AuthwitDetails.vue`); both windows at full width; and the window-wide details toggle removed.
+  - a2 also closed the gaps the renders carried: D8's slot, the warning and a pending reading printed once, no "Payload" heading, the advice for a loose unreadable authorization, and the checking, failed, refused and empty states.
+- **Owner's sign-off:** page 126 (2026-11-09 13:44 UTC) and page 130 (2026-11-10 14:51 UTC, re-signed 15:34 UTC), quoted in the decision ledger. Page 132 (2026-11-10 21:09 UTC) landed #1776. #1782 waits for its own page, with OA-1.
+- **Gates at a2's final code:**
+  - Phase 4's gate green.
+  - Phase 5's gate: `audit:vue` and `test:all` green on their third run; the reds before were untouched tests at their 5 s limit on a host at load5 up to 671. `check:plans` green.
+  - Smoke `execute-steps` on Chrome and Firefox, and the release-artifact negative.
+  - The nine network specs, 23/23 on each browser.
+  - `snack-placement`, 5/5 on both browsers, after CI found its pinned width.
+  - CI on #1782: every check green at `6472bd5c6` (52 pass, 6 skipped by their path filters); its first run, at `dc490fcfa`, found that pinned width.
+  - `lessons/phase-5.md` has every run.
+- **Measured on `batch`:**
+  - Tab stops: 7 in the card at rest and 17 open, then the footer's two. Under a request that makes 9 and 19; a fixture holds the footer (D17).
+  - Presses: 7 open everything; 15 reach every value.
+  - `ten`'s box holds "10" (#576 stays closed).
+  - `wide` paints 32,769 rows 1,980 ms after one press on Chrome, at load1 about 170.
+- **Deviations** (each recorded in Phases 4 and 5 or § Audit verdicts):
+  - D11: a row is described by its sentence's parts.
+  - D8: the slot is a group only while it holds something.
+  - D17: the Tab counts are read in the card.
+  - D4: the `wide-authwits` fixture.
+  - `expectCallCaptionsWhole` without "beside on".
+  - The guide below 300 px (OA-1).
+  - `snack-placement`'s width.
+  - a2 targets `dev`.
+- **Known limits:** none new.
+- **Open items:**
+  - OA-1 (`OWNER-ASKS.md`), answer pending: (a) ships; (b) would also hold an address deep in a struct at 240 px.
+  - #1279: its reopen condition is met, and the evidence is commented there. Four guard scans and two cold-import tests timed out at 5 s on a saturated host.
+- **Lessons:** none promoted to `lessons.md`, which holds 8192 of its 8192 bytes with nothing superseded. The Tab walk's anchor went to the e2e-testing skill; the rest stays in `lessons/phase-4.md` and `lessons/phase-5.md`.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # p126-build-1: the approval window with many calls, as signed on pages 126 and 130
 
@@ -82,12 +124,13 @@ Accessibility calls made under the owner's 2026-10-19 delegation: D8, D11, D12, 
 
 ## UI impact
 
-Every line below is inside the picks quoted above; captures in each PR body close the loop.
+Every line below but the last is inside the picks quoted above; captures in each PR body close the loop.
 - **Execute window, `aztec_sendTx` card** (P126-01, P126-02, P126-03, P126-04, P130-01, P130-03). Before: a numbered list at rest; one "Show all details" toggle opens "Payload" (a head row and flattened arguments per call) and three authorization groups. After: the same sentences on a rail of 20 px number boxes, each ending in a chevron; one press opens a step's value tree and its "Show N raw values" press; the Authorizations node, after the unchecked line and the advice, opens every authorization's rows under its line; no "Payload" heading, no repeated head row, no window-wide toggle.
 - **Execute window, grant and `aztec_createAuthWit` cards** (P126-02): a struct or an array argument reads as tree rows instead of one flattened string; scalar arguments render as today.
 - **Execute window and raised-fee window, width** (P126-05): the body fills 400 px; the card draws the margins. A toast in these two windows spans the window, as in the capabilities window.
 - **Raised-fee window** (P126-01 to P126-05): the same card, so the same rail.
 - **"Checking authorizations…", the failed preview with Try again, a refused request**: the same text in the node's place; captured in the new layout.
+- **Execute window below 300 px, an open step's or authorization's details** (OWNER-ASKS OA-1, answer pending): the guide indents by its line alone. Before: 3 px, the line, 11 px. After: the line, 1 px. Captured at 240 px in #1782.
 
 ## Assumptions
 
@@ -203,7 +246,7 @@ Frames come from the committed specs' capture mode (`NULO_E2E_SHOT_DIR=~/.cache/
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) read at `32fd50e60`. Specific to this plan:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) read at `32fd50e60`. Specific to this plan:
 - **Loop placement**: per arc at its boundary, while the arc is the stack tip, then one fresh cross-arc pass over the net diff from `32fd50e60` before the close-out.
 - **Reviewer**: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; the prompt carries the diff against the arc's base, this plan, the arc map ("arc N of 2; a2 builds the rail on a1's tree, raw layer and fixture build"), the adversarial ask and the standard's two rules verbatim. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) of the arc's diff runs alongside the first round. Until a round has no material finding; three rounds is the hard stop.
 - **While implementing**: comments state invariants only; every attempt goes to `lessons/phase-N.md`; `agent-worktree status p126-build-1 "phase N green: <next>"` at each gate; three failures on one step stop the arc.
