@@ -251,6 +251,42 @@ describe("composite/TransactionCardLayout — a row's direction", () => {
 	})
 })
 
+describe("composite/TransactionCardLayout — the title's token mark", () => {
+	const SEND = { from: "public", to: "private", way: "out", label: "Public → Private" } as const
+	const ICON = "data:image/svg+xml;base64,PHN2Zy8+"
+	const titleRow = (w: ReturnType<typeof mountLayout>) =>
+		[...w.get("[data-testid='activity-title-row']").element.children].map((el) => el.getAttribute("data-testid"))
+	const box = (w: ReturnType<typeof mountLayout>) =>
+		w.findAll("[data-testid='activity-icon'] [data-testid]").map((el) => el.attributes("data-testid"))
+
+	test("the mark goes before the title at 16 px, and the 40 px box keeps its pair, way badge and status badge", () => {
+		const w = mountLayout(
+			{ title: "USDC", icon: "send", direction: SEND, titleMark: { symbol: "USDC", icon: ICON, badge: false } },
+			{ badge: "<span data-testid='status'>✓</span>" },
+		)
+		expect(titleRow(w)).toEqual(["token-mark", "activity-title"])
+		const mark = w.get("[data-testid='token-mark']")
+		expect(mark.attributes()).toMatchObject({ "data-kind": "logo", "aria-hidden": "true", style: "width: 16px; height: 16px;" })
+		expect(mark.get("[data-testid='token-mark-logo']").attributes("src")).toBe(ICON)
+		expect(box(w)).toEqual(
+			box(mountLayout({ title: "USDC", icon: "send", direction: SEND }, { badge: "<span data-testid='status'>✓</span>" })),
+		)
+		expect(box(w)).toContain("activity-way-badge")
+	})
+
+	test("a flagged token's mark carries the corner badge; a token with no picture draws its initials", () => {
+		const w = mountLayout({ title: "USDC", titleMark: { symbol: "USDC", badge: true } })
+		const mark = w.get("[data-testid='token-mark']")
+		expect(mark.attributes("data-kind")).toBe("initials")
+		expect(mark.text()).toBe("U")
+		expect(mark.findAll("[data-testid='stub-icon']").map((i) => i.attributes("data-name"))).toEqual(["warning"])
+	})
+
+	test("without a mark the title row holds the title alone", () => {
+		expect(titleRow(mountLayout({ title: "Mint (public)" }))).toEqual(["activity-title"])
+	})
+})
+
 describe("composite/TransactionCardLayout — the row's target", () => {
 	const router = () =>
 		createRouter({ history: createMemoryHistory(), routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }] })

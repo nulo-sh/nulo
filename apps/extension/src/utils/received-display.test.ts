@@ -133,6 +133,15 @@ describe("tokenForReceipt + buildIncomingCardProps", () => {
 		expect(buildIncomingCardProps(noteRec(), [token({ decimals: 0 })], fiatLabel).tokenDecimals).toBe(0)
 	})
 
+	test("a known token's receipt draws its mark from the list's reading; with no token there is none", () => {
+		const ICON = "data:image/svg+xml;base64,PHN2Zy8+"
+		const marks = { iconFor: vi.fn(() => ICON), isFlagged: vi.fn(() => true) }
+		const known = token({ decimals: 6 })
+		expect(buildIncomingCardProps(noteRec(), [known], fiatLabel, marks).titleMark).toEqual({ symbol: "TST", icon: ICON, badge: true })
+		expect(marks.iconFor).toHaveBeenCalledWith(known)
+		expect(buildIncomingCardProps(noteRec(), [token({ id: 2, contract: "0xother" })], fiatLabel, marks).titleMark).toBeNull()
+	})
+
 	test("a tokenId gone stale (the token removed and re-added) matches by contract", () => {
 		const readded = token({ id: 12 })
 		expect(tokenForReceipt([readded], noteRec())).toBe(readded)

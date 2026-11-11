@@ -23,6 +23,7 @@ import {
 	journalCardDirection,
 	journalCardOriginLabel,
 	journalCardTitle,
+	journalCardTitleMark,
 	type JournalTerminalDisplay,
 	journalTerminalDisplay,
 	journalTransferAmount,
@@ -424,6 +425,26 @@ describe("buildJournalTerminalCardProps", () => {
 
 const ACCOUNT = `0x${"2b".repeat(32)}`
 const OUTSIDE = `0x${"1e".repeat(32)}`
+
+describe("journalCardTitleMark", () => {
+	const TOKEN = { symbol: "cUSDC", chainId: 1, contract: "0xc" }
+	const ctx = { tokenById: (id: number) => (id === 7 ? TOKEN : undefined) }
+	const lookup = { iconFor: vi.fn(() => "data:image/svg+xml;base64,PHN2Zy8+"), isFlagged: vi.fn(() => true) }
+
+	test("a send's title names its token, so it draws that token's mark from the list's reading", () => {
+		expect(journalCardTitleMark(transferRecord({ tokenId: 7 }), ctx, lookup)).toEqual({
+			symbol: "cUSDC",
+			icon: "data:image/svg+xml;base64,PHN2Zy8+",
+			badge: true,
+		})
+		expect(lookup.iconFor).toHaveBeenCalledWith(TOKEN)
+	})
+
+	test("a dApp call, titled by its function, and a send whose token is not the wallet's draw none", () => {
+		expect(journalCardTitleMark(recordWith({ kind: "dapp_execute", tokenId: 7 }), ctx, lookup)).toBeNull()
+		expect(journalCardTitleMark(transferRecord({ tokenId: 8 }), ctx, lookup)).toBeNull()
+	})
+})
 
 describe("journalCardDirection", () => {
 	const way = (over: Partial<OperationRecord>) => journalCardDirection(transferRecord({ transferType: 2, ...over }))?.way
