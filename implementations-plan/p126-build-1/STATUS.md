@@ -17,3 +17,4 @@
 - 2026-11-10: a2 review: Codex r1 approve (3 adopted), Opus conditional approve (6 adopted), Codex r2 approve; cross-arc pass conditional approve (2 adopted, 1 rejected), resumed approve. Final gates next on f62e24d29.
 - 2026-11-10: a2 final gates on 7454b1c14 green through smoke and the release negative; network Chrome red (type-roles at 240 px, a2 defect, fixed, OA-1) and void after an outside checkout of a1 mid-run; a2 rebased onto c860df0e4; every final gate reruns.
 - 2026-11-10: #1776 merged (21acbab59); a2 rebased onto origin/dev f5d00cc52; its PR targets dev. Gate rerun red on host starvation (load5 565); rerun pending.
+- 2026-11-11: a2 final gates green on ff87d8472 (phase 4; phase 5 after starved reruns; smoke Chrome+Firefox; release negative; network Chrome 23/23, Firefox 23/23). Opening the PR.
