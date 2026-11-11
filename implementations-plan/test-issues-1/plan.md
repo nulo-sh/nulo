@@ -10,6 +10,22 @@ eli5_mode: skipped (orchestrator-owned)
 base: dev at 4c931737acdeb7c6f60d41361ca4b0275c8756eb
 ---
 
+## Outcome
+
+- Date: 2026-11-11.
+- Status: completed, delivered in PR #1791 (awaiting the merge).
+- Shipped: PR #1791.
+  - #1763: `goAndSweep` waits until no `loading-state` is on the page, bounded by `DEFAULT_RPC_TIMEOUT_MS`. The Senders sweep began mid-load in 2 of 5 base runs and in 0 of 10 after.
+  - #1742 and #1735: the node-status describe fakes `Date` alone; a 2 ms injected stall went red on the base and stays green.
+  - #1743: diagnostic only (not reproduced in 15 runs): the arrival spec's baseline read, `NULO_E2E_INTERCEPT_LOG` on smoke, and the guard's `held` / `not held` line per watched-host request.
+  - #1683: both comments name `completeFeeOptions`'s default.
+- Left as they are: Contacts, Reset and Send show content late but no loading text (D4).
+- Did not hold: #1742's test asserts 2_500 now, not 5_000 (the defect stood); #1683's second file is under `execution/helpers/` ([`recon.md`](recon.md) § Issue claims checked).
+- Lessons: one line promoted to the `e2e-testing` skill (a list page's controls render while it fetches). `lessons.md` is at its 8192-byte budget and nothing there is superseded; the host's missing `zip` and the `pgrep` wrapper trap are in [`lessons/phase-2.md`](lessons/phase-2.md) and [`lessons/phase-4.md`](lessons/phase-4.md).
+- Known limits: none.
+- Open items: #1743 stays open, commented with the runs and what its next red will show.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
+
 # test-issues-1: four open test issues
 
 Two flaky specs, one clock-bound unit assertion filed twice, and two stale comments. Each phase fixes its cause with the smallest change; no production behaviour changes. Evidence for every claim is in [`recon.md`](recon.md).

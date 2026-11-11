@@ -419,6 +419,11 @@ wrapper splices its own options in at index 1 and your `{}` becomes the page fun
 — `waitForFunction((sel) => !document.querySelector(sel), {}, SEL)` then queries `{}`, matches nothing,
 and an absence-wait passes vacuously while a presence-wait times out. Always write `{ timeout: N }`.
 
+**A list page renders its controls while the list still fetches.** `useEntityCrud` starts loading, so
+`AsyncListStatus`'s `loading-state` shows beside an unconditional button (Senders' `senders-add-btn`).
+Before reading such a page, wait until no `loading-state` is on the page, bounded by the popup RPC's
+`DEFAULT_RPC_TIMEOUT_MS`, as `goAndSweep` in `type-roles.test.ts` does.
+
 **A patched page's `waitForSelector` resolves `null`.** For a CSS selector `patchPagePolling` waits
 through `waitForFunction` and returns `null`, never the `ElementHandle` Puppeteer's type promises, so
 `(await page.waitForSelector(sel))!.evaluate(…)` compiles and throws `Cannot read properties of null`
