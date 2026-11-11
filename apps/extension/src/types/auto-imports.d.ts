@@ -348,6 +348,7 @@ declare global {
   const leftToScroll: typeof import('../composables/useScrollRemaining').leftToScroll
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
   const legalSheetMayCover: typeof import('../utils/legal-sheet').legalSheetMayCover
+  const listKeyOf: typeof import('../utils/token-flag').listKeyOf
   const listOwnAccountRow: typeof import('../utils/account-rows').listOwnAccountRow
   const logCredentialFailure: typeof import('../utils/credential-refusal').logCredentialFailure
   const managers: typeof import('../utils/core').managers
@@ -549,6 +550,9 @@ declare global {
   const toValue: typeof import('vue').toValue
   const tokenForReceipt: typeof import('../utils/received-display').tokenForReceipt
   const tokenHeroCandidates: typeof import('../utils/hero-fit').tokenHeroCandidates
+  const tokenIconFor: typeof import('../utils/token-icon').tokenIconFor
+  const tokenIconsOf: typeof import('../utils/token-icon').tokenIconsOf
+  const tokenInitials: typeof import('../utils/string').tokenInitials
   const tokenMovementLabel: typeof import('../utils/tx-enrichment').tokenMovementLabel
   const transferDirection: typeof import('../utils/tx-enrichment').transferDirection
   const transferLabel: typeof import('../utils/token-transfer-vocabulary').transferLabel
@@ -1311,6 +1315,7 @@ declare module 'vue' {
     readonly leftToScroll: UnwrapRef<typeof import('../composables/useScrollRemaining')['leftToScroll']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly legalSheetMayCover: UnwrapRef<typeof import('../utils/legal-sheet')['legalSheetMayCover']>
+    readonly listKeyOf: UnwrapRef<typeof import('../utils/token-flag')['listKeyOf']>
     readonly listOwnAccountRow: UnwrapRef<typeof import('../utils/account-rows')['listOwnAccountRow']>
     readonly logCredentialFailure: UnwrapRef<typeof import('../utils/credential-refusal')['logCredentialFailure']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
@@ -1512,6 +1517,9 @@ declare module 'vue' {
     readonly toValue: UnwrapRef<typeof import('vue')['toValue']>
     readonly tokenForReceipt: UnwrapRef<typeof import('../utils/received-display')['tokenForReceipt']>
     readonly tokenHeroCandidates: UnwrapRef<typeof import('../utils/hero-fit')['tokenHeroCandidates']>
+    readonly tokenIconFor: UnwrapRef<typeof import('../utils/token-icon')['tokenIconFor']>
+    readonly tokenIconsOf: UnwrapRef<typeof import('../utils/token-icon')['tokenIconsOf']>
+    readonly tokenInitials: UnwrapRef<typeof import('../utils/string')['tokenInitials']>
     readonly tokenMovementLabel: UnwrapRef<typeof import('../utils/tx-enrichment')['tokenMovementLabel']>
     readonly transferDirection: UnwrapRef<typeof import('../utils/tx-enrichment')['transferDirection']>
     readonly transferLabel: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['transferLabel']>

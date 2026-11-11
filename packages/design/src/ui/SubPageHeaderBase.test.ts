@@ -39,6 +39,19 @@ describe("SubPageHeaderBase (router-free)", () => {
 		expect(mountHeader({ title: "Settings", leadingIcon: "settings" }).find('[data-name="settings"]').exists()).toBe(true)
 	})
 
+	test("a leading slot takes the icon's place before the title; without one the icon stays", () => {
+		const w = mountHeader({ title: "USDC", leadingIcon: "holdings" }, { leading: '<i id="mark" />' })
+		expect(w.find("#mark").exists()).toBe(true)
+		expect(w.find('[data-name="holdings"]').exists()).toBe(false)
+		const title = w.get('[data-testid="subpage-title"]').element
+		expect(w.get("#mark").element.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		expect(mountHeader({ title: "USDC", leadingIcon: "holdings" }).find('[data-name="holdings"]').exists()).toBe(true)
+	})
+
+	test("no title draws no leading content, slotted or not", () => {
+		expect(mountHeader({ leadingIcon: "holdings" }, { leading: '<i id="mark" />' }).find("#mark").exists()).toBe(false)
+	})
+
 	test("trailing slot renders inside the trailing region", () => {
 		expect(mountHeader({ title: "X" }, { trailing: '<button id="cta">Edit</button>' }).find("#cta").exists()).toBe(true)
 	})

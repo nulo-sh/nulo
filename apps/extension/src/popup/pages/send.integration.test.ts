@@ -116,8 +116,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
-			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, tokenIcons: {} })),
+			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, tokenIcons: {} })),
 		}
 	}),
 }))
@@ -779,6 +779,7 @@ describe("send page with the real fee card — the review sheet's fee", () => {
 			value.onQuotesUpdated.invoke({
 				quotes: { aztec: { coingeckoId: "aztec", usd: 0.01 * (i + 1), fetchedAt: Date.now(), providerUpdatedAt: null } },
 				pricedTokens: {},
+				tokenIcons: {},
 			})
 		})
 		await flushPromises()

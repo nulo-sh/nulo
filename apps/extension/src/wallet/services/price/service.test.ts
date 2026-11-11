@@ -19,7 +19,14 @@ import { ConfigStore } from "@/wallet/config"
 import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
 import { flaggedKeysOf } from "@/utils/token-flag"
-import { TEST_FLAGGED, TEST_LIST_ENTRIES, TEST_PRICE_FEEDS, TEST_PRICED_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import {
+	TEST_FLAGGED,
+	TEST_LIST_ENTRIES,
+	TEST_LIST_ENTRIES_WITH_ICONS,
+	TEST_PRICE_FEEDS,
+	TEST_PRICED_TOKENS,
+} from "@/wallet/services/token-list/list.fixture"
+import { tokenIconsOf } from "@/utils/token-icon"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
 import {
 	freshQuotes,
@@ -405,7 +412,9 @@ describe("PriceService — refresh pipeline", () => {
 			throw new Error("offline")
 		}
 		await service.onAlarmTick()
-		expect(seen).toEqual([{ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: flaggedKeysOf([TEST_FLAGGED]) }])
+		expect(seen).toEqual([
+			{ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: flaggedKeysOf([TEST_FLAGGED]), tokenIcons: {} },
+		])
 	})
 
 	test("a newer stored quote is never overwritten by an older response (monotonic)", async () => {
@@ -456,6 +465,29 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 		expect(read.quotes).toEqual({})
 		expect(read.flaggedTokens).toEqual(flaggedKeysOf([TEST_FLAGGED]))
 		expect((await service.refreshIfStale()).quotes).toEqual({})
+		expect(state.fetchCalls).toHaveLength(0)
+	})
+
+	test("the list's pictures ride every snapshot with fiat off, and a list without pictures empties them", async () => {
+		const { service, state, fakeTokenList } = await harness({ enabled: false })
+		state.list = {
+			sequence: 2,
+			keyId: "nulo-ci-1",
+			entries: TEST_LIST_ENTRIES_WITH_ICONS,
+			flagged: [TEST_FLAGGED],
+			priceFeeds: TEST_PRICE_FEEDS,
+		}
+		const read = await service.getQuotes()
+		expect(read.tokenIcons).toEqual(tokenIconsOf(TEST_LIST_ENTRIES_WITH_ICONS))
+		expect(Object.keys(read.tokenIcons)).toHaveLength(2)
+		expect(Object.keys(read.tokenIcons)).not.toContain(flaggedKeysOf([TEST_FLAGGED])[0])
+
+		const seen: PriceSnapshot[] = []
+		service.onQuotesUpdated.add((s) => seen.push(s))
+		state.list = { ...state.list, sequence: 3, entries: TEST_LIST_ENTRIES }
+		fakeTokenList.onListChanged.invoke(state.list)
+		await vi.waitFor(() => expect(seen).toHaveLength(1))
+		expect(seen[0].tokenIcons).toEqual({})
 		expect(state.fetchCalls).toHaveLength(0)
 	})
 
