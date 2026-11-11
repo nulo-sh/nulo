@@ -236,14 +236,25 @@ async function shutDown(server: Server, sockets: Map<Socket, () => void>): Promi
 }
 
 export async function startEgressGuard(): Promise<EgressGuard> {
+	const interceptLog = process.env.NULO_E2E_INTERCEPT_LOG === "1"
 	const record = new Map<string, EgressAttempt>()
 	const watched = new Map<string, () => boolean>()
 	let overflow = false
 	/** Each open socket and the call that classifies it if the guard stops first. */
 	const sockets = new Map<Socket, () => void>()
 
+	/** Under the intercept log, each request for a watched host is logged, which places it among the
+	 *  interceptions' attach lines when a failed run is read. */
+	const heldNow = (host: string, port: number): boolean => {
+		const holding = watched.get(host)
+		if (!holding) return false
+		const held = holding() === true
+		if (interceptLog) console.log(`[egress-guard] ${host}:${port} ${held ? "held" : "not held"}`)
+		return held
+	}
+
 	const note = (host: string, port: number) => {
-		const held = watched.get(host)?.() === true
+		const held = heldNow(host, port)
 		const entry = record.get(`${host}:${port}`)
 		if (entry) {
 			entry.count++

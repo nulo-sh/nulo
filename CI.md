@@ -264,7 +264,7 @@ The reusables today are:
 - `_lint-and-typecheck.yml` — biome + typecheck
 - `_unit-tests.yml` — vitest workspace-wide
 - `_build-extension.yml` — chrome + firefox (with optional version override)
-- `_extension-smoke-e2e.yml` — puppeteer smoke against `EXTENSION_PATH` or downloaded artifact
+- `_extension-smoke-e2e.yml` — puppeteer smoke against `EXTENSION_PATH` or downloaded artifact, with `NULO_E2E_INTERCEPT_LOG=1`, so a held-count failure's log carries the interceptions' and the guard's lines
 - `_extension-network-e2e.yml` — the `network suite` job: Aztec sandbox + the local `e2e:agent` runner, one job per shard or dedicated file list
 - `_release-pr-lockfile.yml` — writes the Release PR's version into `bun.lock` (advisory)
 
