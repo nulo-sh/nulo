@@ -20,14 +20,14 @@ Page 134 answered the four surfaces token-icons-build-1 left to the owner (its A
 
 ## Outcome & Quality Bar
 
-- **Excellent**: every row titled by a token draws its mark, the same picture on Home, Holdings, Send's picker, Activity and both approval windows; Home's rows start their text at one edge; no figure loses a digit; a window opened while checking or locked reads no price; every `data-testid` stays; nothing else moves. **Good enough**: a figure from about $10 trillion takes a third line (P134-04); #625's long-symbol limit stands.
+- **Excellent**: every row titled by a token draws its mark, the same picture on Home, Holdings, Send's picker, Activity and both approval windows; Home's rows start their text at one edge; no figure loses a digit; a window opened while checking or locked reads no price; every `data-testid` stays; nothing else moves. **Good enough**: a figure from about $100 trillion takes a third line (measured; P134-04 allowed from about $10T); #625's long-symbol limit stands.
 
 ## Assumptions
 
 ### Facts (at `52e2099ad`; `recon.md` has the file map)
 
 - F1. The step sentence's chevron is an inline `<svg>` after `&nbsp;`; CSS Text 3 keeps a soft wrap opportunity beside an atomic inline even next to U+00A0. Demonstrated on the armed base build (`lessons/phase-0.md`): at 400 px the chevron sits alone in fixtures `one` and `batch`, on Chrome and Firefox. With the `&nbsp;` and the chevron in a `nowrap` span, no fixture shows it at 400 or 240 px, nor with a sender four characters longer.
-- F2. With the 32 px mark and 12 px gap the token row's text gets 166.6 px of 312 at the seeded $123T balance; `type-roles.test.ts:921-924` holds its figure at two lines or fewer, and it needs 179.4 px. The figure's part after "≈ " keeps one line up to 21 characters, so below about $10T. That edge depends on the balance column and is measured in phase 2.
+- F2. With the 32 px mark and 12 px gap the token row's text gets 166.6 px of 312 at the seeded $123T balance; `type-roles.test.ts:921-924` holds its figure at two lines or fewer, and it needs 179.4 px. The edge depends on the balance column; measured in phase 2 on both browsers, the figure keeps two lines up to $99,999,999,999,999.99 and takes a third from about $100T (`lessons/phase-2.md`).
 - F3. A default holds one Home slot from seed row through its own import row to its card, and both pre-card rows carry the list's `entry` (`home-slots.ts`). `userImports` can hold a listed token: delete one (a tombstone ends its seed status), then add it again. A live import's title is unset until its symbol is fetched (`token/service.ts:399-410`).
 - F4. Only the settled card titles a dApp's call by its token (`journal-state.ts`); with the mark the large dApp transfer's chip read 85.8 px where `rows.test.ts:787` holds 96 (token-icons-build-1, `lessons/phase-5.md`).
 - F5. `start()` runs the fee window's `init` only once its session is checked and signed in, and `untilSessionChecked` is a component-scoped watcher, so an unmounted window never reaches `init` (Codex, demonstrated). `fee/index.test.ts` pins [reads, refreshes] = [0, 0] while checking, locked or resolving, [1, 0] signed in, [2, 0] after a reconnect.
@@ -103,7 +103,7 @@ Page 134 answered the four surfaces token-icons-build-1 left to the owner (its A
 
 ## UI impact
 
-- **Token rows** (Home, Holdings, Send's picker): the 32 px mark and a 12 px gap before the symbol (logo, grey initials, red badge when flagged); a figure takes a third line from about $10T, a wide split wraps under its "≈". Sign-off: P134-04 = a, P129-01 = A, P129-02 = M1.
+- **Token rows** (Home, Holdings, Send's picker): the 32 px mark and a 12 px gap before the symbol (logo, grey initials, red badge when flagged); a figure takes a third line from about $100T (measured; the sign-off allowed from about $10T), a wide split wraps under its "≈". Sign-off: P134-04 = a, P129-01 = A, P129-02 = M1.
 - **Home's seed, import and skeleton rows**: the same 32 px slot; a seed row draws the list's picture, an import row grey initials, a ghost row a 32 px round skeleton. Sign-off: P134-04's premise, A3 (a). B1 to B3 cover what A3 does not say.
 - **A dApp's transfer row**: the 16 px mark and 6 px gap before the symbol; the app chip up to 22 px shorter. Sign-off: P134-06 = a, P124-04 = AC1.
 - **The fee-raised window's line**: the 16 px mark before the amount, as in the approval window. Sign-off: P134-07 = a, P124-05 = AL1.

@@ -1,0 +1,8 @@
+# Phases 2 to 5: the probe and the restated guards
+
+- Arc 2's throwaway probe (the armed build at `b7b726378`, `listedExtensionPerTest`, two seeded token rows at $1, the Testnet RPC refused; Chrome and Firefox measured alike to 0.1 px). Every row: the mark 32 × 32, the text 12 px after it, at 44 px from the row's edge.
+  - The figure, beside the balance column its own amount sets: one line up to $10,000,000,000,000.00 (the text column at its 190 px cap), two at $99,999,999,999,999.99 (174.4 px), three at $123,456,789,012,345.67 (166.6 px). So the third line comes from about $100T, not the $10T F2 estimated: the narrower `1.99T` to `99.99T` amounts leave the column wider than the $123T row's.
+  - A wide split (5T private, 4.99T public) wraps $9,999,999,999,999.99 onto two lines, as P134-04 says.
+  - A 32-character symbol is cut at the 160 px cap, its right edge at 204 px, the balance column from 226.2 px; no row scrolls sideways.
+- The large dApp transfer's chip ("Shielded Payroll Portal" beside 1,250 USDC) reads 85.8 px on Chrome and 85.9 on Firefox, on Home, a token's page and History, light and dark: one constant pins both within ±0.5 px. The 16-letter floor chip stays at 20 px.
+- Firefox refuses Puppeteer's `page.setViewport` on an extension page (`browsingContext.setViewport`: privileged scope); `setViewport` from `fixtures/browser` is the way.
