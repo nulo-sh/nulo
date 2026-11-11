@@ -1,6 +1,8 @@
 ---
 plan: token-icons-build-1
 tier: mid
+status: completed
+issues: none; the work is the owner's picks on pages 124, 129 and 132
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -8,8 +10,26 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev 32fd50e60
+trunk: dev
 post_implementation_standard: implementations-plan/README.md § Post-implementation standard at 32fd50e60
 ---
+
+## Outcome
+
+- **Date:** 2026-11-11.
+- **Status:** completed. Ships in three stacked PRs: #1778 (arc 1, merged), #1785 (arc 2) and arc 3's, `feat(activity): activity rows and the approval line draw each token's picture`, which carries this close-out; the merge of arc 3 closes this plan. No issue closes.
+- **Shipped:**
+  - Arc 1 (#1778): the signed list carries each entry's picture as a `data:image/svg+xml;base64` URL under a drawing allowlist and a 3,072-character budget (`packages/token-list/src/icon.ts`). Wallet mode drops a refused picture and strict mode refuses it; the publisher fails an entry with no picture (L3), and the tree check requires each picture's provenance row in `infra/token-list/README.md` § Pictures. The approver's summary shows each picture's type, size and digest prefix. #1780 then applied P132-04 and P132-05 (A1, A2: GBPC's letter on a near-black disc, Ethereum's diamond for `cWETH`), and #1781 published the list.
+  - Arc 2 (#1785): `PriceSnapshot.tokenIcons` and `iconFor` beside `isFlagged` in `usePrices` and `useTokenFlags`; `TokenMark.vue` (the list's logo, else grey initials from `tokenInitials`, the red corner badge when flagged); the mark on Send's asset row (36 px) and the token page's header (20 px).
+  - Arc 3: Activity rows (History, Home's recent activity, a token's page) draw the 16 px mark before a title that names a token, in every phase; the approval window's transfer line draws it before the amount: the logo for a listed contract on that chain, initials otherwise, the badge when flagged. No words change.
+- **Gates (arc 3, on `fb0063689`, once, in order, retry 0; the final code commit `59d35be86` adds only the network spec fix below):** `bun run test`, `test:components` (101 files, 1,426 tests), `audit:vue`, `test:all` and `check:plans` green; the five smoke specs that read the marks green on Chrome (209 s) and Firefox (358 s); the full smoke suite green on Chrome (63 files, 1,793 s, against 1,755 s at the base `0c4b3b11e`) and Firefox (67 files, 2,595 s, against 2,594 s). The PR's network lanes then found `tx-transfer-row.test.ts` counting the mark's initials as the line's words, 4 of 4 red on both browsers; it now reads the words without the mark and checks the mark is initials, green at retry 0 on Chrome and Firefox through `e2e:agent`, with `audit:vue` and `check:plans` green on that head.
+- **Deviations:** the token rows' 32 px mark is left out (D17): it pushes P46-08's widest dollar figure onto a third line. A dApp's transfer row has no mark (D18): measured, it would narrow the app chip past the rows suite's cap. The fee-raised window's copy of the approval line has none (D21): it reads no list, and a summary given no reader draws no mark. The tree-wins are D13 to D16, D19 and D20.
+- **Left out:** Home's seed, import and skeleton rows (A3), unchanged beside cards that carry no mark.
+- **Review:** each arc's Codex loop converged (arc 1 clean at rounds 2 and 3, arc 2 clean at round 2 with a docs round after D17, arc 3 clean at round 2), with one Opus review beside each round 1; the fresh cross-arc pass found one docs drift, folded (Audit verdicts).
+- **Lessons:** none promoted to `lessons.md`. The one cross-task gotcha, that a pull request conflicting with its base starts no workflow so the checks watch exits green, is already in the aztec-update skill; the rest are this plan's own, in `lessons/`.
+- **Known limits:** #1786 (with pictures, the 64 KiB envelope holds about 17 entries at the picture budget).
+- **Open items:** none. A4 is P134-04 on the owner's page 134; A3, A5 and A6 go to the orchestrator with arc 3's report. Each ships its "what ships now", so no issue was filed.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # token-icons-build-1: the token pictures, as signed on pages 124 and 129
 
@@ -49,10 +69,12 @@ The signed token list carries each listed token's picture, and the wallet draws 
 
 ### Asks (OWNER-ASKS.md; the arcs build the "what ships now" form)
 
-- A1. The look of Nulo's letter mark for GBPC and `cWETH`. Ships in the list: a disc in Nulo's accent `#a8480c` with a white geometric letter. The owner sees the sheet in arc 1's PR body and decides at the `sign` approval.
-- A2. `cWETH` has no issuer logo; ships: Nulo's "W" letter mark under L3.
+- A1. The look of Nulo's letter mark for GBPC and `cWETH`. Answered (b) on page 132 (P132-04): the letter on a near-black disc; #1780 replaced arc 1's accent disc, and the list was published with it.
+- A2. `cWETH` has no issuer logo. Answered (b) on page 132 (P132-05): Ethereum's diamond, in place of arc 1's "W" (#1780).
 - A3. Home's seed, import and skeleton rows beside the cards (arc 2); ships unchanged.
 - A4. The rows' 32 px mark against P46-08's two-line dollar figure (arc 2); ships: the rows without a mark (D17).
+- A5. A dApp's transfer row, where the mark would take 22 px from the app chip beside the title (arc 3); ships: that row without a mark (D18).
+- A6. The fee-raised window's copy of the approval line, which reads no list today (arc 3); ships: that copy without a mark (D21).
 
 ## Sign-offs (verbatim; the whole visible budget)
 
@@ -106,7 +128,7 @@ The signed token list carries each listed token's picture, and the wallet draws 
 | Home, Holdings, Send's picker (`TokenCard.vue`): deferred, D17 and A4 | mark before the symbol column, gap 12 | 32 | `isFlagged` |
 | Send's asset row (`SelectTokenCard.vue`; `send.vue` passes `flagged`, `icon`) | mark replaces the accent square and draws the no-transfers badge | 36 | `flagged \|\| isTokenBlocked` |
 | Token page (`tokens/[id].vue`; `SubPageHeaderBase.vue` gains a `leading` slot, fallback today's icon; `SubPageHeader.vue` forwards it) | mark replaces the holdings glyph; `subpage-title` and `focusTitle` stay | 20 | `isFlagged` |
-| Activity (`TransactionCardLayout.vue` prop `titleMark: { symbol, icon?, badge }`; set by `TransactionCard`, `TransactionIncomingCard`, `TransactionAwaitingCard`, `TransactionTerminalCard` when the title names a token) | mark before the title; the 40 px box untouched | 16 | flag of chain and contract |
+| Activity (`TransactionCardLayout.vue` prop `titleMark: { symbol, icon?, badge }`; set by `TransactionCard`, `TransactionIncomingCard`, `TransactionAwaitingCard`, `TransactionTerminalCard` when the title names a token; not on a dApp's transfer, D18) | mark before the title; the 40 px box untouched | 16 | flag of chain and contract |
 | Approval line (`SendTxSummary.vue`; `OperationCard.vue` and `execute/index.vue` thread `iconFor`, `isFlagged`) | mark before the amount; token by `tokenAt` (chain and contract) | 16 | flag |
 
 - Activity's chain is `appStore.network.chainId`, which the rows' fiat already uses. `TransactionsList.vue` (History) and `RecentActivityView.vue` (Home) own the price composable and pass `iconFor` and `isFlagged` down through `ActivityRowCard.vue` and `received-display.ts`; journal rows resolve the token through `tokenById`, as their amount symbol does.
@@ -156,7 +178,7 @@ Each phase lands its tests with its code. Every gate also runs `bun run lint` an
 - **Tests**: each surface: logo for a listed token, initials for a custom one, the badge for a flagged one; Send: the flag, no transfers, and both, one badge each time; the header slot falls back to the glyph. E2E: a token the held list gives an icon has an `<img>` mark with `complete` and `naturalWidth > 0`; an added token has initials; a token the held list gives no icon (an artifact run's published list before the owner publishes) expects initials. Failure mode: the issuer SVG decodes under the real CSP through the worker-to-popup channel in both engines, which jsdom cannot show. Estimate +1 s per browser, measured in the PR.
 - **Validation gate**: `bun run audit:vue`, `bun run test:all`; the touched smoke spec at `--retry=0` on Chrome and Firefox; the full smoke suite once per browser before and after for the wall-clock. Pass: exit 0 at retry 0.
 
-### Phase 5 — Activity and the approval line (arc 3)
+### Phase 5 — Activity and the approval line (arc 3) ✓ (a dApp's transfer row and the fee-raised window's line left out, D18, D21)
 
 - **Change map**: `TransactionCardLayout.vue` (+ test), `TransactionCard.vue` (+ test), `TransactionIncomingCard.vue` (+ test), `TransactionAwaitingCard.vue`, `TransactionTerminalCard.vue` (+ tests), `TransactionsList.vue`, `ActivityRowCard.vue`, `utils/received-display.ts`, `pages/activity.vue`, `RecentActivityView.vue`, `SendTxSummary.vue`, `OperationCard.vue`, `execute/index.vue`, `SendTxSummary.test.ts` (new) with `execute.fixture.ts`.
 - **Tests**: wire-shaped fixtures (`aztec_sendTx` arguments as `0x` + 64 hex fields): the line shows the logo for a listed contract, initials for a known custom one, nothing for an unknown contract, the badge for a flagged one, and no logo for the same contract on another chain; each Activity card titled by a token gets the 16 px mark, an outgoing mint does not, the 40 px box keeps its children; one History-path test through `TransactionsList`.
@@ -167,8 +189,8 @@ Each phase lands its tests with its code. Every gate also runs `bun run lint` an
 - **Home, Holdings, Send's picker**: before, symbol and second line; after, a 32 px logo (listed) or grey initials, the red badge when flagged. Sign-off: A ("the issuers' logos as published, round, unaltered, initials in a grey circle when there is none, the red badge when flagged"), M1. Not shipped in arc 2: the mark meets P46-08's two-line figure (`OWNER-ASKS.md` A4, D17); the rows ship unchanged.
 - **Send's asset row**: before, the first letter in a 36 px accent square; after, the 36 px mark, the no-transfers badge in its corner. Sign-off: A, M1.
 - **Token page**: before, the 18 px holdings glyph; after, the 20 px mark. Sign-off: A.
-- **Activity rows** (History and Home's recent activity, every phase of a row titled by a token): before, the title alone; after, a 16 px mark before it; the 40 px box unchanged. Sign-off: AC1 ("A 16 px mark before the row title, as prototyped; the 40 px box keeps chips-3's pair and badges").
-- **Approval window transfer line**: before, "25 USDC"; after, the 16 px mark before it, no new words. Sign-off: AL1 ("the line takes P124-01's picture, if any, in the meantime").
+- **Activity rows** (History and Home's recent activity, every phase of a row titled by a token): before, the title alone; after, a 16 px mark before it; the 40 px box unchanged. Sign-off: AC1 ("A 16 px mark before the row title, as prototyped; the 40 px box keeps chips-3's pair and badges"). Not shipped in arc 3: a dApp's transfer, whose app chip would give the mark its room (`OWNER-ASKS.md` A5, D18); that row ships unchanged.
+- **Approval window transfer line**: before, "25 USDC"; after, the 16 px mark before it, no new words. Sign-off: AL1 ("the line takes P124-01's picture, if any, in the meantime"). Not shipped in arc 3: the same line in the fee-raised window, which reads no list (`OWNER-ASKS.md` A6, D21); it ships unchanged.
 - **The list** (arc 1): no surface; no build reads the field before arc 2, and only the owner's publish serves it.
 
 ## Delivery
@@ -207,7 +229,7 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 | D6 | Wallet SVG rule | B (none: image mode is the boundary; a blocklist claims what it does not enforce, R1) | the allowlist, on literal text | **Allowlist**. The blocklist was bypassable (character references, CSS escapes, prefixes: both legs, demonstrated). Refusing `&`, `\`, `<!`, `<?` makes the literal text what the parser sees; an element allowlist then refuses script, animation and filters, which image mode would still run. The lane requires the "SVG with script" reader test, and the rule is a validator, not a rewriter. Image mode stays the boundary. |
 | D7 | Awaiting and terminal Activity rows | B, pending the owner (R5) | A (the layout's invariant) | **A**. `TransactionCardLayout.vue:8-10` and `TransactionIncomingCard.vue:5-7` keep field positions identical across a row's lifecycle; a mark only on settled rows moves the title 22 px when a row settles. AC1 says "a 16 px mark before the row title", with no phase. Shown in arc 3's captures. |
 | D8 | README provenance check | A, qualified (R3) | even; keep if small | Keep (about 15 lines), stated as a tree-check guarantee; the recovery steps say to review the table. |
-| D9 | Artwork defaults (A1, A2) | no default; ask first (R5) | ship, show the sheet, publish waits on the answer | Ship the letter marks: L3 needs a picture for every entry, and the lane names GBPC's as "a plain letter mark". The owner sees the sheet in arc 1's body and decides at the `sign` approval, the only path to a served list. |
+| D9 | Artwork defaults (A1, A2) | no default; ask first (R5) | ship, show the sheet, publish waits on the answer | Ship the letter marks: L3 needs a picture for every entry, and the lane names GBPC's as "a plain letter mark". The owner sees the sheet in arc 1's body and decides at the `sign` approval, the only path to a served list. Superseded by P132-04 and P132-05 (A1, A2 answered (b), #1780) before the list was first published. |
 | D10 | Capacity (R4, I1) | correct I1 | correct I1, known limit | Corrected I1; a closed `known-limit` issue at close-out. No aggregate budget machinery. |
 | D11 | Release lane (Opus T-2) | — | expect a logo only where the held list has one | Accepted: the artifact run holds the published list, which has no pictures until the owner publishes. |
 | D12 | Badge accessibility | — | known limit | Not filed: the words are AL1's deferral to page 125, and no surface loses a signal it has today. |
@@ -216,6 +238,10 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 | D15 | Mocks given `tokenIcons` (arc 2) | — | — | Only the tests that mount a surface drawing the mark; the other mocks already omit `flaggedTokens` and never call `iconFor`. |
 | D16 | The smoke runner (arc 2) | — | — | `agent.sh` runs the network config only; the touched smoke spec and the full smoke suite run through `bun run test:e2e` after the armed build, the list host claiming its port in the host registry. |
 | D17 | The rows' mark (arc 2) | leave it out (consult `01a1c81b`) | — | Left out, to the owner (`OWNER-ASKS.md` A4). `type-roles.test.ts` holds P46-08's guarantee that a $123,456,789,012,345.68 figure stays on two lines. A 32 px mark with a 12 px gap leaves it 166.6 px of the 312 px row, where it needs 179.4 px (measured in Chrome), so the figure takes a third line. Mark and gap fit only within 31.2 px. Restating the guard would decide between two owner picks, and every other fix changes what a person sees. `TokenCard.vue` and its tests stay as on `dev`, and so do the mocks that only fed it. |
+| D18 | A dApp's transfer row (arc 3) | — | — | Left out, to the owner (`OWNER-ASKS.md` A5). Measured before building (lessons/phase-5.md): every row titled by a token keeps at least 28 px to its amount with the mark, but on a dApp's transfer the title shares its line with the app chip, and the mark takes 22 px from it: `rows.test.ts` holds "Shielded Payroll Portal" at its 96 px cap beside 1,250 USDC, and it reads 85.8 px. Restating that guard would decide how much of a dApp's name shows, which no pick covers and no frame drew. |
+| D19 | Where Activity reads the list (arc 3) | — | — | Tree wins: the settled card owns its price composable, so it reads the picture and the flag itself; received and journal rows take the reader from their list through `ActivityRowCard`; History's sends in progress, outside `TransactionsList`, read it through `useTokenFlags` on the page's own client; `journalCardTitleMark` joins the awaiting card's field builders in `journal-state.ts`. |
+| D20 | The summary's mint line (arc 3) | — | — | One element serves a transfer and a mint ("25 USDC to …"), and the prototype drew the mark on both; the mark goes before an amount that names a token the wallet knows, never before base units. |
+| D21 | The fee-raised window's line (arc 3) | — | — | Opus found that window's copy of the line drawing a listed token's initials and a flagged one's mark with no badge, since it reads no list. A card given no list reader now draws no mark, so that copy reads as today. Giving it the list's reader, as Opus proposed, adds a cache read its tests pin out (none while the session is checked or locked, one from its fee card once signed in), so it goes to the owner (`OWNER-ASKS.md` A6). |
 
 ## Audit verdicts
 
@@ -231,6 +257,12 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 - **Arc 2 review, Codex round 2** (same session, over `f18f7f96c`): **clean** ("No new findings. Accepted fixes verified by inspection; identity and missing-picture probes passed").
 - **Arc 2, the full smoke suite red, Codex consult** (session `01a1c81b`, gpt-6.1-sol, high): asked whether a fix keeps both P46-08's two-line figure and A's 32 px row mark with its 12 px gap. Its answer: "I found no cause-level fix that preserves both picks" (high confidence), so "defer only the shared row-mark integration in `TokenCard.vue`". Taken as D17. The rows' `min-width: 0` from round 1 leaves with it.
 - **Arc 2 review, Codex round 3** (session `01a1c73e`, over the D17 commits): findings (2 low, docs). Accepted: the surfaces table, Phase 4's change map, the summary and the index line still promised the rows' mark; A3's "what ships now" described an offset only the rows' mark makes. Code: "No remaining code/test/capture-helper assumption found". The hard stop at three rounds ends the loop; the fold is docs only.
+
+- **Arc 3 review, Codex round 1** (session `01a1c8bd`, gpt-6.1-sol, high): findings (2 low). Accepted: the mint negative mounted an unrecognized call, so it proved nothing about a mint (demonstrated; it now reads a registered mint's title and amount before its missing mark); the `.line_mark` comment narrated its margin (deleted).
+- **Arc 3 review, Opus** (general-purpose, beside Codex round 1): findings (1 medium, 2 low, 1 nit). Accepted: the fee-raised window shows the line with no list reader, so a listed token drew initials and a flagged one no badge (demonstrated); a summary given no reader now draws no mark, and threading the reader there, as proposed, was refused by that window's pinned price reads (D21, A6). A token whose symbol cleans to "" drew a mark in flight, failed or received but none once settled (`tokenMarkOf` now returns null with no symbol). Home's and History's in-flight cards could lose the reader with every test green (one assertion each, mutation-checked). The nit was Codex's comment.
+- **Arc 3 review, Codex round 2** (same session, over `74831faf7`): **clean** ("all accepted fixes verified by inspection; no new findings").
+- **Arc 3, the PR's network lanes red, then Codex round 3** (session `01a1c8bd`, over `59d35be86`): `tx-transfer-row.test.ts` read the approval line's `textContent`, which now holds the mark's initials ("T5 TST from …"), 4 of 4 on both browsers. The spec reads the line's words without the mark and asserts the mark is initials; green at retry 0 on both browsers. Round 3: **clean** ("The fix preserves exact sentence equality after the same whitespace normalization"). The loop stops at its cap with nothing open.
+- **Cross-arc pass, Codex** (fresh session `01a1c8d7`, gpt-6.1-sol, high, over arc 1's commits and `0e31082a4..HEAD`): findings (1 low, docs). Accepted: A1, A2 and the asks list still described arc 1's accent disc and "W" as shipping after P132-04/05 and #1780 (A1 and A2 recorded answered (b); D9 marked superseded). It found no second path to a picture, no symbol-keyed lookup, no duplicated rule and no stored shape.
 
 ## Seeds
 

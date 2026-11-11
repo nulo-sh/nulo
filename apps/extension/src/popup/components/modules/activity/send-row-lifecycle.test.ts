@@ -1,10 +1,11 @@
 /**
  * One wallet send drawn queued, failed and settled, each card over the real layout and built the way
- * the activity views build it: the row keeps its icon box, title, words and amount column, and only the
- * status corner changes. The token is unpriced, as the in-flight cards are: fiat comes only at settlement.
+ * the activity views build it: the row keeps its icon box, its token's mark and title, words and amount
+ * column, and only the status corner changes. The token is unpriced, as the in-flight cards are: fiat
+ * comes only at settlement.
  */
 import { RowAction } from "@nulo/design"
-import { mount, type VueWrapper } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { describe, expect, test, vi } from "vitest"
 import TransactionAwaitingCard from "@/components/composite/activity/TransactionAwaitingCard.vue"
 import TransactionTerminalCard from "@/components/composite/activity/TransactionTerminalCard.vue"
@@ -16,8 +17,10 @@ import {
 	journalCardDirection,
 	journalCardIcon,
 	journalCardTitle,
+	journalCardTitleMark,
 	journalCardTitleNamesToken,
 } from "@/utils/journal-state"
+import { tokenIconFor } from "@/utils/token-icon"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { OriginType, TransferType, TxStatus } from "@/wallet/services/transaction/spec"
 import TransactionCard from "./TransactionCard.vue"
@@ -25,14 +28,16 @@ import TransactionCard from "./TransactionCard.vue"
 vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({ network: { chainId: CHAIN_IDS.TESTNET }, defaultExplorer: "aztecscan" }),
 }))
+const LIST = vi.hoisted(() => ({ tokenIcons: {} as Record<string, string> }))
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
+		const snapshot = async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: [], tokenIcons: LIST.tokenIcons })
 		return {
 			disconnect: vi.fn(),
 			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
 			onConnected: { add: vi.fn(), remove: vi.fn() },
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
-			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			getQuotes: vi.fn(snapshot),
+			refreshIfStale: vi.fn(snapshot),
 		}
 	}),
 }))
@@ -48,8 +53,12 @@ const ACCOUNT = `0x${"2b".repeat(32)}`
 const OUTSIDE = `0x${"1e".repeat(32)}`
 const CONTRACT = `0x${"0a".repeat(32)}`
 const HASH = `0x${"5e".repeat(32)}`
-const TOKEN = { symbol: "cUSDC", decimals: 6, hasDecimals: true }
+const TOKEN = { symbol: "cUSDC", decimals: 6, hasDecimals: true, chainId: CHAIN_IDS.TESTNET, contract: CONTRACT }
 const CTX = { tokenById: () => TOKEN, tokens: [] }
+const ICON = "data:image/svg+xml;base64,PHN2Zy8+"
+LIST.tokenIcons = { [`${CHAIN_IDS.TESTNET}:${CONTRACT}`]: ICON }
+/** The list's reading the in-flight views hold, from the same answer the settled card's feed gives. */
+const MARKS = { iconFor: (t?: { chainId?: number; contract?: string }) => tokenIconFor(LIST.tokenIcons, t), isFlagged: () => false }
 
 /** The send's request, as the journal record and the settled record each copy it. */
 const send = (recipient: string) => ({ transferType: TransferType.PrivateToPublic, from: ACCOUNT, to: recipient, amount: "1500000" })
@@ -98,6 +107,7 @@ const mountQueued = (op: OperationRecord) =>
 			amount: journalCardAmount(op, CTX.tokenById) ?? undefined,
 			amountSymbol: journalCardAmountSymbol(op, CTX.tokenById) ?? undefined,
 			titleNamesToken: journalCardTitleNamesToken(op),
+			titleMark: journalCardTitleMark(op, CTX, MARKS),
 			direction: journalCardDirection(op),
 			stage: "queued",
 			hasApprovalWindow: false,
@@ -106,10 +116,16 @@ const mountQueued = (op: OperationRecord) =>
 	})
 
 const mountFailed = (op: OperationRecord) =>
-	mount(TransactionTerminalCard, { props: buildJournalTerminalCardProps(op, CTX) ?? undefined, global: { stubs: STUBS } })
+	mount(TransactionTerminalCard, {
+		props: { ...buildJournalTerminalCardProps(op, CTX), titleMark: journalCardTitleMark(op, CTX, MARKS) } as never,
+		global: { stubs: STUBS },
+	})
 
-const mountSettled = (req: ReturnType<typeof send>) =>
-	mount(TransactionCard, { props: { tx: settledTx(req) } as never, global: { stubs: STUBS, components: { RowAction } } })
+const mountSettled = async (req: ReturnType<typeof send>) => {
+	const w = mount(TransactionCard, { props: { tx: settledTx(req) } as never, global: { stubs: STUBS, components: { RowAction } } })
+	await flushPromises()
+	return w
+}
 
 /** What a person sees of the row, but for what the status corner holds. */
 function rowShape(w: VueWrapper) {
@@ -122,7 +138,9 @@ function rowShape(w: VueWrapper) {
 		way: [box.get("[data-testid='activity-way-badge']").attributes("data-way"), ...glyphs("activity-way-badge")],
 		statusCorners: corners.filter((el) => !/_badge_way_/.test(el.className)).length,
 		title: w.get("[data-testid='activity-title']").text(),
-		titleAlone: w.get("[data-testid='activity-title-row']").element.childElementCount === 1,
+		titleRow: [...w.get("[data-testid='activity-title-row']").element.children].map(
+			(el) => `${el.getAttribute("data-testid")}${el.getAttribute("data-kind") ? `:${el.getAttribute("data-kind")}` : ""}`,
+		),
 		words: w.get("[data-testid='activity-direction-chip']").element.textContent,
 		amountColumn: [...w.get("[data-testid='activity-amount-col']").element.children].map((el) => el.textContent?.trim()),
 	}
@@ -132,15 +150,15 @@ describe("a wallet send's row from queued to settled", () => {
 	test.each([
 		["to another account", OUTSIDE, "out", "send", "Private → Public"],
 		["to its own account", ACCOUNT, "self", "swap", "Private → Public, within this account"],
-	])("%s: queued, failed and settled draw one row; only the status corner changes", (_name, recipient, way, glyph, words) => {
+	])("%s: queued, failed and settled draw one row; only the status corner changes", async (_name, recipient, way, glyph, words) => {
 		const req = send(recipient)
-		const settled = rowShape(mountSettled(req))
+		const settled = rowShape(await mountSettled(req))
 		expect(settled).toEqual({
 			pair: ["private", "forward", "public"],
 			way: [way, glyph],
 			statusCorners: 1,
 			title: "cUSDC",
-			titleAlone: true,
+			titleRow: ["token-mark:logo", "activity-title"],
 			words,
 			amountColumn: ["1.5"],
 		})

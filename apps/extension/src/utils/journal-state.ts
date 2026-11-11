@@ -14,6 +14,7 @@ import type { RowDirection } from "@/utils/row-direction"
 import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { dashIfBlank } from "@/utils/string"
 import { knownDecimals, parseSide } from "@/utils/token-amount"
+import { type TokenMarkLookup, type TokenMarkOf, tokenMarkOf } from "@/utils/token-icon"
 import type { ListedToken } from "@/utils/tx-amount"
 import { DAPP_LABEL, callTitle, settledCallTitle, transferDirection } from "@/utils/tx-enrichment"
 import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
@@ -400,6 +401,8 @@ export interface TokenForCardProps {
 	symbol?: string
 	decimals?: number
 	hasDecimals?: boolean
+	chainId?: number
+	contract?: string
 }
 
 export interface JournalTerminalCardCtx {
@@ -523,6 +526,15 @@ export function journalCardDirection(op: OperationRecord): RowDirection | null {
 /** A transfer is titled by its token; a dApp op by its call. */
 export function journalCardTitleNamesToken(op: OperationRecord): boolean {
 	return op.kind === "transfer"
+}
+
+/** The mark before a title that names a token; none while the record's token is not the wallet's or has no symbol. */
+export function journalCardTitleMark(
+	op: OperationRecord,
+	ctx: Pick<JournalTerminalCardCtx, "tokenById">,
+	lookup: TokenMarkLookup,
+): TokenMarkOf | null {
+	return journalCardTitleNamesToken(op) && op.tokenId !== undefined ? tokenMarkOf(lookup, ctx.tokenById(op.tokenId)) : null
 }
 
 function transferTitle(token: TokenForCardProps | undefined): string {

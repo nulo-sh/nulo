@@ -35,6 +35,8 @@ const props = defineProps({
 	to: { type: String, default: undefined },
 	/** The receipt is arriving now: the row slides in and glows. */
 	arriving: { type: Boolean, default: false },
+	/** The mark of the receipt's token; null while the token is not the wallet's. */
+	titleMark: { type: Object, default: null },
 })
 
 /** `decimals` comes from a contract-fed storage row; an invalid one leaves the amount column out. */
@@ -56,6 +58,7 @@ const hashSlice = computed(() => {
 		:amount="formattedAmount ? `+${formattedAmount}` : null"
 		:amountSymbol="tokenSymbol"
 		:titleNamesToken="true"
+		:titleMark="titleMark"
 		:amountFiat="amountFiat"
 		:to="to"
 		:arriving="arriving"

@@ -334,6 +334,7 @@ declare global {
   const journalCardIcon: typeof import('../utils/journal-state').journalCardIcon
   const journalCardOriginLabel: typeof import('../utils/journal-state').journalCardOriginLabel
   const journalCardTitle: typeof import('../utils/journal-state').journalCardTitle
+  const journalCardTitleMark: typeof import('../utils/journal-state').journalCardTitleMark
   const journalCardTitleNamesToken: typeof import('../utils/journal-state').journalCardTitleNamesToken
   const journalDeleted: typeof import('../utils/journal-mirror').journalDeleted
   const journalProgressWord: typeof import('../utils/journal-state').journalProgressWord
@@ -553,6 +554,7 @@ declare global {
   const tokenIconFor: typeof import('../utils/token-icon').tokenIconFor
   const tokenIconsOf: typeof import('../utils/token-icon').tokenIconsOf
   const tokenInitials: typeof import('../utils/string').tokenInitials
+  const tokenMarkOf: typeof import('../utils/token-icon').tokenMarkOf
   const tokenMovementLabel: typeof import('../utils/tx-enrichment').tokenMovementLabel
   const transferDirection: typeof import('../utils/tx-enrichment').transferDirection
   const transferLabel: typeof import('../utils/token-transfer-vocabulary').transferLabel
@@ -957,6 +959,9 @@ declare global {
   export type { FiatOf } from '../utils/token-amount'
   import('../utils/token-amount')
   // @ts-ignore
+  export type { TokenMarkLookup, TokenMarkOf } from '../utils/token-icon'
+  import('../utils/token-icon')
+  // @ts-ignore
   export type { OrderableRow, OrderCtx, RowClass, LiveTokenScope } from '../utils/token-order'
   import('../utils/token-order')
   // @ts-ignore
@@ -1301,6 +1306,7 @@ declare module 'vue' {
     readonly journalCardIcon: UnwrapRef<typeof import('../utils/journal-state')['journalCardIcon']>
     readonly journalCardOriginLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardOriginLabel']>
     readonly journalCardTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitle']>
+    readonly journalCardTitleMark: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitleMark']>
     readonly journalCardTitleNamesToken: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitleNamesToken']>
     readonly journalDeleted: UnwrapRef<typeof import('../utils/journal-mirror')['journalDeleted']>
     readonly journalProgressWord: UnwrapRef<typeof import('../utils/journal-state')['journalProgressWord']>
@@ -1520,6 +1526,7 @@ declare module 'vue' {
     readonly tokenIconFor: UnwrapRef<typeof import('../utils/token-icon')['tokenIconFor']>
     readonly tokenIconsOf: UnwrapRef<typeof import('../utils/token-icon')['tokenIconsOf']>
     readonly tokenInitials: UnwrapRef<typeof import('../utils/string')['tokenInitials']>
+    readonly tokenMarkOf: UnwrapRef<typeof import('../utils/token-icon')['tokenMarkOf']>
     readonly tokenMovementLabel: UnwrapRef<typeof import('../utils/tx-enrichment')['tokenMovementLabel']>
     readonly transferDirection: UnwrapRef<typeof import('../utils/tx-enrichment')['transferDirection']>
     readonly transferLabel: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['transferLabel']>

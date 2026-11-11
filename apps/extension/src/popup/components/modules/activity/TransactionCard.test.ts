@@ -11,7 +11,9 @@ import { describe, expect, test, vi } from "vitest"
 import { OriginType, TransferType, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { flushPromises } from "@vue/test-utils"
-import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { tokenIconsOf } from "@/utils/token-icon"
+import { TEST_ICONS, TEST_LIST_ENTRIES_WITH_ICONS, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 // Bypass the real Pinia app store + its chrome.storage subscriptions —
 // TransactionCard only reads `network.chainId` + `defaultExplorer` for the
@@ -20,16 +22,17 @@ vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({ network: { chainId: CHAIN_IDS.TESTNET }, defaultExplorer: "aztecscan" }),
 }))
 
-// Controllable price feed for the fiat case.
+// Controllable price feed for the fiat case; the list's flags and pictures ride every answer.
 let mockQuotes: Record<string, unknown> = {}
+let mockList: { flaggedTokens: string[]; tokenIcons: Record<string, string> } = { flaggedTokens: [], tokenIcons: {} }
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
 			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
 			onConnected: { add: vi.fn(), remove: vi.fn() },
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
-			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, ...mockList })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS, ...mockList })),
 		}
 	}),
 }))
@@ -68,6 +71,7 @@ const STUBS = {
 			"to",
 			"oneLineTitle",
 			"direction",
+			"titleMark",
 		],
 	},
 }
@@ -370,5 +374,69 @@ describe("TransactionCard fiat (D2 activity rows)", () => {
 			amount: w.find(".amount").text(),
 			fiat: w.find('[data-testid="activity-fiat"]').exists(),
 		}).toEqual({ title: "cUSD", ...want })
+	})
+})
+
+describe("TransactionCard's title mark", () => {
+	const field = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
+	const FLAGGED = `0x${"0e".repeat(32)}`
+	const transferOf = (contract: string, origin: Record<string, unknown> = { type: OriginType.UI }) => ({
+		hash: field(0x5e5en),
+		status: TxStatus.Proposed,
+		origin,
+		calls: [
+			{
+				contract,
+				method: "transfer_private_to_public",
+				args: [field(0xa1n), field(0xb2n), field(125n * 10n ** 6n)],
+				transfers: [
+					{
+						token: { name: "USD Coin", symbol: "USDC", decimals: 6 },
+						type: TransferType.PrivateToPublic,
+						from: field(0xa1n),
+						to: field(0xb2n),
+						amount: (125n * 10n ** 6n).toString(),
+					},
+				],
+			},
+		],
+	})
+	const layoutOf = async (tx: Record<string, unknown>, tokens: unknown[] = []) => {
+		mockList = {
+			flaggedTokens: flaggedKeysOf([{ chainId: CHAIN_IDS.TESTNET, address: FLAGGED }]),
+			tokenIcons: tokenIconsOf(TEST_LIST_ENTRIES_WITH_ICONS),
+		}
+		const w = mountCard(tx, { tokens })
+		await flushPromises()
+		return w.findComponent(STUBS.TransactionCardLayout)
+	}
+	const markOf = async (tx: Record<string, unknown>) => (await layoutOf(tx)).props("titleMark")
+
+	test("a transfer of a listed token draws the list's picture; a custom one its initials; a flagged one the badge", async () => {
+		expect(await markOf(transferOf(TEST_TOKENS.USDC))).toEqual({ symbol: "USDC", icon: TEST_ICONS.USDC, badge: false })
+		expect(await markOf(transferOf(field(0xc0ffeen)))).toEqual({ symbol: "USDC", icon: undefined, badge: false })
+		expect(await markOf(transferOf(FLAGGED))).toEqual({ symbol: "USDC", icon: undefined, badge: true })
+	})
+
+	test("an outgoing mint is titled by its kind and a dApp's transfer shares its title with the app chip: neither has a mark", async () => {
+		const CLASS = field(0xc1a55n)
+		const usdc = {
+			id: 1,
+			chainId: CHAIN_IDS.TESTNET,
+			contract: TEST_TOKENS.USDC,
+			classId: CLASS,
+			symbol: "USDC",
+			decimals: 6,
+			hasDecimals: true,
+		}
+		const mint = {
+			hash: field(0x3a3an),
+			status: TxStatus.Proposed,
+			origin: { type: OriginType.UI },
+			calls: [{ contract: TEST_TOKENS.USDC, method: "mint_to_public", args: [field(0xa1n), field(10n ** 6n)], classId: CLASS }],
+		}
+		const layout = await layoutOf(mint, [usdc])
+		expect([layout.props("title"), layout.props("amount"), layout.props("titleMark")]).toEqual(["Mint (public)", "1", null])
+		expect(await markOf(transferOf(TEST_TOKENS.USDC, { type: OriginType.DAPP, name: "example.dapp.io" }))).toBeNull()
 	})
 })

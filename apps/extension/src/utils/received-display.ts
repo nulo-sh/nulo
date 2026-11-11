@@ -12,6 +12,7 @@ import type { IncomingTransferRecord } from "@/wallet/services/incoming-transfer
 import type { TokenInfo } from "@/wallet/services/token/spec"
 import type { RowDirection } from "./row-direction"
 import { knownDecimals } from "./token-amount"
+import { type TokenMarkLookup, tokenMarkOf } from "./token-icon"
 
 const ZERO_ADDRESS = AztecAddress.ZERO.toString().toLowerCase()
 const MAGIC = PRIVATE_ADDRESS_MAGIC_VALUE.toLowerCase()
@@ -87,6 +88,7 @@ export function buildIncomingCardProps(
 	inc: IncomingTransferRecord,
 	tokens: readonly TokenInfo[],
 	fiatLabel: (token: TokenInfo, raw: bigint) => string | undefined,
+	marks?: TokenMarkLookup,
 ) {
 	const token = tokenForReceipt(tokens, inc)
 	return {
@@ -96,5 +98,6 @@ export function buildIncomingCardProps(
 		txHash: inc.txHash,
 		amountFiat: token ? (fiatLabel(token, BigInt(inc.amountRaw || 0)) ?? null) : null,
 		direction: receivedDirection(resolveReceivedType(inc)),
+		titleMark: tokenMarkOf(marks, token),
 	}
 }

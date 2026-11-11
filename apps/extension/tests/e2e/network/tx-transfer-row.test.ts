@@ -29,6 +29,13 @@ const NONCE = "0x0f3c7a91e24b6d08c5f1a39e7b2d40c86e9a1f53b7d20c4e8a6f91b3d5c07e2
 /** The transfer step's sentence head, which names the call: the rows it opens to name none. */
 const TRANSFER_HEAD = `${sel("execute-op-summary-call")}[data-intent-kind="transfer"] ${sel("execute-op-summary-call-head")}`
 const textOf = (page: Page, selector: string) => page.$eval(selector, (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
+/** The line's words: the token's mark before its amount is a picture, and its initials say nothing. */
+const lineWordsOf = (page: Page, selector: string) =>
+	page.$eval(selector, (el) => {
+		const words = el.cloneNode(true) as Element
+		for (const mark of words.querySelectorAll('[data-testid="token-mark"]')) mark.remove()
+		return (words.textContent ?? "").replace(/\s+/g, " ").trim()
+	})
 const senderKind = (page: Page, testid: string) => page.$eval(sel(testid), (el) => el.getAttribute("data-sender-kind"))
 const trimmed = (address: string) => `${address.slice(0, 8)}..${address.slice(-4)}`
 
@@ -40,15 +47,9 @@ async function expectTransferLine(page: Page, recipient: string): Promise<void> 
 	expect(await senderKind(page, "execute-op-call-line")).toBe("explicit")
 	// Each address fills its text after a contact lookup, once the line already shows.
 	const expected = `5 TST from ${name} to ${trimmed(recipient)}`
-	await page
-		.waitForFunction(
-			(selector: string, text: string) => document.querySelector(selector)?.textContent?.replace(/\s+/g, " ").trim() === text,
-			{ timeout: 10_000 },
-			line,
-			expected,
-		)
-		.catch(() => undefined)
-	expect(await textOf(page, line)).toBe(expected)
+	await expect.poll(() => lineWordsOf(page, line), { timeout: 10_000 }).toBe(expected)
+	// TST is the sandbox's own token, which no list names.
+	expect(await page.$eval(`${line} ${sel("token-mark")}`, (el) => el.getAttribute("data-kind"))).toBe("initials")
 	expect(await page.$(sel("execute-op-details"))).toBeNull()
 	for (const state of ["a transfer the wallet reads, from a named sender (network)", "a transfer the wallet reads (network)"]) {
 		expectSitesClean(await observeIdentifierSites(page, "windows-execute", state))

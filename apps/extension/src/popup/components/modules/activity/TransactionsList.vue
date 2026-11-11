@@ -58,6 +58,8 @@ const tokenById = (id) => tokensById.value.get(id)
 				:tokens="tokens"
 				:tokenById="tokenById"
 				:fiatLabel="prices.tokenFiatLabel"
+				:iconFor="prices.iconFor"
+				:isFlagged="prices.isFlagged"
 				:isArriving="isArriving"
 			/>
 		</Flex>

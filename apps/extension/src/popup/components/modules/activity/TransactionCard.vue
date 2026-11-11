@@ -25,6 +25,7 @@ import { dashIfBlank } from "@/utils/string"
 import { knownDecimals } from "@/utils/token-amount"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "@/composables/usePrices"
+import { tokenMarkOf } from "@/utils/token-icon"
 import { getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 import { getTxCategory, getTxTitle, getOriginLabel, getPrimaryCall, transferDirection } from "@/utils/tx-enrichment"
 import { directionWords } from "@/utils/row-direction"
@@ -147,6 +148,13 @@ const amountFiat = computed(() => {
 	)
 	return label ?? null
 })
+/** A transfer's title names its token, so its mark goes before it; a mint's names its kind. A dApp's
+ *  transfer draws none: its app chip gives way beside the title, and the mark would take that room. */
+const titleMark = computed(() =>
+	titleNamesToken.value && amount.value && !originLabel.value
+		? tokenMarkOf(prices, { symbol: amount.value.symbol, chainId: appStore.network?.chainId, contract: call.value?.contract })
+		: null,
+)
 onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
@@ -160,6 +168,7 @@ onBeforeUnmount(() => {
 		:amount="amountStr"
 		:amountSymbol="displayAmountSymbol"
 		:titleNamesToken="titleNamesToken"
+		:titleMark="titleMark"
 		:amountFiat="amountFiat"
 		:to="to"
 		testId="tx-card"

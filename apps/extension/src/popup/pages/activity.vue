@@ -31,6 +31,7 @@ import {
 	journalCardIcon,
 	journalCardOriginLabel,
 	journalCardTitle,
+	journalCardTitleMark,
 	journalCardTitleNamesToken,
 	journalProgressWord,
 } from "@/utils/journal-state"
@@ -43,6 +44,7 @@ import { ARRIVALS_KEY } from "@/composables/useArrivals"
 import { useHeroVisible } from "@/composables/useHeroVisible"
 import { useIncomingTransfers } from "@/composables/useIncomingTransfers"
 import { useJournalMirror } from "@/composables/useJournalMirror"
+import { useTokenFlags } from "@/composables/usePrices"
 import { useScopedTokens } from "@/composables/useScopedTokens"
 import { SENDS_IN_PROGRESS_KEY } from "@/composables/useSendsInProgress"
 
@@ -86,6 +88,8 @@ const {
 	scope: () => activeAccountScope(appStore),
 	afterRead: arrivals?.load,
 })
+/** The list's pictures and flags for the marks of the sends in progress; the list below reads its own. */
+const pendingMarks = useTokenFlags(incomingPriceService)
 
 /** Journal terminal records.
  *  Loaded on mount + refreshed on every journal event so the list reacts to
@@ -202,6 +206,7 @@ onBeforeUnmount(() => {
 	incomingPriceService.disconnect()
 	disposeTerminalOps()
 	disposeIncomingTransfers()
+	pendingMarks.dispose()
 	scopedTokens.dispose()
 })
 </script>
@@ -250,6 +255,7 @@ onBeforeUnmount(() => {
 					:amount="journalCardAmount(op, tokenById)"
 					:amountSymbol="journalCardAmountSymbol(op, tokenById)"
 					:titleNamesToken="journalCardTitleNamesToken(op)"
+					:titleMark="journalCardTitleMark(op, { tokenById }, pendingMarks)"
 					:direction="journalCardDirection(op)"
 					:stage="op.progress?.stage ?? null"
 					:backend="op.progress?.backend ?? null"

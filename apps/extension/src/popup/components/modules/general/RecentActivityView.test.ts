@@ -55,6 +55,7 @@ const H = vi.hoisted(() => {
 		configConnect: vi.fn(),
 		acceptQueuedFee: vi.fn(),
 		refreshPrices: vi.fn(),
+		tokenIcons: {} as Record<string, string>,
 		// event emitters (the mocked clients don't fire them; tests emit explicitly)
 		journalAdded: makeEvent(),
 		journalUpdated: makeEvent(),
@@ -147,7 +148,7 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: H.makeEvent(),
 			onConnected: H.makeEvent(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: [], tokenIcons: H.tokenIcons })),
 			refreshIfStale: H.refreshPrices,
 		}
 	}),
@@ -184,6 +185,7 @@ vi.mock("@/stores/app.store", () => ({ useAppStore: () => H.store.current }))
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
 import { REVIEW_ARM_MS } from "@/composables/useSendReview"
 import { usePopupStore } from "@/stores/popup.store"
+import { listKeyOf } from "@/utils/token-flag"
 import RecentActivityView from "./RecentActivityView.vue"
 
 const makeRouter = () =>
@@ -251,7 +253,10 @@ beforeEach(() => {
 	H.incomingConnect.mockReset().mockResolvedValue(undefined)
 	H.configConnect.mockReset().mockResolvedValue(undefined)
 	H.acceptQueuedFee.mockReset().mockResolvedValue(true)
-	H.refreshPrices.mockReset().mockResolvedValue({ quotes: {}, pricedTokens: {} })
+	H.tokenIcons = {}
+	H.refreshPrices
+		.mockReset()
+		.mockImplementation(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: [], tokenIcons: H.tokenIcons }))
 	for (const ev of [
 		H.journalAdded,
 		H.journalUpdated,
@@ -407,6 +412,22 @@ describe("RecentActivityView — journal records by network", () => {
 		expect(cards.map((c) => c.props("jobId")).sort()).toEqual(["live-here", "live-legacy"])
 		const terminal = vmOf(w).recentActivityRows.filter((r: { type: string }) => r.type === "journal")
 		expect(terminal.map((r: { key: string }) => r.key).sort()).toEqual(["journal:done-here", "journal:done-legacy"])
+	})
+})
+
+describe("RecentActivityView — the in-flight row's token mark", () => {
+	test("a send in flight draws its token's mark from the feed's own list read", async () => {
+		const ICON = "data:image/svg+xml;base64,PHN2Zy8+"
+		H.tokenIcons = { [listKeyOf(1, "0xusdc")]: ICON }
+		H.getTokens.mockResolvedValue([{ id: 1, chainId: 1, contract: "0xusdc", symbol: "USDC", decimals: 6, hasDecimals: true }])
+		H.getOperations.mockResolvedValue([{ ...inFlightTransferOp(ACCT_A), tokenId: 1, amountRaw: "1000000" }])
+		const w = mountView()
+		await flushPromises()
+		expect(w.findComponent({ name: "TransactionAwaitingCard" }).props("titleMark")).toEqual({
+			symbol: "USDC",
+			icon: ICON,
+			badge: false,
+		})
 	})
 })
 
@@ -1391,6 +1412,8 @@ describe("RecentActivityView — a queued send that asks again", () => {
 		H.refreshPrices.mockResolvedValue({
 			quotes: { aztec: { coingeckoId: "aztec", usd: 0.0147, fetchedAt: Date.now(), providerUpdatedAt: null } },
 			pricedTokens: {},
+			flaggedTokens: [],
+			tokenIcons: {},
 		})
 		H.getTokens.mockResolvedValue([{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true }])
 		H.getOperations.mockResolvedValue([asking()])
