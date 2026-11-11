@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /** Only the wallet's own reading of a transfer or mint states an amount or a party; nothing here closes. */
 import type { DiscoveredAuthwit } from "@/wallet/services/execution/client"
+import TokenMark from "@/components/composite/general/TokenMark.vue"
+import { type TokenMarkLookup, tokenMarkOf } from "@/utils/token-icon"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import {
 	type CallSurface,
@@ -12,6 +14,7 @@ import {
 	RAW_LINE,
 	RAW_TITLE,
 	rowTitle,
+	tokenAt,
 	uncheckedCallsLine,
 } from "./call-surface"
 import ArgsNotice from "./ArgsNotice.vue"
@@ -28,20 +31,27 @@ const props = defineProps<{
 	/** The window's closing advice follows the list of calls. */
 	advice?: boolean
 	previewFailed?: boolean
+	/** The signed list's picture and flag, for the mark before an amount in a token the wallet knows. */
+	iconFor?: TokenMarkLookup["iconFor"]
+	isFlagged?: TokenMarkLookup["isFlagged"]
 }>()
 
 const emit = defineEmits<{ retryPreview: [event: MouseEvent] }>()
 
+/** An amount that names its token draws that token's mark; one in base units names none. */
+const markAt = (contract: unknown, amount: { baseUnits: boolean } | undefined) => {
+	const token = amount && !amount.baseUnits ? tokenAt(props.tokens, props.chainId, contract) : undefined
+	return token ? tokenMarkOf(props, token) : undefined
+}
+
 const callRows = computed(() =>
-	props.calls.map(({ call, surface }) => ({
-		call,
-		surface,
-		title: rowTitle(call, surface),
-		amount:
+	props.calls.map(({ call, surface }) => {
+		const amount =
 			surface.kind === "transfer" || surface.kind === "mint"
 				? amountOf(props.tokens, props.chainId, call.to, surface.amount)
-				: undefined,
-	})),
+				: undefined
+		return { call, surface, title: rowTitle(call, surface), amount, mark: markAt(call.to, amount) }
+	}),
 )
 
 const uncheckedLine = computed(() => uncheckedCallsLine(callRows.value.map(({ surface }) => surface)))
@@ -85,7 +95,7 @@ const authwitRows = computed(() =>
 						height="130"
 					>
 						<!-- A sentence's spaces sit inside its text nodes: a bare newline between two tags renders none. -->
-						<Text variant="meta" data-testid="execute-op-line-amount">{{ row.amount.text }}</Text>
+						<TokenMark v-if="row.mark" :symbol="row.mark.symbol" :icon="row.mark.icon" :size="16" :badge="row.mark.badge" :class="$style.line_mark" /><Text variant="meta" data-testid="execute-op-line-amount">{{ row.amount.text }}</Text>
 						<template v-if="row.amount.baseUnits"> base units</template>
 						<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'account'"> from this account</template>
 						<template v-else-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'explicit'"> from <AddressDisplay :address="row.surface.sender.address" data-testid="execute-op-line-from" /></template>
@@ -149,6 +159,12 @@ const authwitRows = computed(() =>
 </template>
 
 <style module>
+/* Sits on the sentence's line, 6px before the amount it pictures. */
+.line_mark {
+	margin-right: 6px;
+	vertical-align: -3px;
+}
+
 .section {
 	width: 100%;
 	padding-top: 12px;

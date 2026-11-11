@@ -60,6 +60,7 @@ import {
 	wire,
 } from "./call-surface"
 import { trimAddress } from "@/utils/string"
+import type { TokenMarkLookup } from "@/utils/token-icon"
 import { callTitle } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
@@ -104,6 +105,9 @@ const props = defineProps<{
 	decodedGrants?: readonly DecodedGrant[]
 	/** The wallet's registered tokens, so an amount can carry its symbol and decimals. */
 	tokens?: readonly TokenInfo[]
+	/** The signed list's picture and flag of a token, for the mark on a transfer's line. */
+	iconFor?: TokenMarkLookup["iconFor"]
+	isFlagged?: TokenMarkLookup["isFlagged"]
 	/**
 	 * A `register_token` operation's metadata, read by the parent while
 	 * `tokenMetadataLoading` holds; Confirm stays off until every token is read.
@@ -391,6 +395,8 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					:previewFailed="authwits.kind === 'failed'"
 					:chainId="op.network?.chainId"
 					:tokens="tokens"
+					:iconFor="iconFor"
+					:isFlagged="isFlagged"
 					:advice="adviceSite?.on === 'calls'"
 					@retryPreview="onRetryPreview"
 				/>

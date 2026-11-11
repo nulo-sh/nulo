@@ -62,7 +62,13 @@ const mountCard = async (props: Record<string, unknown>, op: unknown = fixtureOp
 }
 const mountFixture = async () => mountCard({ feeEstimate: feeEstimateWith(AUTHWITS), ...(await decodeFixture()) })
 
-const read = (w: VueWrapper, testid: string): string[] => w.findAll(`[data-testid="${testid}"]`).map((el) => el.text().replace(/\s+/g, " "))
+/** The words of each element; a token's mark before an amount is a picture and says none. */
+const read = (w: VueWrapper, testid: string): string[] =>
+	w.findAll(`[data-testid="${testid}"]`).map((el) => {
+		const words = el.element.cloneNode(true) as Element
+		for (const mark of words.querySelectorAll('[data-testid="token-mark"]')) mark.remove()
+		return (words.textContent ?? "").replace(/\s+/g, " ").trim()
+	})
 const toggle = (w: VueWrapper) => w.get('[data-testid="execute-op-details-toggle"]')
 const advice = (w: VueWrapper) => w.findAll('[data-testid$="-unverified-advice"]')
 const testidOf = (el: Element | null | undefined) => el?.getAttribute("data-testid")
@@ -143,6 +149,10 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(line.closest('[data-testid="execute-op-summary-authwits-section"]')).toBeNull()
 		expect(read(w, "execute-op-call-line")).toEqual([`0.1 USDC from Main to ${trimAddress(RECIPIENT)}`])
 		expect(w.findAll('[data-testid="execute-op-call-line"]')[0]!.element.closest('[data-call-index="1"]')).not.toBeNull()
+		const callLine = w.get('[data-testid="execute-op-call-line"]')
+		expect(
+			callLine.findAll('[data-testid="token-mark"]').map((m) => m.element.nextElementSibling?.getAttribute("data-testid")),
+		).toEqual(["execute-op-line-amount"])
 		const unreadable = w.get('[data-call-index="2"] [data-testid="execute-op-summary-unverified-args"]')
 		expect(unreadable.text()).toContain("Can't read the arguments")
 		expect(shownText(unreadable.get('[data-testid="execute-op-summary-unverified-reason"]').element)).toBe(
