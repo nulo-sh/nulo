@@ -24,7 +24,7 @@ const fix = computed(() => (props.remedy ? FIX_WORDS[props.remedy] : null))
 </script>
 
 <template>
-	<div role="status" aria-live="polite" aria-atomic="true" :class="$style.region" :data-you="facts.you">
+	<div role="status" aria-live="polite" aria-atomic="true" :class="$style.region" :data-you="facts.you" data-testid="send-publish">
 		<div v-if="warning" :class="$style.warning" data-testid="send-fee-warning">
 			<Icon name="warning" size="14" aria-hidden="true" :class="$style.mark" />
 			<span :class="$style.warning_body">

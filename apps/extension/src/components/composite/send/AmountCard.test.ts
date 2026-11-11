@@ -103,17 +103,17 @@ describe("composite/AmountCard", () => {
 		expect(input.attributes("disabled")).toBeDefined()
 	})
 
-	test("corner balance segment: amount + symbol only — no privacy dot/word (the From selector owns that)", () => {
-		const w = mountCard({
-			token: { symbol: "USDC", decimals: 6 },
-			tokenBalanceByType: 42,
-			balanceRawByType: "42000000",
-		})
-		const seg = w.find("[data-testid='send-amount-balance']")
-		expect(seg.exists()).toBe(true)
-		expect(seg.text()).toBe("42 USDC")
-		expect(seg.text()).not.toContain("PRIVATE")
-		expect(seg.text()).not.toContain("PUBLIC")
+	const maxLabel = (w: ReturnType<typeof mountCard>) => w.get("[data-testid='send-amount-max']").attributes("aria-label")
+
+	test("Max names what it fills: all of the side's balance, the amount and symbol as the From choice prints them", () => {
+		const props = { token: { symbol: "USDC", decimals: 6 }, tokenBalanceByType: 42, balanceRawByType: "42000000" }
+		expect(maxLabel(mountCard(props))).toBe("Max: all of your private 42 USDC")
+		expect(maxLabel(mountCard({ ...props, side: "public" }))).toBe("Max: all of your public 42 USDC")
+	})
+
+	test("no balance segment is drawn in the card: the From choice prints it", () => {
+		const w = mountCard({ token: { symbol: "USDC", decimals: 6 }, tokenBalanceByType: 42, balanceRawByType: "42000000" })
+		expect(w.text()).not.toContain("42 USDC")
 	})
 
 	test.each([
@@ -121,40 +121,37 @@ describe("composite/AmountCard", () => {
 		["1123456789012345678", "1.12345678 TST"],
 		["1000000000", "0 TST"],
 		["0", "0 TST"],
-	])("the balance beside Max reads the raw balance %s as %s: exact, cut at 8 places", (raw, text) => {
+	])("Max reads the raw balance %s as %s: exact, cut at 8 places", (raw, text) => {
 		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, tokenBalanceByType: Number(raw) / 10 ** 18, balanceRawByType: raw })
-		expect(w.get("[data-testid='send-amount-balance']").text()).toBe(text)
+		expect(maxLabel(w)).toBe(`Max: all of your private ${text}`)
 	})
 
 	test.each([
 		["no raw balance", { tokenBalanceByType: 42, balanceRawByType: null }],
 		["no decimals", { token: { symbol: "TST" }, tokenBalanceByType: 42, balanceRawByType: "42" }],
-	])("no balance beside Max with %s", (_name, props) => {
+	])("Max names no figure with %s", (_name, props) => {
 		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, ...props })
-		expect(w.find("[data-testid='send-amount-balance']").exists()).toBe(false)
+		expect(maxLabel(w)).toBeUndefined()
 	})
 
-	test.each([["abc"], ["1.5"], ["-1"]])(
-		"a read side %j that is no digit string draws nothing beside Max, and the card still renders",
-		(raw) => {
-			const w = mountCard({ token: { symbol: "TST", decimals: 18 }, tokenBalanceByType: Number(raw), balanceRawByType: raw })
-			expect(w.find("[data-testid='send-amount-balance']").exists()).toBe(false)
-			expect(w.find("[data-testid='send-amount-input']").exists()).toBe(true)
-		},
-	)
+	test.each([["abc"], ["1.5"], ["-1"]])("a read side %j that is no digit string names no figure, and the card still renders", (raw) => {
+		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, tokenBalanceByType: Number(raw), balanceRawByType: raw })
+		expect(maxLabel(w)).toBeUndefined()
+		expect(w.find("[data-testid='send-amount-input']").exists()).toBe(true)
+	})
 
 	test.each([[-1], [1.5]])(
-		"a read zero of a token whose stored decimals are %j draws nothing beside Max, and the card still renders",
+		"a read zero of a token whose stored decimals are %j names no figure, and the card still renders",
 		(decimals) => {
 			const w = mountCard({ token: { symbol: "TST", decimals }, tokenBalanceByType: 0, balanceRawByType: "0" })
-			expect(w.find("[data-testid='send-amount-balance']").exists()).toBe(false)
+			expect(maxLabel(w)).toBeUndefined()
 			expect(w.find("[data-testid='send-amount-input']").exists()).toBe(true)
 		},
 	)
 
-	test("a zero read beside Max, with Max and the field still off", () => {
+	test("a zero read: Max names it, with Max and the field still off", () => {
 		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, tokenBalanceByType: 0, balanceRawByType: "0" })
-		expect(w.get("[data-testid='send-amount-balance']").text()).toBe("0 TST")
+		expect(maxLabel(w)).toBe("Max: all of your private 0 TST")
 		expect(w.get("[data-testid='send-amount-max']").attributes("disabled")).toBeDefined()
 		expect(w.get("[data-testid='send-amount-input']").attributes("disabled")).toBeDefined()
 	})
@@ -162,20 +159,22 @@ describe("composite/AmountCard", () => {
 	test.each([
 		["loading", { balanceState: "loading" }],
 		["no state passed", { balanceState: undefined }],
-	])("a balance not read yet (%s) draws a skeleton beside Max, never the zero placeholder", (_name, props) => {
+		["unavailable", { balanceState: "unavailable" }],
+	])("a balance not read (%s): Max names no figure, never the zero placeholder", (_name, props) => {
 		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, tokenBalanceByType: 0, balanceRawByType: "0", ...props })
-		expect(w.find("[data-testid='send-amount-balance']").exists()).toBe(false)
-		expect(w.find("[data-testid='send-amount-balance-loading']").exists()).toBe(true)
+		expect(maxLabel(w)).toBeUndefined()
+		expect(w.get("[data-testid='send-amount-max']").text()).toBe("Max")
 	})
 
-	test.each([
-		["unavailable", { token: { symbol: "TST", decimals: 18 }, balanceState: "unavailable" }],
-		["loading with no token", { token: undefined, balanceState: "loading" }],
-	])("%s: nothing beside Max", (_name, props) => {
-		const w = mountCard({ tokenBalanceByType: 0, balanceRawByType: "0", ...props })
-		expect(w.find("[data-testid='send-amount-balance']").exists()).toBe(false)
-		expect(w.find("[data-testid='send-amount-balance-loading']").exists()).toBe(false)
-		expect(w.find("[data-testid='send-amount-max']").exists()).toBe(true)
+	test("Max sits on the label line above the field, before it in reading and Tab order", () => {
+		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, liveQuote: { usd: 1, fetchedAt: Date.now() }, balanceRawByType: "1" })
+		const max = w.get("[data-testid='send-amount-max']").element
+		const field = w.get("[data-testid='send-amount-input']").element
+		const unit = w.get("[data-testid='send-amount-fiat-toggle']").element
+		expect(max.parentElement?.textContent).toContain("Amount")
+		expect(max.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		expect(field.compareDocumentPosition(unit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		expect(field.getAttribute("aria-labelledby")).toBe(max.parentElement?.querySelector("span")?.id)
 	})
 
 	test("quoteless: no fiat line at all — no fake $0.00, no warning noise", () => {
@@ -468,11 +467,11 @@ describe("composite/AmountCard — a symbol of spaces reads as a noun", () => {
 	const QUOTE = { usd: 1, fetchedAt: Date.now() }
 	const GUARD = { frozenUsd: 1, frozenAt: Date.now(), converting: false }
 
-	test("the clamp hint, while the balance corner keeps the raw symbol after its amount", async () => {
+	test("the clamp hint, while Max keeps the raw symbol after its amount", async () => {
 		const w = mountCard({ token: BLANK, modelValue: "", tokenBalanceByType: 1.5, balanceRawByType: "1500000" })
 		await w.find("input[data-testid='send-amount-input']").setValue("1.1234567")
 		expect(w.find("[data-testid='send-amount-clamp-hint']").text()).toBe("Token supports 6 decimals")
-		expect(w.find("[data-testid='send-amount-balance']").element.textContent).toBe("1.5    ")
+		expect(w.get("[data-testid='send-amount-max']").attributes("aria-label")).toBe("Max: all of your private 1.5    ")
 	})
 
 	test("a one-decimal token's clamp hint is singular", async () => {
@@ -712,7 +711,7 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 		const DERIVED = "[data-testid='send-amount-derived']"
 		const CONVERTING = "[data-testid='send-amount-converting']"
 		// "≈ 1,234,567.123456789012345678 TST" is 650 px at full size in the stand-in font, one fraction
-		// digit fewer 630 px: 395 px beside the balance draws them at 0.60 (7.8 px) and 0.62 (8.06 px).
+		// digit fewer 630 px: 395 px on the line under the field draws them at 0.60 (7.8 px) and 0.62 (8.06 px).
 		const mountUsd = (props: Record<string, unknown> = {}) =>
 			mountField({
 				fiatMode: true,
@@ -736,7 +735,7 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 			rooms = {}
 		})
 
-		test("below 8 px beside the balance it takes its own row at the full width's scale, and returns once it fits", async () => {
+		test("below 8 px on the line under the field it takes its own row at the full width's scale, and returns once it fits", async () => {
 			const w = mountUsd()
 			await nextTick()
 			expect(w.get(DERIVED).text()).toBe("≈ 1,234,567.123456789012345678 TST")
@@ -755,12 +754,13 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 			await nextTick()
 			expect([placeOf(w), scaleOfLine(w)]).toEqual(["beside", "1"])
 			rooms["send-amount-row"] = 600
-			await w.setProps({ balanceRawByType: "100000000000000000000" })
+			// The same amount with a zero more: the field's text moved, so the card fits again.
+			await w.setProps({ modelValue: `${LONG}0` })
 			expect([placeOf(w), scaleOfLine(w)]).toEqual(["own row", "0.92"])
 			w.unmount()
 		})
 
-		test("with no room beside the balance even a short line takes its own row", async () => {
+		test("with no room on the line under the field even a short line takes its own row", async () => {
 			rooms["send-amount-meta"] = 0
 			const w = mountUsd({ modelValue: "25" })
 			await nextTick()
@@ -1209,7 +1209,7 @@ describe("composite/AmountCard — an amount over the balance", () => {
 	})
 })
 
-describe("composite/AmountCard — every refusal takes the balance row's left slot", () => {
+describe("composite/AmountCard — every refusal takes the line under the field", () => {
 	const TOKEN = { symbol: "TST", decimals: 6 }
 	const QUOTE = { usd: 1, fetchedAt: Date.now() }
 	type Card = ReturnType<typeof mountCard>
@@ -1234,10 +1234,10 @@ describe("composite/AmountCard — every refusal takes the balance row's left sl
 			(w) => w.get("[data-testid='send-amount-input']").setValue("1.1234567"),
 		],
 	]
-	// The 360 px popup and a 240 px sidebar give the row 312 and 192 px, and the slot what the balance and Max leave.
+	// The 360 px popup and a 240 px sidebar give the row and the line under it 312 and 192 px.
 	const WIDTHS: [string, Record<string, number>][] = [
-		["360", { "send-amount-row": 312, "send-amount-meta": 184 }],
-		["240", { "send-amount-row": 192, "send-amount-meta": 64 }],
+		["360", { "send-amount-row": 312, "send-amount-meta": 312 }],
+		["240", { "send-amount-row": 192, "send-amount-meta": 192 }],
 	]
 	const mountPriced = (props: Record<string, unknown> = {}) =>
 		mountCard({ token: TOKEN, tokenBalanceByType: 500, balanceRawByType: "500000000", modelValue: "", liveQuote: QUOTE, ...props })
@@ -1253,7 +1253,7 @@ describe("composite/AmountCard — every refusal takes the balance row's left sl
 		})
 
 		test.each(REFUSALS)(
-			"%s: in the slot, as body text in the danger colour, beside the balance and Max, with no line under the row",
+			"%s: on the line under the field, as body text in the danger colour, with nothing under it",
 			async (_, testid, text, enter) => {
 				const w = mountPriced()
 				await enter(w)
@@ -1266,9 +1266,9 @@ describe("composite/AmountCard — every refusal takes the balance row's left sl
 				])
 				expect(slotOf(w).element.contains(line.element)).toBe(true)
 				expect(slotOf(w).find("[data-testid='send-amount-fiat-label']").exists()).toBe(false)
-				const row = slotOf(w).element.parentElement as HTMLElement
-				expect(row.contains(w.get("[data-testid='send-amount-max']").element)).toBe(true)
-				expect(row.nextElementSibling).toBeNull()
+				expect(slotOf(w).element.nextElementSibling).toBeNull()
+				const row = w.get("[data-testid='send-amount-row']").element
+				expect(row.compareDocumentPosition(slotOf(w).element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 				const field = w.get("[data-testid='send-amount-input']")
 				expect(field.attributes("aria-describedby")).toBe(line.attributes("id"))
 			},
@@ -1286,7 +1286,7 @@ describe("composite/AmountCard — every refusal takes the balance row's left sl
 
 	test.each(WIDTHS)(
 		"in USD at %s px the derived amount gives way while refused, on whichever line it is drawn",
-		async (width, widths) => {
+		async (_width, widths) => {
 			rooms = { ...widths }
 			const w = mountPriced({
 				fiatMode: true,
@@ -1302,8 +1302,8 @@ describe("composite/AmountCard — every refusal takes the balance row's left sl
 			)
 			await w.setProps({ modelValue: "400", exceedsBalance: false })
 			await nextTick()
-			// The narrow row draws it on its own line under the amount; the wide one, in the slot.
-			expect(slotOf(w).element.contains(w.get("[data-testid='send-amount-derived']").element)).toBe(width === "360")
+			// Nothing shares the line under the field now, so at either width the amount returns to it.
+			expect(slotOf(w).element.contains(w.get("[data-testid='send-amount-derived']").element)).toBe(true)
 		},
 	)
 

@@ -152,15 +152,6 @@ export const OVERRIDES: Override[] = [
 		why: "a mini field's typed text keeps its 12px",
 	},
 	{
-		file: "apps/extension/src/components/composite/send/SendTypesCard.vue",
-		selector: ".toggle_btn.toggle_active",
-		scope: '[data-testid="send-from-type"] > [data-selected], [data-testid="send-to-type"] > [data-selected]',
-		property: "font-weight",
-		value: "700",
-		role: "segment",
-		why: "the selected side of the send type toggle takes segment's active weight",
-	},
-	{
 		file: "apps/extension/src/onboarding/pages/create.vue",
 		selector: ".tab.tabActive",
 		scope: '[data-testid^="onboarding-method-"][aria-selected="true"]',

@@ -17,9 +17,10 @@ const STUBS = {
 	AccountAvatar: { template: '<span data-testid="stub-avatar" :data-name="name" />', props: ["name", "address", "size"] },
 	RecipientField: {
 		props: ["searchTerm", "selectedContact", "candidates"],
-		emits: ["update:searchTerm", "update:selectedContact"],
+		emits: ["update:searchTerm", "update:selectedContact", "choose"],
 		template: `<div><input data-testid="stub-field" :value="searchTerm" />
-			<button data-testid="stub-pick" @click="$emit('update:selectedContact', candidates[0])" /></div>`,
+			<button data-testid="stub-hold" @click="$emit('update:selectedContact', candidates[0])" />
+			<button data-testid="stub-pick" @click="$emit('choose', candidates[0])" /></div>`,
 	},
 }
 
@@ -73,8 +74,10 @@ describe("modules/send/SendPersonStep", () => {
 		expect(chosen(w)).toEqual([])
 	})
 
-	test("a suggestion taken in the field is the choice", async () => {
+	test("the field's pick is the choice once the field shows it, never at the model's write", async () => {
 		const w = mountStep()
+		await w.get('[data-testid="stub-hold"]').trigger("click")
+		expect(chosen(w)).toEqual([])
 		await w.get('[data-testid="stub-pick"]').trigger("click")
 		expect(chosen(w)).toEqual([[ANA, ana]])
 	})

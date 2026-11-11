@@ -4,7 +4,7 @@
  * recent recipient or one of the profile's own accounts. Every way out emits `choose` with the address
  * and the candidate it names, if any; the page owns what follows.
  */
-import { computed, watch } from "vue"
+import { computed } from "vue"
 import AccountAvatar from "@/components/composite/general/AccountAvatar.vue"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { trimAddress } from "@/utils/string"
@@ -30,10 +30,8 @@ function choose(address: string) {
 	emit("choose", address, candidateFor(address))
 }
 
-// The field names a candidate once a suggestion is taken: that is the choice.
-watch(selectedContact, (c) => {
-	if (c) emit("choose", c.address, c)
-})
+/** The field names a candidate once its pick may be shown: that is the choice. */
+const chooseCandidate = (c: Candidate) => emit("choose", c.address, c)
 
 /** Enter in the field takes a pasted address, as the button does; a suggestion's Enter is the field's. */
 function onEnter(e: KeyboardEvent) {
@@ -47,7 +45,7 @@ function onEnter(e: KeyboardEvent) {
 <template>
 	<div :class="$style.step" data-testid="send-person-step" @keydown.enter="onEnter">
 		<h2 :class="$style.ask">Who are you paying?</h2>
-		<RecipientField v-model:searchTerm="searchTerm" v-model:selectedContact="selectedContact" :candidates="candidates" />
+		<RecipientField v-model:searchTerm="searchTerm" v-model:selectedContact="selectedContact" :candidates="candidates" @choose="chooseCandidate" />
 		<Button v-if="pasted" variant="primary_outline" wide data-testid="send-pay-address" @click="choose(pasted)">Pay this address</Button>
 
 		<template v-if="recents.length">

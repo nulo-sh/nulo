@@ -247,26 +247,6 @@
 			"why": "an end of the whole address, set in data-lead inside the half its line's entry reads"
 		},
 		{
-			"file": "apps/extension/src/components/composite/send/RecipientCard.vue",
-			"expression": "masked",
-			"branch": "",
-			"ordinal": 0,
-			"role": "meta",
-			"selector": "[data-testid=\"recipient-card-masked\"]",
-			"surface": "popup-send",
-			"state": "a chosen recipient"
-		},
-		{
-			"file": "apps/extension/src/components/composite/send/RecipientCard.vue",
-			"expression": "address",
-			"branch": "revealed",
-			"ordinal": 0,
-			"role": "meta",
-			"selector": "[data-testid=\"recipient-card-full-address\"]",
-			"surface": "popup-send",
-			"state": "a chosen recipient with recipient-card-reveal clicked"
-		},
-		{
 			"file": "apps/extension/src/components/Header.vue",
 			"expression": "appStore.account?.address ? trimAddress(appStore.account.address, 6, 4, \"...\") : \"\"",
 			"branch": "!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && !isCardWindow() && appStore.isLogined && accountState === 'shown'",
@@ -371,7 +351,7 @@
 		{
 			"file": "apps/extension/src/popup/components/modules/send/RecipientField.vue",
 			"expression": "searchTerm",
-			"branch": "!(selectedContact && !holdView)",
+			"branch": "",
 			"ordinal": 0,
 			"role": "input-data",
 			"selector": "[data-testid=\"send-destination-field\"]",
@@ -381,7 +361,7 @@
 		{
 			"file": "apps/extension/src/popup/components/modules/send/RecipientField.vue",
 			"expression": "trimAddress(c.address)",
-			"branch": "!(selectedContact && !holdView) && showSuggestions",
+			"branch": "showSuggestions",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"recipient-suggestion-address\"]",

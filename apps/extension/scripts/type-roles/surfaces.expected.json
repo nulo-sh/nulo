@@ -531,7 +531,7 @@
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/send.vue",
 			"reach": "#/popup/send",
-			"states": ["empty", "recipient and amount typed", "fee card open"],
+			"states": ["the person step", "a chosen recipient and an amount typed", "the Fee sheet open"],
 			"suite": "smoke"
 		},
 		{
@@ -1005,6 +1005,16 @@
 			"states": [],
 			"suite": "none",
 			"why": "the frame every popup teleports through: the popup rows read it"
+		},
+		{
+			"id": "overlay:send",
+			"name": "Send's fee card, carried into the Fee sheet",
+			"kind": "overlay",
+			"source": "apps/extension/src/popup/pages/send.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "its one Teleport carries the fee card into the Fee sheet, read there in the popup-send row's Fee sheet state"
 		},
 		{
 			"id": "overlay:PasskeyCeremonyDialog",

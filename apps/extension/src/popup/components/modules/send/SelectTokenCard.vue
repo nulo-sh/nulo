@@ -148,9 +148,8 @@ onBeforeUnmount(() => {
 
 	cursor: pointer;
 
-	/* The parent `.section` already pads 14px top/bottom; keep this minimal so the
-	 * two don't stack into the oversized gap the token row had. */
-	padding: 4px 0;
+	/* The parent section's 14 px above and below are the row's whole band. */
+	padding: 0;
 
 	transition: all 0.2s var(--bezier);
 
