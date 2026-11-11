@@ -32,6 +32,8 @@ const textOf = (page: Page, testid: string) => page.$eval(`[data-testid="${testi
 const MAINNET_HOSTS = [MAINNET_NODE_HOST, new URL(RELAY_RPC_URLS.mainnet).hostname]
 const mainnetRequests = (extension: ExtensionContext) =>
 	extension.egress?.nodes.filter(({ host }) => MAINNET_HOSTS.includes(host)).reduce((sum, node) => sum + node.requests(), 0)
+const mainnetAttempts = (extension: ExtensionContext) =>
+	extension.egress?.guard.attempts().filter(({ host }) => MAINNET_HOSTS.includes(host))
 /** The rollup the public Mainnet node serves until its v6 upgrade executes. */
 const ALPHA_ROLLUP_VERSION = 4248422647
 
@@ -88,6 +90,8 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		await scratch.close()
 		await stopBackground(extension)
 		const mainnetBefore = mainnetRequests(extension)
+		// The same read ends the spec; failing here, it names an attempt recorded before the restart.
+		expect(mainnetAttempts(extension)).toEqual([])
 		page = await openPopup(extension)
 		await unlockAfterBackgroundDeath(page)
 		await reloadWithLegalState(page, "stale")
@@ -117,7 +121,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		await page.close()
 		expect(mainnetBefore).toBeTypeOf("number")
 		expect(mainnetRequests(extension)).toBe(mainnetBefore)
-		expect(extension.egress?.guard.attempts().filter(({ host }) => MAINNET_HOSTS.includes(host))).toEqual([])
+		expect(mainnetAttempts(extension)).toEqual([])
 	}, 180_000)
 
 	test.for([

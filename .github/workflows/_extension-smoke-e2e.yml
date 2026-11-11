@@ -209,6 +209,9 @@ jobs:
           NULO_E2E_MIGRATION_FIXTURE: ${{ env.MIGRATION_FIXTURE_ARMED }}
           NULO_E2E_CSP_REPORT: ${{ env.CSP_REPORT_ARMED }}
           NULO_E2E_EXECUTE_FIXTURE: ${{ env.EXECUTE_FIXTURE_ARMED }}
+          # A held-count failure has to be read from the run it happened in: log the interceptions'
+          # attach lines and the guard's (tests/e2e/README.md, Egress guard).
+          NULO_E2E_INTERCEPT_LOG: "1"
 
       - name: Upload smoke logs on failure
         if: failure()
