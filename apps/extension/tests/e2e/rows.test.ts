@@ -568,10 +568,10 @@ const ROWS = `${sel("tx-card")}, ${sel("tx-incoming-card")}`
 const RECEIPT_TOKEN_ID = 1
 const DAPP_NAME = "Shielded Payroll Portal"
 const LARGE_DAPP_HASH = `0x${"6e".repeat(32)}`
-/** Measured at 360px in Chrome and Firefox with the transfer's mark and gap. */
-const LARGE_APP_CHIP = 85.8
 /** The floor of a dApp transfer's app chip: its border, padding and one whole "…" at the chip's 11px. */
 const APP_CHIP_FLOOR = 20
+/** An activity row's 16px mark and its 6px gap before the title. */
+const MARK_ROOM = 22
 /** An account other than the seeded sender's: a transfer to it goes out, one to the sender is a move. */
 const OUTSIDE = `0x${"1e".repeat(32)}`
 
@@ -760,7 +760,7 @@ function expectIconBox(box: IconBox, where: string): void {
 }
 
 /** The five seeded rows: a send out, three moves to the sender (two of them a dApp's transfers, the
- *  large one cut below its cap beside its symbol) and a receipt. Only the dApp transfers carry a chip. */
+ *  large one cut beside its symbol) and a receipt. Only the dApp transfers carry a chip. */
 async function expectDirectionRows(page: Page, where: string, mark: "logo" | "initials"): Promise<void> {
 	// The list's picture arrives with its snapshot, after the rows; a logo is read once it has loaded.
 	await page.waitForFunction(
@@ -782,9 +782,9 @@ async function expectDirectionRows(page: Page, where: string, mark: "logo" | "in
 		name: DAPP_NAME,
 		lead: { content: '""', display: "inline-block" },
 	})
-	expect(large.width).toBeCloseTo(LARGE_APP_CHIP, 0)
-	expect(large.width).toBeGreaterThan(APP_CHIP_FLOOR + 0.5)
-	expect(large.width).toBeLessThan(APP_CHIP_CAP - 0.5)
+	// The room it is left depends on the host's glyph metrics; the mark and its gap may take 22px of it.
+	expect(large.width).toBeGreaterThanOrEqual(APP_CHIP_CAP - MARK_ROOM - 0.5)
+	expect(large.width).toBeLessThanOrEqual(APP_CHIP_CAP + 0.5)
 	expect(large.edge).toBeCloseTo(0, 0)
 	const boxes = await readIconBoxes(page)
 	console.log(`[rows] ${where}: icon boxes ${JSON.stringify(boxes)}`)

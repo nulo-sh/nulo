@@ -22,12 +22,12 @@ post_implementation_standard: implementations-plan/README.md § Post-implementat
   - Arc 1 (#1790): each step sentence's chevron and its no-break space sit in one `white-space: nowrap` span, so the chevron ends the last line beside the last word. A component test and the execute-steps 400/240 px loop pin it; both were red on `dev`'s template on Chrome and Firefox (`lessons/phase-1.md`).
   - Arc 2: Home's, Holdings' and Send's picker's token rows draw the 32 px mark 12 px before the symbol; a seed row draws its entry's picture (by chain and contract), an import row grey initials ("—" before its symbol is read), a ghost row a 32 px round skeleton; a dApp's transfer row draws the 16 px mark beside its app chip; the fee-raised window opens its own reader of the list in `init` and its step line draws the mark. No words change; every `data-testid` stays.
 - **Gates (arc 2, on `c7cbc4ae5`, once, in order, retry 0):** `audit:vue` (202 s), `test:components` (101 files, 1,426 tests), `test:all` and `check:plans` green; the six smoke specs (execute-steps, type-roles, rows, home-links, token-list, shipped-token-list) green on Chrome, 268 s (`dev`: 329 s), and on Firefox, 415 s (`dev`: 471 s), but for type-roles' two #1763 reds, which `dev` reproduces; `tx-transfer-row` and `tx-sendTx-default` through `e2e:agent` green on Chrome (278 s) and Firefox (477 s). The commits after it change comments, captures and plan files only: `lint`, the touched unit files (21 files, 424 tests) and the e2e typecheck green on them. `dev` then moved (#1791, which fixed #1763); merged into both arcs, the merged head `adf876ec9` passed `lint`, `typecheck:all` and type-roles with execute-steps on Chrome (196 s) and Firefox (284 s, type-roles 15 of 15).
-- **Deviations:** a figure's third line comes from about $100T, not the "about $10 trillion" P134-04 allowed (F2, measured). An import row's long title stays uncut and runs under its spinner or × from about 30 characters (D10, B4, a data point on #625). The large dApp chip's pin is one constant, 85.8 px, as both browsers measure it within 0.1 px. Arc 1's PR opened before the cross-arc pass; and the loops' prompts omitted the standard's two verbatim rules until a round under them trimmed the comments (Audit verdicts).
+- **Deviations:** a figure's third line comes from about $100T, not the "about $10 trillion" P134-04 allowed (F2, measured). An import row's long title stays uncut and runs under its spinner or × from about 30 characters (D10, B4, a data point on #625). The large dApp chip is held by P134-06's 22 px bound, not a measured pin: CI measures it 2.5 px wider than this host (D6). An unpriced token's name ends in its ellipsis at 240 px; the narrow gate accepts `token-name` (D11, B5). Arc 1's PR opened before the cross-arc pass; and the loops' prompts omitted the standard's two verbatim rules until a round under them trimmed the comments (Audit verdicts).
 - **Left out:** none of the picks. The skeleton has no capture: no smoke fixture holds Home blank and unsettled; `TokensView.test.ts` pins its 32 px round slot.
 - **Review:** arc 1's Codex loop clean at round 1; arc 2's clean at round 1, then the Opus review's import-title finding settled at round 3 (D10); the fresh cross-arc pass clean, then its comment round applied and verified.
 - **Lessons:** none promoted. The chevron's wrap rule lives at its code; the Firefox `setViewport` refusal is already in `apps/extension/tests/e2e/FIREFOX.md`; the rest are this plan's own, in `lessons/`.
 - **Known limits:** #625 (a data point: the import row's long title).
-- **Open items:** none filed. B1 to B4 go to the orchestrator with the report; each ships its "what ships now". #1763 got a reproduction data point.
+- **Open items:** none filed. B1 to B5 go to the orchestrator with the report; each ships its "what ships now". #1763 got a reproduction data point.
 - **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # token-icons-build-2: the token rows' mark, Home's other rows, a dApp's transfer row and the fee-raised line
@@ -56,7 +56,7 @@ Page 134 answered the four surfaces token-icons-build-1 left to the owner (its A
 
 ### Asks
 
-- Ask 1. The lane brief makes #1789 "its own PR"; the spawn prompt says "one arc, one PR". Working assumption: two stacked PRs built in this session, one arc report listing both. `OWNER-ASKS.md` B1 to B4 each ship their "what ships now" form.
+- Ask 1. The lane brief makes #1789 "its own PR"; the spawn prompt says "one arc, one PR". Working assumption: two stacked PRs built in this session, one arc report listing both. `OWNER-ASKS.md` B1 to B5 each ship their "what ships now" form.
 
 ## Sign-offs (verbatim; the visible budget)
 
@@ -120,7 +120,7 @@ Page 134 answered the four surfaces token-icons-build-1 left to the owner (its A
 ## UI impact
 
 - **Token rows** (Home, Holdings, Send's picker): the 32 px mark and a 12 px gap before the symbol (logo, grey initials, red badge when flagged); a figure takes a third line from about $100T (measured; the sign-off allowed from about $10T), a wide split wraps under its "≈". Sign-off: P134-04 = a, P129-01 = A, P129-02 = M1.
-- **Home's seed, import and skeleton rows**: the same 32 px slot; a seed row draws the list's picture, an import row grey initials, a ghost row a 32 px round skeleton. Sign-off: P134-04's premise, A3 (a). B1 to B4 cover what A3 does not say.
+- **Home's seed, import and skeleton rows**: the same 32 px slot; a seed row draws the list's picture, an import row grey initials, a ghost row a 32 px round skeleton. Sign-off: P134-04's premise, A3 (a). B1 to B5 cover what A3 does not say.
 - **A dApp's transfer row**: the 16 px mark and 6 px gap before the symbol; the app chip up to 22 px shorter. Sign-off: P134-06 = a, P124-04 = AC1.
 - **The fee-raised window's line**: the 16 px mark before the amount, as in the approval window. Sign-off: P134-07 = a, P124-05 = AL1.
 - **The approval window's step sentence** (#1789): the chevron ends the last line beside the last word, as the template intends.
@@ -147,10 +147,11 @@ Cite `implementations-plan/README.md` § Post-implementation standard at `52e209
 | D3 | A default's import row | not inside A3 (a); an owner ask | Grey initials on every import row, as A3 says; the picture there is B2. |
 | D4 | An import row with no title yet | "—" is right, but an owner ask | Ships "—" (B3). |
 | D5 | Shared `.lead` | share CSS, but the inner column keeps its 2 px gap and alignment | `.lead` is `min-width: 0` only; gap and alignment stay on each `Flex`. |
-| D6 | The large dApp chip's guard | pin the measured width, plus floor, cap, edge, uncut symbol, clearance, mark and gap | Taken. |
+| D6 | The large dApp chip's guard | pin the measured width, plus floor, cap, edge, uncut symbol, clearance, mark and gap; after CI, the signed bound instead | First a pin at 85.8 px, as both browsers measured here; CI's runners measure 88.3, both browsers alike, so a measured width is the host's glyph metrics, not a contract. Now `96 − 22 − 0.5 ≤ width ≤ 96.5` (P134-06's 22 px), the edge, the uncut symbol and every row's 16 px mark and 6 px gap. |
 | D7 | Smoke through `test:e2e` | agree | `agent.sh` runs only the network config (token-icons-build-1 D16). |
 | D8 | The type-roles guard | keep the $123T row; add a boundary row; hold the mark's geometry | Taken; its "three lines just above" is the $123T row held at three. |
 | D9 | The fee window's threading test | un-stub `OperationCard` | Rejected: the file stubs it by design, and the approval window's test reads `marks` the same way; the forwarding is pinned end to end by the network assertion. |
+| D11 | An unpriced token's name cut at 240 px (CI, `in-flight-send-guard`) | ship the row's existing ellipsis; a reviewed `NARROW_ACCEPTED` entry, scoped honestly; B5 | Taken: wrapping the name or shrinking the mark would be the new visible decision; the entry exempts every `token-name` from the narrow gate. |
 | D10 | An import title too long beside the mark (Opus, arc 2) | round 2: an ellipsis is a visible decision, so approve it or defer the mark; round 3, on the measurement: ship | Ship A3's mark; the title stays uncut, as #625 records for long symbols; B4 asks for the ellipsis; the measurement goes on #625 at close-out. |
 
 ## Audit verdicts
