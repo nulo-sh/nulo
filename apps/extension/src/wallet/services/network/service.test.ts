@@ -2521,6 +2521,14 @@ async function bothStatuses(service: NetworkService, factory: FakeNodeFactory, n
 }
 
 describe("NetworkService node status: getNodeStatus and probeNodeStatus", () => {
+	// The probe gets what is left of its budget by the clock; a frozen `Date` keeps that budget exact.
+	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["Date"] })
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
 	test("a matching endpoint is Active on both; getNodeStatus builds a node, probeNodeStatus probes once with its budget", async () => {
 		const { service, factory } = setupServiceWithStorage({ "https://rpc.example.com": nodeInfoForChain(7) })
 		const network = await service.addNetwork("Seven", "https://rpc.example.com")

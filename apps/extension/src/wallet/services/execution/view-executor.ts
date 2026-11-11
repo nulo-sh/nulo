@@ -335,7 +335,7 @@ export class ViewExecutor {
 		// Thread the dApp's `opts.fee.gasSettings` (including
 		// `maxPriorityFeesPerGas`) so `nulo-account.ts`'s
 		// `completeFeeOptions` call uses the dApp-supplied values rather
-		// than silently defaulting from `node.getCurrentMinFees() * 1.5`.
+		// than silently defaulting to `predictedWorstMinFees(node) * 1.5`.
 		const { txRequest, node, pxe, account, scopes } = await this.deps.txBuilder.buildStandard(
 			{ ...op, actions },
 			fence,
