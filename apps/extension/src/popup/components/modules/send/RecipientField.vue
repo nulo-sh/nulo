@@ -84,11 +84,14 @@ const handleSearchBlur = () => {
 		if (contact) handleSelectContact(contact)
 	}
 	clearTimeout(closeTimer)
-	if (pressId !== null) {
-		clearTimeout(releaseTimer)
-		holdView.value = true
-		return
-	}
+	clearTimeout(releaseTimer)
+	holdView.value = true
+	if (pressId !== null) return
+	// A tap's compatibility mousedown blurs the field and its click follows in the same task, so the
+	// match waits that task out: what the tap landed on chooses first.
+	releaseTimer = setTimeout(() => {
+		holdView.value = false
+	}, 0)
 	closeTimer = setTimeout(() => {
 		isSearchInputFocused.value = false
 	}, 250)

@@ -1478,6 +1478,17 @@ describe("send page — Same as last time, over the real amount card", () => {
 		})
 	})
 
+	test("the words keep every place of the last amount, past eight", async () => {
+		const FINE = { ...TOKEN, id: 9, contract: `0x${"e".repeat(64)}`, symbol: "FIN", decimals: 18 }
+		mocks.getTokens.mockResolvedValue([TOKEN, FINE])
+		mocks.getTokenBalances.mockResolvedValue([BALANCE, { ...BALANCE, id: "b9", token: FINE, privateBalance: "5000000000" }])
+		mocks.getOperations.mockResolvedValue([sent({ tokenId: FINE.id, amountRaw: "1000000001" })])
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		expect(w.get('[data-testid="send-recent"]').text()).toContain("0.000000001000000001 FIN")
+		await payRecent(w)
+		expect(again(w).text()).toBe("Same as last time: 0.000000001000000001 FIN, publicly")
+	})
+
 	test("a send recorded before the journal kept its sides lists in Recent, with no side, and offers no Same as last time", async () => {
 		mocks.getOperations.mockResolvedValue([sent({ transferType: undefined })])
 		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })

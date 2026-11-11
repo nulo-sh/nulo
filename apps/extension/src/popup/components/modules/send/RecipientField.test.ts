@@ -241,6 +241,7 @@ describe("modules/send/RecipientField", () => {
 			w.get("input").element.focus()
 			await nextTick()
 			w.get("input").element.dispatchEvent(enter())
+			vi.advanceTimersByTime(0)
 			await nextTick()
 			expect(choices(w)).toEqual([alice.address])
 			expect(document.activeElement).not.toBe(w.get("input").element)
@@ -573,19 +574,32 @@ describe("modules/send/RecipientField", () => {
 			expect(hint(w)).toBe(true)
 		})
 
-		test("a blur with no press chooses at once", async () => {
+		test("a blur with no press chooses once its task has run", async () => {
 			const w = await focused({ candidates: [alice], searchTerm: alice.address })
 			await w.get("input").trigger("blur")
+			expect(choices(w)).toEqual([])
+			await afterRelease()
 			expect(choices(w)).toEqual([alice.address])
 		})
 
-		test("a right-button or touch press records nothing: the pick is chosen at the blur", async () => {
-			for (const init of [{ button: 2 }, { pointerType: "touch" }]) {
+		test("a tap or a right-button press records nothing; the click its blur's task delivers chooses first", async () => {
+			for (const init of [{ pointerType: "touch" }, { button: 2 }]) {
 				const w = await focused({ candidates: [alice], searchTerm: alice.address })
+				// A row outside the field chooses as the step's rows do: the page leaves the step at once.
+				const row = document.body.appendChild(document.createElement("button"))
+				let atClick: string[] | undefined
+				row.addEventListener("click", () => {
+					atClick = choices(w)
+					w.unmount()
+				})
 				press("pointerdown", init)
-				await w.get("input").trigger("blur")
-				expect(choices(w), JSON.stringify(init)).toEqual([alice.address])
 				press("pointerup", init)
+				await w.get("input").trigger("blur")
+				row.click()
+				await afterRelease()
+				expect(atClick, JSON.stringify(init)).toEqual([])
+				expect(choices(w), JSON.stringify(init)).toEqual([])
+				row.remove()
 			}
 		})
 

@@ -5,6 +5,7 @@
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
+import { isValidAztecAddress } from "@/utils/aztec-address"
 import { trimAddress } from "@/utils/string"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
@@ -33,23 +34,34 @@ const OPEN_TRIGGER = `[data-dropdown-open="true"] ${sel("send-fee-method-trigger
 const CLOSED_TRIGGER = `[data-dropdown-open="false"] ${sel("send-fee-method-trigger")}`
 const TESTNET_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
 
-/** Saves contacts straight to storage, which Send reads when it opens. */
+/** The first `count` addresses `0x…01`, `0x…02`, … that are points on the curve, so Send can pay each. */
+function contactAddresses(count: number): string[] {
+	const out: string[] = []
+	for (let n = 1; out.length < count; n++) {
+		const address = `0x${n.toString(16).padStart(64, "0")}`
+		if (isValidAztecAddress(address)) out.push(address)
+	}
+	return out
+}
+
+/** Saves contacts straight to storage, which Send reads when it opens; the i-th at `contactAddresses`' i-th. */
 async function seedContacts(page: Page, names: string[]): Promise<void> {
 	const profileId = await captureSoleProfileId(page)
+	const addresses = contactAddresses(names.length)
 	await page.evaluate(
-		(pid: string, list: string[]) => {
+		(pid: string, list: string[], at: string[]) => {
 			const rows = list.map((name, i) => {
 				const id = `e2e-contact-${i}`
-				const address = `0x${String(i + 1).padStart(64, "0")}`
 				return [
 					`nulo:core:contacts@${id}`,
-					JSON.stringify({ id, profileId: pid, name, address, abbr: name.slice(0, 2).toUpperCase() }),
+					JSON.stringify({ id, profileId: pid, name, address: at[i], abbr: name.slice(0, 2).toUpperCase() }),
 				]
 			})
 			return chrome.storage.local.set(Object.fromEntries(rows))
 		},
 		profileId,
 		names,
+		addresses,
 	)
 }
 
@@ -274,7 +286,7 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(sel("send-payee"), { timeout: 5_000 })
 	const picked = (await readSendInputs(page)).destination
-	expect(zeds.map((_, i) => `0x${String(i + 4).padStart(64, "0")}`)).toContain(picked)
+	expect(contactAddresses(3 + zeds.length).slice(3)).toContain(picked)
 	expect(trimAddress(picked)).toBe(lastDrawn)
 
 	await clickByTestId(page, "subpage-back")
@@ -512,7 +524,7 @@ test("a mouse press held on a suggestion while the field's blur matches another 
 	const account = await getAccountAddress(home)
 	// Named after the account's address, so typing that address suggests both.
 	await seedContacts(home, [`${account} fan`])
-	const namesake = `0x${"1".padStart(64, "0")}`
+	const [namesake] = contactAddresses(1)
 	await home.close()
 	const { page } = await openSendPage(ctx)
 	await page.focus(DESTINATION_INPUT)
@@ -547,8 +559,7 @@ test("a mouse press held on a Recent row while the field holds a contact's whole
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
 	await seedContacts(page, ["Alice"])
-	const alice = `0x${"1".padStart(64, "0")}`
-	const recent = `0x${"5".padStart(64, "0")}`
+	const [alice, recent] = contactAddresses(2)
 	const scope = await readActivityScope(page)
 	await seedTokenRow(page, scope, 1)
 	await seedJournalRecord(page, scope, {
