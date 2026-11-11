@@ -528,14 +528,13 @@ export function journalCardTitleNamesToken(op: OperationRecord): boolean {
 	return op.kind === "transfer"
 }
 
-/** The mark before a title that names a token; none while the record's token is not the wallet's. */
+/** The mark before a title that names a token; none while the record's token is not the wallet's or has no symbol. */
 export function journalCardTitleMark(
 	op: OperationRecord,
 	ctx: Pick<JournalTerminalCardCtx, "tokenById">,
 	lookup: TokenMarkLookup,
 ): TokenMarkOf | null {
-	const token = journalCardTitleNamesToken(op) && op.tokenId !== undefined ? ctx.tokenById(op.tokenId) : undefined
-	return token ? tokenMarkOf(lookup, token) : null
+	return journalCardTitleNamesToken(op) && op.tokenId !== undefined ? tokenMarkOf(lookup, ctx.tokenById(op.tokenId)) : null
 }
 
 function transferTitle(token: TokenForCardProps | undefined): string {

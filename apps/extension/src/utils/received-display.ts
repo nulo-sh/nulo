@@ -88,7 +88,7 @@ export function buildIncomingCardProps(
 	inc: IncomingTransferRecord,
 	tokens: readonly TokenInfo[],
 	fiatLabel: (token: TokenInfo, raw: bigint) => string | undefined,
-	marks: TokenMarkLookup = {},
+	marks?: TokenMarkLookup,
 ) {
 	const token = tokenForReceipt(tokens, inc)
 	return {
@@ -98,6 +98,6 @@ export function buildIncomingCardProps(
 		txHash: inc.txHash,
 		amountFiat: token ? (fiatLabel(token, BigInt(inc.amountRaw || 0)) ?? null) : null,
 		direction: receivedDirection(resolveReceivedType(inc)),
-		titleMark: token ? tokenMarkOf(marks, token) : null,
+		titleMark: tokenMarkOf(marks, token),
 	}
 }

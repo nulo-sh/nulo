@@ -208,10 +208,9 @@ const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null
 	return tokenById(executingTask.value.content.tokenId)?.symbol || null
 })
-const executingTitleMark = computed(() => {
-	const token = isUiTransfer.value ? tokenById(executingTask.value.content.tokenId) : undefined
-	return token ? tokenMarkOf(incomingPrices, token) : null
-})
+const executingTitleMark = computed(() =>
+	isUiTransfer.value ? tokenMarkOf(incomingPrices, tokenById(executingTask.value.content.tokenId)) : null,
+)
 /** The task holds the request's own sender and recipient, as the send's journal record does. */
 const executingDirection = computed(() => {
 	if (!isUiTransfer.value) return null

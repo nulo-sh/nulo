@@ -31,18 +31,15 @@ const props = defineProps<{
 	/** The window's closing advice follows the list of calls. */
 	advice?: boolean
 	previewFailed?: boolean
-	/** The signed list's picture and flag, for the mark before an amount in a token the wallet knows. */
-	iconFor?: TokenMarkLookup["iconFor"]
-	isFlagged?: TokenMarkLookup["isFlagged"]
+	/** The signed list's reader, for the mark before an amount in a token the wallet knows; none, no mark. */
+	marks?: TokenMarkLookup
 }>()
 
 const emit = defineEmits<{ retryPreview: [event: MouseEvent] }>()
 
 /** An amount that names its token draws that token's mark; one in base units names none. */
-const markAt = (contract: unknown, amount: { baseUnits: boolean } | undefined) => {
-	const token = amount && !amount.baseUnits ? tokenAt(props.tokens, props.chainId, contract) : undefined
-	return token ? tokenMarkOf(props, token) : undefined
-}
+const markAt = (contract: unknown, amount: { baseUnits: boolean } | undefined) =>
+	amount && !amount.baseUnits ? tokenMarkOf(props.marks, tokenAt(props.tokens, props.chainId, contract)) : null
 
 const callRows = computed(() =>
 	props.calls.map(({ call, surface }) => {

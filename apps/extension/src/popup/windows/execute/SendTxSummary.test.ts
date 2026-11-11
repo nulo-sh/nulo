@@ -1,8 +1,9 @@
 /**
  * The transfer line's token mark, read through the card that threads the list's reading to it, over
  * the wire-shaped fixture (32-byte hex fields, the real Token decode): the logo for a listed contract,
- * initials for a known custom one, nothing for an unknown contract or an amount in base units, the
- * badge for a flagged one, and no logo for the same contract on another chain. The words stay as they are.
+ * initials for a known custom one, nothing for an unknown contract, an amount in base units or a card
+ * given no list reader, the badge for a flagged one, and no logo for the same contract on another
+ * chain. The words stay as they are.
  */
 
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
@@ -43,11 +44,11 @@ const stubs = {
 const CHAIN = fixtureOp().network?.chainId as number
 const listed = (chainId: number) => {
 	const icons = { [listKeyOf(chainId, USDC)]: TEST_ICONS.USDC }
-	return { iconFor: (t?: { chainId?: number; contract?: string }) => tokenIconFor(icons, t), isFlagged: () => false }
+	return { marks: { iconFor: (t?: { chainId?: number; contract?: string }) => tokenIconFor(icons, t), isFlagged: () => false } }
 }
 const flagged = () => {
 	const keys = new Set(flaggedKeysOf([{ chainId: CHAIN, address: USDC }]))
-	return { iconFor: () => undefined, isFlagged: (t?: { chainId?: number; contract?: string }) => isFlaggedToken(keys, t) }
+	return { marks: { iconFor: () => undefined, isFlagged: (t?: { chainId?: number; contract?: string }) => isFlaggedToken(keys, t) } }
 }
 
 const mountLine = async (props: Record<string, unknown>) => {
@@ -100,8 +101,12 @@ describe("execute/SendTxSummary — the transfer line's token mark", () => {
 
 	test("a known custom contract draws its initials; the same contract listed on another chain gets no logo", async () => {
 		const custom = { mark: { kind: "initials", src: undefined, initials: "U", badge: [], ...MARK }, words: WORDS }
-		expect(lineOf(await mountLine({}))).toEqual(custom)
+		expect(lineOf(await mountLine({ marks: { iconFor: () => undefined, isFlagged: () => false } }))).toEqual(custom)
 		expect(lineOf(await mountLine(listed(CHAIN + 1)))).toEqual(custom)
+	})
+
+	test("a card given no list reader draws no mark, since its initials and its missing badge would misread the list", async () => {
+		expect(lineOf(await mountLine({}))).toEqual({ mark: null, words: WORDS })
 	})
 
 	test("a flagged contract's mark carries the badge", async () => {

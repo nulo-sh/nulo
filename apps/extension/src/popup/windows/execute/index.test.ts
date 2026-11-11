@@ -17,6 +17,7 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, ref, type Ref } from "vue"
 import { type ToastOptions, useToast } from "@/composables/toast"
 import { END_ACK_TIMEOUT_MS } from "@/composables/useDappApprovalWindow"
+import type { TokenMarkLookup } from "@/utils/token-icon"
 import {
 	approval,
 	beforeunloadAdds,
@@ -241,8 +242,7 @@ const STUBS = {
 			"previewFailed",
 			"decodedCalls",
 			"appFailure",
-			"iconFor",
-			"isFlagged",
+			"marks",
 		],
 		template: '<div><slot name="fee" /></div>',
 	},
@@ -1122,8 +1122,7 @@ describe("execute window — a token the signed list flags", () => {
 		priceFake.flagged = FLAG
 		priceFake.icons = { [`1:${TOKEN}`]: ICON }
 		await mountAdd()
-		const iconFor = card().props("iconFor") as (t: { chainId: number; contract: string }) => string | undefined
-		const isFlagged = card().props("isFlagged") as (t: { chainId: number; contract: string }) => boolean
+		const { iconFor, isFlagged } = card().props("marks") as TokenMarkLookup
 		expect([iconFor({ chainId: 1, contract: TOKEN }), isFlagged({ chainId: 1, contract: TOKEN })]).toEqual([ICON, true])
 		expect([iconFor({ chainId: 2, contract: TOKEN }), isFlagged({ chainId: 2, contract: TOKEN })]).toEqual([undefined, false])
 		expect(priceFake.refreshes()).toBe(0)

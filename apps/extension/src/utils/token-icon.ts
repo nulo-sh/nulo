@@ -21,17 +21,21 @@ export function tokenIconFor(
 
 type ListedAt = { chainId?: number; contract?: string }
 
-/** The list's reading of a token that a mark draws, as `usePrices` and `useTokenFlags` give it. A
- *  surface given neither draws the initials with no badge, as every surface does before the list's
- *  first answer. */
+/** The list's reading of a token that a mark draws, as `usePrices` and `useTokenFlags` give it. */
 export type TokenMarkLookup = {
-	iconFor?: (token: ListedAt | undefined) => string | undefined
-	isFlagged?: (token: ListedAt | undefined) => boolean
+	iconFor: (token: ListedAt | undefined) => string | undefined
+	isFlagged: (token: ListedAt | undefined) => boolean
 }
 
 /** A token's mark, as `TokenMark` takes it but for its size. */
 export type TokenMarkOf = { symbol: string; icon?: string; badge: boolean }
 
-export function tokenMarkOf(lookup: TokenMarkLookup, token: ListedAt & { symbol?: string }): TokenMarkOf {
-	return { symbol: token.symbol ?? "", icon: lookup.iconFor?.(token), badge: lookup.isFlagged?.(token) ?? false }
+/**
+ * The mark goes before a name, so a token with no symbol, whose row names something else, has none.
+ * Nor does a surface with no list reader: its initials would say the list names no picture, and its
+ * missing badge that the list flags nothing.
+ */
+export function tokenMarkOf(lookup: TokenMarkLookup | undefined, token: (ListedAt & { symbol?: string }) | undefined): TokenMarkOf | null {
+	if (!lookup || !token?.symbol) return null
+	return { symbol: token.symbol, icon: lookup.iconFor(token), badge: lookup.isFlagged(token) }
 }
