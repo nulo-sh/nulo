@@ -53,6 +53,7 @@ The signed token list carries each listed token's picture, and the wallet draws 
 - A2. `cWETH` has no issuer logo; ships: Nulo's "W" letter mark under L3.
 - A3. Home's seed, import and skeleton rows beside the cards (arc 2); ships unchanged.
 - A4. The rows' 32 px mark against P46-08's two-line dollar figure (arc 2); ships: the rows without a mark (D17).
+- A5. A dApp's transfer row, where the mark would take 22 px from the app chip beside the title (arc 3); ships: that row without a mark (D18).
 
 ## Sign-offs (verbatim; the whole visible budget)
 
@@ -106,7 +107,7 @@ The signed token list carries each listed token's picture, and the wallet draws 
 | Home, Holdings, Send's picker (`TokenCard.vue`): deferred, D17 and A4 | mark before the symbol column, gap 12 | 32 | `isFlagged` |
 | Send's asset row (`SelectTokenCard.vue`; `send.vue` passes `flagged`, `icon`) | mark replaces the accent square and draws the no-transfers badge | 36 | `flagged \|\| isTokenBlocked` |
 | Token page (`tokens/[id].vue`; `SubPageHeaderBase.vue` gains a `leading` slot, fallback today's icon; `SubPageHeader.vue` forwards it) | mark replaces the holdings glyph; `subpage-title` and `focusTitle` stay | 20 | `isFlagged` |
-| Activity (`TransactionCardLayout.vue` prop `titleMark: { symbol, icon?, badge }`; set by `TransactionCard`, `TransactionIncomingCard`, `TransactionAwaitingCard`, `TransactionTerminalCard` when the title names a token) | mark before the title; the 40 px box untouched | 16 | flag of chain and contract |
+| Activity (`TransactionCardLayout.vue` prop `titleMark: { symbol, icon?, badge }`; set by `TransactionCard`, `TransactionIncomingCard`, `TransactionAwaitingCard`, `TransactionTerminalCard` when the title names a token; not on a dApp's transfer, D18) | mark before the title; the 40 px box untouched | 16 | flag of chain and contract |
 | Approval line (`SendTxSummary.vue`; `OperationCard.vue` and `execute/index.vue` thread `iconFor`, `isFlagged`) | mark before the amount; token by `tokenAt` (chain and contract) | 16 | flag |
 
 - Activity's chain is `appStore.network.chainId`, which the rows' fiat already uses. `TransactionsList.vue` (History) and `RecentActivityView.vue` (Home) own the price composable and pass `iconFor` and `isFlagged` down through `ActivityRowCard.vue` and `received-display.ts`; journal rows resolve the token through `tokenById`, as their amount symbol does.
@@ -167,7 +168,7 @@ Each phase lands its tests with its code. Every gate also runs `bun run lint` an
 - **Home, Holdings, Send's picker**: before, symbol and second line; after, a 32 px logo (listed) or grey initials, the red badge when flagged. Sign-off: A ("the issuers' logos as published, round, unaltered, initials in a grey circle when there is none, the red badge when flagged"), M1. Not shipped in arc 2: the mark meets P46-08's two-line figure (`OWNER-ASKS.md` A4, D17); the rows ship unchanged.
 - **Send's asset row**: before, the first letter in a 36 px accent square; after, the 36 px mark, the no-transfers badge in its corner. Sign-off: A, M1.
 - **Token page**: before, the 18 px holdings glyph; after, the 20 px mark. Sign-off: A.
-- **Activity rows** (History and Home's recent activity, every phase of a row titled by a token): before, the title alone; after, a 16 px mark before it; the 40 px box unchanged. Sign-off: AC1 ("A 16 px mark before the row title, as prototyped; the 40 px box keeps chips-3's pair and badges").
+- **Activity rows** (History and Home's recent activity, every phase of a row titled by a token): before, the title alone; after, a 16 px mark before it; the 40 px box unchanged. Sign-off: AC1 ("A 16 px mark before the row title, as prototyped; the 40 px box keeps chips-3's pair and badges"). Not shipped in arc 3: a dApp's transfer, whose app chip would give the mark its room (`OWNER-ASKS.md` A5, D18); that row ships unchanged.
 - **Approval window transfer line**: before, "25 USDC"; after, the 16 px mark before it, no new words. Sign-off: AL1 ("the line takes P124-01's picture, if any, in the meantime").
 - **The list** (arc 1): no surface; no build reads the field before arc 2, and only the owner's publish serves it.
 
@@ -216,6 +217,9 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 | D15 | Mocks given `tokenIcons` (arc 2) | — | — | Only the tests that mount a surface drawing the mark; the other mocks already omit `flaggedTokens` and never call `iconFor`. |
 | D16 | The smoke runner (arc 2) | — | — | `agent.sh` runs the network config only; the touched smoke spec and the full smoke suite run through `bun run test:e2e` after the armed build, the list host claiming its port in the host registry. |
 | D17 | The rows' mark (arc 2) | leave it out (consult `01a1c81b`) | — | Left out, to the owner (`OWNER-ASKS.md` A4). `type-roles.test.ts` holds P46-08's guarantee that a $123,456,789,012,345.68 figure stays on two lines. A 32 px mark with a 12 px gap leaves it 166.6 px of the 312 px row, where it needs 179.4 px (measured in Chrome), so the figure takes a third line. Mark and gap fit only within 31.2 px. Restating the guard would decide between two owner picks, and every other fix changes what a person sees. `TokenCard.vue` and its tests stay as on `dev`, and so do the mocks that only fed it. |
+| D18 | A dApp's transfer row (arc 3) | — | — | Left out, to the owner (`OWNER-ASKS.md` A5). Measured before building (lessons/phase-5.md): every row titled by a token keeps at least 28 px to its amount with the mark, but on a dApp's transfer the title shares its line with the app chip, and the mark takes 22 px from it: `rows.test.ts` holds "Shielded Payroll Portal" at its 96 px cap beside 1,250 USDC, and it reads 85.8 px. Restating that guard would decide how much of a dApp's name shows, which no pick covers and no frame drew. |
+| D19 | Where Activity reads the list (arc 3) | — | — | Tree wins: the settled card owns its price composable, so it reads the picture and the flag itself; received and journal rows take the reader from their list through `ActivityRowCard`; History's sends in progress, outside `TransactionsList`, read it through `useTokenFlags` on the page's own client; `journalCardTitleMark` joins the awaiting card's field builders in `journal-state.ts`. |
+| D20 | The summary's mint line (arc 3) | — | — | One element serves a transfer and a mint ("25 USDC to …"), and the prototype drew the mark on both; the mark goes before an amount that names a token the wallet knows, never before base units. |
 
 ## Audit verdicts
 
