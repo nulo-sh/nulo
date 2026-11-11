@@ -68,7 +68,7 @@ None. No screen, copy or layout changes.
 - Files: `apps/extension/tests/e2e/network-arrival.test.ts` (the baseline assertion), `apps/extension/tests/e2e/fixtures/egress-guard.ts` (`note`), `.github/workflows/_extension-smoke-e2e.yml` (the test step's `env`), `apps/extension/tests/e2e/README.md` § Egress guard, `CI.md` (the smoke line). Comment the runs and what a reader will now see on #1743, which stays open.
 - **Validation gate**: `bun run lint`; `bun run typecheck:all`; `bun run lint:actions`; `bun run test:ci-gating`; `bun run test:release`; from `apps/extension`, `bun --bun vitest run scripts/e2e/egress-guard.test.ts`. Then `tests/e2e/egress-guard.test.ts` and `tests/e2e/network-arrival.test.ts` once each on Chrome and on Firefox at retry 0 with the flag on, all green. On Chrome, the guard spec's page-request control prints its intentional `held` line and the arrival spec prints none. Layers: lint, typecheck, CI gating, unit, smoke e2e on both browsers.
 
-### Phase 3: the probe budget on a frozen clock (#1742, #1735)
+### Phase 3: the probe budget on a frozen clock (#1742, #1735) ✓
 - File: `apps/extension/src/wallet/services/network/service.test.ts` (that describe only).
 - Before/after evidence (scratch): a 2 ms busy-wait on `performance.now()` (which `["Date"]` does not fake) in the service's route lookup, between the deadline and the first probe. Record the budgets the three tests see on the base (expected below 5_000 and 2_500) and that they stay exact after.
 - **Validation gate**: `bun run lint`; `bun run typecheck:all`; from `apps/extension`, `bun --bun vitest run src/wallet/services/network/service.test.ts --retry=0` twenty times, every run green. Layers: lint, typecheck, unit.
