@@ -14,7 +14,7 @@
  */
 
 /** Vendor */
-import { onMounted, onUnmounted } from "vue"
+import { onMounted, onUnmounted, shallowRef } from "vue"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 
@@ -52,11 +52,13 @@ import type { DraftUIOperation } from "../execute/types"
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
 import { type DecodedCall, type DecodedGrant, ExecutionServiceClient } from "@/wallet/services/execution/client"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
 import { DappInteractionServiceClient, type FeeQuestionPayload, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
 
 /** Composables */
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
+import { useTokenFlags } from "@/composables/usePrices"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -81,6 +83,10 @@ const interactionService = new DappInteractionServiceClient()
 const tokenService = new TokenServiceClient()
 const tokenFollow = followKnownTokens(tokenService, knownTokens)
 const profileService = new ProfileServiceClient()
+const priceService = new PriceServiceClient()
+/** The signed list's reader for the summary's marks. `init` opens it, and `init` runs only once the
+ *  window is signed in, so a window still checking its session or locked reads no price. */
+const marks = shallowRef<ReturnType<typeof useTokenFlags>>()
 
 const {
 	requestId,
@@ -118,6 +124,8 @@ const {
 		interactionService.disconnect()
 		executionService.disconnect()
 		tokenService.disconnect()
+		priceService.disconnect()
+		marks.value?.dispose()
 	},
 	init: () => init(),
 	reject: (end) => reject(requestEnd(end, isWrongProfile.value, profile.value)),
@@ -128,7 +136,7 @@ const grantsPending = computed(() => !!operation.value && awaitsGrantDecode(oper
 const grantRefusal = computed(() => grantRefusalRow(decodedGrants.value ?? []))
 /** Read from the question, so it needs no quote and names the fee before the card mounts. */
 const confirmLabel = computed(() => (question.value ? `Send for ${feeFigure(feeDisplay(question.value.fee, undefined))}` : "Send for FJ"))
-/** The card's own quote of the new fee: the window reads no price, so its dollars are the card's. */
+/** The card's own quote of the new fee: the window prices nothing, so its dollars are the card's. */
 const nowFee = ref<FeeDisplay | null>(null)
 const confirmDetail = computed(() => (nowFee.value?.usd ? `(${nowFee.value.usd})` : undefined))
 /** The app's own payment set the fee path: no speed was picked, and its claim, not the balance, pays. */
@@ -136,6 +144,7 @@ const setByApp = computed(() => question.value?.feeSettings?.paymentMethod.kind 
 const priority = computed(() => (setByApp.value ? undefined : (question.value?.feeSettings?.priorityLevel ?? "normal")))
 
 const init = async () => {
+	marks.value = useTokenFlags(priceService)
 	try {
 		profile.value = await profileService.getActiveProfile()
 		await loadInteractionPayload()
@@ -266,6 +275,7 @@ onUnmounted(() => {
 					:decodedAuthwits="decodedAuthwits"
 					:decodedGrants="decodedGrants"
 					:tokens="knownTokens"
+					:marks="marks"
 				>
 					<template #fee>
 						<FeeRaisedCard
