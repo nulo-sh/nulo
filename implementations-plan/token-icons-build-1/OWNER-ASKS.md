@@ -46,3 +46,12 @@ Each ask names what ships now; no arc waits for an answer. Arc 1 touches no surf
   - (a) the mark there too, as on every other row titled by a token: the app chip shows 22 px less of the dApp's name wherever it is cut, and the guard is restated to the chip between its floor and its cap. **Recommended**: the dApp's transfer is where a look-alike token most needs its picture.
   - (b) no mark on a dApp's transfer: the row reads as today.
 - **What ships now**: (b). Every other row titled by a token, in every phase, carries the mark; a dApp's transfer does not, until the owner picks.
+
+## A6. The fee-raised window's copy of the approval line (arc 3)
+
+- **Surface**: the window that asks again when a dApp's transaction needs a higher fee. It shows the approval window's summary, the transfer line included, and reads no token list.
+- **Why it is asked**: AL1 gives the approval window's line the token's picture, and that window reads the list. The fee-raised window shows the same line, but it reads no price while its session is checked or locked and, once signed in, reads the cache once, from its fee card. Without the list it could only draw initials, which would say a listed token has no picture, and no badge, which would say a flagged token is not flagged.
+- **Options**:
+  - (a) the mark there too: the window reads the list from the cache once signed in, a second read beside its fee card's, so the line looks the same in both windows. **Recommended**: a person approving a raised fee sees the token as they first approved it.
+  - (b) no mark there: the line reads as today.
+- **What ships now**: (b). A summary given no list reader draws no mark.

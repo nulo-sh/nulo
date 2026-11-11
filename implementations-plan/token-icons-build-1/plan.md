@@ -54,6 +54,7 @@ The signed token list carries each listed token's picture, and the wallet draws 
 - A3. Home's seed, import and skeleton rows beside the cards (arc 2); ships unchanged.
 - A4. The rows' 32 px mark against P46-08's two-line dollar figure (arc 2); ships: the rows without a mark (D17).
 - A5. A dApp's transfer row, where the mark would take 22 px from the app chip beside the title (arc 3); ships: that row without a mark (D18).
+- A6. The fee-raised window's copy of the approval line, which reads no list today (arc 3); ships: that copy without a mark (D21).
 
 ## Sign-offs (verbatim; the whole visible budget)
 
@@ -169,7 +170,7 @@ Each phase lands its tests with its code. Every gate also runs `bun run lint` an
 - **Send's asset row**: before, the first letter in a 36 px accent square; after, the 36 px mark, the no-transfers badge in its corner. Sign-off: A, M1.
 - **Token page**: before, the 18 px holdings glyph; after, the 20 px mark. Sign-off: A.
 - **Activity rows** (History and Home's recent activity, every phase of a row titled by a token): before, the title alone; after, a 16 px mark before it; the 40 px box unchanged. Sign-off: AC1 ("A 16 px mark before the row title, as prototyped; the 40 px box keeps chips-3's pair and badges"). Not shipped in arc 3: a dApp's transfer, whose app chip would give the mark its room (`OWNER-ASKS.md` A5, D18); that row ships unchanged.
-- **Approval window transfer line**: before, "25 USDC"; after, the 16 px mark before it, no new words. Sign-off: AL1 ("the line takes P124-01's picture, if any, in the meantime").
+- **Approval window transfer line**: before, "25 USDC"; after, the 16 px mark before it, no new words. Sign-off: AL1 ("the line takes P124-01's picture, if any, in the meantime"). Not shipped in arc 3: the same line in the fee-raised window, which reads no list (`OWNER-ASKS.md` A6, D21); it ships unchanged.
 - **The list** (arc 1): no surface; no build reads the field before arc 2, and only the owner's publish serves it.
 
 ## Delivery
@@ -220,6 +221,7 @@ Outline A (this plan) against outline B (`outline-b.md`, local): SVG only, L3 in
 | D18 | A dApp's transfer row (arc 3) | — | — | Left out, to the owner (`OWNER-ASKS.md` A5). Measured before building (lessons/phase-5.md): every row titled by a token keeps at least 28 px to its amount with the mark, but on a dApp's transfer the title shares its line with the app chip, and the mark takes 22 px from it: `rows.test.ts` holds "Shielded Payroll Portal" at its 96 px cap beside 1,250 USDC, and it reads 85.8 px. Restating that guard would decide how much of a dApp's name shows, which no pick covers and no frame drew. |
 | D19 | Where Activity reads the list (arc 3) | — | — | Tree wins: the settled card owns its price composable, so it reads the picture and the flag itself; received and journal rows take the reader from their list through `ActivityRowCard`; History's sends in progress, outside `TransactionsList`, read it through `useTokenFlags` on the page's own client; `journalCardTitleMark` joins the awaiting card's field builders in `journal-state.ts`. |
 | D20 | The summary's mint line (arc 3) | — | — | One element serves a transfer and a mint ("25 USDC to …"), and the prototype drew the mark on both; the mark goes before an amount that names a token the wallet knows, never before base units. |
+| D21 | The fee-raised window's line (arc 3) | — | — | Opus found that window's copy of the line drawing a listed token's initials and a flagged one's mark with no badge, since it reads no list. A card given no list reader now draws no mark, so that copy reads as today. Giving it the list's reader, as Opus proposed, adds a cache read its tests pin out (none while the session is checked or locked, one from its fee card once signed in), so it goes to the owner (`OWNER-ASKS.md` A6). |
 
 ## Audit verdicts
 
