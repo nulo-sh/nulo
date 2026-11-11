@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { clickByTestId } from "../dom"
 import { approveDiscover } from "../popups"
-import { type FeeMethodSubtitle, selectFeeMethod } from "../transfers"
+import { type FeeMethodSubtitle, selectFeeMethod } from "../fee-method"
 
 /**
  * Allow a connection on a 0.31.0 build, whose emoji check replaces the connect window's page where

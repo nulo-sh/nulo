@@ -9,7 +9,7 @@ import type { Page } from "puppeteer"
 import { pointerClick } from "../helpers/legal-drivers"
 import { clickByTestId, replaceInputValue, withTimeoutMessage } from "./dom"
 import { settleClosedPopup } from "./popup-leave"
-import { FEE_ROW_READY_MS, type FeeMethodSubtitle, selectFeeMethod } from "./transfers"
+import { FEE_ROW_READY_MS, type FeeMethodSubtitle, selectFeeMethod } from "./fee-method"
 
 export { settleThemeTransitions, shotSend } from "./shots"
 

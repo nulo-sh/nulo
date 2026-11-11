@@ -53,7 +53,7 @@ async function waitForAmount(page: Page, expected: string): Promise<void> {
 
 async function readTokenLine(
 	page: Page,
-): Promise<{ text: string; lines: number; maxAbove: boolean; inside: boolean; spans: Record<string, [number, number]> }> {
+): Promise<{ text: string; lines: number; maxAbove: boolean; inside: boolean; spans: Record<string, number[]> }> {
 	return page.evaluate(() => {
 		const box = (testid: string) => document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect()
 		const unit = (px: number) => Math.round(px * 60) / 60
