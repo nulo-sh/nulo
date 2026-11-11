@@ -217,6 +217,12 @@ test.skipIf(!hasConfig)(
 			}),
 		).toBe(true)
 		await shotSend(feePopup, "execute-leaves-raised-fee", "execute-op-leaves-account")
+		// The window reads the list, so the step's line draws the token's mark as the approval window
+		// did: TST's initial, since no list pictures the sandbox token.
+		const lineMark = '[data-testid="execute-op-call-line"] [data-testid="token-mark"]'
+		await feePopup.waitForSelector(`${lineMark}[data-kind="initials"]`, { visible: true, timeout: 15_000 })
+		expect(await feePopup.$$eval(lineMark, (marks) => marks.map((mark) => mark.textContent?.trim()))).toEqual(["T"])
+		await shotSend(feePopup, "fee-window-line-mark", "execute-op-call-line")
 		// The dApp's own row is pending from its request on; only a settled one would mean an answer.
 		const settled = await page.evaluate(
 			(after) =>

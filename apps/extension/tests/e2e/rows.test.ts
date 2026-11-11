@@ -566,10 +566,13 @@ test("History's list keeps the −8px row box inside the page: nothing scrolls s
 
 const ROWS = `${sel("tx-card")}, ${sel("tx-incoming-card")}`
 const RECEIPT_TOKEN_ID = 1
-/** A dApp's own name: at 360px its chip is cut at its cap beside the transfer's symbol. */
+/** A dApp's own name: at 360px its chip is cut below its cap beside the transfer's mark and symbol. */
 const DAPP_NAME = "Shielded Payroll Portal"
-/** A dApp's large transfer: its app chip is cut at its cap beside the transfer's symbol. */
+/** A dApp's large transfer: its app chip is cut below its cap beside the transfer's mark and symbol. */
 const LARGE_DAPP_HASH = `0x${"6e".repeat(32)}`
+/** The large transfer's app chip at 360px, measured alike on Chrome and Firefox: the cap less the
+ *  room the 16px mark and its 6px gap take from the title row. */
+const LARGE_APP_CHIP = 85.8
 /** The floor of a dApp transfer's app chip: its border, padding and one whole "…" at the chip's 11px. */
 const APP_CHIP_FLOOR = 20
 /** An account other than the seeded sender's: a transfer to it goes out, one to the sender is a move. */
@@ -677,6 +680,8 @@ type IconBox = {
 	titleAlone: boolean
 	/** The token mark before the title: its kind, and for a logo whether the picture decoded. */
 	mark: string | null
+	/** The mark's width and its distance to the title. */
+	markBox: { width: number; gap: number } | null
 }
 
 /** Each direction row's icon box, measured from the inside of its 1px border. */
@@ -723,6 +728,13 @@ function readIconBoxes(page: Page): Promise<IconBox[]> {
 							? `logo ${logo.complete && logo.naturalWidth > 0 ? "decoded" : "broken"}`
 							: mark.getAttribute("data-kind")
 					})(),
+					markBox: (() => {
+						const mark = row
+							.querySelector('[data-testid="activity-title-row"] > [data-testid="token-mark"]')
+							?.getBoundingClientRect()
+						const title = row.querySelector('[data-testid="activity-title"]')?.getBoundingClientRect()
+						return mark && title ? { width: r1(mark.width), gap: r1(title.left - mark.right) } : null
+					})(),
 				}
 			})
 	}, ROWS)
@@ -751,33 +763,42 @@ function expectIconBox(box: IconBox, where: string): void {
 }
 
 /** The five seeded rows: a send out, three moves to the sender (two of them a dApp's transfers, the
- *  large one cut at its cap beside its symbol) and a receipt. Only the dApp transfers carry a chip. */
+ *  large one cut below its cap beside its symbol) and a receipt. Only the dApp transfers carry a chip. */
 async function expectDirectionRows(page: Page, where: string, mark: "logo" | "initials"): Promise<void> {
 	// The list's picture arrives with its snapshot, after the rows; a logo is read once it has loaded.
 	await page.waitForFunction(
 		(rowsSel: string, kind: string) =>
-			[...document.querySelectorAll(rowsSel)]
-				.filter((row) => !row.querySelector('[data-testid="activity-app-chip"]'))
-				.every((row) => {
-					const drawn = row.querySelector(`[data-testid="token-mark"][data-kind="${kind}"]`)
-					return drawn !== null && drawn.querySelector<HTMLImageElement>("img")?.complete !== false
-				}),
+			[...document.querySelectorAll(rowsSel)].every((row) => {
+				const drawn = row.querySelector(`[data-testid="token-mark"][data-kind="${kind}"]`)
+				return drawn !== null && drawn.querySelector<HTMLImageElement>("img")?.complete !== false
+			}),
 		{ timeout: 15_000, polling: 100 },
 		ROWS,
 		mark,
 	)
 	const large = await readAppChip(page, LARGE_DAPP_HASH)
 	console.log(`[rows] ${where}: the large dApp transfer ${JSON.stringify(large)}`)
-	expect(large).toMatchObject({ cut: true, besideTitle: true, name: DAPP_NAME, lead: { content: '""', display: "inline-block" } })
-	expect(large.width).toBeCloseTo(APP_CHIP_CAP, 0)
+	expect(large).toMatchObject({
+		cut: true,
+		besideTitle: true,
+		titleCut: false,
+		name: DAPP_NAME,
+		lead: { content: '""', display: "inline-block" },
+	})
+	expect(large.width).toBeCloseTo(LARGE_APP_CHIP, 0)
+	expect(large.width).toBeGreaterThan(APP_CHIP_FLOOR + 0.5)
+	expect(large.width).toBeLessThan(APP_CHIP_CAP - 0.5)
+	expect(large.edge).toBeCloseTo(0, 0)
 	const boxes = await readIconBoxes(page)
 	console.log(`[rows] ${where}: icon boxes ${JSON.stringify(boxes)}`)
 	expect(boxes.map((b) => b.way).sort()).toEqual(["in", "out", "self", "self", "self"])
 	for (const box of boxes) expectIconBox(box, where)
 	expect(boxes.filter((b) => !b.titleAlone).map((b) => b.row)).toEqual(["tx-card 0x6b6b", "tx-card 0x6e6e"])
-	// A row titled by its token draws the mark; a dApp's transfer, its title beside the app chip, none.
+	// Every row is titled by its token, so every row draws its mark, a dApp's transfer beside its app chip too.
 	const drawn = mark === "logo" ? "logo decoded" : "initials"
-	expect(boxes.map((b) => [b.row, b.mark])).toEqual(boxes.map((b) => [b.row, b.titleAlone ? drawn : null]))
+	expect(boxes.map((b) => [b.row, b.mark])).toEqual(boxes.map((b) => [b.row, drawn]))
+	for (const box of boxes)
+		expect(box.markBox, `${where}, ${box.row}`).toEqual({ width: expect.closeTo(16, 0), gap: expect.closeTo(6, 0) })
 }
 
 /** The mark a row of this token draws: a source run's held list pictures its tokens; an artifact
@@ -788,7 +809,17 @@ function listedMark(contract: string): "logo" | "initials" {
 	return pictured ? "logo" : "initials"
 }
 
-type AppChip = { width: number; cut: boolean; name: string; besideTitle: boolean; lead: { content: string; display: string } }
+type AppChip = {
+	width: number
+	cut: boolean
+	name: string
+	besideTitle: boolean
+	/** Whether the title beside it, a transfer's symbol, is cut. */
+	titleCut: boolean
+	/** How far the chip's right edge sits from its title row's. */
+	edge: number
+	lead: { content: string; display: string }
+}
 
 /** A dApp transfer's app chip: `lead` is its `::before`, an empty inline-block that lets the "…" replace the first letter. */
 function readAppChip(page: Page, hash: string): Promise<AppChip> {
@@ -798,11 +829,15 @@ function readAppChip(page: Page, hash: string): Promise<AppChip> {
 		const title = row?.querySelector('[data-testid="activity-title"]')
 		if (!chip || !title) throw new Error(`row ${h.slice(0, 6)} has no app chip`)
 		const box = chip.getBoundingClientRect()
+		const titleRow = row?.querySelector('[data-testid="activity-title-row"]')?.getBoundingClientRect()
+		if (!titleRow) throw new Error(`row ${h.slice(0, 6)} has no title row`)
 		return {
 			width: box.width,
 			cut: chip.scrollWidth > chip.clientWidth,
 			name: chip.textContent ?? "",
 			besideTitle: box.top < title.getBoundingClientRect().bottom - 0.5,
+			titleCut: title.scrollWidth > title.clientWidth,
+			edge: titleRow.right - box.right,
 			lead: (({ content, display }) => ({ content, display }))(getComputedStyle(chip, "::before")),
 		}
 	}, hash)
@@ -1079,7 +1114,7 @@ async function readMethodRow(page: Page, shot: string, text: string): Promise<Me
 	return row
 }
 
-test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol whole with its app chip cut beside it, at its cap or, under a 16-letter symbol, at its 20px floor, and at 240px no row's text is hidden or newly cut; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
+test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol whole with its app chip cut beside it, up to its cap or, under a 16-letter symbol, at its 20px floor, and at 240px no row's text is hidden or newly cut; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
 	listedExtensionPerTest,
 }) => {
 	const page = await openPopup(listedExtensionPerTest)
