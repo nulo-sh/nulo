@@ -1,6 +1,8 @@
 ---
 plan: token-icons-build-1
 tier: mid
+status: completed
+issues: none; the work is the owner's picks on pages 124, 129 and 132
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -8,8 +10,26 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev 32fd50e60
+trunk: dev
 post_implementation_standard: implementations-plan/README.md § Post-implementation standard at 32fd50e60
 ---
+
+## Outcome
+
+- **Date:** 2026-11-11.
+- **Status:** completed. Ships in three stacked PRs: #1778 (arc 1, merged), #1785 (arc 2) and arc 3's, `feat(activity): activity rows and the approval line draw each token's picture`, which carries this close-out; the merge of arc 3 closes this plan. No issue closes.
+- **Shipped:**
+  - Arc 1 (#1778): the signed list carries each entry's picture as a `data:image/svg+xml;base64` URL under a drawing allowlist and a 3,072-character budget (`packages/token-list/src/icon.ts`). Wallet mode drops a refused picture and strict mode refuses it; the publisher fails an entry with no picture (L3), and the tree check requires each picture's provenance row in `infra/token-list/README.md` § Pictures. The approver's summary shows each picture's type, size and digest prefix. #1780 then applied P132-04 and P132-05 (A1, A2: GBPC's letter on a near-black disc, Ethereum's diamond for `cWETH`), and #1781 published the list.
+  - Arc 2 (#1785): `PriceSnapshot.tokenIcons` and `iconFor` beside `isFlagged` in `usePrices` and `useTokenFlags`; `TokenMark.vue` (the list's logo, else grey initials from `tokenInitials`, the red corner badge when flagged); the mark on Send's asset row (36 px) and the token page's header (20 px).
+  - Arc 3: Activity rows (History, Home's recent activity, a token's page) draw the 16 px mark before a title that names a token, in every phase; the approval window's transfer line draws it before the amount: the logo for a listed contract on that chain, initials otherwise, the badge when flagged. No words change.
+- **Gates (arc 3, on `fb0063689`, once, in order, retry 0):** `bun run test`, `test:components` (101 files, 1,426 tests), `audit:vue`, `test:all` and `check:plans` green; the five smoke specs that read the marks green on Chrome (209 s) and Firefox (358 s); the full smoke suite green on Chrome (63 files, 1,793 s, against 1,755 s at the base `0c4b3b11e`) and Firefox (67 files, 2,595 s, against 2,594 s).
+- **Deviations:** the token rows' 32 px mark is left out (D17): it pushes P46-08's widest dollar figure onto a third line. A dApp's transfer row has no mark (D18): measured, it would narrow the app chip past the rows suite's cap. The fee-raised window's copy of the approval line has none (D21): it reads no list, and a summary given no reader draws no mark. The tree-wins are D13 to D16, D19 and D20.
+- **Left out:** Home's seed, import and skeleton rows (A3), unchanged beside cards that carry no mark.
+- **Review:** each arc's Codex loop converged (arc 1 clean at rounds 2 and 3, arc 2 clean at round 2 with a docs round after D17, arc 3 clean at round 2), with one Opus review beside each round 1; the fresh cross-arc pass found one docs drift, folded (Audit verdicts).
+- **Lessons:** none promoted to `lessons.md`. The one cross-task gotcha, that a pull request conflicting with its base starts no workflow so the checks watch exits green, is already in the aztec-update skill; the rest are this plan's own, in `lessons/`.
+- **Known limits:** #1786 (with pictures, the 64 KiB envelope holds about 17 entries at the picture budget).
+- **Open items:** none. A4 is P134-04 on the owner's page 134; A3, A5 and A6 go to the orchestrator with arc 3's report. Each ships its "what ships now", so no issue was filed.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # token-icons-build-1: the token pictures, as signed on pages 124 and 129
 
@@ -158,7 +178,7 @@ Each phase lands its tests with its code. Every gate also runs `bun run lint` an
 - **Tests**: each surface: logo for a listed token, initials for a custom one, the badge for a flagged one; Send: the flag, no transfers, and both, one badge each time; the header slot falls back to the glyph. E2E: a token the held list gives an icon has an `<img>` mark with `complete` and `naturalWidth > 0`; an added token has initials; a token the held list gives no icon (an artifact run's published list before the owner publishes) expects initials. Failure mode: the issuer SVG decodes under the real CSP through the worker-to-popup channel in both engines, which jsdom cannot show. Estimate +1 s per browser, measured in the PR.
 - **Validation gate**: `bun run audit:vue`, `bun run test:all`; the touched smoke spec at `--retry=0` on Chrome and Firefox; the full smoke suite once per browser before and after for the wall-clock. Pass: exit 0 at retry 0.
 
-### Phase 5 — Activity and the approval line (arc 3)
+### Phase 5 — Activity and the approval line (arc 3) ✓ (a dApp's transfer row and the fee-raised window's line left out, D18, D21)
 
 - **Change map**: `TransactionCardLayout.vue` (+ test), `TransactionCard.vue` (+ test), `TransactionIncomingCard.vue` (+ test), `TransactionAwaitingCard.vue`, `TransactionTerminalCard.vue` (+ tests), `TransactionsList.vue`, `ActivityRowCard.vue`, `utils/received-display.ts`, `pages/activity.vue`, `RecentActivityView.vue`, `SendTxSummary.vue`, `OperationCard.vue`, `execute/index.vue`, `SendTxSummary.test.ts` (new) with `execute.fixture.ts`.
 - **Tests**: wire-shaped fixtures (`aztec_sendTx` arguments as `0x` + 64 hex fields): the line shows the logo for a listed contract, initials for a known custom one, nothing for an unknown contract, the badge for a flagged one, and no logo for the same contract on another chain; each Activity card titled by a token gets the 16 px mark, an outgoing mint does not, the 40 px box keeps its children; one History-path test through `TransactionsList`.
