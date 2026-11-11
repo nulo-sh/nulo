@@ -1,0 +1,33 @@
+# Owner asks: token-icons-build-2
+
+Each ask names what ships now; no PR waits for an answer. Page 134's picks are the visible budget (`plan.md` § Sign-offs).
+
+## B1. A stopped default's mark beside its dimmed symbol
+
+- **Surface**: Home, a default token whose setup failed ("Couldn't set up", RETRY) or was refused ("Couldn't verify"). The row shows its symbol at 55 % opacity today.
+- **Why it is asked**: A3 (a) gives a seed row "the list's picture"; it does not say whether a stopped row's picture dims with its symbol. An import row that fails dims as a whole today (`opacity: 0.7`), so its mark dims with it.
+- **Options**:
+  - (a) the picture as published, at full strength, beside the dimmed symbol. **Recommended**: M1's "as published, unaltered", and the reason line under the symbol already says the row stopped.
+  - (b) the picture dimmed with the symbol, as a failed import row's is.
+- **What ships now**: (a).
+- **Answer**: pending.
+
+## B2. A default token's import row: its picture or initials
+
+- **Surface**: Home, a default token in the moment its setup journals its import (`TokenImportRow` in the default's slot), between its seed row and its card. Also a listed token added again after it was deleted.
+- **Why it is asked**: A3 (a) says "grey initials on an import row" and "a seed row keeps its picture when it becomes a card". A default passes through an import row on its way from seed row to card, and that row knows the list's entry, so the two lines meet there.
+- **Options**:
+  - (a) grey initials on every import row, as A3 says: a default's slot shows the list's picture, then its initials while it imports, then the picture again.
+  - (b) the list's picture on an import row whose chain and contract the list names, initials on any other: one picture from seed row to card. **Recommended**: the slot keeps one face, which is what "keeps its picture" asks for.
+- **What ships now**: (a).
+- **Answer**: pending.
+
+## B3. An import row whose symbol is not known yet
+
+- **Surface**: Home, a token being added from its contract address, before the wallet has read its symbol (the row shows the shortened contract, or "Token").
+- **Why it is asked**: A3 (a) gives an import row grey initials, and such a row has no symbol to take them from.
+- **Options**:
+  - (a) a dash on the grey disc, as the mark already draws for a token whose symbol has no letter or digit; the initials replace it once the symbol is read. **Recommended**: the initials of an address would read as a name.
+  - (b) an empty grey disc.
+- **What ships now**: (a).
+- **Answer**: pending.
