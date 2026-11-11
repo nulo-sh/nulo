@@ -245,7 +245,7 @@ Frames come from the committed specs' capture mode (`NULO_E2E_SHOT_DIR=~/.cache/
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) read at `32fd50e60`. Specific to this plan:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) read at `32fd50e60`. Specific to this plan:
 - **Loop placement**: per arc at its boundary, while the arc is the stack tip, then one fresh cross-arc pass over the net diff from `32fd50e60` before the close-out.
 - **Reviewer**: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; the prompt carries the diff against the arc's base, this plan, the arc map ("arc N of 2; a2 builds the rail on a1's tree, raw layer and fixture build"), the adversarial ask and the standard's two rules verbatim. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) of the arc's diff runs alongside the first round. Until a round has no material finding; three rounds is the hard stop.
 - **While implementing**: comments state invariants only; every attempt goes to `lessons/phase-N.md`; `agent-worktree status p126-build-1 "phase N green: <next>"` at each gate; three failures on one step stop the arc.
