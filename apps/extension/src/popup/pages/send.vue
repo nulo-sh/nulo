@@ -1051,8 +1051,8 @@ onBeforeUnmount(() => {
 					</PayeeBlock>
 				</div>
 
-				<div :class="$style.section">
-					<FlaggedTokenBanner v-if="prices.isFlagged(activeToken)" />
+				<div :class="[$style.section, $style.section_token]">
+					<FlaggedTokenBanner v-if="prices.isFlagged(activeToken)" :class="$style.token_banner" />
 					<SelectTokenCard
 						:token="activeToken"
 						:flagged="prices.isFlagged(activeToken)"
@@ -1060,9 +1060,10 @@ onBeforeUnmount(() => {
 						:loading="tokensLoading"
 						:failed="tokensFailed"
 						:onTokenAdded="pickAddedToken"
+						:class="[prices.isFlagged(activeToken) && $style.token_row_after, showsTokenCaveat && $style.token_row_before]"
 						@retry="retryTokens"
 					/>
-					<Text v-if="showsTokenCaveat" variant="body" color="secondary" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
+					<Text v-if="showsTokenCaveat" variant="body" color="secondary" :class="$style.token_caveat" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
 				</div>
 
 				<div :class="$style.section">
@@ -1258,6 +1259,29 @@ onBeforeUnmount(() => {
 
 .section_last {
 	padding: 14px 0;
+}
+
+/* The token row pads itself to the rules, so its hover and press fill the band; a banner or caveat
+   sharing the band keeps 8 px from the row's content and 14 px from the rule. */
+.section_token {
+	padding: 0;
+	gap: 0;
+}
+
+.token_banner {
+	margin-top: 14px;
+}
+
+.token_caveat {
+	margin-bottom: 14px;
+}
+
+.section_token > .token_row_after {
+	padding-top: 8px;
+}
+
+.section_token > .token_row_before {
+	padding-bottom: 8px;
 }
 
 .bottom {

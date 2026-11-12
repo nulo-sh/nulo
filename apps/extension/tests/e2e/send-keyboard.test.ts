@@ -23,6 +23,7 @@ import { startNodeStub } from "./fixtures/node-stub"
 import { skipUnlessListPrices } from "./fixtures/token-list"
 import { chooseRecipient, openSend, readSendInputs, shotSend } from "./fixtures/send-page"
 import { settleClosedPopup } from "./fixtures/popup-leave"
+import { settleThemeTransitions } from "./fixtures/shots"
 import { readActivityScope, seedJournalRecord, seedTokenRow } from "./helpers/activity-seeds"
 import { SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
 import { savedFeePicks } from "./helpers/ui-preferences"
@@ -353,14 +354,51 @@ test("the unit switch: a Tab stop right after the token card, the accent ring, E
 	await shotSend(page, "send-sides-focused", "send-to-type")
 })
 
-test("the token card draws the accent ring when focused", { timeout: 180_000, retry: 0 }, async ({ listedExtensionPerTest: ctx, skip }) => {
+/** The token row's box against the band its section's rules frame, and its settled background. */
+async function tokenBand(page: Page) {
+	await settleThemeTransitions(page)
+	return page.$eval(sel("send-token-trigger"), (el) => {
+		const section = el.parentElement as HTMLElement
+		const row = el.getBoundingClientRect()
+		const band = section.getBoundingClientRect()
+		const rule = Number.parseFloat(getComputedStyle(section).borderBottomWidth)
+		const gap = (n: number) => Math.round(n * 10) / 10 + 0
+		return {
+			edges: [row.top - band.top, band.right - row.right, band.bottom - rule - row.bottom, row.left - band.left].map(gap),
+			height: gap(row.height),
+			tinted: getComputedStyle(el).backgroundColor !== "rgba(0, 0, 0, 0)",
+		}
+	})
+}
+
+test("the token row is the whole band between its rules, and focus, hover and press tint all of it", {
+	timeout: 180_000,
+	retry: 0,
+}, async ({ listedExtensionPerTest: ctx, skip }) => {
 	skipUnlessListPrices(skip)
 	const { page } = await openSendPage(ctx, { priced: true, form: true })
 	await page.waitForSelector(sel("send-token-symbol"), { visible: true, timeout: 30_000 })
+	const band = { edges: [0, 0, 0, 0], height: 64 }
+	expect(await tokenBand(page)).toEqual({ ...band, tinted: false })
+	await shotSend(page, "token-row-rest", "send-token-trigger")
+
 	await page.focus(sel("subpage-back"))
 	await tabTo(page, "send-token-trigger")
 	await expectAccentRing(page, "send-token-trigger")
+	expect(await tokenBand(page)).toEqual({ ...band, tinted: true })
 	await shotSend(page, "send-token-focused", "send-token-trigger")
+
+	await page.focus(sel("subpage-back"))
+	await page.hover(sel("send-token-trigger"))
+	expect(await tokenBand(page)).toEqual({ ...band, tinted: true })
+	await shotSend(page, "token-row-hovered", "send-token-trigger")
+
+	// Released off the row, the press opens nothing.
+	await page.mouse.down()
+	expect(await tokenBand(page)).toEqual({ ...band, tinted: true })
+	await shotSend(page, "token-row-pressed", "send-token-trigger")
+	await page.mouse.move(1, 1)
+	await page.mouse.up()
 })
 
 async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void> {
