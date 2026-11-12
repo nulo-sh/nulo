@@ -360,18 +360,20 @@ test("the unit switch: a Tab stop right after the token card, the accent ring, E
 	await shotSend(page, "send-sides-focused", "send-to-type")
 })
 
-/** The token row's box against the band its section's rules frame, and its settled background. */
+/** The token row's box against the band it owns between its section's rules (up to the caveat when
+ *  the caveat shares the band), with its settled background. */
 async function tokenBand(page: Page) {
 	await settleThemeTransitions(page)
 	return page.$eval(sel("send-token-trigger"), (el) => {
 		const section = el.parentElement as HTMLElement
 		const row = el.getBoundingClientRect()
 		const band = section.getBoundingClientRect()
-		const rule = Number.parseFloat(getComputedStyle(section).borderBottomWidth)
+		const caveat = section.querySelector('[data-testid="send-token-caveat"]')?.getBoundingClientRect()
+		const floor = caveat ? caveat.top : band.bottom - Number.parseFloat(getComputedStyle(section).borderBottomWidth)
 		const gap = (n: number) => Math.round(n * 10) / 10 + 0
 		return {
-			edges: [row.top - band.top, band.right - row.right, band.bottom - rule - row.bottom, row.left - band.left].map(gap),
-			height: gap(row.height),
+			edges: [row.top - band.top, band.right - row.right, floor - row.bottom, row.left - band.left].map(gap),
+			above: Number.parseFloat(getComputedStyle(el).paddingTop),
 			tinted: getComputedStyle(el).backgroundColor !== "rgba(0, 0, 0, 0)",
 		}
 	})
@@ -384,7 +386,10 @@ test("the token row is the whole band between its rules, and focus, hover and pr
 	skipUnlessListPrices(skip)
 	const { page } = await openSendPage(ctx, { priced: true, form: true })
 	await page.waitForSelector(sel("send-token-symbol"), { visible: true, timeout: 30_000 })
-	const band = { edges: [0, 0, 0, 0], height: 64 }
+	const band = { edges: [0, 0, 0, 0], above: 14 }
+	// At rest: no pointer over the row and the keyboard elsewhere.
+	await page.mouse.move(1, 1)
+	await page.focus(sel("subpage-back"))
 	expect(await tokenBand(page)).toEqual({ ...band, tinted: false })
 	await shotSend(page, "token-row-rest", "send-token-trigger")
 

@@ -99,11 +99,13 @@ defineExpose({
 	composes: fee_label from "./fee-shared.module.css";
 }
 
+/* What a payer spends wraps under its words, right-aligned, once the row cannot hold both side by side. */
 .option {
 	position: relative;
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: 10px;
+	gap: 4px 10px;
 	padding: 7px 10px;
 	border: 1px solid var(--nulo-border);
 	cursor: pointer;
@@ -139,7 +141,7 @@ defineExpose({
 
 .main {
 	display: flex;
-	flex: 1;
+	flex: 1 1 9em;
 	flex-direction: column;
 	min-width: 0;
 }
@@ -157,6 +159,7 @@ defineExpose({
 .spend {
 	composes: type--meta from global;
 	flex: none;
+	margin-left: auto;
 	color: var(--nulo-secondary);
 }
 
