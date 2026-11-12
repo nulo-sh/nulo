@@ -64,6 +64,7 @@ type SheetProps = {
 	facts: PublishFacts
 	amount?: string
 	symbol?: string
+	fiat?: string | null
 	recipientAddress?: string
 	recipientName?: string | null
 	sentenceName?: string | null
@@ -177,9 +178,23 @@ describe("modules/send/SendReviewSheet", () => {
 		)
 	})
 
-	test("the amount with its symbol", () => {
+	test("the amount with its symbol, and no dollar figure without a price", () => {
 		w = mountSheet()
 		expect(w.get('[data-testid="send-review-amount"]').text()).toBe("25TST")
+		expect(w.find('[data-testid="send-review-amount-fiat"]').exists()).toBe(false)
+	})
+
+	test("with a price, the form's dollar figure follows the amount in the same line, heard after it", () => {
+		w = mountSheet({ fiat: "≈ $43.20" })
+		const amount = w.get('[data-testid="send-review-amount"]').element
+		const fiat = w.get('[data-testid="send-review-amount-fiat"]').element
+		expect(fiat.textContent).toBe("≈ $43.20")
+		expect(amount.nextElementSibling).toBe(fiat)
+		expect(fiat.closest("[aria-hidden]")).toBeNull()
+		// An unfinished amount has no figure to price.
+		w.unmount()
+		w = mountSheet({ fiat: "≈ $43.20", amount: undefined })
+		expect(w.find('[data-testid="send-review-amount-fiat"]').exists()).toBe(false)
 	})
 
 	test("a private send on a vouched payer: the three rows read hidden, with no sentence under them", () => {

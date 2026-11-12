@@ -2352,6 +2352,29 @@ describe("send page — Refresh quote by keyboard", () => {
 		expect(document.activeElement).toBe(w.get('[data-testid="send-amount-fiat-input"]').element)
 		w.unmount()
 	})
+
+	test("the review prints the form's dollar figure beside its amount, and none before a price", async () => {
+		const chainId = CHAIN_IDS.TESTNET
+		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }
+		mocks.getTokens.mockResolvedValue([priced])
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
+		const { w } = await mountSend({ realAmountCard: true, chainId, form: true })
+		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
+		const reviewFiat = () => w.getComponent({ name: "SendReviewSheet" }).props("fiat")
+
+		await w.get('[data-testid="send-amount-input"]').setValue("4.32")
+		await nextTick()
+		expect(reviewFiat()).toBeNull()
+
+		price.onQuotesUpdated.invoke({
+			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
+			pricedTokens: TEST_PRICED_TOKENS,
+			tokenIcons: {},
+		})
+		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-fiat-label"]').text()).toBe("≈ $4.32"))
+		expect(reviewFiat()).toBe("≈ $4.32")
+		w.unmount()
+	})
 })
 
 describe("send page — a token the signed list flags", () => {

@@ -33,6 +33,8 @@ const props = withDefaults(
 		facts: PublishFacts
 		amount?: string
 		symbol?: string
+		/** The amount in dollars as the form's readout words it ("≈ $43.20"); null with no price. */
+		fiat?: string | null
 		recipientAddress?: string
 		/** The name the wallet has for the address. */
 		recipientName?: string | null
@@ -54,7 +56,7 @@ const props = withDefaults(
 		/** Set for a queued send whose fee came out above the cap the person accepted. */
 		reask?: { now: string; cap: string }
 	}>(),
-	{ recipientName: null, sentenceName: null, known: true, notices: () => [], queueing: false },
+	{ fiat: null, recipientName: null, sentenceName: null, known: true, notices: () => [], queueing: false },
 )
 const emit = defineEmits<{ close: []; send: []; retry: [] }>()
 
@@ -183,6 +185,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<span :class="$style.amount" :style="{ '--hero-scale': amountScale }" data-testid="send-review-amount">
 							<span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol" class="type--meta">{{ symbol }}</small>
 						</span>
+						<span v-if="amount && fiat" :class="$style.fiat" data-testid="send-review-amount-fiat">{{ fiat }}</span>
 						<!-- The fit's ruler: it holds what the line holds, in the line's classes, or the two widths part. -->
 						<span aria-hidden="true" :class="$style.amount_ruler">
 							<span ref="amountRuler" :class="$style.amount"><span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol" class="type--meta">{{ symbol }}</small></span>
@@ -263,8 +266,14 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 	padding: 4px 20px 24px;
 }
 
+/* The dollar figure sits on the amount's baseline and wraps whole under it, flush left, when the
+   line is full. */
 .summary {
 	position: relative;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	column-gap: 8px;
 }
 
 .amount {
@@ -275,6 +284,12 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 	color: var(--txt-primary);
 	/* Wraps only when even 60% is too wide for one line. */
 	overflow-wrap: anywhere;
+}
+
+.fiat {
+	composes: type--meta from global;
+	color: var(--nulo-secondary);
+	white-space: nowrap;
 }
 
 .amount_ruler {

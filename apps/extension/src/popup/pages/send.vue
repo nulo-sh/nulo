@@ -340,6 +340,8 @@ const onHeaderBack = () => (personChosen.value ? backToPerson() : void goBack(ro
 const amountTerm = ref()
 /** The card's own resting text, whose commas the validator reads as its grouping. */
 const amountRested = ref(null)
+/** The amount in dollars as the card reads it, which the review prints beside its hero. */
+const amountFiat = ref(null)
 
 const isValidAddress = computed(() => isValidAztecAddress(searchTerm.value))
 
@@ -1082,6 +1084,7 @@ onBeforeUnmount(() => {
 						ref="amountCardRef"
 						v-model="amountTerm"
 						v-model:rested="amountRested"
+						v-model:usdFigure="amountFiat"
 						v-model:fiatMode="fiatMode"
 						v-model:fiatGuard="fiatGuard"
 						:token="activeToken"
@@ -1216,6 +1219,7 @@ onBeforeUnmount(() => {
 			:facts="facts"
 			:amount="amountText"
 			:symbol="activeToken?.symbol"
+			:fiat="amountFiat"
 			:recipientName="payeeName"
 			:sentenceName="payeeSentenceName"
 			:recipientAddress="searchTerm"
