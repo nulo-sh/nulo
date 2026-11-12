@@ -55,7 +55,7 @@ const subtitle = computed(() => {
 		<Flex align="center" gap="12" :class="$style.lead">
 			<TokenMark :symbol="markSymbol" :size="32" :badge="false" />
 			<Flex direction="column" gap="2" :class="$style.lead">
-				<span :class="titleIsAddress ? $style.address : $style.symbol" data-testid="token-import-title">{{ title }}</span>
+				<span :class="[$style.title, titleIsAddress ? $style.address : $style.symbol]" data-testid="token-import-title">{{ title }}</span>
 				<span :class="$style.subtitle" data-testid="token-import-subtitle">{{ subtitle }}</span>
 			</Flex>
 		</Flex>
@@ -79,6 +79,13 @@ const subtitle = computed(() => {
 
 .lead {
 	composes: lead from "./token-row.module.css";
+}
+
+/* A contract names its token with up to 32 characters in one word: cut where the spinner or × starts. */
+.title {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
 }
 
 .symbol {
