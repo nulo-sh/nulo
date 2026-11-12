@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
-import { NO_FACTS, type PublishFacts, publishFacts, stripAriaLabel } from "./publish-facts"
+import { NO_FACTS, type PayerKind, type PublishFacts, publishFacts, stripSentence } from "./publish-facts"
 import mark from "./publish-mark.module.css"
 import PublishStrip from "./PublishStrip.vue"
 
@@ -8,8 +8,9 @@ const STUBS = {
 	Icon: { template: '<svg data-testid="stub-glyph" :data-name="name" :data-size="size" />', props: ["name", "size"] },
 }
 
-const mountStrip = (facts: PublishFacts) => mount(PublishStrip, { props: { facts }, global: { stubs: STUBS } })
-const strip = (w: ReturnType<typeof mountStrip>) => w.get('[data-testid="send-publish-strip"]')
+const mountStrip = (facts: PublishFacts, payer: PayerKind = null, name: string | null = null) =>
+	mount(PublishStrip, { props: { facts, payer, name }, global: { stubs: STUBS } })
+const strip = (w: ReturnType<typeof mountStrip>) => w.get('[data-testid="send-review-strip"]')
 const cell = (w: ReturnType<typeof mountStrip>, attr: string) => w.get(`[data-cell="${attr}"]`)
 const glyphOf = (w: ReturnType<typeof mountStrip>, attr: string) => {
 	const glyph = cell(w, attr).find('[data-testid="stub-glyph"]')
@@ -17,11 +18,10 @@ const glyphOf = (w: ReturnType<typeof mountStrip>, attr: string) => {
 }
 
 describe("composite/send/PublishStrip", () => {
-	test("is one button carrying the three visibilities as data attributes", () => {
-		const w = mountStrip(publishFacts("private", "public", "account"))
-		expect(w.findAll("button")).toHaveLength(1)
+	test("draws the three visibilities and offers nothing to press", () => {
+		const w = mountStrip(publishFacts("private", "public", "account"), "account")
+		expect(w.findAll("button, a, [tabindex]")).toHaveLength(0)
 		const el = strip(w)
-		expect(el.attributes("type")).toBe("button")
 		expect([el.attributes("data-you"), el.attributes("data-to"), el.attributes("data-amount")]).toEqual(["exposed", "public", "public"])
 	})
 
@@ -42,14 +42,11 @@ describe("composite/send/PublishStrip", () => {
 		expect(cell(w, attr).get("span").text()).toBe(word)
 	})
 
-	test("a glyph is decoration at 10px: the words and the label carry the meaning", () => {
+	test("a glyph is drawn at 10px inside its hidden cell: the sentence carries the meaning", () => {
 		const w = mountStrip(publishFacts("private", "public", "contract"))
 		const glyphs = w.findAll('[data-cell] [data-testid="stub-glyph"]')
 		expect(glyphs).toHaveLength(3)
-		for (const glyph of glyphs) {
-			expect(glyph.attributes("data-size")).toBe("10")
-			expect(glyph.attributes("aria-hidden")).toBe("true")
-		}
+		for (const glyph of glyphs) expect(glyph.attributes("data-size")).toBe("10")
 	})
 
 	test("the cells keep their order and labels", () => {
@@ -58,18 +55,22 @@ describe("composite/send/PublishStrip", () => {
 		expect(w.findAll("[data-cell] b").map((b) => b.text())).toEqual(["You", "To", "Amount"])
 	})
 
-	test("the accessible name is the facts' label, and the chevron is decoration", () => {
-		const facts = publishFacts("private", "public", "unvouched")
-		const w = mountStrip(facts)
-		expect(strip(w).attributes("aria-label")).toBe(stripAriaLabel(facts))
-		const chevron = w.get('[data-testid="stub-glyph"][data-name="chevron"]')
-		expect(chevron.element.parentElement?.getAttribute("aria-hidden")).toBe("true")
+	test("a screen reader hears one sentence, the route and what anyone can see; every cell is hidden from it", () => {
+		const facts = publishFacts("private", "public", "account")
+		const w = mountStrip(facts, "account", "Ana")
+		expect(w.get('[data-testid="send-review-strip-spoken"]').text()).toBe(stripSentence(facts, "Ana", "account"))
+		expect(w.get('[data-testid="send-review-strip-spoken"]').text()).toBe(
+			"From your private balance, received publicly: anyone can see your address as the fee payer, Ana's address and the amount.",
+		)
+		expect(w.findAll("[data-cell]").map((c) => c.attributes("aria-hidden"))).toEqual(["true", "true", "true"])
+		expect(w.findAll('[data-testid="stub-glyph"]').map((g) => g.attributes("data-name"))).not.toContain("chevron")
 	})
 
-	test("a click emits open once, with no payload", async () => {
-		const w = mountStrip(publishFacts("private", "private", "account"))
-		await strip(w).trigger("click")
-		expect(w.emitted("open")).toEqual([[]])
+	test("a hand-added sponsor is heard as Nulo not knowing, never as hiding you", () => {
+		const w = mountStrip(publishFacts("private", "private", "unvouched"), "unvouched")
+		expect(w.get('[data-testid="send-review-strip-spoken"]').text()).toBe(
+			"From your private balance, received privately: Nulo can't tell what this FPC publishes about you.",
+		)
 	})
 
 	test("re-renders when the facts change", async () => {

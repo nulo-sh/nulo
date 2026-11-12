@@ -38,7 +38,6 @@ import { isValidAztecAddress } from "@/utils/aztec-address"
 import { entityListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
-import { feeText } from "@/utils/fee-estimation"
 import { formatBaseUnits } from "@/utils/amount"
 import { goBack } from "@/utils/page-back"
 import { sentenceName } from "@/utils/string"
@@ -97,8 +96,6 @@ const payer = ref(null)
  *  shows the explainer banner (A). */
 const needsFeeJuice = ref(false)
 const feeDisplay = ref(null)
-/** The fee card's wording of the queued cap, for the review sheet. */
-const queuedCapText = ref(null)
 /** Set by FeeSettingsCard when the fee read refused the account: its imported key does not open. */
 const accountUnusable = ref(false)
 /** What the closed fee card would say, for the fee line, and the payer its warning's fix picks. */
@@ -522,6 +519,18 @@ const feeLinePayer = computed(() => {
 })
 const feeLinePayerName = computed(() => (feeLinePayer.value === "unvouched" ? sentenceName(payer.value?.name ?? "", "this FPC") : null))
 const feeLineQueuedCap = ref(null)
+/** What the form's fee line and the review's fee row both read, so the two can never word the fee apart. */
+const feeLineState = computed(() => ({
+	payer: feeLinePayer.value,
+	payerName: feeLinePayerName.value,
+	display: feeDisplay.value,
+	estimating: isEstimating.value,
+	slow: estimateSlow.value,
+	failed: estimateFailed.value,
+	queued: feeQueued.value,
+	queuedCap: feeLineQueuedCap.value,
+	queuedSponsored: queuedSponsored.value,
+}))
 
 const otherSide = (side) => (side === "private" ? "public" : "private")
 const fromDisabled = computed(() =>
@@ -546,7 +555,6 @@ const toHints = computed(() => ({
 }))
 
 const amountText = computed(() => (amountTerm.value ? String(amountTerm.value) : undefined))
-const reviewFeeText = computed(() => (feeDisplay.value ? feeText(feeDisplay.value) : undefined))
 
 const transferType = computed(() => {
 	if (selectedSendType.value === "private" && selectedReceiverType.value === "private") return TransferType.Private
@@ -1124,15 +1132,7 @@ onBeforeUnmount(() => {
 
 			<Flex v-snack-footer direction="column" gap="10" :class="$style.bottom" data-testid="send-footer">
 				<SendFeeLine
-					:payer="feeLinePayer"
-					:payerName="feeLinePayerName"
-					:display="feeDisplay"
-					:estimating="isEstimating"
-					:slow="estimateSlow"
-					:failed="estimateFailed"
-					:queued="feeQueued"
-					:queuedCap="feeLineQueuedCap"
-					:queuedSponsored="queuedSponsored"
+					v-bind="feeLineState"
 					:notices="feeNotices"
 					:open="feeSheetOpen"
 					@change="openFeeSheet"
@@ -1184,7 +1184,6 @@ onBeforeUnmount(() => {
 					v-model:needsFeeJuice="needsFeeJuice"
 					v-model:payer="payer"
 					v-model:feeDisplay="feeDisplay"
-					v-model:queuedCapText="queuedCapText"
 					v-model:queuedCapFigures="feeLineQueuedCap"
 					v-model:accountUnusable="accountUnusable"
 					v-model:notices="feeNotices"
@@ -1217,18 +1216,18 @@ onBeforeUnmount(() => {
 			:facts="facts"
 			:amount="amountText"
 			:symbol="activeToken?.symbol"
-			:recipientName="selectedContact?.name"
+			:recipientName="payeeName"
+			:sentenceName="payeeSentenceName"
 			:recipientAddress="searchTerm"
-			:feeText="reviewFeeText"
+			:known="payeeKnown"
 			:payerKind="payerKind"
 			:payerType="payer?.type"
+			:fee="feeLineState"
+			:notices="feeNotices"
+			:queueing="queueMode"
 			:canSend="isAllowedToSend"
 			:sending="isSending"
 			:ready="reviewReady"
-			:queuedCapText="queueCap ? queuedCapText : undefined"
-			:queuedSponsored="queuedSponsored"
-			:estimating="isEstimating"
-			:slow="estimateSlow"
 			@close="closeReview"
 			@retry="requestEstimate"
 			@send="submit('review')"

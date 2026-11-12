@@ -1,105 +1,110 @@
 <script setup lang="ts">
 /**
- * What this send publishes, for the sender to read before it goes. Everything shown is a prop and
- * every action an emit: the page owns the popup slot, the facts and the send.
+ * The last look before a send goes: who is paid, how much, what the chain publishes and the fee, in
+ * that order. Everything shown is a prop and every action an emit: the page owns the popup slot, the
+ * facts and the send. Closing it is the way back to the form, which keeps every value.
  */
-import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
+import PayeeBlock from "@/components/composite/send/PayeeBlock.vue"
+import PublishStrip from "@/components/composite/send/PublishStrip.vue"
 import { vSnackFooter } from "@/composables/snackInset"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import {
-	type FactCell,
-	factWord,
+	feeWarning,
 	type PayerDescriptor,
 	type PayerKind,
 	paidBy,
 	type PublishFacts,
-	publishGlyph,
-	QUEUED_SPONSORED_COPY,
-	rowSentence,
-	UNVOUCHED_FEE_SENTENCE,
+	UNVOUCHED_PUBLISH_SENTENCE,
 } from "@/components/composite/send/publish-facts"
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { fitHero, HERO_MIN_SCALE } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
-import { addressEnds } from "@/utils/string"
-import { FEE_JUICE_BRIDGE_URL } from "./fee-helpers"
+import { type FeeLine, type FeeLineState, feeLine } from "./fee-line-words"
 
-const props = defineProps<{
-	show: boolean
-	/** The popup slot's order — the z-index tier `Popup` stacks on. */
-	order: number
-	/** How many newer popups sit on top — what `PopupCard` displaces behind. */
-	depth: number
-	facts: PublishFacts
-	amount?: string
-	symbol?: string
-	recipientName?: string
-	recipientAddress?: string
-	feeText?: string
-	payerKind: PayerKind
-	payerType?: PayerDescriptor["type"]
-	canSend: boolean
-	sending: boolean
-	ready: boolean
-	/** Set while the send is queued against a cap: the cap as the fee card words it. */
-	queuedCapText?: string
-	/** Set while the send is queued with Nulo's sponsor paying, which needs no cap. */
-	queuedSponsored?: boolean
-	/** Set for a queued send whose fee came out above the cap the person accepted. */
-	reask?: { now: string; cap: string }
-	/** The page's estimate is running: a button that cannot send yet says so. */
-	estimating?: boolean
-	/** The running estimate has run long: the fee line offers to ask again, as `retry`. */
-	slow?: boolean
-}>()
+const props = withDefaults(
+	defineProps<{
+		show: boolean
+		/** The popup slot's order — the z-index tier `Popup` stacks on. */
+		order: number
+		/** How many newer popups sit on top — what `PopupCard` displaces behind. */
+		depth: number
+		facts: PublishFacts
+		amount?: string
+		symbol?: string
+		recipientAddress?: string
+		/** The name the wallet has for the address. */
+		recipientName?: string | null
+		/** The same name made safe for a sentence, or null. */
+		sentenceName?: string | null
+		/** False for an address this wallet has no record of paying: its check line shows. */
+		known?: boolean
+		payerKind: PayerKind
+		payerType?: PayerDescriptor["type"]
+		/** Send's fee, which the row reads exactly as the form's line reads it. */
+		fee?: FeeLineState
+		/** What the fee card would say under the form's line. */
+		notices?: string[]
+		/** The send is queued against a cap, or behind an earlier one with Nulo's sponsor paying. */
+		queueing?: boolean
+		canSend: boolean
+		sending: boolean
+		ready: boolean
+		/** Set for a queued send whose fee came out above the cap the person accepted. */
+		reask?: { now: string; cap: string }
+	}>(),
+	{ recipientName: null, sentenceName: null, known: true, notices: () => [], queueing: false },
+)
 const emit = defineEmits<{ close: []; send: []; retry: [] }>()
 
-const ROWS: { cell: FactCell; id: string; name: string }[] = [
-	{ cell: "you", id: "you", name: "Your address" },
-	{ cell: "recipient", id: "to", name: "Recipient" },
-	{ cell: "amount", id: "amount", name: "Amount" },
-]
-
-const recipientEnds = computed(() => addressEnds(props.recipientAddress ?? ""))
-const paid = computed(() => paidBy(props.payerKind, props.payerType))
 const sendable = computed(() => props.show && props.canSend && props.ready && !props.sending)
 const submitLabel = computed(() => {
-	// The re-asked figure stays on the fee line above: in the label it clips at 360 px.
+	// The re-asked figure stays on the fee row above: in the label it clips at 360 px.
 	if (props.reask) return "Send"
-	if (props.queuedCapText || props.queuedSponsored) return "Queue send"
-	return props.estimating ? "Estimating fee" : "Send now"
+	if (props.queueing) return "Queue send"
+	return props.fee?.estimating ? "Estimating fee" : "Send now"
 })
 
-const rows = computed(() =>
-	ROWS.map((row) => {
-		const visibility = props.facts[row.cell]
-		return {
-			...row,
-			visibility,
-			glyph: publishGlyph(visibility),
-			word: factWord(row.cell, props.facts),
-			sentence: rowSentence(row.cell, props.facts, props.payerKind),
-			remedy: row.cell === "you" && visibility === "exposed",
-			noticeShape: row.cell === "you" ? (props.facts.noticeShape ?? undefined) : undefined,
-		}
-	}),
-)
+const warning = computed(() => feeWarning(props.facts, props.sentenceName))
+const unvouched = computed(() => props.facts.you === "unknown" && props.payerKind === "unvouched")
+
+const QUEUE_TESTID = { cap: "send-review-fee-cap", sponsored: "send-review-fee-queued", behind: "send-review-fee-value" } as const
+const line = computed<FeeLine>(() => (props.fee ? feeLine(props.fee) : { kind: "words", value: "—", note: null }))
+const valueTestid = computed(() => {
+	if (line.value.kind === "slow") return "send-review-fee-slow"
+	return line.value.kind === "words" && line.value.queue ? QUEUE_TESTID[line.value.queue] : "send-review-fee-value"
+})
+const notes = computed(() => {
+	if (props.reask) return [paidBy(props.payerKind, props.payerType)].filter((n) => n !== null)
+	const own = line.value.kind === "words" && line.value.note ? [line.value.note] : []
+	return [...own, ...props.notices]
+})
 
 const summary = useTemplateRef<HTMLElement>("summary")
 const amountRuler = useTemplateRef<HTMLElement>("amountRuler")
+const sendNow = useTemplateRef<{ $el: HTMLElement }>("sendNow")
 /** The amount line's type as a fraction of its 30 px: the largest that fits one line, never
  *  under 60%, where the line wraps instead. */
 const amountScale = ref(1)
 
-// The button's disabled look mirrors this; the guard is what a programmatic click meets.
+// Never natively disabled, so the focus it takes on opening survives the arming wait and any change
+// of state; this guard is what a press, a key or a programmatic click meets.
 const handleSend = () => {
 	if (sendable.value) emit("send")
 }
 
+/** A retry replaces its own button, so the keyboard it held moves on to Send now. */
+function retry(e: Event) {
+	const held = e.currentTarget === document.activeElement
+	emit("retry")
+	if (held) nextTick(() => sendNow.value?.$el.focus())
+}
+
 function fitAmount() {
-	const line = summary.value
+	const row = summary.value
 	const form = amountRuler.value
-	if (!line || !form) return
-	const fit = fitHero(1, (_, scale) => rulerWidth(form, scale), heroRoom(line))
+	if (!row || !form) return
+	const fit = fitHero(1, (_, scale) => rulerWidth(form, scale), heroRoom(row))
 	amountScale.value = Math.max(fit.scale, HERO_MIN_SCALE)
 }
 
@@ -111,16 +116,18 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 
 <template>
 	<div data-testid="send-review-sheet" :data-open="show" hidden />
-	<Popup :show="show" :displaceIdx="order" initial-focus="#send-review-title" @onClose="emit('close')">
+	<Popup :show="show" :displaceIdx="order" initial-focus='[data-testid="send-review-submit"]' @onClose="emit('close')">
 		<PopupCard :displaceIdx="depth">
-			<div role="dialog" aria-modal="true" aria-labelledby="send-review-title">
+			<div role="dialog" aria-modal="true" aria-labelledby="send-review-title" data-testid="send-review">
 				<PopupHeader closable @onClose="emit('close')">
 					<template #title>
-						<span id="send-review-title" tabindex="-1" :class="$style.title">Review</span>
+						<span id="send-review-title" :class="$style.title">Review</span>
 					</template>
 				</PopupHeader>
 
-				<Flex direction="column" gap="14" :class="$style.body">
+				<Flex direction="column" gap="12" :class="$style.body">
+					<PayeeBlock v-if="recipientAddress" :address="recipientAddress" :name="recipientName" :known="known" />
+
 					<div ref="summary" :class="$style.summary">
 						<span :class="$style.amount" :style="{ '--hero-scale': amountScale }" data-testid="send-review-amount">
 							<span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol" class="type--meta">{{ symbol }}</small>
@@ -129,64 +136,47 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<span aria-hidden="true" :class="$style.amount_ruler">
 							<span ref="amountRuler" :class="$style.amount"><span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol" class="type--meta">{{ symbol }}</small></span>
 						</span>
-						<span :class="$style.to" data-testid="send-review-recipient">to <template v-if="recipientName">{{ recipientName }} · </template><span v-if="recipientAddress" class="type--meta" data-testid="send-review-recipient-address"><span :class="$style.address_end">{{ recipientEnds.head }}</span>{{ recipientEnds.middle }}<span :class="$style.address_end">{{ recipientEnds.tail }}</span></span><template v-else>—</template></span>
 					</div>
 
-					<div :class="$style.rows">
-						<div :class="$style.rows_head">This send publishes</div>
-						<div
-							v-for="row in rows"
-							:key="row.cell"
-							:class="[$style.row, mark[row.visibility]]"
-							:data-testid="`send-review-row-${row.id}`"
-							:data-visibility="row.visibility"
-							:data-notice-shape="row.noticeShape"
-						>
-							<Icon v-if="row.glyph" :name="row.glyph" size="10" aria-hidden="true" :class="$style.row_mark" />
-							<span v-else :class="$style.row_gap" aria-hidden="true" />
-							<div :class="$style.row_body">
-								<div :class="$style.row_top">
-									<span>{{ row.name }}</span>
-									<span :class="$style.row_word">{{ row.word }}</span>
-								</div>
-								<span v-if="row.sentence" :class="$style.why">{{ row.sentence }}</span>
-								<a
-									v-if="row.remedy"
-									:href="FEE_JUICE_BRIDGE_URL"
-									target="_blank"
-									rel="noopener noreferrer"
-									:class="$style.remedy"
-									data-testid="send-fee-privacy-remedy"
-								>Get private Fee Juice</a>
-							</div>
-						</div>
-					</div>
+					<PublishStrip :facts="facts" :payer="payerKind" :name="sentenceName" />
+
+					<p v-if="warning" :class="mark.warning_box" data-testid="send-review-warning" :data-notice-shape="facts.noticeShape">
+						<Icon name="warning" size="14" aria-hidden="true" :class="mark.warning_mark" />
+						<span>{{ warning }}</span>
+					</p>
+					<p v-else-if="unvouched" :class="$style.unvouched" data-testid="send-review-unvouched">{{ UNVOUCHED_PUBLISH_SENTENCE }}</p>
 
 					<div :class="$style.fee" data-testid="send-review-fee" :data-payer="payerKind ?? 'none'">
-						<span v-if="payerKind === 'unvouched'">Fee · <span aria-hidden="true">—</span><span :class="$style.visually_hidden">{{ UNVOUCHED_FEE_SENTENCE }}</span></span>
-						<span v-else-if="reask" data-testid="send-review-fee-reask">Fee is now {{ reask.now }}, above the {{ reask.cap }} you accepted.</span>
-						<span v-else-if="queuedCapText" data-testid="send-review-fee-cap">Fee up to {{ queuedCapText }}, based on your last send. If it comes out higher, we ask again.</span>
-						<span v-else-if="queuedSponsored" data-testid="send-review-fee-queued">Fee · {{ QUEUED_SPONSORED_COPY }}</span>
-						<span v-else-if="estimating && slow && !feeText" :class="$style.fee_slow" data-testid="send-review-fee-slow">
-							Fee · Taking longer than usual.
-							<button type="button" :class="$style.retry" data-testid="send-review-fee-retry" @click="emit('retry')">Try again</button>
+						<span :class="$style.fee_key">Fee</span>
+						<span :class="$style.fee_value" :data-testid="reask ? 'send-review-fee-reask' : valueTestid">
+							<span v-if="reask">Fee is now {{ reask.now }}, above the {{ reask.cap }} you accepted.</span>
+							<span v-else-if="line.kind === 'words'">{{ line.value }}</span>
+							<Skeleton v-else-if="line.kind === 'bar'" :width="96" :height="10" />
+							<span v-else :class="$style.fee_state">
+								<span v-if="line.kind === 'slow'" :class="$style.muted">Taking longer than usual.</span>
+								<span v-else class="color--txt-danger">Couldn't estimate fee.</span>
+								<button type="button" :class="$style.retry" data-testid="send-review-fee-retry" @click="retry">Try again</button>
+							</span>
+							<span v-for="note in notes" :key="note" :class="$style.note">{{ note }}</span>
 						</span>
-						<span v-else>Fee · {{ feeText || "—" }}</span>
-						<b v-if="paid" class="type--meta">{{ paid }}</b>
 					</div>
 
-					<Button
-						v-snack-footer
-						variant="cta"
-						wide
-						data-testid="send-review-submit"
-						:data-ready="ready"
-						:disabled="!sendable"
-						:loading="sending"
-						@click="handleSend"
-					>
-						{{ submitLabel }}
-					</Button>
+					<span :class="$style.send_wrap" @keydown.enter="refuseRepeatEnter">
+						<Button
+							ref="sendNow"
+							v-snack-footer
+							variant="cta"
+							wide
+							data-testid="send-review-submit"
+							:data-ready="ready"
+							:aria-disabled="!sendable || undefined"
+							:class="!sendable && !sending && $style.unarmed"
+							:loading="sending"
+							@click="handleSend"
+						>
+							{{ submitLabel }}
+						</Button>
+					</span>
 				</Flex>
 			</div>
 		</PopupCard>
@@ -199,27 +189,17 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 	color: var(--txt-primary);
 }
 
-.title:focus-visible {
-	outline: 2px dotted var(--nulo-accent);
-	outline-offset: 4px;
-}
-
 .body {
 	padding: 4px 20px 24px;
 }
 
 .summary {
 	position: relative;
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-
-	padding-bottom: 12px;
-	border-bottom: 1px solid var(--nulo-border);
 }
 
 .amount {
 	composes: type--amount-hero from global;
+	display: block;
 	font-size: calc(30px * var(--hero-scale, 1));
 	line-height: 1;
 	color: var(--txt-primary);
@@ -253,116 +233,60 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 	color: var(--nulo-secondary);
 }
 
-.to {
-	composes: type--meta from global;
-	color: var(--nulo-secondary);
-	overflow-wrap: anywhere;
+.unvouched {
+	composes: type--body from global;
+	margin: 0;
+	color: var(--txt-secondary);
 }
 
-.address_end {
-	color: var(--txt-primary);
-}
-
-.rows {
-	display: flex;
-	flex-direction: column;
-
-	border: 1px solid var(--nulo-border);
-}
-
-.rows_head {
-	composes: type--label-section from global;
-	padding: 6px 10px;
-	border-bottom: 1px solid var(--nulo-border);
-
-	color: var(--nulo-secondary);
-}
-
-.row {
-	display: flex;
-	gap: 8px;
-
-	padding: 8px 10px;
-	border-bottom: 1px solid var(--nulo-border);
-}
-
-.row:last-child {
-	border-bottom: none;
-}
-
-.row_mark {
-	flex: none;
-	margin-top: 2px;
-}
-
-/* Keeps an unmarked row's words in line with the marked ones. */
-.row_gap {
-	flex: none;
-	width: 10px;
-}
-
-.row_body {
-	flex: 1;
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-}
-
-.row_top {
-	composes: type--value from global;
-	display: flex;
-	justify-content: space-between;
-	gap: 8px;
-
-	color: var(--txt-primary);
-}
-
-.row_word {
-	composes: type--label-section from global;
-}
-
-.why {
-	composes: type--caption from global;
-	line-height: 1.4;
-	color: var(--txt-tertiary);
-}
-
-.remedy {
-	composes: type--label-section from global;
-	align-self: flex-start;
-	margin-top: 2px;
-
-	color: var(--orange);
-	text-decoration: underline;
-	text-underline-offset: 4px;
-}
-
+/* Label at To's left edge, value at the strip's right edge. */
 .fee {
-	composes: type--meta from global;
-	display: flex;
-	justify-content: space-between;
-	gap: 8px;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: baseline;
+	column-gap: 12px;
+}
 
+.fee_key {
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
-.visually_hidden {
-	composes: visually_hidden from "./fee-shared.module.css";
+.fee_value {
+	composes: type--body from global;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 2px;
+	min-width: 0;
+	text-align: right;
+	color: var(--txt-primary);
 }
 
-.fee_slow {
+.fee_state {
 	display: flex;
 	flex-wrap: wrap;
+	justify-content: flex-end;
 	align-items: baseline;
 	gap: 6px;
+}
+
+.muted,
+.note {
+	color: var(--txt-secondary);
 }
 
 .retry {
 	composes: retry from "./fee-shared.module.css";
 }
 
-.fee b {
-	color: var(--txt-primary);
+.send_wrap {
+	display: block;
+}
+
+/* The base's disabled look, kept focusable: a press passes through to nothing. */
+.unarmed {
+	opacity: 0.3;
+	pointer-events: none;
 }
 </style>

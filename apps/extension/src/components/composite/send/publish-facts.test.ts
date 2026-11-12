@@ -1,11 +1,9 @@
 import { describe, expect, test } from "vitest"
 import {
-	FACT_SENTENCES,
 	FACT_WORDS,
 	factWord,
 	feeWarning,
 	NO_FACTS,
-	noticeBodyFor,
 	PAID_BY,
 	type PayerDescriptor,
 	type PayerKind,
@@ -14,11 +12,10 @@ import {
 	publishFacts,
 	publishGlyph,
 	publishSentence,
-	rowSentence,
-	UNVOUCHED_FEE_SENTENCE,
-	stripAriaLabel,
+	stripSentence,
 	TOKEN_CAVEAT,
 	type TransferSide,
+	UNVOUCHED_FEE_SENTENCE,
 	UNVOUCHED_PUBLISH_SENTENCE,
 } from "./publish-facts"
 
@@ -108,12 +105,6 @@ describe("copy", () => {
 			recipient: { hidden: "HIDDEN", public: "PUBLIC" },
 			amount: { hidden: "HIDDEN", public: "PUBLIC" },
 		})
-		expect(FACT_SENTENCES).toEqual({
-			sender: "A public origin shows the balance leaving your account, so your address is on the chain as the sender.",
-			unvouched: "This FPC was added by hand. Nulo cannot tell what it publishes about you.",
-			recipient: "A public destination shows the balance arriving at the recipient's address.",
-			amount: "Either side being public shows the balance change, and with it the amount.",
-		})
 		expect(PAID_BY).toEqual({
 			account: "paid by your address",
 			contract: "paid from your private Fee Juice",
@@ -132,31 +123,6 @@ describe("copy", () => {
 		expect(factWord("you", NO_FACTS)).toBe("—")
 	})
 
-	test("the notice bodies are the shipped ones, word for word", () => {
-		expect(noticeBodyFor("private-private")).toBe(
-			"This send hides the amount and the recipient, but the fee names your account publicly. Anyone watching the chain learns this account sent something, and when.",
-		)
-		expect(noticeBodyFor("private-public")).toBe(
-			"The recipient and amount on this send are already public. Paying from public Fee Juice adds your address to them, and the whole transfer becomes readable as yours.",
-		)
-	})
-
-	test("a row carries a sentence only when it publishes something, or when the wallet cannot vouch", () => {
-		const gated = publishFacts("private", "public", "account")
-		expect(rowSentence("you", gated, "account")).toBe(noticeBodyFor("private-public"))
-		expect(rowSentence("recipient", gated, "account")).toBe(FACT_SENTENCES.recipient)
-		expect(rowSentence("amount", gated, "account")).toBe(FACT_SENTENCES.amount)
-		expect(rowSentence("you", publishFacts("private", "private", "account"), "account")).toBe(noticeBodyFor("private-private"))
-		expect(rowSentence("you", publishFacts("public", "private", "contract"), "contract")).toBe(FACT_SENTENCES.sender)
-
-		const hidden = publishFacts("private", "private", "contract")
-		for (const cell of ["you", "recipient", "amount"] as const) expect(rowSentence(cell, hidden, "contract")).toBeNull()
-
-		const unknown = publishFacts("private", "private", "unvouched")
-		expect(rowSentence("you", unknown, "unvouched")).toBe(FACT_SENTENCES.unvouched)
-		expect(rowSentence("you", unknown, null)).toBeNull()
-	})
-
 	test("the fee line names the payer from the settings' reading, and none while pending or hand-added", () => {
 		expect(paidBy("account", "fj")).toBe(PAID_BY.account)
 		expect(paidBy("account", "fpc")).toBe(PAID_BY.account)
@@ -165,18 +131,99 @@ describe("copy", () => {
 		expect(paidBy("unvouched", "fpc")).toBeNull()
 		expect(paidBy(null, "fj")).toBeNull()
 	})
+})
 
-	test("the strip's label says nothing only when all three are hidden, and never guesses an unknown", () => {
-		const label = (o: TransferSide, d: TransferSide, p: PayerKind) => stripAriaLabel(publishFacts(o, d, p))
-		expect(label("private", "private", "contract")).toBe("This send publishes nothing. Open details")
-		expect(label("private", "private", "account")).toBe("This send publishes your address as the fee payer. Open details")
-		expect(label("public", "private", null)).toBe("This send publishes your address as the sender and the amount. Open details")
-		expect(label("public", "public", "account")).toBe(
-			"This send publishes your address as the sender, the recipient and the amount. Open details",
-		)
-		expect(label("private", "private", null)).toBe("Your address: not known yet. Open details")
-		expect(label("private", "public", "unvouched")).toBe(
-			"This send publishes the recipient and the amount. Your address: not known yet. Open details",
+describe("the review's strip, heard as one sentence", () => {
+	const NOBODY = "nobody watching the chain can see who sent it, who got it or how much."
+	/** origin → destination · payer = what a screen reader hears for "Ana". */
+	const SPOKEN: [TransferSide, TransferSide, PayerKind, string][] = [
+		["private", "private", "account", "From your private balance, received privately: anyone can see your address as the fee payer."],
+		["private", "private", "contract", `From your private balance, received privately: ${NOBODY}`],
+		["private", "private", "unvouched", `From your private balance, received privately: ${UNVOUCHED_PUBLISH_SENTENCE}`],
+		["private", "private", null, "From your private balance, received privately. Your address: not known yet."],
+		[
+			"private",
+			"public",
+			"account",
+			"From your private balance, received publicly: anyone can see your address as the fee payer, Ana's address and the amount.",
+		],
+		["private", "public", "contract", "From your private balance, received publicly: anyone can see Ana's address and the amount."],
+		[
+			"private",
+			"public",
+			"unvouched",
+			`From your private balance, received publicly: ${UNVOUCHED_PUBLISH_SENTENCE} Anyone can see Ana's address and the amount.`,
+		],
+		[
+			"private",
+			"public",
+			null,
+			"From your private balance, received publicly. Anyone can see Ana's address and the amount. Your address: not known yet.",
+		],
+		[
+			"public",
+			"private",
+			"account",
+			"From your public balance, received privately: anyone can see your address as the sender and the amount.",
+		],
+		[
+			"public",
+			"private",
+			"contract",
+			"From your public balance, received privately: anyone can see your address as the sender and the amount.",
+		],
+		[
+			"public",
+			"private",
+			"unvouched",
+			"From your public balance, received privately: anyone can see your address as the sender and the amount.",
+		],
+		[
+			"public",
+			"private",
+			null,
+			"From your public balance, received privately: anyone can see your address as the sender and the amount.",
+		],
+		[
+			"public",
+			"public",
+			"account",
+			"From your public balance, received publicly: anyone can see your address as the sender, Ana's address and the amount.",
+		],
+		[
+			"public",
+			"public",
+			"contract",
+			"From your public balance, received publicly: anyone can see your address as the sender, Ana's address and the amount.",
+		],
+		[
+			"public",
+			"public",
+			"unvouched",
+			"From your public balance, received publicly: anyone can see your address as the sender, Ana's address and the amount.",
+		],
+		[
+			"public",
+			"public",
+			null,
+			"From your public balance, received publicly: anyone can see your address as the sender, Ana's address and the amount.",
+		],
+	]
+
+	test.each(SPOKEN)("%s → %s, payer %s", (origin, destination, payer, expected) => {
+		expect(stripSentence(publishFacts(origin, destination, payer), "Ana", payer)).toBe(expected)
+	})
+
+	test("the table is every cell; an unresolved or hand-added payer is never heard as hiding you", () => {
+		expect(new Set(SPOKEN.map(([o, d, p]) => `${o}/${d}/${p}`)).size).toBe(16)
+		for (const [o, d, p] of SPOKEN) {
+			if (publishFacts(o, d, p).you === "unknown") expect(stripSentence(publishFacts(o, d, p), "Ana", p)).not.toContain("nobody")
+		}
+	})
+
+	test("an unnamed recipient is their address", () => {
+		expect(stripSentence(publishFacts("private", "public", "contract"), null, "contract")).toBe(
+			"From your private balance, received publicly: anyone can see their address and the amount.",
 		)
 	})
 })

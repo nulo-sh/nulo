@@ -33,7 +33,7 @@ const BRUTALIST = "packages/design/src/ui/BrutalistTitle.vue"
 const BALANCE = "apps/extension/src/popup/components/modules/general/BalanceView.vue"
 const BUTTON = "packages/design/src/ui/Button.vue"
 const PUBLISH_STRIP = "apps/extension/src/components/composite/send/PublishStrip.vue"
-const PUBLISH_FACTS = '[data-testid="send-publish-strip"] [data-cell]'
+const PUBLISH_FACTS = '[data-testid="send-review-strip"] [data-cell]'
 const ROLELESS = ".wrapper:is(.secondary, .ghost, .text)"
 const ROLELESS_WHY = "the icon-only variants carry no role and keep their size step"
 const CONTACT_ROW = "apps/extension/src/popup/components/modules/settings/contacts/ContactRow.vue"

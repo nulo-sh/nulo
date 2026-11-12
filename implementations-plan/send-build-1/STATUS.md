@@ -8,3 +8,4 @@
 - 2026-11-11: a1 phase 3 green (the page; `RecipientCard` and `SendTypesCard` retired).
 - 2026-11-11: a1 Codex fix loop converged in three rounds (reject, reject, approve); rebased onto `dev`.
 - 2026-11-11: a1 gates green at retry 0. Smoke: Chrome 1839 s (three reds in two unmigrated specs, fixed and rerun green), Firefox 2926 s. Network, the 24 touched specs: Chrome 2309 s, Firefox 2711 s (one Firefox red, a sub-pixel read, fixed and rerun green on both); the three opt-in specs armed on Chrome; update-in-place from v1.2.0 armed on both. `lint`, `typecheck:all`, `test:all`, `test:ci-gating` green.
+- 2026-11-12: a2 started on send-build-1-a1 at 9700932b0; OA-1 answered (a) per the answers file.

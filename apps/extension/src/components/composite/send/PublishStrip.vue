@@ -1,10 +1,13 @@
 <script setup lang="ts">
+/**
+ * What the chain publishes, You · To · Amount, each with its mark and word. The cells are drawn only:
+ * a screen reader hears the strip as one sentence, which also carries the route the cells imply.
+ */
 import { computed } from "vue"
-import { type FactCell, factWord, type PublishFacts, publishGlyph, stripAriaLabel } from "./publish-facts"
+import { type FactCell, factWord, type PayerKind, type PublishFacts, publishGlyph, stripSentence } from "./publish-facts"
 import mark from "./publish-mark.module.css"
 
-const props = defineProps<{ facts: PublishFacts }>()
-const emit = defineEmits<{ open: [] }>()
+const props = withDefaults(defineProps<{ facts: PublishFacts; payer: PayerKind; name?: string | null }>(), { name: null })
 
 const CELLS: { cell: FactCell; name: string; attr: string }[] = [
 	{ cell: "you", name: "You", attr: "you" },
@@ -12,56 +15,32 @@ const CELLS: { cell: FactCell; name: string; attr: string }[] = [
 	{ cell: "amount", name: "Amount", attr: "amount" },
 ]
 
-const label = computed(() => stripAriaLabel(props.facts))
+const spoken = computed(() => stripSentence(props.facts, props.name, props.payer))
 const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props.facts[c.cell]) })))
 </script>
 
 <template>
-	<button
-		type="button"
-		:class="$style.strip"
-		data-testid="send-publish-strip"
-		:data-you="facts.you"
-		:data-to="facts.recipient"
-		:data-amount="facts.amount"
-		:aria-label="label"
-		@click="emit('open')"
-	>
-		<span v-for="{ cell, name, attr, glyph } in cells" :key="cell" :class="[$style.cell, mark[facts[cell]]]" :data-cell="attr">
-			<Icon v-if="glyph" :name="glyph" size="10" aria-hidden="true" />
-			<b :class="$style.name">{{ name }}</b>
+	<div :class="$style.strip" data-testid="send-review-strip" :data-you="facts.you" :data-to="facts.recipient" :data-amount="facts.amount">
+		<span
+			v-for="{ cell, name: cellName, attr, glyph } in cells"
+			:key="cell"
+			aria-hidden="true"
+			:class="[$style.cell, mark[facts[cell]]]"
+			:data-cell="attr"
+		>
+			<Icon v-if="glyph" :name="glyph" size="10" />
+			<b :class="$style.name">{{ cellName }}</b>
 			<span>{{ factWord(cell, facts) }}</span>
 		</span>
-		<span :class="$style.chevron" aria-hidden="true">
-			<Icon name="chevron" :size="15" color="secondary" />
-		</span>
-	</button>
+		<span :class="$style.spoken" data-testid="send-review-strip-spoken">{{ spoken }}</span>
+	</div>
 </template>
 
 <style module>
 .strip {
+	position: relative;
 	display: flex;
-	width: 100%;
-	padding: 0;
-
-	font: inherit;
-	color: inherit;
-	text-align: left;
-
-	background: none;
 	border: 1px solid var(--nulo-border);
-	cursor: pointer;
-
-	transition: background 0.15s var(--bezier);
-}
-
-.strip:hover {
-	background: var(--nulo-surface-low);
-}
-
-.strip:focus-visible {
-	outline: 2px solid var(--nulo-accent);
-	outline-offset: 2px;
 }
 
 .cell {
@@ -73,9 +52,12 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 	gap: 5px;
 
 	padding: 6px 2px;
-	border-right: 1px solid var(--nulo-border);
 
 	white-space: nowrap;
+}
+
+.cell + .cell {
+	border-left: 1px solid var(--nulo-border);
 }
 
 /* The facts sit at 10px semibold, a step under the bold 10px names, so every cell fits its text. */
@@ -99,10 +81,15 @@ const cells = computed(() => CELLS.map((c) => ({ ...c, glyph: publishGlyph(props
 	color: var(--nulo-secondary);
 }
 
-.chevron {
-	flex: 0 0 20px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+.spoken {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
 }
 </style>

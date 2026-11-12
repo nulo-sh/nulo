@@ -47,19 +47,11 @@ const sentence = computed(() => (warning.value ? null : publishSentence(props.fa
 }
 
 .warning {
-	composes: type--body from global;
-	display: flex;
-	align-items: baseline;
-	gap: 8px;
-	padding: 8px 10px;
-	background: var(--nulo-surface-low);
-	color: var(--txt-warning);
-	box-shadow: inset 3px 0 0 var(--yellow);
+	composes: warning_box from "./publish-mark.module.css";
 }
 
 .mark {
-	flex: none;
-	color: var(--yellow);
+	composes: warning_mark from "./publish-mark.module.css";
 }
 
 .warning_body {

@@ -373,6 +373,12 @@ async function fillForm(w: W, method: Method | null = SPONSOR) {
 const submit = (w: W) => w.get('[data-testid="send-submit"]')
 const sheetOpen = (w: W) => w.get('[data-testid="send-review-sheet"]').attributes("data-open") === "true"
 const sendNow = (w: W) => w.get('[data-testid="send-review-submit"]')
+/** The review's strip: its `you` cell, and the warning's shape when the fee names the account. */
+const reviewYou = (w: W) => w.get('[data-testid="send-review-strip"]').attributes("data-you")
+const reviewShape = (w: W) => {
+	const box = w.find('[data-testid="send-review-warning"]')
+	return box.exists() ? box.attributes("data-notice-shape") : undefined
+}
 /** The review's own Popup: the fee sheet's comes first in the page. */
 const reviewPopup = (w: W) => w.getComponent({ name: "SendReviewSheet" }).getComponent({ name: "Popup" })
 /** The publish line's region, which carries the facts' `you` cell. */
@@ -1152,8 +1158,8 @@ describe("send page — consent", () => {
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 		expect(sheetOpen(w)).toBe(true)
-		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-visibility")).toBe(you)
-		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-notice-shape")).toBe(shape)
+		expect(reviewYou(w)).toBe(you)
+		expect(reviewShape(w)).toBe(shape)
 		w.unmount()
 	})
 
@@ -1194,7 +1200,7 @@ describe("send page — consent", () => {
 		expect(ready(w)).toBe("true")
 
 		await feeCard(w, FJ)
-		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-visibility")).toBe("exposed")
+		expect(reviewYou(w)).toBe("exposed")
 		expect(ready(w)).toBe("false")
 		vi.advanceTimersByTime(REVIEW_ARM_MS - 1)
 		await nextTick()
@@ -1239,7 +1245,7 @@ describe("send page — consent", () => {
 		popupStore.open("confirm")
 		await nextTick()
 		expect(ready(w)).toBe("false")
-		expect(sendNow(w).attributes("disabled")).toBeDefined()
+		expect(sendNow(w).attributes("aria-disabled")).toBe("true")
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 

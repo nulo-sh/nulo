@@ -6,7 +6,7 @@ const meta: Meta<typeof PublishStrip> = {
 	title: "Composite / Send / PublishStrip",
 	component: PublishStrip,
 	tags: ["autodocs"],
-	args: { facts: publishFacts("private", "private", "contract") },
+	args: { facts: publishFacts("private", "private", "contract"), payer: "contract", name: "Ana" },
 	render: (args) => ({
 		components: { PublishStrip },
 		setup: () => ({ args }),
@@ -18,8 +18,9 @@ export default meta
 type Story = StoryObj<typeof PublishStrip>
 
 export const AllHidden: Story = {}
-export const NamesYouAsFeePayer: Story = { args: { facts: publishFacts("private", "private", "account") } }
-export const PublicSend: Story = { args: { facts: publishFacts("public", "public", "account") } }
+export const NamesYouAsFeePayer: Story = { args: { facts: publishFacts("private", "private", "account"), payer: "account" } }
+export const PublicSend: Story = { args: { facts: publishFacts("public", "public", "account"), payer: "account" } }
 export const PublicOriginPrivateDestination: Story = { args: { facts: publishFacts("public", "private", "contract") } }
-export const PayerNotKnownYet: Story = { args: { facts: publishFacts("private", "public", null) } }
-export const NothingToSend: Story = { args: { facts: NO_FACTS } }
+export const PayerNotKnownYet: Story = { args: { facts: publishFacts("private", "public", null), payer: null } }
+export const HandAddedSponsor: Story = { args: { facts: publishFacts("private", "public", "unvouched"), payer: "unvouched" } }
+export const NothingToSend: Story = { args: { facts: NO_FACTS, payer: null } }

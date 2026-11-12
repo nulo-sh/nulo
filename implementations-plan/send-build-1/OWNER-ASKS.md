@@ -2,13 +2,13 @@
 
 Every visible change in this lane is inside the owner's picks on pages 129, 131 and 133, quoted in `plan.md` § UI impact. The entries below are the parts the picks do not settle. Each ships in the form named under "What ships now", so none blocks an arc (the lane brief: "the arc ships without it"); an answer changes it before or after the arc lands. Focus, Tab order, keyboard and ARIA calls are made under the owner's 2026-10-19 accessibility delegation and are recorded in `plan.md`'s decision ledger, not here.
 
-## OA-1: the review's edit control (arc a2)
+## OA-1: the review's edit control (arc a2): answered (a)
 
 - **Surface**: the review sheet, under or beside Send now.
 - **From**: P133-05's note, "I don't love that "EDIT" minimal button, I'd rather remove it, and let the user press the "X" if they want to edit? … Maybe it can be below the "SEND" button, an "edit" with the same format as "use a passkey I already have" link."
 - **Options**: (a) no edit control: the sheet's X closes it back to the form with every value kept (2 Tab stops: Send now, close). (b) an "edit" text link under Send now, set like onboarding's "Use a Nulo passkey I already have" link (3 Tab stops).
-- **Recommendation**: (a), the note's first words.
-- **What ships now**: (a), unless `send-build-1-answers.md` says otherwise when a2 is built.
+- **Answer**: (a). The owner in chat, 2026-11-11 at about 14:55 UTC: "(a) on p133-05 then".
+- **Shipped in a2**: no edit control; the X (and Escape) closes the sheet back to the form, which keeps every value; two Tab stops, Send now and the close; nothing under Send now.
 
 ## OA-2: S1, the amount's refusal and the token caveat (arc a1): answered (a)
 
@@ -95,7 +95,19 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
 ## OA-15: Home's re-ask review (arc a2)
 
 - **Surface**: the review Home opens when a send's fee went up ("Fee went up. Review"), which mounts the same sheet as Send's review.
-- **What ships now**: it follows RV4a with its re-ask fee states; its address carries no check line (the send was already made).
+- **What ships now**: it follows RV4a with its re-ask fee states; its address carries no check line (the send was already made). Its fee row is today's sentence on the row's grid, "Fee is now ~0.88 FJ ($0.013), above the ~0.8 FJ ($0.012) you accepted.", with today's payer words under it ("paid by your address", "paid from your private Fee Juice" or "paid by the sponsor"); the label "Fee" sits left of a sentence that starts with "Fee". It has no name line: the record keeps the address, not a name.
+
+## OA-16: the review's details the picks do not name (arc a2)
+
+- **Surface**: the review sheet, Send's and Home's re-ask.
+- **Why ask**: RV4a's pick names the four parts and their order; the prototype it was drawn from differs from what ships in five details, each kept to today's wallet or to the form's own words.
+- **What ships now**, against the prototype:
+  - The title stays "Review", as today; the prototype titled the sheet "Check and send".
+  - The amount stays today's hero, the token amount alone; the prototype set "≈ $43.20" beside it.
+  - The fee row reads the form's line word for word (P133-07 = RS2), "≈ $0.027 (0.00214 FJ), private Fee Juice" on one line with the line's notes under it; the prototype set the method on a second line under the cost ("private Fee Juice under it", P131-10).
+  - The warning, when the fee names your account, is the form's warning box with no link; today's review offered "Get private Fee Juice" (the bridge) under its row, and the form's warning keeps its own fix, Pay it from private Fee Juice.
+  - A hand-added sponsor shows the form's sentence, "Nulo can't tell what this FPC publishes about you.", under the strip; today's review said "This FPC was added by hand. Nulo cannot tell what it publishes about you."
+- **Options for each**: keep what ships, or take the prototype's form (or today's link).
 
 ## Page 137: the owner's change to #1795 (P137-01)
 
@@ -124,4 +136,3 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
   - With a flagged-token banner or the token caveat in the token's section, the hover and press tint covers the row, not the whole section.
   - The bridge link is unleashed's testnet app on every network, as the fee card's link is today.
 - **Options**: keep each; or a second estimate for the fix; or arrows that move without picking (the menu's behaviour) at the cost of native radios; or a tint over the whole section.
-
