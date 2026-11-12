@@ -1,7 +1,7 @@
 ---
 plan: token-icons-build-3
 tier: light
-status: approved (panel); implementing arc 1
+status: completed
 issues: "none closed; page 136's three (b) answers. #625 (closed known limit) gets a data point"
 driver: claude-code
 claude_model: opus
@@ -13,6 +13,18 @@ base: dev 1593cf027
 trunk: dev
 post_implementation_standard: implementations-plan/README.md § Post-implementation standard at 1593cf027
 ---
+
+## Outcome
+
+- **Date:** 2026-11-12.
+- **Status:** completed. Ships in #1800, `feat(tokens): a listed import draws its picture, a long title cuts, a stopped default dims`, which carries this close-out; it lands on the owner's decision page with its captures.
+- **Shipped:** an import row whose chain and contract the signed list names draws the list's picture, for a record stamped with the active network (P136-03); a stopped default's picture dims with its symbol at 55 % (P136-02); an import title ends in an ellipsis where its spinner or × starts, on Chrome and Firefox at 360 and 240 px (P136-05), guarded in `type-roles.test.ts`, red on base.
+- **Gates (on `425e62dc9`, once, in order, retry 0):** lint, typecheck:all, test, test:components, test:all and check:plans green; audit:vue green on its one rerun after an unrelated 5 s timeout under host load; the four smoke specs green on Chrome (218 s) and Firefox (432 s).
+- **Deviations:** the Codex loop ran before Phase 4's gates (D7). No capture of a refused default (C2) or of a default's own import row: no run reached either; unit tests pin both. Rejected: a snapshot-update test (D6); re-seeding against the reaper (D8).
+- **Lessons:** none promoted; this plan's are in `lessons/`.
+- **Known limits:** #1801 (a dApp's long name in an in-flight import's subtitle). #625 got the import title's data point.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # token-icons-build-3: page 136's three (b) answers on Home's import and seed rows
 
