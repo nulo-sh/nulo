@@ -4,3 +4,4 @@
 - 2026-11-12: dual audit done (Codex reject, Opus conditional); fixes folded into plan.md and OWNER-ASKS.md.
 - 2026-11-12: final fresh Codex pass approve (after one verification round); plan committed for the orchestrator's approval.
 - 2026-11-12: arc 1 phase 1 gate pass (lint, typecheck:all, test: 1030 files green, price tests green).
+- 2026-11-12: arc 1 phase 2 gate pass (design test 570, lint after one format fix, typecheck:all, build-storybook). Deviation: placeCard engages only for inline popovers; the logs toolbar's block popover keeps today's placement path.

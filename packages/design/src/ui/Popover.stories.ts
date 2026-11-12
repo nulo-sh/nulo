@@ -11,6 +11,7 @@ const meta: Meta<typeof Popover> = {
 		width: { control: "text" },
 		height: { control: "text" },
 		disabled: { control: "boolean" },
+		inline: { control: "boolean" },
 	},
 	args: { open: true, side: "left", width: "240" },
 	render: (args) => ({
@@ -41,3 +42,17 @@ export const Closed: Story = { args: { open: false } }
 export const Disabled: Story = { args: { disabled: true } }
 export const RightSide: Story = { args: { side: "right" } }
 export const SizedHeight: Story = { args: { height: "200" } }
+
+/** A trigger in running text near the view's left edge: the card slides right to stay inside. */
+export const Inline: Story = {
+	args: { open: true, inline: true, width: "280" },
+	render: (args) => ({
+		components: { Popover },
+		setup: () => ({ args }),
+		template: `
+			<p style="padding: 24px 8px; max-width: 360px;">
+				Transfer 20 <Popover v-bind="args"><button style="border: 1px solid #555; background: transparent; color: inherit; font-family: inherit;">TST</button><template #content><div style="padding: 12px 14px;">The press, kept inside the view.</div></template></Popover> to 0x1e6f..7a8b
+			</p>
+		`,
+	}),
+}

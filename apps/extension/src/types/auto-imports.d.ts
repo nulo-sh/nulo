@@ -351,6 +351,7 @@ declare global {
   const legalSheetMayCover: typeof import('../utils/legal-sheet').legalSheetMayCover
   const listKeyOf: typeof import('../utils/token-flag').listKeyOf
   const listOwnAccountRow: typeof import('../utils/account-rows').listOwnAccountRow
+  const listedTokensOf: typeof import('../utils/token-icon').listedTokensOf
   const logCredentialFailure: typeof import('../utils/credential-refusal').logCredentialFailure
   const managers: typeof import('../utils/core').managers
   const markGetStarted: typeof import('../utils/get-started').markGetStarted
@@ -437,6 +438,7 @@ declare global {
   const readAmountText: typeof import('../utils/amount').readAmountText
   const readAppPicks: typeof import('../utils/fee-picks').readAppPicks
   const readBackupFile: typeof import('../utils/full-backup-helpers').readBackupFile
+  const readContract: typeof import('../utils/contract-level').readContract
   const readGetStarted: typeof import('../utils/get-started').readGetStarted
   const readHandback: typeof import('../utils/panel-handback').readHandback
   const readLiveness: typeof import('../utils/background-liveness').readLiveness
@@ -862,6 +864,9 @@ declare global {
   // @ts-ignore
   export type { ImportedContactV1, ImportedContactV2, ParsedExport } from '../utils/contacts-export-format'
   import('../utils/contacts-export-format')
+  // @ts-ignore
+  export type { ContractLevel, ContractReading, ListReader } from '../utils/contract-level'
+  import('../utils/contract-level')
   // @ts-ignore
   export type { AppServices } from '../utils/core'
   import('../utils/core')
@@ -1323,6 +1328,7 @@ declare module 'vue' {
     readonly legalSheetMayCover: UnwrapRef<typeof import('../utils/legal-sheet')['legalSheetMayCover']>
     readonly listKeyOf: UnwrapRef<typeof import('../utils/token-flag')['listKeyOf']>
     readonly listOwnAccountRow: UnwrapRef<typeof import('../utils/account-rows')['listOwnAccountRow']>
+    readonly listedTokensOf: UnwrapRef<typeof import('../utils/token-icon')['listedTokensOf']>
     readonly logCredentialFailure: UnwrapRef<typeof import('../utils/credential-refusal')['logCredentialFailure']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
     readonly markGetStarted: UnwrapRef<typeof import('../utils/get-started')['markGetStarted']>
@@ -1409,6 +1415,7 @@ declare module 'vue' {
     readonly readAmountText: UnwrapRef<typeof import('../utils/amount')['readAmountText']>
     readonly readAppPicks: UnwrapRef<typeof import('../utils/fee-picks')['readAppPicks']>
     readonly readBackupFile: UnwrapRef<typeof import('../utils/full-backup-helpers')['readBackupFile']>
+    readonly readContract: UnwrapRef<typeof import('../utils/contract-level')['readContract']>
     readonly readGetStarted: UnwrapRef<typeof import('../utils/get-started')['readGetStarted']>
     readonly readHandback: UnwrapRef<typeof import('../utils/panel-handback')['readHandback']>
     readonly readLiveness: UnwrapRef<typeof import('../utils/background-liveness')['readLiveness']>
