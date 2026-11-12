@@ -1,7 +1,7 @@
 ---
 plan: fee-window-1
 tier: light
-status: approved by the panel; arc 1 in build
+status: completed
 issues: none (page 116 names #1571, closed, about other questions; no `Closes`, no `Part of`)
 driver: claude-code
 claude_model: opus
@@ -13,6 +13,20 @@ base: dev 1593cf027
 trunk: dev
 post_implementation_standard: implementations-plan/README.md § Post-implementation standard at 1593cf027
 ---
+
+## Outcome
+
+- **Date:** 2026-11-12.
+- **Status:** completed. Ships in #1803, `feat(fee-window): fee row strikes the approved figure, send button takes two lines`, which carries this close-out. It lands only on the owner's approve of its captures; that merge closes this plan.
+- **Shipped:** P116-20 D in the raised-fee window's card: the block goes; the Fee row reads the new fee in `meta` (dollars in `fiat`), "was ~X FJ" struck through in the same `meta` role, an amber `--yellow` dot and the payer under the figures; the drawn row is `aria-hidden` and a hidden sentence in the old block's words is read. P116-21 A on its confirm: "Send" over "for ~X FJ ($Y)" in `caption`, wrapping instead of clipped, a 6 px inset holding 40 px until the line wraps (51 px at ~12.345678 FJ). Every `data-testid` stays; other footers unchanged.
+- **Gates (retry 0):** at `87701c186`, `lint`, `typecheck:all`, `test`, `test:components`, `audit:vue`, `test:all`, `check:plans` green; `tx-sendTx-default` through `e2e:agent` green on Chrome (225.0 s; base 174.1 s) and Firefox (328.8 s; base 255.8 s) at `f8c0d13d5`, the unchanged canary moving with host load; `execute-steps` smoke green on Chrome and Firefox. Later commits touch only captures and plan files.
+- **Deviations:** I1 did not hold at 400 px (Confirm is 176.9 px wide; page 116's 157 px was a 360 px viewport). The narrow e2e width is 320 px with the detail's computed `white-space` read at 560 px, not 359 px (D11). The footer test pins the `caption` class, not the inset, which the e2e height branches pin both ways.
+- **Left out:** none of the picks.
+- **Review:** plan audit conditional, five findings taken; final fresh pass approve on round 2; fix loop approve on round 2 (Audit verdicts).
+- **Lessons:** none promoted: `lessons.md` sits at its 8 KiB budget. Two gotchas stay in `lessons/phase-0.md`: vitest leaves `composes … from global` unresolved, and the design Button's 359 px breakpoint wraps every label.
+- **Known limits:** none.
+- **Open items:** none filed. A1 (`OWNER-ASKS.md`) goes to the orchestrator with the report and ships (a).
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # fee-window-1: the raised-fee window's fee row and its Send button, as page 116 picked them
 
@@ -89,7 +103,7 @@ Every phase closes with `bun run lint` and `bun run typecheck:all`, exit 0. Unit
 - **Network**: the confirm text stays `Send for ${pinnedFeeText(fee)}`. At two window widths set through the driver's `setViewport` (one where the detail wraps, one where it fits, both at or above the design's 359 px breakpoint), then restored with `null`: the detail has positive-size line boxes, all inside `fee-confirm-btn`'s padding box; the spec asserts one line at the wide width and more at the narrow one, then the button's height equals `fee-reject-btn`'s (±0.5 px) at the first and exceeds it at the second. Chrome and Firefox.
 - **Gate**: the change map's unit files green; unit gates.
 
-### Phase 3: gates, captures, PR
+### Phase 3: gates, captures, PR ✓
 
 - **Gates, once, in order, retry 0**: `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run --cwd apps/extension test:components`, `bun run audit:vue`, `bun run test:all`, `bun run check:plans`; `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/tx-sendTx-default.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`, each against its base duration. Smoke: no smoke spec opens this window; `execute-steps.test.ts` (the footer's only smoke reader, armed build `VITE_NULO_E2E_EXECUTE_FIXTURE=1`, run env `NULO_E2E_EXECUTE_FIXTURE=1`) through `bun run test:e2e -- execute-steps --retry=0` on Chrome then Firefox. No scenario is added, so no full-suite budget run.
 - **Captures** (D10), light and dark, into `~/.cache/nulo-backlog/fee-window-1/shots/` with `captions.json`: the window at 400 px with the row and the button at a short fee, at ~1.314209 FJ, at ~12.345678 FJ and with no price, plus the committed spec's natural `fee-window-raised`. Each caption records the button's measured height (40 px at the short fee) and states any figure substituted. `formatFeeJuice` has no length cap; `overflow-wrap: anywhere` makes the no-clip guarantee length-free, and ~12.345678 FJ is the longest case measured.
