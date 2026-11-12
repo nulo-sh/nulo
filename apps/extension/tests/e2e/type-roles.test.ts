@@ -874,7 +874,8 @@ async function expectTokenMetadata(page: Page): Promise<void> {
 	await closeByEscape(page, "token-metadata-id")
 }
 
-/** Home again with a token import in flight, written after the worker's last start, then New token from its menu. */
+/** Home again with a token import in flight, written after the worker's last start, then New token from
+ *  its menu, then a second import named with a 32-character symbol. */
 async function expectImportAndNewToken(page: Page, scope: ActivityScope): Promise<void> {
 	await seedTokenImport(page, scope, { id: IMPORT_ID, contract: IMPORT_CONTRACT })
 	await goAndSweep(page, "#/popup/general", "token-import-spinner", "Home, an import in flight", [
@@ -936,6 +937,7 @@ async function expectLongImportTitleCut(page: Page, scope: ActivityScope): Promi
 	await seedTokenImport(page, scope, { id: LONG_IMPORT_ID, contract: LONG_IMPORT_CONTRACT, title: LONG_SYMBOL })
 	// Home reads the journal as it mounts; a seeded row raises no event.
 	await navigateByHash(page, "#/popup/activity", 10_000)
+	await page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 10_000, polling: 100 }, sel("tokens-list"))
 	await navigateByHash(page, "#/popup/general", 10_000)
 	await page.waitForFunction(
 		(s: string) => document.querySelectorAll(s).length === 2,

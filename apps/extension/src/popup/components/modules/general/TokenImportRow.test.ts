@@ -75,14 +75,15 @@ describe("TokenImportRow", () => {
 		expect(w.find('[data-testid="token-import-subtitle"]').text()).toBe("Could not fetch decimals")
 	})
 
-	test("its title takes the same classes in flight and failed, so the cut holds in both", () => {
-		const title = (op: Record<string, unknown>) =>
+	test("its title takes the cut in flight and failed", () => {
+		const CUT = (TokenImportRow as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style.title
+		const cut = (op: Record<string, unknown>) =>
 			mount(TokenImportRow, { props: { op: { ...baseOp, title: "USDC", ...op } }, global: { stubs: STUBS } })
 				.get('[data-testid="token-import-title"]')
 				.classes()
-		const failed = title({ progress: { stage: "failed" }, error: { kind: "unknown", message: "", normalizedRaw: null }, terminalAt: 1 })
-		expect(failed).toEqual(title({}))
-		expect(failed).toHaveLength(2)
+				.includes(CUT)
+		const failed = { progress: { stage: "failed" }, error: { kind: "unknown", message: "", normalizedRaw: null }, terminalAt: 1 }
+		expect([typeof CUT, cut({}), cut(failed)]).toEqual(["string", true, true])
 	})
 
 	test("failed: subtitle falls back to a generic copy if the error envelope has no message", () => {

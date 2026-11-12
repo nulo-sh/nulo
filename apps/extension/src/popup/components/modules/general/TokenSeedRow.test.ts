@@ -62,7 +62,6 @@ describe("TokenSeedRow", () => {
 		const DIMMED = (TokenSeedRow as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style.dimmed
 		const dims = (status: string) => {
 			const w = mount(TokenSeedRow, { props: { entry: entry(status), icon: TEST_ICONS.USDC }, global: { stubs: STUBS } })
-			// null: the row shows no such element in this state.
 			const dimmed = (testid: string) => {
 				const el = w.find(`[data-testid="${testid}"]`)
 				return el.exists() ? el.classes().includes(DIMMED) : null

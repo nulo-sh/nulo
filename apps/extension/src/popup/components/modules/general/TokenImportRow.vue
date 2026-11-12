@@ -19,7 +19,7 @@ const props = defineProps({
 		type: Object,
 		required: true,
 	},
-	/** The signed list's picture for this import's chain and contract; one the list does not name leaves initials. */
+	/** The signed list's picture for this import's chain and contract, when the list names them. */
 	icon: String,
 })
 
