@@ -3,3 +3,8 @@
 .loading_block {
 	min-height: 37px;
 }
+
+/* Both flex ancestors need min-width: 0 to let clipped text yield to the trailing column. */
+.lead {
+	min-width: 0;
+}

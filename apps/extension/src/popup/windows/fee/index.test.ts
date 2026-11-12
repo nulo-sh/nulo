@@ -6,6 +6,7 @@ import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { captureWindowDocument } from "@/utils/window-document"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
+import type { TokenMarkLookup } from "@/utils/token-icon"
 
 // ── The request as the dApp's wire carried it: 32-byte hex fields, a CAIP account. ──
 
@@ -150,7 +151,7 @@ const STUBS = {
 	},
 	// The card's own rendering is pinned in its tests; here it shows which request it read and its fee slot.
 	OperationCard: {
-		props: ["op", "approvedAuthwits", "decodedAuthwits", "decodedGrants", "tokens"],
+		props: ["op", "approvedAuthwits", "decodedAuthwits", "decodedGrants", "tokens", "marks"],
 		template: `<div data-testid="execute-op-item" :data-op-kind="op.kind" :data-account="op.accountAddress"
 			:data-authwits="(approvedAuthwits ?? []).map((a) => a.messageHash).join(',')"
 			:data-decoded="[...(decodedAuthwits?.keys() ?? [])].join(',')"
@@ -226,13 +227,15 @@ describe("the fee question window", () => {
 		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ ($0.042)")
 		expect(confirm().text()).toBe("Send for ~0.021 FJ ($0.042)")
 		expect(byId("dapp-approval-confirm-detail").text()).toBe("($0.042)")
-		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
+		// The card's quote and the summary's marks. The counts leave out the real client's read on its
+		// first Ready: this fake fires onConnected only through reconnect().
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
 		priceFake.reconnect()
 		await flushPromises()
-		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([4, 0])
 	})
 
-	test("while the request's operation resolves, Confirm already names the new fee, off and with no price read", async () => {
+	test("while the request's operation resolves, Confirm already names the new fee, off, and only the list is read", async () => {
 		priceFake.reset(2)
 		accountReadGate = new Promise(() => {})
 		await opened()
@@ -240,24 +243,46 @@ describe("the fee question window", () => {
 		expect(confirm().text()).toBe("Send for ~0.021 FJ")
 		expect(byId("dapp-approval-confirm-detail").exists()).toBe(false)
 		expect(confirm().attributes("disabled")).toBeDefined()
-		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
 	})
 
 	test.each([
 		["still checking its session", { isSessionChecked: false, isLogined: true }],
 		["locked", { isSessionChecked: true, isLogined: false }],
-	])("a window %s reads no price; one signed in reads the cache once, from its fee card", async (_case, session) => {
-		priceFake.reset(2)
-		Object.assign(appStoreMock, session)
-		await opened()
-		expect(byId("fee-raised-card").exists()).toBe(false)
-		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
+	])(
+		"a window %s reads no price; one signed in reads the cache twice, its fee card's quote and the list's marks",
+		async (_case, session) => {
+			priceFake.reset(2)
+			Object.assign(appStoreMock, session)
+			await opened()
+			expect(byId("fee-raised-card").exists()).toBe(false)
+			expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
 
-		w!.unmount()
-		Object.assign(appStoreMock, { isSessionChecked: true, isLogined: true })
+			w!.unmount()
+			Object.assign(appStoreMock, { isSessionChecked: true, isLogined: true })
+			await opened()
+			expect(byId("fee-raised-card").exists()).toBe(true)
+			expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
+		},
+	)
+
+	test("the summary's marks read the signed list on the request's chain, the badge included, and a closed window's reader hears nothing more", async () => {
+		priceFake.icons = { [`1:${TOKEN}`]: "data:image/svg+xml;base64,PHN2Zy8+" }
+		priceFake.flagged = [`1:${TOKEN}`]
 		await opened()
-		expect(byId("fee-raised-card").exists()).toBe(true)
-		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
+		const { iconFor, isFlagged } = w!.findComponent(STUBS.OperationCard).props("marks") as TokenMarkLookup
+		expect([iconFor({ chainId: 1, contract: TOKEN }), isFlagged({ chainId: 1, contract: TOKEN })]).toEqual([
+			priceFake.icons[`1:${TOKEN}`],
+			true,
+		])
+		expect([iconFor({ chainId: 2, contract: TOKEN }), isFlagged({ chainId: 2, contract: TOKEN })]).toEqual([undefined, false])
+		const reads = priceFake.reads()
+		w!.unmount()
+		w = undefined
+		priceFake.reconnect()
+		priceFake.broadcast()
+		await flushPromises()
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([reads, 0])
 	})
 
 	test("the authorizations the approval window listed are listed again, each decoded on its consumer", async () => {

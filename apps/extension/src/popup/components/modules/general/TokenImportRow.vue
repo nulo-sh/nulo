@@ -11,6 +11,7 @@
  * window so the user sees the reason, then auto-dismisses.
  */
 
+import TokenMark from "@/components/composite/general/TokenMark.vue"
 import { dashIfBlank, trimAddress } from "@/utils/string"
 
 const props = defineProps({
@@ -37,6 +38,8 @@ const title = computed(() => {
 })
 
 const titleIsAddress = computed(() => !hasName.value && Boolean(shortAddress.value))
+/** Initials come only from a title that names the token: a shortened contract's would read as a name. */
+const markSymbol = computed(() => (hasName.value ? props.op.title : ""))
 
 const subtitle = computed(() => {
 	if (isFailed.value) {
@@ -49,9 +52,12 @@ const subtitle = computed(() => {
 
 <template>
 	<Flex align="center" justify="between" :class="[$style.row, isFailed && $style.failed]" data-testid="token-import-row">
-		<Flex direction="column" gap="2">
-			<span :class="titleIsAddress ? $style.address : $style.symbol" data-testid="token-import-title">{{ title }}</span>
-			<span :class="$style.subtitle" data-testid="token-import-subtitle">{{ subtitle }}</span>
+		<Flex align="center" gap="12" :class="$style.lead">
+			<TokenMark :symbol="markSymbol" :size="32" :badge="false" />
+			<Flex direction="column" gap="2" :class="$style.lead">
+				<span :class="titleIsAddress ? $style.address : $style.symbol" data-testid="token-import-title">{{ title }}</span>
+				<span :class="$style.subtitle" data-testid="token-import-subtitle">{{ subtitle }}</span>
+			</Flex>
 		</Flex>
 
 		<Flex v-if="isInFlight" align="center" gap="6" data-testid="token-import-spinner">
@@ -69,6 +75,10 @@ const subtitle = computed(() => {
 
 .failed {
 	opacity: 0.7;
+}
+
+.lead {
+	composes: lead from "./token-row.module.css";
 }
 
 .symbol {

@@ -83,6 +83,7 @@ import { skipUnlessListPrices } from "./fixtures/token-list"
 import {
 	type ActivityScope,
 	readActivityScope,
+	secondToken,
 	seedJournalRecord,
 	seedPublicReceipt,
 	seedTokenImport,
@@ -470,6 +471,8 @@ const VISIBLE = { visible: true, timeout: 15_000 } as const
 const TX_HASH = `0x1e${"5e".repeat(31)}`
 /** About 123 trillion of the scope's token: at $1, a figure Home's fit draws only below full size. */
 const longBalance = (decimals: number) => `123456789012345${"678901234567890123456789".slice(0, decimals)}`
+/** $99,999,999,999,999.99 at $1 per token: this fixture's measured two-line boundary. */
+const edgeBalance = (decimals: number) => `${"9".repeat(16)}${"0".repeat(decimals - 2)}`
 /** Wire-shaped: 0x and 64 hex, the x coordinate of a Grumpkin point. */
 const RECIPIENT = "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a9459b"
 const BLOCK = { number: 42, hash: `0x0b${"4e".repeat(31)}` }
@@ -543,13 +546,29 @@ async function expectPageClean(page: Page, label: string, states: readonly SiteS
 	if (states.length === 0) expect(await readHexOutsideMono(page), `${label}: hex outside a mono role`).toEqual([])
 }
 
-async function readTokenFiat(page: Page): Promise<{ text: string; lines: number }> {
-	return page.$eval(sel("token-fiat"), (el) => {
-		const range = document.createRange()
-		range.selectNodeContents(el)
-		const tops = [...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))
-		return { text: el.textContent?.trim() ?? "", lines: new Set(tops).size }
-	})
+type TokenRowFigure = { text: string; lines: number; mark: { width: number; gap: number } }
+
+async function readTokenFiat(page: Page, symbol: string): Promise<TokenRowFigure> {
+	return page.$$eval(
+		sel("tokens-card"),
+		(rows, wanted: string) => {
+			const row = rows.find((r) => r.querySelector('[data-testid="token-symbol"]')?.getAttribute("data-symbol") === wanted)
+			const fiat = row?.querySelector('[data-testid="token-fiat"]')
+			const mark = row?.querySelector('[data-testid="token-mark"]')?.getBoundingClientRect()
+			const text = row?.querySelector('[data-testid="token-symbol"]')?.getBoundingClientRect()
+			if (!fiat || !mark || !text) throw new Error(`no priced ${wanted} row with its mark`)
+			const range = document.createRange()
+			range.selectNodeContents(fiat)
+			const tops = [...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))
+			const r1 = (n: number) => Math.round(n * 10) / 10
+			return {
+				text: fiat.textContent?.trim() ?? "",
+				lines: new Set(tops).size,
+				mark: { width: r1(mark.width), gap: r1(text.left - mark.right) },
+			}
+		},
+		symbol,
+	)
 }
 
 type HoldingsHeader = { align: string; metaLines: number; metaInsideTotal: boolean; metaRightGap: number }
@@ -663,11 +682,11 @@ async function expectButtons(page: Page, ...testids: ButtonTestid[]): Promise<vo
 }
 
 /**
- * Seeds a token row, its long private balance, a quote, a transfer to an outside address in a
- * block, a public receipt, a send's failed record and an authwit of every kind but
- * the encoded call, then restarts the background: the balance service reads its token map only as
- * it starts. The caller holds the Testnet RPC refused, or a balance refresh writes the real zero
- * over the seed.
+ * Seeds a token row with its long private balance, a second at the two-line edge, their quotes, a
+ * transfer to an outside address in a block, a public receipt, a send's failed record and an
+ * authwit of every kind but the encoded call, then restarts the background: the balance service
+ * reads its token map only as it starts. The caller holds the Testnet RPC refused, or a balance
+ * refresh writes the real zero over the seed.
  */
 async function openSeededHome(ctx: ExtensionContext): Promise<{ page: Page; scope: ActivityScope; receipt: string }> {
 	const seeder = await openHome(ctx)
@@ -679,7 +698,10 @@ async function openSeededHome(ctx: ExtensionContext): Promise<{ page: Page; scop
 	const scope = await readActivityScope(seeder, { priced: true })
 	const priceId = scope.token.priceId
 	if (priceId === undefined) throw new Error("the held list prices no token on this chain")
+	const second = secondToken(scope)
+	if (second.priceId === undefined) throw new Error("the second listed token has no price id")
 	await seedTokenRow(seeder, scope, 1)
+	await seedTokenRow(seeder, scope, 2, { token: second })
 	await seedTransaction(seeder, scope, { hash: TX_HASH, amount: "1500000", to: RECIPIENT, block: BLOCK, chunkNonce: CHUNK_NONCE })
 	const receipt = await seedPublicReceipt(seeder, scope, { tokenId: 1, amount: "2500000", txHash: RECEIPT_TX_HASH })
 	await seedJournalRecord(seeder, scope, {
@@ -702,8 +724,20 @@ async function openSeededHome(ctx: ExtensionContext): Promise<{ page: Page; scop
 			privateBalance: longBalance(scope.token.decimals),
 			updatedAt: Date.now(),
 		}),
+		"nulo:core:token-balances@2": JSON.stringify({
+			id: 2,
+			token: 2,
+			account: scope.account,
+			profileId: scope.profileId,
+			chainId: scope.chainId,
+			contract: second.contract,
+			publicBalance: "0",
+			privateBalance: edgeBalance(second.decimals),
+			updatedAt: Date.now(),
+		}),
 		"nulo:core:token-prices": JSON.stringify({
 			[priceId]: { coingeckoId: priceId, usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null },
+			[second.priceId]: { coingeckoId: second.priceId, usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null },
 		}),
 	})
 	// Firefox keeps its event page alive while an extension page is open.
@@ -926,10 +960,13 @@ test("a seeded wallet's Home, Holdings, Activity, its tx, receipt and send detai
 		// lands: the sweep waits for it, or the narrow pass reads the name as gone.
 		await page.waitForSelector(sel("token-fiat"), VISIBLE)
 		await expectPageClean(page, "Home", [["overlay:Header", ""]])
-		// Past $1T the figure outgrows a 160px cap onto a third line; its own cap keeps it on two.
-		const fiat = await readTokenFiat(page)
-		expect(fiat.text).toMatch(/^≈ \$123,456,789,012,345\./)
-		expect.soft(fiat.lines, `the token row's dollar figure: ${JSON.stringify(fiat)}`).toBeLessThanOrEqual(2)
+		const large = await readTokenFiat(page, scope.token.symbol)
+		const edge = await readTokenFiat(page, secondToken(scope).symbol)
+		expect(large.text).toMatch(/^≈ \$123,456,789,012,345\./)
+		expect(edge.text).toBe("≈ $99,999,999,999,999.99")
+		expect.soft(large.lines, `the $123T row's dollar figure: ${JSON.stringify(large)}`).toBe(3)
+		expect.soft(edge.lines, `the $99.99T row's dollar figure: ${JSON.stringify(edge)}`).toBe(2)
+		for (const { mark } of [large, edge]) expect.soft(mark).toEqual({ width: expect.closeTo(32, 0), gap: expect.closeTo(12, 0) })
 		await expectRoleAt(page, "holdings-section-label", "label-section")
 		await expectButtons(page, "tokens-menu-trigger")
 		// A menu is placed when it opens, so it is opened at the narrow width.

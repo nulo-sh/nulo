@@ -6,8 +6,8 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import type { PriceState } from "@/wallet/services/price/spec"
 import TokenCard from "./TokenCard.vue"
 import { boundAttr, declarationsOf, elementByTestid, parseSource, walkElements } from "../../../../../scripts/type-roles/source-scan"
-import { flaggedKeysOf } from "@/utils/token-flag"
-import { TEST_FLAGGED, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { flaggedKeysOf, listKeyOf } from "@/utils/token-flag"
+import { TEST_FLAGGED, TEST_ICONS, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 // TokenCard imports useAppStore but never reads from it. The store body calls
 // syncedRef which touches chrome.storage.local — not stubbed in vitest.setup.ts.
@@ -16,19 +16,28 @@ vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({}),
 }))
 
-// Controllable price feed: tests set `mockQuotes` and `mockFlagged` before mounting.
+// Controllable price feed: tests set `mockQuotes`, `mockFlagged` and `mockIcons` before mounting.
 let mockQuotes: PriceState = {}
 let mockFlagged: string[] = []
+let mockIcons: Record<string, string> = {}
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: mockFlagged })),
-			refreshIfStale: vi
-				.fn()
-				.mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: mockFlagged })),
+			getQuotes: vi.fn(async () => ({
+				quotes: {},
+				pricedTokens: TEST_PRICED_TOKENS,
+				flaggedTokens: mockFlagged,
+				tokenIcons: mockIcons,
+			})),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({
+				quotes: mockQuotes,
+				pricedTokens: TEST_PRICED_TOKENS,
+				flaggedTokens: mockFlagged,
+				tokenIcons: mockIcons,
+			})),
 		}
 	}),
 }))
@@ -432,6 +441,43 @@ describe("TokenCard — R5 layout (subtitle left, private/public split right)", 
 	})
 })
 
+describe("TokenCard — the token's mark", () => {
+	const mark = (w: ReturnType<typeof factory>) => w.get('[data-testid="token-mark"]')
+	const badges = (w: ReturnType<typeof factory>) => mark(w).findAll('[data-name="warning"]').length
+
+	test("a listed token leads with the list's picture at 32 px; a token not on the list with its initials", async () => {
+		mockQuotes = {}
+		mockIcons = { [listKeyOf(TEST_FLAGGED.chainId, TEST_USDC)]: TEST_ICONS.USDC }
+		try {
+			const listed = factory({ updatedAt: 1 }, { chainId: TEST_FLAGGED.chainId, contract: TEST_USDC, symbol: "USDC" })
+			const custom = factory({ updatedAt: 1 }, { chainId: TEST_FLAGGED.chainId, symbol: "mine" })
+			await flushPromises()
+			expect(mark(listed).attributes()).toMatchObject({ "data-kind": "logo", "aria-hidden": "true" })
+			expect(mark(listed).attributes("style")).toContain("width: 32px")
+			expect(mark(listed).get("img").attributes("src")).toBe(TEST_ICONS.USDC)
+			expect(mark(custom).attributes("data-kind")).toBe("initials")
+			expect(mark(custom).text()).toBe("MI")
+			expect(badges(listed) + badges(custom)).toBe(0)
+			expect(mark(listed).element.nextElementSibling?.querySelector('[data-testid="token-symbol"]')).not.toBeNull()
+		} finally {
+			mockIcons = {}
+		}
+	})
+
+	test("a token the list flags carries the badge on its mark", async () => {
+		mockQuotes = {}
+		mockFlagged = flaggedKeysOf([TEST_FLAGGED])
+		try {
+			const w = factory({ updatedAt: 1 }, { chainId: TEST_FLAGGED.chainId, contract: TEST_FLAGGED.address, symbol: "USDC" })
+			await flushPromises()
+			expect(mark(w).attributes("data-kind")).toBe("initials")
+			expect(badges(w)).toBe(1)
+		} finally {
+			mockFlagged = []
+		}
+	})
+})
+
 describe("TokenCard — the subtitle's overflow", () => {
 	const parsed = parseSource("apps/extension/src/popup/components/modules/general/TokenCard.vue")
 
@@ -452,5 +498,18 @@ describe("TokenCard — the subtitle's overflow", () => {
 		if (parsed.template)
 			walkElements(parsed.template, (node) => void (node.tag === "span" && subtitles.push(boundAttr(node, "class") ?? "")))
 		expect(subtitles.filter((cls) => cls.includes("$style.fiat"))).toEqual(["[$style.fiat, $style.fiat_figure]", "$style.fiat"])
+	})
+
+	test("each of Home's token rows puts its mark and its text column in the rows' shared lead, which may shrink below its content", () => {
+		const dir = "apps/extension/src/popup/components/modules/general"
+		expect(declarationsOf(parseSource(`${dir}/token-row.module.css`), ".lead")).toEqual({ "min-width": "0" })
+		for (const row of ["TokenCard", "TokenSeedRow", "TokenImportRow"]) {
+			const source = parseSource(`${dir}/${row}.vue`)
+			expect(declarationsOf(source, ".lead"), row).toEqual({ composes: 'lead from "./token-row.module.css"' })
+			const leads: (string | undefined)[] = []
+			if (source.template)
+				walkElements(source.template, (node) => void (boundAttr(node, "class") === "$style.lead" && leads.push(node.tag)))
+			expect(leads, row).toEqual(["Flex", "Flex"])
+		}
 	})
 })

@@ -607,6 +607,10 @@ export const NARROW_ACCEPTED: readonly { testid: string; why: string }[] = [
 		why: "a row's chips wrapped under its title below 359 px leave their separator left of the row's clip",
 	},
 	{ testid: "identity-sep", why: "a dApp window's network goes under its account below 359 px, with no separator between them" },
+	{
+		testid: "token-name",
+		why: "an unpriced token's contract-supplied name keeps its row's ellipsis where the mark and balance leave too little room; the symbol stays above it, and Show metadata names it whole",
+	},
 ]
 
 export type TextFate = { fate: "cut" | "gone" | "split"; testid: string | null; text: string }

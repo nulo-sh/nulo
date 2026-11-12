@@ -7,6 +7,7 @@
 
 /** Components */
 import { Skeleton } from "@nulo/design"
+import TokenMark from "@/components/composite/general/TokenMark.vue"
 
 /** Utils */
 import { isSeedWorking } from "./home-slots"
@@ -16,6 +17,8 @@ const props = defineProps({
 		type: Object,
 		required: true,
 	},
+	/** The signed list's picture for this entry; a list without one leaves its initials. */
+	icon: String,
 })
 const emit = defineEmits(["retry"])
 
@@ -33,10 +36,13 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 		:aria-busy="isWorking || undefined"
 		:class="$style.row"
 	>
-		<Flex direction="column" gap="2">
-			<span :class="[$style.symbol, !isWorking && $style.dimmed]">{{ entry.symbol }}</span>
-			<span v-if="isWorking" :class="$style.sub">{{ entry.displayName }}</span>
-			<span v-else :class="$style.reason" data-testid="token-seed-reason">{{ reason }}</span>
+		<Flex align="center" gap="12" :class="$style.lead">
+			<TokenMark :symbol="entry.symbol" :icon="icon" :size="32" :badge="false" />
+			<Flex direction="column" gap="2" :class="$style.lead">
+				<span :class="[$style.symbol, !isWorking && $style.dimmed]">{{ entry.symbol }}</span>
+				<span v-if="isWorking" :class="$style.sub">{{ entry.displayName }}</span>
+				<span v-else :class="$style.reason" data-testid="token-seed-reason">{{ reason }}</span>
+			</Flex>
 		</Flex>
 
 		<Flex v-if="isWorking" direction="column" align="end" justify="center" gap="2" :class="$style.loading_block">
@@ -76,6 +82,10 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 .reason {
 	composes: type--caption from global;
 	color: var(--txt-danger);
+}
+
+.lead {
+	composes: lead from "./token-row.module.css";
 }
 
 .loading_block {

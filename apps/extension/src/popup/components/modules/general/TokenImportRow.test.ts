@@ -20,6 +20,16 @@ const baseOp = {
 }
 
 describe("TokenImportRow", () => {
+	test("leads with grey initials of its title at 32 px, never a picture; a title that names no letter, or none yet, gets the mark's dash", () => {
+		const mark = (title: string | undefined) =>
+			mount(TokenImportRow, { props: { op: { ...baseOp, title } }, global: { stubs: STUBS } }).get('[data-testid="token-mark"]')
+		const named = mark("USDC")
+		expect(named.attributes()).toMatchObject({ "data-kind": "initials", "aria-hidden": "true" })
+		expect(named.attributes("style")).toContain("width: 32px")
+		expect([named.text(), named.find("img").exists()]).toEqual(["US", false])
+		for (const title of [undefined, "", "   ", "…!"]) expect([title, mark(title).text()]).toEqual([title, "—"])
+	})
+
 	test("in-flight: renders truncated contract address as title and the configured subtitle", () => {
 		const w = mount(TokenImportRow, { props: { op: baseOp }, global: { stubs: STUBS } })
 		expect(w.find('[data-testid="token-import-title"]').text()).toBe("0x1234…5678")

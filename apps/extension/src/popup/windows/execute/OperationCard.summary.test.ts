@@ -727,8 +727,7 @@ describe("OperationCard — what leaves the account opens the fee section", () =
 
 describe("OperationCard — a step's chevron ends its sentence beside the last word", () => {
 	const TAIL = (SendTxSummary as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style.chevron_tail
-	/** Per step sentence: the box around its chevron, that box's text, and whether the word before it
-	 *  touches it. Vue leaves a comment for a branch not taken and empty text anchors around a fragment. */
+	/** Vue inserts comment nodes for inactive branches and empty text anchors around fragments. */
 	const tails = (w: VueWrapper) =>
 		w.findAll('[data-testid="execute-op-summary-call"]').map((step) => {
 			const line = step.find('[data-testid="execute-op-call-line"]')

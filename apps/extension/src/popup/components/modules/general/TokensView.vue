@@ -350,13 +350,16 @@ onBeforeUnmount(() => {
 			<template v-for="row in shownSlots" :key="row.key">
 				<TokenCard v-if="row.kind === 'token'" :tokenBalance="row.tb" />
 				<TokenImportRow v-else-if="row.kind === 'import'" :op="row.op" />
-				<TokenSeedRow v-else :entry="row.entry" @retry="retryDefault(row.entry)" />
+				<TokenSeedRow v-else :entry="row.entry" :icon="prices.iconFor(row.entry)" @retry="retryDefault(row.entry)" />
 			</template>
 			<template v-if="showGhostRows">
 				<div v-for="n in GHOST_ROWS" :key="n" data-testid="tokens-skeleton-row" aria-hidden="true" :class="$style.ghost_row">
-					<Flex direction="column" gap="2">
-						<Skeleton :width="52" :height="14" />
-						<Skeleton :width="84" :height="11" />
+					<Flex align="center" gap="12">
+						<Skeleton :width="32" :height="32" :class="$style.mark_skeleton" />
+						<Flex direction="column" gap="2">
+							<Skeleton :width="52" :height="14" />
+							<Skeleton :width="84" :height="11" />
+						</Flex>
 					</Flex>
 					<Flex direction="column" align="end" justify="center" gap="2" :class="$style.loading_block">
 						<Skeleton :width="64" :height="13" />
@@ -424,6 +427,10 @@ onBeforeUnmount(() => {
 
 	min-height: 32px;
 	padding: 8px 0;
+}
+
+.mark_skeleton {
+	border-radius: 50%;
 }
 
 .loading_block {
