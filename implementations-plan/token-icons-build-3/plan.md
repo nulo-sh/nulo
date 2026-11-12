@@ -73,19 +73,19 @@ Page 136 approved #1792 and answered its five build questions. B2, B1 and B4 are
 
 `bun run lint` and `bun run typecheck:all` close every phase. Unit gates: `bun run test` and `bun run --cwd apps/extension test:components`, exit 0. Armed build: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 VITE_NULO_E2E_EXECUTE_FIXTURE=1 bun run build:<chrome|firefox>` in `apps/extension`, from a bash script. Smoke: `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_EXECUTE_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- $SPECS --retry=0`, with `NULO_E2E_BROWSER=firefox` for Firefox. `SPECS` = `tests/e2e/type-roles.test.ts tests/e2e/rows.test.ts tests/e2e/token-list.test.ts tests/e2e/home-links.test.ts`, the smoke specs that render Home's token rows, by exact file (a bare `rows` also matches `send-outcome-rows`).
 
-### Phase 1: B4's guard, red on base, then the cut
+### Phase 1: B4's guard, red on base, then the cut ✓
 
 - **Change map**: `tests/e2e/helpers/activity-seeds.ts` (`seedTokenImport` takes an optional `title`), `tests/e2e/type-roles.test.ts` (`expectImportAndNewToken`), then `TokenImportRow.vue` (+ test).
 - **Tests**: e2e, at the end of the existing step, after its title-less sweep and the New token popup (that sweep's identifier site holds every visible `token-import-title` to `meta`, which a named title is not): seed a second import in flight titled "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345", route away from Home and back so the view reads it, and require visible, non-zero title and spinner boxes. At the popup's width and at 240 px, its painted text (the text's range, clipped by the title's own box when the title clips) ends at or before the spinner's left edge and inside the row, and the title draws an ellipsis (`text-overflow: ellipsis`, `scrollWidth > clientWidth`). The title-less row's address stays whole (success control). Estimated cost: about 3 s per browser; measured in Phase 4. Component: the title takes the same classes in flight and failed, so the cut holds on both.
 - **Gate**: build base (dev's `src`, the new specs) for Chrome and Firefox; run `SPECS` on each. Pass: type-roles is red only at the new assertion; the other three are green, with their wall-clock recorded as "before". Then the cut, and the unit gates green.
 
-### Phase 2: B2, the list's picture on a listed import row
+### Phase 2: B2, the list's picture on a listed import row ✓
 
 - **Change map**: `TokenImportRow.vue`, `TokensView.vue` (+ tests).
 - **Tests**: `TokenImportRow`: with `icon` the mark is the logo, titled or not; without it, the initials and dash cases as today. `TokensView`: a default's import slot gets its entry's picture; a user import at a listed contract stamped with the active network gets it; one at an unlisted contract, and an unstamped one at the listed contract, get none.
 - **Gate**: unit gates green.
 
-### Phase 3: B1, the stopped default's picture dims with its symbol
+### Phase 3: B1, the stopped default's picture dims with its symbol ✓
 
 - **Change map**: `TokenSeedRow.vue` (+ test).
 - **Tests**: failed and rejected: the mark and the symbol carry the same `.dimmed` class, and the reason and RETRY do not. Working (pending, seeding, seeded): neither carries it (success control).
@@ -122,10 +122,13 @@ Cite `implementations-plan/README.md` § Post-implementation standard at 1593cf0
 | D4 | B4's cut point | agree | Where the title meets the trailing control, with no px cap and no gap. The token row's 160 px cap would cut a title that fits at 360 px. |
 | D5 | B4's test layer and placement | agree on e2e; reject seeding beside the title-less sweep, whose identifier site holds every import title to `meta` | E2e after that sweep, in flight only, with the clipped-range measurement and visible boxes. The failed row (30 s on Home) is checked by Phase 4's measurement on both browsers, not a permanent sweep. |
 | D6 | B2's test layer | agree; add wrong-chain and unstamped controls | Unit, with the unstamped control. `rows.test.ts` already proves the worker's pictures reach the popup. A snapshot-update test was rejected: `usePrices.test.ts` pins how a snapshot is adopted. |
+| D7 | Where the Codex loop runs (implementation) | round 1 asked for the head smoke runs as a condition | Before Phase 4's gates, once every phase's own gate was green, so the full gates run once on the final head. |
+| D8 | Re-seed the title-less import so the reaper's 2-minute limit cannot fail it (Opus) | stays rejected in round 2 | Rejected: the check runs about 20 s after that seed, and a line that only outruns a timer patches a clock. |
 
 ## Audit verdicts
 
 - **Codex, plan audit** (session `01a1d04b`, gpt-6.1-sol, high, read-only): conditional approve. Accepted: D1's stamp guard (F2 corrected), D5's order, the 95-character title (now 90), the exact spec files, I1's trigger order, the runtime estimate, the failed state's measurement as a pass criterion, C1's line (16, not 14). Rejected: the snapshot-update test (D6). Its other positions agree with D2 to D4.
+- **Fix loop** (Codex session `01a1d070`; one Opus `general-purpose` review beside round 1): round 1 conditional (the route away from Home now waits for its list to leave; a redundant comment cut). Opus: no product bug; the cut test reads its module class; two comments corrected; D8 rejected; a dApp's long name in an import's subtitle is outside the picks (a closed `known-limit` issue at close-out). Round 2 (`ae5252991`): no material finding, conditional on the head smoke runs.
 - **Codex, final fresh pass** (session `01a1d054`, gpt-6.1-sol, high, read-only): **approve**. No blocking finding; D1 to D6 and the snapshot-update rejection stand. Folded in: recon's `agent.sh` line, and I1's capture registers on the list's chain.
 
 ## Seeds
