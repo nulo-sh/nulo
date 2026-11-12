@@ -131,6 +131,27 @@ describe("composite/ContractChip", () => {
 		)
 	})
 
+	test("the PrivateFPC reads by its name with the solid seal, and its card says Nulo knows it", async () => {
+		const w = mountChip(contractChipOf({ level: "nulo", source: "fpc" }, OTHER))
+		expect(chip(w).attributes("aria-label")).toBe("Private Fee Juice, Nulo verified")
+		expect(w.find('[data-testid="token-mark"]').exists()).toBe(false)
+		await press(w)
+		expect(inPanel("contract-chip-level")[0].textContent).toBe("Nulo verified")
+		expect(inPanel("contract-chip-title")[0].textContent).toBe("Private Fee Juice")
+		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual([
+			"Nulo knows this contract. Knowing it isn't a promise that it's safe.",
+		])
+	})
+
+	test("a pending card names no level and says Nulo is still checking, above the short address", async () => {
+		const w = mountChip(contractChipOf({ level: "pending" }, OTHER))
+		await press(w)
+		expect(inPanel("contract-chip-level")).toHaveLength(0)
+		expect(inPanel("contract-chip-title")).toHaveLength(0)
+		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual(["Nulo is still checking this contract."])
+		expect(inPanel("contract-chip-short-address")[0].textContent).toBe("0x2d8fb6..ff50")
+	})
+
 	test("an Aztecscan verified card says the code is verified and who runs it is not checked", async () => {
 		const w = mountChip(contractChipOf({ level: "scan", name: "Router" }, OTHER))
 		await press(w)

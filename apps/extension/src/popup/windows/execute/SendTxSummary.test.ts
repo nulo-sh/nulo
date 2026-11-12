@@ -35,6 +35,8 @@ import {
 	USDC_TOKEN,
 	VAULT,
 } from "./execute.fixture"
+import type { ChipModel } from "@/components/composite/contract-chip"
+import ContractChip from "@/components/composite/ContractChip.vue"
 import OperationCard from "./OperationCard.vue"
 
 vi.mock("@/utils/core", () => ({ managers: { contact: { getContactByAddress: vi.fn(async () => null) } } }))
@@ -210,6 +212,19 @@ describe("execute/SendTxSummary — the contract chip", () => {
 			unverified(VAULT),
 		])
 		expect(sentenceOf(w, 1)).toEqual([`Transfer (private) 100000 base units ${trimAddress(USDC)}`, TRANSFER_LINE])
+	})
+
+	test("the name a decoded contract's code gives it reaches its unverified press, for a call and for an authorization; a Nulo verified press never repeats it", async () => {
+		const w = await mountLine(readerOf([usdcListedOn(CHAIN)]))
+		const unchecked = "Nulo hasn't checked this contract."
+		const listed = ["Nulo knows this contract. Knowing it isn't a promise that it's safe.", "Nulo names it from its token list."]
+		expect(w.findAllComponents(ContractChip).map((chip) => (chip.props("model") as ChipModel).lines)).toEqual([
+			[unchecked, "The name Hub came from an app. Nulo hasn't checked it."],
+			listed,
+			[unchecked],
+			listed,
+			[unchecked, "The name Vault came from an app. Nulo hasn't checked it."],
+		])
 	})
 
 	test("one unreadable call among readable ones: one line after the steps names its step, and no advice, open or not", async () => {

@@ -6,7 +6,7 @@ import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { captureWindowDocument } from "@/utils/window-document"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
-import type { TokenMarkLookup } from "@/utils/token-icon"
+import type { ListReader } from "@/utils/contract-level"
 
 // ── The request as the dApp's wire carried it: 32-byte hex fields, a CAIP account. ──
 
@@ -65,7 +65,7 @@ const tokenUpdated = {
 const decodeGrantsMock = vi.fn(async (_interactionId: string): Promise<unknown[]> => [])
 /** Set, the request's account read waits on it, so the operation stays unresolved. */
 let accountReadGate: Promise<void> | undefined
-const appStoreMock = reactive({ isSessionChecked: true, isLogined: true, pageAwaitingAuth: "" })
+const appStoreMock = reactive({ isSessionChecked: true, isLogined: true, pageAwaitingAuth: "", defaultExplorer: "aztecscan" })
 
 vi.mock("@/composables/useDappInteractionPayload", () => ({
 	useDappInteractionPayload: vi.fn(() => ({
@@ -151,7 +151,7 @@ const STUBS = {
 	},
 	// The card's own rendering is pinned in its tests; here it shows which request it read and its fee slot.
 	OperationCard: {
-		props: ["op", "approvedAuthwits", "decodedAuthwits", "decodedGrants", "tokens", "marks"],
+		props: ["op", "approvedAuthwits", "decodedAuthwits", "decodedGrants", "tokens", "marks", "explorerId"],
 		template: `<div data-testid="execute-op-item" :data-op-kind="op.kind" :data-account="op.accountAddress"
 			:data-authwits="(approvedAuthwits ?? []).map((a) => a.messageHash).join(',')"
 			:data-decoded="[...(decodedAuthwits?.keys() ?? [])].join(',')"
@@ -266,16 +266,23 @@ describe("the fee question window", () => {
 		},
 	)
 
-	test("the summary's marks read the signed list on the request's chain, the badge included, and a closed window's reader hears nothing more", async () => {
+	test("the summary's marks and chip levels read the signed list on the request's chain, the badge included, and a closed window's reader hears nothing more", async () => {
 		priceFake.icons = { [`1:${TOKEN}`]: "data:image/svg+xml;base64,PHN2Zy8+" }
 		priceFake.flagged = [`1:${TOKEN}`]
+		priceFake.listed = { [`1:${TOKEN}`]: { symbol: "TST", name: "Test Token" } }
 		await opened()
-		const { iconFor, isFlagged } = w!.findComponent(STUBS.OperationCard).props("marks") as TokenMarkLookup
+		const card = w!.findComponent(STUBS.OperationCard)
+		const { iconFor, isFlagged, listedAt } = card.props("marks") as ListReader
 		expect([iconFor({ chainId: 1, contract: TOKEN }), isFlagged({ chainId: 1, contract: TOKEN })]).toEqual([
 			priceFake.icons[`1:${TOKEN}`],
 			true,
 		])
 		expect([iconFor({ chainId: 2, contract: TOKEN }), isFlagged({ chainId: 2, contract: TOKEN })]).toEqual([undefined, false])
+		expect([listedAt({ chainId: 1, contract: TOKEN }), listedAt({ chainId: 2, contract: TOKEN })]).toEqual([
+			{ symbol: "TST", name: "Test Token" },
+			undefined,
+		])
+		expect(card.props("explorerId"), "a chip's press links the explorer the person picked").toBe("aztecscan")
 		const reads = priceFake.reads()
 		w!.unmount()
 		w = undefined

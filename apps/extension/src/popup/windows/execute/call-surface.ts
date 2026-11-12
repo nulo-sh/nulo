@@ -310,8 +310,8 @@ export const RAW_ADVICE = "Check what the app says this does before approving."
 
 /**
  * The summary's one line on the calls it cannot read as a transfer or a mint, named by their step
- * numbers: undecodable or decoded without the wallet's reading alike, as each chip's press says
- * which. It waits for every decode, so it never names some calls and then more.
+ * numbers: undecodable or decoded without the wallet's reading alike. It waits for every decode, so
+ * it never names some calls and then more.
  */
 export const unparsedCallsLine = (surfaces: readonly CallSurface[]): string | undefined => {
 	if (surfaces.some((surface) => surface.kind === "pending")) return undefined

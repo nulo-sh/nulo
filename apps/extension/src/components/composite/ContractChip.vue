@@ -116,6 +116,7 @@ const seal = computed(() => (props.model.level === "nulo" || props.model.level =
 	flex-direction: column;
 	gap: 6px;
 	padding: 6px 14px;
+	overflow-wrap: anywhere;
 }
 
 .link_row {

@@ -89,3 +89,28 @@ Each ask names the surface, the options, a recommendation and **what ships now**
 
 - **What ships now (draft):** "Nulo is still checking this contract." above the short address and the explorer link; no level header. Shown only until the worker's first answer.
 - **Options:** this line; the address row alone (the plan's first fallback).
+
+## A15. The raised-fee window carries the chips
+
+- **Surface:** the window that raises a pending transaction's fee. It renders the same operation card as the approval window, so it now shows the contract chips, their presses (linking the explorer the person picked) and the count line, in place of today's addresses, orange notices and advice.
+- **What ships now:** the same card in both windows (capture `fee-window-contract-chip`).
+- **Options:** this; today's rail kept in that window alone (a second rendering path for one window).
+
+## A16. "The name X came from an app." when the name is the wallet's own
+
+- **Surface:** an unverified contract's press, when its decode names the contract. The line is the signed frame's (P139-04 = W1, round three's "The name Crowdfunding came from an app. Nulo hasn't checked it.").
+- **The case it misreads:** the decode takes the name from whatever artifact the wallet holds for the contract's class. For an unlisted token the wallet registered with its own Token artifact, or a protocol contract such as Fee Juice, the name ("Token", "FeeJuice") did not come from an app. The decode carries no provenance, so the build cannot tell these apart. The line never raises a level.
+- **What ships now:** the signed words for every decoded name.
+- **Options:** the signed words; "The name X comes from the contract's code. Nulo hasn't checked it." (true in every case); the line only for names an app registered (needs provenance the decode does not carry, a data change).
+
+## Page 143 (signed 2026-11-12 20:00 UTC, no notes): arc 2's, recorded
+
+The answers file: "The owner's picks on round five's page (the fee-row matrix and the live loading options). All five are arc 2's; arc 1 keeps the fee row as today and the pending chip as (a), as its plan says."
+
+- **P143-01 = b2**: "the seal on the app-paid fee row, Nulo verified only".
+- **P143-02 = b3**: "the row only".
+- **P143-03 = d**: "the chips held" (a placeholder per pending chip until its level lands or a 1,000 ms cap ends the wait; arc 2 amends the plan for the timer's lifecycle and audits it before building).
+- **P143-04 = n1**: "the seal alone".
+- **P143-05 = s1**: "nothing about the balance".
+
+Arc 1 changes nothing for them: the fee row is as before the arc, and the pending chip is the real state (a) that d renders over (A3, A14).

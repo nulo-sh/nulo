@@ -157,7 +157,7 @@ const decodedAt = (j: number): DecodedCall | undefined =>
 /** The name a decoded contract's own code gives it; only an unverified chip's press repeats it. */
 const selfNameOf = (decoded: DecodedCall | undefined): string | undefined => (decoded?.kind === "decoded" ? decoded.contract : undefined)
 
-const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: CallSurface }[] => {
+const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: CallSurface; selfName?: string }[] => {
 	const ctx: CallerContext = { accountAddress: op.accountAddress, noFrom: isNoFrom(op as SendLikeUIOp) }
 	return (op.exec.calls as WireCall[]).map((call, j) => ({
 		call,

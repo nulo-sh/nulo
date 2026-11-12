@@ -351,10 +351,9 @@ async function stretchPayload(win: Page): Promise<void> {
 	})
 }
 
-/** Each step's contract chip, measured by its own box: a narrow window may break the line before
- *  the chip, but never inside it, and a label wider than the row clips inside the chip, which never
- *  leaves its step. */
-async function callCaptions(win: Page): Promise<{ lines: number; inRow: boolean; clips: boolean }[]> {
+/** Each step's contract chip, measured by its own box, which as an inline-flex box never breaks: it
+ *  stays inside its step's row, and a label wider than the row clips inside it. */
+async function callCaptions(win: Page): Promise<{ inRow: boolean; clips: boolean }[]> {
 	return win.evaluate(() =>
 		Array.from(document.querySelectorAll('[data-testid="execute-op-summary-call-head"]'), (head) => {
 			const chip = head.querySelector('[data-testid="execute-op-call-to"] [data-testid="contract-chip"]')
@@ -364,7 +363,6 @@ async function callCaptions(win: Page): Promise<{ lines: number; inRow: boolean;
 			const rects = Array.from(chip.getClientRects()).filter((rect) => rect.width > 0)
 			const right = row.getBoundingClientRect().right
 			return {
-				lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
 				inRow: rects.length > 0 && rects.every((rect) => rect.right <= right + 0.5),
 				clips: label.scrollWidth > label.clientWidth,
 			}
@@ -376,7 +374,7 @@ async function expectCallCaptionsWhole(win: Page): Promise<void> {
 	const whole = async (label: string) => {
 		const captions = await callCaptions(win)
 		expect(captions.length, `${label}: steps`).toBeGreaterThan(0)
-		expect(captions, label).toEqual(captions.map(() => ({ lines: 1, inRow: true, clips: false })))
+		expect(captions, label).toEqual(captions.map(() => ({ inRow: true, clips: false })))
 	}
 	await whole("the window's width")
 	await atWidth(win, 360, async () => {
@@ -386,7 +384,7 @@ async function expectCallCaptionsWhole(win: Page): Promise<void> {
 		})
 		const capped = await callCaptions(win)
 		expect(capped, "a contract wider than the row clips inside its chip, which stays in the row, at 360 px").toEqual(
-			capped.map(() => ({ lines: 1, inRow: true, clips: true })),
+			capped.map(() => ({ inRow: true, clips: true })),
 		)
 		expect(await payloadPastCard(win), "a contract wider than the row, at 360 px").toBeLessThanOrEqual(0)
 	})

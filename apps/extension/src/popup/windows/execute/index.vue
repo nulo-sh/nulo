@@ -732,7 +732,7 @@ onUnmounted(() => {
 				nameTestId="execute-dapp-name"
 				actionLabel="wants to execute the following"
 			>
-				<template v-if="appChip" #name><ContractChip :model="appChip" /></template>
+				<template v-if="appChip" #name><ContractChip :model="appChip" testid="execute-app-chip-label" /></template>
 			</DappIdentityBlock>
 
 			<Flex direction="column" gap="16" :class="$style.sections">

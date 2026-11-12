@@ -187,7 +187,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<component :is="inline ? 'span' : Flex" :class="disabled && $style.disabled">
+	<component :is="inline ? 'span' : Flex" :class="[inline && $style.inline, disabled && $style.disabled]">
 		<component :is="inline ? 'span' : 'div'" ref="triggerEl">
 			<slot />
 		</component>
@@ -225,6 +225,12 @@ onBeforeUnmount(() => {
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--txt-primary) 8%, transparent), 0 14px 34px rgba(0, 0, 0, 15%), 0 4px 14px rgba(0, 0, 0, 5%);
 
 	padding: 6px 0;
+}
+
+/* As a flex item it would hold its content's width; this lets the trigger shrink and clip its text. */
+.inline {
+	min-width: 0;
+	max-width: 100%;
 }
 
 .card_inline {

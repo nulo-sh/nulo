@@ -275,6 +275,7 @@ onUnmounted(() => {
 					:decodedGrants="decodedGrants"
 					:tokens="knownTokens"
 					:marks="marks"
+					:explorerId="appStore.defaultExplorer"
 				>
 					<template #fee>
 						<FeeRaisedCard

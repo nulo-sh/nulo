@@ -540,7 +540,7 @@ describe.skipIf(!ARMED)("contract chips over the held list", () => {
 		}
 	})
 
-	test("by key: Enter on a chip opens its press on its link and leaves the step shut; Tab goes on past the chip and shuts it; Shift+Tab and Escape return to the chip; the app's press keeps focus on its chip; at 240 px a press stays in the window, the lowest included", {
+	test("by key: Enter or Space on a chip opens its press on its link and leaves the step shut; Tab goes on past the chip and shuts it; Shift+Tab and Escape return to the chip; the app's press keeps focus on its chip; at 240 px a press stays in the window, the lowest included", {
 		timeout: 180_000,
 	}, async ({ listedExtension: ctx }) => {
 		const page = await openPopup(ctx)
@@ -571,6 +571,11 @@ describe.skipIf(!ARMED)("contract chips over the held list", () => {
 			await pressShut(page)
 			expect(await page.$eval(chipOf(0), (el) => el === document.activeElement)).toBe(true)
 			expect(await isOpen(page, stepRow(0))).toBe(false)
+			await page.keyboard.press("Space")
+			await page.waitForSelector(sel("contract-chip-explorer-link"), { visible: true, timeout: 10_000 })
+			expect(await isOpen(page, stepRow(0))).toBe(false)
+			await page.keyboard.press("Escape")
+			await pressShut(page)
 
 			const app = `${sel("execute-dapp-name")} ${sel(CHIP)}`
 			await page.focus(app)
@@ -594,6 +599,34 @@ describe.skipIf(!ARMED)("contract chips over the held list", () => {
 				expect(await isOpen(page, stepRow(j))).toBe(false)
 				await page.keyboard.press("Escape")
 				await pressShut(page)
+			}
+		} finally {
+			await page.close()
+		}
+	})
+
+	test("an app's longest strings stay inside: its chip clips a 64-character name at 400 and 240 px, and each press wraps a 63-character host or a 64-character contract name inside its card", {
+		timeout: 120_000,
+	}, async ({ listedExtension: ctx }) => {
+		const page = await openPopup(ctx)
+		try {
+			for (const width of [400, 240]) {
+				await openFixture(page, "long-names", width)
+				await page.waitForSelector(`${chipOf(0)}[data-level="none"]`, { timeout: 10_000 })
+				const app = `${sel("execute-dapp-name")} ${sel(CHIP)}`
+				const chip = await page.$eval(sel("execute-app-chip-label"), (label) => {
+					const box = (label.closest('[data-testid="contract-chip"]') as HTMLElement).getBoundingClientRect()
+					return { inside: box.left >= 0 && box.right <= window.innerWidth, clipped: label.scrollWidth > label.clientWidth }
+				})
+				expect(chip, `the app chip at ${width} px`).toEqual({ inside: true, clipped: true })
+				for (const target of [app, chipOf(0)]) {
+					await page.click(target)
+					await page.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
+					const wraps = await page.$eval(sel("contract-chip-panel"), (panel) => panel.scrollWidth <= panel.clientWidth)
+					expect(wraps, `${target}'s press at ${width} px`).toBe(true)
+					await page.keyboard.press("Escape")
+					await pressShut(page)
+				}
 			}
 		} finally {
 			await page.close()

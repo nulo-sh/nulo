@@ -17,7 +17,19 @@ import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 /** Travels in every fixture's app metadata, so the release grep finds this module wherever it lands. */
 export const EXECUTE_FIXTURE_MARKER = "nulo:e2e:execute-fixture"
 
-export const EXECUTE_FIXTURES = ["one", "batch", "deep", "raw", "ten", "wide", "wide-authwits", "depth", "ancestry", "listed"] as const
+export const EXECUTE_FIXTURES = [
+	"one",
+	"batch",
+	"deep",
+	"raw",
+	"ten",
+	"wide",
+	"wide-authwits",
+	"depth",
+	"ancestry",
+	"listed",
+	"long-names",
+] as const
 export type ExecuteFixtureName = (typeof EXECUTE_FIXTURES)[number]
 
 export type ExecuteFixture = {
@@ -274,7 +286,12 @@ const listedSpecs = (main: string): Spec[] => [
 	},
 ]
 
-type Shape = { specs: Spec[]; authwits: ReturnType<typeof authwitOf>[]; maxFee: string }
+type Shape = { specs: Spec[]; authwits: ReturnType<typeof authwitOf>[]; maxFee: string; dapp?: { name: string; url: string } }
+
+/** The longest unbroken strings the window takes from an app: a 64-character name, a 63-character
+ *  host label and a contract that names itself in 64 characters. */
+const LONG_NAME = "W".repeat(64)
+const LONG_DAPP = { name: LONG_NAME, url: `https://${"w".repeat(63)}.example` }
 
 const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
 	const fee = (specs: Spec[], maxFee: string, authwits: ReturnType<typeof authwitOf>[] = []): Shape => ({ specs, authwits, maxFee })
@@ -311,6 +328,14 @@ const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
 			return fee([ancestrySpec()], "2500000000000000")
 		case "listed":
 			return fee(listedSpecs(main), "2500000000000000")
+		case "long-names":
+			return {
+				...fee(
+					[{ name: "checkpoint", to: UNKNOWN, contract: LONG_NAME, selector: "0x6c4d2e1f", params: { epoch: int(7) } }],
+					"2500000000000000",
+				),
+				dapp: LONG_DAPP,
+			}
 	}
 }
 
@@ -322,7 +347,7 @@ const isFixtureName = (name: string): name is ExecuteFixtureName => (EXECUTE_FIX
  *  every fixture's are the sending account's own. */
 export function executeFixture(name: string, account: Account, network: Network): ExecuteFixture | undefined {
 	if (!isFixtureName(name)) return undefined
-	const { specs, authwits, maxFee } = shapeOf(name, account.address)
+	const { specs, authwits, maxFee, dapp = { name: "Playground", url: "https://playground.nulo.sh" } } = shapeOf(name, account.address)
 	const operation = {
 		kind: "aztec_sendTx",
 		networkId: network.id,
@@ -349,6 +374,6 @@ export function executeFixture(name: string, account: Account, network: Network)
 			{ id: 9003, chainId: network.chainId, contract: LISTED_TOKEN, name: "USD Coin", symbol: "USDC", decimals: 6 },
 			{ id: 9004, chainId: network.chainId, contract: FLAGGED_TOKEN, name: "Free Money", symbol: "FREE", decimals: 6 },
 		] as TokenInfo[],
-		dapp: { name: "Playground", url: "https://playground.nulo.sh", description: EXECUTE_FIXTURE_MARKER },
+		dapp: { ...dapp, description: EXECUTE_FIXTURE_MARKER },
 	}
 }

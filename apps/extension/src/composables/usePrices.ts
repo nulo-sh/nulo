@@ -10,9 +10,8 @@ import { isQuoteFresh } from "@/wallet/services/price/spec"
 import { getPriceMapEntry, inBand, FEE_JUICE_ENTRY, type PriceMapEntry, type PricedTokens } from "@/wallet/services/price/price-map"
 import { tokenAmountToUsdMicro, formatUsdMicro } from "@/wallet/services/price/convert"
 import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
-import { isFlaggedToken } from "@/utils/token-flag"
+import { isFlaggedToken, listKeyOf } from "@/utils/token-flag"
 import { type ListedToken, tokenIconFor } from "@/utils/token-icon"
-import { listKeyOf } from "@/utils/token-flag"
 import { isWindowDocument } from "@/utils/window-document"
 
 /** A token as pricing reads it: priced only when its decimals are known (`knownDecimals`). */

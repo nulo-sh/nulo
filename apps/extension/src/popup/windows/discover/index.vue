@@ -6,8 +6,6 @@ import { onMounted, onUnmounted } from "vue"
 import IdentityStrip from "@/components/composite/IdentityStrip.vue"
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
 import ContractChip from "@/components/composite/ContractChip.vue"
-import { appChipOf } from "@/components/composite/contract-chip"
-import { useDappOrigin } from "@/composables/useDappOrigin"
 import DappCancelledOverlay from "@/components/composite/DappCancelledOverlay.vue"
 import DappApprovalFooter from "@/components/composite/DappApprovalFooter.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
@@ -15,6 +13,7 @@ import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue
 
 /** Utils */
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
+import { appChipOf } from "@/components/composite/contract-chip"
 import { resolveDappChain } from "../capabilities/chain-mismatch"
 import { EVERY_SITE_CONFIRM } from "@/utils/every-site"
 
@@ -29,6 +28,7 @@ import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 /** Composables */
+import { useDappOrigin } from "@/composables/useDappOrigin"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useConfirm } from "@/composables/useConfirm"
