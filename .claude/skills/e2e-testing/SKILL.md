@@ -432,18 +432,18 @@ on both browsers. Wait, then read with `page.$eval(sel, …)` or `page.evaluate`
 **A Send fee trigger can show a method that is not in effect.** With a saved pick, the card previews
 that pick's row while balances load (`send-fee-method-trigger[data-fee-method]`), and a preview pays
 nothing. To assert the method in effect, wait on something only the effective method produces
-(`send-publish-strip[data-you]`, `send-submit[data-action]`, the `send-fee-privacy-notice` tag, an
+(`send-publish[data-you]`, the `send-fee-privacy-notice` tag, the form's `send-fee-warning`, an
 enabled submit — `waitForFee` / `waitForTag` in `fixtures/send-page.ts`), and scope by
 `fee-settings-card[data-origin]` — across an origin flip the trigger attribute alone cannot tell the new
 origin's method from the last one's.
 
-**A send names what it expects of the page.** `sendTransfer` takes `expect: "send" | "review"` and
-`submitSend` throws when the page disagrees — a gated send that the button would fire directly, or a
-one-tap send that opens the sheet, is a product bug the helper must not paper over by clicking
-whatever appears. Every read of the page goes through `readSendView` + `assertPublishInvariant`
-(tag ⇔ `data-action="review"` ⇔ `data-you="exposed"`), so a test asserting one surface has
-asserted the other two. The sheet's CTA arms after a delay: wait on `send-review-submit[data-ready]`
-(`waitForReviewReady`), never on a sleep. Closing the sheet goes through `waitForReviewClosed`, which
+**Every send passes the review.** `submitSend` reads the page through `readSendView` +
+`assertPublishInvariant` (the card's tag ⇔ the form's warning ⇔ `data-you="exposed"`) and refuses to
+click while they disagree, so a test asserting one surface has asserted the other two; then it opens
+the sheet and presses Send now. The sheet's Send now arms after a delay and is never natively
+disabled (it refuses through `aria-disabled`): wait on `send-review-submit[data-ready]`
+(`waitForReviewReady`), never on a sleep or on `disabled`. The review draws its own payee block
+outside the page, so a read of the form's payee scopes to `send-page`. Closing the sheet goes through `waitForReviewClosed`, which
 finishes a stuck leave transition for that popup only (`settleClosedPopup`) — `closeStuckPopup` would
 clear the whole `#popup` layer, including a popup that must stay open beneath. `settleClosedPopup`'s
 `true` means only that the popup was still in the DOM once its leave began

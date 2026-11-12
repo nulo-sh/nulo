@@ -243,6 +243,9 @@ describe("modules/send/SendReviewSheet", () => {
 		})
 		expect(w.get('[data-testid="send-review-strip"]').attributes("data-you")).toBe("unknown")
 		expect(w.get('[data-testid="send-review-unvouched"]').text()).toBe(UNVOUCHED_PUBLISH_SENTENCE)
+		// Heard once, in the strip's sentence.
+		expect(w.get('[data-testid="send-review-unvouched"]').attributes("aria-hidden")).toBe("true")
+		expect(w.get('[data-testid="send-review-strip-spoken"]').text()).toContain(UNVOUCHED_PUBLISH_SENTENCE)
 		expect(feeLines(w)).toEqual(["—, My FPC", UNVOUCHED_FEE_SENTENCE])
 		expect(feeRow(w).text()).not.toContain("0.00214")
 	})
@@ -421,12 +424,31 @@ describe("modules/send/SendReviewSheet — Send now", () => {
 		expect(w.emitted("close")).toBeUndefined()
 	})
 
-	test("Send now refuses the auto-repeat of an Enter that moved focus onto it; a new press is its own", () => {
+	test("Send now refuses the auto-repeat of an Enter or a Space; a new press is its own", () => {
 		w = mountSheet()
 		const el = submit(w).element
-		const repeat = sendEvent(el, "keydown", { key: "Enter", repeat: true })
-		const press = sendEvent(el, "keydown", { key: "Enter" })
-		expect([repeat?.defaultPrevented, press?.defaultPrevented]).toEqual([true, false])
+		const prevented = (key: string, repeat: boolean) => sendEvent(el, "keydown", { key, repeat })?.defaultPrevented
+		expect([prevented("Enter", true), prevented(" ", true)]).toEqual([true, true])
+		expect([prevented("Enter", false), prevented(" ", false)]).toEqual([false, false])
+	})
+
+	test("a Space pressed while Send now refuses is refused at its release too, even once armed; a press begun armed is not", async () => {
+		w = mountSheet({ ready: false })
+		const el = submit(w).element
+		expect(sendEvent(el, "keydown", { key: " " })?.defaultPrevented).toBe(true)
+		await w.setProps({ ready: true })
+		expect(sendEvent(el, "keyup", { key: " " })?.defaultPrevented).toBe(true)
+
+		expect(sendEvent(el, "keydown", { key: " " })?.defaultPrevented).toBe(false)
+		expect(sendEvent(el, "keyup", { key: " " })?.defaultPrevented).toBe(false)
+		await submit(w).trigger("click")
+		expect(w.emitted("send")).toEqual([[]])
+	})
+
+	test("an Enter while Send now refuses is cancelled where it would click", () => {
+		w = mountSheet({ ready: false })
+		expect(sendEvent(submit(w).element, "keydown", { key: "Enter" })?.defaultPrevented).toBe(true)
+		expect(w.emitted("send")).toBeUndefined()
 	})
 
 	test("close comes from the header button and from the popup's own close paths", async () => {

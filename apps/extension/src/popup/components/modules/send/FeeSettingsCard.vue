@@ -101,8 +101,6 @@ const payerOut = defineModel("payer", { default: null })
  *  than pricing it again, since the page's own price client can hold a different quote. */
 const feeDisplayOut = defineModel("feeDisplay", { default: null })
 
-/** One-way child→parent: the cap as the readout words it, for the review sheet, priced once here. */
-const queuedCapTextOut = defineModel("queuedCapText", { default: null })
 /** The queued cap's two figures as the card prices them, so a line elsewhere quotes the same dollars. */
 const queuedCapFiguresOut = defineModel("queuedCapFigures", { default: null })
 
@@ -292,7 +290,6 @@ watch(
 watch(
 	queuedCapDisplay,
 	(d) => {
-		queuedCapTextOut.value = d ? feeText(d.cap) : null
 		queuedCapFiguresOut.value = d
 	},
 	{ immediate: true },

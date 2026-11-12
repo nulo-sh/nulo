@@ -1,14 +1,13 @@
 <script setup lang="ts">
 /**
- * The last look before a send goes: who is paid, how much, what the chain publishes and the fee, in
- * that order. Everything shown is a prop and every action an emit: the page owns the popup slot, the
- * facts and the send. Closing it is the way back to the form, which keeps every value.
+ * The last look before a send goes. Everything shown is a prop and every action an emit: the page
+ * owns the popup slot, the facts and the send.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
 import PayeeBlock from "@/components/composite/send/PayeeBlock.vue"
 import PublishStrip from "@/components/composite/send/PublishStrip.vue"
 import { vSnackFooter } from "@/composables/snackInset"
-import { refuseRepeatEnter } from "@/composables/usePopupEntity"
+import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 import {
 	feeWarning,
 	type PayerDescriptor,
@@ -20,7 +19,7 @@ import {
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { fitHero, HERO_MIN_SCALE } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
-import { type FeeLine, type FeeLineState, feeLine } from "./fee-line-words"
+import { type FeeLine, type FeeLineState, feeLine, feeLineNotes } from "./fee-line-words"
 
 const props = withDefaults(
 	defineProps<{
@@ -37,7 +36,7 @@ const props = withDefaults(
 		recipientName?: string | null
 		/** The same name made safe for a sentence, or null. */
 		sentenceName?: string | null
-		/** False for an address this wallet has no record of paying: its check line shows. */
+		/** False for an address the wallet does not know (no contact, own account or past send): its check line shows. */
 		known?: boolean
 		payerKind: PayerKind
 		payerType?: PayerDescriptor["type"]
@@ -76,8 +75,7 @@ const valueTestid = computed(() => {
 })
 const notes = computed(() => {
 	if (props.reask) return [paidBy(props.payerKind, props.payerType)].filter((n) => n !== null)
-	const own = line.value.kind === "words" && line.value.note ? [line.value.note] : []
-	return [...own, ...props.notices]
+	return feeLineNotes(line.value, props.notices)
 })
 
 const summary = useTemplateRef<HTMLElement>("summary")
@@ -91,6 +89,19 @@ const amountScale = ref(1)
 // of state; this guard is what a press, a key or a programmatic click meets.
 const handleSend = () => {
 	if (sendable.value) emit("send")
+}
+
+/** Space clicks at its release, so a press that began while Send now refused would send once it arms:
+ *  such a press is refused at both ends, and a held key's repeats never start one. */
+let pressRefused = false
+function onSendKeydown(e: KeyboardEvent) {
+	if (e.key !== "Enter" && e.key !== " ") return
+	if (isRepeatOrComposing(e)) return e.preventDefault()
+	pressRefused = !sendable.value
+	if (pressRefused) e.preventDefault()
+}
+function onSendKeyup(e: KeyboardEvent) {
+	if (e.key === " " && pressRefused) e.preventDefault()
 }
 
 /** A retry replaces its own button, so the keyboard it held moves on to Send now. */
@@ -144,7 +155,8 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<Icon name="warning" size="14" aria-hidden="true" :class="mark.warning_mark" />
 						<span>{{ warning }}</span>
 					</p>
-					<p v-else-if="unvouched" :class="$style.unvouched" data-testid="send-review-unvouched">{{ UNVOUCHED_PUBLISH_SENTENCE }}</p>
+					<!-- The strip's spoken sentence already says it. -->
+					<p v-else-if="unvouched" aria-hidden="true" :class="$style.unvouched" data-testid="send-review-unvouched">{{ UNVOUCHED_PUBLISH_SENTENCE }}</p>
 
 					<div :class="$style.fee" data-testid="send-review-fee" :data-payer="payerKind ?? 'none'">
 						<span :class="$style.fee_key">Fee</span>
@@ -161,7 +173,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						</span>
 					</div>
 
-					<span :class="$style.send_wrap" @keydown.enter="refuseRepeatEnter">
+					<span :class="$style.send_wrap" @keydown="onSendKeydown" @keyup="onSendKeyup">
 						<Button
 							ref="sendNow"
 							v-snack-footer

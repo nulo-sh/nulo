@@ -91,3 +91,9 @@ export function feeLine(state: FeeLineState): FeeLine {
 	if (!state.payer) return { kind: "words", value: "—", note: null }
 	return { kind: "words", ...feeLineWords(state.payer, state.display, { name: state.payerName ?? undefined }) }
 }
+
+/** What goes under the line: its own note, then what the fee card would say. */
+export function feeLineNotes(line: FeeLine, notices: readonly string[]): string[] {
+	const own = line.kind === "words" && line.note ? [line.note] : []
+	return [...own, ...notices]
+}

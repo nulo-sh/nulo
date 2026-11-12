@@ -261,7 +261,7 @@ async function fillAndSubmit(page: Page, destination: string, amount: string, ro
 async function expectNothingSent(page: Page, dwellMs: number): Promise<void> {
 	await new Promise((r) => setTimeout(r, dwellMs))
 	const state = await page.evaluate(() => ({
-		onForm: Boolean(document.querySelector('[data-testid="send-payee"]')),
+		onForm: Boolean(document.querySelector('[data-testid="send-page"] [data-testid="send-payee"]')),
 		toast: (document.body.textContent ?? "").toLowerCase().includes("transaction submitted"),
 	}))
 	expect(state).toEqual({ onForm: true, toast: false })
@@ -449,8 +449,8 @@ test.skipIf(!hasConfig)(
 			expect(await readSendInputs(page)).toEqual({ amount: "10", destination: self })
 			expect(await waitForTag(page, "private-private")).toMatchObject({ warning: true, you: "exposed" })
 
-			// Reopened, armed after the wait, sent from the sheet alone by the key that opened it — paid by
-			// the account.
+			// Reopened, armed after the wait, sent from the sheet alone by Enter on the Send now it opened
+			// on — paid by the account.
 			await openReview(page)
 			await waitForFocus(page, "send-review-submit")
 			await waitForReviewReady(page)

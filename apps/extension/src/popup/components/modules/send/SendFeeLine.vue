@@ -7,7 +7,7 @@
 import { computed, nextTick, useTemplateRef } from "vue"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import type { FeeDisplay } from "@/utils/fee-estimation"
-import { type FeeLinePayer, feeLine } from "./fee-line-words"
+import { type FeeLinePayer, feeLine, feeLineNotes } from "./fee-line-words"
 
 const props = withDefaults(
 	defineProps<{
@@ -40,12 +40,8 @@ const props = withDefaults(
 )
 const emit = defineEmits<{ change: []; retry: [] }>()
 
-/** The rule the review's fee row reads too. */
 const line = computed(() => feeLine(props))
-const notes = computed(() => {
-	const own = line.value.kind === "words" && line.value.note ? [line.value.note] : []
-	return [...own, ...props.notices]
-})
+const notes = computed(() => feeLineNotes(line.value, props.notices))
 
 const changeEl = useTemplateRef<HTMLButtonElement>("changeEl")
 /** A retry replaces its own button, so the keyboard it held moves on to Change. */
