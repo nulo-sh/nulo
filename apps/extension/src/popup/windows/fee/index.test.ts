@@ -211,22 +211,22 @@ describe("the fee question window", () => {
 		await opened()
 		expect(byId("execute-op-item").attributes()).toMatchObject({ "data-op-kind": "aztec_sendTx", "data-account": OWNER })
 		expect(byId("fee-raised-method").text()).toBe("Private Fee Juice")
-		expect(byId("fee-raised-was").text()).toBe("Was ~0.016 FJ")
-		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ")
+		expect(byId("fee-raised-was").text()).toBe("was ~0.016 FJ")
+		expect(byId("fee-raised-now").text()).toBe("~0.021 FJ")
 		expect(byId("fee-raised-card").text()).toContain("1.25 FJ")
 		expect(byId("fee-raised-priority").text()).toContain("Normal")
 		expect(getGasBalancesMock).toHaveBeenCalledExactlyOnceWith("n1", OWNER, true)
 		expect(confirm().text()).toBe("Send for ~0.021 FJ")
-		expect(byId("dapp-approval-confirm-detail").exists()).toBe(false)
+		expect(byId("dapp-approval-confirm-detail").text()).toBe("for ~0.021 FJ")
 		expect(confirm().attributes("disabled")).toBeUndefined()
 	})
 
-	test("with a quote the card prices both figures; Confirm repeats the new one's dollars on its second line", async () => {
+	test("with a quote the card prices the new figure; Confirm's second line repeats it with its dollars", async () => {
 		priceFake.reset(2)
 		await opened()
-		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ ($0.042)")
+		expect(byId("fee-raised-now").text()).toBe("~0.021 FJ ($0.042)")
 		expect(confirm().text()).toBe("Send for ~0.021 FJ ($0.042)")
-		expect(byId("dapp-approval-confirm-detail").text()).toBe("($0.042)")
+		expect(byId("dapp-approval-confirm-detail").text()).toBe("for ~0.021 FJ ($0.042)")
 		// The card's quote and the summary's marks. The counts leave out the real client's read on its
 		// first Ready: this fake fires onConnected only through reconnect().
 		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
@@ -241,9 +241,28 @@ describe("the fee question window", () => {
 		await opened()
 		expect(byId("fee-raised-card").exists()).toBe(false)
 		expect(confirm().text()).toBe("Send for ~0.021 FJ")
-		expect(byId("dapp-approval-confirm-detail").exists()).toBe(false)
+		expect(byId("dapp-approval-confirm-detail").text()).toBe("for ~0.021 FJ")
 		expect(confirm().attributes("disabled")).toBeDefined()
 		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
+	})
+
+	test.each([
+		["~0.021 FJ at $2", "21000000000000000", 2, "~0.021 FJ ($0.042)"],
+		["~1.314209 FJ at $2", "1314209000000000000", 2, "~1.314209 FJ ($2.628)"],
+		["~12.345678 FJ at $2", "12345678000000000000", 2, "~12.345678 FJ ($24.691)"],
+		["~0.021 FJ unpriced", "21000000000000000", undefined, "~0.021 FJ"],
+	])("%s: the row and Confirm print the whole fee, Confirm as Send over it", async (_, fee, usd, shown) => {
+		priceFake.reset(usd)
+		await opened(question({ fee }))
+		expect(byId("fee-raised-now").text()).toBe(shown)
+		expect(byId("dapp-approval-confirm-detail").text()).toBe(`for ${shown}`)
+		expect(confirm().element.textContent).toBe(`Send for ${shown}`)
+	})
+
+	test("before its question loads Confirm reads Send alone, on one line", async () => {
+		await opened(null)
+		expect(confirm().element.textContent).toBe("Send")
+		expect(byId("dapp-approval-confirm-detail").exists()).toBe(false)
 	})
 
 	test.each([
