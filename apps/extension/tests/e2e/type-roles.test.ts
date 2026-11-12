@@ -484,6 +484,10 @@ const IMPORT_CONTRACT = `0x0a${"6b".repeat(31)}`
 /** 16 hex, as the journal mints its ids. */
 const JOURNAL_ID = "a1b2c3d4e5f60718"
 const IMPORT_ID = "0f1e2d3c4b5a6978"
+/** One unbreakable word as long as a contract's symbol may be. */
+const LONG_SYMBOL = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345"
+const LONG_IMPORT_CONTRACT = `0x0a${"7c".repeat(31)}`
+const LONG_IMPORT_ID = "0f1e2d3c4b5a6979"
 
 type SiteState = readonly [surface: string, state: string]
 
@@ -870,7 +874,8 @@ async function expectTokenMetadata(page: Page): Promise<void> {
 	await closeByEscape(page, "token-metadata-id")
 }
 
-/** Home again with a token import in flight, written after the worker's last start, then New token from its menu. */
+/** Home again with a token import in flight, written after the worker's last start, then New token from
+ *  its menu, then a second import named with a 32-character symbol. */
 async function expectImportAndNewToken(page: Page, scope: ActivityScope): Promise<void> {
 	await seedTokenImport(page, scope, { id: IMPORT_ID, contract: IMPORT_CONTRACT })
 	await goAndSweep(page, "#/popup/general", "token-import-spinner", "Home, an import in flight", [
@@ -880,6 +885,81 @@ async function expectImportAndNewToken(page: Page, scope: ActivityScope): Promis
 	await page.waitForSelector(sel("tokens-menu-import"), VISIBLE)
 	await openAndSweep(page, "tokens-menu-import", "token-address-input", "New token", [["popup:new_token", ""]])
 	await closeByEscape(page, "token-address-input")
+	await expectLongImportTitleCut(page, scope)
+}
+
+type ImportTitleBox = {
+	title: string
+	boxes: boolean
+	paintedRight: number
+	spinnerLeft: number
+	rowRight: number
+	ellipsis: boolean
+	cut: boolean
+}
+
+/** Each import row's title against its spinner and its row. The title's box ends at the spinner whether
+ *  or not its text runs on under it, so the painted edge is the text's range, clipped by the box only
+ *  when the title clips. */
+async function readImportTitles(page: Page): Promise<ImportTitleBox[]> {
+	return page.evaluate(() => {
+		const at = (n: number) => Math.round(n * 100) / 100
+		const shown = (r: DOMRect | undefined) => r !== undefined && r.width > 0 && r.height > 0
+		const read = (row: Element, title: HTMLElement): ImportTitleBox => {
+			const spinner = row.querySelector('[data-testid="token-import-spinner"]')?.getBoundingClientRect()
+			const box = title.getBoundingClientRect()
+			const style = getComputedStyle(title)
+			const range = document.createRange()
+			range.selectNodeContents(title)
+			const textRight = range.getBoundingClientRect().right
+			const clips = style.overflowX !== "visible"
+			return {
+				title: (title.textContent ?? "").trim(),
+				boxes: shown(box) && shown(spinner),
+				paintedRight: at(clips ? Math.min(textRight, box.right) : textRight),
+				spinnerLeft: at(spinner?.left ?? Number.NaN),
+				rowRight: at(row.getBoundingClientRect().right),
+				ellipsis: clips && style.textOverflow === "ellipsis",
+				cut: title.scrollWidth > title.clientWidth,
+			}
+		}
+		return [...document.querySelectorAll('[data-testid="token-import-row"]')].flatMap((row) => {
+			const title = row.querySelector<HTMLElement>('[data-testid="token-import-title"]')
+			return title ? [read(row, title)] : []
+		})
+	})
+}
+
+/** A 32-character symbol ends in an ellipsis where its import row's spinner starts, at the popup's
+ *  width and the narrowest, while the address of the import with no name yet stays whole. Seeded after
+ *  the sweep above, whose site holds every import title to the address's role. */
+async function expectLongImportTitleCut(page: Page, scope: ActivityScope): Promise<void> {
+	await seedTokenImport(page, scope, { id: LONG_IMPORT_ID, contract: LONG_IMPORT_CONTRACT, title: LONG_SYMBOL })
+	// Home reads the journal as it mounts; a seeded row raises no event.
+	await navigateByHash(page, "#/popup/activity", 10_000)
+	await page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 10_000, polling: 100 }, sel("tokens-list"))
+	await navigateByHash(page, "#/popup/general", 10_000)
+	await page.waitForFunction(
+		(s: string) => document.querySelectorAll(s).length === 2,
+		{ timeout: 15_000, polling: 100 },
+		`${sel("token-import-row")} ${sel("token-import-spinner")}`,
+	)
+	const check = async (width: string) => {
+		const rows = await readImportTitles(page)
+		const long = rows.find((r) => r.title === LONG_SYMBOL)
+		const unnamed = rows.find((r) => r.title !== LONG_SYMBOL)
+		expect([long?.boxes, unnamed?.boxes], `the import rows' boxes at ${width}`).toEqual([true, true])
+		if (!long || !unnamed) return
+		expect(long.paintedRight, `the long title's painted edge against its spinner at ${width}`).toBeLessThanOrEqual(long.spinnerLeft)
+		expect(long.paintedRight, `the long title's painted edge against its row at ${width}`).toBeLessThanOrEqual(long.rowRight)
+		expect([long.ellipsis, long.cut], `the long title's ellipsis at ${width}`).toEqual([true, true])
+		expect([unnamed.cut, unnamed.paintedRight <= unnamed.spinnerLeft], `the unnamed import's address at ${width}`).toEqual([
+			false,
+			true,
+		])
+	}
+	await check("the popup's width")
+	await atWidth(page, NARROW_WIDTH, () => check(`${NARROW_WIDTH} px`))
 }
 
 /**

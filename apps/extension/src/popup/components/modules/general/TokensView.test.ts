@@ -707,6 +707,43 @@ describe("TokensView — loading, placeholders and the empty state", () => {
 		}
 	})
 
+	test("an import row draws the list's picture for a contract the list names on its record's network; an unlisted or unstamped one none", async () => {
+		const LISTED = "0xListedCCCC"
+		const importOp = (id: string, contractAddress: string, stamp: { networkId?: string } = { networkId: "net-1" }) => ({
+			id,
+			kind: "token_import",
+			profileId: H.store.current.profile?.id,
+			accountAddress: H.store.current.account?.address,
+			...stamp,
+			contractAddress,
+			terminalAt: null,
+			progress: { stage: "pending" },
+		})
+		H.getTokenBalances.mockResolvedValue([])
+		H.getOperations.mockResolvedValue([
+			importOp("op-default", SEED_CONTRACT.toLowerCase()),
+			importOp("op-listed", LISTED),
+			importOp("op-unlisted", "0xNotListed"),
+			importOp("op-unstamped", LISTED, {}),
+		])
+		H.icons.current = { [listKeyOf(1, SEED_CONTRACT)]: TEST_ICONS.USDC, [listKeyOf(1, LISTED)]: TEST_ICONS.GBPC }
+		try {
+			wrapper = mount(TokensView, { shallow: true, props: { seedEntries: [seedEntry("seeding")], seedReady: true } })
+			await flushPromises()
+			const icons = wrapper
+				.findAllComponents({ name: "TokenImportRow" })
+				.map((c) => [(c.props("op") as { id: string }).id, c.props("icon")])
+			expect(icons).toEqual([
+				["op-listed", TEST_ICONS.GBPC],
+				["op-unlisted", undefined],
+				["op-unstamped", undefined],
+				["op-default", TEST_ICONS.USDC],
+			])
+		} finally {
+			H.icons.current = {}
+		}
+	})
+
 	test("a rejected balances fetch is never an empty list: rows keep waiting, the timed retry recovers", async () => {
 		H.getTokenBalances.mockRejectedValueOnce(new Error("port closed")).mockResolvedValue([balanceRow()])
 		wrapper = mount(TokensView, { shallow: true, props: { seedEntries: [], seedReady: true } })

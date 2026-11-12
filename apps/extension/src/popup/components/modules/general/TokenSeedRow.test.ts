@@ -58,6 +58,22 @@ describe("TokenSeedRow", () => {
 		}
 	})
 
+	test("stopped, its picture dims with its symbol and its reason and RETRY stay at full strength; working, nothing dims", () => {
+		const DIMMED = (TokenSeedRow as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style.dimmed
+		const dims = (status: string) => {
+			const w = mount(TokenSeedRow, { props: { entry: entry(status), icon: TEST_ICONS.USDC }, global: { stubs: STUBS } })
+			const dimmed = (testid: string) => {
+				const el = w.find(`[data-testid="${testid}"]`)
+				return el.exists() ? el.classes().includes(DIMMED) : null
+			}
+			const symbol = w.findAll("span").find((s) => s.text() === "cUSDC")
+			return [dimmed("token-mark"), symbol?.classes().includes(DIMMED), dimmed("token-seed-reason"), dimmed("token-seed-retry")]
+		}
+		expect(dims("failed")).toEqual([true, true, false, false])
+		expect(dims("rejected")).toEqual([true, true, false, null])
+		for (const status of ["pending", "seeding", "seeded"]) expect([status, ...dims(status)]).toEqual([status, false, false, null, null])
+	})
+
 	test("renders its strings as text, never as markup", () => {
 		const w = mount(TokenSeedRow, {
 			props: { entry: { ...entry("pending"), symbol: "<b>x</b>", displayName: "<img src=x>" } },

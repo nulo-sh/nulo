@@ -37,7 +37,7 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 		:class="$style.row"
 	>
 		<Flex align="center" gap="12" :class="$style.lead">
-			<TokenMark :symbol="entry.symbol" :icon="icon" :size="32" :badge="false" />
+			<TokenMark :symbol="entry.symbol" :icon="icon" :size="32" :badge="false" :class="!isWorking && $style.dimmed" />
 			<Flex direction="column" gap="2" :class="$style.lead">
 				<span :class="[$style.symbol, !isWorking && $style.dimmed]">{{ entry.symbol }}</span>
 				<span v-if="isWorking" :class="$style.sub">{{ entry.displayName }}</span>
