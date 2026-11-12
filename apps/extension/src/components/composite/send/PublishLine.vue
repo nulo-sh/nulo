@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * What anyone watching the chain can see, said once under the sides: one plain sentence, or the one
- * warning, for a private send whose fee names the account, with the payer that fixes it when one can.
- * The region stays mounted, so a line that changes is announced.
+ * warning, for a private send whose fee names the account. Its fix is the account's private Fee
+ * Juice when that can pay, else the bridge to get some; never a sponsor, which only some networks
+ * have. The region stays mounted, so a line that changes is announced.
  */
 import { computed } from "vue"
 import { feeWarning, type PayerKind, type PublishFacts, publishSentence } from "./publish-facts"
@@ -12,15 +13,14 @@ const props = defineProps<{
 	/** The recipient's name, already safe for a sentence, or null. */
 	name: string | null
 	payer: PayerKind
-	remedy: "private_fpc" | "sponsor" | null
+	remedy: "private_fpc" | null
+	/** Where the account gets private Fee Juice when its own cannot pay. */
+	bridgeUrl: string
 }>()
 const emit = defineEmits<{ fix: [] }>()
 
-const FIX_WORDS = { private_fpc: "Pay it from private Fee Juice", sponsor: "Use Sponsored" } as const
-
 const warning = computed(() => feeWarning(props.facts, props.name))
 const sentence = computed(() => (warning.value ? null : publishSentence(props.facts, props.name, props.payer)))
-const fix = computed(() => (props.remedy ? FIX_WORDS[props.remedy] : null))
 </script>
 
 <template>
@@ -29,7 +29,8 @@ const fix = computed(() => (props.remedy ? FIX_WORDS[props.remedy] : null))
 			<Icon name="warning" size="14" aria-hidden="true" :class="$style.mark" />
 			<span :class="$style.warning_body">
 				<span>{{ warning }}</span>
-				<button v-if="fix" type="button" :class="$style.fix" data-testid="send-fee-warning-fix" @click="emit('fix')">{{ fix }}</button>
+				<button v-if="remedy === 'private_fpc'" type="button" :class="$style.fix" data-testid="send-fee-warning-fix" @click="emit('fix')">Pay it from private Fee Juice</button>
+				<a v-else :href="bridgeUrl" target="_blank" rel="noopener noreferrer" :class="$style.fix" data-testid="send-fee-warning-bridge">Get private Fee Juice</a>
 			</span>
 		</div>
 		<p v-else-if="sentence" :class="$style.sentence" data-testid="send-publish-line">{{ sentence }}</p>

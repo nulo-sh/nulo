@@ -26,6 +26,8 @@ export interface SendView {
 	you: Visibility | null
 	/** The form's warning, `send-fee-warning`, is drawn. */
 	warning: boolean
+	/** The warning's fix: `send-fee-warning-fix` (private Fee Juice) or `send-fee-warning-bridge`. */
+	warningFix: "private" | "bridge" | null
 	/** `send-fee-line[data-payer]`. */
 	payer: string | null
 	sheetOpen: boolean
@@ -88,6 +90,7 @@ export async function readSendView(page: Page): Promise<SendView> {
 			tag: q("send-fee-privacy-notice")?.getAttribute("data-notice-shape") ?? null,
 			you: (q("send-publish")?.getAttribute("data-you") as Visibility | null) ?? null,
 			warning: Boolean(q("send-fee-warning")),
+			warningFix: (q("send-fee-warning-fix") ? "private" : q("send-fee-warning-bridge") ? "bridge" : null) as SendView["warningFix"],
 			payer: q("send-fee-line")?.getAttribute("data-payer") ?? null,
 			sheetOpen: q("send-review-sheet")?.getAttribute("data-open") === "true",
 			feeSheetOpen: q("send-fee-change")?.getAttribute("aria-expanded") === "true",

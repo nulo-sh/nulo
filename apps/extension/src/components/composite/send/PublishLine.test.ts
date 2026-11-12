@@ -3,17 +3,19 @@ import { describe, expect, test } from "vitest"
 import { NO_FACTS, type PayerKind, publishFacts, type TransferSide, UNVOUCHED_PUBLISH_SENTENCE } from "./publish-facts"
 import PublishLine from "./PublishLine.vue"
 
+const BRIDGE = "https://bridge.example"
 const STUBS = { Icon: { template: '<i data-testid="stub-icon" :data-name="name" />', props: ["name", "size"] } }
 
 function mountLine(origin: TransferSide, arrival: TransferSide, payer: PayerKind, extra: Record<string, unknown> = {}) {
 	return mount(PublishLine, {
-		props: { facts: publishFacts(origin, arrival, payer), name: "Ana", payer, remedy: null, ...extra },
+		props: { facts: publishFacts(origin, arrival, payer), name: "Ana", payer, remedy: null, bridgeUrl: BRIDGE, ...extra },
 		global: { stubs: STUBS },
 	})
 }
 const line = (w: ReturnType<typeof mountLine>) => w.find('[data-testid="send-publish-line"]')
 const warning = (w: ReturnType<typeof mountLine>) => w.find('[data-testid="send-fee-warning"]')
 const fix = (w: ReturnType<typeof mountLine>) => w.find('[data-testid="send-fee-warning-fix"]')
+const bridge = (w: ReturnType<typeof mountLine>) => w.find('[data-testid="send-fee-warning-bridge"]')
 
 describe("composite/send/PublishLine", () => {
 	test("a private send paid privately is one calm sentence", () => {
@@ -37,22 +39,25 @@ describe("composite/send/PublishLine", () => {
 		expect(warning(w).get('[data-testid="stub-icon"]').attributes("data-name")).toBe("warning")
 	})
 
-	test.each([
-		["private_fpc", "Pay it from private Fee Juice"],
-		["sponsor", "Use Sponsored"],
-	])("the warning's fix for %s reads %s, and a press emits fix", async (remedy, words) => {
-		const w = mountLine("private", "public", "account", { remedy })
-		expect(fix(w).text()).toBe(words)
+	test("private Fee Juice that can pay is the fix, and a press emits fix", async () => {
+		const w = mountLine("private", "public", "account", { remedy: "private_fpc" })
+		expect(fix(w).text()).toBe("Pay it from private Fee Juice")
+		expect(bridge(w).exists()).toBe(false)
 		await fix(w).trigger("click")
 		expect(w.emitted("fix")).toHaveLength(1)
 	})
 
-	test("with nothing to switch to, the warning stands alone", () => {
-		expect(fix(mountLine("private", "private", "account", { remedy: null })).exists()).toBe(false)
+	test("when private Fee Juice cannot pay, the fix is the bridge, opened in a new tab", () => {
+		const w = mountLine("private", "private", "account", { remedy: null })
+		expect(fix(w).exists()).toBe(false)
+		const link = bridge(w)
+		expect(link.text()).toBe("Get private Fee Juice")
+		expect(link.attributes()).toMatchObject({ href: BRIDGE, target: "_blank", rel: "noopener noreferrer" })
 	})
 
-	test("a remedy offered on a send that warns of nothing is not drawn", () => {
-		expect(fix(mountLine("private", "private", "contract", { remedy: "sponsor" })).exists()).toBe(false)
+	test("a send that warns of nothing offers no fix", () => {
+		const w = mountLine("private", "private", "contract", { remedy: "private_fpc" })
+		expect([fix(w).exists(), bridge(w).exists()]).toEqual([false, false])
 	})
 
 	test("an unresolved payer shows no line until the card names one", () => {
@@ -80,7 +85,10 @@ describe("composite/send/PublishLine", () => {
 	})
 
 	test("no sendable token, no line", () => {
-		const w = mount(PublishLine, { props: { facts: NO_FACTS, name: "Ana", payer: null, remedy: null }, global: { stubs: STUBS } })
+		const w = mount(PublishLine, {
+			props: { facts: NO_FACTS, name: "Ana", payer: null, remedy: null, bridgeUrl: BRIDGE },
+			global: { stubs: STUBS },
+		})
 		expect([line(w).exists(), warning(w).exists()]).toEqual([false, false])
 	})
 })

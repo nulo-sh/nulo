@@ -395,7 +395,8 @@ test.skipIf(!hasConfig)(
 
 			// THE case: private gas read as zero, public gas held. Nobody picked anything.
 			const defaulted = await waitForFee(page, "private", "public")
-			expect(defaulted).toMatchObject({ tag: "private-private", warning: true, you: "exposed" })
+			// Nulo's sponsor pays on this network, and still the fix is only ever the bridge.
+			expect(defaulted).toMatchObject({ tag: "private-private", warning: true, you: "exposed", warningFix: "bridge" })
 			expect(await readSendPicks(page)).toEqual({})
 			await shotSend(page, "warning-private-private", "send-fee-warning")
 
@@ -429,7 +430,7 @@ test.skipIf(!hasConfig)(
 			expect(visited).toContain("send-review-submit")
 			expect(visited).not.toContain("send-submit")
 			expect(visited).not.toContain("send-fee-change")
-			expect(visited).not.toContain("send-fee-warning-fix")
+			expect(visited).not.toContain("send-fee-warning-bridge")
 			expect(visited).not.toContain("send-amount-input")
 			await page.keyboard.press("Escape")
 			await waitForReviewClosed(page)

@@ -1114,7 +1114,7 @@ onBeforeUnmount(() => {
 						testid="send-to-type"
 						prefix="send-to"
 					/>
-					<PublishLine :facts="facts" :name="payeeSentenceName" :payer="payerKind" :remedy="feeRemedy" @fix="applyFeeFix" />
+					<PublishLine :facts="facts" :name="payeeSentenceName" :payer="payerKind" :remedy="feeRemedy" :bridgeUrl="FEE_JUICE_BRIDGE_URL" @fix="applyFeeFix" />
 				</Flex>
 			</Flex>
 

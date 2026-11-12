@@ -3258,10 +3258,14 @@ describe("FeeSettingsCard — Send: the remedy and the notices a closed card giv
 	const payerType = (w: Card) =>
 		((w.emitted<unknown[]>("update:payer") ?? []).at(-1)?.[0] as { type: string; fpcId?: string } | null) ?? null
 
-	async function paidFromPublic(gas: { publicFeeJuice: string; privateFeeJuice: string | null }, fpcs: unknown[]) {
+	async function paidFromPublic(
+		gas: { publicFeeJuice: string; privateFeeJuice: string | null },
+		fpcs: unknown[],
+		over: Record<string, unknown> = {},
+	) {
 		mocks.getFpcs.mockResolvedValue(fpcs)
 		mocks.getGasBalances.mockResolvedValue(gas)
-		const w = mountSend()
+		const w = mountSend(over)
 		await flushPromises()
 		await w.get('[data-testid="pick-fj"]').trigger("click")
 		await flushPromises()
@@ -3278,16 +3282,22 @@ describe("FeeSettingsCard — Send: the remedy and the notices a closed card giv
 		expect(remedy(w)).toBeNull()
 	})
 
-	test("with no private Fee Juice, Nulo's sponsor, never one added by hand ahead of it", async () => {
-		const w = await paidFromPublic({ publicFeeJuice: HELD, privateFeeJuice: "0" }, [PRIVATE_FPC, HAND_ADDED, SPONSOR])
-		expect(remedy(w)).toBe("sponsor")
-		w.vm.applyRemedy()
+	test("private Fee Juice that holds the estimated fee is the remedy; one short of it is none", async () => {
+		const estimate = (maxFee: string) => ({ feeEstimate: { maxFee, gasDetails: {} } })
+		const covered = await paidFromPublic({ publicFeeJuice: HELD, privateFeeJuice: "500" }, [PRIVATE_FPC, SPONSOR], estimate("500"))
+		expect(remedy(covered)).toBe("private_fpc")
+		covered.unmount()
+
+		const short = await paidFromPublic({ publicFeeJuice: HELD, privateFeeJuice: "499" }, [PRIVATE_FPC, SPONSOR], estimate("500"))
+		expect(remedy(short)).toBeNull()
+		short.vm.applyRemedy()
 		await flushPromises()
-		expect(payerType(w)).toMatchObject({ type: "fpc", fpcId: "s1" })
+		expect(payerType(short)?.type).toBe("fj")
 	})
 
-	test("none when only a hand-added sponsor could pay, and the press does nothing", async () => {
-		const w = await paidFromPublic({ publicFeeJuice: HELD, privateFeeJuice: "0" }, [PRIVATE_FPC, HAND_ADDED])
+	test("never a sponsor: with no private Fee Juice, none, on a network whose sponsor could pay", async () => {
+		const w = await paidFromPublic({ publicFeeJuice: HELD, privateFeeJuice: "0" }, [PRIVATE_FPC, HAND_ADDED, SPONSOR])
+		expect(w.get('[data-testid="pick-fpc"][data-fpc-id="s1"]').attributes("data-disabled")).toBe("false")
 		expect(remedy(w)).toBeNull()
 		w.vm.applyRemedy()
 		await flushPromises()

@@ -22,7 +22,6 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 /** Helpers */
 import {
 	buildFeeMethods,
-	defaultSponsor,
 	FEE_JUICE_BRIDGE_URL,
 	feePayerOf,
 	formatGasBalance,
@@ -115,8 +114,8 @@ const accountUnusableOut = defineModel("accountUnusable", { type: Boolean, defau
  *  closed. */
 const noticesOut = defineModel("notices", { type: Array, default: () => [] })
 
-/** One-way child→parent, Send only: the one payer that stops a private send's fee naming the account,
- *  as `"private_fpc"` or `"sponsor"`, or null when none can. `applyRemedy` picks it. */
+/** One-way child→parent, Send only: `"private_fpc"` while the account's private Fee Juice can take
+ *  over a private send's fee that names the account, else null. `applyRemedy` picks it. */
 const remedyOut = defineModel("remedy", { type: String, default: null })
 
 const methodId = getRandomHex(6)
@@ -323,18 +322,26 @@ const handleMethodPicked = (m) => {
 	rules.pick(m)
 }
 
-/** Only the PrivateFPC the wallet derives, or Nulo's own sponsor: never a hand-added contract, which
- *  may publish anything. Read from the rows at the press too, so a row that changed since is never
- *  picked. */
+/** The private balance holds this send's fee as estimated, or nothing has priced it yet. The
+ *  estimate is for the payer in use; the PrivateFPC's own calls only add gas, so a balance below it
+ *  can never pay. */
+const privateCoversFee = computed(() => {
+	const held = gasBalances.value?.privateFeeJuice
+	const fee = props.feeEstimate?.maxFee
+	return typeof held === "string" && (!fee || BigInt(held) >= BigInt(fee))
+})
+
+/** Only the PrivateFPC the wallet derives. Never a sponsor: Nulo's exists on some networks only, and
+ *  a hand-added one may publish anything. Read from the rows at the press too, so a row that changed
+ *  since is never picked. */
 const remedyMethod = computed(() => {
-	if (props.originPrivacy !== "private" || effectiveMethod.value?.type !== "fj") return null
-	const privateRow = methods.value.find((m) => m.type === "private_fpc" && m.fpc?.isProtocol === true && !m.disabled && !m.checking)
-	return privateRow ?? defaultSponsor(methods.value) ?? null
+	if (props.originPrivacy !== "private" || effectiveMethod.value?.type !== "fj" || !privateCoversFee.value) return null
+	return methods.value.find((m) => m.type === "private_fpc" && m.fpc?.isProtocol === true && !m.disabled && !m.checking) ?? null
 })
 watch(
 	remedyMethod,
 	(m) => {
-		remedyOut.value = m ? (m.type === "private_fpc" ? "private_fpc" : "sponsor") : null
+		remedyOut.value = m ? "private_fpc" : null
 	},
 	{ immediate: true },
 )

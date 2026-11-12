@@ -162,6 +162,7 @@ vi.mock("vue-router", () => ({
 }))
 
 import { REVIEW_ARM_MS } from "@/composables/useSendReview"
+import { FEE_JUICE_BRIDGE_URL } from "@/popup/components/modules/send/fee-helpers"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
@@ -894,11 +895,12 @@ describe("send page — the footer", () => {
 		w.unmount()
 	})
 
-	test("the warning's fix applies the card's remedy and hands the focus to the fee line's Change", async () => {
+	test("the warning's fix is the bridge until the card offers private Fee Juice, whose press applies it and focuses Change", async () => {
 		const { w } = await mountSend()
 		await fillForm(w, FJ)
 		expect(warning(w).exists()).toBe(true)
 		expect(w.find('[data-testid="send-fee-warning-fix"]').exists()).toBe(false)
+		expect(w.get('[data-testid="send-fee-warning-bridge"]').attributes("href")).toBe(FEE_JUICE_BRIDGE_URL)
 		w.findComponent({ name: "FeeSettingsCard" }).vm.$emit("update:remedy", "private_fpc")
 		await nextTick()
 		const fix = w.get('[data-testid="send-fee-warning-fix"]')
