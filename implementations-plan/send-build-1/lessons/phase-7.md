@@ -1,0 +1,7 @@
+# Phase 7: round a1b on a2 (page 138)
+
+- The a1 PR stopped merging cleanly once `dev` moved three commits, and GitHub ran none of its PR workflows (only CodeQL, which failed in 5 s, and Workers Builds): a `pull_request` run needs the merge ref, which a conflicted PR lacks. Read `mergeable` before reading a silent check list. The stack was rebased onto `dev` with `gh stack rebase` (conflicts only in `implementations-plan/index.md`), a1 re-checked with `lint`, `typecheck:all` and `test:all` (209 s), and pushed with `--force-with-lease`.
+- `gh stack rebase --upstack --no-trunk` moved a2 onto a1 first; the conflicts were the plan's ledger rows and audit verdicts (merged by D-number, the rebased side's row kept on a shared number), `OWNER-ASKS.md` (both sides kept) and one e2e assertion (a2's exact Tab-stop set implies a1's list).
+- A test price must sit inside the token's band: `usePrices.quoteFor` drops a quote outside the signed list's band, so USDC at $15 left `liveQuote` null and no readout drew. USDC at $1 does.
+- `DottedTerm` puts its definition in a `hidden` span beside the word, so `text()` on a line that holds one reads the definition too. Consumer tests stub it to its key and word (as `GasBalanceCard.test.ts` does); the term's own test reads text with `[hidden]` removed.
+- Two dotted terms per screen is the cap, so the dot goes only inside the two constant sentences: a generic "dot every FPC" would dot a hand-added sponsor's name that contains it (the fee line's value reads `—, {name}`).

@@ -97,7 +97,7 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
 - **Surface**: the review Home opens when a send's fee went up ("Fee went up. Review"), which mounts the same sheet as Send's review.
 - **What ships now**: it follows RV4a with its re-ask fee states; its address carries no check line (the send was already made). Its fee row is today's sentence on the row's grid, "Fee is now ~0.88 FJ ($0.013), above the ~0.8 FJ ($0.012) you accepted.", with today's payer words under it ("paid by your address", "paid from your private Fee Juice" or "paid by the sponsor"); the label "Fee" sits left of a sentence that starts with "Fee". It has no name line: the record keeps the address, not a name.
 
-## OA-16: the review's details the picks do not name (arc a2)
+## OA-16: the review's details the picks do not name (arc a2): answered (page 138)
 
 - **Surface**: the review sheet, Send's and Home's re-ask.
 - **Why ask**: RV4a's pick names the four parts and their order; the prototype it was drawn from differs from what ships in five details, each kept to today's wallet or to the form's own words.
@@ -108,6 +108,18 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
   - The warning, when the fee names your account, is the form's warning box with no link; today's review offered "Get private Fee Juice" (the bridge) under its row, and the form's warning keeps its own fix, Pay it from private Fee Juice.
   - A hand-added sponsor shows the form's sentence, "Nulo can't tell what this FPC publishes about you.", under the strip; today's review said "This FPC was added by hand. Nulo cannot tell what it publishes about you."
 - **Options for each**: keep what ships, or take the prototype's form (or today's link).
+- **Answers** (page 138, 2026-11-12, as the answers file records them):
+  - P138-02 = a (15:37 UTC): "The sheet's title stays "Review". Nothing changes."
+  - P138-03 = b (15:37 UTC): "b, on the page, no note." Shipped: "≈ $43.20" after the token amount when a price is known (`plan.md` D26).
+  - P138-04 = read (15:38 UTC), the owner's note: "I need "b" with a picture too. can't remember." Shipped: (a), the form's line on one line with its notes under it; the prototype's two-line row (the cost, the method under it) captured at the same state, light and dark, for the owner to pick from.
+  - P138-05 = a (15:38 UTC): "The review's warning box, when the fee names your account, carries no link. Nothing changes."
+  - P138-06 = a (15:39 UTC): "a, the form's sentence, "Nulo can't tell what this FPC publishes about you.", in the review as on the form." The owner's note: "fee paying contract? Or FPC with glossary? We are assuming the user knows what an FPC is." Answered in chat, about 16:04 UTC: ""Your P138-06 question needs one answer from you. " => dot the FPC then. your rec." Shipped: "FPC" in both sponsor sentences dotted with the glossary's `fpc` entry, on the form and the review (D27).
+
+## Page 138: the review's publish block (P138-01)
+
+- **Asked**: page 138 showed the review with the strip; page 137 showed today's sheet with "This send publishes" over three rows. The owner in chat, 2026-11-12 at about 15:20 UTC: "In general, on p137 and p138 im seeing two types of warnings for the user on the review of the send. The "this send publishes" and the one-strip preview. I like better the "This send publishes" though I know I previously said I liked the strip. What's going to be the reality?"
+- **Answer**: on the orchestrator's proposal (keep RV4a's order, put the three rows back in the strip's slot), the owner: "Agreed." and, on recording it: "Can't you do it yourself if you already know I don't want the strip anymore?"
+- **Shipped in round a1b**: `plan.md` D25; the `send-review-row-*` testids are back.
 
 ## Page 137: the owner's change to #1795 (P137-01)
 
@@ -136,3 +148,14 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
   - With a flagged-token banner or the token caveat in the token's section, the hover and press tint covers the row, not the whole section.
   - The bridge link is unleashed's testnet app on every network, as the fee card's link is today.
 - **Options**: keep each; or a second estimate for the fix; or arrows that move without picking (the menu's behaviour) at the cost of native radios; or a tint over the whole section.
+
+## OA-19: what page 138's answers leave open (round a1b)
+
+- **Surface**: the review sheet, Send's and Home's re-ask.
+- **Why ask**: each follows from a page-138 answer and is visible, but the answers do not settle it.
+- **What ships now**:
+  - When the fee names your account, the "Your address" row's sentence (today's words) and the warning box under the rows (RV4a's) both say so, one after the other.
+  - Home's re-ask review shows the token amount alone: it has no form, so no price is read for it.
+  - In USD mode the dollar figure is the token amount the send carries priced at the quote the form froze, half-up to the cent, so it matches the dollars typed unless the token's decimals round the amount.
+  - Each dotted "FPC" is a Tab stop, so a review paid by a hand-added sponsor has four (the close, two terms, Send now).
+- **Options**: keep each; or drop the row's sentence while the warning shows; or price Home's re-ask at today's quote; or print the typed dollars in USD mode.
