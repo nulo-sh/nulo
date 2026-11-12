@@ -1,3 +1,6 @@
 - 2026-11-12 planning: recon done (1 Explore sonnet); plan drafted; one owner ask (A1, ships (a)).
 - 2026-11-12 Codex plan audit: conditional approve, five findings taken; final fresh pass next.
 - 2026-11-12 Codex final fresh pass: approve (round 2). Plan approved by the panel; A1 ships (a) per the spawn prompt; arc 1 next.
+- 2026-11-12 phase 1 gate: lint, typecheck:all, card + window tests (32), bun run test (1029 files) green.
+- 2026-11-12 phase 2 gate: lint, typecheck:all, bun run test (1029 files), test:components (101 files) green.
+- 2026-11-12 e2e tx-sendTx-default: Chrome green (225.0 s), Firefox green (328.8 s) at f8c0d13d5. Codex fix loop: round 2 approve.
