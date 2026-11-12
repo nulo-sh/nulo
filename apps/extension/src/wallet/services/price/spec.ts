@@ -1,3 +1,4 @@
+import type { ListedToken } from "@/utils/token-icon"
 import type { PricedTokens } from "./price-map"
 
 export const PRICE_SERVICE_NAME = "price"
@@ -47,13 +48,14 @@ export function isQuoteFresh(quote: PriceQuote, now: number): boolean {
 /** Usable quotes with the mapping that says which token each id prices. They travel together, so a
  *  reader never prices a token with a mapping from another moment than its quotes. `flaggedTokens`
  *  and `tokenIcons` ride along as the popup's one channel to the signed list, whatever the fiat
- *  setting: the `flaggedKeysOf` key of each pair it flags as a scam, and each entry's picture under
- *  the same key (`tokenIconsOf`). */
+ *  setting: the `flaggedKeysOf` key of each pair it flags as a scam, and each entry's picture and its
+ *  symbol and name under the same key (`tokenIconsOf`, `listedTokensOf`). */
 export type PriceSnapshot = {
 	quotes: PriceState
 	pricedTokens: PricedTokens
 	flaggedTokens: readonly string[]
 	tokenIcons: Readonly<Record<string, string>>
+	listedTokens: Readonly<Record<string, ListedToken>>
 }
 
 export type Methods = {
