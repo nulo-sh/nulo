@@ -2,26 +2,28 @@
 
 Each ask names the surface, the options, a recommendation and **what ships now**: what the arc's PR carries without waiting. No PR lands before the owner approves its captures, so a draft here reaches nobody until then. A1 to A3 are page 139's open slots: their answers arrive in the answers file and are quoted here, marked answered, when applied.
 
-## A1. P139-02: a call Nulo cannot read (slot S1), open
+## A1. P139-02: a call Nulo cannot read (slot S1), answered
 
-- **The owner's note, verbatim:** "The thing here is that when it's only one call, of couse I'd go for "b" but try to showcase this with a 10-call transaciton with 5 it can't read. So we can check how noisy it gets."
-- **Options:** the seal alone, no line; one plain line "Nulo can't read this call." under each unreadable call; one counting line for the window ("Nulo can't read calls 3, 5, 7, 8 and 10.").
-- **Recommendation:** whatever the round-4 page settles; the plan carries each option's change.
-- **What ships now:** one plain tertiary line under each unreadable call, no icon, no orange; the call's orange notice and the window's closing advice go; an unreadable authorization keeps today's notice and advice.
-- **A case to weigh:** a call on a Nulo verified token whose arguments Nulo cannot read shows the solid seal on its chip and only the tertiary line under it, where today it shows the orange notice.
+- **Answered on page 140, signed 2026-11-12 16:56 UTC: P140-01 = c with the owner's wording, P140-02 = c1** (the answers file's entry "P139-02 slot = P140-01 c, with the owner's wording (16:51 UTC)").
+- **The owner's note, verbatim:** "I'd do "c" but I wouldn't do the "can only check transfers and mints" it gets too verbose. I'd say: "Nulo can't parse calls from steps 3, 5 and ..."."
+- **The page 139 note it answers, verbatim:** "The thing here is that when it's only one call, of couse I'd go for "b" but try to showcase this with a 10-call transaciton with 5 it can't read. So we can check how noisy it gets."
+- **What ships now:** one tertiary line after the steps, no icon, no orange, naming both kinds of call Nulo cannot read as a transfer or a mint (undecodable, and decoded without the wallet's reading) by step number: "Nulo can't parse calls from steps 3, 5, 7, 8 and 10." / "Nulo can't parse the call from step 3." / "Nulo can't parse this call." (a request of one call). It waits for every decode. Today's orange notice and reason per call go, today's "Nulo can only check transfers and mints…" sentence goes, and today's closing advice goes from a send (c1); the standalone authorization card keeps its advice (K1). An unreadable authorization has one short line of its own (A13).
+- **Still open with the owner:** whether the two kinds share this one line or keep two short lines of the same shape. One line ships until an answer lands.
+- **A case to weigh:** a call on a Nulo verified token whose arguments Nulo cannot read shows the solid seal on its chip, and only the count line names its step.
 
-## A2. P139-05: the fee row's green tick (slot S2), open
+## A2. P139-05: the fee row's green tick (slot S2), answered for arc 2
 
-- **The owner's note, verbatim:** "To be honest: do we need this glyph in particular? I think it's not needed? Or maybe we should use the resette as Nulo verified? But it's a bit weird. Of course if we are showcasing the fee it's nulo verified. I think this green check is confusing. We should work to improve this."
-- **Options** (by content; the round-4 page letters them a = no glyph, b = the seal for the payer, c = today): no glyph; the solid seal for a Nulo verified payer (reopens P135-06's "no chip on the fee payer"); today's green tick.
-- **What ships now:** today's fee row, unchanged.
+- **Answered on page 140: P140-03 = b** (the seal on the app-paid fee row standing for the payer contract's level), scoped to arc 2 behind the fee-row matrix page.
+- **The owner's note, verbatim:** "Actually, now that you mention it, there is a world in which the applications publish (through aztecscan + we verify) their fee paying contracts, and hence, they can have the check. So I guess "b" is kinda right? Though the double-liner of "You pay..." + "Your Private Fee Juice must cover"... I'd remove the last one. I feel we should kinda work on a matrix here: \n- how does it look when the app sets a private fee juice, or public fee juice.\n- how does it look when it sets an fpc that we can't verify, when it's verified on atecscan, when it's verified on Nulo, etc.\n- how does it look when... whatever other matrix you can think of."
+- **The page 139 note it answers, verbatim:** "To be honest: do we need this glyph in particular? I think it's not needed? Or maybe we should use the resette as Nulo verified? But it's a bit weird. Of course if we are showcasing the fee it's nulo verified. I think this green check is confusing. We should work to improve this."
+- **What ships now (arc 1):** today's fee row, unchanged. The payer contract's level is one call of the chips' resolver, `readContract(reader, chainId, payer)`, so arc 2 is a rendering change.
 
-## A3. P139-07: a level not yet known (slot S3), open
+## A3. P139-07: a level not yet known (slot S3), answered as the base
 
-- **The owner's note, verbatim:** "Should we do a skeleton loading on the names / verification of the contracts until they load? Should we try that out? It'd be weird to laod the approval pop-up and all of a sudden a jitter because we checked it. ORRRR I am missunderstanding this ask."
-- **Options:** no mark until known; a skeleton in the seal's place that the seal fills.
-- **Context for this build:** the only level source here is local (the signed list the wallet holds, plus the compiled-in PrivateFPC), so a chip waits at most for the worker's first answer; the long wait round 4 measured is Aztecscan's, which this build does not ask.
-- **What ships now:** no mark until known: the short address, no seal, no level words, and a press with the address row only.
+- **Answered on page 140: P140-04 = read**; arc 1 builds no mark until the level is known, as a real pending state.
+- **The owner's note, verbatim:** "I don't quite understand this in it's completeness... Because... Also once the chip loads, we could change the addresses for the names of the contracts, right? Maybe we should implement this PoCs on an artifact so I can decide checking out how they'd look "live"?"
+- **The page 139 note it answers, verbatim:** "Should we do a skeleton loading on the names / verification of the contracts until they load? Should we try that out? It'd be weird to laod the approval pop-up and all of a sudden a jitter because we checked it. ORRRR I am missunderstanding this ask."
+- **What ships now:** a pending chip shows its short address, no seal and no level words; its accessible name is the address alone; its press has no level header and says "Nulo is still checking this contract." (draft, A14) above the address row. In this build the only source is the local list, so a chip is pending only until the worker's first answer. A skeleton, held chips or a name kept in the press is a rendering change on this state.
 
 ## A4. The legend's three entries (Settings → Glossary, a new Contracts section), drafts
 
@@ -35,9 +37,9 @@ Each ask names the surface, the options, a recommendation and **what ships now**
 
 - **Nulo verified, a token:** "Nulo knows this contract. Knowing it isn't a promise that it's safe." then "Nulo names it from its token list." (both as drawn in `vc3-s1-nulo-01`).
 - **Nulo verified, the PrivateFPC:** the first of those lines only (round two's "Aztec's standard fee contract, at its fixed address." was never drawn in a press).
-- **Unverified:** "Unverified", "Unknown contract", then the address row, with no level line: round three's "Neither Nulo nor Aztecscan has verified this contract." claims an Aztecscan answer this build never asks for. Round four drafts "Nulo hasn't checked this contract." for this case.
+- **Unverified:** "Unverified", "Unknown contract", then "Nulo hasn't checked this contract." alone (**P140-05 = a**, signed 16:56 UTC: in arc 1 Nulo never asks Aztecscan, so the second line, in each of its three forms, arrives with the Aztecscan reader), then the address row. When the decoded contract's own code names it, one more line says who chose the name and what Nulo checked, as round three drew it: "The name Crowdfunding came from an app. Nulo hasn't checked it." (P135-06 default 2 as P139-04 = W1 rewrote it; the chip keeps the short address).
 - **The app (execute and connect windows):** "Nulo doesn't know this site. Each contract shows its own level." above W1's line (as drawn in `vc3-s1-app-01`, the frame P139-04 was signed on).
-- **What ships now:** as listed. Recommendation: add round four's line to the unverified press once its page is signed.
+- **What ships now:** as listed.
 
 ## A6. The PrivateFPC's chip label
 
@@ -75,3 +77,15 @@ Each ask names the surface, the options, a recommendation and **what ships now**
 
 - **The build:** header "Unverified", title "Nulo flagged this token as a scam" (the existing banner's words, `FlaggedTokenBanner.vue`), then the address row; no seal ever.
 - **What ships now:** as described. Alternative: the plain unverified press ("Unknown contract").
+
+## A13. An unreadable authorization's line, draft
+
+- **Surface:** the approval window, under an authorization whose arguments Nulo cannot decode (an authorization has no step number, so the count line cannot name it).
+- **The answers file's mapping:** "an unreadable authorization (no rail number) keeps one short line of its own under it".
+- **What ships now (draft, in the count line's shape):** "Nulo can't parse this authorization." in tertiary, no icon, no orange, replacing today's orange "Can't read the arguments" and its reason; the press of its consumer chip still says what Nulo knows of the contract.
+- **Options:** this line; today's orange notice and reason kept.
+
+## A14. A pending chip's press, draft
+
+- **What ships now (draft):** "Nulo is still checking this contract." above the short address and the explorer link; no level header. Shown only until the worker's first answer.
+- **Options:** this line; the address row alone (the plan's first fallback).

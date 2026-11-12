@@ -1,16 +1,18 @@
 /**
  * A send's calls on the rail, on the fixtures the armed build renders: numbered steps in order, then
- * the unchecked line, the advice and the authorizations' node; each step and the node one press row
- * that opens only its own details, with focus left on it; the controls inside a row keep their own
- * presses. jsdom has no layout: the smoke spec measures the rows, the Tab walk and the hit testing.
+ * the line naming the calls Nulo cannot read and the authorizations' node; each step and the node one
+ * press row that opens only its own details, with focus left on it; the controls inside a row, its
+ * contract's chip among them, keep their own presses. jsdom has no layout: the smoke spec measures
+ * the rows, the Tab walk and the hit testing.
  */
 import { DOMWrapper, enableAutoUnmount, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import Popover from "@nulo/design/ui/Popover.vue"
 import SectionLabel from "@nulo/design/ui/SectionLabel.vue"
 import Tooltip from "@nulo/design/ui/Tooltip.vue"
 import AddressDisplay from "@/components/AddressDisplay.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
-import { executeFixture, HUB, RECIPIENT, ROUTER } from "@/e2e/execute-fixture"
+import { executeFixture, HUB, RECIPIENT, ROUTER, UNKNOWN, USDC } from "@/e2e/execute-fixture"
 import { trimAddress } from "@/utils/string"
 import type { Account } from "@/wallet/services/account/client"
 import type { DecodedCall } from "@/wallet/services/execution/client"
@@ -49,7 +51,7 @@ const mountFixture = async (name: string, { decodedCalls = (d) => d, props = {} 
 			decodedAuthwits: f.decodedAuthwits as never,
 			...props,
 		},
-		global: { stubs, components: { AddressDisplay, SectionLabel, Tooltip } as never },
+		global: { stubs, components: { AddressDisplay, Popover, SectionLabel, Tooltip } as never },
 		attachTo: document.body,
 	})
 	await flushPromises()
@@ -63,6 +65,8 @@ const step = (w: VueWrapper, j: number) => w.get(`[data-testid="execute-op-summa
 const openSteps = (w: VueWrapper) =>
 	rows(w).flatMap((row) => (row.attributes("aria-expanded") === "true" ? [row.attributes("data-step-index")] : []))
 const UNREAD: DecodedCall = { kind: "undecoded", reason: "unknown-contract" }
+const unparsed = (w: VueWrapper) => w.findAll('[data-testid="execute-op-summary-unparsed"]').map((l) => l.text())
+const chipPanel = () => document.querySelector('[data-testid="contract-chip-panel"]')
 /** Everything Tab reaches inside the card, in DOM order: no `tabindex` here is positive. */
 const tabbables = (w: VueWrapper) =>
 	[...(w.element as Element).querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])')].filter(
@@ -72,14 +76,20 @@ const tabbables = (w: VueWrapper) =>
 // Every mount is its own app, whose ids repeat another's; one left attached would answer `getElementById`.
 enableAutoUnmount(afterEach)
 
+/** The teleport root a chip's press renders into, as the popup shell declares it. */
+let popoverRoot: HTMLDivElement
 beforeEach(() => {
 	document.getSelection()?.removeAllRanges()
 	lookups.accounts.splice(0)
 	lookups.accounts.push({ name: "Main", address: MAIN })
+	popoverRoot = document.createElement("div")
+	popoverRoot.id = "popover"
+	document.body.appendChild(popoverRoot)
 })
+afterEach(() => popoverRoot.remove())
 
 describe("OperationCard — the rail", () => {
-	test("order: the steps as the request lists them, then the unchecked line, the advice, the authorizations' node", async () => {
+	test("order: the steps as the request lists them, then the line naming the calls Nulo can't parse, the authorizations' node; no advice", async () => {
 		const { w, f } = await mountFixture("batch", { decodedCalls: ([, ...rest]) => [UNREAD, ...rest] })
 		const names = (f.operations[0] as unknown as { exec: { calls: { name: string }[] } }).exec.calls.map((c) => c.name)
 		expect(names).toEqual([
@@ -98,32 +108,29 @@ describe("OperationCard — the rail", () => {
 			"Claim Rewards",
 			"Transfer (private)",
 		])
-		const order = [
-			"execute-op-summary-calls",
-			"execute-op-summary-unchecked",
-			"execute-op-summary-unverified-advice",
-			"execute-op-summary-authwits-section",
-		].map((id) => w.get(`[data-testid="${id}"]`).element)
+		const order = ["execute-op-summary-calls", "execute-op-summary-unparsed", "execute-op-summary-authwits-section"].map(
+			(id) => w.get(`[data-testid="${id}"]`).element,
+		)
 		for (let i = 1; i < order.length; i++)
 			expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `${i}`).toBeTruthy()
-		expect(w.findAll('[data-testid$="-unverified-advice"]')).toHaveLength(1)
+		expect(unparsed(w)).toEqual(["Nulo can't parse calls from steps 1, 2, 4 and 5."])
+		expect(w.findAll('[data-testid$="-unverified-advice"]')).toHaveLength(0)
 	})
 
-	test("at rest: every sentence and every authorization's line, an unreadable call's warning and reason, no details", async () => {
+	test("at rest: every sentence and every authorization's line, the line naming an unreadable call in place of a warning under it, no details", async () => {
 		const batch = (await mountFixture("batch")).w
 		expect(batch.findAll('[data-testid="execute-op-summary-call-head"]')).toHaveLength(6)
 		expect(batch.findAll('[data-testid="execute-discovered-authwit-line"]').map((l) => shownText(l.element))).toEqual([
-			`Lets ${trimAddress(HUB)} move 25 USDC from Main to ${trimAddress(HUB)}`,
-			`Lets ${trimAddress(ROUTER)} move 10 USDC from Main to ${trimAddress(ROUTER)}`,
+			`Lets ${trimAddress(HUB)} move 25 ${trimAddress(USDC)} from Main to ${trimAddress(HUB)}`,
+			`Lets ${trimAddress(ROUTER)} move 10 ${trimAddress(USDC)} from Main to ${trimAddress(ROUTER)}`,
 		])
 		expect(batch.find('[data-testid="execute-op-details"]').exists()).toBe(false)
 
 		const raw = (await mountFixture("raw")).w
 		const unread = step(raw, 1)
-		expect(unread.get('[data-testid="execute-op-summary-unverified-warning"]').text()).toBe("Can't read the arguments")
-		expect(shownText(unread.get('[data-testid="execute-op-summary-unverified-reason"]').element)).toBe(
-			"Nulo doesn't have this contract's interface.",
-		)
+		expect(shownText(unread.get('[data-testid="execute-op-summary-call-head"]').element)).toBe(`Checkpoint on ${trimAddress(UNKNOWN)}`)
+		expect(unread.findAll('[data-testid*="-unverified-"]')).toHaveLength(0)
+		expect(unparsed(raw)).toEqual(["Nulo can't parse the call from step 2."])
 		expect(raw.find('[data-testid="execute-op-details"]').exists()).toBe(false)
 	})
 
@@ -144,26 +151,35 @@ describe("OperationCard — the rail", () => {
 		},
 	)
 
-	test("a press leaves focus on the pressed row, and the step's panel follows it, so the next Tab enters the panel", async () => {
+	test("a press leaves focus on the pressed row, and the step's panel follows the row's chip, so the second Tab enters the panel", async () => {
 		const { w } = await mountFixture("batch")
 		const row = rows(w)[1]!.element as HTMLElement
 		row.focus()
 		await rows(w)[1]!.trigger("click")
 		expect(document.activeElement).toBe(row)
 		const after = tabbables(w)
-		expect(after[after.indexOf(row) + 1]).toBe(step(w, 1).get('[data-testid="execute-op-raw-toggle"]').element)
+		expect(after.slice(after.indexOf(row) + 1, after.indexOf(row) + 3)).toEqual([
+			step(w, 1).get('[data-testid="contract-chip"]').element,
+			step(w, 1).get('[data-testid="execute-op-raw-toggle"]').element,
+		])
 	})
 
 	describe("the controls inside a row keep their own presses", () => {
-		test("a glossary term, by mouse and by Enter, opens nothing; a press on the warning's text beside it opens the step", async () => {
+		test("a contract's chip, by mouse and by Enter, opens its own press and never the step; a press on the sentence's text beside it opens the step", async () => {
 			const { w } = await mountFixture("raw")
-			const term = step(w, 1).get('[data-testid="execute-op-summary-interface-term"]')
-			expect(term.attributes("tabindex")).toBe("0")
-			await term.trigger("click")
-			sendEvent(term.element, "keydown", { key: "Enter" })
+			const chip = step(w, 1).get<HTMLButtonElement>('[data-testid="contract-chip"]')
+			expect([chip.element.tagName, chip.attributes("type")]).toEqual(["BUTTON", "button"])
+			chip.element.focus()
+			await chip.trigger("click")
+			expect([chip.attributes("aria-expanded"), chipPanel() !== null, openSteps(w)]).toEqual(["true", true, []])
+			await chip.trigger("click")
+			expect([chip.attributes("aria-expanded"), openSteps(w)]).toEqual(["false", []])
+			// Enter on a native button arrives as its keydown, then a click.
+			sendEvent(chip.element, "keydown", { key: "Enter" })
+			await chip.trigger("click")
 			await flushPromises()
-			expect(openSteps(w)).toEqual([])
-			await step(w, 1).get('[data-testid="execute-op-summary-unverified-warning"]').trigger("click")
+			expect([chip.attributes("aria-expanded"), openSteps(w)]).toEqual(["true", []])
+			await step(w, 1).get('[data-testid="execute-op-summary-call-title"]').trigger("click")
 			expect(openSteps(w)).toEqual(["1"])
 		})
 
@@ -237,12 +253,11 @@ describe("OperationCard — the rail", () => {
 			expect([row.element.tagName, row.attributes("type"), row.attributes("aria-expanded")]).toEqual(["BUTTON", "button", "false"])
 			return described(row).map((el) => el.getAttribute("data-testid"))
 		})
-		expect(parts).toEqual([
-			["execute-op-summary-call-head", "execute-op-call-line"],
-			["execute-op-summary-call-head", "execute-op-summary-unverified-args"],
+		expect(parts).toEqual([["execute-op-summary-call-head", "execute-op-call-line"], ["execute-op-summary-call-head"]])
+		expect(rows(w).map((row) => described(row).map((el) => shownText(el)))).toEqual([
+			[`Transfer (private) 2 ${trimAddress(USDC)}`, `from Main to ${trimAddress(RECIPIENT)}`],
+			[`Checkpoint on ${trimAddress(UNKNOWN)}`],
 		])
-		// jsdom's text joins blocks with no space; a browser's description computation spaces them.
-		expect(shownText(described(rows(w)[1]!)[1]!)).toMatch(/^Can't read the arguments ?Nulo doesn't have this contract's interface\.$/)
 		await rows(w)[1]!.trigger("click")
 		expect(rows(w)[1]!.attributes("aria-controls")).toBe(step(w, 1).get('[data-testid="execute-op-details"]').attributes("id"))
 
@@ -252,12 +267,11 @@ describe("OperationCard — the rail", () => {
 		expect(described(node(batch)).map((el) => shownText(el))).toEqual([expect.stringMatching(/^Authorizations\s*2$/)])
 	})
 
-	test("an unreadable call's warning and a pending call's reading print once, under the sentence, with the step open", async () => {
+	test("with the step open, an unreadable call prints no warning and the line names it once; a pending call's reading prints once, under the sentence, and no line names it", async () => {
 		const raw = (await mountFixture("raw")).w
 		await openAllSteps(raw)
-		expect(raw.findAll('[data-testid$="-unverified-warning"]').map((n) => n.attributes("data-testid"))).toEqual([
-			"execute-op-summary-unverified-warning",
-		])
+		expect(raw.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(0)
+		expect(unparsed(raw)).toEqual(["Nulo can't parse the call from step 2."])
 		expect(step(raw, 1).find('[data-testid="execute-op-raw-toggle"]').exists()).toBe(true)
 
 		const pending = (await mountFixture("batch", { decodedCalls: () => undefined })).w
@@ -265,22 +279,26 @@ describe("OperationCard — the rail", () => {
 		expect(panels(pending)).toHaveLength(6)
 		expect(pending.text().split("Reading arguments…")).toHaveLength(7)
 		expect(pending.findAll('[data-testid="execute-op-summary-args-pending"]')).toHaveLength(6)
+		expect(unparsed(pending)).toEqual([])
 	})
 
-	test("an unreadable authorization beside readable calls takes the advice into its details, once, and none at rest", async () => {
+	test("an unreadable authorization beside decoded calls says so in one line under its own, and advises neither at rest nor with its details open", async () => {
 		const f = executeFixture("batch", ACCOUNT, NETWORK)!
 		const [first] = f.feeEstimates[0]!.discoveredAuthwits!
 		const decodedAuthwits = new Map(f.decodedAuthwits)
 		decodedAuthwits.set(first!.messageHash, UNREAD)
 		const { w } = await mountFixture("batch", { props: { decodedAuthwits } })
-		expect(w.findAll('[data-testid$="-unverified-advice"]')).toHaveLength(0)
+		const lines = () =>
+			w
+				.findAll('[data-testid="execute-op-summary-authwit-unparsed"]')
+				.map((l) => [l.element.closest("[data-message-hash]")?.getAttribute("data-message-hash"), l.text()])
+		const ONE = [[first!.messageHash, "Nulo can't parse this authorization."]]
+		expect([lines(), w.findAll('[data-testid$="-unverified-advice"]').length]).toEqual([ONE, 0])
 		await node(w).trigger("click")
-		const advice = w.findAll('[data-testid$="-unverified-advice"]')
-		expect(advice.map((a) => a.attributes("data-testid"))).toEqual(["execute-discovered-authwit-unverified-advice"])
-		expect(advice[0]!.element.closest("[data-message-hash]")?.getAttribute("data-message-hash")).toBe(first!.messageHash)
+		expect([lines(), w.findAll('[data-testid$="-unverified-advice"]').length]).toEqual([ONE, 0])
 	})
 
-	test("checking, a failed preview and a refusal read in the node's place; a refusal offers no advice and no Try again", async () => {
+	test("checking, a failed preview and a refusal read in the node's place; a refusal offers no advice and no Try again, and keeps the line naming its unreadable call", async () => {
 		const noFrom = (op: unknown) => ({
 			...(op as object),
 			executionMode: "default_entrypoint",
@@ -303,7 +321,12 @@ describe("OperationCard — the rail", () => {
 		)
 		expect(slot.get('[data-testid="execute-op-authwits-preview-retry"]').text()).toBe("Try again")
 
-		const refused = (await mountFixture("raw", { props: { ...base, previewFailed: true, refused: true } })).w
+		const raw = executeFixture("raw", ACCOUNT, NETWORK)!
+		const refused = (
+			await mountFixture("raw", {
+				props: { op: noFrom(raw.operations[0]), feeEstimate: undefined, previewFailed: true, refused: true },
+			})
+		).w
 		expect(slotText(refused)).toBe("")
 		const group = (w: VueWrapper) => ["role", "aria-label"].map((a) => w.get('[data-testid="execute-op-authwits-slot"]').attributes(a))
 		expect([group(checking), group(failed), group(refused)]).toEqual([
@@ -313,14 +336,15 @@ describe("OperationCard — the rail", () => {
 		])
 		expect(refused.find('[data-testid="execute-op-authwits-preview-retry"]').exists()).toBe(false)
 		expect(refused.findAll('[data-testid$="-unverified-advice"]')).toHaveLength(0)
-		expect(refused.find('[data-testid="execute-op-summary-unverified-warning"]').exists()).toBe(true)
+		expect(unparsed(refused)).toEqual(["Nulo can't parse the call from step 2."])
 	})
 
-	test("batch: 7 rows reach Tab at rest and 17 controls with everything open; 7 presses open every step and the node", async () => {
+	test("batch: 15 stops reach Tab at rest, each row then its chip, the node, each authorization's chip, and 25 with everything open; 7 presses open every step and the node", async () => {
 		const { w } = await mountFixture("batch")
 		expect(tabbables(w).map((el) => el.getAttribute("data-testid"))).toEqual([
-			...Array(6).fill("execute-op-step-toggle"),
+			...Array(6).fill(["execute-op-step-toggle", "contract-chip"]).flat(),
 			"execute-op-authwits-toggle",
+			...Array(2).fill("contract-chip"),
 		])
 		const closed = () =>
 			w.findAll(
@@ -335,9 +359,9 @@ describe("OperationCard — the rail", () => {
 		// Every value then sits one press further at most: each step's and each authorization's raw values.
 		expect(presses + w.findAll('[data-testid$="raw-toggle"]').length).toBe(15)
 		expect(tabbables(w).map((el) => el.getAttribute("data-testid"))).toEqual([
-			...Array(6).fill(["execute-op-step-toggle", "execute-op-raw-toggle"]).flat(),
+			...Array(6).fill(["execute-op-step-toggle", "contract-chip", "execute-op-raw-toggle"]).flat(),
 			"execute-op-authwits-toggle",
-			...Array(2).fill(["execute-discovered-authwit-toggle", "execute-discovered-authwit-raw-toggle"]).flat(),
+			...Array(2).fill(["contract-chip", "execute-discovered-authwit-toggle", "execute-discovered-authwit-raw-toggle"]).flat(),
 		])
 	})
 
@@ -348,22 +372,12 @@ describe("OperationCard — the rail", () => {
 		).toEqual(Array.from({ length: 10 }, (_, i) => String(i + 1)))
 	})
 
-	test("no glossary term or tooltip joins the window: everything open mounts only the unreadable call's one term and its tooltip", async () => {
-		for (const [name, terms] of [
-			["batch", 0],
-			["deep", 0],
-			["one", 0],
-			["raw", 1],
-		] as const) {
+	test("no glossary term or tooltip joins the window, an unreadable call's included: everything open mounts none", async () => {
+		for (const name of ["batch", "deep", "one", "raw"] as const) {
 			const { w } = await mountFixture(name)
 			const atRest = w.findAllComponents(DottedTerm).length
 			await openAllSteps(w)
-			expect([name, atRest, w.findAllComponents(DottedTerm).length, w.findAllComponents(Tooltip).length]).toEqual([
-				name,
-				terms,
-				terms,
-				terms,
-			])
+			expect([name, atRest, w.findAllComponents(DottedTerm).length, w.findAllComponents(Tooltip).length]).toEqual([name, 0, 0, 0])
 		}
 	})
 })

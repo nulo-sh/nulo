@@ -5,6 +5,9 @@ import { onMounted, onUnmounted } from "vue"
 /** Components */
 import IdentityStrip from "@/components/composite/IdentityStrip.vue"
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
+import ContractChip from "@/components/composite/ContractChip.vue"
+import { appChipOf } from "@/components/composite/contract-chip"
+import { useDappOrigin } from "@/composables/useDappOrigin"
 import DappCancelledOverlay from "@/components/composite/DappCancelledOverlay.vue"
 import DappApprovalFooter from "@/components/composite/DappApprovalFooter.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
@@ -56,6 +59,10 @@ const {
 	getRequestId: () => router.currentRoute.value.query.requestId?.toString(),
 	dappOf: (p) => p.params.dappMetadata,
 })
+
+/** No list vouches for an app yet, so its own chip always reads unverified. */
+const { origin: dappOrigin } = useDappOrigin(dapp)
+const appChip = computed(() => appChipOf(dapp.value?.name, dappOrigin.value))
 
 // The app's chain, not the wallet's: the strip above names the wallet's network, and an approval
 // connects the app on the chain it asked for, whatever the wallet shows.
@@ -185,7 +192,9 @@ onUnmounted(disposeWindow)
 				hostnameTestId="discover-hostname"
 				nameTestId="discover-dapp-name"
 				actionTestId="discover-action"
-			/>
+			>
+				<template v-if="appChip" #name><ContractChip :model="appChip" /></template>
+			</DappIdentityBlock>
 
 			<Flex direction="column" gap="16" :class="$style.body">
 				<Text variant="body" color="primary" :style="{ lineHeight: '1.5' }" data-testid="discover-scope">

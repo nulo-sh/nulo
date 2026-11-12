@@ -45,9 +45,9 @@ An answer is read from `~/.cache/nulo-backlog/_orch/briefs/verified-contracts-bu
 
 | Slot | Fallback (ships now) | Other options, and what each changes |
 |---|---|---|
-| **S1** P139-02, an unreadable call | One tertiary line "Nulo can't read this call." under each unreadable call, no icon, no orange; the call loses `ArgsNotice` and the window's advice (as `vc3-s1-raw-02`); an unreadable authorization keeps today's notice and advice | Mark alone: no line. Count line: one line where the advice sits, "Nulo can't read call 3." / "…calls 3, 5 and 7." / "…this call." (one call), from a helper beside `uncheckedCallsLine`, advice per the entry |
-| **S2** P139-05, the fee row's green tick | Unchanged (`OperationCard.vue:398`) | No glyph: delete that `Icon`. The seal for the payer's level: the solid seal when the payer resolves Nulo verified (today the pinned PrivateFPC), else none; reopens P135-06's "no chip on the fee payer", so it builds only if the entry says so |
-| **S3** P139-07, a level not yet known | No mark until known: the chip shows its short address, no seal, no level words; its press shows the address row only | Placeholder: the design package's `Skeleton` (15 × 10 px) in the seal's place while pending; collapses on unverified |
+| **S1** P139-02, an unreadable call | **Answered, P140-01 = c with the owner's wording, P140-02 = c1** (page 140, signed 16:56 UTC): one tertiary count line after the steps, `unparsedCallsLine` replacing `uncheckedCallsLine`, naming undecodable and decoded-but-unread calls together by step ("Nulo can't parse calls from steps 3, 5, 7, 8 and 10." / "…the call from step 3." / "…this call."), waiting for every decode; no `ArgsNotice` under a call; no advice on a send; an unreadable authorization gets one line of its own (A13) | One line or two for the two kinds: open with the owner |
+| **S2** P139-05, the fee row's green tick | **Answered, P140-03 = b, scoped to arc 2** behind the fee-row matrix page: arc 1 leaves the row unchanged (`OperationCard.vue:398`) | Arc 2 renders the seal from `readContract(reader, chainId, payer)` |
+| **S3** P139-07, a level not yet known | **Answered as the base, P140-04 = read**: no mark until known, a real `pending` reading; the chip shows its short address, no seal, no level words; its press drops the level header and says "Nulo is still checking this contract." (draft, A14) | A skeleton, held chips or a name kept in the press: rendering changes on `pending` |
 
 ## Outcome & Quality Bar
 
@@ -71,7 +71,7 @@ An answer is read from `~/.cache/nulo-backlog/_orch/briefs/verified-contracts-bu
 - I3. The list parser bars control and format characters (`parse.ts:41,104`); a listed symbol is still capped with `safeWire(…, 16)` like today's symbols. Confusable letters survive, which matters only with a hostile signed list (out of scope).
 
 **Asks** (working assumption in bold):
-- K1. P135-06's text is held here only as a fragment ("the token's picture inside the chip, a short address on an unverified chip, one chi…"). **The orchestrator pastes its full text into the arc prompt; before phase 4 the arc checks this working list against it, and a contradiction on a visible rule follows the signed text or stops the arc.** Working list: the picture inside the chip; a short address on an unverified chip; one chip per contract per step; the legend in Settings → Glossary only, no new dotted term in a window; a flagged token never Nulo verified; no chip on the fee payer; the register_token card, the standalone authorization card, the utility, simulate and metadata cards and public grants keep today's surfaces; a transfer's recipient stays `AddressDisplay`. Each visible rule that rests on this list alone also has its own entry (A7, A9, A11).
+- K1. **Reconciled before phase 4** against the full signed text the arc prompt carried: the working list matches it except default (2), which P139-04 = W1 rewrote; the build adds its line, "The name Crowdfunding came from an app. Nulo hasn't checked it.", to an unverified press when the decode names the contract (`contractChipOf`'s `selfName`), the chip keeping its short address. Default (3)'s per-step dedupe holds with no code (I2); default (4) for the fee row only is arc 2's (P140-03 = b); default (7)'s N2 sentence is not in this build (A8). Original note: P135-06's text is held here only as a fragment ("the token's picture inside the chip, a short address on an unverified chip, one chi…"). **The orchestrator pastes its full text into the arc prompt; before phase 4 the arc checks this working list against it, and a contradiction on a visible rule follows the signed text or stops the arc.** Working list: the picture inside the chip; a short address on an unverified chip; one chip per contract per step; the legend in Settings → Glossary only, no new dotted term in a window; a flagged token never Nulo verified; no chip on the fee payer; the register_token card, the standalone authorization card, the utility, simulate and metadata cards and public grants keep today's surfaces; a transfer's recipient stays `AddressDisplay`. Each visible rule that rests on this list alone also has its own entry (A7, A9, A11).
 - K2. **No storage change** (a hard rule of the lane): the channel is a message field; persisted `PriceState` is untouched.
 
 ## Architecture & Implementation
@@ -119,17 +119,17 @@ P139-03 b's row: `trimAddress` in mono, then "View on {explorer}" with the `open
 
 ## Phases (arc 1 = phases 1 to 5; arc 2 = phase 6)
 
-### Phase 1: the channel and the resolver
+### Phase 1: the channel and the resolver ✓
 - Change: `utils/token-icon.ts`, `wallet/services/price/spec.ts`, `price/service.ts` (`snapshotOf`), `composables/usePrices.ts` (`listState`, `useTokenFlags().listedAt`), new `utils/contract-level.ts`.
 - Tests: `utils/contract-level.test.ts`: listed on this chain → Nulo verified with its icon; the same address on another chain → unverified; flagged and also listed (a hostile reader) → unverified; the PrivateFPC → Nulo verified before `mapped`, unverified once the list flags it; unknown → unverified; not mapped → pending; mapped with an empty list → unverified; chain 0 listed → Nulo verified. The `snapshotOf` test gains `listedTokens`; `usePrices.test.ts` gains `listedAt` before and after an answer.
 - **Validation gate:** `bun run lint`, `bun run typecheck:all`, `bun run test`, `cd apps/extension && bun --bun vitest run src/wallet/services/price`. Pass: exit 0, the new cases green. Layers: lint, typecheck, unit.
 
-### Phase 2: the design package
+### Phase 2: the design package ✓
 - Change: `packages/design/src/core/glyph-sources.ts` (`seal`, `seal-solid`), regenerated with `bun run --cwd packages/design gen:glyphs`; `Popover.vue` (`inline`), new `packages/design/src/ui/popover-place.ts` (`placeCard`); `Popover.test.ts`; the `Core / Icon` and `Popover` stories.
 - Tests: `placeCard`: a left trigger in a 400 px view keeps the card inside; a 240 px view narrows it to 224 px; a trigger near the bottom opens above; neither side fits → the larger side with a capped height; a right-edge trigger places as today. `Popover`: `inline` renders spans; the existing focus, Escape and Tab cases unchanged. `glyphs.drift.test.ts` green.
 - **Validation gate:** `bun run --cwd packages/design test`, `bun run lint`, `bun run typecheck:all`, `bun run --cwd apps/extension build-storybook`. Pass: exit 0. Layers: lint, typecheck, unit, story build.
 
-### Phase 3: the chip, its press and the legend
+### Phase 3: the chip, its press and the legend ✓
 - Change: new `components/composite/contract-chip.ts` and `ContractChip.vue`; `utils/glossary.ts` (a "Contracts" section, three entries, A4); `popup/pages/settings/glossary.vue` (the seal beside the two marked terms, `aria-hidden`).
 - Tests: `ContractChip.test.ts`, ten distinct behaviours (the L3 floor), wire-shaped `0x` + 64-hex addresses: the accessible name per level and pending; solid, outline and no seal; click and Enter open the press with `aria-expanded`; a repeat Enter refused on chip and link; the link's `href`, `target`, `rel` and text beside the short address; no explorer → the address alone; D2 on the Aztecscan press; the flagged press; the app model's two lines; a press with no link keeps focus on the chip, which is described by it, and Escape closes it; the type-role classes (label `type--value`, address mono). `glossary.test.ts` (`SPEC` rows) and `settings/glossary.test.ts` (six sections).
 - **Validation gate:** `bun run lint`, `bun run typecheck:all`, `bun run --cwd apps/extension test:components`, `bun run test`. Pass: exit 0, `copy-dash-ban`, `red-text-ban` and `type-role-ban` green. Layers: lint, typecheck, component.
@@ -159,11 +159,11 @@ P139-03 b's row: `trimAddress` in mono, then "View on {explorer}" with the `open
 Each PR body quotes the sign-offs a line names, verbatim, from § Sign-offs.
 - **Approval window, step sentences**: no address outside a chip; each step's contract is a chip; a listed token's picture moves from before the amount into its chip; Nulo verified chips carry the solid seal. An unlisted token loses today's initials and its symbol in the sentence; a flagged held one keeps its badge (A7). Sign-off: P135-01's note, P139-01 = s1, P135-06.
 - **Approval window, authorization lines**: the consumer contract is a chip; caller, from and to stay as today (A11). Sign-off: P135-01, P135-06.
-- **Approval window, an unreadable call**: S1's fallback replaces the orange notice and the advice for calls (A1).
+- **Approval window, an unreadable call**: the count line replaces the orange notice per call, today's unchecked-calls sentence and the advice on a send; an unreadable authorization reads "Nulo can't parse this authorization." (draft, A13). Sign-off: P140-01 = c with the owner's wording and P140-02 = c1, quoted in `OWNER-ASKS.md` A1.
 - **The press**: P139-03 b's last row, D2, the header naming the level, the drafts of A5, A6 and A12. Sign-off: P135-03 = D2, P139-03 = b, P139-06 = a.
 - **The app chip, approval and connect windows only**: the self-declared name as a chip, no seal, one stop per window, the press as `vc3-s1-app-01`. The other four windows keep today's caption. Sign-off: P135-02 = a, P139-04 = W1.
 - **Settings → Glossary**: a Contracts section, the seals beside two terms (A4). Sign-off: P135-06, P139-06 = a.
-- **Fee row**: unchanged (S2). **Loading**: S3's fallback. **Logs viewer**: no change (`placeCard`'s right-edge case).
+- **Fee row**: unchanged (P140-03 = b is arc 2's). **Loading**: the pending state (P140-04 = read; A14's draft line). **Unverified press**: "Nulo hasn't checked this contract." alone (P140-05 = a). **Logs viewer**: no change (its block popover keeps today's placement, D13).
 
 **Accessibility calls** (made under the owner's 2026-10-19 delegation; each goes in the PR body): the chip is a native button with the 2 px accent ring on `:focus-visible`; every chip is a stop (one per contract per step; a contract named again in another step is a stop again, so each step's press is reachable where it is read) and the app chip one stop; the name carries the level; the seal is `aria-hidden`; the press keeps `Popover`'s Tab hand-off and Escape; chip and link refuse a repeat Enter.
 
@@ -210,6 +210,12 @@ Cite `implementations-plan/README.md` § Post-implementation standard at `1593cf
 | D10 | E2's forward Tab | the chip vs the next control | The next control: that is `Popover`'s contract (`Popover.vue:77-85`); the plan does not change it. |
 | D11 | The press near the bottom | flip only vs flip plus a height cap | Both, in `placeCard`: a short window fits neither side; a pure helper keeps `Popover`'s watch inside the complexity budget. |
 | D12 | E1's list | sign a custom list (I1 draft) vs the `listedExtension` source list | `listedExtension`: `launchExtension` takes no custom tokens; a new armed fixture targets its entries. |
+| D13 | `placeCard`'s reach (arc 1) | every left-side popover vs inline ones only | Inline only: `Popover.test.ts` pins the logs toolbar's off-screen start at 400 px as today's behaviour, and the plan promises the logs viewer no change; the block path is untouched. |
+| D14 | The identity block's `#name` slot | an untyped slot in a JS component vs the block in TS with `defineSlots` | TS: vue-tsc read the JS block's slots as `{}` and refused `#name`; typed props are the same contract. |
+| D15 | Chips in the rail's computeds | inside `callRows` vs computeds of their own | Their own (`callChips`, `authwitChips`, bound with `v-bind`): the type-role inventory treats anything derived from a computed that reaches `trimAddress` as an identifier site, so rows carrying chips flagged the count line and the authorization node. |
+| D16 | A rail with no list reader | treat as an empty list vs pending | Pending: without a reader no level is known, and an empty list would claim "unverified". |
+| D17 | Smoke cases whose subject went | keep the glossary-term press cases vs fold into E2 | Fold: the `interface` term no longer renders on a send's rail; "a press or an Enter on a chip opens nothing of the step" is their replacement, in the batch mouse case and in E2. |
+| D18 | Network gate's list | the plan's four files vs adding `tx-sendTx-multicall.test.ts` | Add it: it pins the old unchecked-calls sentence and is in the network lane. |
 
 ## Audit verdicts
 

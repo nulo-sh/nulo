@@ -18,8 +18,6 @@ defineProps<{
 	controls: string
 	chainId?: number
 	tokens?: readonly TokenInfo[]
-	/** Carries the window's closing advice; the rail picks the one authorization. */
-	advice?: boolean
 }>()
 
 const emit = defineEmits<{ toggle: [] }>()
@@ -60,7 +58,6 @@ const emit = defineEmits<{ toggle: [] }>()
 					:chainId="chainId"
 					:tokens="tokens"
 					prefix="execute-discovered-authwit"
-					:advice="advice"
 					:notice="surface.kind === 'pending'"
 					:raw="rawRows(authwit.args, Number.POSITIVE_INFINITY)"
 				/>

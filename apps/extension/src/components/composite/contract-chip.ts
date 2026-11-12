@@ -44,6 +44,11 @@ const chip = (
 	...rest,
 })
 
+function uncheckedLines(selfName: string | undefined): string[] {
+	const name = selfName ? sanitizeWireString(selfName, 64) : ""
+	return ["Nulo hasn't checked this contract.", ...(name.trim() ? [`The name ${name} came from an app. Nulo hasn't checked it.`] : [])]
+}
+
 /** Like a symbol in any other row, the list's own strings are capped as wire text. */
 function verifiedToken(reading: Extract<ContractReading, { source: "token" }>, address: string): ChipModel {
 	const symbol = sanitizeWireString(reading.symbol, 16)
@@ -58,9 +63,14 @@ function verifiedToken(reading: Extract<ContractReading, { source: "token" }>, a
 
 /**
  * `held` is the person's own token at this address, so a flagged one keeps its red badge; nothing
- * else of it reaches an unverified chip.
+ * else of it reaches an unverified chip. `selfName` is the name the contract's own code gives it,
+ * which only an unverified press repeats, saying where it came from.
  */
-export function contractChipOf(reading: ContractReading, address: string, held?: TokenMarkOf | null): ChipModel {
+export function contractChipOf(
+	reading: ContractReading,
+	address: string,
+	{ held, selfName }: { held?: TokenMarkOf | null; selfName?: string } = {},
+): ChipModel {
 	const short = trimAddress(address)
 	switch (reading.level) {
 		case "pending":
@@ -86,12 +96,7 @@ export function contractChipOf(reading: ContractReading, address: string, held?:
 						lines: [],
 						address,
 					})
-				: chip(short, true, "none", {
-						mark: null,
-						title: "Unknown contract",
-						lines: ["Nulo hasn't checked this contract."],
-						address,
-					})
+				: chip(short, true, "none", { mark: null, title: "Unknown contract", lines: uncheckedLines(selfName), address })
 	}
 }
 

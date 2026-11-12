@@ -20,7 +20,7 @@ import {
 	readableGrants,
 	rowTitle,
 	tokenAt,
-	uncheckedCallsLine,
+	unparsedCallsLine,
 	valueText,
 	valueTitle,
 } from "./call-surface"
@@ -469,7 +469,7 @@ describe("readableGrants", () => {
 	})
 })
 
-describe("uncheckedCallsLine", () => {
+describe("unparsedCallsLine", () => {
 	const read: CallSurface = { kind: "transfer", fn: "transfer", to: TO, amount: "5", sender: { kind: "account", address: OWNER } }
 	const minted: CallSurface = { kind: "mint", fn: "mint_to_public", to: TO, amount: "5" }
 	const named: CallSurface = { kind: "decoded", fn: "exit_to_l1", params: [] }
@@ -480,34 +480,14 @@ describe("uncheckedCallsLine", () => {
 	test.each([
 		["no call", [], undefined],
 		["every call read", [read, minted], undefined],
-		["calls still being read or unreadable", [pending, raw], undefined],
-		[
-			"a one-call transaction",
-			[named],
-			"Nulo can only check transfers and mints of tokens in your list, so it can't say what this call does.",
-		],
-		[
-			"every call in the list",
-			[named, claimed],
-			"Nulo can only check transfers and mints of tokens in your list, so it can't say what these calls do.",
-		],
-		[
-			"one call among several",
-			[read, raw, named],
-			"Nulo can only check transfers and mints of tokens in your list, so it can't say what call 3 does.",
-		],
-		[
-			"two of three",
-			[named, minted, claimed],
-			"Nulo can only check transfers and mints of tokens in your list, so it can't say what calls 1 and 3 do.",
-		],
-		[
-			"three of four",
-			[named, read, named, claimed],
-			"Nulo can only check transfers and mints of tokens in your list, so it can't say what calls 1, 3 and 4 do.",
-		],
+		["a decode still landing, so the line waits rather than name some calls and then more", [raw, pending, named], undefined],
+		["a one-call request, undecodable", [raw], "Nulo can't parse this call."],
+		["a one-call request, decoded without the wallet's reading", [named], "Nulo can't parse this call."],
+		["one call among several", [read, raw, minted], "Nulo can't parse the call from step 2."],
+		["both kinds named together, by step", [named, minted, raw, claimed], "Nulo can't parse calls from steps 1, 3 and 4."],
+		["every call of several", [raw, named], "Nulo can't parse calls from steps 1 and 2."],
 	] as const)("%s", (_, surfaces, line) => {
-		expect(uncheckedCallsLine(surfaces)).toBe(line)
+		expect(unparsedCallsLine(surfaces)).toBe(line)
 	})
 })
 

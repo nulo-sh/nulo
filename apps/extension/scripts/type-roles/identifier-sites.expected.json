@@ -91,7 +91,7 @@
 				}
 			],
 			"digests": {
-				"apps/extension/src/e2e/execute-fixture.ts": "6e45a2c0a7043acf5a77a422c61950d7c388eaef6cc14d56a630ca60477dc0bd",
+				"apps/extension/src/e2e/execute-fixture.ts": "da8b4142dd1f8d634f6726779cfccd7f3c92b7a0a98b66ab01af627f4bf7856f",
 				"packages/wallet-bridge/src/dispatcher.ts": "a7a81b849e72d78ec910e2d883faac29b117233f98554a7d98f748e5e1443b41"
 			},
 			"evidence": [
@@ -1397,7 +1397,7 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
 			"expression": "line.from",
-			"branch": "authwitRows.length && line.kind === 'move'",
+			"branch": "authwitRows.length && line.kind === 'move' && amount",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-line-from\"]",
@@ -1407,7 +1407,7 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
 			"expression": "line.to",
-			"branch": "authwitRows.length && line.kind === 'move'",
+			"branch": "authwitRows.length && line.kind === 'move' && amount",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-line-to\"]",

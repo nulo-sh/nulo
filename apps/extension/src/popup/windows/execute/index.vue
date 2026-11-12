@@ -14,6 +14,8 @@ import { JobCancelledError } from "@nulo/extension-messaging/errors"
 
 /** Components */
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
+import ContractChip from "@/components/composite/ContractChip.vue"
+import { appChipOf } from "@/components/composite/contract-chip"
 import DappCancelledOverlay from "@/components/composite/DappCancelledOverlay.vue"
 import DappApprovalFooter from "@/components/composite/DappApprovalFooter.vue"
 import OperationCard from "./OperationCard.vue"
@@ -83,6 +85,7 @@ import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
 import { estimateWhenClear } from "@/utils/estimate-when-clear"
 import { useTokenFlags } from "@/composables/usePrices"
+import { useDappOrigin } from "@/composables/useDappOrigin"
 import { useToast } from "@/composables/toast"
 
 const { openToast, toast, closeToast } = useToast()
@@ -209,6 +212,10 @@ const {
 	getRequestId: () => router.currentRoute.value.query.requestId?.toString(),
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
+
+/** No list vouches for an app yet, so its own chip always reads unverified. */
+const { origin: dappOrigin } = useDappOrigin(dapp)
+const appChip = computed(() => appChipOf(dapp.value?.name, dappOrigin.value))
 
 /** Per operation, whether its estimate or preview waits behind another send; cleared once its run
  *  starts, a new fee setting asks again, or neither is in flight. */
@@ -722,8 +729,11 @@ onUnmounted(() => {
 			<DappIdentityBlock
 				:dapp="dapp ?? undefined"
 				hostnameTestId="execute-hostname"
+				nameTestId="execute-dapp-name"
 				actionLabel="wants to execute the following"
-			/>
+			>
+				<template v-if="appChip" #name><ContractChip :model="appChip" /></template>
+			</DappIdentityBlock>
 
 			<Flex direction="column" gap="16" :class="$style.sections">
 				<Banner
@@ -772,6 +782,7 @@ onUnmounted(() => {
 						:decodedGrants="decodedGrants.get(i)"
 						:tokens="knownTokens"
 						:marks="tokenFlags"
+						:explorerId="appStore.defaultExplorer"
 						:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
 						:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
 						:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"

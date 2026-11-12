@@ -12,11 +12,12 @@ import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 import type { DecodedCall, DecodedValue, DiscoveredAuthwit, TransferFeeEstimate } from "@/wallet/services/execution/client"
 import type { Network } from "@/wallet/services/network/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 
 /** Travels in every fixture's app metadata, so the release grep finds this module wherever it lands. */
 export const EXECUTE_FIXTURE_MARKER = "nulo:e2e:execute-fixture"
 
-export const EXECUTE_FIXTURES = ["one", "batch", "deep", "raw", "ten", "wide", "wide-authwits", "depth", "ancestry"] as const
+export const EXECUTE_FIXTURES = ["one", "batch", "deep", "raw", "ten", "wide", "wide-authwits", "depth", "ancestry", "listed"] as const
 export type ExecuteFixtureName = (typeof EXECUTE_FIXTURES)[number]
 
 export type ExecuteFixture = {
@@ -44,6 +45,9 @@ export const RECIPIENT = hex("1e6f12", "007a8b")
 export const RECIPIENT_2 = hex("08c3f9", "003d08")
 export const UNKNOWN = hex("2c3d4e", "004e5f")
 export const APP_FPC = hex("1a4b6c", "000f23")
+/** A Testnet entry and a flagged Testnet pair of the source run's held list (`tests/e2e/fixtures/token-list.ts`). */
+export const LISTED_TOKEN = `0x${"0".repeat(62)}a1`
+export const FLAGGED_TOKEN = `0x${"0".repeat(62)}f1`
 
 const NONCES = [
 	"0x1a7c03e59d2b46f80c3e1a5b7d9f2c4e6a8b0d1f3e5c7a9b1d3f5e7c9a1b3d5f",
@@ -249,6 +253,27 @@ const rawSpecs = (main: string): Spec[] => [
 	},
 ]
 
+/** One contract per level source: a listed token, a flagged one, an unknown contract that names
+ *  itself, and the PrivateFPC the build pins. */
+const listedSpecs = (main: string): Spec[] => [
+	transfer(LISTED_TOKEN, main, RECIPIENT, 5_000_000n),
+	transfer(FLAGGED_TOKEN, main, RECIPIENT, 1_000_000n),
+	{
+		name: "checkpoint",
+		to: UNKNOWN,
+		contract: "Checkpoint",
+		selector: "0x6c4d2e1f",
+		params: { root: fld(ROOT), epoch: int(7) },
+	},
+	{
+		name: "mint_and_pay_fee",
+		to: PRIVATE_FPC_ADDRESS,
+		contract: "PrivateFPC",
+		selector: "0x2b7e4d19",
+		params: { amount: int(1_000_000) },
+	},
+]
+
 type Shape = { specs: Spec[]; authwits: ReturnType<typeof authwitOf>[]; maxFee: string }
 
 const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
@@ -284,6 +309,8 @@ const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
 			return fee([depthSpec()], "2500000000000000")
 		case "ancestry":
 			return fee([ancestrySpec()], "2500000000000000")
+		case "listed":
+			return fee(listedSpecs(main), "2500000000000000")
 	}
 }
 
@@ -319,6 +346,8 @@ export function executeFixture(name: string, account: Account, network: Network)
 		tokens: [
 			{ id: 9001, chainId: network.chainId, contract: USDC, name: "USD Coin", symbol: "USDC", decimals: 6 },
 			{ id: 9002, chainId: network.chainId, contract: TST, name: "Test Token", symbol: "TST", decimals: 18 },
+			{ id: 9003, chainId: network.chainId, contract: LISTED_TOKEN, name: "USD Coin", symbol: "USDC", decimals: 6 },
+			{ id: 9004, chainId: network.chainId, contract: FLAGGED_TOKEN, name: "Free Money", symbol: "FREE", decimals: 6 },
 		] as TokenInfo[],
 		dapp: { name: "Playground", url: "https://playground.nulo.sh", description: EXECUTE_FIXTURE_MARKER },
 	}

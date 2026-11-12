@@ -28,6 +28,7 @@ declare module 'vue' {
     Checkbox: typeof import('@nulo/design')['Checkbox']
     CollapsingHeroLayout: typeof import('./../components/composite/CollapsingHeroLayout.vue')['default']
     ConfirmPopup: typeof import('./../components/ConfirmPopup.vue')['default']
+    ContractChip: typeof import('./../components/composite/ContractChip.vue')['default']
     CurrentPasswordField: typeof import('./../components/composite/CurrentPasswordField.vue')['default']
     DappApprovalFooter: typeof import('./../components/composite/DappApprovalFooter.vue')['default']
     DappCancelledOverlay: typeof import('./../components/composite/DappCancelledOverlay.vue')['default']

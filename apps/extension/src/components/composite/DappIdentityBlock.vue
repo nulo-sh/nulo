@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * The `name` field is dApp-controlled metadata from the discovery payload. Route through
  * sanitizeWireString to strip bidi overrides, zero-width chars, etc. so a phishing dApp can't
@@ -7,17 +7,21 @@
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 import { HOSTNAME_WARNING, useDappOrigin } from "@/composables/useDappOrigin"
 
-const props = defineProps({
-	/** From useDappInteractionPayload.dapp; reads `url`, `loadingLogo`,
-	 *  `logoBlobUrl`, and `name` keys. */
-	dapp: { type: Object, default: null },
-	actionLabel: { type: String, default: "" },
-	/** Forwarded to the hostname `<span>` so e2e selectors stay scoped
-	 *  per window (e.g. "discover-hostname", "capabilities-hostname"). */
-	hostnameTestId: { type: String, default: undefined },
-	nameTestId: { type: String, default: undefined },
-	actionTestId: { type: String, default: undefined },
-})
+const props = withDefaults(
+	defineProps<{
+		/** From useDappInteractionPayload.dapp; reads `url`, `loadingLogo`, `logoBlobUrl`, and `name` keys. */
+		dapp?: { url?: string; name?: string; loadingLogo?: boolean; logoBlobUrl?: string } | null
+		actionLabel?: string
+		/** Forwarded to the hostname `<span>` so e2e selectors stay scoped
+		 *  per window (e.g. "discover-hostname", "capabilities-hostname"). */
+		hostnameTestId?: string
+		nameTestId?: string
+		actionTestId?: string
+	}>(),
+	{ dapp: null, actionLabel: "" },
+)
+
+defineSlots<{ name?: () => unknown }>()
 
 const { origin, isSuspicious } = useDappOrigin(toRef(props, "dapp"))
 
@@ -40,7 +44,9 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 				<Icon name="warning" size="12" color="orange" aria-hidden="true" :class="$style.warning_icon" />
 				<span :class="$style.warning_text">{{ HOSTNAME_WARNING }}</span>
 			</Flex>
-			<span v-if="sanitizedName" :data-testid="nameTestId" :class="$style.dapp_name">{{ sanitizedName }}</span>
+			<!-- A window that knows the app's level draws its name as a chip; the others keep the caption. -->
+			<span v-if="$slots.name" :data-testid="nameTestId" :class="$style.dapp_chip"><slot name="name" /></span>
+			<span v-else-if="sanitizedName" :data-testid="nameTestId" :class="$style.dapp_name">{{ sanitizedName }}</span>
 			<span v-if="actionLabel" :data-testid="actionTestId" :class="$style.dapp_action">{{ actionLabel }}</span>
 		</Flex>
 	</Flex>
@@ -102,6 +108,12 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.dapp_chip {
+	display: flex;
+	min-width: 0;
+	padding: 2px 0;
 }
 
 .dapp_action {

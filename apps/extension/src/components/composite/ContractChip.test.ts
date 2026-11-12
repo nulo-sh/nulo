@@ -117,6 +117,20 @@ describe("composite/ContractChip", () => {
 		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual(["Nulo hasn't checked this contract."])
 	})
 
+	test("an unverified contract whose code names itself keeps its short address, and its card says who chose the name", async () => {
+		const w = mountChip(contractChipOf({ level: "none", flagged: false }, OTHER, { selfName: "Crowdfunding" }))
+		expect(w.get('[data-testid="label"]').text()).toBe("0x2d8fb6..ff50")
+		await press(w)
+		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual([
+			"Nulo hasn't checked this contract.",
+			"The name Crowdfunding came from an app. Nulo hasn't checked it.",
+		])
+		const listed = contractChipOf({ level: "nulo", source: "token", symbol: "TST", name: "Test Token" }, TOKEN, { selfName: "Token" })
+		expect(listed.lines, "a Nulo verified card names the contract from the list alone").not.toContain(
+			"The name Token came from an app. Nulo hasn't checked it.",
+		)
+	})
+
 	test("an Aztecscan verified card says the code is verified and who runs it is not checked", async () => {
 		const w = mountChip(contractChipOf({ level: "scan", name: "Router" }, OTHER))
 		await press(w)
@@ -127,7 +141,7 @@ describe("composite/ContractChip", () => {
 	})
 
 	test("a flagged token keeps the person's mark with its badge, never a seal, and its card says Nulo flagged it", async () => {
-		const w = mountChip(contractChipOf({ level: "none", flagged: true }, OTHER, { symbol: "SCAM", badge: false }))
+		const w = mountChip(contractChipOf({ level: "none", flagged: true }, OTHER, { held: { symbol: "SCAM", badge: false } }))
 		expect(w.get('[data-testid="token-mark"]').find("svg.color--red").exists(), "the red badge").toBe(true)
 		expect(w.find('[data-testid="contract-chip-seal"]').exists()).toBe(false)
 		expect(w.get('[data-testid="label"]').text()).toBe("0x2d8fb6..ff50")
