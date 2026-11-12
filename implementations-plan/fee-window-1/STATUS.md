@@ -1,0 +1,3 @@
+- 2026-11-12 planning: recon done (1 Explore sonnet); plan drafted; one owner ask (A1, ships (a)).
+- 2026-11-12 Codex plan audit: conditional approve, five findings taken; final fresh pass next.
+- 2026-11-12 Codex final fresh pass: approve (round 2). Plan approved by the panel; A1 ships (a) per the spawn prompt; arc 1 next.
