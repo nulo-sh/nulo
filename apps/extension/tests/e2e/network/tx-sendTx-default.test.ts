@@ -232,27 +232,35 @@ test.skipIf(!hasConfig)(
 		const row = ["fee-raised-now", "fee-raised-was", "fee-raised-method"]
 		const rowFit = (await textFit(feePopup, row, "fee-raised-card")).map(({ id, lines, inside }) => ({ id, drawn: lines > 0, inside }))
 		expect(rowFit).toEqual(row.map((id) => ({ id, drawn: true, inside: true })))
-		// The Confirm repeats the card's figure, its dollars on a second line.
+		// Confirm reads Send over the card's figure and its dollars.
 		const confirmText = `Send for ${pinnedFeeText(fee)}`
 		expect(await settledText(feePopup, "fee-confirm-btn", confirmText)).toBe(confirmText)
 		// The second line wraps rather than being cut: on one line Confirm keeps Reject's height, and where
-		// it must wrap Confirm grows to hold it. Each width asserts which branch it met.
-		const branches: { width: number; lines: number; inside: boolean; height: string }[] = []
+		// it must wrap Confirm grows to hold it. Each width asserts which branch it met. Under 359 px the
+		// design's Button lets every label wrap, so the detail's own `normal` is read above it.
+		const branches: { width: number; narrow: boolean; wraps: string; lines: number; inside: boolean; height: string }[] = []
 		for (const width of [560, 320]) {
 			await setViewport(feePopup, { width, height: 800 })
 			const [{ lines, inside }] = await textFit(feePopup, ["dapp-approval-confirm-detail"], "fee-confirm-btn")
-			const [confirmH, rejectH] = await feePopup.evaluate(() =>
-				["fee-confirm-btn", "fee-reject-btn"].map(
-					(id) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect().height ?? 0,
-				),
-			)
+			const [confirmH, rejectH, narrow, wraps] = await feePopup.evaluate(() => {
+				const [confirm, reject, detail] = ["fee-confirm-btn", "fee-reject-btn", "dapp-approval-confirm-detail"].map(
+					(id) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement,
+				)
+				const height = (el: HTMLElement) => el.getBoundingClientRect().height
+				return [
+					height(confirm),
+					height(reject),
+					matchMedia("(width < 359px)").matches,
+					getComputedStyle(detail).whiteSpace,
+				] as const
+			})
 			const height = Math.abs(confirmH - rejectH) <= 0.5 ? "level" : confirmH > rejectH ? "taller" : "shorter"
-			branches.push({ width, lines: Math.min(lines, 2), inside, height })
+			branches.push({ width, narrow, wraps, lines: Math.min(lines, 2), inside, height })
 		}
 		await setViewport(feePopup, null)
 		expect(branches).toEqual([
-			{ width: 560, lines: 1, inside: true, height: "level" },
-			{ width: 320, lines: 2, inside: true, height: "taller" },
+			{ width: 560, narrow: false, wraps: "normal", lines: 1, inside: true, height: "level" },
+			{ width: 320, narrow: true, wraps: "normal", lines: 2, inside: true, height: "taller" },
 		])
 		expect(await prices.refused.failures(), "price interception failures").toEqual([])
 		await prices.refused.stop()

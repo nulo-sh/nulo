@@ -67,14 +67,14 @@ describe("FeeRaisedCard", () => {
 		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
 	})
 
-	test("the row is spoken as one sentence: the dot and the drawn figures are hidden, and only that sentence says the fee went up", async () => {
+	test("the row is spoken as one sentence: the label, the dot and the drawn figures are hidden, and only that sentence says the fee went up", async () => {
 		priceFake.reset(2)
 		const w = factory()
 		await flushPromises()
 		const row = w.get('[data-testid="fee-raised"]')
 		const hidden = row.findAll('[aria-hidden="true"]')
-		expect(hidden.map((el) => el.text())).toEqual(["", "~0.021 FJ ($0.042)was ~0.016 FJ"])
-		expect(spokenRow(w)).toBe("FeeFee went up. Was ~0.016 FJ. Now ~0.021 FJ ($0.042).Private Fee Juice")
+		expect(hidden.map((el) => el.text())).toEqual(["Fee", "~0.021 FJ ($0.042)was ~0.016 FJ"])
+		expect(spokenRow(w)).toBe("Fee went up. Was ~0.016 FJ. Now ~0.021 FJ ($0.042).Private Fee Juice")
 		expect(w.text().split("Fee went up")).toHaveLength(2)
 	})
 

@@ -49,7 +49,7 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const was = computed(() => feeDisplay(props.approved, prices.feeJuiceQuote.value?.usd))
 const now = computed(() => feeDisplay(props.fee, prices.feeJuiceQuote.value?.usd))
-/** Screen readers skip a strikethrough, so the row is spoken as this sentence alone. */
+/** A strikethrough is not announced, so the drawn row is hidden and spoken as this sentence. */
 const spoken = computed(() => `Fee went up. Was ${feeFigure(was.value)}. Now ${feeText(now.value)}.`)
 
 watch(
@@ -69,8 +69,8 @@ onBeforeUnmount(() => {
 <template>
 	<Flex direction="column" data-testid="fee-raised-card">
 		<Flex justify="between" gap="12" :class="$style.card" data-testid="fee-raised">
-			<span :class="$style.label">
-				<span :class="$style.dot" aria-hidden="true" />
+			<span :class="$style.label" aria-hidden="true">
+				<span :class="$style.dot" />
 				<Text variant="label-section" color="primary">Fee</Text>
 			</span>
 			<Flex direction="column" align="end" gap="4" :class="$style.figures">
