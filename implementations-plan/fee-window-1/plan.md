@@ -22,7 +22,7 @@ Page 116 (signed 2026-11-06 17:04 UTC) picked D for the raised-fee card and A fo
 
 - **For whom**: a person approving a dApp send again because its fee rose, in a 400 px window, about to press the button that pays.
 - **Excellent**: (1) the fee row alone says the fee rose, from what to what, in one face and size, and a screen reader hears both figures; (2) the button names the full fee and its dollars at every fee length the helper prints, never cut, 40 px tall when the two lines fit; (3) nothing else on the window moves: every `data-testid`, the arming rules and the keyboard path stay.
-- **Good enough**: the struck figure drops under the new one when the two do not fit one line (OWNER-ASKS A1 holds its words).
+- **Good enough**: the struck figure drops under the new one when the two do not fit one line, at 400 px from two whole digits (OWNER-ASKS A1 holds its words).
 
 ## Sign-offs (verbatim; the visible budget)
 
@@ -48,10 +48,10 @@ Page 116 (signed 2026-11-06 17:04 UTC) picked D for the raised-fee card and A fo
 - C2. "no issue is linked on page 116": both items name #1571, closed, about the execute window's six questions. Nothing to link.
 - C3. "the e2e README names the fixture that raises a fee": the spec raises it inline (approves half the estimate as `feeCeiling`); the README names none.
 
-### Inferences (measured in the build)
+### Inferences, as measured
 
-- I1. At the sandbox fee and $7 the second line ("for ~1.31xxxx FJ ($9.xxx)") wraps at 11 px in the button's 129 px. The network spec does not rely on it: it sets two window widths, one where the line wraps and one where it fits, and asserts both line counts occur (D8).
-- I2. With a 6 px inset, "Send" plus one 11 px line is 40 px and a wrapped detail about 51 px (`a-02` drew 50); measured on both browsers in phase 2.
+- I1. Did not hold at 400 px: the e2e window's viewport is 400 px, so Confirm is 176.9 px wide (page 116's 157 px was a 360 px viewport) and the sandbox's "for ~1.314209 FJ ($9.199)" fits one line; ~12.345678 FJ wraps. The spec never relied on it: its two widths make both line counts occur (D8, D11).
+- I2. Held: 40 px with one detail line and 51 px with two (Chrome captures); the e2e branches hold the same on Firefox.
 
 ### Asks
 
@@ -75,14 +75,14 @@ Page 116 (signed 2026-11-06 17:04 UTC) picked D for the raised-fee card and A fo
 
 Every phase closes with `bun run lint` and `bun run typecheck:all`, exit 0. Unit gates: `bun run test` and `bun run --cwd apps/extension test:components`, exit 0.
 
-### Phase 1: the fee row (D)
+### Phase 1: the fee row (D) ✓
 
 - **Change map**: `send/FeeRaisedCard.vue`, `send/FeeRaisedCard.test.ts`, `windows/fee/index.test.ts`, `tests/e2e/network/tx-sendTx-default.test.ts`.
 - **Tests (component, card)**: with a quote: `fee-raised-now` "~0.021 FJ ($0.042)", `fee-raised-was` "was ~0.016 FJ" inside an `<s>`, no dollars; both carry `type--meta` (D2's same role); the dot and the visual line are `aria-hidden`; the hidden sentence reads "Fee went up. Was ~0.016 FJ. Now ~0.021 FJ ($0.042)."; "Fee went up" appears in no other element (paired with the sentence present); the method title follows the figures; Available and Priority unchanged. The window test reads the row through the same ids.
 - **Network**: `fee-raised-now` = `pinnedFeeText(fee)`, `fee-raised-was` = `was ${feeFigure(approved)}`; each of `fee-raised-now`, `fee-raised-was` and `fee-raised-method` has at least one text line box of positive size (a `Range` over its contents), and every one lies inside `fee-raised-card`'s box.
 - **Gate**: the change map's unit files green; unit gates.
 
-### Phase 2: the Send button (A)
+### Phase 2: the Send button (A) ✓
 
 - **Change map**: `windows/fee/index.vue`, `components/composite/DappApprovalFooter.vue` (+ test), `windows/fee/index.test.ts`, `tests/e2e/network/tx-sendTx-default.test.ts`.
 - **Tests (component)**: window, one `test.each` over ~0.021, ~1.314209 and ~12.345678 FJ at $2 and ~0.021 FJ unpriced: label "Send", detail `for ${feeText(...)}` whole, row figures whole, the button's `textContent` `Send for ~X FJ ($Y)`. Before the card mounts the detail names the figure; before the question loads, "Send" and no detail. Footer: the detail carries `type--caption` and the label the inset class; without a detail neither (existing one-line test). The repeat-Enter, disabled and grant-arming tests stay green unchanged.

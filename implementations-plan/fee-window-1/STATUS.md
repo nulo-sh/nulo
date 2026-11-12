@@ -4,3 +4,4 @@
 - 2026-11-12 phase 1 gate: lint, typecheck:all, card + window tests (32), bun run test (1029 files) green.
 - 2026-11-12 phase 2 gate: lint, typecheck:all, bun run test (1029 files), test:components (101 files) green.
 - 2026-11-12 e2e tx-sendTx-default: Chrome green (225.0 s), Firefox green (328.8 s) at f8c0d13d5. Codex fix loop: round 2 approve.
+- 2026-11-12 captures (throwaway branch, Chrome, 400 px): 5 frames x 2 themes; base durations measured (Chrome 174.1 s, Firefox 255.8 s); execute-steps smoke green on Chrome (28.5 s) and Firefox (70.7 s).
