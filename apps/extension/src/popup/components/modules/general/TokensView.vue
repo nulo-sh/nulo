@@ -92,6 +92,12 @@ const anyRefreshing = computed(() => tokenBalances.value.some((tb) => tb.isUpdat
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const fiatOf = prices.fiatOfRow
+/** A record with no network stamp shows on every network, so only one stamped with the active network
+ *  takes its chain for the list's picture. */
+const importIcon = (op) =>
+	op.networkId !== undefined && op.networkId === appStore.network?.id
+		? prices.iconFor({ chainId: appStore.network.chainId, contract: op.contractAddress })
+		: undefined
 
 const pins = usePinnedTokens({
 	preferences: managers.uiPreference,
@@ -346,10 +352,10 @@ onBeforeUnmount(() => {
 		</Flex>
 
 		<Flex direction="column" :class="$style.token_list" data-testid="tokens-list" :data-settled="isSettled">
-			<TokenImportRow v-for="op in userImports" :key="op.id" :op="op" />
+			<TokenImportRow v-for="op in userImports" :key="op.id" :op="op" :icon="importIcon(op)" />
 			<template v-for="row in shownSlots" :key="row.key">
 				<TokenCard v-if="row.kind === 'token'" :tokenBalance="row.tb" />
-				<TokenImportRow v-else-if="row.kind === 'import'" :op="row.op" />
+				<TokenImportRow v-else-if="row.kind === 'import'" :op="row.op" :icon="importIcon(row.op)" />
 				<TokenSeedRow v-else :entry="row.entry" :icon="prices.iconFor(row.entry)" @retry="retryDefault(row.entry)" />
 			</template>
 			<template v-if="showGhostRows">
