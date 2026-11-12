@@ -205,6 +205,8 @@ type Request = {
 	contained?: true
 	/** A send: its steps open, each its own press, before `ready` is awaited. */
 	details?: true
+	/** A send: its first step's contract chip pressed open, the press's faces and sites read. */
+	press?: true
 	/** Approved, not rejected: what it registers, the requests after it read. */
 	approve?: true
 	/** Light and dark shots of the window, focused on this testid, when `NULO_E2E_SHOT_DIR` is set. */
@@ -229,6 +231,7 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddre
 			],
 			contained: true,
 			details: true,
+			press: true,
 			shot: { name: "execute-fee-card", focus: "fee-settings-card" },
 		},
 		{
@@ -315,7 +318,10 @@ async function payloadPastCard(win: Page): Promise<number> {
 			const text = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT)
 			for (let node = text.nextNode(); node; node = text.nextNode()) nodes.push(node)
 		}
+		// A chip clips its label with an ellipsis, so the chip's own box is what must stay inside.
 		const rights = nodes.flatMap((node) => {
+			const chip = node.parentElement?.closest('[data-testid="contract-chip"]')
+			if (chip) return [chip.getBoundingClientRect().right]
 			const range = document.createRange()
 			range.selectNodeContents(node)
 			return [...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => rect.right)
@@ -345,26 +351,22 @@ async function stretchPayload(win: Page): Promise<void> {
 	})
 }
 
-/** Each step's contract, measured by its own text: a narrow window may break the line after "on",
- *  but never inside the address, which never leaves its step. */
-async function callCaptions(win: Page): Promise<{ lines: number; inRow: boolean }[]> {
+/** Each step's contract chip, measured by its own box: a narrow window may break the line before
+ *  the chip, but never inside it, and a label wider than the row clips inside the chip, which never
+ *  leaves its step. */
+async function callCaptions(win: Page): Promise<{ lines: number; inRow: boolean; clips: boolean }[]> {
 	return win.evaluate(() =>
 		Array.from(document.querySelectorAll('[data-testid="execute-op-summary-call-head"]'), (head) => {
-			const to = head.querySelector('[data-testid="execute-op-call-to"]')
+			const chip = head.querySelector('[data-testid="execute-op-call-to"] [data-testid="contract-chip"]')
+			const label = chip?.querySelector('[data-testid="execute-op-summary-call-to"]')
 			const row = head.closest('[data-testid="execute-op-summary-call"]')
-			if (!to || !row) throw new Error("a step's sentence with no contract")
-			const rects: DOMRect[] = []
-			const text = document.createTreeWalker(to, NodeFilter.SHOW_TEXT)
-			for (let node = text.nextNode(); node; node = text.nextNode()) {
-				if ((node.textContent ?? "").trim() === "") continue
-				const range = document.createRange()
-				range.selectNodeContents(node)
-				rects.push(...Array.from(range.getClientRects()).filter((rect) => rect.width > 0))
-			}
+			if (!chip || !label || !row) throw new Error("a step's sentence with no contract chip")
+			const rects = Array.from(chip.getClientRects()).filter((rect) => rect.width > 0)
 			const right = row.getBoundingClientRect().right
 			return {
 				lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
 				inRow: rects.length > 0 && rects.every((rect) => rect.right <= right + 0.5),
+				clips: label.scrollWidth > label.clientWidth,
 			}
 		}),
 	)
@@ -374,7 +376,7 @@ async function expectCallCaptionsWhole(win: Page): Promise<void> {
 	const whole = async (label: string) => {
 		const captions = await callCaptions(win)
 		expect(captions.length, `${label}: steps`).toBeGreaterThan(0)
-		expect(captions, label).toEqual(captions.map(() => ({ lines: 1, inRow: true })))
+		expect(captions, label).toEqual(captions.map(() => ({ lines: 1, inRow: true, clips: false })))
 	}
 	await whole("the window's width")
 	await atWidth(win, 360, async () => {
@@ -383,10 +385,9 @@ async function expectCallCaptionsWhole(win: Page): Promise<void> {
 			for (const el of document.querySelectorAll('[data-testid="execute-op-summary-call-to"]')) el.textContent = "W".repeat(48)
 		})
 		const capped = await callCaptions(win)
-		expect(
-			capped.map(({ inRow }) => inRow),
-			"a contract wider than the row stays in it, at 360 px",
-		).toEqual(capped.map(() => true))
+		expect(capped, "a contract wider than the row clips inside its chip, which stays in the row, at 360 px").toEqual(
+			capped.map(() => ({ lines: 1, inRow: true, clips: true })),
+		)
 		expect(await payloadPastCard(win), "a contract wider than the row, at 360 px").toBeLessThanOrEqual(0)
 	})
 }
@@ -455,6 +456,19 @@ function feeSettled(): boolean {
 	return [...document.querySelectorAll('[data-testid="snackbar"]')].some((snack) => /estimate fee/i.test(snack.textContent ?? ""))
 }
 
+const PRESS_STATE = "an aztec_sendTx request, a contract chip's press open (network)"
+
+/** The press is teleported out of the card, so its faces and its short address are read with it open. */
+async function sweepChipPress(win: Page): Promise<void> {
+	await win.click(`${sel("execute-op-summary-call")} ${sel("contract-chip")}`)
+	await win.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
+	await waitForStateSites(win, "windows-execute", PRESS_STATE)
+	expectSweepClean(await sweepTypeRoles(win), "windows-execute, a chip's press")
+	await observeState(win, "windows-execute", PRESS_STATE)
+	await win.keyboard.press("Escape")
+	await win.waitForFunction((s: string) => !document.querySelector(s), { timeout: 10_000 }, sel("contract-chip-panel"))
+}
+
 async function runRequest(ctx: Connected, request: Request, shown: Set<string>): Promise<void> {
 	const pg = ctx.playgroundPage
 	const seq = await snapshotResultSeq(pg)
@@ -463,6 +477,7 @@ async function runRequest(ctx: Connected, request: Request, shown: Set<string>):
 		const observations = await sweepWindow(win, "windows-execute", request.states)
 		if (request.shot) await shotSend(win, request.shot.name, request.shot.focus)
 		if (request.fullArguments) await expectFullArguments(win, request.fullArguments)
+		if (request.press) await sweepChipPress(win)
 		if (request.contained) {
 			expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
 			await stretchPayload(win)

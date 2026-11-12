@@ -217,11 +217,20 @@ test.skipIf(!hasConfig)(
 			}),
 		).toBe(true)
 		await shotSend(feePopup, "execute-leaves-raised-fee", "execute-op-leaves-account")
-		// TST is absent from the list, so its mark must use initials.
-		const lineMark = '[data-testid="execute-op-call-line"] [data-testid="token-mark"]'
-		await feePopup.waitForSelector(`${lineMark}[data-kind="initials"]`, { visible: true, timeout: 15_000 })
-		expect(await feePopup.$$eval(lineMark, (marks) => marks.map((mark) => mark.textContent?.trim()))).toEqual(["T"])
-		await shotSend(feePopup, "fee-window-line-mark", "execute-op-call-line")
+		// TST is absent from the list, so its chip reads its short address with no mark and no seal.
+		const chip = '[data-testid="execute-op-summary-call-head"] [data-testid="contract-chip"]'
+		await feePopup.waitForSelector(`${chip}[data-level="none"]`, { visible: true, timeout: 15_000 })
+		const token = aztecConfig!.tokenAddress.toLowerCase()
+		expect(
+			await feePopup.$$eval(chip, (chips) =>
+				chips.map((el) => ({
+					label: el.querySelector('[data-testid="execute-op-summary-call-to"]')?.textContent?.trim(),
+					mark: el.querySelector('[data-testid="token-mark"]') !== null,
+					seal: el.querySelector('[data-testid="contract-chip-seal"]') !== null,
+				})),
+			),
+		).toEqual([{ label: `${token.slice(0, 8)}..${token.slice(-4)}`, mark: false, seal: false }])
+		await shotSend(feePopup, "fee-window-contract-chip", "execute-op-summary-call-head")
 		// The dApp's own row is pending from its request on; only a settled one would mean an answer.
 		const settled = await page.evaluate(
 			(after) =>

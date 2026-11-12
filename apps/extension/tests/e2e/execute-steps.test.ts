@@ -187,15 +187,16 @@ const tabbableCount = (page: Page) =>
 			).length,
 	)
 
-const AT_REST = [0, 1, 2, 3, 4, 5].map((j) => `execute-op-step-toggle#${j}`)
-const STOPS_AT_REST = [...AT_REST, "execute-op-authwits-toggle"]
+/** Every chip is one stop: the app's leads, each step's follows its row, and each authorization's
+ *  line holds its consumer's. */
+const CHIP = "contract-chip"
+const ROWS = [0, 1, 2, 3, 4, 5].map((j) => `execute-op-step-toggle#${j}`)
+const STOPS_AT_REST = [CHIP, ...ROWS.flatMap((row) => [row, CHIP]), "execute-op-authwits-toggle", CHIP, CHIP]
 const STOPS_OPEN = [
-	...AT_REST.flatMap((row) => [row, "execute-op-raw-toggle"]),
+	CHIP,
+	...ROWS.flatMap((row) => [row, CHIP, "execute-op-raw-toggle"]),
 	"execute-op-authwits-toggle",
-	"execute-discovered-authwit-toggle",
-	"execute-discovered-authwit-raw-toggle",
-	"execute-discovered-authwit-toggle",
-	"execute-discovered-authwit-raw-toggle",
+	...[0, 1].flatMap(() => [CHIP, "execute-discovered-authwit-toggle", "execute-discovered-authwit-raw-toggle"]),
 ]
 /** The footer's two stops, after every stop of the card. */
 const FOOTER = ["execute-reject-btn", "execute-confirm-btn"]
@@ -293,23 +294,23 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 		}
 	})
 
-	test("batch: Tab meets 7 stops in the card at rest and 17 with everything open, then the footer; 7 presses open everything, 15 reach every value", {
+	test("batch: Tab meets 16 stops at rest and 26 with everything open, then the footer; 7 presses open everything, 15 reach every value", {
 		timeout: 180_000,
 	}, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
 		try {
 			await openFixture(page, "batch", 400)
 			// A fixture answers no request, so the footer's two stops are held; under a request they
-			// follow the card's, 9 at rest and 19 open.
+			// follow the card's, 18 at rest and 28 open.
 			expect(await footerAfterCard(page)).toEqual(FOOTER.map((id) => ({ id, disabled: true })))
-			expect(STOPS_AT_REST.length + FOOTER.length).toBe(9)
+			expect(STOPS_AT_REST.length + FOOTER.length).toBe(18)
 			const restScroll = await scrollStops(page)
 			const atRest = await tabWalk(page, STOPS_AT_REST.length + restScroll)
 			expect(atRest).toEqual([...Array(restScroll).fill("scroll"), ...STOPS_AT_REST])
 			expect(await tabbableCount(page)).toBe(STOPS_AT_REST.length)
 
 			let presses = 0
-			for (const row of [...AT_REST.map((_, j) => stepRow(j)), sel("execute-op-authwits-toggle")]) {
+			for (const row of [...ROWS.map((_, j) => stepRow(j)), sel("execute-op-authwits-toggle")]) {
 				await page.$eval(row, (el) => (el as HTMLElement).click())
 				await page.waitForSelector(`${row}[aria-expanded="true"]`, { timeout: 10_000 })
 				presses++
@@ -321,20 +322,25 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 			const openScroll = await scrollStops(page)
 			const open = await tabWalk(page, STOPS_OPEN.length + openScroll)
 			expect(open).toEqual([...Array(openScroll).fill("scroll"), ...STOPS_OPEN])
-			expect(STOPS_OPEN.length + FOOTER.length).toBe(19)
+			expect(STOPS_OPEN.length + FOOTER.length).toBe(28)
 		} finally {
 			await page.close()
 		}
 	})
 
-	test("Enter on a row opens its step with focus left on the row, which does not move; the next Tab enters the step, where Enter opens the raw values", {
+	test("Enter on a row opens its step with focus left on the row, which does not move; the next Tab reaches its chip, the one after enters the step, where Enter opens the raw values", {
 		timeout: 120_000,
 	}, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
 		try {
 			await openFixture(page, "batch", 400)
 			const scroll = await scrollStops(page)
-			expect((await tabWalk(page, 2 + scroll)).slice(scroll)).toEqual(["execute-op-step-toggle#0", "execute-op-step-toggle#1"])
+			expect((await tabWalk(page, 4 + scroll)).slice(scroll)).toEqual([
+				CHIP,
+				"execute-op-step-toggle#0",
+				CHIP,
+				"execute-op-step-toggle#1",
+			])
 			const before = await rectOf(page, stepRow(1))
 			await page.keyboard.press("Enter")
 			await page.waitForSelector(`${stepRow(1)}[aria-expanded="true"]`, { timeout: 10_000 })
@@ -342,6 +348,8 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 			expect([await isOpen(page, stepRow(0)), await isOpen(page, stepRow(2))]).toEqual([false, false])
 			await page.keyboard.press("Tab")
 			expect(await page.evaluate((s: string) => document.querySelector(s)?.contains(document.activeElement), step(1))).toBe(true)
+			expect(await focused(page)).toBe(CHIP)
+			await page.keyboard.press("Tab")
 			expect(await focused(page)).toBe("execute-op-raw-toggle")
 			await page.keyboard.press("Enter")
 			await page.waitForSelector(`${step(1)} ${sel("execute-op-raw-args")}`, { visible: true, timeout: 10_000 })
@@ -351,22 +359,23 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 		}
 	})
 
-	test("by mouse: a drag over the address selects it and a press on a named address or the glossary term opens nothing; the text and the padding open the step", {
+	test("by mouse: a drag over the recipient selects it and a press on a named address or a chip opens nothing of the step; the text and the padding open it", {
 		timeout: 180_000,
 	}, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
 		try {
 			await openFixture(page, "batch", 400)
 			await bringToFront(page)
-			const address = await rectOf(page, `${step(0)} ${sel("execute-op-summary-call-to")}`)
+			const recipient = `${step(2)} ${sel("execute-op-line-to")}`
+			const address = await rectOf(page, recipient)
 			const midY = address.top + address.height / 2
 			await page.mouse.move(address.left + 1, midY)
 			await page.mouse.down()
 			await page.mouse.move(address.right - 1, midY, { steps: 8 })
 			await page.mouse.up()
 			const selected = await page.evaluate(() => window.getSelection()?.toString().trim())
-			expect(selected).toBe(await page.$eval(`${step(0)} ${sel("execute-op-summary-call-to")}`, (el) => el.textContent?.trim()))
-			expect(await isOpen(page, stepRow(0))).toBe(false)
+			expect(selected).toBe(await page.$eval(recipient, (el) => el.textContent?.trim()))
+			expect(await isOpen(page, stepRow(2))).toBe(false)
 			await page.evaluate(() => window.getSelection()?.removeAllRanges())
 
 			const named = `${step(2)} ${sel("execute-op-line-from")}[data-address-shows="name"]`
@@ -392,29 +401,9 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 			await page.mouse.click(row.left + 2, row.top + 2)
 			await page.waitForSelector(`${stepRow(1)}[aria-expanded="true"]`, { timeout: 10_000 })
 
-			await openFixture(page, "raw", 400)
-			await bringToFront(page)
-			await page.click(`${step(1)} ${sel("execute-op-summary-interface-term")}`)
-			expect(await isOpen(page, stepRow(1))).toBe(false)
-			await page.click(`${step(1)} ${sel("execute-op-summary-unverified-warning")}`)
-			await page.waitForSelector(`${stepRow(1)}[aria-expanded="true"]`, { timeout: 10_000 })
-		} finally {
-			await page.close()
-		}
-	})
-
-	test("by key: Enter on the glossary term inside a row opens nothing", { timeout: 120_000 }, async ({ registeredExtension: ctx }) => {
-		const page = await openPopup(ctx)
-		try {
-			await openFixture(page, "raw", 400)
-			const scroll = await scrollStops(page)
-			expect((await tabWalk(page, 3 + scroll)).slice(scroll)).toEqual([
-				"execute-op-step-toggle#0",
-				"execute-op-step-toggle#1",
-				"execute-op-summary-interface-term",
-			])
-			await page.keyboard.press("Enter")
-			expect([await isOpen(page, stepRow(0)), await isOpen(page, stepRow(1))]).toEqual([false, false])
+			await page.click(`${step(3)} ${sel(CHIP)}`)
+			await page.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
+			expect(await isOpen(page, stepRow(3))).toBe(false)
 		} finally {
 			await page.close()
 		}
@@ -499,6 +488,118 @@ async function pressAndCount(page: Page, press: string, rows: string, want: numb
 		want,
 	)
 }
+
+const chipOf = (j: number) => `${step(j)} ${sel(CHIP)}`
+const chipOpen = (page: Page, selector: string) => page.$eval(selector, (el) => el.getAttribute("aria-expanded") === "true")
+const pressShut = (page: Page) =>
+	page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 10_000 }, sel("contract-chip-panel"))
+const shiftTab = async (page: Page) => {
+	await page.keyboard.down("Shift")
+	await page.keyboard.press("Tab")
+	await page.keyboard.up("Shift")
+}
+
+/** A source run holds the fixture list, whose Testnet entries the `listed` fixture calls; an artifact
+ *  run is unarmed, so it skips these. */
+describe.skipIf(!ARMED)("contract chips over the held list", () => {
+	test("the worker's list reaches each chip: a listed token draws its picture, symbol and solid seal, the PrivateFPC its name and seal; a flagged token keeps its badge and an unknown contract its short address, neither sealed", {
+		timeout: 120_000,
+	}, async ({ listedExtension: ctx }) => {
+		const page = await openPopup(ctx)
+		try {
+			await openFixture(page, "listed", 400)
+			await page.waitForSelector(`${chipOf(0)}[data-level="nulo"]`, { timeout: 10_000 })
+			const chips = await page.$$eval(sel("execute-op-summary-call"), (rows) =>
+				rows.map((row) => {
+					const chip = row.querySelector('[data-testid="contract-chip"]')
+					return {
+						level: chip?.getAttribute("data-level"),
+						name: chip?.getAttribute("aria-label"),
+						label: chip?.querySelector('[data-testid="execute-op-summary-call-to"]')?.textContent?.trim(),
+						picture: Boolean(chip?.querySelector('[data-testid="token-mark-logo"]')),
+						badge: Boolean(chip?.querySelector('[data-testid="token-mark"] svg')),
+						seal: Boolean(chip?.querySelector('[data-testid="contract-chip-seal"]')),
+					}
+				}),
+			)
+			expect(chips).toEqual([
+				{ level: "nulo", name: "USDC, Nulo verified", label: "USDC", picture: true, badge: false, seal: true },
+				{ level: "none", name: "0x000000..00f1, Unverified", label: "0x000000..00f1", picture: false, badge: true, seal: false },
+				{ level: "none", name: "0x2c3d4e..4e5f, Unverified", label: "0x2c3d4e..4e5f", picture: false, badge: false, seal: false },
+				{
+					level: "nulo",
+					name: "Private Fee Juice, Nulo verified",
+					label: "Private Fee Juice",
+					picture: false,
+					badge: false,
+					seal: true,
+				},
+			])
+		} finally {
+			await page.close()
+		}
+	})
+
+	test("by key: Enter on a chip opens its press on its link and leaves the step shut; Tab goes on past the chip and shuts it; Shift+Tab and Escape return to the chip; the app's press keeps focus on its chip; at 240 px a press stays in the window, the lowest included", {
+		timeout: 180_000,
+	}, async ({ listedExtension: ctx }) => {
+		const page = await openPopup(ctx)
+		try {
+			await openFixture(page, "listed", 400)
+			await page.waitForSelector(`${chipOf(0)}[data-level="nulo"]`, { timeout: 10_000 })
+			const scroll = await scrollStops(page)
+			expect((await tabWalk(page, 3 + scroll)).slice(scroll)).toEqual([CHIP, "execute-op-step-toggle#0", CHIP])
+			await page.keyboard.press("Enter")
+			await page.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
+			expect([await focused(page), await isOpen(page, stepRow(0))]).toEqual(["contract-chip-explorer-link", false])
+
+			await page.keyboard.press("Tab")
+			await pressShut(page)
+			expect([await focused(page), await chipOpen(page, chipOf(0))]).toEqual(["execute-op-step-toggle#1", false])
+			await shiftTab(page)
+			expect(await focused(page)).toBe(CHIP)
+
+			await page.keyboard.press("Enter")
+			await page.waitForSelector(sel("contract-chip-explorer-link"), { visible: true, timeout: 10_000 })
+			await shiftTab(page)
+			await pressShut(page)
+			expect(await page.$eval(chipOf(0), (el) => el === document.activeElement)).toBe(true)
+
+			await page.keyboard.press("Enter")
+			await page.waitForSelector(sel("contract-chip-explorer-link"), { visible: true, timeout: 10_000 })
+			await page.keyboard.press("Escape")
+			await pressShut(page)
+			expect(await page.$eval(chipOf(0), (el) => el === document.activeElement)).toBe(true)
+			expect(await isOpen(page, stepRow(0))).toBe(false)
+
+			const app = `${sel("execute-dapp-name")} ${sel(CHIP)}`
+			await page.focus(app)
+			await page.keyboard.press("Enter")
+			await page.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
+			expect(await page.$eval(app, (el) => el === document.activeElement)).toBe(true)
+			await page.keyboard.press("Tab")
+			await pressShut(page)
+			expect(await focused(page)).toBe("execute-op-step-toggle#0")
+
+			await openFixture(page, "listed", 240)
+			for (const j of [0, 3]) {
+				await page.$eval(chipOf(j), (el) => el.scrollIntoView({ block: "end" }))
+				await page.click(chipOf(j))
+				await page.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
+				const placed = await page.$eval(sel("contract-chip-panel"), (panel) => {
+					const r = (panel.parentElement as HTMLElement).getBoundingClientRect()
+					return r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight
+				})
+				expect(placed, `step ${j}'s press at 240 px`).toBe(true)
+				expect(await isOpen(page, stepRow(j))).toBe(false)
+				await page.keyboard.press("Escape")
+				await pressShut(page)
+			}
+		} finally {
+			await page.close()
+		}
+	})
+})
 
 describe.skipIf(ARMED)("a release build", () => {
 	test("renders no fixture: the route names no request, so the window reports its error", { timeout: 120_000 }, async ({
