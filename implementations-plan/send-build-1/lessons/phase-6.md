@@ -8,3 +8,4 @@
 - The local network has no price feed, so every capture's fee reads in Fee Juice alone ("~0.00002 FJ").
 - Review rounds, the e2e side: round 1 scoped `expectNothingSent` to `send-page` and corrected a spec comment; round 2 corrected the skill (`aria-disabled` announces, the guards enforce); round 3 touched no spec.
 - The first send's info toast sits over Send now's footer inset and covered the re-ask review's fee sentence in its capture; the capture closes it on Home before opening the review.
+- Gate: the same 24 network specs a1 ran (the 21 that reach the review through `fixtures/send-page.ts`, `send-burst.ts` or `transfers.ts`, plus the plan's three `concurrent-sendtx` specs), every one green at retry 0 on both browsers; no spec was added. The warned `fee-methods` test, which now walks Tab and presses Enter on Send now, took 47 s on Chrome and 55 s on Firefox against a1's 60 s and 60 s: host noise, not a saving.

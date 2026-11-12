@@ -11,3 +11,4 @@
 - 2026-11-12: a2 started on send-build-1-a1 at 9700932b0; OA-1 answered (a) per the answers file.
 - 2026-11-12: a2 phase 5 green: audit:vue (18409 tests), test:all, build-storybook.
 - 2026-11-12: a2 Codex loop converged in three rounds (reject, reject, approve); Opus conditional approve beside round 1, all adopted. Final gates next.
+- 2026-11-12: a2 gates green at retry 0 on 0f9124df6: audit:vue, test:all, build-storybook, lint, typecheck:all, test:ci-gating, check:plans. Smoke: Chrome 1714 s, Firefox 2795 s, no red. Network, the 24 touched specs: Chrome 2225 s, Firefox 2593 s, no red; the three opt-in specs armed on Chrome; update-in-place from v1.2.0 armed on both (2/2 each).
