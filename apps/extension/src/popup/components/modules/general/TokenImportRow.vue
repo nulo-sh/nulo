@@ -19,6 +19,8 @@ const props = defineProps({
 		type: Object,
 		required: true,
 	},
+	/** The signed list's picture for this import's chain and contract; one the list does not name leaves initials. */
+	icon: String,
 })
 
 const isInFlight = computed(() => props.op?.terminalAt === null)
@@ -53,7 +55,7 @@ const subtitle = computed(() => {
 <template>
 	<Flex align="center" justify="between" :class="[$style.row, isFailed && $style.failed]" data-testid="token-import-row">
 		<Flex align="center" gap="12" :class="$style.lead">
-			<TokenMark :symbol="markSymbol" :size="32" :badge="false" />
+			<TokenMark :symbol="markSymbol" :icon="icon" :size="32" :badge="false" />
 			<Flex direction="column" gap="2" :class="$style.lead">
 				<span :class="[$style.title, titleIsAddress ? $style.address : $style.symbol]" data-testid="token-import-title">{{ title }}</span>
 				<span :class="$style.subtitle" data-testid="token-import-subtitle">{{ subtitle }}</span>

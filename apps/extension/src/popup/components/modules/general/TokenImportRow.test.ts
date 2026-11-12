@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
+import { TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
 import TokenImportRow from "./TokenImportRow.vue"
 
 const STUBS = {
@@ -20,7 +21,7 @@ const baseOp = {
 }
 
 describe("TokenImportRow", () => {
-	test("leads with grey initials of its title at 32 px, never a picture; a title that names no letter, or none yet, gets the mark's dash", () => {
+	test("with no picture from the list, leads with grey initials of its title at 32 px; a title that names no letter, or none yet, gets the mark's dash", () => {
 		const mark = (title: string | undefined) =>
 			mount(TokenImportRow, { props: { op: { ...baseOp, title } }, global: { stubs: STUBS } }).get('[data-testid="token-mark"]')
 		const named = mark("USDC")
@@ -28,6 +29,14 @@ describe("TokenImportRow", () => {
 		expect(named.attributes("style")).toContain("width: 32px")
 		expect([named.text(), named.find("img").exists()]).toEqual(["US", false])
 		for (const title of [undefined, "", "   ", "…!"]) expect([title, mark(title).text()]).toEqual([title, "—"])
+	})
+
+	test("draws the list's picture it is given, whether or not its symbol has been read", () => {
+		for (const title of ["USDC", undefined]) {
+			const w = mount(TokenImportRow, { props: { op: { ...baseOp, title }, icon: TEST_ICONS.USDC }, global: { stubs: STUBS } })
+			const mark = w.get('[data-testid="token-mark"]')
+			expect([title, mark.attributes("data-kind"), mark.get("img").attributes("src")]).toEqual([title, "logo", TEST_ICONS.USDC])
+		}
 	})
 
 	test("in-flight: renders truncated contract address as title and the configured subtitle", () => {
