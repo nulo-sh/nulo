@@ -445,6 +445,27 @@ describe("modules/send/SendReviewSheet — Send now", () => {
 		expect(w.emitted("send")).toEqual([[]])
 	})
 
+	test("a press held across a re-arm never sends: Space is cancelled at its release, the pointer's click refused", async () => {
+		w = mountSheet()
+		const el = submit(w).element
+		const rearm = async () => {
+			await w?.setProps({ ready: false })
+			await w?.setProps({ ready: true })
+		}
+		expect(sendEvent(el, "keydown", { key: " " })?.defaultPrevented).toBe(false)
+		await rearm()
+		expect(sendEvent(el, "keyup", { key: " " })?.defaultPrevented).toBe(true)
+
+		sendEvent(el, "pointerdown")
+		await rearm()
+		await submit(w).trigger("click")
+		expect(w.emitted("send")).toBeUndefined()
+
+		sendEvent(el, "pointerdown")
+		await submit(w).trigger("click")
+		expect(w.emitted("send")).toEqual([[]])
+	})
+
 	test("an Enter while Send now refuses is cancelled where it would click", () => {
 		w = mountSheet({ ready: false })
 		expect(sendEvent(submit(w).element, "keydown", { key: "Enter" })?.defaultPrevented).toBe(true)

@@ -441,7 +441,7 @@ origin's method from the last one's.
 `assertPublishInvariant` (the card's tag ⇔ the form's warning ⇔ `data-you="exposed"`) and refuses to
 click while they disagree, so a test asserting one surface has asserted the other two; then it opens
 the sheet and presses Send now. The sheet's Send now arms after a delay and is never natively
-disabled (it refuses through `aria-disabled`): wait on `send-review-submit[data-ready]`
+disabled (`aria-disabled` announces the refusal; its key and pointer guards enforce it): wait on `send-review-submit[data-ready]`
 (`waitForReviewReady`), never on a sleep or on `disabled`. The review draws its own payee block
 outside the page, so a read of the form's payee scopes to `send-page`. Closing the sheet goes through `waitForReviewClosed`, which
 finishes a stuck leave transition for that popup only (`settleClosedPopup`) — `closeStuckPopup` would

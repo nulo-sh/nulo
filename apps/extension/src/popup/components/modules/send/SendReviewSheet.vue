@@ -85,23 +85,31 @@ const sendNow = useTemplateRef<{ $el: HTMLElement }>("sendNow")
  *  under 60%, where the line wraps instead. */
 const amountScale = ref(1)
 
+/** Space and a pointer click at their release, so a press held across the arm or a re-arm would send
+ *  what it never saw: a press that met Send now refusing, at its start or since, never sends. */
+let press: { refused: boolean } | null = null
+function beginPress() {
+	press = { refused: !sendable.value }
+	return press.refused
+}
+
 // Never natively disabled, so the focus it takes on opening survives the arming wait and any change
 // of state; this guard is what a press, a key or a programmatic click meets.
 const handleSend = () => {
-	if (sendable.value) emit("send")
+	const refused = press?.refused ?? false
+	press = null
+	if (sendable.value && !refused) emit("send")
 }
 
-/** Space clicks at its release, so a press that began while Send now refused would send once it arms:
- *  such a press is refused at both ends, and a held key's repeats never start one. */
-let pressRefused = false
 function onSendKeydown(e: KeyboardEvent) {
 	if (e.key !== "Enter" && e.key !== " ") return
 	if (isRepeatOrComposing(e)) return e.preventDefault()
-	pressRefused = !sendable.value
-	if (pressRefused) e.preventDefault()
+	if (beginPress()) e.preventDefault()
 }
 function onSendKeyup(e: KeyboardEvent) {
-	if (e.key === " " && pressRefused) e.preventDefault()
+	if (e.key !== " " || !press?.refused) return
+	e.preventDefault()
+	press = null
 }
 
 /** A retry replaces its own button, so the keyboard it held moves on to Send now. */
@@ -118,6 +126,15 @@ function fitAmount() {
 	const fit = fitHero(1, (_, scale) => rulerWidth(form, scale), heroRoom(row))
 	amountScale.value = Math.max(fit.scale, HERO_MIN_SCALE)
 }
+
+// Synchronous, so a refusal and a re-arm inside one tick still mark the press in flight.
+watch(
+	sendable,
+	(now) => {
+		if (!now && press) press.refused = true
+	},
+	{ flush: "sync" },
+)
 
 // The sheet's content mounts with the popup, so its ref is watched with what it shows.
 watch([summary, () => props.amount, () => props.symbol], fitAmount, { flush: "post" })
@@ -173,7 +190,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						</span>
 					</div>
 
-					<span :class="$style.send_wrap" @keydown="onSendKeydown" @keyup="onSendKeyup">
+					<span :class="$style.send_wrap" @pointerdown="beginPress" @keydown="onSendKeydown" @keyup="onSendKeyup">
 						<Button
 							ref="sendNow"
 							v-snack-footer
