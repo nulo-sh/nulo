@@ -571,7 +571,7 @@ describe.skipIf(!ARMED)("contract chips over the held list", () => {
 			await pressShut(page)
 			expect(await page.$eval(chipOf(0), (el) => el === document.activeElement)).toBe(true)
 			expect(await isOpen(page, stepRow(0))).toBe(false)
-			await page.keyboard.press("Space")
+			await page.keyboard.press(" ")
 			await page.waitForSelector(sel("contract-chip-explorer-link"), { visible: true, timeout: 10_000 })
 			expect(await isOpen(page, stepRow(0))).toBe(false)
 			await page.keyboard.press("Escape")
