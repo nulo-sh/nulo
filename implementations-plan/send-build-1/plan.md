@@ -185,6 +185,8 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 - To the owner (OA-18): arrowing from private to a sponsor passes public Fee Juice, a pick, so the warning shows for that step; with a flagged banner or the caveat, the tint covers the row, not the section; the bridge link is unleashed's testnet app on every network, the owner's earlier call.
 - Kept: `FeeMethodSelector`'s `:pending` (a card test pins it false outside Send).
 
+**Round a1b, Codex resumed (same session) over `e07056889..aff3844c3`: approve.** The native check follows the card after refused, synchronous, delayed and rapid picks; `initialFocus` returns an enabled radio or undefined, never null; the fee line's payer and the publish facts settle in one flush (no disagreement across 40 transitions). No new findings. The touched network specs (`fee-methods`, `fee-sponsor-funding`) went 12 of 12 on Chrome after the fix, from 11 of 12 before it.
+
 ## Seeds
 
 ```
