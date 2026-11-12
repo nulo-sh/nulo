@@ -102,6 +102,7 @@ Each ask names the surface, the options, a recommendation and **what ships now**
 - **The case it misreads:** the decode takes the name from whatever artifact the wallet holds for the contract's class. For an unlisted token the wallet registered with its own Token artifact, or a protocol contract such as Fee Juice, the name ("Token", "FeeJuice") did not come from an app. The decode carries no provenance, so the build cannot tell these apart. The line never raises a level.
 - **What ships now:** the signed words for every decoded name.
 - **Options:** the signed words; "The name X comes from the contract's code. Nulo hasn't checked it." (true in every case); the line only for names an app registered (needs provenance the decode does not carry, a data change).
+- **The reviews:** Opus found the case; Codex agreed the signed words ship until you answer, and recommends the neutral wording.
 
 ## Page 143 (signed 2026-11-12 20:00 UTC, no notes): arc 2's, recorded
 

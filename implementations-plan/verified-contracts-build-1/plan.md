@@ -230,6 +230,7 @@ Cite `implementations-plan/README.md` § Post-implementation standard at `1593cf
 
 - **Codex, arc 1 round 1** (session `01a1d168`, gpt-6.1-sol, high): **conditional approve**. No finding on seal forgery, the count line, keyboard, copy, layering. Accepted: the app chip's label did not clip inside a flex row (the inline popover's root now shrinks), long words overflowed the press (`overflow-wrap: anywhere`), both pinned by a smoke case (D22); the pending press tested; Space pinned in E2; a comment that claimed each press names the unreadable kind.
 - **Opus, arc 1 review** (general-purpose agent, opus): **conditional approve**. No finding on seal forgery, the count line, keyboard, copy, test loosening. Accepted: the raised-fee window listed and given its explorer link with a test (D20, A15); the PrivateFPC press, the pending press and the decoded name's path through the card tested; `sendTxCalls`'s return type carries `selfName`; the import nits; a vacuous `lines` measure dropped. Answered by an owner ask, not a rewrite: "came from an app" for a wallet-bundled artifact's name (D21, A16).
+- **Codex, arc 1 round 2** (same session, resumed): **approve**, no new finding. Confirmed each fix (reverting either CSS rule fails the new smoke case in its reduced check) and D21: keep the signed words and ask, recommending the neutral wording to the owner. The loop converged at round 2.
 
 ## Seeds
 
