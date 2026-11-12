@@ -154,7 +154,7 @@ const methods = computed(() =>
 	}),
 )
 
-/** The dropdown's rows: `methods` once the live identity's snapshot is in. Before that, rows come
+/** The rows on offer: `methods` once the live identity's snapshot is in. Before that, rows come
  *  from that identity's early FPC list alone, never another identity's, and load wherever no read
  *  has answered them. Display only: no selection is ever resolved against them. */
 const menuMethods = computed(() => {
@@ -221,7 +221,7 @@ const nudgeCopy = computed(() =>
 		: { title: "You have no Fee Juice yet", body: "Bridge some to cover the network fee.", link: "Get Fee Juice" },
 )
 
-/** What the dropdown trigger shows: the paying method, or the saved pick's row while loading. */
+/** The paying method, or the saved pick's row while loading. */
 const displayMethod = computed(() => effectiveMethod.value ?? previewMethod.value)
 
 /** Send's read for the live identity is in flight; the app windows keep their own loading look.
@@ -305,8 +305,8 @@ watch(
 	{ immediate: true },
 )
 
-/** The retry's button leaves with the failure, so a keyboard press keeps its place on the trigger
- *  above, or on the locked method's row, which has no trigger. */
+/** The retry's button leaves with the failure, so a keyboard press keeps its place on the payer
+ *  choice above, or on the locked method's row, which has none. */
 const onRetryEstimate = (event) => {
 	emit("retryEstimate")
 	if (!event.currentTarget.matches(":focus-visible")) return
@@ -321,13 +321,13 @@ const handleMethodPicked = (m) => {
 	rules.pick(m)
 }
 
-/** The private balance holds this send's fee as estimated, or nothing has priced it yet. The
- *  estimate is for the payer in use; the PrivateFPC's own calls only add gas, so a balance below it
- *  can never pay. */
+/** The private balance holds the fee estimated for the payer in use, or nothing has priced it yet.
+ *  An approximation: the PrivateFPC's own estimate differs in gas and in its cap's multiplier. A zero
+ *  balance is ruled out by the row's own `disabled`. */
 const privateCoversFee = computed(() => {
-	const held = gasBalances.value?.privateFeeJuice
+	const balance = gasBalances.value?.privateFeeJuice
 	const fee = props.feeEstimate?.maxFee
-	return typeof held === "string" && (!fee || BigInt(held) >= BigInt(fee))
+	return typeof balance === "string" && (!fee || BigInt(balance) >= BigInt(fee))
 })
 
 /** Only the PrivateFPC the wallet derives. Never a sponsor: Nulo's exists on some networks only, and
@@ -348,7 +348,7 @@ function applyRemedy() {
 	const m = remedyMethod.value
 	if (m) handleMethodPicked(m)
 }
-defineExpose({ applyRemedy })
+defineExpose({ applyRemedy, payerFocusTarget: () => methodSelector.value?.target?.() })
 
 const onFpcUpdated = (fpc) => {
 	const before = knownFpcs.value.find((f) => f.id === fpc.id)?.address ?? ""
@@ -495,10 +495,9 @@ onBeforeUnmount(() => {
 		</div>
 
 		<FeeMethodRow
-			v-if="!onSend && (readPending || !statusNotice)"
+			v-if="!onSend && !statusNotice"
 			:method="effectiveMethod"
 			:isLoading="isLoading"
-			:pending="readPending"
 			:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
 			:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
 		/>

@@ -1,8 +1,7 @@
 <script setup>
 /**
- * Who pays the fee, as native radios: each payer the card offers with its glossary definition and
- * what it can spend. A row still loading, or one that cannot pay, cannot be chosen; the arrows skip
- * it, as they do any disabled radio.
+ * Who pays the fee, as native radios. The card may refuse a pick (a row its own rules cannot use),
+ * so the browser's check is put back to the card's choice after every change.
  */
 import { Skeleton } from "@nulo/design"
 import { GLOSSARY } from "@/utils/glossary"
@@ -29,19 +28,30 @@ const DEFINITION = {
 	fj: GLOSSARY["public-fee-juice"].definition,
 	fpc: GLOSSARY.sponsored.definition,
 }
+/** A contract added by hand may charge, so it is never told as one that pays for you. */
+const definitionOf = (m) => (m.type === "fpc" && m.fpc?.isProtocol !== true ? GLOSSARY.fpc.definition : DEFINITION[m.type])
 
 const keyOf = (m) => m.fpc?.id ?? m.type
 const isChosen = (m) =>
 	Boolean(props.modelValue) && props.modelValue.type === m.type && (m.type !== "fpc" || props.modelValue.fpc?.id === m.fpc?.id)
 const isOff = (m) => Boolean(m.disabled || m.checking)
 
-/** Focuses the chosen payer, else the first one that can be chosen. */
-defineExpose({
-	focus: () => {
-		const radios = [...(group.value?.querySelectorAll("input") ?? [])]
-		;(radios.find((r) => r.checked) ?? radios.find((r) => !r.disabled))?.focus()
-	},
-})
+/** Vue patches `checked` only when `isChosen` changes, so a refused pick would stay checked. */
+async function onChange(m) {
+	emit("update:modelValue", m)
+	await nextTick()
+	const inputs = group.value?.querySelectorAll("input") ?? []
+	rows.value.forEach((row, i) => {
+		if (inputs[i]) inputs[i].checked = isChosen(row)
+	})
+}
+
+/** The chosen payer, else the first that can be chosen; undefined when none can. */
+const target = () => {
+	const open = [...(group.value?.querySelectorAll("input:not(:disabled)") ?? [])]
+	return open.find((r) => r.checked) ?? open[0]
+}
+defineExpose({ target, focus: () => target()?.focus() })
 </script>
 
 <template>
@@ -72,11 +82,11 @@ defineExpose({
 				:data-fpc-id="m.fpc?.id"
 				:data-checking="m.checking ? 'true' : undefined"
 				:data-verifying="m.verifying ? 'true' : undefined"
-				@change="emit('update:modelValue', m)"
+				@change="onChange(m)"
 			/>
 			<span :class="$style.main">
 				<span :class="$style.title">{{ m.title }}</span>
-				<span :class="$style.definition">{{ DEFINITION[m.type] }}</span>
+				<span :class="$style.definition">{{ definitionOf(m) }}</span>
 			</span>
 			<span v-if="m.checking || m.verifying" :class="$style.spend">
 				<Skeleton />

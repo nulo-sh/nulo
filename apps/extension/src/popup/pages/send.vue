@@ -505,6 +505,9 @@ function closeSheets() {
 	closeFeeSheet()
 }
 
+/** The Fee sheet opens on the chosen payer, else the first that can pay, else the trap's first control. */
+const feeSheetFocus = () => feeCard.value?.payerFocusTarget() ?? undefined
+
 /** The warning's fix applies only the card's own remedy; focus goes to the fee it changed. */
 function applyFeeFix() {
 	feeCard.value?.applyRemedy()
@@ -1191,7 +1194,7 @@ onBeforeUnmount(() => {
 			</Teleport>
 		</div>
 
-		<Popup :show="feeSheetOpen" :displaceIdx="feeOrder" initial-focus='[data-testid="send-fee-payers"] input:checked' @onClose="closeFeeSheet">
+		<Popup :show="feeSheetOpen" :displaceIdx="feeOrder" :initialFocus="feeSheetFocus" @onClose="closeFeeSheet">
 			<PopupCard :displaceIdx="feeDepth">
 				<div role="dialog" aria-modal="true" aria-labelledby="send-fee-title" data-testid="send-fee-sheet">
 					<PopupHeader closable @onClose="closeFeeSheet">

@@ -4,7 +4,7 @@
  * cannot be chosen.
  */
 import { Skeleton } from "@nulo/design"
-import { mount } from "@vue/test-utils"
+import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test } from "vitest"
 import { GLOSSARY } from "@/utils/glossary"
 import { FpcType } from "@/wallet/services/fpc/client"
@@ -55,7 +55,8 @@ describe("FeeMethodRadios", () => {
 			{ id: "send-fee-payer-private", text: `Private Fee Juice ${priv} 1.8 FJ` },
 			{ id: "send-fee-payer-public", text: `Public Fee Juice ${pub} 4.2 FJ` },
 			{ id: "send-fee-payer-sponsored", text: `Sponsored ${sponsored} free` },
-			{ id: "send-fee-payer-sponsored", text: `My sponsor ${sponsored} —` },
+			// A contract added by hand may charge: it is never told as one that pays for you.
+			{ id: "send-fee-payer-sponsored", text: `My sponsor ${GLOSSARY.fpc.definition} —` },
 		])
 		expect(w.findAll("label").map((l) => l.attributes("data-fpc-id") ?? null)).toEqual(["p1", null, "s1", "s2"])
 	})
@@ -81,6 +82,19 @@ describe("FeeMethodRadios", () => {
 		const w = mountRadios(rows, rows.find((m) => m.type === "private_fpc") ?? null)
 		await radios(w)[1].setValue(true)
 		expect(w.emitted("update:modelValue")).toEqual([[rows.find((m) => m.type === "fj")]])
+	})
+
+	test("a pick the card refuses leaves the browser's check on the card's payer", async () => {
+		// An unread balance leaves both Fee Juice rows open, and the card keeps its sponsor.
+		const rows = buildFeeMethods([PRIVATE_FPC, NULO_SPONSOR], undefined)
+		const w = mountRadios(rows, rows.find((m) => m.fpc?.id === "s1") ?? null)
+		await radios(w)[1].setValue(true)
+		await flushPromises()
+		expect(w.emitted("update:modelValue")).toHaveLength(1)
+		expect(choices(w).map((c) => c.checked)).toEqual([false, false, true])
+		// Taken later, the card's own choice still lands.
+		await w.setProps({ modelValue: rows.find((m) => m.type === "fj") })
+		expect(choices(w).map((c) => c.checked)).toEqual([false, true, false])
 	})
 
 	test("a payer that cannot pay is out of reach and says why", () => {
@@ -121,10 +135,16 @@ describe("FeeMethodRadios", () => {
 	test("focus lands on the chosen payer, else on the first that can be chosen", async () => {
 		const rows = rowsOf({ publicFeeJuice: HELD.publicFeeJuice, privateFeeJuice: "0" })
 		const w = mountRadios(rows, null)
-		;(w.vm as unknown as { focus: () => void }).focus()
+		const vm = w.vm as unknown as { focus: () => void; target: () => HTMLElement | undefined }
+		vm.focus()
 		expect(document.activeElement).toBe(w.get('[data-testid="send-fee-payer-public"]').element)
 		await w.setProps({ modelValue: rows.find((m) => m.fpc?.id === "s1") })
-		;(w.vm as unknown as { focus: () => void }).focus()
+		vm.focus()
 		expect(document.activeElement).toBe(radios(w)[2].element)
+		// A chosen row that cannot pay is passed over.
+		await w.setProps({ modelValue: rows.find((m) => m.type === "private_fpc") })
+		expect(vm.target()).toBe(w.get('[data-testid="send-fee-payer-public"]').element)
+		await w.setProps({ methods: rowsOf({ publicFeeJuice: "0", privateFeeJuice: "0" }, [PRIVATE_FPC]) })
+		expect(vm.target()).toBeUndefined()
 	})
 })

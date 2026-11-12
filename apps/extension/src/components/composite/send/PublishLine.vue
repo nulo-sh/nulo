@@ -1,9 +1,7 @@
 <script setup lang="ts">
 /**
- * What anyone watching the chain can see, said once under the sides: one plain sentence, or the one
- * warning, for a private send whose fee names the account. Its fix is the account's private Fee
- * Juice when that can pay, else the bridge to get some; never a sponsor, which only some networks
- * have. The region stays mounted, so a line that changes is announced.
+ * The warning's fix is the account's private Fee Juice when that can pay, else the bridge; never a
+ * sponsor, which only some networks have. The region stays mounted, so a line that changes is announced.
  */
 import { computed } from "vue"
 import { feeWarning, type PayerKind, type PublishFacts, publishSentence } from "./publish-facts"

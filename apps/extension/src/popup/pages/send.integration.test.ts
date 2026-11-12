@@ -242,7 +242,7 @@ const STUBS = {
 	Popup: {
 		name: "Popup",
 		template: '<div v-if="show" data-testid="stub-popup" :data-order="displaceIdx"><slot /></div>',
-		props: { show: Boolean, displaceIdx: Number, closeOnEscape: Boolean, initialFocus: [String, Boolean] },
+		props: { show: Boolean, displaceIdx: Number, closeOnEscape: Boolean, initialFocus: [String, Boolean, Function] },
 		emits: ["onClose"],
 	},
 	PopupCard: { template: '<div data-testid="stub-card" :data-depth="displaceIdx"><slot /></div>', props: ["displaceIdx"] },
