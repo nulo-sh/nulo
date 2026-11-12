@@ -27,8 +27,8 @@ const RECIPIENT = "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a
  *  a fresh profile has no saved pick to preview — neither is present, so no assertion below can pass
  *  against a card that simply has not resolved yet. */
 const SETTLED = `(() => {
-	const trigger = document.querySelector('[data-testid="send-fee-method-trigger"]')
-	return Boolean(trigger?.getAttribute("data-fee-method")) || Boolean(document.querySelector('[data-testid="fee-init-degraded"]'))
+	const payers = document.querySelector('[data-testid="send-fee-payers"]')
+	return Boolean(payers?.getAttribute("data-fee-method")) || Boolean(document.querySelector('[data-testid="fee-init-degraded"]'))
 })()`
 
 describe("send fee privacy (dead RPC)", () => {
@@ -42,7 +42,7 @@ describe("send fee privacy (dead RPC)", () => {
 			await openSend(page)
 			await chooseRecipient(page, RECIPIENT)
 			// The card stays mounted behind its sheet, so it is read without opening it.
-			await page.waitForSelector('[data-testid="send-fee-method-trigger"]', { timeout: 30_000 })
+			await page.waitForSelector('[data-testid="send-fee-payers"]', { timeout: 30_000 })
 
 			// Private is the Send page's default origin — asserted, not assumed.
 			const origin = await page.$eval('[data-testid="fee-settings-card"]', (el) => el.getAttribute("data-origin"))
@@ -51,8 +51,7 @@ describe("send fee privacy (dead RPC)", () => {
 			await page.waitForFunction(SETTLED, { timeout: 120_000, polling: 500 })
 
 			const state = await page.evaluate(() => ({
-				method: document.querySelector('[data-testid="send-fee-method-trigger"]')?.getAttribute("data-fee-method") ?? null,
-				tag: Boolean(document.querySelector('[data-testid="send-fee-privacy-notice"]')),
+				method: document.querySelector('[data-testid="send-fee-payers"]')?.getAttribute("data-fee-method") ?? null,
 				publish: Boolean(document.querySelector('[data-testid="send-publish"]')),
 				warning: Boolean(document.querySelector('[data-testid="send-fee-warning"]')),
 				explained: Boolean(document.querySelector('[data-testid="fee-init-degraded"]')),
@@ -61,7 +60,6 @@ describe("send fee privacy (dead RPC)", () => {
 			console.log(`[send-fee-privacy] settled: ${JSON.stringify(state)}`)
 
 			expect(state.method).not.toBe("public")
-			expect(state.tag).toBe(false)
 			// No token, nothing to send: the page makes no claim about what a send would publish.
 			expect(state.publish).toBe(false)
 			expect(state.warning).toBe(false)

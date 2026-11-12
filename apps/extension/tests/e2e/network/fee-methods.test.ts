@@ -51,17 +51,16 @@ test.skipIf(!hasConfig)("sponsored FPC is default fee method", { timeout: 180_00
 	await chooseRecipient(page, tokenReadyExtension.accountAddress)
 
 	// Wait for FPC auto-discovery to complete
+	const chosen = '[data-testid="send-fee-payers"] input:checked'
 	await page.waitForFunction(
-		() => {
-			const trigger = document.querySelector('[data-testid="send-fee-method-trigger"]')
-			return trigger?.textContent?.includes("Sponsored")
-		},
+		(s: string) => document.querySelector(s)?.closest("label")?.textContent?.includes("Sponsored"),
 		{ timeout: 30_000, polling: 1_000 },
+		chosen,
 	)
 
-	const triggerText = await page.evaluate(() => document.querySelector('[data-testid="send-fee-method-trigger"]')?.textContent?.trim())
-	console.log(`[fee-methods] Default fee method: "${triggerText}"`)
-	expect(triggerText).toContain("Sponsored")
+	const chosenText = await page.$eval(chosen, (el) => el.closest("label")?.textContent?.replace(/\s+/g, " ").trim())
+	console.log(`[fee-methods] Default fee method: "${chosenText}"`)
+	expect(chosenText).toContain("Sponsored")
 
 	console.log("✓ Sponsored FPC is the default fee method")
 	await page.close()

@@ -1,17 +1,17 @@
-/** The shared FeeSettingsCard's method picker: Send's sheet and the dApp windows embed the same card. */
+/** The fee card's method menu in the dApp windows; Send's Fee sheet offers the same payers as radios. */
 import type { Page } from "puppeteer"
 import { clickByTestId, withTimeoutMessage } from "./dom"
 
-/** The three selectable fee methods (`send-fee-method-{subtitle}` testids);
- *  the fourth rendered entry ("coming soon") is disabled by design. */
+/** The three selectable fee methods: `send-fee-method-{subtitle}` in the windows' menu,
+ *  `send-fee-payer-{subtitle}` among Send's radios. */
 export type FeeMethodSubtitle = "sponsored" | "public" | "private"
 
 /** How long a fee row can stay loading on Send: the forced balance read waits out a read already in
  *  flight, then runs its own, each bounded by the balances store's 20s fetch timeout. */
 export const FEE_ROW_READY_MS = 45_000
 
-/** Select a fee payment method in the shared FeeSettingsCard dropdown (the
- *  send flow AND the dApp execute/authwit popups embed the same card).
+/** Select a fee payment method in the fee card's dropdown, as the dApp execute and authwit popups
+ *  draw it.
  *  `mountTimeoutMs` bounds every wait. The card can mount late, and its rows
  *  stay loading (aria-disabled, inert) until the read that answers them lands:
  *  the sponsor rows with the FPC list, the Fee Juice rows with the balance read,

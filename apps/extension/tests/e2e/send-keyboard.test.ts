@@ -7,6 +7,7 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { trimAddress } from "@/utils/string"
+import { FpcType } from "@/wallet/services/fpc/spec"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
 import {
@@ -25,14 +26,15 @@ import { chooseRecipient, openSend, readSendInputs, shotSend } from "./fixtures/
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { settleThemeTransitions } from "./fixtures/shots"
 import { readActivityScope, seedJournalRecord, seedTokenRow } from "./helpers/activity-seeds"
-import { SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
+import { SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedFpcs, seedProtocolFpcs } from "./helpers/fpc-seeds"
 import { savedFeePicks } from "./helpers/ui-preferences"
 import { activeTestId, focusRing, pressEscape, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const DESTINATION_INPUT = `${sel("send-destination-field")} input`
-const OPEN_TRIGGER = `[data-dropdown-open="true"] ${sel("send-fee-method-trigger")}`
-const CLOSED_TRIGGER = `[data-dropdown-open="false"] ${sel("send-fee-method-trigger")}`
+/** A sponsor added by hand beside Nulo's, so the Fee sheet holds two payers a wallet with no balance
+ *  can choose. Its address is wire-shaped and is not the sponsor's derived one. */
+const HAND_SPONSOR = { id: "e2e-hand-sponsor", type: FpcType.DefaultSponsoredFpc, address: `0x${"5e".repeat(32)}`, name: "Hand sponsor" }
 const TESTNET_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
 
 /** The first `count` addresses `0x…01`, `0x…02`, … that are points on the curve, so Send can pay each. */
@@ -69,7 +71,7 @@ async function seedContacts(page: Page, names: string[]): Promise<void> {
 /** Opens Send on its person step, or with `form` on the form for the profile's own account. */
 async function openSendPage(
 	ctx: ExtensionContext,
-	{ priced = false, sponsors = false, form = false, contacts = [] as string[] } = {},
+	{ priced = false, sponsors = false, handSponsor = false, form = false, contacts = [] as string[] } = {},
 ): Promise<{ page: Page; seededFpcIds: string[] }> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
@@ -80,6 +82,10 @@ async function openSendPage(
 		expect(await fpcRowIds(page), "FPC rows before the seed").toEqual([])
 		seededFpcIds = await seedProtocolFpcs(page, scope)
 		expect(seededFpcIds, "the sponsor is offered on the spec's chain").toContain(SEEDED_SPONSOR_FPC_ID)
+		if (handSponsor) {
+			await seedFpcs(page, scope, [HAND_SPONSOR])
+			seededFpcIds = [...seededFpcIds, HAND_SPONSOR.id].sort()
+		}
 	}
 	if (scope && priced) {
 		await seedTokenRow(page, scope, 1, { transfers: true })
@@ -402,58 +408,45 @@ test("the token row is the whole band between its rules, and focus, hover and pr
 })
 
 async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void> {
-	const { page, seededFpcIds } = await openSendPage(ctx, { priced: true, sponsors: true, form: true })
+	const { page, seededFpcIds } = await openSendPage(ctx, { priced: true, sponsors: true, handSponsor: true, form: true })
 	const account = await getAccountAddress(page)
 	await page.waitForSelector(sel("send-fee-change"), { visible: true, timeout: 30_000 })
 	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
 	await shotSend(page, "send-fee-at-rest", "send-fee-line")
+	const radio = (fpcId: string) => `${sel("send-fee-payers")} input[data-fpc-id="${fpcId}"]`
+	const focusIsOn = (selector: string) =>
+		page.waitForFunction((s: string) => document.activeElement === document.querySelector(s), { timeout: 5_000 }, selector)
+	const savedSponsor = () => savedFeePicks(page).then((picks) => picks.send[account]?.private)
 
-	// Change opens the Fee sheet on the card's method trigger, a stop inside the sheet's trap.
+	// The walk's default is Nulo's sponsor: the only protocol payer a wallet with no balance can use.
+	await page.waitForFunction(
+		(s: string) => document.querySelector<HTMLInputElement>(s)?.checked === true,
+		{ timeout: 30_000 },
+		radio(SEEDED_SPONSOR_FPC_ID),
+	)
+
+	// Change opens the Fee sheet on the chosen payer's radio, a stop inside the sheet's trap.
 	await tabTo(page, "send-fee-change")
 	await expectAccentRing(page, "send-fee-change")
 	await page.keyboard.press("Enter")
-	await waitForFocus(page, "send-fee-method-trigger")
-	expect(await page.$(`${sel("send-fee-sheet")} ${sel("send-fee-method-trigger")}`), "the trigger is the sheet's").not.toBeNull()
-	await expectAccentRing(page, "send-fee-method-trigger")
-	await shotSend(page, "send-fee-focused", "send-fee-method-trigger")
-	const trigger = await page.$eval(sel("send-fee-method-trigger"), (el) => ({ tag: el.tagName, type: el.getAttribute("type") }))
-	expect(trigger).toEqual({ tag: "BUTTON", type: "button" })
+	await focusIsOn(`${sel("send-fee-sheet")} ${radio(SEEDED_SPONSOR_FPC_ID)}`)
+	const { ring, color } = await focusRing(page, "send-fee-payer-sponsored-choice")
+	expect(ring).toMatch(/^solid 2px /)
+	expect(color).toBe(await tokenColor(page, "--nulo-accent"))
+	await shotSend(page, "send-fee-focused", "send-fee-payers")
 
-	await page.keyboard.press("Enter")
-	await page.waitForSelector(OPEN_TRIGGER, { timeout: 5_000 })
-	// The menu measures a trigger the sheet moved in: it opens 8 px beside it.
-	const gap = await feeMenuGap(page)
-	expect(
-		[gap.above, gap.below].some((edge) => Math.abs(edge - 8) <= 1),
-		JSON.stringify(gap),
-	).toBe(true)
-	// Arrow navigation has no target until at least one fee method finishes loading.
-	await page.waitForSelector("#dropdown [data-dropdown-item]", { timeout: 30_000 })
+	// The arrows move the pick, each one saved: down to the hand-added sponsor, up back to Nulo's.
 	await page.keyboard.press("ArrowDown")
-	await page.waitForFunction(() => document.activeElement?.closest("[data-dropdown-item]") !== null, { timeout: 5_000 })
-	const row = await activeTestId(page)
-	expect(row).toMatch(/^send-fee-method-/)
-	const fpcId = await page.evaluate(() => document.activeElement?.closest("[data-dropdown-item]")?.getAttribute("data-fpc-id"))
-	expect(fpcId, `the focused row ${row}`).toBe(SEEDED_SPONSOR_FPC_ID)
-	await page.keyboard.press("Enter")
-	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
-	await page.waitForFunction(
-		(want: string) => document.querySelector('[data-testid="send-fee-method-trigger"]')?.getAttribute("data-fee-method") === want,
-		{ timeout: 10_000 },
-		row.replace("send-fee-method-", ""),
-	)
-	// The pick may land on the row already showing, so only the saved pick tells Enter from a no-op.
-	await expect
-		.poll(async () => (await savedFeePicks(page)).send[account]?.private, { timeout: 10_000, interval: 200 })
-		.toMatchObject({ type: "fpc", fpc: { id: SEEDED_SPONSOR_FPC_ID } })
-	await waitForFocus(page, "send-fee-method-trigger")
-
-	await page.keyboard.press(" ")
-	await page.waitForSelector(OPEN_TRIGGER, { timeout: 5_000 })
-	await page.keyboard.press("Escape")
-	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
-	await waitForFocus(page, "send-fee-method-trigger")
+	await focusIsOn(radio(HAND_SPONSOR.id))
+	await expect.poll(savedSponsor, { timeout: 10_000, interval: 200 }).toMatchObject({ type: "fpc", fpc: { id: HAND_SPONSOR.id } })
+	await page.keyboard.press("ArrowUp")
+	await focusIsOn(radio(SEEDED_SPONSOR_FPC_ID))
+	await expect.poll(savedSponsor, { timeout: 10_000, interval: 200 }).toMatchObject({ type: "fpc", fpc: { id: SEEDED_SPONSOR_FPC_ID } })
 	expect(await fpcRowIds(page), "FPC rows after the picks").toEqual(seededFpcIds)
+
+	// The group is one Tab stop: Tab leaves it for the chosen priority.
+	await page.keyboard.press("Tab")
+	await waitForFocus(page, "send-fee-priority-normal")
 
 	// Only the chosen priority carries the accent border; the level under the pointer does not.
 	await page.waitForSelector(sel("send-fee-priority-fast"), { visible: true, timeout: 10_000 })
@@ -497,9 +490,25 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 	expect(await pressEscape(page)).toBe(true)
 	await settleClosedPopup(page, "send-fee-sheet")
 	await waitForFocus(page, "send-fee-change")
+
+	// Done closes it too, and the pick made inside stays the card's.
+	await page.keyboard.press("Enter")
+	await focusIsOn(radio(SEEDED_SPONSOR_FPC_ID))
+	await page.keyboard.press("ArrowDown")
+	await page.waitForFunction(
+		(s: string) => document.querySelector<HTMLInputElement>(s)?.checked === true,
+		{ timeout: 5_000 },
+		radio(HAND_SPONSOR.id),
+	)
+	await page.focus(sel("send-fee-done"))
+	await page.keyboard.press("Enter")
+	await settleClosedPopup(page, "send-fee-sheet")
+	await waitForFocus(page, "send-fee-change")
+	expect(await page.$eval(radio(HAND_SPONSOR.id), (el) => (el as HTMLInputElement).checked)).toBe(true)
+	await expect.poll(savedSponsor, { timeout: 10_000, interval: 200 }).toMatchObject({ type: "fpc", fpc: { id: HAND_SPONSOR.id } })
 }
 
-test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrows and Enter pick, Escape returns to it", {
+test("the fee sheet's payers: Change opens it on the chosen radio with the ring, the arrows pick, Tab leaves, Escape and Done return", {
 	timeout: 180_000,
 	retry: 0,
 }, async ({ skip }) => {
@@ -531,26 +540,6 @@ async function pickSponsorBehindStub(ctx: ExtensionContext): Promise<void> {
 	} finally {
 		await stub.stop()
 	}
-}
-
-/** The fee menu's edge and its trigger's, once the menu's entry transition has settled. */
-async function feeMenuGap(page: Page): Promise<{ above: number; below: number }> {
-	const menu = `#dropdown [data-testid^="send-fee-method-"]`
-	await page.waitForSelector(menu, { visible: true, timeout: 5_000 })
-	await page.waitForFunction(
-		(item: string) => document.querySelector(item)?.parentElement?.getAnimations().length === 0,
-		{ timeout: 2_000 },
-		menu,
-	)
-	return page.$eval(
-		menu,
-		(item, trigger) => {
-			const m = (item.parentElement as HTMLElement).getBoundingClientRect()
-			const t = ((document.querySelector(trigger) as HTMLElement).closest("#trigger") as HTMLElement).getBoundingClientRect()
-			return { above: t.top - m.bottom, below: m.top - t.bottom }
-		},
-		sel("send-fee-method-trigger"),
-	)
 }
 
 test("a mouse press held on a suggestion while the field's blur matches another destination picks the pressed one", {

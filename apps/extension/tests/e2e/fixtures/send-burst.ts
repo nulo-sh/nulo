@@ -5,8 +5,8 @@
  */
 import type { Page } from "puppeteer"
 import { clickByTestId, replaceInputValue } from "./extension"
-import { type FeeMethodSubtitle, selectFeeMethod, selectSendToken, setActiveSendType } from "./helpers"
-import { chooseRecipient, closeSendFeeSheet, openSend, openSendFeeSheet, submitSend, waitForSendGone } from "./send-page"
+import { type FeeMethodSubtitle, selectSendToken, setActiveSendType } from "./helpers"
+import { chooseRecipient, closeSendFeeSheet, openSend, openSendFeeSheet, pickSendFeePayer, submitSend, waitForSendGone } from "./send-page"
 import { PollTimeoutError, pollUntil } from "./poll"
 import { readSealedRows } from "./sealed-rows"
 import { bringToFront } from "./browser"
@@ -47,9 +47,9 @@ export async function startSend(page: Page, send: BurstSend): Promise<void> {
 		{ timeout: 60_000, polling: 250 },
 	)
 	await replaceInputValue(page, '[data-testid="send-amount-input"]', send.amount)
-	// The fee card is drawn, so its method and speed rows take a press, only inside its sheet.
+	// The payers and the speed take a press only inside the Fee sheet.
 	await openSendFeeSheet(page)
-	await selectFeeMethod(page, send.fee)
+	await pickSendFeePayer(page, send.fee)
 	if (send.speed) await clickByTestId(page, `send-fee-priority-${send.speed}`)
 	await closeSendFeeSheet(page)
 }

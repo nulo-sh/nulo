@@ -98,16 +98,12 @@ async function connectAccount(burst: Burst): Promise<Page> {
  * A send whose estimate is queued behind an earlier one cannot be confirmed until it lands, so each
  * send waits for its estimate (through any queued spell) and is confirmed the moment Send enables.
  */
-/** The fee menu as the page shows it, so a send the menu would not take names its reason. The menu
- *  lives in the Fee sheet, opened here unless the failed start left it open. */
+/** The payers as the Fee sheet offers them, so a send the sheet would not take names its reason. The
+ *  sheet is opened here unless the failed start left it open. */
 async function readFeeMenu(page: Page): Promise<(string | undefined)[]> {
 	if (!(await readSendView(page)).feeSheetOpen) await openSendFeeSheet(page).catch(() => undefined)
-	await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid="send-fee-method-trigger"]')?.click())
-	await new Promise((r) => setTimeout(r, 500))
 	return page.evaluate(() =>
-		[...document.querySelectorAll('[data-testid^="send-fee-method-"]:not([data-testid="send-fee-method-trigger"])')].map((el) =>
-			el.textContent?.replace(/\s+/g, " ").trim(),
-		),
+		[...document.querySelectorAll('[data-testid="send-fee-payers"] label')].map((el) => el.textContent?.replace(/\s+/g, " ").trim()),
 	)
 }
 

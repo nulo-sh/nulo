@@ -243,7 +243,6 @@ const STUBS = {
 			"estimateFailed",
 			"estimateSlow",
 			"originPrivacy",
-			"payerNoticeShape",
 			"txShape",
 			"amountTyped",
 			"modelValue",
@@ -847,14 +846,13 @@ describe("send page — the footer", () => {
 		w.unmount()
 	})
 
-	test("no sendable token: no sides, no publish line, no tag shape whatever the card says, and the button stays off", async () => {
+	test("no sendable token: no sides, no publish line whatever the card says, and the button stays off", async () => {
 		mocks.getTokens.mockResolvedValue([])
 		mocks.getTokenBalances.mockResolvedValue([])
 		const { w } = await mountSend({ form: true })
 		await feeCard(w, FJ)
 		expect(w.find('[data-testid="send-from-type"]').exists()).toBe(false)
 		expect(publishLine(w).exists()).toBe(false)
-		expect(w.findComponent({ name: "FeeSettingsCard" }).props("payerNoticeShape")).toBeNull()
 		expect(submit(w).attributes("disabled")).toBeDefined()
 		await submit(w).trigger("click")
 		expect(sheetOpen(w)).toBe(false)
@@ -920,21 +918,6 @@ describe("send page — the footer", () => {
 		expect(typed()).toBe(true)
 		await w.get('[data-testid="stub-amount"]').setValue("")
 		expect(typed()).toBe(false)
-		w.unmount()
-	})
-
-	test("the card is handed the tag's shape exactly while the fee names the account", async () => {
-		const { w } = await mountSend()
-		const shape = () => w.findComponent({ name: "FeeSettingsCard" }).props("payerNoticeShape")
-		await fillForm(w, FJ)
-		expect(shape()).toBe("private-private")
-		await pickSide(w, "to", "public")
-		expect(shape()).toBe("private-public")
-		await feeCard(w, SPONSOR)
-		expect(shape()).toBeNull()
-		await feeCard(w, FJ)
-		await pickSide(w, "from", "public")
-		expect(shape()).toBeNull()
 		w.unmount()
 	})
 

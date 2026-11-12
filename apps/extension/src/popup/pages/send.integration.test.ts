@@ -1,7 +1,7 @@
 /**
  * The Send page over the real fee card, its selector and the balances store — the seam
  * `send.test.ts` stubs. Every settled state is read as one whole: the publish line's `you` cell
- * against its warning and the card's tag, the review's three rows, and then what Send now sends.
+ * against its warning and the card's own pick, the review's three rows, and then what Send now sends.
  */
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
@@ -348,7 +348,6 @@ const submit = (w: W) => w.get('[data-testid="send-submit"]')
 /** The publish line's region, which carries the facts' `you` cell. */
 const publishLine = (w: W) => w.get("[data-you]")
 const warning = (w: W) => w.find('[data-testid="send-fee-warning"]')
-const tag = (w: W) => w.find('[data-testid="send-fee-privacy-notice"]')
 const sheetOpen = (w: W) => w.get('[data-testid="send-review-sheet"]').attributes("data-open") === "true"
 const closeSheet = (w: W) => w.getComponent({ name: "SendReviewSheet" }).get('[data-testid="popup-close-btn"]').trigger("click")
 const sendNow = (w: W) => w.get('[data-testid="send-review-submit"]')
@@ -357,12 +356,15 @@ async function armed() {
 	vi.advanceTimersByTime(REVIEW_ARM_MS)
 	await nextTick()
 }
-const feeTrigger = (w: W) => w.get('[data-testid="send-fee-method-trigger"]').attributes("data-fee-method")
-/** A fee picked where a person picks it: in the fee sheet, opened from the fee line and closed again. */
+const feeTrigger = (w: W) => w.get('[data-testid="send-fee-payers"]').attributes("data-fee-method")
+/** The card's own pick names the account: public Fee Juice paying for a private send. */
+const namesAccount = (w: W) =>
+	w.get('[data-testid="fee-settings-card"]').attributes("data-origin") === "private" && feeTrigger(w) === "public"
+/** A fee picked where a person picks it: its radio in the fee sheet, opened from the fee line, then Done. */
 async function pickFee(w: W, subtitle: "public" | "private" | "sponsored") {
 	await w.get('[data-testid="send-fee-change"]').trigger("click")
-	await w.get(`[data-testid="send-fee-sheet"] [data-testid="send-fee-method-${subtitle}"]`).trigger("click")
-	await w.get('[data-testid="send-fee-sheet"] [data-testid="popup-close-btn"]').trigger("click")
+	await w.get(`[data-testid="send-fee-sheet"] [data-testid="send-fee-payer-${subtitle}"]`).setValue(true)
+	await w.get('[data-testid="send-fee-sheet"] [data-testid="send-fee-done"]').trigger("click")
 }
 /** Both sides start private for a token that can do either. */
 const setSide = (w: W, side: "from" | "to", want: TransferSide) => w.get(`[data-testid="send-${side}-${want}"]`).setValue(true)
@@ -370,11 +372,11 @@ const checkedSide = (w: W, side: "from" | "to") =>
 	(["private", "public"] as const).filter((s) => (w.get(`[data-testid="send-${side}-${s}"]`).element as HTMLInputElement).checked)
 
 /** The one reading a settled state must give everywhere at once: the publish line's `you`, its warning
- *  and the card's tag. */
+ *  and the card's own pick. */
 function settled(w: W) {
 	const you = publishLine(w).attributes("data-you")
 	expect(warning(w).exists()).toBe(you === "exposed")
-	expect(tag(w).exists()).toBe(you === "exposed")
+	expect(namesAccount(w)).toBe(you === "exposed")
 	return you
 }
 /** The three cells as the open review's rows read them. */
@@ -454,7 +456,6 @@ describe.each(SWEEP)("send page with the real fee card — %s, %s origin", (fund
 		expect(settled(w)).toBe(you)
 		expect(feeTrigger(w)).toBe(fee.kind === "fj" ? "public" : fee.fpcId === "p1" ? "private" : "sponsored")
 		const shape = you === "exposed" ? `private-${destination}` : undefined
-		if (shape) expect(tag(w).attributes("data-notice-shape")).toBe(shape)
 
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
@@ -476,13 +477,12 @@ describe.each(SWEEP)("send page with the real fee card — %s, %s origin", (fund
 })
 
 describe("send page with the real fee card — nothing to send", () => {
-	test("no sendable token with funded Fee Juice: no publish line, no tag, and the button stays off", async () => {
+	test("no sendable token with funded Fee Juice: no publish line, and the button stays off", async () => {
 		mocks.getTokens.mockResolvedValue([])
 		mocks.getTokenBalances.mockResolvedValue([])
 		const { w } = await mountSend(FUNDING["public Fee Juice only"])
 		await toForm(w)
 		expect(w.find("[data-you]").exists()).toBe(false)
-		expect(tag(w).exists()).toBe(false)
 		expect(submit(w).attributes("disabled")).toBeDefined()
 		await submit(w).trigger("click")
 		expect(sheetOpen(w)).toBe(false)
@@ -554,7 +554,7 @@ describe("send page — the caveat under the token row for a token outside the v
 })
 
 describe("send page with the real fee card — transitions", () => {
-	test("balances still pending: unknown, no tag, nothing sendable; the read landing settles it", async () => {
+	test("balances still pending: unknown, no pick, nothing sendable; the read landing settles it", async () => {
 		const { w, gas } = await mountSend(FUNDING["public Fee Juice only"], { holdGas: true })
 		await fillForm(w)
 		expect(settled(w)).toBe("unknown")
@@ -713,7 +713,6 @@ describe("send page with the real fee card — transitions", () => {
 
 		await setSide(w, "to", "public")
 		expect(settled(w)).toBe("exposed")
-		expect(tag(w).attributes("data-notice-shape")).toBe("private-public")
 		await estimateLands()
 		await submit(w).trigger("click")
 		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-notice-shape")).toBe("private-public")
@@ -856,11 +855,8 @@ describe("send page with the real fee card — a sponsor that can't cover the fe
 	const ESTIMATE = { maxFee: "1000", gasDetails: {} }
 	const SHORT = { ...ESTIMATE, sponsorFunding: { fpcId: "s1", address: SPONSOR_AT, funded: false } }
 	const notice = (w: W) => w.find('[data-testid="fee-sponsor-short"]')
-	/** The menu item is unresolved here, so its `disabled` prop lands as an attribute. */
-	const offered = (w: W, subtitle: "public" | "sponsored") => {
-		const item = w.get(`[data-testid="send-fee-method-${subtitle}"]`)
-		return item.attributes("disabled") === undefined && item.attributes("aria-disabled") !== "true"
-	}
+	const offered = (w: W, subtitle: "public" | "sponsored") =>
+		!(w.get(`[data-testid="send-fee-payer-${subtitle}"]`).element as HTMLInputElement).disabled
 
 	/** The picked sponsor's first estimate, held until `release`. */
 	async function heldEstimate() {

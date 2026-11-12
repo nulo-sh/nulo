@@ -1,6 +1,6 @@
 /**
  * The Send page from the outside: who is paid, what it says a send publishes, and the one way to
- * submit one. Every real send in the suite goes through `submitSend`, which reads the fee card's tag,
+ * submit one. Every real send in the suite goes through `submitSend`, which reads the fee card's pick,
  * the warning and the publish line's `you` together and refuses to click while they disagree, then
  * passes the review: so each send is also a check that the gate and its mirrors hold on the built
  * extension.
@@ -9,7 +9,7 @@ import type { Page } from "puppeteer"
 import { pointerClick } from "../helpers/legal-drivers"
 import { clickByTestId, replaceInputValue, withTimeoutMessage } from "./dom"
 import { settleClosedPopup } from "./popup-leave"
-import { FEE_ROW_READY_MS, type FeeMethodSubtitle, selectFeeMethod } from "./fee-method"
+import { FEE_ROW_READY_MS, type FeeMethodSubtitle } from "./fee-method"
 
 export { settleThemeTransitions, shotSend } from "./shots"
 
@@ -18,9 +18,9 @@ export type Visibility = "hidden" | "public" | "exposed" | "unknown"
 export interface SendView {
 	/** `fee-settings-card[data-origin]`; the card stays mounted while its sheet is closed. */
 	origin: string | null
-	/** `send-fee-method-trigger[data-fee-method]`: may preview a saved pick while balances load. */
+	/** `send-fee-payers[data-fee-method]`: may preview a saved pick while balances load. */
 	method: string | null
-	/** The card's tag `data-notice-shape`; null when no tag is drawn. */
+	/** What the card's pick names: `private-{arrival}` while public Fee Juice pays a private send. */
 	tag: string | null
 	/** `send-publish[data-you]`; null before a person is chosen. */
 	you: Visibility | null
@@ -86,8 +86,12 @@ export async function readSendView(page: Page): Promise<SendView> {
 		const q = (t: string) => document.querySelector(`[data-testid="${t}"]`)
 		return {
 			origin: q("fee-settings-card")?.getAttribute("data-origin") ?? null,
-			method: q("send-fee-method-trigger")?.getAttribute("data-fee-method") ?? null,
-			tag: q("send-fee-privacy-notice")?.getAttribute("data-notice-shape") ?? null,
+			method: q("send-fee-payers")?.getAttribute("data-fee-method") ?? null,
+			tag:
+				q("fee-settings-card")?.getAttribute("data-origin") === "private" &&
+				q("send-fee-payers")?.getAttribute("data-fee-method") === "public"
+					? `private-${q("send-to-type")?.getAttribute("data-side")}`
+					: null,
 			you: (q("send-publish")?.getAttribute("data-you") as Visibility | null) ?? null,
 			warning: Boolean(q("send-fee-warning")),
 			warningFix: (q("send-fee-warning-fix") ? "private" : q("send-fee-warning-bridge") ? "bridge" : null) as SendView["warningFix"],
@@ -98,8 +102,8 @@ export async function readSendView(page: Page): Promise<SendView> {
 	})
 }
 
-/** The card's tag ⇔ the form's warning ⇔ `you` exposed: three readings of one fact. Anything else is
- *  a page at odds with itself. */
+/** The card's pick names the account ⇔ the form's warning ⇔ `you` exposed: three readings of one
+ *  fact. Anything else is a page at odds with itself. */
 export function assertPublishInvariant(view: SendView): SendView {
 	const tagged = view.tag !== null
 	const exposed = view.you === "exposed"
@@ -118,7 +122,7 @@ export async function waitForFee(page: Page, origin: "private" | "public", metho
 		await page.waitForFunction(
 			({ o, m }: { o: string; m: string }) =>
 				document.querySelector('[data-testid="fee-settings-card"]')?.getAttribute("data-origin") === o &&
-				document.querySelector('[data-testid="send-fee-method-trigger"]')?.getAttribute("data-fee-method") === m,
+				document.querySelector('[data-testid="send-fee-payers"]')?.getAttribute("data-fee-method") === m,
 			{ timeout, polling: 250 },
 			{ o: origin, m: method },
 		)
@@ -133,12 +137,18 @@ export async function waitForFee(page: Page, origin: "private" | "public", metho
 	return assertPublishInvariant(await readSendView(page))
 }
 
-/** Waits for the tag to read `shape`, or to be gone (`null`). Returns the settled view, invariant checked. */
+/** Waits for the card's pick to name `shape`, or nothing (`null`), with the warning to match. Returns
+ *  the settled view, invariant checked. */
 export async function waitForTag(page: Page, shape: string | null, timeout = 30_000): Promise<SendView> {
 	await page.waitForFunction(
-		(want: string | null) =>
-			(document.querySelector('[data-testid="send-fee-privacy-notice"]')?.getAttribute("data-notice-shape") ?? null) === want &&
-			Boolean(document.querySelector('[data-testid="send-fee-warning"]')) === (want !== null),
+		(want: string | null) => {
+			const q = (t: string) => document.querySelector(`[data-testid="${t}"]`)
+			const names =
+				q("fee-settings-card")?.getAttribute("data-origin") === "private" &&
+				q("send-fee-payers")?.getAttribute("data-fee-method") === "public"
+			const tag = names ? `private-${q("send-to-type")?.getAttribute("data-side")}` : null
+			return tag === want && Boolean(q("send-fee-warning")) === (want !== null)
+		},
 		{ timeout, polling: 250 },
 		shape,
 	)
@@ -151,7 +161,7 @@ export async function openSendFeeSheet(page: Page): Promise<void> {
 	await page.waitForFunction(
 		() =>
 			document.querySelector('[data-testid="send-fee-change"]')?.getAttribute("aria-expanded") === "true" &&
-			Boolean(document.querySelector('[data-testid="send-fee-sheet"] [data-testid="fee-settings-card"]')),
+			Boolean(document.querySelector('[data-testid="send-fee-sheet"] [data-testid="send-fee-payers"]')),
 		{ timeout: 10_000, polling: 100 },
 	)
 }
@@ -168,11 +178,51 @@ export async function closeSendFeeSheet(page: Page): Promise<void> {
 	await settleClosedPopup(page, "send-fee-sheet")
 }
 
-/** Picks Send's fee method in its sheet, then closes the sheet. */
+/** Picks a payer in the open Fee sheet with a pointer press on its radio, once its row can pay (rows
+ *  load while the forced balance read runs). A sponsor is the first sponsor row, Nulo's. */
+export async function pickSendFeePayer(page: Page, method: FeeMethodSubtitle, opts: { timeoutMs?: number } = {}): Promise<void> {
+	const timeout = opts.timeoutMs ?? FEE_ROW_READY_MS
+	const radio = `[data-testid="send-fee-sheet"] [data-testid="send-fee-payer-${method}"]`
+	await withTimeoutMessage(
+		page.waitForFunction(
+			(s: string) => document.querySelector<HTMLInputElement>(s)?.disabled === false,
+			{ timeout, polling: 100 },
+			radio,
+		),
+		async () => `pickSendFeePayer: ${radio} could not be chosen within ${timeout}ms (${await payerRow(page, radio)})`,
+	)
+	await pointerClick(page, `send-fee-payer-${method}`)
+	await withTimeoutMessage(
+		page.waitForFunction(
+			(want: string) => document.querySelector('[data-testid="send-fee-payers"]')?.getAttribute("data-fee-method") === want,
+			{ timeout: 10_000, polling: 50 },
+			method,
+		),
+		async () => `pickSendFeePayer: pressed ${method}, but the card picked ${(await readSendView(page)).method}`,
+	)
+}
+
+const payerRow = (page: Page, radio: string) =>
+	page.evaluate((s: string) => {
+		const el = document.querySelector<HTMLInputElement>(s)
+		return el ? `${el.disabled ? "disabled" : "enabled"}: ${el.closest("label")?.textContent?.replace(/\s+/g, " ").trim()}` : "absent"
+	}, radio)
+
+/** Done closes the Fee sheet; its DOM has left. */
+export async function doneSendFeeSheet(page: Page): Promise<void> {
+	await pointerClick(page, "send-fee-done")
+	await page.waitForFunction(() => document.querySelector('[data-testid="send-fee-change"]')?.getAttribute("aria-expanded") === "false", {
+		timeout: 10_000,
+		polling: 100,
+	})
+	await settleClosedPopup(page, "send-fee-sheet")
+}
+
+/** Picks Send's fee payer in its sheet, then Done. */
 export async function selectSendFeeMethod(page: Page, method: FeeMethodSubtitle, opts: { mountTimeoutMs?: number } = {}): Promise<void> {
 	await openSendFeeSheet(page)
-	await selectFeeMethod(page, method, { mountTimeoutMs: opts.mountTimeoutMs ?? FEE_ROW_READY_MS })
-	await closeSendFeeSheet(page)
+	await pickSendFeePayer(page, method, { timeoutMs: opts.mountTimeoutMs })
+	await doneSendFeeSheet(page)
 }
 
 export async function waitForReview(page: Page, open: boolean, timeout = 15_000): Promise<void> {

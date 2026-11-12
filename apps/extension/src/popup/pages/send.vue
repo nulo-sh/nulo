@@ -1175,7 +1175,7 @@ onBeforeUnmount(() => {
 					:estimateFailed="estimateFailed"
 					:estimateSlow="estimateSlow"
 					:originPrivacy="selectedSendType"
-					:payerNoticeShape="facts.noticeShape"
+					embedded
 					:txShape="feeTxShape"
 					v-model="feeSettings"
 					v-model:needsFeeJuice="needsFeeJuice"
@@ -1191,7 +1191,7 @@ onBeforeUnmount(() => {
 			</Teleport>
 		</div>
 
-		<Popup :show="feeSheetOpen" :displaceIdx="feeOrder" initial-focus='[data-testid="send-fee-method-trigger"]' @onClose="closeFeeSheet">
+		<Popup :show="feeSheetOpen" :displaceIdx="feeOrder" initial-focus='[data-testid="send-fee-payers"] input:checked' @onClose="closeFeeSheet">
 			<PopupCard :displaceIdx="feeDepth">
 				<div role="dialog" aria-modal="true" aria-labelledby="send-fee-title" data-testid="send-fee-sheet">
 					<PopupHeader closable @onClose="closeFeeSheet">
@@ -1199,7 +1199,10 @@ onBeforeUnmount(() => {
 							<span id="send-fee-title" :class="$style.sheet_title">Fee</span>
 						</template>
 					</PopupHeader>
-					<div ref="feeBody" :class="$style.fee_body" />
+					<div :class="$style.fee_body">
+						<div ref="feeBody" />
+						<Button variant="secondary" wide data-testid="send-fee-done" @click="closeFeeSheet">Done</Button>
+					</div>
 				</div>
 			</PopupCard>
 		</Popup>
@@ -1321,6 +1324,9 @@ onBeforeUnmount(() => {
 }
 
 .fee_body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
 	padding: 4px 20px 24px;
 }
 </style>

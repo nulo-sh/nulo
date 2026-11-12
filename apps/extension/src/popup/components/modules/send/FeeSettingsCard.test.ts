@@ -105,20 +105,15 @@ import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { INIT_FETCH_TIMEOUT_MS, INIT_RETRY_BACKOFF_MS, useBalancesStore } from "@/stores/balances.store"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 
-const STUBS = {
-	Flex: { template: "<div><slot /></div>" },
-	Text: { template: "<span><slot /></span>" },
-	Icon: { template: "<i></i>" },
-	Tooltip: { template: '<div><slot /><slot name="content" /></div>' },
-	FeeMethodSelector: {
-		props: ["modelValue", "methods", "payerNoticeShape", "pending"],
-		emits: ["update:modelValue", "open", "close"],
-		template: `
+/** Send's radios and the windows' menu offer the same rows to pick from. */
+const PICKER = {
+	props: ["modelValue", "methods", "pending"],
+	emits: ["update:modelValue", "open", "close"],
+	template: `
 			<div data-testid="fee-method-selector"
 			     :data-active-type="modelValue?.type"
 			     :data-active-title="modelValue?.title"
 			     :data-pending="String(pending)">
-				<span v-if="payerNoticeShape" data-testid="send-fee-privacy-notice" :data-notice-shape="payerNoticeShape" />
 				<button
 					v-for="m in methods"
 					:key="m.fpc?.id ?? m.type"
@@ -133,6 +128,17 @@ const STUBS = {
 				>{{ m.title }}</button>
 			</div>
 		`,
+}
+
+const STUBS = {
+	Flex: { template: "<div><slot /></div>" },
+	Text: { template: "<span><slot /></span>" },
+	Icon: { template: "<i></i>" },
+	Tooltip: { template: '<div><slot /><slot name="content" /></div>' },
+	FeeMethodSelector: PICKER,
+	FeeMethodRadios: {
+		...PICKER,
+		template: PICKER.template.replace('data-testid="fee-method-selector"', 'data-testid="fee-method-selector" data-radios'),
 	},
 	FeeMethodRow: { props: ["pending"], template: '<div data-testid="fee-method-row" :data-pending="String(pending)" />' },
 	FeeCostReadout: {
@@ -2351,9 +2357,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 
 	describe("while loading", () => {
 		const pendingOf = (w: ReturnType<typeof mount>) =>
-			["fee-method-selector", "fee-method-row", "fee-cost-readout"].map((id) =>
-				w.find(`[data-testid="${id}"]`).attributes("data-pending"),
-			)
+			["fee-method-selector", "fee-cost-readout"].map((id) => w.find(`[data-testid="${id}"]`).attributes("data-pending"))
 
 		test("the trigger previews the saved pick, but no settings come from it and its rows wait as bars", async () => {
 			const gas = deferred<unknown>()
@@ -2364,7 +2368,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			await flushPromises()
 			expect(activeType(w)).toBe("fj")
 			expect(everEmittedSettings(w)).toEqual([])
-			expect(pendingOf(w)).toEqual(["true", "true", "true"])
+			expect(pendingOf(w)).toEqual(["true", "true"])
 			// With a saved pick no Checking shows, so only the card's mark says the read runs.
 			const readPending = () => w.get('[data-testid="fee-settings-card"]').attributes("data-read-pending")
 			expect(readPending()).toBe("true")
@@ -2372,7 +2376,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: "0" })
 			await flushPromises()
 			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
-			expect(pendingOf(w)).toEqual(["false", "false", "false"])
+			expect(pendingOf(w)).toEqual(["false", "false"])
 			expect(readPending()).toBeUndefined()
 		})
 
@@ -2382,7 +2386,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			mocks.getGasBalances.mockReturnValue(gas.promise)
 			const w = mountSend()
 			expect(activeType(w)).toBeUndefined()
-			expect(pendingOf(w)).toEqual(["true", "true", "true"])
+			expect(pendingOf(w)).toEqual(["true", "true"])
 			expect(w.find('[data-testid="fee-priority-row"]').exists()).toBe(true)
 			await flushPromises()
 
@@ -2396,7 +2400,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			await flushPromises()
 			expect(everEmittedSettings(w)).toEqual([{ paymentMethod: { kind: "fpc", fpcId: "p1" }, priorityLevel: "fast" }])
 			expect(payers().at(-1)).toEqual({ type: "private_fpc", fpcId: "p1", isProtocol: true, name: "Private FPC" })
-			expect(pendingOf(w)).toEqual(["false", "false", "false"])
+			expect(pendingOf(w)).toEqual(["false", "false"])
 		})
 
 		test("the readout hears whether Send's amount field holds an amount while the read runs", async () => {
@@ -2451,12 +2455,12 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 
 				await w.setProps({ account: accountB })
 				await flushPromises()
-				expect(pendingOf(w)).toEqual(["true", "true", "true"])
+				expect(pendingOf(w)).toEqual(["true", "true"])
 				expect(degradedText(w)).toBeNull()
 
 				gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
 				await flushPromises()
-				expect(pendingOf(w)).toEqual(["false", "false", "false"])
+				expect(pendingOf(w)).toEqual(["false", "false"])
 				expect(degradedText(w)).toBeNull()
 				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "p1" } })
 			} finally {
@@ -3107,11 +3111,10 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 	})
 })
 
-describe("FeeSettingsCard — Send: the fee-source tag", () => {
+describe("FeeSettingsCard — Send: the payers as radios", () => {
 	const HELD = "1000000000000000000"
 	const PRIVATE_FPC = { id: "p1", type: 2, name: "Private FPC", isProtocol: true }
 	const SPONSOR = { id: "s1", type: 1, name: "Sponsor" }
-	const TAG = '[data-testid="send-fee-privacy-notice"]'
 
 	const mountSend = (over: Record<string, unknown> = {}) =>
 		mount(FeeSettingsCard, {
@@ -3123,30 +3126,27 @@ describe("FeeSettingsCard — Send: the fee-source tag", () => {
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: HELD })
 	}
 
-	test("the tag is the page's call: Fee Juice picked under a private origin draws none by itself", async () => {
+	test("Send offers its payers as radios with priority after them and no balance row; the windows keep the menu", async () => {
 		everyPayer()
-		const w = mountSend()
+		const send = mountSend()
 		await flushPromises()
-		await w.find('[data-testid="pick-fj"]').trigger("click")
-		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
-		expect(w.find(TAG).exists()).toBe(false)
-		expect(w.find('[data-testid="send-fee-privacy-remedy"]').exists()).toBe(false)
-	})
+		const order = (w: ReturnType<typeof mount>) =>
+			[...w.get('[data-testid="fee-settings-card"]').element.children]
+				.map((el) => el.getAttribute("data-testid"))
+				.filter((id) => id === "fee-method-selector" || id === "fee-priority-row" || id === "fee-cost-readout")
+		expect(send.get('[data-testid="fee-method-selector"]').attributes()).toHaveProperty("data-radios")
+		expect(order(send)).toEqual(["fee-method-selector", "fee-priority-row", "fee-cost-readout"])
+		expect(send.find('[data-testid="fee-method-row"]').exists()).toBe(false)
+		await send.find('[data-testid="pick-fj"]').trigger("click")
+		expect(lastEmittedSettings(send)).toEqual({ paymentMethod: { kind: "fj" } })
+		send.unmount()
 
-	test("the prop draws the tag with its shape, and withdraws it, whatever is selected", async () => {
-		everyPayer()
-		const w = mountSend({ payerNoticeShape: "private-private" })
+		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: { type: "fj" } }
+		const app = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
-		expect(w.find(TAG).attributes("data-notice-shape")).toBe("private-private")
-
-		await w.setProps({ payerNoticeShape: "private-public" })
-		expect(w.find(TAG).attributes("data-notice-shape")).toBe("private-public")
-
-		await w.find('[data-testid="pick-fpc"]').trigger("click")
-		expect(w.find(TAG).attributes("data-notice-shape")).toBe("private-public")
-
-		await w.setProps({ payerNoticeShape: null })
-		expect(w.find(TAG).exists()).toBe(false)
+		expect(app.get('[data-testid="fee-method-selector"]').attributes()).not.toHaveProperty("data-radios")
+		expect(order(app)).toEqual(["fee-method-selector", "fee-cost-readout", "fee-priority-row"])
+		expect(app.find('[data-testid="fee-method-row"]').exists()).toBe(true)
 	})
 
 	test("the no-gas nudge speaks of private Fee Juice on a private send, and of Fee Juice elsewhere", async () => {

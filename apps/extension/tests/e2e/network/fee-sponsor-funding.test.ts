@@ -90,8 +90,16 @@ function readSentenceLayout(page: Page) {
 	})
 }
 
+/** The title of the payer the Fee sheet's radios hold chosen. */
 const triggerText = (page: Page) =>
-	page.evaluate(() => document.querySelector('[data-testid="send-fee-method-trigger"]')?.textContent?.trim() ?? "")
+	page.evaluate(
+		() =>
+			document
+				.querySelector('[data-testid="send-fee-payers"] input:checked')
+				?.closest("label")
+				?.querySelector("span span")
+				?.textContent?.trim() ?? "",
+	)
 
 /** The playground, connected once per browser with a bundle that may register contracts and send:
  *  a second connect finds the origin approved and opens no discovery window. */
@@ -170,7 +178,7 @@ test.skipIf(!hasConfig)(
 		const instance = await getContractInstanceFromInstantiationParams(SponsoredFPCContractArtifact, { salt: new Fr(1) })
 		const address = instance.address.toString()
 		const fpcId = await addUnfundedSponsor(tokenReadyExtension, address, serializeInstance(instance))
-		const row = `[data-testid="send-fee-method-sponsored"][data-fpc-id="${fpcId}"]`
+		const row = `[data-testid="send-fee-payer-sponsored"][data-fpc-id="${fpcId}"]`
 
 		const page = await openPopup(tokenReadyExtension)
 		await waitForHash(page, "#/popup/general")
@@ -182,13 +190,12 @@ test.skipIf(!hasConfig)(
 		const nuloTrigger = await triggerText(page)
 
 		await openSendFeeSheet(page)
-		await clickByTestId(page, "send-fee-method-trigger")
-		await page.waitForSelector(row, { visible: true, timeout: 10_000 })
+		await page.waitForFunction((s: string) => document.querySelector<HTMLInputElement>(s)?.disabled === false, { timeout: 10_000 }, row)
 		await page.evaluate((s: string) => document.querySelector<HTMLElement>(s)?.click(), row)
 		await page.waitForFunction(
-			(name: string) => document.querySelector('[data-testid="send-fee-method-trigger"]')?.textContent?.includes(name),
+			(s: string) => document.querySelector<HTMLInputElement>(s)?.checked === true,
 			{ timeout: 10_000, polling: 100 },
-			UNFUNDED_NAME,
+			row,
 		)
 		await closeSendFeeSheet(page)
 
@@ -198,9 +205,9 @@ test.skipIf(!hasConfig)(
 
 		// The walk goes on as when the sponsor is missing: Nulo's own sponsor, named by the notice.
 		await page.waitForFunction(
-			(name: string) => !document.querySelector('[data-testid="send-fee-method-trigger"]')?.textContent?.includes(name),
+			(s: string) => document.querySelector<HTMLInputElement>(s)?.checked === false,
 			{ timeout: 30_000, polling: 250 },
-			UNFUNDED_NAME,
+			row,
 		)
 		expect(await triggerText(page)).toBe(nuloTrigger)
 		const shortCopy = "The sponsor you chose can't cover this fee right now. The default sponsor pays it instead."
@@ -224,10 +231,11 @@ test.skipIf(!hasConfig)(
 		await waitForVerdict(page, "short")
 
 		await openSendFeeSheet(page)
-		await clickByTestId(page, "send-fee-method-trigger")
-		await page.waitForSelector(row, { visible: true, timeout: 10_000 })
-		const short = await page.$eval(row, (el) => ({ disabled: el.getAttribute("aria-disabled"), text: el.textContent ?? "" }))
-		expect(short.disabled).toBe("true")
+		const short = await page.$eval(row, (el) => ({
+			disabled: (el as HTMLInputElement).disabled,
+			text: el.closest("label")?.textContent ?? "",
+		}))
+		expect(short.disabled).toBe(true)
 		expect(short.text).toContain("can't pay now")
 		await page.close()
 	},

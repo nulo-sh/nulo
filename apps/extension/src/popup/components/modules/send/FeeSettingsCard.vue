@@ -6,6 +6,7 @@ import FeeCostReadout from "./FeeCostReadout.vue"
 import FeeAmount from "@/components/composite/FeeAmount.vue"
 import FeePriorityRow from "./FeePriorityRow.vue"
 import FeeMethodSelector from "./FeeMethodSelector.vue"
+import FeeMethodRadios from "./FeeMethodRadios.vue"
 
 /** Vendor */
 import { getRandomHex } from "@/wallet/utils"
@@ -63,11 +64,9 @@ const props = defineProps({
 	 *  and the network's default never replace it. */
 	lockedMethod: { type: String, default: null },
 	/** "private" | "public" — the side the transfer spends from. Non-null only on the Send page, where
-	 *  the fee source follows it; null keeps the one-pick-per-account behaviour of the dApp windows. */
+	 *  the fee source follows it and the payers show as radios; null keeps the dApp windows'
+	 *  one-pick-per-account behaviour and their menu. */
 	originPrivacy: { type: String, default: null },
-	/** The page's reading of what this send's fee publishes — the selector's tag is drawn from it,
-	 *  never from this card's own selection, so the tag can only ever agree with the footer. */
-	payerNoticeShape: { type: String, default: null },
 	/** The transaction the fee is for, less its fee settings; a change is a new transaction. */
 	txShape: { type: String, default: "" },
 	/** Outside Send: a short sponsor's selection falls to the next payer of Send's public-side walk
@@ -184,10 +183,10 @@ const selectionInput = {
 	saveFeePick: (profileId, update) => managers.uiPreference.saveFeePick(profileId, update),
 }
 /** Chosen once: Send always passes an origin, the app windows never do. */
-const rules =
-	props.originPrivacy !== null
-		? useSendFeeSelection({ ...selectionInput, origin: () => props.originPrivacy })
-		: useAppFeeSelection({ ...selectionInput, lockedMethod: () => props.lockedMethod, fallsBack: () => props.fallsBack })
+const onSend = props.originPrivacy !== null
+const rules = onSend
+	? useSendFeeSelection({ ...selectionInput, origin: () => props.originPrivacy })
+	: useAppFeeSelection({ ...selectionInput, lockedMethod: () => props.lockedMethod, fallsBack: () => props.fallsBack })
 const { effectiveMethod, previewMethod, held, sponsorShort, feeJuiceMissing } = rules
 
 const feeJuiceBalanceFormatted = computed(() =>
@@ -227,7 +226,7 @@ const displayMethod = computed(() => effectiveMethod.value ?? previewMethod.valu
 
 /** Send's read for the live identity is in flight; the app windows keep their own loading look.
  *  Priority needs no balance, so it answers before the read lands. */
-const readPending = computed(() => props.originPrivacy !== null && snapshotPending.value)
+const readPending = computed(() => onSend && snapshotPending.value)
 const showsCostRows = computed(() => readPending.value || (Boolean(effectiveMethod.value) && !feeJuiceMissing.value))
 
 /** Who pays the estimate the readout shows; an estimate shows only while a method is chosen. */
@@ -463,13 +462,16 @@ onBeforeUnmount(() => {
 			<Text variant="label-section" color="primary">Fee</Text>
 			<Text variant="name" color="primary" :class="$style.method_size">Public Fee Juice · set by the app</Text>
 		</Flex>
+		<template v-else-if="onSend">
+			<FeeMethodRadios ref="methodSelector" :modelValue="displayMethod" :methods="menuMethods" :pending="readPending" @update:modelValue="handleMethodPicked" />
+			<FeePriorityRow v-if="showsCostRows" v-model="selectedPriority" />
+		</template>
 		<FeeMethodSelector
 			ref="methodSelector"
 			v-else
 			:modelValue="displayMethod"
 			@update:modelValue="handleMethodPicked"
 			:methods="menuMethods"
-			:payerNoticeShape="payerNoticeShape"
 			:pending="readPending"
 			@open="isMethodsDropdownOpen = true"
 			@close="isMethodsDropdownOpen = false"
@@ -493,7 +495,7 @@ onBeforeUnmount(() => {
 		</div>
 
 		<FeeMethodRow
-			v-if="readPending || !statusNotice"
+			v-if="!onSend && (readPending || !statusNotice)"
 			:method="effectiveMethod"
 			:isLoading="isLoading"
 			:pending="readPending"
@@ -561,7 +563,7 @@ onBeforeUnmount(() => {
 			@retry="onRetryEstimate"
 		/>
 
-		<FeePriorityRow v-if="showsCostRows" v-model="selectedPriority" />
+		<FeePriorityRow v-if="!onSend && showsCostRows" v-model="selectedPriority" />
 	</Flex>
 </template>
 
