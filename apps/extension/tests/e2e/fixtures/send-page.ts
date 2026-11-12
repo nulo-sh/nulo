@@ -39,14 +39,18 @@ export interface SendView {
 }
 
 export interface ReviewView {
+	/** The strip's cells, `send-review-strip[data-you|data-to|data-amount]`. */
 	you: Visibility | null
-	shape: string | null
 	to: string | null
 	amount: string | null
+	/** `send-review-warning[data-notice-shape]`; null when the review gives no warning. */
+	shape: string | null
+	warning: boolean
 	/** `send-review-fee[data-payer]`. */
 	payer: string | null
-	remedyHref: string | null
 	ready: boolean
+	/** Send now's `aria-disabled`: it refuses a press exactly while it is not ready. */
+	refusing: boolean
 }
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -65,7 +69,7 @@ export async function chooseRecipient(page: Page, destination: string): Promise<
 	await withTimeoutMessage(
 		page.waitForFunction(
 			() => {
-				if (document.querySelector('[data-testid="send-payee"]')) return true
+				if (document.querySelector('[data-testid="send-page"] [data-testid="send-payee"]')) return true
 				document.querySelector<HTMLElement>('[data-testid="send-pay-address"]')?.click()
 				return false
 			},
@@ -239,29 +243,33 @@ export async function waitForReview(page: Page, open: boolean, timeout = 15_000)
 	)
 }
 
-/** "Send now" is armed: `data-ready` set and the button enabled. */
+/** "Send now" is armed: `data-ready` set and no longer refusing a press. */
 export async function waitForReviewReady(page: Page, timeout = 15_000): Promise<void> {
 	await page.waitForFunction(
 		() => {
 			const btn = document.querySelector<HTMLButtonElement>('[data-testid="send-review-submit"]')
-			return Boolean(btn) && btn?.getAttribute("data-ready") === "true" && !btn?.disabled
+			return Boolean(btn) && btn?.getAttribute("data-ready") === "true" && btn?.getAttribute("aria-disabled") !== "true"
 		},
 		{ timeout, polling: 100 },
 	)
 }
 
+/** One read of the open review, so every field describes the same moment. */
 export async function readReview(page: Page): Promise<ReviewView> {
 	return page.evaluate(() => {
 		const q = (t: string) => document.querySelector(`[data-testid="${t}"]`)
-		const you = q("send-review-row-you")
+		const strip = q("send-review-strip")
+		const warning = q("send-review-warning")
+		const sendNow = q("send-review-submit")
 		return {
-			you: (you?.getAttribute("data-visibility") as Visibility | null) ?? null,
-			shape: you?.getAttribute("data-notice-shape") ?? null,
-			to: q("send-review-row-to")?.getAttribute("data-visibility") ?? null,
-			amount: q("send-review-row-amount")?.getAttribute("data-visibility") ?? null,
+			you: (strip?.getAttribute("data-you") as Visibility | null) ?? null,
+			to: strip?.getAttribute("data-to") ?? null,
+			amount: strip?.getAttribute("data-amount") ?? null,
+			shape: warning?.getAttribute("data-notice-shape") ?? null,
+			warning: Boolean(warning),
 			payer: q("send-review-fee")?.getAttribute("data-payer") ?? null,
-			remedyHref: q("send-fee-privacy-remedy")?.getAttribute("href") ?? null,
-			ready: q("send-review-submit")?.getAttribute("data-ready") === "true",
+			ready: sendNow?.getAttribute("data-ready") === "true",
+			refusing: sendNow?.getAttribute("aria-disabled") === "true",
 		}
 	})
 }
@@ -300,10 +308,12 @@ export async function waitForSendGone(page: Page, timeout = 10_000): Promise<voi
 	await page.waitForFunction(() => !document.querySelector('[data-testid="send-page"]'), { timeout })
 }
 
-/** The form's two values: the amount typed and the address the payee block shows whole. */
+/** The form's two values: the amount typed and the address the payee block shows whole. The review
+ *  draws a payee block of its own, outside the page. */
 export async function readSendInputs(page: Page): Promise<{ amount: string; destination: string }> {
 	return page.evaluate(() => ({
 		amount: document.querySelector<HTMLInputElement>('[data-testid="send-amount-input"]')?.value ?? "",
-		destination: document.querySelector('[data-testid="send-payee-address"]')?.textContent?.replace(/\s+/g, "") ?? "",
+		destination:
+			document.querySelector('[data-testid="send-page"] [data-testid="send-payee-address"]')?.textContent?.replace(/\s+/g, "") ?? "",
 	}))
 }

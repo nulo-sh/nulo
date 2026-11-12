@@ -313,7 +313,8 @@ test.skipIf(!hasConfig)(
 			amount: "public",
 			payer: "contract",
 			ready: true,
-			remedyHref: null,
+			refusing: false,
+			warning: false,
 		})
 		await shotSend(page, "sheet-not-gated", "send-review-submit")
 		await pointerClick(page, "send-review-submit")
@@ -413,24 +414,33 @@ test.skipIf(!hasConfig)(
 			await selectSendFeeMethod(page, "public")
 			await waitForTag(page, "private-private")
 
-			// The warned send: "Review send" only opens the sheet. Nothing goes out, and while the sheet is
-			// up the footer is under it — nothing stays clickable below a modal.
+			// The warned send: "Review send" only opens the sheet, which takes the keyboard on Send now.
+			// Nothing goes out, and while the sheet is up the footer is under it — nothing stays clickable
+			// below a modal. Send now refuses a press exactly while it is not armed, whenever it is read.
 			await fillSendForm(page, { amount: "10", destination: self })
 			await openReview(page)
+			await waitForFocus(page, "send-review-submit")
+			const opened = await readReview(page)
+			expect(opened.refusing).toBe(!opened.ready)
 			await expectNothingSent(page, 1_500)
 			expect(await coveredAt(page, "send-submit")).not.toBeNull()
 			const review = await readReview(page)
-			expect(review).toMatchObject({ you: "exposed", shape: "private-private", to: "hidden", amount: "hidden", payer: "account" })
-			expect(review.remedyHref).toMatch(/^https:\/\//)
+			expect(review).toMatchObject({
+				you: "exposed",
+				shape: "private-private",
+				warning: true,
+				to: "hidden",
+				amount: "hidden",
+				payer: "account",
+				ready: true,
+				refusing: false,
+			})
 			await shotSend(page, "sheet-gated", "send-review-submit")
 
-			// The trap: Tab never leaves the sheet; Escape closes it and hands focus back to the opener.
+			// The trap: Tab never leaves the sheet, whose two stops are its close and Send now; Escape
+			// closes it and hands focus back to the opener.
 			const visited = await tabAround(page, 12)
-			expect(visited).toContain("send-review-submit")
-			expect(visited).not.toContain("send-submit")
-			expect(visited).not.toContain("send-fee-change")
-			expect(visited).not.toContain("send-fee-warning-bridge")
-			expect(visited).not.toContain("send-amount-input")
+			expect(new Set(visited)).toEqual(new Set(["popup-close-btn", "send-review-submit"]))
 			await page.keyboard.press("Escape")
 			await waitForReviewClosed(page)
 			await waitForFocus(page, "send-submit")
@@ -439,10 +449,12 @@ test.skipIf(!hasConfig)(
 			expect(await readSendInputs(page)).toEqual({ amount: "10", destination: self })
 			expect(await waitForTag(page, "private-private")).toMatchObject({ warning: true, you: "exposed" })
 
-			// Reopened, armed after the wait, sent from the sheet alone — paid by the account.
+			// Reopened, armed after the wait, sent from the sheet alone by the key that opened it — paid by
+			// the account.
 			await openReview(page)
+			await waitForFocus(page, "send-review-submit")
 			await waitForReviewReady(page)
-			await pointerClick(page, "send-review-submit")
+			await page.keyboard.press("Enter")
 			await waitForToast(page, "Transaction submitted", 60_000)
 			await waitForSendGone(page)
 			await waitForTxConfirmation(page, { amount: "10", fromType: "private", toType: "private", timeout: 120_000 })
