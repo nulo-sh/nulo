@@ -15,8 +15,7 @@ const props = defineProps({
 })
 const emit = defineEmits(["update:modelValue"])
 
-const uid = Math.random().toString(36).slice(2, 8)
-const labelId = `fee-payers-${uid}`
+const labelId = `fee-payers-${useId()}`
 const group = ref(null)
 
 /** Private Fee Juice first, then public, then the sponsors in the menu's order. */
