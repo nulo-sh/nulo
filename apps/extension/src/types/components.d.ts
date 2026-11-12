@@ -89,7 +89,6 @@ declare module 'vue' {
     ProcessingErrorNote: typeof import('./../components/composite/ProcessingErrorNote.vue')['default']
     ProfileNameField: typeof import('./../components/composite/ProfileNameField.vue')['default']
     PublishLine: typeof import('./../components/composite/send/PublishLine.vue')['default']
-    PublishStrip: typeof import('./../components/composite/send/PublishStrip.vue')['default']
     RecoveryPhraseGrid: typeof import('./../components/composite/RecoveryPhraseGrid.vue')['default']
     RequestLogButton: typeof import('./../components/RequestLogButton.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

@@ -5,14 +5,15 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import { nextTick } from "vue"
 import { sendEvent } from "../../../../../tests/helpers/send-event"
 import {
+	FACT_SENTENCES,
 	feeWarning,
 	NO_FACTS,
+	noticeBodyFor,
 	PAID_BY,
 	type PayerDescriptor,
 	type PayerKind,
 	type PublishFacts,
 	publishFacts,
-	stripSentence,
 	UNVOUCHED_FEE_SENTENCE,
 	UNVOUCHED_PUBLISH_SENTENCE,
 } from "@/components/composite/send/publish-facts"
@@ -106,19 +107,23 @@ const feeLines = (w: W) =>
 	Array.from(feeRow(w).element.querySelectorAll(":scope > span:last-child > span:not([class*=fee_state] span)")).map((el) =>
 		(el.textContent ?? "").trim(),
 	)
+const ROW_IDS = ["send-review-row-you", "send-review-row-to", "send-review-row-amount"]
 const testidsInOrder = (w: W) =>
 	Array.from(w.get('[data-testid="send-review"]').element.querySelectorAll("[data-testid]"))
 		.map((el) => el.getAttribute("data-testid") ?? "")
 		.filter((id) =>
-			[
-				"send-payee",
-				"send-review-amount",
-				"send-review-strip",
-				"send-review-warning",
-				"send-review-fee",
-				"send-review-submit",
-			].includes(id),
+			["send-payee", "send-review-amount", ...ROW_IDS, "send-review-warning", "send-review-fee", "send-review-submit"].includes(id),
 		)
+/** Each "This send publishes" row: its visibility, then its words as a reader hears them, one space
+ *  between text nodes. */
+const rows = (w: W) =>
+	ROW_IDS.map((id) => {
+		const row = w.get(`[data-testid="${id}"]`)
+		const parts: string[] = []
+		const walk = document.createTreeWalker(row.element, NodeFilter.SHOW_TEXT)
+		for (let n = walk.nextNode(); n; n = walk.nextNode()) if (n.textContent?.trim()) parts.push(n.textContent.trim())
+		return [row.attributes("data-visibility"), parts.join(" ")]
+	})
 
 describe("modules/send/SendReviewSheet", () => {
 	let w: W | undefined
@@ -145,15 +150,10 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(w.get('[data-testid="send-review-sheet"]').attributes("data-open")).toBe("true")
 	})
 
-	test("To, the amount, the strip, the fee row, then Send now; two Tab stops, the close and Send now", () => {
+	test("To, the amount, the three publish rows, the fee row, then Send now; two Tab stops, the close and Send now", () => {
 		w = mountSheet()
-		expect(testidsInOrder(w)).toEqual([
-			"send-payee",
-			"send-review-amount",
-			"send-review-strip",
-			"send-review-fee",
-			"send-review-submit",
-		])
+		expect(testidsInOrder(w)).toEqual(["send-payee", "send-review-amount", ...ROW_IDS, "send-review-fee", "send-review-submit"])
+		expect(w.text()).toContain("This send publishes")
 		const stops = w.get('[data-testid="send-review"]').findAll('button, a[href], input, [tabindex]:not([tabindex="-1"])')
 		expect(stops.map((s) => s.attributes("data-testid"))).toEqual(["popup-close-btn", "send-review-submit"])
 		expect(w.text()).not.toMatch(/edit/i)
@@ -172,7 +172,9 @@ describe("modules/send/SendReviewSheet", () => {
 		w = mountSheet({ recipientName: null, sentenceName: null, known: false })
 		expect(w.find('[data-testid="send-payee-name"]').exists()).toBe(false)
 		expect(w.get('[data-testid="send-payee-address"]').text().replace(/\s+/g, "")).toBe(ADDRESS)
-		expect(w.get('[data-testid="send-payee-check"]').text()).toBe("You have not paid this address before. Check its start and end.")
+		expect(w.get('[data-testid="send-payee-check"]').text()).toBe(
+			"You have not paid this address before. Review it carefully before you send.",
+		)
 	})
 
 	test("the amount with its symbol", () => {
@@ -180,16 +182,23 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(w.get('[data-testid="send-review-amount"]').text()).toBe("25TST")
 	})
 
-	test("a public send: the strip reads sender, public, public and is heard as one sentence; no warning", () => {
+	test("a private send on a vouched payer: the three rows read hidden, with no sentence under them", () => {
+		w = mountSheet()
+		expect(rows(w)).toEqual([
+			["hidden", "Your address HIDDEN"],
+			["hidden", "Recipient HIDDEN"],
+			["hidden", "Amount HIDDEN"],
+		])
+	})
+
+	test("a public send: the rows read sender, public, public, each with its sentence; no warning", () => {
 		const facts = publishFacts("public", "public", "account")
 		w = mountSheet({ facts, payerKind: "account", payerType: "fj", fee: { payer: "fj", display: PRICED } })
-		const strip = w.get('[data-testid="send-review-strip"]')
-		expect([strip.attributes("data-you"), strip.attributes("data-to"), strip.attributes("data-amount")]).toEqual([
-			"public",
-			"public",
-			"public",
+		expect(rows(w)).toEqual([
+			["public", `Your address SENDER ${FACT_SENTENCES.sender}`],
+			["public", `Recipient PUBLIC ${FACT_SENTENCES.recipient}`],
+			["public", `Amount PUBLIC ${FACT_SENTENCES.amount}`],
 		])
-		expect(w.get('[data-testid="send-review-strip-spoken"]').text()).toBe(stripSentence(facts, "Ana", "account"))
 		expect(w.find('[data-testid="send-review-warning"]').exists()).toBe(false)
 		expect(feeLines(w)).toEqual(["≈ $0.027 (0.00214 FJ), public Fee Juice"])
 	})
@@ -206,18 +215,18 @@ describe("modules/send/SendReviewSheet", () => {
 		["private", "private", "private-private"],
 		["private", "public", "private-public"],
 	] as const)(
-		"paid from public Fee Juice on a %s → %s send: the warning sits between the strip and the fee row",
+		"paid from public Fee Juice on a %s → %s send: the rows name the fee payer, and the warning sits between them and the fee row",
 		(origin, destination, shape) => {
 			const facts = publishFacts(origin, destination, "account")
 			w = mountSheet({ facts, payerKind: "account", payerType: "fj", fee: { payer: "fj", display: PRICED } })
-			expect(w.get('[data-testid="send-review-strip"]').attributes("data-you")).toBe("exposed")
+			expect(rows(w)[0]).toEqual(["exposed", `Your address FEE PAYER ${noticeBodyFor(shape)}`])
 			const box = w.get('[data-testid="send-review-warning"]')
 			expect(box.text()).toBe(feeWarning(facts, "Ana"))
 			expect(box.attributes("data-notice-shape")).toBe(shape)
 			expect(testidsInOrder(w)).toEqual([
 				"send-payee",
 				"send-review-amount",
-				"send-review-strip",
+				...ROW_IDS,
 				"send-review-warning",
 				"send-review-fee",
 				"send-review-submit",
@@ -233,7 +242,7 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(feeRow(w).find("s").exists()).toBe(false)
 	})
 
-	test("a hand-added sponsor: the strip cannot vouch, the sheet says so, and its cost is never named", () => {
+	test("a hand-added sponsor: Your address cannot be vouched for, its row says so in the form's words, and its cost is never named", () => {
 		const facts = publishFacts("private", "private", "unvouched")
 		w = mountSheet({
 			facts,
@@ -241,11 +250,8 @@ describe("modules/send/SendReviewSheet", () => {
 			payerType: "fpc",
 			fee: { payer: "unvouched", payerName: "My FPC", display: PRICED },
 		})
-		expect(w.get('[data-testid="send-review-strip"]').attributes("data-you")).toBe("unknown")
-		expect(w.get('[data-testid="send-review-unvouched"]').text()).toBe(UNVOUCHED_PUBLISH_SENTENCE)
-		// Heard once, in the strip's sentence.
-		expect(w.get('[data-testid="send-review-unvouched"]').attributes("aria-hidden")).toBe("true")
-		expect(w.get('[data-testid="send-review-strip-spoken"]').text()).toContain(UNVOUCHED_PUBLISH_SENTENCE)
+		expect(rows(w)[0]).toEqual(["unknown", `Your address — ${UNVOUCHED_PUBLISH_SENTENCE}`])
+		expect(w.text().split(UNVOUCHED_PUBLISH_SENTENCE)).toHaveLength(2)
 		expect(feeLines(w)).toEqual(["—, My FPC", UNVOUCHED_FEE_SENTENCE])
 		expect(feeRow(w).text()).not.toContain("0.00214")
 	})
@@ -354,13 +360,7 @@ describe("modules/send/SendReviewSheet — Home's re-ask review", () => {
 		w = mountSheet({ ...REASK })
 		expect(w.find('[data-testid="send-payee-name"]').exists()).toBe(false)
 		expect(w.find('[data-testid="send-payee-check"]').exists()).toBe(false)
-		expect(testidsInOrder(w)).toEqual([
-			"send-payee",
-			"send-review-amount",
-			"send-review-strip",
-			"send-review-fee",
-			"send-review-submit",
-		])
+		expect(testidsInOrder(w)).toEqual(["send-payee", "send-review-amount", ...ROW_IDS, "send-review-fee", "send-review-submit"])
 	})
 
 	test("a re-asked send whose fee names the account carries the warning", () => {
@@ -415,7 +415,7 @@ describe("modules/send/SendReviewSheet — Send now", () => {
 		for (const target of [
 			document.body,
 			w.get('[data-testid="send-review"]').element,
-			w.get('[data-testid="send-review-strip"]').element,
+			w.get('[data-testid="send-review-row-you"]').element,
 		]) {
 			sendEvent(target, "keydown", { key: "Enter" })
 			sendEvent(target, "keyup", { key: "Enter" })

@@ -429,16 +429,17 @@ through `waitForFunction` and returns `null`, never the `ElementHandle` Puppetee
 `(await page.waitForSelector(sel))!.evaluate(…)` compiles and throws `Cannot read properties of null`
 on both browsers. Wait, then read with `page.$eval(sel, …)` or `page.evaluate`.
 
-**A Send fee trigger can show a method that is not in effect.** With a saved pick, the card previews
-that pick's row while balances load (`send-fee-method-trigger[data-fee-method]`), and a preview pays
-nothing. To assert the method in effect, wait on something only the effective method produces
-(`send-publish[data-you]`, the `send-fee-privacy-notice` tag, the form's `send-fee-warning`, an
-enabled submit — `waitForFee` / `waitForTag` in `fixtures/send-page.ts`), and scope by
-`fee-settings-card[data-origin]` — across an origin flip the trigger attribute alone cannot tell the new
-origin's method from the last one's.
+**Send's payer radios can show a method that is not in effect.** With a saved pick, the card previews
+that pick's row while balances load (`send-fee-payers[data-fee-method]`, and a native radio may stay
+checked), and a preview pays nothing. To assert the method in effect, wait on something only the
+effective method produces (the fee line's `send-fee-line[data-payer]`, `send-publish[data-you]`, the
+form's `send-fee-warning`, an enabled submit — `waitForFee` / `waitForTag` in `fixtures/send-page.ts`),
+and scope by `fee-settings-card[data-origin]` — across an origin flip the radios alone cannot tell the
+new origin's method from the last one's.
 
 **Every send passes the review.** `submitSend` reads the page through `readSendView` +
-`assertPublishInvariant` (the card's tag ⇔ the form's warning ⇔ `data-you="exposed"`) and refuses to
+`assertPublishInvariant` (public Fee Juice in effect on a private send ⇔ the form's warning ⇔
+`data-you="exposed"`, and a checked radio is the card's payer) and refuses to
 click while they disagree, so a test asserting one surface has asserted the other two; then it opens
 the sheet and presses Send now. The sheet's Send now arms after a delay and is never natively
 disabled (`aria-disabled` announces the refusal; its key and pointer guards enforce it): wait on `send-review-submit[data-ready]`

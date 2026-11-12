@@ -371,8 +371,8 @@ async function fillForm(w: W, method: Method | null = SPONSOR) {
 const submit = (w: W) => w.get('[data-testid="send-submit"]')
 const sheetOpen = (w: W) => w.get('[data-testid="send-review-sheet"]').attributes("data-open") === "true"
 const sendNow = (w: W) => w.get('[data-testid="send-review-submit"]')
-/** The review's strip: its `you` cell, and the warning's shape when the fee names the account. */
-const reviewYou = (w: W) => w.get('[data-testid="send-review-strip"]').attributes("data-you")
+/** The review's "Your address" row, and the warning's shape when the fee names the account. */
+const reviewYou = (w: W) => w.get('[data-testid="send-review-row-you"]').attributes("data-visibility")
 const reviewShape = (w: W) => {
 	const box = w.find('[data-testid="send-review-warning"]')
 	return box.exists() ? box.attributes("data-notice-shape") : undefined

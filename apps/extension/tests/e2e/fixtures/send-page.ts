@@ -39,7 +39,7 @@ export interface SendView {
 }
 
 export interface ReviewView {
-	/** The strip's cells, `send-review-strip[data-you|data-to|data-amount]`. */
+	/** The "This send publishes" rows, `send-review-row-{you,to,amount}[data-visibility]`. */
 	you: Visibility | null
 	to: string | null
 	amount: string | null
@@ -258,13 +258,13 @@ export async function waitForReviewReady(page: Page, timeout = 15_000): Promise<
 export async function readReview(page: Page): Promise<ReviewView> {
 	return page.evaluate(() => {
 		const q = (t: string) => document.querySelector(`[data-testid="${t}"]`)
-		const strip = q("send-review-strip")
+		const row = (id: string) => q(`send-review-row-${id}`)?.getAttribute("data-visibility") ?? null
 		const warning = q("send-review-warning")
 		const sendNow = q("send-review-submit")
 		return {
-			you: (strip?.getAttribute("data-you") as Visibility | null) ?? null,
-			to: strip?.getAttribute("data-to") ?? null,
-			amount: strip?.getAttribute("data-amount") ?? null,
+			you: row("you") as Visibility | null,
+			to: row("to"),
+			amount: row("amount"),
 			shape: warning?.getAttribute("data-notice-shape") ?? null,
 			warning: Boolean(warning),
 			payer: q("send-review-fee")?.getAttribute("data-payer") ?? null,

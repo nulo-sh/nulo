@@ -379,10 +379,10 @@ function settled(w: W) {
 	expect(namesAccount(w)).toBe(you === "exposed")
 	return you
 }
-/** The three cells as the open review's strip reads them. */
+/** The open review's three "This send publishes" rows. */
 const reviewCells = (w: W) => {
-	const strip = w.get('[data-testid="send-review-strip"]')
-	return { you: strip.attributes("data-you"), to: strip.attributes("data-to"), amount: strip.attributes("data-amount") }
+	const row = (id: string) => w.get(`[data-testid="send-review-row-${id}"]`).attributes("data-visibility")
+	return { you: row("you"), to: row("to"), amount: row("amount") }
 }
 /** The review's fee row and the form's fee line, each as its value then its notes. */
 const reviewFeeLines = (w: W) =>
@@ -676,7 +676,7 @@ describe("send page with the real fee card — transitions", () => {
 		await estimateLands()
 		await submit(w).trigger("click")
 		expect(w.get('[data-testid="send-review-fee"]').attributes("data-payer")).toBe("unvouched")
-		expect(w.get('[data-testid="send-review-unvouched"]').text()).toBe("Nulo can't tell what this FPC publishes about you.")
+		expect(w.get('[data-testid="send-review-row-you"]').text()).toContain("Nulo can't tell what this FPC publishes about you.")
 		w.unmount()
 	})
 

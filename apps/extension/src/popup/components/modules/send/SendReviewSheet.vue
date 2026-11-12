@@ -5,16 +5,18 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
 import PayeeBlock from "@/components/composite/send/PayeeBlock.vue"
-import PublishStrip from "@/components/composite/send/PublishStrip.vue"
 import { vSnackFooter } from "@/composables/snackInset"
 import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 import {
+	type FactCell,
+	factWord,
 	feeWarning,
 	type PayerDescriptor,
 	type PayerKind,
 	paidBy,
 	type PublishFacts,
-	UNVOUCHED_PUBLISH_SENTENCE,
+	publishGlyph,
+	rowSentence,
 } from "@/components/composite/send/publish-facts"
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { fitHero, HERO_MIN_SCALE } from "@/utils/hero-fit"
@@ -65,7 +67,25 @@ const submitLabel = computed(() => {
 })
 
 const warning = computed(() => feeWarning(props.facts, props.sentenceName))
-const unvouched = computed(() => props.facts.you === "unknown" && props.payerKind === "unvouched")
+
+const ROWS: { cell: FactCell; id: string; name: string }[] = [
+	{ cell: "you", id: "you", name: "Your address" },
+	{ cell: "recipient", id: "to", name: "Recipient" },
+	{ cell: "amount", id: "amount", name: "Amount" },
+]
+const rows = computed(() =>
+	ROWS.map((row) => {
+		const visibility = props.facts[row.cell]
+		return {
+			...row,
+			visibility,
+			glyph: publishGlyph(visibility),
+			word: factWord(row.cell, props.facts),
+			sentence: rowSentence(row.cell, props.facts, props.payerKind),
+			noticeShape: row.cell === "you" ? (props.facts.noticeShape ?? undefined) : undefined,
+		}
+	}),
+)
 
 const QUEUE_TESTID = { cap: "send-review-fee-cap", sponsored: "send-review-fee-queued", behind: "send-review-fee-value" } as const
 const line = computed<FeeLine>(() => (props.fee ? feeLine(props.fee) : { kind: "words", value: "—", note: null }))
@@ -169,14 +189,32 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						</span>
 					</div>
 
-					<PublishStrip :facts="facts" :payer="payerKind" :name="sentenceName" />
+					<div :class="$style.rows">
+						<div :class="$style.rows_head">This send publishes</div>
+						<div
+							v-for="row in rows"
+							:key="row.cell"
+							:class="[$style.row, mark[row.visibility]]"
+							:data-testid="`send-review-row-${row.id}`"
+							:data-visibility="row.visibility"
+							:data-notice-shape="row.noticeShape"
+						>
+							<Icon v-if="row.glyph" :name="row.glyph" size="10" aria-hidden="true" :class="$style.row_mark" />
+							<span v-else :class="$style.row_gap" aria-hidden="true" />
+							<div :class="$style.row_body">
+								<div :class="$style.row_top">
+									<span>{{ row.name }}</span>
+									<span :class="$style.row_word">{{ row.word }}</span>
+								</div>
+								<span v-if="row.sentence" :class="$style.why">{{ row.sentence }}</span>
+							</div>
+						</div>
+					</div>
 
 					<p v-if="warning" :class="mark.warning_box" data-testid="send-review-warning" :data-notice-shape="facts.noticeShape">
 						<Icon name="warning" size="14" aria-hidden="true" :class="mark.warning_mark" />
 						<span>{{ warning }}</span>
 					</p>
-					<!-- The strip's spoken sentence already says it. -->
-					<p v-else-if="unvouched" aria-hidden="true" :class="$style.unvouched" data-testid="send-review-unvouched">{{ UNVOUCHED_PUBLISH_SENTENCE }}</p>
 
 					<div :class="$style.fee" data-testid="send-review-fee" :data-payer="payerKind ?? 'none'">
 						<span :class="$style.fee_key">Fee</span>
@@ -265,13 +303,72 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 	color: var(--nulo-secondary);
 }
 
-.unvouched {
-	composes: type--body from global;
-	margin: 0;
-	color: var(--txt-secondary);
+.rows {
+	display: flex;
+	flex-direction: column;
+
+	border: 1px solid var(--nulo-border);
 }
 
-/* Label at To's left edge, value at the strip's right edge. */
+.rows_head {
+	composes: type--label-section from global;
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--nulo-border);
+
+	color: var(--nulo-secondary);
+}
+
+.row {
+	display: flex;
+	gap: 8px;
+
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--nulo-border);
+}
+
+.row:last-child {
+	border-bottom: none;
+}
+
+.row_mark {
+	flex: none;
+	margin-top: 2px;
+}
+
+/* Keeps an unmarked row's words in line with the marked ones. */
+.row_gap {
+	flex: none;
+	width: 10px;
+}
+
+.row_body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.row_top {
+	composes: type--value from global;
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+
+	color: var(--txt-primary);
+}
+
+.row_word {
+	composes: type--label-section from global;
+}
+
+.why {
+	composes: type--caption from global;
+	line-height: 1.4;
+	color: var(--txt-tertiary);
+}
+
+/* Label at To's left edge, value at the rows' right edge. */
 .fee {
 	display: grid;
 	grid-template-columns: auto 1fr;
