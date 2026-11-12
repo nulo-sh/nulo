@@ -466,10 +466,14 @@ describe("modules/send/SendReviewSheet — Send now", () => {
 		expect(w.emitted("send")).toEqual([[]])
 	})
 
-	test("an Enter while Send now refuses is cancelled where it would click", () => {
+	test("an Enter while Send now refuses is cancelled where it would click, and ends at its release", async () => {
 		w = mountSheet({ ready: false })
 		expect(sendEvent(submit(w).element, "keydown", { key: "Enter" })?.defaultPrevented).toBe(true)
+		sendEvent(submit(w).element, "keyup", { key: "Enter" })
 		expect(w.emitted("send")).toBeUndefined()
+		await w.setProps({ ready: true })
+		await submit(w).trigger("click")
+		expect(w.emitted("send")).toEqual([[]])
 	})
 
 	test("close comes from the header button and from the popup's own close paths", async () => {

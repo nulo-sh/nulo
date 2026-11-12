@@ -107,9 +107,12 @@ function onSendKeydown(e: KeyboardEvent) {
 	if (beginPress()) e.preventDefault()
 }
 function onSendKeyup(e: KeyboardEvent) {
-	if (e.key !== " " || !press?.refused) return
-	e.preventDefault()
-	press = null
+	// Enter acts at its keydown, so its release ends the press whatever it met.
+	if (e.key === "Enter") press = null
+	else if (e.key === " " && press?.refused) {
+		e.preventDefault()
+		press = null
+	}
 }
 
 /** A retry replaces its own button, so the keyboard it held moves on to Send now. */
