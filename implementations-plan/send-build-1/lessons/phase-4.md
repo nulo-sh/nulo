@@ -15,3 +15,9 @@ Page 137 (signed 2026-11-12 14:44:49 UTC) asked four changes of #1795: the check
 - Opus traced, and the touched network spec reproduced, an e2e red: the invariant's derived tag read the radios' `data-fee-method`, which previews a saved pick while balances load, so `waitForFee` asserted on a preview (`fee-methods`, both gases held, a fresh popup: tag set, warning off, `you` unknown). The old tag came from the publish facts, the same source as the warning; a stand-in for a removed DOM signal must read the same source, here the fee line's payer in effect.
 - Codex: the "covers" heuristic compares against the payer-in-use estimate, whose cap multiplier and gas differ from the PrivateFPC's. An exact check is a second estimate lifecycle, a plan change: OA-18.
 - Codex, resumed over the fixes: approve, with in-memory harnesses over the real components and focus-trap. The touched network specs: 11 of 12 before the e2e fix, 12 of 12 after.
+
+## Gates (retry 0, head `477d1f040`)
+
+- Static: lint, typecheck:all, test:ci-gating (755), check:plans green. test:all: one red at load 278, `price/convert.test.ts` timing out at 5 s (21 tests, 143 ms alone, untouched here); rerun green.
+- Smoke: Chrome 290 passed (2044 s). Firefox 294 passed and 1 red, `sealed-storage`: the unlock's sealing pass outran its 120 s wait at load ~330 (31 s in the arc's earlier Firefox gate, 129 s alone at load ~200); the file rerun green. The spec's wait is load-sensitive, not this round's.
+- Network, the 24 specs: Chrome 62 passed (2663 s), Firefox 62 passed (3394 s). Armed on Chrome: `send-chaos`, `stale-network-a10-capture`, `store-captures`, 3 of 3 (the store art restored after).
