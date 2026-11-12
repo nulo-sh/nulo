@@ -34,7 +34,7 @@ const parts = computed(() => {
 		</span>
 		<span v-if="!known" :class="$style.check" data-testid="send-payee-check">
 			<Icon name="warning" size="12" aria-hidden="true" :class="$style.check_mark" />
-			<span>You have not paid this address before. Check its start and end.</span>
+			<span>You have not paid this address before. Review it carefully before you send.</span>
 		</span>
 		<slot />
 	</section>

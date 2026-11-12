@@ -46,7 +46,7 @@ describe("composite/send/PayeeBlock", () => {
 
 	test("an address with no record carries the check line, with its glyph", () => {
 		const check = mountBlock({ known: false }).get('[data-testid="send-payee-check"]')
-		expect(check.text()).toBe("You have not paid this address before. Check its start and end.")
+		expect(check.text()).toBe("You have not paid this address before. Review it carefully before you send.")
 		expect(check.get('[data-testid="stub-icon"]').attributes("data-name")).toBe("warning")
 	})
 
