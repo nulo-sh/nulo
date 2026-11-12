@@ -2,6 +2,7 @@ import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { importToken } from "../fixtures/helpers"
+import { feeDisplay, feeFigure } from "@/utils/fee-estimation"
 import { pinnedFeeText, refusePrices, seedFeeJuiceQuote, settledText } from "../fixtures/fee-quote"
 import { shotSend } from "../fixtures/send-page"
 import { callService } from "../fixtures/helpers"
@@ -13,6 +14,38 @@ import { createTestWallet, fundPublicFeeJuice, mintPublicTokensForAccount, type 
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
+
+/** Each element's text runs, a `Range` per text node, and whether every run sits inside `within`'s
+ *  padding box: a figure clipped by `overflow: hidden` keeps its `textContent`, so only its boxes
+ *  show the cut. `lines` counts distinct run tops, exact for an element in one role. */
+async function textFit(page: Page, ids: readonly string[], within: string): Promise<{ id: string; lines: number; inside: boolean }[]> {
+	return page.evaluate(
+		(ids: readonly string[], within: string) => {
+			const host = document.querySelector(`[data-testid="${within}"]`) as HTMLElement
+			const box = host.getBoundingClientRect()
+			const [left, top] = [box.left + host.clientLeft, box.top + host.clientTop]
+			const [right, bottom] = [left + host.clientWidth, top + host.clientHeight]
+			return ids.map((id) => {
+				const runs: DOMRect[] = []
+				const walker = document.createTreeWalker(
+					document.querySelector(`[data-testid="${id}"]`) as HTMLElement,
+					NodeFilter.SHOW_TEXT,
+				)
+				for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+					const range = document.createRange()
+					range.selectNodeContents(node)
+					runs.push(...[...range.getClientRects()].filter((run) => run.width > 0 && run.height > 0))
+				}
+				const inside = runs.every(
+					(run) => run.left >= left - 0.5 && run.right <= right + 0.5 && run.top >= top - 0.5 && run.bottom <= bottom + 0.5,
+				)
+				return { id, lines: new Set(runs.map((run) => Math.round(run.top))).size, inside }
+			})
+		},
+		ids,
+		within,
+	)
+}
 
 /** The playground's transfer of one fixture token to the minter. */
 async function setTransferInputs(page: Page): Promise<void> {
@@ -191,10 +224,13 @@ test.skipIf(!hasConfig)(
 		expect(asked).toEqual([{ fee: expect.any(String), cap: approved.toString(), payer: { type: "fj", isProtocol: false } }])
 		const fee = BigInt(asked[0]!.fee)
 		const text = (id: string) => feePopup.$eval(`[data-testid="${id}"]`, (el) => el.textContent?.replace(/\s+/g, " ").trim())
-		const [was, now] = [`Was ${pinnedFeeText(approved)}`, `Now ${pinnedFeeText(fee)}`]
+		const [was, now] = [`was ${feeFigure(feeDisplay(approved, undefined))}`, pinnedFeeText(fee)]
 		expect(await settledText(feePopup, "fee-raised-was", was)).toBe(was)
 		expect(await settledText(feePopup, "fee-raised-now", now)).toBe(now)
 		expect(await text("fee-raised-method")).toBe("Public Fee Juice")
+		const row = ["fee-raised-now", "fee-raised-was", "fee-raised-method"]
+		const rowFit = (await textFit(feePopup, row, "fee-raised-card")).map(({ id, lines, inside }) => ({ id, drawn: lines > 0, inside }))
+		expect(rowFit).toEqual(row.map((id) => ({ id, drawn: true, inside: true })))
 		// The Confirm repeats the card's figure, its dollars on a second line.
 		const confirmText = `Send for ${pinnedFeeText(fee)}`
 		expect(await settledText(feePopup, "fee-confirm-btn", confirmText)).toBe(confirmText)

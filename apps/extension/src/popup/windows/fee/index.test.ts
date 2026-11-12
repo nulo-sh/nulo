@@ -211,8 +211,8 @@ describe("the fee question window", () => {
 		await opened()
 		expect(byId("execute-op-item").attributes()).toMatchObject({ "data-op-kind": "aztec_sendTx", "data-account": OWNER })
 		expect(byId("fee-raised-method").text()).toBe("Private Fee Juice")
-		expect(byId("fee-raised-was").text()).toBe("Was ~0.016 FJ")
-		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ")
+		expect(byId("fee-raised-was").text()).toBe("was ~0.016 FJ")
+		expect(byId("fee-raised-now").text()).toBe("~0.021 FJ")
 		expect(byId("fee-raised-card").text()).toContain("1.25 FJ")
 		expect(byId("fee-raised-priority").text()).toContain("Normal")
 		expect(getGasBalancesMock).toHaveBeenCalledExactlyOnceWith("n1", OWNER, true)
@@ -224,7 +224,7 @@ describe("the fee question window", () => {
 	test("with a quote the card prices both figures; Confirm repeats the new one's dollars on its second line", async () => {
 		priceFake.reset(2)
 		await opened()
-		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ ($0.042)")
+		expect(byId("fee-raised-now").text()).toBe("~0.021 FJ ($0.042)")
 		expect(confirm().text()).toBe("Send for ~0.021 FJ ($0.042)")
 		expect(byId("dapp-approval-confirm-detail").text()).toBe("($0.042)")
 		// The card's quote and the summary's marks. The counts leave out the real client's read on its
