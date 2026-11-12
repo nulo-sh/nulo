@@ -20,7 +20,10 @@ export interface SendView {
 	origin: string | null
 	/** `send-fee-payers[data-fee-method]`: may preview a saved pick while balances load. */
 	method: string | null
-	/** What the card's pick names: `private-{arrival}` while public Fee Juice pays a private send. */
+	/** The checked payer radio's subtitle; null while none is checked. */
+	checked: string | null
+	/** `private-{arrival}` while public Fee Juice is the payer in effect (`send-fee-line[data-payer]`,
+	 *  never the preview) on a private send; else null. */
 	tag: string | null
 	/** `send-publish[data-you]`; null before a person is chosen. */
 	you: Visibility | null
@@ -87,9 +90,13 @@ export async function readSendView(page: Page): Promise<SendView> {
 		return {
 			origin: q("fee-settings-card")?.getAttribute("data-origin") ?? null,
 			method: q("send-fee-payers")?.getAttribute("data-fee-method") ?? null,
+			checked:
+				document
+					.querySelector<HTMLInputElement>('[data-testid="send-fee-payers"] input:checked')
+					?.getAttribute("data-testid")
+					?.replace("send-fee-payer-", "") ?? null,
 			tag:
-				q("fee-settings-card")?.getAttribute("data-origin") === "private" &&
-				q("send-fee-payers")?.getAttribute("data-fee-method") === "public"
+				q("fee-settings-card")?.getAttribute("data-origin") === "private" && q("send-fee-line")?.getAttribute("data-payer") === "fj"
 					? `private-${q("send-to-type")?.getAttribute("data-side")}`
 					: null,
 			you: (q("send-publish")?.getAttribute("data-you") as Visibility | null) ?? null,
@@ -102,14 +109,14 @@ export async function readSendView(page: Page): Promise<SendView> {
 	})
 }
 
-/** The card's pick names the account ⇔ the form's warning ⇔ `you` exposed: three readings of one
- *  fact. Anything else is a page at odds with itself. */
+/** The payer in effect names the account ⇔ the form's warning ⇔ `you` exposed: three readings of one
+ *  fact; and a checked radio is the card's payer. Anything else is a page at odds with itself. */
 export function assertPublishInvariant(view: SendView): SendView {
 	const tagged = view.tag !== null
 	const exposed = view.you === "exposed"
-	if (tagged !== view.warning || view.warning !== exposed) {
+	if (tagged !== view.warning || view.warning !== exposed || (view.checked !== null && view.checked !== view.method)) {
 		throw new Error(
-			`the Send page disagrees with itself (tag ${view.tag}, warning ${view.warning}, you ${view.you}): ${JSON.stringify(view)}`,
+			`the Send page disagrees with itself (tag ${view.tag}, warning ${view.warning}, you ${view.you}, checked ${view.checked}): ${JSON.stringify(view)}`,
 		)
 	}
 	return view
@@ -137,15 +144,14 @@ export async function waitForFee(page: Page, origin: "private" | "public", metho
 	return assertPublishInvariant(await readSendView(page))
 }
 
-/** Waits for the card's pick to name `shape`, or nothing (`null`), with the warning to match. Returns
- *  the settled view, invariant checked. */
+/** Waits for the payer in effect to name `shape`, or nothing (`null`), with the warning to match.
+ *  Returns the settled view, invariant checked. */
 export async function waitForTag(page: Page, shape: string | null, timeout = 30_000): Promise<SendView> {
 	await page.waitForFunction(
 		(want: string | null) => {
 			const q = (t: string) => document.querySelector(`[data-testid="${t}"]`)
 			const names =
-				q("fee-settings-card")?.getAttribute("data-origin") === "private" &&
-				q("send-fee-payers")?.getAttribute("data-fee-method") === "public"
+				q("fee-settings-card")?.getAttribute("data-origin") === "private" && q("send-fee-line")?.getAttribute("data-payer") === "fj"
 			const tag = names ? `private-${q("send-to-type")?.getAttribute("data-side")}` : null
 			return tag === want && Boolean(q("send-fee-warning")) === (want !== null)
 		},

@@ -192,10 +192,13 @@ test.skipIf(!hasConfig)(
 		await openSendFeeSheet(page)
 		await page.waitForFunction((s: string) => document.querySelector<HTMLInputElement>(s)?.disabled === false, { timeout: 10_000 }, row)
 		await page.evaluate((s: string) => document.querySelector<HTMLElement>(s)?.click(), row)
+		// The card took the pick: its payer in effect, not the browser's check, names the hand-added sponsor.
 		await page.waitForFunction(
-			(s: string) => document.querySelector<HTMLInputElement>(s)?.checked === true,
-			{ timeout: 10_000, polling: 100 },
-			row,
+			() => document.querySelector('[data-testid="send-fee-line"]')?.getAttribute("data-payer") === "unvouched",
+			{
+				timeout: 10_000,
+				polling: 100,
+			},
 		)
 		await closeSendFeeSheet(page)
 
