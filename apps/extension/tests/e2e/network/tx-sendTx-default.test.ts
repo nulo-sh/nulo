@@ -1,5 +1,6 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
+import { setViewport } from "../fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { importToken } from "../fixtures/helpers"
 import { feeDisplay, feeFigure } from "@/utils/fee-estimation"
@@ -234,6 +235,25 @@ test.skipIf(!hasConfig)(
 		// The Confirm repeats the card's figure, its dollars on a second line.
 		const confirmText = `Send for ${pinnedFeeText(fee)}`
 		expect(await settledText(feePopup, "fee-confirm-btn", confirmText)).toBe(confirmText)
+		// The second line wraps rather than being cut: on one line Confirm keeps Reject's height, and where
+		// it must wrap Confirm grows to hold it. Each width asserts which branch it met.
+		const branches: { width: number; lines: number; inside: boolean; height: string }[] = []
+		for (const width of [560, 320]) {
+			await setViewport(feePopup, { width, height: 800 })
+			const [{ lines, inside }] = await textFit(feePopup, ["dapp-approval-confirm-detail"], "fee-confirm-btn")
+			const [confirmH, rejectH] = await feePopup.evaluate(() =>
+				["fee-confirm-btn", "fee-reject-btn"].map(
+					(id) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect().height ?? 0,
+				),
+			)
+			const height = Math.abs(confirmH - rejectH) <= 0.5 ? "level" : confirmH > rejectH ? "taller" : "shorter"
+			branches.push({ width, lines: Math.min(lines, 2), inside, height })
+		}
+		await setViewport(feePopup, null)
+		expect(branches).toEqual([
+			{ width: 560, lines: 1, inside: true, height: "level" },
+			{ width: 320, lines: 2, inside: true, height: "taller" },
+		])
 		expect(await prices.refused.failures(), "price interception failures").toEqual([])
 		await prices.refused.stop()
 		await shotSend(feePopup, "fee-window-raised", "fee-raised")
