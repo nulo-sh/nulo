@@ -295,11 +295,15 @@ export async function seedJournalRecord(page: Page, scope: ActivityScope, seed: 
 }
 
 /**
- * A token import still in flight, as the token service opens one, for a contract whose name is not
- * known yet. Write it after the worker's last start: the start fails every record still in flight
- * that was opened before it.
+ * A token import still in flight, as the token service opens one: with no `title` its contract's
+ * name is not known yet, with one the symbol it read. Write it after the worker's last start: the
+ * start fails every record still in flight that was opened before it.
  */
-export async function seedTokenImport(page: Page, scope: ActivityScope, seed: { id: string; contract: string }): Promise<void> {
+export async function seedTokenImport(
+	page: Page,
+	scope: ActivityScope,
+	seed: { id: string; contract: string; title?: string },
+): Promise<void> {
 	const at = Date.now()
 	const record = {
 		id: seed.id,
@@ -309,6 +313,7 @@ export async function seedTokenImport(page: Page, scope: ActivityScope, seed: { 
 		accountAddress: scope.account,
 		networkId: scope.networkId,
 		contractAddress: seed.contract,
+		title: seed.title,
 		progress: { stage: "pending" },
 		error: null,
 		terminalAt: null,
