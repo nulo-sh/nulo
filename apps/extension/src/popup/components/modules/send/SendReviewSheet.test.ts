@@ -25,6 +25,8 @@ const STUBS = {
 	Flex: { template: '<div v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Icon: { template: '<svg data-testid="stub-glyph" :data-name="name" :data-size="size" />', props: ["name", "size"] },
 	Skeleton: { template: '<span data-testid="stub-bar" />' },
+	// The term's definition is its own test's; here only its key and its word.
+	DottedTerm: { props: ["term", "testid"], template: '<span :data-testid="testid" :data-term="term"><slot /></span>' },
 	// The popup family is stubbed to what the sheet wires into it: the stack numbers, escape, initial focus, close.
 	Popup: {
 		name: "Popup",
@@ -269,6 +271,11 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(w.text().split(UNVOUCHED_PUBLISH_SENTENCE)).toHaveLength(2)
 		expect(feeLines(w)).toEqual(["—, My FPC", UNVOUCHED_FEE_SENTENCE])
 		expect(feeRow(w).text()).not.toContain("0.00214")
+		// Each sentence's "FPC" is the glossary's term, the sponsor's own name never: two, the screen's cap.
+		expect(w.findAll("[data-term]").map((t) => [t.attributes("data-term"), t.text()])).toEqual([
+			["fpc", "FPC"],
+			["fpc", "FPC"],
+		])
 	})
 
 	const STATES: [string, FeeLineState, string[]][] = [

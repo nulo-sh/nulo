@@ -196,6 +196,8 @@ const STUBS = {
 	Icon: { template: "<i />" },
 	Skeleton: { template: "<span />" },
 	Tooltip: { template: '<div><slot /><slot name="content" /></div>' },
+	// The term's definition is its own test's; here only its key and its word.
+	DottedTerm: { props: ["term", "testid"], template: '<span :data-testid="testid" :data-term="term"><slot /></span>' },
 	Banner: { template: '<div data-testid="stub-banner"><slot /></div>' },
 	Button: {
 		template: '<button v-bind="$attrs" :disabled="disabled || loading" @click="$emit(\'click\', $event)"><slot /></button>',
@@ -674,9 +676,13 @@ describe("send page with the real fee card — transitions", () => {
 		await nextTick()
 		expect(settled(w)).toBe("unknown")
 		await estimateLands()
+		// The form dots each sentence's "FPC" and nothing else: two terms, the screen's cap.
+		const terms = (root: Element) => [...root.querySelectorAll("[data-term]")].map((t) => t.getAttribute("data-term"))
+		expect(terms(w.element)).toEqual(["fpc", "fpc"])
 		await submit(w).trigger("click")
 		expect(w.get('[data-testid="send-review-fee"]').attributes("data-payer")).toBe("unvouched")
 		expect(w.get('[data-testid="send-review-row-you"]').text()).toContain("Nulo can't tell what this FPC publishes about you.")
+		expect(terms(w.get('[data-testid="send-review"]').element)).toEqual(["fpc", "fpc"])
 		w.unmount()
 	})
 

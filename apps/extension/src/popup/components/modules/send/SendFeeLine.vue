@@ -5,6 +5,7 @@
  * and the card's notices on the line under it.
  */
 import { computed, nextTick, useTemplateRef } from "vue"
+import FpcSentence from "@/components/composite/send/FpcSentence.vue"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import type { FeeDisplay } from "@/utils/fee-estimation"
 import { type FeeLinePayer, feeLine, feeLineNotes } from "./fee-line-words"
@@ -82,7 +83,7 @@ function retry(e: Event) {
 			</button>
 		</div>
 		<div role="status" aria-live="polite" aria-atomic="true" :class="$style.notes" data-testid="send-fee-line-note">
-			<p v-for="note in notes" :key="note" :class="$style.note">{{ note }}</p>
+			<p v-for="note in notes" :key="note" :class="$style.note"><FpcSentence :text="note" /></p>
 		</div>
 	</div>
 </template>

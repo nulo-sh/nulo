@@ -4,6 +4,7 @@
  * owns the popup slot, the facts and the send.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
+import FpcSentence from "@/components/composite/send/FpcSentence.vue"
 import PayeeBlock from "@/components/composite/send/PayeeBlock.vue"
 import { vSnackFooter } from "@/composables/snackInset"
 import { isRepeatOrComposing } from "@/composables/usePopupEntity"
@@ -209,7 +210,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 									<span>{{ row.name }}</span>
 									<span :class="$style.row_word">{{ row.word }}</span>
 								</div>
-								<span v-if="row.sentence" :class="$style.why">{{ row.sentence }}</span>
+								<span v-if="row.sentence" :class="$style.why"><FpcSentence :text="row.sentence" /></span>
 							</div>
 						</div>
 					</div>
@@ -230,7 +231,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 								<span v-else class="color--txt-danger">Couldn't estimate fee.</span>
 								<button type="button" :class="$style.retry" data-testid="send-review-fee-retry" @click="retry">Try again</button>
 							</span>
-							<span v-for="note in notes" :key="note" :class="$style.note">{{ note }}</span>
+							<span v-for="note in notes" :key="note" :class="$style.note"><FpcSentence :text="note" /></span>
 						</span>
 					</div>
 

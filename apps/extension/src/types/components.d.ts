@@ -46,6 +46,7 @@ declare module 'vue' {
     FilePasswordSection: typeof import('./../components/composite/FilePasswordSection.vue')['default']
     Flex: typeof import('@nulo/design')['Flex']
     FormPopup: typeof import('./../components/composite/FormPopup.vue')['default']
+    FpcSentence: typeof import('./../components/composite/send/FpcSentence.vue')['default']
     HandoffCard: typeof import('./../components/composite/HandoffCard.vue')['default']
     Header: typeof import('./../components/Header.vue')['default']
     Icon: typeof import('@nulo/design')['Icon']

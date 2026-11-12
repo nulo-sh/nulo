@@ -4,6 +4,7 @@
  * sponsor, which only some networks have. The region stays mounted, so a line that changes is announced.
  */
 import { computed } from "vue"
+import FpcSentence from "./FpcSentence.vue"
 import { feeWarning, type PayerKind, type PublishFacts, publishSentence } from "./publish-facts"
 
 const props = defineProps<{
@@ -31,7 +32,7 @@ const sentence = computed(() => (warning.value ? null : publishSentence(props.fa
 				<a v-else :href="bridgeUrl" target="_blank" rel="noopener noreferrer" :class="$style.fix" data-testid="send-fee-warning-bridge">Get private Fee Juice</a>
 			</span>
 		</div>
-		<p v-else-if="sentence" :class="$style.sentence" data-testid="send-publish-line">{{ sentence }}</p>
+		<p v-else-if="sentence" :class="$style.sentence" data-testid="send-publish-line"><FpcSentence :text="sentence" /></p>
 	</div>
 </template>
 
