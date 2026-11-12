@@ -131,6 +131,16 @@
 			"why": "the component's own text; each AddressDisplay element is a site of its own, read at its call site's selector"
 		},
 		{
+			"file": "apps/extension/src/components/composite/ContractChip.vue",
+			"expression": "trimAddress(model.address)",
+			"branch": "model.address",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"contract-chip-short-address\"]",
+			"surface": "windows-execute",
+			"state": "an aztec_sendTx request, a contract chip's press open (network)"
+		},
+		{
 			"file": "apps/extension/src/components/composite/activity/TransactionIncomingCard.vue",
 			"expression": "hashSlice",
 			"branch": "hashSlice",

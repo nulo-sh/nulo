@@ -1,0 +1,184 @@
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { afterEach, beforeEach, describe, expect, test } from "vitest"
+import { Flex, Icon, Popover, Text } from "@nulo/design"
+import { CHAIN_IDS } from "@/utils/chain-ids"
+import { explorerDisplayName, getContractExplorerUrl } from "@/wallet/constants/explorers"
+import { sendEvent } from "../../../tests/helpers/send-event"
+import { appChipOf, type ChipModel, contractChipOf } from "./contract-chip"
+import ContractChip from "./ContractChip.vue"
+
+/** As the wire carries a call's target: `0x` and 64 hex digits. */
+const TOKEN = "0x0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
+const OTHER = "0x2d8fb63a7b035198295a451cac292a50a2a58fdf4824e2f5c18356146062ff50"
+const ICON = "data:image/svg+xml;base64,PHN2Zy8+"
+const EXPLORER = { url: getContractExplorerUrl(CHAIN_IDS.TESTNET, "aztecscan", TOKEN) as string, name: explorerDisplayName("aztecscan") }
+
+const LISTED = contractChipOf({ level: "nulo", source: "token", symbol: "TST", name: "Test Token", icon: ICON }, TOKEN)
+const UNKNOWN = contractChipOf({ level: "none", flagged: false }, OTHER)
+
+let root: HTMLDivElement
+const mounted: VueWrapper[] = []
+const mountChip = (model: ChipModel, explorer: { url: string; name: string } | null = EXPLORER) => {
+	const w = mount(ContractChip, {
+		props: { model, explorer, testid: "label" },
+		attachTo: document.body,
+		global: { components: { Flex, Icon, Popover, Text } },
+	})
+	mounted.push(w)
+	return w
+}
+const chip = (w: VueWrapper) => w.get('[data-testid="contract-chip"]')
+const panel = () => document.querySelector<HTMLElement>('[data-testid="contract-chip-panel"]')
+const inPanel = (testid: string) => panel()?.querySelectorAll<HTMLElement>(`[data-testid="${testid}"]`) ?? []
+const press = async (w: VueWrapper) => {
+	const button = chip(w).element as HTMLButtonElement
+	button.focus()
+	sendEvent(button, "click")
+	await flushPromises()
+}
+const key = (el: Element, init: Record<string, unknown>) => sendEvent(el, "keydown", init) as KeyboardEvent
+
+describe("composite/ContractChip", () => {
+	beforeEach(() => {
+		root = document.createElement("div")
+		root.id = "popover"
+		document.body.appendChild(root)
+	})
+	afterEach(() => {
+		for (const w of mounted.splice(0)) w.unmount()
+		root.remove()
+	})
+
+	test("its accessible name carries the level, and a pending chip's is its label alone", () => {
+		expect(chip(mountChip(LISTED)).attributes()).toMatchObject({ "aria-label": "TST, Nulo verified", "data-level": "nulo" })
+		expect(chip(mountChip(UNKNOWN)).attributes()).toMatchObject({ "aria-label": "0x2d8fb6..ff50, Unverified", "data-level": "none" })
+		const pending = chip(mountChip(contractChipOf({ level: "pending" }, OTHER)))
+		expect(pending.attributes()).toMatchObject({ "aria-label": "0x2d8fb6..ff50", "data-level": "pending" })
+	})
+
+	test("Nulo verified draws the solid seal, Aztecscan verified the drawn one, and unverified and pending none", () => {
+		const seal = (model: ChipModel) => mountChip(model).find('[data-testid="contract-chip-seal"]')
+		/** The solid seal paints a filled shape only; the drawn one a stroke only. */
+		const paint = (svg: ReturnType<typeof seal>) => ({
+			filled: svg.findAll('path[stroke="none"]').length > 0,
+			stroked: svg.findAll('path[fill="none"]').length > 0,
+		})
+		const solid = seal(LISTED)
+		expect(solid.attributes("aria-hidden")).toBe("true")
+		expect(paint(solid)).toEqual({ filled: true, stroked: false })
+		expect(paint(seal(contractChipOf({ level: "scan", name: "Router" }, OTHER)))).toEqual({ filled: false, stroked: true })
+		expect(seal(UNKNOWN).exists()).toBe(false)
+		expect(seal(contractChipOf({ level: "pending" }, OTHER)).exists()).toBe(false)
+	})
+
+	test("a listed token reads by the list's symbol with its picture inside the chip, an unknown contract by its short address", () => {
+		const listed = mountChip(LISTED)
+		expect(listed.get('[data-testid="label"]').text()).toBe("TST")
+		expect(listed.get('[data-testid="label"]').classes()).toContain("type--value")
+		expect(listed.get('[data-testid="token-mark-logo"]').attributes("src")).toBe(ICON)
+		const unknown = mountChip(UNKNOWN)
+		expect(unknown.get('[data-testid="label"]').text()).toBe("0x2d8fb6..ff50")
+		expect(unknown.get('[data-testid="label"]').classes()).toContain("type--meta")
+		expect(unknown.find('[data-testid="token-mark"]').exists()).toBe(false)
+	})
+
+	test("a press opens its card, and the chip names it while open", async () => {
+		const w = mountChip(LISTED)
+		expect(chip(w).attributes("aria-expanded")).toBe("false")
+		expect(panel()).toBeNull()
+		await press(w)
+		const id = panel()?.id
+		expect(id).toBeTruthy()
+		expect(chip(w).attributes()).toMatchObject({ "aria-expanded": "true", "aria-controls": id, "aria-describedby": id })
+	})
+
+	test("the card names the level and the token, then the short address beside the explorer link", async () => {
+		const w = mountChip(LISTED)
+		await press(w)
+		expect(inPanel("contract-chip-level")[0].textContent).toBe("Nulo verified")
+		expect(inPanel("contract-chip-title")[0].textContent).toBe("TST · Test Token")
+		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual([
+			"Nulo knows this contract. Knowing it isn't a promise that it's safe.",
+			"Nulo names it from its token list.",
+		])
+		expect(inPanel("contract-chip-short-address")[0].textContent).toBe("0x0f8df6..9ecf")
+		const link = inPanel("contract-chip-explorer-link")[0]
+		expect(link.getAttribute("href")).toBe(`https://testnet.aztecscan.xyz/contracts/instances/${TOKEN}`)
+		expect(link.getAttribute("target")).toBe("_blank")
+		expect(link.getAttribute("rel")).toBe("noopener noreferrer")
+		expect(link.textContent?.trim()).toBe("View on Aztecscan")
+	})
+
+	test("with no explorer for the chain the card ends on the short address alone", async () => {
+		const w = mountChip(UNKNOWN, null)
+		await press(w)
+		expect(inPanel("contract-chip-short-address")[0].textContent).toBe("0x2d8fb6..ff50")
+		expect(inPanel("contract-chip-explorer-link")).toHaveLength(0)
+		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual(["Nulo hasn't checked this contract."])
+	})
+
+	test("an Aztecscan verified card says the code is verified and who runs it is not checked", async () => {
+		const w = mountChip(contractChipOf({ level: "scan", name: "Router" }, OTHER))
+		await press(w)
+		expect(inPanel("contract-chip-level")[0].textContent).toBe("Aztecscan verified")
+		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual([
+			"Its code is verified on Aztecscan. Nulo hasn't checked who runs it.",
+		])
+	})
+
+	test("a flagged token keeps the person's mark with its badge, never a seal, and its card says Nulo flagged it", async () => {
+		const w = mountChip(contractChipOf({ level: "none", flagged: true }, OTHER, { symbol: "SCAM", badge: false }))
+		expect(w.get('[data-testid="token-mark"]').find("svg.color--red").exists(), "the red badge").toBe(true)
+		expect(w.find('[data-testid="contract-chip-seal"]').exists()).toBe(false)
+		expect(w.get('[data-testid="label"]').text()).toBe("0x2d8fb6..ff50")
+		await press(w)
+		expect(inPanel("contract-chip-title")[0].textContent).toBe("Nulo flagged this token as a scam")
+		expect(inPanel("contract-chip-line")).toHaveLength(0)
+	})
+
+	test("the app's card names its site and says who chose the name, with no address row", async () => {
+		const app = appChipOf("Playground", "https://playground.example") as ChipModel
+		const w = mountChip(app, null)
+		expect(chip(w).attributes("aria-label")).toBe("Playground, Unverified")
+		await press(w)
+		expect(inPanel("contract-chip-title")[0].textContent).toBe("https://playground.example")
+		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual([
+			"Nulo doesn't know this site. Each contract shows its own level.",
+			"The name Playground comes from the site. Nulo hasn't checked it.",
+		])
+		expect(inPanel("contract-chip-short-address")).toHaveLength(0)
+		expect(appChipOf("  ​ ", "https://x.example"), "a name that sanitizes to nothing has no chip").toBeNull()
+	})
+
+	test("opened from the chip, focus moves to the link, and Escape returns it to the chip", async () => {
+		const w = mountChip(LISTED)
+		await press(w)
+		const link = inPanel("contract-chip-explorer-link")[0]
+		expect(document.activeElement).toBe(link)
+		expect(key(link, { key: "Escape", code: "Escape" }).defaultPrevented).toBe(true)
+		await flushPromises()
+		expect(document.activeElement).toBe(chip(w).element)
+		expect(chip(w).attributes("aria-expanded")).toBe("false")
+	})
+
+	test("a card with no link keeps focus on the chip, which it describes, and Escape closes it", async () => {
+		const w = mountChip(appChipOf("Playground", "https://playground.example") as ChipModel, null)
+		await press(w)
+		expect(document.activeElement).toBe(chip(w).element)
+		expect(chip(w).attributes("aria-describedby")).toBe(panel()?.id)
+		key(chip(w).element, { key: "Escape", code: "Escape" })
+		await flushPromises()
+		expect(chip(w).attributes("aria-expanded")).toBe("false")
+		expect(document.activeElement).toBe(chip(w).element)
+	})
+
+	test("a repeat Enter is refused on the chip and on the link, a first Enter is not", async () => {
+		const w = mountChip(LISTED)
+		expect(key(chip(w).element, { key: "Enter", repeat: true }).defaultPrevented).toBe(true)
+		expect(key(chip(w).element, { key: "Enter" }).defaultPrevented).toBe(false)
+		await press(w)
+		const link = inPanel("contract-chip-explorer-link")[0]
+		expect(key(link, { key: "Enter", repeat: true }).defaultPrevented).toBe(true)
+		expect(key(link, { key: "Enter" }).defaultPrevented).toBe(false)
+	})
+})

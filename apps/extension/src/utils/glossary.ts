@@ -115,6 +115,21 @@ export const GLOSSARY = {
 		definition: "Emojis you compare with the site's, so no one can sit between Nulo and the site.",
 		where: "Connect window",
 	},
+	"nulo-verified": {
+		term: "Nulo verified",
+		definition: "Nulo knows which contract this is and names it, which isn't a promise that it's safe.",
+		where: "Approval window · Connect window",
+	},
+	"aztecscan-verified": {
+		term: "Aztecscan verified",
+		definition: "Its code is verified on Aztecscan, but Nulo hasn't checked who runs it.",
+		where: "Approval window · Connect window",
+	},
+	unverified: {
+		term: "Unverified",
+		definition: "Shown with no mark: Nulo has nothing that vouches for this contract.",
+		where: "Approval window · Connect window",
+	},
 	proof: {
 		term: "Proof",
 		definition: "What your device builds to show a transaction is valid without revealing what's in it.",
@@ -138,5 +153,6 @@ export const GLOSSARY_SECTIONS = [
 	{ title: "Balances", keys: ["private-balance", "public-balance"] },
 	{ title: "Fees", keys: ["fee-juice", "public-fee-juice", "private-fee-juice", "sponsored", "priority-fee", "fpc"] },
 	{ title: "Apps", keys: ["authorization", "name-for-this-app", "interface", "discover", "connection-check"] },
+	{ title: "Contracts", keys: ["nulo-verified", "aztecscan-verified", "unverified"] },
 	{ title: "Transactions", keys: ["proof", "proving"] },
 ] as const satisfies ReadonlyArray<{ title: string; keys: ReadonlyArray<GlossaryKey> }>
