@@ -110,7 +110,18 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
 - **What ships now**:
   - You pay, as the prototype's sheet drew it, in today's card's words (`FeeCostReadout`), under priority.
   - The card's notices in today's words and places, between priority and You pay: fee data that did not load, a sponsor that cannot pay, a cost above the balance, no Fee Juice yet with its bridge link.
-  - A hand-added sponsor is a radio of its own after Nulo's, with the Sponsored definition and "—" for what it spends, as the menu lists it today.
+  - A hand-added sponsor is a radio of its own after Nulo's, with the glossary's FPC definition (not Sponsored's, which promises the fee is paid for you) and "—" for what it spends, as the menu lists it today.
   - The menu's "NAMES YOUR ADDRESS" tag is not drawn; the form's warning says what it said. The "Available" row is not drawn; each radio carries its balance.
 - **Options for each**: keep what ships, or drop it from the sheet.
+
+## OA-18: what round a1b's reviews surfaced (round a1b)
+
+- **Surface**: the form's warning and the Fee sheet.
+- **Why ask**: each is a behaviour the owner's page-137 words do not settle.
+- **What ships now**:
+  - "Private Fee Juice covers the fee" compares the private balance with the estimate for the payer in use. The PrivateFPC's own estimate differs, so near the line the warning can offer the bridge to an account that could pay privately, or the fix to one whose private estimate then fails (the fee line then says it could not estimate; nothing falls back to a payer that names the account). An exact answer runs a second estimate for every warned form.
+  - Native radios check on an arrow, so arrowing from private Fee Juice to the sponsor passes public Fee Juice: that step is a pick, and the warning shows until the next.
+  - With a flagged-token banner or the token caveat in the token's section, the hover and press tint covers the row, not the whole section.
+  - The bridge link is unleashed's testnet app on every network, as the fee card's link is today.
+- **Options**: keep each; or a second estimate for the fix; or arrows that move without picking (the menu's behaviour) at the cost of native radios; or a tint over the whole section.
 
