@@ -2,8 +2,8 @@
 /**
  * Only the wallet's own reading of a transfer or mint states an amount or a party, and nothing places
  * an authorization under a call: the wallet holds no link between them. Every address a sentence names
- * reads as its chip, whose level comes from the signed list alone and whose name, short of the list's,
- * is only one the person gave the address.
+ * reads as its chip, whose level comes only from the signed list or a fee contract Nulo pins, and whose
+ * name, short of Nulo's, is only one the person gave the address.
  */
 import type { DiscoveredAuthwit } from "@/wallet/services/execution/client"
 import ContractChip from "@/components/composite/ContractChip.vue"
@@ -75,7 +75,6 @@ const callRows = computed(() =>
 )
 /** Apart from the rows, so only a chip renders what its contract's address becomes. */
 const callChips = computed(() => props.calls.map(({ call, selfName }) => contractChipAt(chipContext.value, call.to, selfName)))
-/** A movement's parties: an explicit sender and the recipient. */
 const partyChips = computed(() =>
 	props.calls.map(({ surface }) => ({
 		from:
@@ -103,7 +102,6 @@ const authwitRows = computed(() =>
 const authwitChips = computed(() =>
 	(props.authwits ?? []).map(({ authwit, selfName }) => contractChipAt(chipContext.value, authwit.consumer, selfName)),
 )
-/** An authorization's caller, and the parties of a movement it allows. */
 const authwitPartyChips = computed(() =>
 	authwitRows.value.map(({ authwit, line }) => ({
 		caller: contractChipAt(chipContext.value, authwit.caller),

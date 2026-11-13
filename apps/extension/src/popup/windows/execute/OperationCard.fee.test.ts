@@ -546,29 +546,26 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		const seal = (w: VueWrapper) => row(w).find('[data-testid="execute-op-fee-seal"]')
 
 		test.each([
-			["the PrivateFPC", privatePaid, undefined],
-			["Nulo's sponsor", sponsorPaid, undefined],
-			["a fee contract the signed list names", appPaid, listing(APP_FPC)],
-		])("an app naming %s: the solid seal leads the row, named for a screen reader, and no green check", async (_, op, marks) => {
-			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { op: op(), marks })
+			["the PrivateFPC", privatePaid],
+			["Nulo's sponsor", sponsorPaid],
+		])("an app naming %s: the solid seal leads the row, named for a screen reader, and no green check", async (_, op) => {
+			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { op: op() })
 			expect(seal(w).attributes()).toMatchObject({ role: "img", "aria-label": "Nulo verified" })
 			expect(seal(w).find('[name="seal-solid"]').exists()).toBe(true)
 			expect(row(w).find('[name="square-check"]').exists()).toBe(false)
 		})
 
-		test("an unknown fee contract, a list not yet answered and a payload with no payer draw no glyph", async () => {
+		test("an unknown fee contract and a token the signed list names draw no glyph", async () => {
 			const unknown = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
 			expect([seal(unknown).exists(), row(unknown).find('[name="square-check"]').exists()]).toEqual([false, false])
 			unknown.unmount()
-			const unanswered = await mountWith(undefined, {
-				op: privatePaid(),
-				isEstimating: true,
-				marks: { ...listing(), mapped: ref(false) },
-			})
-			expect(seal(unanswered).exists(), "the PrivateFPC's pin needs no list").toBe(true)
-			unanswered.unmount()
-			const pending = await mountWith(undefined, { isEstimating: true, marks: { ...listing(APP_FPC), mapped: ref(false) } })
-			expect(seal(pending).exists(), "a listed payer waits for the list").toBe(false)
+			const token = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { marks: listing(APP_FPC) })
+			expect(seal(token).exists(), "a listed token is no fee contract Nulo pins").toBe(false)
+		})
+
+		test("the PrivateFPC's seal needs no list: it shows before the list answers", async () => {
+			const w = await mountWith(undefined, { op: privatePaid(), isEstimating: true, marks: { ...listing(), mapped: ref(false) } })
+			expect(seal(w).exists()).toBe(true)
 		})
 
 		test("Private Fee Juice: the person pays, the app's method under it, and nothing about the balance", async () => {

@@ -188,11 +188,14 @@ const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
  *  reads the fee contract's own pool as the person's. */
 const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
 const appFeeFailed = computed(() => props.estimateFailed && !props.feeEstimate && !props.isEstimating)
-/** The row's seal stands for the contract that pays, read as the chips read it, and only when Nulo
- *  verifies it: the row names no contract, so a weaker level would read as a mark on the app. */
+/** The row's seal stands for the contract that pays, read as the chips read it, and only for a fee
+ *  contract Nulo pins: the row names no contract, so a weaker level, or a listed token named as the
+ *  payer, would read as a mark on the app. */
 const feeSealed = computed(() => {
 	const payer = payingContract(props.op)
-	return payer !== undefined && !!props.marks && readContract(props.marks, props.op.network?.chainId, payer).level === "nulo"
+	if (payer === undefined || !props.marks) return false
+	const reading = readContract(props.marks, props.op.network?.chainId, payer)
+	return reading.level === "nulo" && reading.source !== "token"
 })
 const appFeeRow = ref<{ $el: HTMLElement } | null>(null)
 /** The retry's button leaves with the failure, so a keyboard press keeps its place on the row. Read

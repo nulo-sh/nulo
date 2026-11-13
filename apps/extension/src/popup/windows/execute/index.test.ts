@@ -259,8 +259,8 @@ const STUBS = {
 	},
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
-		template: '<div data-testid="identity-block" />',
-		props: ["dapp", "actionLabel"],
+		template: '<div data-testid="identity-block" :data-name-as-chip="nameAsChip" />',
+		props: { dapp: null, actionLabel: null, nameAsChip: Boolean },
 	},
 	DappCancelledOverlay: {
 		props: ["message"],
@@ -496,6 +496,7 @@ describe("execute window — an armed build's fixture", () => {
 		expect(approval.requestId.value).toBeUndefined()
 		expect(vm.operations).toHaveLength(1)
 		expect(vm.initComplete).toBe(true)
+		expect(w.get('[data-testid="identity-block"]').attributes("data-name-as-chip"), "a name with no chip shows no caption").toBe("true")
 
 		// The app-paid fixture's opening estimate is answered by the fixture, never the worker.
 		const fees = feeMapInstances[0]

@@ -70,7 +70,6 @@ function verifiedToken(reading: Extract<ContractReading, { source: "token" }>, a
 	})
 }
 
-/** An unverified, unflagged contract: by the name the person gave its address, else its short address. */
 function unverified(address: string, selfName: string | undefined, name: string | undefined): ChipModel {
 	const label = name ? sanitizeWireString(name, 64) : ""
 	return label.trim()
@@ -124,8 +123,8 @@ export function contractChipOf(
 }
 
 /**
- * The app's own chip: its self-declared name, which no list vouches for yet, without emoji, so a
- * seal-like one cannot sit beside a level; none when nothing survives. Its press quotes the name
+ * The app's own chip: its self-declared name, which no list vouches for yet, without emoji or check
+ * marks, so a seal-like one cannot sit beside a level; none when nothing survives. Its press quotes the name
  * as declared.
  */
 export function appChipOf(name: unknown, host: string): ChipModel | null {

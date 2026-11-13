@@ -747,6 +747,7 @@ onUnmounted(() => {
 				hostnameTestId="execute-hostname"
 				nameTestId="execute-dapp-name"
 				actionLabel="wants to execute the following"
+				nameAsChip
 			>
 				<template v-if="appChip" #name><ContractChip :model="appChip" testid="execute-app-chip-label" /></template>
 			</DappIdentityBlock>

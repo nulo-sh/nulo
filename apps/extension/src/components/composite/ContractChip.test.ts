@@ -126,7 +126,10 @@ describe("composite/ContractChip", () => {
 			"The name Crowdfunding comes from the contract's code. Nulo hasn't checked it.",
 		])
 		const listed = contractChipOf({ level: "nulo", source: "token", symbol: "TST", name: "Test Token" }, TOKEN, { selfName: "Token" })
-		expect(listed.lines, "a Nulo verified card names the contract from the list alone").toHaveLength(2)
+		expect(listed.lines, "a Nulo verified card names the contract from the list alone").toEqual([
+			"Nulo knows this contract. Knowing it isn't a promise that it's safe.",
+			"Nulo names it from its token list.",
+		])
 	})
 
 	test("an address the person named reads by that name with no mark, its card titled by it, the decoded name's line kept", async () => {

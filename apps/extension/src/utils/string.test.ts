@@ -199,6 +199,14 @@ describe("stripPictographs", () => {
 		expect(stripPictographs("Cool \u{1F680} App")).toBe("Cool App")
 	})
 
+	test("a check mark that is no emoji still goes: it reads as a seal", () => {
+		expect(["Playground \u2713", "Playground \u{1F5F8}", "\u{1F5F9} Playground"].map(stripPictographs)).toEqual([
+			"Playground",
+			"Playground",
+			"Playground",
+		])
+	})
+
 	test("sequences go whole: a flag, a joined family, a skin tone, a subdivision flag, a keycap", () => {
 		expect(stripPictographs("\u{1F1E6}\u{1F1F7} Tango")).toBe("Tango")
 		expect(stripPictographs("\u{1F468}\u200D\u{1F469}\u200D\u{1F467} Family")).toBe("Family")
