@@ -192,15 +192,23 @@ test.skipIf(!hasConfig)(
 			() => document.querySelector('[data-testid="send-amount-fiat-label"]')?.textContent?.includes("888.12"),
 			{ timeout: 10_000, polling: 100 },
 		)
-		// Nulo's sponsor pays on the sandbox: its cost is the line's note, priced at the pinned quote.
+		// Nulo's sponsor pays on the sandbox: its cost is the line's note, priced at the pinned quote. The
+		// sandbox's fee falls as a suite runs, so the dollars may read the helper's bound, `(<$0.001)`.
 		const noteFigure = '[data-testid="send-fee-line-note"] >> [data-testid="send-fee-figure"]'
-		await page.waitForFunction(
-			() =>
-				/\(\$/.test(
-					document.querySelector('[data-testid="send-fee-line-note"] [data-testid="send-fee-figure"]')?.textContent ?? "",
-				),
-			{ timeout: 120_000, polling: 250 },
-		)
+		await page
+			.waitForFunction(
+				() =>
+					/\(<?\$/.test(
+						document.querySelector('[data-testid="send-fee-line-note"] [data-testid="send-fee-figure"]')?.textContent ?? "",
+					),
+				{ timeout: 120_000, polling: 250 },
+			)
+			.catch(async (cause) => {
+				const line = await page.evaluate(() => document.querySelector('[data-testid="send-fee-line"]')?.textContent ?? null)
+				throw new Error(`no priced sponsor note; the fee line reads ${JSON.stringify(line?.replace(/\s+/g, " ").trim())}`, {
+					cause,
+				})
+			})
 		const fee = expectWhole(await placed(page, noteFigure), "the form's fee at 360 px").text
 		expectPinnedFee(fee)
 		await atWidth(page, NARROW_WIDTH, async () => {
