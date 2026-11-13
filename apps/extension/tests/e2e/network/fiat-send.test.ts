@@ -1,20 +1,22 @@
 /**
  * C3 fiat-input flow, end-to-end on the sandbox: the agent build arms
  * `VITE_NULO_E2E_PRICE_MAP=1`, mapping every sandbox-chain token to USDC, and
- * the test seeds a valid usd-coin quote into the price cache — so the full
- * priced-token UI (row fiat, header aggregate, unit-pair toggle, fiat typing →
- * derived token amount) runs against a REAL funded wallet with no live API
- * dependency. Values assert structurally (a live CoinGecko fetch may merge a
- * newer, equally-valid quote; both are ~$1 for USDC).
+ * the test refuses the provider and seeds a usd-coin quote and a Fee Juice quote
+ * into the price cache — so the full priced-token UI (row fiat, header aggregate,
+ * unit-pair toggle, fiat typing → derived token amount, the fee's dollars) runs
+ * against a REAL funded wallet with no live API dependency.
  */
 
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { reloadExtensionPage } from "../fixtures/browser"
+import { replaceInputValue } from "../fixtures/dom"
 import { test, openPopup, waitForHash, clickByTestId } from "../fixtures/extension"
+import { pinnedFeeTexts, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
 import { setActiveSendType, waitForHomeTotal } from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { chooseRecipient } from "../fixtures/send-page"
+import { chooseRecipient, closeReview, closeSendFeeSheet, openReview, openSendFeeSheet, waitForReviewReady } from "../fixtures/send-page"
+import { atWidth, NARROW_WIDTH } from "../fixtures/type-roles"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -35,19 +37,58 @@ async function rowTopEdge(page: Page, testid: string, over: "middle" | "right"):
 	)
 }
 
+/** Where an element lies against the box it must stay inside: its line count, its edges, and its text. */
+type Placed = { lines: number; top: number; bottom: number; left: number; right: number; text: string }
+async function placed(page: Page, selector: string): Promise<{ el: Placed; box: Placed } | null> {
+	return page.evaluate((s: string) => {
+		const [boxSel, elSel] = s.split(" >> ")
+		const box = document.querySelector(boxSel)
+		const el = box?.querySelector(elSel)
+		if (!box || !el) return null
+		const read = (node: Element): Placed => {
+			const r = node.getBoundingClientRect()
+			const tops = new Set(Array.from(node.getClientRects(), (rect) => Math.round(rect.top)))
+			const text = (node.textContent ?? "").replace(/\s+/g, " ").trim()
+			return { lines: tops.size, top: r.top, bottom: r.bottom, left: r.left, right: r.right, text }
+		}
+		return { el: read(el), box: read(box) }
+	}, selector)
+}
+
+/** One line, inside its box: nothing cut, the dollars on the figure's line. */
+function expectWhole(at: { el: Placed; box: Placed } | null, label: string): Placed {
+	expect(at, `${label} is on the page`).not.toBeNull()
+	const { el, box } = at as { el: Placed; box: Placed }
+	expect({ lines: el.lines, inside: el.left >= box.left - 0.5 && el.right <= box.right + 0.5 }, `${label}: ${el.text}`).toEqual({
+		lines: 1,
+		inside: true,
+	})
+	return el
+}
+
+/** The fee as the popup prints it at the pinned quote, whatever its last digit's rounding. */
+function expectPinnedFee(text: string): void {
+	const amount = /^~([\d.]+) FJ \(/.exec(text)?.[1]
+	expect(amount, `"${text}" names a fee with its dollars`).toBeDefined()
+	expect([...pinnedFeeTexts(amount ?? "")]).toContain(text)
+}
+
 test.skipIf(!hasConfig)(
-	"priced sandbox token: row + header fiat render, fiat typing derives the send amount",
-	{ timeout: 180_000 },
+	"priced sandbox token: row + header fiat render, fiat typing derives the send amount, every fee carries its dollars",
+	{ timeout: 240_000 },
 	async ({ tokenReadyExtension }) => {
+		const prices = await refusePrices(tokenReadyExtension)
 		const page = await openPopup(tokenReadyExtension)
 		await waitForHash(page, "#/popup/general")
 
-		// Seed a valid quote; remount so the stale-on-connect read adopts it.
-		await page.evaluate(() => {
-			const state = {
-				"usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null },
-			}
-			return chrome.storage.local.set({ "nulo:core:token-prices": JSON.stringify(state) })
+		// Seed both quotes beside each other; remount so the stale-on-connect read adopts them.
+		await seedFeeJuiceQuote(tokenReadyExtension, prices)
+		await page.evaluate(async () => {
+			const key = "nulo:core:token-prices"
+			const stored = (await chrome.storage.local.get(key))[key]
+			const quotes = typeof stored === "string" ? JSON.parse(stored) : {}
+			quotes["usd-coin"] = { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null }
+			await chrome.storage.local.set({ [key]: JSON.stringify(quotes) })
 		})
 		await reloadExtensionPage(page)
 		await waitForHash(page, "#/popup/general")
@@ -116,6 +157,68 @@ test.skipIf(!hasConfig)(
 		await clickByTestId(page, "send-amount-fiat-toggle")
 		await page.waitForSelector('[data-testid="send-amount-input"]', { visible: true, timeout: 10_000 })
 
+		// ── The fee's dollars, and every figure whole at the side panel's width ──
+		// A long amount, so the review's dollar figure cannot share the amount's line at 240 px.
+		await replaceInputValue(page, '[data-testid="send-amount-input"]', "888.123456")
+		await page.waitForFunction(
+			() => document.querySelector('[data-testid="send-amount-fiat-label"]')?.textContent?.includes("888.12"),
+			{ timeout: 10_000, polling: 100 },
+		)
+		// Nulo's sponsor pays on the sandbox: its cost is the line's note, priced at the pinned quote.
+		const noteFigure = '[data-testid="send-fee-line-note"] >> [data-testid="send-fee-figure"]'
+		await page.waitForFunction(
+			() =>
+				/\(\$/.test(
+					document.querySelector('[data-testid="send-fee-line-note"] [data-testid="send-fee-figure"]')?.textContent ?? "",
+				),
+			{ timeout: 120_000, polling: 250 },
+		)
+		const fee = expectWhole(await placed(page, noteFigure), "the form's fee at 360 px").text
+		expectPinnedFee(fee)
+		await atWidth(page, NARROW_WIDTH, async () => {
+			const at = expectWhole(await placed(page, noteFigure), `the form's fee at ${NARROW_WIDTH} px`)
+			expect(at.text).toBe(fee)
+		})
+
+		// The review's fee row reads the line's fee; at 240 px it and the amount's dollars stay whole.
+		await openReview(page)
+		await waitForReviewReady(page)
+		const rowFigure = '[data-testid="send-review-fee"] >> [data-testid="send-fee-figure"]'
+		expect(expectWhole(await placed(page, rowFigure), "the review's fee at 360 px").text).toBe(fee)
+		await atWidth(page, NARROW_WIDTH, async () => {
+			expect(expectWhole(await placed(page, rowFigure), `the review's fee at ${NARROW_WIDTH} px`).text).toBe(fee)
+			const hero = await placed(page, '[data-testid="send-review"] >> [data-testid="send-review-amount"]')
+			const fiat = expectWhole(
+				await placed(page, '[data-testid="send-review"] >> [data-testid="send-review-amount-fiat"]'),
+				"the amount's dollars",
+			)
+			expect(fiat.text).toMatch(/^≈ \$888\.1\d$/)
+			// Wrapped whole under the amount, flush with its left edge.
+			const amount = hero?.el as Placed
+			expect({ below: fiat.top >= amount.bottom - 1, flush: Math.abs(fiat.left - amount.left) < 1 }).toEqual({
+				below: true,
+				flush: true,
+			})
+		})
+		await closeReview(page)
+
+		// The Fee sheet's You pay: the struck fee with its dollars, whole at 240 px.
+		await openSendFeeSheet(page)
+		const youPay = '[data-testid="fee-estimate"] >> [data-testid="fee-estimate-usd"]'
+		await page.waitForSelector('[data-testid="fee-estimate"] [data-testid="fee-estimate-usd"]', { timeout: 30_000 })
+		await atWidth(page, NARROW_WIDTH, async () => {
+			const usd = expectWhole(await placed(page, youPay), `You pay's dollars at ${NARROW_WIDTH} px`)
+			const figure = await page.evaluate(() => {
+				const struck = document.querySelector('[data-testid="fee-estimate"] [data-testid="fee-estimate-usd"]')?.parentElement
+				const tops = new Set(Array.from(struck?.getClientRects() ?? [], (r) => Math.round(r.top)))
+				return { lines: tops.size, text: (struck?.textContent ?? "").replace(/\s+/g, " ").trim() }
+			})
+			expect(figure).toEqual({ lines: 1, text: fee })
+			expect(usd.text).toBe(fee.slice(fee.indexOf("(")))
+		})
+		await closeSendFeeSheet(page)
+
+		expect(await prices.refused.failures(), "price interception failures").toEqual([])
 		expect(tokenReadyExtension.pageErrors).toEqual([])
 	},
 )
