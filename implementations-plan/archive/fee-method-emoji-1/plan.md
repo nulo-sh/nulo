@@ -119,7 +119,7 @@ One PR from branch `fee-method-emoji-1-a1` (off `origin/dev`, carrying the plan 
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `4fd3d8fcc`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `4fd3d8fcc`. Plan-specific values:
 - Step 1: `code_review: off`, so absent.
 - Step 2: single arc. After Phase 1 is green, write the review prompt to a file under `~/.cache/nulo-backlog/fee-method-emoji-1/` and run `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` over `origin/dev...HEAD`. Keep the `SESSION_ID` and `CODEX_DIR` it prints. Resume each round with `~/.claude/skills/codex/scripts/resume-codex.sh <SESSION_ID> <followup-file> <CODEX_DIR> high`. Stop hard at three rounds. Run one Opus review (`Agent`, `general-purpose`) beside round 1. Then run the gates once more on the final head, then a fresh `run-codex.sh` session over the plan and the net diff.
 - Step 3: `gh pr create` as Delivery says; `gh pr checks <n> --watch` once.
