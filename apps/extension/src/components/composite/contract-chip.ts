@@ -123,14 +123,22 @@ export function contractChipOf(
 }
 
 /**
- * The app's own chip: its self-declared name, which no list vouches for yet, without emoji or check
- * marks, so a seal-like one cannot sit beside a level; none when nothing survives. Its press quotes the name
- * as declared.
+ * An app's self-declared name without emoji or check marks, so a seal-like one cannot sit beside a
+ * level; `""` when nothing but whitespace survives. Stripped before the cap, so the cap counts what shows.
+ */
+export function appLabelOf(name: unknown): string {
+	if (typeof name !== "string") return ""
+	const label = sanitizeWireString(stripPictographs(name), 64)
+	return label.trim() ? label : ""
+}
+
+/**
+ * The app's own chip, labelled by `appLabelOf`, which no list vouches for yet; none when the label is
+ * empty. Its press quotes the name as declared.
  */
 export function appChipOf(name: unknown, host: string): ChipModel | null {
-	if (typeof name !== "string") return null
-	const label = sanitizeWireString(stripPictographs(name), 64)
-	if (!label.trim()) return null
+	const label = appLabelOf(name)
+	if (typeof name !== "string" || !label) return null
 	return chip(label, false, "none", {
 		mark: null,
 		title: host,
