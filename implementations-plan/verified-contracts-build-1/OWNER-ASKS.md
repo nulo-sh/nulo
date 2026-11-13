@@ -49,6 +49,7 @@ Each ask names the surface, the options, a recommendation and **what ships now**
 - **Options:** "Private Fee Juice" (the wallet's name for that payer in the fee card today, `fee-helpers.ts`, `FeeRaisedCard.vue`); "PrivateFPC" (round two's frames).
 - **What ships now:** "Private Fee Juice": no new word. Recommendation: the same. Unanswered: ships as built.
 - **Draft added in arc 2:** Nulo's sponsor, named by an app, reads "Sponsored" on its chip and as its press title, the fee card's own word for it (`fee-helpers.ts`, `fee-line-words.ts`): again no new word.
+- **A case to weigh (Opus review):** with the recipient a chip (P144-03), a dApp transfer to the PrivateFPC reads "… to Private Fee Juice" on a chip with the solid seal: the person's own balance name, sealed, as the destination. Tokens sent there are lost, and a dApp could already send them to any address; the reading is new. Ships as built; the capture `chip-pfpc-recipient-400` shows it. Options: as built; a pinned fee contract in a "to" position reads as unverified.
 
 ## A7. Tokens the list does not name
 
@@ -72,7 +73,8 @@ Each ask names the surface, the options, a recommendation and **what ships now**
 - **What can happen:** an app named "Playground ✅" shows that emoji inside its unverified chip, as today's caption shows it under the address. The chip frame may make it read closer to a verified chip. Exploitability unknown.
 - **Options:** keep today's sanitizer; strip pictographic characters from the app chip's label (changes how some names read).
 - **What ships now:** today's sanitizer.
-- **Answered on page 144: P144-06 = b**, no note: "Pictographic characters stripped from the app chip's label (letters in every script stay); the press still quotes the name as declared. A few honest names lose their emoji in the chip." **Built in arc 2:** the label strips Extended_Pictographic characters, their modifiers, flags, keycap sequences, ZWJ and variation selectors before the 64-character cap; a name of emoji only falls back to the host, as an empty name does. Unit tests on wire-shaped names.
+- **Answered on page 144: P144-06 = b**, no note: "Pictographic characters stripped from the app chip's label (letters in every script stay); the press still quotes the name as declared. A few honest names lose their emoji in the chip." **Built in arc 2:** the label strips Extended_Pictographic characters, their modifiers, flags, keycap sequences, ZWJ and variation selectors before the 64-character cap; a name of emoji only falls back to the host, as an empty name does (no caption either). Unit tests on wire-shaped names.
+- **Draft extension (Opus review):** the check marks ✓ (U+2713), 🗸 (U+1F5F8) and 🗹 (U+1F5F9) are not pictographic, so the pick's set kept them beside an unverified chip ("Playground ✓"); the build strips them too, as seal-like. Options: as built; the pick's set alone.
 
 ## A11. Which addresses in an authorization line become chips
 
