@@ -742,11 +742,13 @@ test.skipIf(!hasConfig)("every identifier site the network suite owns was read i
 	console.log(`[type-roles] identifier sites: ${coverage.live} network-owned live`)
 	expect(coverage.live).toBeGreaterThan(0)
 	expect(coverage.unobserved).toEqual([])
-	// Every AddressDisplay here can be pressed to its address, so none may be read only as a name.
+	// Every AddressDisplay here can be pressed to its address, so none may be read only as a name; a
+	// chip is no AddressDisplay.
 	const forms = new Map<string, Set<string>>()
 	for (const { sites } of observed) {
 		for (const { key, readings } of sites) {
-			for (const { addressShows } of readings) if (addressShows) forms.set(key, (forms.get(key) ?? new Set()).add(addressShows))
+			for (const { addressShows, inChip } of readings)
+				if (addressShows && !inChip) forms.set(key, (forms.get(key) ?? new Set()).add(addressShows))
 		}
 	}
 	expect([...forms].filter(([, shown]) => !shown.has("address")).map(([key]) => key)).toEqual([])
