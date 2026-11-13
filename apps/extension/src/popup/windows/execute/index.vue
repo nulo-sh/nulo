@@ -9,13 +9,15 @@
 
 <script setup lang="ts">
 /** Vendor */
-import { onMounted, onUnmounted } from "vue"
+import { onMounted, onUnmounted, shallowRef } from "vue"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
 
 /** Components */
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
 import ContractChip from "@/components/composite/ContractChip.vue"
 import { appChipOf } from "@/components/composite/contract-chip"
+import { type NameBook, nameBookOf } from "./contract-chips"
+import type { Contact } from "@/wallet/services/contact/client"
 import DappCancelledOverlay from "@/components/composite/DappCancelledOverlay.vue"
 import DappApprovalFooter from "@/components/composite/DappApprovalFooter.vue"
 import OperationCard from "./OperationCard.vue"
@@ -120,6 +122,18 @@ const operations = ref<UIOperation[]>([])
 /** Per operation, the paying method its fee card reports. */
 const feePayers = ref<Record<number, FeePayerPick | null>>({})
 const accounts = ref<Account[]>([])
+/** The person's names for the chips' addresses, from one read of the profile's contacts that the
+ *  cards never wait for; a failed read names no contact. */
+const contacts = shallowRef<readonly Contact[]>()
+const names = computed((): NameBook => (contacts.value ? nameBookOf(contacts.value, appStore.accounts) : "loading"))
+async function readContacts(): Promise<void> {
+	try {
+		contacts.value = await managers.contact.getContacts()
+	} catch (error) {
+		console.warn("[Execute] Contacts read failed", { error })
+		contacts.value = []
+	}
+}
 
 const isLoading = ref(false)
 const isWrongProfile = ref(false)
@@ -404,6 +418,7 @@ const init = async () => {
 
 		// TODO: redirect to sign in page with preconfigured profile id
 		assertRequestProfile(profile.value, payload.value.session.profileId)
+		void readContacts()
 
 		const resolved = await resolveForProfile(payload.value.params.operations, profile.value.id)
 		session.value = payload.value.session
@@ -460,6 +475,7 @@ function showFixture(executeFixture: NonNullable<typeof armedExecuteFixture>, na
 	decodedAuthwits.value = new Map(fixture.decodedAuthwits)
 	for (const [index, decoded] of fixture.decodedCalls.entries()) decodedCalls.value.set(index, decoded)
 	accounts.value = [account]
+	void readContacts()
 	operations.value = fixture.operations
 	initComplete.value = true
 	askOpeningEstimates(fixture.operations)
@@ -783,6 +799,7 @@ onUnmounted(() => {
 						:tokens="knownTokens"
 						:marks="tokenFlags"
 						:explorerId="appStore.defaultExplorer"
+						:names="names"
 						:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
 						:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
 						:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"

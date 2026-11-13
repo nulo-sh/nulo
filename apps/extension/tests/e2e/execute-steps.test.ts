@@ -47,6 +47,8 @@ async function openFixture(page: Page, name: string, width: number): Promise<voi
 		sel("execute-op-summary-authwit"),
 		listed,
 	)
+	// A chip waiting on its level is held behind placeholders for at most a second; read the card settled.
+	await page.waitForFunction(() => !document.querySelector('[data-testid="contract-chip"][data-held]'), { timeout: 10_000 })
 }
 
 /** Opens every step and, once the fixture's estimate has listed them, the authorizations' node. */
@@ -187,16 +189,17 @@ const tabbableCount = (page: Page) =>
 			).length,
 	)
 
-/** Every chip is one stop: the app's leads, each step's follows its row, and each authorization's
- *  line holds its consumer's. */
+/** Every chip is one stop: the app's leads, each step's follow its row (a transfer's contract, sender
+ *  and recipient), and each authorization's line holds its caller, consumer, sender and recipient. */
 const CHIP = "contract-chip"
 const ROWS = [0, 1, 2, 3, 4, 5].map((j) => `execute-op-step-toggle#${j}`)
-const STOPS_AT_REST = [CHIP, ...ROWS.flatMap((row) => [row, CHIP]), "execute-op-authwits-toggle", CHIP, CHIP]
+const chipsOf = (j: number) => Array(j === 2 || j === 5 ? 3 : 1).fill(CHIP)
+const STOPS_AT_REST = [CHIP, ...ROWS.flatMap((row, j) => [row, ...chipsOf(j)]), "execute-op-authwits-toggle", ...Array(8).fill(CHIP)]
 const STOPS_OPEN = [
 	CHIP,
-	...ROWS.flatMap((row) => [row, CHIP, "execute-op-raw-toggle"]),
+	...ROWS.flatMap((row, j) => [row, ...chipsOf(j), "execute-op-raw-toggle"]),
 	"execute-op-authwits-toggle",
-	...[0, 1].flatMap(() => [CHIP, "execute-discovered-authwit-toggle", "execute-discovered-authwit-raw-toggle"]),
+	...[0, 1].flatMap(() => [...Array(4).fill(CHIP), "execute-discovered-authwit-toggle", "execute-discovered-authwit-raw-toggle"]),
 ]
 /** The footer's two stops, after every stop of the card. */
 const FOOTER = ["execute-reject-btn", "execute-confirm-btn"]
@@ -294,16 +297,16 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 		}
 	})
 
-	test("batch: Tab meets 16 stops at rest and 26 with everything open, then the footer; 7 presses open everything, 15 reach every value", {
+	test("batch: Tab meets 26 stops at rest and 36 with everything open, then the footer; 7 presses open everything, 15 reach every value", {
 		timeout: 180_000,
 	}, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
 		try {
 			await openFixture(page, "batch", 400)
 			// A fixture answers no request, so the footer's two stops are held; under a request they
-			// follow the card's, 18 at rest and 28 open.
+			// follow the card's, 28 at rest and 38 open.
 			expect(await footerAfterCard(page)).toEqual(FOOTER.map((id) => ({ id, disabled: true })))
-			expect(STOPS_AT_REST.length + FOOTER.length).toBe(18)
+			expect(STOPS_AT_REST.length + FOOTER.length).toBe(28)
 			const restScroll = await scrollStops(page)
 			const atRest = await tabWalk(page, STOPS_AT_REST.length + restScroll)
 			expect(atRest).toEqual([...Array(restScroll).fill("scroll"), ...STOPS_AT_REST])
@@ -322,7 +325,7 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 			const openScroll = await scrollStops(page)
 			const open = await tabWalk(page, STOPS_OPEN.length + openScroll)
 			expect(open).toEqual([...Array(openScroll).fill("scroll"), ...STOPS_OPEN])
-			expect(STOPS_OPEN.length + FOOTER.length).toBe(28)
+			expect(STOPS_OPEN.length + FOOTER.length).toBe(38)
 		} finally {
 			await page.close()
 		}
@@ -359,29 +362,24 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 		}
 	})
 
-	test("by mouse: a drag over the recipient selects it and a press on a named address or a chip opens nothing of the step; the text and the padding open it", {
+	test("by mouse: a drag over a step's words selects them and a press on a chip opens nothing of the step; the text and the padding open it", {
 		timeout: 180_000,
 	}, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
 		try {
 			await openFixture(page, "batch", 400)
 			await bringToFront(page)
-			const recipient = `${step(2)} ${sel("execute-op-line-to")}`
-			const address = await rectOf(page, recipient)
-			const midY = address.top + address.height / 2
-			await page.mouse.move(address.left + 1, midY)
+			const words = `${step(2)} ${sel("execute-op-summary-call-title")}`
+			const text = await rectOf(page, words)
+			const midY = text.top + text.height / 2
+			await page.mouse.move(text.left + 1, midY)
 			await page.mouse.down()
-			await page.mouse.move(address.right - 1, midY, { steps: 8 })
+			await page.mouse.move(text.right - 1, midY, { steps: 8 })
 			await page.mouse.up()
 			const selected = await page.evaluate(() => window.getSelection()?.toString().trim())
-			expect(selected).toBe(await page.$eval(recipient, (el) => el.textContent?.trim()))
+			expect(selected).toBe(await page.$eval(words, (el) => el.textContent?.trim()))
 			expect(await isOpen(page, stepRow(2))).toBe(false)
 			await page.evaluate(() => window.getSelection()?.removeAllRanges())
-
-			const named = `${step(2)} ${sel("execute-op-line-from")}[data-address-shows="name"]`
-			await page.waitForSelector(named, { visible: true, timeout: 10_000 })
-			await page.click(named)
-			expect(await isOpen(page, stepRow(2))).toBe(false)
 
 			await page.click(`${step(0)} ${sel("execute-op-summary-call-title")}`)
 			await page.waitForSelector(`${stepRow(0)}[aria-expanded="true"]`, { timeout: 10_000 })
@@ -404,6 +402,12 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 			await page.click(`${step(3)} ${sel(CHIP)}`)
 			await page.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
 			expect(await isOpen(page, stepRow(3))).toBe(false)
+			await page.keyboard.press("Escape")
+			await pressShut(page)
+			// A transfer's sender is a chip too: its press is its own.
+			await page.click(`${step(2)} ${sel("execute-op-line-from")}`)
+			await page.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
+			expect(await isOpen(page, stepRow(2))).toBe(false)
 		} finally {
 			await page.close()
 		}
@@ -553,11 +557,14 @@ describe.skipIf(!ARMED)("contract chips over the held list", () => {
 			await page.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
 			expect([await focused(page), await isOpen(page, stepRow(0))]).toEqual(["contract-chip-explorer-link", false])
 
+			// The listed transfer's sender is the next chip after its contract's.
+			const sender = `${step(0)} ${sel("execute-op-line-from")}`
 			await page.keyboard.press("Tab")
 			await pressShut(page)
-			expect([await focused(page), await chipOpen(page, chipOf(0))]).toEqual(["execute-op-step-toggle#1", false])
+			expect(await page.$eval(sender, (label) => label.closest("button") === document.activeElement)).toBe(true)
+			expect(await chipOpen(page, chipOf(0))).toBe(false)
 			await shiftTab(page)
-			expect(await focused(page)).toBe(CHIP)
+			expect(await page.$eval(chipOf(0), (el) => el === document.activeElement)).toBe(true)
 
 			await page.keyboard.press("Enter")
 			await page.waitForSelector(sel("contract-chip-explorer-link"), { visible: true, timeout: 10_000 })

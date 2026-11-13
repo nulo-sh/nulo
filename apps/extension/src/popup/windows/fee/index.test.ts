@@ -65,7 +65,7 @@ const tokenUpdated = {
 const decodeGrantsMock = vi.fn(async (_interactionId: string): Promise<unknown[]> => [])
 /** Set, the request's account read waits on it, so the operation stays unresolved. */
 let accountReadGate: Promise<void> | undefined
-const appStoreMock = reactive({ isSessionChecked: true, isLogined: true, pageAwaitingAuth: "", defaultExplorer: "aztecscan" })
+const appStoreMock = reactive({ isSessionChecked: true, isLogined: true, pageAwaitingAuth: "", defaultExplorer: "aztecscan", accounts: [] })
 
 vi.mock("@/composables/useDappInteractionPayload", () => ({
 	useDappInteractionPayload: vi.fn(() => ({

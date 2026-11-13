@@ -122,11 +122,12 @@ async function observeState(win: Page, surface: string, state: string): Promise<
 	return observation
 }
 
-/** Presses every `AddressDisplay` of `states` that shows a name, until each shows its address; whether any did. */
+/** Presses every `AddressDisplay` of `states` that shows a name, until each shows its address; whether any did.
+ *  A chip's name stays: its press opens its card, whose last row is the address. */
 async function revealAddresses(win: Page, surface: string, states: readonly string[]): Promise<boolean> {
 	let pressed = false
 	for (const site of SITES.filter((s) => s.surface === surface && states.includes(s.state) && s.role !== "none" && !s.unreachable)) {
-		const named = `${site.selector}[data-address-shows="name"]`
+		const named = `${site.selector}[data-address-shows="name"]:not([data-testid="contract-chip"] *)`
 		for (let left = await win.$$(named); left.length > 0; left = await win.$$(named)) {
 			await left[0]!.click()
 			await win.waitForFunction(

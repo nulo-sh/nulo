@@ -12,6 +12,10 @@ import { GLOSSARY } from "@/utils/glossary"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { shownText } from "../../../../tests/helpers/shown-text"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
+import { SPONSORED_FPC_ADDRESS } from "@/wallet/services/fpc/sponsored-fpc-address"
+import type { ListReader } from "@/utils/contract-level"
+import { listKeyOf } from "@/utils/token-flag"
+import { ref } from "vue"
 import { captureWindowDocument } from "@/utils/window-document"
 import { openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
@@ -340,6 +344,19 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		maxFeesPerGas: { feePerDaGas: "1200000000", feePerL2Gas: "1200000000" },
 		maxPriorityFeesPerGas: { feePerDaGas: "300000000", feePerL2Gas: "300000000" },
 	}
+	/** The signed list as the window reads it once answered, naming `listed` on the request's chain. */
+	const listing = (...listed: string[]): ListReader => {
+		const keys = new Set(listed.map((a) => listKeyOf(11155111, a)))
+		return {
+			mapped: ref(true),
+			isFlagged: () => false,
+			iconFor: () => undefined,
+			listedAt: (t) =>
+				typeof t?.chainId === "number" && t.contract && keys.has(listKeyOf(t.chainId, t.contract))
+					? { symbol: "PAY", name: "Payer" }
+					: undefined,
+		}
+	}
 	const appPaid = () => ({
 		...sendTx({ feePayer: APP_FPC }),
 		opts: { from: OWNER, fee: { gasSettings: GAS_SETTINGS } },
@@ -347,7 +364,14 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 	})
 	const mountWith = async (
 		feeEstimate: unknown,
-		state: { isEstimating?: boolean; estimateFailed?: boolean; op?: unknown; isPreviewing?: boolean; dapp?: { name?: string } } = {},
+		state: {
+			isEstimating?: boolean
+			estimateFailed?: boolean
+			op?: unknown
+			isPreviewing?: boolean
+			dapp?: { name?: string }
+			marks?: ListReader
+		} = {},
 	) => {
 		const w = mount(OperationCard, {
 			props: {
@@ -359,6 +383,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 				estimateFailed: state.estimateFailed ?? false,
 				isPreviewing: state.isPreviewing ?? false,
 				dapp: state.dapp ?? { name: "Swap" },
+				marks: state.marks ?? listing(),
 			},
 			// The real term, so the test reads its markup: the key, the Tab stop, the hidden definition.
 			global: { stubs, components: { DottedTerm, Skeleton } },
@@ -424,7 +449,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			const w = await mountWith(undefined, { op: op(), estimateFailed: true })
 			expect(failedBlock(w).text()).toBe(text)
 			expect([legend(w).exists(), figure(w).exists(), waiting(w).exists()]).toEqual([false, false, false])
-			expect(row(w).find('[name="square-check"]').exists()).toBe(false)
+			expect(row(w).find('[data-testid="execute-op-fee-seal"]').exists(), "the failed row draws no glyph").toBe(false)
 			expect(row(w).attributes("aria-busy")).toBeUndefined()
 
 			await retry(w).trigger("click")
@@ -511,49 +536,58 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			const w = await mountWith({ ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: false, provenShort } })
 			expect(figure(w).text()).toBe("About ~3.577824 FJ ($0.215); payment method set by Swap.")
 			expect(region(w).text()).toBe("This app's fee contract may not cover this fee right now.")
-			expect(row(w).find('[name="square-check"]').exists()).toBe(true)
+			expect(row(w).find('[name="square-check"]').exists()).toBe(false)
 		},
 	)
 
-	describe("paid through the PrivateFPC", () => {
+	describe("the seal on the row stands for the contract that pays, only when Nulo verifies it", () => {
 		const privatePaid = () => ({ ...appPaid(), exec: { ...appPaid().exec, feePayer: PRIVATE_FPC_ADDRESS } })
-		const notice = (w: VueWrapper) => w.find('[data-testid="execute-op-private-fee-notice"]')
-		const NOTICE = "Your Private Fee Juice must cover this fee."
-		const check = (w: VueWrapper) => row(w).find('[name="square-check"]')
+		const sponsorPaid = () => ({ ...appPaid(), exec: { ...appPaid().exec, feePayer: SPONSORED_FPC_ADDRESS } })
+		const seal = (w: VueWrapper) => row(w).find('[data-testid="execute-op-fee-seal"]')
 
-		test("the estimate lands: no check, the person pays first, the app's method under it, and the neutral notice", async () => {
+		test.each([
+			["the PrivateFPC", privatePaid, undefined],
+			["Nulo's sponsor", sponsorPaid, undefined],
+			["a fee contract the signed list names", appPaid, listing(APP_FPC)],
+		])("an app naming %s: the solid seal leads the row, named for a screen reader, and no green check", async (_, op, marks) => {
+			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { op: op(), marks })
+			expect(seal(w).attributes()).toMatchObject({ role: "img", "aria-label": "Nulo verified" })
+			expect(seal(w).find('[name="seal-solid"]').exists()).toBe(true)
+			expect(row(w).find('[name="square-check"]').exists()).toBe(false)
+		})
+
+		test("an unknown fee contract, a list not yet answered and a payload with no payer draw no glyph", async () => {
+			const unknown = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
+			expect([seal(unknown).exists(), row(unknown).find('[name="square-check"]').exists()]).toEqual([false, false])
+			unknown.unmount()
+			const unanswered = await mountWith(undefined, {
+				op: privatePaid(),
+				isEstimating: true,
+				marks: { ...listing(), mapped: ref(false) },
+			})
+			expect(seal(unanswered).exists(), "the PrivateFPC's pin needs no list").toBe(true)
+			unanswered.unmount()
+			const pending = await mountWith(undefined, { isEstimating: true, marks: { ...listing(APP_FPC), mapped: ref(false) } })
+			expect(seal(pending).exists(), "a listed payer waits for the list").toBe(false)
+		})
+
+		test("Private Fee Juice: the person pays, the app's method under it, and nothing about the balance", async () => {
 			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { op: privatePaid() })
-			expect(check(w).exists()).toBe(false)
 			expect(shownText(figure(w).element)).toBe("You pay about ~3.577824 FJ ($0.215) from Private Fee Juice method set by Swap")
-			expect(notice(w).text()).toBe(NOTICE)
-			expect(notice(w).find('[name="info"]').attributes("aria-hidden")).toBe("true")
-		})
-
-		test("estimating and after a failed estimate: the notice in both, the loading bar or the failed readout, and no check", async () => {
+			expect(w.find('[data-testid="execute-op-private-fee-notice"]').exists()).toBe(false)
+			expect(w.text()).not.toContain("must cover")
 			const estimating = await mountWith(undefined, { op: privatePaid(), isEstimating: true })
-			expect(waiting(estimating).findComponent(Skeleton).exists()).toBe(true)
 			expect(shownText(waiting(estimating).element)).toBe("You pay about from Private Fee Juice method set by Swap")
-			expect([check(estimating).exists(), notice(estimating).text()]).toEqual([false, NOTICE])
-			estimating.unmount()
-
-			const failed = await mountWith(undefined, { op: privatePaid(), estimateFailed: true })
-			expect(failed.get('[data-testid="execute-op-app-fee-failed"]').text()).toContain("You payCouldn't estimate fee.")
-			expect([check(failed).exists(), notice(failed).text()]).toEqual([false, NOTICE])
+			expect(seal(estimating).exists()).toBe(true)
 		})
 
-		test.each([true, false])("its pool reads short (proven: %s): no fee-contract line, the notice stays", async (provenShort) => {
+		test.each([true, false])("its pool reads short (proven: %s): no fee-contract line", async (provenShort) => {
 			const w = await mountWith(
 				{ ...ESTIMATE, appPayerFunding: { address: PRIVATE_FPC_ADDRESS, funded: false, provenShort } },
 				{ op: privatePaid() },
 			)
 			expect(region(w).text()).toBe("")
 			expect(w.find('[data-testid="execute-op-app-payer-short"]').exists()).toBe(false)
-			expect(notice(w).text()).toBe(NOTICE)
-		})
-
-		test("another app fee contract keeps today's card: the check, no notice", async () => {
-			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
-			expect([check(w).exists(), notice(w).exists()]).toEqual([true, false])
 		})
 
 		test("an app's priority fee follows the method's line", async () => {

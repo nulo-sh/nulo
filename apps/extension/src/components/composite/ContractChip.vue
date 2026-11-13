@@ -2,6 +2,9 @@
 /**
  * A contract named in a sentence, with its level's seal; its press says what the level rests on and
  * where to look the contract up. One Tab stop: the press moves focus to its link when it has one.
+ * A chip whose level is pending is held behind placeholders for at most `HOLD_MS` from its first
+ * paint, so it appears once, final, when its level lands in time; past the cap it shows its short
+ * address with no mark until the level lands.
  */
 /** Components */
 import TokenMark from "@/components/composite/general/TokenMark.vue"
@@ -26,6 +29,38 @@ const props = defineProps<{
 const open = ref(false)
 const panelId = useId()
 const seal = computed(() => (props.model.level === "nulo" || props.model.level === "scan" ? LEVEL_GLYPH[props.model.level] : null))
+const released = ref(false)
+const held = computed(() => props.model.level === null && !released.value)
+
+/** Functions */
+const HOLD_MS = 1000
+let hold: ReturnType<typeof setTimeout> | undefined
+const stopHold = (): void => {
+	clearTimeout(hold)
+	hold = undefined
+}
+
+/** Watchers */
+// One hold per address: another contract in the same place is held afresh from its own first paint.
+watch(
+	() => [props.model.level === null, props.model.address] as const,
+	([pending, address], previous) => {
+		if (previous && previous[1] !== address) {
+			stopHold()
+			released.value = false
+		}
+		if (!pending) return stopHold()
+		if (hold !== undefined || released.value) return
+		hold = setTimeout(() => {
+			hold = undefined
+			released.value = true
+		}, HOLD_MS)
+	},
+	{ immediate: true },
+)
+
+/** Lifecycle */
+onBeforeUnmount(stopHold)
 </script>
 
 <template>
@@ -34,6 +69,7 @@ const seal = computed(() => (props.model.level === "nulo" || props.model.level =
 			type="button"
 			data-testid="contract-chip"
 			:data-level="model.level ?? 'pending'"
+			:data-held="held || undefined"
 			:aria-label="model.accessibleName"
 			:aria-expanded="open"
 			:aria-controls="open ? panelId : undefined"
@@ -43,8 +79,14 @@ const seal = computed(() => (props.model.level === "nulo" || props.model.level =
 			@keydown.enter="refuseRepeatEnter"
 		>
 			<TokenMark v-if="model.mark" :symbol="model.mark.symbol" :icon="model.mark.icon" :size="16" :badge="model.mark.badge" />
-			<span :data-testid="testid" :class="[model.mono ? 'type--meta' : 'type--value', $style.text]">{{ model.label }}</span>
-			<Icon v-if="seal" data-testid="contract-chip-seal" :name="seal" size="15" :color="model.level === 'nulo' ? 'primary' : 'secondary'" aria-hidden="true" />
+			<span
+				:data-testid="testid"
+				:data-address-shows="model.ownName ? 'name' : undefined"
+				:class="[model.mono ? 'type--meta' : model.ownName ? 'type--name' : 'type--value', $style.text]"
+				><Skeleton v-if="held" data-testid="contract-chip-held-label" :width="64" :height="10" /><template v-else>{{ model.label }}</template></span
+			>
+			<Skeleton v-if="held" data-testid="contract-chip-held-mark" :width="15" :height="10" />
+			<Icon v-else-if="seal" data-testid="contract-chip-seal" :name="seal" size="15" :color="model.level === 'nulo' ? 'primary' : 'secondary'" aria-hidden="true" />
 		</button>
 		<template #content>
 			<div :id="panelId" data-testid="contract-chip-panel" :class="$style.panel">
