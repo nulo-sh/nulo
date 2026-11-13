@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { mount } from "@vue/test-utils"
+import postcss, { type ChildNode, type Rule } from "postcss"
 import { describe, expect, test } from "vitest"
 import PayeeBlock from "./PayeeBlock.vue"
 
@@ -8,6 +11,15 @@ const STUBS = { Icon: { template: '<i data-testid="stub-icon" :data-name="name" 
 const mountBlock = (props: Record<string, unknown>, slot?: string) =>
 	mount(PayeeBlock, { props: { address: ANA, ...props }, slots: slot ? { default: slot } : {}, global: { stubs: STUBS } })
 const halves = (w: ReturnType<typeof mountBlock>) => w.get('[data-testid="send-payee-address"]').element.children
+
+/** The block's own `<style module>` declarations for one rule; jsdom applies no stylesheet. */
+const declarationsOf = (selector: string): Record<string, string> => {
+	const source = readFileSync(join(__dirname, "PayeeBlock.vue"), "utf8").split("<style module>")[1] ?? ""
+	const rule = postcss
+		.parse(source.split("</style>")[0] ?? "")
+		.nodes.find((node: ChildNode): node is Rule => node.type === "rule" && node.selector === selector)
+	return Object.fromEntries((rule?.nodes ?? []).flatMap((node) => (node.type === "decl" ? [[node.prop, node.value]] : [])))
+}
 
 describe("composite/send/PayeeBlock", () => {
 	test("is a labelled region headed To", () => {
@@ -76,5 +88,14 @@ describe("composite/send/PayeeBlock", () => {
 				.map((el) => el.textContent)
 				.join(""),
 		).toBe(other)
+	})
+
+	test("a long name with no space wraps anywhere, whole, never cut or scrolled", () => {
+		const long = "W".repeat(32)
+		expect(mountBlock({ name: long }).get('[data-testid="send-payee-name"]').text()).toBe(long)
+		const name = declarationsOf(".name")
+		expect(name).toMatchObject({ "overflow-wrap": "anywhere" })
+		expect(name).not.toHaveProperty("text-overflow")
+		expect(name).not.toHaveProperty("white-space")
 	})
 })

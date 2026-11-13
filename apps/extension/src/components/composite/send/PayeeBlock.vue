@@ -62,6 +62,7 @@ const parts = computed(() => {
 
 .name {
 	composes: type--name from global;
+	overflow-wrap: anywhere;
 	color: var(--txt-primary);
 }
 
