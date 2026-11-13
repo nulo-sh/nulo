@@ -289,24 +289,29 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(feeRow(w).find("s").exists()).toBe(false)
 	})
 
-	test("a hand-added sponsor: Your address cannot be vouched for, its row says so in the form's words, and its cost is never named", () => {
-		const facts = publishFacts("private", "private", "unvouched")
-		w = mountSheet({
-			facts,
-			payerKind: "unvouched",
-			payerType: "fpc",
-			fee: { payer: "unvouched", payerName: "My FPC", display: PRICED },
-		})
-		expect(rows(w)[0]).toEqual(["unknown", `Your address — ${UNVOUCHED_PUBLISH_SENTENCE}`])
-		expect(w.text().split(UNVOUCHED_PUBLISH_SENTENCE)).toHaveLength(2)
-		expect(feeLines(w)).toEqual(["—, My FPC", UNVOUCHED_FEE_SENTENCE])
-		expect(feeRow(w).text()).not.toContain("0.00214")
-		// Each sentence's "FPC" is the glossary's term, the sponsor's own name never: two, the screen's cap.
-		expect(w.findAll("[data-term]").map((t) => [t.attributes("data-term"), t.text()])).toEqual([
-			["fpc", "FPC"],
-			["fpc", "FPC"],
-		])
-	})
+	test.each([
+		["private", "unknown", `Your address — ${UNVOUCHED_PUBLISH_SENTENCE}`],
+		["public", "public", `Your address SENDER ${UNVOUCHED_PUBLISH_SENTENCE} ${FACT_SENTENCES.sender}`],
+	] as const)(
+		"a hand-added sponsor from a %s origin: its row says so in the form's words, and its cost is never named",
+		(origin, visibility, row) => {
+			w = mountSheet({
+				facts: publishFacts(origin, "private", "unvouched"),
+				payerKind: "unvouched",
+				payerType: "fpc",
+				fee: { payer: "unvouched", payerName: "My FPC", display: PRICED },
+			})
+			expect(rows(w)[0]).toEqual([visibility, row])
+			expect(w.text().split(UNVOUCHED_PUBLISH_SENTENCE)).toHaveLength(2)
+			expect(feeLines(w)).toEqual(["—, My FPC", UNVOUCHED_FEE_SENTENCE])
+			expect(feeRow(w).text()).not.toContain("0.00214")
+			// Each sentence's "FPC" is the glossary's term, the sponsor's own name never: two, the screen's cap.
+			expect(w.findAll("[data-term]").map((t) => [t.attributes("data-term"), t.text()])).toEqual([
+				["fpc", "FPC"],
+				["fpc", "FPC"],
+			])
+		},
+	)
 
 	const STATES: [string, FeeLineState, FeeWords[]][] = [
 		["paid, private", PAID_PRIVATE, []],

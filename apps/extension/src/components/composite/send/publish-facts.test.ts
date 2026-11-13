@@ -141,11 +141,11 @@ describe("copy", () => {
 		for (const cell of ["you", "recipient", "amount"] as const) expect(rowSentence(cell, hidden, "contract")).toBeNull()
 
 		const unknown = publishFacts("private", "private", "unvouched")
-		// A hand-added sponsor reads the form's sentence, after the sender's on a public origin.
+		// A hand-added sponsor reads the form's sentence, before the sender's on a public origin.
 		expect(rowSentence("you", unknown, "unvouched")).toBe(UNVOUCHED_PUBLISH_SENTENCE)
 		expect(rowSentence("you", unknown, null)).toBeNull()
 		expect(rowSentence("you", publishFacts("public", "public", "unvouched"), "unvouched")).toBe(
-			`${FACT_SENTENCES.sender} ${UNVOUCHED_PUBLISH_SENTENCE}`,
+			`${UNVOUCHED_PUBLISH_SENTENCE} ${FACT_SENTENCES.sender}`,
 		)
 	})
 

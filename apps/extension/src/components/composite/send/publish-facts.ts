@@ -123,12 +123,13 @@ export function publishGlyph(visibility: Visibility): "private" | "public" | nul
 
 /** The sentence under a review row. Hidden rows carry none; "—" carries one only for a hand-added contract;
  *  an exposed one none, since `feeWarning` says it once under the rows. A hand-added contract's caveat
- *  follows the sender's sentence too: it may publish more than a public origin already does. */
+ *  leads the sender's sentence too (it may publish more than a public origin does), first so `FpcSentence`
+ *  dots its "FPC". */
 export function rowSentence(cell: FactCell, facts: PublishFacts, payer: PayerKind): string | null {
 	if (cell === "recipient") return facts.recipient === "public" ? FACT_SENTENCES.recipient : null
 	if (cell === "amount") return facts.amount === "public" ? FACT_SENTENCES.amount : null
 	const caveat = payer === "unvouched" ? UNVOUCHED_PUBLISH_SENTENCE : null
-	if (facts.you === "public") return caveat ? `${FACT_SENTENCES.sender} ${caveat}` : FACT_SENTENCES.sender
+	if (facts.you === "public") return caveat ? `${caveat} ${FACT_SENTENCES.sender}` : FACT_SENTENCES.sender
 	return facts.you === "unknown" ? caveat : null
 }
 
