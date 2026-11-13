@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { canSwitchReceiver, canSwitchSender, forcedSide, openingSendSide } from "./send-sides"
+import { canSwitchReceiver, canSwitchSender, forcedSide, openingSendSide, sideBalanceText } from "./send-sides"
 
 describe("openingSendSide", () => {
 	test.each([
@@ -50,5 +50,18 @@ describe("forcedSide, canSwitchSender, canSwitchReceiver", () => {
 		expect(forcedSide({})).toBe("private")
 		expect(canSwitchSender({})).toBe(false)
 		expect(canSwitchReceiver({})).toBe(false)
+	})
+})
+
+describe("sideBalanceText", () => {
+	test("the balance as Send prints it, grouped and cut at eight places, never rounded up", () => {
+		expect(sideBalanceText("1234567891234567891", 18, "TST")).toBe("1.23456789 TST")
+		expect(sideBalanceText("123456789000000", 6, "USDC")).toBe("123,456,789 USDC")
+	})
+
+	test("nothing for a row or decimals it cannot read", () => {
+		expect(sideBalanceText(null, 6, "USDC")).toBeNull()
+		expect(sideBalanceText("1", undefined, "USDC")).toBeNull()
+		expect(sideBalanceText("x", 6, "USDC")).toBeNull()
 	})
 })

@@ -23,7 +23,7 @@ import {
 	waitForToast,
 	waitForToastGone,
 } from "../fixtures/helpers"
-import { submitSend } from "../fixtures/send-page"
+import { chooseRecipient, openSend, submitSend } from "../fixtures/send-page"
 import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "../helpers/account-io"
 import { CAPTURE_VIEWPORT, CAPTURES_ENABLED, capture } from "../helpers/stale-network-capture"
 import { corruptImportedKeys } from "../helpers/stale-network-capture-seeds"
@@ -52,13 +52,13 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox || aztecConfig === undefined)("st
 			await importToken(page, aztecConfig!.tokenAddress)
 			await switchAccountByAddress(page, source.accountAddress)
 
-			await page.evaluate(() => (document.querySelector('[data-testid="actions-send"]') as HTMLElement | null)?.click())
-			await page.waitForSelector('[data-testid="send-from-type"]', { timeout: 10_000 })
+			await openSend(page)
+			await chooseRecipient(page, source.accountAddress)
 			await setActiveSendType(page, "send-from-type", "public")
 			await setActiveSendType(page, "send-to-type", "public")
 			await fillSendForm(page, { amount: "1", destination: source.accountAddress })
 			expect(await corruptImportedKeys(page)).toBe(1)
-			await submitSend(page, { expect: "send" })
+			expect(await submitSend(page)).toMatchObject({ warning: false, you: "public" })
 			await waitForToast(page, IMPORTED_UNUSABLE_TOAST.label, 60_000, { kind: "error" })
 			await capture(page, "A10-imported-unusable")
 

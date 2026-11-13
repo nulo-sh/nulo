@@ -70,7 +70,6 @@ import {
 	navigateToTokenDetail,
 	openNetworkDetail,
 	pinFromTokenPage,
-	selectFeeMethod,
 	selectedAccount,
 	setDeveloperMode,
 	switchAccount,
@@ -81,7 +80,6 @@ import {
 } from "../fixtures/helpers"
 import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
 import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
-import { openSend } from "../fixtures/send-page"
 import { pollUntil } from "../fixtures/poll"
 import { callsOf, RELAY_REPLIES, type RelayRuleHandle, type RpcRelay, sendTxCount, startRpcRelay } from "../fixtures/rpc-relay"
 import { reconnectPlayground, runApprovedPgCall } from "../fixtures/send"
@@ -93,7 +91,7 @@ import { recordingProblems, writeRecording } from "../fixtures/update/recording"
 import { type ReleaseTraits, releaseTraits } from "../fixtures/update/release"
 import { readRelease } from "../fixtures/update/read-release"
 import { isLoopbackUrl, loopbackOrigins, namedHostCount, type ReleasePreferences } from "../fixtures/update/release-reads"
-import { approveReleaseConnect } from "../fixtures/update/release-ui"
+import { approveReleaseConnect, openReleaseSend, selectReleaseSendFee } from "../fixtures/update/release-ui"
 import { storedRows } from "../fixtures/update/stored-rows"
 import { BARRIERS, missingFamilies, shownOverlays, unofferedSponsorIds, updateProblems } from "../fixtures/update/verify"
 import {
@@ -338,8 +336,8 @@ async function pickPreferences(page: Page, release: ReleaseTraits): Promise<void
 	await navigateToTokenDetail(page)
 	await pinFromTokenPage(page)
 	await navigateByHash(page, "#/popup/general", 15_000)
-	await openSend(page)
-	await selectFeeMethod(page, sandboxFeeMethod(release))
+	await openReleaseSend(page)
+	await selectReleaseSendFee(page, sandboxFeeMethod(release))
 	await navigateByHash(page, "#/popup/general", 15_000)
 }
 
@@ -506,8 +504,8 @@ async function populatePending(
 	})
 	// The release keeps an account's gas balances for minutes and reads them again on a Send mount,
 	// so the app window's fee row sees the funding only after one.
-	await openSend(page)
-	await selectFeeMethod(page, sandboxFeeMethod(release))
+	await openReleaseSend(page)
+	await selectReleaseSendFee(page, sandboxFeeMethod(release))
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)

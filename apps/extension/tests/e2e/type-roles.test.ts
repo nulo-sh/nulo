@@ -78,6 +78,7 @@ import {
 } from "./fixtures/type-roles"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { callService, peekSession } from "./fixtures/session"
+import { chooseRecipient, closeSendFeeSheet, openSendFeeSheet } from "./fixtures/send-page"
 import { shotSend } from "./fixtures/shots"
 import { skipUnlessListPrices } from "./fixtures/token-list"
 import {
@@ -483,6 +484,8 @@ const RECEIPT_TX_HASH = `0x${"1d".repeat(32)}`
 const IMPORT_CONTRACT = `0x0a${"6b".repeat(31)}`
 /** 16 hex, as the journal mints its ids. */
 const JOURNAL_ID = "a1b2c3d4e5f60718"
+/** A send the node took, to an address no contact or account holds. */
+const RECENT_SEND_ID = "5e0d5e0d5e0d5e0d"
 const IMPORT_ID = "0f1e2d3c4b5a6978"
 /** One unbreakable word as long as a contract's symbol may be. */
 const LONG_SYMBOL = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345"
@@ -1143,14 +1146,19 @@ const readLongHost = (page: Page) =>
 		LONG_APP.host,
 	)
 
-test("Send with a recipient typed, the Settings hub, Display, a network, Manage accounts, Reset, Contacts, New contact and Connected Apps", async ({
+test("Send's person step, a pasted recipient's form and its Fee sheet, the Settings hub, Display, a network, Manage accounts, Reset, Contacts, New contact and Connected Apps", async ({
 	registeredExtension: ctx,
 }) => {
 	const page = await openHome(ctx)
-	await goAndSweep(page, "#/popup/send", "send-destination-field", "Send")
+	await goAndSweep(page, "#/popup/send", "send-own-account-address", "Send, the person step", [["popup-send", "the person step"]])
 	await replaceInputValue(page, `${sel("send-destination-field")} input`, RECIPIENT)
 	await expectPageClean(page, "Send, a recipient typed", [["popup-send", ""]])
 	await expectRoleAt(page, "send-destination-field", "input-data", true)
+	await chooseRecipient(page, RECIPIENT)
+	await expectPageClean(page, "Send, a pasted recipient's form")
+	await openSendFeeSheet(page)
+	await expectPageClean(page, "Send, the Fee sheet")
+	await closeSendFeeSheet(page)
 
 	await goAndSweep(page, "#/popup/settings", "settings-page", "Settings hub")
 	await goAndSweep(page, "#/popup/settings/display", "theme-trigger", "Display")
@@ -1192,22 +1200,30 @@ const BOB = "0x048b29517cddb7566a05a2a292624eb2c5350dbe44350763cefe4c9207344c10"
 const UNNAMED_FPC = { id: "e2e-unnamed-fpc", type: 1, address: `0x0d${"7c".repeat(30)}00` }
 const FPC_ROW = `${sel("fpc-row")}[data-fpc-id="${UNNAMED_FPC.id}"]`
 
-/** A saved contact in Contacts, then on Send: suggested for a partial name, chosen, revealed. */
-async function expectContactOnSend(page: Page): Promise<void> {
+/** A saved contact in Contacts, then on Send: a recent send listed by address, the contact
+ *  suggested for a partial name, then chosen. */
+async function expectContactOnSend(page: Page, scope: ActivityScope): Promise<void> {
 	await navigateToSettings(page, "contacts")
 	await page.waitForSelector(sel("contacts-new-btn"), VISIBLE)
 	await addContact(page, "Alice", ALICE)
 	await expectPageClean(page, "Contacts, a saved contact", [["popup-settings-contacts", "a saved contact"]])
-	await goAndSweep(page, "#/popup/send", "send-destination-field", "Send")
+	await seedTokenRow(page, scope, 1)
+	await seedJournalRecord(page, scope, {
+		id: RECENT_SEND_ID,
+		tokenId: 1,
+		amount: "700000",
+		recipient: RECIPIENT,
+		progress: { stage: "succeeded" },
+	})
+	await goAndSweep(page, "#/popup/send", "send-recent-address", "Send, the person step after a send", [
+		["popup-send", "the person step after a send to an unnamed address"],
+	])
 	await replaceInputValue(page, `${sel("send-destination-field")} input`, "Ali")
 	await page.waitForSelector(sel("recipient-suggestion-address"), VISIBLE)
 	await expectPageClean(page, "Send, a contact suggested", [["popup-send", "a saved contact and a partial recipient typed"]])
 	await expectRoleAt(page, "send-destination-field", "input-data", true)
-	await openAndSweep(page, "recipient-suggestion-address", "recipient-card-masked", "Send, a recipient chosen", [
+	await openAndSweep(page, "recipient-suggestion-address", "send-payee-half-first", "Send, a contact chosen", [
 		["popup-send", "a chosen recipient"],
-	])
-	await openAndSweep(page, "recipient-card-reveal", "recipient-card-full-address", "Send, the recipient revealed", [
-		["popup-send", "a chosen recipient with recipient-card-reveal clicked"],
 	])
 }
 
@@ -1309,7 +1325,7 @@ test("a contact on Send and in Contacts, a contacts file, an unnamed FPC, New se
 		const scope = await readActivityScope(page)
 		await seedProtocolFpcs(page, scope)
 		await seedFpcs(page, scope, [UNNAMED_FPC])
-		await expectContactOnSend(page)
+		await expectContactOnSend(page, scope)
 		await expectContactsImport(page)
 		await expectSettingsForms(page)
 		await expectHiddenAccountAndImport(page)

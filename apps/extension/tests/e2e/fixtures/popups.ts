@@ -13,7 +13,7 @@ import { waitForTarget } from "./browser"
 import { clickByTestId, clickSelector, patchPagePolling, waitForHash } from "./dom"
 import { pollUntil } from "./poll"
 import type { ExtensionContext } from "./extension"
-import { selectFeeMethod, type FeeMethodSubtitle } from "./transfers"
+import { selectFeeMethod, type FeeMethodSubtitle } from "./fee-method"
 import { recordPageErrors } from "./wallet-pages"
 
 export type PopupKind =

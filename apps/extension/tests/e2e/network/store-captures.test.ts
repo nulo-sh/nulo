@@ -40,10 +40,8 @@ import {
 	navigateToSettings,
 	openNetworkDetail,
 	seedUsdQuoteAndReload,
-	selectFeeMethod,
 	selectSendToken,
 	setActiveSendType,
-	setInputAndBlur,
 	setTheme,
 	switchToLocalNetwork,
 	waitForFreshBalanceRow,
@@ -55,7 +53,16 @@ import {
 } from "../fixtures/helpers"
 import { openPlayground } from "../fixtures/playground"
 import { approveConnect, approveVerify, waitForPopup } from "../fixtures/popups"
-import { assertPublishInvariant, openSend, readSendView, submitSend, waitForFee, waitForSendGone } from "../fixtures/send-page"
+import {
+	assertPublishInvariant,
+	chooseRecipient,
+	openSend,
+	readSendView,
+	selectSendFeeMethod,
+	submitSend,
+	waitForFee,
+	waitForSendGone,
+} from "../fixtures/send-page"
 import { gotoPopupImport, importSeed, POPUP_IMPORT_SHELL, TEST_PASSWORD, waitForActiveAccount } from "../helpers/import-drivers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -174,6 +181,13 @@ async function receive(page: Page, chain: Chain): Promise<void> {
 /** Fills a private → private USD Coin send to the contact and waits for its fee estimate. */
 async function fillPrivateSend(page: Page, chain: Chain, amount: string, fee: FeeMethodSubtitle): Promise<void> {
 	await openSend(page)
+	await chooseRecipient(page, chain.alice)
+	// The payee block names a contact the chosen address matches exactly.
+	await page.waitForFunction(
+		(name: string) => document.querySelector('[data-testid="send-payee-name"]')?.textContent?.trim() === name,
+		{ timeout: 10_000 },
+		CONTACT,
+	)
 	await selectSendToken(page, "USDC")
 	await setActiveSendType(page, "send-from-type", "private")
 	await setActiveSendType(page, "send-to-type", "private")
@@ -185,25 +199,23 @@ async function fillPrivateSend(page: Page, chain: Chain, amount: string, fee: Fe
 		{ timeout: 90_000, polling: 1_000 },
 	)
 	await replaceInputValue(page, '[data-testid="send-amount-input"]', amount)
-	// The blur is what turns a typed contact address into the contact's card.
-	await setInputAndBlur(page, '[data-testid="send-destination-field"] input', chain.alice)
-	await page.waitForSelector(`[data-testid="recipient-card"][data-address="${chain.alice}"]`, { visible: true, timeout: 10_000 })
-	await selectFeeMethod(page, fee)
+	await selectSendFeeMethod(page, fee)
 	await waitForFee(page, "private", fee)
 	await page.waitForFunction(
 		() => {
-			const submit = document.querySelector<HTMLElement>('[data-testid="send-submit"]')
-			return !!submit && getComputedStyle(submit).pointerEvents !== "none"
+			const submit = document.querySelector<HTMLButtonElement>('[data-testid="send-submit"]')
+			return !!submit && !submit.disabled
 		},
 		{ timeout: 180_000, polling: 1_000 },
 	)
-	// The trigger names a pick before the card has resolved who pays for it, and the strip reads "—"
-	// until it has; an armed send is the page's own word that the payer is settled.
+	// The trigger names a pick before the card has resolved who pays for it, and the publish line's
+	// `you` reads unknown until it has; an armed send is the page's own word that the payer is settled.
 	expect(assertPublishInvariant(await readSendView(page))).toMatchObject({
 		origin: "private",
 		method: fee,
-		action: "send",
-		strip: { you: "hidden", to: "hidden", amount: "hidden" },
+		tag: null,
+		warning: false,
+		you: "hidden",
 	})
 }
 
@@ -211,7 +223,7 @@ async function fillPrivateSend(page: Page, chain: Chain, amount: string, fee: Fe
  *  both Fee Juice balances stay round. */
 async function sendToContact(page: Page, chain: Chain): Promise<void> {
 	await fillPrivateSend(page, chain, "50", "sponsored")
-	await submitSend(page, { expect: "send" })
+	await submitSend(page)
 	await waitForToast(page, "Transaction submitted", 120_000)
 	await waitForSendGone(page)
 	await navigateByHash(page, "#/popup/activity")
@@ -298,7 +310,7 @@ function revealCutActivityRow(): Fit {
 /**
  * In-page, on Send: the least scroll that lifts the amount's conversion line clear of the sticky
  * footer, measured again once scrolled, so a fit that returns `scrolled` leaves the line clear. The
- * transfer-type labels may pass under the sticky header.
+ * payee and token rows may pass under the sticky header.
  */
 function clearAmountLine(): Fit {
 	const footer = document.querySelector<HTMLElement>('[data-testid="send-footer"]')
@@ -306,7 +318,7 @@ function clearAmountLine(): Fit {
 	while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
 	const lineBottom = () =>
 		Math.max(
-			...["send-amount-meta", "send-amount-balance", "send-amount-max"]
+			...["send-amount-meta", "send-amount-max"]
 				.map((id) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect().bottom)
 				.filter((bottom): bottom is number => bottom !== undefined),
 		)
@@ -343,8 +355,8 @@ async function captureHome(page: Page): Promise<void> {
 	await capture(page, "home")
 }
 
-/** The fee card sits below the fold, under the sticky footer: the frame keeps the recipient, the
- *  token and the amount, and the strip's "you hidden" reads the private Fee Juice pick. */
+/** The frame keeps the recipient, the token and the amount clear of the sticky footer, whose fee
+ *  line names the private Fee Juice pick that keeps the publish line's `you` hidden. */
 async function captureSend(page: Page, chain: Chain): Promise<void> {
 	await fillPrivateSend(page, chain, "120", "private")
 	await scrollToFit(page, clearAmountLine)

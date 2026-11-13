@@ -193,7 +193,7 @@ test("Send and Receive on Home are the Tab stops after the hero, with the accent
 		`the Enter keydowns: ${JSON.stringify(sendEnters)}`,
 	).toEqual([false, true])
 	await waitForHash(page, "#/popup/send")
-	await page.waitForSelector(sel("send-footer"), { visible: true, timeout: 15_000 })
+	await page.waitForSelector(sel("send-person-step"), { visible: true, timeout: 15_000 })
 	expect(await historyLength(page), "pushStates the held Enter made").toBe(before + 1)
 
 	await page.evaluate(() => history.back())

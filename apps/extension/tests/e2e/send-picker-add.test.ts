@@ -8,7 +8,7 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { clickByTestId, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
 import { getAccountAddress, navigateByHash, seedUsdQuoteAndReload } from "./fixtures/helpers"
-import { readSendInputs, shotSend } from "./fixtures/send-page"
+import { chooseRecipient, openSend, readSendInputs, shotSend } from "./fixtures/send-page"
 import { E2E_LIST_TOKENS, heldListEntries, skipUnlessListPrices } from "./fixtures/token-list"
 import { waitForNewTokenAddress } from "./fixtures/tokens"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
@@ -50,9 +50,9 @@ test("the Send picker: New token opened from a pasted address's add row closes b
 	await seedTokenRow(page, scope, 2, { token: ADDED })
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	const recipient = await getAccountAddress(page)
-	await clickByTestId(page, "actions-send")
+	await openSend(page)
+	await chooseRecipient(page, recipient)
 	await page.waitForSelector(sel("send-token-symbol"), VISIBLE)
-	await replaceInputValue(page, `${sel("send-destination-field")} input`, recipient)
 	const pictured = heldListEntries().some((e) => e.address === scope.token.contract && e.icon !== undefined)
 	expect(pictured || !E2E_LIST_TOKENS.some((e) => e.address === scope.token.contract), "a source run's list pictures its tokens").toBe(
 		true,

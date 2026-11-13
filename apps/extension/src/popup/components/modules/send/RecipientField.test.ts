@@ -3,7 +3,6 @@ import { mount } from "@vue/test-utils"
 import { nextTick } from "vue"
 import { Input } from "@nulo/design"
 import AddressInput from "@/components/composite/general/AddressInput.vue"
-import RecipientCard from "@/components/composite/send/RecipientCard.vue"
 import RecipientField from "./RecipientField.vue"
 
 const STUBS = {
@@ -20,16 +19,12 @@ const STUBS = {
 		template: '<div data-testid="stub-avatar" :data-name="name" :data-address="address" />',
 		props: ["name", "address", "size"],
 	},
-	RecipientCard: {
-		template: `<div data-testid="stub-card" :data-name="name" :data-address="address"><button data-testid="card-change-btn" @click="$emit('change')" /></div>`,
-		props: ["name", "address"],
-		emits: ["change"],
-		methods: { focusChange() {} },
-	},
 }
 
 const mountField = (props: Record<string, unknown> = {}) => mount(RecipientField, { props, global: { stubs: STUBS } })
 const hint = (w: ReturnType<typeof mount>) => w.find('[data-testid="recipient-invalid-hint"]').exists()
+/** The addresses `choose` named, in order. */
+const choices = (w: ReturnType<typeof mount>) => (w.emitted<[{ address: string }]>("choose") ?? []).map(([c]) => c.address)
 
 const alice = { id: "1", name: "Alice", address: "0xaaaa", abbr: "AL" }
 const account1 = { id: "2", name: "Account 1", address: "0xbbbb" }
@@ -73,22 +68,12 @@ describe("modules/send/RecipientField", () => {
 		expect(await suggested("\u200B\u200D")).toEqual([])
 	})
 
-	test("a selected recipient renders the RecipientCard (with the full address), not the input", () => {
-		const w = mountField({ candidates: [alice], selectedContact: alice })
-		const card = w.find('[data-testid="stub-card"]')
-		expect(card.exists()).toBe(true)
-		expect(card.attributes("data-address")).toBe("0xaaaa")
-		expect(card.attributes("data-name")).toBe("Alice")
-		expect(w.find("input").exists()).toBe(false)
-	})
-
-	test("the card's change action clears the selection and restores the input", async () => {
-		const w = mountField({ candidates: [alice], selectedContact: alice, searchTerm: alice.address })
-		await w.find('[data-testid="card-change-btn"]').trigger("click")
-		expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([null])
-		expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([""])
+	test("a picked suggestion is chosen once, and the field stays the input", async () => {
+		const w = mountField({ candidates: [alice, account1], searchTerm: "a" })
+		await w.find("input").trigger("focus")
+		await w.get('[role="option"]').trigger("click")
+		expect(choices(w)).toEqual([alice.address])
 		expect(w.find("input").exists()).toBe(true)
-		expect(w.find('[data-testid="stub-card"]').exists()).toBe(false)
 	})
 
 	test("shows the 'Invalid address' hint for a malformed address when blurred", () => {
@@ -208,8 +193,6 @@ describe("modules/send/RecipientField", () => {
 	})
 
 	describe("Enter picks a suggestion only from the field's own input", () => {
-		// Named after the address, so it is suggested first while the blur matches Alice's address.
-		const namesake = { id: "5", name: "0xaaaa fan", address: "0xcccc" }
 		const mounted: ReturnType<typeof mount>[] = []
 		const mountAttached = (props: Record<string, unknown>) => {
 			const w = mount(RecipientField, { props, global: { stubs: STUBS }, attachTo: document.body })
@@ -244,17 +227,6 @@ describe("modules/send/RecipientField", () => {
 			expect(document.activeElement).toBe(other)
 		})
 
-		test("an Enter on the account card's own button within the grace period picks nothing", async () => {
-			const w = mountAttached({ candidates: [namesake, alice], searchTerm: alice.address })
-			await w.find("input").trigger("focus")
-			await w.find("input").trigger("blur")
-			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([alice])
-			const before = picks(w)
-			const change = w.find('[data-testid="card-change-btn"]')
-			change.element.dispatchEvent(enter())
-			expect(picks(w)).toEqual(before)
-		})
-
 		test("an Enter in the field's input picks the first suggestion", async () => {
 			const w = mountAttached({ candidates: [alice, account1], searchTerm: "a" })
 			const input = w.find("input")
@@ -264,39 +236,15 @@ describe("modules/send/RecipientField", () => {
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([alice])
 		})
 
-		/** Picks the first suggestion with the real card mounted, and lets the card render. */
-		const pickWithCard = async (how: "Enter" | "click") => {
-			const { RecipientCard: _stub, ...stubs } = STUBS
-			const w = mount(RecipientField, {
-				props: { candidates: [alice, account1], searchTerm: "a" },
-				global: { stubs, components: { RecipientCard } },
-				attachTo: document.body,
-			})
-			mounted.push(w)
+		test("an Enter pick is chosen and leaves the input, so the page places the keyboard", async () => {
+			const w = mountAttached({ candidates: [alice, account1], searchTerm: "a" })
 			w.get("input").element.focus()
 			await nextTick()
-			if (how === "Enter") w.get("input").element.dispatchEvent(enter())
-			else await w.get('[role="option"]').trigger("click")
+			w.get("input").element.dispatchEvent(enter())
+			vi.advanceTimersByTime(0)
 			await nextTick()
-			await nextTick()
-			expect(w.find('[data-testid="recipient-card"]').exists()).toBe(true)
-		}
-
-		test.each([
-			["an Enter pick moves the focus to the card's Change recipient", "Enter", "recipient-card-change"],
-			["a click pick leaves the focus where the removed field had it", "click", undefined],
-		] as const)("%s", async (_, how, focused) => {
-			await pickWithCard(how)
-			expect(document.activeElement?.getAttribute("data-testid") ?? undefined).toBe(focused)
-		})
-
-		test("the pick's auto-repeat on Change is refused, so a held Enter picks once; a new press is not", async () => {
-			await pickWithCard("Enter")
-			const repeat = enter({ repeat: true })
-			const press = enter()
-			document.activeElement?.dispatchEvent(repeat)
-			document.activeElement?.dispatchEvent(press)
-			expect([repeat.defaultPrevented, press.defaultPrevented]).toEqual([true, false])
+			expect(choices(w)).toEqual([alice.address])
+			expect(document.activeElement).not.toBe(w.get("input").element)
 		})
 
 		test("a repeat, composing or already handled Enter in the input picks nothing", async () => {
@@ -539,7 +487,7 @@ describe("modules/send/RecipientField", () => {
 		})
 	})
 
-	describe("a mouse press that takes the focus from the field: the card waits for the press to end", () => {
+	describe("a mouse press that takes the focus from the field: the pick waits for the press to end", () => {
 		const namesake = { id: "5", name: "0xaaaa fan", address: "0xcccc" }
 		const mounted: ReturnType<typeof mount>[] = []
 		const mountAttached = (props: Record<string, unknown>) => {
@@ -556,7 +504,6 @@ describe("modules/send/RecipientField", () => {
 			vi.advanceTimersByTime(0)
 			await nextTick()
 		}
-		const view = (w: ReturnType<typeof mount>) => (w.find('[data-testid="stub-card"]').exists() ? "card" : "input")
 		const lastContact = (w: ReturnType<typeof mount>) => w.emitted("update:selectedContact")?.at(-1)?.[0]
 		const suggested = (w: ReturnType<typeof mount>) => w.findAll('[data-testid="stub-avatar"]').map((a) => a.attributes("data-address"))
 		const clickSuggestion = (w: ReturnType<typeof mount>, address: string) =>
@@ -576,32 +523,36 @@ describe("modules/send/RecipientField", () => {
 			vi.useRealTimers()
 		})
 
-		test("a blur during the press matches at once and keeps the input; the card shows once the press ends", async () => {
+		test("a blur during the press matches at once and keeps the input; the pick is chosen once the press ends", async () => {
 			const w = await focused({ candidates: [alice], searchTerm: alice.address })
 			press("pointerdown")
 			await w.get("input").trigger("blur")
 			expect(lastContact(w)).toEqual(alice)
-			expect(view(w)).toBe("input")
+			expect(choices(w)).toEqual([])
 			press("pointerup")
 			await nextTick()
-			expect(view(w)).toBe("input")
+			expect(choices(w)).toEqual([])
 			await afterRelease()
-			expect(view(w)).toBe("card")
-			expect(w.get('[data-testid="stub-card"]').attributes("data-address")).toBe(alice.address)
+			expect(choices(w)).toEqual([alice.address])
+			expect(w.find("input").exists()).toBe(true)
 			expect(suggested(w)).toEqual([])
 			expect(w.emitted("update:searchTerm")).toBeUndefined()
 		})
 
-		test("the click a release delivers outside the field ends the hold at its capture, before its target", async () => {
+		test("the click a release delivers outside the field lands while the pick is held, so its target chooses first", async () => {
 			const w = await focused({ candidates: [alice], searchTerm: alice.address })
 			const outside = document.body.appendChild(document.createElement("button"))
+			const atClick: string[][] = []
+			outside.addEventListener("click", () => atClick.push(choices(w)))
 			press("pointerdown")
 			await w.get("input").trigger("blur")
 			press("pointerup")
 			outside.click()
 			await nextTick()
-			expect(view(w)).toBe("card")
-			expect(vi.getTimerCount()).toBe(0)
+			expect(atClick).toEqual([[]])
+			expect(choices(w)).toEqual([])
+			await afterRelease()
+			expect(choices(w)).toEqual([alice.address])
 		})
 
 		test("text that is no address shows the hint once the press that took the focus ends", async () => {
@@ -623,23 +574,36 @@ describe("modules/send/RecipientField", () => {
 			expect(hint(w)).toBe(true)
 		})
 
-		test("a blur with no press shows the card at once", async () => {
+		test("a blur with no press chooses once its task has run", async () => {
 			const w = await focused({ candidates: [alice], searchTerm: alice.address })
 			await w.get("input").trigger("blur")
-			expect(view(w)).toBe("card")
+			expect(choices(w)).toEqual([])
+			await afterRelease()
+			expect(choices(w)).toEqual([alice.address])
 		})
 
-		test("a right-button or touch press records nothing: the card shows at the blur", async () => {
-			for (const init of [{ button: 2 }, { pointerType: "touch" }]) {
+		test("a tap or a right-button press records nothing; the click its blur's task delivers chooses first", async () => {
+			for (const init of [{ pointerType: "touch" }, { button: 2 }]) {
 				const w = await focused({ candidates: [alice], searchTerm: alice.address })
+				// A row outside the field chooses as the step's rows do: the page leaves the step at once.
+				const row = document.body.appendChild(document.createElement("button"))
+				let atClick: string[] | undefined
+				row.addEventListener("click", () => {
+					atClick = choices(w)
+					w.unmount()
+				})
 				press("pointerdown", init)
-				await w.get("input").trigger("blur")
-				expect(view(w), JSON.stringify(init)).toBe("card")
 				press("pointerup", init)
+				await w.get("input").trigger("blur")
+				row.click()
+				await afterRelease()
+				expect(atClick, JSON.stringify(init)).toEqual([])
+				expect(choices(w), JSON.stringify(init)).toEqual([])
+				row.remove()
 			}
 		})
 
-		test("the press lands on another suggestion it was held over, and that one is picked", async () => {
+		test("the press lands on another suggestion it was held over, and only that one is chosen", async () => {
 			const w = await focused({ candidates: [alice, namesake], searchTerm: alice.address })
 			press("pointerdown")
 			await w.get("input").trigger("blur")
@@ -650,7 +614,7 @@ describe("modules/send/RecipientField", () => {
 			clickSuggestion(w, namesake.address)
 			await afterRelease()
 			expect(lastContact(w)).toEqual(namesake)
-			expect(w.get('[data-testid="stub-card"]').attributes("data-address")).toBe(namesake.address)
+			expect(choices(w)).toEqual([namesake.address])
 		})
 
 		test("a list that changes under a held press never rebinds the pressed row to another destination", async () => {
@@ -664,6 +628,7 @@ describe("modules/send/RecipientField", () => {
 			pressed.click()
 			await afterRelease()
 			expect(lastContact(w)).toEqual(own)
+			expect(choices(w)).toEqual([own.address])
 		})
 
 		test("a press inside the focused field holds nothing, and its suggestions stay", async () => {
@@ -673,6 +638,7 @@ describe("modules/send/RecipientField", () => {
 			await afterRelease()
 			expect(suggested(w)).toEqual([alice.address, account1.address])
 			expect(w.emitted("update:selectedContact")).toBeUndefined()
+			expect(choices(w)).toEqual([])
 		})
 
 		test("the release of another pointer ends nothing; a cancelled press or a window blur ends the hold", async () => {
@@ -681,17 +647,17 @@ describe("modules/send/RecipientField", () => {
 			await w.get("input").trigger("blur")
 			press("pointerup", { pointerId: 2 })
 			await afterRelease()
-			expect(view(w)).toBe("input")
+			expect(choices(w)).toEqual([])
 			press("pointercancel")
 			await afterRelease()
-			expect(view(w)).toBe("card")
+			expect(choices(w)).toEqual([alice.address])
 
 			const other = await focused({ candidates: [alice], searchTerm: alice.address })
 			press("pointerdown")
 			await other.get("input").trigger("blur")
 			window.dispatchEvent(new Event("blur"))
 			await afterRelease()
-			expect(view(other)).toBe("card")
+			expect(choices(other)).toEqual([alice.address])
 		})
 
 		test("a second pointer never takes over the press holding the field", async () => {
@@ -701,10 +667,10 @@ describe("modules/send/RecipientField", () => {
 			press("pointerdown", { pointerId: 2, pointerType: "pen" })
 			press("pointerup", { pointerId: 2, pointerType: "pen" })
 			await afterRelease()
-			expect(view(w)).toBe("input")
+			expect(choices(w)).toEqual([])
 			press("pointerup")
 			await afterRelease()
-			expect(view(w)).toBe("card")
+			expect(choices(w)).toEqual([alice.address])
 		})
 
 		test("a press that starts before the last one's release ran keeps the field held until it ends", async () => {
@@ -714,10 +680,10 @@ describe("modules/send/RecipientField", () => {
 			press("pointerup")
 			press("pointerdown", { pointerId: 2, pointerType: "pen" })
 			await afterRelease()
-			expect(view(w)).toBe("input")
+			expect(choices(w)).toEqual([])
 			press("pointerup", { pointerId: 2, pointerType: "pen" })
 			await afterRelease()
-			expect(view(w)).toBe("card")
+			expect(choices(w)).toEqual([alice.address])
 		})
 
 		test("a refocus during the hold keeps the field editable, drops the blur's match and voids the queued release", async () => {
@@ -727,7 +693,7 @@ describe("modules/send/RecipientField", () => {
 			press("pointerup")
 			await w.get("input").trigger("focus")
 			await afterRelease()
-			expect(view(w)).toBe("input")
+			expect(choices(w)).toEqual([])
 			expect(lastContact(w)).toBeNull()
 			expect(suggested(w)).toEqual([alice.address])
 
@@ -735,10 +701,10 @@ describe("modules/send/RecipientField", () => {
 			press("pointerdown", { pointerId: 3 })
 			await w.get("input").trigger("blur")
 			await afterRelease()
-			expect(view(w)).toBe("input")
+			expect(choices(w)).toEqual([])
 			press("pointerup", { pointerId: 3 })
 			await afterRelease()
-			expect(view(w)).toBe("card")
+			expect(choices(w)).toEqual([alice.address])
 		})
 
 		test("an earlier blur's close timer never closes the suggestions a later held press needs", async () => {
@@ -754,6 +720,7 @@ describe("modules/send/RecipientField", () => {
 			clickSuggestion(w, account1.address)
 			await afterRelease()
 			expect(lastContact(w)).toEqual(account1)
+			expect(choices(w)).toEqual([account1.address])
 		})
 
 		test("unmount removes every listener and timer", async () => {

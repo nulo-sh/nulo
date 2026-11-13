@@ -148,9 +148,8 @@ onBeforeUnmount(() => {
 
 	cursor: pointer;
 
-	/* The parent `.section` already pads 14px top/bottom; keep this minimal so the
-	 * two don't stack into the oversized gap the token row had. */
-	padding: 4px 0;
+	/* The row is the whole band between the rules around it, so a hover or a press tints all of it. */
+	padding: 14px 0;
 
 	transition: all 0.2s var(--bezier);
 
@@ -163,12 +162,17 @@ onBeforeUnmount(() => {
 		outline-offset: -2px;
 		background: color-mix(in srgb, var(--nulo-surface-low) 50%, transparent);
 	}
+
+	&:active {
+		background: var(--nulo-surface-low);
+	}
 }
 
 .wrapper_loading {
 	cursor: default;
 
-	&:hover {
+	&:hover,
+	&:active {
 		background: none;
 	}
 }

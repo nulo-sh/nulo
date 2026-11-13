@@ -229,17 +229,22 @@ export async function pointerClick(page: Page, testid: string, opts: { last?: bo
 			const x = box.left + box.width / 2
 			const y = box.top + box.height / 2
 			const top = document.elementFromPoint(x, y)
+			const cover = top?.getBoundingClientRect()
 			return {
 				x,
 				y,
 				reachable: !!top && (el === top || el.contains(top)),
 				covering: top?.getAttribute("data-testid") ?? top?.tagName,
+				where: `y ${Math.round(y)} under ${Math.round(cover?.top ?? 0)}..${Math.round(cover?.bottom ?? 0)} of ${innerHeight}`,
+				says: top?.textContent?.replace(/\s+/g, " ").trim().slice(0, 80),
 			}
 		},
 		sel(testid),
 		opts.last === true,
 	)
-	if (!point.reachable) throw new Error(`${testid} is covered at its centre by ${point.covering}`)
+	if (!point.reachable) {
+		throw new Error(`${testid} is covered at its centre by ${point.covering} (${point.where}): "${point.says}"`)
+	}
 	await page.mouse.click(point.x, point.y)
 }
 

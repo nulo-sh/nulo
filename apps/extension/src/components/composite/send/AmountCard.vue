@@ -6,7 +6,7 @@ import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 /** Utils */
 import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
 import { pluralize } from "@/utils/plural"
-import { isValidDecimals, parseSide } from "@/utils/token-amount"
+import { sideBalanceText } from "./send-sides"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, inputRoom, rulerWidth } from "@/utils/hero-ruler"
 import { isBlank } from "@/utils/string"
@@ -20,10 +20,10 @@ const props = defineProps({
 	},
 	tokenBalanceByType: Number,
 	/** The selected side's balance in base units, as a digit string; null until it loads. Every
-	 *  balance digit Max fills or the corner shows comes from it: `tokenBalanceByType` is a float. */
+	 *  balance digit Max fills or names comes from it: `tokenBalanceByType` is a float. */
 	balanceRawByType: { type: String, required: false, default: null },
-	/** `read` draws the balance, a zero included; `loading` draws a skeleton; `unavailable` nothing.
-	 *  Unread by default, so a parent that passes nothing never shows a zero it did not read. */
+	/** Only a `read` balance, a zero included, is named by Max; `loading` and `unavailable` are not.
+	 *  Unread by default, so a parent that passes nothing never names a zero it did not read. */
 	balanceState: { type: String, default: "loading" },
 	/** Live usable quote for the selected token ({ usd, fetchedAt }) or null.
 	 *  Null hides all fiat UI (and the fiat-input toggle). */
@@ -32,6 +32,8 @@ const props = defineProps({
 	proxyTicker: { type: String, required: false, default: null },
 	/** The page's amount gate found the amount above a balance it read; the card only draws it. */
 	exceedsBalance: { type: Boolean, default: false },
+	/** The side the amount is spent from, as Max names it. */
+	side: { type: String, default: "private" },
 })
 
 /** Token amount string — ALWAYS the value that validates + sends, in both
@@ -59,6 +61,7 @@ let commaPoint = false
 let lastText = String(model.value ?? "")
 
 const refusalId = useId()
+const labelId = useId()
 const inputEl = useTemplateRef("inputEl")
 const fieldRuler = useTemplateRef("fieldRuler")
 const amountRow = useTemplateRef("amountRow")
@@ -78,7 +81,7 @@ const wasClamped = ref(false)
  *  whose text reads, when the text empties, and when the field is left with text that reads. */
 const readHint = ref(null)
 
-/** The one refusal the balance row's left slot shows in place of its figure: over the balance first,
+/** The one refusal the line under the field shows in place of its figure: over the balance first,
  *  then a text the field could not read, then the decimals it cut, which still leaves an amount to send. */
 const refusal = computed(() => {
 	if (props.exceedsBalance) return { testid: "send-amount-over-balance", text: "More than your balance" }
@@ -203,7 +206,7 @@ const DERIVED_PX = 13
 const DERIVED_MIN_PX = 8
 
 /** The derived token line's type as a fraction of its 13 px: the largest that keeps it on one line
- *  beside the balance and Max or, where that is under 8 px, in its own row under the amount. */
+ *  in the line under the field or, where that is under 8 px, in its own row under the amount. */
 const derivedScale = ref(1)
 const derivedOwnRow = ref(false)
 /** Neither room depends on where the line is drawn, so a move never feeds back into the decision. */
@@ -264,16 +267,13 @@ const tokenModeFiatLabel = computed(() => {
 
 const conversionTitle = computed(() => (props.proxyTicker ? `Priced via ${props.proxyTicker}, at today's rate` : "At today's rate"))
 
-/** Corner balance segment: amount + symbol only — the From selector above
- *  already names the private/public side, so no dot/word repeats it here.
- *  Truncated at 8 places, so it never reads more than the balance. */
-const balanceSegment = computed(() => {
-	if (props.balanceState !== "read" || !props.token || props.balanceRawByType == null || !isValidDecimals(tokenDecimals.value))
-		return null
-	const raw = parseSide(props.balanceRawByType)
-	if (raw === undefined) return null
-	const amount = formatBaseUnits(raw, tokenDecimals.value, { maxDecimals: 8, thousandsSep: ",", decimalSep: "." })
-	return `${amount} ${props.token.symbol}`
+/** What Max fills, as its spoken name says it; the side's own balance is printed by the From choice. */
+const maxLabel = computed(() => {
+	const balance =
+		props.balanceState === "read" && props.token
+			? sideBalanceText(props.balanceRawByType, tokenDecimals.value, props.token.symbol)
+			: null
+	return balance ? `Max: all of your ${props.side} ${balance}` : undefined
 })
 
 /** Fiat-mode secondary line: the DERIVED token amount that will send;
@@ -383,8 +383,7 @@ watch(
 watch(canUseFiatInput, (can) => {
 	if (!can && fiatMode.value) exitFiatMode({ clearAmount: true })
 })
-// After the render, so each ruler holds what its line shows; the unit switch takes the field's width,
-// the balance corner the derived line's.
+// After the render, so each ruler holds what its line shows; the unit switch takes the field's width.
 watch(
 	[
 		model,
@@ -393,7 +392,6 @@ watch(
 		fiatMode,
 		canUseFiatInput,
 		derivedTokenLabel,
-		balanceSegment,
 		() => fiatGuard.value?.converting,
 		() => refusal.value?.testid,
 	],
@@ -426,7 +424,15 @@ const refreezeQuote = () => {
 	// Handed over, not written first: `fiatGuard.value` reads the page's old quote until it re-renders.
 	scheduleConvert({ frozenUsd: props.liveQuote.usd, frozenAt: Date.now(), converting: false })
 }
-defineExpose({ refreezeQuote, focusAmount: () => handleFocus() })
+defineExpose({
+	refreezeQuote,
+	focusAmount: () => handleFocus(),
+	/** Ends a USD session keeping the token amount it settled on, so a write from the page outlives
+	 *  it; one still converting keeps none, since its amount is not the figure typed last. */
+	exitFiat: () => {
+		if (fiatMode.value) exitFiatMode({ clearAmount: Boolean(fiatGuard.value?.converting) })
+	},
+})
 
 onBeforeUnmount(() => {
 	clearTimeout(convertTimer)
@@ -466,6 +472,20 @@ const handleFiatBalanceAction = (divisor) => {
 
 <template>
 	<Flex @click="handleFocus" gap="8" direction="column" :class="$style.wrapper">
+		<!-- Max sits over the unit switch, before the field in reading and Tab order. -->
+		<Flex align="center" justify="between" gap="8">
+			<span :id="labelId" :class="$style.label">Amount</span>
+			<button
+				type="button"
+				:disabled="!tokenBalanceByType"
+				:aria-label="maxLabel"
+				@click.stop="handleMax"
+				data-testid="send-amount-max"
+				:class="$style.action_link"
+			>
+				Max
+			</button>
+		</Flex>
 		<Flex direction="column" gap="4">
 			<Flex ref="amountRow" gap="8" justify="between" data-testid="send-amount-row">
 				<div :class="$style.field_line">
@@ -478,6 +498,7 @@ const handleFiatBalanceAction = (divisor) => {
 						@blur="handleFiatBlur"
 						:disabled="!tokenBalanceByType"
 						placeholder="0.00"
+						:aria-labelledby="labelId"
 						:aria-invalid="exceedsBalance"
 						:aria-describedby="refusal ? refusalId : undefined"
 						data-testid="send-amount-fiat-input"
@@ -493,6 +514,7 @@ const handleFiatBalanceAction = (divisor) => {
 						@blur="handleAmountBlur"
 						:disabled="!tokenBalanceByType"
 						placeholder="0.00"
+						:aria-labelledby="labelId"
 						:aria-invalid="exceedsBalance"
 						:aria-describedby="refusal ? refusalId : undefined"
 						data-testid="send-amount-input"
@@ -524,42 +546,25 @@ const handleFiatBalanceAction = (divisor) => {
 				}}</span>
 			</span>
 
-			<!-- Fiat mode's span has a zero basis, so its line wraps only when the balance and Max alone overflow it. -->
-			<Flex align="center" justify="between" gap="8" wrap="wrap">
-				<!-- The slot of the row's figure: a refusal takes it whole, and wraps inside it beside the balance and Max. -->
-				<span ref="conversionEl" :class="[$style.conversion, (fiatMode || refusal) && $style.conversion_fit]" data-testid="send-amount-meta">
-					<Text v-if="refusal" :id="refusalId" variant="body" color="txt-danger" role="alert" :data-testid="refusal.testid">{{ refusal.text }}</Text>
-					<template v-else-if="fiatMode">
-						<template v-if="!derivedOwnRow">
-							<Skeleton v-if="fiatGuard?.converting" :width="72" :height="10" data-testid="send-amount-converting" />
-							<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
-								derivedTokenLabel
-							}}</span>
-						</template>
-					</template>
-					<template v-else>
-						<span v-if="tokenModeFiatLabel" :title="conversionTitle" data-testid="send-amount-fiat-label" :class="$style.fiat_label">{{
-							tokenModeFiatLabel
+			<!-- The line under the field: its figure, or a refusal in its place. -->
+			<span ref="conversionEl" :class="[$style.conversion, (fiatMode || refusal) && $style.conversion_fit]" data-testid="send-amount-meta">
+				<Text v-if="refusal" :id="refusalId" variant="body" color="txt-danger" role="alert" :data-testid="refusal.testid">{{ refusal.text }}</Text>
+				<template v-else-if="fiatMode">
+					<template v-if="!derivedOwnRow">
+						<Skeleton v-if="fiatGuard?.converting" :width="72" :height="10" data-testid="send-amount-converting" />
+						<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
+							derivedTokenLabel
 						}}</span>
 					</template>
-					<!-- Here wherever the line is drawn, in the meta line's own mono 13 px, so a shortened line is fitted again. -->
-					<span v-if="fiatMode && derivedTokenLabel" aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
-				</span>
-
-				<Flex align="center" gap="8" style="flex: none">
-					<span v-if="balanceSegment" data-testid="send-amount-balance" :class="$style.balance_corner">{{ balanceSegment }}</span>
-					<Skeleton v-else-if="token && balanceState === 'loading'" :width="48" :height="10" data-testid="send-amount-balance-loading" />
-					<button
-						type="button"
-						:disabled="!tokenBalanceByType"
-						@click.stop="handleMax"
-						data-testid="send-amount-max"
-						:class="$style.action_link"
-					>
-						Max
-					</button>
-				</Flex>
-			</Flex>
+				</template>
+				<template v-else>
+					<span v-if="tokenModeFiatLabel" :title="conversionTitle" data-testid="send-amount-fiat-label" :class="$style.fiat_label">{{
+						tokenModeFiatLabel
+					}}</span>
+				</template>
+				<!-- Here wherever the line is drawn, in the meta line's own mono 13 px, so a shortened line is fitted again. -->
+				<span v-if="fiatMode && derivedTokenLabel" aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
+			</span>
 		</Flex>
 	</Flex>
 </template>
@@ -646,8 +651,8 @@ const handleFiatBalanceAction = (divisor) => {
 	margin: 0 2px;
 }
 
-.balance_corner {
-	composes: type--meta from global;
+.label {
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -656,12 +661,12 @@ const handleFiatBalanceAction = (divisor) => {
 	color: var(--nulo-secondary);
 }
 
-/* "≈" stays with its figure: the balance and Max wrap under it instead. */
+/* "≈" stays with its figure. */
 .fiat_label {
 	white-space: nowrap;
 }
 
-/* The derived line's room is all the row leaves beside the balance and Max, drawn there or not. */
+/* The derived line's room is the line under the field, drawn there or not. */
 .conversion_fit {
 	flex: 1;
 	min-width: 0;

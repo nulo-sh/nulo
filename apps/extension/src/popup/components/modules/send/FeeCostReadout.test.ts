@@ -186,7 +186,7 @@ describe("FeeCostReadout · a sponsor added by hand", () => {
 	test("a dash, spoken as what Nulo can't tell; no amount and no Nothing", () => {
 		const w = factory({ estimate: ESTIMATE, payer: "unvouched" })
 		expect(drawn(w)).toBe("You pay —")
-		expect(spoken(w)).toBe("You pay Nulo can't tell what this fee contract charges you.")
+		expect(spoken(w)).toBe("You pay Nulo can't tell what this FPC charges you.")
 		expect(w.text()).not.toContain("Nothing")
 		expect(w.text()).not.toContain("3.577824")
 		expect(w.find('[data-testid="fee-estimate-usd"]').exists()).toBe(false)

@@ -91,7 +91,7 @@ describe("stale network on a live node", () => {
 				expect(await getAccountAddress(page)).toBe(trueAddress)
 
 				await importTokenAndWaitForBalance(page, trueAddress, aztecConfig!.tokenAddress, MINTED.toString())
-				await sendTransfer(page, { fromType: "public", toType: "public", amount: "10", destination: trueAddress, expect: "send" })
+				await sendTransfer(page, { fromType: "public", toType: "public", amount: "10", destination: trueAddress })
 				await waitForTxConfirmation(page, { amount: "10", fromType: "public", toType: "public", timeout: 180_000 })
 
 				const history = await transactionRows(page)

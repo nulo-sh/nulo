@@ -10,7 +10,7 @@ const meta: Meta<typeof AmountCard> = {
 		tokenBalanceByType: 1000,
 		balanceRawByType: "1000000000",
 		balanceState: "read",
-		selectedSendType: "private",
+		side: "private",
 		modelValue: "",
 	},
 	render: (args) => ({
@@ -27,4 +27,4 @@ export const Default: Story = {}
 export const WithValue: Story = { args: { modelValue: "12.5" } }
 export const NoBalance: Story = { args: { tokenBalanceByType: 0, balanceRawByType: "0" } }
 export const BalanceLoading: Story = { args: { balanceState: "loading" } }
-export const PublicSend: Story = { args: { selectedSendType: "public" } }
+export const PublicSend: Story = { args: { side: "public" } }
