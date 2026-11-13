@@ -183,10 +183,8 @@ const outflows = computed(() =>
 		? accountOutflows(sendTxRows.value, props.op.accountAddress, props.tokens, props.op.network?.chainId, signedAuthorizations.value)
 		: [],
 )
-/** The fee row's "set by" lines name the app as its chip does; the failed readout's payer label keeps
- *  the name as the session holds it. */
+/** Every line of the fee row names the app as its chip does. */
 const appName = computed(() => appLabelOf(props.dapp?.name) || "the app")
-const payerName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
 /** The app picked the method but the person pays, so the card claims nothing for the app and never
  *  reads the fee contract's own pool as the person's. */
 const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
@@ -418,7 +416,7 @@ const advises = computed((): boolean => {
 							{{ privateFeeJuice ? `Private Fee Juice · set by ${appName}` : `Set by ${appName}` }}
 						</Text>
 					</Flex>
-					<FeeCostReadout failed :label="personPaysAppPayment(op) ? 'You pay' : `${payerName} pays`" @retry="onRetryAppEstimate" />
+					<FeeCostReadout failed :label="personPaysAppPayment(op) ? 'You pay' : `${appName} pays`" @retry="onRetryAppEstimate" />
 				</Flex>
 				<Flex v-else align="start" gap="8" wide :class="$style.op_fee_set">
 					<span v-if="feeSealed" data-testid="execute-op-fee-seal" role="img" :aria-label="LEVEL_LABEL.nulo" :class="$style.fee_seal">

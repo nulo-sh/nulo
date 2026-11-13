@@ -1,4 +1,5 @@
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
+import { appLabelOf } from "@/components/composite/contract-chip"
 import { OriginType } from "@/wallet/services/transaction/client"
 import { FEE_METHODS } from "@/utils/tx-enrichment"
 import { isPrivateFpc } from "@/wallet/services/fpc/private-fpc-address"
@@ -64,7 +65,7 @@ function describeExternalFee(tx: FeePaymentLabelInput): string {
 	if (!feeCall && tx.origin?.type === OriginType.UI) return isPrivateFpc(tx.feeSpender) ? "Private Fee Juice" : "Sponsored"
 	// The person's own pick names no app, whatever the row's origin.
 	if (tx.feeChoice === "wallet") return "External FPC"
-	if (tx.origin?.type === OriginType.DAPP) return `Set by ${tx.origin.name ?? "the app"}`
+	if (tx.origin?.type === OriginType.DAPP) return `Set by ${appOf(tx)}`
 	return "External FPC"
 }
 
@@ -72,7 +73,7 @@ function describeExternalFee(tx: FeePaymentLabelInput): string {
  *  matched when the row was written, the PrivateFPC is matched here against its pinned address. */
 function describeAppFee(tx: FeePaymentLabelInput): string | null {
 	const method = tx.feePaymentMethod
-	const app = tx.origin?.name ?? "the app"
+	const app = appOf(tx)
 	// The wallet's own entrypoint makes the claim to the sender, so its method is known whoever chose it.
 	if (method === AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM) return `Public Fee Juice (with claim), set by ${app}`
 	if (method === AccountFeePaymentMethodOptions.EXTERNAL) {
@@ -81,6 +82,11 @@ function describeAppFee(tx: FeePaymentLabelInput): string | null {
 	}
 	if (method === AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE) return `Set by ${app}`
 	return method !== undefined ? `Unknown (${method})` : null
+}
+
+/** The app as its chip labels it; the App row above the line keeps the declared name. */
+function appOf(tx: FeePaymentLabelInput): string {
+	return appLabelOf(tx.origin?.name) || "the app"
 }
 
 function provenAppMethod(tx: FeePaymentLabelInput): string | undefined {
