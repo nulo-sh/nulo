@@ -186,7 +186,7 @@ From the real popup over seeded storage through `shotSend` under `NULO_E2E_SHOT_
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `5736a920a`. Specific to this plan:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `5736a920a`. Specific to this plan:
 - **Loop placement**: per arc at its boundary while it is the stack tip; one fresh cross-arc pass over the net diff from `5736a920a` before the close-out.
 - **Reviewer**: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; the prompt carries the arc's diff, this plan, the arc map ("arc N of 3: the form; the review; the close-out"), the adversarial ask and the standard's two rules verbatim. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) beside round 1. Hard stop at three rounds.
 - **While implementing**: comments state invariants only; attempts go to `lessons/phase-N.md`; `agent-worktree status send-build-1 "phase N green: <next>"` per gate; three failures on one step end the arc.
