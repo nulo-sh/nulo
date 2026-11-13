@@ -1,7 +1,7 @@
 ---
 plan: verified-contracts-build-1
 tier: mid
-status: planned
+status: completed
 issues: "none: the charter is pages 135 and 139 and the owner's scope answer"
 driver: claude-code
 claude_model: opus
@@ -13,6 +13,19 @@ base: dev 1593cf027
 trunk: dev
 post_implementation_standard: implementations-plan/README.md § Post-implementation standard at 1593cf027
 ---
+
+## Outcome
+
+- **Date:** 2026-11-13.
+- **Status:** completed. Arc 1 shipped in #1805 (`06aeddff9`). Arc 2 ships in the PR titled `feat(execute): fee row seal, held chips, contact names and callers as chips; the plan closes`, which carries this close-out; it lands on the owner's decision page with its captures.
+- **Shipped:** arc 1: contract and app chips with the s1 seal for Nulo verified, sourced from the signed token list and the pinned PrivateFPC, their presses, the glossary's Contracts section and the unreadable-call count line (P135, P139, P140). Arc 2: the app-paid fee row's seal for a pinned fee contract, no square-check, no PrivateFPC second line, no seal in the fee card (P143-01 b2, P143-02 b3, P143-04 n1, P143-05 s1); held chips with a 1,000 ms cap (P143-03 d); a contact's or account's name on an unverified chip, and the caller, "from" and "to" as chips (P144-02 b, P144-03 b); "comes from the contract's code" (P144-04 b); the app chip's label without pictographs (P144-06 b); P144-05, -07 and -09 = a as built; A14's (a) and (b) captured for P144-08.
+- **Gates (arc 2, retry 0):** static at `c76542ceb` (lint, typecheck:all, test, test:all, test:ci-gating, build, check:plans; the first test run exited 1 on a store mock missing `accounts`, fixed in that commit). Smoke, whole suite: Chrome at `c76542ceb` 2043 s, 292 passed (base `06aeddff9` 2037 s, 292); Firefox at `8266506f9` 2869 s, 297 passed (base 2863 s, one failure in `network-arrival.test.ts`, a file the arc leaves alone). After the cross-arc fix, `execute-steps.test.ts` on Chrome at `fb987dfe1`: 11 passed. Network through `e2e:agent`: Chrome, ten files at `8266506f9`, 852 s, all green but `type-roles-windows.test.ts`'s reveal rule on two chip sites, fixed in `a17bf3016` and green on its rerun (271 s); `tx-sendTx-noFrom.test.ts` alone and proverless, 146 s. Firefox, the same ten files at `a17bf3016`, 1440 s, 24 passed; `tx-sendTx-noFrom.test.ts` proverless, 152 s. `test:all` and `build-storybook` at `a17bf3016`: green.
+- **Deviations:** arc 1 merged before arc 2 opened, so arc 2 is a plain PR on dev, not a stacked layer; the smoke "before" ran in a scratch worktree beside each "after" run (D29); the review fixes landed after the Chrome smoke, so `execute-steps.test.ts` reran on them; `tx-sendTx-noFrom.test.ts` runs only proverless, so it ran alone.
+- **Owner decisions, named and not filed:** the Aztecscan reader (P135-11); the apps list (P135-12, with P135-10's "belongs to <origin>"); protocol contracts as a Nulo verified rung, and N2's effect lines (A8). Shipping as built, for the captures page: A4 (with n1's line), A5, A6 (with "Sponsored" and a pinned fee contract as a recipient), A10's check marks and the fee row's app name.
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget, and each candidate is covered already: a run reads each spec when it starts it (the `e2e-testing` skill), and Vue unit tests run no design resolver (the Vue unit-test line). The rest stay in `lessons/`.
+- **Known limits:** none.
+- **Open items:** none. #1804 (the claim-paid row's wording while the person pays) stays the owner's open call; this plan leaves its wording as it is.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # verified-contracts-build-1: the seal (s1) on the sources the wallet already has
 
@@ -164,7 +177,7 @@ P139-03 b's row: `trimAddress` in mono, then "View on {explorer}" with the `open
   3. Per browser: `NULO_E2E_BROWSER=<browser> NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/tx-transfer-row.test.ts tests/e2e/network/type-roles-windows.test.ts tests/e2e/network/connect-dapp.test.ts`.
   Pass: every command exits 0 at retry 0. Layers: all, with live-network e2e on the sandbox.
 
-### Phase 6 (arc 2): the late answers, then the close-out
+### Phase 6 (arc 2): the late answers, then the close-out ✓
 Branch `verified-contracts-build-1-a2` off dev after #1805's squash (`06aeddff9`, dev carrying #1803's fee row). Pages 143 and 144 are quoted in § Sign-offs; each change below maps one pick by content.
 - **Fee row** (P143-01 b2, P143-02 b3, P143-04 n1, P143-05 s1). `OperationCard.vue`'s app-paid row reads the paying contract through the chips' resolver: when `classifyFeePayer` gives `fpc` (a contract other than the account pays), `readContract(marks, chainId, exec.feePayer)`; the solid seal (`seal-solid`, testid `execute-op-fee-seal`) leads the running, landed, short and never-estimated row only on a pinned fee contract's `nulo` (the PrivateFPC, Nulo's sponsor), never a listed token named as the payer; nothing on `scan`, `none`, `pending`, a claim to the account, the account itself, no payer or `send_transaction` (its operation names no payer). The green square-check goes; the failed row draws no glyph; `execute-op-private-fee-notice` goes; `AppFeeLine` keeps its sentence as `vc5-fee-pfpc-nulo-done` drew it ("You pay about ~X from Private Fee Juice", "method set by <app>"), s1's "nothing more" read as no balance line. The fee card is untouched (b3). The resolver learns Nulo's sponsor: `SPONSORED_FPC_ADDRESS` beside the PrivateFPC's, pinned to the derivation in `protocol-fpcs.test.ts`, read as `{ level: "nulo"; source: "sponsor" }` on every chain like the PrivateFPC (the address fixes the code; a sponsor with no instance fails its estimate, and the failed row has no glyph); its chip reads "Sponsored", the fee card's name (draft, A6). n1: the glossary's Nulo verified line names the referent (draft, A4): "Nulo knows which contract this is, or which one pays the fee; that isn't a promise that it's safe." (98 characters, one sentence).
 - **Held chips** (P143-03 d), the plan change the pick approves:
