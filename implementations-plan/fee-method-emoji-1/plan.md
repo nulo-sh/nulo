@@ -63,7 +63,7 @@ Page 146's P146-04 = b: the approval window's fee row prints the app's name thro
 
 **Asks.** None blocks the arc. A1 (History) and A2 (the payer label) are in `OWNER-ASKS.md`.
 
-## Phase 1: the filter and its tests
+## Phase 1: the filter and its tests ✓
 
 Assumptions used: F1, F2, F3, D1-D4.
 
@@ -84,7 +84,7 @@ Assumptions used: F1, F2, F3, D1-D4.
 - Pass criteria: require every command to exit 0. Require T1-T4 to pass. Require every existing assertion in `OperationCard.fee.test.ts` and `ContractChip.test.ts` to pass unedited.
 - Layers: lint, typecheck, unit and component, smoke e2e, network e2e.
 
-## Phase 2: captures and the PR
+## Phase 2: captures and the PR (captures ✓)
 
 Assumptions used: D5, F4, F5.
 
@@ -141,3 +141,8 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 Rejected: none. Kept against the critique: the gate list keeps `audit:vue` and `test:all` beside the single commands, because the lane brief names that sequence.
 
 **Final fresh Codex pass** (new session, gpt-6.1-sol, high, read-only), 2026-11-13: approve with changes. It confirmed F1-F5, D1 and D2 (two copy roles, not a patch), and verified I2 (`discovery-flow.ts:479` sanitizes and caps the stored name, so T4 pins the helper's order, not a recovery of what discovery cut). Accepted: the review wrapper's path and resume contract written into Post-implementation; the title is 91 characters; T1's exact failed text. Verify round (resumed): approve, no regressions.
+
+**Arc review, round 1** (Codex, gpt-6.1-sol, high, read-only, over `origin/dev...HEAD` at `dbba75096`): approve, no findings. It compared `appChipOf` before and after over 10,031 inputs (byte-identical) and confirmed that only the three set-by prints change.
+
+**Opus diff review** (beside round 1): approve. Accepted: the `appChipOf` doc wording (`029f7f11d`). Rejected: deleting T3 (the lane brief asks for the same-fixture pin of sentence and press) and trimming T2 to one print (the pick names both sentences; the four mounts cost milliseconds). Noted, no action: `stripPictographs` collapses spaces before `sanitizeWireString` removes control characters, so `" A \u0000 B "` keeps two spaces; it predates this arc and is the chip's own output.
+
