@@ -5,7 +5,11 @@ import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "
 import SendFeeLine from "./SendFeeLine.vue"
 
 const PRICED = { amount: "0.00214", usd: "$0.027" }
-const STUBS = { Skeleton: { template: '<span data-testid="stub-bar" />' } }
+const STUBS = {
+	Skeleton: { template: '<span data-testid="stub-bar" />' },
+	// The term's definition is its own test's; here only its key and its word.
+	DottedTerm: { props: ["term", "testid"], template: '<span :data-testid="testid" :data-term="term"><slot /></span>' },
+}
 
 const mountLine = (props: Record<string, unknown> = {}) =>
 	mount(SendFeeLine, { props: { payer: "private_fpc", display: PRICED, ...props }, global: { stubs: STUBS } })
@@ -74,6 +78,7 @@ describe("modules/send/SendFeeLine", () => {
 		const w = mountLine({ payer: "unvouched", payerName: "Mine" })
 		expect(value(w)).toBe("—, Mine")
 		expect(notes(w)).toEqual([UNVOUCHED_FEE_SENTENCE])
+		expect(w.findAll("[data-term]").map((t) => [t.attributes("data-term"), t.text()])).toEqual([["fpc", "FPC"]])
 	})
 
 	test("estimating: a bar where the figure goes", () => {

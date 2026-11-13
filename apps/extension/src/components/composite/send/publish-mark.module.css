@@ -18,3 +18,20 @@
 	color: var(--txt-tertiary);
 	opacity: 0.55;
 }
+
+/* The one warning, on the form and in the review alike: a send whose fee names the account. */
+.warning_box {
+	composes: type--body from global;
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 8px 10px;
+	background: var(--nulo-surface-low);
+	color: var(--txt-warning);
+	box-shadow: inset 3px 0 0 var(--yellow);
+}
+
+.warning_mark {
+	flex: none;
+	color: var(--yellow);
+}

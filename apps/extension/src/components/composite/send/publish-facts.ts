@@ -55,7 +55,6 @@ const NOTICE_BODY: Record<NoticeShape, string> = {
 
 export const FACT_SENTENCES = {
 	sender: "A public origin shows the balance leaving your account, so your address is on the chain as the sender.",
-	unvouched: "This FPC was added by hand. Nulo cannot tell what it publishes about you.",
 	recipient: "A public destination shows the balance arriving at the recipient's address.",
 	amount: "Either side being public shows the balance change, and with it the amount.",
 } as const
@@ -139,7 +138,7 @@ export function rowSentence(cell: FactCell, facts: PublishFacts, payer: PayerKin
 	if (cell === "amount") return facts.amount === "public" ? FACT_SENTENCES.amount : null
 	if (facts.you === "public") return FACT_SENTENCES.sender
 	if (facts.you === "exposed") return noticeBodyFor(facts.noticeShape ?? "private-private")
-	return facts.you === "unknown" && payer === "unvouched" ? FACT_SENTENCES.unvouched : null
+	return facts.you === "unknown" && payer === "unvouched" ? UNVOUCHED_PUBLISH_SENTENCE : null
 }
 
 /**
@@ -154,21 +153,6 @@ export function paidBy(payer: PayerKind, type: PayerDescriptor["type"] | undefin
 
 const joinList = (items: string[]): string =>
 	items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`
-
-export function stripAriaLabel(facts: PublishFacts): string {
-	const published: string[] = []
-	if (facts.you === "public") published.push("your address as the sender")
-	if (facts.you === "exposed") published.push("your address as the fee payer")
-	if (facts.recipient === "public") published.push("the recipient")
-	if (facts.amount === "public") published.push("the amount")
-
-	const sentences: string[] = []
-	if (published.length > 0) sentences.push(`This send publishes ${joinList(published)}.`)
-	else if (facts.you !== "unknown") sentences.push("This send publishes nothing.")
-	if (facts.you === "unknown") sentences.push("Your address: not known yet.")
-	sentences.push("Open details")
-	return sentences.join(" ")
-}
 
 /** Said once on Send for a hand-added sponsor, which may publish anything about the sender. */
 export const UNVOUCHED_PUBLISH_SENTENCE = "Nulo can't tell what this FPC publishes about you."

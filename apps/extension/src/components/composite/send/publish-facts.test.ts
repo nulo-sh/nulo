@@ -15,10 +15,9 @@ import {
 	publishGlyph,
 	publishSentence,
 	rowSentence,
-	UNVOUCHED_FEE_SENTENCE,
-	stripAriaLabel,
 	TOKEN_CAVEAT,
 	type TransferSide,
+	UNVOUCHED_FEE_SENTENCE,
 	UNVOUCHED_PUBLISH_SENTENCE,
 } from "./publish-facts"
 
@@ -110,7 +109,6 @@ describe("copy", () => {
 		})
 		expect(FACT_SENTENCES).toEqual({
 			sender: "A public origin shows the balance leaving your account, so your address is on the chain as the sender.",
-			unvouched: "This FPC was added by hand. Nulo cannot tell what it publishes about you.",
 			recipient: "A public destination shows the balance arriving at the recipient's address.",
 			amount: "Either side being public shows the balance change, and with it the amount.",
 		})
@@ -153,7 +151,8 @@ describe("copy", () => {
 		for (const cell of ["you", "recipient", "amount"] as const) expect(rowSentence(cell, hidden, "contract")).toBeNull()
 
 		const unknown = publishFacts("private", "private", "unvouched")
-		expect(rowSentence("you", unknown, "unvouched")).toBe(FACT_SENTENCES.unvouched)
+		// A hand-added sponsor reads the form's sentence.
+		expect(rowSentence("you", unknown, "unvouched")).toBe(UNVOUCHED_PUBLISH_SENTENCE)
 		expect(rowSentence("you", unknown, null)).toBeNull()
 	})
 
@@ -164,20 +163,6 @@ describe("copy", () => {
 		expect(paidBy("contract", "fpc")).toBe(PAID_BY.sponsor)
 		expect(paidBy("unvouched", "fpc")).toBeNull()
 		expect(paidBy(null, "fj")).toBeNull()
-	})
-
-	test("the strip's label says nothing only when all three are hidden, and never guesses an unknown", () => {
-		const label = (o: TransferSide, d: TransferSide, p: PayerKind) => stripAriaLabel(publishFacts(o, d, p))
-		expect(label("private", "private", "contract")).toBe("This send publishes nothing. Open details")
-		expect(label("private", "private", "account")).toBe("This send publishes your address as the fee payer. Open details")
-		expect(label("public", "private", null)).toBe("This send publishes your address as the sender and the amount. Open details")
-		expect(label("public", "public", "account")).toBe(
-			"This send publishes your address as the sender, the recipient and the amount. Open details",
-		)
-		expect(label("private", "private", null)).toBe("Your address: not known yet. Open details")
-		expect(label("private", "public", "unvouched")).toBe(
-			"This send publishes the recipient and the amount. Your address: not known yet. Open details",
-		)
 	})
 })
 

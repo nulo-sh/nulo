@@ -249,7 +249,6 @@ const STUBS = {
 			"needsFeeJuice",
 			"payer",
 			"feeDisplay",
-			"queuedCapText",
 			"accountUnusable",
 			"notices",
 			"remedy",
@@ -259,7 +258,6 @@ const STUBS = {
 			"update:needsFeeJuice",
 			"update:payer",
 			"update:feeDisplay",
-			"update:queuedCapText",
 			"update:accountUnusable",
 			"update:notices",
 			"update:remedy",
@@ -373,6 +371,12 @@ async function fillForm(w: W, method: Method | null = SPONSOR) {
 const submit = (w: W) => w.get('[data-testid="send-submit"]')
 const sheetOpen = (w: W) => w.get('[data-testid="send-review-sheet"]').attributes("data-open") === "true"
 const sendNow = (w: W) => w.get('[data-testid="send-review-submit"]')
+/** The review's "Your address" row, and the warning's shape when the fee names the account. */
+const reviewYou = (w: W) => w.get('[data-testid="send-review-row-you"]').attributes("data-visibility")
+const reviewShape = (w: W) => {
+	const box = w.find('[data-testid="send-review-warning"]')
+	return box.exists() ? box.attributes("data-notice-shape") : undefined
+}
 /** The review's own Popup: the fee sheet's comes first in the page. */
 const reviewPopup = (w: W) => w.getComponent({ name: "SendReviewSheet" }).getComponent({ name: "Popup" })
 /** The publish line's region, which carries the facts' `you` cell. */
@@ -1152,8 +1156,8 @@ describe("send page — consent", () => {
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 		expect(sheetOpen(w)).toBe(true)
-		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-visibility")).toBe(you)
-		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-notice-shape")).toBe(shape)
+		expect(reviewYou(w)).toBe(you)
+		expect(reviewShape(w)).toBe(shape)
 		w.unmount()
 	})
 
@@ -1194,7 +1198,7 @@ describe("send page — consent", () => {
 		expect(ready(w)).toBe("true")
 
 		await feeCard(w, FJ)
-		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-visibility")).toBe("exposed")
+		expect(reviewYou(w)).toBe("exposed")
 		expect(ready(w)).toBe("false")
 		vi.advanceTimersByTime(REVIEW_ARM_MS - 1)
 		await nextTick()
@@ -1239,7 +1243,7 @@ describe("send page — consent", () => {
 		popupStore.open("confirm")
 		await nextTick()
 		expect(ready(w)).toBe("false")
-		expect(sendNow(w).attributes("disabled")).toBeDefined()
+		expect(sendNow(w).attributes("aria-disabled")).toBe("true")
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 
@@ -2346,6 +2350,29 @@ describe("send page — Refresh quote by keyboard", () => {
 		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 1.904761 USDC"))
 		expect(w.find('[data-testid="send-fiat-requote"]').exists()).toBe(false)
 		expect(document.activeElement).toBe(w.get('[data-testid="send-amount-fiat-input"]').element)
+		w.unmount()
+	})
+
+	test("the review prints the form's dollar figure beside its amount, and none before a price", async () => {
+		const chainId = CHAIN_IDS.TESTNET
+		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }
+		mocks.getTokens.mockResolvedValue([priced])
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
+		const { w } = await mountSend({ realAmountCard: true, chainId, form: true })
+		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
+		const reviewFiat = () => w.getComponent({ name: "SendReviewSheet" }).props("fiat")
+
+		await w.get('[data-testid="send-amount-input"]').setValue("4.32")
+		await nextTick()
+		expect(reviewFiat()).toBeNull()
+
+		price.onQuotesUpdated.invoke({
+			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
+			pricedTokens: TEST_PRICED_TOKENS,
+			tokenIcons: {},
+		})
+		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-fiat-label"]').text()).toBe("≈ $4.32"))
+		expect(reviewFiat()).toBe("≈ $4.32")
 		w.unmount()
 	})
 })

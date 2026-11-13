@@ -56,6 +56,9 @@ const fiatGuard = defineModel("fiatGuard", { default: null })
  * one "." as one a typed comma wrote, and lasts while that point does.
  */
 const rested = defineModel("rested", { default: null })
+/** One-way out: the amount in dollars as this card reads it ("≈ $43.20"), for the review; null with no
+ *  price or no amount. USD mode prices it at the quote it froze, the one its token amount came from. */
+const usdFigure = defineModel("usdFigure", { default: null })
 let commaPoint = false
 /** The text the card last wrote or the page last set: the prior text of the next edit. */
 let lastText = String(model.value ?? "")
@@ -258,11 +261,16 @@ const unitRateLabel = computed(() => {
 	return `1 ${symbolBlank.value ? "token" : props.token.symbol} ≈ ${formatUsdMicro(unitMicro)}`
 })
 
+const amountUsd = computed(() => {
+	const usd = fiatMode.value ? fiatGuard.value?.frozenUsd : props.liveQuote?.usd
+	if (typeof usd !== "number" || !modelRaw.value) return null
+	return `≈ ${formatUsdMicro(tokenAmountToUsdMicro(modelRaw.value, tokenDecimals.value, usd))}`
+})
+
 const tokenModeFiatLabel = computed(() => {
 	if (!props.liveQuote) return null
 	if (modelRaw.value === null || modelRaw.value === 0n) return unitRateLabel.value
-	const micro = tokenAmountToUsdMicro(modelRaw.value, tokenDecimals.value, props.liveQuote.usd)
-	return `≈ ${formatUsdMicro(micro)}`
+	return amountUsd.value
 })
 
 const conversionTitle = computed(() => (props.proxyTicker ? `Priced via ${props.proxyTicker}, at today's rate` : "At today's rate"))
@@ -380,6 +388,13 @@ watch(
 )
 /** Quote lost mid-session: the toggle hides and requote is a no-op without a
  *  live quote — fiat mode would be stuck. Exit instead. */
+watch(
+	amountUsd,
+	(figure) => {
+		usdFigure.value = figure
+	},
+	{ immediate: true },
+)
 watch(canUseFiatInput, (can) => {
 	if (!can && fiatMode.value) exitFiatMode({ clearAmount: true })
 })

@@ -4,6 +4,7 @@
  * sponsor, which only some networks have. The region stays mounted, so a line that changes is announced.
  */
 import { computed } from "vue"
+import FpcSentence from "./FpcSentence.vue"
 import { feeWarning, type PayerKind, type PublishFacts, publishSentence } from "./publish-facts"
 
 const props = defineProps<{
@@ -31,7 +32,7 @@ const sentence = computed(() => (warning.value ? null : publishSentence(props.fa
 				<a v-else :href="bridgeUrl" target="_blank" rel="noopener noreferrer" :class="$style.fix" data-testid="send-fee-warning-bridge">Get private Fee Juice</a>
 			</span>
 		</div>
-		<p v-else-if="sentence" :class="$style.sentence" data-testid="send-publish-line">{{ sentence }}</p>
+		<p v-else-if="sentence" :class="$style.sentence" data-testid="send-publish-line"><FpcSentence :text="sentence" /></p>
 	</div>
 </template>
 
@@ -47,19 +48,11 @@ const sentence = computed(() => (warning.value ? null : publishSentence(props.fa
 }
 
 .warning {
-	composes: type--body from global;
-	display: flex;
-	align-items: baseline;
-	gap: 8px;
-	padding: 8px 10px;
-	background: var(--nulo-surface-low);
-	color: var(--txt-warning);
-	box-shadow: inset 3px 0 0 var(--yellow);
+	composes: warning_box from "./publish-mark.module.css";
 }
 
 .mark {
-	flex: none;
-	color: var(--yellow);
+	composes: warning_mark from "./publish-mark.module.css";
 }
 
 .warning_body {

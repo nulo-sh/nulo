@@ -4,7 +4,11 @@ import { NO_FACTS, type PayerKind, publishFacts, type TransferSide, UNVOUCHED_PU
 import PublishLine from "./PublishLine.vue"
 
 const BRIDGE = "https://bridge.example"
-const STUBS = { Icon: { template: '<i data-testid="stub-icon" :data-name="name" />', props: ["name", "size"] } }
+const STUBS = {
+	Icon: { template: '<i data-testid="stub-icon" :data-name="name" />', props: ["name", "size"] },
+	// The term's definition is its own test's; here only its key and its word.
+	DottedTerm: { props: ["term", "testid"], template: '<span :data-testid="testid" :data-term="term"><slot /></span>' },
+}
 
 function mountLine(origin: TransferSide, arrival: TransferSide, payer: PayerKind, extra: Record<string, unknown> = {}) {
 	return mount(PublishLine, {
@@ -69,6 +73,8 @@ describe("composite/send/PublishLine", () => {
 		const w = mountLine("private", "public", "unvouched")
 		expect(line(w).text()).toBe(`${UNVOUCHED_PUBLISH_SENTENCE} Anyone can see Ana's address and the amount.`)
 		expect(line(w).text()).not.toContain("Nobody")
+		// The sentence's "FPC" is the glossary's term; the name after it is not.
+		expect(w.findAll("[data-term]").map((t) => [t.attributes("data-term"), t.text()])).toEqual([["fpc", "FPC"]])
 	})
 
 	test("an unnamed recipient is their address", () => {

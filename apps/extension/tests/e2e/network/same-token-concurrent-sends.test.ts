@@ -724,7 +724,7 @@ async function readReaskSheet(page: Page): Promise<{ line: string; button: strin
 	await waitForReview(page, true)
 	await waitForReviewReady(page)
 	return page.evaluate(() => ({
-		line: document.querySelector('[data-testid="send-review-fee-reask"]')?.textContent?.trim() ?? "",
+		line: document.querySelector('[data-testid="send-review-fee-reask"] > span')?.textContent?.trim() ?? "",
 		button: document.querySelector('[data-testid="send-review-submit"]')?.textContent?.trim() ?? "",
 	}))
 }

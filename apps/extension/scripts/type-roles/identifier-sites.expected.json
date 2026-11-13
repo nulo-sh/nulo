@@ -389,38 +389,6 @@
 			"state": "the person step"
 		},
 		{
-			"file": "apps/extension/src/popup/components/modules/send/SendReviewSheet.vue",
-			"expression": "recipientEnds.head",
-			"branch": "recipientAddress",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "popup-send",
-			"state": "",
-			"why": "an end of the whole address, in full ink inside the element its middle's entry reads"
-		},
-		{
-			"file": "apps/extension/src/popup/components/modules/send/SendReviewSheet.vue",
-			"expression": "recipientEnds.middle",
-			"branch": "recipientAddress",
-			"ordinal": 0,
-			"role": "meta",
-			"selector": "[data-testid=\"send-review-recipient-address\"]",
-			"surface": "popup-send",
-			"state": "recipient and amount typed, review sheet open (network)"
-		},
-		{
-			"file": "apps/extension/src/popup/components/modules/send/SendReviewSheet.vue",
-			"expression": "recipientEnds.tail",
-			"branch": "recipientAddress",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "popup-send",
-			"state": "",
-			"why": "an end of the whole address, in full ink inside the element its middle's entry reads"
-		},
-		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
 			"expression": "authwit.content.selector",
 			"branch": "authwit.content.kind === 'encoded_call'",

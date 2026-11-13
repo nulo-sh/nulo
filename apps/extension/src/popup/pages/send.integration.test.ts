@@ -196,6 +196,8 @@ const STUBS = {
 	Icon: { template: "<i />" },
 	Skeleton: { template: "<span />" },
 	Tooltip: { template: '<div><slot /><slot name="content" /></div>' },
+	// The term's definition is its own test's; here only its key and its word.
+	DottedTerm: { props: ["term", "testid"], template: '<span :data-testid="testid" :data-term="term"><slot /></span>' },
 	Banner: { template: '<div data-testid="stub-banner"><slot /></div>' },
 	Button: {
 		template: '<button v-bind="$attrs" :disabled="disabled || loading" @click="$emit(\'click\', $event)"><slot /></button>',
@@ -379,11 +381,26 @@ function settled(w: W) {
 	expect(namesAccount(w)).toBe(you === "exposed")
 	return you
 }
-/** The three cells as the open review's rows read them. */
-const reviewCells = (w: W) =>
-	Object.fromEntries(
-		["you", "to", "amount"].map((row) => [row, w.get(`[data-testid="send-review-row-${row}"]`).attributes("data-visibility")]),
-	)
+/** The open review's three "This send publishes" rows. */
+const reviewCells = (w: W) => {
+	const row = (id: string) => w.get(`[data-testid="send-review-row-${id}"]`).attributes("data-visibility")
+	return { you: row("you"), to: row("to"), amount: row("amount") }
+}
+/** The review's fee row and the form's fee line, each as its value then its notes. */
+const reviewFeeLines = (w: W) =>
+	w
+		.get('[data-testid="send-review-fee"]')
+		.findAll(":scope > span:last-child > span")
+		.map((el) => el.text())
+const formFeeLines = (w: W) => [
+	w.get('[data-testid="send-fee-line-value"]').text(),
+	...w.findAll('[data-testid="send-fee-line-note"] p').map((p) => p.text()),
+]
+/** The review's warning's shape, or undefined when it shows no warning. */
+const reviewShape = (w: W) => {
+	const box = w.find('[data-testid="send-review-warning"]')
+	return box.exists() ? box.attributes("data-notice-shape") : undefined
+}
 
 function balanceUpdated() {
 	const client = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
@@ -461,7 +478,7 @@ describe.each(SWEEP)("send page with the real fee card — %s, %s origin", (fund
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 		expect(sheetOpen(w)).toBe(true)
 		expect(reviewCells(w)).toEqual({ you, ...SIDE_CELLS[`${origin}→${destination}`] })
-		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-notice-shape")).toBe(shape)
+		expect(reviewShape(w)).toBe(shape)
 		expect(w.get('[data-testid="send-review-fee"]').attributes("data-payer")).toBe(payer)
 
 		await armed()
@@ -659,9 +676,13 @@ describe("send page with the real fee card — transitions", () => {
 		await nextTick()
 		expect(settled(w)).toBe("unknown")
 		await estimateLands()
+		// The form dots each sentence's "FPC" and nothing else: two terms, the screen's cap.
+		const terms = (root: Element) => [...root.querySelectorAll("[data-term]")].map((t) => t.getAttribute("data-term"))
+		expect(terms(w.element)).toEqual(["fpc", "fpc"])
 		await submit(w).trigger("click")
 		expect(w.get('[data-testid="send-review-fee"]').attributes("data-payer")).toBe("unvouched")
-		expect(w.get('[data-testid="send-review-row-you"]').text()).toContain("added by hand")
+		expect(w.get('[data-testid="send-review-row-you"]').text()).toContain("Nulo can't tell what this FPC publishes about you.")
+		expect(terms(w.get('[data-testid="send-review"]').element)).toEqual(["fpc", "fpc"])
 		w.unmount()
 	})
 
@@ -715,7 +736,7 @@ describe("send page with the real fee card — transitions", () => {
 		expect(settled(w)).toBe("exposed")
 		await estimateLands()
 		await submit(w).trigger("click")
-		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-notice-shape")).toBe("private-public")
+		expect(reviewShape(w)).toBe("private-public")
 		expect(reviewCells(w)).toEqual({ you: "exposed", to: "public", amount: "public" })
 		await closeSheet(w)
 
@@ -936,7 +957,8 @@ describe("send page with the real fee card — the review sheet's fee", () => {
 		const shown = w.get('[data-testid="stub-fee-cost"]').attributes("data-usd")
 		expect(shown).toMatch(/^\$0\.0\d0$/)
 		await submit(w).trigger("click")
-		expect(w.get('[data-testid="send-review-fee"] span').text()).toBe(`Fee · ~1 FJ (${shown})`)
+		expect(reviewFeeLines(w)).toEqual([`≈ ${shown} (1 FJ), public Fee Juice`])
+		expect(reviewFeeLines(w)).toEqual(formFeeLines(w))
 		w.unmount()
 	})
 })
@@ -1031,9 +1053,9 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		expect(submit(w).text()).toBe("Review send")
 		expect(sendDisabled(w)).toBe(false)
 		await submit(w).trigger("click")
-		expect(w.get('[data-testid="send-review-fee-cap"]').text()).toBe(
-			"Fee up to ~4.47228 FJ, based on your last send. If it comes out higher, we ask again.",
-		)
+		expect(w.find('[data-testid="send-review-fee-cap"]').exists()).toBe(true)
+		expect(reviewFeeLines(w)).toEqual(formFeeLines(w))
+		expect(reviewFeeLines(w)[1]).toBe("Goes out after your earlier send, for at most 4.47228 FJ.")
 		expect(sendNow(w).text()).toBe("Queue send")
 		await armed()
 		await sendNow(w).trigger("click")
@@ -1078,7 +1100,9 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		expect(submit(w).text()).toBe("Review send")
 		expect(sendDisabled(w)).toBe(false)
 		await submit(w).trigger("click")
-		expect(w.get('[data-testid="send-review-fee-queued"]').text()).toBe("Fee · Goes out after your earlier send.")
+		expect(w.find('[data-testid="send-review-fee-queued"]').exists()).toBe(true)
+		expect(reviewFeeLines(w)).toEqual(["Nothing · Sponsored", "Goes out after your earlier send."])
+		expect(reviewFeeLines(w)).toEqual(formFeeLines(w))
 		expect(sendNow(w).text()).toBe("Queue send")
 		await armed()
 		await sendNow(w).trigger("click")
@@ -1198,14 +1222,15 @@ describe("send page — an estimate that runs long", () => {
 		expect(sheetOpen(w)).toBe(true)
 		const fee = () => w.get('[data-testid="send-review-fee"]')
 		expect(sendNow(w).text()).toBe("Estimating fee")
-		expect(fee().text()).toContain("Fee · —")
+		expect(fee().text()).toBe("Fee")
 		await vi.advanceTimersByTimeAsync(20_000)
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(asked + 1)
-		expect(fee().text()).toContain("Fee · Taking longer than usual. Try again")
+		expect(w.get('[data-testid="send-review-fee-slow"]').text()).toContain("Taking longer than usual.")
+		expect(w.get('[data-testid="send-review-fee-slow"] [data-testid="send-review-fee-retry"]').text()).toBe("Try again")
 		await w.get('[data-testid="send-review-fee-retry"]').trigger("click")
 		await vi.advanceTimersByTimeAsync(800)
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(asked + 2)
-		expect(fee().text()).toContain("Fee · —")
+		expect(fee().text()).toBe("Fee")
 		w.unmount()
 	})
 })

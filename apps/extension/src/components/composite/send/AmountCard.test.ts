@@ -447,6 +447,39 @@ describe("composite/AmountCard — C3 fiat input", () => {
 	})
 })
 
+describe("composite/AmountCard — the amount in dollars, for the review", () => {
+	const TOKEN = { symbol: "TST", decimals: 18 }
+	const figures = (w: ReturnType<typeof mountCard>) => (w.emitted("update:usdFigure") ?? []).map(([v]) => v)
+
+	test("token mode: the readout's own words, at the live quote", async () => {
+		const w = mountCard({ token: TOKEN, liveQuote: { usd: 1.5, fetchedAt: Date.now() }, modelValue: "28.8" })
+		await nextTick()
+		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("≈ $43.20")
+		expect(figures(w).at(-1)).toBe("≈ $43.20")
+	})
+
+	test("no price or no amount: none", async () => {
+		const unpriced = mountCard({ token: TOKEN, liveQuote: null, modelValue: "28.8" })
+		await nextTick()
+		expect(figures(unpriced).at(-1) ?? null).toBeNull()
+		const empty = mountCard({ token: TOKEN, liveQuote: { usd: 1.5, fetchedAt: Date.now() }, modelValue: "" })
+		await nextTick()
+		expect(figures(empty).at(-1) ?? null).toBeNull()
+	})
+
+	test("USD mode: the quote it froze, never the live one", async () => {
+		const w = mountCard({
+			token: TOKEN,
+			liveQuote: { usd: 2, fetchedAt: Date.now() },
+			modelValue: "28.8",
+			fiatMode: true,
+			fiatGuard: { frozenUsd: 1.5, frozenAt: Date.now(), converting: false },
+		})
+		await nextTick()
+		expect(figures(w).at(-1)).toBe("≈ $43.20")
+	})
+})
+
 describe("composite/AmountCard — swap button + empty state", () => {
 	const TOKEN = { symbol: "cUSD", decimals: 6 }
 	const QUOTE = { usd: 0.999857, fetchedAt: Date.now() }

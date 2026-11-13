@@ -5,10 +5,10 @@
  * and the card's notices on the line under it.
  */
 import { computed, nextTick, useTemplateRef } from "vue"
-import { QUEUED_FEE_COPY } from "@/components/composite/send/publish-facts"
+import FpcSentence from "@/components/composite/send/FpcSentence.vue"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import type { FeeDisplay } from "@/utils/fee-estimation"
-import { FEE_LINE_METHOD, type FeeLinePayer, feeLineFigure, feeLineWords } from "./fee-line-words"
+import { type FeeLinePayer, feeLine, feeLineNotes } from "./fee-line-words"
 
 const props = withDefaults(
 	defineProps<{
@@ -41,34 +41,8 @@ const props = withDefaults(
 )
 const emit = defineEmits<{ change: []; retry: [] }>()
 
-type Line = { kind: "words"; value: string; note: string | null } | { kind: "bar" } | { kind: "slow" } | { kind: "failed" }
-
-const capSentence = (cap: FeeDisplay) =>
-	`Goes out after your earlier send, for at most ${cap.usd ? `${cap.usd} (${cap.amount} FJ)` : `${cap.amount} FJ`}.`
-
-/** A queued estimate's line, or null when nothing is queued. */
-function queuedLine(): Line | null {
-	if (!props.queued) return null
-	const cap = props.queuedCap
-	if (cap) {
-		const method = props.payer === "fj" || props.payer === "private_fpc" ? `, ${FEE_LINE_METHOD[props.payer]}` : ""
-		return { kind: "words", value: `${feeLineFigure(cap.about)}${method}`, note: capSentence(cap.cap) }
-	}
-	if (props.queuedSponsored) return { kind: "words", ...feeLineWords("sponsor", null, { queued: true }) }
-	return { kind: "words", value: QUEUED_FEE_COPY, note: null }
-}
-
-/** The estimate's own states first, as the card's cost row orders them. */
-const line = computed<Line>(() => {
-	if (props.estimating && !props.display) return queuedLine() ?? { kind: props.slow ? "slow" : "bar" }
-	if (props.failed && !props.display) return { kind: "failed" }
-	if (!props.payer) return { kind: "words", value: "—", note: null }
-	return { kind: "words", ...feeLineWords(props.payer, props.display, { name: props.payerName ?? undefined }) }
-})
-const notes = computed(() => {
-	const own = line.value.kind === "words" && line.value.note ? [line.value.note] : []
-	return [...own, ...props.notices]
-})
+const line = computed(() => feeLine(props))
+const notes = computed(() => feeLineNotes(line.value, props.notices))
 
 const changeEl = useTemplateRef<HTMLButtonElement>("changeEl")
 /** A retry replaces its own button, so the keyboard it held moves on to Change. */
@@ -109,7 +83,7 @@ function retry(e: Event) {
 			</button>
 		</div>
 		<div role="status" aria-live="polite" aria-atomic="true" :class="$style.notes" data-testid="send-fee-line-note">
-			<p v-for="note in notes" :key="note" :class="$style.note">{{ note }}</p>
+			<p v-for="note in notes" :key="note" :class="$style.note"><FpcSentence :text="note" /></p>
 		</div>
 	</div>
 </template>
