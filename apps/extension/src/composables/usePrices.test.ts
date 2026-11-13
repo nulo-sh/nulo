@@ -14,10 +14,11 @@ import type { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices, useTokenFlags } from "./usePrices"
 import { captureWindowDocument } from "@/utils/window-document"
 import { flaggedKeysOf } from "@/utils/token-flag"
-import { tokenIconsOf } from "@/utils/token-icon"
+import { listedTokensOf, tokenIconsOf } from "@/utils/token-icon"
 import {
 	TEST_FLAGGED,
 	TEST_ICONS,
+	TEST_LIST_ENTRIES,
 	TEST_LIST_ENTRIES_WITH_ICONS,
 	TEST_PRICED_TOKENS,
 	TEST_TOKENS,
@@ -31,6 +32,7 @@ const snap = (quotes: PriceState, { flagged = [TEST_FLAGGED], icons = ICONS } = 
 	pricedTokens: TEST_PRICED_TOKENS,
 	flaggedTokens: flaggedKeysOf(flagged),
 	tokenIcons: icons,
+	listedTokens: listedTokensOf(TEST_LIST_ENTRIES),
 })
 /** A row as a restored backup may store it: upper-case hex. */
 const FLAGGED_ROW = { chainId: TEST_FLAGGED.chainId, contract: `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}` }
@@ -408,6 +410,18 @@ describe("composables/useTokenFlags", () => {
 		expect(flags.isFlagged(FLAGGED_ROW)).toBe(false)
 		expect(client.getQuotes).toHaveBeenCalledTimes(2)
 		expect(client.refreshIfStale).not.toHaveBeenCalled()
+	})
+
+	test("listedAt names a listed contract on its own chain only, once the list answers", async () => {
+		const client = fakeClient()
+		const flags = useTokenFlags(client as unknown as PriceServiceClient)
+		const usdc = { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC.toUpperCase().replace("0X", "0x") }
+		expect(flags.listedAt(usdc), "nothing is listed before the answer").toBeUndefined()
+		await flushPromises()
+		expect(flags.listedAt(usdc)).toEqual({ symbol: "USDC", name: "Test USDC" })
+		expect(flags.listedAt({ chainId: CHAIN_IDS.TESTNET + 1, contract: TEST_USDC })).toBeUndefined()
+		expect(flags.listedAt(FLAGGED_ROW)).toBeUndefined()
+		expect(flags.listedAt(undefined)).toBeUndefined()
 	})
 
 	test("a broadcast replaces the flags, and a read begun before it is dropped", async () => {

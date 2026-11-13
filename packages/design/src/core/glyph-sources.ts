@@ -22,6 +22,9 @@ export const glyphSources = {
 	"square-half": "hourglass",
 	"square-cross": "square-x",
 	square: "square",
+	/** Nulo verified, solid; the drawn seal is Aztecscan verified. */
+	"seal-solid": "filled/rosette-discount-check",
+	seal: "rosette-discount-check",
 	warning: "alert-triangle",
 	info: "info-circle",
 	lock: "lock",

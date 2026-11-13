@@ -8,7 +8,7 @@ import { TokenListService } from "@/wallet/services/token-list/service"
 import type { ValueStorage } from "@/wallet/storage"
 import { valueStorage } from "@/wallet/storage/stores"
 import { flaggedKeysOf } from "@/utils/token-flag"
-import { tokenIconsOf } from "@/utils/token-icon"
+import { listedTokensOf, tokenIconsOf } from "@/utils/token-icon"
 import { AlarmDispatcher, EventHandler, createSerialQueue, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
 import { isFeedId } from "@nulo/token-list"
 import { inBand, type PriceTable, priceIdsOf, priceTableOf, pricedTokensOf } from "./price-map"
@@ -324,6 +324,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			pricedTokens: pricedTokensOf(list?.entries ?? [], table),
 			flaggedTokens: flaggedKeysOf(list?.flagged ?? []),
 			tokenIcons: tokenIconsOf(list?.entries ?? []),
+			listedTokens: listedTokensOf(list?.entries ?? []),
 		}
 	}
 

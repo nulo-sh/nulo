@@ -201,7 +201,8 @@ const STUBS = {
 		props: ["accountLabel", "networkLabel", "status", "warn"],
 	},
 	DappIdentityBlock: {
-		template: '<div data-testid="identity-block" :data-action="actionLabel" :data-name="dapp?.name" />',
+		template:
+			'<div data-testid="identity-block" :data-action="actionLabel" :data-name="dapp?.name"><span v-if="$slots.name" :data-testid="nameTestId"><slot name="name" /></span></div>',
 		props: ["dapp", "actionLabel", "hostnameTestId", "nameTestId"],
 	},
 	SectionLabel: { props: ["label"], template: "<div>{{ label }}</div>" },
@@ -548,6 +549,14 @@ describe("discover popup — what Allow reveals", () => {
 		expect(shown(w, "discover-scope")).toBe(
 			"Allowing lets this site discover Nulo. It sees no account or balance until you pass the connection check and approve a request.",
 		)
+	})
+
+	test("the app's name is its chip in discover-dapp-name, unverified, whatever it calls itself", async () => {
+		payloadDapp = { name: "Nulo verified", url: "https://playground.nulo.sh" }
+		const w = await ready()
+		const chip = w.get('[data-testid="discover-dapp-name"] [data-testid="contract-chip"]')
+		expect(chip.attributes()).toMatchObject({ "aria-label": "Nulo verified, Unverified", "data-level": "none" })
+		expect(chip.find('[data-testid="contract-chip-seal"]').exists()).toBe(false)
 	})
 
 	test("a chain with no wallet network: the remember line names it by its id", async () => {

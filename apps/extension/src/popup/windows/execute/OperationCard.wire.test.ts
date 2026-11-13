@@ -114,6 +114,7 @@ const one = (w: Awaited<ReturnType<typeof mountCard>>, testid: string) => w.find
 const intentKind = (w: Awaited<ReturnType<typeof mountCard>>) => one(w, "execute-op-payload-row").attributes("data-intent-kind")
 const decodedNames = (w: Awaited<ReturnType<typeof mountCard>>) =>
 	w.findAll('[data-testid="execute-op-decoded-param"]').map((p) => p.attributes("data-param"))
+const unparsed = (w: Awaited<ReturnType<typeof mountCard>>) => w.findAll('[data-testid="execute-op-summary-unparsed"]').map((l) => l.text())
 
 beforeEach(() => {
 	lookups.accounts.splice(0)
@@ -223,7 +224,7 @@ describe("OperationCard — a call as the wire carries it", () => {
 		expect(intentKind(await mountCard(sendTx({ ...honest, selector })))).toBe(kind)
 	})
 
-	test("an L1 exit whose recipient field carries bits past an address shows the notice, not that address", async () => {
+	test("an L1 exit whose recipient field carries bits past an address reads as a call Nulo can't parse, not as that address", async () => {
 		const L1 = BigInt("0x7c41d2a90b3e85f61c0d7e4b2a9f13c86d5be9f0")
 		const exit = (recipient: bigint) =>
 			mountCard(
@@ -239,8 +240,8 @@ describe("OperationCard — a call as the wire carries it", () => {
 		const padded = await exit(2n ** 160n + L1)
 		expect(intentKind(padded)).toBe("raw")
 		expect(one(padded, "execute-op-unverified-args").attributes("data-reason")).toBe("arguments")
-		expect(one(padded, "execute-op-summary-unverified-warning").text()).toContain("Can't read the arguments")
-		expect(padded.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(1)
+		expect(unparsed(padded)).toEqual(["Nulo can't parse this call."])
+		expect(padded.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(0)
 		expect(decodedNames(padded)).toEqual([])
 	})
 
@@ -272,14 +273,14 @@ describe("OperationCard — a call as the wire carries it", () => {
 				},
 			)
 
-		test("one holding U+202E shows the notice, the advice and its raw fields, never the stripped text", async () => {
+		test("one holding U+202E reads as a call Nulo can't parse, with its raw fields and no advice, never the stripped text", async () => {
 			const w = await memo([0x70, 0x61, 0x79, 0x202e, 0x65, 0x76, 0x69, 0x6c])
 			expect(intentKind(w)).toBe("raw")
-			expect(one(w, "execute-op-summary-unverified-args").attributes("data-reason")).toBe("arguments")
+			expect(one(w, "execute-op-summary-unverified-args").exists()).toBe(false)
 			expect(one(w, "execute-op-unverified-args").attributes("data-reason")).toBe("arguments")
-			expect(one(w, "execute-op-summary-unverified-warning").text()).toBe("Can't read the arguments")
-			expect(w.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(1)
-			expect(one(w, "execute-op-summary-unverified-advice").exists()).toBe(true)
+			expect(unparsed(w)).toEqual(["Nulo can't parse this call."])
+			expect(w.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(0)
+			expect(w.findAll('[data-testid$="-unverified-advice"]')).toHaveLength(0)
 			expect(one(w, "execute-op-raw-toggle").text()).toContain("Show 12 raw values")
 			expect(w.text()).not.toContain("payevil")
 		})

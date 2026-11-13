@@ -106,11 +106,12 @@ describe("OperationCard — discovered authorizations", () => {
 		expect(a!.find('[data-testid="execute-discovered-authwit-function"]').text()).not.toContain("0x1234abcd")
 		expect(b!.find('[data-testid="execute-discovered-authwit-function"]').text()).toContain("0x1234abcd")
 		expect(a!.findAll('[data-testid="execute-discovered-authwit-decoded-param"]')).toHaveLength(1)
-		// Once, under its line at rest: the open details do not say it again.
+		// Once, in one plain line under its own at rest: the open details do not say it again, nor warn.
 		const bLine = w.findAll('[data-testid="execute-op-summary-authwit"]')[1]!
-		expect(bLine.findAll('[data-testid$="-unverified-warning"]').map((n) => n.attributes("data-testid"))).toEqual([
-			"execute-op-summary-authwit-unverified-warning",
+		expect(bLine.findAll('[data-testid$="-unparsed"]').map((n) => [n.attributes("data-testid"), n.text()])).toEqual([
+			["execute-op-summary-authwit-unparsed", "Nulo can't parse this authorization."],
 		])
+		expect(bLine.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(0)
 		await b!.find('[data-testid="execute-discovered-authwit-raw-toggle"]').trigger("click")
 		const html = b!.html()
 		expect(html).toContain("arg-b")

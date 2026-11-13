@@ -29,27 +29,29 @@ const NONCE = "0x0f3c7a91e24b6d08c5f1a39e7b2d40c86e9a1f53b7d20c4e8a6f91b3d5c07e2
 /** The transfer step's sentence head, which names the call: the rows it opens to name none. */
 const TRANSFER_HEAD = `${sel("execute-op-summary-call")}[data-intent-kind="transfer"] ${sel("execute-op-summary-call-head")}`
 const textOf = (page: Page, selector: string) => page.$eval(selector, (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
-/** The line's words: the token's mark before its amount is a picture, and its initials say nothing. */
-const lineWordsOf = (page: Page, selector: string) =>
-	page.$eval(selector, (el) => {
-		const words = el.cloneNode(true) as Element
-		for (const mark of words.querySelectorAll('[data-testid="token-mark"]')) mark.remove()
-		return (words.textContent ?? "").replace(/\s+/g, " ").trim()
-	})
 const senderKind = (page: Page, testid: string) => page.$eval(sel(testid), (el) => el.getAttribute("data-sender-kind"))
 const trimmed = (address: string) => `${address.slice(0, 8)}..${address.slice(-4)}`
 
-/** The summary's line for the transfer, at rest: the wallet's reading, its sender by account name. */
+/** The transfer at rest: its head the amount in TST's units beside TST's chip, its line the sender by
+ *  account name and the recipient. */
 async function expectTransferLine(page: Page, recipient: string): Promise<void> {
 	const line = `${sel("execute-op-summary-call")}[data-intent-kind="transfer"] ${sel("execute-op-call-line")}`
 	await page.waitForSelector(line, { visible: true, timeout: 60_000 })
 	const name = await page.$eval(sel("execute-op-from-account"), (el) => el.getAttribute("data-account-name"))
 	expect(await senderKind(page, "execute-op-call-line")).toBe("explicit")
 	// Each address fills its text after a contact lookup, once the line already shows.
-	const expected = `5 TST from ${name} to ${trimmed(recipient)}`
-	await expect.poll(() => lineWordsOf(page, line), { timeout: 10_000 }).toBe(expected)
-	// TST is the sandbox's own token, which no list names.
-	expect(await page.$eval(`${line} ${sel("token-mark")}`, (el) => el.getAttribute("data-kind"))).toBe("initials")
+	const expected = `from ${name} to ${trimmed(recipient)}`
+	await expect.poll(() => textOf(page, line), { timeout: 10_000 }).toBe(expected)
+	// TST is the sandbox's own token, which no list names: its chip reads its short address, unmarked and unsealed.
+	const chip = `${TRANSFER_HEAD} ${sel("contract-chip")}`
+	await page.waitForSelector(`${chip}[data-level="none"]`, { visible: true, timeout: 10_000 })
+	expect(
+		await page.$eval(chip, (el) => [
+			el.querySelector('[data-testid="token-mark"]'),
+			el.querySelector('[data-testid="contract-chip-seal"]'),
+		]),
+	).toEqual([null, null])
+	expect((await textOf(page, TRANSFER_HEAD)).endsWith(` 5 ${trimmed(aztecConfig!.tokenAddress.toLowerCase())}`)).toBe(true)
 	expect(await page.$(sel("execute-op-details"))).toBeNull()
 	for (const state of ["a transfer the wallet reads, from a named sender (network)", "a transfer the wallet reads (network)"]) {
 		expectSitesClean(await observeIdentifierSites(page, "windows-execute", state))
@@ -88,7 +90,7 @@ test.skipIf(!hasConfig)(
 		const send = await openWindow(ctx, page, "pg-btn-sendTx-default")
 		// The decode and the token list land after the window opens; the line turns once both have.
 		await expectTransferLine(send, minterAddress)
-		expect(await textOf(send, sel("execute-op-summary-call-head"))).toMatch(/^Transfer \(public\) on /)
+		expect(await textOf(send, sel("execute-op-summary-call-head"))).toMatch(/^Transfer \(public\) 5 /)
 		await shotSend(send, "transfer-line-send", "execute-op-summary")
 		await openExecuteSteps(send)
 		const row = `${sel("execute-op-payload-row")}[data-intent-kind="transfer"]`

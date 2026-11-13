@@ -41,6 +41,9 @@ stubTokenSelectors()
 const MAX_PRESSES = 2
 const UNREACHED = Number.POSITIVE_INFINITY
 
+/** A send names its unreadable calls once, in the line after the steps, never under a call. */
+const NOT_IN_ROW = ["Can't read the arguments", "Nulo doesn't have this contract's interface"]
+
 const stubs = {
 	Flex: { inheritAttrs: false, template: '<div v-bind="$attrs"><slot /></div>' },
 	Text: { inheritAttrs: false, template: '<span v-bind="$attrs"><slot /></span>' },
@@ -120,7 +123,9 @@ beforeEach(() => {
 
 describe("OperationCard — every fact of a multi-call transaction within two presses", () => {
 	test("each call's and each authorization's facts, the Vault authorization decoded", async () => {
-		expect(await unreached(await mountCard(), [...FACTS, ...VAULT_DECODED_FACTS])).toEqual([])
+		const w = await mountCard()
+		expect(await unreached(w, [...FACTS, ...VAULT_DECODED_FACTS])).toEqual([])
+		expect(NOT_IN_ROW.filter((text) => normalized(w.text()).includes(text))).toEqual([])
 	})
 
 	test("each call's and each authorization's facts, the Vault authorization unreadable", async () => {

@@ -11,6 +11,7 @@ import { join } from "node:path"
 import { mount } from "@vue/test-utils"
 import postcss, { type ChildNode, type Rule } from "postcss"
 import { describe, expect, test } from "vitest"
+import { trimAddress } from "@/utils/string"
 import AuthwitDetails from "./AuthwitDetails.vue"
 import CallArguments from "./CallArguments.vue"
 import { openAllSteps } from "./execute.fixture"
@@ -145,7 +146,9 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		expect(title.text()).toMatch(HUMANIZED)
 		expect(title.element.closest(`.${SUMMARY.body}`)).not.toBeNull()
 		expect(w.get('[data-testid="execute-op-payload-row"]').text()).not.toMatch(HUMANIZED)
-		expect(w.findAll('[data-testid="execute-op-summary-call-to"]').map((a) => a.text())).toEqual([TOKEN])
+		// The contract prints once, as its chip's short address: never whole, so it has nothing to break.
+		expect(w.findAll('[data-testid="execute-op-summary-call-to"]').map((a) => a.text())).toEqual([trimAddress(TOKEN)])
+		expect(w.get('[data-testid="execute-op-summary-call-head"]').text()).not.toContain(TOKEN)
 	})
 
 	test.each([

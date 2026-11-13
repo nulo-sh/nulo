@@ -262,6 +262,28 @@ describe("Popover", () => {
 		})
 	})
 
+	describe("inline", () => {
+		test("root and trigger are spans, so the trigger can sit in a sentence", () => {
+			const w = mountPopover({ inline: true })
+			expect(w.element.tagName).toBe("SPAN")
+			expect(w.element.firstElementChild?.tagName).toBe("SPAN")
+			expect(mountPopover().element.firstElementChild?.tagName, "a block popover keeps its div trigger").toBe("DIV")
+		})
+
+		test("a trigger at the left edge of a narrow view opens a card that fits inside it", async () => {
+			vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(240)
+			vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(600)
+			const w = mountPopover({ open: false, inline: true, width: "280" })
+			vi.spyOn(w.element.firstElementChild as HTMLElement, "getBoundingClientRect").mockReturnValue(new DOMRect(16, 40, 60, 20))
+			await w.setProps({ open: true })
+			await flushPromises()
+			const placed = popoverRoot.querySelector<HTMLElement>("[style*='top']") as HTMLElement
+			expect(placed.style.left).toBe("8px")
+			expect(placed.style.top).toBe("68px")
+			expect((placed.firstElementChild as HTMLElement).style.width).toBe("224px")
+		})
+	})
+
 	test("disabled prop applies the disabled CSS class on the wrapper", () => {
 		expect(mountPopover({ disabled: true }).html()).toMatch(/disabled/)
 	})

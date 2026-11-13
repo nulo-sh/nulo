@@ -18,15 +18,16 @@ describe("settings/glossary", () => {
 		expect(shell.attributes("data-back")).toBe("/popup/settings")
 	})
 
-	test("lists the five sections in order, each with its entries in order", () => {
+	test("lists the six sections in order, each with its entries in order", () => {
 		const w = mountPage()
 		const sections = w.findAll('[data-testid^="glossary-section-"]')
-		expect(sections.map((s) => s.get("span").text())).toEqual(["Your wallet", "Balances", "Fees", "Apps", "Transactions"])
+		expect(sections.map((s) => s.get("span").text())).toEqual(["Your wallet", "Balances", "Fees", "Apps", "Contracts", "Transactions"])
 		expect(sections.map((s) => s.attributes("data-testid"))).toEqual([
 			"glossary-section-your-wallet",
 			"glossary-section-balances",
 			"glossary-section-fees",
 			"glossary-section-apps",
+			"glossary-section-contracts",
 			"glossary-section-transactions",
 		])
 		expect(sections.map((s) => s.findAll('[data-testid^="glossary-entry-"]').map((e) => e.attributes("data-testid")))).toEqual([
@@ -56,6 +57,7 @@ describe("settings/glossary", () => {
 				"glossary-entry-discover",
 				"glossary-entry-connection-check",
 			],
+			["glossary-entry-nulo-verified", "glossary-entry-aztecscan-verified", "glossary-entry-unverified"],
 			["glossary-entry-proof", "glossary-entry-proving"],
 		])
 	})
@@ -127,6 +129,24 @@ describe("settings/glossary", () => {
 			"Emojis you compare with the site's, so no one can sit between Nulo and the site.",
 			"Connect window",
 		],
+		[
+			"nulo-verified",
+			"Nulo verified",
+			"Nulo knows which contract this is and names it, which isn't a promise that it's safe.",
+			"Approval window · Connect window",
+		],
+		[
+			"aztecscan-verified",
+			"Aztecscan verified",
+			"Its code is verified on Aztecscan, but Nulo hasn't checked who runs it.",
+			"Approval window · Connect window",
+		],
+		[
+			"unverified",
+			"Unverified",
+			"Shown with no mark: Nulo has nothing that vouches for this contract.",
+			"Approval window · Connect window",
+		],
 		["proof", "Proof", "What your device builds to show a transaction is valid without revealing what's in it.", "Proving"],
 		[
 			"proving",
@@ -139,5 +159,13 @@ describe("settings/glossary", () => {
 		expect(text(w, `glossary-term-${key}`)).toBe(term)
 		expect(text(w, `glossary-definition-${key}`)).toBe(definition)
 		expect(text(w, `glossary-where-${key}`)).toBe(where)
+	})
+
+	test("the legend draws the solid seal beside Nulo verified, the drawn one beside Aztecscan verified, none beside Unverified", () => {
+		const w = mountPage()
+		const seal = (key: string) => w.find(`[data-testid="glossary-seal-${key}"]`)
+		expect(seal("nulo-verified").attributes()).toMatchObject({ name: "seal-solid", "aria-hidden": "true" })
+		expect(seal("aztecscan-verified").attributes()).toMatchObject({ name: "seal", "aria-hidden": "true" })
+		expect(seal("unverified").exists()).toBe(false)
 	})
 })

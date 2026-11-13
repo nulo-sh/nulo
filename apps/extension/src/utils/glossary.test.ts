@@ -108,6 +108,27 @@ const SPEC = [
 		"Emojis you compare with the site's, so no one can sit between Nulo and the site.",
 		"Connect window",
 	],
+	[
+		"Contracts",
+		"nulo-verified",
+		"Nulo verified",
+		"Nulo knows which contract this is and names it, which isn't a promise that it's safe.",
+		"Approval window · Connect window",
+	],
+	[
+		"Contracts",
+		"aztecscan-verified",
+		"Aztecscan verified",
+		"Its code is verified on Aztecscan, but Nulo hasn't checked who runs it.",
+		"Approval window · Connect window",
+	],
+	[
+		"Contracts",
+		"unverified",
+		"Unverified",
+		"Shown with no mark: Nulo has nothing that vouches for this contract.",
+		"Approval window · Connect window",
+	],
 	["Transactions", "proof", "Proof", "What your device builds to show a transaction is valid without revealing what's in it.", "Proving"],
 	[
 		"Transactions",
