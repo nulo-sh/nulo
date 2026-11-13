@@ -236,9 +236,13 @@ describe("modules/send/SendReviewSheet", () => {
 		(origin, destination, shape) => {
 			const facts = publishFacts(origin, destination, "account")
 			w = mountSheet({ facts, payerKind: "account", payerType: "fj", fee: { payer: "fj", display: PRICED } })
-			expect(rows(w)[0]).toEqual(["exposed", `Your address FEE PAYER ${noticeBodyFor(shape)}`])
+			// The box says it once: the row keeps its name, its mark and its word, and no sentence.
+			expect(rows(w)[0]).toEqual(["exposed", "Your address FEE PAYER"])
+			expect(w.get('[data-testid="send-review-row-you"] [data-testid="stub-glyph"]').attributes("data-name")).toBe("public")
+			expect(w.text()).not.toContain(noticeBodyFor(shape))
 			const box = w.get('[data-testid="send-review-warning"]')
 			expect(box.text()).toBe(feeWarning(facts, "Ana"))
+			expect(w.text().split(box.text())).toHaveLength(2)
 			expect(box.attributes("data-notice-shape")).toBe(shape)
 			expect(testidsInOrder(w)).toEqual([
 				"send-payee",
@@ -252,6 +256,20 @@ describe("modules/send/SendReviewSheet", () => {
 			expect(w.find("a").exists()).toBe(false)
 		},
 	)
+
+	test("the Your address row's sentence goes only while the warning shows, and comes back with the warning gone", async () => {
+		w = mountSheet({
+			facts: publishFacts("private", "public", "account"),
+			payerKind: "account",
+			payerType: "fj",
+			fee: { payer: "fj", display: PRICED },
+		})
+		expect(w.find('[data-testid="send-review-warning"]').exists()).toBe(true)
+		expect(rows(w)[0]).toEqual(["exposed", "Your address FEE PAYER"])
+		await w.setProps({ facts: publishFacts("public", "public", "account") })
+		expect(w.find('[data-testid="send-review-warning"]').exists()).toBe(false)
+		expect(rows(w)[0]).toEqual(["public", `Your address SENDER ${FACT_SENTENCES.sender}`])
+	})
 
 	test("Sponsored: Nothing · Sponsored over the sponsor's cost, nothing struck", () => {
 		w = mountSheet({ payerType: "fpc", fee: { payer: "sponsor", display: PRICED } })
@@ -389,6 +407,7 @@ describe("modules/send/SendReviewSheet — Home's re-ask review", () => {
 		const facts = publishFacts("private", "private", "account")
 		w = mountSheet({ ...REASK, facts, payerKind: "account", payerType: "fj" })
 		expect(w.get('[data-testid="send-review-warning"]').text()).toBe(feeWarning(facts, null))
+		expect(rows(w)[0]).toEqual(["exposed", "Your address FEE PAYER"])
 	})
 })
 
