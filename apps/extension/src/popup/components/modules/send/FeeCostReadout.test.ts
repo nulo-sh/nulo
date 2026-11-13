@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { describe, expect, test } from "vitest"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { Skeleton } from "@nulo/design"
@@ -179,6 +181,21 @@ describe("FeeCostReadout · Nulo's sponsor", () => {
 		const w = factory({ estimate: { amount: "0.004", usd: "<$0.001" }, payer: "sponsor" })
 		expect(w.find("s").text()).toBe("~0.004 FJ (<$0.001)")
 		expect(spoken(w)).toBe("You pay nothing. The sponsor covers less than $0.001.")
+	})
+})
+
+describe("FeeCostReadout · a fee after other words stays whole", () => {
+	const whole = /\.whole\s*\{[^}]*white-space:\s*nowrap/.test(readFileSync(resolve(__dirname, "FeeCostReadout.vue"), "utf8"))
+
+	test("the struck sponsored fee and both queued figures never wrap inside themselves", () => {
+		expect(whole).toBe(true)
+		const wholes = (w: VueWrapper) => w.findAll('[class*="whole"]').map((el) => el.text())
+		expect(wholes(factory({ estimate: ESTIMATE, payer: "sponsor" }))).toEqual(["~3.577824 FJ ($0.215)"])
+		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
+		expect(wholes(factory({ isEstimating: true, isQueued: true, queuedCap }))).toEqual([
+			"~3.577824 FJ ($0.215)",
+			"~4.47228 FJ ($0.269)",
+		])
 	})
 })
 
