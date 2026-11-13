@@ -9,14 +9,18 @@
 
 <script setup>
 /** Components */
+import { SubPageHeaderBase } from "@nulo/design"
 import AmountCard from "@/components/composite/send/AmountCard.vue"
+import PayeeBlock from "@/components/composite/send/PayeeBlock.vue"
+import PublishLine from "@/components/composite/send/PublishLine.vue"
+import SendAgainRow from "@/components/composite/send/SendAgainRow.vue"
+import SideChoice from "@/components/composite/send/SideChoice.vue"
 import FlaggedTokenBanner from "@/popup/components/modules/general/FlaggedTokenBanner.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
-import PublishStrip from "@/components/composite/send/PublishStrip.vue"
-import RecipientField from "@/popup/components/modules/send/RecipientField.vue"
 import SelectTokenCard from "@/popup/components/modules/send/SelectTokenCard.vue"
+import SendFeeLine from "@/popup/components/modules/send/SendFeeLine.vue"
+import SendPersonStep from "@/popup/components/modules/send/SendPersonStep.vue"
 import SendReviewSheet from "@/popup/components/modules/send/SendReviewSheet.vue"
-import SendTypesCard from "@/components/composite/send/SendTypesCard.vue"
 
 /** Services */
 import { ContactServiceClient } from "@/wallet/services/contact/client"
@@ -35,9 +39,14 @@ import { entityListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
 import { feeText } from "@/utils/fee-estimation"
+import { formatBaseUnits } from "@/utils/amount"
+import { goBack } from "@/utils/page-back"
+import { sentenceName } from "@/utils/string"
+import { isKnownAddress, lastSendTo, parseSends, recentRecipients, sendWords, sentAgo } from "@/popup/components/modules/send/recent-sends"
+import { sendButtonLabel } from "@/popup/pages/send-labels"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
-import { canSwitchReceiver, canSwitchSender, forcedSide, openingSendSide } from "@/components/composite/send/send-sides"
+import { canSwitchReceiver, canSwitchSender, forcedSide, openingSendSide, sideBalanceText } from "@/components/composite/send/send-sides"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
 import { NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
@@ -47,6 +56,7 @@ import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { useFeeEstimation } from "@/composables/useFeeEstimation"
 import { useLegalAcceptance } from "@/composables/useLegalAcceptance"
 import { usePrices } from "@/composables/usePrices"
@@ -69,7 +79,8 @@ const router = useRouter()
 
 /** Post-send / forced-close navigation. Prefers browser history so the user
  *  returns to whichever surface launched Send (token detail, contacts, home);
- *  falls back to /popup/general for cold-open / deep-link. */
+ *  falls back to /popup/general for cold-open / deep-link. The person step is page state, not a
+ *  history entry, so this never lands on it. */
 function leaveSend() {
 	if (window.history.length > 1) {
 		router.back()
@@ -90,12 +101,18 @@ const feeDisplay = ref(null)
 const queuedCapText = ref(null)
 /** Set by FeeSettingsCard when the fee read refused the account: its imported key does not open. */
 const accountUnusable = ref(false)
+/** What the closed fee card would say, for the fee line, and the payer its warning's fix picks. */
+const feeNotices = ref([])
+const feeRemedy = ref(null)
+const feeCard = useTemplateRef("feeCard")
+const pageEl = useTemplateRef("pageEl")
 
 /** No send can leave an account whose key does not open, so Send closes onto Home and says why. */
 let leftUnusable = false
 function leaveUnusable() {
 	if (leftUnusable) return
 	leftUnusable = true
+	closeSheets()
 	openToast({ kind: "error", ...IMPORTED_UNUSABLE_TOAST })
 	router.replace("/popup/general")
 }
@@ -214,6 +231,114 @@ contactService.onContactDeleted.add(contactList.onDeleted)
 const selectedContact = ref()
 const searchTerm = ref("")
 const recipientCandidates = computed(() => [...contacts.value, ...appStore.accounts])
+/** Who is paid is asked first, as page state: a history entry would sit behind the review's Send now. */
+const personChosen = ref(false)
+
+/** This account's journal, read with each identity load and parsed against the token list. */
+const journalOps = shallowRef([])
+const sendScope = computed(() => ({
+	profileId: appStore.profile?.id,
+	networkId: appStore.network?.id,
+	accountAddress: appStore.account?.address,
+}))
+const pastSends = computed(() => parseSends(journalOps.value, sendScope.value, new Set(tokens.value.map((t) => t.id))))
+/** A failed read leaves Recent empty and every address unpaid: the check line shows, never hides. */
+async function readPastSends(profileId, accountAddress) {
+	const journal = new OperationJournalServiceClient()
+	try {
+		return await journal.getOperations({ profileId, accountAddress, kind: "transfer", stage: "succeeded" })
+	} catch (error) {
+		console.debug("send page journal read failed", { error })
+		return []
+	} finally {
+		journal.disconnect()
+	}
+}
+
+/** Names come from the profile's contacts and accounts by exact address, never from the journal. */
+const candidateFor = (address) => recipientCandidates.value.find((c) => c.address?.toLowerCase() === address.toLowerCase()) ?? null
+const tokenById = (id) => tokens.value.find((t) => t.id === id)
+function sendText(send) {
+	const token = tokenById(send.tokenId)
+	if (!token) return ""
+	// Every digit the press fills, so the words never round what it sends.
+	const amount = formatBaseUnits(send.amountRaw, token.decimals, { maxDecimals: token.decimals, thousandsSep: ",", decimalSep: "." })
+	return sendWords(amount, token.symbol, send.arrival)
+}
+const recentRows = computed(() =>
+	recentRecipients(
+		pastSends.value,
+		appStore.accounts.map((a) => a.address),
+	).map((send) => ({
+		address: send.address,
+		name: candidateFor(send.address)?.name ?? null,
+		words: sendText(send),
+		ago: sentAgo(send.at, gateNow.value ?? Date.now()),
+	})),
+)
+
+const payeeName = computed(() => selectedContact.value?.name ?? null)
+const payeeKnown = computed(() =>
+	isKnownAddress(searchTerm.value, { contacts: contacts.value, accounts: appStore.accounts, sends: pastSends.value }),
+)
+/** The recipient's name as a sentence may carry it, or null. */
+const payeeSentenceName = computed(() => (payeeName.value ? sentenceName(payeeName.value, "") || null : null))
+
+/** The last send to this person, offered while the form does not already hold it. A record that kept
+ *  no sides, or whose token can no longer arrive on its side, offers nothing. */
+const sendAgain = computed(() => {
+	const last = personChosen.value ? lastSendTo(pastSends.value, searchTerm.value) : null
+	const token = last && tokenById(last.tokenId)
+	if (!last || last.arrival === null || !token) return null
+	if (!canSwitchReceiver(token) && forcedSide(token) !== last.arrival) return null
+	const held =
+		activeToken.value?.id === last.tokenId &&
+		amountValidation.value.integerized === last.amountRaw &&
+		selectedReceiverType.value === last.arrival
+	return held ? null : { send: last, token, words: sendText(last) }
+})
+
+/** USD mode ends first, so neither its pending conversion nor its token watch clears the amount;
+ *  the token watch then keeps it, as it keeps an imported token's. */
+function applySendAgain() {
+	const again = sendAgain.value
+	if (!again) return
+	amountCardRef.value?.exitFiat()
+	if (cacheStore.activeTokenIdx !== again.token.id) {
+		keepFormFor = again.token.id
+		cacheStore.activeTokenIdx = again.token.id
+	}
+	amountRested.value = null
+	amountTerm.value = formatBaseUnits(again.send.amountRaw, again.token.decimals, { thousandsSep: "", decimalSep: "." })
+	selectedReceiverType.value = again.send.arrival
+	nextTick(() => amountCardRef.value?.focusAmount())
+}
+
+function choosePerson(address, candidate) {
+	selectedContact.value = candidate
+	searchTerm.value = address
+	personChosen.value = true
+	nextTick(focusForm)
+}
+/** The form opens on its first question: last time's send when offered, else the amount, which takes
+ *  no focus with nothing to spend; then the token row. */
+function focusForm() {
+	const again = pageEl.value?.querySelector('[data-testid="send-again"]')
+	if (again) return again.focus()
+	amountCardRef.value?.focusAmount()
+	if (!pageEl.value?.contains(document.activeElement)) pageEl.value?.querySelector('[data-testid="send-token-trigger"]')?.focus()
+}
+/** Back to the person step keeps the token and the amount; the amount card unmounts, so a USD
+ *  session ends first, in the token amount it settled on. */
+function backToPerson() {
+	closeSheets()
+	amountCardRef.value?.exitFiat()
+	personChosen.value = false
+	selectedContact.value = null
+	searchTerm.value = ""
+	nextTick(() => pageEl.value?.querySelector('[data-testid="send-destination-field"] input')?.focus())
+}
+const onHeaderBack = () => (personChosen.value ? backToPerson() : void goBack(router, "/popup/general"))
 
 const amountTerm = ref()
 /** The card's own resting text, whose commas the validator reads as its grouping. */
@@ -343,7 +468,7 @@ const isAllowedToSend = computed(() => {
 })
 
 const payerKind = computed(() => payerKindOf(feeSettings.value, payer.value))
-// No sendable token → no facts: no strip, no tag, no review, whatever the fee card resolved.
+// No sendable token → no facts: no publish line, no tag, no warning, whatever the fee card resolved.
 const facts = computed(() =>
 	isBlockedTransfer.value ? NO_FACTS : publishFacts(selectedSendType.value, selectedReceiverType.value, payerKind.value),
 )
@@ -355,14 +480,70 @@ const reviewOpen = computed(() => popupStore.isOpened(REVIEW_KEY))
 const reviewOrder = computed(() => popupStore.popups[REVIEW_KEY]?.order ?? 0)
 const reviewDepth = computed(() => popupStore.len - reviewOrder.value)
 const { ready: reviewReady, authorises } = useSendReview({
-	isGated: () => facts.value.requiresReview,
+	isGated: () => true,
 	isOpen: () => reviewOpen.value,
 	isTop: () => reviewOrder.value === popupStore.len - 1,
+	rearmOn: () => facts.value.you,
 })
 const openReview = () => {
 	if (!reviewOpen.value) popupStore.open(REVIEW_KEY)
 }
 const closeReview = () => popupStore.close(REVIEW_KEY)
+
+/** The fee card lives for the page and is shown in this sheet: its settings are what the estimate asks. */
+const FEE_KEY = "send_fee"
+const feeSheetOpen = computed(() => popupStore.isOpened(FEE_KEY))
+const feeOrder = computed(() => popupStore.popups[FEE_KEY]?.order ?? 0)
+const feeDepth = computed(() => popupStore.len - feeOrder.value)
+const feeBody = useTemplateRef("feeBody")
+const openFeeSheet = () => {
+	if (!feeSheetOpen.value) popupStore.open(FEE_KEY)
+}
+const closeFeeSheet = () => popupStore.close(FEE_KEY)
+function closeSheets() {
+	closeReview()
+	closeFeeSheet()
+}
+
+/** The Fee sheet opens on the chosen payer, else the first that can pay, else the trap's first control. */
+const feeSheetFocus = () => feeCard.value?.payerFocusTarget() ?? undefined
+
+/** The warning's fix applies only the card's own remedy; focus goes to the fee it changed. */
+function applyFeeFix() {
+	feeCard.value?.applyRemedy()
+	nextTick(() => pageEl.value?.querySelector('[data-testid="send-fee-change"]')?.focus())
+}
+
+const feeLinePayer = computed(() => {
+	const p = payer.value
+	if (!p) return null
+	if (p.type === "fj" || p.type === "private_fpc") return p.type
+	return p.isProtocol ? "sponsor" : "unvouched"
+})
+const feeLinePayerName = computed(() => (feeLinePayer.value === "unvouched" ? sentenceName(payer.value?.name ?? "", "this FPC") : null))
+const feeLineQueuedCap = ref(null)
+
+const otherSide = (side) => (side === "private" ? "public" : "private")
+const fromDisabled = computed(() =>
+	activeToken.value && !canSwitchSender(activeToken.value) ? { [otherSide(selectedSendType.value)]: true } : {},
+)
+const toDisabled = computed(() =>
+	activeToken.value && !canSwitchReceiver(activeToken.value) ? { [otherSide(selectedReceiverType.value)]: true } : {},
+)
+const fromHints = computed(() => {
+	const token = activeToken.value
+	if (!token || balanceState.value !== "read") return {}
+	const row = tokenBalance.value
+	return {
+		private: sideBalanceText(row?.privateBalance, token.decimals, token.symbol),
+		public: sideBalanceText(row?.publicBalance, token.decimals, token.symbol),
+	}
+})
+const fromLoading = computed(() => (activeToken.value && balanceState.value === "loading" ? { private: true, public: true } : {}))
+const toHints = computed(() => ({
+	private: toDisabled.value.private ? `${activeToken.value?.symbol ?? ""} has no private transfer` : "Their address stays hidden",
+	public: "Their address is shown",
+}))
 
 const amountText = computed(() => (amountTerm.value ? String(amountTerm.value) : undefined))
 const reviewFeeText = computed(() => (feeDisplay.value ? feeText(feeDisplay.value) : undefined))
@@ -481,16 +662,16 @@ const canSubmitNow = () => {
 
 /**
  * The one path to a transfer. `source` says which control was activated; the sheet's counts only
- * while the sheet is open, the footer's only while it is not. A send that names the account as fee
- * payer goes out only from the sheet, and only once it is ready — the footer opens the sheet instead.
+ * while the sheet is open, the footer's only while it is not. Every send goes out only from the
+ * sheet, and only once it is ready: the footer opens the sheet.
  */
 const submit = (source) => {
 	if (!canSubmitNow()) return
 	if ((source === "review") !== reviewOpen.value) return
-	if (facts.value.requiresReview && !authorises(source)) return openReview()
+	if (!authorises(source)) return openReview()
 
 	isSending.value = true
-	closeReview()
+	closeSheets()
 	submitInFlight = true
 	submitTransfer(submitDeps, snapshotTransfer())
 
@@ -575,13 +756,21 @@ function restartSlowClock() {
 }
 watch(isEstimating, restartSlowClock)
 
-/** A send that can go out while its estimate runs keeps its word; otherwise the disabled button says why. */
-const submitLabel = computed(() => {
-	if (isSending.value) return "CONFIRMING"
-	if (isEstimating.value && !queueMode.value) return "Estimating fee"
-	if (facts.value.requiresReview) return "Review send"
-	return queueMode.value ? "Queue send" : "Confirm Transaction"
-})
+/** The refusals the amount card shows; an amount it cannot weigh yet refuses nothing. */
+const amountRefused = computed(
+	() => exceedsBalance.value || amountValidation.value.reason === "invalid" || amountValidation.value.reason === "tooManyDecimals",
+)
+/** Ready, the button opens the review; off, it names what is missing where it can. */
+const submitLabel = computed(() =>
+	sendButtonLabel({
+		sending: isSending.value,
+		allowed: isAllowedToSend.value,
+		estimating: isEstimating.value && !queueMode.value,
+		amountEmpty: !amountTerm.value,
+		amountRefused: amountRefused.value,
+		feeRefused: Boolean(feeEstimate.value?.feeJuiceShortfall) || estimateFailed.value,
+	}),
+)
 
 /** An imported token's id: the token watch's next run keeps the amount and each side the token
  *  supports. */
@@ -601,7 +790,7 @@ async function pickAddedToken(token) {
 watch(
 	() => cacheStore.activeTokenIdx,
 	(id) => {
-		closeReview()
+		closeSheets()
 		const keep = id === keepFormFor
 		keepFormFor = undefined
 		initSendType(keep)
@@ -694,8 +883,9 @@ function applyQueryContact() {
 	const preselected = id === null ? undefined : contacts.value.find((c) => String(c.id) === id)
 	if (!preselected) return
 	queryContactApplied = true
-	selectedContact.value = preselected
-	searchTerm.value = preselected.address
+	if (isValidAztecAddress(preselected.address)) choosePerson(preselected.address, preselected)
+	// An address that is no point stays in the field, which says it is invalid.
+	else searchTerm.value = preselected.address
 }
 
 // A newer identity fetch supersedes an older one, and only the current fetch ends `tokensLoading`
@@ -716,6 +906,7 @@ async function refetchIdentityScopedState() {
 			tokens.value = []
 			tokenBalances.value = []
 			contacts.value = []
+			journalOps.value = []
 			tokensLoading.value = false
 		}
 		return
@@ -725,10 +916,16 @@ async function refetchIdentityScopedState() {
 	// Cleared before the read, so a switch never shows the previous identity's token or balance.
 	tokens.value = []
 	tokenBalances.value = []
+	journalOps.value = []
 	tokensLoading.value = true
 	tokensChangedDuringLoad = false
 	try {
-		const [first, , c] = await Promise.all([tokenService.getTokens(profileId, chainId), readBalances(), contactService.getContacts()])
+		const [first, , c, ops] = await Promise.all([
+			tokenService.getTokens(profileId, chainId),
+			readBalances(),
+			contactService.getContacts(),
+			readPastSends(profileId, appStore.account.address),
+		])
 		let t = first
 		while (tokensChangedDuringLoad && isCurrent()) {
 			tokensChangedDuringLoad = false
@@ -737,6 +934,7 @@ async function refetchIdentityScopedState() {
 		if (!isCurrent()) return
 		tokens.value = t
 		contacts.value = c
+		journalOps.value = ops
 		// The tokens watch makes the first token added to an empty list the active one. A refused
 		// load must not arm it, or the Retry's list would lose the active or requested token.
 		awaitingNewToken.value = t.length === 0
@@ -780,7 +978,7 @@ function applyQueryToken() {
 watch(
 	() => [appStore.profile?.id, appStore.network?.id, appStore.account?.address],
 	() => {
-		closeReview()
+		closeSheets()
 		refetchIdentityScopedState().catch(onReadFailed)
 	},
 	{ immediate: false },
@@ -800,7 +998,7 @@ onBeforeUnmount(() => {
 	cancelled = true
 	// A load still out ends here: its late reads must not write the shared token selection.
 	identityFetchSeq++
-	closeReview()
+	closeSheets()
 
 	contactService.disconnect()
 	balances.dispose()
@@ -830,36 +1028,34 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<Flex direction="column" :class="$style.wrapper">
-		<SubPageHeader title="Send" :backTo="'/popup/general'" />
+	<div ref="pageEl" :class="$style.wrapper" data-testid="send-page">
+		<SubPageHeaderBase title="Send" @back="onHeaderBack" />
 
 		<Banner v-if="legalBlocked" variant="warning" wide :action="legalBannerAction" data-testid="send-legal-banner">
 			Accept the Terms to send
 		</Banner>
 
-		<Flex wide direction="column" justify="between" :class="$style.body">
-			<Flex direction="column" :class="$style.top">
-				<!-- Section: Transfer Path + Recipient — flush variant: the input's own bottom border
-				     is the visual terminator, so we suppress the section divider to avoid a double line. -->
-				<div :class="[$style.section, $style.section_flush]">
-					<SendTypesCard
-						v-if="!isBlockedTransfer"
-						v-model:sendType="selectedSendType"
-						v-model:receiverType="selectedReceiverType"
-						:token="activeToken"
-					/>
+		<div v-if="!personChosen" :class="$style.top">
+			<SendPersonStep
+				v-model:searchTerm="searchTerm"
+				v-model:selectedContact="selectedContact"
+				:candidates="recipientCandidates"
+				:recents="recentRows"
+				:accounts="appStore.accounts"
+				@choose="choosePerson"
+			/>
+		</div>
 
-					<RecipientField
-						v-model:searchTerm="searchTerm"
-						v-model:selectedContact="selectedContact"
-						:candidates="recipientCandidates"
-					/>
+		<Flex v-else wide direction="column" justify="between" :class="$style.body">
+			<Flex direction="column" :class="$style.top">
+				<div :class="$style.section">
+					<PayeeBlock :address="searchTerm" :name="payeeName" :known="payeeKnown">
+						<SendAgainRow v-if="sendAgain" :words="sendAgain.words" @apply="applySendAgain" />
+					</PayeeBlock>
 				</div>
 
-				<!-- Section: Select Asset -->
-				<div :class="$style.section">
-					<span :class="$style.section_label">Select Asset</span>
-					<FlaggedTokenBanner v-if="prices.isFlagged(activeToken)" />
+				<div :class="[$style.section, $style.section_token]">
+					<FlaggedTokenBanner v-if="prices.isFlagged(activeToken)" :class="$style.token_banner" />
 					<SelectTokenCard
 						:token="activeToken"
 						:flagged="prices.isFlagged(activeToken)"
@@ -867,13 +1063,13 @@ onBeforeUnmount(() => {
 						:loading="tokensLoading"
 						:failed="tokensFailed"
 						:onTokenAdded="pickAddedToken"
+						:class="[prices.isFlagged(activeToken) && $style.token_row_after, showsTokenCaveat && $style.token_row_before]"
 						@retry="retryTokens"
 					/>
+					<Text v-if="showsTokenCaveat" variant="body" color="secondary" :class="$style.token_caveat" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
 				</div>
 
-				<!-- Section: Transaction Amount -->
 				<div :class="$style.section">
-					<span :class="$style.section_label">Transaction Amount</span>
 					<AmountCard
 						ref="amountCardRef"
 						v-model="amountTerm"
@@ -887,6 +1083,7 @@ onBeforeUnmount(() => {
 						:liveQuote
 						:proxyTicker
 						:exceedsBalance
+						:side="selectedSendType"
 					/>
 					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
 						<Icon name="warning" size="12" color="tertiary" />
@@ -899,40 +1096,48 @@ onBeforeUnmount(() => {
 					</Flex>
 				</div>
 
-				<!-- In the page, not the pinned footer, so it never covers the amount's balance, its refusal or the fee. -->
-				<Flex v-if="!isBlockedTransfer" direction="column" gap="10" :class="$style.publish">
-					<PublishStrip :facts="facts" @open="openReview" />
-					<Text v-if="showsTokenCaveat" variant="body" color="secondary" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
-				</Flex>
-
-				<!-- Section: Fee Summary -->
-				<div :class="$style.section_last">
-					<FeeSettingsCard
-						:profile="appStore.profile"
-						:network="appStore.network"
-						:account="appStore.account"
-						:feeEstimate="feeEstimate"
-						:isEstimating="isEstimating"
-						:isQueued="feeQueued"
-						:queuedCap="queueCap"
-						:amountTyped="Boolean(amountTerm)"
-						:estimateFailed="estimateFailed"
-						:estimateSlow="estimateSlow"
-						:originPrivacy="selectedSendType"
-						:payerNoticeShape="facts.noticeShape"
-						:txShape="feeTxShape"
-						v-model="feeSettings"
-						v-model:needsFeeJuice="needsFeeJuice"
-						v-model:payer="payer"
-						v-model:feeDisplay="feeDisplay"
-						v-model:queuedCapText="queuedCapText"
-						v-model:accountUnusable="accountUnusable"
-						@retryEstimate="requestEstimate"
+				<Flex v-if="!isBlockedTransfer" direction="column" gap="12" :class="$style.section_last">
+					<SideChoice
+						v-model="selectedSendType"
+						label="From your balance"
+						:words="{ private: 'Private', public: 'Public' }"
+						:hints="fromHints"
+						:loading="fromLoading"
+						:disabled="fromDisabled"
+						testid="send-from-type"
+						prefix="send-from"
+						hintPrefix="send-from-balance"
 					/>
-				</div>
+					<SideChoice
+						v-model="selectedReceiverType"
+						label="They receive it"
+						:words="{ private: 'Privately', public: 'Publicly' }"
+						:hints="toHints"
+						:disabled="toDisabled"
+						rows
+						testid="send-to-type"
+						prefix="send-to"
+					/>
+					<PublishLine :facts="facts" :name="payeeSentenceName" :payer="payerKind" :remedy="feeRemedy" :bridgeUrl="FEE_JUICE_BRIDGE_URL" @fix="applyFeeFix" />
+				</Flex>
 			</Flex>
 
 			<Flex v-snack-footer direction="column" gap="10" :class="$style.bottom" data-testid="send-footer">
+				<SendFeeLine
+					:payer="feeLinePayer"
+					:payerName="feeLinePayerName"
+					:display="feeDisplay"
+					:estimating="isEstimating"
+					:slow="estimateSlow"
+					:failed="estimateFailed"
+					:queued="feeQueued"
+					:queuedCap="feeLineQueuedCap"
+					:queuedSponsored="queuedSponsored"
+					:notices="feeNotices"
+					:open="feeSheetOpen"
+					@change="openFeeSheet"
+					@retry="requestEstimate"
+				/>
 				<Button
 					v-if="needsFeeJuice"
 					@click="openFeeJuiceBridge"
@@ -940,22 +1145,70 @@ onBeforeUnmount(() => {
 					variant="cta"
 					wide
 				>
-					{{ selectedSendType === "private" ? "Get private gas" : "Get Fee Juice" }}
+					{{ selectedSendType === "private" ? "Get private Fee Juice" : "Get Fee Juice" }}
 				</Button>
-				<Button
-					v-else
-					@click="submit('primary')"
-					data-testid="send-submit"
-					:data-action="facts.requiresReview ? 'review' : 'send'"
-					variant="cta"
-					wide
-					:disabled="!isAllowedToSend || isSending"
-					:loading="isSending"
-				>
-					{{ submitLabel }}
-				</Button>
+				<span v-else @keydown.enter="refuseRepeatEnter">
+					<Button
+						@click="submit('primary')"
+						data-testid="send-submit"
+						variant="cta"
+						wide
+						:disabled="!isAllowedToSend || isSending"
+						:loading="isSending"
+					>
+						{{ submitLabel }}
+					</Button>
+				</span>
 			</Flex>
 		</Flex>
+
+		<!-- The card lives as long as the page, since the estimate asks with its settings; the sheet only shows it. -->
+		<div hidden>
+			<Teleport defer :to="feeBody" :disabled="!feeSheetOpen || !feeBody">
+				<FeeSettingsCard
+					ref="feeCard"
+					:profile="appStore.profile"
+					:network="appStore.network"
+					:account="appStore.account"
+					:feeEstimate="feeEstimate"
+					:isEstimating="isEstimating"
+					:isQueued="feeQueued"
+					:queuedCap="queueCap"
+					:amountTyped="Boolean(amountTerm)"
+					:estimateFailed="estimateFailed"
+					:estimateSlow="estimateSlow"
+					:originPrivacy="selectedSendType"
+					embedded
+					:txShape="feeTxShape"
+					v-model="feeSettings"
+					v-model:needsFeeJuice="needsFeeJuice"
+					v-model:payer="payer"
+					v-model:feeDisplay="feeDisplay"
+					v-model:queuedCapText="queuedCapText"
+					v-model:queuedCapFigures="feeLineQueuedCap"
+					v-model:accountUnusable="accountUnusable"
+					v-model:notices="feeNotices"
+					v-model:remedy="feeRemedy"
+					@retryEstimate="requestEstimate"
+				/>
+			</Teleport>
+		</div>
+
+		<Popup :show="feeSheetOpen" :displaceIdx="feeOrder" :initialFocus="feeSheetFocus" @onClose="closeFeeSheet">
+			<PopupCard :displaceIdx="feeDepth">
+				<div role="dialog" aria-modal="true" aria-labelledby="send-fee-title" data-testid="send-fee-sheet">
+					<PopupHeader closable @onClose="closeFeeSheet">
+						<template #title>
+							<span id="send-fee-title" :class="$style.sheet_title">Fee</span>
+						</template>
+					</PopupHeader>
+					<div :class="$style.fee_body">
+						<div ref="feeBody" />
+						<Button variant="secondary" wide data-testid="send-fee-done" @click="closeFeeSheet">Done</Button>
+					</div>
+				</div>
+			</PopupCard>
+		</Popup>
 
 		<SendReviewSheet
 			:show="reviewOpen"
@@ -980,11 +1233,13 @@ onBeforeUnmount(() => {
 			@retry="requestEstimate"
 			@send="submit('review')"
 		/>
-	</Flex>
+	</div>
 </template>
 
 <style module>
 .wrapper {
+	display: flex;
+	flex-direction: column;
 	flex: 1;
 	overflow: auto;
 	scrollbar-gutter: stable;
@@ -1005,25 +1260,34 @@ onBeforeUnmount(() => {
 	gap: 8px;
 
 	padding: 14px 0;
-	border-bottom: 1px solid rgba(35, 31, 28, 1);
-}
-
-.section_flush {
-	border-bottom: none;
-	padding-bottom: 0;
+	border-bottom: 1px solid var(--nulo-border);
 }
 
 .section_last {
 	padding: 14px 0;
 }
 
-.section_label {
-	composes: type--label-section from global;
-	color: var(--nulo-secondary);
+/* The token row pads itself to the rules, so its hover and press fill the band; a banner or caveat
+   sharing the band keeps 8 px from the row's content and 14 px from the rule. */
+.section_token {
+	padding: 0;
+	gap: 0;
 }
 
-.publish {
-	padding-top: 14px;
+.token_banner {
+	margin-top: 14px;
+}
+
+.token_caveat {
+	margin-bottom: 14px;
+}
+
+.section_token > .token_row_after {
+	padding-top: 8px;
+}
+
+.section_token > .token_row_before {
+	padding-bottom: 8px;
 }
 
 .bottom {
@@ -1035,7 +1299,6 @@ onBeforeUnmount(() => {
 	background: var(--app-bg);
 	border-top: 1px solid var(--nulo-border);
 }
-
 
 .requote_notice {
 	padding: 6px 0;
@@ -1056,5 +1319,17 @@ onBeforeUnmount(() => {
 		outline: 2px solid var(--nulo-accent);
 		outline-offset: 2px;
 	}
+}
+
+.sheet_title {
+	composes: type--title-page from global;
+	color: var(--txt-primary);
+}
+
+.fee_body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 4px 20px 24px;
 }
 </style>

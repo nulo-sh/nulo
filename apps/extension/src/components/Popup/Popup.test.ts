@@ -195,6 +195,10 @@ describe("Popup", () => {
 		const b = await openPopup({ initialFocus: "#title" })
 		expect(traps[1]?.options.initialFocus).toBe("#title")
 		b.unmount()
+		const pick = () => undefined
+		const c = await openPopup({ initialFocus: pick })
+		expect(traps[2]?.options.initialFocus).toBe(pick)
+		c.unmount()
 	})
 
 	test("an open popup covers the nav: the snack drops from the nav's 76px to 12px and goes back when it closes", async () => {

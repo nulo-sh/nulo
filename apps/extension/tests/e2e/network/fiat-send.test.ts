@@ -14,6 +14,7 @@ import { reloadExtensionPage } from "../fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId } from "../fixtures/extension"
 import { setActiveSendType, waitForHomeTotal } from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { chooseRecipient } from "../fixtures/send-page"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -67,20 +68,21 @@ test.skipIf(!hasConfig)(
 		await page.waitForSelector('[data-testid="actions-send"]', { visible: true, timeout: 30_000 })
 		await page.evaluate(() => document.querySelector('[data-testid="actions-send"]')?.scrollIntoView({ block: "center" }))
 		await clickByTestId(page, "actions-send")
+		await page.waitForSelector('[data-testid="send-person-step"]', { timeout: 30_000 })
+		await chooseRecipient(page, tokenReadyExtension.accountAddress)
 		await page.waitForSelector('[data-testid="send-amount-input"]', { visible: true, timeout: 30_000 })
 
-		// The fixture mints PUBLIC tokens — select the funded side (the private
-		// balance is zero, which disables the input and hides the balance row).
+		// The fixture mints PUBLIC tokens: select the funded side (the private
+		// balance is zero, which disables the input).
 		await page.waitForSelector('[data-testid="send-from-type"]', { timeout: 10_000 })
 		await setActiveSendType(page, "send-from-type", "public")
 
 		// The unit pair exists ONLY for priced tokens — this run has one.
 		await page.waitForSelector('[data-testid="send-amount-fiat-toggle"]', { visible: true, timeout: 15_000 })
-		// Corner balance segment (1A rework: amount + symbol only, no privacy
-		// dot/word) — it mounts once the selected-type balance loads (async
-		// after the popup opens).
-		await page.waitForSelector('[data-testid="send-amount-balance"]', { visible: true, timeout: 30_000 })
-		const balanceSeg = await page.$eval('[data-testid="send-amount-balance"]', (el) => el.textContent?.trim() ?? "")
+		// The From choice prints the side's balance, amount and symbol, once it loads (async after the
+		// popup opens).
+		await page.waitForSelector('[data-testid="send-from-balance-public"]', { visible: true, timeout: 30_000 })
+		const balanceSeg = await page.$eval('[data-testid="send-from-balance-public"]', (el) => el.textContent?.trim() ?? "")
 		expect(balanceSeg).toMatch(/\d/)
 
 		// Flip to USD with a press on the switch at the amount row's top edge: the switch takes a press

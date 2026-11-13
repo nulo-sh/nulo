@@ -1,7 +1,7 @@
 /**
- * The Send page with its cards stubbed: what the footer does with a click, what the review sheet
- * authorises, and what the submit tail does with the promise. The fee card's real behaviour, and
- * the tag ⇔ gate ⇔ strip equivalence it feeds, is `send.integration.test.ts`.
+ * The Send page with its cards stubbed: the person step, what the footer does with a press, what the
+ * review sheet authorises, and what the submit tail does with the promise. The fee card's real
+ * behaviour, and the tag ⇔ warning equivalence it feeds, is `send.integration.test.ts`.
  */
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
@@ -14,6 +14,8 @@ import { TEST_FLAGGED, TEST_ICONS } from "@/wallet/services/token-list/list.fixt
 
 const ACCOUNT = "0xacct"
 const DESTINATION = `0x2${"b".repeat(63)}`
+/** A second payee, on the curve like `DESTINATION`. */
+const BEN = "0x1259300cc3f28f7051594427d01711cacf0a7c1eecd0035e5ee8f744e3ca4059"
 const HASH = `0x${"e".repeat(64)}`
 const TOKEN = {
 	id: 7,
@@ -43,6 +45,9 @@ const mocks = vi.hoisted(() => ({
 	legalStatus: vi.fn(async () => "current"),
 	refreezeQuote: vi.fn(),
 	focusAmount: vi.fn(),
+	exitFiat: vi.fn(),
+	applyRemedy: vi.fn(),
+	getOperations: vi.fn(async (_filter: unknown): Promise<unknown[]> => []),
 	flagged: { current: [] as string[] },
 	icons: { current: {} as Record<string, string> },
 }))
@@ -90,6 +95,22 @@ vi.mock("@/wallet/services/contact/client", () => ({
 			onContactUpdated: liveBus(),
 			onContactDeleted: liveBus(),
 			getContacts: mocks.getContacts,
+		}
+	}),
+}))
+// The app store's in-flight mirror and the page's short-lived reads both build one; every instance
+// reads the one journal `mocks.getOperations` answers for.
+vi.mock("@/wallet/services/operation-journal/client", () => ({
+	OperationJournalServiceClient: vi.fn(function () {
+		return {
+			connect: vi.fn(async () => {}),
+			disconnect: vi.fn(),
+			getOperations: vi.fn((filter: unknown) => mocks.getOperations(filter)),
+			getOperation: vi.fn(async () => undefined),
+			onConnected: new EventHandler(),
+			onOperationAdded: new EventHandler(),
+			onOperationUpdated: new EventHandler(),
+			onOperationDeleted: new EventHandler(),
 		}
 	}),
 }))
@@ -141,6 +162,7 @@ vi.mock("vue-router", () => ({
 }))
 
 import { REVIEW_ARM_MS } from "@/composables/useSendReview"
+import { FEE_JUICE_BRIDGE_URL } from "@/popup/components/modules/send/fee-helpers"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
@@ -150,18 +172,20 @@ import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
 import { ContactServiceClient } from "@/wallet/services/contact/client"
+import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 import { TransferType } from "@/wallet/services/transaction/client"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import { held, holdReads, liveBus } from "../../../tests/helpers/held-read"
+import { sendEvent } from "../../../tests/helpers/send-event"
 import Send from "./send.vue"
 
 const STUBS = {
 	Flex: { template: '<div v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: "<i />" },
-	SubPageHeader: { template: "<header />" },
+	Skeleton: { template: '<span data-testid="stub-skeleton" />' },
 	Banner: { template: '<div data-testid="stub-banner"><slot /></div>' },
 	Button: {
 		template: '<button v-bind="$attrs" :disabled="disabled || loading" @click="$emit(\'click\', $event)"><slot /></button>',
@@ -176,28 +200,34 @@ const STUBS = {
 		props: ["token", "loading", "failed", "onTokenAdded", "flagged", "icon"],
 		emits: ["retry"],
 	},
+	// The field's own wrapper testid is what the page focuses into on the way back to the person step.
 	RecipientField: {
-		template: '<input data-testid="stub-recipient" :value="searchTerm" @input="$emit(\'update:searchTerm\', $event.target.value)" />',
+		name: "RecipientField",
+		template:
+			'<div data-testid="send-destination-field"><input data-testid="stub-recipient" :value="searchTerm" @input="$emit(\'update:searchTerm\', $event.target.value)" /></div>',
 		props: ["searchTerm", "selectedContact", "candidates"],
 		emits: ["update:searchTerm", "update:selectedContact"],
 	},
 	AmountCard: {
 		name: "AmountCard",
 		template:
-			'<input data-testid="stub-amount" :data-token="token?.symbol" :data-balance="tokenBalanceByType" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+			'<input data-testid="stub-amount" :data-token="token?.symbol" :data-balance="tokenBalanceByType" :data-side="side" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
 		props: [
 			"modelValue",
+			"rested",
 			"fiatMode",
 			"fiatGuard",
 			"token",
 			"tokenBalanceByType",
 			"balanceRawByType",
+			"balanceState",
 			"liveQuote",
 			"proxyTicker",
 			"exceedsBalance",
+			"side",
 		],
-		emits: ["update:modelValue", "update:fiatMode", "update:fiatGuard"],
-		methods: { refreezeQuote: mocks.refreezeQuote, focusAmount: mocks.focusAmount },
+		emits: ["update:modelValue", "update:rested", "update:fiatMode", "update:fiatGuard"],
+		methods: { refreezeQuote: mocks.refreezeQuote, focusAmount: mocks.focusAmount, exitFiat: mocks.exitFiat },
 	},
 	FeeSettingsCard: {
 		name: "FeeSettingsCard",
@@ -208,21 +238,40 @@ const STUBS = {
 			"account",
 			"feeEstimate",
 			"isEstimating",
+			"isQueued",
+			"queuedCap",
+			"estimateFailed",
+			"estimateSlow",
 			"originPrivacy",
-			"payerNoticeShape",
+			"txShape",
 			"amountTyped",
 			"modelValue",
 			"needsFeeJuice",
 			"payer",
+			"feeDisplay",
+			"queuedCapText",
 			"accountUnusable",
+			"notices",
+			"remedy",
 		],
-		emits: ["update:modelValue", "update:needsFeeJuice", "update:payer", "update:accountUnusable"],
+		emits: [
+			"update:modelValue",
+			"update:needsFeeJuice",
+			"update:payer",
+			"update:feeDisplay",
+			"update:queuedCapText",
+			"update:accountUnusable",
+			"update:notices",
+			"update:remedy",
+			"retryEstimate",
+		],
+		methods: { applyRemedy: mocks.applyRemedy },
 	},
 	// The popup family under the real review sheet: what the sheet hands it, without trap or teleport.
 	Popup: {
 		name: "Popup",
 		template: '<div v-if="show" data-testid="stub-popup" :data-order="displaceIdx"><slot /></div>',
-		props: { show: Boolean, displaceIdx: Number, closeOnEscape: Boolean, initialFocus: [String, Boolean] },
+		props: { show: Boolean, displaceIdx: Number, closeOnEscape: Boolean, initialFocus: [String, Boolean, Function] },
 		emits: ["onClose"],
 	},
 	PopupCard: { template: '<div data-testid="stub-card" :data-depth="displaceIdx"><slot /></div>', props: ["displaceIdx"] },
@@ -235,10 +284,19 @@ const STUBS = {
 }
 
 type W = ReturnType<typeof mount>
+type Method = { settings: unknown; payer: unknown }
 /** The account's own Fee Juice: the one payer that names it. */
-const FJ = { settings: { paymentMethod: { kind: "fj" } }, payer: { type: "fj", isProtocol: false } }
+const FJ: Method = { settings: { paymentMethod: { kind: "fj" } }, payer: { type: "fj", isProtocol: false } }
 /** A protocol sponsor: hidden, one tap. */
-const SPONSOR = { settings: { paymentMethod: { kind: "fpc", fpcId: "s1" } }, payer: { type: "fpc", fpcId: "s1", isProtocol: true } }
+const SPONSOR: Method = {
+	settings: { paymentMethod: { kind: "fpc", fpcId: "s1" } },
+	payer: { type: "fpc", fpcId: "s1", isProtocol: true },
+}
+/** The PrivateFPC the wallet derives: hidden, paid from private Fee Juice. */
+const PRIVATE_FPC: Method = {
+	settings: { paymentMethod: { kind: "fpc", fpcId: "p1" } },
+	payer: { type: "private_fpc", fpcId: "p1", isProtocol: true },
+}
 
 /** The identity the page reads for; a cold tab's settles after mount. Balance rows land only for
  *  its chain. */
@@ -257,6 +315,13 @@ async function estimateLands() {
 	await flushPromises()
 }
 
+/** The person step's way to the form for a pasted address: the field takes it, then Pay this address. */
+async function toForm(w: W, address = DESTINATION) {
+	await w.get('[data-testid="stub-recipient"]').setValue(address)
+	await w.get('[data-testid="send-pay-address"]').trigger("click")
+	await flushPromises()
+}
+
 async function mountSend(
 	opts: {
 		errorHandler?: (error: unknown) => void
@@ -264,6 +329,8 @@ async function mountSend(
 		realAmountCard?: boolean
 		cold?: boolean
 		chainId?: number
+		/** Pays `DESTINATION` from the person step once the mount's reads settle. */
+		form?: boolean
 	} = {},
 ) {
 	vi.useFakeTimers()
@@ -283,29 +350,44 @@ async function mountSend(
 		},
 	})
 	await flushPromises()
+	if (opts.form) await toForm(w)
 	return { w, appStore, cacheStore, popupStore }
 }
 
 /** What the fee card would hand the page for a resolved method. */
-async function feeCard(w: W, method: { settings: unknown; payer: unknown } | null) {
+async function feeCard(w: W, method: Method | null) {
 	const card = w.findComponent({ name: "FeeSettingsCard" }).vm
 	card.$emit("update:payer", method?.payer ?? null)
 	card.$emit("update:modelValue", method?.settings ?? null)
 	await nextTick()
 }
 
-/** A complete, sendable form — a sponsor pays unless told otherwise, so nothing needs review. */
-async function fillForm(w: W, method: { settings: unknown; payer: unknown } | null = SPONSOR) {
-	await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+/** A complete, sendable form for `DESTINATION`, a sponsor paying unless told otherwise. */
+async function fillForm(w: W, method: Method | null = SPONSOR) {
+	await toForm(w)
 	await w.get('[data-testid="stub-amount"]').setValue("1.5")
 	await feeCard(w, method)
 	await estimateLands()
 }
 
 const submit = (w: W) => w.get('[data-testid="send-submit"]')
-const strip = (w: W) => w.find('[data-testid="send-publish-strip"]')
 const sheetOpen = (w: W) => w.get('[data-testid="send-review-sheet"]').attributes("data-open") === "true"
 const sendNow = (w: W) => w.get('[data-testid="send-review-submit"]')
+/** The review's own Popup: the fee sheet's comes first in the page. */
+const reviewPopup = (w: W) => w.getComponent({ name: "SendReviewSheet" }).getComponent({ name: "Popup" })
+/** The publish line's region, which carries the facts' `you` cell. */
+const publishLine = (w: W) => w.find("[data-you]")
+/** The side a group's checked radio names. */
+const checkedSide = (w: W, group: "from" | "to") =>
+	(["private", "public"] as const).filter((s) => (w.get(`[data-testid="send-${group}-${s}"]`).element as HTMLInputElement).checked)
+const pickSide = (w: W, group: "from" | "to", side: "private" | "public") => w.get(`[data-testid="send-${group}-${side}"]`).setValue(true)
+/** The primary press opens the review; its Send now, once armed, sends. */
+async function reviewAndSend(w: W) {
+	await submit(w).trigger("click")
+	vi.advanceTimersByTime(REVIEW_ARM_MS)
+	await nextTick()
+	await sendNow(w).trigger("click")
+}
 const awaitingIds = (store: ReturnType<typeof useAppStore>) => store.awaitingTransactions.map((row) => row.id)
 const lastClient = <T>(ctor: unknown) => (ctor as { mock: { results: { value: T }[] } }).mock.results.at(-1)?.value as T
 const balanceUpdated = () => lastClient<{ onTokenBalanceUpdated: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceUpdated
@@ -329,6 +411,8 @@ beforeEach(() => {
 	document.body.innerHTML = '<div id="popup"></div>'
 	mocks.getTokens.mockResolvedValue([TOKEN])
 	mocks.getTokenBalances.mockResolvedValue([BALANCE])
+	mocks.getContacts.mockResolvedValue([])
+	mocks.getOperations.mockResolvedValue([])
 	mocks.executeTransfer.mockResolvedValue(undefined)
 	mocks.estimateTransferFee.mockResolvedValue(LANDED)
 	mocks.legalStatus.mockResolvedValue("current")
@@ -345,13 +429,13 @@ afterEach(() => {
 })
 
 describe("send page — the submit tail", () => {
-	test("a click posts the awaiting row, fires the transfer with the snapshotted args, and leaves", async () => {
+	test("Send now posts the awaiting row, fires the transfer with the snapshotted args, and leaves", async () => {
 		const { w, appStore } = await mountSend()
 		await fillForm(w)
 		expect(submit(w).attributes("disabled")).toBeUndefined()
-		expect(submit(w).text()).toBe("Confirm Transaction")
+		expect(submit(w).text()).toBe("Review send")
 
-		await submit(w).trigger("click")
+		await reviewAndSend(w)
 
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 		expect(mocks.executeTransfer).toHaveBeenCalledWith(
@@ -381,7 +465,7 @@ describe("send page — the submit tail", () => {
 		client.results.at(-1)?.value.onTokenUpdated.invoke({ ...TOKEN, decimals: 4, profileId: "p1" })
 		await flushPromises()
 		await fillForm(w)
-		await submit(w).trigger("click")
+		await reviewAndSend(w)
 		expect(mocks.executeTransfer.mock.calls[0]?.[6]).toBe(15_000n)
 		expect(mocks.executeTransfer.mock.calls[0]?.[4]).toBe(TransferType.Private)
 		w.unmount()
@@ -397,7 +481,7 @@ describe("send page — the submit tail", () => {
 		client.results.at(-1)?.value.onTokenUpdated.invoke({ ...TOKEN, profileId: "p1" })
 		await flushPromises()
 		await fillForm(w)
-		await submit(w).trigger("click")
+		await reviewAndSend(w)
 		expect(mocks.executeTransfer.mock.calls[0]?.[4]).toBe(TransferType.Public)
 		w.unmount()
 	})
@@ -410,7 +494,7 @@ describe("send page — the submit tail", () => {
 		client.results.at(-1)?.value.onTokenUpdated.invoke({ ...publicOnly, profileId: "p1" })
 		await flushPromises()
 		await fillForm(w)
-		await submit(w).trigger("click")
+		await reviewAndSend(w)
 		expect(mocks.executeTransfer.mock.calls[0]?.[4]).toBe(TransferType.Public)
 		w.unmount()
 	})
@@ -421,8 +505,10 @@ describe("send page — the submit tail", () => {
 		await fillForm(w)
 		await w.get('[data-testid="stub-amount"]').setValue("1,234,567.123456")
 		await estimateLands()
-		await strip(w).trigger("click")
+		await submit(w).trigger("click")
 		expect(w.get('[data-testid="send-review-amount"]').text()).toBe("1,234,567.123456TST")
+		vi.advanceTimersByTime(REVIEW_ARM_MS)
+		await nextTick()
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledWith(
 			"n1",
@@ -440,12 +526,15 @@ describe("send page — the submit tail", () => {
 		w.unmount()
 	})
 
-	test("two activations in the same tick, before the button is patched disabled, send once", async () => {
+	test("two activations of Send now in the same tick, before the sheet is patched closed, send once", async () => {
 		const { w } = await mountSend()
 		await fillForm(w)
 		pendingTransfer()
-		;(submit(w).element as HTMLButtonElement).click()
-		;(submit(w).element as HTMLButtonElement).click()
+		await submit(w).trigger("click")
+		vi.advanceTimersByTime(REVIEW_ARM_MS)
+		await nextTick()
+		expect(sendEvent(sendNow(w).element, "click")).toBeDefined()
+		expect(sendEvent(sendNow(w).element, "click")).toBeDefined()
 		await flushPromises()
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 		w.unmount()
@@ -455,7 +544,7 @@ describe("send page — the submit tail", () => {
 		const { w, appStore } = await mountSend()
 		await fillForm(w)
 		const transfer = pendingTransfer()
-		await submit(w).trigger("click")
+		await reviewAndSend(w)
 		transfer.resolve()
 		await flushPromises()
 		expect(mocks.openToast).toHaveBeenCalledWith({
@@ -479,7 +568,7 @@ describe("send page — the submit tail", () => {
 		const { w, appStore } = await mountSend()
 		await fillForm(w)
 		const transfer = pendingTransfer()
-		await submit(w).trigger("click")
+		await reviewAndSend(w)
 		change(appStore)
 		transfer.resolve()
 		await flushPromises()
@@ -493,7 +582,7 @@ describe("send page — the submit tail", () => {
 		await fillForm(w)
 		appStore.addAwaitingTransaction({ id: "other", account: ACCOUNT, destination: DESTINATION, contract: TOKEN.contract })
 		const transfer = pendingTransfer()
-		await submit(w).trigger("click")
+		await reviewAndSend(w)
 		expect(awaitingIds(appStore)).toHaveLength(2)
 		transfer.reject(new Error("boom"))
 		await flushPromises()
@@ -508,7 +597,7 @@ describe("send page — the submit tail", () => {
 		const { w } = await mountSend()
 		await fillForm(w)
 		const transfer = pendingTransfer()
-		await submit(w).trigger("click")
+		await reviewAndSend(w)
 		transfer.reject(new TermsAcceptanceRequiredError())
 		await flushPromises()
 		expect(mocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Send failed", sub: TRANSFER_TERMS_COPY })
@@ -521,7 +610,7 @@ describe("send page — the submit tail", () => {
 		const { w, appStore } = await mountSend()
 		await fillForm(w)
 		const transfer = pendingTransfer()
-		await submit(w).trigger("click")
+		await reviewAndSend(w)
 		transfer.reject(new JobCancelledError())
 		await flushPromises()
 		expect(awaitingIds(appStore)).toHaveLength(0)
@@ -533,7 +622,7 @@ describe("send page — the submit tail", () => {
 		const { w } = await mountSend()
 		await fillForm(w)
 		const transfer = pendingTransfer()
-		await submit(w).trigger("click")
+		await reviewAndSend(w)
 		w.unmount()
 		expect(mocks.executionDisconnect).not.toHaveBeenCalled()
 		transfer.resolve()
@@ -550,12 +639,101 @@ describe("send page — the submit tail", () => {
 })
 
 describe("send page — the asset section", () => {
-	test("renders its label without a render error and names no network", async () => {
+	test("renders without a render error, names no network and no Select Asset label, and puts the token caveat under the token card", async () => {
 		const errors: unknown[] = []
-		const { w } = await mountSend({ errorHandler: (error) => errors.push(error) })
+		const { w } = await mountSend({ errorHandler: (error) => errors.push(error), form: true })
 		expect(errors).toEqual([])
-		expect(w.text()).toContain("Select Asset")
 		expect(w.text()).not.toContain("Network:")
+		expect(w.text()).not.toContain("Select Asset")
+		const caveat = w.get('[data-testid="send-token-caveat"]').element
+		expect(caveat.previousElementSibling?.getAttribute("data-testid")).toBe("stub-token-card")
+		w.unmount()
+	})
+})
+
+describe("send page — the person step", () => {
+	const OTHER = { ...TOKEN, id: 8, contract: `0x${"d".repeat(64)}`, symbol: "OTH" }
+	const field = (w: W) => w.get('[data-testid="stub-recipient"]')
+	const onPersonStep = (w: W) => w.find('[data-testid="send-person-step"]').exists()
+
+	test("an amount that takes no focus, with nothing to spend, leaves the form on the token row", async () => {
+		const { w } = await mountSend({ realTokenCard: true })
+		await toForm(w)
+		await flushPromises()
+		expect(mocks.focusAmount).toHaveBeenCalled()
+		expect(document.activeElement).toBe(w.get('[data-testid="send-token-trigger"]').element)
+		w.unmount()
+	})
+
+	test("a pasted address opens the form; Back keeps the token and the amount, clears the person and lands in the field; Enter takes the next", async () => {
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const { w, cacheStore } = await mountSend()
+		expect(onPersonStep(w)).toBe(true)
+		expect(w.find('[data-testid="send-payee"]').exists()).toBe(false)
+
+		await toForm(w)
+		expect(onPersonStep(w)).toBe(false)
+		expect(w.get('[data-testid="send-payee-address"]').text()).toBe(DESTINATION)
+		expect(w.find('[data-testid="send-payee-check"]').exists()).toBe(true)
+		cacheStore.activeTokenIdx = OTHER.id
+		await flushPromises()
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+
+		mocks.exitFiat.mockClear()
+		await w.get('[data-testid="subpage-back"]').trigger("click")
+		await flushPromises()
+		expect(mocks.exitFiat).toHaveBeenCalledTimes(1)
+		expect(onPersonStep(w)).toBe(true)
+		expect(w.findComponent({ name: "RecipientField" }).props()).toMatchObject({ searchTerm: "", selectedContact: null })
+		expect(document.activeElement).toBe(field(w).element)
+		expect(mocks.routerBack).not.toHaveBeenCalled()
+		expect(mocks.routerPush).not.toHaveBeenCalled()
+
+		await field(w).setValue(BEN)
+		expect(sendEvent(field(w).element, "keydown", { key: "Enter" })?.defaultPrevented).toBe(true)
+		await flushPromises()
+		expect(w.get('[data-testid="send-payee-address"]').text()).toBe(BEN)
+		expect(cacheStore.activeTokenIdx).toBe(OTHER.id)
+		expect((w.get('[data-testid="stub-amount"]').element as HTMLInputElement).value).toBe("1.5")
+		w.unmount()
+	})
+
+	test("each identity load reads the account's sends on a client of its own, closed after; a refused read loses only them", async () => {
+		mocks.getOperations.mockImplementation(async (filter) => {
+			if ((filter as { kind?: string } | undefined)?.kind === "transfer") throw new Error("port closed")
+			return []
+		})
+		const { w, appStore } = await mountSend({ form: true })
+		const pageReads = () =>
+			vi
+				.mocked(OperationJournalServiceClient)
+				.mock.results.map(({ value }) => value as { getOperations: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> })
+				.filter((client) => client.getOperations.mock.calls.some(([f]) => (f as { kind?: string })?.kind === "transfer"))
+		expect(pageReads()).toHaveLength(1)
+		expect(pageReads()[0]?.getOperations).toHaveBeenCalledExactlyOnceWith({
+			profileId: "p1",
+			accountAddress: ACCOUNT,
+			kind: "transfer",
+			stage: "succeeded",
+		})
+		expect(pageReads()[0]?.disconnect).toHaveBeenCalledTimes(1)
+		expect(w.get('[data-testid="stub-token-card"]').attributes()).toMatchObject({ "data-failed": "false", "data-symbol": "TST" })
+		expect(w.find('[data-testid="send-payee-check"]').exists()).toBe(true)
+
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		expect(pageReads()).toHaveLength(2)
+		expect(pageReads()[1]?.getOperations).toHaveBeenCalledWith(expect.objectContaining({ accountAddress: "0xbob" }))
+		expect(pageReads()[1]?.disconnect).toHaveBeenCalledTimes(1)
+		w.unmount()
+	})
+
+	test("Back on the person step leaves Send", async () => {
+		const { w } = await mountSend()
+		await w.get('[data-testid="subpage-back"]').trigger("click")
+		await flushPromises()
+		expect(mocks.routerBack.mock.calls.length + mocks.routerPush.mock.calls.length).toBe(1)
+		expect(mocks.routerReplace).not.toHaveBeenCalled()
 		w.unmount()
 	})
 })
@@ -563,16 +741,15 @@ describe("send page — the asset section", () => {
 describe("send page — the side a token opens on", () => {
 	const PUBLIC_ONLY = { ...BALANCE, privateBalance: "0", publicBalance: "3000000" }
 	const OTHER = { ...TOKEN, id: 8, contract: `0x${"8".repeat(64)}`, symbol: "OTH" }
-	const fromSide = (w: W) => w.get('[data-testid="send-from-type"] [data-selected]').text()
 	const shownBalance = (w: W) => w.get('[data-testid="stub-amount"]').attributes("data-balance")
 
 	test.each([
-		["all public opens on Public, with its balance", PUBLIC_ONLY, "PUBLIC", "3"],
-		["both sides open on Private", BALANCE, "PRIVATE", "5"],
+		["all public opens on Public, with its balance", PUBLIC_ONLY, "public", "3"],
+		["both sides open on Private", BALANCE, "private", "5"],
 	])("a balance %s", async (_, balance, side, shown) => {
 		mocks.getTokenBalances.mockResolvedValue([balance])
-		const { w } = await mountSend()
-		expect(fromSide(w)).toBe(side)
+		const { w } = await mountSend({ form: true })
+		expect(checkedSide(w, "from")).toEqual([side])
 		expect(shownBalance(w)).toBe(shown)
 		w.unmount()
 	})
@@ -580,36 +757,51 @@ describe("send page — the side a token opens on", () => {
 	test("picking a token whose balance is all public moves From to Public", async () => {
 		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
 		mocks.getTokenBalances.mockResolvedValue([BALANCE, { ...PUBLIC_ONLY, id: "b8", token: OTHER }])
-		const { w, cacheStore } = await mountSend()
-		expect(fromSide(w)).toBe("PRIVATE")
+		const { w, cacheStore } = await mountSend({ form: true })
+		expect(checkedSide(w, "from")).toEqual(["private"])
 		cacheStore.activeTokenIdx = OTHER.id
 		await flushPromises()
-		expect(fromSide(w)).toBe("PUBLIC")
+		expect(checkedSide(w, "from")).toEqual(["public"])
 		expect(shownBalance(w)).toBe("3")
 		w.unmount()
 	})
 })
 
 describe("send page — the footer", () => {
+	const warning = (w: W) => w.find('[data-testid="send-fee-warning"]')
+	const sentence = (w: W) => w.find('[data-testid="send-publish-line"]')
+
 	test("no settings from the card: nothing is sendable", async () => {
 		const { w } = await mountSend()
 		await fillForm(w, null)
 		expect(submit(w).attributes("disabled")).toBeDefined()
 		await submit(w).trigger("click")
+		expect(sheetOpen(w)).toBe(false)
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 		w.unmount()
 	})
 
-	test("a well-formed recipient off the curve is never estimated or sent; one on it is", async () => {
+	test("a well-formed recipient off the curve is never offered, nor a contact holding one; one on it is", async () => {
+		const OFF_CURVE = "0x24f20fb6e501242936eb1f47e2f51610f15e6c07486ed62012774e5f14ebd583"
+		mocks.getContacts.mockResolvedValue([{ id: "c-off", name: "Off", address: OFF_CURVE }])
+		route.query = { contact: "c-off" }
+		onTestFinished(() => {
+			route.query = {}
+		})
 		const { w } = await mountSend()
-		await fillForm(w)
-		mocks.estimateTransferFee.mockClear()
-		await w.get('[data-testid="stub-recipient"]').setValue("0x24f20fb6e501242936eb1f47e2f51610f15e6c07486ed62012774e5f14ebd583")
-		await estimateLands()
+		expect(w.find('[data-testid="send-payee"]').exists()).toBe(false)
+		expect(w.findComponent({ name: "RecipientField" }).props()).toMatchObject({ searchTerm: OFF_CURVE, selectedContact: null })
 		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
-		expect(submit(w).attributes("disabled")).toBeDefined()
 
-		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await w.get('[data-testid="stub-recipient"]').setValue(OFF_CURVE)
+		expect(w.find('[data-testid="send-pay-address"]').exists()).toBe(false)
+		expect(sendEvent(w.get('[data-testid="stub-recipient"]').element, "keydown", { key: "Enter" })?.defaultPrevented).toBe(false)
+		await flushPromises()
+		expect(w.find('[data-testid="send-person-step"]').exists()).toBe(true)
+
+		await toForm(w)
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+		await feeCard(w, SPONSOR)
 		await estimateLands()
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
 		expect(submit(w).attributes("disabled")).toBeUndefined()
@@ -642,57 +834,84 @@ describe("send page — the footer", () => {
 		w.unmount()
 	})
 
-	test("needsFeeJuice from the card takes the footer over", async () => {
+	test("needsFeeJuice from the card takes the footer over, named for the side it pays from", async () => {
 		const { w } = await mountSend()
 		await fillForm(w)
 		w.findComponent({ name: "FeeSettingsCard" }).vm.$emit("update:needsFeeJuice", true)
 		await nextTick()
 		expect(w.find('[data-testid="send-submit"]').exists()).toBe(false)
-		expect(w.get('[data-testid="send-get-fee-juice"]').text()).toBe("Get private gas")
+		expect(w.get('[data-testid="send-get-fee-juice"]').text()).toBe("Get private Fee Juice")
+		await pickSide(w, "from", "public")
+		expect(w.get('[data-testid="send-get-fee-juice"]').text()).toBe("Get Fee Juice")
 		w.unmount()
 	})
 
-	test("no sendable token: no strip, and the action is never review, whatever the card says", async () => {
+	test("no sendable token: no sides, no publish line whatever the card says, and the button stays off", async () => {
 		mocks.getTokens.mockResolvedValue([])
 		mocks.getTokenBalances.mockResolvedValue([])
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		await feeCard(w, FJ)
-		expect(strip(w).exists()).toBe(false)
-		expect(submit(w).attributes("data-action")).toBe("send")
-		expect(submit(w).text()).toBe("Confirm Transaction")
+		expect(w.find('[data-testid="send-from-type"]').exists()).toBe(false)
+		expect(publishLine(w).exists()).toBe(false)
+		expect(submit(w).attributes("disabled")).toBeDefined()
+		await submit(w).trigger("click")
+		expect(sheetOpen(w)).toBe(false)
 		w.unmount()
 	})
 
-	test("the strip carries the facts and opens the sheet on an unfinished form", async () => {
-		const { w } = await mountSend()
+	test("the publish line carries the facts on an unfinished form, and the review waits for a sendable one", async () => {
+		const { w } = await mountSend({ form: true })
 		await feeCard(w, FJ)
-		const el = strip(w)
-		expect(el.attributes("data-you")).toBe("exposed")
-		expect(el.attributes("data-to")).toBe("hidden")
-		expect(el.attributes("data-amount")).toBe("hidden")
-		await el.trigger("click")
-		expect(sheetOpen(w)).toBe(true)
-		expect(sendNow(w).attributes("disabled")).toBeDefined()
-		expect(w.get('[data-testid="send-review-amount"]').text()).toBe("—")
+		expect(publishLine(w).attributes("data-you")).toBe("exposed")
+		expect(warning(w).text()).toContain("Paying the fee from your public Fee Juice shows your address")
+		expect(sentence(w).exists()).toBe(false)
+		expect(submit(w).attributes("disabled")).toBeDefined()
+		await submit(w).trigger("click")
+		expect(sheetOpen(w)).toBe(false)
 		w.unmount()
 	})
 
-	test("the card's payer reading and the origin flip the action together", async () => {
+	test("the card's payer reading and the origin flip the publish line together; the button reads Review send throughout", async () => {
 		const { w } = await mountSend()
 		await fillForm(w, FJ)
-		expect(submit(w).attributes("data-action")).toBe("review")
+		expect(publishLine(w).attributes("data-you")).toBe("exposed")
+		expect(warning(w).exists()).toBe(true)
 		expect(submit(w).text()).toBe("Review send")
 		await feeCard(w, SPONSOR)
-		expect(submit(w).attributes("data-action")).toBe("send")
+		await estimateLands()
+		expect(publishLine(w).attributes("data-you")).toBe("hidden")
+		expect(warning(w).exists()).toBe(false)
+		expect(sentence(w).exists()).toBe(true)
+		expect(submit(w).text()).toBe("Review send")
 		await feeCard(w, FJ)
-		await w.get('[data-testid="send-from-type"]').trigger("click")
-		expect(submit(w).attributes("data-action")).toBe("send")
-		expect(strip(w).attributes("data-you")).toBe("public")
+		await pickSide(w, "from", "public")
+		await estimateLands()
+		expect(publishLine(w).attributes("data-you")).toBe("public")
+		expect(warning(w).exists()).toBe(false)
+		expect(sentence(w).text()).toContain("your address as the sender")
+		expect(submit(w).text()).toBe("Review send")
 		w.unmount()
 	})
 
-	test("the card hears whether the amount field holds an amount, with no recipient needed", async () => {
+	test("the warning's fix is the bridge until the card offers private Fee Juice, whose press applies it and focuses Change", async () => {
 		const { w } = await mountSend()
+		await fillForm(w, FJ)
+		expect(warning(w).exists()).toBe(true)
+		expect(w.find('[data-testid="send-fee-warning-fix"]').exists()).toBe(false)
+		expect(w.get('[data-testid="send-fee-warning-bridge"]').attributes("href")).toBe(FEE_JUICE_BRIDGE_URL)
+		w.findComponent({ name: "FeeSettingsCard" }).vm.$emit("update:remedy", "private_fpc")
+		await nextTick()
+		const fix = w.get('[data-testid="send-fee-warning-fix"]')
+		expect(fix.text()).toBe("Pay it from private Fee Juice")
+		await fix.trigger("click")
+		await nextTick()
+		expect(mocks.applyRemedy).toHaveBeenCalledTimes(1)
+		expect(document.activeElement).toBe(w.get('[data-testid="send-fee-change"]').element)
+		w.unmount()
+	})
+
+	test("the card hears whether the amount field holds an amount, before any fee is set", async () => {
+		const { w } = await mountSend({ form: true })
 		const typed = () => w.findComponent({ name: "FeeSettingsCard" }).props("amountTyped")
 		expect(typed()).toBe(false)
 		await w.get('[data-testid="stub-amount"]').setValue("1.5")
@@ -702,18 +921,30 @@ describe("send page — the footer", () => {
 		w.unmount()
 	})
 
-	test("the card is handed the tag's shape exactly while the send is gated", async () => {
-		const { w } = await mountSend()
-		const shape = () => w.findComponent({ name: "FeeSettingsCard" }).props("payerNoticeShape")
-		await fillForm(w, FJ)
-		expect(shape()).toBe("private-private")
-		await w.get('[data-testid="send-to-type"]').trigger("click")
-		expect(shape()).toBe("private-public")
+	test("the button names what is missing: an amount, a refused amount, the fee, a running estimate; ready, Review send", async () => {
+		const { w } = await mountSend({ form: true })
+		const label = () => [submit(w).text(), submit(w).attributes("disabled") === undefined ? "on" : "off"]
+		const amount = (text: string) => w.get('[data-testid="stub-amount"]').setValue(text)
 		await feeCard(w, SPONSOR)
-		expect(shape()).toBeNull()
-		await feeCard(w, FJ)
-		await w.get('[data-testid="send-from-type"]').trigger("click")
-		expect(shape()).toBeNull()
+		expect(label()).toEqual(["Enter an amount", "off"])
+		await amount("6")
+		expect(label()).toEqual(["Fix the amount", "off"])
+		await amount("1.5")
+		expect(label()).toEqual(["Estimating fee", "off"])
+		await estimateLands()
+		expect(label()).toEqual(["Review send", "on"])
+
+		mocks.estimateTransferFee.mockResolvedValueOnce({
+			...LANDED,
+			feeJuiceShortfall: { maxFee: "2100000000000000", balance: "1500000000000000" },
+		})
+		await amount("2")
+		await estimateLands()
+		expect(label()).toEqual(["Fix the fee", "off"])
+		mocks.estimateTransferFee.mockRejectedValueOnce(new Error("node down"))
+		await amount("3")
+		await estimateLands()
+		expect(label()).toEqual(["Fix the fee", "off"])
 		w.unmount()
 	})
 })
@@ -723,8 +954,7 @@ describe("send page — an amount over the balance says so", () => {
 	const amountInput = (w: W) => w.get('[data-testid="send-amount-input"]')
 
 	test("6 typed over private 5 shows the line; the balance rising to cover it takes it away", async () => {
-		const { w } = await mountSend({ realAmountCard: true })
-		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		const { w } = await mountSend({ realAmountCard: true, form: true })
 		await amountInput(w).setValue("6")
 		await feeCard(w, SPONSOR)
 		await estimateLands()
@@ -740,7 +970,7 @@ describe("send page — an amount over the balance says so", () => {
 
 	// Tokens are read per profile and chain, balances per account: a switch keeps the typed amount.
 	test("an account whose balance is not read yet keeps the amount, and only a synced balance below it shows the line", async () => {
-		const { w, appStore } = await mountSend({ realAmountCard: true })
+		const { w, appStore } = await mountSend({ realAmountCard: true, form: true })
 		await amountInput(w).setValue("1.5")
 		expect(line(w).exists()).toBe(false)
 
@@ -763,53 +993,54 @@ describe("send page — an amount over the balance says so", () => {
 	})
 })
 
-describe("send page — the balance beside Max", () => {
-	const corner = (w: W) => {
-		const figure = w.find('[data-testid="send-amount-balance"]')
+describe("send page — the balance under From", () => {
+	/** The private side's hint: its figure, the bar standing in for it, or nothing. */
+	const hint = (w: W) => {
+		const figure = w.find('[data-testid="send-from-balance-private"]')
 		if (figure.exists()) return figure.text()
-		return w.find('[data-testid="send-amount-balance-loading"]').exists() ? "skeleton" : "nothing"
+		return w.find('[data-testid="send-from-type"] [data-testid="stub-skeleton"]').exists() ? "skeleton" : "nothing"
 	}
 	const balanceConnected = () => lastClient<{ onConnected: EventHandler<void> }>(TokenBalanceServiceClient).onConnected
 	const FRESH = { ...BALANCE, privateBalance: "0", publicBalance: "0", updatedAt: 0 }
 
 	test("a row walks from unsynced to read: a skeleton, nothing on a failed first sync, then the zero it read, kept past a later failure", async () => {
 		mocks.getTokenBalances.mockResolvedValue([])
-		const { w } = await mountSend({ realAmountCard: true })
-		expect(corner(w)).toBe("skeleton")
+		const { w } = await mountSend({ form: true })
+		expect(hint(w)).toBe("skeleton")
 
 		balanceAdded().invoke(FRESH)
 		await flushPromises()
-		expect(corner(w)).toBe("skeleton")
+		expect(hint(w)).toBe("skeleton")
 
 		const failure = { at: 1, message: "PXE down" }
 		balanceUpdated().invoke({ ...FRESH, syncFailure: failure })
 		await flushPromises()
-		expect(corner(w)).toBe("nothing")
+		expect(hint(w)).toBe("nothing")
 
 		balanceUpdated().invoke({ ...FRESH, updatedAt: 2 })
 		await flushPromises()
-		expect(corner(w)).toBe("0 TST")
+		expect(hint(w)).toBe("0 TST")
 
 		balanceUpdated().invoke({ ...FRESH, updatedAt: 2, syncFailure: failure })
 		await flushPromises()
-		expect(corner(w)).toBe("0 TST")
+		expect(hint(w)).toBe("0 TST")
 		w.unmount()
 	})
 
 	test("with no row, a refused re-read keeps the skeleton the load's read showed, and so does the retry's read", async () => {
 		mocks.getTokenBalances.mockResolvedValue([])
-		const { w } = await mountSend({ realAmountCard: true })
-		expect(corner(w)).toBe("skeleton")
+		const { w } = await mountSend({ form: true })
+		expect(hint(w)).toBe("skeleton")
 		balanceConnected().invoke()
 		mocks.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
 		balanceConnected().invoke()
 		await flushPromises()
-		expect(corner(w)).toBe("skeleton")
+		expect(hint(w)).toBe("skeleton")
 
 		await vi.advanceTimersByTimeAsync(2_000)
 		await flushPromises()
 		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(3)
-		expect(corner(w)).toBe("skeleton")
+		expect(hint(w)).toBe("skeleton")
 		w.unmount()
 	})
 })
@@ -820,9 +1051,8 @@ describe("send page — the estimate follows the amount the balance covers", () 
 	const balanceShown = (w: W) => w.get('[data-testid="stub-amount"]').attributes("data-balance")
 
 	test("public side: an amount over the balance asks nothing; the balance rising to cover it asks for that amount", async () => {
-		const { w } = await mountSend()
-		await w.get('[data-testid="send-from-type"]').trigger("click")
-		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		const { w } = await mountSend({ form: true })
+		await pickSide(w, "from", "public")
 		await w.get('[data-testid="stub-amount"]').setValue("4")
 		await feeCard(w, SPONSOR)
 		await estimateLands()
@@ -911,77 +1141,84 @@ describe("send page — the estimate follows the amount the balance covers", () 
 })
 
 describe("send page — consent", () => {
-	test("gated: the primary button opens the sheet and sends nothing", async () => {
+	const ready = (w: W) => sendNow(w).attributes("data-ready")
+
+	test.each([
+		["a fee that names the account", FJ, "exposed", "private-private"],
+		["a sponsored fee", SPONSOR, "hidden", undefined],
+	])("%s: the primary button opens the sheet and sends nothing", async (_name, method, you, shape) => {
 		const { w } = await mountSend()
-		await fillForm(w, FJ)
+		await fillForm(w, method)
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 		expect(sheetOpen(w)).toBe(true)
-		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-visibility")).toBe("exposed")
-		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-notice-shape")).toBe("private-private")
+		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-visibility")).toBe(you)
+		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-notice-shape")).toBe(shape)
 		w.unmount()
 	})
 
-	test("gated: Send now before the wait sends nothing, after it sends once — the slot closed before leaving", async () => {
-		vi.useFakeTimers()
+	test.each([
+		["a fee that names the account", FJ],
+		["a sponsored fee", SPONSOR],
+	])("%s: Send now before the wait sends nothing, after it sends once — the slot closed before leaving", async (_name, method) => {
 		const { w, popupStore } = await mountSend()
-		await fillForm(w, FJ)
+		await fillForm(w, method)
 		await submit(w).trigger("click")
-		expect(sendNow(w).attributes("data-ready")).toBe("false")
+		expect(ready(w)).toBe("false")
+		vi.advanceTimersByTime(REVIEW_ARM_MS - 1)
+		await nextTick()
+		expect(ready(w)).toBe("false")
+		w.findComponent({ name: "SendReviewSheet" }).vm.$emit("send")
 		await sendNow(w).trigger("click")
+		await flushPromises()
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 
-		vi.advanceTimersByTime(REVIEW_ARM_MS)
+		vi.advanceTimersByTime(1)
 		await nextTick()
-		expect(sendNow(w).attributes("data-ready")).toBe("true")
+		expect(ready(w)).toBe("true")
 		const closeSpy = vi.spyOn(popupStore, "close")
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
-		expect(mocks.executeTransfer.mock.calls[0]?.[7]).toEqual(FJ.settings)
+		expect(mocks.executeTransfer.mock.calls[0]?.[7]).toEqual(method.settings)
 		expect(closeSpy.mock.invocationCallOrder[0]).toBeLessThan(mocks.routerReplace.mock.invocationCallOrder[0] as number)
 		expect(sheetOpen(w)).toBe(false)
 		w.unmount()
 	})
 
-	test("not gated: the optional sheet, opened from the strip, sends at once", async () => {
+	test("a payer change on a private origin after the sheet armed starts the wait again, each way", async () => {
 		const { w } = await mountSend()
-		await fillForm(w)
-		await strip(w).trigger("click")
-		expect(sendNow(w).attributes("data-ready")).toBe("true")
-		await sendNow(w).trigger("click")
-		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
-		w.unmount()
-	})
+		await fillForm(w, PRIVATE_FPC)
+		await submit(w).trigger("click")
+		vi.advanceTimersByTime(REVIEW_ARM_MS)
+		await nextTick()
+		expect(ready(w)).toBe("true")
 
-	test("turning gated while the sheet is open starts the wait; turning back makes it sendable at once", async () => {
-		vi.useFakeTimers()
-		const { w } = await mountSend()
-		await fillForm(w)
-		await strip(w).trigger("click")
 		await feeCard(w, FJ)
-		expect(sendNow(w).attributes("data-ready")).toBe("false")
-		await sendNow(w).trigger("click")
-		expect(mocks.executeTransfer).not.toHaveBeenCalled()
+		expect(w.get('[data-testid="send-review-row-you"]').attributes("data-visibility")).toBe("exposed")
+		expect(ready(w)).toBe("false")
 		vi.advanceTimersByTime(REVIEW_ARM_MS - 1)
 		await nextTick()
-		expect(sendNow(w).attributes("data-ready")).toBe("false")
+		expect(ready(w)).toBe("false")
+		await sendNow(w).trigger("click")
+		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 
-		await feeCard(w, SPONSOR)
+		await feeCard(w, PRIVATE_FPC)
+		expect(ready(w)).toBe("false")
 		await estimateLands()
-		expect(sendNow(w).attributes("data-ready")).toBe("true")
+		expect(ready(w)).toBe("true")
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
+		expect(mocks.executeTransfer.mock.calls[0]?.[7]).toEqual(PRIVATE_FPC.settings)
 		w.unmount()
 	})
 
 	test.each([
-		["gated", FJ],
-		["not gated", SPONSOR],
+		["a fee that names the account", FJ],
+		["a sponsored fee", SPONSOR],
 	])("the sheet's send event while its slot is closed sends nothing (%s, wait elapsed)", async (_name, method) => {
-		vi.useFakeTimers()
 		const { w } = await mountSend()
 		await fillForm(w, method)
-		await strip(w).trigger("click")
+		await submit(w).trigger("click")
 		vi.advanceTimersByTime(REVIEW_ARM_MS)
 		await w.get('[data-testid="popup-close-btn"]').trigger("click")
 		expect(sheetOpen(w)).toBe(false)
@@ -992,41 +1229,42 @@ describe("send page — consent", () => {
 	})
 
 	test("a popup opened over the armed sheet takes its consent; closed again, the wait starts over", async () => {
-		vi.useFakeTimers()
 		const { w, popupStore } = await mountSend()
 		await fillForm(w, FJ)
 		await submit(w).trigger("click")
 		vi.advanceTimersByTime(REVIEW_ARM_MS)
 		await nextTick()
-		expect(sendNow(w).attributes("data-ready")).toBe("true")
+		expect(ready(w)).toBe("true")
 
 		popupStore.open("confirm")
 		await nextTick()
-		expect(sendNow(w).attributes("data-ready")).toBe("false")
+		expect(ready(w)).toBe("false")
 		expect(sendNow(w).attributes("disabled")).toBeDefined()
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 
 		popupStore.close("confirm")
 		await nextTick()
-		expect(sendNow(w).attributes("data-ready")).toBe("false")
+		expect(ready(w)).toBe("false")
 		vi.advanceTimersByTime(REVIEW_ARM_MS)
 		await nextTick()
-		expect(sendNow(w).attributes("data-ready")).toBe("true")
+		expect(ready(w)).toBe("true")
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 		w.unmount()
 	})
 
-	test("the primary button never sends a gated transfer, even with the sheet open and ready", async () => {
-		vi.useFakeTimers()
+	test.each([
+		["a fee that names the account", FJ],
+		["a sponsored fee", SPONSOR],
+	])("the primary button never sends, even with the sheet open and ready (%s)", async (_name, method) => {
 		const { w } = await mountSend()
-		await fillForm(w, FJ)
-		await strip(w).trigger("click")
+		await fillForm(w, method)
+		await submit(w).trigger("click")
 		vi.advanceTimersByTime(REVIEW_ARM_MS)
 		await nextTick()
-		expect(sendNow(w).attributes("data-ready")).toBe("true")
-		;(submit(w).element as HTMLButtonElement).click()
+		expect(ready(w)).toBe("true")
+		expect(sendEvent(submit(w).element, "click")).toBeDefined()
 		await flushPromises()
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
 		w.unmount()
@@ -1037,7 +1275,7 @@ describe("send page — the sheet on the popup stack", () => {
 	test("a popup opened on top gets the higher order; the sheet is displaced behind it", async () => {
 		const { w, popupStore } = await mountSend()
 		await fillForm(w)
-		await strip(w).trigger("click")
+		await submit(w).trigger("click")
 		expect(w.get('[data-testid="stub-popup"]').attributes("data-order")).toBe("0")
 		expect(w.get('[data-testid="stub-card"]').attributes("data-depth")).toBe("1")
 		popupStore.open("confirm")
@@ -1051,9 +1289,9 @@ describe("send page — the sheet on the popup stack", () => {
 	test("closing the sheet underneath a newer popup keeps orders unique; opening twice does not renumber", async () => {
 		const { w, popupStore } = await mountSend()
 		await fillForm(w)
-		await strip(w).trigger("click")
+		await submit(w).trigger("click")
 		popupStore.open("confirm")
-		await strip(w).trigger("click")
+		await submit(w).trigger("click")
 		expect(popupStore.popups.send_review?.order).toBe(0)
 		await w.get('[data-testid="popup-close-btn"]').trigger("click")
 		expect(popupStore.popups.confirm?.order).toBe(0)
@@ -1064,11 +1302,11 @@ describe("send page — the sheet on the popup stack", () => {
 	test("closeAll (lock) closes it; unmounting releases the slot; a reopen takes a fresh one", async () => {
 		const { w, popupStore } = await mountSend()
 		await fillForm(w)
-		await strip(w).trigger("click")
+		await submit(w).trigger("click")
 		popupStore.closeAll()
 		await nextTick()
 		expect(sheetOpen(w)).toBe(false)
-		await strip(w).trigger("click")
+		await submit(w).trigger("click")
 		expect(sheetOpen(w)).toBe(true)
 		w.unmount()
 		expect(popupStore.isOpened("send_review")).toBe(false)
@@ -1105,11 +1343,11 @@ describe("send page — the sheet on the popup stack", () => {
 
 	test.each([
 		["header close", async (w: W) => w.get('[data-testid="popup-close-btn"]').trigger("click")],
-		["backdrop / Escape", async (w: W) => w.findComponent({ name: "Popup" }).vm.$emit("onClose")],
+		["backdrop / Escape", async (w: W) => reviewPopup(w).vm.$emit("onClose")],
 	])("closing by %s leaves the form intact", async (_name, close) => {
 		const { w } = await mountSend()
 		await fillForm(w, FJ)
-		await w.get('[data-testid="send-to-type"]').trigger("click")
+		await pickSide(w, "to", "public")
 		await estimateLands()
 		await submit(w).trigger("click")
 		expect(sheetOpen(w)).toBe(true)
@@ -1117,9 +1355,10 @@ describe("send page — the sheet on the popup stack", () => {
 		await nextTick()
 		expect(sheetOpen(w)).toBe(false)
 		expect((w.get('[data-testid="stub-amount"]').element as HTMLInputElement).value).toBe("1.5")
-		expect((w.get('[data-testid="stub-recipient"]').element as HTMLInputElement).value).toBe(DESTINATION)
-		expect(strip(w).attributes("data-to")).toBe("public")
-		expect(submit(w).attributes("data-action")).toBe("review")
+		expect(w.get('[data-testid="send-payee-address"]').text()).toBe(DESTINATION)
+		expect(checkedSide(w, "to")).toEqual(["public"])
+		expect(submit(w).text()).toBe("Review send")
+		expect(submit(w).attributes("disabled")).toBeUndefined()
 		w.unmount()
 	})
 })
@@ -1131,24 +1370,22 @@ describe("send page — a token the picker imported", () => {
 	const amountInput = (w: W) => w.get('[data-testid="send-amount-input"]')
 	const amountText = (w: W) => (amountInput(w).element as HTMLInputElement).value
 	const cardSymbol = (w: W) => w.get('[data-testid="stub-token-card"]').attributes("data-symbol")
-	/** From and To as the real `SendTypesCard` marks them. */
-	const sides = (w: W) =>
-		["send-from-type", "send-to-type"].map((id) => w.get(`[data-testid="${id}"] [data-selected]`).text().toLowerCase())
+	/** From and To as their checked radios name them. */
+	const sides = (w: W) => [...checkedSide(w, "from"), ...checkedSide(w, "to")]
 	const tokenAdded = () => lastClient<{ onTokenAdded: EventHandler<unknown> }>(TokenServiceClient).onTokenAdded
 	/** What New token hands the picker's opener once the add is done. */
 	const report = (w: W, token: unknown) =>
 		(w.findComponent({ name: "SelectTokenCard" }).props("onTokenAdded") as (t: unknown) => Promise<void>)(token)
 	/** Mounted on `TOKEN` with an amount typed, every token read held from the next one on. */
 	async function heldAfterMount() {
-		const { w, appStore, cacheStore } = await mountSend({ realAmountCard: true })
+		const { w, appStore, cacheStore } = await mountSend({ realAmountCard: true, form: true })
 		const reads = holdReads<unknown[]>(mocks.getTokens)
 		await amountInput(w).setValue("1.5")
 		return { w, appStore, cacheStore, reads }
 	}
 
 	test("the swap keeps the recipient and the amount, cut to the new token's places with the hint, and asks the fee again", async () => {
-		const { w, cacheStore } = await mountSend({ realAmountCard: true })
-		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		const { w, cacheStore } = await mountSend({ realAmountCard: true, form: true })
 		await amountInput(w).setValue("1.123456")
 		await feeCard(w, SPONSOR)
 		await estimateLands()
@@ -1163,7 +1400,7 @@ describe("send page — a token the picker imported", () => {
 		expect(cacheStore.activeTokenIdx).toBe(NEW.id)
 		expect(amountText(w)).toBe("1.12")
 		expect(w.get('[data-testid="send-amount-clamp-hint"]').text()).toBe("NEW supports 2 decimals")
-		expect((w.get('[data-testid="stub-recipient"]').element as HTMLInputElement).value).toBe(DESTINATION)
+		expect(w.get('[data-testid="send-payee-address"]').text()).toBe(DESTINATION)
 
 		await estimateLands()
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
@@ -1176,11 +1413,10 @@ describe("send page — a token the picker imported", () => {
 		["public", "private", TransferType.PublicToPrivate],
 		["private", "public", TransferType.PrivateToPublic],
 	] as const)("the swap keeps From on %s and To on %s, and the fee is asked for that transfer", async (from, to, transfer) => {
-		const { w, cacheStore } = await mountSend({ realAmountCard: true })
-		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		const { w, cacheStore } = await mountSend({ realAmountCard: true, form: true })
 		await feeCard(w, SPONSOR)
-		if (from === "public") await w.get('[data-testid="send-from-type"]').trigger("click")
-		if (to === "public") await w.get('[data-testid="send-to-type"]').trigger("click")
+		await pickSide(w, "from", from)
+		await pickSide(w, "to", to)
 		await amountInput(w).setValue("1.5")
 
 		mocks.getTokens.mockResolvedValue([TOKEN, NEW])
@@ -1199,10 +1435,10 @@ describe("send page — a token the picker imported", () => {
 
 	test("a row pick still puts From and To back on private and clears the amount", async () => {
 		mocks.getTokens.mockResolvedValue([TOKEN, NEW])
-		const { w, cacheStore } = await mountSend({ realAmountCard: true })
+		const { w, cacheStore } = await mountSend({ realAmountCard: true, form: true })
 		await amountInput(w).setValue("1.5")
-		await w.get('[data-testid="send-from-type"]').trigger("click")
-		await w.get('[data-testid="send-to-type"]').trigger("click")
+		await pickSide(w, "from", "public")
+		await pickSide(w, "to", "public")
 		expect([amountText(w), ...sides(w)]).toEqual(["1.5", "public", "public"])
 
 		cacheStore.activeTokenIdx = NEW.id
@@ -1292,7 +1528,7 @@ describe("send page — a token the picker imported", () => {
 		const added = { ...NEW, chainId }
 		mocks.getTokens.mockResolvedValue([priced])
 		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
-		const { w, cacheStore } = await mountSend({ realAmountCard: true, chainId })
+		const { w, cacheStore } = await mountSend({ realAmountCard: true, chainId, form: true })
 		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
 		price.onQuotesUpdated.invoke({
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
@@ -1316,17 +1552,26 @@ describe("send page — a token the picker imported", () => {
 
 describe("send page — the contact in the URL", () => {
 	const ALICE = { id: "c-alice", name: "Alice", address: `0x2${"a".repeat(63)}`, abbr: "AL" }
-	const recipient = (w: W) => w.findComponent(STUBS.RecipientField)
+	const recipient = (w: W) => w.findComponent({ name: "RecipientField" })
+	const payee = (w: W) => ({
+		name: w.find('[data-testid="send-payee-name"]').text(),
+		address: w.find('[data-testid="send-payee-address"]').text(),
+		check: w.find('[data-testid="send-payee-check"]').exists(),
+	})
 	afterEach(() => {
 		route.query = {}
 	})
 
-	test("?contact=<id> of one of the profile's contacts preselects it, with no store involved", async () => {
+	test("?contact=<id> of one of the profile's contacts opens the form on it, with no store involved", async () => {
 		mocks.getContacts.mockResolvedValue([ALICE])
 		route.query = { contact: ALICE.id }
+		mocks.focusAmount.mockClear()
 		const { w, cacheStore } = await mountSend()
-		expect(recipient(w).props("selectedContact")).toEqual(ALICE)
-		expect(recipient(w).props("searchTerm")).toBe(ALICE.address)
+		await flushPromises()
+		expect(w.find('[data-testid="send-person-step"]').exists()).toBe(false)
+		expect(payee(w)).toEqual({ name: "Alice", address: ALICE.address, check: false })
+		expect(mocks.focusAmount).toHaveBeenCalledTimes(1)
+		expect(w.findComponent({ name: "SendReviewSheet" }).props("recipientName")).toBe("Alice")
 		expect("preselectedContactToSend" in cacheStore).toBe(false)
 		w.unmount()
 	})
@@ -1334,25 +1579,25 @@ describe("send page — the contact in the URL", () => {
 	test.each([
 		["an unknown id", "c-nobody"],
 		["another profile's id", "c-bob"],
-	])("%s selects nothing", async (_name, id) => {
+	])("%s selects nothing: the person step stays", async (_name, id) => {
 		mocks.getContacts.mockResolvedValue([ALICE])
 		route.query = { contact: id }
 		const { w } = await mountSend()
-		expect(recipient(w).props("selectedContact")).toBeUndefined()
-		expect(recipient(w).props("searchTerm")).toBe("")
+		expect(w.find('[data-testid="send-payee"]').exists()).toBe(false)
+		expect(recipient(w).props()).toMatchObject({ selectedContact: null, searchTerm: "" })
 		w.unmount()
 	})
 
-	test("a cold tab: the contacts arrive once the identity settles after mount, and the id still preselects", async () => {
+	test("a cold tab: the contacts arrive once the identity settles after mount, and the id still opens the form on it", async () => {
 		mocks.getContacts.mockResolvedValue([ALICE])
 		route.query = { contact: ALICE.id }
 		const { w, appStore } = await mountSend({ cold: true })
-		expect(recipient(w).props("selectedContact")).toBeUndefined()
+		expect(recipient(w).props("selectedContact")).toBeNull()
 
 		setIdentity(appStore)
 		await flushPromises()
-		expect(recipient(w).props("selectedContact")).toEqual(ALICE)
-		expect(recipient(w).props("searchTerm")).toBe(ALICE.address)
+		expect(w.find('[data-testid="send-person-step"]').exists()).toBe(false)
+		expect(payee(w)).toEqual({ name: "Alice", address: ALICE.address, check: false })
 		w.unmount()
 	})
 })
@@ -1387,7 +1632,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("loading while the mount's read is out; the read ends it and draws the token", async () => {
 		const reads = holdTokenReads()
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		expect(card(w)).toEqual({ loading: "true", symbol: undefined })
 		reads[0]?.resolve([TOKEN])
 		await flushPromises()
@@ -1397,7 +1642,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("a superseded read does not end the newer read's loading", async () => {
 		const reads = holdTokenReads()
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		await toB(appStore)
 		reads[0]?.resolve([TOKEN])
 		await flushPromises()
@@ -1410,7 +1655,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("A to B: B's load shows neither A's token nor its balance, and B's refused read ends on the failed card", async () => {
 		const reads = holdTokenReads()
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		reads[0]?.resolve([TOKEN])
 		await flushPromises()
 		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
@@ -1432,7 +1677,7 @@ describe("send page — the token card while the tokens load", () => {
 	})
 
 	test("after an account switch an add for the previous account never lands; one for the new account does", async () => {
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		expect(amount(w).attributes("data-balance")).toBe("5")
 		mocks.getTokenBalances.mockResolvedValue([])
 		appStore.account = { address: "0xbob" } as never
@@ -1454,7 +1699,7 @@ describe("send page — the token card while the tokens load", () => {
 	test("a restart that gives a listed row's id to another token shows each token's own amount at every step", async () => {
 		const NEW = { ...TOKEN, id: 9, contract: `0x${"9".repeat(64)}`, symbol: "NEW" }
 		mocks.getTokens.mockResolvedValue([TOKEN, NEW])
-		const { w, cacheStore } = await mountSend()
+		const { w, cacheStore } = await mountSend({ form: true })
 		const shown = async (tokenId: number) => {
 			cacheStore.activeTokenIdx = tokenId
 			await flushPromises()
@@ -1484,7 +1729,7 @@ describe("send page — the token card while the tokens load", () => {
 	})
 
 	test("a worker restart re-reads the balances: the first connect is the load's own, a later one lands the new amount", async () => {
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		expect(amount(w).attributes("data-balance")).toBe("5")
 		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, privateBalance: "8000000" }])
 		balanceConnected().invoke()
@@ -1499,7 +1744,7 @@ describe("send page — the token card while the tokens load", () => {
 	})
 
 	test("an account switch drops a re-read still out for the previous account", async () => {
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		balanceConnected().invoke()
 		let release: (rows: unknown[]) => void = () => {}
 		mocks.getTokenBalances.mockImplementationOnce(
@@ -1521,7 +1766,7 @@ describe("send page — the token card while the tokens load", () => {
 	})
 
 	test("an identity fetch's balance read never lands over a reconnect's read that began after it", async () => {
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		balanceConnected().invoke()
 		const reads = holdTokenReads()
 		mocks.getTokenBalances.mockResolvedValueOnce([{ ...BALANCE, id: "b2", account: "0xbob" }])
@@ -1540,7 +1785,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("a refused re-read after an identity fetch keeps the rows that fetch's read landed", async () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		balanceConnected().invoke()
 		// A re-read landed for the previous identity first.
 		balanceConnected().invoke()
@@ -1563,7 +1808,7 @@ describe("send page — the token card while the tokens load", () => {
 	})
 
 	test("a deleted balance row drops its amount; a delete for another row keeps it", async () => {
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		expect(amount(w).attributes("data-balance")).toBe("5")
 		balanceDeleted().invoke({ ...BALANCE, id: "b9" })
 		await flushPromises()
@@ -1581,7 +1826,7 @@ describe("send page — the token card while the tokens load", () => {
 		const tokenReads = holdTokenReads()
 		const balanceReads = holdReads<unknown[]>(mocks.getTokenBalances)
 		const UPDATED = { ...BALANCE, privateBalance: "9000000", updatedAt: 2 }
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		if (whileOut) balanceUpdated().invoke(UPDATED)
 		balanceReads[0]?.resolve([BALANCE])
 		await flushPromises()
@@ -1596,7 +1841,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("a delete of the selected row after the balance read answers keeps it gone when the load ends", async () => {
 		const tokenReads = holdTokenReads()
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		balanceDeleted().invoke(BALANCE)
 		tokenReads[0]?.resolve([TOKEN])
 		await flushPromises()
@@ -1622,7 +1867,7 @@ describe("send page — the token card while the tokens load", () => {
 	])("a refused balance read shows the failed card at once and keeps it: %s", async (_which, refetch) => {
 		const tokenReads = holdTokenReads()
 		const balanceReads = holdReads<unknown[]>(mocks.getTokenBalances)
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		if (refetch) {
 			balanceUpdated().invoke({ ...BALANCE, privateBalance: "9000000", updatedAt: 2 })
 			balanceReads[0]?.resolve([BALANCE])
@@ -1645,7 +1890,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("the identity going incomplete mid-load ends the loading on the empty card", async () => {
 		const reads = holdTokenReads()
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		appStore.account = undefined as never
 		await flushPromises()
 		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
@@ -1657,7 +1902,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("a token re-read still out when the identity goes incomplete never lands", async () => {
 		const reads = holdTokenReads()
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		reads[0]?.resolve([TOKEN])
 		await flushPromises()
 		tokenAdded().invoke(OTHER)
@@ -1672,7 +1917,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("after a refused read, the next identity's read draws its token", async () => {
 		const reads = holdTokenReads()
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		reads[0]?.reject(refused())
 		await flushPromises()
 		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
@@ -1688,7 +1933,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("a read that finds no tokens ends on the empty card, not the failed one", async () => {
 		mocks.getTokens.mockResolvedValue([])
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
 		expect(failed(w)).toBe("false")
 		w.unmount()
@@ -1697,7 +1942,7 @@ describe("send page — the token card while the tokens load", () => {
 	test("the mount's read refused: logged at debug, nothing unhandled, the failed card", async () => {
 		mocks.getTokens.mockRejectedValue(refused())
 		const errorHandler = vi.fn()
-		const { w } = await mountSend({ errorHandler })
+		const { w } = await mountSend({ errorHandler, form: true })
 		expect(errorHandler.mock.calls.length).toBe(0)
 		expect(console.debug).toHaveBeenCalledWith(expect.any(String), { error: expect.objectContaining({ message: "port closed" }) })
 		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
@@ -1710,7 +1955,7 @@ describe("send page — the token card while the tokens load", () => {
 		["after B's read is refused, which it retries", false],
 	])("a token added on another chain, with the kept token's id, is never drawn: %s", async (_when, duringLoad) => {
 		const reads = holdTokenReads()
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		reads[0]?.resolve([TOKEN])
 		await flushPromises()
 		await toB(appStore)
@@ -1731,7 +1976,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("tokens read and contacts refused: the same failed card", async () => {
 		mocks.getContacts.mockRejectedValueOnce(refused())
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
 		expect(failed(w)).toBe("true")
 		w.unmount()
@@ -1739,7 +1984,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("the identity going incomplete after a refused read clears the failure", async () => {
 		mocks.getTokens.mockRejectedValueOnce(refused())
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		expect(failed(w)).toBe("true")
 		appStore.account = undefined as never
 		await flushPromises()
@@ -1750,7 +1995,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("a Retry after a refused read shows loading, then the active token, not the first", async () => {
 		const reads = holdTokenReads()
-		const { w, cacheStore } = await mountSend()
+		const { w, cacheStore } = await mountSend({ form: true })
 		cacheStore.activeTokenIdx = OTHER.id
 		reads[0]?.reject(refused())
 		await flushPromises()
@@ -1769,7 +2014,7 @@ describe("send page — the token card while the tokens load", () => {
 	test("opened for the second token, its first read refused: the Retry selects that token", async () => {
 		route.query = { tokenId: String(OTHER.id) }
 		mocks.getTokens.mockRejectedValueOnce(refused()).mockResolvedValue([TOKEN, OTHER])
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		expect(failed(w)).toBe("true")
 		await retry(w)
 		await flushPromises()
@@ -1780,7 +2025,7 @@ describe("send page — the token card while the tokens load", () => {
 	test("a cold tab opened for the second token selects it once the identity settles", async () => {
 		route.query = { tokenId: String(OTHER.id) }
 		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
-		const { w, appStore } = await mountSend({ cold: true })
+		const { w, appStore } = await mountSend({ cold: true, form: true })
 		setIdentity(appStore)
 		await flushPromises()
 		expect(card(w)).toEqual({ loading: "false", symbol: "OTH" })
@@ -1789,7 +2034,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("a Retry refused again ends on the failed card again", async () => {
 		mocks.getTokens.mockRejectedValue(refused())
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		await retry(w)
 		await flushPromises()
 		expect(mocks.getTokens).toHaveBeenCalledTimes(2)
@@ -1800,7 +2045,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("a refusal from a superseded fetch leaves the newer fetch's card alone", async () => {
 		const reads = holdTokenReads()
-		const { w, appStore } = await mountSend()
+		const { w, appStore } = await mountSend({ form: true })
 		await toB(appStore)
 		reads[0]?.reject(refused())
 		await flushPromises()
@@ -1815,7 +2060,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("the real card: a second Retry tap while the Retry loads starts no second fetch", async () => {
 		const reads = holdTokenReads()
-		const { w } = await mountSend({ realTokenCard: true })
+		const { w } = await mountSend({ realTokenCard: true, form: true })
 		reads[0]?.reject(refused())
 		await flushPromises()
 		const trigger = () => w.get('[data-testid="send-token-trigger"]')
@@ -1832,7 +2077,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("a token added while the load has failed retries the whole load", async () => {
 		mocks.getTokens.mockRejectedValueOnce(refused()).mockResolvedValue([OTHER])
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		expect(failed(w)).toBe("true")
 		const reads = () => [mocks.getTokens, mocks.getTokenBalances, mocks.getContacts].map((m) => m.mock.calls.length)
 		expect(reads()).toEqual([1, 1, 1])
@@ -1847,7 +2092,7 @@ describe("send page — the token card while the tokens load", () => {
 	test("a token added for this identity during the load is in the loaded list", async () => {
 		const first = held<unknown[]>()
 		mocks.getTokens.mockReturnValueOnce(first.promise).mockResolvedValue([TOKEN, OTHER])
-		const { w, cacheStore } = await mountSend()
+		const { w, cacheStore } = await mountSend({ form: true })
 		tokenAdded().invoke(OTHER)
 		await flushPromises()
 		expect(card(w).loading).toBe("true")
@@ -1870,7 +2115,7 @@ describe("send page — the token card while the tokens load", () => {
 		onTestFinished(() => {
 			mocks.getContacts.mockReset()
 		})
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		tokenDeleted().invoke(TOKEN)
 		expect(contactReads).toHaveLength(1)
 		contactReads[0]?.resolve([])
@@ -1888,7 +2133,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("deleting the active token selects the first remaining token", async () => {
 		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
-		const { w, cacheStore } = await mountSend()
+		const { w, cacheStore } = await mountSend({ form: true })
 		expect(card(w).symbol).toBe("TST")
 		tokenDeleted().invoke(TOKEN)
 		await flushPromises()
@@ -1902,7 +2147,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("deleting the last token toasts once and leaves Send", async () => {
 		mocks.getTokens.mockResolvedValue([TOKEN])
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		expect(card(w).symbol).toBe("TST")
 		tokenDeleted().invoke(TOKEN)
 		await flushPromises()
@@ -1914,7 +2159,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("deleting another token keeps the selection", async () => {
 		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
-		const { w, cacheStore } = await mountSend()
+		const { w, cacheStore } = await mountSend({ form: true })
 		const selected = cacheStore.activeTokenIdx
 		expect(card(w).symbol).toBe("TST")
 		tokenDeleted().invoke(OTHER)
@@ -1929,7 +2174,7 @@ describe("send page — the token card while the tokens load", () => {
 
 	test("after an empty load, a token added for this identity becomes the active token", async () => {
 		mocks.getTokens.mockResolvedValueOnce([]).mockResolvedValue([OTHER])
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
 		tokenAdded().invoke(OTHER)
 		await flushPromises()
@@ -1943,7 +2188,7 @@ describe("send page — the token card while the tokens load", () => {
 	])("%s: a token added becomes the active token", async (_path, cold) => {
 		if (!cold) mocks.getTokens.mockResolvedValueOnce([TOKEN])
 		mocks.getTokens.mockResolvedValueOnce([]).mockResolvedValue([OTHER])
-		const { w, appStore } = await mountSend({ cold })
+		const { w, appStore } = await mountSend({ cold, form: true })
 		if (cold) setIdentity(appStore)
 		else await toB(appStore)
 		await flushPromises()
@@ -2006,8 +2251,10 @@ describe("send page — the contact list reducers", () => {
 })
 
 describe("send page — Refresh quote by keyboard", () => {
-	/** In fiat mode with no live quote: the gate asks for a requote, which a re-freeze cannot answer. */
+	/** In fiat mode with no live quote: the gate asks for a requote, which a re-freeze cannot answer. The
+	 *  form's opening focus is the amount's, before any press. */
 	async function showRequote(w: W) {
+		mocks.focusAmount.mockClear()
 		const amount = w.findComponent({ name: "AmountCard" })
 		amount.vm.$emit("update:fiatMode", true)
 		amount.vm.$emit("update:fiatGuard", { frozenUsd: 1, frozenAt: Date.now(), converting: false })
@@ -2020,7 +2267,7 @@ describe("send page — Refresh quote by keyboard", () => {
 	}
 
 	test("Refresh quote is a button; a pointer press re-freezes the quote and moves no focus", async () => {
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		const requote = await showRequote(w)
 		expect(requote.element.tagName).toBe("BUTTON")
 		expect(requote.attributes("type")).toBe("button")
@@ -2031,7 +2278,7 @@ describe("send page — Refresh quote by keyboard", () => {
 	})
 
 	test("with no live quote a keyboard press leaves the focus on Refresh quote, which stays", async () => {
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		const requote = await showRequote(w)
 		asKeyboardFocus(requote.element)
 		await requote.trigger("click")
@@ -2046,7 +2293,7 @@ describe("send page — Refresh quote by keyboard", () => {
 		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }
 		mocks.getTokens.mockResolvedValue([priced])
 		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
-		const { w } = await mountSend()
+		const { w } = await mountSend({ form: true })
 		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
 		const quote = (usd: number) => ({
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
@@ -2075,7 +2322,7 @@ describe("send page — Refresh quote by keyboard", () => {
 		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }
 		mocks.getTokens.mockResolvedValue([priced])
 		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
-		const { w } = await mountSend({ realAmountCard: true, chainId })
+		const { w } = await mountSend({ realAmountCard: true, chainId, form: true })
 		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
 		const quote = (usd: number) => ({
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
@@ -2109,7 +2356,7 @@ describe("send page — a token the signed list flags", () => {
 		const scam = { ...TOKEN, id: 8, symbol: "SCAM", contract: `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}` }
 		mocks.flagged.current = flaggedKeysOf([{ chainId: TOKEN.chainId, address: TEST_FLAGGED.address }])
 		mocks.getTokens.mockResolvedValue([TOKEN, scam])
-		const { w, cacheStore } = await mountSend()
+		const { w, cacheStore } = await mountSend({ form: true })
 		expect(w.find('[data-testid="token-flagged-banner"]').exists()).toBe(false)
 
 		cacheStore.activeTokenIdx = scam.id
@@ -2128,7 +2375,7 @@ describe("send page — a token the signed list flags", () => {
 		mocks.flagged.current = flaggedKeysOf([{ chainId: TOKEN.chainId, address: TEST_FLAGGED.address }])
 		mocks.icons.current = { [listKeyOf(TOKEN.chainId, TOKEN.contract)]: TEST_ICONS.USDC }
 		mocks.getTokens.mockResolvedValue([TOKEN, scam])
-		const { w, cacheStore } = await mountSend()
+		const { w, cacheStore } = await mountSend({ form: true })
 		const card = () => w.findComponent({ name: "SelectTokenCard" })
 		expect(card().props()).toMatchObject({ flagged: false, icon: TEST_ICONS.USDC })
 

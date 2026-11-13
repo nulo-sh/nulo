@@ -42,7 +42,7 @@ import { LEGAL_ACCEPTANCE_KEY } from "../fixtures/legal"
 import { pollUntil } from "../fixtures/poll"
 import { PROOF_GATE_HOLD_MS, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
 import { readSealedRows } from "../fixtures/sealed-rows"
-import { openSend, shotSend, submitSend } from "../fixtures/send-page"
+import { chooseRecipient, openSend, shotSend, submitSend } from "../fixtures/send-page"
 import { readLegalRecord } from "../helpers/legal-drivers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -180,10 +180,11 @@ const ENDED_ROW = '[data-testid="journal-detail-ended"]'
  */
 async function sendWithoutTerms(page: Page, destination: string): Promise<{ id: string; accepted: unknown }> {
 	await openSend(page)
+	await chooseRecipient(page, destination)
 	await setActiveSendType(page, "send-from-type", "public")
 	await setActiveSendType(page, "send-to-type", "public")
 	await fillSendForm(page, { amount: "1", destination })
-	await submitSend(page, { expect: "send" })
+	expect(await submitSend(page)).toMatchObject({ warning: false, you: "public" })
 
 	const send = await waitForSendRecord(page, (r) => r.kind === "transfer" && r.stage === "proving", 180_000)
 	const accepted = await readLegalRecord(page)
@@ -320,11 +321,12 @@ test.skipIf(!hasConfig)(
 		await refreshBalances(page)
 
 		await openSend(page)
+		await chooseRecipient(page, config.minterAddress)
 		await setActiveSendType(page, "send-from-type", "public")
 		await setActiveSendType(page, "send-to-type", "public")
 		await fillSendForm(page, { amount: "1", destination: config.minterAddress })
 		await recordJournalWrites(page)
-		await submitSend(page, { expect: "send" })
+		expect(await submitSend(page)).toMatchObject({ warning: false, you: "public" })
 		const send = await waitForSendRecord(page, (r) => r.kind === "transfer" && r.stage === "succeeded", 300_000)
 		const sent = await waitForRecord(page, send.id, (r) => r.progress.stage === "succeeded", "did not succeed", 10_000)
 		const { txHash } = sent.progress as { txHash: string }

@@ -259,7 +259,7 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(fee.get('[data-testid="send-review-fee-cap"]').text()).toBe(
 			"Fee up to 4.47228 FJ ($0.269), based on your last send. If it comes out higher, we ask again.",
 		)
-		expect(fee.get("b").text()).toBe("paid by the fee contract")
+		expect(fee.get("b").text()).toBe("paid from your private Fee Juice")
 		expect(submit(w).text()).toBe("Queue send")
 		await submit(w).trigger("click")
 		expect(w.emitted("send")).toEqual([[]])

@@ -394,6 +394,7 @@
     "activityRowRoute": true,
     "addressChangeText": true,
     "addressEnds": true,
+    "addressHalves": true,
     "admitRestoreOutcome": true,
     "aggregateFiat": true,
     "ago": true,

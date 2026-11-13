@@ -14,6 +14,7 @@ import { inject, expect } from "vitest"
 import { test, openPopup, waitForHash } from "../fixtures/extension"
 import { captureBalanceBaseline, setActiveSendType, waitForFreshBalanceRow } from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { chooseRecipient, openSend } from "../fixtures/send-page"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -40,14 +41,11 @@ test.skipIf(!hasConfig)(
 			})
 		}
 
-		// Open SendPopup, then flip from-type to "public" — the fixture mints
-		// only public tokens via `mintPublicTokens`, but send.vue defaults
-		// `selectedSendType = "private"` (zero balance), so the input would
-		// stay disabled and the clamp guard silently skip.
-		await page.evaluate(() => {
-			;(document.querySelector('[data-testid="actions-send"]') as HTMLElement)?.click()
-		})
-		await page.waitForSelector('[data-testid="send-from-type"]', { timeout: 10_000 })
+		// Open Send, name the recipient, then hold the From side on public: the fixture mints only
+		// public tokens via `mintPublicTokens`, so a private origin (zero balance) would leave the
+		// input disabled and the clamp guard silently skipped.
+		await openSend(page)
+		await chooseRecipient(page, tokenReadyExtension.accountAddress)
 		await setActiveSendType(page, "send-from-type", "public")
 		await page.waitForSelector('[data-testid="send-amount-input"]', { visible: true, timeout: 10_000 })
 

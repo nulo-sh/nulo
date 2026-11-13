@@ -126,6 +126,7 @@ declare global {
   const activityRowRoute: typeof import('../utils/activity-rows').activityRowRoute
   const addressChangeText: typeof import('../utils/contact-import-rows').addressChangeText
   const addressEnds: typeof import('../utils/string').addressEnds
+  const addressHalves: typeof import('../utils/string').addressHalves
   const admitRestoreOutcome: typeof import('../utils/restore-outcome').admitRestoreOutcome
   const aggregateFiat: typeof import('../utils/token-aggregate').aggregateFiat
   const ago: typeof import('../utils/endpoint-status').ago
@@ -1103,6 +1104,7 @@ declare module 'vue' {
     readonly activityRowRoute: UnwrapRef<typeof import('../utils/activity-rows')['activityRowRoute']>
     readonly addressChangeText: UnwrapRef<typeof import('../utils/contact-import-rows')['addressChangeText']>
     readonly addressEnds: UnwrapRef<typeof import('../utils/string')['addressEnds']>
+    readonly addressHalves: UnwrapRef<typeof import('../utils/string')['addressHalves']>
     readonly admitRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['admitRestoreOutcome']>
     readonly aggregateFiat: UnwrapRef<typeof import('../utils/token-aggregate')['aggregateFiat']>
     readonly ago: UnwrapRef<typeof import('../utils/endpoint-status')['ago']>

@@ -1,4 +1,5 @@
-import { parseSide } from "@/utils/token-amount"
+import { formatBaseUnits } from "@/utils/amount"
+import { isValidDecimals, parseSide } from "@/utils/token-amount"
 
 export type SendSide = "private" | "public"
 
@@ -41,4 +42,13 @@ export function canSwitchSender(token: SideCaps): boolean {
 /** Whether the destination may switch sides. */
 export function canSwitchReceiver(token: SideCaps): boolean {
 	return Boolean(token.hasPrivateBalances && token.hasPublicBalances)
+}
+
+/** A side's balance as Send prints it: truncated at 8 places, so it never reads more than the balance;
+ *  null when the row or the decimals cannot be read. */
+export function sideBalanceText(raw: string | null | undefined, decimals: number | undefined, symbol: string): string | null {
+	if (raw == null || !isValidDecimals(decimals)) return null
+	const units = parseSide(raw)
+	if (units === undefined) return null
+	return `${formatBaseUnits(units, decimals, { maxDecimals: 8, thousandsSep: ",", decimalSep: "." })} ${symbol}`
 }

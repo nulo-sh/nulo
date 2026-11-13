@@ -27,7 +27,7 @@ import OperationCard from "../execute/OperationCard.vue"
 import SignerIdentityStrip from "../execute/SignerIdentityStrip.vue"
 
 /** Utils */
-import { type FeeDisplay, feeDisplay, feeFigure, formatGasBalance } from "@/utils/fee-estimation"
+import { type FeeDisplay, feeDisplay, feeText, formatGasBalance } from "@/utils/fee-estimation"
 import { openJsonWindow } from "@/utils/json-window"
 import {
 	authwitDisplayCall,
@@ -132,11 +132,14 @@ const {
 const question = computed(() => payload.value?.feeQuestion)
 const grantsPending = computed(() => !!operation.value && awaitsGrantDecode(operation.value, !!decodedGrants.value))
 const grantRefusal = computed(() => grantRefusalRow(decodedGrants.value ?? []))
-/** Read from the question, so it needs no quote and names the fee before the card mounts. */
-const confirmLabel = computed(() => (question.value ? `Send for ${feeFigure(feeDisplay(question.value.fee, undefined))}` : "Send for FJ"))
 /** Reuse the fee card's quote so the button and card cannot show different dollar amounts. */
 const nowFee = ref<FeeDisplay | null>(null)
-const confirmDetail = computed(() => (nowFee.value?.usd ? `(${nowFee.value.usd})` : undefined))
+/** The figure is read from the question, so the button names the fee before the card mounts. */
+const confirmDetail = computed(() =>
+	question.value
+		? `for ${feeText({ amount: feeDisplay(question.value.fee, undefined).amount, usd: nowFee.value?.usd ?? null })}`
+		: undefined,
+)
 /** The app's own payment set the fee path: no speed was picked, and its claim, not the balance, pays. */
 const setByApp = computed(() => question.value?.feeSettings?.paymentMethod.kind === "embedded")
 const priority = computed(() => (setByApp.value ? undefined : (question.value?.feeSettings?.priorityLevel ?? "normal")))
@@ -299,7 +302,7 @@ onUnmounted(() => {
 			reject-label="Reject"
 			:reject-disabled="isLoading || !requestId"
 			confirm-testid="fee-confirm-btn"
-			:confirm-label="confirmLabel"
+			confirm-label="Send"
 			:confirm-detail="confirmDetail"
 			:confirm-loading="isLoading"
 			:confirm-disabled="

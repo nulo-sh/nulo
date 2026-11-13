@@ -12,6 +12,7 @@ import {
 } from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { readSealedRows } from "../fixtures/sealed-rows"
+import { chooseRecipient } from "../fixtures/send-page"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -70,7 +71,6 @@ test.skipIf(!hasConfig)(
 				toType: "public",
 				amount: "10",
 				destination: tokenReadyExtension.accountAddress,
-				expect: "send",
 			})
 			console.log("✓ Public → Public submitted")
 			await waitForTxConfirmation(page, { amount: "10", fromType: "public", toType: "public" })
@@ -96,7 +96,6 @@ test.skipIf(!hasConfig)(
 				toType: "private",
 				amount: "100",
 				destination: tokenReadyExtension.accountAddress,
-				expect: "send",
 			})
 			console.log("✓ Public → Private (shield) submitted")
 			await waitForTxConfirmation(page, { amount: "100", fromType: "public", toType: "private" })
@@ -125,7 +124,6 @@ test.skipIf(!hasConfig)(
 				toType: "public",
 				amount: "50",
 				destination: tokenReadyExtension.accountAddress,
-				expect: "send",
 			})
 			console.log("✓ Private → Public (unshield) submitted")
 			await waitForTxConfirmation(page, { amount: "50", fromType: "private", toType: "public" })
@@ -142,7 +140,6 @@ test.skipIf(!hasConfig)(
 				toType: "private",
 				amount: "10",
 				destination: tokenReadyExtension.accountAddress,
-				expect: "send",
 			})
 			console.log("✓ Private → Private submitted")
 			await waitForTxConfirmation(page, { amount: "10", fromType: "private", toType: "private" })
@@ -186,10 +183,11 @@ test.skipIf(!hasConfig)(
 			await page.waitForSelector('[data-testid="actions-send"]', { visible: true, timeout: 10_000 })
 			await page.evaluate(() => document.querySelector('[data-testid="actions-send"]')?.scrollIntoView({ block: "center" }))
 			await clickByTestId(page, "actions-send")
-			// SendPopup mounted — send-from-type proves the token loaded
+			await page.waitForSelector('[data-testid="send-person-step"]', { timeout: 10_000 })
+			await chooseRecipient(page, tokenReadyExtension.accountAddress)
+			// The side choices draw only for a token the page holds: they prove the token loaded
 			// (if the bug were present, we'd see "No available tokens" instead).
 			await page.waitForSelector('[data-testid="send-from-type"]', { timeout: 30_000 })
-			await clickByTestId(page, "send-from-type")
 			const hasAmountInput = await page.evaluate(() => !!document.querySelector('[data-testid="send-amount-input"]'))
 			expect(hasAmountInput).toBe(true)
 			const bodyText = await page.evaluate(() => document.body.textContent ?? "")

@@ -203,7 +203,7 @@ describe("OperationCard — who pays a wire-shaped transaction's fee", () => {
 		expect(fee(w).text()).toContain("—")
 		expect(fee(w).text()).not.toContain("Nothing")
 		expect(fee(w).text()).not.toContain("3.577824")
-		expect(spokenText(fee(w).element)).toContain("Nulo can't tell what this fee contract charges you.")
+		expect(spokenText(fee(w).element)).toContain("Nulo can't tell what this FPC charges you.")
 	})
 })
 

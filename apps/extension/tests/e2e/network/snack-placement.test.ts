@@ -34,7 +34,7 @@ import {
 import { readSendRecords, waitForBalanceQueueIdle } from "../fixtures/journal"
 import { pollUntil } from "../fixtures/poll"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { shotSend } from "../fixtures/send-page"
+import { chooseRecipient, readSendView, shotSend, submitSend } from "../fixtures/send-page"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 import { bringToFront, setViewport } from "../fixtures/browser"
 
@@ -404,19 +404,20 @@ const ONE_TO_MINTER = () => ({ amount: "1", destination: (aztecConfig as AztecTe
 
 async function openPublicSend(page: Page): Promise<void> {
 	await navigateByHash(page, "#/popup/send", 10_000)
-	await page.waitForSelector(sel("send-from-type"), { timeout: 10_000 })
+	await page.waitForSelector(sel("send-person-step"), { timeout: 10_000 })
+	await chooseRecipient(page, ONE_TO_MINTER().destination)
 	await setActiveSendType(page, "send-from-type", "public")
 	await setActiveSendType(page, "send-to-type", "public")
 }
 
 /** On Send: 1 token, public to public, to the sandbox minter, from a balance the chain no longer
- *  holds, until the estimate has failed. Nothing goes out on a fee the person has not seen, so the
- *  footer stays off. */
+ *  holds, until the estimate has failed. Nothing goes out on a fee the person has not seen, so
+ *  "Review send" stays off. */
 async function sendFromDrainedBalance(page: Page): Promise<void> {
 	await openPublicSend(page)
 	await enterSendForm(page, ONE_TO_MINTER())
 	await waitForToast(page, "Couldn't estimate fee", 120_000, { kind: "error" })
-	expect(await page.$eval(sel("send-submit"), (el) => getComputedStyle(el).pointerEvents)).toBe("none")
+	expect(await page.$eval(sel("send-submit"), (el) => (el as HTMLButtonElement).disabled)).toBe(true)
 }
 
 /**
@@ -434,9 +435,9 @@ async function estimateOnSend(page: Page): Promise<void> {
  *  record is written. */
 async function confirmDrainedSend(page: Page): Promise<void> {
 	await bringToFront(page)
-	// A public origin needs no review, so the footer sends at once.
-	expect(await page.$eval(sel("send-submit"), (el) => el.getAttribute("data-action"))).toBe("send")
-	await clickByTestId(page, "send-submit")
+	// A public origin names the sender, never the fee payer: no warning stands before the review.
+	expect(await readSendView(page)).toMatchObject({ warning: false, you: "public" })
+	await submitSend(page)
 }
 
 /** Asks, through the playground, for a public transfer of 1,000,000 base units from an account that

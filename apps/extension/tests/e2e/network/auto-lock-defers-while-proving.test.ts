@@ -51,7 +51,6 @@ test.skipIf(!hasConfig)(
 			toType: "public",
 			amount: "1",
 			destination: config.minterAddress,
-			expect: "send",
 		})
 		sending.catch(() => {})
 		let send: SendRecordView

@@ -40,7 +40,7 @@ import { pollUntil } from "../fixtures/poll"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { readSealedRows } from "../fixtures/sealed-rows"
 import { serializeInstance } from "../fixtures/selfpay-phase"
-import { openSend, shotSend, waitForFee } from "../fixtures/send-page"
+import { chooseRecipient, closeSendFeeSheet, openSend, openSendFeeSheet, shotSend, waitForFee } from "../fixtures/send-page"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -90,8 +90,16 @@ function readSentenceLayout(page: Page) {
 	})
 }
 
+/** The title of the payer the Fee sheet's radios hold chosen. */
 const triggerText = (page: Page) =>
-	page.evaluate(() => document.querySelector('[data-testid="send-fee-method-trigger"]')?.textContent?.trim() ?? "")
+	page.evaluate(
+		() =>
+			document
+				.querySelector('[data-testid="send-fee-payers"] input:checked')
+				?.closest("label")
+				?.querySelector("span span")
+				?.textContent?.trim() ?? "",
+	)
 
 /** The playground, connected once per browser with a bundle that may register contracts and send:
  *  a second connect finds the origin approved and opens no discovery window. */
@@ -147,6 +155,7 @@ test.skipIf(!hasConfig)(
 		const page = await openPopup(tokenReadyExtension)
 		await waitForHash(page, "#/popup/general")
 		await openSend(page)
+		await chooseRecipient(page, tokenReadyExtension.accountAddress)
 		await setActiveSendType(page, "send-from-type", "public")
 		await setActiveSendType(page, "send-to-type", "public")
 		await waitForFee(page, "public", "sponsored")
@@ -169,24 +178,29 @@ test.skipIf(!hasConfig)(
 		const instance = await getContractInstanceFromInstantiationParams(SponsoredFPCContractArtifact, { salt: new Fr(1) })
 		const address = instance.address.toString()
 		const fpcId = await addUnfundedSponsor(tokenReadyExtension, address, serializeInstance(instance))
-		const row = `[data-testid="send-fee-method-sponsored"][data-fpc-id="${fpcId}"]`
+		const row = `[data-testid="send-fee-payer-sponsored"][data-fpc-id="${fpcId}"]`
 
 		const page = await openPopup(tokenReadyExtension)
 		await waitForHash(page, "#/popup/general")
 		await openSend(page)
+		await chooseRecipient(page, tokenReadyExtension.accountAddress)
 		await setActiveSendType(page, "send-from-type", "public")
 		await setActiveSendType(page, "send-to-type", "public")
 		await waitForFee(page, "public", "sponsored")
 		const nuloTrigger = await triggerText(page)
 
-		await clickByTestId(page, "send-fee-method-trigger")
-		await page.waitForSelector(row, { visible: true, timeout: 10_000 })
+		await openSendFeeSheet(page)
+		await page.waitForFunction((s: string) => document.querySelector<HTMLInputElement>(s)?.disabled === false, { timeout: 10_000 }, row)
 		await page.evaluate((s: string) => document.querySelector<HTMLElement>(s)?.click(), row)
+		// The card took the pick: its payer in effect, not the browser's check, names the hand-added sponsor.
 		await page.waitForFunction(
-			(name: string) => document.querySelector('[data-testid="send-fee-method-trigger"]')?.textContent?.includes(name),
-			{ timeout: 10_000, polling: 100 },
-			UNFUNDED_NAME,
+			() => document.querySelector('[data-testid="send-fee-line"]')?.getAttribute("data-payer") === "unvouched",
+			{
+				timeout: 10_000,
+				polling: 100,
+			},
 		)
+		await closeSendFeeSheet(page)
 
 		await fillSendForm(page, { amount: "1", destination: tokenReadyExtension.accountAddress })
 		await waitForFee(page, "public", "sponsored")
@@ -194,31 +208,37 @@ test.skipIf(!hasConfig)(
 
 		// The walk goes on as when the sponsor is missing: Nulo's own sponsor, named by the notice.
 		await page.waitForFunction(
-			(name: string) => !document.querySelector('[data-testid="send-fee-method-trigger"]')?.textContent?.includes(name),
+			(s: string) => document.querySelector<HTMLInputElement>(s)?.checked === false,
 			{ timeout: 30_000, polling: 250 },
-			UNFUNDED_NAME,
+			row,
 		)
 		expect(await triggerText(page)).toBe(nuloTrigger)
+		const shortCopy = "The sponsor you chose can't cover this fee right now. The default sponsor pays it instead."
 		const notice = await page.$eval('[data-testid="fee-sponsor-short"]', (el) => el.textContent?.trim())
-		expect(notice).toBe("The sponsor you chose can't cover this fee right now. The default sponsor pays it instead.")
-		await shotSend(page, "fee-sponsor-short", "fee-sponsor-short")
+		expect(notice).toBe(shortCopy)
+		// The closed sheet's card is unshown: the form says it on the fee line, in the card's words.
+		const noted = await page.$eval('[data-testid="send-fee-line-note"]', (el) => el.textContent ?? "")
+		expect(noted).toContain(shortCopy)
+		await shotSend(page, "fee-sponsor-short", "send-fee-line")
 		const region = await page.$eval('[data-testid="fee-sponsor-short"]', (el) => el.parentElement?.getAttribute("data-testid"))
 		expect(region).toBe("fee-sponsor-live")
 		const view = await waitForFee(page, "public", "sponsored")
-		expect(view.action).toBe("send")
+		expect(view).toMatchObject({ warning: false, you: "public" })
 		await page.waitForFunction(
 			() => {
-				const submit = document.querySelector<HTMLElement>('[data-testid="send-submit"]')
-				return Boolean(submit) && getComputedStyle(submit as HTMLElement).pointerEvents !== "none"
+				const submit = document.querySelector<HTMLButtonElement>('[data-testid="send-submit"]')
+				return Boolean(submit) && !submit?.disabled
 			},
 			{ timeout: 120_000, polling: 1_000 },
 		)
 		await waitForVerdict(page, "short")
 
-		await clickByTestId(page, "send-fee-method-trigger")
-		await page.waitForSelector(row, { visible: true, timeout: 10_000 })
-		const short = await page.$eval(row, (el) => ({ disabled: el.getAttribute("aria-disabled"), text: el.textContent ?? "" }))
-		expect(short.disabled).toBe("true")
+		await openSendFeeSheet(page)
+		const short = await page.$eval(row, (el) => ({
+			disabled: (el as HTMLInputElement).disabled,
+			text: el.closest("label")?.textContent ?? "",
+		}))
+		expect(short.disabled).toBe(true)
 		expect(short.text).toContain("can't pay now")
 		await page.close()
 	},
