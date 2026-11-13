@@ -1,10 +1,7 @@
 <script setup lang="ts">
 /**
- * A contract named in a sentence, with its level's seal; its press says what the level rests on and
- * where to look the contract up. One Tab stop: the press moves focus to its link when it has one.
- * A chip whose level is pending is held behind placeholders for at most `HOLD_MS` from its first
- * paint, so it appears once, final, when its level lands in time; past the cap it shows its short
- * address with no mark until the level lands.
+ * One Tab stop: the press moves focus to its link when it has one. A pending chip is held behind
+ * placeholders for at most `HOLD_MS` from its first paint, so a level that lands in time draws once.
  */
 /** Components */
 import TokenMark from "@/components/composite/general/TokenMark.vue"
@@ -41,7 +38,8 @@ const stopHold = (): void => {
 }
 
 /** Watchers */
-// One hold per address: another contract in the same place is held afresh from its own first paint.
+// Keyed on the address alone, since one request fixes the window's chain: another contract in the
+// same place is held afresh from its own first paint.
 watch(
 	() => [props.model.level === null, props.model.address] as const,
 	([pending, address], previous) => {
@@ -64,7 +62,7 @@ onBeforeUnmount(stopHold)
 </script>
 
 <template>
-	<Popover inline :open="open" width="280" @onClose="open = false">
+	<Popover inline :open="open" :placeKey="model" width="280" @onClose="open = false">
 		<button
 			type="button"
 			data-testid="contract-chip"

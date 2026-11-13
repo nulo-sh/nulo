@@ -1,8 +1,4 @@
-/**
- * A contract position in the approval window as its chip draws it: the level from the signed list the
- * window reads, the person's own name for the address, the press's link from the explorer the person
- * picked.
- */
+/** A contract position's chip in the approval and raised-fee windows. */
 import { type ChipModel, contractChipOf } from "@/components/composite/contract-chip"
 import { type ContractReading, type ListReader, readContract } from "@/utils/contract-level"
 import { tokenMarkOf } from "@/utils/token-icon"
