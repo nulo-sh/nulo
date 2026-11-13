@@ -1,0 +1,8 @@
+# Phase 8: page 145 and the close-out (arc a3)
+
+- Read the answers file's page-145 section first. P145-06 = b and the dollars (P145-03, P145-04) are this arc's; the radios' balances have no recorded answer, so they stay as shipped and are OA-20.
+- The answers file names both "the wallet's one fee helper" (`~X FJ ($Y)`) and "the same price source and formatter as the hero amount's". The hero's formatter rounds to the cent; a fee through it would read `$0.03` where every fee screen reads `$0.027`. The fee keeps `feeDisplay`'s rule and the same quote service (`usePrices`), recorded in D28.
+- The line already printed dollars whenever the card had a Fee Juice quote; the local network has no price feed, so every capture until now read Fee Juice alone. The change is the grammar (FJ first, the one helper's) and the wrap rule, not a missing price.
+- A fee that must stay whole beside a fixed control needs `white-space: nowrap`, not an atomic `inline-block`: only `nowrap` makes the figure's width the flex column's minimum, which is what lets Change take the next row at 240 px instead of the dollars splitting. Measured on Chrome at 240 px: "~0.019526 FJ ($0.137), public Fee Juice" with Change below, the line 52 px (30 px at 360 px, one row).
+- `FeeLineText` renders a fragment, so a test mounting it alone reads `text()` without the space before the figure; mount it inside a paragraph, as its hosts do.
+- The e2e that reads a fee's dollars must refuse the provider and wait out an in-flight fetch before seeding (`fixtures/fee-quote.ts`), which costs about 11 s; `fiat-send` went from 18 s to 56 s on Chrome with the estimate, the review and the sheet it now opens.
