@@ -75,6 +75,7 @@ Each ask names the surface, the options, a recommendation and **what ships now**
 - **What ships now:** today's sanitizer.
 - **Answered on page 144: P144-06 = b**, no note: "Pictographic characters stripped from the app chip's label (letters in every script stay); the press still quotes the name as declared. A few honest names lose their emoji in the chip." **Built in arc 2:** the label strips Extended_Pictographic characters, their modifiers, flags, keycap sequences, ZWJ and variation selectors before the 64-character cap; a name of emoji only falls back to the host, as an empty name does (no caption either). Unit tests on wire-shaped names.
 - **Draft extension (Opus review):** the check marks ✓ (U+2713), 🗸 (U+1F5F8) and 🗹 (U+1F5F9) are not pictographic, so the pick's set kept them beside an unverified chip ("Playground ✓"); the build strips them too, as seal-like. Options: as built; the pick's set alone.
+- **A case to weigh (captures):** the app-paid fee row's "method set by <app>" still names the app as declared, so an app named "Playground ✅" reads "method set by Playground ✅" on a row whose seal now stands for the paying contract (capture `press-app-emoji-400`). P144-06 named the chip's label only, so the row ships as built. Options: as built; the row's name stripped as the chip's is.
 
 ## A11. Which addresses in an authorization line become chips
 
