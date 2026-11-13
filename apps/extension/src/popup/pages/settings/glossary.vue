@@ -6,9 +6,19 @@
 }
 </route>
 
-<script setup>
+<script setup lang="ts">
+/** Vendor */
+import type { GlyphName, TextColorName } from "@nulo/design"
+
 /** Utils */
-import { GLOSSARY, GLOSSARY_SECTIONS } from "@/utils/glossary"
+import { GLOSSARY, GLOSSARY_SECTIONS, type GlossaryKey } from "@/utils/glossary"
+import { LEVEL_GLYPH } from "@/components/composite/contract-chip"
+
+/** The legend draws each seal beside the level it stands for, as the chips draw it. */
+const SEAL: Partial<Record<GlossaryKey, { name: GlyphName; color: TextColorName }>> = {
+	"nulo-verified": { name: LEVEL_GLYPH.nulo, color: "primary" },
+	"aztecscan-verified": { name: LEVEL_GLYPH.scan, color: "secondary" },
+}
 </script>
 
 <template>
@@ -21,7 +31,9 @@ import { GLOSSARY, GLOSSARY_SECTIONS } from "@/utils/glossary"
 		>
 			<span :class="$style.title">{{ section.title }}</span>
 			<div v-for="key in section.keys" :key="key" :class="$style.entry" :data-testid="`glossary-entry-${key}`">
-				<span :class="$style.term" :data-testid="`glossary-term-${key}`">{{ GLOSSARY[key].term }}</span>
+				<span :class="[$style.term, SEAL[key] && $style.sealed]" :data-testid="`glossary-term-${key}`"
+					><Icon v-if="SEAL[key]" :name="SEAL[key].name" size="16" :color="SEAL[key].color" aria-hidden="true" :data-testid="`glossary-seal-${key}`" />{{ GLOSSARY[key].term }}</span
+				>
 				<span :class="$style.definition" :data-testid="`glossary-definition-${key}`">{{ GLOSSARY[key].definition }}</span>
 				<span :class="$style.where" :data-testid="`glossary-where-${key}`">{{ GLOSSARY[key].where }}</span>
 			</div>
@@ -64,6 +76,12 @@ import { GLOSSARY, GLOSSARY_SECTIONS } from "@/utils/glossary"
 	composes: type--row-title from global;
 	font-size: 14px;
 	color: var(--txt-primary);
+}
+
+.sealed {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
 }
 
 .definition {

@@ -1,27 +1,26 @@
 <script setup lang="ts">
 /**
  * Only the wallet's own reading of a transfer or mint states an amount or a party, and nothing places
- * an authorization under a call: the wallet holds no link between them.
+ * an authorization under a call: the wallet holds no link between them. A contract position reads as
+ * its chip, whose level comes from the signed list alone.
  */
 import type { DiscoveredAuthwit } from "@/wallet/services/execution/client"
-import TokenMark from "@/components/composite/general/TokenMark.vue"
-import { type TokenMarkLookup, tokenMarkOf } from "@/utils/token-icon"
+import ContractChip from "@/components/composite/ContractChip.vue"
+import type { ListReader } from "@/utils/contract-level"
+import type { BlockExplorerType } from "@/wallet/constants/explorers"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import {
 	type CallSurface,
 	type WireCall,
-	amountOf,
+	amountLabel,
 	authwitLine,
 	authwitTitle,
-	RAW_ADVICE,
-	RAW_LINE,
-	RAW_TITLE,
 	rawRows,
 	rowTitle,
-	tokenAt,
-	uncheckedCallsLine,
+	UNPARSED_AUTHWIT,
+	unparsedCallsLine,
 } from "./call-surface"
-import ArgsNotice from "./ArgsNotice.vue"
+import { type ChipContext, contractChipAt } from "./contract-chips"
 import AuthwitDetails from "./AuthwitDetails.vue"
 import CallArguments from "./CallArguments.vue"
 import StepRow from "./StepRow.vue"
@@ -29,39 +28,46 @@ import StepRow from "./StepRow.vue"
 export type AuthwitGroup = { testid: string; label: string }
 
 const props = defineProps<{
-	calls: readonly { call: WireCall; surface: CallSurface }[]
+	/** Each call with its reading, and the name its decoded contract's code gives itself. */
+	calls: readonly { call: WireCall; surface: CallSurface; selfName?: string }[]
 	/** The authorizations the transaction uses, each with its reading and the details group it reads
 	 *  in; absent while none are listed. */
-	authwits?: readonly { authwit: DiscoveredAuthwit; surface: CallSurface; group: AuthwitGroup }[]
+	authwits?: readonly { authwit: DiscoveredAuthwit; surface: CallSurface; group: AuthwitGroup; selfName?: string }[]
 	/** The wallet is still finding the authorizations. */
 	checkingAuthwits?: boolean
 	chainId?: number
 	tokens?: readonly TokenInfo[]
-	/** Where the window's closing advice reads: after the calls, or under the last unreadable
-	 *  authorization whose arguments are open. */
-	advice?: "calls" | "authwits"
 	previewFailed?: boolean
-	/** The signed list's reader, for the mark before an amount in a token the wallet knows; none, no mark. */
-	marks?: TokenMarkLookup
+	/** The signed list's reader, for each contract's level and a listed token's picture. */
+	marks?: ListReader
+	/** The explorer the person picked, for the link in a chip's press; none, no link. */
+	explorerId?: BlockExplorerType | null
 }>()
 
 const emit = defineEmits<{ retryPreview: [] }>()
 
-/** An amount that names its token draws that token's mark; one in base units names none. */
-const markAt = (contract: unknown, amount: { baseUnits: boolean } | undefined) =>
-	amount && !amount.baseUnits ? tokenMarkOf(props.marks, tokenAt(props.tokens, props.chainId, contract)) : null
-
-const callRows = computed(() =>
-	props.calls.map(({ call, surface }) => {
-		const amount =
-			surface.kind === "transfer" || surface.kind === "mint"
-				? amountOf(props.tokens, props.chainId, call.to, surface.amount)
-				: undefined
-		return { call, surface, title: rowTitle(call, surface), amount, mark: markAt(call.to, amount) }
-	}),
+const chipContext = computed(
+	(): ChipContext => ({ reader: props.marks, chainId: props.chainId, tokens: props.tokens, explorerId: props.explorerId }),
 )
 
-const uncheckedLine = computed(() => uncheckedCallsLine(callRows.value.map(({ surface }) => surface)))
+/** An amount in the token's own units names the token through its chip; a raw integer reads as base units. */
+const amountAt = (contract: unknown, amount: string): { text: string; baseUnits: boolean } => {
+	const label = amountLabel(props.tokens, props.chainId, contract, amount)
+	return { text: label.text, baseUnits: !label.symbol }
+}
+
+const callRows = computed(() =>
+	props.calls.map(({ call, surface }) => ({
+		call,
+		surface,
+		title: rowTitle(call, surface),
+		amount: surface.kind === "transfer" || surface.kind === "mint" ? amountAt(call.to, surface.amount) : undefined,
+	})),
+)
+/** Apart from the rows, so only a chip renders what its contract's address becomes. */
+const callChips = computed(() => props.calls.map(({ call, selfName }) => contractChipAt(chipContext.value, call.to, selfName)))
+
+const unparsedLine = computed(() => unparsedCallsLine(callRows.value.map(({ surface }) => surface)))
 
 const authwitRows = computed(() =>
 	(props.authwits ?? []).map(({ authwit, surface, group }) => {
@@ -71,9 +77,12 @@ const authwitRows = computed(() =>
 			surface,
 			group,
 			line,
-			amount: line.kind === "move" ? amountOf(props.tokens, props.chainId, authwit.consumer, line.amount) : undefined,
+			amount: line.kind === "move" ? amountAt(authwit.consumer, line.amount) : undefined,
 		}
 	}),
+)
+const authwitChips = computed(() =>
+	(props.authwits ?? []).map(({ authwit, selfName }) => contractChipAt(chipContext.value, authwit.consumer, selfName)),
 )
 
 const uid = useId()
@@ -81,9 +90,7 @@ const stepPanel = (j: number): string => `${uid}-step-${j}`
 const part = (j: number, name: "head" | "line" | "note"): string => `${uid}-${name}-${j}`
 /** The sentence describes its row part by part, so the parts read with a space between them. */
 const describedBy = (j: number, row: { amount?: unknown; surface: CallSurface }): string =>
-	[part(j, "head"), row.amount && part(j, "line"), (row.surface.kind === "pending" || row.surface.kind === "raw") && part(j, "note")]
-		.filter(Boolean)
-		.join(" ")
+	[part(j, "head"), row.amount && part(j, "line"), row.surface.kind === "pending" && part(j, "note")].filter(Boolean).join(" ")
 const authwitPanel = (k: number): string => `${uid}-authwit-${k}`
 
 const openSteps = ref(new Set<number>())
@@ -109,13 +116,6 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 	else next.add(a.messageHash)
 	closedAuthwits.value = next
 }
-
-/** Closing an authorization hands the advice to one still open. */
-const adviceAuthwit = computed(() =>
-	props.advice === "authwits"
-		? authwitRows.value.findLastIndex(({ authwit, surface }) => isAuthwitOpen(authwit) && surface.kind === "raw")
-		: -1,
-)
 
 const authwitSlot = ref<HTMLElement | null>(null)
 const slotHolds = computed(() => authwitRows.value.length > 0 || props.checkingAuthwits || props.previewFailed)
@@ -155,7 +155,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 							     The chevron ends the sentence's last line: its no-break space holds it to the last word, and
 							     its nowrap box removes the break a browser keeps beside an inline svg even after U+00A0. -->
 							<Text :id="part(j, 'head')" data-testid="execute-op-summary-call-head" variant="body" color="primary" height="130">
-								<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text> on <span data-testid="execute-op-call-to"><AddressDisplay :address="row.call.to" data-testid="execute-op-summary-call-to" /></span><template v-if="row.amount">:</template><template v-else><span :class="$style.chevron_tail">&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></span></template>
+								<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text><template v-if="row.amount">{{ " " }}<Text variant="meta" data-testid="execute-op-line-amount">{{ row.amount.text }}</Text>{{ row.amount.baseUnits ? " base units " : " " }}</template><template v-else> on </template><span data-testid="execute-op-call-to" :class="$style.chip_tail"><ContractChip v-bind="callChips[j]" testid="execute-op-summary-call-to" /><template v-if="!row.amount">&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></template></span>
 							</Text>
 							<Text
 								v-if="row.amount && (row.surface.kind === 'transfer' || row.surface.kind === 'mint')"
@@ -166,19 +166,14 @@ const onRetryPreview = (event: MouseEvent): void => {
 								color="primary"
 								height="130"
 							>
-								<TokenMark v-if="row.mark" :symbol="row.mark.symbol" :icon="row.mark.icon" :size="16" :badge="row.mark.badge" :class="$style.line_mark" /><Text variant="meta" data-testid="execute-op-line-amount">{{ row.amount.text }}</Text>
-								<template v-if="row.amount.baseUnits"> base units</template>
-								<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'account'"> from this account</template>
-								<template v-else-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'explicit'"> from <AddressDisplay :address="row.surface.sender.address" data-testid="execute-op-line-from" /></template>
+								<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'account'">from this account </template>
+								<template v-else-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'explicit'">from <AddressDisplay :address="row.surface.sender.address" data-testid="execute-op-line-from" />{{ " " }}</template>
 								to <AddressDisplay :address="row.surface.to" data-testid="execute-op-line-to" />
 								<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'none'">. Caller: none</template><span :class="$style.chevron_tail">&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></span>
 							</Text>
 							<Text v-else-if="row.surface.kind === 'pending'" :id="part(j, 'note')" data-testid="execute-op-summary-args-pending" variant="body" color="tertiary">
 								Reading arguments…
 							</Text>
-							<Flex v-else-if="row.surface.kind === 'raw'" :id="part(j, 'note')" data-testid="execute-op-summary-unverified-args" :data-reason="row.surface.reason" direction="column" gap="4">
-								<ArgsNotice :title="RAW_TITLE" :body="RAW_LINE[row.surface.reason]" prefix="execute-op-summary" kind="unverified" />
-							</Flex>
 						</Flex>
 					</StepRow>
 					<div v-if="openSteps.has(j)" :id="stepPanel(j)" data-testid="execute-op-details" :data-step-index="j" :class="$style.guide">
@@ -206,8 +201,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 				</Flex>
 			</li>
 		</ol>
-		<Text v-if="uncheckedLine" data-testid="execute-op-summary-unchecked" variant="caption" color="secondary" height="130">{{ uncheckedLine }}</Text>
-		<Text v-if="advice === 'calls'" data-testid="execute-op-summary-unverified-advice" variant="body" color="tertiary">{{ RAW_ADVICE }}</Text>
+		<Text v-if="unparsedLine" data-testid="execute-op-summary-unparsed" variant="body" color="tertiary" height="130">{{ unparsedLine }}</Text>
 	</Flex>
 
 	<!-- One element through every state, so a keyboard press on Try again keeps its place here; empty, it
@@ -250,16 +244,14 @@ const onRetryPreview = (event: MouseEvent): void => {
 						<Flex direction="column" gap="4">
 							<Text data-testid="execute-discovered-authwit-line" variant="body" color="primary" height="130">
 								Lets <AddressDisplay :address="a.caller" data-testid="execute-discovered-line-caller" />
-								<template v-if="line.kind === 'move' && amount"> move <Text variant="meta" data-testid="execute-discovered-line-amount">{{ amount.text }}</Text></template>
-								<template v-if="line.kind === 'move' && amount?.baseUnits"> base units</template>
-								<template v-if="line.kind === 'move'"> from <AddressDisplay :address="line.from" data-testid="execute-discovered-line-from" /> to <AddressDisplay :address="line.to" data-testid="execute-discovered-line-to" /></template>
-								<template v-else> call <Text variant="meta" data-testid="execute-discovered-line-function">{{ line.fn }}</Text> on <AddressDisplay :address="a.consumer" data-testid="execute-discovered-line-consumer" /></template>
+								<template v-if="line.kind === 'move' && amount"> move <Text variant="meta" data-testid="execute-discovered-line-amount">{{ amount.text }}</Text>{{ amount.baseUnits ? " base units " : " " }}<ContractChip v-bind="authwitChips[k]" testid="execute-discovered-line-consumer" /> from <AddressDisplay :address="line.from" data-testid="execute-discovered-line-from" /> to <AddressDisplay :address="line.to" data-testid="execute-discovered-line-to" /></template>
+								<template v-else-if="line.kind === 'call'"> call <Text variant="meta" data-testid="execute-discovered-line-function">{{ line.fn }}</Text> on <ContractChip v-bind="authwitChips[k]" testid="execute-discovered-line-consumer" /></template>
 							</Text>
 							<Text v-if="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf" variant="body" color="secondary" height="130">
 								Already authorized by <AddressDisplay :address="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf-account" />.
 							</Text>
 							<Flex v-if="surface.kind === 'raw'" data-testid="execute-op-summary-authwit-unverified-args" :data-reason="surface.reason" direction="column" gap="4">
-								<ArgsNotice :title="RAW_TITLE" :body="RAW_LINE[surface.reason]" prefix="execute-op-summary-authwit" kind="unverified" />
+								<Text data-testid="execute-op-summary-authwit-unparsed" variant="body" color="tertiary" height="130">{{ UNPARSED_AUTHWIT }}</Text>
 							</Flex>
 						</Flex>
 						<div v-if="nodeOpen" :id="authwitPanel(k)" data-testid="execute-op-details" :class="$style.guide">
@@ -271,7 +263,6 @@ const onRetryPreview = (event: MouseEvent): void => {
 								:controls="`${authwitPanel(k)}-args`"
 								:chainId="chainId"
 								:tokens="tokens"
-								:advice="adviceAuthwit === k"
 								@toggle="toggleAuthwit(a)"
 							/>
 						</div>
@@ -292,11 +283,6 @@ const onRetryPreview = (event: MouseEvent): void => {
 </template>
 
 <style module>
-.line_mark {
-	margin-right: 6px;
-	vertical-align: -3px;
-}
-
 .section {
 	width: 100%;
 	padding-top: 12px;
@@ -359,6 +345,11 @@ const onRetryPreview = (event: MouseEvent): void => {
 }
 
 .chevron_tail {
+	white-space: nowrap;
+}
+
+/* The chip and the chevron after it break as one word. */
+.chip_tail {
 	white-space: nowrap;
 }
 

@@ -18,15 +18,17 @@ import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
-import { flaggedKeysOf } from "@/utils/token-flag"
+import { CHAIN_IDS } from "@/utils/chain-ids"
+import { flaggedKeysOf, listKeyOf } from "@/utils/token-flag"
 import {
 	TEST_FLAGGED,
 	TEST_LIST_ENTRIES,
 	TEST_LIST_ENTRIES_WITH_ICONS,
 	TEST_PRICE_FEEDS,
 	TEST_PRICED_TOKENS,
+	TEST_TOKENS,
 } from "@/wallet/services/token-list/list.fixture"
-import { tokenIconsOf } from "@/utils/token-icon"
+import { listedTokensOf, tokenIconsOf } from "@/utils/token-icon"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
 import {
 	freshQuotes,
@@ -413,7 +415,13 @@ describe("PriceService — refresh pipeline", () => {
 		}
 		await service.onAlarmTick()
 		expect(seen).toEqual([
-			{ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: flaggedKeysOf([TEST_FLAGGED]), tokenIcons: {} },
+			{
+				quotes: {},
+				pricedTokens: TEST_PRICED_TOKENS,
+				flaggedTokens: flaggedKeysOf([TEST_FLAGGED]),
+				tokenIcons: {},
+				listedTokens: listedTokensOf(TEST_LIST_ENTRIES),
+			},
 		])
 	})
 
@@ -468,7 +476,7 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 		expect(state.fetchCalls).toHaveLength(0)
 	})
 
-	test("the list's pictures ride every snapshot with fiat off, and a list without pictures empties them", async () => {
+	test("the list's pictures, symbols and names ride every snapshot with fiat off, and a list without pictures empties them", async () => {
 		const { service, state, fakeTokenList } = await harness({ enabled: false })
 		state.list = {
 			sequence: 2,
@@ -481,6 +489,9 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 		expect(read.tokenIcons).toEqual(tokenIconsOf(TEST_LIST_ENTRIES_WITH_ICONS))
 		expect(Object.keys(read.tokenIcons)).toHaveLength(2)
 		expect(Object.keys(read.tokenIcons)).not.toContain(flaggedKeysOf([TEST_FLAGGED])[0])
+		expect(read.listedTokens[listKeyOf(CHAIN_IDS.TESTNET, TEST_TOKENS.USDT)]).toEqual({ symbol: "USDT", name: "Test USDT" })
+		expect(Object.keys(read.listedTokens)).toHaveLength(4)
+		expect(Object.keys(read.listedTokens)).not.toContain(flaggedKeysOf([TEST_FLAGGED])[0])
 
 		const seen: PriceSnapshot[] = []
 		service.onQuotesUpdated.add((s) => seen.push(s))

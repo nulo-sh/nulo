@@ -57,7 +57,8 @@ import {
 	wire,
 } from "./call-surface"
 import { trimAddress } from "@/utils/string"
-import type { TokenMarkLookup } from "@/utils/token-icon"
+import type { ListReader } from "@/utils/contract-level"
+import type { BlockExplorerType } from "@/wallet/constants/explorers"
 import { callTitle } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
 import { grantContentsOf } from "./display-calls"
@@ -101,8 +102,10 @@ const props = defineProps<{
 	decodedGrants?: readonly DecodedGrant[]
 	/** The wallet's registered tokens, so an amount can carry its symbol and decimals. */
 	tokens?: readonly TokenInfo[]
-	/** The signed list's reader, for the token's mark on a transfer's line; without one the line has none. */
-	marks?: TokenMarkLookup
+	/** The signed list's reader, for each contract chip's level and picture; without one every level is pending. */
+	marks?: ListReader
+	/** The explorer the person picked, for a chip's link. */
+	explorerId?: BlockExplorerType | null
 	/**
 	 * A `register_token` operation's metadata, read by the parent while
 	 * `tokenMetadataLoading` holds; Confirm stays off until every token is read.
@@ -151,9 +154,16 @@ const opTitle = (kind: UIOperation["kind"]): string => (kind === "aztec_createAu
 const decodedAt = (j: number): DecodedCall | undefined =>
 	props.decodedCalls ? (props.decodedCalls[j] ?? { kind: "undecoded", reason: "unavailable" }) : undefined
 
-const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: CallSurface }[] => {
+/** The name a decoded contract's own code gives it; only an unverified chip's press repeats it. */
+const selfNameOf = (decoded: DecodedCall | undefined): string | undefined => (decoded?.kind === "decoded" ? decoded.contract : undefined)
+
+const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: CallSurface; selfName?: string }[] => {
 	const ctx: CallerContext = { accountAddress: op.accountAddress, noFrom: isNoFrom(op as SendLikeUIOp) }
-	return (op.exec.calls as WireCall[]).map((call, j) => ({ call, surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)) }))
+	return (op.exec.calls as WireCall[]).map((call, j) => ({
+		call,
+		surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)),
+		selfName: selfNameOf(decodedAt(j)),
+	}))
 }
 const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
 /** What this account gives away by authorization, read as the authorizations block reads it: what the
@@ -279,23 +289,22 @@ const authwitGroup = (a: DiscoveredAuthwit): AuthwitGroup => {
 
 const summaryAuthwits = computed(() =>
 	authwits.value.kind === "list"
-		? authwits.value.authwits.map((authwit) => ({ authwit, surface: authwitArgs(authwit), group: authwitGroup(authwit) }))
+		? authwits.value.authwits.map((authwit) => ({
+				authwit,
+				surface: authwitArgs(authwit),
+				group: authwitGroup(authwit),
+				selfName: selfNameOf(authwitDecode(authwit)),
+			}))
 		: undefined,
 )
 
-/** An unreadable grant always refuses its request, so a grant never carries the advice. Past the
- *  calls, the rail places it under the last unreadable authorization still open. The bridge builds
- *  one operation per window, so once per card is once per window. */
-const adviceSite = computed((): "calls" | "authwits" | undefined => {
+/** The standalone authorization card's call is the one place the advice stays: a send names its
+ *  unreadable calls in one line instead. An unreadable grant always refuses its request. */
+const advises = computed((): boolean => {
 	const op = props.op
-	if (props.refused) return undefined
-	if (op.kind === "aztec_createAuthWit") {
-		const intent = createAuthwitSurface(op.messageHashOrIntent)
-		return intent.kind === "call" && intent.args.kind === "raw" ? "calls" : undefined
-	}
-	if (op.kind !== "aztec_sendTx") return undefined
-	if (sendTxRows.value.some((row) => row.surface.kind === "raw")) return "calls"
-	return summaryAuthwits.value?.some(({ surface }) => surface.kind === "raw") ? "authwits" : undefined
+	if (props.refused || op.kind !== "aztec_createAuthWit") return false
+	const intent = createAuthwitSurface(op.messageHashOrIntent)
+	return intent.kind === "call" && intent.args.kind === "raw"
 })
 </script>
 
@@ -353,7 +362,7 @@ const adviceSite = computed((): "calls" | "authwits" | undefined => {
 					:chainId="op.network?.chainId"
 					:tokens="tokens"
 					:marks="marks"
-					:advice="adviceSite"
+					:explorerId="explorerId"
 					@retryPreview="emit('retryPreview', index)"
 				/>
 			</template>
@@ -647,7 +656,7 @@ const adviceSite = computed((): "calls" | "authwits" | undefined => {
 					</Flex>
 					<Flex data-testid="execute-authwit-args" direction="column" gap="4" :class="$style.group">
 						<Text variant="label-section" color="secondary">Arguments</Text>
-						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view :advice="adviceSite === 'calls'" />
+						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view :advice="advises" />
 					</Flex>
 				</template>
 				<template v-else>

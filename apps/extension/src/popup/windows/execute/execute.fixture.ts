@@ -204,7 +204,7 @@ export const FACTS: readonly Fact[] = [
 	...call(0, trimAddress(L1_RECIPIENT), "authwit_nonce:", trimAddress(EXIT_NONCE, 10, 6)),
 	...titles(callRow(0), EXIT_NONCE),
 	...call(1, "Transfer (private)", trimAddress(USDC), "Main", trimAddress(RECIPIENT), "0.1 USDC"),
-	...call(2, "Checkpoint", trimAddress(UNKNOWN), "Can't read the arguments", "Nulo doesn't have this contract's interface"),
+	...call(2, "Checkpoint", trimAddress(UNKNOWN)),
 	...call(2, trimAddress(CHECKPOINT_ROOT, 10, 6), "= 7"),
 	...titles(callRow(2), CHECKPOINT_ROOT),
 	...authwit(MESSAGE_1, trimAddress(USDC), trimAddress(HUB), "Transfer to public", "Main", "25 USDC"),
@@ -212,6 +212,7 @@ export const FACTS: readonly Fact[] = [
 	...titles(authwitRow(MESSAGE_1), AUTH_NONCE, INNER_1),
 	...authwit(MESSAGE_2, trimAddress(VAULT), trimAddress(HUB), trimAddress(INNER_2, 10, 6)),
 	...titles(authwitRow(MESSAGE_2), INNER_2),
+	{ row: '[data-testid="execute-op-summary-unparsed"]', text: "Nulo can't parse calls from steps 1 and 3." },
 ]
 
 /** The Vault authorization's facts when it decodes, and when it reads as raw fields. */

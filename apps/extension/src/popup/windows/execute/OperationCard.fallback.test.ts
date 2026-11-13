@@ -13,7 +13,6 @@ import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
-import { shownText } from "../../../../tests/helpers/shown-text"
 
 vi.mock("@/utils/core", () => ({ managers: { contact: { getContactByAddress: vi.fn(async () => null) } } }))
 // The real store's setup opens chrome.storage; the card only needs its account list.
@@ -279,15 +278,14 @@ describe("OperationCard — the ABI decode and the raw fallback", () => {
 		expect(one(w, "execute-op-unverified-args").exists()).toBe(false)
 	})
 
-	test("an undecodable call shows the notice and keeps its raw fields behind a toggle; fields trim and small ones read as decimals", async () => {
+	test("an undecodable call is named by the one line after the steps and keeps its raw fields behind a toggle; fields trim and small ones read as decimals", async () => {
 		const w = await mountCard(sendTx([claim]), { decodedCalls: [undecoded("unknown-contract")] })
 		const block = one(w, "execute-op-unverified-args")
 		expect(block.attributes("data-reason")).toBe("unknown-contract")
-		// Once, under the step's sentence: the open step does not say it again.
-		expect(one(w, "execute-op-summary-unverified-warning").text()).toContain("Can't read the arguments")
-		expect(shownText(one(w, "execute-op-summary-unverified-reason").element)).toBe("Nulo doesn't have this contract's interface.")
-		expect(w.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(1)
-		expect(one(w, "execute-op-unverified-reason").exists()).toBe(false)
+		// The line after the steps says it; neither the step's sentence nor the open step warns or gives a reason.
+		expect(all(w, "execute-op-summary-unparsed").map((l) => l.text())).toEqual(["Nulo can't parse this call."])
+		expect(w.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(0)
+		expect(w.findAll('[data-testid$="-unverified-reason"]')).toHaveLength(0)
 		expect(one(w, "execute-op-raw-args").exists()).toBe(false)
 		expect(w.text()).not.toContain(TO)
 		const toggle = one(w, "execute-op-raw-toggle")

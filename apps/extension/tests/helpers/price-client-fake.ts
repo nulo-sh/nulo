@@ -1,7 +1,8 @@
 /**
  * A fake `@/wallet/services/price/client` for a component that owns its price client and runs the real
  * `usePrices`: every client answers with one fresh Fee Juice quote at `priceFake.usd` (none while it is
- * undefined), the list's flagged keys in `priceFake.flagged` and its pictures in `priceFake.icons`, and
+ * undefined), the list's flagged keys in `priceFake.flagged`, its pictures in `priceFake.icons` and its
+ * entries' symbols and names in `priceFake.listed`, and
  * is kept in `priceFake.clients`, so a test counts the refreshes and cache reads a screen began.
  * `hold()` keeps every answer back until `release()`.
  *
@@ -13,12 +14,14 @@ export function feeJuiceSnapshot(
 	usd: number | undefined,
 	flaggedTokens: readonly string[] = [],
 	tokenIcons: Readonly<Record<string, string>> = {},
+	listedTokens: Readonly<Record<string, { symbol: string; name: string }>> = {},
 ) {
 	return {
 		quotes: usd === undefined ? {} : { aztec: { coingeckoId: "aztec", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
 		pricedTokens: {},
 		flaggedTokens: [...flaggedTokens],
 		tokenIcons: { ...tokenIcons },
+		listedTokens: { ...listedTokens },
 	}
 }
 
@@ -27,7 +30,7 @@ let release: (() => void) | undefined
 
 const answer = async () => {
 	await held
-	return feeJuiceSnapshot(priceFake.usd, priceFake.flagged, priceFake.icons)
+	return feeJuiceSnapshot(priceFake.usd, priceFake.flagged, priceFake.icons, priceFake.listed)
 }
 
 type Listeners = { add: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> }
@@ -56,11 +59,14 @@ export const priceFake = {
 	flagged: [] as string[],
 	/** The pictures every answer carries, as `tokenIconsOf` keys them. */
 	icons: {} as Record<string, string>,
+	/** The entries' symbols and names every answer carries, as `listedTokensOf` keys them. */
+	listed: {} as Record<string, { symbol: string; name: string }>,
 	clients: [] as ReturnType<typeof createClient>[],
 	reset(usd: number | undefined) {
 		priceFake.usd = usd
 		priceFake.flagged = []
 		priceFake.icons = {}
+		priceFake.listed = {}
 		priceFake.clients.length = 0
 		priceFake.release()
 	},
@@ -75,7 +81,7 @@ export const priceFake = {
 	},
 	/** A new snapshot, as the worker broadcasts it, to every listener still added. */
 	broadcast() {
-		const snapshot = feeJuiceSnapshot(priceFake.usd, priceFake.flagged, priceFake.icons)
+		const snapshot = feeJuiceSnapshot(priceFake.usd, priceFake.flagged, priceFake.icons, priceFake.listed)
 		for (const client of priceFake.clients) for (const listener of added(client.onQuotesUpdated)) listener(snapshot)
 	},
 	/** A port reopened after a worker restart, as every client still listening hears it. */

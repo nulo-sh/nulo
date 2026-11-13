@@ -10,6 +10,14 @@ export function tokenIconsOf(entries: readonly TokenListEntry[]): Record<string,
 	return Object.fromEntries(entries.flatMap((e) => (e.icon === undefined ? [] : [[listKeyOf(e.chainId, e.address), e.icon]])))
 }
 
+/** What the signed list says a contract it names is called. */
+export type ListedToken = { symbol: string; name: string }
+
+/** Every entry's symbol and name, keyed as {@link tokenIconsOf} keys its pictures. */
+export function listedTokensOf(entries: readonly TokenListEntry[]): Record<string, ListedToken> {
+	return Object.fromEntries(entries.map((e) => [listKeyOf(e.chainId, e.address), { symbol: e.symbol, name: e.name }]))
+}
+
 export function tokenIconFor(
 	icons: Readonly<Record<string, string>>,
 	token: { chainId?: number; contract?: string } | undefined,

@@ -91,7 +91,7 @@
 				}
 			],
 			"digests": {
-				"apps/extension/src/e2e/execute-fixture.ts": "6e45a2c0a7043acf5a77a422c61950d7c388eaef6cc14d56a630ca60477dc0bd",
+				"apps/extension/src/e2e/execute-fixture.ts": "206c69c08c1b550b9467f14a9d1a07b29696b4fbc568e27aa9f015db55aacd34",
 				"packages/wallet-bridge/src/dispatcher.ts": "a7a81b849e72d78ec910e2d883faac29b117233f98554a7d98f748e5e1443b41"
 			},
 			"evidence": [
@@ -129,6 +129,16 @@
 			"surface": "popup-tx-id",
 			"state": "",
 			"why": "the component's own text; each AddressDisplay element is a site of its own, read at its call site's selector"
+		},
+		{
+			"file": "apps/extension/src/components/composite/ContractChip.vue",
+			"expression": "trimAddress(model.address)",
+			"branch": "model.address",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"contract-chip-short-address\"]",
+			"surface": "windows-execute",
+			"state": "an aztec_sendTx request, a contract chip's press open (network)"
 		},
 		{
 			"file": "apps/extension/src/components/composite/activity/TransactionIncomingCard.vue",
@@ -1397,7 +1407,7 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
 			"expression": "line.from",
-			"branch": "authwitRows.length && line.kind === 'move'",
+			"branch": "authwitRows.length && line.kind === 'move' && amount",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-line-from\"]",
@@ -1407,7 +1417,7 @@
 		{
 			"file": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
 			"expression": "line.to",
-			"branch": "authwitRows.length && line.kind === 'move'",
+			"branch": "authwitRows.length && line.kind === 'move' && amount",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"execute-discovered-line-to\"]",
