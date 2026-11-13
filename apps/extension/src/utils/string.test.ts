@@ -1,7 +1,17 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { describe, expect, test } from "vitest"
 import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
-import { addressEnds, addressHalves, dashIfBlank, getInitials, isBlank, stripBidiAndZeroWidth, tokenInitials, trimAddress } from "./string"
+import {
+	addressEnds,
+	addressHalves,
+	dashIfBlank,
+	getInitials,
+	isBlank,
+	stripBidiAndZeroWidth,
+	stripPictographs,
+	tokenInitials,
+	trimAddress,
+} from "./string"
 
 describe("trimAddress", () => {
 	const ADDR = "0x1234567890abcdef1234567890abcdef12345678"
@@ -178,5 +188,42 @@ describe("addressHalves", () => {
 	test("refuses one character short or long", () => {
 		expect(addressHalves(ADDRESS.slice(0, 65))).toBeNull()
 		expect(addressHalves(`${ADDRESS}0`)).toBeNull()
+	})
+})
+
+describe("stripPictographs", () => {
+	test("an emoji after, before or inside a name goes, and the spaces it leaves close", () => {
+		expect(stripPictographs("Playground \u2705")).toBe("Playground")
+		expect(stripPictographs("\u2714\uFE0F Swap")).toBe("Swap")
+		expect(stripPictographs("Play\u{1F3AE}ground")).toBe("Playground")
+		expect(stripPictographs("Cool \u{1F680} App")).toBe("Cool App")
+	})
+
+	test("a check mark that is no emoji still goes: it reads as a seal", () => {
+		expect(["Playground \u2713", "Playground \u{1F5F8}", "\u{1F5F9} Playground"].map(stripPictographs)).toEqual([
+			"Playground",
+			"Playground",
+			"Playground",
+		])
+	})
+
+	test("sequences go whole: a flag, a joined family, a skin tone, a subdivision flag, a keycap", () => {
+		expect(stripPictographs("\u{1F1E6}\u{1F1F7} Tango")).toBe("Tango")
+		expect(stripPictographs("\u{1F468}\u200D\u{1F469}\u200D\u{1F467} Family")).toBe("Family")
+		expect(stripPictographs("\u{1F44D}\u{1F3FD} ok")).toBe("ok")
+		expect(stripPictographs("\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F} Club")).toBe("Club")
+		expect(stripPictographs("Room 1\uFE0F\u20E3")).toBe("Room")
+	})
+
+	test("a name of emoji or keycaps only leaves nothing", () => {
+		expect(stripPictographs("\u{1F680}\u{1F680}")).toBe("")
+		expect(stripPictographs("1\uFE0F\u20E3 #\uFE0F\u20E3")).toBe("")
+	})
+
+	test("letters, digits and punctuation in every script stay, a pictographic punctuation mark included", () => {
+		expect(stripPictographs("\u00DCn\u00EFc\u00F6d\u00E9 \u4E2D\u6587 \u0627\u0644\u0639\u0631\u0628\u064A\u0629 123")).toBe(
+			"\u00DCn\u00EFc\u00F6d\u00E9 \u4E2D\u6587 \u0627\u0644\u0639\u0631\u0628\u064A\u0629 123",
+		)
+		expect(stripPictographs("Wow\u203C Room 42 #1, (beta).")).toBe("Wow\u203C Room 42 #1, (beta).")
 	})
 })

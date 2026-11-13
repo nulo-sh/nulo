@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 import { ref } from "vue"
 import { type TokenListEntry, type TokenListPair, BUNDLED_TOKEN_CLASS_IDS } from "@nulo/token-list"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
+import { SPONSORED_FPC_ADDRESS } from "@/wallet/services/fpc/sponsored-fpc-address"
 import { flaggedKeysOf, isFlaggedToken, listKeyOf } from "./token-flag"
 import { listedTokensOf, tokenIconFor, tokenIconsOf } from "./token-icon"
 import { type ListReader, readContract } from "./contract-level"
@@ -63,6 +64,16 @@ describe("readContract", () => {
 		expect(readContract(readerOf([]), undefined, PRIVATE_FPC_ADDRESS)).toEqual({ level: "nulo", source: "fpc" })
 		const flagged = readerOf([], [{ chainId: CHAIN, address: PRIVATE_FPC_ADDRESS }])
 		expect(readContract(flagged, CHAIN, PRIVATE_FPC_ADDRESS)).toEqual({ level: "none", flagged: true })
+	})
+
+	test("Nulo's sponsor is Nulo verified on any chain before the list answers, and unverified once the list flags it", () => {
+		expect(readContract(readerOf([], [], false), CHAIN, SPONSORED_FPC_ADDRESS)).toEqual({ level: "nulo", source: "sponsor" })
+		expect(readContract(readerOf([]), CHAIN + 1, SPONSORED_FPC_ADDRESS.toUpperCase().replace("0X", "0x"))).toEqual({
+			level: "nulo",
+			source: "sponsor",
+		})
+		const flagged = readerOf([], [{ chainId: CHAIN, address: SPONSORED_FPC_ADDRESS }])
+		expect(readContract(flagged, CHAIN, SPONSORED_FPC_ADDRESS)).toEqual({ level: "none", flagged: true })
 	})
 
 	test("an unknown contract is unverified, and so is a listed one with no chain", () => {

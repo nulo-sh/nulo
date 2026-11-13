@@ -13,6 +13,8 @@ import WonderlandTokenJson from "@wonderland-token-artifact"
 import { FunctionSelector, loadContractArtifact } from "@aztec-labs/stdlib/abi"
 import type { VueWrapper } from "@vue/test-utils"
 import { vi } from "vitest"
+import { ref } from "vue"
+import type { ListReader } from "@/utils/contract-level"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import { decodeCallForDisplay, decodeGrantForDisplay } from "@/wallet/services/execution/call-decoder"
@@ -20,6 +22,15 @@ import type { CallAuthwitContent, DecodedCall, DecodedGrant, DiscoveredAuthwit }
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { authwitDisplayCall, displayCallsOf } from "./display-calls"
 import type { DraftUIOperation } from "./types"
+
+/** The signed list as the window reads it once answered, naming nothing: every chip settles and none
+ *  is sealed, so a card's text reads at once instead of behind a held chip's placeholders. */
+export const answeredList = (): ListReader => ({
+	mapped: ref(true),
+	isFlagged: () => false,
+	iconFor: () => undefined,
+	listedAt: () => undefined,
+})
 
 /** Opens a mounted send card's every step, then its authorizations' node: the rail opens each on its
  *  own press, and the node lists every authorization's details at once. */

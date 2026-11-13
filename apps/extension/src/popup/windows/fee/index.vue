@@ -37,6 +37,8 @@ import {
 	grantContentsOf,
 } from "../execute/display-calls"
 import { grantRefusalRow } from "../execute/call-surface"
+import { type NameBook, nameBookOf } from "../execute/contract-chips"
+import { managers } from "@/utils/core"
 import {
 	WrongProfileError,
 	assertRequestProfile,
@@ -53,6 +55,7 @@ import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profil
 import { type DecodedCall, type DecodedGrant, ExecutionServiceClient } from "@/wallet/services/execution/client"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
+import type { Contact } from "@/wallet/services/contact/client"
 import { DappInteractionServiceClient, type FeeQuestionPayload, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
 
 /** Composables */
@@ -85,6 +88,18 @@ const tokenFollow = followKnownTokens(tokenService, knownTokens)
 const profileService = new ProfileServiceClient()
 const priceService = new PriceServiceClient()
 const marks = shallowRef<ReturnType<typeof useTokenFlags>>()
+/** The person's names for the chips' addresses, from one read of the profile's contacts that the
+ *  cards never wait for; a failed read names no contact. */
+const contacts = shallowRef<readonly Contact[]>()
+const names = computed((): NameBook => (contacts.value ? nameBookOf(contacts.value, appStore.accounts) : "loading"))
+async function readContacts(): Promise<void> {
+	try {
+		contacts.value = await managers.contact.getContacts()
+	} catch (error) {
+		console.warn("[Fee] Contacts read failed", { error })
+		contacts.value = []
+	}
+}
 
 const {
 	requestId,
@@ -152,6 +167,7 @@ const init = async () => {
 		await loadInteractionPayload()
 		if (!payload.value) return
 		assertRequestProfile(profile.value, payload.value.session.profileId)
+		void readContacts()
 		const resolved = await resolveForProfile([payload.value.operation], profile.value.id)
 		const op = resolved.operations[0]
 		operation.value = op
@@ -279,6 +295,7 @@ onUnmounted(() => {
 					:tokens="knownTokens"
 					:marks="marks"
 					:explorerId="appStore.defaultExplorer"
+					:names="names"
 				>
 					<template #fee>
 						<FeeRaisedCard

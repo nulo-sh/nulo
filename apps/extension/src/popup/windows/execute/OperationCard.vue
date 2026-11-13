@@ -43,7 +43,7 @@ import CallArguments from "./CallArguments.vue"
 import OperationActionRow from "./OperationActionRow.vue"
 import SendTxSummary, { type AuthwitGroup } from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
-import { type FeePayerPick, paysFromPrivateFeeJuice, personPaysAppPayment } from "./fee-figure"
+import { type FeePayerPick, payingContract, paysFromPrivateFeeJuice, personPaysAppPayment } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
 import {
 	type CallSurface,
@@ -57,10 +57,12 @@ import {
 	wire,
 } from "./call-surface"
 import { trimAddress } from "@/utils/string"
-import type { ListReader } from "@/utils/contract-level"
+import { type ListReader, readContract } from "@/utils/contract-level"
+import { LEVEL_GLYPH, LEVEL_LABEL, appLabelOf } from "@/components/composite/contract-chip"
 import type { BlockExplorerType } from "@/wallet/constants/explorers"
 import { callTitle } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
+import type { NameBook } from "./contract-chips"
 import { grantContentsOf } from "./display-calls"
 
 // `DraftUIOperation` is the shared honest type. Send-like `feeSettings` is optional during user
@@ -106,6 +108,8 @@ const props = defineProps<{
 	marks?: ListReader
 	/** The explorer the person picked, for a chip's link. */
 	explorerId?: BlockExplorerType | null
+	/** The person's own names for addresses, for the chips of a send's parties. */
+	names?: NameBook
 	/**
 	 * A `register_token` operation's metadata, read by the parent while
 	 * `tokenMetadataLoading` holds; Confirm stays off until every token is read.
@@ -179,11 +183,23 @@ const outflows = computed(() =>
 		? accountOutflows(sendTxRows.value, props.op.accountAddress, props.tokens, props.op.network?.chainId, signedAuthorizations.value)
 		: [],
 )
-const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
+/** The fee row's "set by" lines name the app as its chip does; the failed readout's payer label keeps
+ *  the name as the session holds it. */
+const appName = computed(() => appLabelOf(props.dapp?.name) || "the app")
+const payerName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
 /** The app picked the method but the person pays, so the card claims nothing for the app and never
  *  reads the fee contract's own pool as the person's. */
 const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
 const appFeeFailed = computed(() => props.estimateFailed && !props.feeEstimate && !props.isEstimating)
+/** The row's seal stands for the contract that pays, read as the chips read it, and only for a fee
+ *  contract Nulo pins: the row names no contract, so a weaker level, or a listed token named as the
+ *  payer, would read as a mark on the app. */
+const feeSealed = computed(() => {
+	const payer = payingContract(props.op)
+	if (payer === undefined || !props.marks) return false
+	const reading = readContract(props.marks, props.op.network?.chainId, payer)
+	return reading.level === "nulo" && reading.source !== "token"
+})
 const appFeeRow = ref<{ $el: HTMLElement } | null>(null)
 /** The retry's button leaves with the failure, so a keyboard press keeps its place on the row. Read
  *  `currentTarget` here, inside the click's dispatch: it is null once the dispatch ends. */
@@ -363,6 +379,7 @@ const advises = computed((): boolean => {
 					:tokens="tokens"
 					:marks="marks"
 					:explorerId="explorerId"
+					:names="names"
 					@retryPreview="emit('retryPreview', index)"
 				/>
 			</template>
@@ -401,10 +418,12 @@ const advises = computed((): boolean => {
 							{{ privateFeeJuice ? `Private Fee Juice · set by ${appName}` : `Set by ${appName}` }}
 						</Text>
 					</Flex>
-					<FeeCostReadout failed :label="personPaysAppPayment(op) ? 'You pay' : `${appName} pays`" @retry="onRetryAppEstimate" />
+					<FeeCostReadout failed :label="personPaysAppPayment(op) ? 'You pay' : `${payerName} pays`" @retry="onRetryAppEstimate" />
 				</Flex>
 				<Flex v-else align="start" gap="8" wide :class="$style.op_fee_set">
-					<Icon v-if="!privateFeeJuice" name="square-check" size="14" color="green" />
+					<span v-if="feeSealed" data-testid="execute-op-fee-seal" role="img" :aria-label="LEVEL_LABEL.nulo" :class="$style.fee_seal">
+						<Icon :name="LEVEL_GLYPH.nulo" size="15" color="primary" aria-hidden="true" />
+					</span>
 					<Flex direction="column" :class="$style.fee_lines">
 						<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice">
 							<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
@@ -430,17 +449,6 @@ const advises = computed((): boolean => {
 					<Text variant="body" color="secondary">This app's fee contract may not cover this fee right now.</Text>
 				</Flex>
 			</div>
-			<Flex
-				v-if="privateFeeJuice"
-				align="start"
-				gap="6"
-				wide
-				:class="[$style.op_fee_set, appFeeFailed && $style.hairline]"
-				data-testid="execute-op-private-fee-notice"
-			>
-				<Icon name="info" size="14" color="secondary" aria-hidden="true" />
-				<Text variant="body" color="secondary">Your Private Fee Juice must cover this fee.</Text>
-			</Flex>
 		</template>
 
 		<template v-else>
@@ -753,8 +761,9 @@ const advises = computed((): boolean => {
 	composes: fee_label from "@/popup/components/modules/send/fee-shared.module.css";
 }
 
-.hairline {
-	border-top: 1px solid var(--hairline-soft);
+.fee_seal {
+	display: inline-flex;
+	flex-shrink: 0;
 }
 
 .flag_banner {

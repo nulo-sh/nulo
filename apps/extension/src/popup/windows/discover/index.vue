@@ -192,6 +192,7 @@ onUnmounted(disposeWindow)
 				hostnameTestId="discover-hostname"
 				nameTestId="discover-dapp-name"
 				actionTestId="discover-action"
+				nameAsChip
 			>
 				<template v-if="appChip" #name><ContractChip :model="appChip" /></template>
 			</DappIdentityBlock>

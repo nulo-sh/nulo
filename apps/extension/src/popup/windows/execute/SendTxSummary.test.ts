@@ -1,11 +1,11 @@
 /**
- * Each contract a send names reads as its chip, read through the card over the wire-shaped fixture
+ * Every address a send names reads as its chip, read through the card over the wire-shaped fixture
  * (32-byte hex fields, the real Token decode) and a reader built from the list as the worker sends
  * it: a token the list names on the request's chain by the list's symbol and picture, with the solid
- * seal; any other contract by its short address, with no seal and no name of the person's; a flagged
- * held token keeping its badge; every chip pending without a reader. The calls Nulo cannot read are
- * named in one line after the steps, an unreadable authorization in one line under its own, and a
- * send carries no closing advice.
+ * seal; an address the person named (a contact, an account) by that name, with no seal; any other by
+ * its short address; a flagged held token keeping its badge; every chip pending without a reader or
+ * while the names load. The calls Nulo cannot read are named in one line after the steps, an
+ * unreadable authorization in one line under its own, and a send carries no closing advice.
  */
 
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
@@ -37,6 +37,7 @@ import {
 } from "./execute.fixture"
 import type { ChipModel } from "@/components/composite/contract-chip"
 import ContractChip from "@/components/composite/ContractChip.vue"
+import { type NameBook, nameBookOf } from "./contract-chips"
 import OperationCard from "./OperationCard.vue"
 
 vi.mock("@/utils/core", () => ({ managers: { contact: { getContactByAddress: vi.fn(async () => null) } } }))
@@ -89,6 +90,7 @@ const mountLine = async (props: Record<string, unknown>) => {
 			tokens: [USDC_TOKEN],
 			feeEstimate: feeEstimateWith(AUTHWITS),
 			...(await decodeFixture()),
+			names: nameBookOf([], lookups.accounts),
 			...props,
 		},
 		global: { stubs, components: { AddressDisplay, SectionLabel } },
@@ -102,9 +104,10 @@ const CONSUMER_LABEL = "execute-discovered-line-consumer"
 const callChip = (j: number) => `[data-call-index="${j}"] [data-testid="execute-op-call-to"]`
 const authwitChip = (hash: string) => `[data-message-hash="${hash}"] [data-testid="execute-discovered-authwit-line"]`
 
-/** The chip inside `row`: its level, label, accessible name, mark and seal. */
+/** The chip in `row` whose label carries `label`: its level, label, accessible name, mark and seal. */
 const chipOf = (w: VueWrapper, row: string, label = CALL_LABEL) => {
-	const chip = w.get(`${row} [data-testid="contract-chip"]`)
+	const chip = w.findAll(`${row} [data-testid="contract-chip"]`).find((c) => c.find(`[data-testid="${label}"]`).exists())
+	if (!chip) throw new Error(`no chip labelled ${label} in ${row}`)
 	const mark = chip.find('[data-testid="token-mark"]')
 	const seal = chip.find('[data-testid="contract-chip-seal"]')
 	return {
@@ -185,25 +188,50 @@ describe("execute/SendTxSummary — the contract chip", () => {
 		})
 	})
 
-	test("a card given no list reader draws every chip pending: its short address alone, no seal, no mark", async () => {
-		const w = await mountLine({})
+	test("a card given no list reader holds every chip pending: under its short address's name, no seal, no mark", async () => {
+		const w = await mountLine({ marks: undefined })
 		const chips = w.findAll('[data-testid="contract-chip"]').map((chip) => ({
 			level: chip.attributes("data-level"),
+			held: chip.attributes("data-held"),
 			name: chip.attributes("aria-label"),
-			label: chip.get(`[data-testid="${CALL_LABEL}"], [data-testid="${CONSUMER_LABEL}"]`).text(),
 			marked: chip.find('[data-testid="token-mark"]').exists(),
 			sealed: chip.find('[data-testid="contract-chip-seal"]').exists(),
 		}))
+		// The steps' contracts and parties, then each authorization's caller, consumer and parties.
 		expect(chips).toEqual(
-			[HUB, USDC, UNKNOWN, USDC, VAULT].map((address) => {
-				const label = trimAddress(address)
-				return { level: "pending", name: label, label, marked: false, sealed: false }
-			}),
+			[HUB, USDC, MAIN, RECIPIENT, UNKNOWN, HUB, USDC, MAIN, HUB, HUB, VAULT].map((address) => ({
+				level: "pending",
+				held: "true",
+				name: trimAddress(address),
+				marked: false,
+				sealed: false,
+			})),
 		)
 	})
 
-	test("an unknown contract's chip has no mark and never an account's name; a held token whose symbol reads as nothing gives base units", async () => {
-		lookups.accounts.push({ name: "Checkpoints", address: UNKNOWN })
+	test("the caller, a sender and a recipient are chips: an account the person named by its name, a contact by @ and its name, any other by its short address", async () => {
+		const names: NameBook = nameBookOf([{ name: "Hub team", address: HUB.toUpperCase().replace("0X", "0x") }], lookups.accounts)
+		const w = await mountLine({ ...readerOf([]), names })
+		const step = callChip(1).replace(' [data-testid="execute-op-call-to"]', "")
+		const authwit = `[data-message-hash="${AUTHWITS[0]!.messageHash}"]`
+		const named = (label: string) => ({ level: "none", label, name: `${label}, Unverified`, mark: null, seal: null })
+		expect(chipOf(w, step, "execute-op-line-from")).toEqual(named("Main"))
+		expect(chipOf(w, step, "execute-op-line-to")).toEqual({ ...unverified(RECIPIENT) })
+		expect(chipOf(w, authwit, "execute-discovered-line-caller")).toEqual(named("@Hub team"))
+		expect(chipOf(w, authwit, "execute-discovered-line-from")).toEqual(named("Main"))
+		expect(chipOf(w, authwit, "execute-discovered-line-to")).toEqual(named("@Hub team"))
+		expect(chipOf(w, callChip(0)), "a step's contract the person named reads by that name too").toEqual(named("@Hub team"))
+	})
+
+	test("while the names load, a chip that could take one is pending and one the list settles is not", async () => {
+		const w = await mountLine({ ...readerOf([usdcListedOn(CHAIN)]), names: "loading" })
+		expect(chipOf(w, callChip(1)).level).toBe("nulo")
+		expect(chipOf(w, callChip(0))).toMatchObject({ level: "pending", name: trimAddress(HUB) })
+		const step = callChip(1).replace(' [data-testid="execute-op-call-to"]', "")
+		expect(chipOf(w, step, "execute-op-line-from")).toMatchObject({ level: "pending", name: trimAddress(MAIN) })
+	})
+
+	test("an unknown contract's chip has no mark and reads by its short address; a held token whose symbol reads as nothing gives base units", async () => {
 		const unnamed = { ...USDC_TOKEN, symbol: String.fromCharCode(7) }
 		const w = await mountLine({ ...readerOf([usdcListedOn(CHAIN + 1)]), tokens: [unnamed] })
 		expect([chipOf(w, callChip(0)), chipOf(w, callChip(2)), chipOf(w, authwitChip(AUTHWITS[1]!.messageHash), CONSUMER_LABEL)]).toEqual([
@@ -219,11 +247,17 @@ describe("execute/SendTxSummary — the contract chip", () => {
 		const unchecked = "Nulo hasn't checked this contract."
 		const listed = ["Nulo knows this contract. Knowing it isn't a promise that it's safe.", "Nulo names it from its token list."]
 		expect(w.findAllComponents(ContractChip).map((chip) => (chip.props("model") as ChipModel).lines)).toEqual([
-			[unchecked, "The name Hub came from an app. Nulo hasn't checked it."],
+			[unchecked, "The name Hub comes from the contract's code. Nulo hasn't checked it."],
 			listed,
 			[unchecked],
+			[unchecked],
+			[unchecked],
+			[unchecked],
 			listed,
-			[unchecked, "The name Vault came from an app. Nulo hasn't checked it."],
+			[unchecked],
+			[unchecked],
+			[unchecked],
+			[unchecked, "The name Vault comes from the contract's code. Nulo hasn't checked it."],
 		])
 	})
 

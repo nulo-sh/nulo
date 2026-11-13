@@ -545,6 +545,7 @@ declare global {
   const storedNameKey: typeof import('../utils/account-name').storedNameKey
   const stringCompare: typeof import('../utils/string').stringCompare
   const stripBidiAndZeroWidth: typeof import('../utils/string').stripBidiAndZeroWidth
+  const stripPictographs: typeof import('../utils/string').stripPictographs
   const supersedeProfileActivations: typeof import('../composables/useProfileBootstrap').supersedeProfileActivations
   const tapOrder: typeof import('../utils/endpoint-order').tapOrder
   const toRaw: typeof import('vue').toRaw
@@ -1523,6 +1524,7 @@ declare module 'vue' {
     readonly storedNameKey: UnwrapRef<typeof import('../utils/account-name')['storedNameKey']>
     readonly stringCompare: UnwrapRef<typeof import('../utils/string')['stringCompare']>
     readonly stripBidiAndZeroWidth: UnwrapRef<typeof import('../utils/string')['stripBidiAndZeroWidth']>
+    readonly stripPictographs: UnwrapRef<typeof import('../utils/string')['stripPictographs']>
     readonly supersedeProfileActivations: UnwrapRef<typeof import('../composables/useProfileBootstrap')['supersedeProfileActivations']>
     readonly tapOrder: UnwrapRef<typeof import('../utils/endpoint-order')['tapOrder']>
     readonly toRaw: UnwrapRef<typeof import('vue')['toRaw']>

@@ -112,7 +112,7 @@ const SPEC = [
 		"Contracts",
 		"nulo-verified",
 		"Nulo verified",
-		"Nulo knows which contract this is and names it, which isn't a promise that it's safe.",
+		"Nulo knows which contract this is, or which one pays the fee; that isn't a promise that it's safe.",
 		"Approval window · Connect window",
 	],
 	[

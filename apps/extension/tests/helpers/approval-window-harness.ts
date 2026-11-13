@@ -25,12 +25,14 @@ const appStoreDefaults = () =>
 		isSessionChecked: true,
 		isLogined: true,
 		account: { name: "TestAccount" },
+		accounts: [],
 		network: { name: "TestNet" },
 		pageAwaitingAuth: "",
 	} as {
 		isSessionChecked: boolean
 		isLogined: boolean
 		account: { name: string }
+		accounts: { name?: string; address: string }[]
 		network: { name: string }
 		pageAwaitingAuth: string
 		networks?: unknown[]

@@ -14,7 +14,7 @@ import { describe, expect, test } from "vitest"
 import { trimAddress } from "@/utils/string"
 import AuthwitDetails from "./AuthwitDetails.vue"
 import CallArguments from "./CallArguments.vue"
-import { openAllSteps } from "./execute.fixture"
+import { answeredList, openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 import SendTxSummary from "./SendTxSummary.vue"
 import ValueTree from "./ValueTree.vue"
@@ -114,7 +114,7 @@ const stubs = {
 }
 
 const mountCard = (op: unknown, props: Record<string, unknown> = {}) =>
-	mount(OperationCard, { props: { op: op as never, index: 0, ...props }, global: { stubs } })
+	mount(OperationCard, { props: { op: op as never, index: 0, marks: answeredList(), ...props }, global: { stubs } })
 /** A send's card with its step and its authorizations open, as the person reads them after a press on each. */
 const mountOpen = async (props: Record<string, unknown> = {}) => {
 	const w = mountCard(sendTx, props)

@@ -813,6 +813,7 @@
     "storedNameKey": true,
     "stringCompare": true,
     "stripBidiAndZeroWidth": true,
+    "stripPictographs": true,
     "supersedeProfileActivations": true,
     "tapOrder": true,
     "toRaw": true,

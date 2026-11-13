@@ -28,6 +28,7 @@ const appStoreDefaults = () =>
 		isSessionChecked: true,
 		isLogined: true,
 		account: SAVINGS as typeof SAVINGS | undefined,
+		accounts: [] as (typeof SAVINGS)[],
 		network: TESTNET as typeof TESTNET | undefined,
 		pageAwaitingAuth: "",
 		hasInFlightSend: false,

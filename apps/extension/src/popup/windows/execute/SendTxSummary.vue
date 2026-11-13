@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * Only the wallet's own reading of a transfer or mint states an amount or a party, and nothing places
- * an authorization under a call: the wallet holds no link between them. A contract position reads as
- * its chip, whose level comes from the signed list alone.
+ * an authorization under a call: the wallet holds no link between them. Every address a sentence names
+ * reads as its chip, whose level comes only from the signed list or a fee contract Nulo pins, and whose
+ * name, short of Nulo's, is only one the person gave the address.
  */
 import type { DiscoveredAuthwit } from "@/wallet/services/execution/client"
 import ContractChip from "@/components/composite/ContractChip.vue"
@@ -20,7 +21,7 @@ import {
 	UNPARSED_AUTHWIT,
 	unparsedCallsLine,
 } from "./call-surface"
-import { type ChipContext, contractChipAt } from "./contract-chips"
+import { type ChipContext, contractChipAt, type NameBook } from "./contract-chips"
 import AuthwitDetails from "./AuthwitDetails.vue"
 import CallArguments from "./CallArguments.vue"
 import StepRow from "./StepRow.vue"
@@ -42,12 +43,20 @@ const props = defineProps<{
 	marks?: ListReader
 	/** The explorer the person picked, for the link in a chip's press; none, no link. */
 	explorerId?: BlockExplorerType | null
+	/** The person's own names for addresses; loading, a chip that could take one waits. */
+	names?: NameBook
 }>()
 
 const emit = defineEmits<{ retryPreview: [] }>()
 
 const chipContext = computed(
-	(): ChipContext => ({ reader: props.marks, chainId: props.chainId, tokens: props.tokens, explorerId: props.explorerId }),
+	(): ChipContext => ({
+		reader: props.marks,
+		chainId: props.chainId,
+		tokens: props.tokens,
+		explorerId: props.explorerId,
+		names: props.names,
+	}),
 )
 
 /** An amount in the token's own units names the token through its chip; a raw integer reads as base units. */
@@ -66,6 +75,15 @@ const callRows = computed(() =>
 )
 /** Apart from the rows, so only a chip renders what its contract's address becomes. */
 const callChips = computed(() => props.calls.map(({ call, selfName }) => contractChipAt(chipContext.value, call.to, selfName)))
+const partyChips = computed(() =>
+	props.calls.map(({ surface }) => ({
+		from:
+			surface.kind === "transfer" && surface.sender.kind === "explicit"
+				? contractChipAt(chipContext.value, surface.sender.address)
+				: undefined,
+		to: surface.kind === "transfer" || surface.kind === "mint" ? contractChipAt(chipContext.value, surface.to) : undefined,
+	})),
+)
 
 const unparsedLine = computed(() => unparsedCallsLine(callRows.value.map(({ surface }) => surface)))
 
@@ -83,6 +101,13 @@ const authwitRows = computed(() =>
 )
 const authwitChips = computed(() =>
 	(props.authwits ?? []).map(({ authwit, selfName }) => contractChipAt(chipContext.value, authwit.consumer, selfName)),
+)
+const authwitPartyChips = computed(() =>
+	authwitRows.value.map(({ authwit, line }) => ({
+		caller: contractChipAt(chipContext.value, authwit.caller),
+		from: line.kind === "move" ? contractChipAt(chipContext.value, line.from) : undefined,
+		to: line.kind === "move" ? contractChipAt(chipContext.value, line.to) : undefined,
+	})),
 )
 
 const uid = useId()
@@ -167,9 +192,9 @@ const onRetryPreview = (event: MouseEvent): void => {
 								height="130"
 							>
 								<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'account'">from this account </template>
-								<template v-else-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'explicit'">from <AddressDisplay :address="row.surface.sender.address" data-testid="execute-op-line-from" />{{ " " }}</template>
-								to <AddressDisplay :address="row.surface.to" data-testid="execute-op-line-to" />
-								<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'none'">. Caller: none</template><span :class="$style.chevron_tail">&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></span>
+								<template v-else-if="partyChips[j].from">from <ContractChip v-bind="partyChips[j].from" testid="execute-op-line-from" />{{ " " }}</template>
+								<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'none'">to <ContractChip v-bind="partyChips[j].to!" testid="execute-op-line-to" />. Caller: none<span :class="$style.chevron_tail">&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></span></template>
+								<template v-else>to <span :class="$style.chip_tail"><ContractChip v-bind="partyChips[j].to!" testid="execute-op-line-to" />&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></span></template>
 							</Text>
 							<Text v-else-if="row.surface.kind === 'pending'" :id="part(j, 'note')" data-testid="execute-op-summary-args-pending" variant="body" color="tertiary">
 								Reading arguments…
@@ -243,8 +268,8 @@ const onRetryPreview = (event: MouseEvent): void => {
 					>
 						<Flex direction="column" gap="4">
 							<Text data-testid="execute-discovered-authwit-line" variant="body" color="primary" height="130">
-								Lets <AddressDisplay :address="a.caller" data-testid="execute-discovered-line-caller" />
-								<template v-if="line.kind === 'move' && amount"> move <Text variant="meta" data-testid="execute-discovered-line-amount">{{ amount.text }}</Text>{{ amount.baseUnits ? " base units " : " " }}<ContractChip v-bind="authwitChips[k]" testid="execute-discovered-line-consumer" /> from <AddressDisplay :address="line.from" data-testid="execute-discovered-line-from" /> to <AddressDisplay :address="line.to" data-testid="execute-discovered-line-to" /></template>
+								Lets <ContractChip v-bind="authwitPartyChips[k].caller" testid="execute-discovered-line-caller" />
+								<template v-if="line.kind === 'move' && amount"> move <Text variant="meta" data-testid="execute-discovered-line-amount">{{ amount.text }}</Text>{{ amount.baseUnits ? " base units " : " " }}<ContractChip v-bind="authwitChips[k]" testid="execute-discovered-line-consumer" /> from <ContractChip v-bind="authwitPartyChips[k].from!" testid="execute-discovered-line-from" /> to <ContractChip v-bind="authwitPartyChips[k].to!" testid="execute-discovered-line-to" /></template>
 								<template v-else-if="line.kind === 'call'"> call <Text variant="meta" data-testid="execute-discovered-line-function">{{ line.fn }}</Text> on <ContractChip v-bind="authwitChips[k]" testid="execute-discovered-line-consumer" /></template>
 							</Text>
 							<Text v-if="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf" variant="body" color="secondary" height="130">

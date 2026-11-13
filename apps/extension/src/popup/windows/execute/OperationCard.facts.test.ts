@@ -15,6 +15,7 @@ import type { Account } from "@/wallet/services/account/client"
 import type { DecodedValue } from "@/wallet/services/execution/client"
 import type { Network } from "@/wallet/services/network/client"
 import {
+	answeredList,
 	AUTHWITS,
 	decodeFixture,
 	type Fact,
@@ -30,6 +31,7 @@ import {
 	VAULT_RAW_FACTS,
 } from "./execute.fixture"
 import { valueText } from "./call-surface"
+import { type NameBook, nameBookOf } from "./contract-chips"
 import OperationCard from "./OperationCard.vue"
 
 const lookups = vi.hoisted(() => ({ accounts: [] as { name: string; address: string }[] }))
@@ -51,7 +53,10 @@ const stubs = {
 	FeeSettingsCard: true,
 }
 
-const mountCard = async ({ vaultDecoded = true, components = { AddressDisplay } as Record<string, unknown> } = {}) => {
+/** The card as the window gives it: an answered list and the person's names, the account's included. */
+const settled = (names: NameBook = nameBookOf([], lookups.accounts)) => ({ marks: answeredList(), names })
+
+const mountCard = async ({ vaultDecoded = true, drop = undefined as string | undefined } = {}) => {
 	const w = mount(OperationCard, {
 		props: {
 			op: fixtureOp() as never,
@@ -59,8 +64,11 @@ const mountCard = async ({ vaultDecoded = true, components = { AddressDisplay } 
 			tokens: [USDC_TOKEN],
 			feeEstimate: feeEstimateWith(AUTHWITS) as never,
 			...(await decodeFixture({ vaultDecoded })),
+			...settled(),
 		},
-		global: { stubs, components: components as never },
+		global: drop
+			? { stubs: { ...stubs, ContractChip: droppingChip(drop) }, components: { AddressDisplay: dropping(drop) } as never }
+			: { stubs, components: { AddressDisplay } as never },
 	})
 	await flushPromises()
 	return w
@@ -116,6 +124,14 @@ const dropping = (address: string) =>
 		template: '<AddressDisplay v-if="address !== dropped" v-bind="$attrs" :address="address" />',
 	})
 
+/** A chip that prints its label, and nothing for `address`. */
+const droppingChip = (address: string) =>
+	defineComponent({
+		props: { model: { type: Object, required: true } },
+		setup: () => ({ dropped: address }),
+		template: '<span v-if="model.address !== dropped">{{ model.label }}</span>',
+	})
+
 beforeEach(() => {
 	lookups.accounts.splice(0)
 	lookups.accounts.push({ name: "Main", address: MAIN })
@@ -148,6 +164,7 @@ describe("OperationCard — every fact of a multi-call transaction within two pr
 					feeEstimate: f.feeEstimates[0] as never,
 					decodedCalls: f.decodedCalls[0] as never,
 					decodedAuthwits: f.decodedAuthwits as never,
+					...settled(),
 				},
 				global: { stubs, components: { AddressDisplay } as never },
 			})
@@ -172,7 +189,7 @@ describe("OperationCard — every fact of a multi-call transaction within two pr
 	)
 
 	test("control: a card that drops the transfer's recipient fails the same check", async () => {
-		const missing = await unreached(await mountCard({ components: { AddressDisplay: dropping(RECIPIENT) } }), FACTS)
+		const missing = await unreached(await mountCard({ drop: RECIPIENT }), FACTS)
 		expect(missing).toEqual([{ row: '[data-call-index="1"]', text: trimAddress(RECIPIENT) }])
 	})
 })

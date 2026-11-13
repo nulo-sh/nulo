@@ -262,6 +262,7 @@ test.skipIf(!hasConfig)(
 		await popup.waitForSelector('[data-testid="execute-op-app-payer-short"]', { visible: true, timeout: 120_000 })
 		const notice = await popup.$eval('[data-testid="execute-op-app-payer-short"]', (el) => el.textContent?.trim())
 		expect(notice).toBe("This app's fee contract may not cover this fee right now.")
+		expect(await popup.$('[data-testid="execute-op-fee-seal"]'), "an app's own sponsor is no contract Nulo verifies").toBeNull()
 		expect(await popup.$eval('[data-testid="execute-confirm-btn"]', (el) => (el as HTMLButtonElement).disabled)).toBe(true)
 		await shotSend(popup, "execute-app-payer-short", "execute-op-app-payer-short")
 		await rejectExecute(popup)
@@ -321,6 +322,11 @@ test.skipIf(!hasConfig)(
 				),
 			)
 			expect(lines, "the line prints both figures at the pinned quote").toContain(line)
+			// The playground derives the sponsor as aztec.js does; the window seals it from its pin alone.
+			expect(
+				await popup.$eval('[data-testid="execute-op-fee-seal"]', (el) => el.getAttribute("aria-label")),
+				"Nulo's sponsor leads the row with the seal",
+			).toBe("Nulo verified")
 			const layout = await readSentenceLayout(popup)
 			console.log(`[fee-sponsor-funding] the sentence's layout ${JSON.stringify(layout)}`)
 			expect(layout.leading).toBeCloseTo(1.5, 2)

@@ -122,11 +122,12 @@ async function observeState(win: Page, surface: string, state: string): Promise<
 	return observation
 }
 
-/** Presses every `AddressDisplay` of `states` that shows a name, until each shows its address; whether any did. */
+/** Presses every `AddressDisplay` of `states` that shows a name, until each shows its address; whether any did.
+ *  A chip's name stays: its press opens its card, whose last row is the address. */
 async function revealAddresses(win: Page, surface: string, states: readonly string[]): Promise<boolean> {
 	let pressed = false
 	for (const site of SITES.filter((s) => s.surface === surface && states.includes(s.state) && s.role !== "none" && !s.unreachable)) {
-		const named = `${site.selector}[data-address-shows="name"]`
+		const named = `${site.selector}[data-address-shows="name"]:not([data-testid="contract-chip"] *)`
 		for (let left = await win.$$(named); left.length > 0; left = await win.$$(named)) {
 			await left[0]!.click()
 			await win.waitForFunction(
@@ -741,11 +742,13 @@ test.skipIf(!hasConfig)("every identifier site the network suite owns was read i
 	console.log(`[type-roles] identifier sites: ${coverage.live} network-owned live`)
 	expect(coverage.live).toBeGreaterThan(0)
 	expect(coverage.unobserved).toEqual([])
-	// Every AddressDisplay here can be pressed to its address, so none may be read only as a name.
+	// Every AddressDisplay here can be pressed to its address, so none may be read only as a name; a
+	// chip is no AddressDisplay.
 	const forms = new Map<string, Set<string>>()
 	for (const { sites } of observed) {
 		for (const { key, readings } of sites) {
-			for (const { addressShows } of readings) if (addressShows) forms.set(key, (forms.get(key) ?? new Set()).add(addressShows))
+			for (const { addressShows, inChip } of readings)
+				if (addressShows && !inChip) forms.set(key, (forms.get(key) ?? new Set()).add(addressShows))
 		}
 	}
 	expect([...forms].filter(([, shown]) => !shown.has("address")).map(([key]) => key)).toEqual([])

@@ -17,6 +17,8 @@ const props = withDefaults(
 		hostnameTestId?: string
 		nameTestId?: string
 		actionTestId?: string
+		/** The window draws the name as a chip, so a name that makes none shows no caption either. */
+		nameAsChip?: boolean
 	}>(),
 	{ dapp: null, actionLabel: "" },
 )
@@ -44,9 +46,8 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 				<Icon name="warning" size="12" color="orange" aria-hidden="true" :class="$style.warning_icon" />
 				<span :class="$style.warning_text">{{ HOSTNAME_WARNING }}</span>
 			</Flex>
-			<!-- A window that knows the app's level draws its name as a chip; the others keep the caption. -->
 			<span v-if="$slots.name" :data-testid="nameTestId" :class="$style.dapp_chip"><slot name="name" /></span>
-			<span v-else-if="sanitizedName" :data-testid="nameTestId" :class="$style.dapp_name">{{ sanitizedName }}</span>
+			<span v-else-if="sanitizedName && !nameAsChip" :data-testid="nameTestId" :class="$style.dapp_name">{{ sanitizedName }}</span>
 			<span v-if="actionLabel" :data-testid="actionTestId" :class="$style.dapp_action">{{ actionLabel }}</span>
 		</Flex>
 	</Flex>

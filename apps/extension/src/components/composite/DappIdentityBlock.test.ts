@@ -119,6 +119,12 @@ describe("composite/DappIdentityBlock", () => {
 		).toBe("MyDapp")
 	})
 
+	test("a window that draws the name as a chip shows no caption when the name makes none", () => {
+		const w = factory({ dapp: { name: "\u2705\u{1F680}" }, nameTestId: "execute-dapp-name", nameAsChip: true })
+		expect(w.find('[data-testid="execute-dapp-name"]').exists()).toBe(false)
+		expect(w.text()).not.toContain("\u2705")
+	})
+
 	test("a network name wider than the action line breaks at its edge", () => {
 		const parsed = parseSource("apps/extension/src/components/composite/DappIdentityBlock.vue")
 		const actions: TemplateNode[] = []

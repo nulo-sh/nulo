@@ -202,8 +202,8 @@ const STUBS = {
 	},
 	DappIdentityBlock: {
 		template:
-			'<div data-testid="identity-block" :data-action="actionLabel" :data-name="dapp?.name"><span v-if="$slots.name" :data-testid="nameTestId"><slot name="name" /></span></div>',
-		props: ["dapp", "actionLabel", "hostnameTestId", "nameTestId"],
+			'<div data-testid="identity-block" :data-action="actionLabel" :data-name="dapp?.name" :data-name-as-chip="nameAsChip"><span v-if="$slots.name" :data-testid="nameTestId"><slot name="name" /></span></div>',
+		props: { dapp: null, actionLabel: null, hostnameTestId: null, nameTestId: null, nameAsChip: Boolean },
 	},
 	SectionLabel: { props: ["label"], template: "<div>{{ label }}</div>" },
 	ItemsContainer: { template: "<div><slot /></div>" },
@@ -557,6 +557,13 @@ describe("discover popup — what Allow reveals", () => {
 		const chip = w.get('[data-testid="discover-dapp-name"] [data-testid="contract-chip"]')
 		expect(chip.attributes()).toMatchObject({ "aria-label": "Nulo verified, Unverified", "data-level": "none" })
 		expect(chip.find('[data-testid="contract-chip-seal"]').exists()).toBe(false)
+	})
+
+	test("a name of emoji only makes no chip, and the block is told to draw no caption in its place", async () => {
+		payloadDapp = { name: "\u2705\u{1F680}", url: "https://playground.nulo.sh" }
+		const w = await ready()
+		expect(w.find('[data-testid="discover-dapp-name"]').exists()).toBe(false)
+		expect(w.get('[data-testid="identity-block"]').attributes("data-name-as-chip")).toBe("true")
 	})
 
 	test("a chain with no wallet network: the remember line names it by its id", async () => {
