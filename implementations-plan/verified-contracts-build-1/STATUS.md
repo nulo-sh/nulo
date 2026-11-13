@@ -9,3 +9,4 @@
 - 2026-11-12: arc 1 phase 4 gate pass after one format fix (audit:vue, test:all). The send rail draws chips from computeds apart from its rows (D15); the count line replaces each call's notice and the advice on a send; the e2e specs rewritten ahead of phase 5.
 - 2026-11-12: arc 1 review round 1: Codex and Opus conditional approve; fixes folded (long app strings, the raised-fee window's explorer link, tests for the pending and PrivateFPC presses and the decoded name's path); A15, A16 asked; page 143 recorded for arc 2.
 - 2026-11-12: arc 1 phase 5 gate pass: step 1 at 3bae98620; smoke after Chrome 2035 s, Firefox 2965 s (rerun after a key-name test fix); e2e:agent Chrome and Firefox green; captures taken; fresh Codex pass approve.
+- 2026-11-13: arc 2 plan amendment (pages 143 and 144) audited by Codex: conditional approve, four findings folded, verification approve.
