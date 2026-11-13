@@ -8,8 +8,21 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 4fd3d8fcc
-status: approved (panel, auto-continue)
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-13.
+- **Status:** completed. Ships in the PR titled `fix(execute): the fee sentence prints the app's name as its chip does, pictographs stripped`, which carries this close-out; it lands on the owner's decision page with its captures.
+- **Shipped:** `appLabelOf` (the chip's label rule, one source); the approval window's three "set by" lines read it, and an emptied name reads "the app" (P146-04 b). The chip and its press are unchanged.
+- **Gates (retry 0):** static at `dbba75096` and final at `1e43957d6`, green; smoke `execute-steps.test.ts` on Chrome (`1e43957d6`) and Firefox (`029f7f11d`), green; `e2e:agent fee-sponsor-funding.test.ts` on Chrome (147 s) and Firefox (181 s) at `029f7f11d`, green. No e2e scenario was added.
+- **Deviations:** the brief's claim that the failed row shows the legend did not hold, so the failed method line is stripped and its payer label stays (D2, A2). Chrome smoke ran at `dbba75096` and again at the final code; only a doc comment changed between them.
+- **Owner decisions, named and not filed:** A1 (History's "Fee method", (b) recommended) and A2 (the failed row's "<name> pays", (b) recommended), both shipping as today, for the captures page.
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget, and the one candidate is the capture-only reload workaround in `lessons/phase-1.md`, which applies to no other task.
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # fee-method-emoji-1: the fee row names the app as its chip does, pictographs stripped
 
@@ -84,7 +97,7 @@ Assumptions used: F1, F2, F3, D1-D4.
 - Pass criteria: require every command to exit 0. Require T1-T4 to pass. Require every existing assertion in `OperationCard.fee.test.ts` and `ContractChip.test.ts` to pass unedited.
 - Layers: lint, typecheck, unit and component, smoke e2e, network e2e.
 
-## Phase 2: captures and the PR (captures ✓)
+## Phase 2: captures and the PR ✓
 
 Assumptions used: D5, F4, F5.
 
