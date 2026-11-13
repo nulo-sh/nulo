@@ -55,7 +55,7 @@ Proportion (lane brief): two strings through an existing function. No plan audit
 
 **Asks.** None.
 
-## Phase 1: the two lines and their tests
+## Phase 1: the two lines and their tests ✓
 
 1. `apps/extension/src/popup/components/modules/tx/tx-detail-helpers.ts`: import `appLabelOf`; add the local helper (D1); read it at `:67` and `:75`.
 2. `apps/extension/src/popup/windows/execute/OperationCard.vue`: delete `payerName`; the label reads `${appName} pays`; the comment above `appName` states one rule for the whole row. Every testid unchanged.
@@ -65,7 +65,7 @@ Proportion (lane brief): two strings through an existing function. No plan audit
 
 **Validation gate** (retry 0, one command at a time, from the worktree root): `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension test:components`; `bun run check:plans` after staging; then `NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/fee-sponsor-funding.test.ts` (`agent.sh` claims ports from `~/.agents/ports.md`; the 10-minute stall watchdog stays). No smoke spec reads either line (F3), so none runs; no Firefox run (no fixture, focus, window or WebAuthn change). Pass: every command exits 0; T1 and T2 pass; every other existing assertion passes unedited.
 
-## Phase 2: captures and the PR
+## Phase 2: captures and the PR ✓
 
 1. Copy the capture kit from scratch into the tree, capture at 400 px in both themes into the lane's scratch `shots/` with `captions.json`, restore the tree:
    - `fee-failed-stripped-400`: the smoke fixture's failed row, "Set by Playground" over "Playground pays".
@@ -73,7 +73,7 @@ Proportion (lane brief): two strings through an existing function. No plan audit
 2. Commit the PNGs under `pr-captures/fee-words-1/` in one commit; delete them in the next.
 3. Post-implementation, then the PR.
 
-**Validation gate.** `git status` clean after the restore; `git grep -n 'capture-' apps/extension/src apps/playground/src` shows no capture patch; every frame exists in both themes; `bun run check:plans` exits 0 after staging.
+**Validation gate.** `git status` clean after the restore; `git grep -n 'capture-emoji' apps/extension/src` and a grep for the renamed app id in `apps/playground/src` show no capture patch (a bare `capture-` hits unrelated test comments); every frame exists in both themes; `bun run check:plans` exits 0 after staging.
 
 ## Delivery
 
@@ -96,3 +96,5 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 ## Audit verdicts
 
 No plan audit round (lane brief, Proportion).
+
+**Codex pass over the plan and the net diff** (gpt-6.1-sol, high, read-only, `43970003b...51402dab5`), 2026-11-13: approve, no findings, high confidence. It confirmed every History form that names the app reads `appLabelOf`, the legacy no-chooser row included; the missing, emptied and whitespace fallbacks; the App row, chip, press and "You pay" unchanged; no caller or layer rule broken; the six new or edited cases fail on the base and no assertion was loosened. No second round (the lane brief runs one unless the first says anything but approve).
