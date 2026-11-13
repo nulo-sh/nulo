@@ -1,9 +1,6 @@
 <script setup lang="ts">
-/**
- * Send's fee in one line pinned over the button, with Change to the full card. It says what the card
- * would say in the form, in the card's words: the cost and who pays it, the estimate's state, the queue,
- * and the card's notices on the line under it.
- */
+/** Says only what the fee card would say, in its words; the review's fee row draws the same
+ *  `feeLine`. */
 import { computed, nextTick, useTemplateRef } from "vue"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import type { FeeDisplay } from "@/utils/fee-estimation"

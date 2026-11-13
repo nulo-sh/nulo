@@ -3085,6 +3085,9 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 				.map((f) => f.text()),
 		).toEqual(["~0.0021 FJ"])
 		expect(drawsFeeWhole("FeeSettingsCard.vue", "whole")).toBe(true)
+		// The row and the notice the form and the review show are written twice: they must agree.
+		const said = (w.emitted<unknown[]>("update:notices") ?? []).at(-1)?.[0] as { text: string }[]
+		expect(said.map((n) => n.text)).toEqual([shortfall(w).text()])
 		w.unmount()
 	})
 

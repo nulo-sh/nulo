@@ -1,8 +1,6 @@
 <script setup lang="ts">
-/**
- * The last look before a send goes. Everything shown is a prop and every action an emit: the page
- * owns the popup slot, the facts and the send.
- */
+/** Everything shown is a prop and every action an emit: the page owns the popup slot, the facts
+ *  and the send. */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
 import FpcSentence from "@/components/composite/send/FpcSentence.vue"
 import PayeeBlock from "@/components/composite/send/PayeeBlock.vue"
