@@ -46,13 +46,6 @@ export const FACT_WORDS = {
 	amount: Record<SideVisibility, string>
 }
 
-const NOTICE_BODY: Record<NoticeShape, string> = {
-	"private-private":
-		"This send hides the amount and the recipient, but the fee names your account publicly. Anyone watching the chain learns this account sent something, and when.",
-	"private-public":
-		"The recipient and amount on this send are already public. Paying from public Fee Juice adds your address to them, and the whole transfer becomes readable as yours.",
-}
-
 export const FACT_SENTENCES = {
 	sender: "A public origin shows the balance leaving your account, so your address is on the chain as the sender.",
 	recipient: "A public destination shows the balance arriving at the recipient's address.",
@@ -128,16 +121,12 @@ export function publishGlyph(visibility: Visibility): "private" | "public" | nul
 	}
 }
 
-export function noticeBodyFor(shape: NoticeShape): string {
-	return NOTICE_BODY[shape]
-}
-
-/** The sentence under a review row. Hidden rows carry none; "—" carries one only for a hand-added contract. */
+/** The sentence under a review row. Hidden rows carry none; "—" carries one only for a hand-added contract;
+ *  an exposed one none, since `feeWarning` says it once under the rows. */
 export function rowSentence(cell: FactCell, facts: PublishFacts, payer: PayerKind): string | null {
 	if (cell === "recipient") return facts.recipient === "public" ? FACT_SENTENCES.recipient : null
 	if (cell === "amount") return facts.amount === "public" ? FACT_SENTENCES.amount : null
 	if (facts.you === "public") return FACT_SENTENCES.sender
-	if (facts.you === "exposed") return noticeBodyFor(facts.noticeShape ?? "private-private")
 	return facts.you === "unknown" && payer === "unvouched" ? UNVOUCHED_PUBLISH_SENTENCE : null
 }
 

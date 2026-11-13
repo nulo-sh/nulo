@@ -8,7 +8,6 @@ import {
 	FACT_SENTENCES,
 	feeWarning,
 	NO_FACTS,
-	noticeBodyFor,
 	PAID_BY,
 	type PayerDescriptor,
 	type PayerKind,
@@ -252,7 +251,6 @@ describe("modules/send/SendReviewSheet", () => {
 			// The box says it once: the row keeps its name, its mark and its word, and no sentence.
 			expect(rows(w)[0]).toEqual(["exposed", "Your address FEE PAYER"])
 			expect(w.get('[data-testid="send-review-row-you"] [data-testid="stub-glyph"]').attributes("data-name")).toBe("public")
-			expect(w.text()).not.toContain(noticeBodyFor(shape))
 			const box = w.get('[data-testid="send-review-warning"]')
 			expect(box.text()).toBe(feeWarning(facts, "Ana"))
 			expect(w.text().split(box.text())).toHaveLength(2)
@@ -270,7 +268,7 @@ describe("modules/send/SendReviewSheet", () => {
 		},
 	)
 
-	test("the Your address row's sentence goes only while the warning shows, and comes back with the warning gone", async () => {
+	test("the Your address row: no sentence while the warning says it, the sender's once the fee names it no more", async () => {
 		w = mountSheet({
 			facts: publishFacts("private", "public", "account"),
 			payerKind: "account",

@@ -85,8 +85,7 @@ const rows = computed(() =>
 			visibility,
 			glyph: publishGlyph(visibility),
 			word: factWord(row.cell, props.facts),
-			// The warning box under the rows says the fee names the account, so that row says it no more.
-			sentence: row.cell === "you" && warning.value ? null : rowSentence(row.cell, props.facts, props.payerKind),
+			sentence: rowSentence(row.cell, props.facts, props.payerKind),
 			noticeShape: row.cell === "you" ? (props.facts.noticeShape ?? undefined) : undefined,
 		}
 	}),

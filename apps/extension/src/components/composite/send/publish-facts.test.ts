@@ -5,7 +5,6 @@ import {
 	factWord,
 	feeWarning,
 	NO_FACTS,
-	noticeBodyFor,
 	PAID_BY,
 	type PayerDescriptor,
 	type PayerKind,
@@ -130,21 +129,12 @@ describe("copy", () => {
 		expect(factWord("you", NO_FACTS)).toBe("—")
 	})
 
-	test("the notice bodies are the shipped ones, word for word", () => {
-		expect(noticeBodyFor("private-private")).toBe(
-			"This send hides the amount and the recipient, but the fee names your account publicly. Anyone watching the chain learns this account sent something, and when.",
-		)
-		expect(noticeBodyFor("private-public")).toBe(
-			"The recipient and amount on this send are already public. Paying from public Fee Juice adds your address to them, and the whole transfer becomes readable as yours.",
-		)
-	})
-
-	test("a row carries a sentence only when it publishes something, or when the wallet cannot vouch", () => {
+	test("a row carries a sentence only when it publishes what the warning does not say, or when the wallet cannot vouch", () => {
 		const gated = publishFacts("private", "public", "account")
-		expect(rowSentence("you", gated, "account")).toBe(noticeBodyFor("private-public"))
+		expect(rowSentence("you", gated, "account")).toBeNull()
 		expect(rowSentence("recipient", gated, "account")).toBe(FACT_SENTENCES.recipient)
 		expect(rowSentence("amount", gated, "account")).toBe(FACT_SENTENCES.amount)
-		expect(rowSentence("you", publishFacts("private", "private", "account"), "account")).toBe(noticeBodyFor("private-private"))
+		expect(rowSentence("you", publishFacts("private", "private", "account"), "account")).toBeNull()
 		expect(rowSentence("you", publishFacts("public", "private", "contract"), "contract")).toBe(FACT_SENTENCES.sender)
 
 		const hidden = publishFacts("private", "private", "contract")
