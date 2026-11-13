@@ -7,6 +7,7 @@ import { config, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import { Skeleton } from "@nulo/design"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { appChipOf } from "@/components/composite/contract-chip"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { GLOSSARY } from "@/utils/glossary"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
@@ -528,6 +529,53 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		)
 		mounted?.unmount()
 		expect(legend(await mountWith(undefined, { dapp: { name: "\u0000\u0007" } })).text()).toBe("Fee payment method set by the app")
+	})
+
+	describe("an app whose declared name carries emoji: the set-by lines read it as its chip does", () => {
+		const DECLARED = "Playground \u2705\u{1F680}"
+		const noFrom = () => ({ ...appPaid(), executionMode: "default_entrypoint" })
+
+		test.each([
+			[
+				"the estimate",
+				() => mountWith({ ...ESTIMATE, appPayerFunding: covered }, { dapp: { name: DECLARED } }),
+				"execute-op-fee-set-badge",
+				"About ~3.577824 FJ ($0.215); payment method set by Playground.",
+			],
+			[
+				"the legend",
+				() => mountWith(undefined, { op: noFrom(), isPreviewing: true, dapp: { name: DECLARED } }),
+				"execute-op-fee-set-badge",
+				"Fee payment method set by Playground",
+			],
+			[
+				"the failed row, whose payer label keeps the name as the session holds it",
+				() => mountWith(undefined, { estimateFailed: true, dapp: { name: DECLARED } }),
+				"execute-op-app-fee-failed",
+				"FeeSet by PlaygroundPlayground \u2705\u{1F680} paysCouldn't estimate fee.Try again",
+			],
+		])("%s", async (_, open, testid, text) => {
+			const w = await open()
+			expect(w.get(`[data-testid="${testid}"]`).text()).toBe(text)
+		})
+
+		test.each(["\u2705\u{1F680}", "  "])(
+			"a name the filter empties (%j) is named the app, in the sentence and in the legend",
+			async (name) => {
+				expect(figure(await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { dapp: { name } })).text()).toBe(
+					"About ~3.577824 FJ ($0.215); payment method set by the app.",
+				)
+				mounted?.unmount()
+				expect(legend(await mountWith(undefined, { dapp: { name } })).text()).toBe("Fee payment method set by the app")
+			},
+		)
+
+		test("one name: the sentence reads the chip's label while the chip's press quotes the name whole", async () => {
+			const chip = appChipOf(DECLARED, "https://playground.example")
+			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { dapp: { name: DECLARED } })
+			expect(w.get('[data-testid="execute-op-app-name"]').text()).toBe(chip?.label)
+			expect(chip?.lines[1]).toBe("The name Playground \u2705\u{1F680} comes from the site. Nulo hasn't checked it.")
+		})
 	})
 
 	test.each([true, false])(

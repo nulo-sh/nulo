@@ -224,6 +224,7 @@ describe("composite/ContractChip", () => {
 		expect(appChipOf(`${"W".repeat(70)}\u{1F680}`, "https://x.example")?.label, "the cap counts what the chip shows").toBe(
 			`${"W".repeat(64)}…`,
 		)
+		expect(appChipOf(`${"\u{1F680}".repeat(64)}Playground`, "https://x.example")?.label, "stripped before the cap").toBe("Playground")
 	})
 
 	test("opened from the chip, focus moves to the link, and Escape returns it to the chip", async () => {
