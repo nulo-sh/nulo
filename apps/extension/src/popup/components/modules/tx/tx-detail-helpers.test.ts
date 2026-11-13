@@ -211,5 +211,26 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 		])("%s", (_case, tx, label) => {
 			expect(describeFeePaymentMethod(tx)).toBe(label)
 		})
+
+		const DECLARED = { type: OriginType.DAPP, name: "Playground \u2705\u{1F680}" }
+		test.each([
+			[
+				"the app's sponsor",
+				row("app_protocol_sponsor", EXTERNAL, [call(SPONSOR, "sponsor_unconditionally")], DECLARED),
+				"Sponsored, set by Playground",
+			],
+			[
+				"a row with no recorded chooser",
+				{ ...row("app", EXTERNAL, [call(APP, "fee_entrypoint_private")], DECLARED), feeChoice: undefined },
+				"Set by Playground",
+			],
+			[
+				"a name the filter empties",
+				row("app_protocol_sponsor", EXTERNAL, [], { type: OriginType.DAPP, name: "\u2705\u{1F680}" }),
+				"Sponsored, set by the app",
+			],
+		])("an app whose declared name carries emoji is named as its chip does: %s", (_case, tx, label) => {
+			expect(describeFeePaymentMethod(tx)).toBe(label)
+		})
 	})
 })
