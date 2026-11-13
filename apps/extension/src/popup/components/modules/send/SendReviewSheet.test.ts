@@ -3,6 +3,7 @@ import { resolve } from "node:path"
 import { mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { nextTick } from "vue"
+import { drawsFeeWhole } from "../../../../../tests/helpers/fee-whole"
 import { sendEvent } from "../../../../../tests/helpers/send-event"
 import {
 	FACT_SENTENCES,
@@ -16,7 +17,7 @@ import {
 	UNVOUCHED_FEE_SENTENCE,
 	UNVOUCHED_PUBLISH_SENTENCE,
 } from "@/components/composite/send/publish-facts"
-import type { FeeLineState } from "./fee-line-words"
+import type { FeeLineState, FeeWords } from "./fee-line-words"
 import SendFeeLine from "./SendFeeLine.vue"
 import SendReviewSheet from "./SendReviewSheet.vue"
 
@@ -73,7 +74,7 @@ type SheetProps = {
 	payerKind: PayerKind
 	payerType?: PayerDescriptor["type"]
 	fee?: FeeLineState
-	notices?: string[]
+	notices?: FeeWords[]
 	queueing?: boolean
 	canSend: boolean
 	sending: boolean
@@ -307,7 +308,7 @@ describe("modules/send/SendReviewSheet", () => {
 		])
 	})
 
-	const STATES: [string, FeeLineState, string[]][] = [
+	const STATES: [string, FeeLineState, FeeWords[]][] = [
 		["paid, private", PAID_PRIVATE, []],
 		["paid, public, no quote", { payer: "fj", display: { amount: "0.00214", usd: null } }, []],
 		["sponsored", { payer: "sponsor", display: PRICED }, []],
@@ -320,7 +321,14 @@ describe("modules/send/SendReviewSheet", () => {
 		],
 		["queued, sponsored", { payer: "sponsor", display: null, estimating: true, queued: true, queuedSponsored: true }, []],
 		["queued behind", { payer: "fj", display: null, estimating: true, queued: true }, []],
-		["with the card's notices", PAID_PRIVATE, ["You have no Fee Juice yet"]],
+		[
+			"with the card's notices",
+			PAID_PRIVATE,
+			[
+				{ text: "You have no Fee Juice yet", figure: null },
+				{ text: "This send can cost up to ~0.0021 FJ ($0.015). You have 0.0015 FJ.", figure: "~0.0021 FJ ($0.015)" },
+			],
+		],
 	]
 	test.each(STATES)("%s: the review's fee row says what the form's line says", (_name, fee, notices) => {
 		w = mountSheet({ fee, notices })
@@ -402,6 +410,12 @@ describe("modules/send/SendReviewSheet — Home's re-ask review", () => {
 			`Fee is now ~0.88 FJ ($0.013), above the ~0.8 FJ ($0.012) you accepted.${paid}`,
 		)
 		expect(feeLines(w)).toEqual(["Fee is now ~0.88 FJ ($0.013), above the ~0.8 FJ ($0.012) you accepted.", paid])
+		expect(
+			feeRow(w)
+				.findAll('[data-testid="send-fee-figure"]')
+				.map((f) => f.text()),
+		).toEqual(["~0.88 FJ ($0.013)", "~0.8 FJ ($0.012)"])
+		expect(drawsFeeWhole("SendReviewSheet.vue", "whole")).toBe(true)
 		expect(submit(w).text()).toBe("Send")
 		await submit(w).trigger("click")
 		expect(w.emitted("send")).toEqual([[]])

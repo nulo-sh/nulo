@@ -99,7 +99,7 @@ export function feeLine(state: FeeLineState): FeeLine {
 }
 
 /** What goes under the line: its own note, then what the fee card would say. */
-export function feeLineNotes(line: FeeLine, notices: readonly string[]): FeeWords[] {
+export function feeLineNotes(line: FeeLine, notices: readonly FeeWords[]): FeeWords[] {
 	const own = line.kind === "words" && line.note ? [line.note] : []
-	return [...own, ...notices.map(plain)]
+	return [...own, ...notices]
 }

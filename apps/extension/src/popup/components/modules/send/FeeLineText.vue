@@ -1,8 +1,6 @@
 <script setup lang="ts">
-/**
- * Words that may hold one fee. The fee never wraps inside itself, so its dollars stay on its line and
- * a full line moves the whole figure to the next.
- */
+/** Words that hold a fee never open with a hand-added sponsor's sentence, so only words with none go
+ *  through `FpcSentence`. */
 import { computed } from "vue"
 import FpcSentence from "@/components/composite/send/FpcSentence.vue"
 import type { FeeWords } from "./fee-line-words"
@@ -24,6 +22,6 @@ const parts = computed(() => {
 
 <style module>
 .figure {
-	white-space: nowrap;
+	composes: whole from "./fee-shared.module.css";
 }
 </style>

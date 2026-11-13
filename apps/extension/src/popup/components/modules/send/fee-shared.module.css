@@ -6,6 +6,11 @@
 	padding: 10px 12px;
 }
 
+/* A fee keeps its dollars on its line. */
+.whole {
+	white-space: nowrap;
+}
+
 /* A fee figure inside a body sentence: mono, at the sentence's size. */
 .fee_figure {
 	composes: type--fiat from global;

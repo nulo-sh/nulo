@@ -132,9 +132,8 @@ const sponsoredSentence = computed(() => {
 	color: var(--nulo-secondary);
 }
 
-/* A fee after other words never wraps inside itself: its dollars stay on its line. */
 .whole {
-	white-space: nowrap;
+	composes: whole from "./fee-shared.module.css";
 }
 
 .queued {

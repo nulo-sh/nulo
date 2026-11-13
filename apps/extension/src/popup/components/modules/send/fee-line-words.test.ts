@@ -92,7 +92,7 @@ describe("feeLine", () => {
 
 	test("the notes: the line's own, then the card's notices as it words them", () => {
 		const line = feeLine({ payer: "sponsor", display: PRICED })
-		expect(feeLineNotes(line, ["first"])).toEqual([
+		expect(feeLineNotes(line, [plain("first")])).toEqual([
 			{ text: "The sponsor covers ~0.00214 FJ ($0.027)", figure: "~0.00214 FJ ($0.027)" },
 			plain("first"),
 		])

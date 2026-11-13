@@ -134,9 +134,14 @@ describe("modules/send/SendFeeLine", () => {
 		expect(value(held)).toBe(QUEUED_FEE_COPY)
 	})
 
-	test("the card's notices, two at once, in its order under the line", () => {
-		const w = mountLine({ notices: ["first", "second"] })
-		expect(notes(w)).toEqual(["first", "second"])
+	test("the card's notices, two at once, in its order under the line, a fee one names drawn whole", () => {
+		const shortfall = { text: "This send can cost up to ~0.0021 FJ ($0.015). You have 0.0015 FJ.", figure: "~0.0021 FJ ($0.015)" }
+		const w = mountLine({ notices: [{ text: "first", figure: null }, shortfall] })
+		expect(notes(w)).toEqual(["first", shortfall.text])
+		expect(figures(w)).toEqual([
+			["value", "~0.00214 FJ ($0.027)"],
+			["note", "~0.0021 FJ ($0.015)"],
+		])
 		expect(w.get('[data-testid="send-fee-line-note"]').attributes("role")).toBe("status")
 	})
 

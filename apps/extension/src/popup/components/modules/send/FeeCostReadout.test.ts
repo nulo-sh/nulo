@@ -1,9 +1,8 @@
-import { readFileSync } from "node:fs"
-import { resolve } from "node:path"
 import { describe, expect, test } from "vitest"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { Skeleton } from "@nulo/design"
 import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY } from "@/components/composite/send/publish-facts"
+import { drawsFeeWhole } from "../../../../../tests/helpers/fee-whole"
 import FeeCostReadout from "./FeeCostReadout.vue"
 
 const STUBS = {
@@ -185,10 +184,8 @@ describe("FeeCostReadout · Nulo's sponsor", () => {
 })
 
 describe("FeeCostReadout · a fee after other words stays whole", () => {
-	const whole = /\.whole\s*\{[^}]*white-space:\s*nowrap/.test(readFileSync(resolve(__dirname, "FeeCostReadout.vue"), "utf8"))
-
 	test("the struck sponsored fee and both queued figures never wrap inside themselves", () => {
-		expect(whole).toBe(true)
+		expect(drawsFeeWhole("FeeCostReadout.vue", "whole")).toBe(true)
 		const wholes = (w: VueWrapper) => w.findAll('[class*="whole"]').map((el) => el.text())
 		expect(wholes(factory({ estimate: ESTIMATE, payer: "sponsor" }))).toEqual(["~3.577824 FJ ($0.215)"])
 		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }

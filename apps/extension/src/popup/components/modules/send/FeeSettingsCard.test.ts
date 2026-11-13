@@ -101,6 +101,7 @@ import { Flex } from "@nulo/design"
 import FeeSettingsCard from "./FeeSettingsCard.vue"
 import { applyFeePickUpdate, type FeePickUpdate } from "@/utils/fee-picks"
 import { readFeePicks } from "../../../../../tests/helpers/ui-preference-fake"
+import { drawsFeeWhole } from "../../../../../tests/helpers/fee-whole"
 import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { INIT_FETCH_TIMEOUT_MS, INIT_RETRY_BACKOFF_MS, useBalancesStore } from "@/stores/balances.store"
 import { CHAIN_IDS } from "@/utils/chain-ids"
@@ -3078,6 +3079,12 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 		await w.setProps({ feeEstimate: SHORT })
 		await flushPromises()
 		expect(w.get('[data-testid="fee-sponsor-live"]').text()).toBe("This send can cost up to ~0.0021 FJ. You have 0.0015 FJ.")
+		expect(
+			shortfall(w)
+				.findAll('[class*="whole"]')
+				.map((f) => f.text()),
+		).toEqual(["~0.0021 FJ"])
+		expect(drawsFeeWhole("FeeSettingsCard.vue", "whole")).toBe(true)
 		w.unmount()
 	})
 
@@ -3319,13 +3326,13 @@ describe("FeeSettingsCard — Send: the remedy and the notices a closed card giv
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: null })
 		const held = mountSend()
 		await flushPromises()
-		expect(notices(held)).toEqual(["Couldn't check your private Fee Juice. Pick a fee source to continue."])
+		expect(notices(held)).toEqual([{ text: "Couldn't check your private Fee Juice. Pick a fee source to continue.", figure: null }])
 		held.unmount()
 
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: "0" })
 		const none = mountSend({ account: { id: "a2", address: "0xacctB" } })
 		await flushPromises()
-		expect(notices(none)).toEqual(["You have no private Fee Juice yet"])
+		expect(notices(none)).toEqual([{ text: "You have no private Fee Juice yet", figure: null }])
 		none.unmount()
 
 		const short = await paidFromPublic({ publicFeeJuice: "1500000000000000", privateFeeJuice: null }, [])
@@ -3333,7 +3340,7 @@ describe("FeeSettingsCard — Send: the remedy and the notices a closed card giv
 			feeEstimate: { maxFee: "2100000000000000", feeJuiceShortfall: { maxFee: "2100000000000000", balance: "1500000000000000" } },
 		})
 		await flushPromises()
-		expect(notices(short)).toEqual(["This send can cost up to ~0.0021 FJ. You have 0.0015 FJ."])
+		expect(notices(short)).toEqual([{ text: "This send can cost up to ~0.0021 FJ. You have 0.0015 FJ.", figure: "~0.0021 FJ" }])
 		await short.setProps({ feeEstimate: null })
 		await flushPromises()
 		expect(notices(short)).toEqual([])

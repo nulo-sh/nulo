@@ -8,7 +8,7 @@ import { computed, nextTick, useTemplateRef } from "vue"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import type { FeeDisplay } from "@/utils/fee-estimation"
 import FeeLineText from "./FeeLineText.vue"
-import { type FeeLinePayer, feeLine, feeLineNotes } from "./fee-line-words"
+import { type FeeLinePayer, type FeeWords, feeLine, feeLineNotes } from "./fee-line-words"
 
 const props = withDefaults(
 	defineProps<{
@@ -23,7 +23,7 @@ const props = withDefaults(
 		queued?: boolean
 		queuedCap?: { about: FeeDisplay; cap: FeeDisplay } | null
 		queuedSponsored?: boolean
-		notices?: string[]
+		notices?: FeeWords[]
 		/** The sheet Change opens is open. */
 		open?: boolean
 	}>(),

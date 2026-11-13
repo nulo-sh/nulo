@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs"
-import { resolve } from "node:path"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
+import { drawsFeeWhole } from "../../../../../tests/helpers/fee-whole"
 import { UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
 import FeeLineText from "./FeeLineText.vue"
 
@@ -30,7 +29,6 @@ describe("modules/send/FeeLineText", () => {
 	})
 
 	test("the fee never wraps inside itself, so its dollars stay on its line", () => {
-		const css = /<style module>([\s\S]*)<\/style>/.exec(readFileSync(resolve(__dirname, "FeeLineText.vue"), "utf8"))?.[1] ?? ""
-		expect(/\.figure\s*\{[^}]*white-space:\s*nowrap/.test(css)).toBe(true)
+		expect(drawsFeeWhole("FeeLineText.vue", "figure")).toBe(true)
 	})
 })

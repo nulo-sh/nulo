@@ -108,7 +108,7 @@ const queuedCapFiguresOut = defineModel("queuedCapFigures", { default: null })
 const accountUnusableOut = defineModel("accountUnusable", { type: Boolean, default: false })
 
 /** One-way child→parent: the notices this card shows, in its order, for a page that shows the card
- *  closed. */
+ *  closed. Each is `FeeWords`, so the fee one names is drawn whole there too. */
 const noticesOut = defineModel("notices", { type: Array, default: () => [] })
 
 /** One-way child→parent, Send only: `"private_fpc"` while the account's private Fee Juice can take
@@ -392,16 +392,21 @@ const statusNotice = computed(() => {
 
 const notices = computed(() => {
 	const shown = []
-	if (statusNotice.value) shown.push(statusNotice.value)
-	if (sponsorShort.value) shown.push(sponsorShortText.value)
-	if (shortfall.value) shown.push(`This send can cost up to ${feeText(shortfall.value.cost)}. You have ${shortfall.value.balance} FJ.`)
-	if (feeJuiceMissing.value) shown.push(nudgeCopy.value.title)
+	const plain = (text) => ({ text, figure: null })
+	if (statusNotice.value) shown.push(plain(statusNotice.value))
+	if (sponsorShort.value) shown.push(plain(sponsorShortText.value))
+	if (shortfall.value) {
+		const figure = feeText(shortfall.value.cost)
+		shown.push({ text: `This send can cost up to ${figure}. You have ${shortfall.value.balance} FJ.`, figure })
+	}
+	if (feeJuiceMissing.value) shown.push(plain(nudgeCopy.value.title))
 	return shown
 })
+const said = (shown) => shown.map((notice) => notice.text).join("\n")
 watch(
 	notices,
 	(shown) => {
-		if (shown.join("\n") !== noticesOut.value.join("\n")) noticesOut.value = shown
+		if (said(shown) !== said(noticesOut.value)) noticesOut.value = shown
 	},
 	{ immediate: true },
 )
@@ -524,7 +529,7 @@ onBeforeUnmount(() => {
 			>
 				<Icon name="warning" size="14" color="secondary" aria-hidden="true" />
 				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
-					This send can cost up to <FeeAmount :display="shortfall.cost" :class="$style.fee_figure" />. You have {{ shortfall.balance }} FJ.
+					This send can cost up to <FeeAmount :display="shortfall.cost" :class="[$style.fee_figure, $style.whole]" />. You have {{ shortfall.balance }} FJ.
 				</Text>
 			</Flex>
 		</div>
@@ -593,6 +598,10 @@ onBeforeUnmount(() => {
 
 .fee_figure {
 	composes: fee_figure from "./fee-shared.module.css";
+}
+
+.whole {
+	composes: whole from "./fee-shared.module.css";
 }
 
 .get_fee_juice {

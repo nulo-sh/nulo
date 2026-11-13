@@ -49,7 +49,7 @@ const props = withDefaults(
 		/** Send's fee, which the row reads exactly as the form's line reads it. */
 		fee?: FeeLineState
 		/** What the fee card would say under the form's line. */
-		notices?: string[]
+		notices?: FeeWords[]
 		/** The send is queued against a cap, or behind an earlier one with Nulo's sponsor paying. */
 		queueing?: boolean
 		canSend: boolean
@@ -227,7 +227,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 					<div :class="$style.fee" data-testid="send-review-fee" :data-payer="payerKind ?? 'none'">
 						<span :class="$style.fee_key">Fee</span>
 						<span :class="$style.fee_value" :data-testid="reask ? 'send-review-fee-reask' : valueTestid">
-							<span v-if="reask">Fee is now {{ reask.now }}, above the {{ reask.cap }} you accepted.</span>
+							<span v-if="reask">Fee is now <span :class="$style.whole" data-testid="send-fee-figure">{{ reask.now }}</span>, above the <span :class="$style.whole" data-testid="send-fee-figure">{{ reask.cap }}</span> you accepted.</span>
 							<span v-else-if="line.kind === 'words'"><FeeLineText :words="line.value" /></span>
 							<Skeleton v-else-if="line.kind === 'bar'" :width="96" :height="10" />
 							<span v-else :class="$style.fee_state">
@@ -427,6 +427,10 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 
 .retry {
 	composes: retry from "./fee-shared.module.css";
+}
+
+.whole {
+	composes: whole from "./fee-shared.module.css";
 }
 
 .send_wrap {
