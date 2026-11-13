@@ -222,6 +222,8 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 - Adopted: the shortfall notice (as Codex); the re-ask's "Fee is now … above the … you accepted." draws both priced figures whole, a test red without it; `fiat-send` measures the review's figure against `send-review-fee-value`, not the whole row with its label; the notice bodies the warned row no longer shows deleted, and `rowSentence` itself returns none for an exposed row (the sheet's special case gone, the test name corrected); `FeeLineText` states why words with a fee skip `FpcSentence`; `prices.refused.stop()`; You pay's fee measured by its own line boxes.
 - To the owner: a hand-added sponsor's name with no space now sets the value's least width, so a long one sends Change to the next row at 360 px too → added to OA-21.
 
+**Arc a3, fix round 2, Codex (resumed) over `b651610d2..9259e91c2`: approve.** The shortfall figure survives the card, the line and the review; no other notice or queued copy carries a fee; `said()` cannot hide a figure-only change, since each notice's figure follows from its text; deleting the notice bodies drops no shown or spoken words. Codex ran the `Range` counter in Chromium with the wallet's fonts: mixed sizes and families on one line count one, a wrapped figure two, and dropping `nowrap` fails the computed check. No new findings; converged in two rounds.
+
 ## Seeds
 
 ```
