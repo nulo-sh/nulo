@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 43970003b
-status: approved
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-13.
+- **Status:** completed. Ships in the PR titled `fix(fee): History's fee method and the failed row's label name the app as its chip does`, which carries this close-out; it lands on the owner's decision page with its captures.
+- **Shipped:** History's "Fee method" (every form that names the app) and the approval window's failed-estimate label "\<name\> pays" read `appLabelOf(name) || "the app"` (P147-02 b, P147-03 b). The App row, the chip, its press and "You pay" are unchanged.
+- **Gates (retry 0):** at `8cb861ed0`, lint, typecheck:all, test and test:components green; `e2e:agent fee-sponsor-funding.test.ts` on Chrome green (4/4, 295 s wall). No smoke spec reads either line and no Firefox run was due (no fixture, focus, window or WebAuthn change). No e2e scenario was added.
+- **Deviations:** the lane brief's suggested PR title is 93 characters, over the 92 cap; the PR uses the 87-character title above.
+- **Lessons:** none promoted.
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # fee-words-1: two more fee lines name the app as its chip does
 
@@ -81,7 +93,7 @@ One PR from `fee-words-1-a1` (off `origin/dev`, carrying the plan commit) to `de
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `43970003b`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `43970003b`. Plan-specific values:
 - Step 1: `code_review: off`, so absent.
 - Step 2, thinned by the lane brief: after Phase 1 is green, ONE `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` over the plan and `origin/dev...HEAD`, the prompt in the lane's scratch dir. Take its findings and rerun only the gates a fix touches. A second round only if the first says anything but approve (resume with `resume-codex.sh`; hard stop at three). No Opus review.
 - Step 3: `gh pr create` as Delivery says; `gh pr checks <n> --watch` once.
