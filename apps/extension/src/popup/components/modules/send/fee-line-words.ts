@@ -1,5 +1,5 @@
 import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
-import type { FeeDisplay } from "@/utils/fee-estimation"
+import { type FeeDisplay, feeText } from "@/utils/fee-estimation"
 
 /** Who pays, as Send's fee line names it; `unvouched` is a sponsor added by hand. */
 export type FeeLinePayer = "fj" | "private_fpc" | "sponsor" | "unvouched"
@@ -11,18 +11,24 @@ export const FEE_LINE_METHOD = {
 	sponsor: "Sponsored",
 } as const
 
-/** The figure, dollars first: `≈ $0.027 (0.00214 FJ)`; a fee under a tenth of a cent carries no `≈`,
- *  and with no usable quote it is the Fee Juice alone. */
-export function feeLineFigure({ amount, usd }: FeeDisplay): string {
-	if (!usd) return `~${amount} FJ`
-	if (usd.startsWith("<")) return `${usd} (${amount} FJ)`
-	return `≈ ${usd} (${amount} FJ)`
+/** Words that may hold one fee; `figure` is that fee as `text` prints it, so a screen can draw it whole. */
+export interface FeeWords {
+	text: string
+	figure: string | null
+}
+
+const plain = (text: string): FeeWords => ({ text, figure: null })
+
+/** The fee in the wallet's one grammar, `~X FJ ($Y)`, between `before` and `after`. */
+function withFee(before: string, display: FeeDisplay, after = ""): FeeWords {
+	const figure = feeText(display)
+	return { text: `${before}${figure}${after}`, figure }
 }
 
 /** The fee line's value and its second line, or none. */
 export interface FeeLineWords {
-	value: string
-	note: string | null
+	value: FeeWords
+	note: FeeWords | null
 }
 
 /**
@@ -35,13 +41,14 @@ export function feeLineWords(
 	display: FeeDisplay | null,
 	opts: { name?: string; queued?: boolean } = {},
 ): FeeLineWords {
-	if (payer === "unvouched") return { value: opts.name ? `—, ${opts.name}` : "—", note: UNVOUCHED_FEE_SENTENCE }
+	if (payer === "unvouched") return { value: plain(opts.name ? `—, ${opts.name}` : "—"), note: plain(UNVOUCHED_FEE_SENTENCE) }
 	if (payer === "sponsor") {
-		const value = `Nothing · ${FEE_LINE_METHOD.sponsor}`
-		if (opts.queued) return { value, note: QUEUED_SPONSORED_COPY }
-		return { value, note: display ? `The sponsor covers ${feeLineFigure(display)}` : null }
+		const value = plain(`Nothing · ${FEE_LINE_METHOD.sponsor}`)
+		if (opts.queued) return { value, note: plain(QUEUED_SPONSORED_COPY) }
+		return { value, note: display ? withFee("The sponsor covers ", display) : null }
 	}
-	return { value: display ? `${feeLineFigure(display)}, ${FEE_LINE_METHOD[payer]}` : FEE_LINE_METHOD[payer], note: null }
+	const method = FEE_LINE_METHOD[payer]
+	return { value: display ? withFee("", display, `, ${method}`) : plain(method), note: null }
 }
 
 /** What Send knows of its fee: the inputs of the form's line and of the review's fee row alike. */
@@ -61,23 +68,22 @@ export interface FeeLineState {
 
 /** `queue` names which queued reading the words are, for a screen that marks it. */
 export type FeeLine =
-	| { kind: "words"; value: string; note: string | null; queue?: "cap" | "sponsored" | "behind" }
+	| { kind: "words"; value: FeeWords; note: FeeWords | null; queue?: "cap" | "sponsored" | "behind" }
 	| { kind: "bar" }
 	| { kind: "slow" }
 	| { kind: "failed" }
 
-const capSentence = (cap: FeeDisplay) =>
-	`Goes out after your earlier send, for at most ${cap.usd ? `${cap.usd} (${cap.amount} FJ)` : `${cap.amount} FJ`}.`
+const capSentence = (cap: FeeDisplay) => withFee("Goes out after your earlier send, for at most ", cap, ".")
 
 function queuedLine(state: FeeLineState): FeeLine | null {
 	if (!state.queued) return null
 	const cap = state.queuedCap
 	if (cap) {
 		const method = state.payer === "fj" || state.payer === "private_fpc" ? `, ${FEE_LINE_METHOD[state.payer]}` : ""
-		return { kind: "words", value: `${feeLineFigure(cap.about)}${method}`, note: capSentence(cap.cap), queue: "cap" }
+		return { kind: "words", value: withFee("", cap.about, method), note: capSentence(cap.cap), queue: "cap" }
 	}
 	if (state.queuedSponsored) return { kind: "words", ...feeLineWords("sponsor", null, { queued: true }), queue: "sponsored" }
-	return { kind: "words", value: QUEUED_FEE_COPY, note: null, queue: "behind" }
+	return { kind: "words", value: plain(QUEUED_FEE_COPY), note: null, queue: "behind" }
 }
 
 /**
@@ -88,12 +94,12 @@ function queuedLine(state: FeeLineState): FeeLine | null {
 export function feeLine(state: FeeLineState): FeeLine {
 	if (state.estimating && !state.display) return queuedLine(state) ?? { kind: state.slow ? "slow" : "bar" }
 	if (state.failed && !state.display) return { kind: "failed" }
-	if (!state.payer) return { kind: "words", value: "—", note: null }
+	if (!state.payer) return { kind: "words", value: plain("—"), note: null }
 	return { kind: "words", ...feeLineWords(state.payer, state.display, { name: state.payerName ?? undefined }) }
 }
 
 /** What goes under the line: its own note, then what the fee card would say. */
-export function feeLineNotes(line: FeeLine, notices: readonly string[]): string[] {
+export function feeLineNotes(line: FeeLine, notices: readonly string[]): FeeWords[] {
 	const own = line.kind === "words" && line.note ? [line.note] : []
-	return [...own, ...notices]
+	return [...own, ...notices.map(plain)]
 }

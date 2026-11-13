@@ -15,6 +15,9 @@ const mountLine = (props: Record<string, unknown> = {}) =>
 	mount(SendFeeLine, { props: { payer: "private_fpc", display: PRICED, ...props }, global: { stubs: STUBS } })
 const value = (w: ReturnType<typeof mountLine>) => w.get('[data-testid="send-fee-line-value"]').text()
 const notes = (w: ReturnType<typeof mountLine>) => w.findAll('[data-testid="send-fee-line-note"] p').map((n) => n.text())
+/** Each fee drawn whole, as `[where, its text]`: the line's value or a note under it. */
+const figures = (w: ReturnType<typeof mountLine>) =>
+	w.findAll('[data-testid="send-fee-figure"]').map((f) => [f.element.closest("p") ? "note" : "value", f.text()])
 
 describe("modules/send/SendFeeLine", () => {
 	test("a focused Try again that the retry replaces hands the keyboard to Change; an unfocused one moves nothing", async () => {
@@ -61,17 +64,27 @@ describe("modules/send/SendFeeLine", () => {
 		expect([repeat?.defaultPrevented, press?.defaultPrevented]).toEqual([true, false])
 	})
 
-	test("a paid fee: dollars first, then who pays", () => {
+	test("a paid fee: the figure with its dollars, drawn whole, then who pays", () => {
 		const w = mountLine()
-		expect(value(w)).toBe("≈ $0.027 (0.00214 FJ), private Fee Juice")
+		expect(value(w)).toBe("~0.00214 FJ ($0.027), private Fee Juice")
+		expect(figures(w)).toEqual([["value", "~0.00214 FJ ($0.027)"]])
 		expect(notes(w)).toEqual([])
 		expect(w.get('[data-testid="send-fee-line"]').attributes("data-payer")).toBe("private_fpc")
 	})
 
-	test("Sponsored: Nothing · Sponsored over the sponsor's cost", () => {
+	test("no price known: the Fee Juice alone, nothing reserved for dollars", () => {
+		const w = mountLine({ payer: "fj", display: { amount: "0.00214", usd: null } })
+		expect(value(w)).toBe("~0.00214 FJ, public Fee Juice")
+		expect(figures(w)).toEqual([["value", "~0.00214 FJ"]])
+		const sponsored = mountLine({ payer: "sponsor", display: { amount: "0.00214", usd: null } })
+		expect(notes(sponsored)).toEqual(["The sponsor covers ~0.00214 FJ"])
+	})
+
+	test("Sponsored: Nothing · Sponsored over the sponsor's cost with its dollars", () => {
 		const w = mountLine({ payer: "sponsor" })
 		expect(value(w)).toBe("Nothing · Sponsored")
-		expect(notes(w)).toEqual(["The sponsor covers ≈ $0.027 (0.00214 FJ)"])
+		expect(notes(w)).toEqual(["The sponsor covers ~0.00214 FJ ($0.027)"])
+		expect(figures(w)).toEqual([["note", "~0.00214 FJ ($0.027)"]])
 	})
 
 	test("a hand-added sponsor: no figure, its name, and why", () => {
@@ -106,8 +119,12 @@ describe("modules/send/SendFeeLine", () => {
 			queued: true,
 			queuedCap: { about: PRICED, cap: { amount: "0.0024", usd: "$0.030" } },
 		})
-		expect(value(w)).toBe("≈ $0.027 (0.00214 FJ), public Fee Juice")
-		expect(notes(w)).toEqual(["Goes out after your earlier send, for at most $0.030 (0.0024 FJ)."])
+		expect(value(w)).toBe("~0.00214 FJ ($0.027), public Fee Juice")
+		expect(notes(w)).toEqual(["Goes out after your earlier send, for at most ~0.0024 FJ ($0.030)."])
+		expect(figures(w)).toEqual([
+			["value", "~0.00214 FJ ($0.027)"],
+			["note", "~0.0024 FJ ($0.030)"],
+		])
 	})
 
 	test("queued with Nulo's sponsor, and queued with no cap", () => {

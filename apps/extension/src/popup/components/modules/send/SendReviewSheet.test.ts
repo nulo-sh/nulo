@@ -217,15 +217,28 @@ describe("modules/send/SendReviewSheet", () => {
 			["public", `Amount PUBLIC ${FACT_SENTENCES.amount}`],
 		])
 		expect(w.find('[data-testid="send-review-warning"]').exists()).toBe(false)
-		expect(feeLines(w)).toEqual(["≈ $0.027 (0.00214 FJ), public Fee Juice"])
+		expect(feeLines(w)).toEqual(["~0.00214 FJ ($0.027), public Fee Juice"])
 	})
 
 	test("paid from private Fee Juice: the fee row reads as the form's line, label left and value right", () => {
 		w = mountSheet()
 		expect(feeRow(w).attributes("data-payer")).toBe("contract")
 		expect(feeRow(w).element.firstElementChild?.textContent).toBe("Fee")
-		expect(feeLines(w)).toEqual(["≈ $0.027 (0.00214 FJ), private Fee Juice"])
+		expect(feeLines(w)).toEqual(["~0.00214 FJ ($0.027), private Fee Juice"])
 		expect(w.find('[data-testid="send-review-warning"]').exists()).toBe(false)
+	})
+
+	test("the fee row's figure carries its dollars when priced, drawn whole; with no price, the Fee Juice alone", async () => {
+		const sheet = mountSheet({ payerType: "fpc", fee: { payer: "sponsor", display: PRICED } })
+		w = sheet
+		const figures = () =>
+			feeRow(sheet)
+				.findAll('[data-testid="send-fee-figure"]')
+				.map((f) => f.text())
+		expect(figures()).toEqual(["~0.00214 FJ ($0.027)"])
+		await sheet.setProps({ fee: { payer: "sponsor", display: { amount: "0.00214", usd: null } } })
+		expect(feeLines(sheet)).toEqual(["Nothing · Sponsored", "The sponsor covers ~0.00214 FJ"])
+		expect(figures()).toEqual(["~0.00214 FJ"])
 	})
 
 	test.each([
@@ -252,7 +265,7 @@ describe("modules/send/SendReviewSheet", () => {
 				"send-review-fee",
 				"send-review-submit",
 			])
-			expect(feeLines(w)).toEqual(["≈ $0.027 (0.00214 FJ), public Fee Juice"])
+			expect(feeLines(w)).toEqual(["~0.00214 FJ ($0.027), public Fee Juice"])
 			expect(w.find("a").exists()).toBe(false)
 		},
 	)
@@ -273,7 +286,7 @@ describe("modules/send/SendReviewSheet", () => {
 
 	test("Sponsored: Nothing · Sponsored over the sponsor's cost, nothing struck", () => {
 		w = mountSheet({ payerType: "fpc", fee: { payer: "sponsor", display: PRICED } })
-		expect(feeLines(w)).toEqual(["Nothing · Sponsored", "The sponsor covers ≈ $0.027 (0.00214 FJ)"])
+		expect(feeLines(w)).toEqual(["Nothing · Sponsored", "The sponsor covers ~0.00214 FJ ($0.027)"])
 		expect(feeRow(w).find("s").exists()).toBe(false)
 	})
 
