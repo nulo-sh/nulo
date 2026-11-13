@@ -16,6 +16,7 @@ import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { DecodedCall, DiscoveredAuthwit } from "@/wallet/services/execution/client"
 import {
+	answeredList,
 	AUTHWITS,
 	CONSUMED,
 	decodeAuthwit,
@@ -35,6 +36,7 @@ import {
 	USDC_TOKEN,
 	VAULT,
 } from "./execute.fixture"
+import { nameBookOf } from "./contract-chips"
 import OperationCard from "./OperationCard.vue"
 import SendTxSummary from "./SendTxSummary.vue"
 import { declarationsOf, parseSource } from "../../../../scripts/type-roles/source-scan"
@@ -56,7 +58,14 @@ const stubs = {
 
 const mountCard = async (props: Record<string, unknown>, op: unknown = fixtureOp()) => {
 	const w = mount(OperationCard, {
-		props: { op: op as never, index: 0, tokens: [USDC_TOKEN], ...props },
+		props: {
+			op: op as never,
+			index: 0,
+			tokens: [USDC_TOKEN],
+			marks: answeredList(),
+			names: nameBookOf([], lookups.accounts),
+			...props,
+		},
 		global: { stubs, components: { AddressDisplay, SectionLabel } },
 	})
 	await flushPromises()
@@ -752,14 +761,14 @@ describe("OperationCard — a step's chevron ends its sentence beside the last w
 	const ON_CHIP = { box: STYLE.chip_tail, space: "\u00a0", holds: "chip" }
 	const ON_WORD = { box: STYLE.chevron_tail, space: "\u00a0", holds: "word" }
 
-	test("each chevron shares one nowrap box with the no-break space after what ends its sentence: a call's chip, a transfer to a named account, a transfer whose caller is none", async () => {
+	test("each chevron shares one nowrap box with the no-break space after what ends its sentence: a call's chip, a transfer's recipient chip, a transfer whose caller is none", async () => {
 		const source = parseSource("apps/extension/src/popup/windows/execute/SendTxSummary.vue")
 		expect([declarationsOf(source, ".chevron_tail"), declarationsOf(source, ".chip_tail")]).toEqual([
 			{ "white-space": "nowrap" },
 			{ "white-space": "nowrap" },
 		])
 		lookups.accounts.push({ name: "Savings for the long winter", address: RECIPIENT })
-		expect(tails(await mountFixture())).toEqual([ON_CHIP, ON_WORD, ON_CHIP])
+		expect(tails(await mountFixture())).toEqual([ON_CHIP, ON_CHIP, ON_CHIP])
 		const entry = tokenCall("transfer", [RECIPIENT, field(5_000_000n)], ["to", "amount"], {
 			executionMode: "default_entrypoint",
 			feeSettings: { paymentMethod: { kind: "embedded" } },

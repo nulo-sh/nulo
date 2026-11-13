@@ -49,6 +49,16 @@ const tokenServiceDisconnectMock = vi.fn(() => callLog.push("token.disconnect"))
 // BEFORE their construction, which D13 pins via these constructor spies.
 // vi.hoisted: these are referenced DIRECTLY in vi.mock factory bodies (not
 // inside closures), so they must initialize before the hoisted mocks evaluate.
+const contactsRead = vi.hoisted(() => ({ getContacts: vi.fn(async (): Promise<unknown[]> => []) }))
+// Only the contacts read is the window's own here; every other manager stays the real registry's.
+vi.mock("@/utils/core", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/utils/core")>()
+	return {
+		...actual,
+		managers: new Proxy(actual.managers, { get: (target, key) => (key === "contact" ? contactsRead : Reflect.get(target, key)) }),
+	}
+})
+
 const { accountServiceCtorMock, networkServiceCtorMock } = vi.hoisted(() => ({
 	accountServiceCtorMock: vi.fn(function () {
 		return { getAccount: vi.fn(), connect: vi.fn(), disconnect: vi.fn() }
@@ -243,13 +253,14 @@ const STUBS = {
 			"decodedCalls",
 			"appFailure",
 			"marks",
+			"names",
 		],
 		template: '<div><slot name="fee" /></div>',
 	},
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
-		template: '<div data-testid="identity-block" />',
-		props: ["dapp", "actionLabel"],
+		template: '<div data-testid="identity-block" :data-name-as-chip="nameAsChip" />',
+		props: { dapp: null, actionLabel: null, nameAsChip: Boolean },
 	},
 	DappCancelledOverlay: {
 		props: ["message"],
@@ -485,6 +496,7 @@ describe("execute window — an armed build's fixture", () => {
 		expect(approval.requestId.value).toBeUndefined()
 		expect(vm.operations).toHaveLength(1)
 		expect(vm.initComplete).toBe(true)
+		expect(w.get('[data-testid="identity-block"]').attributes("data-name-as-chip"), "a name with no chip shows no caption").toBe("true")
 
 		// The app-paid fixture's opening estimate is answered by the fixture, never the worker.
 		const fees = feeMapInstances[0]
@@ -505,6 +517,33 @@ describe("execute window — an armed build's fixture", () => {
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
+	})
+
+	test("the chips' names never hold the cards: a contacts read that never answers leaves them loading, an answer names, a failure names none", async () => {
+		fixtureBuild.armed = true
+		const names = () => w!.findComponent(STUBS.OperationCard).props("names")
+		contactsRead.getContacts.mockImplementationOnce(() => new Promise(() => {}))
+		w = factory()
+		await flushPromises()
+		approval.resolveProfile?.({ id: "p1" })
+		await flushPromises()
+		expect([(w.vm as unknown as ExecVm).initComplete, names()]).toEqual([true, "loading"])
+		w.unmount()
+
+		contactsRead.getContacts.mockResolvedValueOnce([{ name: "Bob", address: `0x${"0b".repeat(32)}` }])
+		w = factory()
+		await flushPromises()
+		approval.resolveProfile?.({ id: "p1" })
+		await flushPromises()
+		expect(names()).toEqual(new Map([[`0x${"0b".repeat(32)}`, "@Bob"]]))
+		w.unmount()
+
+		contactsRead.getContacts.mockRejectedValueOnce(new Error("port closed"))
+		w = factory()
+		await flushPromises()
+		approval.resolveProfile?.({ id: "p1" })
+		await flushPromises()
+		expect(names()).toEqual(new Map())
 	})
 
 	test("control: the same route on a build without the fixtures loads its request", async () => {

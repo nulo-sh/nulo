@@ -44,6 +44,11 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
+	/** An inline card's content, by identity: a change while open re-places the card, which may now be taller. */
+	placeKey: {
+		type: null,
+		default: undefined,
+	},
 	// Host-DOM contract: the consuming app must declare this teleport root (the extension declares
 	// `#popover` in its popup/onboarding shells).
 	teleportTo: {
@@ -175,6 +180,14 @@ watch(
 			;(removeOutside as () => void)()
 		}
 	},
+)
+
+watch(
+	() => props.placeKey,
+	() => {
+		if (props.open && props.inline && triggerEl.value) placeInline(triggerEl.value.getBoundingClientRect())
+	},
+	{ flush: "post" },
 )
 
 // A listener left behind would mark every later Escape handled.

@@ -17,7 +17,8 @@ import { trimAddress } from "@/utils/string"
 import type { Account } from "@/wallet/services/account/client"
 import type { DecodedCall } from "@/wallet/services/execution/client"
 import type { Network } from "@/wallet/services/network/client"
-import { MAIN, openAllSteps } from "./execute.fixture"
+import { answeredList, MAIN, openAllSteps } from "./execute.fixture"
+import { nameBookOf } from "./contract-chips"
 import OperationCard from "./OperationCard.vue"
 import { shownText } from "../../../../tests/helpers/shown-text"
 import { sendEvent } from "../../../../tests/helpers/send-event"
@@ -49,6 +50,8 @@ const mountFixture = async (name: string, { decodedCalls = (d) => d, props = {} 
 			feeEstimate: f.feeEstimates[0] as never,
 			decodedCalls: decodedCalls(f.decodedCalls[0]!) as never,
 			decodedAuthwits: f.decodedAuthwits as never,
+			marks: answeredList(),
+			names: nameBookOf([], lookups.accounts),
 			...props,
 		},
 		global: { stubs, components: { AddressDisplay, Popover, SectionLabel, Tooltip } as never },
@@ -183,16 +186,23 @@ describe("OperationCard — the rail", () => {
 			expect(openSteps(w)).toEqual(["1"])
 		})
 
-		test("a named address keeps its press; an unnamed one is the sentence's text and opens the step", async () => {
+		test("a sender's and a recipient's chips keep their own presses: each opens its card, never the step", async () => {
 			const { w } = await mountFixture("batch")
 			const sentence = step(w, 2)
-			const named = sentence.get('[data-testid="execute-op-line-from"]')
-			expect(named.text()).toBe("Main")
-			await named.trigger("click")
-			expect(openSteps(w)).toEqual([])
-			const unnamed = sentence.get('[data-testid="execute-op-line-to"]')
-			expect(unnamed.text()).toBe(trimAddress(RECIPIENT))
-			await unnamed.trigger("click")
+			const chipAt = (testid: string) => {
+				const label = sentence.get(`[data-testid="${testid}"]`)
+				return { label: label.text(), chip: new DOMWrapper(label.element.closest('[data-testid="contract-chip"]') as Element) }
+			}
+			const from = chipAt("execute-op-line-from")
+			const to = chipAt("execute-op-line-to")
+			expect([from.label, to.label]).toEqual(["Main", trimAddress(RECIPIENT)])
+			for (const { chip } of [from, to]) {
+				await chip.trigger("click")
+				await flushPromises()
+				expect([chip.attributes("aria-expanded"), openSteps(w)]).toEqual(["true", []])
+				await chip.trigger("click")
+			}
+			await sentence.get('[data-testid="execute-op-call-line"]').trigger("click")
 			expect(openSteps(w)).toEqual(["2"])
 		})
 
@@ -339,12 +349,19 @@ describe("OperationCard — the rail", () => {
 		expect(unparsed(refused)).toEqual(["Nulo can't parse the call from step 2."])
 	})
 
-	test("batch: 15 stops reach Tab at rest, each row then its chip, the node, each authorization's chip, and 25 with everything open; 7 presses open every step and the node", async () => {
+	test("batch: 25 stops reach Tab at rest, each row then its chips, the node, each authorization's four chips, and 35 with everything open; 7 presses open every step and the node", async () => {
 		const { w } = await mountFixture("batch")
+		const CHIP = "contract-chip"
+		// Steps 3 and 6 are transfers: their sender and recipient are chips after the contract's.
+		const stepStops = (j: number, open: string[] = []) => [
+			"execute-op-step-toggle",
+			...Array(j === 2 || j === 5 ? 3 : 1).fill(CHIP),
+			...open,
+		]
 		expect(tabbables(w).map((el) => el.getAttribute("data-testid"))).toEqual([
-			...Array(6).fill(["execute-op-step-toggle", "contract-chip"]).flat(),
+			...[0, 1, 2, 3, 4, 5].flatMap((j) => stepStops(j)),
 			"execute-op-authwits-toggle",
-			...Array(2).fill("contract-chip"),
+			...Array(8).fill(CHIP),
 		])
 		const closed = () =>
 			w.findAll(
@@ -359,9 +376,11 @@ describe("OperationCard — the rail", () => {
 		// Every value then sits one press further at most: each step's and each authorization's raw values.
 		expect(presses + w.findAll('[data-testid$="raw-toggle"]').length).toBe(15)
 		expect(tabbables(w).map((el) => el.getAttribute("data-testid"))).toEqual([
-			...Array(6).fill(["execute-op-step-toggle", "contract-chip", "execute-op-raw-toggle"]).flat(),
+			...[0, 1, 2, 3, 4, 5].flatMap((j) => stepStops(j, ["execute-op-raw-toggle"])),
 			"execute-op-authwits-toggle",
-			...Array(2).fill(["contract-chip", "execute-discovered-authwit-toggle", "execute-discovered-authwit-raw-toggle"]).flat(),
+			...Array(2)
+				.fill([...Array(4).fill(CHIP), "execute-discovered-authwit-toggle", "execute-discovered-authwit-raw-toggle"])
+				.flat(),
 		])
 	})
 

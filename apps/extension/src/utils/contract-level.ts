@@ -1,9 +1,11 @@
 /**
  * How far Nulo vouches for a contract, from the wallet's own evidence only: the signed list naming it
- * on the request's chain, or the PrivateFPC this build pins. Nothing a dApp sends can raise a level.
+ * on the request's chain, or one of the two fee contracts this build pins. Nothing a dApp sends can
+ * raise a level.
  */
 import type { Ref } from "vue"
 import { isPrivateFpc } from "@/wallet/services/fpc/private-fpc-address"
+import { isSponsoredFpc } from "@/wallet/services/fpc/sponsored-fpc-address"
 import type { ListedToken, TokenMarkLookup } from "./token-icon"
 
 export type ContractLevel = "nulo" | "scan" | "none"
@@ -13,7 +15,7 @@ export type ContractReading =
 	| { level: "pending" }
 	| { level: "none"; flagged: boolean }
 	| { level: "nulo"; source: "token"; symbol: string; name: string; icon?: string }
-	| { level: "nulo"; source: "fpc" }
+	| { level: "nulo"; source: "fpc" | "sponsor" }
 	| { level: "scan"; name: string }
 
 type ListedAt = { chainId?: number; contract?: string }
@@ -25,7 +27,7 @@ export type ListReader = TokenMarkLookup & {
 }
 
 /**
- * A signed flag outranks every other evidence, the pin included, once the list has answered; the pin
+ * A signed flag outranks every other evidence, the pins included, once the list has answered; a pin
  * needs no list, so it reads before the answer; a listed address counts only on its own chain.
  */
 export function readContract(reader: ListReader, chainId: number | undefined, address: unknown): ContractReading {
@@ -33,6 +35,7 @@ export function readContract(reader: ListReader, chainId: number | undefined, ad
 	const mapped = reader.mapped.value
 	if (mapped && reader.isFlagged(token)) return { level: "none", flagged: true }
 	if (isPrivateFpc(token.contract)) return { level: "nulo", source: "fpc" }
+	if (isSponsoredFpc(token.contract)) return { level: "nulo", source: "sponsor" }
 	if (!mapped) return { level: "pending" }
 	const listed = reader.listedAt(token)
 	if (!listed) return { level: "none", flagged: false }

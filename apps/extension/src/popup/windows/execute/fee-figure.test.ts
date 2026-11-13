@@ -1,7 +1,7 @@
 import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { describe, expect, test } from "vitest"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
-import { holdsConfirm, paysFromPrivateFeeJuice, waitsForFeeFigure } from "./fee-figure"
+import { holdsConfirm, payingContract, paysFromPrivateFeeJuice, waitsForFeeFigure } from "./fee-figure"
 import type { DraftUIOperation } from "./types"
 
 const OWNER = `0x${"0a".repeat(32)}`
@@ -91,5 +91,26 @@ describe("paysFromPrivateFeeJuice", () => {
 		expect(
 			paysFromPrivateFeeJuice({ kind: "send_transaction", fee: { embeddedFeePayment: "fpc" } } as unknown as DraftUIOperation),
 		).toBe(false)
+	})
+})
+
+describe("payingContract", () => {
+	test("the contract an app's payment names, the PrivateFPC and a default-entrypoint send's included", () => {
+		expect(payingContract(sendTx({ calls: [], feePayer: APP_FPC }))).toBe(APP_FPC)
+		expect(payingContract(sendTx({ calls: [], feePayer: PRIVATE_FPC_ADDRESS }))).toBe(PRIVATE_FPC_ADDRESS)
+		const entry = { ...(sendTx({ calls: [], feePayer: APP_FPC }, { from: undefined }) as object), executionMode: "default_entrypoint" }
+		expect(payingContract(entry as DraftUIOperation)).toBe(APP_FPC)
+	})
+
+	test.each([
+		["the account itself", sendTx({ calls: [], feePayer: OWNER })],
+		["an app's claim to the account", sendTx({ calls: [CLAIM], feePayer: OWNER })],
+		["no payer", sendTx({ calls: [] })],
+		[
+			"a send_transaction an app's contract pays",
+			{ kind: "send_transaction", fee: { embeddedFeePayment: "fpc" } } as unknown as DraftUIOperation,
+		],
+	])("none for %s", (_case, op) => {
+		expect(payingContract(op)).toBeUndefined()
 	})
 })

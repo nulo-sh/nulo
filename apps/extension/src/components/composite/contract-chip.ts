@@ -1,9 +1,10 @@
 /**
  * What a contract's chip and its press say for a level reading. A chip names a contract only from
- * evidence Nulo holds: an unverified one shows its short address, never a name the request supplies.
+ * evidence Nulo holds or a name the person gave it: an unverified one shows that name or its short
+ * address, never a name the request supplies.
  */
 import type { ContractLevel, ContractReading } from "@/utils/contract-level"
-import { trimAddress } from "@/utils/string"
+import { stripPictographs, trimAddress } from "@/utils/string"
 import type { TokenMarkOf } from "@/utils/token-icon"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
@@ -27,6 +28,8 @@ export type ChipModel = {
 	lines: readonly string[]
 	/** The press's last row; absent for the app, which has no address. */
 	address?: string
+	/** The label is the person's own name for the address, read in the name role as `AddressDisplay` reads one. */
+	ownName?: true
 }
 
 const KNOWN = "Nulo knows this contract. Knowing it isn't a promise that it's safe."
@@ -46,8 +49,14 @@ const chip = (
 
 function uncheckedLines(selfName: string | undefined): string[] {
 	const name = selfName ? sanitizeWireString(selfName, 64) : ""
-	return ["Nulo hasn't checked this contract.", ...(name.trim() ? [`The name ${name} came from an app. Nulo hasn't checked it.`] : [])]
+	return [
+		"Nulo hasn't checked this contract.",
+		...(name.trim() ? [`The name ${name} comes from the contract's code. Nulo hasn't checked it.`] : []),
+	]
 }
+
+/** The fee contracts this build pins, by the names the fee card gives them. */
+const PINNED_NAME = { fpc: "Private Fee Juice", sponsor: "Sponsored" } as const
 
 /** Like a symbol in any other row, the list's own strings are capped as wire text. */
 function verifiedToken(reading: Extract<ContractReading, { source: "token" }>, address: string): ChipModel {
@@ -61,15 +70,23 @@ function verifiedToken(reading: Extract<ContractReading, { source: "token" }>, a
 	})
 }
 
+function unverified(address: string, selfName: string | undefined, name: string | undefined): ChipModel {
+	const label = name ? sanitizeWireString(name, 64) : ""
+	return label.trim()
+		? chip(label, false, "none", { mark: null, title: label, lines: uncheckedLines(selfName), address, ownName: true })
+		: chip(trimAddress(address), true, "none", { mark: null, title: "Unknown contract", lines: uncheckedLines(selfName), address })
+}
+
 /**
  * `held` is the person's own token at this address, so a flagged one keeps its red badge; nothing
  * else of it reaches an unverified chip. `selfName` is the name the contract's own code gives it,
- * which only an unverified press repeats, saying where it came from.
+ * which only an unverified press repeats, saying where it came from. `name` is the person's own
+ * label for the address (a contact or an account), which an unverified, unflagged chip reads by.
  */
 export function contractChipOf(
 	reading: ContractReading,
 	address: string,
-	{ held, selfName }: { held?: TokenMarkOf | null; selfName?: string } = {},
+	{ held, selfName, name }: { held?: TokenMarkOf | null; selfName?: string; name?: string } = {},
 ): ChipModel {
 	const short = trimAddress(address)
 	switch (reading.level) {
@@ -78,12 +95,17 @@ export function contractChipOf(
 		case "nulo":
 			return reading.source === "token"
 				? verifiedToken(reading, address)
-				: chip("Private Fee Juice", false, "nulo", { mark: null, title: "Private Fee Juice", lines: [KNOWN], address })
+				: chip(PINNED_NAME[reading.source], false, "nulo", {
+						mark: null,
+						title: PINNED_NAME[reading.source],
+						lines: [KNOWN],
+						address,
+					})
 		case "scan": {
-			const name = sanitizeWireString(reading.name, 64) || short
-			return chip(name, name === short, "scan", {
+			const scanName = sanitizeWireString(reading.name, 64) || short
+			return chip(scanName, scanName === short, "scan", {
 				mark: null,
-				title: name,
+				title: scanName,
 				lines: ["Its code is verified on Aztecscan. Nulo hasn't checked who runs it."],
 				address,
 			})
@@ -96,20 +118,25 @@ export function contractChipOf(
 						lines: [],
 						address,
 					})
-				: chip(short, true, "none", { mark: null, title: "Unknown contract", lines: uncheckedLines(selfName), address })
+				: unverified(address, selfName, name)
 	}
 }
 
-/** The app's own chip: its self-declared name, which no list vouches for yet; none when nothing survives. */
+/**
+ * The app's own chip: its self-declared name, which no list vouches for yet, without emoji or check
+ * marks, so a seal-like one cannot sit beside a level; none when nothing survives. Its press quotes the name
+ * as declared.
+ */
 export function appChipOf(name: unknown, host: string): ChipModel | null {
-	const label = typeof name === "string" ? sanitizeWireString(name, 64) : ""
+	if (typeof name !== "string") return null
+	const label = sanitizeWireString(stripPictographs(name), 64)
 	if (!label.trim()) return null
 	return chip(label, false, "none", {
 		mark: null,
 		title: host,
 		lines: [
 			"Nulo doesn't know this site. Each contract shows its own level.",
-			`The name ${label} comes from the site. Nulo hasn't checked it.`,
+			`The name ${sanitizeWireString(name, 64)} comes from the site. Nulo hasn't checked it.`,
 		],
 	})
 }

@@ -81,6 +81,20 @@ export const isBlank = (s: string | null | undefined): boolean => stripWireContr
 /** The empty-value "—" for a blank name, title or label; any other value exactly as given. */
 export const dashIfBlank = (s: string | null | undefined): string => (isBlank(s) ? "—" : (s as string))
 
+/** A keycap is a digit, `#` or `*` drawn as an emoji: removed whole, so it leaves no digit behind. */
+const KEYCAP = /[0-9#*]\uFE0F?\u20E3/gu
+/** Characters drawn as emoji, and the joiners, modifiers, selectors and tags that build emoji from
+ *  them; a pictographic character that is also punctuation stays. The check marks U+2713, U+1F5F8 and
+ *  U+1F5F9 are not pictographic but read as a seal, so they go too. */
+const PICTOGRAPHIC =
+	/(?!\p{P})\p{Extended_Pictographic}|\p{Emoji_Modifier}|\p{Regional_Indicator}|[\u200D\u20E3\uFE00-\uFE0F\u2713]|[\u{1F5F8}\u{1F5F9}]|[\u{E0020}-\u{E007F}]|[\u{E0100}-\u{E01EF}]/gu
+
+/** `text` without emoji or check marks, so a seal-like one in a name cannot sit beside a level; letters, digits and
+ *  punctuation in every script stay. Spaces the removal leaves are collapsed and trimmed. */
+export function stripPictographs(text: string): string {
+	return text.replace(KEYCAP, "").replace(PICTOGRAPHIC, "").replace(/ {2,}/g, " ").trim()
+}
+
 export function stringCompare(a: string, b: string): number {
 	return (a || "").localeCompare(b || "", undefined, { sensitivity: "base", numeric: true })
 }

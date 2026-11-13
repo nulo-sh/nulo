@@ -1,6 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
-import { afterEach, beforeEach, describe, expect, test } from "vitest"
-import { Flex, Icon, Popover, Text } from "@nulo/design"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { Flex, Icon, Popover, Skeleton, Text } from "@nulo/design"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { explorerDisplayName, getContractExplorerUrl } from "@/wallet/constants/explorers"
 import { sendEvent } from "../../../tests/helpers/send-event"
@@ -22,7 +22,7 @@ const mountChip = (model: ChipModel, explorer: { url: string; name: string } | n
 	const w = mount(ContractChip, {
 		props: { model, explorer, testid: "label" },
 		attachTo: document.body,
-		global: { components: { Flex, Icon, Popover, Text } },
+		global: { components: { Flex, Icon, Popover, Skeleton, Text } },
 	})
 	mounted.push(w)
 	return w
@@ -117,18 +117,48 @@ describe("composite/ContractChip", () => {
 		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual(["Nulo hasn't checked this contract."])
 	})
 
-	test("an unverified contract whose code names itself keeps its short address, and its card says who chose the name", async () => {
+	test("an unverified contract whose code names itself keeps its short address, and its card says where the name comes from", async () => {
 		const w = mountChip(contractChipOf({ level: "none", flagged: false }, OTHER, { selfName: "Crowdfunding" }))
 		expect(w.get('[data-testid="label"]').text()).toBe("0x2d8fb6..ff50")
 		await press(w)
 		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual([
 			"Nulo hasn't checked this contract.",
-			"The name Crowdfunding came from an app. Nulo hasn't checked it.",
+			"The name Crowdfunding comes from the contract's code. Nulo hasn't checked it.",
 		])
 		const listed = contractChipOf({ level: "nulo", source: "token", symbol: "TST", name: "Test Token" }, TOKEN, { selfName: "Token" })
-		expect(listed.lines, "a Nulo verified card names the contract from the list alone").not.toContain(
-			"The name Token came from an app. Nulo hasn't checked it.",
-		)
+		expect(listed.lines, "a Nulo verified card names the contract from the list alone").toEqual([
+			"Nulo knows this contract. Knowing it isn't a promise that it's safe.",
+			"Nulo names it from its token list.",
+		])
+	})
+
+	test("an address the person named reads by that name with no mark, its card titled by it, the decoded name's line kept", async () => {
+		const named = contractChipOf({ level: "none", flagged: false }, OTHER, { name: "@Alice", selfName: "Crowdfunding" })
+		const w = mountChip(named)
+		expect(chip(w).attributes("aria-label")).toBe("@Alice, Unverified")
+		expect(w.get('[data-testid="label"]').classes()).toContain("type--name")
+		expect(w.get('[data-testid="label"]').attributes("data-address-shows")).toBe("name")
+		expect(w.find('[data-testid="contract-chip-seal"]').exists()).toBe(false)
+		await press(w)
+		expect(inPanel("contract-chip-title")[0].textContent).toBe("@Alice")
+		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual([
+			"Nulo hasn't checked this contract.",
+			"The name Crowdfunding comes from the contract's code. Nulo hasn't checked it.",
+		])
+		expect(inPanel("contract-chip-short-address")[0].textContent).toBe("0x2d8fb6..ff50")
+		const flagged = contractChipOf({ level: "none", flagged: true }, OTHER, { name: "@Alice" })
+		expect([flagged.label, flagged.title], "a flagged token keeps its short address").toEqual([
+			"0x2d8fb6..ff50",
+			"Nulo flagged this token as a scam",
+		])
+		const listed = contractChipOf({ level: "nulo", source: "token", symbol: "TST", name: "Test Token" }, TOKEN, { name: "@Alice" })
+		expect(listed.label, "a listed token keeps the list's name").toBe("TST")
+	})
+
+	test("Nulo's sponsor reads by the fee card's name for it, with the solid seal", () => {
+		const sponsor = contractChipOf({ level: "nulo", source: "sponsor" }, OTHER)
+		expect([sponsor.label, sponsor.accessibleName, sponsor.title]).toEqual(["Sponsored", "Sponsored, Nulo verified", "Sponsored"])
+		expect(sponsor.lines).toEqual(["Nulo knows this contract. Knowing it isn't a promise that it's safe."])
 	})
 
 	test("the PrivateFPC reads by its name with the solid seal, and its card says Nulo knows it", async () => {
@@ -185,6 +215,17 @@ describe("composite/ContractChip", () => {
 		expect(appChipOf("  ​ ", "https://x.example"), "a name that sanitizes to nothing has no chip").toBeNull()
 	})
 
+	test("the app's chip drops the emoji of its name, while its card quotes the name as declared", () => {
+		const app = appChipOf("Playground \u2705", "https://playground.example") as ChipModel
+		expect([app.label, app.accessibleName]).toEqual(["Playground", "Playground, Unverified"])
+		expect(app.lines[1]).toBe("The name Playground \u2705 comes from the site. Nulo hasn't checked it.")
+		expect(appChipOf("Swap\u{1F1E6}\u{1F1F7}Pro", "https://x.example")?.label).toBe("SwapPro")
+		expect(appChipOf("\u{1F680}\u{1F680} 1\uFE0F\u20E3", "https://x.example"), "a name of emoji only has no chip").toBeNull()
+		expect(appChipOf(`${"W".repeat(70)}\u{1F680}`, "https://x.example")?.label, "the cap counts what the chip shows").toBe(
+			`${"W".repeat(64)}…`,
+		)
+	})
+
 	test("opened from the chip, focus moves to the link, and Escape returns it to the chip", async () => {
 		const w = mountChip(LISTED)
 		await press(w)
@@ -215,5 +256,78 @@ describe("composite/ContractChip", () => {
 		const link = inPanel("contract-chip-explorer-link")[0]
 		expect(key(link, { key: "Enter", repeat: true }).defaultPrevented).toBe(true)
 		expect(key(link, { key: "Enter" }).defaultPrevented).toBe(false)
+	})
+})
+
+describe("composite/ContractChip, a pending chip held", () => {
+	const PENDING = contractChipOf({ level: "pending" }, OTHER)
+	const held = (w: VueWrapper) => ({
+		held: chip(w).attributes("data-held") === "true",
+		label: w.find('[data-testid="contract-chip-held-label"]').exists(),
+		mark: w.find('[data-testid="contract-chip-held-mark"]').exists(),
+		text: w.get('[data-testid="label"]').text(),
+	})
+	beforeEach(() => {
+		vi.useFakeTimers()
+		root = document.createElement("div")
+		root.id = "popover"
+		document.body.appendChild(root)
+	})
+	afterEach(() => {
+		for (const w of mounted.splice(0)) w.unmount()
+		root.remove()
+		vi.useRealTimers()
+	})
+
+	test("from its first paint it is placeholders under its short address's name, until the cap shows the address", async () => {
+		const w = mountChip(PENDING)
+		expect(held(w)).toEqual({ held: true, label: true, mark: true, text: "" })
+		expect(chip(w).attributes("aria-label")).toBe("0x2d8fb6..ff50")
+		await vi.advanceTimersByTimeAsync(999)
+		expect(held(w).held).toBe(true)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(held(w)).toEqual({ held: false, label: false, mark: false, text: "0x2d8fb6..ff50" })
+		expect(w.find('[data-testid="contract-chip-seal"]').exists()).toBe(false)
+	})
+
+	test("a level landing before the cap draws the chip final at once and ends the hold", async () => {
+		const w = mountChip(PENDING)
+		await vi.advanceTimersByTimeAsync(400)
+		await w.setProps({ model: LISTED })
+		expect(held(w)).toEqual({ held: false, label: false, mark: false, text: "TST" })
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
+	test("a level landing after the cap moves the released chip to its final look", async () => {
+		const w = mountChip(PENDING)
+		await vi.advanceTimersByTimeAsync(1000)
+		await w.setProps({ model: LISTED })
+		expect(held(w).text).toBe("TST")
+		expect(w.find('[data-testid="contract-chip-seal"]').exists()).toBe(true)
+	})
+
+	test("a held chip's card says Nulo is still checking and names no level", async () => {
+		const w = mountChip(PENDING)
+		await press(w)
+		expect(held(w).held).toBe(true)
+		expect(inPanel("contract-chip-level")).toHaveLength(0)
+		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual(["Nulo is still checking this contract."])
+	})
+
+	test("unmounting a held chip leaves no timer", () => {
+		const w = mountChip(PENDING)
+		expect(vi.getTimerCount()).toBe(1)
+		w.unmount()
+		mounted.splice(mounted.indexOf(w), 1)
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
+	test("another contract in its place is held afresh, even after the first was released", async () => {
+		const w = mountChip(PENDING)
+		await vi.advanceTimersByTimeAsync(1000)
+		await w.setProps({ model: contractChipOf({ level: "pending" }, TOKEN) })
+		expect(held(w).held).toBe(true)
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(held(w)).toMatchObject({ held: false, text: "0x0f8df6..9ecf" })
 	})
 })

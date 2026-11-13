@@ -63,6 +63,8 @@ export type TypeReading = {
 	ellipsizedBy: string | null
 	/** An `AddressDisplay`'s `data-address-shows`: `name` while it shows a contact or account name. */
 	addressShows: string | null
+	/** Inside a contract chip, whose label may read by a name its press does not swap for the address. */
+	inChip: boolean
 	/** The `OVERRIDES` scopes the element matches. */
 	scopes: string[]
 }
@@ -236,6 +238,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 			visible: isVisible(el),
 			...cutBy(el, span),
 			addressShows: el.getAttribute("data-address-shows"),
+			inChip: el.closest('[data-testid="contract-chip"]') !== null,
 			scopes: scopes.filter((selector) => el.matches(selector)),
 		}
 	}
