@@ -228,6 +228,10 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 - Adopted: on a public origin the publish line skipped D11 twice, demonstrated in memory: a hand-added sponsor lost "Nulo can't tell what this FPC publishes about you." and an unresolved payer still showed a line → `publishSentence` opens a hand-added sponsor's line with the caveat on either origin and returns none until the payer resolves, and the review's "Your address" row adds the caveat after the sender's sentence (P138-06 = a: the form's sentence in the review); the table test pins all sixteen cells. The payee block's name had no break rule, so a name with no space ran past a 240 px panel (the quality bar: "nothing scrolls sideways") → `overflow-wrap: anywhere`, red without it. The card's shortfall sentence has two authors (the row and the notice) → a test that the two read alike, red on drift. Three opening comments that narrated their component, cut to their contract.
 - Kept: AmountCard's two template comments (Max's Tab order is the owner's call; the line under the field holds a figure or a refusal); sponsor → private Fee Juice not re-arming the review (both are `hidden`, D6's trigger, and re-estimation still holds Send now).
 
+**Cross-arc pass, round 2 (resumed): conditional approve** (with conditions: the public-origin review row's dotted "FPC"). The joined row put the sender's sentence first, and `FpcSentence` dots "FPC" only where the caveat opens its text, so a public origin drew one dotted term where a private one draws two (rendered in memory) → the caveat leads, and the sheet's hand-added test runs on both origins, red on the old order. Unresolved payer, spoken copy, test timing, name wrapping and the shortfall guard verified with no finding.
+
+**Cross-arc pass, round 3 (resumed): approve.** Two dotted terms and one caveat on both origins; all sixteen publish cells pass. No material finding; converged in three rounds.
+
 ## Seeds
 
 ```
