@@ -133,8 +133,8 @@ export function appLabelOf(name: unknown): string {
 }
 
 /**
- * The app's own chip, labelled by `appLabelOf`, which no list vouches for yet; none when the label is
- * empty. Its press quotes the name as declared.
+ * The app's own chip: its self-declared name, which no list vouches for yet, labelled by `appLabelOf`;
+ * none when that label is empty. Its press quotes the name as declared.
  */
 export function appChipOf(name: unknown, host: string): ChipModel | null {
 	const label = appLabelOf(name)
