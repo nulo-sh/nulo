@@ -141,9 +141,12 @@ describe("copy", () => {
 		for (const cell of ["you", "recipient", "amount"] as const) expect(rowSentence(cell, hidden, "contract")).toBeNull()
 
 		const unknown = publishFacts("private", "private", "unvouched")
-		// A hand-added sponsor reads the form's sentence.
+		// A hand-added sponsor reads the form's sentence, after the sender's on a public origin.
 		expect(rowSentence("you", unknown, "unvouched")).toBe(UNVOUCHED_PUBLISH_SENTENCE)
 		expect(rowSentence("you", unknown, null)).toBeNull()
+		expect(rowSentence("you", publishFacts("public", "public", "unvouched"), "unvouched")).toBe(
+			`${FACT_SENTENCES.sender} ${UNVOUCHED_PUBLISH_SENTENCE}`,
+		)
 	})
 
 	test("the fee line names the payer from the settings' reading, and none while pending or hand-added", () => {
@@ -171,12 +174,17 @@ describe("Send's publish line", () => {
 		["private", "public", null, "-"],
 		["public", "private", "account", "Anyone can see your address as the sender and the amount."],
 		["public", "private", "contract", "Anyone can see your address as the sender and the amount."],
-		["public", "private", "unvouched", "Anyone can see your address as the sender and the amount."],
-		["public", "private", null, "Anyone can see your address as the sender and the amount."],
+		["public", "private", "unvouched", `${UNVOUCHED_PUBLISH_SENTENCE} Anyone can see your address as the sender and the amount.`],
+		["public", "private", null, "-"],
 		["public", "public", "account", "Anyone can see your address as the sender, Ana's address and the amount."],
 		["public", "public", "contract", "Anyone can see your address as the sender, Ana's address and the amount."],
-		["public", "public", "unvouched", "Anyone can see your address as the sender, Ana's address and the amount."],
-		["public", "public", null, "Anyone can see your address as the sender, Ana's address and the amount."],
+		[
+			"public",
+			"public",
+			"unvouched",
+			`${UNVOUCHED_PUBLISH_SENTENCE} Anyone can see your address as the sender, Ana's address and the amount.`,
+		],
+		["public", "public", null, "-"],
 	]
 
 	test.each(LINES)("%s → %s, payer %s", (origin, destination, payer, expected) => {

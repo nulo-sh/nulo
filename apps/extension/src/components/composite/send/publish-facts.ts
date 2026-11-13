@@ -122,12 +122,14 @@ export function publishGlyph(visibility: Visibility): "private" | "public" | nul
 }
 
 /** The sentence under a review row. Hidden rows carry none; "—" carries one only for a hand-added contract;
- *  an exposed one none, since `feeWarning` says it once under the rows. */
+ *  an exposed one none, since `feeWarning` says it once under the rows. A hand-added contract's caveat
+ *  follows the sender's sentence too: it may publish more than a public origin already does. */
 export function rowSentence(cell: FactCell, facts: PublishFacts, payer: PayerKind): string | null {
 	if (cell === "recipient") return facts.recipient === "public" ? FACT_SENTENCES.recipient : null
 	if (cell === "amount") return facts.amount === "public" ? FACT_SENTENCES.amount : null
-	if (facts.you === "public") return FACT_SENTENCES.sender
-	return facts.you === "unknown" && payer === "unvouched" ? UNVOUCHED_PUBLISH_SENTENCE : null
+	const caveat = payer === "unvouched" ? UNVOUCHED_PUBLISH_SENTENCE : null
+	if (facts.you === "public") return caveat ? `${FACT_SENTENCES.sender} ${caveat}` : FACT_SENTENCES.sender
+	return facts.you === "unknown" ? caveat : null
 }
 
 /**
@@ -148,24 +150,20 @@ export const UNVOUCHED_PUBLISH_SENTENCE = "Nulo can't tell what this FPC publish
 
 /**
  * What anyone watching the chain can see, as one sentence in Send's form. `name` is the recipient's
- * name, already made safe for a sentence, or null. Null while the payer is unresolved, and for a send
- * whose fee names the account: that one reads `feeWarning` instead.
+ * name, already made safe for a sentence, or null. Null while the payer is unresolved, on either origin,
+ * and for a send whose fee names the account: that one reads `feeWarning` instead.
  */
 export function publishSentence(facts: PublishFacts, name: string | null, payer: PayerKind): string | null {
-	if (facts.you === "exposed") return null
+	if (facts.you === "exposed" || payer === null) return null
 	const theirs = name ? `${name}'s address` : "their address"
-	if (facts.you === "unknown") {
-		if (payer !== "unvouched") return null
-		return facts.recipient === "public"
-			? `${UNVOUCHED_PUBLISH_SENTENCE} Anyone can see ${theirs} and the amount.`
-			: UNVOUCHED_PUBLISH_SENTENCE
-	}
 	const shown: string[] = []
 	if (facts.you === "public") shown.push("your address as the sender")
 	if (facts.recipient === "public") shown.push(theirs)
 	if (facts.amount === "public") shown.push("the amount")
-	if (shown.length === 0) return "Nobody watching the chain can see who sent it, who got it or how much."
-	return `Anyone can see ${joinList(shown)}.`
+	const parts = shown.length > 0 ? `Anyone can see ${joinList(shown)}.` : null
+	// A hand-added sponsor is never "Nobody…": it may publish anything about the sender.
+	if (payer === "unvouched") return parts ? `${UNVOUCHED_PUBLISH_SENTENCE} ${parts}` : UNVOUCHED_PUBLISH_SENTENCE
+	return parts ?? "Nobody watching the chain can see who sent it, who got it or how much."
 }
 
 /** The one warning Send gives: a private origin whose fee, paid from public Fee Juice, names the account. */
