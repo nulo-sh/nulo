@@ -146,3 +146,4 @@ Rejected: none. Kept against the critique: the gate list keeps `audit:vue` and `
 
 **Opus diff review** (beside round 1): approve. Accepted: the `appChipOf` doc wording (`029f7f11d`). Rejected: deleting T3 (the lane brief asks for the same-fixture pin of sentence and press) and trimming T2 to one print (the pick names both sentences; the four mounts cost milliseconds). Noted, no action: `stripPictographs` collapses spaces before `sanitizeWireString` removes control characters, so `" A \u0000 B "` keeps two spaces; it predates this arc and is the chip's own output.
 
+**Fresh final Codex pass** (new session, gpt-6.1-sol, high, read-only, over the plan and `origin/dev...HEAD` at `1e43957d6`): approve, no findings. The chip's output was byte-identical over 10,016 inputs; no committed capture patch, local path or account name.

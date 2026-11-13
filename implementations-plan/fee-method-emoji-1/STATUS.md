@@ -9,3 +9,5 @@
 - 2026-11-13: e2e:agent fee-sponsor-funding Chrome green at 029f7f11d (4 passed, 147 s).
 - 2026-11-13: e2e:agent fee-sponsor-funding Firefox green at 029f7f11d (4 passed, 181 s). Phase 1 green.
 - 2026-11-13: captures done: window frames over the local sandbox, legend and failed row from the armed fixture, History A1 (a) and (b); capture patches restored, none in the tree.
+- 2026-11-13: final gates at 1e43957d6: lint 6s, typecheck:all 80s, test:all 193s, smoke execute-steps Chrome green (56 s). Firefox smoke and both network runs at 029f7f11d, same code.
+- 2026-11-13: fresh final Codex pass over plan and net diff: approve, no findings.
