@@ -168,8 +168,9 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
 
 - **Surface**: the Fee sheet's "Who pays the fee" radios ("1,000 FJ", "999.9396 FJ", "free").
 - **From**: P145-04's note, "don't forget to put the dollar amounts though"; the orchestrator asked the owner whether the radios' balances carry dollars too, and no answer is recorded.
-- **Options**: (a) the Fee Juice figure alone, as shipped; (b) each balance with its dollars at today's Fee Juice quote, in the wallet's balance form.
-- **What ships now**: (a), the Fee Juice figure alone.
+- **Asked in chat** (2026-11-13 13:40 UTC), the owner, verbatim: "I feel that open question also needs screenshots?" So the decision goes on the close-out's captures page with both drawn.
+- **Options**: (a) the Fee Juice figure alone, as shipped; (b) each balance with its dollars in the one fee helper's form, from You pay's price source and formatter ("1,000 FJ ($7,000)" at the suite's pinned price; "free" stays "free"; no price known, Fee Juice alone).
+- **What ships now**: (a), the Fee Juice figure alone. (b) is drawn only in the captures, from a change that is never committed.
 
 ## OA-21: the form's fee line at 240 px (arc a3)
 

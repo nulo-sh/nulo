@@ -224,6 +224,10 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 
 **Arc a3, fix round 2, Codex (resumed) over `b651610d2..9259e91c2`: approve.** The shortfall figure survives the card, the line and the review; no other notice or queued copy carries a fee; `said()` cannot hide a figure-only change, since each notice's figure follows from its text; deleting the notice bodies drops no shown or spoken words. Codex ran the `Range` counter in Chromium with the wallet's fonts: mixed sizes and families on one line count one, a wrapped figure two, and dropping `nowrap` fails the computed check. No new findings; converged in two rounds.
 
+**Cross-arc pass, Codex (GPT-6.1 Sol, high, read-only, fresh session) over the three arcs' 126 files, `5736a920a...HEAD`: conditional approve** (with conditions: fix public-origin payer disclosures and long-name wrapping).
+- Adopted: on a public origin the publish line skipped D11 twice, demonstrated in memory: a hand-added sponsor lost "Nulo can't tell what this FPC publishes about you." and an unresolved payer still showed a line → `publishSentence` opens a hand-added sponsor's line with the caveat on either origin and returns none until the payer resolves, and the review's "Your address" row adds the caveat after the sender's sentence (P138-06 = a: the form's sentence in the review); the table test pins all sixteen cells. The payee block's name had no break rule, so a name with no space ran past a 240 px panel (the quality bar: "nothing scrolls sideways") → `overflow-wrap: anywhere`, red without it. The card's shortfall sentence has two authors (the row and the notice) → a test that the two read alike, red on drift. Three opening comments that narrated their component, cut to their contract.
+- Kept: AmountCard's two template comments (Max's Tab order is the owner's call; the line under the field holds a figure or a refusal); sponsor → private Fee Juice not re-arming the review (both are `hidden`, D6's trigger, and re-estimation still holds Send now).
+
 ## Seeds
 
 ```
