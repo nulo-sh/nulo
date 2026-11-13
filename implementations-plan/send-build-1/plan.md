@@ -8,8 +8,22 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 5736a920a
-status: approved (panel, auto-continue)
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-13.
+- **Status:** completed. Arcs a1 and a2 landed as #1795 (`26a1d73c3`) and #1797 (`13ae6ed81`); arc a3 and this close-out are the final commits of one PR against `dev`, which lands on the owner's approve of its captures.
+- **Owner sign-off:** pages 129, 131 and 133 for the plan; pages 137 and 138 for round a1b; page 145 (2026-11-13 11:36 UTC) approved #1795 and #1797 as built (P145-01, P145-02) and answered OA-16c, OA-17, OA-18 and OA-19 (P145-03 to P145-06), each quoted in `OWNER-ASKS.md` and the ledger.
+- **Shipped:** Send as B, "Pay a person": a person step ("Who are you paying?"), one form for that person, the fee line pinned over Review send, the payer as native radios in the Fee sheet (a1; round a1b: page 137's check line, the warning's fix, the token row's band); a review sheet for every send, with to, the amount and its dollars, "This send publishes" rows, the warning box, the fee row in the form's words and an armed Send now that refuses a press begun refused (a2); every fee figure Send shows in the one fee grammar, `~X FJ ($Y)`, drawn whole: the form's line and notes, the review's row, the re-ask, the Fee sheet's You pay and shortfall row (P145-03, P145-04); the "Your address" row without its sentence while the warning shows (P145-06 = b); on a public origin the publish line follows D11 and a long payee name wraps (a3, from the cross-arc pass).
+- **Dispositions:** P145-06's (c) and (d) not built, as answered. The fee keeps `feeDisplay`'s rounding on the hero's quote service, not the hero's cents (D28). The radios' balances stay Fee Juice alone (OA-20) and Change takes the next row when a priced fee fills the line (OA-21), each its "what ships now". The asks never answered before page 145 (OA-5, OA-6, OA-7, OA-11, OA-13, OA-15) shipped their "what ships now" in #1795 and #1797, which P145-01 and P145-02 approved as built.
+- **Gates:** each arc's at retry 0 (smoke per browser; network, the touched specs, per browser): a1 smoke Chrome 1839 s (three reds in two unmigrated specs, fixed and rerun green), Firefox 2926 s, network Chrome 2309 s, Firefox 2711 s (one sub-pixel read, fixed); a2 smoke 1714 s and 2795 s, network 2225 s and 2593 s; round a1b smoke 1991 s and 3019 s, network 2353 s (one fixture timeout, rerun green) and 2665 s; a3 in its PR body. The opt-in specs armed on Chrome and update-in-place from v1.2.0 armed on both, each arc.
+- **Reviews:** Codex converged per arc (a1 and a2 in three rounds, a1b and a3 in two), an Opus review beside each first round; the cross-arc pass converged in three rounds: a public origin's publish line brought to D11 (a hand-added sponsor's caveat; no line before the payer resolves), the payee name's wrap, the caveat's dotted "FPC".
+- **Lessons:** three promoted (a Space press refused whole; a radio's `checked` patched only on a bound change; `nowrap` as a flex item's minimum). For the budget, two narrow ones retired: the chaos model's line citations (one test file) and `git diff -M`'s R100; their evidence stays in their archived plans.
+- **Known limits:** #1807 (Send's known address: a bounded journal, a reverted send counts).
+- **Open items:** #1806 (the Terms' lower-case "fee juice" and Privacy § 5.10's "Get private gas", for the next patch of each); OA-20 (the radios' balances, both drawn for the owner's captures page) and OA-21 with the owner (`OWNER-ASKS.md`).
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds; never run them.
 
 # send-build-1: Send's B, "Pay a person", as signed on pages 129, 131 and 133
 
