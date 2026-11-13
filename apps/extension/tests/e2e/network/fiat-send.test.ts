@@ -37,32 +37,60 @@ async function rowTopEdge(page: Page, testid: string, over: "middle" | "right"):
 	)
 }
 
-/** Where an element lies against the box it must stay inside: its line count, its edges, and its text. */
-type Placed = { lines: number; top: number; bottom: number; left: number; right: number; text: string }
-async function placed(page: Page, selector: string): Promise<{ el: Placed; box: Placed } | null> {
-	return page.evaluate((s: string) => {
-		const [boxSel, elSel] = s.split(" >> ")
-		const box = document.querySelector(boxSel)
-		const el = box?.querySelector(elSel)
-		if (!box || !el) return null
-		const read = (node: Element): Placed => {
-			const r = node.getBoundingClientRect()
-			const tops = new Set(Array.from(node.getClientRects(), (rect) => Math.round(rect.top)))
-			const text = (node.textContent ?? "").replace(/\s+/g, " ").trim()
-			return { lines: tops.size, top: r.top, bottom: r.bottom, left: r.left, right: r.right, text }
-		}
-		return { el: read(el), box: read(box) }
-	}, selector)
+/**
+ * Where an element lies against the box it must stay inside: the text lines it covers, whether it may
+ * wrap, its edges and its text. Lines are read from the text's own boxes: a flex item's border box is
+ * one rectangle however many lines its text takes.
+ */
+type Placed = { lines: number; nowrap: boolean; top: number; bottom: number; left: number; right: number; text: string }
+async function placed(page: Page, selector: string, measure: "self" | "parent" = "self"): Promise<{ el: Placed; box: Placed } | null> {
+	return page.evaluate(
+		(s: string, which: string) => {
+			const [boxSel, elSel] = s.split(" >> ")
+			const box = document.querySelector(boxSel)
+			const found = box?.querySelector(elSel)
+			const el = which === "parent" ? found?.parentElement : found
+			if (!box || !el) return null
+			const textRects = (node: Element): DOMRect[] => {
+				const rects: DOMRect[] = []
+				const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+				for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+					const range = document.createRange()
+					range.selectNodeContents(t)
+					rects.push(...Array.from(range.getClientRects()).filter((r) => r.width > 0))
+				}
+				return rects.sort((a, b) => a.top - b.top)
+			}
+			// A rect starting below the current line's bottom opens a new line.
+			const lines = (node: Element): number => {
+				let count = 0
+				let bottom = Number.NEGATIVE_INFINITY
+				for (const r of textRects(node)) {
+					const opens = r.top >= bottom - 2
+					if (opens) count++
+					bottom = opens ? r.bottom : Math.max(bottom, r.bottom)
+				}
+				return count
+			}
+			const read = (node: Element): Placed => {
+				const r = node.getBoundingClientRect()
+				const text = (node.textContent ?? "").replace(/\s+/g, " ").trim()
+				const nowrap = getComputedStyle(node).whiteSpace === "nowrap"
+				return { lines: lines(node), nowrap, top: r.top, bottom: r.bottom, left: r.left, right: r.right, text }
+			}
+			return { el: read(el), box: read(box) }
+		},
+		selector,
+		measure,
+	)
 }
 
-/** One line, inside its box: nothing cut, the dollars on the figure's line. */
+/** One line that may never wrap, inside its box: nothing cut, the dollars on the figure's line. */
 function expectWhole(at: { el: Placed; box: Placed } | null, label: string): Placed {
 	expect(at, `${label} is on the page`).not.toBeNull()
 	const { el, box } = at as { el: Placed; box: Placed }
-	expect({ lines: el.lines, inside: el.left >= box.left - 0.5 && el.right <= box.right + 0.5 }, `${label}: ${el.text}`).toEqual({
-		lines: 1,
-		inside: true,
-	})
+	const inside = el.left >= box.left - 0.5 && el.right <= box.right + 0.5
+	expect({ lines: el.lines, nowrap: el.nowrap, inside }, `${label}: ${el.text}`).toEqual({ lines: 1, nowrap: true, inside: true })
 	return el
 }
 
@@ -183,7 +211,7 @@ test.skipIf(!hasConfig)(
 		// The review's fee row reads the line's fee; at 240 px it and the amount's dollars stay whole.
 		await openReview(page)
 		await waitForReviewReady(page)
-		const rowFigure = '[data-testid="send-review-fee"] >> [data-testid="send-fee-figure"]'
+		const rowFigure = '[data-testid="send-review-fee-value"] >> [data-testid="send-fee-figure"]'
 		expect(expectWhole(await placed(page, rowFigure), "the review's fee at 360 px").text).toBe(fee)
 		await atWidth(page, NARROW_WIDTH, async () => {
 			expect(expectWhole(await placed(page, rowFigure), `the review's fee at ${NARROW_WIDTH} px`).text).toBe(fee)
@@ -208,17 +236,13 @@ test.skipIf(!hasConfig)(
 		await page.waitForSelector('[data-testid="fee-estimate"] [data-testid="fee-estimate-usd"]', { timeout: 30_000 })
 		await atWidth(page, NARROW_WIDTH, async () => {
 			const usd = expectWhole(await placed(page, youPay), `You pay's dollars at ${NARROW_WIDTH} px`)
-			const figure = await page.evaluate(() => {
-				const struck = document.querySelector('[data-testid="fee-estimate"] [data-testid="fee-estimate-usd"]')?.parentElement
-				const tops = new Set(Array.from(struck?.getClientRects() ?? [], (r) => Math.round(r.top)))
-				return { lines: tops.size, text: (struck?.textContent ?? "").replace(/\s+/g, " ").trim() }
-			})
-			expect(figure).toEqual({ lines: 1, text: fee })
+			expect(expectWhole(await placed(page, youPay, "parent"), `You pay's fee at ${NARROW_WIDTH} px`).text).toBe(fee)
 			expect(usd.text).toBe(fee.slice(fee.indexOf("(")))
 		})
 		await closeSendFeeSheet(page)
 
 		expect(await prices.refused.failures(), "price interception failures").toEqual([])
+		await prices.refused.stop()
 		expect(tokenReadyExtension.pageErrors).toEqual([])
 	},
 )
