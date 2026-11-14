@@ -62,10 +62,11 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
 - **What ships now**: every send opens the review; Send now there sends.
 - **Answer**: (a), page 137, P137-05, 2026-11-12 14:44:23 UTC. As shipped; no change.
 
-## OA-9: the fee line's figures (arc a1)
+## OA-9: the fee line's figures (arc a1): superseded by page 145
 
 - **Surface**: the fee line, and the review's fee row in a2.
-- **What ships now**: the order as built, dollars first, with the wallet's own figures: "≈ $0.027 (0.00214 FJ)" (three-decimal dollars, as every fee screen prints them); "<$0.001 (0.0000412 FJ)" with no "≈" below a tenth of a cent; "~0.00214 FJ" when no price is known. Other screens keep "~0.00214 FJ ($0.027)".
+- **Shipped in a1 and a2**: the order as built, dollars first, with the wallet's own figures: "≈ $0.027 (0.00214 FJ)" (three-decimal dollars, as every fee screen prints them); "<$0.001 (0.0000412 FJ)" with no "≈" below a tenth of a cent; "~0.00214 FJ" when no price is known. Other screens kept "~0.00214 FJ ($0.027)".
+- **Superseded**: P145-03's entry (below, OA-16's answer) puts every fee Send shows through the wallet's one fee grammar, "~0.00214 FJ ($0.027)"; arc a3 ships it (`plan.md` D28).
 
 ## OA-11: the address at 240 px (arc a1)
 
@@ -111,7 +112,7 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
 - **Answers** (page 138, 2026-11-12, as the answers file records them):
   - P138-02 = a (15:37 UTC): "The sheet's title stays "Review". Nothing changes."
   - P138-03 = b (15:37 UTC): "b, on the page, no note." Shipped: "≈ $43.20" after the token amount when a price is known (`plan.md` D26).
-  - P138-04 = read (15:38 UTC), the owner's note: "I need "b" with a picture too. can't remember." Shipped: (a), the form's line on one line with its notes under it; the prototype's two-line row (the cost, the method under it) captured at the same state, light and dark, for the owner to pick from.
+  - P138-04 = read (15:38 UTC), the owner's note: "I need "b" with a picture too. can't remember." Shipped: (a), the form's line on one line with its notes under it; the prototype's two-line row (the cost, the method under it) captured at the same state, light and dark, for the owner to pick from. Answered on page 145 (signed 2026-11-13 11:36 UTC), P145-03 = a, the owner's note: "don't forget to put the USD dollar amounts though." Shipped in arc a3: the row keeps RS2's shape, and every fee figure Send shows prints with its dollars when a price is known, through the one fee grammar "~X FJ ($Y)" (`plan.md` D28).
   - P138-05 = a (15:38 UTC): "The review's warning box, when the fee names your account, carries no link. Nothing changes."
   - P138-06 = a (15:39 UTC): "a, the form's sentence, "Nulo can't tell what this FPC publishes about you.", in the review as on the form." The owner's note: "fee paying contract? Or FPC with glossary? We are assuming the user knows what an FPC is." Answered in chat, about 16:04 UTC: ""Your P138-06 question needs one answer from you. " => dot the FPC then. your rec." Shipped: "FPC" in both sponsor sentences dotted with the glossary's `fpc` entry, on the form and the review (D27).
 
@@ -127,7 +128,7 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
 - **Answer**: change, 2026-11-12 14:42:35 UTC: "- I don't like "check it's start and it's end" => we should just say to review carefully. - We shouldn't rely on the "use sponsored" since that's only for Testnet. On mainnet, they should get private fee juice."
 - **Shipped in round a1b**: the check line reads "You have not paid this address before. Review it carefully before you send." (`plan.md` D21); the warning's fix never relies on the sponsor (D22, with OA-12 above).
 
-## OA-17: the fee sheet's parts the prototype never drew (round a1b)
+## OA-17: the fee sheet's parts the prototype never drew (round a1b): answered (a), page 145
 
 - **Surface**: the Fee sheet Change opens.
 - **Why ask**: P137-04 = b names the radios, priority and Done. The prototype's sheet also drew a You pay row and tinted no option as a warning; it never drew the card's notices or a hand-added sponsor.
@@ -137,8 +138,9 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
   - A hand-added sponsor is a radio of its own after Nulo's, with the glossary's FPC definition (not Sponsored's, which promises the fee is paid for you) and "—" for what it spends, as the menu lists it today.
   - The menu's "NAMES YOUR ADDRESS" tag is not drawn; the form's warning says what it said. The "Available" row is not drawn; each radio carries its balance.
 - **Options for each**: keep what ships, or drop it from the sheet.
+- **Answer**: page 145 (signed 2026-11-13 11:36 UTC), P145-04 = a, the owner's note: "don't forget to put the dollar amounts though". The sheet keeps You pay, the notices, the hand-added sponsor's radio and no Available row; You pay prints with its dollars (`plan.md` D28). The radios' balances: OA-20.
 
-## OA-18: what round a1b's reviews surfaced (round a1b)
+## OA-18: what round a1b's reviews surfaced (round a1b): answered (a), page 145
 
 - **Surface**: the form's warning and the Fee sheet.
 - **Why ask**: each is a behaviour the owner's page-137 words do not settle.
@@ -148,8 +150,9 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
   - With a flagged-token banner or the token caveat in the token's section, the hover and press tint covers the row, not the whole section.
   - The bridge link is unleashed's testnet app on every network, as the fee card's link is today.
 - **Options**: keep each; or a second estimate for the fix; or arrows that move without picking (the menu's behaviour) at the cost of native radios; or a tint over the whole section.
+- **Answer**: page 145 (signed 2026-11-13 11:36 UTC), P145-05 = a: the warning's fix and the radios as shipped. Nothing to build.
 
-## OA-19: what page 138's answers leave open (round a1b)
+## OA-19: what page 138's answers leave open (round a1b): answered (b), page 145
 
 - **Surface**: the review sheet, Send's and Home's re-ask.
 - **Why ask**: each follows from a page-138 answer and is visible, but the answers do not settle it.
@@ -159,3 +162,19 @@ Every visible change in this lane is inside the owner's picks on pages 129, 131 
   - In USD mode the dollar figure is the token amount the send carries priced at the quote the form froze, half-up to the cent, so it matches the dollars typed unless the token's decimals round the amount.
   - Each dotted "FPC" is a Tab stop, so a review paid by a hand-added sponsor has four (the close, two terms, Send now).
 - **Options**: keep each; or drop the row's sentence while the warning shows; or price Home's re-ask at today's quote; or print the typed dollars in USD mode.
+- **Answer**: page 145 (signed 2026-11-13 11:36 UTC), P145-06 = b, no note: "While the warning shows, the "Your address" row keeps its label and FEE PAYER mark but drops its sentence; the box says it once." Shipped in arc a3: whenever the warning box shows, the row draws its name, its mark and FEE PAYER and no sentence, so a screen reader hears the box's sentence once; without the warning the row reads as before (`plan.md` D29). (c) and (d) are not built: Home's re-ask stays unpriced, and USD mode keeps pricing the carried amount at the frozen quote.
+
+## OA-20: the payer radios' balances (arc a3)
+
+- **Surface**: the Fee sheet's "Who pays the fee" radios ("1,000 FJ", "999.9396 FJ", "free").
+- **From**: P145-04's note, "don't forget to put the dollar amounts though"; the orchestrator asked the owner whether the radios' balances carry dollars too, and no answer is recorded.
+- **Asked in chat** (2026-11-13 13:40 UTC), the owner, verbatim: "I feel that open question also needs screenshots?" So the decision goes on the close-out's captures page with both drawn.
+- **Options**: (a) the Fee Juice figure alone, as shipped; (b) each balance with its dollars in the one fee helper's form, from You pay's price source and formatter ("1,000 FJ ($7,000)" at the suite's pinned price; "free" stays "free"; no price known, Fee Juice alone).
+- **What ships now**: (a), the Fee Juice figure alone. (b) is drawn only in the captures, from a change that is never committed.
+
+## OA-21: the form's fee line at 240 px (arc a3)
+
+- **Surface**: the fee line pinned over Review send, in the 240 px side panel, when a priced fee sits on the line itself (paid from private or public Fee Juice, or queued against a cap).
+- **Why ask**: P145-03 keeps a fee's dollars on its line and moves the whole figure to the next line when the line is full. Beside "Fee" and Change the value has about 105 px at 240 px, narrower than a priced figure ("~0.00214 FJ ($0.015)" is about 125 px), so the figure cannot sit whole beside Change.
+- **Options**: (a) Change takes the next row, at the line's right edge, only when the figure needs the room; (b) the value takes a row of its own under "Fee" and Change; (c) the figure wraps before its dollars at 240 px only.
+- **What ships now**: (a). At 360 px, and at 240 px for "Nothing · Sponsored" or an unpriced figure, the line reads as before. One more case moves Change: a hand-added sponsor's name with no space in it (up to 32 characters) now sets the value's least width too, so a name wider than about 225 px at 360 px sends Change to the next row; before, the name ran under Change.

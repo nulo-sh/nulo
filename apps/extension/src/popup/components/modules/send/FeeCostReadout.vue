@@ -51,9 +51,9 @@ const sponsoredSentence = computed(() => {
 	>
 		<span :class="$style.fee_label">{{ label }}</span>
 		<span :class="$style.fee_value">
-			About <FeeAmount :display="queuedCap.about" :usdClass="$style.fee_usd" usdTestid="fee-estimate-usd" />
+			About <FeeAmount :display="queuedCap.about" :class="$style.whole" :usdClass="$style.fee_usd" usdTestid="fee-estimate-usd" />
 		</span>
-		<span :class="$style.queued" data-testid="fee-estimate-queued-cap-line">Goes out after your earlier send, for at most <FeeAmount :display="queuedCap.cap" :class="$style.fee_figure" />.</span>
+		<span :class="$style.queued" data-testid="fee-estimate-queued-cap-line">Goes out after your earlier send, for at most <FeeAmount :display="queuedCap.cap" :class="[$style.fee_figure, $style.whole]" />.</span>
 	</Flex>
 	<Flex
 		v-else-if="estimating && isQueued && offersQueue && payer === 'sponsor'"
@@ -85,7 +85,7 @@ const sponsoredSentence = computed(() => {
 		<span :class="$style.fee_label" :aria-hidden="payer === 'sponsor' ? 'true' : undefined">{{ label }}</span>
 		<span v-if="payer === 'sponsor'" :class="$style.fee_value">
 			<span aria-hidden="true">
-				<span>Nothing</span> <s :class="$style.fee_usd"><FeeAmount :display="estimate" usdTestid="fee-estimate-usd" /></s>
+				<span>Nothing</span> <s :class="[$style.fee_usd, $style.whole]"><FeeAmount :display="estimate" usdTestid="fee-estimate-usd" /></s>
 			</span>
 			<span :class="$style.visually_hidden">{{ sponsoredSentence }}</span>
 		</span>
@@ -130,6 +130,10 @@ const sponsoredSentence = computed(() => {
 	composes: type--fiat from global;
 	font-size: 11px;
 	color: var(--nulo-secondary);
+}
+
+.whole {
+	composes: whole from "./fee-shared.module.css";
 }
 
 .queued {

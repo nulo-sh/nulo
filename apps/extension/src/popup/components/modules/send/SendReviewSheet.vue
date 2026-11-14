@@ -1,8 +1,6 @@
 <script setup lang="ts">
-/**
- * The last look before a send goes. Everything shown is a prop and every action an emit: the page
- * owns the popup slot, the facts and the send.
- */
+/** Everything shown is a prop and every action an emit: the page owns the popup slot, the facts
+ *  and the send. */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
 import FpcSentence from "@/components/composite/send/FpcSentence.vue"
 import PayeeBlock from "@/components/composite/send/PayeeBlock.vue"
@@ -22,7 +20,8 @@ import {
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { fitHero, HERO_MIN_SCALE } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
-import { type FeeLine, type FeeLineState, feeLine, feeLineNotes } from "./fee-line-words"
+import FeeLineText from "./FeeLineText.vue"
+import { type FeeLine, type FeeLineState, type FeeWords, feeLine, feeLineNotes } from "./fee-line-words"
 
 const props = withDefaults(
 	defineProps<{
@@ -48,7 +47,7 @@ const props = withDefaults(
 		/** Send's fee, which the row reads exactly as the form's line reads it. */
 		fee?: FeeLineState
 		/** What the fee card would say under the form's line. */
-		notices?: string[]
+		notices?: FeeWords[]
 		/** The send is queued against a cap, or behind an earlier one with Nulo's sponsor paying. */
 		queueing?: boolean
 		canSend: boolean
@@ -91,13 +90,16 @@ const rows = computed(() =>
 )
 
 const QUEUE_TESTID = { cap: "send-review-fee-cap", sponsored: "send-review-fee-queued", behind: "send-review-fee-value" } as const
-const line = computed<FeeLine>(() => (props.fee ? feeLine(props.fee) : { kind: "words", value: "—", note: null }))
+const line = computed<FeeLine>(() => (props.fee ? feeLine(props.fee) : { kind: "words", value: { text: "—", figure: null }, note: null }))
 const valueTestid = computed(() => {
 	if (line.value.kind === "slow") return "send-review-fee-slow"
 	return line.value.kind === "words" && line.value.queue ? QUEUE_TESTID[line.value.queue] : "send-review-fee-value"
 })
-const notes = computed(() => {
-	if (props.reask) return [paidBy(props.payerKind, props.payerType)].filter((n) => n !== null)
+const notes = computed<FeeWords[]>(() => {
+	if (props.reask) {
+		const paid = paidBy(props.payerKind, props.payerType)
+		return paid ? [{ text: paid, figure: null }] : []
+	}
 	return feeLineNotes(line.value, props.notices)
 })
 
@@ -223,15 +225,15 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 					<div :class="$style.fee" data-testid="send-review-fee" :data-payer="payerKind ?? 'none'">
 						<span :class="$style.fee_key">Fee</span>
 						<span :class="$style.fee_value" :data-testid="reask ? 'send-review-fee-reask' : valueTestid">
-							<span v-if="reask">Fee is now {{ reask.now }}, above the {{ reask.cap }} you accepted.</span>
-							<span v-else-if="line.kind === 'words'">{{ line.value }}</span>
+							<span v-if="reask">Fee is now <span :class="$style.whole" data-testid="send-fee-figure">{{ reask.now }}</span>, above the <span :class="$style.whole" data-testid="send-fee-figure">{{ reask.cap }}</span> you accepted.</span>
+							<span v-else-if="line.kind === 'words'"><FeeLineText :words="line.value" /></span>
 							<Skeleton v-else-if="line.kind === 'bar'" :width="96" :height="10" />
 							<span v-else :class="$style.fee_state">
 								<span v-if="line.kind === 'slow'" :class="$style.muted">Taking longer than usual.</span>
 								<span v-else class="color--txt-danger">Couldn't estimate fee.</span>
 								<button type="button" :class="$style.retry" data-testid="send-review-fee-retry" @click="retry">Try again</button>
 							</span>
-							<span v-for="note in notes" :key="note" :class="$style.note"><FpcSentence :text="note" /></span>
+							<span v-for="note in notes" :key="note.text" :class="$style.note"><FeeLineText :words="note" /></span>
 						</span>
 					</div>
 
@@ -423,6 +425,10 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 
 .retry {
 	composes: retry from "./fee-shared.module.css";
+}
+
+.whole {
+	composes: whole from "./fee-shared.module.css";
 }
 
 .send_wrap {

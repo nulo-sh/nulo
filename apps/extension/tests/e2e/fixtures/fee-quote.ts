@@ -10,7 +10,8 @@ import { PRICE_FETCH_TIMEOUT_MS } from "@/wallet/services/price/spec"
 import { type ArmedInterception, interceptRpc, openScratchPage } from "./browser"
 import type { ExtensionContext } from "./extension"
 
-/** Inside AZTEC's sanity band, and high enough that a sandbox fee prints whole tenths of a cent. */
+/** Inside AZTEC's sanity band. A fresh sandbox's fee prints whole tenths of a cent at it; the fee falls
+ *  as a suite runs, so a late spec may read the helper's bound, `<$0.001`. */
 export const PINNED_FEE_JUICE_USD = 7
 
 export interface PricePin {

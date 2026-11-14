@@ -1,9 +1,6 @@
 <script setup lang="ts">
-/**
- * Send's first question, who is paid: a contact or account found in the field, a pasted address, a
- * recent recipient or one of the profile's own accounts. Every way out emits `choose` with the address
- * and the candidate it names, if any; the page owns what follows.
- */
+/** Every way out emits `choose` with the address and the candidate it names, if any; the page owns
+ *  what follows. */
 import { computed } from "vue"
 import AccountAvatar from "@/components/composite/general/AccountAvatar.vue"
 import { isValidAztecAddress } from "@/utils/aztec-address"

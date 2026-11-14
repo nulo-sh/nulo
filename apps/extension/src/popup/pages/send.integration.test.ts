@@ -957,7 +957,7 @@ describe("send page with the real fee card — the review sheet's fee", () => {
 		const shown = w.get('[data-testid="stub-fee-cost"]').attributes("data-usd")
 		expect(shown).toMatch(/^\$0\.0\d0$/)
 		await submit(w).trigger("click")
-		expect(reviewFeeLines(w)).toEqual([`≈ ${shown} (1 FJ), public Fee Juice`])
+		expect(reviewFeeLines(w)).toEqual([`~1 FJ (${shown}), public Fee Juice`])
 		expect(reviewFeeLines(w)).toEqual(formFeeLines(w))
 		w.unmount()
 	})
@@ -1043,7 +1043,7 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		const card = w.getComponent({ name: "FeeSettingsCard" })
 		const figures = card.emitted<[{ cap: { usd: string | null } } | null]>("update:queuedCapFigures")?.at(-1)?.[0]
 		expect(figures?.cap.usd).toMatch(/^\$/)
-		expect(w.get('[data-testid="send-fee-line-note"]').text()).toContain(`${figures?.cap.usd} (4.47228 FJ)`)
+		expect(w.get('[data-testid="send-fee-line-note"]').text()).toContain(`~4.47228 FJ (${figures?.cap.usd})`)
 		w.unmount()
 	})
 
@@ -1055,7 +1055,7 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		await submit(w).trigger("click")
 		expect(w.find('[data-testid="send-review-fee-cap"]').exists()).toBe(true)
 		expect(reviewFeeLines(w)).toEqual(formFeeLines(w))
-		expect(reviewFeeLines(w)[1]).toBe("Goes out after your earlier send, for at most 4.47228 FJ.")
+		expect(reviewFeeLines(w)[1]).toBe("Goes out after your earlier send, for at most ~4.47228 FJ.")
 		expect(sendNow(w).text()).toBe("Queue send")
 		await armed()
 		await sendNow(w).trigger("click")

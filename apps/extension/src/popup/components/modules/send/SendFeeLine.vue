@@ -1,14 +1,11 @@
 <script setup lang="ts">
-/**
- * Send's fee in one line pinned over the button, with Change to the full card. It says what the card
- * would say in the form, in the card's words: the cost and who pays it, the estimate's state, the queue,
- * and the card's notices on the line under it.
- */
+/** Says only what the fee card would say, in its words; the review's fee row draws the same
+ *  `feeLine`. */
 import { computed, nextTick, useTemplateRef } from "vue"
-import FpcSentence from "@/components/composite/send/FpcSentence.vue"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import type { FeeDisplay } from "@/utils/fee-estimation"
-import { type FeeLinePayer, feeLine, feeLineNotes } from "./fee-line-words"
+import FeeLineText from "./FeeLineText.vue"
+import { type FeeLinePayer, type FeeWords, feeLine, feeLineNotes } from "./fee-line-words"
 
 const props = withDefaults(
 	defineProps<{
@@ -23,7 +20,7 @@ const props = withDefaults(
 		queued?: boolean
 		queuedCap?: { about: FeeDisplay; cap: FeeDisplay } | null
 		queuedSponsored?: boolean
-		notices?: string[]
+		notices?: FeeWords[]
 		/** The sheet Change opens is open. */
 		open?: boolean
 	}>(),
@@ -58,7 +55,7 @@ function retry(e: Event) {
 		<div :class="$style.line">
 			<span :class="$style.key">Fee</span>
 			<span :class="$style.value" data-testid="send-fee-line-value">
-				<span v-if="line.kind === 'words'">{{ line.value }}</span>
+				<span v-if="line.kind === 'words'"><FeeLineText :words="line.value" /></span>
 				<Skeleton v-else-if="line.kind === 'bar'" :width="96" :height="10" />
 				<template v-else-if="line.kind === 'slow'">
 					<span :class="$style.muted">Taking longer than usual.</span>
@@ -83,7 +80,7 @@ function retry(e: Event) {
 			</button>
 		</div>
 		<div role="status" aria-live="polite" aria-atomic="true" :class="$style.notes" data-testid="send-fee-line-note">
-			<p v-for="note in notes" :key="note" :class="$style.note"><FpcSentence :text="note" /></p>
+			<p v-for="note in notes" :key="note.text" :class="$style.note"><FeeLineText :words="note" /></p>
 		</div>
 	</div>
 </template>
@@ -95,9 +92,11 @@ function retry(e: Event) {
 	gap: 2px;
 }
 
+/* Where the value cannot hold its fee whole beside Change, Change takes the next row. */
 .line {
 	composes: type--body from global;
 	display: flex;
+	flex-wrap: wrap;
 	align-items: baseline;
 	gap: 8px;
 	color: var(--txt-primary);
@@ -110,9 +109,9 @@ function retry(e: Event) {
 	color: var(--nulo-secondary);
 }
 
+/* No `min-width: 0`: the column is never narrower than its fee. */
 .value {
 	flex: 1;
-	min-width: 0;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: baseline;
@@ -142,6 +141,7 @@ function retry(e: Event) {
 
 .change {
 	align-self: baseline;
+	margin-left: auto;
 }
 
 .notes {
