@@ -83,10 +83,12 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
   locally not to invoke any e2e config.
 - **Heavy suites run alone on the host.** A concurrent `audit:vue`, a proving run, or a second
   suite starves the sandbox and the browsers; the signature is timeouts across unrelated files.
-  Rerun before triage. Shard for wall-clock (`--shard=N/M` across agents), never overlap.
-- **One browser's whole network suite can outlast an agent's command limit** (about 2 hours on a
-  loaded host; Claude Code stops a background command at 7,200 s, leaving the lock and the run
-  dir): shard it, or `bun run e2e:reap` and run the files it did not reach
+  Rerun before triage. Never overlap. A local gate is the specs the change affects, never a whole
+  suite: the whole suites are CI's sharded required lanes, the gate of record (CLAUDE.md § Quality
+  gates).
+- **A long run can outlast an agent's command limit**: Claude Code stops a background command at
+  7,200 s, leaving the lock and the run dir, and one browser's whole network suite took about 2
+  hours on a loaded host. `bun run e2e:reap`, then run the files it did not reach
   (`implementations-plan/archive/e2e-stores-1/lessons/phase-3.md`).
 - **Offscreen sender shapes (Chrome, verified by probe)**: SW→offscreen `sender = { id, url: <getURL(manifest.background.service_worker)> }` (no `origin`, no `tab`); offscreen→SW `sender = { id, url: <getURL("src/offscreen/index.html")>, origin }`. A Chrome offscreen document has NO `chrome.runtime.getManifest` (fetch `manifest.json` by URL instead). When a sender predicate changes on either listener, probe the real shapes with a 30-second puppeteer script (pattern: `apps/extension/.playwright-mcp/sender-probe.mjs`) BEFORE the smoke run — the suite only shows the symptom (PXE timeouts, a profile reset stuck on its tombstone) three retries later. `MessageType` on the wire is numeric (`Event=1`, `Request=2`, `Response=3`).
 - **Sharding smoke on one host**: both `global-setup-smoke.ts` hooks kill every Chrome loading exactly `EXTENSION_PATH` (`chromePattern` in `sandbox-ownership.ts`: the path as a literal, ending at the argument's end, so `dist/chrome` never matches `dist/chrome-2`) — two `test:e2e --shard` halves need two dist dirs (`dist/chrome` + a copy at `dist/chrome-2`), each half pointed at its own via `EXTENSION_PATH`, and the armed-build env + `NULO_E2E_MIGRATION_FIXTURE=1` on both. One dist shared by two halves still kills the other half mid-run with `ConnectionClosedError` at `openPopup`.
@@ -303,7 +305,8 @@ runtime env var can never arm a build-time flag.
 
 An added scenario pays the [e2e runtime budget](../../../CLAUDE.md#quality-gates--local-and-ci) in
 CLAUDE.md: the distinct failure mode it proves, why a cheaper layer cannot prove it, and its estimated
-then measured runtime, with each browser's suite wall-clock before and after in the PR body.
+then measured runtime, with each browser's suite wall-clock before and after in the PR body, read from
+CI's job envelopes below, never from a local pass.
 
 - **Suite wall-clock** is the CI suite job envelope: GitHub's job timestamps over the `Run / …` jobs
   that ran and passed in a run whose first attempt succeeded (a skipped job carries no real times).
