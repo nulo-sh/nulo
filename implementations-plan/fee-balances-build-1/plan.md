@@ -56,23 +56,25 @@ Proportion (lane brief): a 36-line prototype made a build. No plan audit round; 
 **Asks.**
 - A1. A disabled reason drawn in `value` (D4) appears in no page-150 frame. Working assumption: it is the pick's column face, as the prototype draws it; the PR body names it so the decision page can show it.
 
-## Phase 1: the rows, their helper and their tests
+## Phase 1: the rows, their helper and their tests ✓
 
 1. `apps/extension/src/popup/components/modules/send/fee-helpers.ts`: `FeeMethodOption.balance` (TSDoc: base units as read; absent while unread or after a failed read); `feeJuiceOption` and `privateFeeJuiceOption` set it from a string leg.
 2. `apps/extension/src/popup/components/modules/send/FeeMethodRadios.vue`: the `usd` prop; `dollarsOf` (D2) and `spendOf`; the spend span becomes a flex column of `.figure` (`composes: type--value from global`) over `.usd` (`composes: type--caption from global`), both `--nulo-secondary` and `nowrap` (D3). DOM order title → definition → spend; every testid and `data-*` attribute unchanged.
 3. `apps/extension/src/popup/components/modules/send/FeeSettingsCard.vue`: `:usd="prices.feeJuiceQuote.value?.usd"`.
 4. `packages/design/README.md`: the sentence of D6, below the role table.
 5. Tests:
-   - T1 (`FeeMethodRadios.test.ts`, a priced describe, the wire-shaped `HELD` style: raw 18-decimal strings): 1,000 FJ at $7 prints "1,000 FJ $7,000.00" in each Fee Juice label and nothing on the sponsor rows; 0.001 FJ prints "<$0.01"; no `usd` prints no "$" (the existing row-order case, unpriced, stays the control); a disabled row ("no balance", "couldn't check balance") and a loading row print no "$" with a quote set; a malformed balance (`"0x10"`, `"abc"`) prints the row with no "$" and does not throw.
+   - T1 (`FeeMethodRadios.test.ts`, a priced describe, the wire-shaped `HELD` style: raw 18-decimal strings): 1,000 FJ at $7 prints "1,000 FJ $7,000.00" in each Fee Juice label and nothing on the sponsor rows; 0.001 FJ prints "<$0.01"; no `usd` prints no "$" (the existing row-order case, unpriced, stays the control); an open row whose balance is unread prints "— FJ" and no "$" (added in review, R1-1); a disabled row ("no balance", "couldn't check balance") and a loading row print no "$" with a quote set; a malformed balance (`"0x10"`, `"abc"`) prints the row with no "$" and does not throw.
    - T2 (`fee-helpers.test.ts`, "what each row can spend"): each Fee Juice row's `balance` equals its leg as read, and is absent for a `null` leg and while unread.
 
 **Validation gate** (retry 0, one command at a time, from the worktree root): `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension test:components`; `bun run check:plans` after staging. Then Chrome only: the armed smoke build (`global-setup-smoke.ts`' `ARMED_BUILD`), then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_EXECUTE_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/send-fee-privacy.test.ts tests/e2e/send-keyboard.test.ts --retry=0`, then the same with `tests/e2e/type-roles.test.ts -t "Send's person step"`; then `NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/fee-methods.test.ts` (`agent.sh` claims ports from `~/.agents/ports.md`; the 10-minute stall watchdog stays). No Firefox run (no fixture, focus, window or WebAuthn change); CI's five lanes are the gate of record. Pass: every command exits 0; T1 and T2 fail on the base and pass on the head; every other assertion passes unedited, or an edit is recorded here with its reason.
 
-## Phase 2: captures and the PR
+## Phase 2: captures and the PR ✓
 
 1. Copy the scratch capture spec into `tests/e2e/network/` and the capture patch onto `FeeSettingsCard.vue` (D8); one `agent.sh` run with `NULO_E2E_SHOT_DIR` set writes, each `-light` and `-dark`, at 360 × 600 unless named: `fbb1-sheet`, `fbb1-sheet-240` (240 × 600), `fbb1-sheet-unpriced` (`refusePrices`), `fbb1-sheet-long` (1,234,567.8901 FJ at $7: the title wraps, nothing clips; fix only a clip), into the lane's scratch `shots/` with `captions.json` (one sentence per id, the point first). Then restore the tree.
 2. Commit the 360 light and dark pair under `pr-captures/fee-balances-build-1/` in one commit; delete it in the next.
 3. Post-implementation, then the PR.
+
+**Outcome.** One capture run, green at `c0926dbab` plus the uncommitted kit (a first run reddened on the scratch spec's own assertion, which expected a space `textContent` does not carry between the figure and dollar spans; the frames were already right). Heights match page 150's B3 exactly (360: 59 / 45 / 45; 240: 73 / 59 / 59); unpriced keeps them. The long figure did not wrap the title as the brief foresaw: the column widened and the descriptions took two lines (59 / 59 / 45), both numbers whole, no part clipped.
 
 **Validation gate.** `git status` clean after the restore; `git grep -n fbb1 -- apps` empty; all eight frames exist; the long frame's measured parts report no `overflowX` and no `outside`; `bun run check:plans` exits 0 after staging.
 
@@ -97,3 +99,10 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 ## Audit verdicts
 
 No plan audit round (lane brief, Proportion).
+
+**Codex pass over the plan and the net diff** (gpt-6.1-sol, high, read-only, `612d2809d...69b4cfdca`), 2026-11-15: approve with fixes, high confidence, no functional bug.
+- R1-1, accepted: no case pinned an open row with an unread balance and a quote set. Added "a balance not read yet prints no dollars on its open row" (T1). Its premise, that removing the `typeof m.balance === "string"` guard left every new case green, was inexact: four cases go red without it (the sponsors' "$0.00"); Codex withdrew it in round 2.
+- R1-2, accepted: comments. The band-checked-quote invariant moved onto the `usd` prop; `dollarsOf`'s and `spendOf`'s docblocks and a test fixture's narration deleted; the CSS comment sits above `.usd` and names `caption` against `fiat`.
+- Its "looks fine": no other consumer reads `balance`; checking and verifying rows bypass the dollars; Skeleton and row heights hold; testids, `data-*`, DOM order and Tab order intact; missing-quote and loading cases pass on the base by nature (never-happens assertions paired with the priced controls).
+
+**Round 2** (resumed, `f1d6cb36d`): approve with one comment correction: a rate under a micro-dollar does not always throw, since the conversion rounds first. The `usd` prop now says the conversion rejects a rate that rounds to zero micro-USD (`c0926dbab`). Comment-only, so no third round.
