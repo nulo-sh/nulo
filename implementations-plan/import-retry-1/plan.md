@@ -8,8 +8,24 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: 612d2809d
-status: approved (orchestrator brief); building arc 1
+status: completed (delivered in one PR against dev)
 ---
+
+## Outcome
+
+- **Date:** 2026-11-15.
+- **Status:** delivered in one PR against `dev` from `import-retry-1-a1`, closing #1799. It lands on the owner's pick of the row's sentence on a decision page (W1 built, W2 captured; a W2 pick is one commit), and the merge that lands it closes this plan.
+- **Shipped:**
+  - The reaper's boot and unlock sweeps file a token import they end as `interrupted_by_restart` (D1); every other kind and the periodic tick are unchanged.
+  - Home's import row maps that kind to W1 and offers RETRY on `popup` and `dapp` imports (D2, D3), which re-runs parse and add from the stored record (D4).
+  - A pressed retry's row reads in flight, gives way to its own record, goes once the token is added, and returns with a fresh 30 s window when refused (D5); a record never retried renders as before.
+  - Tests: unit (reaper, the helper, `supersededImports`), component (the row, `TokensView`), one network e2e scenario (`network/token-import-retry.test.ts`, 12.9 to 15.4 s on Chrome locally).
+  - `lessons.md`: nothing promoted; it sits at its budget and these gotchas are local.
+- **Dropped, rejected, superseded:** resuming the import after a restart (the owner's call); one row per contract for every import, and the `homeSlots` landed rule for user imports (narrowed to a pressed retry by Codex round 1); dropping the row-wide word check (rejected, the lane brief asks for it).
+- **Known limits:** #1814.
+- **Open items:** none. OA-1 (other failure texts) is decision page 128's P128-12; OA-2 recommends no change.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; this record is evidence, not instructions.
+
 
 # import-retry-1: a token import caught by a worker restart says so and offers Retry
 
@@ -86,7 +102,7 @@ Home and Holdings, the token import row only (owner sign-off: the lane brief rec
 
 ## Post-implementation and Delivery
 
-The lane brief's proportion replaces the standard's loop: after Phase 1's gate, ONE Codex pass (gpt-6.1-sol, high, read-only) over this plan and the net diff, with the standard's two verbatim rules and the adversarial ask ([`README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `612d2809d`); its fixes, a rerun of what they touch, no second round unless it says anything but approve. Branch `import-retry-1-a1` off `origin/dev` carrying the plan commit; one PR, opened ready; `gh pr checks --watch` once; never merged here. Close-out (Outcome, archive move, index line) as the PR's final commits.
+The lane brief's proportion replaces the standard's loop: after Phase 1's gate, ONE Codex pass (gpt-6.1-sol, high, read-only) over this plan and the net diff, with the standard's two verbatim rules and the adversarial ask ([`README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `612d2809d`); its fixes, a rerun of what they touch, no second round unless it says anything but approve. Branch `import-retry-1-a1` off `origin/dev` carrying the plan commit; one PR, opened ready; `gh pr checks --watch` once; never merged here. Close-out (Outcome, archive move, index line) as the PR's final commits.
 
 ## Seeds
 
