@@ -199,6 +199,8 @@ Everything CI runs has a local equivalent:
 | network e2e | `bun run e2e:agent` (NOTE: local runs do NOT use `presto-server`. The wallet's `PrestoProver` probes the **Presto** desktop app over HTTPS on `127.0.0.1:59834` and uses it if available; otherwise WASM. CI specifically stamps `VITE_NULO_PRESTO_REQUIRED=1` to enforce no-fallback — that's not set locally.) |
 | one-shot pre-PR | `bun run audit:vue` (typecheck + units + lint + build) |
 
+The two e2e rows are entry points: before a PR, pass them only the specs the change affects, with the prover mode each needs (`CLAUDE.md` § Quality gates); the whole suites are CI's sharded lanes.
+
 ## Releasing
 
 Releases are driven by `release-please`. The human touchpoint is a single click — merging the Release PR.
