@@ -6,6 +6,7 @@
 import { config, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import { Skeleton } from "@nulo/design"
+import { CLAIM_AND_END_SETUP, CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { appChipOf } from "@/components/composite/contract-chip"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
@@ -363,6 +364,29 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		opts: { from: OWNER, fee: { gasSettings: GAS_SETTINGS } },
 		feeSettings: { paymentMethod: { kind: "embedded" } },
 	})
+	/** The Fee Juice contract's setup-ending claim crediting the sender, leading the calls. */
+	const CLAIM = {
+		name: CLAIM_AND_END_SETUP,
+		to: FEE_JUICE_CONTRACT,
+		selector: CLAIM_AND_END_SETUP_SELECTOR,
+		type: "private",
+		isStatic: false,
+		hideMsgSender: false,
+		args: [OWNER, field(1_000_000_000_000_000_000_000n), field(0x5a17n), field(41n)],
+	}
+	const claimLed = (feePayer: string) => ({ ...appPaid(), exec: { calls: [CLAIM, ...appPaid().exec.calls], feePayer } })
+	const claimed = () => claimLed(OWNER)
+	/** A `send_transaction` the wallet routed as a claim to the account. */
+	const claimedSend = () => ({
+		kind: "send_transaction" as const,
+		networkId: "net-1",
+		accountAddress: OWNER,
+		account: sendTx().account,
+		network: sendTx().network,
+		actions: [{ kind: "call", contract: TOKEN, method: "transfer_in_public", args: [OWNER, RECIPIENT, field(25_000_000n), field(0n)] }],
+		fee: { embeddedFeePayment: "fjwc" },
+		feeSettings: { paymentMethod: { kind: "embedded" } },
+	})
 	const mountWith = async (
 		feeEstimate: unknown,
 		state: {
@@ -432,6 +456,24 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
 	})
 
+	test.each([
+		["an aztec_sendTx that leads with the claim", claimed],
+		["a send_transaction the wallet routed as one", claimedSend],
+	])("a claim to the account, %s: one sentence says the person pays, names no app and draws no seal", async (_, op) => {
+		const w = await mountWith(ESTIMATE, { op: op() })
+		expect(shownText(figure(w).element)).toBe("You pay about ~3.577824 FJ ($0.215) from the Fee Juice this app claims to your account.")
+		expect(row(w).find('[data-testid="execute-op-app-name"]').exists()).toBe(false)
+		expect(row(w).find('[data-testid="execute-op-fee-seal"]').exists()).toBe(false)
+		const estimating = await mountWith(undefined, { op: op(), isEstimating: true })
+		expect(shownText(waiting(estimating).element)).toBe("You pay about from the Fee Juice this app claims to your account.")
+		expect(waiting(estimating).findComponent(Skeleton).exists()).toBe(true)
+	})
+
+	test("the same claim with the app's own contract as payer: the app pays, so the line keeps its words", async () => {
+		const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { op: claimLed(APP_FPC) })
+		expect(figure(w).text()).toBe("About ~3.577824 FJ ($0.215); payment method set by Swap.")
+	})
+
 	describe("after a failed estimate: the fee card's failed state, whoever pays", () => {
 		const sponsored = () => ({ ...appPaid(), opts: { from: OWNER } })
 		const privatePaid = () => ({ ...appPaid(), exec: { ...appPaid().exec, feePayer: PRIVATE_FPC_ADDRESS } })
@@ -446,6 +488,8 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 				"FeePrivate Fee Juice · set by SwapYou payCouldn't estimate fee.Try again",
 			],
 			["a sponsor and no cap of its own", sponsored, "FeeSet by SwapSwap paysCouldn't estimate fee.Try again"],
+			["a claim to the account, which the person pays", claimed, "FeeSet by SwapYou payCouldn't estimate fee.Try again"],
+			["a claim to the account on a send_transaction", claimedSend, "FeeSet by SwapYou payCouldn't estimate fee.Try again"],
 		])("an app paying through %s: the method over the failed readout, and Try again asks the estimate again", async (_, op, text) => {
 			const w = await mountWith(undefined, { op: op(), estimateFailed: true })
 			expect(failedBlock(w).text()).toBe(text)
