@@ -15,7 +15,8 @@ const props = defineProps({
 	methods: { type: Array, required: true },
 	/** The card is still reading what can pay. */
 	pending: { type: Boolean, default: false },
-	/** USD per Fee Juice at today's usable quote; none hides every balance's dollars. */
+	/** USD per Fee Juice from a band-checked quote (a rate under a micro-dollar throws in the
+	 *  conversion); none hides every balance's dollars. */
 	usd: { type: Number, default: undefined },
 })
 const emit = defineEmits(["update:modelValue"])
@@ -40,15 +41,12 @@ const isChosen = (m) =>
 	Boolean(props.modelValue) && props.modelValue.type === m.type && (m.type !== "fpc" || props.modelValue.fpc?.id === m.fpc?.id)
 const isOff = (m) => Boolean(m.disabled || m.checking)
 
-/** A balance's dollars at cents, "<$0.01" under a cent; none on a row that cannot pay, a balance that
- *  is not a decimal string, or without a usable quote. */
 const dollarsOf = (m) => {
 	const raw = typeof m.balance === "string" ? parseSide(m.balance) : undefined
 	const usd = props.usd
 	if (raw === undefined || isOff(m) || !Number.isFinite(usd) || usd <= 0) return null
 	return formatUsdMicro(tokenAmountToUsdMicro(raw, FEE_JUICE_DECIMALS, usd))
 }
-/** What the row can spend, or why it cannot pay. */
 const spendOf = (m) => (m.disabled && m.disabledReason ? m.disabledReason : m.spend)
 
 /** Vue patches `checked` only when `isChosen` changes, so a refused pick would stay checked. */
@@ -192,14 +190,13 @@ defineExpose({ target, focus: () => target()?.focus() })
 	margin-left: auto;
 }
 
-/* The row's own face, not mono: the figure is a trailing value and its dollars the row's secondary
-   line, so they take `caption` rather than `fiat`. */
 .figure {
 	composes: type--value from global;
 	color: var(--nulo-secondary);
 	white-space: nowrap;
 }
 
+/* The row's secondary line, so `caption`, not the mono `fiat` every other dollar value takes. */
 .usd {
 	composes: type--caption from global;
 	color: var(--nulo-secondary);

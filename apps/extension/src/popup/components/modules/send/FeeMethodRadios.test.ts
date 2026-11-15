@@ -150,7 +150,6 @@ describe("FeeMethodRadios", () => {
 })
 
 describe("FeeMethodRadios: a balance's dollars", () => {
-	/** Whole Fee Juice in base units, as the gas read hands them over. */
 	const FJ = (whole: string) => `${whole}${"0".repeat(18)}`
 	const THOUSAND = { publicFeeJuice: FJ("1000"), privateFeeJuice: FJ("1000") }
 	const USD = 7
@@ -175,6 +174,14 @@ describe("FeeMethodRadios: a balance's dollars", () => {
 
 	test("without a usable quote no row prints dollars", () => {
 		expect(anyDollars(mountRadios(rowsOf(THOUSAND)))).toBe(false)
+	})
+
+	test("a balance not read yet prints no dollars on its open row", () => {
+		const w = mountRadios(buildFeeMethods([PRIVATE_FPC, NULO_SPONSOR], undefined), null, USD)
+		expect(choices(w).slice(0, 2)).toEqual([
+			{ id: "send-fee-payer-private", text: `Private Fee Juice ${priv} — FJ`, disabled: false, checked: false },
+			{ id: "send-fee-payer-public", text: `Public Fee Juice ${pub} — FJ`, disabled: false, checked: false },
+		])
 	})
 
 	test("a row that cannot pay prints its reason and no dollars, even over a balance it holds", () => {
