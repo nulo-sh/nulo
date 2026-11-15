@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { orderTokenRows } from "@/utils/token-order"
 import type { SeedStatus } from "@/wallet/services/token/spec"
-import { type SlotImportOp, capHomeSlots, homeSlots } from "./home-slots"
+import { type SlotImportOp, capHomeSlots, homeSlots, supersededImports } from "./home-slots"
 
 const CHAIN = 7
 const seed = (symbol: string, chainId = CHAIN, status: SeedStatus = "pending") => ({
@@ -50,7 +50,7 @@ describe("homeSlots", () => {
 		expect(landed.userImports).toEqual([])
 	})
 
-	test("an import of anything but a default stays outside the slots", () => {
+	test("an import of anything but a default stays outside the slots until its token row lands", () => {
 		const own = [
 			{ id: "other", contractAddress: "0xother", terminalAt: null },
 			{ id: "blank", contractAddress: undefined, terminalAt: null },
@@ -58,6 +58,23 @@ describe("homeSlots", () => {
 		const { slots, userImports } = slotsOf([], own)
 		expect(userImports.map((o) => o.id)).toEqual(["other", "blank"])
 		expect(slots.map((s) => s.kind)).toEqual(["seed", "seed", "seed", "seed"])
+
+		const otherRow = tokenRow("OTHER", 9)
+		const landed = slotsOf([{ ...otherRow, token: { ...otherRow.token, contract: "0xOTHER" } }], own)
+		expect(landed.userImports.map((o) => o.id)).toEqual(["blank"])
+	})
+
+	test("a failed import gives way to a later import of its contract in any stage; another contract's does not", () => {
+		const record = (id: string, contractAddress: string, createdAt: number, stage: "failed" | "pending" | "succeeded") => ({
+			id,
+			contractAddress,
+			createdAt,
+			progress: { stage },
+		})
+		const superseded = (later: "failed" | "pending" | "succeeded") =>
+			supersededImports([record("old", "0xAbC", 1, "failed"), record("new", "0xabc", 2, later), record("lone", "0xdef", 1, "failed")])
+		for (const later of ["failed", "pending", "succeeded"] as const) expect([later, [...superseded(later)]]).toEqual([later, ["old"]])
+		expect([...supersededImports([record("running", "0xabc", 1, "pending"), record("failed", "0xabc", 2, "failed")])]).toEqual([])
 	})
 
 	test("adding the four defaults never changes the three rows Home shows or the count", () => {

@@ -15,8 +15,9 @@
  *    grace windows. The rationale: a fresh SW has an empty pending-
  *    request map, so any record in proving/submitting from a previous
  *    SW lifetime is unrecoverable regardless of how recently it started.
- *    Error kind = `sw_restart_post_prove` (proving) / `stale_on_resume`
- *    (others) per the documented `JobError.kind` set.
+ *    Error kind = `interrupted_by_restart` (a token import, at any stage) /
+ *    `sw_restart_post_prove` (proving) / `stale_on_resume` (others) per the
+ *    documented `JobError.kind` set.
  *
  * 2. **Periodic tick** (chrome.alarms, every 1 min): respects the
  *    per-stage grace windows. Catches records that get stuck within
@@ -208,7 +209,7 @@ export class JournalReaper {
 			const age = now - op.updatedAt
 			if (shouldSkipRecord(op, age, unconditional, bootCutoff)) continue
 			const grace = STAGE_GRACE_MS[stage as ActiveStage]
-			const kind = classifyReapKind(stage, unconditional)
+			const kind = classifyReapKind(op, unconditional)
 			const reason = unconditional
 				? `SW restart with non-terminal record in ${stage} — unrecoverable`
 				: `${stage} stage exceeded grace window (${age}ms ≥ ${grace}ms)`
@@ -258,8 +259,12 @@ function shouldSkipRecord(op: OperationRecord, age: number, unconditional: boole
  *  35-min sanity ceiling within THIS SW's lifetime. A queued record the restart
  *  ended is interrupted like every other stage it ends; one past its grace window
  *  within a lifetime is "stuck" — it never made it past the message-arrival
- *  surface — tagged distinctly for observability. */
-function classifyReapKind(stage: OperationRecord["progress"]["stage"], unconditional: boolean): string {
+ *  surface — tagged distinctly for observability. A token import has no
+ *  transaction for the send check to look up, so the restart that ended it is its
+ *  whole reason, apart from the stall kind a periodic tick gives it. */
+function classifyReapKind(op: OperationRecord, unconditional: boolean): string {
+	const stage = op.progress.stage
+	if (unconditional && op.kind === "token_import") return "interrupted_by_restart"
 	if (stage === "proving") return unconditional ? "sw_restart_post_prove" : "stuck_proving"
 	if (stage === "queued" && !unconditional) return "stuck_queued"
 	return "stale_on_resume"

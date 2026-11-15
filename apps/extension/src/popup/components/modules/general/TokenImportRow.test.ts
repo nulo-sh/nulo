@@ -73,6 +73,49 @@ describe("TokenImportRow", () => {
 		expect(w.find('[data-testid="token-import-spinner"]').exists()).toBe(false)
 		expect(w.find('[data-testid="token-import-failed"]').exists()).toBe(true)
 		expect(w.find('[data-testid="token-import-subtitle"]').text()).toBe("Could not fetch decimals")
+		expect(w.find('[data-testid="token-import-retry"]').exists()).toBe(false)
+	})
+
+	const REAPED = "Job declared lost: SW restart with non-terminal record in pending — unrecoverable"
+	const interruptedOp = {
+		...baseOp,
+		origin: "popup",
+		profileId: "p1",
+		networkId: "net1",
+		accountAddress: "0xacc1",
+		progress: { stage: "failed" as const },
+		error: { kind: "interrupted_by_restart", message: REAPED, normalizedRaw: null },
+		terminalAt: Date.now(),
+	}
+	const wordsOf = (text: string) =>
+		text
+			.toLowerCase()
+			.split(/[^a-z0-9-]+/)
+			.filter(Boolean)
+
+	test("a restart's failure reads the wallet's sentence and no word of the reaper's, with Retry; pressing it asks the parent", async () => {
+		const w = mount(TokenImportRow, { props: { op: interruptedOp }, global: { stubs: STUBS } })
+		expect(w.get('[data-testid="token-import-subtitle"]').element.textContent).toBe("The wallet restarted while adding this token.")
+		const shown = new Set(wordsOf(w.get('[data-testid="token-import-row"]').element.textContent ?? ""))
+		expect(wordsOf(REAPED).filter((word) => shown.has(word))).toEqual([])
+		expect(w.find('[data-testid="token-import-failed"]').exists()).toBe(true)
+		await w.get('[data-testid="token-import-retry"]').trigger("click")
+		expect(w.emitted("retry")).toHaveLength(1)
+
+		const seeded = mount(TokenImportRow, { props: { op: { ...interruptedOp, origin: "seed" } }, global: { stubs: STUBS } })
+		expect(seeded.get('[data-testid="token-import-subtitle"]').text()).toBe("The wallet restarted while adding this token.")
+		expect(seeded.find('[data-testid="token-import-retry"]').exists()).toBe(false)
+	})
+
+	test("while its retry runs the row reads in flight: the spinner, no Retry and no mark", () => {
+		const w = mount(TokenImportRow, {
+			props: { op: { ...interruptedOp, subtitle: "Requested by app.example" }, retrying: true },
+			global: { stubs: STUBS },
+		})
+		expect(w.find('[data-testid="token-import-spinner"]').exists()).toBe(true)
+		expect(w.find('[data-testid="token-import-retry"]').exists()).toBe(false)
+		expect(w.find('[data-testid="token-import-failed"]').exists()).toBe(false)
+		expect(w.get('[data-testid="token-import-subtitle"]').text()).toBe("Adding token…")
 	})
 
 	test("its title takes the cut in flight and failed", () => {

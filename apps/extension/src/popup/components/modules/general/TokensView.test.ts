@@ -34,6 +34,8 @@ const H = vi.hoisted(() => {
 		getTasks: vi.fn(),
 		getOperations: vi.fn(),
 		getTokenBalances: vi.fn(),
+		parseTokenInterface: vi.fn(),
+		addToken: vi.fn(),
 		balanceConnected: makeEvent(),
 		balanceAdded: makeEvent(),
 		balanceUpdated: makeEvent(),
@@ -93,6 +95,11 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 			onOperationDeleted: H.journalDeleted,
 			getOperations: H.getOperations,
 		}
+	}),
+}))
+vi.mock("@/wallet/services/token/client", () => ({
+	TokenServiceClient: vi.fn(function () {
+		return { disconnect: vi.fn(), parseTokenInterface: H.parseTokenInterface, addToken: H.addToken }
 	}),
 }))
 // The view orders rows by price: `usePrices` calls `refreshIfStale()` at construction, so the
@@ -167,7 +174,64 @@ function resetHarness() {
 	H.getTasks.mockReset().mockResolvedValue([])
 	H.getOperations.mockReset().mockResolvedValue([])
 	H.getTokenBalances.mockReset().mockResolvedValue([balanceRow()])
+	H.parseTokenInterface.mockReset()
+	H.addToken.mockReset()
 }
+
+describe("TokensView — Retry on an import a restart ended", () => {
+	beforeEach(resetHarness)
+
+	const interrupted = (over: Record<string, unknown> = {}) => ({
+		id: "lost",
+		kind: "token_import",
+		origin: "popup",
+		profileId: "p1",
+		accountAddress: "0xacct",
+		networkId: "net-1",
+		contractAddress: "0xlost",
+		createdAt: 1,
+		terminalAt: Date.now(),
+		progress: { stage: "failed" },
+		error: { kind: "interrupted_by_restart", message: "Job declared lost", normalizedRaw: null },
+		...over,
+	})
+	const rows = (wrapper: ReturnType<typeof mount>) =>
+		wrapper.findAllComponents({ name: "TokenImportRow" }).map((c) => [(c.props("op") as { id: string }).id, c.props("retrying")])
+	const pressRetry = async (wrapper: ReturnType<typeof mount>) => {
+		wrapper.getComponent({ name: "TokenImportRow" }).vm.$emit("retry")
+		await nextTick()
+	}
+
+	test("a refused parse adds nothing and returns the row to failed; the next press adds it and its own record replaces the row", async () => {
+		const refused = deferred<unknown>()
+		H.parseTokenInterface.mockReturnValueOnce(refused.promise)
+		H.getOperations.mockResolvedValue([interrupted()])
+		const wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		expect(rows(wrapper)).toEqual([["lost", false]])
+
+		await pressRetry(wrapper)
+		expect(rows(wrapper)).toEqual([["lost", true]])
+		expect(H.parseTokenInterface.mock.calls).toEqual([["net-1", "0xlost"]])
+		refused.reject(new Error("node unreachable"))
+		await flushPromises()
+		expect([rows(wrapper), H.addToken.mock.calls.length]).toEqual([[["lost", false]], 0])
+
+		const tokenInterface = { chainId: 1, contract: "0xlost", isComplete: true }
+		const added = deferred<unknown>()
+		H.parseTokenInterface.mockResolvedValueOnce(tokenInterface)
+		H.addToken.mockReturnValueOnce(added.promise)
+		await pressRetry(wrapper)
+		await flushPromises()
+		expect(H.addToken.mock.calls).toEqual([["p1", "net-1", "0xacct", tokenInterface, { origin: "popup" }]])
+		H.journalAdded.emit(interrupted({ id: "again", createdAt: 2, terminalAt: null, progress: { stage: "pending" }, error: null }))
+		await nextTick()
+		expect(rows(wrapper)).toEqual([["again", false]])
+		added.resolve({ id: 1 })
+		await flushPromises()
+		expect(rows(wrapper)).toEqual([["again", false]])
+	})
+})
 
 describe("TokensView — section refresh dot", () => {
 	beforeEach(resetHarness)
