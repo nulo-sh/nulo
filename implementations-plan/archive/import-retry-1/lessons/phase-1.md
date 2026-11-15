@@ -4,3 +4,4 @@
 - 2026-11-15, the row's dim: the static pin in `TokenCard.test.ts` wants `class="$style.lead"` verbatim on both lead flexes, so the failed dim sits on the mark, title and subtitle instead of the lead.
 - 2026-11-15, Codex round 1 (gpt-6.1-sol, high, read-only): changes requested; verdicts and dispositions in the plan's Audit verdicts.
 - 2026-11-15, Codex round 2 (resumed): approve, no findings.
+- 2026-11-15, final head `4b1710c55`: `bun run test` passed every test but reported 5 `EnvironmentTeardownError` ("Closing rpc while onUserConsoleLog was pending") from `src/popup/windows/execute/OperationCard.wire.test.ts`, a file this change does not touch, at load1 ~270; the file alone and the full run again (load1 ~125) are green. Read as host load at worker teardown.
