@@ -13,4 +13,4 @@
 
 **Recommendation.** (a), moderate confidence: the edge needs an account that already holds Fee Juice and a claim smaller than the fee (an older small deposit, or fees that moved since it was bridged), and the amount the person pays is right either way. (c) if the owner wants the source exact.
 
-**What ships now.** (a): W1 exactly as signed. The PR does not wait on this ask.
+**What ships now.** (a): W1 exactly as signed. The PR does not wait on this ask. Home after close-out: #1816.

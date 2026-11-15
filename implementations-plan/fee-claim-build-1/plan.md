@@ -8,8 +8,21 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at a763870d4
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-15.
+- **Status:** completed. Ships in the PR titled `fix(execute): the claim-paid fee row says who pays`, which carries this close-out; it lands on the owner's approve of its captures.
+- **Shipped:** a request that claims Fee Juice to the account reads "You pay about ~X from the Fee Juice this app claims to your account." while its estimate runs and once it lands (P151-01 = W1), "Fee Juice" joined by a no-break space; the failed grid, every other route and the seal rule unchanged; `execute-op-app-name` leaves that row on that route.
+- **Gates (retry 0):** at `5f9b30b14`, lint, typecheck:all, test (1041 files), test:components (104 files) and check:plans green; `e2e:agent` proverless on Chrome, the four fee-row specs, 9/9 tests, about 4.6 min wall. `7385a4a65` (two test comments) reran its file and Biome. No e2e scenario added; no Firefox run was due.
+- **Deviations:** D7 revised in Phase 1 (the fixtures stay capture tooling, on a measured timeout); the network gate ran proverless (`tx-sendTx-noFrom` requires it); the Codex loop stopped at three rounds, the code settled in round 1.
+- **Lessons:** none promoted (`lessons.md` holds 8148 of 8192 bytes); the barrel-import timeout is in [`lessons/phase-1.md`](lessons/phase-1.md).
+- **Known limits:** none.
+- **Open items:** #1816 (owner ask A1).
+- **Follow-up named in the PR, not filed:** History's line for such a send, "Public Fee Juice (with claim), set by \<app\>" (`tx-detail-helpers.ts`).
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # fee-claim-build-1: the claim-paid fee row says who pays
 
@@ -66,7 +79,7 @@ Proportion (lane brief): a three-line prototype made a build, with tests. No pla
 
 **Validation gate** (retry 0, one command at a time, from the worktree root): `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension test:components`; `bun run check:plans` after staging; then `NULO_E2E_PROVERLESS=1 NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/fee-sponsor-funding.test.ts tests/e2e/network/tx-sendTx-feePayer.test.ts tests/e2e/network/tx-sendTx-noFrom.test.ts tests/e2e/network/tx-sendTx-selfPay.test.ts` (proverless, as most CI shards run: `tx-sendTx-noFrom` requires it and none of the four requires the prover, so one run covers all four; `agent.sh` claims ports from `~/.agents/ports.md`; the 10-minute stall watchdog stays). No Firefox run (no fixture, focus, window or WebAuthn change). Pass: every command exits 0; T1 and T2 pass and fail on the base; every other existing assertion passes unedited.
 
-## Phase 2: captures and the PR
+## Phase 2: captures and the PR ✓
 
 1. Capture at 400 px, light and dark, from the fixture route over the armed smoke build, with the fee-claim-words-1 fixtures and a scratch capture spec applied from scratch and removed after (D7): `fcb1-run`, `fcb1-done`, `fcb1-fail`, `fcb1-done-long` (the 64-character name), and `fcb1-done-usd` only if the route can price (the smoke build has no AZTEC price; if not, the PR says so), each `-light` and `-dark`, into the lane's scratch `shots/` with `captions.json`.
 2. Commit the landed pair under `pr-captures/fee-claim-build-1/` in one commit; delete them in the next.
