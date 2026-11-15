@@ -119,6 +119,9 @@ export type TransferFeeEstimate = {
 	readonly feeJuiceShortfall?: FeeJuiceShortfall
 }
 
+/** A shortfall the node would refuse on: one confirmed by agreeing reads. An unconfirmed one warns only. */
+export const refusesShortfall = (short: FeeJuiceShortfall | undefined): boolean => short !== undefined && short.lastRead === undefined
+
 /** `funded`: the sponsor's public Fee Juice covers the estimate's fee limit. */
 export type SponsorFunding = {
 	readonly fpcId: string
@@ -140,6 +143,9 @@ export type AppPayerFunding = {
 export type FeeJuiceShortfall = {
 	readonly maxFee: string
 	readonly balance: string
+	/** Set when the wallet's last balance read covered `maxFee` and one fresh read of both still
+	 *  disagreed: `balance` is unconfirmed, and the node decides at submission. */
+	readonly lastRead?: string
 }
 
 /** One private authorization discovered by simulation: the call it authorizes,

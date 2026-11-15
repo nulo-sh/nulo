@@ -31,6 +31,8 @@ export const EXECUTE_FIXTURES = [
 	"listed",
 	"long-names",
 	"fee-zero",
+	"fee-zero-disputed",
+	"fee-zero-agreed",
 ] as const
 export type ExecuteFixtureName = (typeof EXECUTE_FIXTURES)[number]
 
@@ -47,6 +49,8 @@ export type ExecuteFixture = {
 	readonly gasBalances?: GasBalances
 	/** The footer answers as it would for a stored request, so Confirm shows the window's own gate. */
 	readonly footerLive?: boolean
+	/** The balance the worker's recheck left behind, which the card reads once an own-Fee-Juice estimate lands. */
+	readonly gasAfterEstimate?: GasBalances
 }
 
 const hex = (prefix: string, tail: string): string => `0x${prefix}${"0".repeat(64 - prefix.length - tail.length)}${tail}`
@@ -298,7 +302,7 @@ type Shape = {
 	maxFee: string
 	dapp?: { name: string; url: string }
 	/** The account pays from its own Fee Juice: no fee payer, and the card asks for the method. */
-	selfPaid?: { gasBalances: GasBalances; estimate: Partial<TransferFeeEstimate> }
+	selfPaid?: { gasBalances: GasBalances; estimate: Partial<TransferFeeEstimate>; gasAfterEstimate?: GasBalances }
 }
 
 /** A field case of a funded account refused: the cached balance covers the fee, the fresh probe read
@@ -354,6 +358,23 @@ const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
 					estimate: { feeJuiceShortfall: { maxFee: FEE_ZERO_LIMIT, balance: "0" } },
 				},
 			}
+		case "fee-zero-disputed":
+			return {
+				...fee([transfer(USDC, main, RECIPIENT, 25_000_000n)], FEE_ZERO_LIMIT),
+				selfPaid: {
+					gasBalances: { publicFeeJuice: FEE_ZERO_CACHED, privateFeeJuice: null },
+					estimate: { feeJuiceShortfall: { maxFee: FEE_ZERO_LIMIT, balance: "0", lastRead: FEE_ZERO_CACHED } },
+				},
+			}
+		case "fee-zero-agreed":
+			return {
+				...fee([transfer(USDC, main, RECIPIENT, 25_000_000n)], FEE_ZERO_LIMIT),
+				selfPaid: {
+					gasBalances: { publicFeeJuice: FEE_ZERO_CACHED, privateFeeJuice: null },
+					estimate: { feeJuiceShortfall: { maxFee: FEE_ZERO_LIMIT, balance: "0" } },
+					gasAfterEstimate: { publicFeeJuice: "0", privateFeeJuice: null },
+				},
+			}
 		case "long-names":
 			return {
 				...fee(
@@ -407,6 +428,6 @@ export function executeFixture(name: string, account: Account, network: Network)
 			{ id: 9004, chainId: network.chainId, contract: FLAGGED_TOKEN, name: "Free Money", symbol: "FREE", decimals: 6 },
 		] as TokenInfo[],
 		dapp: { ...dapp, description: EXECUTE_FIXTURE_MARKER },
-		...(selfPaid ? { gasBalances: selfPaid.gasBalances, footerLive: true } : {}),
+		...(selfPaid ? { gasBalances: selfPaid.gasBalances, footerLive: true, gasAfterEstimate: selfPaid.gasAfterEstimate } : {}),
 	}
 }

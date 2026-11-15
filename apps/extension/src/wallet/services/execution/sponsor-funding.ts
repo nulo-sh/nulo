@@ -60,6 +60,31 @@ export async function probeOwnFeeJuice(
 	return { maxFee: coverage.limit.toString(), balance: coverage.balance.toString() }
 }
 
+/** What a shortfall's recheck reads: the reader's last balance, one fresh reader read and one more probe. */
+export interface ShortfallRecheck {
+	/** The balance reader's last figure for the payer, never a fetch; null when unread. */
+	peek(): string | null
+	/** One fresh read through the balance reader, which the card's next read is served from. */
+	reread(): Promise<string | null>
+	/** One more probe of the payer's slot. */
+	reprobe(): Promise<FeeJuiceShortfall | undefined>
+}
+
+/**
+ * A probe that reads short while the reader's last balance covers the fee is two reads of one
+ * balance that disagree. Both are read once more, concurrently: agreement keeps or clears the
+ * shortfall, disagreement marks it unconfirmed with the fresh reader figure. One recheck per
+ * estimate and never a loop: a second disagreement is reported, not retried.
+ */
+export async function recheckShortfall(short: FeeJuiceShortfall, recheck: ShortfallRecheck): Promise<FeeJuiceShortfall | undefined> {
+	const limit = BigInt(short.maxFee)
+	const cached = recheck.peek()
+	if (cached === null || BigInt(cached) < limit) return short
+	const [fresh, again] = await Promise.all([recheck.reread().catch(() => null), recheck.reprobe()])
+	if (!again) return undefined
+	return fresh !== null && BigInt(fresh) >= limit ? { ...again, lastRead: fresh } : again
+}
+
 /** The verdict on `built`'s sponsor, or `undefined` when no sponsor pays or the read fails. */
 export async function probeSponsorFunding(
 	built: FeeEstimate,

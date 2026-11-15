@@ -179,6 +179,8 @@ function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 		logDebug: vi.fn(),
 		logError: vi.fn(),
 		readPublicStorageOnce: vi.fn(async () => new Fr(0n)),
+		peekPublicFeeJuice: () => null,
+		rereadPublicFeeJuice: async () => null,
 		...overrides,
 	}
 	return { deps, task, built, proveAndSend, executor: new TransferExecutor(deps) }

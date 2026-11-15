@@ -283,6 +283,13 @@ export function useFeeSnapshot<L>(
 		snapshotPending: computed(() => !snapshotCommitted.value && ctx.readingKey.value === feeScopeKey(liveFeeScope(props))),
 		scopeIsLiveIdentity: (scope: FeeScope | null) => scopeIsLiveIdentity(props, scope),
 		run: () => runSnapshot(ctx),
+		/** Takes the store's current balance for the committed identity, leaving the pick as it is: a
+		 *  refresh of one figure re-resolves nothing. */
+		refreshGas: () => {
+			const scope = ctx.committedScope.value
+			const entry = scope && !identityDrifted(ctx, scope) ? ctx.store.entry(scope) : undefined
+			if (entry) ctx.gasBalances.value = entry.gas.verified
+		},
 		/** True on a real identity change: the gate closes now, so the old identity's snapshot stops
 		 *  serving settings while a same-identity refresh in flight is drift-guarded away. */
 		invalidate: () => {

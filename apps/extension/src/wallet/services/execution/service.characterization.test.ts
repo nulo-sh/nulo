@@ -149,6 +149,8 @@ describe("slot-for-executeSendTransaction", () => {
 			getNode: vi.fn() as never,
 			pickSendEndpoint: vi.fn() as never,
 			readPublicStorageOnce: vi.fn() as never,
+			peekPublicFeeJuice: () => null,
+			rereadPublicFeeJuice: async () => null,
 			getPXE: vi.fn() as never,
 			getAccountContract: vi.fn() as never,
 			getPendingForAccount: vi.fn(() => []) as never,

@@ -1,3 +1,4 @@
+import { refusesShortfall } from "@nulo/wallet-bridge"
 import { watch } from "vue"
 import type { TransferFeeEstimate } from "@/wallet/services/execution/spec"
 import { useToast } from "@/composables/toast"
@@ -59,7 +60,7 @@ export function useWalletTxEstimates<P>(deps: WalletTxEstimatesDeps<P>) {
 		return keys.length > 0 && keys.every((key) => map.results.value[key] != null)
 	}
 	/** Some key's payer was read short of its fee: the node would refuse that transaction. */
-	const short = () => deps.keys().some((key) => map.results.value[key]?.feeJuiceShortfall !== undefined)
+	const short = () => deps.keys().some((key) => refusesShortfall(map.results.value[key]?.feeJuiceShortfall))
 
 	const stopScope = watch(deps.scope, refreshAll, { flush: "sync" })
 
