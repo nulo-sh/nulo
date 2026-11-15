@@ -549,10 +549,10 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 				"Fee payment method set by Playground",
 			],
 			[
-				"the failed row, whose payer label keeps the name as the session holds it",
+				"the failed row, its method line and its payer label",
 				() => mountWith(undefined, { estimateFailed: true, dapp: { name: DECLARED } }),
 				"execute-op-app-fee-failed",
-				"FeeSet by PlaygroundPlayground \u2705\u{1F680} paysCouldn't estimate fee.Try again",
+				"FeeSet by PlaygroundPlayground paysCouldn't estimate fee.Try again",
 			],
 		])("%s", async (_, open, testid, text) => {
 			const w = await open()
@@ -560,13 +560,18 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		})
 
 		test.each(["\u2705\u{1F680}", "  "])(
-			"a name the filter empties (%j) is named the app, in the sentence and in the legend",
+			"a name the filter empties (%j) is named the app, in the sentence, the legend and the failed row",
 			async (name) => {
 				expect(figure(await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { dapp: { name } })).text()).toBe(
 					"About ~3.577824 FJ ($0.215); payment method set by the app.",
 				)
 				mounted?.unmount()
 				expect(legend(await mountWith(undefined, { dapp: { name } })).text()).toBe("Fee payment method set by the app")
+				mounted?.unmount()
+				const failed = await mountWith(undefined, { estimateFailed: true, dapp: { name } })
+				expect(failed.get('[data-testid="execute-op-app-fee-failed"]').text()).toBe(
+					"FeeSet by the appthe app paysCouldn't estimate fee.Try again",
+				)
 			},
 		)
 
