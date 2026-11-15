@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 612d2809d
-status: approved
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-15.
+- **Status:** completed. Ships in the PR titled `feat(send): payer balances stack the FJ figure over its dollars in the row's own face`, which carries this close-out; it lands on the owner's decision page with its captures.
+- **Shipped:** the Fee sheet's Private and Public Fee Juice rows draw the balance in `value` over its dollars in `caption`, right-aligned (P150-01 = B3); no dollars without a usable quote, on a row that cannot pay, on a loading row or on a balance that is not a decimal string. The type-role table records the `caption` departure.
+- **Gates (retry 0, Chrome):** at `69b4cfdca`, lint, typecheck:all, test (1041 files), test:components (104 files) and check:plans green; smoke `send-fee-privacy` + `send-keyboard` 7/7 and the `type-roles` Fee-sheet case 1/1 on the armed build; `e2e:agent fee-methods.test.ts` 8/8 (269 s). The review fixes (`f1d6cb36d`, `c0926dbab`) reran biome, the two unit files (82/82) and the extension typecheck. No Firefox run (no fixture, focus, window or WebAuthn change); no e2e scenario added.
+- **Deviations:** Codex's first round said approve with fixes, so a second round ran (approve with a comment fix). The `type-roles` Fee-sheet case joined the smoke gates (it sweeps the changed spans). The long capture wrapped the descriptions, not the title.
+- **Lessons:** none promoted (`lessons.md` is at 8,148 of its 8,192 bytes).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # fee-balances-build-1: the Fee sheet's payer balances as B3
 
