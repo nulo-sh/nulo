@@ -467,6 +467,19 @@ describe("composite/AmountCard — the amount in dollars, for the review", () =>
 		expect(figures(empty).at(-1) ?? null).toBeNull()
 	})
 
+	test("a figure already handed out clears when the amount empties, and again when the quote is lost", async () => {
+		const w = mountCard({ token: TOKEN, liveQuote: { usd: 1.5, fetchedAt: Date.now() }, modelValue: "28.8" })
+		await nextTick()
+		expect(figures(w).at(-1)).toBe("≈ $43.20")
+		await w.setProps({ modelValue: "" })
+		expect(figures(w).at(-1)).toBeNull()
+		await w.setProps({ modelValue: "28.8" })
+		expect(figures(w).at(-1)).toBe("≈ $43.20")
+		await w.setProps({ liveQuote: null })
+		expect(figures(w).at(-1)).toBeNull()
+		expect(figures(w)).toHaveLength(4)
+	})
+
 	test("USD mode: the quote it froze, never the live one", async () => {
 		const w = mountCard({
 			token: TOKEN,
