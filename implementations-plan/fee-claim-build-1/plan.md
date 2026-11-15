@@ -17,7 +17,7 @@ Page 151, signed 2026-11-15 21:04 UTC. A request that leads with the Fee Juice c
 
 > **P151-01 = W1** (2026-11-15 21:04 UTC): "One sentence says who pays: "You pay about ~X from the Fee Juice this app claims to your account." (two lines, 58 px, while the estimate runs and once it lands; the failed state stays today's grid). It names no app, so the longest name cannot stretch it; with dollars, "Fee" and "Juice" break across the two lines unless a no-break space joins them."
 
-One arc, one PR against `dev`, `Closes #1804`. It changes what users see, so it does not land on its own: the orchestrator lands it on the owner's approve of its captures. Recon: [`recon.md`](recon.md). Owner asks: none ([`OWNER-ASKS.md`](OWNER-ASKS.md)).
+One arc, one PR against `dev`, `Closes #1804`. It changes what users see, so it does not land on its own: the orchestrator lands it on the owner's approve of its captures. Recon: [`recon.md`](recon.md). Owner asks: A1 ([`OWNER-ASKS.md`](OWNER-ASKS.md)); the arc ships W1 as signed without it.
 
 Proportion (lane brief): a three-line prototype made a build, with tests. No plan audit round; one Codex pass over the plan and the net diff after the build; no Opus review.
 
@@ -53,7 +53,7 @@ Proportion (lane brief): a three-line prototype made a build, with tests. No pla
 - F2. #1804's "green square-check" no longer holds: since #1808 the row draws only the seal, and only for a pinned paying contract (`feeSealed`); the claim route draws none.
 - F3. A claim route's estimate never carries `appPayerFunding` (`embedded-strategy.ts`, `appPayerOf` returns nothing unless `fpc`), so the "may not cover" notice cannot show beside the new sentence.
 
-**Asks.** None.
+**Asks.** A1 ([`OWNER-ASKS.md`](OWNER-ASKS.md)), raised by the Codex pass: a claim smaller than the fee, to an account that already holds Fee Juice, reads as paid from the claim. What ships now: W1 exactly as signed.
 
 ## Phase 1: the row and its tests ✓
 
@@ -95,3 +95,7 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 ## Audit verdicts
 
 No plan audit round (lane brief, Proportion).
+
+**Codex round 1, over the plan and the net diff** (gpt-6.1-sol, high, read-only, `origin/dev...651d924f8`), 2026-11-15: changes requested, high confidence. It confirmed both kinds reach the sentence while estimating and once landed; the failed grid, the legend and every other route (an app's own contract, the PrivateFPC, a sponsor, a self-pay, a default-entrypoint request) unchanged; the full stop and priority clause right in every combination; `privateFeeJuice` and `claimed` never both hold for a wallet account; the tests wire-shaped, nothing loosened, the no-break space proven by raw `textContent`; D7 right against both alternatives; no supported path where a hostile name, target, recipient or external payer reads as this route. Findings:
+- R1-1, accepted as owner ask A1, no code change: the classifier never compares the claim's amount with the fee and the protocol pools the claim with the account's balance, so a small claim to a funded account reads as paying the fee (demonstrated by source: `fee-payer.ts`, the Fee Juice contract's `claim_and_end_setup` and `check_balance`). The words are the owner's signed sentence, so the panel does not change them; what ships now is W1 as signed. Its suggested boundary test is not added: it would pin a wording the owner has not ruled on.
+- R1-2, accepted: two comments in `OperationCard.fee.test.ts` restated their fixtures; removed.
