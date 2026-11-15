@@ -70,8 +70,8 @@ const {
 // 5s tick is a generous fraction of the 30s retention window — the failed
 // row visibly disappears even if no new journal event fires.
 const tickNow = useTicker(5_000)
-/** Failed records whose Retry is running: each reads in flight until its retry's own record replaces it. */
-const retryingImports = ref(new Set())
+/** A pressed Retry by its failed record's id: "running", "done", or the time it was refused. */
+const importRetries = ref(new Map())
 const visibleTokenImports = computed(() => {
 	const scope = { accountAddress: appStore.account?.address, profileId: appStore.profile?.id, networkId: appStore.network?.id }
 	const now = tickNow.value ?? Date.now()
@@ -80,9 +80,13 @@ const visibleTokenImports = computed(() => {
 	return scoped.filter((op) => {
 		// In-flight
 		if (op.terminalAt === null) return true
-		// Recently-failed retention window so the user sees the reason.
-		if (op.progress?.stage !== "failed" || superseded.has(op.id)) return false
-		return now - op.terminalAt < FAILED_RETENTION_MS || retryingImports.value.has(op.id)
+		if (op.progress?.stage !== "failed") return false
+		const retry = importRetries.value.get(op.id)
+		// A retried record gives way to its retry's own record, and goes once the retry has added the token.
+		if (retry === "done" || (retry !== undefined && superseded.has(op.id))) return false
+		if (retry === "running") return true
+		// Recently-failed retention window so the user sees the reason: a refused retry restarts it.
+		return now - (retry ?? op.terminalAt) < FAILED_RETENTION_MS
 	})
 })
 
@@ -217,14 +221,14 @@ let isUnmounted = false
 
 const tokenService = new TokenServiceClient()
 async function retryImport(op) {
-	if (retryingImports.value.has(op.id)) return
-	retryingImports.value.add(op.id)
+	if (importRetries.value.get(op.id) === "running") return
+	importRetries.value.set(op.id, "running")
 	try {
 		await retryTokenImport(tokenService, op, () => !isUnmounted)
+		importRetries.value.set(op.id, "done")
 	} catch (error) {
 		console.debug("[tokens] import retry refused", { error })
-	} finally {
-		retryingImports.value.delete(op.id)
+		importRetries.value.set(op.id, Date.now())
 	}
 }
 
@@ -375,7 +379,7 @@ onBeforeUnmount(() => {
 				:key="op.id"
 				:op="op"
 				:icon="importIcon(op)"
-				:retrying="retryingImports.has(op.id)"
+				:retrying="importRetries.get(op.id) === 'running'"
 				@retry="retryImport(op)"
 			/>
 			<template v-for="row in shownSlots" :key="row.key">
@@ -384,7 +388,7 @@ onBeforeUnmount(() => {
 					v-else-if="row.kind === 'import'"
 					:op="row.op"
 					:icon="importIcon(row.op)"
-					:retrying="retryingImports.has(row.op.id)"
+					:retrying="importRetries.get(row.op.id) === 'running'"
 					@retry="retryImport(row.op)"
 				/>
 				<TokenSeedRow v-else :entry="row.entry" :icon="prices.iconFor(row.entry)" @retry="retryDefault(row.entry)" />

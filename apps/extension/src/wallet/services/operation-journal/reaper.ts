@@ -148,8 +148,7 @@ export class JournalReaper {
 		// empty activeControllers map + no pending requests in any client).
 		// Even if the offscreen prove finishes, its response will be dropped
 		// when it arrives because no requestId in the new SW matches it.
-		// So at boot we transition EVERY in-flight record to `failed` with
-		// `sw_restart_post_prove` (proving) / `stale_on_resume` (others) —
+		// So at boot we transition EVERY in-flight record to `failed`, with
 		// no grace window to wait for, since recovery is impossible.
 		try {
 			await this.reap({ unconditional: true, bootCutoff })
@@ -190,11 +189,9 @@ export class JournalReaper {
 	 * `unconditional: true` skips the grace-window gate — used by the
 	 * boot sweep, where every non-terminal record is by construction from
 	 * a previous SW lifetime and unrecoverable (the new SW has an empty
-	 * pending-request map). Error kind reflects the post-prove SW restart
-	 * cause: `sw_restart_post_prove` for the proving stage, `stale_on_resume`
-	 * for the others. Periodic ticks (the normal path) keep the grace
-	 * window — a proving op started 10s ago in THIS SW instance should
-	 * NOT be reaped.
+	 * pending-request map); `classifyReapKind` names the kind. Periodic
+	 * ticks (the normal path) keep the grace window — a proving op started
+	 * 10s ago in THIS SW instance should NOT be reaped.
 	 */
 	public async reap(opts?: { unconditional?: boolean; bootCutoff?: number; profileId?: string }): Promise<void> {
 		const inflight = await this.journal.getOperations({

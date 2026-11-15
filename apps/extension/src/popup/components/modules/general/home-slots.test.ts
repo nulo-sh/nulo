@@ -50,7 +50,7 @@ describe("homeSlots", () => {
 		expect(landed.userImports).toEqual([])
 	})
 
-	test("an import of anything but a default stays outside the slots until its token row lands", () => {
+	test("an import of anything but a default stays outside the slots", () => {
 		const own = [
 			{ id: "other", contractAddress: "0xother", terminalAt: null },
 			{ id: "blank", contractAddress: undefined, terminalAt: null },
@@ -58,13 +58,9 @@ describe("homeSlots", () => {
 		const { slots, userImports } = slotsOf([], own)
 		expect(userImports.map((o) => o.id)).toEqual(["other", "blank"])
 		expect(slots.map((s) => s.kind)).toEqual(["seed", "seed", "seed", "seed"])
-
-		const otherRow = tokenRow("OTHER", 9)
-		const landed = slotsOf([{ ...otherRow, token: { ...otherRow.token, contract: "0xOTHER" } }], own)
-		expect(landed.userImports.map((o) => o.id)).toEqual(["blank"])
 	})
 
-	test("a failed import gives way to a later import of its contract in any stage; another contract's does not", () => {
+	test("a failed import is followed by a later import of its contract in any stage; another contract's is not", () => {
 		const record = (id: string, contractAddress: string, createdAt: number, stage: "failed" | "pending" | "succeeded") => ({
 			id,
 			contractAddress,

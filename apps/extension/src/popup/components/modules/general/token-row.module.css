@@ -9,7 +9,6 @@
 	min-width: 0;
 }
 
-/* A stopped row's Retry: an outlined label-size button in the accent. */
 .retry {
 	composes: type--label-section from global;
 	height: 28px;

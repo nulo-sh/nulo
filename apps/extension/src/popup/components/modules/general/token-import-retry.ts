@@ -6,7 +6,6 @@
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import type { TokenServiceClient } from "@/wallet/services/token/client"
 
-/** The reaper's kind for a token import a restart ended; its `message` is the journal's own. */
 const INTERRUPTED_BY_RESTART = "interrupted_by_restart"
 
 const RESTARTED_SENTENCE = "The wallet restarted while adding this token."
@@ -20,7 +19,6 @@ type Retryable = RetryableImport & Required<Pick<RetryableImport, "networkId" | 
 
 export type ImportRetryClient = Pick<TokenServiceClient, "parseTokenInterface" | "addToken">
 
-/** The row's sentence for a failure the wallet names itself; any other reason renders as before. */
 export function importFailureSentence(op: Pick<OperationRecord, "error">): string | undefined {
 	return op.error?.kind === INTERRUPTED_BY_RESTART ? RESTARTED_SENTENCE : undefined
 }
@@ -41,10 +39,9 @@ export function canRetryImport(op: RetryableImport): op is Retryable {
 }
 
 /**
- * Re-runs the import as the person's own, so a dApp's approved details are not re-checked: the
- * press authorizes it, as Import token would. Resolves once the import ends; the add opens a new
- * journal record. `isLive` false after the parse adds nothing: the page that pressed is gone, and
- * a call on its disconnected client would open a new port.
+ * Re-runs the import as the person's own: the press authorizes it, as Import token would, so a
+ * dApp's approved details are not re-checked. `isLive` false after the parse adds nothing, since a
+ * call on the departed page's disconnected client would open a new port.
  */
 export async function retryTokenImport(client: ImportRetryClient, op: RetryableImport, isLive: () => boolean): Promise<void> {
 	if (!canRetryImport(op)) throw new Error("this import cannot be retried")

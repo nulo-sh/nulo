@@ -7,8 +7,7 @@
  * watchlist entry lands.
  *
  * A failed row stays visible for a short window so the person sees the reason, then
- * auto-dismisses. One a worker restart ended offers Retry, which the parent runs; while it runs
- * the row reads in flight.
+ * auto-dismisses.
  */
 
 import TokenMark from "@/components/composite/general/TokenMark.vue"
@@ -23,7 +22,6 @@ const props = defineProps({
 	},
 	/** The signed list's picture for this import's chain and contract, when the list names them. */
 	icon: String,
-	/** The parent's retry of this failed record is running. */
 	retrying: Boolean,
 })
 

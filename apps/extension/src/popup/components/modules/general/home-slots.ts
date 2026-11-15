@@ -20,8 +20,7 @@ export type HomeSlot<R extends SlotTokenRow, O extends SlotImportOp, S extends S
 
 export type HomeSlots<R extends SlotTokenRow, O extends SlotImportOp, S extends SlotSeed> = {
 	slots: HomeSlot<R, O, S>[]
-	/** Imports of anything but a listed default: they stay above the list until they end or their
-	 *  token row lands. */
+	/** Imports of anything but a listed default: they stay above the list until they end. */
 	userImports: O[]
 }
 
@@ -49,15 +48,14 @@ function splitImports<O extends SlotImportOp>(imports: readonly O[], defaults: R
 	const userImports: O[] = []
 	for (const op of imports) {
 		const contract = contractOf(op.contractAddress)
-		if (landed.has(contract)) continue
 		if (!defaults.has(contract)) userImports.push(op)
-		else if (outranks(op, standing.get(contract))) standing.set(contract, op)
+		else if (!landed.has(contract) && outranks(op, standing.get(contract))) standing.set(contract, op)
 	}
 	return { standing, userImports }
 }
 
-/** Failed imports a later import of the same contract replaces, whatever its stage: a retry's own
- *  record, or the person's next try, is what the row stands for now. Pass one scope's records. */
+/** Failed imports followed by a later import of the same contract, whatever its stage. Pass one
+ *  scope's records. */
 export function supersededImports(ops: readonly Pick<OperationRecord, "id" | "contractAddress" | "createdAt" | "progress">[]) {
 	const latest = new Map<string, number>()
 	for (const op of ops) {

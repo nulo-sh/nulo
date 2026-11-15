@@ -40,7 +40,7 @@ One arc, one PR against `dev`, closing #1799. Recon: [`recon.md`](recon.md); pla
 - **D2. The row.** `importFailureSentence(op)` maps `interrupted_by_restart` to W1; any other failure renders as today. Retry is a native `<button>` (`token-import-retry`, the seed row's RETRY style moved into `token-row.module.css`), left of the × mark, shown when `canRetryImport(op)`. The failed dim moves from the row to the lead and the mark so the button keeps full contrast (accessibility call under the owner's 2026-10-19 delegation).
 - **D3. Who may retry.** `canRetryImport`: failed with D1's kind, origin `popup` or `dapp`, and string `profileId`, `networkId`, `accountAddress`, `contractAddress`. `seed` imports are the seeder's (its own retry and Home's seed Retry). A `dapp` import retried is the person's own `popup`-origin add of that address, as Import token would make it: the approval window's details are not re-checked, since the press, not the app, authorizes it.
 - **D4. Dispatch.** `retryTokenImport(client, op, isLive)` in the popup runs the existing two RPCs with the record's fields; no new worker method. `isLive` stops the add when the page unmounted during the parse (a call on a disconnected client reopens its port). A refusal logs at `debug` as `{ error }`.
-- **D5. One row per contract.** `TokensView` holds `retryingImports` (ids): while its retry runs, a failed row renders in flight (spinner, "Adding token…", no Retry, no ×). `supersededImports(scoped)` hides a failed record once a later record of its contract exists in scope, whatever its stage; `homeSlots` drops a user import whose contract has a token row, as it already does for defaults. A refused retry with no new record returns the row to failed with its sentence and Retry; the retry's own record, if it failed, shows its own reason.
+- **D5. One row per retry, only after a press** (narrowed by Codex round 1, finding 2: a rule for every import would change flows the owner has not seen). `TokensView` holds `importRetries` (id → `"running"`, `"done"`, or the refusal time). Running: the failed row renders in flight (spinner, "Adding token…", no Retry, no ×) and stays on show past the 30 s window. A retried record gives way to any later record of its contract in scope (`supersededImports`), and goes once its retry resolves (the token was added, or was already there). Refused with no new record: the row returns to failed with its sentence and Retry, its 30 s window restarted at the refusal (Codex round 1, finding 1). A record never retried behaves as today.
 - **D6. Tests.** Unit and component for each seam; one network e2e scenario for what only a live worker proves (below). No composition test: the import's metadata read is a simulation (Fact 6).
 
 ## Phase 1: reason kind, row sentence and Retry
@@ -52,16 +52,16 @@ One arc, one PR against `dev`, closing #1799. Recon: [`recon.md`](recon.md); pla
 | `apps/extension/src/popup/components/modules/general/token-import-retry.ts` (+ test, new) | `importFailureSentence`, `canRetryImport`, `retryTokenImport` (D2-D4) |
 | `.../general/TokenImportRow.vue` (+ test) | `retrying` prop, `retry` emit, sentence, Retry button, dim moved (D2, D5) |
 | `.../general/TokenSeedRow.vue`, `token-row.module.css` | `.retry` moves to the shared module; no visual change |
-| `.../general/home-slots.ts` (+ test) | landed drops user imports; `supersededImports` (D5) |
-| `.../general/TokensView.vue` (+ test) | a `TokenServiceClient`, `retryingImports`, the filter, both row sites wired, disconnect in `onBeforeUnmount` |
+| `.../general/home-slots.ts` (+ test) | `supersededImports` (D5) |
+| `.../general/TokensView.vue` (+ test) | a `TokenServiceClient`, `importRetries`, the filter, both row sites wired, disconnect in `onBeforeUnmount` |
 | `apps/extension/tests/e2e/network/token-import-retry.test.ts` (new) | the scenario below |
 
 **Tests that land.**
 - `reaper.test.ts`: the boot sweep fails a pending `token_import` with `interrupted_by_restart` and a pending transfer with `stale_on_resume` (control); the unlock sweep gives the import the same kind; the periodic tick keeps `stale_on_resume` on a stalled import.
 - `token-import-retry.test.ts`: the sentence for D1's kind and none for another; `canRetryImport` true for `popup` and `dapp`, false for `seed`, another kind, and each missing field; `retryTokenImport` calls parse then add with the record's fields and `{ origin: "popup" }`, refuses an incomplete interface before any add, and adds nothing once not live.
 - `TokenImportRow.test.ts`: a failed record whose `message` is the reaper's sentence shows exactly W1 and none of its words, with Retry; pressing emits `retry`; `retrying` shows the spinner and no Retry or ×; a `metadata_fetch` failure keeps its message and no Retry (success control).
-- `home-slots.test.ts`: a user import of a landed contract is dropped; an older failed record is superseded by a later one of its contract in any stage, another contract's is not.
-- `TokensView.test.ts`: Retry on a restart-failed row calls parse and add with its fields and reads in flight; the retry's own pending record replaces it; a refused parse returns it to failed with Retry.
+- `home-slots.test.ts`: an older failed record is followed by a later one of its contract in any stage; another contract's is not.
+- `TokensView.test.ts`: Retry on a restart-failed row calls parse and add with its fields and reads in flight; a refused parse returns it to failed with Retry; the retry's own pending record replaces it; a refusal after the failure's window keeps the row from the refusal on; a retry that adds no record ends it.
 - **E2E** `network/token-import-retry.test.ts`: seed a pending import of the sandbox token (`seedTokenImport`), close the pages, `stopBackground`, unlock; the row reads W1 with Retry; press it; the TST card lands and no import row remains. Failure mode only it proves: the reaped record's stored fields drive the real parse and live metadata read through a real worker restart and unlock sweep (the composition layer cannot simulate, Fact 6; the component test fakes the client). Estimated 60 s on Chrome; measured: TBD. Shots through `shotSend` under `NULO_E2E_SHOT_DIR` only.
 
 **Gate (pass = every command exits 0 at retry 0, in order):** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run --cwd apps/extension test:components`, `bun run check:plans` (staged), then one `agent.sh` run from the root (`NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/token-import-retry.test.ts tests/e2e/network/tokens.test.ts`), Chrome only. The touched-spec sweep (`git grep` of the import testids under `tests/e2e`) also names the smoke specs `type-roles.test.ts`, `shipped-token-list.test.ts`, `rows.test.ts`, `home-links.test.ts`; they run once through `bun run test:e2e -- <files> --retry=0`.
@@ -76,7 +76,7 @@ One arc, one PR against `dev`, closing #1799. Recon: [`recon.md`](recon.md); pla
 
 Home and Holdings, the token import row only (owner sign-off: the lane brief records the Retry decision; the sentence is picked on the decision page).
 - Before: a restart-failed import reads "Job declared lost: SW restart with non-terminal record in pending — unrecoverable" with the × mark, dimmed.
-- After: it reads W1, with a RETRY button left of the mark; pressing shows the in-flight row; the import's own row then follows as today. A failed row also gives way to a later import of its contract, and a user import drops once its token row is listed. Nothing else changes.
+- After: it reads W1, with a RETRY button left of the mark; pressing shows the in-flight row; the retry's own import row then follows as today, or the row goes when the token was already there; a refused retry shows the sentence and RETRY again for 30 s. Nothing else changes.
 
 ## Security & Adversarial Considerations
 
@@ -96,4 +96,4 @@ The lane brief's proportion replaces the standard's loop: after Phase 1's gate, 
 ## Audit verdicts
 
 - Plan audit: none (lane brief, light and thinned).
-- Codex pass over plan and diff: pending.
+- **Codex round 1** (gpt-6.1-sol, high, read-only; plan and net diff at `d1370c6c2`): changes requested. D1, D3, D4, D6 agreed. Findings: (1) a retry refused after the failure's 30 s window hid the row with its reason and Retry: demonstrated, fixed (window restarts at the refusal; test added). (2) D5's rules also changed ordinary imports (a manual re-import hid an older failure; any import yielded to its landed card): accepted, narrowed to records a press retried; the `landed` change to `homeSlots` reverted. (3) Comments that narrated a literal, a prop or CSS, and two reaper comments whose kind lists became wrong: fixed. (4) Drop the row-wide "no word of the reaper's sentence" check as redundant with exact equality: rejected; the lane brief asks for exactly that check, and it also covers text outside the subtitle.

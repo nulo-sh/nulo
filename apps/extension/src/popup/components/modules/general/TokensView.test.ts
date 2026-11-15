@@ -8,7 +8,7 @@
 import { deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
-import { effect, nextTick, stop } from "vue"
+import { effect, nextTick, ref, stop } from "vue"
 import { createMemoryHistory, createRouter } from "vue-router"
 import { createAppStoreHarness } from "../../../../../tests/helpers/app-store-harness"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
@@ -230,6 +230,37 @@ describe("TokensView — Retry on an import a restart ended", () => {
 		added.resolve({ id: 1 })
 		await flushPromises()
 		expect(rows(wrapper)).toEqual([["again", false]])
+	})
+
+	test("a retry refused after the failure's window keeps the row from the refusal on; one that adds no record ends it", async () => {
+		const start = Date.now()
+		const tick = ref(start)
+		vi.stubGlobal("useTicker", () => tick)
+		const refused = deferred<unknown>()
+		H.parseTokenInterface.mockReturnValueOnce(refused.promise)
+		H.getOperations.mockResolvedValue([interrupted({ terminalAt: start - 29_000 })])
+		const wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		await pressRetry(wrapper)
+		tick.value = start + 5_000
+		await nextTick()
+		expect(rows(wrapper)).toEqual([["lost", true]])
+		refused.reject(new Error("node unreachable"))
+		await flushPromises()
+		expect(rows(wrapper)).toEqual([["lost", false]])
+		tick.value = Date.now() + 31_000
+		await nextTick()
+		expect(rows(wrapper)).toEqual([])
+
+		H.getOperations.mockResolvedValue([interrupted({ terminalAt: Date.now() })])
+		tick.value = Date.now()
+		H.parseTokenInterface.mockResolvedValueOnce({ chainId: 1, contract: "0xlost", isComplete: true })
+		H.addToken.mockResolvedValueOnce({ id: 1 })
+		const already = mount(TokensView, { shallow: true })
+		await flushPromises()
+		await pressRetry(already)
+		await flushPromises()
+		expect([rows(already), H.addToken.mock.calls.length]).toEqual([[], 1])
 	})
 })
 
