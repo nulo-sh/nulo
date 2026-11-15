@@ -31,7 +31,7 @@ Proportion (lane brief): a three-line prototype made a build, with tests. No pla
 | D4 | The failed state is unchanged: "FEE / Set by \<app\>" over "YOU PAY / Couldn't estimate fee. TRY AGAIN". | The pick: "the failed state stays today's grid". Its label already reads "You pay" (`personPaysAppPayment`). |
 | D5 | The running and landed row on this route loses `execute-op-app-name`: the sentence names no app. Every other testid stays. | The pick's words. No spec or test reads it on this route (`recon.md`). |
 | D6 | The `appName` comment in `OperationCard.vue` reads "every line of the fee row that names the app". | The claimed sentence names none; the old comment would be false. |
-| D7 | The fee-claim-words-1 fixtures ship: `claim` and `claim-long-names` on the execute fixture route, `?estimate=running\|failed`, and the fixture test admitting the Fee Juice contract (a protocol address off the curve the check reads). The scratch capture spec does not. | The lane brief keeps them when captures use them; armed builds only (`execute-fixture-gate.ts`), so the captures come from the PR head itself. No spec iterates every fixture, so no e2e runtime moves. |
+| D7 | The fee-claim-words-1 fixtures (`claim`, `claim-long-names`, `?estimate=running\|failed`) do not ship: the captures apply them from scratch with the capture spec and restore the tree, as fee-words-1 did. Revised in Phase 1; the plan first kept them. | The lane brief allows keeping them, not requires it. Shipped, they import the `@nulo/wallet-bridge` barrel into `execute-fixture.ts` (for the claim's address and selector), which `config.test.ts`'s gate test loads twice: 1.7 to 1.9 s alone against 0.4 to 0.6 s at the base, and over vitest's 5 s timeout under the full suite at load1 ≈ 250 (demonstrated, Phase 1 gate); they also reopen the type-roles inventory's producer digest. Rejected: a `./fee-payer` subpath export on `@nulo/wallet-bridge` (a package entry for one armed-only caller), and literal constants in the fixture (a copy of the pinned ones). |
 | D8 | Tests in the unit and component layers; no new e2e scenario. The four network specs that read the row's testids run unchanged as the regression gate. | The change is a branch inside one component; none of those specs drives the claim route. No span or role changes (D3), so the type-roles smoke spec is not due. |
 | D9 | No accessibility call. | Text only; the row's focus, `aria-busy`, Tab order and live region are untouched. |
 
@@ -60,8 +60,7 @@ Proportion (lane brief): a three-line prototype made a build, with tests. No pla
 1. `apps/extension/src/popup/windows/execute/fee-figure.ts`: export `claimsToAccount` (D2).
 2. `apps/extension/src/popup/components/modules/send/AppFeeLine.vue`: the `claimed` prop and branch (D1, D3); one line in the header comment.
 3. `apps/extension/src/popup/windows/execute/OperationCard.vue`: `claimPaid`, passed as `:claimed`; the `appName` comment (D6).
-4. `apps/extension/src/e2e/execute-fixture.ts`, `execute-fixture.test.ts`, `apps/extension/src/popup/windows/execute/index.vue`: the fixtures (D7).
-5. Tests, wire-shaped:
+4. Tests, wire-shaped:
    - T1 (`AppFeeLine.test.ts`): claimed and landed, the exact sentence with "Fee Juice" read from `textContent` and no slot text; with a priority fee, the clause after it; estimating, the skeleton in the figure's place. The existing unclaimed cases stay the control.
    - T2 (`OperationCard.fee.test.ts`): an `aztec_sendTx` as the wire carries it (`0x` + 64 hex fields, a leading `claim_and_end_setup` crediting the sender, the sender as payer) and a `send_transaction` with `embeddedFeePayment: "fjwc"`: the sentence at the landed state, no `execute-op-app-name`, no seal; the same request with an app's own contract as payer keeps "About …; payment method set by Swap." (the control); the failed test.each gains the claim row, "FeeSet by SwapYou payCouldn't estimate fee.Try again".
 
@@ -69,11 +68,11 @@ Proportion (lane brief): a three-line prototype made a build, with tests. No pla
 
 ## Phase 2: captures and the PR
 
-1. Capture at 400 px, light and dark, from the fixture route over the armed smoke build, with a scratch capture spec copied in and removed after: `fcb1-run`, `fcb1-done`, `fcb1-fail`, `fcb1-done-long` (the 64-character name), and `fcb1-done-usd` only if the route can price (the smoke build has no AZTEC price; if not, the PR says so), each `-light` and `-dark`, into the lane's scratch `shots/` with `captions.json`.
+1. Capture at 400 px, light and dark, from the fixture route over the armed smoke build, with the fee-claim-words-1 fixtures and a scratch capture spec applied from scratch and removed after (D7): `fcb1-run`, `fcb1-done`, `fcb1-fail`, `fcb1-done-long` (the 64-character name), and `fcb1-done-usd` only if the route can price (the smoke build has no AZTEC price; if not, the PR says so), each `-light` and `-dark`, into the lane's scratch `shots/` with `captions.json`.
 2. Commit the landed pair under `pr-captures/fee-claim-build-1/` in one commit; delete them in the next.
 3. Post-implementation, then the PR.
 
-**Validation gate.** `git status` clean after the capture run; no `fcb1-captures` file in the tree; every frame exists in both themes; `bun run check:plans` exits 0 after staging.
+**Validation gate.** `git status` clean after the capture run; no `fcb1-captures` file and no `claim-long-names` fixture in the tree; every frame exists in both themes; `bun run check:plans` exits 0 after staging.
 
 ## Delivery
 

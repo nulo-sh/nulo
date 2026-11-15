@@ -1,3 +1,5 @@
 # fee-claim-build-1: status
 
 - 2026-11-15: plan written at `a763870d4`; no plan audit round (lane brief, Proportion).
+- 2026-11-15: arc 1 on `fee-claim-build-1-a1`; Phase 1 built (`1f3d05319`); lint green, typecheck:all green, test red (type-roles inventory digest, D10), fixed, rerunning.
+- 2026-11-15: test rerun red (config.test.ts gate test timed out: the shipped fixture's wallet-bridge import); D7 revised, fixtures out of the tree.
