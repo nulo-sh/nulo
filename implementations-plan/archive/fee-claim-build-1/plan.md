@@ -93,7 +93,7 @@ One PR from `fee-claim-build-1-a1` (off `origin/dev`, carrying the plan commit) 
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `a763870d4`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `a763870d4`. Plan-specific values:
 - Step 1: `code_review: off`, so absent.
 - Step 2, bounded work: after Phase 1 is green, ONE `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` over the plan and `origin/dev...HEAD`, the prompt in the lane's scratch dir. Take its findings and rerun only the gates a fix touches. A second round only if the first says anything but approve (resume with `resume-codex.sh`; hard stop at three). No Opus review.
 - Step 3: `gh pr create` as Delivery says; `gh pr checks <n> --watch` once.
