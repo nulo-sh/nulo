@@ -15,8 +15,8 @@ const props = defineProps({
 	methods: { type: Array, required: true },
 	/** The card is still reading what can pay. */
 	pending: { type: Boolean, default: false },
-	/** USD per Fee Juice from a band-checked quote (a rate under a micro-dollar throws in the
-	 *  conversion); none hides every balance's dollars. */
+	/** USD per Fee Juice from a band-checked quote (the conversion rejects a rate that rounds to zero
+	 *  micro-USD); none hides every balance's dollars. */
 	usd: { type: Number, default: undefined },
 })
 const emit = defineEmits(["update:modelValue"])
