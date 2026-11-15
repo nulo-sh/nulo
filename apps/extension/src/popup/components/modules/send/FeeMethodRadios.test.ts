@@ -20,8 +20,8 @@ const HELD = { publicFeeJuice: "4200000000000000000", privateFeeJuice: "18000000
 const rowsOf = (gas: GasBalances = HELD, fpcs = [HAND_ADDED, PRIVATE_FPC, NULO_SPONSOR]) => buildFeeMethods(fpcs, gas)
 
 const mounted: ReturnType<typeof mount>[] = []
-function mountRadios(methods: FeeMethodOption[], modelValue: FeeMethodOption | null = null) {
-	const w = mount(FeeMethodRadios, { props: { methods, modelValue }, global: { stubs: { Skeleton } }, attachTo: document.body })
+function mountRadios(methods: FeeMethodOption[], modelValue: FeeMethodOption | null = null, usd?: number) {
+	const w = mount(FeeMethodRadios, { props: { methods, modelValue, usd }, global: { stubs: { Skeleton } }, attachTo: document.body })
 	mounted.push(w)
 	return w
 }
@@ -146,5 +146,64 @@ describe("FeeMethodRadios", () => {
 		expect(vm.target()).toBe(w.get('[data-testid="send-fee-payer-public"]').element)
 		await w.setProps({ methods: rowsOf({ publicFeeJuice: "0", privateFeeJuice: "0" }, [PRIVATE_FPC]) })
 		expect(vm.target()).toBeUndefined()
+	})
+})
+
+describe("FeeMethodRadios: a balance's dollars", () => {
+	/** Whole Fee Juice in base units, as the gas read hands them over. */
+	const FJ = (whole: string) => `${whole}${"0".repeat(18)}`
+	const THOUSAND = { publicFeeJuice: FJ("1000"), privateFeeJuice: FJ("1000") }
+	const USD = 7
+	const priv = GLOSSARY["private-fee-juice"].definition
+	const pub = GLOSSARY["public-fee-juice"].definition
+	const anyDollars = (w: ReturnType<typeof mount>) => choices(w).some((c) => c.text.includes("$"))
+
+	test("each Fee Juice balance reads its dollars at cents after it; the sponsors print none", () => {
+		expect(choices(mountRadios(rowsOf(THOUSAND), null, USD)).map((c) => c.text)).toEqual([
+			`Private Fee Juice ${priv} 1,000 FJ $7,000.00`,
+			`Public Fee Juice ${pub} 1,000 FJ $7,000.00`,
+			`Sponsored ${GLOSSARY.sponsored.definition} free`,
+			`My sponsor ${GLOSSARY.fpc.definition} —`,
+		])
+	})
+
+	test("a balance worth less than a cent reads <$0.01", () => {
+		const dust = `1${"0".repeat(15)}`
+		const w = mountRadios(rowsOf({ publicFeeJuice: dust, privateFeeJuice: dust }), null, USD)
+		expect(choices(w)[1].text).toBe(`Public Fee Juice ${pub} 0.001 FJ <$0.01`)
+	})
+
+	test("without a usable quote no row prints dollars", () => {
+		expect(anyDollars(mountRadios(rowsOf(THOUSAND)))).toBe(false)
+	})
+
+	test("a row that cannot pay prints its reason and no dollars, even over a balance it holds", () => {
+		// No PrivateFPC: the private row still carries the 1,000 FJ it read.
+		const w = mountRadios(buildFeeMethods([NULO_SPONSOR], THOUSAND), null, USD)
+		expect(
+			choices(w)
+				.slice(0, 2)
+				.map((c) => c.text),
+		).toEqual([`Private Fee Juice ${priv} not available`, `Public Fee Juice ${pub} 1,000 FJ $7,000.00`])
+		const unread = mountRadios(rowsOf({ publicFeeJuice: "0", privateFeeJuice: null }), null, USD)
+		expect(anyDollars(unread)).toBe(false)
+	})
+
+	test("a row still loading keeps its skeleton and prints no dollars", () => {
+		const w = mountRadios(buildFeeMethods([PRIVATE_FPC, NULO_SPONSOR], undefined, { balancesPending: true }), null, USD)
+		expect(w.findAllComponents(Skeleton)).toHaveLength(2)
+		expect(anyDollars(w)).toBe(false)
+	})
+
+	test.each(["0x10", "abc"])("a balance that is not a decimal string (%s) prints no dollars", (balance) => {
+		const row = (b: string): FeeMethodOption => ({
+			type: "fj",
+			title: "Public Fee Juice",
+			subtitle: "public",
+			spend: "1 FJ",
+			balance: b,
+		})
+		expect(choices(mountRadios([row(FJ("1"))], null, USD))[0].text).toBe(`Public Fee Juice ${pub} 1 FJ $7.00`)
+		expect(choices(mountRadios([row(balance)], null, USD))[0].text).toBe(`Public Fee Juice ${pub} 1 FJ`)
 	})
 })

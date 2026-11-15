@@ -30,6 +30,8 @@ export interface FeeMethodOption {
 	/** What the method can spend, for the menu's right column: a balance, "— FJ" while
 	 *  balances are unknown, "free" for Nulo's own sponsor, "—" for one added by hand. */
 	spend?: string
+	/** The Fee Juice row's balance in base units, as read; absent while unread or on a failed read. */
+	balance?: string
 	/** The read that answers this row has not landed: it is drawn loading and is never picked. */
 	checking?: boolean
 	/** A sponsor whose funding read for the current transaction is in flight: drawn loading, and it
@@ -295,6 +297,7 @@ function feeJuiceOption(gasBalances?: GasBalances): FeeMethodOption {
 		subtitle: "public",
 		spend: spendOf(gasBalances?.publicFeeJuice),
 	}
+	if (typeof gasBalances?.publicFeeJuice === "string") fj.balance = gasBalances.publicFeeJuice
 	if (publicFeeJuiceZero) {
 		fj.disabled = true
 		fj.disabledReason = "no balance"
@@ -317,6 +320,7 @@ function privateFeeJuiceOption(privateFpc: RegisteredFpc | undefined, gasBalance
 		spend: spendOf(gasBalances?.privateFeeJuice),
 		fpc: privateFpc ?? null,
 	}
+	if (typeof gasBalances?.privateFeeJuice === "string") privateFj.balance = gasBalances.privateFeeJuice
 	if (!privateFpc) {
 		privateFj.disabled = true
 		privateFj.disabledReason = "not available"

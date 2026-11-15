@@ -93,6 +93,8 @@ Send's publish facts keep 10 px / 600 / 0.08 em in `label-section` the same way,
 
 Avatar initials take no role: `AccountAvatar` sizes them from their box.
 
+The Fee sheet's payer-balance dollars take `caption`, not `fiat`: the owner's decision of 2026-11-15 (decision page 150, P150-01 = B3), which draws each Fee Juice row's balance in the row's own face.
+
 ## Icons
 
 `Icon` draws one glyph of `src/core/glyphs.ts`, the set's only source: Tabler Icons 3.49.0 (MIT),
