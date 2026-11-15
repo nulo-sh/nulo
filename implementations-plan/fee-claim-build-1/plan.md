@@ -55,7 +55,7 @@ Proportion (lane brief): a three-line prototype made a build, with tests. No pla
 
 **Asks.** None.
 
-## Phase 1: the row and its tests
+## Phase 1: the row and its tests ✓
 
 1. `apps/extension/src/popup/windows/execute/fee-figure.ts`: export `claimsToAccount` (D2).
 2. `apps/extension/src/popup/components/modules/send/AppFeeLine.vue`: the `claimed` prop and branch (D1, D3); one line in the header comment.
@@ -64,7 +64,7 @@ Proportion (lane brief): a three-line prototype made a build, with tests. No pla
    - T1 (`AppFeeLine.test.ts`): claimed and landed, the exact sentence with "Fee Juice" read from `textContent` and no slot text; with a priority fee, the clause after it; estimating, the skeleton in the figure's place. The existing unclaimed cases stay the control.
    - T2 (`OperationCard.fee.test.ts`): an `aztec_sendTx` as the wire carries it (`0x` + 64 hex fields, a leading `claim_and_end_setup` crediting the sender, the sender as payer) and a `send_transaction` with `embeddedFeePayment: "fjwc"`: the sentence at the landed state, no `execute-op-app-name`, no seal; the same request with an app's own contract as payer keeps "About …; payment method set by Swap." (the control); the failed test.each gains the claim row, "FeeSet by SwapYou payCouldn't estimate fee.Try again".
 
-**Validation gate** (retry 0, one command at a time, from the worktree root): `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension test:components`; `bun run check:plans` after staging; then `NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/fee-sponsor-funding.test.ts tests/e2e/network/tx-sendTx-feePayer.test.ts tests/e2e/network/tx-sendTx-noFrom.test.ts tests/e2e/network/tx-sendTx-selfPay.test.ts` (`agent.sh` claims ports from `~/.agents/ports.md`; the 10-minute stall watchdog stays). No Firefox run (no fixture, focus, window or WebAuthn change). Pass: every command exits 0; T1 and T2 pass and fail on the base; every other existing assertion passes unedited.
+**Validation gate** (retry 0, one command at a time, from the worktree root): `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension test:components`; `bun run check:plans` after staging; then `NULO_E2E_PROVERLESS=1 NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/fee-sponsor-funding.test.ts tests/e2e/network/tx-sendTx-feePayer.test.ts tests/e2e/network/tx-sendTx-noFrom.test.ts tests/e2e/network/tx-sendTx-selfPay.test.ts` (proverless, as most CI shards run: `tx-sendTx-noFrom` requires it and none of the four requires the prover, so one run covers all four; `agent.sh` claims ports from `~/.agents/ports.md`; the 10-minute stall watchdog stays). No Firefox run (no fixture, focus, window or WebAuthn change). Pass: every command exits 0; T1 and T2 pass and fail on the base; every other existing assertion passes unedited.
 
 ## Phase 2: captures and the PR
 
