@@ -364,7 +364,6 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		opts: { from: OWNER, fee: { gasSettings: GAS_SETTINGS } },
 		feeSettings: { paymentMethod: { kind: "embedded" } },
 	})
-	/** The Fee Juice contract's setup-ending claim crediting the sender, leading the calls. */
 	const CLAIM = {
 		name: CLAIM_AND_END_SETUP,
 		to: FEE_JUICE_CONTRACT,
@@ -376,7 +375,6 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 	}
 	const claimLed = (feePayer: string) => ({ ...appPaid(), exec: { calls: [CLAIM, ...appPaid().exec.calls], feePayer } })
 	const claimed = () => claimLed(OWNER)
-	/** A `send_transaction` the wallet routed as a claim to the account. */
 	const claimedSend = () => ({
 		kind: "send_transaction" as const,
 		networkId: "net-1",
