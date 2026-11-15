@@ -7,3 +7,4 @@
 - 2026-11-15: Phase 1 e2e green at `5f9b30b14`: `e2e:agent` proverless, Chrome, retry 0, the four fee-row specs 4/4 files, 9/9 tests, about 4.6 min wall. Phase 1 gate passed.
 - 2026-11-15: Codex round 1 (session 01a1e124): changes requested; R1-1 to OWNER-ASKS A1 (what ships now: W1 as signed), R1-2 two test comments removed; OperationCard.fee.test.ts 45/45, biome clean.
 - 2026-11-15: Codex round 2: changes requested on A1's text (R2-1..3), corrected.
+- 2026-11-15: Codex round 3: changes requested on A1's tolerance wording (R3-1), applied as worded; loop stopped at three rounds, code settled since round 1.

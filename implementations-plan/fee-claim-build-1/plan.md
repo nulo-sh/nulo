@@ -104,3 +104,5 @@ No plan audit round (lane brief, Proportion).
 - R2-1: A1 said the charge cannot exceed the approved fee; a build may take up to 10 % more without asking (`feeRiseAsks`, `fee-reask.ts`). Corrected.
 - R2-2: option (c)'s comparison is exact at the estimate, not at the final charge, for the same reason. Corrected.
 - R2-3: "on purpose" dropped; an older small deposit or moved fees reach the same state.
+
+**Codex round 3, resumed over `a6fbc4a9c..eebe170f2`**, 2026-11-15: changes requested, high confidence, on A1's text only: R2-1 and R2-3 verified; R3-1, the tolerance is "up to 10 %, or any rise under one fee-readout unit", not a flat 10 %, in both places A1 states it. Applied as worded. The loop stops here (three rounds): every code finding closed in round 1, and rounds 2 and 3 corrected only the owner ask's prose.
