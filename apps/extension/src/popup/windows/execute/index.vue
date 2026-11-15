@@ -56,7 +56,7 @@ import {
 } from "./operation-display"
 import { openJsonWindow } from "@/utils/json-window"
 import { E2E_EXECUTE_FIXTURE_BUILD_STAMP } from "@/e2e/config"
-import { armedExecuteFixture } from "@/e2e/execute-fixture-gate"
+import { armedExecuteFixture, fixtureGas } from "@/e2e/execute-fixture-gate"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
@@ -116,6 +116,8 @@ const router = useRouter()
  */
 const fixtureName = armedExecuteFixture ? router.currentRoute.value.query.fixture?.toString() : undefined
 let fixtureEstimates: readonly TransferFeeEstimate[] | undefined
+/** The shown fixture's footer answers as a stored request's would: no request stands behind it. */
+const fixtureFooterLive = ref(false)
 
 const session = ref()
 const operations = ref<UIOperation[]>([])
@@ -470,6 +472,8 @@ function showFixture(executeFixture: NonNullable<typeof armedExecuteFixture>, na
 	;(globalThis as { __NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP__?: string | null }).__NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP__ =
 		E2E_EXECUTE_FIXTURE_BUILD_STAMP
 	fixtureEstimates = fixture.feeEstimates
+	if (fixtureGas) fixtureGas.value = fixture.gasBalances
+	fixtureFooterLive.value = fixture.footerLive === true
 	dapp.value = fixture.dapp
 	knownTokens.value = fixture.tokens
 	decodedAuthwits.value = new Map(fixture.decodedAuthwits)
@@ -671,7 +675,7 @@ const needsFeeSelection = computed(() =>
 /** Every hold on Confirm but the fee pick, which approve() answers with a warning instead. */
 const confirmBlocked = computed(
 	() =>
-		!requestId.value ||
+		(!requestId.value && !fixtureFooterLive.value) ||
 		isInteractionCancelled.value ||
 		!initComplete.value ||
 		operations.value.length === 0 ||
@@ -844,7 +848,7 @@ onUnmounted(() => {
 			:processing-error="grantRefusal ?? processingError"
 			reject-testid="execute-reject-btn"
 			reject-label="Reject"
-			:reject-disabled="isLoading || !requestId"
+			:reject-disabled="isLoading || (!requestId && !fixtureFooterLive)"
 			confirm-testid="execute-confirm-btn"
 			:confirm-hidden="refusal !== undefined"
 			:confirm-label="isLoading ? 'EXECUTING' : 'Confirm'"

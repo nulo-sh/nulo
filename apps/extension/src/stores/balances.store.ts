@@ -47,6 +47,7 @@ import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 import { errorMessageFromUnknown, raceTimeout } from "@nulo/wallet-core/utils"
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
+import { fixtureGas } from "@/e2e/execute-fixture-gate"
 
 export type BalanceScope = ActivityScope
 
@@ -396,6 +397,7 @@ class BalancesCore {
 
 	// ── SWR peek (display-only, version-guarded) ─────────────────────────────
 	private async primeFromPeek(key: string, scope: BalanceScope): Promise<void> {
+		if (fixtureGas?.value) return
 		const versionAtStart = this.entries.value[key]?.gas.version ?? 0
 		try {
 			const peeked = await this.execution.peekGasBalances(scope.networkId, scope.accountAddress)
@@ -512,13 +514,15 @@ class BalancesCore {
 				}
 				this.rawFlights.delete(`${key}|gas|${epoch}`)
 			}
-			result = await withTimeout(
-				this.rawReuse(key, "gas", epoch, () =>
-					this.execution.getGasBalances(scope.networkId, scope.accountAddress, opts.forceRefresh),
-				),
-				INIT_FETCH_TIMEOUT_MS,
-				"getGasBalances",
-			)
+			result =
+				fixtureGas?.value ??
+				(await withTimeout(
+					this.rawReuse(key, "gas", epoch, () =>
+						this.execution.getGasBalances(scope.networkId, scope.accountAddress, opts.forceRefresh),
+					),
+					INIT_FETCH_TIMEOUT_MS,
+					"getGasBalances",
+				))
 		} catch (err) {
 			failed = errorMessageFromUnknown(err)
 			accountUnusable = err instanceof ImportedAccountUnusableError

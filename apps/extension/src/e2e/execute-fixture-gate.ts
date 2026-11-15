@@ -7,3 +7,7 @@ import { E2E_EXECUTE_FIXTURE } from "./config"
 import { executeFixture } from "./execute-fixture"
 
 export const armedExecuteFixture: typeof executeFixture | undefined = E2E_EXECUTE_FIXTURE ? executeFixture : undefined
+import type { GasBalances } from "@/wallet/services/execution/models"
+
+/** The shown fixture's Fee Juice, which the balances store answers with instead of the worker. */
+export const fixtureGas: { value: GasBalances | undefined } | undefined = E2E_EXECUTE_FIXTURE ? { value: undefined } : undefined
