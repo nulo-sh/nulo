@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 35c580901
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-16.
+- **Status:** completed. Ships in the PR titled `fix(execute): the more-below button sits at the bottom right of the request`, which carries this close-out and `Closes #1820`. It lands on the owner's approve of its captures.
+- **Shipped:** P157-02's "right". The execute window's more-below button sits at the bottom right of the request's scroll area (12 px up, 16 px plus the scrollbar gutter in), the Terms sheet's rule; nothing else visible changed. The `execute-steps` case pins no glyph and no control but a step row's blank end under it at first paint, steps shut or open, and after press 1; two presses still reach the parse warning.
+- **Gates (retry 0):** at `6f0fd13af` (the code's final head; later commits are docs only): lint, typecheck:all, test (1045 files), test:components (104 files) and check:plans green; Chrome `execute-steps.test.ts` green, 12 passed and 2 shot-only skips, the case at 2.7 s. No Firefox run: no fixture or helper under `tests/e2e/fixtures/` changed.
+- **Deviations:** D4 (a step's toggle edge meets the right corner, so the scan leaves out exactly that control).
+- **Lessons:** none promoted (`lessons.md` is near its 8 KiB budget, and both notes in [`lessons/phase-1.md`](lessons/phase-1.md) are local to this case).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # scroll-cue-right-1: the execute window's more-below button moves to the bottom right
 

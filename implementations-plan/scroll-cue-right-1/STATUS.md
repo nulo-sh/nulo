@@ -1,4 +1,0 @@
-- 2026-11-16: plan written at `35c580901`; light tier, no plan audit (the lane brief's proportion); no owner asks.
-- 2026-11-16: armed Chrome build, probe and captures (`scr1-args-shut-right`, `scr1-args-cue-right`, `scr1-args-end`); measurement in the plan; D4 recorded (a step's toggle edge meets the right corner).
-- 2026-11-16: gates green: lint, typecheck:all, test, test:components; execute-steps Chrome red once on the case's success control (wrong target), green after.
-- 2026-11-16: Codex pass 1 approve; the case title renamed; Chrome execute-steps green on it.
