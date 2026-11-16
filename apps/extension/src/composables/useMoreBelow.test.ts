@@ -175,9 +175,18 @@ describe('useMoreBelow over the document ("document")', () => {
 		document.body.appendChild(child)
 		added.push(child)
 		documentOf(720)
-		track("document")
+		Object.defineProperty(root, "clientWidth", { value: 1280, configurable: true })
+		const { remaining, gutter, width } = track("document")
 		expect([...(FakeResizeObserver.last?.observed ?? [])]).toEqual([...document.body.children])
 		expect(FakeResizeObserver.last?.observed.has(child)).toBe(true)
+		expect([remaining.value, gutter.value, width.value]).toEqual([0, 0, 1280])
+		// Content outgrowing the fold brings a classic scrollbar in with no window resize.
+		Object.defineProperties(root, {
+			scrollHeight: { value: 1000, configurable: true },
+			clientWidth: { value: 1265, configurable: true },
+		})
+		FakeResizeObserver.last?.callback()
+		expect([remaining.value, gutter.value, width.value]).toEqual([280, 15, 1265])
 	})
 
 	test("a press scrolls the root, from the window's top: one view height toward a section far below", () => {

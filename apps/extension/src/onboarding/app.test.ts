@@ -205,7 +205,6 @@ describe("onboarding's more-below button", () => {
 		docRoot.scrollTop = 0
 	})
 
-	/** The shell over a document holding 1000 px under a 720 px fold, in a window `clientWidth` px wide. */
 	function mountShell(clientWidth: number) {
 		config.getValue.mockResolvedValue("dark")
 		Object.defineProperties(docRoot, {

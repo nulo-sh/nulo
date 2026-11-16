@@ -200,7 +200,12 @@ describe("onboarding tab", () => {
 		// the more-below button, so only the wide window draws it.
 		await page.waitForSelector('[data-testid="onboarding-scroll-more"]', { visible: true, timeout: 5_000 })
 		await setViewport(page, viewport)
-		expect(await page.evaluate(() => document.documentElement.scrollHeight - document.documentElement.clientHeight)).toBeGreaterThan(64)
+		expect(
+			await page.evaluate(() => {
+				const root = document.documentElement
+				return root.scrollHeight - root.clientHeight - root.scrollTop
+			}),
+		).toBeGreaterThan(64)
 		await page.waitForFunction(() => !document.querySelector('[data-testid="onboarding-scroll-more"]'), { timeout: 5_000 })
 		expect(await readProfileNames(page)).toEqual(["Main"])
 		const words = await readRecoveryWords(page, "onboarding-phrase")
