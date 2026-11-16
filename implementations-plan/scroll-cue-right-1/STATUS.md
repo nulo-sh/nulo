@@ -1,0 +1,1 @@
+- 2026-11-16: plan written at `35c580901`; light tier, no plan audit (the lane brief's proportion); no owner asks.
