@@ -370,6 +370,7 @@ declare global {
   const neverOpened: typeof import('../composables/useStaleNetwork').neverOpened
   const newPasswordHint: typeof import('../utils/password-hint').newPasswordHint
   const nextAccountName: typeof import('../utils/account-name').nextAccountName
+  const nextScrollTop: typeof import('../utils/next-scroll-top').nextScrollTop
   const nextTick: typeof import('vue').nextTick
   const normalizeAllIds: typeof import('../utils/full-backup-helpers').normalizeAllIds
   const normalizeAmount: typeof import('../utils/amount').normalizeAmount
@@ -929,6 +930,9 @@ declare global {
   export type { NetworkStatusTone } from '../utils/network-status'
   import('../utils/network-status')
   // @ts-ignore
+  export type { NextSectionGeometry } from '../utils/next-scroll-top'
+  import('../utils/next-scroll-top')
+  // @ts-ignore
   export type { HandbackRoute, HandbackSnack, Handback } from '../utils/panel-handback'
   import('../utils/panel-handback')
   // @ts-ignore
@@ -1354,6 +1358,7 @@ declare module 'vue' {
     readonly neverOpened: UnwrapRef<typeof import('../composables/useStaleNetwork')['neverOpened']>
     readonly newPasswordHint: UnwrapRef<typeof import('../utils/password-hint')['newPasswordHint']>
     readonly nextAccountName: UnwrapRef<typeof import('../utils/account-name')['nextAccountName']>
+    readonly nextScrollTop: UnwrapRef<typeof import('../utils/next-scroll-top')['nextScrollTop']>
     readonly nextTick: UnwrapRef<typeof import('vue')['nextTick']>
     readonly normalizeAllIds: UnwrapRef<typeof import('../utils/full-backup-helpers')['normalizeAllIds']>
     readonly normalizeAmount: UnwrapRef<typeof import('../utils/amount')['normalizeAmount']>

@@ -20,11 +20,10 @@
 
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
-import { useScrollRemaining } from "@/composables/useScrollRemaining"
+import { MORE_FOOTPRINT_PX, useMoreBelow } from "@/composables/useMoreBelow"
 
 /** Utils */
-import { isCalm } from "@/utils/motion"
-import { COLLAPSING_HERO, nextScrollTop, revealMove } from "./collapsing-hero"
+import { COLLAPSING_HERO, revealMove } from "./collapsing-hero"
 
 const props = defineProps({
 	/**
@@ -44,39 +43,27 @@ const props = defineProps({
 	moreBelow: { type: Boolean, default: false },
 })
 
-/** The button's footprint: 36 px tall, 12 px above the scroll area's bottom. It shows only while
- *  more than this is left below, so it is gone before it could cover the last control. */
-const FOOTPRINT_PX = 48
 /** With the 20 px bottom padding a section carries, the room keeps the footprint blank at the end,
  *  so the button never shows while only blank space is left. */
-const END_ROOM_PX = FOOTPRINT_PX - 20
+const END_ROOM_PX = MORE_FOOTPRINT_PX - 20
 
 const wrapperRef = useTemplateRef("wrapperRef")
 const headerRef = useTemplateRef("headerRef")
 const titleRef = useTemplateRef("titleRef")
 const heroVisible = ref(true)
 const scrollEl = shallowRef(null)
-const { remaining, gutter } = useScrollRemaining(computed(() => (props.moreBelow ? scrollEl.value : null)))
-const moreShown = computed(() => props.moreBelow && remaining.value > FOOTPRINT_PX)
+const {
+	shown: moreShown,
+	gutter,
+	press: showMore,
+} = useMoreBelow(
+	computed(() => (props.moreBelow ? scrollEl.value : null)),
+	{ barBottom: () => headerRef.value?.$el?.getBoundingClientRect().bottom },
+)
 
 const handleScroll = () => {
 	if (!scrollEl.value) return
 	heroVisible.value = scrollEl.value.scrollTop < 40
-}
-
-/** Sections are read on each press: a page's steps swap them. */
-function showMore() {
-	const scroller = scrollEl.value
-	const bar = headerRef.value?.$el
-	if (!scroller || !bar) return
-	const top = nextScrollTop({
-		scrollTop: scroller.scrollTop,
-		maxScroll: scroller.scrollHeight - scroller.clientHeight,
-		barBottom: bar.getBoundingClientRect().bottom,
-		viewBottom: scroller.getBoundingClientRect().top + scroller.clientHeight,
-		sections: [...scroller.querySelectorAll("[data-scroll-section]")].map((el) => el.getBoundingClientRect()),
-	})
-	scroller.scrollTo({ top, behavior: isCalm() ? "auto" : "smooth" })
 }
 
 function reveal(el) {

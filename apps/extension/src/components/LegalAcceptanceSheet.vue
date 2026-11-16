@@ -31,7 +31,7 @@ const busy = ref(false)
 const legal = useLegalAcceptance(managers.legal)
 
 const bodyRef = useTemplateRef("bodyRef")
-const more = useMoreBelow(computed(() => bodyRef.value?.wrapper ?? null))
+const { shown: moreShown, gutter: moreGutter, press: showMore } = useMoreBelow(computed(() => bodyRef.value?.wrapper ?? null))
 
 const visible = computed(() =>
 	shouldShowLegalSheet({
@@ -128,11 +128,11 @@ onBeforeUnmount(() => {
 					/>
 				</Flex>
 				<ScrollMoreButton
-					:shown="more.shown.value"
+					:shown="moreShown"
 					:class="$style.more_below"
-					:style="{ right: `${16 + more.gutter.value}px` }"
+					:style="{ right: `${16 + moreGutter}px` }"
 					data-testid="legal-sheet-scroll-more"
-					@press="more.press"
+					@press="showMore"
 				/>
 			</div>
 

@@ -108,7 +108,7 @@ const appStore = useAppStore()
 
 const profile = ref<ProfileInfo>()
 const scrollRef = useTemplateRef("scrollRef")
-const more = useMoreBelow(computed(() => scrollRef.value?.wrapper ?? null))
+const { shown: moreShown, press: showMore } = useMoreBelow(computed(() => scrollRef.value?.wrapper ?? null))
 
 const router = useRouter()
 
@@ -840,10 +840,10 @@ onUnmounted(() => {
 				</Flex>
 			</Flex>
 			<ScrollMoreButton
-				:shown="more.shown.value"
+				:shown="moreShown"
 				:class="$style.more_below"
 				data-testid="execute-scroll-more"
-				@press="more.press"
+				@press="showMore"
 			/>
 		</div>
 
@@ -895,8 +895,8 @@ onUnmounted(() => {
 	flex-direction: column;
 }
 
-/* Bottom left, on the sections' 16 px gutter: every value column right-aligns, so the right corner
- * would sit on the figures a person is checking. The scrollbar gutter is on the right and moves nothing here. */
+/* Bottom left, on the sections' 16 px gutter: value columns right-align, so the right corner would
+ * cover the figures a person is checking. The scrollbar sits right and offsets nothing here. */
 .more_below {
 	position: absolute;
 	bottom: 12px;

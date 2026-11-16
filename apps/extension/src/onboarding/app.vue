@@ -24,7 +24,7 @@ import { doneRoute, resumePath, settleResume } from "./steps"
 const popupStore = usePopupStore()
 const router = useRouter()
 const { hydrateKnownProfile } = useProfileBootstrap()
-const more = useMoreBelow(ref<"document">("document"))
+const { shown: moreShown, gutter: moreGutter, press: showMore } = useMoreBelow("document")
 
 // `theme-boot.js` painted the hint before first paint, and it stands until Config is read: applying a
 // default first would paint a theme nobody chose and overwrite the hint the next document reads.
@@ -117,11 +117,11 @@ onBeforeUnmount(() => {
 		</RouterView>
 
 		<ScrollMoreButton
-			:shown="more.shown.value"
+			:shown="moreShown"
 			:class="$style.more_below"
-			:style="{ right: `${16 + more.gutter.value}px` }"
+			:style="{ right: `${16 + moreGutter}px` }"
 			data-testid="onboarding-scroll-more"
-			@press="more.press"
+			@press="showMore"
 		/>
 
 		<div id="toast" />
