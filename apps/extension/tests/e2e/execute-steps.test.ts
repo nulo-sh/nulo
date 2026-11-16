@@ -259,9 +259,9 @@ const rectOf = (page: Page, selector: string) =>
 const tabbableCount = (page: Page) =>
 	page.evaluate(
 		() =>
-			[...document.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(
-				(el) => !(el as HTMLButtonElement).disabled && el.getClientRects().length > 0,
-			).length,
+			[
+				...document.querySelectorAll<HTMLElement>(':is(button, a[href], input, select, textarea, [tabindex]):not([tabindex="-1"])'),
+			].filter((el) => !(el as HTMLButtonElement).disabled && el.getClientRects().length > 0).length,
 	)
 
 /** Every chip is one stop: the app's leads, each step's follow its row (a transfer's contract, sender
