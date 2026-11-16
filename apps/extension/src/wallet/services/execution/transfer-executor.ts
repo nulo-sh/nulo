@@ -41,7 +41,7 @@ import type { ExecutionLane } from "./execution-lane"
 import type { SharedSendDeps } from "./shared-send-deps"
 import type { SendSequencer, SequenceScope, SequenceTicket } from "./send-sequencer"
 import type { Action, FeeOptions, FeeSettings, TransferFeeEstimate, TransferFeeQueued } from "./spec"
-import { probeOwnFeeJuice, probeSponsorFunding, recheckShortfall } from "./sponsor-funding"
+import { ownFeeJuiceShortfall, probeSponsorFunding } from "./sponsor-funding"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
 import { minedSuccessfully, type SequenceKey, transferSequenceKeys, usedSequences } from "./transfer-sequence-keys"
 import { getEstimatedFee, getGasDetails } from "./tx-fee-details"
@@ -759,15 +759,7 @@ export class TransferExecutor {
 		throwIfAborted(signal)
 		const log = (msg: string, data: object) => this.deps.logDebug(msg, data)
 		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log)
-		const ownShortfall = await probeOwnFeeJuice(built, this.deps.readPublicStorageOnce, log)
-		const payer = built.account.address.toString()
-		const feeJuiceShortfall =
-			ownShortfall &&
-			(await recheckShortfall(ownShortfall, {
-				peek: () => this.deps.peekPublicFeeJuice(built.network.id, payer),
-				reread: () => this.deps.rereadPublicFeeJuice(built.network.id, payer),
-				reprobe: () => probeOwnFeeJuice(built, this.deps.readPublicStorageOnce, log),
-			}))
+		const feeJuiceShortfall = await ownFeeJuiceShortfall(built, this.deps, log)
 		throwIfAborted(signal)
 
 		const maxFeeRaw = BigInt(getEstimatedFee(txRequest))

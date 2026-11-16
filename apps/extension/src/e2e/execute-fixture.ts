@@ -30,9 +30,9 @@ export const EXECUTE_FIXTURES = [
 	"ancestry",
 	"listed",
 	"long-names",
-	"fee-zero",
 	"fee-zero-disputed",
 	"fee-zero-agreed",
+	"fee-zero-resolved",
 ] as const
 export type ExecuteFixtureName = (typeof EXECUTE_FIXTURES)[number]
 
@@ -305,10 +305,17 @@ type Shape = {
 	selfPaid?: { gasBalances: GasBalances; estimate: Partial<TransferFeeEstimate>; gasAfterEstimate?: GasBalances }
 }
 
-/** A field case of a funded account refused: the cached balance covers the fee, the fresh probe read
- *  zero. The limit rounds up to ~4.160516 FJ in the refusal and half-up to ~4.160515 FJ in the cost. */
+/** The field case of a funded account the probe read empty: the card's cached balance covers a fee
+ *  limit that rounds up to ~4.160516 FJ in a warning and half-up to ~4.160515 FJ in the cost, and
+ *  the estimate carries what the worker's recheck concluded. */
 const FEE_ZERO_LIMIT = "4160515300000000000"
 const FEE_ZERO_CACHED = "38163812345678901234"
+const feeZero = (main: string, estimate: Partial<TransferFeeEstimate>, gasAfterEstimate?: GasBalances): Shape => ({
+	specs: [transfer(USDC, main, RECIPIENT, 25_000_000n)],
+	authwits: [],
+	maxFee: FEE_ZERO_LIMIT,
+	selfPaid: { gasBalances: { publicFeeJuice: FEE_ZERO_CACHED, privateFeeJuice: null }, estimate, gasAfterEstimate },
+})
 
 /** The longest unbroken strings the window takes from an app: a 64-character name, a 63-character
  *  host label and a contract that names itself in 64 characters. */
@@ -350,31 +357,16 @@ const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
 			return fee([ancestrySpec()], "2500000000000000")
 		case "listed":
 			return fee(listedSpecs(main), "2500000000000000")
-		case "fee-zero":
-			return {
-				...fee([transfer(USDC, main, RECIPIENT, 25_000_000n)], FEE_ZERO_LIMIT),
-				selfPaid: {
-					gasBalances: { publicFeeJuice: FEE_ZERO_CACHED, privateFeeJuice: null },
-					estimate: { feeJuiceShortfall: { maxFee: FEE_ZERO_LIMIT, balance: "0" } },
-				},
-			}
 		case "fee-zero-disputed":
-			return {
-				...fee([transfer(USDC, main, RECIPIENT, 25_000_000n)], FEE_ZERO_LIMIT),
-				selfPaid: {
-					gasBalances: { publicFeeJuice: FEE_ZERO_CACHED, privateFeeJuice: null },
-					estimate: { feeJuiceShortfall: { maxFee: FEE_ZERO_LIMIT, balance: "0", lastRead: FEE_ZERO_CACHED } },
-				},
-			}
+			return feeZero(main, { feeJuiceShortfall: { maxFee: FEE_ZERO_LIMIT, balance: "0", lastRead: FEE_ZERO_CACHED } })
 		case "fee-zero-agreed":
-			return {
-				...fee([transfer(USDC, main, RECIPIENT, 25_000_000n)], FEE_ZERO_LIMIT),
-				selfPaid: {
-					gasBalances: { publicFeeJuice: FEE_ZERO_CACHED, privateFeeJuice: null },
-					estimate: { feeJuiceShortfall: { maxFee: FEE_ZERO_LIMIT, balance: "0" } },
-					gasAfterEstimate: { publicFeeJuice: "0", privateFeeJuice: null },
-				},
-			}
+			return feeZero(
+				main,
+				{ feeJuiceShortfall: { maxFee: FEE_ZERO_LIMIT, balance: "0" } },
+				{ publicFeeJuice: "0", privateFeeJuice: null },
+			)
+		case "fee-zero-resolved":
+			return feeZero(main, {})
 		case "long-names":
 			return {
 				...fee(

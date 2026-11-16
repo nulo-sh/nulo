@@ -520,6 +520,26 @@ describe("execute window — an armed build's fixture", () => {
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
 	})
 
+	test("a fixture whose footer answers as a live request's shows Confirm on, and a press still answers nothing", async () => {
+		fixtureBuild.armed = true
+		route.query = { ...liveQuery, fixture: "fee-zero-disputed" }
+		w = factory()
+		await flushPromises()
+		approval.resolveProfile?.({ id: "p1" })
+		await flushPromises()
+		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+		const limit = "4160515300000000000"
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+		feeMapInstances[0]!.api.results.value = {
+			0: { maxFee: limit, feeJuiceShortfall: { maxFee: limit, balance: "0", lastRead: "38163812345678901234" } },
+		}
+		await flushPromises()
+		expect(w.find('[data-testid="execute-confirm-btn"]').attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		await flushPromises()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
 	test("the chips' names never hold the cards: a contacts read that never answers leaves them loading, an answer names, a failure names none", async () => {
 		fixtureBuild.armed = true
 		const names = () => w!.findComponent(STUBS.OperationCard).props("names")
@@ -1269,6 +1289,18 @@ describe("execute window — an operation the app pays for", () => {
 		expect(confirm().attributes("disabled")).toBeDefined()
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("a shortfall the wallet's two reads still disagree on leaves Confirm on: the node decides at submission", async () => {
+		const { vm, fees, confirm } = await opened()
+		const limit = "4160515300000000000"
+		fees.api.results.value = {
+			0: { maxFee: limit, feeJuiceShortfall: { maxFee: limit, balance: "0", lastRead: "38163812345678901234" } },
+		}
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
 
 	test("a shortfall already shown holds Confirm while its replacement estimate runs", async () => {

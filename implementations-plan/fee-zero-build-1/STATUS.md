@@ -1,1 +1,2 @@
 - 2026-11-16 plan: written at 3017f1928; clause verified (holds); no owner asks.
+- 2026-11-16 phase 1: lint, typecheck:all, test (1041 files; one pin re-attested, D13), test:components (104), wallet-bridge test green; armed-gate test base 269/152/164 ms, head 242/229/397 ms.

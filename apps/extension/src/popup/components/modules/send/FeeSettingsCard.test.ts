@@ -3131,7 +3131,7 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 		w.unmount()
 	})
 
-	test("a confirmed zero against a figure that covered the fee re-reads the card's balance once, so both rows agree", async () => {
+	test("a confirmed zero against a figure that covered the fee re-reads the card's balance once, unforced, so both rows agree", async () => {
 		mocks.getFpcs.mockResolvedValue([])
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "38163812345678901234", privateFeeJuice: null })
 		const row = {
@@ -3144,13 +3144,14 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 		expect(w.get('[data-testid="fee-method-row"]').attributes("data-balance")).toBe("38.1638")
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
 		const confirmed = { maxFee: "4160515300000000000", feeJuiceShortfall: { maxFee: "4160515300000000000", balance: "0" } }
+		const before = mocks.getGasBalances.mock.calls.length
 		await w.setProps({ feeEstimate: confirmed })
 		await flushPromises()
-		const reads = mocks.getGasBalances.mock.calls.length
 		await w.setProps({ feeEstimate: { ...confirmed } })
 		await flushPromises()
-		expect(mocks.getGasBalances).toHaveBeenCalledTimes(reads)
-		expect(mocks.getGasBalances.mock.calls.filter((call) => call[2] === true)).toHaveLength(1)
+		const rereads = mocks.getGasBalances.mock.calls.slice(before)
+		expect(rereads).toHaveLength(1)
+		expect(rereads[0]?.[2], "the re-read takes the reader's figure the worker's recheck just wrote").toBeFalsy()
 		expect(w.get('[data-testid="fee-method-row"]').attributes("data-balance")).toBe("0")
 		expect(shortfall(w).text()).toBe("This send can cost up to ~4.160516 FJ. You have 0 FJ.")
 		w.unmount()

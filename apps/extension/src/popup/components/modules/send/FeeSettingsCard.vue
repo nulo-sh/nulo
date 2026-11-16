@@ -258,8 +258,9 @@ const shortfall = computed(() => {
 const unconfirmedText = (s) =>
 	`Your balance couldn't be confirmed: one check found ${s.lastRead} FJ and a fresh one found ${s.balance} FJ. If the network refuses this send, nothing is charged.`
 
-/** A confirmed shortfall against a figure that covered the fee: the worker's recheck read both again,
- *  so the card takes the fresh figure once, and the two rows agree. */
+/** A confirmed shortfall against a figure that covered the fee: the worker's recheck has just read the
+ *  balance afresh into its reader's cache, so an unforced read takes exactly that figure, once per
+ *  estimate, and the two rows agree. Forcing would read the network a third time, maybe elsewhere. */
 const rereadFor = new WeakSet()
 watch(
 	() => props.feeEstimate,
@@ -269,7 +270,7 @@ watch(
 		if (!short || short.lastRead || cached == null || BigInt(cached) < BigInt(short.maxFee) || rereadFor.has(estimate)) return
 		rereadFor.add(estimate)
 		balancesStore
-			.ensure(liveFeeScope(props), { legs: ["gas"], forceRefresh: true })
+			.ensure(liveFeeScope(props), { legs: ["gas"] })
 			.then(() => snapshot.refreshGas())
 			.catch((error) => console.debug("Fee Juice re-read failed", { error }))
 	},

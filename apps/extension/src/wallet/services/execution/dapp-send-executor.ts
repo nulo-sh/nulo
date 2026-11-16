@@ -76,7 +76,7 @@ import { throwIfAborted } from "./rpc-cancel"
 import { askFeeAgain, feeRiseAsks, personalPayerOf } from "./fee-reask"
 import type { QueuedFeeAnswers } from "./queued-fee-cap"
 import { MAX_WAIT_MS, type SendSequencer, type SequenceScope, type SequenceTicket } from "./send-sequencer"
-import { probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding, recheckShortfall } from "./sponsor-funding"
+import { ownFeeJuiceShortfall, probeAppPayerFunding, probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { type FeeEstimate, finalizeGasLimits, type OnBuilt, suggestGasLimits } from "./fee/fee-strategy"
 import { gasFeeOptionsOf, type OperationPlanner } from "./operation-planner"
@@ -507,15 +507,7 @@ export class DappSendExecutor {
 		const log = (msg: string, data: object) => this.deps.logDebug(msg, data)
 		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log)
 		const appPayerFunding = await probeAppPayerFunding(built, this.deps.readPublicStorageOnce, log)
-		const ownShortfall = await probeOwnFeeJuice(built, this.deps.readPublicStorageOnce, log)
-		const payer = built.account.address.toString()
-		const feeJuiceShortfall =
-			ownShortfall &&
-			(await recheckShortfall(ownShortfall, {
-				peek: () => this.deps.peekPublicFeeJuice(built.network.id, payer),
-				reread: () => this.deps.rereadPublicFeeJuice(built.network.id, payer),
-				reprobe: () => probeOwnFeeJuice(built, this.deps.readPublicStorageOnce, log),
-			}))
+		const feeJuiceShortfall = await ownFeeJuiceShortfall(built, this.deps, log)
 		throwIfAborted(signal)
 
 		const identity = fingerprintInputFor(operation, feeSettings, detectedFee, preDiscoveryActions)

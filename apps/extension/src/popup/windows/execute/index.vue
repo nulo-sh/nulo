@@ -581,7 +581,7 @@ const retryFeeEstimate = (index: number) =>
 	handleFeeUpdate(index, (operations.value[index] as { feeSettings?: FeeSettings } | undefined)?.feeSettings)
 
 const approve = async () => {
-	if (isLoading.value || refusal.value || confirmBlocked.value) return
+	if (!requestId.value || isLoading.value || refusal.value || confirmBlocked.value) return
 	if (needsFeeSelection.value) {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
