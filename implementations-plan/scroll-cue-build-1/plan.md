@@ -35,6 +35,9 @@ Proportion (lane brief): a measured prototype made a build. No plan audit round,
 | D8 | New testids `legal-sheet-scroll-more`, `execute-scroll-more`, `onboarding-scroll-more`. No existing testid moves. | `security.test.ts` reads the layout's `scroll-more`, which is unchanged. |
 | D9 | Accessibility (the owner's 2026-10-19 delegation): `ScrollMoreButton` is untouched. It stays `tabindex="-1"`, its `mousedown` default stays prevented, it keeps its `:focus-visible` ring and its click-through while fading, and no Tab stop is added. | Page 109's button, a pointer shortcut. Keyboard users scroll as before. |
 | D10 | E2E: two cases in `legal-acceptance.test.ts`, one in `execute-steps.test.ts` (Phase 2). The overlap scan stays local to the execute case. | No spec in the repo is "the onboarding spec": the Terms gate's cases live in `legal-acceptance.test.ts` (recon). |
+| D11 | Execute with the steps shut: the build measured the window's opening state, which the page had not. On `batch` at 400 × 800 the button's bottom 5 px overlaps the top of "Leaves your account". The e2e asserts no control or glyph under the button in that state, and nothing at all with the steps open or after press 1. A success control proves the scan reads a line brought under the button. Owner ask A1; the left placement ships as signed. | Demonstrated (Phase 2, `scb1-args-shut-left`). No end room or mark moves a first-paint overlap, and moving the button is the owner's call. Asserting text-free in the shut state would pin a defect the signed placement causes; asserting nothing would let a control slip under it. |
+| D12 | Onboarding in a 720 px wide window: the corner meets the 640 px column. On the phrase step at 720 × 900 the button covers about 12 × 27 px of I saved it. Owner ask A2; the corner ships as signed. At 1280 × 720 every page is clean, with 63–64 px of end room. | Demonstrated (Phase 3 probe, `scb1-onb-phrase-narrow`). No right-side placement clears the column below about 750 px. |
+| D13 | `execute-steps.test.ts`'s `tabbableCount` now skips a `tabindex="-1"` button. | Its selector counted every `button`, so the new button made 26 read 27. The same test's Tab walk passed, which shows the button is no Tab stop. The fix is at the helper's cause; no expected number moved. |
 
 ## UI impact
 
@@ -60,11 +63,11 @@ The sign-off is **P155-01 = B**, quoted above.
 - F3. `openOnboarding` sets 720 × 900, where the Terms gate does not scroll (it hides 156 px at 720 tall). The new onboarding case sets 1280 × 720.
 - F4. Onboarding's `html` and `body` are `height: 100%`, so the document scrolls and `#app` grows with the content (`onboarding.scss`).
 - F5. Existing onboarding specs click by DOM `click()` (`clickByTestId`), and `pointerClick` centres its target first. A corner button cannot cover what they press.
-- F6. At 720 px wide the 640 px column runs to x 680, and the corner button spans about x 668–704. Phase 3 probes whether it sits over a control at first paint (D11 once measured).
+- F6. At 720 px wide the 640 px column runs to x 680, and the corner button spans about x 668–704. Measured in Phase 3 (D12).
 
-**Asks.** None yet; Phase 3's probe may raise one (see F6), in the "what ships now" form.
+**Asks.** A1 (D11) and A2 (D12) in [`OWNER-ASKS.md`](OWNER-ASKS.md). What ships now: both placements as signed.
 
-## Phase 1: the composable, the moved rule, the layout and the three shells
+## Phase 1: the composable, the moved rule, the layout and the three shells ✓
 
 1. Cherry-pick `ff0a10655` and `119a45227` onto `scroll-cue-build-1-a1`; resolve by hand.
 2. `apps/extension/src/utils/next-scroll-top.ts` (+ `.test.ts`, the nine cases moved); `components/composite/collapsing-hero.ts` and `.test.ts` lose them (D2).
@@ -82,7 +85,7 @@ The sign-off is **P155-01 = B**, quoted above.
 
 **Gate** (retry 0, in order, from the root): `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension test:components`. Pass: all exit 0. The new tests fail on the base, and every existing assertion passes unedited.
 
-## Phase 2: the three e2e scenarios, both browsers
+## Phase 2: the three e2e scenarios, both browsers ✓
 
 | Case | Failure mode it proves | Why no cheaper layer | Estimate |
 |---|---|---|---|
@@ -97,6 +100,8 @@ The sign-off is **P155-01 = B**, quoted above.
 
 No network spec reads the button. Pass: every run exits 0, and each case's measured time is recorded here.
 
+Measured at `a86314fcb`, in-file on Chrome then filtered on Firefox: (i) 6.7 s and 11.7 s; (ii) 2.8 s (the file's fixture shared) and 12.5 s (fixture setup included); (iii) 4.9 s and 9.7 s. Every gate run exited 0 once D13 landed; `shipped-token-list` skips off an artifact run, as on dev.
+
 ## Phase 3: probe, captures, the Codex pass, the PR
 
 1. A scratch probe and capture spec, copied from scroll-cue-5's `spec/` into `tests/e2e/`, run with the same env plus `NULO_E2E_SHOT_DIR`, then deleted and never committed. It probes:
@@ -110,7 +115,7 @@ No network spec reads the button. Pass: every run exits 0, and each case's measu
    - `scb1-onb-terms-cue` and `scb1-onb-terms-end`;
    - `scb1-import-cue`.
 3. The one Codex pass (gpt-6.1-sol, high, read-only) over this plan and `git diff origin/dev...HEAD`. It is asked the brief's five questions (listeners end with the scope on every shell; the 48 px footprint is blank at each end; nothing sits under the execute button at first paint or after press 1; the onboarding button is never over a modal or a Tab stop; the ten layout screens are unchanged), plus D1 and D5. Take its findings and rerun only what a fix touches. A second round runs only if it does not approve.
-4. `bun run check:plans` staged, push, then open the PR ready without labels. Title (88 characters): `feat(popup): the more-below button on the Terms sheet, the execute window and onboarding`. The body carries the pick as sign-off, page 109 and #1666, the twelve screens left as they are, the D9 accessibility call, gates with outcomes, each browser's smoke wall-clock before and after from CI's job envelopes, the Terms pair embedded from `pr-captures/scroll-cue-build-1/` (committed, then removed in the next commit), and `Closes #1658`. Then `gh pr checks --watch` once.
+4. `bun run check:plans` staged, push, then open the PR ready without labels. Title (88 characters, lower case for commitlint's `subject-case`): `feat(popup): the more-below button on the terms sheet, the execute window and onboarding`. The body carries the pick as sign-off, page 109 and #1666, the twelve screens left as they are, the D9 accessibility call, gates with outcomes, each browser's smoke wall-clock before and after from CI's job envelopes, the Terms pair embedded from `pr-captures/scroll-cue-build-1/` (committed, then removed in the next commit), and `Closes #1658`. Then `gh pr checks --watch` once.
 
 ## Delivery and post-implementation
 

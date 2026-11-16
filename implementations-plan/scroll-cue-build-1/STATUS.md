@@ -1,1 +1,6 @@
 - 2026-11-16 plan: written (light, one arc, B as signed); no plan audit per the lane brief
+- 2026-11-16 phase 1 gate at 20023d470: lint, typecheck:all, test (1044 files), test:components (104 files) green
+- 2026-11-16 phase 2 Chrome at a86314fcb: security, legal-acceptance, execute-steps, rows, token-list green (shipped-token-list skips off an artifact run); type-roles "onboarding's every page" green
+- 2026-11-16 phase 2 Firefox at a86314fcb: S12, S13 and the execute case green
+- 2026-11-16 decision: the execute button's bottom 5 px meets "Leaves your account" at first paint with the steps shut; owner ask A1, the left placement ships as signed
+- 2026-11-16 phase 3 probe and captures (Chrome, at a86314fcb): eight frames light and dark plus captions; asks A1 and A2 written
