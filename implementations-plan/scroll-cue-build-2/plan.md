@@ -90,3 +90,4 @@ One arc, one PR. The Post-implementation standard (`implementations-plan/README.
 ## Audit verdicts
 
 - Plan audit: none (the lane brief's proportion).
+- Codex, one pass over this plan and the net diff at `40bffec3e` (gpt-6.1-sol, high): `approve`, high confidence on all four asks. D1 holds (16 px clear at 776; 744 would leave 0), D5 holds (the native button never mounts while narrow; a zero width fails closed), nothing else moves at wide windows, D3 holds for the fixed box and for the two framed hosts. Three non-blocking items, each verified and accepted in `d85aebc7f`: the e2e pair reads what is left below from the current scroll; the observer test delivers a callback, so a scrollbar that content brings in re-measures the width; one doc comment that restated its fixture removed. Targeted verification: the two unit files, lint, the extension typecheck, and the happy path on Chrome (7.8 s) and Firefox (15.6 s). Detail in [`lessons/phase-1.md`](lessons/phase-1.md).
