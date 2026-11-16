@@ -15,8 +15,9 @@
  *    grace windows. The rationale: a fresh SW has an empty pending-
  *    request map, so any record in proving/submitting from a previous
  *    SW lifetime is unrecoverable regardless of how recently it started.
- *    Error kind = `sw_restart_post_prove` (proving) / `stale_on_resume`
- *    (others) per the documented `JobError.kind` set.
+ *    Error kind = `interrupted_by_restart` (a token import, at any stage) /
+ *    `sw_restart_post_prove` (proving) / `stale_on_resume` (others) per the
+ *    documented `JobError.kind` set.
  *
  * 2. **Periodic tick** (chrome.alarms, every 1 min): respects the
  *    per-stage grace windows. Catches records that get stuck within
@@ -147,8 +148,7 @@ export class JournalReaper {
 		// empty activeControllers map + no pending requests in any client).
 		// Even if the offscreen prove finishes, its response will be dropped
 		// when it arrives because no requestId in the new SW matches it.
-		// So at boot we transition EVERY in-flight record to `failed` with
-		// `sw_restart_post_prove` (proving) / `stale_on_resume` (others) —
+		// So at boot we transition EVERY in-flight record to `failed`, with
 		// no grace window to wait for, since recovery is impossible.
 		try {
 			await this.reap({ unconditional: true, bootCutoff })
@@ -189,11 +189,9 @@ export class JournalReaper {
 	 * `unconditional: true` skips the grace-window gate — used by the
 	 * boot sweep, where every non-terminal record is by construction from
 	 * a previous SW lifetime and unrecoverable (the new SW has an empty
-	 * pending-request map). Error kind reflects the post-prove SW restart
-	 * cause: `sw_restart_post_prove` for the proving stage, `stale_on_resume`
-	 * for the others. Periodic ticks (the normal path) keep the grace
-	 * window — a proving op started 10s ago in THIS SW instance should
-	 * NOT be reaped.
+	 * pending-request map); `classifyReapKind` names the kind. Periodic
+	 * ticks (the normal path) keep the grace window — a proving op started
+	 * 10s ago in THIS SW instance should NOT be reaped.
 	 */
 	public async reap(opts?: { unconditional?: boolean; bootCutoff?: number; profileId?: string }): Promise<void> {
 		const inflight = await this.journal.getOperations({
@@ -208,7 +206,7 @@ export class JournalReaper {
 			const age = now - op.updatedAt
 			if (shouldSkipRecord(op, age, unconditional, bootCutoff)) continue
 			const grace = STAGE_GRACE_MS[stage as ActiveStage]
-			const kind = classifyReapKind(stage, unconditional)
+			const kind = classifyReapKind(op, unconditional)
 			const reason = unconditional
 				? `SW restart with non-terminal record in ${stage} — unrecoverable`
 				: `${stage} stage exceeded grace window (${age}ms ≥ ${grace}ms)`
@@ -258,8 +256,12 @@ function shouldSkipRecord(op: OperationRecord, age: number, unconditional: boole
  *  35-min sanity ceiling within THIS SW's lifetime. A queued record the restart
  *  ended is interrupted like every other stage it ends; one past its grace window
  *  within a lifetime is "stuck" — it never made it past the message-arrival
- *  surface — tagged distinctly for observability. */
-function classifyReapKind(stage: OperationRecord["progress"]["stage"], unconditional: boolean): string {
+ *  surface — tagged distinctly for observability. A token import has no
+ *  transaction for the send check to look up, so the restart that ended it is its
+ *  whole reason, apart from the stall kind a periodic tick gives it. */
+function classifyReapKind(op: OperationRecord, unconditional: boolean): string {
+	const stage = op.progress.stage
+	if (unconditional && op.kind === "token_import") return "interrupted_by_restart"
 	if (stage === "proving") return unconditional ? "sw_restart_post_prove" : "stuck_proving"
 	if (stage === "queued" && !unconditional) return "stuck_queued"
 	return "stale_on_resume"

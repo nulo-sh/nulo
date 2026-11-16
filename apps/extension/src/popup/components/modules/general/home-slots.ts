@@ -54,6 +54,18 @@ function splitImports<O extends SlotImportOp>(imports: readonly O[], defaults: R
 	return { standing, userImports }
 }
 
+/** Failed imports followed by a later import of the same contract, whatever its stage. Pass one
+ *  scope's records. */
+export function supersededImports(ops: readonly Pick<OperationRecord, "id" | "contractAddress" | "createdAt" | "progress">[]) {
+	const latest = new Map<string, number>()
+	for (const op of ops) {
+		const contract = contractOf(op.contractAddress)
+		latest.set(contract, Math.max(latest.get(contract) ?? op.createdAt, op.createdAt))
+	}
+	const isEarlier = (op: (typeof ops)[number]) => op.createdAt < (latest.get(contractOf(op.contractAddress)) ?? op.createdAt)
+	return new Set(ops.filter((op) => op.progress?.stage === "failed" && isEarlier(op)).map((op) => op.id))
+}
+
 export function homeSlots<R extends SlotTokenRow, O extends SlotImportOp, S extends SlotSeed>(input: {
 	rows: readonly R[]
 	imports: readonly O[]

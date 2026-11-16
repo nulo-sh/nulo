@@ -142,6 +142,28 @@ describe("JournalReaper.reap", () => {
 		expect(categoricalLabel(op).label).toBe("Interrupted before sending")
 	})
 
+	test("a token import a restart ended is interrupted_by_restart at boot and at the unlock; a stall in one lifetime is not", async () => {
+		const tokenImport: NewOperationInput = { kind: "token_import", origin: "popup", profileId: "profile-a", contractAddress: "0x0a" }
+		const atBoot = await service.createOperation(tokenImport)
+		const transfer = await service.createOperation(VALID_INPUT)
+		const reaper = new JournalReaper(service, api.alarms, logger, { bootCutoff: Date.now() + 60_000 })
+		await reaper.start()
+		const atUnlock = await service.createOperation(tokenImport)
+		await service.transitionOperation(atUnlock.id, { stage: "simulating" })
+		await reaper.reapUnlocked("profile-a")
+		await reaper.stop()
+		const stalled = await service.createOperation(tokenImport)
+		await new JournalReaper(service, api.alarms, logger, { now: () => stalled.updatedAt + 3 * 60_000 }).reap()
+
+		const kindOf = async (id: string) => (await service.getOperation(id))?.error?.kind
+		expect([await kindOf(atBoot.id), await kindOf(atUnlock.id), await kindOf(transfer.id), await kindOf(stalled.id)]).toEqual([
+			"interrupted_by_restart",
+			"interrupted_by_restart",
+			"stale_on_resume",
+			"stale_on_resume",
+		])
+	})
+
 	// (BOOT-SWEEP PIN) The cold-start boot sweep must NOT fail a record created in the
 	// CURRENT SW lifetime — i.e. by the very request that woke the SW after
 	// reaper.start() began. bootCutoff is captured at start(); rows with
