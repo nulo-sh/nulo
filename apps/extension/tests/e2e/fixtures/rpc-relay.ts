@@ -162,9 +162,9 @@ const calls = (rule: RelayRule, e: Entry) => rule.methods?.includes(bare(e.metho
 const answers = (rule: RelayRule, entry: Entry): boolean =>
 	(rule.methods === undefined || calls(rule, entry)) && (rule.carrying === undefined || entry.text.includes(rule.carrying.toLowerCase()))
 
-/** `body` is lower-cased. A `result` rule takes only a request it answers an entry of. */
+/** `body` is lower-cased. A `result` rule that would answer no entry must not spend its `times`. */
 function matches(rule: RelayRule, entries: readonly Entry[] | undefined, body: string): boolean {
-	if (rule.fault.kind === "result") return entries?.some((e) => answers(rule, e)) === true
+	if (rule.fault.kind === "result" && !entries?.some((e) => answers(rule, e))) return false
 	const every = rule.entries === "every"
 	if (rule.methods && !(every ? entries?.length && entries.every((e) => calls(rule, e)) : entries?.some((e) => calls(rule, e)))) {
 		return false

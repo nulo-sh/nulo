@@ -213,4 +213,18 @@ test("a result rule takes no request it answers no entry of, so its count and it
 	expect(rule.taken()).toBe(0)
 	expect(results((await rpc(r, ["getPublicStorageAt"], ["latest", "0xfee", "0x1"])).text)).toEqual([zero])
 	expect(rule.taken()).toBe(1)
+
+	const every = r.fail({
+		methods: ["getPublicStorageAt"],
+		entries: "every",
+		carrying: "0xfee",
+		times: 1,
+		fault: { kind: "result", value: zero },
+	})
+	const mixed = await rpc(r, ["getPublicStorageAt", "simulatePublicCalls"], ["latest", "0xfee", "0x1"])
+	expect(results(mixed.text), "`every` still asks every entry to call a named method").toEqual([
+		"aztec_getPublicStorageAt:ok",
+		"aztec_simulatePublicCalls:ok",
+	])
+	expect(every.taken()).toBe(0)
 })
