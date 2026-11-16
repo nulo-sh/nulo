@@ -4,7 +4,10 @@
  * so the browser's check is put back to the card's choice after every change.
  */
 import { Skeleton } from "@nulo/design"
+import { FEE_JUICE_DECIMALS } from "@/utils/fee-estimation"
 import { GLOSSARY } from "@/utils/glossary"
+import { parseSide } from "@/utils/token-amount"
+import { formatUsdMicro, tokenAmountToUsdMicro } from "@/wallet/services/price/convert"
 import { menuOrder } from "./fee-helpers"
 
 const props = defineProps({
@@ -12,6 +15,9 @@ const props = defineProps({
 	methods: { type: Array, required: true },
 	/** The card is still reading what can pay. */
 	pending: { type: Boolean, default: false },
+	/** USD per Fee Juice from a band-checked quote (the conversion rejects a rate that rounds to zero
+	 *  micro-USD); none hides every balance's dollars. */
+	usd: { type: Number, default: undefined },
 })
 const emit = defineEmits(["update:modelValue"])
 
@@ -34,6 +40,14 @@ const keyOf = (m) => m.fpc?.id ?? m.type
 const isChosen = (m) =>
 	Boolean(props.modelValue) && props.modelValue.type === m.type && (m.type !== "fpc" || props.modelValue.fpc?.id === m.fpc?.id)
 const isOff = (m) => Boolean(m.disabled || m.checking)
+
+const dollarsOf = (m) => {
+	const raw = typeof m.balance === "string" ? parseSide(m.balance) : undefined
+	const usd = props.usd
+	if (raw === undefined || isOff(m) || !Number.isFinite(usd) || usd <= 0) return null
+	return formatUsdMicro(tokenAmountToUsdMicro(raw, FEE_JUICE_DECIMALS, usd))
+}
+const spendOf = (m) => (m.disabled && m.disabledReason ? m.disabledReason : m.spend)
 
 /** Vue patches `checked` only when `isChosen` changes, so a refused pick would stay checked. */
 async function onChange(m) {
@@ -91,7 +105,10 @@ defineExpose({ target, focus: () => target()?.focus() })
 				<Skeleton />
 				<span :class="$style.visually_hidden">Checking</span>
 			</span>
-			<span v-else :class="$style.spend">{{ m.disabled && m.disabledReason ? m.disabledReason : m.spend }}</span>
+			<span v-else :class="$style.spend">
+				<span :class="$style.figure">{{ spendOf(m) }}</span>
+				<span v-if="dollarsOf(m)" :class="$style.usd">{{ dollarsOf(m) }}</span>
+			</span>
 		</label>
 	</div>
 </template>
@@ -166,10 +183,24 @@ defineExpose({ target, focus: () => target()?.focus() })
 }
 
 .spend {
-	composes: type--meta from global;
+	display: flex;
 	flex: none;
+	flex-direction: column;
+	align-items: flex-end;
 	margin-left: auto;
+}
+
+.figure {
+	composes: type--value from global;
 	color: var(--nulo-secondary);
+	white-space: nowrap;
+}
+
+/* The row's secondary line, so `caption`, not the mono `fiat` every other dollar value takes. */
+.usd {
+	composes: type--caption from global;
+	color: var(--nulo-secondary);
+	white-space: nowrap;
 }
 
 .visually_hidden {

@@ -7,6 +7,7 @@ import {
 	FEE_JUICE_BRIDGE_URL,
 	type FeeMethodOption,
 	feePayerOf,
+	type GasBalances,
 	feeScopeKey,
 	formatGasBalance,
 	isLiveFeeScope,
@@ -243,6 +244,13 @@ describe("fee-helpers/buildFeeMethods — what each row can spend", () => {
 	] as const)("%s", (_, fpcs, balances, expected) => {
 		const methods = buildFeeMethods([...fpcs, NULO_SPONSOR, HAND_ADDED], balances)
 		expect(methods.map(column)).toEqual([...expected, "free", "—"])
+	})
+
+	test("each Fee Juice row keeps its balance as read; none for a leg that failed or before the read", () => {
+		const balances = (gas?: GasBalances) => buildFeeMethods([PRIVATE, NULO_SPONSOR], gas).map((m) => m.balance)
+		expect(balances({ publicFeeJuice: FJ("120"), privateFeeJuice: FJ("42") })).toEqual([FJ("120"), FJ("42"), undefined])
+		expect(balances({ publicFeeJuice: null, privateFeeJuice: FJ("42") })).toEqual([undefined, FJ("42"), undefined])
+		expect(balances(undefined)).toEqual([undefined, undefined, undefined])
 	})
 
 	test("titles: Public Fee Juice, then the FPCs' names, else Private Fee Juice and Sponsored", () => {
