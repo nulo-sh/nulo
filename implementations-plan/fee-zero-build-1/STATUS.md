@@ -1,3 +1,6 @@
 - 2026-11-16 plan: written at 3017f1928; clause verified (holds); no owner asks.
 - 2026-11-16 phase 1: lint, typecheck:all, test (1041 files; one pin re-attested, D13), test:components (104), wallet-bridge test green; armed-gate test base 269/152/164 ms, head 242/229/397 ms.
 - 2026-11-16 phase 1: smoke send-fee-privacy + send-keyboard 7/7 on the armed Chrome build at 0793b0b2a.
+- 2026-11-16 phase 2: relay unit 14/14; e2e:agent Chrome prover-ON (fee-shortfall-recheck, fee-sponsor-funding, fee-methods, tx-sendTx-default) 15/15 at 829ed6239; new scenario 65.6 s.
+- 2026-11-16 phase 2: e2e:agent Chrome proverless rpc-failover-send 1/1.
+- 2026-11-16 phase 2: e2e:agent Firefox proverless (fee-shortfall-recheck 77.1 s, rpc-failover-send) 2/2.

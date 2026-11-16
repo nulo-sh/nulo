@@ -72,10 +72,10 @@ export interface ShortfallRecheck {
 
 /**
  * A probe that reads short while the reader's last balance covers the fee is two reads of one
- * balance that disagree. Both are read once more, concurrently: agreement keeps or clears the
- * shortfall, disagreement marks it unconfirmed with the fresh reader figure. One recheck per
- * estimate and never a loop: a second disagreement is reported, not retried. A read that fails
- * counts as no read: a failed probe keeps the first probe's figure, a failed reader read confirms.
+ * balance that disagree. Both are read once more, concurrently. A covering second probe clears the
+ * shortfall: it reads the slot the node's fee-payer check reads. Otherwise a covering fresh reader
+ * figure marks it unconfirmed, and anything else confirms it. One recheck per estimate, never a
+ * loop. A read that fails counts as no read: a failed probe keeps the first probe's figure.
  */
 export async function recheckShortfall(short: FeeJuiceShortfall, recheck: ShortfallRecheck): Promise<FeeJuiceShortfall | undefined> {
 	const limit = BigInt(short.maxFee)
@@ -95,7 +95,6 @@ export interface OwnFeeJuiceReads {
 	rereadPublicFeeJuice(networkId: string, account: string): Promise<string | null>
 }
 
-/** {@link probeOwnFeeJuice}, then {@link recheckShortfall} when it reads short. */
 export async function ownFeeJuiceShortfall(
 	built: FeeEstimate,
 	reads: OwnFeeJuiceReads,

@@ -305,9 +305,7 @@ type Shape = {
 	selfPaid?: { gasBalances: GasBalances; estimate: Partial<TransferFeeEstimate>; gasAfterEstimate?: GasBalances }
 }
 
-/** The field case of a funded account the probe read empty: the card's cached balance covers a fee
- *  limit that rounds up to ~4.160516 FJ in a warning and half-up to ~4.160515 FJ in the cost, and
- *  the estimate carries what the worker's recheck concluded. */
+/** The limit rounds up to ~4.160516 FJ in a warning and half-up to ~4.160515 FJ in the cost. */
 const FEE_ZERO_LIMIT = "4160515300000000000"
 const FEE_ZERO_CACHED = "38163812345678901234"
 const feeZero = (main: string, estimate: Partial<TransferFeeEstimate>, gasAfterEstimate?: GasBalances): Shape => ({

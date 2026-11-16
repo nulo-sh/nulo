@@ -199,3 +199,18 @@ test("a result rule answers, under its own id, only the batch entries calling it
 	r.clear()
 	expect(results((await rpc(r, ["getPublicStorageAt"], ["latest", "0xfee", "0x1"])).text)).toEqual(["aztec_getPublicStorageAt:ok"])
 })
+
+test("a result rule takes no request it answers no entry of, so its count and its `times` wait for one it does", async () => {
+	const r = await start()
+	const zero = `0x${"0".repeat(64)}`
+	const rule = r.fail({ methods: ["getPublicStorageAt"], carrying: "0xfee", times: 1, fault: { kind: "result", value: zero } })
+	const unrelated = JSON.stringify([
+		{ jsonrpc: "2.0", id: 1, method: "aztec_getPublicStorageAt", params: ["latest", "0xabc", "0x1"] },
+		{ jsonrpc: "2.0", id: 2, method: "aztec_simulatePublicCalls", params: ["0xfee"] },
+	])
+	const passed = await fetch(r.url, { method: "POST", headers: { "content-type": "application/json" }, body: unrelated })
+	expect(results(await passed.text())).toEqual(["aztec_getPublicStorageAt:ok", "aztec_simulatePublicCalls:ok"])
+	expect(rule.taken()).toBe(0)
+	expect(results((await rpc(r, ["getPublicStorageAt"], ["latest", "0xfee", "0x1"])).text)).toEqual([zero])
+	expect(rule.taken()).toBe(1)
+})

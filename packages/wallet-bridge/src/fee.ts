@@ -119,7 +119,7 @@ export type TransferFeeEstimate = {
 	readonly feeJuiceShortfall?: FeeJuiceShortfall
 }
 
-/** A shortfall the node would refuse on: one confirmed by agreeing reads. An unconfirmed one warns only. */
+/** Every shortfall refuses but an unconfirmed one (`lastRead` set: the wallet's reads still disagreed), which warns only. */
 export const refusesShortfall = (short: FeeJuiceShortfall | undefined): boolean => short !== undefined && short.lastRead === undefined
 
 /** `funded`: the sponsor's public Fee Juice covers the estimate's fee limit. */

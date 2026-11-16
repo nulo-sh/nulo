@@ -171,9 +171,10 @@ describe("recheckShortfall", () => {
 		expect(r.reprobe).toHaveBeenCalledTimes(1)
 	})
 
-	test("agreeing reads keep the refusal with the second probe's figure, or clear it when the second probe covers", async () => {
+	test("agreeing reads keep the refusal with the second probe's figure; a covering second probe clears it whatever the reader read", async () => {
 		expect(await recheckShortfall(SHORT, recheck(COVERS, "1", 1n))).toEqual({ ...SHORT, balance: "1" })
-		expect(await recheckShortfall(SHORT, recheck(COVERS, COVERS, BigInt(COVERS)))).toBeUndefined()
+		for (const fresh of [COVERS, "0", null])
+			expect(await recheckShortfall(SHORT, recheck(COVERS, fresh, BigInt(COVERS)))).toBeUndefined()
 	})
 
 	test("a read that fails is no read: a failed reader read never counts as funds, a failed probe keeps the first figure", async () => {
