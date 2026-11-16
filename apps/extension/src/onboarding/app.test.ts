@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { flushPromises, mount, shallowMount } from "@vue/test-utils"
 import { ScrollMoreButton } from "@nulo/design"
 import { createPinia, setActivePinia } from "pinia"
@@ -199,23 +201,29 @@ describe("onboarding's confirm", () => {
 describe("onboarding's more-below button", () => {
 	const docRoot = document.documentElement
 	afterEach(() => {
-		for (const key of ["scrollHeight", "clientHeight"]) delete (docRoot as unknown as Record<string, unknown>)[key]
+		for (const key of ["scrollHeight", "clientHeight", "clientWidth"]) delete (docRoot as unknown as Record<string, unknown>)[key]
 		docRoot.scrollTop = 0
 	})
 
-	test("shows while more than the shell's 64 px of end room is left below the window's fold, and is gone at it", async () => {
+	/** The shell over a document holding 1000 px under a 720 px fold, in a window `clientWidth` px wide. */
+	function mountShell(clientWidth: number) {
 		config.getValue.mockResolvedValue("dark")
 		Object.defineProperties(docRoot, {
 			scrollHeight: { value: 1000, configurable: true },
 			clientHeight: { value: 720, configurable: true },
+			clientWidth: { value: clientWidth, configurable: true },
 		})
-		const page = mount(App, {
+		return mount(App, {
 			global: {
 				plugins: [createPinia()],
 				stubs: { RouterView: { template: "<div />" }, ToastManager: true, NotificationManager: true, MigrationBarrier: true },
 				components: { ScrollMoreButton },
 			},
 		})
+	}
+
+	test("shows while more than the shell's 64 px of end room is left below the window's fold, and is gone at it", async () => {
+		const page = mountShell(1280)
 		const shownAt = async (scrollTop: number) => {
 			docRoot.scrollTop = scrollTop
 			window.dispatchEvent(new Event("scroll"))
@@ -224,6 +232,31 @@ describe("onboarding's more-below button", () => {
 		}
 		expect(await shownAt(215)).toBe(true)
 		expect(await shownAt(216)).toBe(false)
+		page.unmount()
+	})
+
+	test("shows only from 776 px of client width: the 640 px column centred, 16 + 36 + 16 px right of it, a scrollbar not counted", async () => {
+		expect(readFileSync(resolve(__dirname, "components/OnboardingPage.vue"), "utf8")).toMatch(/\bmax-width: 640px;/)
+		// A classic 15 px scrollbar throughout: the window is wider than the room the column is centred in.
+		vi.stubGlobal("innerWidth", 790)
+		const page = mountShell(775)
+		const more = () => page.find('[data-testid="onboarding-scroll-more"]')
+		const resizeTo = async (clientWidth: number) => {
+			Object.defineProperty(docRoot, "clientWidth", { value: clientWidth, configurable: true })
+			vi.stubGlobal("innerWidth", clientWidth + 15)
+			window.dispatchEvent(new Event("resize"))
+			await nextTick()
+		}
+		await nextTick()
+		expect(more().exists()).toBe(false)
+
+		await resizeTo(776)
+		expect(more().exists()).toBe(true)
+		// A fixed box's right edge already stops at the scrollbar, so the inset does not add it.
+		expect(more().attributes("style")).toContain("right: 16px")
+
+		await resizeTo(775)
+		expect(more().exists()).toBe(false)
 		page.unmount()
 	})
 })

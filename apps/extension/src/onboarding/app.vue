@@ -27,8 +27,14 @@ const { hydrateKnownProfile } = useProfileBootstrap()
 /** The shell's 64 px bottom padding, the blank room after every page's last content: the button shows
  *  only while more than this is left, so it is gone once a page's end is in view. */
 const END_ROOM_PX = 64
-const { remaining: moreLeft, gutter: moreGutter, press: showMore } = useMoreBelow("document")
-const moreShown = computed(() => moreLeft.value > END_ROOM_PX)
+/** `OnboardingPage`'s max width; the column is centred on the window's client width. */
+const COLUMN_PX = 640
+/** The button's inset from the window's edge, kept again from the column: it shows only where the room
+ *  right of the column holds both and its 36 px, so it never meets the column's controls. */
+const MORE_INSET_PX = 16
+const MORE_ROOM_PX = 36 + 2 * MORE_INSET_PX
+const { remaining: moreLeft, width: viewWidth, press: showMore } = useMoreBelow("document")
+const moreShown = computed(() => moreLeft.value > END_ROOM_PX && (viewWidth.value - COLUMN_PX) / 2 >= MORE_ROOM_PX)
 
 // `theme-boot.js` painted the hint before first paint, and it stands until Config is read: applying a
 // default first would paint a theme nobody chose and overwrite the hint the next document reads.
@@ -123,7 +129,7 @@ onBeforeUnmount(() => {
 		<ScrollMoreButton
 			:shown="moreShown"
 			:class="$style.more_below"
-			:style="{ right: `${16 + moreGutter}px` }"
+			:style="{ right: `${MORE_INSET_PX}px` }"
 			data-testid="onboarding-scroll-more"
 			@press="showMore"
 		/>
@@ -148,7 +154,8 @@ onBeforeUnmount(() => {
 	padding: 8px 0 24px;
 }
 
-/* The window scrolls every onboarding page, so the button holds to the viewport. */
+/* The window scrolls every onboarding page, so the button holds to the viewport, whose right edge
+   already stops at a classic scrollbar. */
 .more_below {
 	position: fixed;
 	bottom: 12px;

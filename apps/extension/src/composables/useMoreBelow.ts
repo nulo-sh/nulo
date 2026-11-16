@@ -21,13 +21,15 @@ export interface MoreBelowEdges {
 
 /** What is left below the window's fold. Its scrolls fire on `window`; a host that pins `body` to the
  *  viewport grows in `body`'s children, so their resizes are what content changes sound like. */
-function useDocumentRemaining(): { remaining: Readonly<Ref<number>>; gutter: Readonly<Ref<number>> } {
+function useDocumentRemaining(): ReturnType<typeof useScrollRemaining> {
 	const remaining = ref(0)
 	const gutter = ref(0)
+	const width = ref(0)
 	const root = document.documentElement
 	const measure = () => {
 		remaining.value = leftToScroll(root)
 		gutter.value = window.innerWidth - root.clientWidth
+		width.value = root.clientWidth
 	}
 	// jsdom has no ResizeObserver; there scrolls still measure.
 	const resizes = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure)
@@ -40,7 +42,7 @@ function useDocumentRemaining(): { remaining: Readonly<Ref<number>>; gutter: Rea
 		window.removeEventListener("resize", measure)
 		resizes?.disconnect()
 	})
-	return { remaining: readonly(remaining), gutter: readonly(gutter) }
+	return { remaining: readonly(remaining), gutter: readonly(gutter), width: readonly(width) }
 }
 
 /**
@@ -50,7 +52,7 @@ function useDocumentRemaining(): { remaining: Readonly<Ref<number>>; gutter: Rea
  */
 export function useMoreBelow(scroller: Readonly<Ref<HTMLElement | null>> | "document", edges: MoreBelowEdges = {}) {
 	const isDocument = scroller === "document"
-	const { remaining, gutter } = isDocument ? useDocumentRemaining() : useScrollRemaining(scroller)
+	const { remaining, gutter, width } = isDocument ? useDocumentRemaining() : useScrollRemaining(scroller)
 	const shown = computed(() => remaining.value > MORE_FOOTPRINT_PX)
 
 	/** Sections are read on each press: a step can swap them. */
@@ -68,5 +70,5 @@ export function useMoreBelow(scroller: Readonly<Ref<HTMLElement | null>> | "docu
 		el.scrollTo({ top: target, behavior: isCalm() ? "auto" : "smooth" })
 	}
 
-	return { shown, remaining, gutter, press }
+	return { shown, remaining, gutter, width, press }
 }

@@ -111,8 +111,9 @@ describe("useMoreBelow over a scroller", () => {
 		expect(() => press()).not.toThrow()
 	})
 
-	test("hands the host the scroller's scrollbar width, which a right-placed button clears", () => {
-		expect(track(ref(scroller())).gutter.value).toBe(8)
+	test("hands the host the scroller's scrollbar width, which a right-placed button clears, and its client width", () => {
+		const { gutter, width } = track(ref(scroller()))
+		expect([gutter.value, width.value]).toEqual([8, 352])
 	})
 
 	test("a press with no section marked scrolls smoothly to the end", () => {
@@ -155,13 +156,17 @@ describe("useMoreBelow over a scroller", () => {
 })
 
 describe('useMoreBelow over the document ("document")', () => {
-	test("measures what the root holds below the window's fold, and follows the window's scrolls", () => {
+	test("measures what the root holds below the window's fold, its scrollbar and client width, and follows the window", () => {
 		documentOf(1000)
-		const { shown, remaining, gutter } = track("document")
-		expect([shown.value, remaining.value, gutter.value]).toEqual([true, 280, 15])
+		const { shown, remaining, gutter, width } = track("document")
+		expect([shown.value, remaining.value, gutter.value, width.value]).toEqual([true, 280, 15, 1265])
 		root.scrollTop = 240
 		window.dispatchEvent(new Event("scroll"))
 		expect(shown.value).toBe(false)
+		Object.defineProperty(root, "clientWidth", { value: 745, configurable: true })
+		vi.stubGlobal("innerWidth", 760)
+		window.dispatchEvent(new Event("resize"))
+		expect([gutter.value, width.value]).toEqual([15, 745])
 	})
 
 	test("hears content change as resizes of each of body's children", () => {
