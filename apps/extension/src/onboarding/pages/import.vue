@@ -12,7 +12,6 @@ import { useProfileImportFlow } from "@/composables/useProfileImportFlow"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useToast } from "@/composables/toast"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
-import { useMoreBelow } from "@/composables/useMoreBelow"
 
 /** Utils */
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
@@ -36,7 +35,6 @@ const appStore = useAppStore()
 const notificationStore = useNotificationStore()
 const { openToast } = useToast()
 const { bootstrapActiveProfile, hydrateKnownProfile } = useProfileBootstrap()
-const more = useMoreBelow(ref<"document">("document"))
 
 // One generation for the page's life: an import that settles after the person left completes
 // silently, since the history entry, the bootstrap's shared stores and the route are no longer its.
@@ -317,14 +315,6 @@ onBeforeUnmount(() => {
 			</Button>
 		</Flex>
 
-		<ScrollMoreButton
-			:shown="more.shown.value"
-			:class="$style.more_below"
-			:style="{ right: `${16 + more.gutter.value}px` }"
-			data-testid="onboarding-scroll-more"
-			@press="more.press"
-		/>
-
 		<PasskeyCeremonyDialog v-if="ceremonyRequest" :request="ceremonyRequest" @resolve="onCeremonyResolve" @reject="onCeremonyReject" />
 	</OnboardingPage>
 </template>
@@ -336,14 +326,6 @@ onBeforeUnmount(() => {
 
 .ctas {
 	margin-top: 8px;
-}
-
-/* The window scrolls this page, so the button holds to the viewport; the shell's 64 px bottom
- * padding already keeps the footprint blank at the end. */
-.more_below {
-	position: fixed;
-	bottom: 12px;
-	z-index: 1;
 }
 
 </style>

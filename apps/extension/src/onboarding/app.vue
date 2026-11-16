@@ -10,6 +10,7 @@ import ConfirmPopup from "@/components/ConfirmPopup.vue"
 /** Composables */
 import { useConfigRead } from "@/composables/useConfigRead"
 import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
+import { useMoreBelow } from "@/composables/useMoreBelow"
 
 /** Stores */
 import { usePopupStore } from "@/stores/popup.store"
@@ -23,6 +24,7 @@ import { doneRoute, resumePath, settleResume } from "./steps"
 const popupStore = usePopupStore()
 const router = useRouter()
 const { hydrateKnownProfile } = useProfileBootstrap()
+const more = useMoreBelow(ref<"document">("document"))
 
 // `theme-boot.js` painted the hint before first paint, and it stands until Config is read: applying a
 // default first would paint a theme nobody chose and overwrite the hint the next document reads.
@@ -114,6 +116,14 @@ onBeforeUnmount(() => {
 			<component :is="Component" />
 		</RouterView>
 
+		<ScrollMoreButton
+			:shown="more.shown.value"
+			:class="$style.more_below"
+			:style="{ right: `${16 + more.gutter.value}px` }"
+			data-testid="onboarding-scroll-more"
+			@press="more.press"
+		/>
+
 		<div id="toast" />
 	</main>
 </template>
@@ -132,6 +142,14 @@ onBeforeUnmount(() => {
 
 .brand {
 	padding: 8px 0 24px;
+}
+
+/* The window scrolls every onboarding page, so the button holds to the viewport; the shell's 64 px
+ * bottom padding keeps the footprint blank at each page's end. */
+.more_below {
+	position: fixed;
+	bottom: 12px;
+	z-index: 1;
 }
 
 .wordmark {

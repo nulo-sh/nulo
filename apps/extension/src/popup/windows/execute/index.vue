@@ -842,7 +842,6 @@ onUnmounted(() => {
 			<ScrollMoreButton
 				:shown="more.shown.value"
 				:class="$style.more_below"
-				:style="{ right: `${16 + more.gutter.value}px` }"
 				data-testid="execute-scroll-more"
 				@press="more.press"
 			/>
@@ -896,9 +895,12 @@ onUnmounted(() => {
 	flex-direction: column;
 }
 
+/* Bottom left, on the sections' 16 px gutter: every value column right-aligns, so the right corner
+ * would sit on the figures a person is checking. The scrollbar gutter is on the right and moves nothing here. */
 .more_below {
 	position: absolute;
 	bottom: 12px;
+	left: 16px;
 	z-index: 1;
 }
 
