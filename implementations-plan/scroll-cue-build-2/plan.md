@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 35c580901
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-16.
+- **Status:** completed. Ships in the PR titled `fix(onboarding): the more-below button hides where no room is left beside the column`, which carries this close-out. It lands on the owner's approve of its captures.
+- **Shipped:** P158-01 = H. The onboarding shell's button shows only from 776 px of the document's client width, 16 px clear of the centred 640 px column, gated in `shown` so it never mounts while narrow; its right offset is 16 px from the scrollbar, no longer counting the bar twice (D3). `useMoreBelow` returns the scroller's client width. The Terms sheet, the execute window and the ten layout screens are untouched.
+- **Gates (retry 0):** at `d85aebc7f` (the final code head) lint, typecheck:all, test (1045 files) and test:components green; smoke `legal-acceptance` and `onboarding-tab` green on Chrome and Firefox at `6160f1f38`, the edited happy path again on both at `d85aebc7f`.
+- **Deviations:** the brief's 708 px threshold did not hold (centred column: 776); D1 reads the room as 68 px, not 52.
+- **Lessons:** none promoted (`lessons.md` holds 8148 of 8192 bytes). The `-t` regex slip and the classic-scrollbar probe are in [`lessons/phase-1.md`](lessons/phase-1.md) and [`lessons/phase-0.md`](lessons/phase-0.md).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # scroll-cue-build-2: the onboarding more-below button hidden where the window is narrow (H)
 
