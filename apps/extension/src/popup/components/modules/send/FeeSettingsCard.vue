@@ -245,11 +245,36 @@ const sponsorShortText = computed(() => {
 	return name ? `${SPONSOR_SHORT} ${name} pays it instead.` : SPONSOR_SHORT
 })
 
-/** The account's own Fee Juice, read short of this estimate's fee while it pays. */
+/** The account's own Fee Juice, read short of this estimate's fee while it pays. `lastRead` is the
+ *  wallet's other read when the two still disagreed after a recheck: then the row warns, never refuses. */
 const shortfall = computed(() => {
 	const short = props.feeEstimate?.feeJuiceShortfall
-	return short && effectiveMethod.value?.type === "fj" ? shortfallFigures(short, prices.feeJuiceQuote.value?.usd) : null
+	if (!short || effectiveMethod.value?.type !== "fj") return null
+	return {
+		...shortfallFigures(short, prices.feeJuiceQuote.value?.usd),
+		lastRead: short.lastRead ? formatGasBalance(short.lastRead) : null,
+	}
 })
+const unconfirmedText = (s) =>
+	`Your balance couldn't be confirmed: one check found ${s.lastRead} FJ and a fresh one found ${s.balance} FJ. If the network refuses this send, nothing is charged.`
+
+/** A confirmed shortfall against a figure that covered the fee: the worker's recheck has just read the
+ *  balance afresh into its reader's cache, so an unforced read takes exactly that figure, once per
+ *  estimate, and the two rows agree. Forcing would read the network a third time, maybe elsewhere. */
+const rereadFor = new WeakSet()
+watch(
+	() => props.feeEstimate,
+	(estimate) => {
+		const short = estimate?.feeJuiceShortfall
+		const cached = gasBalances.value?.publicFeeJuice
+		if (!short || short.lastRead || cached == null || BigInt(cached) < BigInt(short.maxFee) || rereadFor.has(estimate)) return
+		rereadFor.add(estimate)
+		balancesStore
+			.ensure(liveFeeScope(props), { legs: ["gas"] })
+			.then(() => snapshot.refreshGas())
+			.catch((error) => console.debug("Fee Juice re-read failed", { error }))
+	},
+)
 
 /** `short` while the notice shows, `funded` while the sponsor a funded verdict named pays. */
 const sponsorFunding = computed(() => {
@@ -395,7 +420,8 @@ const notices = computed(() => {
 	const plain = (text) => ({ text, figure: null })
 	if (statusNotice.value) shown.push(plain(statusNotice.value))
 	if (sponsorShort.value) shown.push(plain(sponsorShortText.value))
-	if (shortfall.value) {
+	if (shortfall.value?.lastRead) shown.push(plain(unconfirmedText(shortfall.value)))
+	else if (shortfall.value) {
 		const figure = feeText(shortfall.value.cost)
 		shown.push({ text: `This send can cost up to ${figure}. You have ${shortfall.value.balance} FJ.`, figure })
 	}
@@ -520,7 +546,18 @@ onBeforeUnmount(() => {
 				</Text>
 			</Flex>
 			<Flex
-				v-if="shortfall"
+				v-if="shortfall?.lastRead"
+				align="start"
+				gap="6"
+				wide
+				:class="$style.detail_row"
+				data-testid="fee-juice-unconfirmed"
+			>
+				<Icon name="warning" size="14" color="secondary" aria-hidden="true" />
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">{{ unconfirmedText(shortfall) }}</Text>
+			</Flex>
+			<Flex
+				v-else-if="shortfall"
 				align="start"
 				gap="6"
 				wide

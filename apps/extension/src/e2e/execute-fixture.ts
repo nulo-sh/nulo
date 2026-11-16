@@ -10,6 +10,7 @@ import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { Account } from "@/wallet/services/account/client"
 import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 import type { DecodedCall, DecodedValue, DiscoveredAuthwit, TransferFeeEstimate } from "@/wallet/services/execution/client"
+import type { GasBalances } from "@/wallet/services/execution/models"
 import type { Network } from "@/wallet/services/network/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
@@ -29,6 +30,9 @@ export const EXECUTE_FIXTURES = [
 	"ancestry",
 	"listed",
 	"long-names",
+	"fee-zero-disputed",
+	"fee-zero-agreed",
+	"fee-zero-resolved",
 ] as const
 export type ExecuteFixtureName = (typeof EXECUTE_FIXTURES)[number]
 
@@ -41,6 +45,12 @@ export type ExecuteFixture = {
 	readonly feeEstimates: readonly TransferFeeEstimate[]
 	readonly tokens: TokenInfo[]
 	readonly dapp: DappMetadata
+	/** The account's Fee Juice as the fee card reads it, in place of the worker's read. */
+	readonly gasBalances?: GasBalances
+	/** The footer answers as it would for a stored request, so Confirm shows the window's own gate. */
+	readonly footerLive?: boolean
+	/** The balance the worker's recheck left behind, which the card reads once an own-Fee-Juice estimate lands. */
+	readonly gasAfterEstimate?: GasBalances
 }
 
 const hex = (prefix: string, tail: string): string => `0x${prefix}${"0".repeat(64 - prefix.length - tail.length)}${tail}`
@@ -286,7 +296,24 @@ const listedSpecs = (main: string): Spec[] => [
 	},
 ]
 
-type Shape = { specs: Spec[]; authwits: ReturnType<typeof authwitOf>[]; maxFee: string; dapp?: { name: string; url: string } }
+type Shape = {
+	specs: Spec[]
+	authwits: ReturnType<typeof authwitOf>[]
+	maxFee: string
+	dapp?: { name: string; url: string }
+	/** The account pays from its own Fee Juice: no fee payer, and the card asks for the method. */
+	selfPaid?: { gasBalances: GasBalances; estimate: Partial<TransferFeeEstimate>; gasAfterEstimate?: GasBalances }
+}
+
+/** The limit rounds up to ~4.160516 FJ in a warning and half-up to ~4.160515 FJ in the cost. */
+const FEE_ZERO_LIMIT = "4160515300000000000"
+const FEE_ZERO_CACHED = "38163812345678901234"
+const feeZero = (main: string, estimate: Partial<TransferFeeEstimate>, gasAfterEstimate?: GasBalances): Shape => ({
+	specs: [transfer(USDC, main, RECIPIENT, 25_000_000n)],
+	authwits: [],
+	maxFee: FEE_ZERO_LIMIT,
+	selfPaid: { gasBalances: { publicFeeJuice: FEE_ZERO_CACHED, privateFeeJuice: null }, estimate, gasAfterEstimate },
+})
 
 /** The longest unbroken strings the window takes from an app: a 64-character name, a 63-character
  *  host label and a contract that names itself in 64 characters. */
@@ -328,6 +355,16 @@ const shapeOf = (name: ExecuteFixtureName, main: string): Shape => {
 			return fee([ancestrySpec()], "2500000000000000")
 		case "listed":
 			return fee(listedSpecs(main), "2500000000000000")
+		case "fee-zero-disputed":
+			return feeZero(main, { feeJuiceShortfall: { maxFee: FEE_ZERO_LIMIT, balance: "0", lastRead: FEE_ZERO_CACHED } })
+		case "fee-zero-agreed":
+			return feeZero(
+				main,
+				{ feeJuiceShortfall: { maxFee: FEE_ZERO_LIMIT, balance: "0" } },
+				{ publicFeeJuice: "0", privateFeeJuice: null },
+			)
+		case "fee-zero-resolved":
+			return feeZero(main, {})
 		case "long-names":
 			return {
 				...fee(
@@ -347,21 +384,27 @@ const isFixtureName = (name: string): name is ExecuteFixtureName => (EXECUTE_FIX
  *  every fixture's are the sending account's own. */
 export function executeFixture(name: string, account: Account, network: Network): ExecuteFixture | undefined {
 	if (!isFixtureName(name)) return undefined
-	const { specs, authwits, maxFee, dapp = { name: "Playground", url: "https://playground.nulo.sh" } } = shapeOf(name, account.address)
+	const {
+		specs,
+		authwits,
+		maxFee,
+		dapp = { name: "Playground", url: "https://playground.nulo.sh" },
+		selfPaid,
+	} = shapeOf(name, account.address)
 	const operation = {
 		kind: "aztec_sendTx",
 		networkId: network.id,
 		accountAddress: account.address,
 		account,
 		network,
-		exec: { calls: specs.map(wireCall), feePayer: APP_FPC },
+		exec: { calls: specs.map(wireCall), ...(selfPaid ? {} : { feePayer: APP_FPC }) },
 		opts: { from: account.address },
 	} as unknown as DraftUIOperation
 	const estimate: TransferFeeEstimate = {
 		maxFee,
 		gasDetails: { l2GasLimit: 0, daGasLimit: 0, teardownL2GasLimit: 0, teardownDaGasLimit: 0, feePerL2Gas: "1", feePerDaGas: "1" },
 		discoveredAuthwits: authwits.map((a) => a.record),
-		appPayerFunding: { address: APP_FPC, funded: true, provenShort: false },
+		...(selfPaid ? selfPaid.estimate : { appPayerFunding: { address: APP_FPC, funded: true, provenShort: false } }),
 	} as TransferFeeEstimate
 	return {
 		operations: [operation],
@@ -375,5 +418,6 @@ export function executeFixture(name: string, account: Account, network: Network)
 			{ id: 9004, chainId: network.chainId, contract: FLAGGED_TOKEN, name: "Free Money", symbol: "FREE", decimals: 6 },
 		] as TokenInfo[],
 		dapp: { ...dapp, description: EXECUTE_FIXTURE_MARKER },
+		...(selfPaid ? { gasBalances: selfPaid.gasBalances, footerLive: true, gasAfterEstimate: selfPaid.gasAfterEstimate } : {}),
 	}
 }

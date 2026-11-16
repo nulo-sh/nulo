@@ -3110,6 +3110,53 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 		w.unmount()
 	})
 
+	test("two reads that disagree after a recheck warn with both figures and refuse nothing", async () => {
+		mocks.getFpcs.mockResolvedValue([])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "38163812345678901234", privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		await w.get('[data-testid="pick-fj"]').trigger("click")
+		await w.setProps({
+			feeEstimate: {
+				maxFee: "4160515300000000000",
+				feeJuiceShortfall: { maxFee: "4160515300000000000", balance: "0", lastRead: "38163812345678901234" },
+			},
+		})
+		await flushPromises()
+		expect(shortfall(w).exists()).toBe(false)
+		expect(w.get('[data-testid="fee-juice-unconfirmed"]').text()).toBe(
+			"Your balance couldn't be confirmed: one check found 38.1638 FJ and a fresh one found 0 FJ. If the network refuses this send, nothing is charged.",
+		)
+		expect(mocks.getGasBalances).toHaveBeenCalledTimes(1)
+		w.unmount()
+	})
+
+	test("a confirmed zero against a figure that covered the fee re-reads the card's balance once, unforced, so both rows agree", async () => {
+		mocks.getFpcs.mockResolvedValue([])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "38163812345678901234", privateFeeJuice: null })
+		const row = {
+			props: ["feeJuiceBalanceFormatted"],
+			template: '<div data-testid="fee-method-row" :data-balance="feeJuiceBalanceFormatted" />',
+		}
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: { ...STUBS, FeeMethodRow: row } } })
+		await flushPromises()
+		await w.get('[data-testid="pick-fj"]').trigger("click")
+		expect(w.get('[data-testid="fee-method-row"]').attributes("data-balance")).toBe("38.1638")
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
+		const confirmed = { maxFee: "4160515300000000000", feeJuiceShortfall: { maxFee: "4160515300000000000", balance: "0" } }
+		const before = mocks.getGasBalances.mock.calls.length
+		await w.setProps({ feeEstimate: confirmed })
+		await flushPromises()
+		await w.setProps({ feeEstimate: { ...confirmed } })
+		await flushPromises()
+		const rereads = mocks.getGasBalances.mock.calls.slice(before)
+		expect(rereads).toHaveLength(1)
+		expect(rereads[0]?.[2], "the re-read takes the reader's figure the worker's recheck just wrote").toBeFalsy()
+		expect(w.get('[data-testid="fee-method-row"]').attributes("data-balance")).toBe("0")
+		expect(shortfall(w).text()).toBe("This send can cost up to ~4.160516 FJ. You have 0 FJ.")
+		w.unmount()
+	})
+
 	test("never while another payer pays", async () => {
 		mocks.getFpcs.mockResolvedValue([NULO])
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })

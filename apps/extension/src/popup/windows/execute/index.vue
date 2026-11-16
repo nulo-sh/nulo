@@ -31,7 +31,7 @@ import { uniqueSignerAccounts, uniqueSignerNetworks } from "./signers"
 import { resolveOperationScope, scopeBannerCopy, scopeBannerState } from "./scope-mismatch"
 import { createScopeFollow, selectionWriter } from "./scope-follow"
 import { managers, requireNetwork } from "@/utils/core"
-import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
+import { carriesFeeSettings, isSelfPay, refusesShortfall } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { type FeePayerPick, holdsConfirm, personPaysAppPayment } from "./fee-figure"
 import { approvalDeltas } from "./approval-deltas"
@@ -57,6 +57,7 @@ import {
 import { openJsonWindow } from "@/utils/json-window"
 import { E2E_EXECUTE_FIXTURE_BUILD_STAMP } from "@/e2e/config"
 import { armedExecuteFixture } from "@/e2e/execute-fixture-gate"
+import { fixtureGas } from "@/e2e/execute-fixture-gas"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
@@ -71,6 +72,7 @@ import {
 	type OperationAuthwitPreview,
 	type TransferFeeEstimate,
 } from "@/wallet/services/execution/client"
+import type { GasBalances } from "@/wallet/services/execution/models"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import {
@@ -116,6 +118,14 @@ const router = useRouter()
  */
 const fixtureName = armedExecuteFixture ? router.currentRoute.value.query.fixture?.toString() : undefined
 let fixtureEstimates: readonly TransferFeeEstimate[] | undefined
+/** The shown fixture's footer answers as a stored request's would: no request stands behind it. */
+const fixtureFooterLive = ref(false)
+let fixtureGasAfterEstimate: GasBalances | undefined
+/** The fixture's estimate; one the account pays from its own Fee Juice leaves the recheck's balance behind. */
+const fixtureEstimate = (estimates: readonly TransferFeeEstimate[], params: { index: number; feeSettings: FeeSettings }) => {
+	if (fixtureGasAfterEstimate && params.feeSettings.paymentMethod?.kind === "fj") fixtureGas.value = fixtureGasAfterEstimate
+	return Promise.resolve(estimates[params.index])
+}
 
 const session = ref()
 const operations = ref<UIOperation[]>([])
@@ -261,7 +271,7 @@ const {
 	// applies the fee choice itself — the popup never hands it an operation.
 	estimate: (params, estimateToken, flowKey, signal) =>
 		armedExecuteFixture && fixtureEstimates
-			? Promise.resolve(fixtureEstimates[params.index])
+			? fixtureEstimate(fixtureEstimates, params)
 			: estimateWhenClear(
 					() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
 					signal,
@@ -315,7 +325,7 @@ const isAppPaid = (op: UIOperation | undefined): boolean => carriesFeeSettings(o
 /** An estimate whose payer the node would refuse at submission: an app's fee contract proven unable
  *  to pay, or the account's own Fee Juice below the fee. Confirm stays off, so nothing is proven. */
 const isShortEstimate = (estimate: TransferFeeEstimate): boolean =>
-	estimate.appPayerFunding?.provenShort === true || estimate.feeJuiceShortfall !== undefined
+	estimate.appPayerFunding?.provenShort === true || refusesShortfall(estimate.feeJuiceShortfall)
 /** Each operation's last landed verdict. A replacement estimate clears the result while it runs, so a
  *  shortfall already shown holds Confirm until the replacement answers. */
 const lastLandedShort = ref<Record<number, boolean>>({})
@@ -470,6 +480,9 @@ function showFixture(executeFixture: NonNullable<typeof armedExecuteFixture>, na
 	;(globalThis as { __NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP__?: string | null }).__NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP__ =
 		E2E_EXECUTE_FIXTURE_BUILD_STAMP
 	fixtureEstimates = fixture.feeEstimates
+	fixtureGas.value = fixture.gasBalances
+	fixtureFooterLive.value = fixture.footerLive === true
+	fixtureGasAfterEstimate = fixture.gasAfterEstimate
 	dapp.value = fixture.dapp
 	knownTokens.value = fixture.tokens
 	decodedAuthwits.value = new Map(fixture.decodedAuthwits)
@@ -569,7 +582,7 @@ const retryFeeEstimate = (index: number) =>
 	handleFeeUpdate(index, (operations.value[index] as { feeSettings?: FeeSettings } | undefined)?.feeSettings)
 
 const approve = async () => {
-	if (isLoading.value || refusal.value || confirmBlocked.value) return
+	if (!requestId.value || isLoading.value || refusal.value || confirmBlocked.value) return
 	if (needsFeeSelection.value) {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
@@ -671,7 +684,7 @@ const needsFeeSelection = computed(() =>
 /** Every hold on Confirm but the fee pick, which approve() answers with a warning instead. */
 const confirmBlocked = computed(
 	() =>
-		!requestId.value ||
+		(!requestId.value && !fixtureFooterLive.value) ||
 		isInteractionCancelled.value ||
 		!initComplete.value ||
 		operations.value.length === 0 ||
@@ -844,7 +857,7 @@ onUnmounted(() => {
 			:processing-error="grantRefusal ?? processingError"
 			reject-testid="execute-reject-btn"
 			reject-label="Reject"
-			:reject-disabled="isLoading || !requestId"
+			:reject-disabled="isLoading || (!requestId && !fixtureFooterLive)"
 			confirm-testid="execute-confirm-btn"
 			:confirm-hidden="refusal !== undefined"
 			:confirm-label="isLoading ? 'EXECUTING' : 'Confirm'"
