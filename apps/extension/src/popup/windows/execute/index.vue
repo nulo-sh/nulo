@@ -56,7 +56,8 @@ import {
 } from "./operation-display"
 import { openJsonWindow } from "@/utils/json-window"
 import { E2E_EXECUTE_FIXTURE_BUILD_STAMP } from "@/e2e/config"
-import { armedExecuteFixture, fixtureGas } from "@/e2e/execute-fixture-gate"
+import { armedExecuteFixture } from "@/e2e/execute-fixture-gate"
+import { fixtureGas } from "@/e2e/execute-fixture-gas"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
@@ -122,7 +123,7 @@ const fixtureFooterLive = ref(false)
 let fixtureGasAfterEstimate: GasBalances | undefined
 /** The fixture's estimate; one the account pays from its own Fee Juice leaves the recheck's balance behind. */
 const fixtureEstimate = (estimates: readonly TransferFeeEstimate[], params: { index: number; feeSettings: FeeSettings }) => {
-	if (fixtureGas && fixtureGasAfterEstimate && params.feeSettings.paymentMethod?.kind === "fj") fixtureGas.value = fixtureGasAfterEstimate
+	if (fixtureGasAfterEstimate && params.feeSettings.paymentMethod?.kind === "fj") fixtureGas.value = fixtureGasAfterEstimate
 	return Promise.resolve(estimates[params.index])
 }
 
@@ -479,7 +480,7 @@ function showFixture(executeFixture: NonNullable<typeof armedExecuteFixture>, na
 	;(globalThis as { __NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP__?: string | null }).__NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP__ =
 		E2E_EXECUTE_FIXTURE_BUILD_STAMP
 	fixtureEstimates = fixture.feeEstimates
-	if (fixtureGas) fixtureGas.value = fixture.gasBalances
+	fixtureGas.value = fixture.gasBalances
 	fixtureFooterLive.value = fixture.footerLive === true
 	fixtureGasAfterEstimate = fixture.gasAfterEstimate
 	dapp.value = fixture.dapp

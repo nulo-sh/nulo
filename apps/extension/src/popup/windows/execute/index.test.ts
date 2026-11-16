@@ -197,7 +197,6 @@ vi.mock("@/e2e/execute-fixture-gate", async () => {
 		get armedExecuteFixture() {
 			return fixtureBuild.armed ? executeFixture : undefined
 		},
-		fixtureGas: undefined,
 	}
 })
 vi.mock("vue-router", async (importOriginal) => ({

@@ -47,7 +47,8 @@ import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 import { TxStatus } from "@/wallet/services/transaction/spec"
 import { errorMessageFromUnknown, raceTimeout } from "@nulo/wallet-core/utils"
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
-import { fixtureGas } from "@/e2e/execute-fixture-gate"
+import { E2E_EXECUTE_FIXTURE } from "@/e2e/config"
+import { fixtureGas } from "@/e2e/execute-fixture-gas"
 
 export type BalanceScope = ActivityScope
 
@@ -397,7 +398,7 @@ class BalancesCore {
 
 	// ── SWR peek (display-only, version-guarded) ─────────────────────────────
 	private async primeFromPeek(key: string, scope: BalanceScope): Promise<void> {
-		if (fixtureGas?.value) return
+		if (E2E_EXECUTE_FIXTURE && fixtureGas.value) return
 		const versionAtStart = this.entries.value[key]?.gas.version ?? 0
 		try {
 			const peeked = await this.execution.peekGasBalances(scope.networkId, scope.accountAddress)
@@ -515,7 +516,7 @@ class BalancesCore {
 				this.rawFlights.delete(`${key}|gas|${epoch}`)
 			}
 			result =
-				fixtureGas?.value ??
+				(E2E_EXECUTE_FIXTURE ? fixtureGas.value : undefined) ??
 				(await withTimeout(
 					this.rawReuse(key, "gas", epoch, () =>
 						this.execution.getGasBalances(scope.networkId, scope.accountAddress, opts.forceRefresh),
