@@ -1,0 +1,1 @@
+- 2026-11-16 plan: written (light, one arc, B as signed); no plan audit per the lane brief
