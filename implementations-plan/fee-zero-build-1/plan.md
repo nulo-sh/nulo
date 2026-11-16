@@ -8,8 +8,21 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 3017f1928
-status: approved (orchestrator proportion: no plan audit round)
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-16.
+- **Status:** completed. Ships in the PR titled `fix(fee): two balance reads that disagree are read again, then warn without refusing`, which carries this close-out and `Closes #1802`; it lands on the owner's decision page with its captures.
+- **Shipped:** S1 as signed (P152-02): one recheck when the probe reads short and the reader's last figure covers (`ownFeeJuiceShortfall`, `recheckShortfall`), the `lastRead` wire field, `refusesShortfall` as the one rule of the window, Send's gate, Send's label and the wallet-tx estimates, the card's unconfirmed row and its one-time unforced re-read, the clause verified against the node and shipped as signed; the relay's `result` fault and the `fee-shortfall-recheck` network scenario.
+- **Gates (retry 0):** at `86af6c7a9`, lint, typecheck:all, test (1042 files), test:components (104), wallet-bridge (21) and check:plans green; smoke `send-fee-privacy` + `send-keyboard` 7/7 (Chrome, armed); network Chrome prover-ON 15/15, Chrome proverless `rpc-failover-send` 1/1, Firefox proverless 2/2, and `fee-shortfall-recheck` again on both browsers after the review's relay fixes. After merging `origin/dev` (`a0bf30d0b`): check:plans and the touched unit files green.
+- **Deviations:** D3, D5, D7, D11, D12, D13 (ledger). Codex round 1 asked for changes (R1-1 rejected with reason, R1-2 and R1-3 fixed); round 2 approved with one fixture fix (R2-1); no third round.
+- **Lessons:** none promoted (`lessons.md` is at its budget).
+- **Accepted residual:** the page's own: Confirm on with a true zero costs one proof and a refusal at submission, and the send rides the same pool. Recorded on decision page 152; no issue.
+- **Known limits:** none.
+- **Open items:** none. #1749 and #1607, the likely cause, were already closed and stay so.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # fee-zero-build-1: two balance reads that disagree are read again before a refusal (S1)
 
