@@ -571,5 +571,6 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [verified-contracts-build-1](verified-contracts-build-1/plan.md) — completed — contract and app chips with the s1 seal from the signed token list and the pinned fee contracts; the fee row's seal, held chips, the person's names and every party a chip (P135, P139, P140, P143, P144)
 - [fee-method-emoji-1](fee-method-emoji-1/plan.md) — completed — the approval window's fee row names the app as its chip does, pictographs stripped (P146-04); A1 and A2 ask the owner
 - [fee-words-1](fee-words-1/plan.md) — completed — History's fee method and the failed row's payer label name the app as its chip does (P147-02, P147-03)
+- [fee-claim-build-1](fee-claim-build-1/plan.md) — completed — the claim-paid fee row says who pays: "You pay about ~X from the Fee Juice this app claims to your account." (P151-01 = W1); A1 asks the owner (#1816)
 - [import-retry-1](import-retry-1/plan.md) — completed — a token import a worker restart ended reads the wallet's sentence and offers Retry (#1799)
 - [fee-balances-build-1](fee-balances-build-1/plan.md) — completed — the Fee sheet's two Fee Juice rows stack the FJ figure in `value` over its dollars in `caption`, right-aligned, no dollars unpriced or on a row that cannot pay (P150-01 = B3)
