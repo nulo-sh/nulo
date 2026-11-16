@@ -8,8 +8,23 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 1f94c0938
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-16.
+- **Status:** completed. Ships in the PR titled `feat(popup): the more-below button on the terms sheet, the execute window and onboarding`, which carries this close-out. It lands on the owner's approve of its captures.
+- **Shipped:** P155-01 = B. The page 109 button now appears on the Terms sheet (bottom right), in the execute window (bottom left) and in the onboarding shell (the window's corner, gated on the shell's 64 px end room). `useMoreBelow` serves all three and `CollapsingHeroLayout`, whose ten screens are unchanged. `nextScrollTop` lives in `src/utils/`. Three e2e cases cover it. The twelve content-only screens stay as today.
+- **Gates (retry 0):**
+  - At `2e6b416ba` (the final head, `origin/dev` merged): lint, typecheck:all and test:all (extension: 1045 files) green; the Chrome smoke files `security`, `legal-acceptance` and `execute-steps` green, with the new cases at 4.4 s, 6.3 s and 2.8 s.
+  - Firefox, the three cases at `96b3ef5be`: green.
+  - Earlier: `rows`, `token-list` and the type-roles onboarding test at `a86314fcb`: green.
+- **Deviations:** D1 drops the prototype's `coveredBottom` edge. D11 and D12 record two overlaps the build measured past the page's frames. D13 fixes a Tab-count helper. D14 gates onboarding on its own end room.
+- **Lessons:** none promoted (`lessons.md` holds 8148 of 8192 bytes). The disabled-control hit-test and the relative `--cwd` slip are in [`lessons/phase-1.md`](lessons/phase-1.md).
+- **Known limits:** none.
+- **Open items:** #1820 (owner ask A1) and #1821 (owner ask A2).
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # scroll-cue-build-1: the more-below button on the three warning screens (B)
 
@@ -37,8 +52,8 @@ Proportion (lane brief): a measured prototype made a build. No plan audit round,
 | D10 | E2E: two cases in `legal-acceptance.test.ts`, one in `execute-steps.test.ts` (Phase 2). The overlap scan stays local to the execute case. | No spec in the repo is "the onboarding spec": the Terms gate's cases live in `legal-acceptance.test.ts` (recon). |
 | D11 | Execute with the steps shut: the build measured the window's opening state, which the page had not. On `batch` at 400 × 800 the button's bottom 5 px overlaps the top of "Leaves your account". The e2e asserts no control or glyph under the button in that state, and nothing at all with the steps open or after press 1. A success control proves the scan reads a line brought under the button. Owner ask A1; the left placement ships as signed. | Demonstrated (Phase 2, `scb1-args-shut-left`). No end room or mark moves a first-paint overlap, and moving the button is the owner's call. Asserting text-free in the shut state would pin a defect the signed placement causes; asserting nothing would let a control slip under it. |
 | D12 | Onboarding in a 720 px wide window: the corner meets the 640 px column. On the phrase step at 720 × 900 the button covers about 12 × 27 px of I saved it. Owner ask A2; the corner ships as signed. At 1280 × 720 every page is clean, with 63–64 px of end room. | Demonstrated (Phase 3 probe, `scb1-onb-phrase-narrow`). No right-side placement clears the column below about 750 px. |
-| D14 | Onboarding shows its button only while more than its 64 px end room is left (`remaining > 64`). The composable also returns `remaining`. | Codex round 1, demonstrated: with the 48 px rule the button showed over the last 16 px of blank room, against page 109's "hidden once the end is in view". Shrinking the shell's padding to 48 px would change every onboarding page; a composable option would serve one caller. |
 | D13 | `execute-steps.test.ts`'s `tabbableCount` now skips a `tabindex="-1"` button. | Its selector counted every `button`, so the new button made 26 read 27. The same test's Tab walk passed, which shows the button is no Tab stop. The fix is at the helper's cause; no expected number moved. |
+| D14 | Onboarding shows its button only while more than its 64 px end room is left (`remaining > 64`). The composable also returns `remaining`. | Codex round 1, demonstrated: with the 48 px rule the button showed over the last 16 px of blank room, against page 109's "hidden once the end is in view". Shrinking the shell's padding to 48 px would change every onboarding page; a composable option would serve one caller. |
 
 ## UI impact
 
