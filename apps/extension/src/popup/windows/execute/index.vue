@@ -89,6 +89,7 @@ import { estimateWhenClear } from "@/utils/estimate-when-clear"
 import { useTokenFlags } from "@/composables/usePrices"
 import { useDappOrigin } from "@/composables/useDappOrigin"
 import { useToast } from "@/composables/toast"
+import { useMoreBelow } from "@/composables/useMoreBelow"
 
 const { openToast, toast, closeToast } = useToast()
 
@@ -106,6 +107,8 @@ import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 const profile = ref<ProfileInfo>()
+const scrollRef = useTemplateRef("scrollRef")
+const more = useMoreBelow(computed(() => scrollRef.value?.wrapper ?? null))
 
 const router = useRouter()
 
@@ -741,100 +744,109 @@ onUnmounted(() => {
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
 		<SignerIdentityStrip :signerAccounts="signerAccounts" :signerNetworks="signerNetworks" :status="stripStatus" />
 
-		<Flex direction="column" :class="$style.scroll_area">
-			<DappIdentityBlock
-				:dapp="dapp ?? undefined"
-				hostnameTestId="execute-hostname"
-				nameTestId="execute-dapp-name"
-				actionLabel="wants to execute the following"
-				nameAsChip
-			>
-				<template v-if="appChip" #name><ContractChip :model="appChip" testid="execute-app-chip-label" /></template>
-			</DappIdentityBlock>
-
-			<Flex direction="column" gap="16" :class="$style.sections">
-				<Banner
-					v-if="scopeBanner"
-					data-testid="execute-scope-banner"
-					:data-state="scopeBanner.state"
-					:class="$style.scope_banner"
-					variant="info"
-					direction="vertical"
-					wide
-					:action="scopeBanner.action ? { name: scopeBanner.action, callback: toggleFollow, testId: 'execute-scope-action-btn' } : undefined"
+		<div :class="$style.frame">
+			<Flex ref="scrollRef" direction="column" :class="$style.scroll_area">
+				<DappIdentityBlock
+					:dapp="dapp ?? undefined"
+					hostnameTestId="execute-hostname"
+					nameTestId="execute-dapp-name"
+					actionLabel="wants to execute the following"
+					nameAsChip
 				>
-					<template #title>{{ scopeBanner.title }}</template>
-					<template #description>{{ scopeBanner.body }}</template>
-				</Banner>
+					<template v-if="appChip" #name><ContractChip :model="appChip" testid="execute-app-chip-label" /></template>
+				</DappIdentityBlock>
 
-				<Flex v-if="operations.length" direction="column" gap="10" wide>
-					<Flex wide justify="between" align="center">
-						<SectionLabel label="Requested operations" :count="operations.length" />
-						<Icon
-							data-testid="execute-show-json-btn"
-							@click="showJson"
-							name="expand"
-							size="16"
-							color="tertiary"
-							:class="$style.fullscreen_icon"
-						/>
-					</Flex>
-
-					<OperationCard
-						v-for="(op, i) in operations"
-						:key="i"
-						:op="op as UIOperation"
-						:index="i"
-						:profile="profile"
-						:dapp="dapp ?? undefined"
-						:feeEstimate="feeEstimates[i] ?? undefined"
-						:isEstimating="!!estimatingOps[i]"
-						:estimateFailed="!!failedFeeEstimates[i]"
-						:authwitPreview="authwitPreviews[i] ?? undefined"
-						:isPreviewing="!!previewingOps[i]"
-						:previewFailed="!!failedAuthwitPreviews[i]"
-						:isQueued="!!queuedOps[i]"
-						:decodedCalls="decodedCalls.get(i)"
-						:decodedAuthwits="decodedAuthwits"
-						:decodedGrants="decodedGrants.get(i)"
-						:tokens="knownTokens"
-						:marks="tokenFlags"
-						:explorerId="appStore.defaultExplorer"
-						:names="names"
-						:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
-						:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
-						:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"
-						:tokenFlagged="isFlaggedAdd(op as UIOperation)"
-						:tokenFlagAcknowledged="flagAcknowledged.has(i)"
-						:refused="refusal !== undefined"
-						:appFailure="failedFeeEstimates[i] ? appFailures[i] : undefined"
-						@updateFeeSettings="handleFeeUpdate"
-						@retryEstimate="retryFeeEstimate"
-						@retryPreview="retryAuthwitPreview"
-						@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
-						@acknowledgeTokenFlag="acknowledgeTokenFlag"
+				<Flex direction="column" gap="16" :class="$style.sections">
+					<Banner
+						v-if="scopeBanner"
+						data-testid="execute-scope-banner"
+						:data-state="scopeBanner.state"
+						:class="$style.scope_banner"
+						variant="info"
+						direction="vertical"
+						wide
+						:action="scopeBanner.action ? { name: scopeBanner.action, callback: toggleFollow, testId: 'execute-scope-action-btn' } : undefined"
 					>
-						<template v-if="refusal" #fee>
-							<Flex
-								data-testid="execute-op-refusal"
-								:data-kind="refusal"
-								role="alert"
-								direction="column"
-								gap="4"
-								wide
-								:class="$style.refusal"
-							>
-								<Flex align="center" gap="4">
-									<Icon name="warning" size="12" color="orange" />
-									<Text data-testid="execute-op-refusal-title" variant="body" color="orange">{{ REFUSAL_TITLE }}</Text>
+						<template #title>{{ scopeBanner.title }}</template>
+						<template #description>{{ scopeBanner.body }}</template>
+					</Banner>
+
+					<Flex v-if="operations.length" direction="column" gap="10" wide>
+						<Flex wide justify="between" align="center">
+							<SectionLabel label="Requested operations" :count="operations.length" />
+							<Icon
+								data-testid="execute-show-json-btn"
+								@click="showJson"
+								name="expand"
+								size="16"
+								color="tertiary"
+								:class="$style.fullscreen_icon"
+							/>
+						</Flex>
+
+						<OperationCard
+							v-for="(op, i) in operations"
+							:key="i"
+							:op="op as UIOperation"
+							:index="i"
+							:profile="profile"
+							:dapp="dapp ?? undefined"
+							:feeEstimate="feeEstimates[i] ?? undefined"
+							:isEstimating="!!estimatingOps[i]"
+							:estimateFailed="!!failedFeeEstimates[i]"
+							:authwitPreview="authwitPreviews[i] ?? undefined"
+							:isPreviewing="!!previewingOps[i]"
+							:previewFailed="!!failedAuthwitPreviews[i]"
+							:isQueued="!!queuedOps[i]"
+							:decodedCalls="decodedCalls.get(i)"
+							:decodedAuthwits="decodedAuthwits"
+							:decodedGrants="decodedGrants.get(i)"
+							:tokens="knownTokens"
+							:marks="tokenFlags"
+							:explorerId="appStore.defaultExplorer"
+							:names="names"
+							:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
+							:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
+							:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"
+							:tokenFlagged="isFlaggedAdd(op as UIOperation)"
+							:tokenFlagAcknowledged="flagAcknowledged.has(i)"
+							:refused="refusal !== undefined"
+							:appFailure="failedFeeEstimates[i] ? appFailures[i] : undefined"
+							@updateFeeSettings="handleFeeUpdate"
+							@retryEstimate="retryFeeEstimate"
+							@retryPreview="retryAuthwitPreview"
+							@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
+							@acknowledgeTokenFlag="acknowledgeTokenFlag"
+						>
+							<template v-if="refusal" #fee>
+								<Flex
+									data-testid="execute-op-refusal"
+									:data-kind="refusal"
+									role="alert"
+									direction="column"
+									gap="4"
+									wide
+									:class="$style.refusal"
+								>
+									<Flex align="center" gap="4">
+										<Icon name="warning" size="12" color="orange" />
+										<Text data-testid="execute-op-refusal-title" variant="body" color="orange">{{ REFUSAL_TITLE }}</Text>
+									</Flex>
+									<Text data-testid="execute-op-refusal-reason" variant="body" color="secondary">{{ REFUSAL_REASON[refusal] }}</Text>
 								</Flex>
-								<Text data-testid="execute-op-refusal-reason" variant="body" color="secondary">{{ REFUSAL_REASON[refusal] }}</Text>
-							</Flex>
-						</template>
-					</OperationCard>
+							</template>
+						</OperationCard>
+					</Flex>
 				</Flex>
 			</Flex>
-		</Flex>
+			<ScrollMoreButton
+				:shown="more.shown.value"
+				:class="$style.more_below"
+				:style="{ right: `${16 + more.gutter.value}px` }"
+				data-testid="execute-scroll-more"
+				@press="more.press"
+			/>
+		</div>
 
 		<Flex v-if="showsFailure && requestId" wide :class="$style.request_log_row">
 			<RequestLogButton :interaction-id="requestId" />
@@ -876,8 +888,23 @@ onUnmounted(() => {
 	composes: scroll_area from "../window-shell.module.css";
 }
 
+.frame {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.more_below {
+	position: absolute;
+	bottom: 12px;
+	z-index: 1;
+}
+
+/* The bottom padding is the button's footprint, so at the end only blank room sits under it. */
 .sections {
-	padding: 16px;
+	padding: 16px 16px 48px;
 }
 
 .request_log_row {

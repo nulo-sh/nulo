@@ -5,6 +5,7 @@ import { managers } from "@/utils/core"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { vSnackFooter, vSnackSheet } from "@/composables/snackInset"
+import { useMoreBelow } from "@/composables/useMoreBelow"
 
 /** Utils */
 import { type LegalAcceptanceRecord, RISK_POINTS, currentVersion, pendingTermsVersions } from "@nulo/legal"
@@ -28,6 +29,9 @@ const record = ref<LegalAcceptanceRecord | null>(null)
 const busy = ref(false)
 
 const legal = useLegalAcceptance(managers.legal)
+
+const bodyRef = useTemplateRef("bodyRef")
+const more = useMoreBelow(computed(() => bodyRef.value?.wrapper ?? null))
 
 const visible = computed(() =>
 	shouldShowLegalSheet({
@@ -102,26 +106,35 @@ onBeforeUnmount(() => {
 	>
 		<Flex direction="column" :class="$style.sheet" role="dialog" aria-modal="true" aria-labelledby="legal-sheet-title">
 			<!-- Everything to read, then the control that agrees to it, in one scroll. -->
-			<Flex direction="column" gap="16" :class="$style.body" data-testid="legal-sheet-body">
-				<Flex direction="column" gap="8">
-					<Text variant="label-section" color="secondary" data-testid="legal-sheet-version">Terms v{{ termsVersion }}</Text>
-					<Text id="legal-sheet-title" variant="title-page" color="primary" data-testid="legal-sheet-title">
-						{{ isReacceptance ? "The terms have changed" : "Review the terms" }}
-					</Text>
-					<Text v-if="isReacceptance" variant="body" color="secondary" height="150" data-testid="legal-sheet-since">
-						Here is what changed since the version you accepted on {{ acceptedOn }}.
-					</Text>
-				</Flex>
+			<div :class="$style.frame">
+				<Flex ref="bodyRef" direction="column" gap="16" :class="$style.body" data-testid="legal-sheet-body">
+					<Flex direction="column" gap="8">
+						<Text variant="label-section" color="secondary" data-testid="legal-sheet-version">Terms v{{ termsVersion }}</Text>
+						<Text id="legal-sheet-title" variant="title-page" color="primary" data-testid="legal-sheet-title">
+							{{ isReacceptance ? "The terms have changed" : "Review the terms" }}
+						</Text>
+						<Text v-if="isReacceptance" variant="body" color="secondary" height="150" data-testid="legal-sheet-since">
+							Here is what changed since the version you accepted on {{ acceptedOn }}.
+						</Text>
+					</Flex>
 
-				<LegalConsent
-					:points="isReacceptance ? undefined : RISK_POINTS"
-					:changes="isReacceptance ? changes : undefined"
-					:terms-version="termsVersion"
-					:busy="busy"
-					@accept="handleAccept"
-					@open="openLegalDocument"
+					<LegalConsent
+						:points="isReacceptance ? undefined : RISK_POINTS"
+						:changes="isReacceptance ? changes : undefined"
+						:terms-version="termsVersion"
+						:busy="busy"
+						@accept="handleAccept"
+						@open="openLegalDocument"
+					/>
+				</Flex>
+				<ScrollMoreButton
+					:shown="more.shown.value"
+					:class="$style.more_below"
+					:style="{ right: `${16 + more.gutter.value}px` }"
+					data-testid="legal-sheet-scroll-more"
+					@press="more.press"
 				/>
-			</Flex>
+			</div>
 
 			<!-- Outside the scroll: declining is always one visible tap away. -->
 			<Flex v-snack-footer justify="center" :class="$style.footer">
@@ -152,10 +165,24 @@ onBeforeUnmount(() => {
 	border-top: 1px solid var(--nulo-border);
 }
 
+.frame {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+/* The bottom padding is the button's footprint, so at the end only blank room sits under it. */
 .body {
 	min-height: 0;
 	overflow-y: auto;
-	padding: 20px 16px 16px;
+	padding: 20px 16px 48px;
+}
+
+.more_below {
+	position: absolute;
+	bottom: 12px;
+	z-index: 1;
 }
 
 .footer {

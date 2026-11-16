@@ -77,6 +77,7 @@ declare global {
   const MAX_PASSWORD_LENGTH: typeof import('../utils/password').MAX_PASSWORD_LENGTH
   const MINT_SIGNATURES: typeof import('../utils/token-transfer-vocabulary').MINT_SIGNATURES
   const MIN_NEW_PASSWORD_LENGTH: typeof import('../utils/password').MIN_NEW_PASSWORD_LENGTH
+  const MORE_FOOTPRINT_PX: typeof import('../composables/useMoreBelow').MORE_FOOTPRINT_PX
   const NETWORK_ARRIVAL_KEY: typeof import('../composables/useNetworkArrival').NETWORK_ARRIVAL_KEY
   const NEW_PASSWORD_HINTS: typeof import('../utils/password-hint').NEW_PASSWORD_HINTS
   const ONBOARDING_COMPLETED_KEY: typeof import('../stores/app.store').ONBOARDING_COMPLETED_KEY
@@ -612,6 +613,7 @@ declare global {
   const useLink: typeof import('vue-router').useLink
   const useLockWallet: typeof import('../composables/useLockWallet').useLockWallet
   const useModel: typeof import('vue').useModel
+  const useMoreBelow: typeof import('../composables/useMoreBelow').useMoreBelow
   const useNetworkActivation: typeof import('../composables/useNetworkActivation').useNetworkActivation
   const useNetworkArrival: typeof import('../composables/useNetworkArrival').useNetworkArrival
   const useNewProfilePasskey: typeof import('../composables/useNewProfilePasskey').useNewProfilePasskey
@@ -752,6 +754,9 @@ declare global {
   // @ts-ignore
   export type { LockProfileClient } from '../composables/useLockWallet'
   import('../composables/useLockWallet')
+  // @ts-ignore
+  export type { MoreBelowEdges } from '../composables/useMoreBelow'
+  import('../composables/useMoreBelow')
   // @ts-ignore
   export type { UseNetworkActivationOptions } from '../composables/useNetworkActivation'
   import('../composables/useNetworkActivation')
@@ -1056,6 +1061,7 @@ declare module 'vue' {
     readonly MAX_PASSWORD_LENGTH: UnwrapRef<typeof import('../utils/password')['MAX_PASSWORD_LENGTH']>
     readonly MINT_SIGNATURES: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['MINT_SIGNATURES']>
     readonly MIN_NEW_PASSWORD_LENGTH: UnwrapRef<typeof import('../utils/password')['MIN_NEW_PASSWORD_LENGTH']>
+    readonly MORE_FOOTPRINT_PX: UnwrapRef<typeof import('../composables/useMoreBelow')['MORE_FOOTPRINT_PX']>
     readonly NETWORK_ARRIVAL_KEY: UnwrapRef<typeof import('../composables/useNetworkArrival')['NETWORK_ARRIVAL_KEY']>
     readonly NEW_PASSWORD_HINTS: UnwrapRef<typeof import('../utils/password-hint')['NEW_PASSWORD_HINTS']>
     readonly ONBOARDING_COMPLETED_KEY: UnwrapRef<typeof import('../stores/app.store')['ONBOARDING_COMPLETED_KEY']>
@@ -1591,6 +1597,7 @@ declare module 'vue' {
     readonly useLink: UnwrapRef<typeof import('vue-router')['useLink']>
     readonly useLockWallet: UnwrapRef<typeof import('../composables/useLockWallet')['useLockWallet']>
     readonly useModel: UnwrapRef<typeof import('vue')['useModel']>
+    readonly useMoreBelow: UnwrapRef<typeof import('../composables/useMoreBelow')['useMoreBelow']>
     readonly useNetworkActivation: UnwrapRef<typeof import('../composables/useNetworkActivation')['useNetworkActivation']>
     readonly useNetworkArrival: UnwrapRef<typeof import('../composables/useNetworkArrival')['useNetworkArrival']>
     readonly useNewProfilePasskey: UnwrapRef<typeof import('../composables/useNewProfilePasskey')['useNewProfilePasskey']>

@@ -388,7 +388,7 @@ const advises = computed((): boolean => {
 
 		<!-- Opens every fee section, a window's own block in the slot included. -->
 		<template v-if="outflows.length">
-			<Flex data-testid="execute-op-leaves-account" direction="column" gap="8" wide :class="$style.leaves">
+			<Flex data-testid="execute-op-leaves-account" data-scroll-section direction="column" gap="8" wide :class="$style.leaves">
 				<Text variant="label-section" color="secondary">Leaves your account</Text>
 				<Flex v-for="row in outflows" :key="row.contract" data-testid="execute-op-leaves-row" :data-contract="row.contract" justify="between" align="center" :class="$style.row">
 					<Text data-testid="execute-op-leaves-count" variant="body" color="secondary" :class="$style.leaves_count">{{ outflowLabel(row) }}</Text>
@@ -404,6 +404,7 @@ const advises = computed((): boolean => {
 			<Flex
 				ref="appFeeRow"
 				data-testid="execute-op-fee-set-badge"
+				data-scroll-section
 				direction="column"
 				wide
 				tabindex="-1"
@@ -452,6 +453,7 @@ const advises = computed((): boolean => {
 
 		<template v-else>
 			<FeeSettingsCard
+				data-scroll-section
 				embedded
 				:lockedMethod="requestedMethod(op)"
 				:profile="profile"
