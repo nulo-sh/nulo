@@ -45,7 +45,6 @@ const FORMS = {
 	"popup/windows/execute/OperationCard.vue": [3, []],
 } as const
 
-/** The shells outside the layout, each with its own button; their stops are the marks of the forms above. */
 const SHELLS = {
 	"components/LegalAcceptanceSheet.vue": "legal-sheet-scroll-more",
 	"popup/windows/execute/index.vue": "execute-scroll-more",

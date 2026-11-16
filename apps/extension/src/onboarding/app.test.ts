@@ -1,6 +1,7 @@
 import { flushPromises, mount, shallowMount } from "@vue/test-utils"
+import { ScrollMoreButton } from "@nulo/design"
 import { createPinia, setActivePinia } from "pinia"
-import { effectScope } from "vue"
+import { effectScope, nextTick } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 const config = vi.hoisted(() => ({ getValue: vi.fn(), onConnected: undefined as unknown as { invoke: () => void } }))
@@ -191,6 +192,38 @@ describe("onboarding's confirm", () => {
 			expect(popups.isOpened("confirm")).toBe(false)
 		}
 		scope.stop()
+		page.unmount()
+	})
+})
+
+describe("onboarding's more-below button", () => {
+	const docRoot = document.documentElement
+	afterEach(() => {
+		for (const key of ["scrollHeight", "clientHeight"]) delete (docRoot as unknown as Record<string, unknown>)[key]
+		docRoot.scrollTop = 0
+	})
+
+	test("shows while more than the shell's 64 px of end room is left below the window's fold, and is gone at it", async () => {
+		config.getValue.mockResolvedValue("dark")
+		Object.defineProperties(docRoot, {
+			scrollHeight: { value: 1000, configurable: true },
+			clientHeight: { value: 720, configurable: true },
+		})
+		const page = mount(App, {
+			global: {
+				plugins: [createPinia()],
+				stubs: { RouterView: { template: "<div />" }, ToastManager: true, NotificationManager: true, MigrationBarrier: true },
+				components: { ScrollMoreButton },
+			},
+		})
+		const shownAt = async (scrollTop: number) => {
+			docRoot.scrollTop = scrollTop
+			window.dispatchEvent(new Event("scroll"))
+			await nextTick()
+			return page.find('[data-testid="onboarding-scroll-more"]').exists()
+		}
+		expect(await shownAt(215)).toBe(true)
+		expect(await shownAt(216)).toBe(false)
 		page.unmount()
 	})
 })

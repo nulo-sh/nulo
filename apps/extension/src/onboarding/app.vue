@@ -24,7 +24,11 @@ import { doneRoute, resumePath, settleResume } from "./steps"
 const popupStore = usePopupStore()
 const router = useRouter()
 const { hydrateKnownProfile } = useProfileBootstrap()
-const { shown: moreShown, gutter: moreGutter, press: showMore } = useMoreBelow("document")
+/** The shell's 64 px bottom padding, the blank room after every page's last content: the button shows
+ *  only while more than this is left, so it is gone once a page's end is in view. */
+const END_ROOM_PX = 64
+const { remaining: moreLeft, gutter: moreGutter, press: showMore } = useMoreBelow("document")
+const moreShown = computed(() => moreLeft.value > END_ROOM_PX)
 
 // `theme-boot.js` painted the hint before first paint, and it stands until Config is read: applying a
 // default first would paint a theme nobody chose and overwrite the hint the next document reads.
@@ -144,8 +148,7 @@ onBeforeUnmount(() => {
 	padding: 8px 0 24px;
 }
 
-/* The window scrolls every onboarding page, so the button holds to the viewport; the shell's 64 px
- * bottom padding keeps the footprint blank at each page's end. */
+/* The window scrolls every onboarding page, so the button holds to the viewport. */
 .more_below {
 	position: fixed;
 	bottom: 12px;

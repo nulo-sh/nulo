@@ -498,7 +498,9 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 		try {
 			await openFixture(page, "batch", 400)
 			await page.waitForSelector(sel("execute-scroll-more"), { visible: true, timeout: 10_000 })
-			expect((await underMoreBelow(page)).controls).toEqual([])
+			const shut = await underMoreBelow(page)
+			expect(shut.controls).toEqual([])
+			expect(shut.text.filter((line) => line !== '"Leaves your account" in execute-op-leaves-account')).toEqual([])
 			await openExecuteSteps(page)
 			expect((await readWindow(page)).warningInView).toBe(false)
 			expect(await underMoreBelow(page)).toEqual(empty)

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { effectScope, type Ref, ref } from "vue"
+import { type EffectScope, effectScope, type Ref, ref } from "vue"
 import { MORE_FOOTPRINT_PX, type MoreBelowEdges, useMoreBelow } from "./useMoreBelow"
 
 /** A ResizeObserver whose deliveries the test sends; each instance lists what it observes. */
@@ -20,6 +20,7 @@ class FakeResizeObserver {
 const root = document.documentElement
 const ROOT_KEYS = ["scrollHeight", "clientHeight", "clientWidth", "scrollTo"] as const
 const added: Element[] = []
+const scopes: EffectScope[] = []
 
 /** `el` reports `rect` as its box, as a laid-out element would; jsdom lays nothing out. */
 function placeAt<T extends Element>(el: T, rect: { top: number; bottom: number }): T {
@@ -71,6 +72,7 @@ function documentOf(scrollHeight: number): void {
 
 function track(el: Ref<HTMLElement | null> | "document", edges?: MoreBelowEdges) {
 	const scope = effectScope()
+	scopes.push(scope)
 	const result = scope.run(() => useMoreBelow(el, edges))
 	if (!result) throw new Error("no result")
 	return { ...result, stop: () => scope.stop() }
@@ -82,6 +84,7 @@ function scrollTo(el: HTMLElement, top: number) {
 }
 
 afterEach(() => {
+	for (const scope of scopes.splice(0)) scope.stop()
 	vi.unstubAllGlobals()
 	vi.restoreAllMocks()
 	FakeResizeObserver.last = undefined
@@ -154,8 +157,8 @@ describe("useMoreBelow over a scroller", () => {
 describe('useMoreBelow over the document ("document")', () => {
 	test("measures what the root holds below the window's fold, and follows the window's scrolls", () => {
 		documentOf(1000)
-		const { shown, gutter } = track("document")
-		expect([shown.value, gutter.value]).toEqual([true, 15])
+		const { shown, remaining, gutter } = track("document")
+		expect([shown.value, remaining.value, gutter.value]).toEqual([true, 280, 15])
 		root.scrollTop = 240
 		window.dispatchEvent(new Event("scroll"))
 		expect(shown.value).toBe(false)

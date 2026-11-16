@@ -68,5 +68,5 @@ export function useMoreBelow(scroller: Readonly<Ref<HTMLElement | null>> | "docu
 		el.scrollTo({ top: target, behavior: isCalm() ? "auto" : "smooth" })
 	}
 
-	return { shown, gutter, press }
+	return { shown, remaining, gutter, press }
 }
