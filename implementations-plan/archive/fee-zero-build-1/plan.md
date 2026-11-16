@@ -121,7 +121,7 @@ One PR from `fee-zero-build-1-a1` to `dev`, opened ready, no label at creation (
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `3017f1928`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `3017f1928`. Plan-specific values:
 - Step 1: `code_review: off`, so absent.
 - Step 2, bounded work: after Phase 2 is green, ONE `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` over the plan and `origin/dev...HEAD`, asked adversarially about the recheck's bound, D2's four call sites, the card's one-time re-read and the relay's id echo. Rerun only the gates a fix touches; a second round only if the first says anything but approve (hard stop at three). No Opus review.
 - Step 3: `gh pr create`; `gh pr checks <n> --watch` once.

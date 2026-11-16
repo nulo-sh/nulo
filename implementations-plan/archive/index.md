@@ -574,3 +574,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fee-claim-build-1](fee-claim-build-1/plan.md) — completed — the claim-paid fee row says who pays: "You pay about ~X from the Fee Juice this app claims to your account." (P151-01 = W1); A1 asks the owner (#1816)
 - [import-retry-1](import-retry-1/plan.md) — completed — a token import a worker restart ended reads the wallet's sentence and offers Retry (#1799)
 - [fee-balances-build-1](fee-balances-build-1/plan.md) — completed — the Fee sheet's two Fee Juice rows stack the FJ figure in `value` over its dollars in `caption`, right-aligned, no dollars unpriced or on a row that cannot pay (P150-01 = B3)
+- [fee-zero-build-1](fee-zero-build-1/plan.md) — completed — two balance reads that disagree are read again before the fee card refuses: one recheck, a warning that refuses nothing (S1, #1802)
