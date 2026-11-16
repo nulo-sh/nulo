@@ -12,13 +12,15 @@ import { TaskServiceClient } from "@/wallet/services/task/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
+import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Utils */
 import { managers } from "@/utils/core"
 import { journalRecordInScope } from "@/utils/activity-rows"
 import { stringCompare } from "@/utils/string"
 import { orderTokenRows } from "@/utils/token-order"
-import { capHomeSlots, defaultKey, homeSlots, isDefaultPending } from "./home-slots"
+import { capHomeSlots, defaultKey, homeSlots, isDefaultPending, supersededImports } from "./home-slots"
+import { retryTokenImport } from "./token-import-retry"
 
 /** Composables */
 import { useBalanceTasks } from "@/composables/useBalanceTasks"
@@ -68,17 +70,23 @@ const {
 // 5s tick is a generous fraction of the 30s retention window — the failed
 // row visibly disappears even if no new journal event fires.
 const tickNow = useTicker(5_000)
+/** A pressed Retry by its failed record's id: "running", "done", or the time it was refused. */
+const importRetries = ref(new Map())
 const visibleTokenImports = computed(() => {
 	const scope = { accountAddress: appStore.account?.address, profileId: appStore.profile?.id, networkId: appStore.network?.id }
 	const now = tickNow.value ?? Date.now()
-	return tokenImports.value.filter((op) => {
-		if (op.kind !== TOKENS_VIEW_KIND) return false
-		if (!journalRecordInScope(op, scope)) return false
+	const scoped = tokenImports.value.filter((op) => op.kind === TOKENS_VIEW_KIND && journalRecordInScope(op, scope))
+	const superseded = supersededImports(scoped)
+	return scoped.filter((op) => {
 		// In-flight
 		if (op.terminalAt === null) return true
-		// Recently-failed retention window so the user sees the reason.
-		if (op.progress?.stage === "failed" && now - op.terminalAt < FAILED_RETENTION_MS) return true
-		return false
+		if (op.progress?.stage !== "failed") return false
+		const retry = importRetries.value.get(op.id)
+		// A retried record gives way to its retry's own record, and goes once the retry has added the token.
+		if (retry === "done" || (retry !== undefined && superseded.has(op.id))) return false
+		if (retry === "running") return true
+		// Recently-failed retention window so the user sees the reason: a refused retry restarts it.
+		return now - (retry ?? op.terminalAt) < FAILED_RETENTION_MS
 	})
 })
 
@@ -211,6 +219,19 @@ async function fetchTokenImports() {
 
 let isUnmounted = false
 
+const tokenService = new TokenServiceClient()
+async function retryImport(op) {
+	if (importRetries.value.get(op.id) === "running") return
+	importRetries.value.set(op.id, "running")
+	try {
+		await retryTokenImport(tokenService, op, () => !isUnmounted)
+		importRetries.value.set(op.id, "done")
+	} catch (error) {
+		console.debug("[tokens] import retry refused", { error })
+		importRetries.value.set(op.id, Date.now())
+	}
+}
+
 function refreshBalances() {
 	for (const tb of tokenBalances.value) tokenBalanceService.refreshTokenBalance(tb.id)
 }
@@ -293,6 +314,7 @@ onBeforeUnmount(() => {
 	tokenBalanceService.disconnect()
 	disposeImports()
 	journalService.disconnect()
+	tokenService.disconnect()
 	prices.dispose()
 	priceService.disconnect()
 	pins.dispose()
@@ -352,10 +374,23 @@ onBeforeUnmount(() => {
 		</Flex>
 
 		<Flex direction="column" :class="$style.token_list" data-testid="tokens-list" :data-settled="isSettled">
-			<TokenImportRow v-for="op in userImports" :key="op.id" :op="op" :icon="importIcon(op)" />
+			<TokenImportRow
+				v-for="op in userImports"
+				:key="op.id"
+				:op="op"
+				:icon="importIcon(op)"
+				:retrying="importRetries.get(op.id) === 'running'"
+				@retry="retryImport(op)"
+			/>
 			<template v-for="row in shownSlots" :key="row.key">
 				<TokenCard v-if="row.kind === 'token'" :tokenBalance="row.tb" />
-				<TokenImportRow v-else-if="row.kind === 'import'" :op="row.op" :icon="importIcon(row.op)" />
+				<TokenImportRow
+					v-else-if="row.kind === 'import'"
+					:op="row.op"
+					:icon="importIcon(row.op)"
+					:retrying="importRetries.get(row.op.id) === 'running'"
+					@retry="retryImport(row.op)"
+				/>
 				<TokenSeedRow v-else :entry="row.entry" :icon="prices.iconFor(row.entry)" @retry="retryDefault(row.entry)" />
 			</template>
 			<template v-if="showGhostRows">
