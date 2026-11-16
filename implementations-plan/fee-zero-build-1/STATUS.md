@@ -1,0 +1,1 @@
+- 2026-11-16 plan: written at 3017f1928; clause verified (holds); no owner asks.
