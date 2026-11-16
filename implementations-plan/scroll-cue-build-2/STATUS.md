@@ -1,0 +1,1 @@
+- 2026-11-16 plan: H build of #1821 planned; classic-scrollbar probe run on Chrome 155 and Firefox 158 (D3).
