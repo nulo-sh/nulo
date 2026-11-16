@@ -61,6 +61,8 @@ function makeExecutor(): DappSendExecutor {
 		getNode: unreachable as never,
 		pickSendEndpoint: unreachable as never,
 		readPublicStorageOnce: unreachable as never,
+		peekPublicFeeJuice: unreachable as never,
+		rereadPublicFeeJuice: unreachable as never,
 		getPXE: unreachable as never,
 		getAccountContract: unreachable as never,
 		getPendingForAccount: unreachable as never,

@@ -20,6 +20,10 @@ export interface SharedSendDeps {
 	pickSendEndpoint(network: Network, tx: { txHash: string; anchorHash: string }): Promise<PickedEndpoint>
 	/** The sponsor probe's read: bounded and silent, unlike the build's retrying `node`. */
 	readPublicStorageOnce: PublicStorageReader
+	/** The balance reader's last public Fee Juice for the account, never a fetch; null when unread. */
+	peekPublicFeeJuice(networkId: string, account: string): string | null
+	/** One forced read of the account's public Fee Juice through the balance reader. */
+	rereadPublicFeeJuice(networkId: string, account: string): Promise<string | null>
 	getPXE(network: Network): IPXE
 	getAccountContract(profileId: string, chainId: number, accountAddress: string): Promise<IAccountContract>
 	getPendingForAccount(account: string): { hash: string }[]

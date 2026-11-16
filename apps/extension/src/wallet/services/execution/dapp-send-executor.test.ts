@@ -254,6 +254,8 @@ function makeHarness(
 		chainTip: { unconfirmed: () => false, wait: async () => "confirmed" },
 		logDebug: vi.fn(),
 		readPublicStorageOnce: vi.fn(async () => new Fr(0n)),
+		peekPublicFeeJuice: () => null,
+		rereadPublicFeeJuice: async () => null,
 		answers: new QueuedFeeAnswers(),
 		askInWindow: vi.fn(),
 		...overrides,

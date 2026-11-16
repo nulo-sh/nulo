@@ -10,6 +10,7 @@
 <script setup>
 /** Components */
 import { SubPageHeaderBase } from "@nulo/design"
+import { refusesShortfall } from "@nulo/wallet-bridge"
 import AmountCard from "@/components/composite/send/AmountCard.vue"
 import PayeeBlock from "@/components/composite/send/PayeeBlock.vue"
 import PublishLine from "@/components/composite/send/PublishLine.vue"
@@ -778,7 +779,7 @@ const submitLabel = computed(() =>
 		estimating: isEstimating.value && !queueMode.value,
 		amountEmpty: !amountTerm.value,
 		amountRefused: amountRefused.value,
-		feeRefused: Boolean(feeEstimate.value?.feeJuiceShortfall) || estimateFailed.value,
+		feeRefused: refusesShortfall(feeEstimate.value?.feeJuiceShortfall) || estimateFailed.value,
 	}),
 )
 

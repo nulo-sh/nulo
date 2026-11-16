@@ -12,9 +12,12 @@ import type { Socket } from "node:net"
 import { listenClaimed } from "./egress-guard"
 
 /** What a matching request gets instead of the upstream's answer. `kill` resets its connection and
- *  stops the relay listening until `restore`; `hold` parks the request until `release` forwards it. */
+ *  stops the relay listening until `restore`; `hold` parks the request until `release` forwards it;
+ *  `result` forwards it and answers, under its own id, each entry that calls one of the rule's
+ *  methods and carries its text, so the other entries of a batch keep the upstream's answers. */
 export type RelayFault =
 	| { readonly kind: "reply"; readonly status: number; readonly body: string }
+	| { readonly kind: "result"; readonly value: unknown }
 	| { readonly kind: "blackhole" }
 	| { readonly kind: "delay"; readonly ms: number }
 	| { readonly kind: "kill" }
@@ -120,7 +123,12 @@ export interface RpcRelay {
 interface Entry {
 	readonly id: unknown
 	readonly method: string
+	/** The entry as sent, lower-cased. */
+	readonly text: string
 }
+
+/** The result an upstream answer's entry takes instead of its own, or `undefined` to keep it. */
+type ResultPick = (entry: Entry) => { readonly value: unknown } | undefined
 
 interface Parked {
 	readonly body: string
@@ -139,18 +147,28 @@ function entriesOf(body: string): Entry[] | undefined {
 		const list = Array.isArray(parsed) ? parsed : [parsed]
 		return list.map((e) => {
 			const entry = (e ?? {}) as { id?: unknown; method?: unknown }
-			return { id: entry.id, method: typeof entry.method === "string" ? entry.method : "<no-method>" }
+			const method = typeof entry.method === "string" ? entry.method : "<no-method>"
+			return { id: entry.id, method, text: JSON.stringify(e ?? null).toLowerCase() }
 		})
 	} catch {
 		return undefined
 	}
 }
 
-/** `body` is lower-cased. */
+const calls = (rule: RelayRule, e: Entry) => rule.methods?.includes(bare(e.method)) === true
+
+/** Whether a `result` rule answers `entry` itself: it calls one of the rule's methods (any, when the
+ *  rule names none) and carries the rule's text within that entry. */
+const answers = (rule: RelayRule, entry: Entry): boolean =>
+	(rule.methods === undefined || calls(rule, entry)) && (rule.carrying === undefined || entry.text.includes(rule.carrying.toLowerCase()))
+
+/** `body` is lower-cased. A `result` rule that would answer no entry must not spend its `times`. */
 function matches(rule: RelayRule, entries: readonly Entry[] | undefined, body: string): boolean {
-	const names = rule.methods
-	const calls = (e: Entry) => names?.includes(bare(e.method)) === true
-	if (names && !(rule.entries === "every" ? entries?.length && entries.every(calls) : entries?.some(calls))) return false
+	if (rule.fault.kind === "result" && !entries?.some((e) => answers(rule, e))) return false
+	const every = rule.entries === "every"
+	if (rule.methods && !(every ? entries?.length && entries.every((e) => calls(rule, e)) : entries?.some((e) => calls(rule, e)))) {
+		return false
+	}
 	return rule.carrying === undefined || body.includes(rule.carrying.toLowerCase())
 }
 
@@ -169,9 +187,9 @@ async function postUpstream(upstream: string, body: string): Promise<{ status: n
 	return { status: res.status, text: await res.text() }
 }
 
-/** Replaces each frozen entry's result with the value captured at the freeze. */
-function patchFrozen(text: string, entries: readonly Entry[], frozen: ReadonlyMap<string, unknown>): string {
-	const byId = new Map(entries.map((e) => [JSON.stringify(e.id), bare(e.method)]))
+/** Replaces the result of each answered entry `pick` names, matched to its request entry by id. */
+function patchResults(text: string, entries: readonly Entry[], pick: ResultPick): string {
+	const byId = new Map(entries.map((e) => [JSON.stringify(e.id), e]))
 	let parsed: unknown
 	try {
 		parsed = JSON.parse(text)
@@ -179,9 +197,9 @@ function patchFrozen(text: string, entries: readonly Entry[], frozen: ReadonlyMa
 		return text
 	}
 	const patch = (reply: { id?: unknown; result?: unknown }) => {
-		const method = byId.get(JSON.stringify(reply.id))
-		if (method === undefined || !frozen.has(method) || !("result" in reply)) return reply
-		return { ...reply, result: frozen.get(method) }
+		const entry = byId.get(JSON.stringify(reply.id))
+		const picked = entry && "result" in reply ? pick(entry) : undefined
+		return picked ? { ...reply, result: picked.value } : reply
 	}
 	return JSON.stringify(Array.isArray(parsed) ? parsed.map(patch) : patch(parsed as { id?: unknown }))
 }
@@ -196,8 +214,8 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 	let frozen: Map<string, unknown> | undefined
 	const sockets = new Set<Socket>()
 
-	const take = (entries: readonly Entry[] | undefined, request: Received): RelayFault | undefined => {
-		if (batchCap && entries && entries.length > batchCap.max) return batchCap.refusal
+	const take = (entries: readonly Entry[] | undefined, request: Received): { fault: RelayFault; rule?: RelayRule } | undefined => {
+		if (batchCap && entries && entries.length > batchCap.max) return { fault: batchCap.refusal }
 		for (let i = rules.length - 1; i >= 0; i--) {
 			const rule = rules[i]
 			if (!rule || rule.left <= 0 || !matches(rule, entries, request.body)) continue
@@ -207,14 +225,16 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 			}
 			rule.left--
 			rule.took.push(request)
-			return rule.fault
+			return { fault: rule.fault, rule }
 		}
 		return undefined
 	}
 
-	const forward = async (body: string, entries: readonly Entry[] | undefined, res: ServerResponse) => {
+	const forward = async (body: string, entries: readonly Entry[] | undefined, res: ServerResponse, answer?: ResultPick) => {
 		const reply = await postUpstream(upstream, body)
-		const text = frozen && entries ? patchFrozen(reply.text, entries, frozen) : reply.text
+		const tips = frozen
+		const pick: ResultPick = (e) => answer?.(e) ?? (tips?.has(bare(e.method)) ? { value: tips.get(bare(e.method)) } : undefined)
+		const text = entries && (answer || tips) ? patchResults(reply.text, entries, pick) : reply.text
 		res.writeHead(reply.status, { "content-type": "application/json" }).end(text)
 	}
 
@@ -225,7 +245,8 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 		received.push(request)
 		const entries = entriesOf(body)
 		for (const entry of entries ?? [{ id: null, method: "<unparsed>" }]) methods.push(entry.method)
-		const fault = take(entries, request)
+		const taken = take(entries, request)
+		const fault = taken?.fault
 		if (fault?.kind === "blackhole") return
 		if (fault?.kind === "hold") {
 			const held: Parked = { body, entries, res }
@@ -240,6 +261,11 @@ export async function startRpcRelay(upstream: string, service = "rpc-relay"): Pr
 		}
 		if (fault?.kind === "reply") {
 			reply(res, fault)
+			return
+		}
+		if (fault?.kind === "result") {
+			const rule = taken?.rule
+			await forward(body, entries, res, (e) => (rule && answers(rule, e) ? { value: fault.value } : undefined))
 			return
 		}
 		if (fault?.kind === "delay") await new Promise((resolve) => setTimeout(resolve, fault.ms))

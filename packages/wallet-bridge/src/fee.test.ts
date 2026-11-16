@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { type FeeSettingsReaders, type FeeSettings, isPriorityLevel, refuseUnknownPriorities } from "./fee"
+import { type FeeSettingsReaders, type FeeSettings, isPriorityLevel, refusesShortfall, refuseUnknownPriorities } from "./fee"
 
 describe("isPriorityLevel", () => {
 	test.each(["normal", "fast", "urgent"])("%s is a speed level", (level) => {
@@ -39,5 +39,18 @@ describe("refuseUnknownPriorities", () => {
 	test("a method with no reader is not read", () => {
 		expect(() => refuseUnknownPriorities(READERS, "read", [fee("bogus")])).not.toThrow()
 		expect(() => refuseUnknownPriorities(READERS, "toString", [fee("bogus")])).not.toThrow()
+	})
+})
+
+describe("refusesShortfall", () => {
+	const SHORT = { maxFee: "4160515300000000000", balance: "0" }
+
+	test("refuses a shortfall two agreeing reads confirmed, and nothing when there is none", () => {
+		expect(refusesShortfall(SHORT)).toBe(true)
+		expect(refusesShortfall(undefined)).toBe(false)
+	})
+
+	test("never refuses one the reads still disagree on", () => {
+		expect(refusesShortfall({ ...SHORT, lastRead: "38163812345678901234" })).toBe(false)
 	})
 })

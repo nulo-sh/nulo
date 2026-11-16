@@ -444,6 +444,8 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			pickSendEndpoint: (network, tx) => this.pickSendEndpoint(network, tx),
 			readPublicStorageOnce: (network, contract, slot, timeoutMs) =>
 				this.networkService.readPublicStorageOnce(network, contract, slot, timeoutMs),
+			peekPublicFeeJuice: (networkId, account) => this.gasBalances.peek(networkId, account)?.balances.publicFeeJuice ?? null,
+			rereadPublicFeeJuice: async (networkId, account) => (await this.gasBalances.get(networkId, account, true)).publicFeeJuice,
 			getPXE: (network) => this.pxeService.getPXE(networkInfoFrom(network)),
 			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),

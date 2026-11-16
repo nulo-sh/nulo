@@ -177,3 +177,54 @@ test("a hold parks only the requests carrying its text until release, and stops 
 	await r.release(RELAY_REPLIES.overloaded)
 	expect(await answered).toEqual({ status: 429, text: RELAY_REPLIES.overloaded.body })
 })
+
+test("a result rule answers, under its own id, only the batch entries calling its method with its text; the rest keep the upstream's", async () => {
+	const r = await start()
+	const zero = `0x${"0".repeat(64)}`
+	const rule = r.fail({ methods: ["getPublicStorageAt"], carrying: "0xFEE", fault: { kind: "result", value: zero } })
+	const body = JSON.stringify([
+		{ jsonrpc: "2.0", id: 7, method: "aztec_getPublicStorageAt", params: ["latest", "0xfee", "0x1"] },
+		{ jsonrpc: "2.0", id: 8, method: "aztec_getPublicStorageAt", params: ["latest", "0xabc", "0x1"] },
+		{ jsonrpc: "2.0", id: 9, method: "aztec_simulatePublicCalls", params: ["0xfee"] },
+	])
+	const res = await fetch(r.url, { method: "POST", headers: { "content-type": "application/json" }, body })
+	const answered = (await res.json()) as { id: number; result: unknown }[]
+	expect(answered).toEqual([
+		{ jsonrpc: "2.0", id: 7, result: zero },
+		{ jsonrpc: "2.0", id: 8, result: "aztec_getPublicStorageAt:ok" },
+		{ jsonrpc: "2.0", id: 9, result: "aztec_simulatePublicCalls:ok" },
+	])
+	expect(rule.taken()).toBe(1)
+
+	r.clear()
+	expect(results((await rpc(r, ["getPublicStorageAt"], ["latest", "0xfee", "0x1"])).text)).toEqual(["aztec_getPublicStorageAt:ok"])
+})
+
+test("a result rule takes no request it answers no entry of, so its count and its `times` wait for one it does", async () => {
+	const r = await start()
+	const zero = `0x${"0".repeat(64)}`
+	const rule = r.fail({ methods: ["getPublicStorageAt"], carrying: "0xfee", times: 1, fault: { kind: "result", value: zero } })
+	const unrelated = JSON.stringify([
+		{ jsonrpc: "2.0", id: 1, method: "aztec_getPublicStorageAt", params: ["latest", "0xabc", "0x1"] },
+		{ jsonrpc: "2.0", id: 2, method: "aztec_simulatePublicCalls", params: ["0xfee"] },
+	])
+	const passed = await fetch(r.url, { method: "POST", headers: { "content-type": "application/json" }, body: unrelated })
+	expect(results(await passed.text())).toEqual(["aztec_getPublicStorageAt:ok", "aztec_simulatePublicCalls:ok"])
+	expect(rule.taken()).toBe(0)
+	expect(results((await rpc(r, ["getPublicStorageAt"], ["latest", "0xfee", "0x1"])).text)).toEqual([zero])
+	expect(rule.taken()).toBe(1)
+
+	const every = r.fail({
+		methods: ["getPublicStorageAt"],
+		entries: "every",
+		carrying: "0xfee",
+		times: 1,
+		fault: { kind: "result", value: zero },
+	})
+	const mixed = await rpc(r, ["getPublicStorageAt", "simulatePublicCalls"], ["latest", "0xfee", "0x1"])
+	expect(results(mixed.text), "`every` still asks every entry to call a named method").toEqual([
+		"aztec_getPublicStorageAt:ok",
+		"aztec_simulatePublicCalls:ok",
+	])
+	expect(every.taken()).toBe(0)
+})
