@@ -1,1 +1,3 @@
 - 2026-11-16 plan: H build of #1821 planned; classic-scrollbar probe run on Chrome 155 and Firefox 158 (D3).
+- 2026-11-16 arc1: lint, typecheck:all, test (1045 files), test:components (104 files) green at the gate commit.
+- 2026-11-16 arc1: smoke legal-acceptance + onboarding-tab green on Chrome and Firefox at 6160f1f38; captures taken (5 frames × 2 themes).
