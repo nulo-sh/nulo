@@ -465,7 +465,7 @@ onBeforeUnmount(() => {
 			<Text variant="name" color="primary" :class="$style.method_size">Public Fee Juice · set by the app</Text>
 		</Flex>
 		<template v-else-if="onSend">
-			<FeeMethodRadios ref="methodSelector" :modelValue="displayMethod" :methods="menuMethods" :pending="readPending" @update:modelValue="handleMethodPicked" />
+			<FeeMethodRadios ref="methodSelector" :usd="prices.feeJuiceQuote.value?.usd" :modelValue="displayMethod" :methods="menuMethods" :pending="readPending" @update:modelValue="handleMethodPicked" />
 			<FeePriorityRow v-if="showsCostRows" v-model="selectedPriority" />
 		</template>
 		<FeeMethodSelector
