@@ -131,7 +131,8 @@ export type JobProgress =
  * `malformed_request`, `terms_refused`, `session_ended` and `wallet_refused` (wallet-sdk; the three
  * scope kinds also from execution's `markFailedUnlessCancelled`, `terms_refused` also from the
  * dApp interaction service), `too_many_pending` (execution's waiting-sends cap), the reaper
- * (`sw_restart_post_prove` | `stuck_proving` | `stuck_queued` | `stale_on_resume`),
+ * (`sw_restart_post_prove` | `stuck_proving` | `stuck_queued` | `stale_on_resume` |
+ * `interrupted_by_restart`),
  * and `classifyTokenImportError` (`network_unreachable` | `contract_invalid` |
  * `metadata_fetch` | `unknown`). `network` | `simulation` are switched-on / documented but not all
  * produced on HEAD.
@@ -150,6 +151,7 @@ export type KnownJobErrorKind =
 	| "stale_on_resume"
 	| "stuck_proving"
 	| "stuck_queued"
+	| "interrupted_by_restart"
 	| "network"
 	| "simulation"
 	| "prover"
@@ -185,6 +187,7 @@ const KNOWN_JOB_ERROR_KIND_TABLE = {
 	stale_on_resume: true,
 	stuck_proving: true,
 	stuck_queued: true,
+	interrupted_by_restart: true,
 	network: true,
 	simulation: true,
 	prover: true,

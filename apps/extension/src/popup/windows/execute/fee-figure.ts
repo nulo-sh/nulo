@@ -11,7 +11,7 @@ function setsOwnFee(op: DraftUIOperation): boolean {
 }
 
 /** An app's own payment that claims Fee Juice to the account, which then pays the fee itself. */
-function claimsToAccount(op: DraftUIOperation): boolean {
+export function claimsToAccount(op: DraftUIOperation): boolean {
 	if (op.kind === "send_transaction") return op.fee?.embeddedFeePayment === "fjwc"
 	return op.kind === "aztec_sendTx" && classifyFeePayer(op.exec?.feePayer, op.opts?.from, op.exec?.calls) === "fjwc"
 }

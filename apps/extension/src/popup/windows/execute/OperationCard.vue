@@ -43,7 +43,7 @@ import CallArguments from "./CallArguments.vue"
 import OperationActionRow from "./OperationActionRow.vue"
 import SendTxSummary, { type AuthwitGroup } from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
-import { type FeePayerPick, payingContract, paysFromPrivateFeeJuice, personPaysAppPayment } from "./fee-figure"
+import { type FeePayerPick, claimsToAccount, payingContract, paysFromPrivateFeeJuice, personPaysAppPayment } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
 import {
 	type CallSurface,
@@ -183,11 +183,12 @@ const outflows = computed(() =>
 		? accountOutflows(sendTxRows.value, props.op.accountAddress, props.tokens, props.op.network?.chainId, signedAuthorizations.value)
 		: [],
 )
-/** Every line of the fee row names the app as its chip does. */
+/** Every line of the fee row that names the app names it as its chip does. */
 const appName = computed(() => appLabelOf(props.dapp?.name) || "the app")
 /** The app picked the method but the person pays, so the card claims nothing for the app and never
  *  reads the fee contract's own pool as the person's. */
 const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
+const claimPaid = computed(() => claimsToAccount(props.op))
 const appFeeFailed = computed(() => props.estimateFailed && !props.feeEstimate && !props.isEstimating)
 /** The row's seal stands for the contract that pays, read as the chips read it, and only for a fee
  *  contract Nulo pins: the row names no contract, so a weaker level, or a listed token named as the
@@ -423,7 +424,7 @@ const advises = computed((): boolean => {
 						<Icon :name="LEVEL_GLYPH.nulo" size="15" color="primary" aria-hidden="true" />
 					</span>
 					<Flex direction="column" :class="$style.fee_lines">
-						<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice">
+						<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice" :claimed="claimPaid">
 							<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
 						</AppFeeLine>
 						<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">

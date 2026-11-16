@@ -28,6 +28,7 @@ describe("KNOWN_JOB_ERROR_KINDS (drift guard)", () => {
 			"stuck_proving",
 			"stuck_queued",
 			"stale_on_resume",
+			"interrupted_by_restart",
 			"network_unreachable",
 			"contract_invalid",
 			"metadata_fetch",
