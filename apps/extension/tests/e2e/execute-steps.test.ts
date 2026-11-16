@@ -488,7 +488,7 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 
 	// The right corner can sit over the right-aligned values until the first scroll (on `batch` with the
 	// steps open, step 3's From and To), so text under it is not checked.
-	test("batch: the more-below button covers no control or glyph at first paint, steps shut or open, nor after a press, and the second press brings the parse warning in and the button leaves", {
+	test("batch: the more-below button covers no glyph and no control but a step row's blank end at first paint, steps shut or open, nor after a press; the second press brings the parse warning in and the button leaves", {
 		timeout: 120_000,
 	}, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)

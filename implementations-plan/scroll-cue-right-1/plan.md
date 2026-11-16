@@ -87,3 +87,4 @@ One arc, one PR. The Post-implementation standard (`implementations-plan/README.
 ## Audit verdicts
 
 - Plan audit: none (the lane brief's proportion).
+- Codex pass 1 (gpt-6.1-sol, high, read-only), over the plan and the net diff at `3efa90321`: `approve`. Only the corner changed, and the binding is the sheet's rule; D4 is proportionate and narrow (it cannot hide a chip, a chevron or a raw-values toggle), and the success control proves the scan is not vacuous; the button cannot reach the footer or the request-log row at any scroll, size or payload. One wording nit accepted: the case's title said "no control" although a step toggle's blank end is left out; renamed. Chrome `execute-steps` green again on the rename. No second round (the pass approved). Detail in [`lessons/phase-1.md`](lessons/phase-1.md).
