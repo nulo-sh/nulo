@@ -66,7 +66,7 @@ The sentence ships as signed.
 
 **Asks.** None.
 
-## Phase 1: the worker, the rule, the card, the window and Send's gates, with their tests
+## Phase 1: the worker, the rule, the card, the window and Send's gates, with their tests ✓
 
 1. Branch `fee-zero-build-1-a1` off `origin/dev` carrying the plan commit; cherry-pick D1; resolve.
 2. `packages/wallet-bridge/src/fee.ts`: `FeeJuiceShortfall.lastRead?`, `refusesShortfall`.
@@ -81,20 +81,24 @@ The sentence ships as signed.
 
 **Validation gate** (retry 0, one at a time, from the worktree root): `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension test:components`; `bun run --cwd packages/wallet-bridge test`; `bun run check:plans` after staging. Then Chrome, on the armed smoke build: `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_EXECUTE_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/send-fee-privacy.test.ts tests/e2e/send-keyboard.test.ts --retry=0`. The armed-gate test in `src/e2e/config.test.ts` timed at the base and the head (three runs each). Pass: every command exits 0; T1–T5 fail on the base and pass on the head; every other assertion passes unedited, or an edit is recorded here.
 
-## Phase 2: the relay fault and the network scenario
+## Phase 2: the relay fault and the network scenario ✓
 
 1. `apps/extension/tests/e2e/fixtures/rpc-relay.ts`: the `result` fault (D8); `take` returns the matched rule so the patch knows which entries to answer.
 2. `apps/extension/tests/e2e/network/fee-shortfall-recheck.test.ts` (D9), with a `shotSend(page, "send-fee-unconfirmed", "fee-settings-card")` (a no-op without `NULO_E2E_SHOT_DIR`).
 
 **Validation gate** (retry 0, `agent.sh` claims ports from `~/.agents/ports.md`; the 10-minute stall watchdog stays): from the root, `NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/fee-shortfall-recheck.test.ts tests/e2e/network/fee-sponsor-funding.test.ts tests/e2e/network/fee-methods.test.ts tests/e2e/network/tx-sendTx-default.test.ts` (prover-ON); then `NULO_E2E_PROVERLESS=1` with `rpc-failover-send.test.ts`; then Firefox (`NULO_E2E_BROWSER=firefox`, proverless) with `fee-shortfall-recheck.test.ts rpc-failover-send.test.ts`. Pass: every run exits 0; the new scenario's duration recorded per browser.
 
+**Outcome.** Chrome prover-ON 15/15 at `829ed6239` (`fee-shortfall-recheck` 65.6 s); Chrome proverless `rpc-failover-send` 1/1; Firefox proverless 2/2 (`fee-shortfall-recheck` 77.1 s). After the review's relay fixes (`53266db58`, `86af6c7a9`): `fee-shortfall-recheck` 84.6 s on Chrome (the capture run) and 95.4 s on Firefox, both green.
+
 **E2E budget.** One scenario added. Estimate 90 s per browser on a warm sandbox plus its fixture's setup; measured figures and each browser's network suite wall-clock before and after (CI's job envelopes, first-attempt successful jobs) go in the PR body.
 
-## Phase 3: captures and the PR
+## Phase 3: captures and the PR ✓
 
 1. Copy fee-zero-2's scratch capture spec into `tests/e2e/network/` (renamed `zz-fzb1-capture.test.ts`), run it once through `agent.sh` with `VITE_NULO_E2E_EXECUTE_FIXTURE=1` and `NULO_E2E_SHOT_DIR` at 400 × 800: `fzb1-disagree` (`fee-zero-disputed`), `fzb1-agreed-zero` (`fee-zero-agreed`), `fzb1-resolved` (`fee-zero-resolved`); and from Phase 2's Chrome run with `NULO_E2E_SHOT_DIR`, `send-fee-unconfirmed` copied as `fzb1-send-disagree`. Each `-light` and `-dark`, into the lane's scratch `shots/` with `captions.json`. Delete the copy.
 2. Commit the disagree pair under `pr-captures/fee-zero-build-1/`; remove it in the next commit.
 3. Post-implementation, then the PR.
+
+**Outcome.** One capture run (proverless, armed), green; the three fixture frames read as signed (disagree: the sentence, Confirm on; agreed-zero: Available 0 FJ, the nudge, Confirm off; resolved: no warning, Confirm on), and the scenario's Send frame shows the warning with Review send enabled.
 
 **Validation gate.** `git status` clean after the copy is deleted; `git grep -n fzb1 -- apps` empty; all eight frames exist; `bun run check:plans` exits 0 after staging.
 
