@@ -41,7 +41,7 @@ const accept = () => {
 
 <template>
 	<Flex direction="column" gap="20" wide :class="$style.consent" data-testid="legal-consent">
-		<Flex v-if="points?.length" direction="column" :class="$style.card" data-testid="legal-points">
+		<Flex v-if="points?.length" direction="column" :class="$style.card" data-testid="legal-points" data-scroll-section>
 			<Flex v-for="(point, index) in points" :key="point.lead" gap="12" :class="$style.point" data-testid="legal-point">
 				<Text variant="meta" color="primary" :class="$style.ordinal">{{ String(index + 1).padStart(2, "0") }}</Text>
 				<Text variant="body" color="secondary" height="150">
@@ -51,7 +51,7 @@ const accept = () => {
 			</Flex>
 		</Flex>
 
-		<Flex v-if="changes?.length" direction="column" gap="8" :class="$style.card" data-testid="legal-changes">
+		<Flex v-if="changes?.length" direction="column" gap="8" :class="$style.card" data-testid="legal-changes" data-scroll-section>
 			<Text v-for="change in changes" :key="change" variant="body" color="secondary" height="150" data-testid="legal-change">
 				{{ change }}
 			</Text>
@@ -66,6 +66,7 @@ const accept = () => {
 			:aria-disabled="busy || undefined"
 			tabindex="0"
 			data-testid="legal-consent-checkbox"
+			data-scroll-section
 			@click="toggle"
 			@keydown.enter.prevent="toggle"
 			@keydown.space.prevent="toggle"
@@ -89,7 +90,7 @@ const accept = () => {
 			</Flex>
 		</Flex>
 
-		<Flex v-snack-footer direction="column" align="center" gap="10" :class="$style.actions">
+		<Flex v-snack-footer direction="column" align="center" gap="10" :class="$style.actions" data-scroll-section>
 			<Button variant="primary" size="large" wide :disabled="!agreed || busy" data-testid="legal-continue" @click="accept">
 				{{ CONTINUE_LABEL }}
 			</Button>

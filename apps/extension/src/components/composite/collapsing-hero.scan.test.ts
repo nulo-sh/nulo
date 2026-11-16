@@ -40,9 +40,19 @@ const FORMS = {
 	"components/composite/import/ImportFullBackupForm.vue": [3, ["Backup File", "Decryption Password"]],
 	"components/composite/SecretUnlockSection.vue": [1, ["Unlock"]],
 	"components/composite/FilePasswordSection.vue": [1, ["File password"]],
+	"components/composite/LegalConsent.vue": [4, []],
+	"popup/windows/execute/SendTxSummary.vue": [2, []],
+	"popup/windows/execute/OperationCard.vue": [3, []],
 } as const
 
-const markCount = (source: string) => source.match(/\sdata-scroll-section\b/g)?.length ?? 0
+const SHELLS = {
+	"components/LegalAcceptanceSheet.vue": "legal-sheet-scroll-more",
+	"popup/windows/execute/index.vue": "execute-scroll-more",
+	"onboarding/app.vue": "onboarding-scroll-more",
+} as const
+
+/** A bound mark (`:data-scroll-section`) counts: it marks the block whenever its condition holds. */
+const markCount = (source: string) => source.match(/\s:?data-scroll-section\b/g)?.length ?? 0
 
 const opensWithMoreBelow = (source: string) => /<CollapsingHeroLayout\b[^>]*\smoreBelow[\s>]/.test(source)
 
@@ -58,5 +68,11 @@ describe("the more-below button's stops", () => {
 		const source = read(path)
 		expect(markCount(source)).toBe(count)
 		expect(markedLabels(source)).toEqual(expect.arrayContaining([...labels]))
+	})
+
+	test.each(Object.entries(SHELLS))("%s walks its sections with the shared rule and mounts its button", (path, testid) => {
+		const source = read(path)
+		expect(source).toContain("useMoreBelow(")
+		expect(source).toMatch(new RegExp(`<ScrollMoreButton\\b[^>]*\\sdata-testid="${testid}"`))
 	})
 })

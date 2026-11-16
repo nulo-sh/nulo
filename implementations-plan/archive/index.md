@@ -575,3 +575,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [import-retry-1](import-retry-1/plan.md) — completed — a token import a worker restart ended reads the wallet's sentence and offers Retry (#1799)
 - [fee-balances-build-1](fee-balances-build-1/plan.md) — completed — the Fee sheet's two Fee Juice rows stack the FJ figure in `value` over its dollars in `caption`, right-aligned, no dollars unpriced or on a row that cannot pay (P150-01 = B3)
 - [fee-zero-build-1](fee-zero-build-1/plan.md) — completed — two balance reads that disagree are read again before the fee card refuses: one recheck, a warning that refuses nothing (S1, #1802)
+- [scroll-cue-build-1](scroll-cue-build-1/plan.md) — completed — the more-below button on the Terms sheet, the execute window and onboarding (P155-01 = B, #1658); A1 and A2 ask the owner (#1820, #1821)

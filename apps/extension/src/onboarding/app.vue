@@ -10,6 +10,7 @@ import ConfirmPopup from "@/components/ConfirmPopup.vue"
 /** Composables */
 import { useConfigRead } from "@/composables/useConfigRead"
 import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
+import { useMoreBelow } from "@/composables/useMoreBelow"
 
 /** Stores */
 import { usePopupStore } from "@/stores/popup.store"
@@ -23,6 +24,11 @@ import { doneRoute, resumePath, settleResume } from "./steps"
 const popupStore = usePopupStore()
 const router = useRouter()
 const { hydrateKnownProfile } = useProfileBootstrap()
+/** The shell's 64 px bottom padding, the blank room after every page's last content: the button shows
+ *  only while more than this is left, so it is gone once a page's end is in view. */
+const END_ROOM_PX = 64
+const { remaining: moreLeft, gutter: moreGutter, press: showMore } = useMoreBelow("document")
+const moreShown = computed(() => moreLeft.value > END_ROOM_PX)
 
 // `theme-boot.js` painted the hint before first paint, and it stands until Config is read: applying a
 // default first would paint a theme nobody chose and overwrite the hint the next document reads.
@@ -114,6 +120,14 @@ onBeforeUnmount(() => {
 			<component :is="Component" />
 		</RouterView>
 
+		<ScrollMoreButton
+			:shown="moreShown"
+			:class="$style.more_below"
+			:style="{ right: `${16 + moreGutter}px` }"
+			data-testid="onboarding-scroll-more"
+			@press="showMore"
+		/>
+
 		<div id="toast" />
 	</main>
 </template>
@@ -132,6 +146,13 @@ onBeforeUnmount(() => {
 
 .brand {
 	padding: 8px 0 24px;
+}
+
+/* The window scrolls every onboarding page, so the button holds to the viewport. */
+.more_below {
+	position: fixed;
+	bottom: 12px;
+	z-index: 1;
 }
 
 .wordmark {

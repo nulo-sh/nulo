@@ -153,7 +153,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 </script>
 
 <template>
-	<Flex v-if="callRows.length" data-testid="execute-op-summary" direction="column" gap="8" :class="$style.section">
+	<Flex v-if="callRows.length" data-testid="execute-op-summary" data-scroll-section direction="column" gap="8" :class="$style.section">
 		<SectionLabel label="What this does" />
 		<ol data-testid="execute-op-summary-calls" :class="$style.rail">
 			<li
@@ -234,6 +234,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 	<div
 		ref="authwitSlot"
 		data-testid="execute-op-authwits-slot"
+		:data-scroll-section="slotHolds || undefined"
 		:role="slotHolds ? 'group' : undefined"
 		:aria-label="slotHolds ? 'Authorizations' : undefined"
 		tabindex="-1"
