@@ -10,6 +10,7 @@ import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { BROWSER, bringToFront, isFirefox, reloadExtensionPage, setViewport } from "./fixtures/browser"
 import { clickByTestId, openPopup, test } from "./fixtures/extension"
+import { pollUntil } from "./fixtures/poll"
 import { openExecuteAuthwits, openExecuteSteps } from "./fixtures/popups"
 import { shotSend } from "./fixtures/shots"
 
@@ -171,6 +172,80 @@ async function tabWalk(page: Page, presses: number): Promise<string[]> {
 		await page.evaluate(() => document.querySelector("[data-tab-walk-start]")?.remove())
 	}
 	return stops
+}
+
+/** What the more-below button's box meets, outside the button: controls and glyphs, and text lines. */
+async function underMoreBelow(page: Page): Promise<{ controls: string[]; text: string[] }> {
+	return page.$eval(sel("execute-scroll-more"), (button) => {
+		const b = button.getBoundingClientRect()
+		const meets = (r: DOMRect) =>
+			r.width > 0 && r.height > 0 && r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top
+		const owner = (el: Element) => el.closest("[data-testid]")?.getAttribute("data-testid") ?? el.tagName
+		const controls: string[] = []
+		const text: string[] = []
+		const marks =
+			'button, a[href], input, textarea, select, [role="button"], [role="checkbox"], [role="tab"], [role="link"], [tabindex="0"], svg'
+		for (const el of document.querySelectorAll(marks)) {
+			if (el !== button && !button.contains(el) && meets(el.getBoundingClientRect())) controls.push(`${el.tagName} in ${owner(el)}`)
+		}
+		const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			if (!node.textContent?.trim() || button.contains(node) || !node.parentElement) continue
+			const range = document.createRange()
+			range.selectNodeContents(node)
+			if ([...range.getClientRects()].some(meets))
+				text.push(`"${node.textContent.trim().slice(0, 32)}" in ${owner(node.parentElement)}`)
+		}
+		return { controls, text }
+	})
+}
+
+/** The window's scroll position and whether the parse warning lies whole inside its visible box. */
+const readWindow = (page: Page): Promise<{ scrollTop: number; warningInView: boolean }> =>
+	page.$eval(sel("execute-op-item"), (card) => {
+		let scroller = card.parentElement
+		while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
+		if (!scroller) throw new Error("no scroller above the card")
+		const top = scroller.getBoundingClientRect().top
+		const line = document.querySelector('[data-testid="execute-op-summary-unparsed"]')?.getBoundingClientRect()
+		return { scrollTop: scroller.scrollTop, warningInView: !!line && line.top >= top && line.bottom <= top + scroller.clientHeight }
+	})
+
+/** Scrolls the window at once: level the parse warning's line with the more-below button, or back to the top. */
+const scrollWindow = (page: Page, to: "warning" | "top"): Promise<void> =>
+	page.$eval(
+		sel("execute-scroll-more"),
+		(button, where) => {
+			const line = document.querySelector('[data-testid="execute-op-summary-unparsed"]')?.getBoundingClientRect()
+			let scroller = document.querySelector('[data-testid="execute-op-item"]')?.parentElement ?? null
+			while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
+			if (!line || !scroller) throw new Error("no parse warning or no scroller")
+			const b = button.getBoundingClientRect()
+			const level = scroller.scrollTop + line.top + line.height / 2 - (b.top + b.height / 2)
+			scroller.scrollTo({ top: where === "top" ? 0 : level, behavior: "instant" })
+		},
+		to,
+	)
+
+/** A real pointer press on the more-below button, then its smooth scroll settled: three reads of the
+ *  scroller 100 ms apart agree. */
+async function pressMoreBelow(page: Page): Promise<void> {
+	const at = await page.$eval(sel("execute-scroll-more"), (el) => {
+		const r = el.getBoundingClientRect()
+		return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+	})
+	await page.mouse.click(at.x, at.y)
+	let last = Number.NaN
+	let same = 0
+	await pollUntil(
+		async () => (await readWindow(page)).scrollTop,
+		(top) => {
+			same = top === last ? same + 1 : 0
+			last = top
+			return same >= 2
+		},
+		{ label: "the press's scroll settled", timeoutMs: 5_000, intervalMs: 100 },
+	)
 }
 
 const isOpen = (page: Page, selector: string) => page.$eval(selector, (el) => el.getAttribute("aria-expanded") === "true")
@@ -408,6 +483,35 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 			await page.click(`${step(2)} ${sel("execute-op-line-from")}`)
 			await page.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
 			expect(await isOpen(page, stepRow(2))).toBe(false)
+		} finally {
+			await page.close()
+		}
+	})
+
+	// With the steps shut a section label at the fold can reach under the button's bottom edge (on
+	// `batch`, the top 5 px of "Leaves your account"); with them open only the rail's line sits there.
+	test("batch: the more-below button covers no control or glyph at first paint; with the steps open it meets no text either, nor after a press, and the second press brings the parse warning in and the button leaves", {
+		timeout: 120_000,
+	}, async ({ registeredExtension: ctx }) => {
+		const page = await openPopup(ctx)
+		const empty = { controls: [], text: [] }
+		try {
+			await openFixture(page, "batch", 400)
+			await page.waitForSelector(sel("execute-scroll-more"), { visible: true, timeout: 10_000 })
+			expect((await underMoreBelow(page)).controls).toEqual([])
+			await openExecuteSteps(page)
+			expect((await readWindow(page)).warningInView).toBe(false)
+			expect(await underMoreBelow(page)).toEqual(empty)
+			// The scan's control: a line brought under the button is read.
+			await scrollWindow(page, "warning")
+			expect((await underMoreBelow(page)).text.join()).toContain("Nulo can't parse calls")
+			await scrollWindow(page, "top")
+
+			await pressMoreBelow(page)
+			expect(await underMoreBelow(page)).toEqual(empty)
+			await pressMoreBelow(page)
+			expect((await readWindow(page)).warningInView).toBe(true)
+			await page.waitForSelector(sel("execute-scroll-more"), { hidden: true, timeout: 5_000 })
 		} finally {
 			await page.close()
 		}
