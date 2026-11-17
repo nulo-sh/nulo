@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 0dc22a9c5
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-17.
+- **Status:** completed. Ships in the PR titled `fix(connected-apps): the connection check section goes; two "Details" glyphs stop misreading`, which carries this close-out; it lands on the owner's decision page with its captures.
+- **Shipped:** the connected app page no longer draws the Connection check section, and nothing replaces it (P163-02 with its note); `DappSessionVerification.vue` is deleted. The capabilities window's Transact column and transaction row draw `send`, its Details column and contract-details row `search`; the yes-mark stays `check` (P163-03 = E3). The page root carries the unseen `connected-app-page` testid, which the mismatch spec now anchors on.
+- **Gates (retry 0, Chrome):** at `0a6e270d1`, lint, typecheck:all, test (1045 files), test:components (104 files) and check:plans green; `e2e:agent` connect-verify-mismatch 2/2, connect-check-window 2/2, type-roles-windows 6/6. The review fix (`0904820c2`, a comment) reran biome and the e2e typecheck. No Firefox run (no fixture, helper, focus, window or WebAuthn change); no e2e scenario added.
+- **Deviations:** the e2e gate and the captures ran through `agent.sh`, not the smoke harness (both need a connected playground); the lane brief's test and stories for `DappSessionVerification` did not exist; `type-roles-windows` joined the gate (it sweeps both surfaces); the built page is 260 px shorter, not K3's 245, since the note dropped K3's header line.
+- **Lessons:** none promoted.
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # connected-app-build-1: the Connection check section removed, two Details glyphs swapped
 
