@@ -258,6 +258,23 @@ window opens and before anything runs, with one envelope:
 The message is a constant: it names no method and no argument value. A stock
 SDK never sends such a call, so it is the dApp's to fix.
 
+A request on a connected session while the wallet is locked (the person locked
+it, or it auto-locked) is refused before any method runs, with one envelope:
+
+```jsonc
+{
+  "code": 4900,                                  // EIP-1193 disconnected
+  "message": "The wallet is locked. Unlock it to continue.",
+  "data": { "walletErrorCode": "WALLET_LOCKED" }
+}
+```
+
+The session stays connected. Show the person an unlock prompt and retry once
+they have unlocked the wallet; nothing opens or queues on the wallet's side,
+so a background poll keeps getting this answer until then. A request already
+running when the lock lands can answer `SESSION_ENDED`, `JOB_CANCELLED` or the
+unclassified envelope instead; the next request answers `WALLET_LOCKED`.
+
 ## getAccounts before requestCapabilities
 
 `wallet.getAccounts()` throws `CapabilityNotGrantedError` (code `4100`,
