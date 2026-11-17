@@ -184,8 +184,8 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 		}
 	}
 
-	/** One artifact read per class for the batch. The artifact is the one its class id binds, but its
-	 *  author chose its names, so the note is marked as named by the contract's own code. */
+	/** One artifact read per class for the batch. The class id binds the artifact's name, not its
+	 *  storage layout, and its author chose both: the note is marked as named by its own code. */
 	private codeNamesFor(network: Network): CodeNamesOf {
 		const artifacts = new Map<string, Promise<ContractArtifact | undefined>>()
 		return async (classId, storageSlot) => {

@@ -59,7 +59,7 @@ const cacheStore = useCacheStore()
 
 const notes = ref([])
 const noteService = new NoteServiceClient()
-/** The signed list from its network-free read, as the approval window's chips read it. */
+/** The list's network-free read: this page never asks for a price fetch. */
 const priceService = new PriceServiceClient()
 const marks = useTokenFlags(priceService)
 const isFetchingNotes = ref(false)
@@ -70,16 +70,9 @@ const isErrorOccurred = computed(() => !!error.value)
 const searchTerm = ref("")
 
 /**
- * Each `displayNote` is a flat, plain-object snapshot ready for the template.
- * All helper calls (color, address trim, content shape) run inside this script
- * inside try/catch so a single malformed note becomes a fallback card with
- * `renderError` instead of breaking the entire v-for. Template renders only
- * primitives — no helper calls, no chained ?. lookups.
- *
- * Failure modes covered:
- *   - service-side parse error (already handled by NoteService — note.renderError set)
- *   - missing/odd-shaped fields (this script's per-note try/catch)
- *   - unrelated render exception inside the v-for body (fallback card)
+ * Flat per-note snapshots for the template. Every helper runs here, per note, so a note a helper
+ * cannot read becomes a fallback card with `renderError` instead of breaking the list; a child
+ * component's own render error is not caught here.
  */
 const displayNotes = computed(() => {
 	const items = []
@@ -165,9 +158,8 @@ function buildDisplayNote(note) {
 }
 
 /**
- * The card's contract chip, and the name its header prints. A custom card always has the chip and
- * prints a name its contract's code chose only beside a level that vouches for the contract; a known
- * card keeps the table's name and has the chip only where the reader places the contract.
+ * A code-chosen name heads a card only beside `nulo` or `scan` evidence; a known card keeps the
+ * table's name and has the chip only where the reader places the contract.
  */
 function contractOf(note, contract) {
 	const selfName = note.contractNameFromCode === true ? note.contractName : undefined

@@ -26,7 +26,6 @@ const note = (contract: string, slot: number, rest: Record<string, unknown>) => 
 	rawContent: [field(42)],
 	...rest,
 })
-/** As the service names a note no table entry matches: the artifact's name and its slot's field. */
 const custom = (contract: string, slot: number, name: string, location: string) =>
 	note(contract, slot, { contractName: name, contractNameFromCode: true, location })
 /** Its value is its slot, so a test finds the card by it. */
@@ -112,9 +111,7 @@ async function mountPage() {
 	return { w, popupStore: usePopupStore(pinia) }
 }
 
-/** Each card as it reads: the header's words, its address element and its chip's level. */
 const cardsOf = (w: VueWrapper) => w.findAll('[style*="border-left-color"]')
-/** The card showing `text`: a custom card's location, or a known card's value. */
 const cardWith = (w: VueWrapper, text: string) => {
 	const card = cardsOf(w).find((c) => c.findAll("span").some((el) => el.element.textContent === text))
 	if (!card) throw new Error(`no card shows ${text}`)
