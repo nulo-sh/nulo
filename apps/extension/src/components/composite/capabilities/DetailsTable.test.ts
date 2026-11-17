@@ -84,7 +84,7 @@ describe("composite/capabilities/DetailsTable", () => {
 		const w = await opened()
 		const head = w.find(`.${STYLE.head}`)
 		const glyphs = w.findAllComponents(Icon).filter((glyph) => head.element.contains(glyph.element))
-		expect(glyphs.map((glyph) => glyph.props("name"))).toEqual(["play", "add", "check", "info", "mail-lock", "code"])
+		expect(glyphs.map((glyph) => glyph.props("name"))).toEqual(["play", "add", "send", "search", "mail-lock", "code"])
 		expect(head.text()).toBe("Contract")
 	})
 

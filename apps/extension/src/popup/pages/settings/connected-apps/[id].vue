@@ -10,14 +10,10 @@
 <script setup>
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
-import DappSessionVerification from "@/popup/components/modules/settings/connected-apps/DappSessionVerification.vue"
 import GrantedCapabilitiesList from "@/popup/components/modules/settings/connected-apps/GrantedCapabilitiesList.vue"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { getChainName } from "@/components/ui/utils.js"
-
-/** Vendor */
-import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
 
 /** Services */
 import { AccountServiceClient } from "@/wallet/services/account/client"
@@ -61,8 +57,6 @@ const sessionChainName = computed(() => {
 	if (cid === undefined || cid === null) return ""
 	return getChainName(Number(cid))
 })
-
-const verificationEmojis = computed(() => (session.value?.verificationHash ? hashToEmoji(session.value.verificationHash) : ""))
 
 const expiryFormatted = computed(() => formatSessionExpiry(session.value?.expiry))
 
@@ -214,7 +208,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Connected App" :backTo="'/popup/settings/connected-apps'" gap="24" v-if="session">
+	<SettingsPageShell title="Connected App" :backTo="'/popup/settings/connected-apps'" gap="24" v-if="session" data-testid="connected-app-page">
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Session actions">
@@ -362,9 +356,6 @@ onBeforeUnmount(() => {
 			<SectionLabel label="Granted permissions" :count="grantedCapabilities.length" />
 			<GrantedCapabilitiesList :grants="grantedCapabilities" />
 		</Flex>
-
-		<!-- Connection check -->
-		<DappSessionVerification v-if="verificationEmojis" :emojis="verificationEmojis" />
 	</SettingsPageShell>
 </template>
 
