@@ -95,6 +95,15 @@ describe("composite/send/PublishLine", () => {
 		expect(region.attributes("data-you")).toBe("exposed")
 	})
 
+	test("quiet, the region stays mounted and announces nothing", async () => {
+		const w = mountLine("private", "private", "account", { quiet: true })
+		const region = w.get('[role="status"]')
+		expect([region.attributes("aria-live"), warning(w).exists()]).toEqual(["off", true])
+		await w.setProps({ quiet: false })
+		expect(w.get('[role="status"]').element).toBe(region.element)
+		expect(region.attributes("aria-live")).toBe("polite")
+	})
+
 	test("no sendable token, no line", () => {
 		const w = mount(PublishLine, {
 			props: { facts: NO_FACTS, name: "Ana", payer: null, remedy: null, bridgeUrl: BRIDGE },

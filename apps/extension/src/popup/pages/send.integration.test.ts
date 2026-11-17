@@ -829,10 +829,13 @@ describe("send page with the real fee card — the card lives with the page, its
 			await nextTick()
 			expect(sheetState(w)).toBe("true")
 			expect(inSheet(w)).toBe(true)
+			// The sheet speaks the warning from its own region; the page's, behind it, stays quiet.
+			expect(publishLine(w).attributes("aria-live")).toBe("off")
 			await close()
 			await nextTick()
 			expect(sheetState(w)).toBe("false")
 			expect(inSheet(w)).toBe(false)
+			expect(publishLine(w).attributes("aria-live")).toBe("polite")
 			expect(w.get('[data-testid="fee-settings-card"]').element.closest("[hidden]")).not.toBeNull()
 		}
 		expect(cardMounts()).toBe(1)

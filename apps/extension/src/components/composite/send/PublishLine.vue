@@ -16,6 +16,8 @@ const props = defineProps<{
 	remedy: "private_fpc" | null
 	/** Where the account gets private Fee Juice when its own cannot pay. */
 	bridgeUrl: string
+	/** The Fee sheet covers the page and announces the same warning from its own region. */
+	quiet?: boolean
 }>()
 const emit = defineEmits<{ fix: [] }>()
 
@@ -24,7 +26,7 @@ const sentence = computed(() => (warning.value ? null : publishSentence(props.fa
 </script>
 
 <template>
-	<div role="status" aria-live="polite" aria-atomic="true" :class="$style.region" :data-you="facts.you" data-testid="send-publish">
+	<div role="status" :aria-live="quiet ? 'off' : 'polite'" aria-atomic="true" :class="$style.region" :data-you="facts.you" data-testid="send-publish">
 		<div v-if="warning" :class="mark.warning_box" data-testid="send-fee-warning">
 			<Icon name="warning" size="14" aria-hidden="true" :class="mark.warning_mark" />
 			<span :class="mark.warning_body">
