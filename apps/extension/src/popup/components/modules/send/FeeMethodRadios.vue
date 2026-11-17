@@ -136,7 +136,8 @@ defineExpose({ target, focus: () => target()?.focus() })
 	border: 1px solid var(--nulo-border);
 	cursor: pointer;
 
-	&:focus-within {
+	/* Keyboard focus only: a press focuses the radio too, and must leave no ring behind. */
+	&:has(> .radio:focus-visible) {
 		outline: 2px solid var(--nulo-accent);
 		outline-offset: -2px;
 	}

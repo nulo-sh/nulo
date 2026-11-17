@@ -22,11 +22,12 @@ import {
 import { captureSoleProfileId, getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { startNodeStub } from "./fixtures/node-stub"
 import { skipUnlessListPrices } from "./fixtures/token-list"
-import { chooseRecipient, openSend, readSendInputs, shotSend } from "./fixtures/send-page"
+import { chooseRecipient, openSend, openSendFeeSheet, readSendInputs, shotSend } from "./fixtures/send-page"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { settleThemeTransitions } from "./fixtures/shots"
 import { readActivityScope, seedJournalRecord, seedTokenRow } from "./helpers/activity-seeds"
 import { SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedFpcs, seedProtocolFpcs } from "./helpers/fpc-seeds"
+import { pointerClick } from "./helpers/legal-drivers"
 import { savedFeePicks } from "./helpers/ui-preferences"
 import { activeTestId, focusRing, pressEscape, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
@@ -358,7 +359,21 @@ test("the unit switch: a Tab stop right after the token card, the accent ring, E
 	await waitForFocus(page, "send-to-public")
 	expect(await page.$eval(sel("send-to-type"), (el) => el.getAttribute("data-side"))).toBe("public")
 	await shotSend(page, "send-sides-focused", "send-to-type")
+
+	// A pointer pick focuses the radio too, and leaves no ring: the ring is the keyboard's.
+	await pointerClick(page, "send-to-private")
+	await waitForFocus(page, "send-to-private")
+	expect(await page.$eval(sel("send-to-type"), (el) => el.getAttribute("data-side"))).toBe("private")
+	expect((await focusRing(page, "send-to-private-choice")).ring).toMatch(/^none /)
+	await pointerClick(page, "send-from-public")
+	await waitForFocus(page, "send-from-public")
+	expect((await focusRing(page, "send-from-public-choice")).ring).toMatch(/^none /)
 })
+
+/** The outline of the fee payer row whose radio `radioSel` names: two sponsors share a testid. */
+function payerRing(page: Page, radioSel: string): Promise<string> {
+	return page.$eval(radioSel, (el) => getComputedStyle(el.closest("label") as Element).outlineStyle)
+}
 
 /** The token row's box against the band it owns between its section's rules (up to the caveat when
  *  the caveat shares the band), with its settled background. */
@@ -511,6 +526,16 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 	await waitForFocus(page, "send-fee-change")
 	expect(await page.$eval(radio(HAND_SPONSOR.id), (el) => (el as HTMLInputElement).checked)).toBe(true)
 	await expect.poll(savedSponsor, { timeout: 10_000, interval: 200 }).toMatchObject({ type: "fpc", fpc: { id: HAND_SPONSOR.id } })
+
+	// Opened and picked by the pointer, the sheet's radios take focus with no ring.
+	await openSendFeeSheet(page)
+	await focusIsOn(radio(HAND_SPONSOR.id))
+	expect(await payerRing(page, radio(HAND_SPONSOR.id))).toBe("none")
+	const sponsors = await page.$$eval(sel("send-fee-payer-sponsored"), (els) => els.map((el) => el.getAttribute("data-fpc-id")))
+	expect([sponsors[0], sponsors.at(-1)], "Nulo's sponsor is the first or last sponsored row").toContain(SEEDED_SPONSOR_FPC_ID)
+	await pointerClick(page, "send-fee-payer-sponsored", { last: sponsors[0] !== SEEDED_SPONSOR_FPC_ID })
+	await focusIsOn(radio(SEEDED_SPONSOR_FPC_ID))
+	expect(await payerRing(page, radio(SEEDED_SPONSOR_FPC_ID))).toBe("none")
 }
 
 test("the fee sheet's payers: Change opens it on the chosen radio with the ring, the arrows pick, Tab leaves, Escape and Done return", {
