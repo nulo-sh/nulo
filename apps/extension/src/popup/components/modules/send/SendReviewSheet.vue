@@ -90,7 +90,9 @@ const rows = computed(() =>
 )
 
 const QUEUE_TESTID = { cap: "send-review-fee-cap", sponsored: "send-review-fee-queued", behind: "send-review-fee-value" } as const
-const line = computed<FeeLine>(() => (props.fee ? feeLine(props.fee) : { kind: "words", value: { text: "—", figure: null }, note: null }))
+const line = computed<FeeLine>(() =>
+	props.fee ? feeLine(props.fee) : { kind: "words", value: { text: "—", figure: null }, note: null, method: null },
+)
 const valueTestid = computed(() => {
 	if (line.value.kind === "slow") return "send-review-fee-slow"
 	return line.value.kind === "words" && line.value.queue ? QUEUE_TESTID[line.value.queue] : "send-review-fee-value"
@@ -226,13 +228,14 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<span :class="$style.fee_key">Fee</span>
 						<span :class="$style.fee_value" :data-testid="reask ? 'send-review-fee-reask' : valueTestid">
 							<span v-if="reask">Fee is now <span :class="$style.whole" data-testid="send-fee-figure">{{ reask.now }}</span>, above the <span :class="$style.whole" data-testid="send-fee-figure">{{ reask.cap }}</span> you accepted.</span>
-							<span v-else-if="line.kind === 'words'"><FeeLineText :words="line.value" /></span>
+							<span v-else-if="line.kind === 'words'" :class="$style.fee_figure"><FeeLineText :words="line.value" /></span>
 							<Skeleton v-else-if="line.kind === 'bar'" :width="96" :height="10" />
 							<span v-else :class="$style.fee_state">
 								<span v-if="line.kind === 'slow'" :class="$style.muted">Taking longer than usual.</span>
 								<span v-else class="color--txt-danger">Couldn't estimate fee.</span>
 								<button type="button" :class="$style.retry" data-testid="send-review-fee-retry" @click="retry">Try again</button>
 							</span>
+							<span v-if="!reask && line.method" :class="$style.fee_method" data-testid="send-review-fee-method">{{ line.method }}</span>
 							<span v-for="note in notes" :key="note.text" :class="$style.note"><FeeLineText :words="note" /></span>
 						</span>
 					</div>
@@ -408,6 +411,16 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 	min-width: 0;
 	text-align: right;
 	color: var(--txt-primary);
+}
+
+.fee_figure {
+	composes: type--value from global;
+}
+
+.fee_method {
+	composes: type--caption from global;
+	color: var(--txt-secondary);
+	overflow-wrap: anywhere;
 }
 
 .fee_state {

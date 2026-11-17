@@ -1,0 +1,12 @@
+# fee-slip-build-1: recon
+
+Done by the planner over the tree at `0dc22a9c5`, no Explore agents (lane brief, Proportion). The render lane's notes cover the surfaces in full; what this build relies on:
+
+- **One reading for both screens.** `feeLine` (`apps/extension/src/popup/components/modules/send/fee-line-words.ts`) is read by `SendFeeLine.vue` (the page's slip) and `SendReviewSheet.vue` (the review's fee row), both fed `send.vue`'s `feeLineState`; nothing else imports it (`FeeLineText.vue` imports only the `FeeWords` type).
+- **The method's place today.** `feeLineWords` appends ", private Fee Juice" / ", public Fee Juice" to the figure, "Nothing · Sponsored" for Nulo's sponsor, "—, <name>" for a hand-added one; `queuedLine` appends the method only for a self-paying cap. `FEE_LINE_METHOD` is read nowhere else.
+- **A cap means the account pays.** `queueCapOf` returns a cap only for `payer === "self"` (`apps/extension/src/popup/pages/send-fee-gate.ts:17`); a hand-added sponsor never queues (`queuedSponsoredOf`).
+- **A hand-added name** reaches the line through `sentenceName(payer.name, "this FPC")` (`send.vue:523`) and renders as text; `FpcSentence` dots only the FPC sentence's constant, never a name.
+- **The bar.** `Skeleton` (`packages/design/src/ui/Skeleton.vue`) is an `inline-block` span, 10 px tall here; as a direct flex item it is blockified and has no line box, so its row is shorter than a text row.
+- **Type roles** (`packages/design/src/utilities.css`): `value` Inter 12/600, `body` 12/400, `caption` 11/400; none sets a line height.
+- **E2E reads** (`git grep` for `send-fee-` and `send-review-fee` under `apps/extension/tests/e2e`): `fixtures/send-page.ts` (`data-payer` on both rows, CHANGE's `aria-expanded`), `fixtures/transfers.ts:98` (the slip's text in a failure snapshot), `network/fiat-send.test.ts` (the sponsor note's figure whole at 360 and 240 px; the review's `send-review-fee-value >> send-fee-figure`, which is the note's figure under a sponsor), `network/fee-sponsor-funding.test.ts` and `network/same-token-concurrent-sends.test.ts` (the notes' text; the cap's text into a diagnostic; `send-review-fee-reask > span`), `network/fee-methods.test.ts` and `network/send-amount-exact.test.ts` (`readReview`, the amount), `send-keyboard.test.ts` (Tab to CHANGE). No assertion reads the one-line words.
+- **Closed known limits** searched (`fee line`): none bears on this.
