@@ -11,9 +11,9 @@ Checked at `0dc22a9c5`. No Explore agents: the lane brief names the four anchors
 ## F2. The warning glyph
 
 - `apps/extension/src/components/composite/send/publish-mark.module.css` `.warning_box`: `display: flex; align-items: baseline`, composed by `PublishLine.vue` (`send-fee-warning`) and used by `SendReviewSheet.vue` (`send-review-warning`). The SVG has no text baseline, so its bottom edge sits on the paragraph's first baseline.
-- `FeeSettingsCard.vue`: `fee-juice-unconfirmed` and `fee-juice-shortfall` are `Flex align="start"` with the text nudged `paddingTop: 1px`; `send-fee-nudge` is `align="center"` beside a title and a caption. The info rows (`fee-init-degraded`, `fee-sponsor-short`) carry the same nudge with the `info` glyph.
-- Inter at 12 px: line box 15 px (measured), ascent 0.96875 em, x-height 0.546 em. The `warning` glyph's triangle has its centroid at 14.27 / 24 of the box.
-- Measured before (network, Chrome, the form's warning): glyph box top 2 px above the first line box; glyph centre 2.5 px above the line centre; triangle centroid 2.02 px above the x-height centre.
+- `FeeSettingsCard.vue`: `fee-juice-unconfirmed` and `fee-juice-shortfall` are `Flex align="start"`; their `Text` keeps its default `line-height: 1` (`lh--100`, a 12 px line box) and is nudged `paddingTop: 1px`, which centres the 14 px glyph on the first line. `send-fee-nudge` is `align="center"` beside a title and a caption.
+- Inter at 12 px with `line-height: normal` (the warning box): the first character's box is 15 px (measured); ascent 0.96875 em, x-height 0.546 em. The `warning` glyph's triangle has its centroid at 14.27 / 24 of the box.
+- Measured before (network, Chrome): the form's warning, glyph box top 2 px above the first line, its centre 2.5 px above the line's, the triangle's centroid 2.02 px above the x-height centre; the Fee sheet's `fee-juice-unconfirmed`, glyph centre 0.5 px below the line's, centroid 0.98 px below the x-height centre. The brief's anchor on the fee card's rows did not hold.
 
 ## F3. The in-flight row's fiat
 

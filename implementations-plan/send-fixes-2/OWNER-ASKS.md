@@ -10,10 +10,10 @@ Neither blocks the arc; it ships the four fixes without them.
 - **Recommendation:** (a). A dollar figure beside a send that moved nothing reads as money that went somewhere.
 - **What ships now:** (a), unchanged.
 
-## A2. The fee card's two info rows
+## A2. The Fee Juice nudge's glyph
 
-- **Surface:** the fee card's `fee-init-degraded` and `fee-sponsor-short` rows (an `info` glyph beside a sentence), on the Fee sheet and in the approval window.
-- **Now:** their text keeps the 1 px nudge the warning rows lose in this arc, so their glyph sits about 1 px higher against its first line than the warning rows' does.
-- **Options:** (a) leave them; (b) give them the warning rows' rule (drop the nudge).
-- **Recommendation:** (b), for one rule across the card's glyph rows; it is outside "the warning icon".
+- **Surface:** the fee card's `send-fee-nudge` row (a warning glyph beside a title, its caption and a link), on the Fee sheet and in the approval window, shown when the chosen Fee Juice has no balance.
+- **Now:** the glyph is centred on the title and its caption together, so it sits between their two lines. This arc leaves it: it is a two-line item, not the paragraph the owner named.
+- **Options:** (a) leave it; (b) align it to the title's line, as the form's warning now sits on its first line.
+- **Recommendation:** (b), for one rule across the warning glyphs.
 - **What ships now:** (a), unchanged.
