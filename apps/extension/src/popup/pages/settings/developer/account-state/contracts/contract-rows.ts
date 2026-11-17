@@ -39,7 +39,7 @@ export type ContractRowView = {
 	haystack: string
 }
 
-/** Nulo discovers the canonical sponsor only where it is published; elsewhere a dApp put it there. */
+/** Nulo discovers the canonical sponsor only on its published chains. */
 const offeredSponsor = (address: string, chainId: number | undefined): boolean =>
 	isSponsoredFpc(address) && chainId !== undefined && offersSponsoredFpc(chainId)
 

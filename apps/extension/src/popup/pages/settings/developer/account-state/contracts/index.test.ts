@@ -183,10 +183,26 @@ test("a read that answers after a later one lands nothing, so the rows are the l
 	let answerFirst: (rows: unknown[]) => void = () => {}
 	getContractRows.mockImplementationOnce(() => new Promise((done) => (answerFirst = done)))
 	const { w, appStore } = await mountPage()
-	appStore.account = { address: ACCOUNT } as never
+	appStore.network = { id: "n2", chainId: CHAIN_IDS.TESTNET } as never
 	await flushPromises()
 	expect(shown(w)).toEqual(ROWS.map((r) => r.address))
 	answerFirst([{ address: `0x${"3a".repeat(31)}0a`, classId: CLASS("0c"), builtIn: false }])
+	await flushPromises()
+	expect(shown(w)).toEqual(ROWS.map((r) => r.address))
+})
+
+test("a read whose scope ended before any other read began lands nothing", async () => {
+	let answerFirst: (rows: unknown[]) => void = () => {}
+	getContractRows.mockImplementationOnce(() => new Promise((done) => (answerFirst = done)))
+	const { w, appStore } = await mountPage()
+	appStore.network = undefined as never
+	await flushPromises()
+	answerFirst(ROWS)
+	await flushPromises()
+	expect(shown(w)).toEqual([])
+	expect(getContractRows).toHaveBeenCalledTimes(1)
+	// Control: the next scope reads and shows its own rows.
+	appStore.network = { id: "n2", chainId: CHAIN_IDS.TESTNET } as never
 	await flushPromises()
 	expect(shown(w)).toEqual(ROWS.map((r) => r.address))
 })
