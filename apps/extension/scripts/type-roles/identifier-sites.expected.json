@@ -913,8 +913,19 @@
 		},
 		{
 			"file": "apps/extension/src/popup/pages/tx/[id].vue",
+			"expression": "protocolChips[idx]",
+			"branch": "tx && userCalls.length && protocolChips[idx]",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "popup-tx-id",
+			"state": "",
+			"why": "a protocol contract's chip, labelled by the wallet's name for it, never by its address; the address shows in the press, read at ContractChip's own site"
+		},
+		{
+			"file": "apps/extension/src/popup/pages/tx/[id].vue",
 			"expression": "trimAddress(c.contract, 6, 4)",
-			"branch": "tx && userCalls.length",
+			"branch": "tx && userCalls.length && !(protocolChips[idx])",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"tx-call-contract\"]",

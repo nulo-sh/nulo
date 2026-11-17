@@ -24,6 +24,7 @@ import {
 	AUTHWITS,
 	decodeFixture,
 	feeEstimateWith,
+	field,
 	fixtureOp,
 	HUB,
 	MAIN,
@@ -240,6 +241,54 @@ describe("execute/SendTxSummary — the contract chip", () => {
 			unverified(VAULT),
 		])
 		expect(sentenceOf(w, 1)).toEqual([`Transfer (private) 100000 base units ${trimAddress(USDC)}`, TRANSFER_LINE])
+	})
+
+	test("a claim on Fee Juice, as the wire carries it, reads on the protocol's chip: its name, the solid seal and a press that says it is part of the protocol", async () => {
+		const FEE_JUICE = field(3n)
+		const SECRET = "0x0e5c7a9b1d3f5e7c9a1b3d5f7e9c0a2b4d6f8e1c3a5b7d9f0e2c4a6b8d1f3e5c"
+		const claim = {
+			name: "claim",
+			to: FEE_JUICE,
+			selector: "0x3e8a7c41",
+			type: "private",
+			isStatic: false,
+			hideMsgSender: false,
+			args: [MAIN, field(10n ** 21n), SECRET, field(1187n)],
+			returnTypes: [],
+		}
+		const decoded = {
+			kind: "decoded",
+			contract: "FeeJuice",
+			fn: "claim",
+			params: [
+				{ name: "to", value: { kind: "address", value: MAIN } },
+				{ name: "amount", value: { kind: "integer", value: (10n ** 21n).toString() } },
+				{ name: "secret", value: { kind: "field", value: SECRET } },
+				{ name: "message_leaf_index", value: { kind: "integer", value: "1187" } },
+			],
+		}
+		const w = await mountLine({
+			...readerOf([]),
+			op: { ...(fixtureOp() as object), exec: { calls: [claim] } },
+			decodedCalls: [decoded],
+			feeEstimate: feeEstimateWith([]),
+		})
+		expect(chipOf(w, callChip(0))).toEqual({
+			level: "nulo",
+			label: "Fee Juice",
+			name: "Fee Juice, Nulo verified",
+			mark: null,
+			seal: ["seal-solid", "primary"],
+		})
+		const press = w.findAllComponents(ContractChip).map((chip) => chip.props("model") as ChipModel)[0]
+		expect([press.title, press.lines]).toEqual([
+			"Fee Juice",
+			[
+				"Nulo knows this contract. Knowing it isn't a promise that it's safe.",
+				"It's part of the Aztec protocol, at the same address on every network.",
+			],
+		])
+		expect(sentenceOf(w, 0)).toEqual(["Claim Fee Juice on Fee Juice"])
 	})
 
 	test("the name a decoded contract's code gives it reaches its unverified press, for a call and for an authorization; a Nulo verified press never repeats it", async () => {

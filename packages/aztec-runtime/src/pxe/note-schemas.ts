@@ -69,7 +69,7 @@ const schemasMemo = memoizeAsync<NoteSchemaMap>(async () => {
 	map.set(nft.classId, new Map([["0x7", nftNote("Aztec NFT")]]))
 
 	const wonderlandToken = await getCatalogEntry("wonderlandToken")
-	map.set(wonderlandToken.classId, new Map([["0x7", uintNote("Wonderland Token")]]))
+	map.set(wonderlandToken.classId, new Map([["0x7", uintNote("Token (AIP-20)")]]))
 
 	const privateFpc = await getCatalogEntry("privateFpc")
 	map.set(privateFpc.classId, new Map([["0x1", uintNote("Private FPC")]]))

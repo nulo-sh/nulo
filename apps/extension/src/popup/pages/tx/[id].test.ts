@@ -211,6 +211,47 @@ describe("the transaction page's fee", () => {
 	})
 })
 
+describe("the transaction page's contract for a call", () => {
+	const FEE_JUICE = field(3n)
+	const OTHER = `0x${"0b".repeat(32)}`
+	const claim = settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [
+		{ contract: FEE_JUICE, method: "claim", args: [ACCOUNT, field(10n ** 21n), field(0x5ecn), field(1187n)] },
+		{ contract: OTHER, method: "checkpoint", args: [field(7n)] },
+	])
+	const chipStub = {
+		props: ["model", "testid"],
+		template: "<button data-testid='contract-chip'><span :data-testid='testid'>{{ model.label }}</span></button>",
+	}
+
+	test("a Fee Juice claim names its contract as the protocol chip; any other call keeps its short address, copied on a click", async () => {
+		const w = await mountPage(claim, Promise.resolve([listed]), { ContractChip: chipStub })
+		const rows = w.findAll("[data-testid='tx-call-method']").map((m) => m.element.parentElement as HTMLElement)
+		expect(rows.map((row) => row.querySelector("[data-testid='tx-call-method']")?.textContent)).toEqual([
+			"Claim Fee Juice",
+			"Checkpoint",
+		])
+		expect(rows[0].querySelector("[data-testid='tx-call-contract'] [data-testid='tx-call-contract-name']")?.textContent).toBe(
+			"Fee Juice",
+		)
+		expect(w.getComponent(chipStub).props("model")).toMatchObject({
+			label: "Fee Juice",
+			level: "nulo",
+			mark: null,
+			title: "Fee Juice",
+			lines: [
+				"Nulo knows this contract. Knowing it isn't a promise that it's safe.",
+				"It's part of the Aztec protocol, at the same address on every network.",
+			],
+			address: FEE_JUICE,
+		})
+		expect(w.findAllComponents(chipStub)).toHaveLength(1)
+		const other = rows[1].querySelector("[data-testid='tx-call-contract']") as HTMLElement
+		expect(other.textContent?.trim()).toBe("0x0b0b..0b0b")
+		other.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+		expect(mocks.copy).toHaveBeenCalledExactlyOnceWith(OTHER, expect.any(Function), "Successfully copied")
+	})
+})
+
 describe("the transaction page's words for a call", () => {
 	const header = { props: ["title"], template: "<h1 data-testid='header'>{{ title }}</h1>" }
 	const words = (w: Awaited<ReturnType<typeof mountPage>>) => [

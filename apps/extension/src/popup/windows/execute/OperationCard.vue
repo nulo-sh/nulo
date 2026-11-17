@@ -191,13 +191,13 @@ const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
 const claimPaid = computed(() => claimsToAccount(props.op))
 const appFeeFailed = computed(() => props.estimateFailed && !props.feeEstimate && !props.isEstimating)
 /** The row's seal stands for the contract that pays, read as the chips read it, and only for a fee
- *  contract Nulo pins: the row names no contract, so a weaker level, or a listed token named as the
- *  payer, would read as a mark on the app. */
+ *  contract Nulo pins: the row names no contract, so a weaker level, or a listed token or protocol
+ *  contract named as the payer, would read as a mark on the app. */
 const feeSealed = computed(() => {
 	const payer = payingContract(props.op)
 	if (payer === undefined || !props.marks) return false
 	const reading = readContract(props.marks, props.op.network?.chainId, payer)
-	return reading.level === "nulo" && reading.source !== "token"
+	return reading.level === "nulo" && (reading.source === "fpc" || reading.source === "sponsor")
 })
 const appFeeRow = ref<{ $el: HTMLElement } | null>(null)
 /** The retry's button leaves with the failure, so a keyboard press keeps its place on the row. Read
