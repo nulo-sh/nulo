@@ -85,6 +85,8 @@ type ServiceHooks = {
 	setNotes: (n: unknown[]) => void
 	setSchemas: (s: Record<string, Record<string, unknown>>) => void
 	setClassIdForContract: (contract: string, classId: string | undefined) => void
+	/** Keyed by the class id's value; an `Error` makes the read reject. */
+	setArtifactForClass: (classId: bigint, artifact: unknown) => void
 }
 
 function makeService(): ServiceHooks {
@@ -95,6 +97,7 @@ function makeService(): ServiceHooks {
 	const noteList: unknown[] = []
 	let schemas: Record<string, Record<string, unknown>> = {}
 	const classIdByContract = new Map<string, string | undefined>()
+	const artifactByClass = new Map<bigint, unknown>()
 
 	const fakePxe = {
 		getContracts: vi.fn(async () => [{ toBigInt: () => BigInt(7) }]),
@@ -104,6 +107,11 @@ function makeService(): ServiceHooks {
 			const classId = classIdByContract.get(address.toString())
 			if (classId === undefined) return undefined
 			return { currentContractClassId: { toString: () => classId } }
+		}),
+		getContractArtifact: vi.fn(async (_network: unknown, classId: { toString: () => string }) => {
+			const artifact = artifactByClass.get(BigInt(classId.toString()))
+			if (artifact instanceof Error) throw artifact
+			return artifact
 		}),
 	}
 	const fakeNetworkService = {
@@ -134,6 +142,9 @@ function makeService(): ServiceHooks {
 		},
 		setClassIdForContract: (contract, classId) => {
 			classIdByContract.set(contract, classId)
+		},
+		setArtifactForClass: (classId, artifact) => {
+			artifactByClass.set(classId, artifact)
 		},
 	}
 }
@@ -371,5 +382,82 @@ describe("NoteService.getNotes — schema-decoded content", () => {
 		expect(result[0].rawContent).toEqual(["0x07"])
 		expect(result[0].renderError).toBeUndefined()
 		expect(result[0].type).toBeUndefined()
+	})
+})
+
+describe("NoteService.getNotes — names from the contract's own artifact", () => {
+	const acc = "0x0000000000000000000000000000000000000000000000000000000000000001"
+	const field = (n: number) => `0x${n.toString(16).padStart(64, "0")}`
+	const slotOf = (n: number) => ({ slot: { toString: () => field(n) } })
+	const NFT_ARTIFACT = { name: "NFT", storageLayout: { minter: slotOf(1), private_nfts: slotOf(5) } }
+	const artifactReads = (service: NoteService) =>
+		(service as unknown as { pxeService: { getContractArtifact: ReturnType<typeof vi.fn> } }).pxeService.getContractArtifact.mock.calls
+
+	test("an unmatched note takes the artifact's name, the code mark and its slot's field; a matched one keeps the table's name", async () => {
+		const { service, setNotes, setSchemas, setClassIdForContract, setArtifactForClass } = makeService()
+		setClassIdForContract("0xtoken", "0xCLASS")
+		setSchemas({
+			"0xCLASS": { "0x3": { noteName: "UintNote", contractName: "Aztec Token", fields: [{ name: "value", type: "u128" }] } },
+		})
+		setClassIdForContract("0xnft", field(0xabc))
+		setArtifactForClass(0xabcn, NFT_ARTIFACT)
+		setNotes([
+			fakeNoteDao({ contract: "0xnft", slot: field(5), items: ["0x2a"] }),
+			fakeNoteDao({ contract: "0xtoken", slot: "0x3", items: ["0x01"] }),
+		])
+
+		const [nft, token] = await service.getNotes("n", acc)
+
+		expect(nft).toMatchObject({ contractName: "NFT", contractNameFromCode: true, location: "private_nfts", rawContent: ["0x2a"] })
+		expect(nft.type).toBeUndefined()
+		expect(nft.content).toBeUndefined()
+		expect(token.contractName).toBe("Aztec Token")
+		expect(token.contractNameFromCode).toBeUndefined()
+		expect(token.location).toBeUndefined()
+		expect(artifactReads(service).map(([, id]) => BigInt(String(id)))).toEqual([0xabcn])
+	})
+
+	test("one read per class: a second note of the class takes the name, and a slot no field holds takes no location", async () => {
+		const { service, setNotes, setClassIdForContract, setArtifactForClass } = makeService()
+		setClassIdForContract("0xnft", field(0xabc))
+		setClassIdForContract("0xnft2", field(0xabc))
+		setArtifactForClass(0xabcn, NFT_ARTIFACT)
+		setNotes([fakeNoteDao({ contract: "0xnft", slot: field(5) }), fakeNoteDao({ contract: "0xnft2", slot: field(0x9f3e) })])
+
+		const [first, derived] = await service.getNotes("n", acc)
+
+		expect(first).toMatchObject({ contractName: "NFT", location: "private_nfts" })
+		expect(derived).toMatchObject({ contractName: "NFT", contractNameFromCode: true })
+		expect(derived.location).toBeUndefined()
+		expect(artifactReads(service)).toHaveLength(1)
+	})
+
+	test("a failed artifact read leaves the raw card, not a render error", async () => {
+		const { service, logger, setNotes, setClassIdForContract, setArtifactForClass } = makeService()
+		setClassIdForContract("0xnft", field(0xabc))
+		setArtifactForClass(0xabcn, new Error("offscreen unreachable"))
+		setNotes([fakeNoteDao({ contract: "0xnft", slot: field(5), items: ["0x2a"] })])
+
+		const [note] = await service.getNotes("n", acc)
+
+		expect(note.rawContent).toEqual(["0x2a"])
+		expect(note.renderError).toBeUndefined()
+		expect(note.contractName).toBeUndefined()
+		expect(note.contractNameFromCode).toBeUndefined()
+		expect(loggedAfter(logger, "Failed to load a contract artifact for a note's names")).toEqual([
+			{ classId: field(0xabc), error: { name: "Error", message: "offscreen unreachable" } },
+		])
+	})
+
+	test("the incoming-transfer read reads no artifact", async () => {
+		const { service, setNotes, setClassIdForContract, setArtifactForClass } = makeService()
+		setClassIdForContract("0xnft", field(0xabc))
+		setArtifactForClass(0xabcn, NFT_ARTIFACT)
+		setNotes([fakeNoteDao({ contract: "0xnft", slot: field(5) })])
+
+		const [note] = await service.getNotesRaw("n", acc)
+
+		expect(note.contractName).toBeUndefined()
+		expect(artifactReads(service)).toHaveLength(0)
 	})
 })
