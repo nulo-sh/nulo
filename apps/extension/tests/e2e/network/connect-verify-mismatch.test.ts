@@ -77,9 +77,7 @@ test.skipIf(!hasConfig)(
 		await approveVerify(await approveConnect(ctx, await discoverP))
 		await dapp.waitForSelector(CONNECTED, { timeout: 20_000 })
 
-		// The app's page reads the first connection as connected. On Chrome the playground's tab hides
-		// the wallet's, and a hidden tab draws no frame to photograph; the dApp is fronted again after,
-		// so the rest of the case runs in the order it always has.
+		// Chrome doesn't paint hidden tabs; front the wallet for its capture, then return to the app.
 		await bringToFront(wallet)
 		await listConnectedApps(wallet)
 		await clickByTestId(wallet, "connected-app-row")
