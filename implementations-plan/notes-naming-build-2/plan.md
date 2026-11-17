@@ -87,4 +87,4 @@ One arc, one PR. The Post-implementation standard (`implementations-plan/README.
 ## Audit verdicts
 
 - Plan audit: none (the lane brief's proportion).
-- Codex, one pass over this plan and the net diff: pending.
+- Codex, one pass over this plan and the net diff at `95bdbb739` (gpt-6.1-sol, high, read-only): `approve`. Failure isolation, the lifecycle order, search (D5), no new copy and the flag reading (A1, moderate confidence on interpretation) all hold. Three nonblocking comment nits, all accepted in `f7f0b6bce` (comments only): the page's isolation comment claimed child render errors become fallback cards and that the template renders only primitives, both untrue now; the `codeNamesFor` comment implied the class id authenticates the storage layout, which it does not (`@aztec-labs/stdlib` 6.0.0 `computeArtifactMetadataHash` hashes `name` and `outputs`, and `storageLayout` is a separate field), so a location label is author-supplied and only capped (D4); narrating or caller-naming comments in the page and its test went. No second round (approve). Detail in [`lessons/phase-1.md`](lessons/phase-1.md).
