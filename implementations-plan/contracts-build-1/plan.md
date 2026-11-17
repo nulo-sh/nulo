@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 0dc22a9c5
-status: planned
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-17.
+- **Status:** completed. Ships in the PR titled `feat(contracts): named rows with both ids, origin and a View on Aztecscan action`, which carries this close-out. It lands on the owner's approve of its captures.
+- **Shipped:** P162-01 = R24. `getContractRows` reads each contract's class id from the PXE's own store (`pxeOnly`) and marks and names the six built-ins; `getContracts` and the backup path are unchanged. Each row shows the chip, Instance and Class in mono with a copy each, and the inferred origin; search covers names, origin words and both ids. One icon-only "View on Aztecscan" action per row follows the Block Explorer setting and the chain, withheld on the profile's accounts, the PrivateFPC and the sponsor on a chain where Nulo offers none. The empty state no longer says "your account". A profile or network change drops what the old scope held or will answer; the read follows the account (D12).
+- **Gates (retry 0):** at `62550ace8` (the final code head) lint, typecheck:all and test:components green; test 18599 of 18600 green, one 5 s timeout under host load in `src/e2e/config.test.ts`, green alone; network `type-roles-windows` 6 of 6 on Chrome and on Firefox. `backup-restore-integrity` green at `1d7819f05`; the service's only later change is a comment.
+- **Deviations:** D4 (token rows only, not the signed list), D6 (no code names), D7 (the copy edit lands on the empty state), D11 (the sponsor gated on the published chains), D13 (one scoped narrow exemption); Firefox ran, since D13 edits a fixture. Three Codex rounds, not one pass: each found a material gap in the previous fix, and the last fix had targeted verification only.
+- **Lessons:** none promoted (`lessons.md` holds 8148 of 8192 bytes; its reboot line already covers a page that stays mounted). The scope drop and the switch's accounts-then-account order are in [`lessons/phase-1.md`](lessons/phase-1.md).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # contracts-build-1: the Contracts page as R24 (named rows, both ids, origin, a View on Aztecscan action)
 
