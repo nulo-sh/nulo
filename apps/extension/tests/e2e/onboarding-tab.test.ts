@@ -196,7 +196,17 @@ describe("onboarding tab", () => {
 		// A password wallet sees its words before Ready, from the top of the step.
 		await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 30_000 })
 		expect(await page.evaluate(() => document.scrollingElement?.scrollTop)).toBe(0)
+		// The step runs past the fold at both sizes; at 720 px wide the room right of the column cannot hold
+		// the more-below button, so only the wide window draws it.
+		await page.waitForSelector('[data-testid="onboarding-scroll-more"]', { visible: true, timeout: 5_000 })
 		await setViewport(page, viewport)
+		expect(
+			await page.evaluate(() => {
+				const root = document.documentElement
+				return root.scrollHeight - root.clientHeight - root.scrollTop
+			}),
+		).toBeGreaterThan(64)
+		await page.waitForFunction(() => !document.querySelector('[data-testid="onboarding-scroll-more"]'), { timeout: 5_000 })
 		expect(await readProfileNames(page)).toEqual(["Main"])
 		const words = await readRecoveryWords(page, "onboarding-phrase")
 		expect(words).toHaveLength(24)
