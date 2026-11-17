@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 33906a052
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-17.
+- **Status:** completed. Ships in the PR titled `fix(send): the fee sheet's warning under the payer group, the warning glyph on its cap top`, which carries this close-out; it lands after the orchestrator reads its captures against the frames the owner picked.
+- **Shipped:** the Fee sheet's warning under the whole WHO PAYS THE FEE group, above PRIORITY, in the page's warning style, in a mounted polite region, its fix the next Tab stop after the radios and moving the keyboard to the Private Fee Juice radio it picks (P169-01 = P2b); the page's short warning words; the 14 px warning glyph's apex on the first line's cap top on the page, the sheet's block, the review, the unconfirmed and shortfall rows and the nudge (P175-01 = B); the page's region quiet while the sheet covers it (D9). Testids `send-fee-sheet-warning`, `-fix`, `-bridge`, `-live` added; nothing else renamed.
+- **Gates (retry 0):** at `7c03aece9`, lint, typecheck:all, test (1045 files), test:components (104 files), check:plans green; smoke `send-keyboard` + `send-fee-privacy` 7/7 on Chrome (also at `02259c22f`) and 7/7 on Firefox at `02259c22f`; proverless `e2e:agent` `fee-methods` + `fee-sponsor-funding` 12/12 on Chrome at `02259c22f`, `fee-methods` 8/8 on Firefox at `f1810f659`. No e2e scenario added: D7's Tab step sits inside `fee-methods`' warned private send.
+- **Deviations:** D3 (one source for the warning styles), D4 (`PublishLine` drops its second `feeWarning`), D7 (the Tab step in `fee-methods`, not `send-keyboard`), D9 (Codex R1-2); `send.test.ts`'s pin of the long words rewritten to the short sentence (Phase 1); the sheet with the block measures 515 px, not the P2b frame's 517 (Phase 2).
+- **Lessons:** none promoted (`lessons.md` holds 8148 of 8192 bytes); the accessibility-tree measure is in [`lessons/phase-1.md`](lessons/phase-1.md).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # fee-slip-build-2: the Fee sheet's warning under the payer group, and the warning glyph on its cap top
 
