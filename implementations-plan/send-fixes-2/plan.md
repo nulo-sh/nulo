@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 0dc22a9c5
-status: active
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-17.
+- **Status:** completed. Ships in PR #1831, `fix(send): recipient divider, warning glyph, in-flight fiat line and radio focus ring`, which carries this close-out. It lands on the owner's approve of its captures.
+- **Shipped:** D1, the last row of Recent and of Your accounts draws no divider (#1825). D2, the Send warning's glyph centred on its paragraph's first line, 0.5 px off where it was 2.5 px (#1828). D3, one price reading per surface feeds the in-flight and the settled row, so a priced send shows `≈ $x` proving and sent alike and landing moves nothing (#1826). D4, the radio rows of From your balance, They receive it and Who pays the fee ring on keyboard focus only (#1827).
+- **Gates (retry 0):** at `db9d5344e`, its tree already holding the regenerated auto-imports committed as `26c87198d`: lint, typecheck:all, test (1045 files), test:components, check:plans, smoke Chrome `send-keyboard`, `rows`, `send-outcome-rows` and smoke Firefox `send-keyboard`, all green; network Chrome `fee-shortfall-recheck` green in the after capture run. After the review fix (three test comments deleted, `728f7e5c0`): lint and the three touched test files green. T1 to T3 red on the base.
+- **Deviations:** D2 narrowed to `.warning_box` once the fee sheet's rows measured aligned (`5d0ba6429`). T3's fee check opens the sheet by keyboard before its pointer pick (Chrome quirk, [`lessons/phase-1.md`](lessons/phase-1.md)).
+- **Lessons:** the Chrome quirk promoted to the `e2e-testing` skill (Focus and the accessibility tree); `lessons.md` untouched (8148 of 8192 bytes). The kit's notes are in [`lessons/phase-0.md`](lessons/phase-0.md) and [`lessons/phase-1.md`](lessons/phase-1.md).
+- **Known limits:** none. A1 and A2 in [`OWNER-ASKS.md`](OWNER-ASKS.md) ship as they are, the owner's to reopen.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # send-fixes-2: four Send defects the owner named on 2026-11-17
 
