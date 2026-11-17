@@ -668,7 +668,9 @@ test.skipIf(!hasConfig)(
 			)
 			await sweepWindow(wallet, "popup-settings-developer-account-state-notes", ["a note (network)", "a note exists (network)"])
 			await navigateByHash(wallet, "#/popup/settings/developer/account-state/contracts", 10_000)
-			await wallet.waitForSelector(sel("address-display"), { visible: true, timeout: 15_000 })
+			await wallet.waitForSelector(sel("contract-row"), { visible: true, timeout: 15_000 })
+			// No explorer covers the local network, so no row links one while the rows show.
+			expect(await wallet.$$eval(sel("contract-row-explorer"), (links) => links.length)).toBe(0)
 			await sweepWindow(wallet, "popup-settings-developer-account-state-contracts", ["a registered contract (network)"])
 		} finally {
 			await wallet.close()

@@ -763,11 +763,21 @@
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/developer/account-state/contracts/index.vue",
-			"expression": "contract",
-			"branch": "appStore.isLogined && contracts.length && !(searchTerm && filteredContracts.length === 0)",
+			"expression": "trimAddress(v.row.address, 6, 4)",
+			"branch": "appStore.isLogined && rows.length && !(searchTerm && filteredContracts.length === 0)",
 			"ordinal": 0,
-			"role": "data-lead",
-			"selector": "[data-testid=\"address-display\"]",
+			"role": "meta",
+			"selector": "[data-testid=\"contract-row-instance\"]",
+			"surface": "popup-settings-developer-account-state-contracts",
+			"state": "a registered contract (network)"
+		},
+		{
+			"file": "apps/extension/src/popup/pages/settings/developer/account-state/contracts/index.vue",
+			"expression": "trimAddress(v.row.classId, 6, 4)",
+			"branch": "appStore.isLogined && rows.length && !(searchTerm && filteredContracts.length === 0) && v.row.classId",
+			"ordinal": 0,
+			"role": "meta",
+			"selector": "[data-testid=\"contract-row-class\"]",
 			"surface": "popup-settings-developer-account-state-contracts",
 			"state": "a registered contract (network)"
 		},
