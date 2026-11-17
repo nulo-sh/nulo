@@ -8,8 +8,21 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 0dc22a9c5
-status: planned
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-17.
+- **Status:** completed. Ships in the PR titled `fix(fees): the app-set fee sentence, the unknown press, History's method row and the readout`, which carries this close-out; it lands on the owner's decision page with its captures.
+- **Shipped:** W2, the approval window's app-set Private Fee Juice line as two sentences (P164-01); U1, an unverified contract's press without its generic line when the code names it (P164-02); M2, History's Fee method row as the method over a "Set by {app}" caption with the App row's spacing, the helper returning the two parts (P164-03); A4, "Enter an amount to see the fee." in Send's Fee sheet while the amount is empty (P164-04), and A1's drafted over-balance sentence.
+- **Gates (retry 0, Chrome):** at `c316291e8`, lint, typecheck:all, test (1045 files), test:components (104 files) and check:plans green; smoke `rows.test.ts` and `type-roles.test.ts` (their History cases) 2/2, 78 s; `e2e:agent fee-sponsor-funding.test.ts` 4/4, 501 s. The review fixes (`cc19a4939`) reran lint, typecheck:all and the four touched unit files. After merging `origin/dev` (`f8f06e1de`), the readout's and the two authorization popups' unit files reran green. No Firefox run (no fixture or helper change); no e2e scenario added.
+- **Deviations:** the over-balance frame came from the local network through `agent.sh`, since the Testnet stub reads no balance; Codex's first round said approve with fixes, so a second round ran (approve).
+- **Owner decisions, for the decision page:** A1, the over-balance sentence, ships as drafted (`fcb1-sim-after-over`); A2, the states that keep today's caption, ships unchanged.
+- **Lessons:** none promoted (`lessons.md` is at 8,148 of its 8,192 bytes); the rest stay in `lessons/`.
+- **Known limits:** #1836.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # fee-copy-build-1: four fee sentences as page 164 picked them
 
@@ -68,8 +81,8 @@ Off Send (approval window, the two authorization popups) the branch shows only b
 **Facts** (checked at `0dc22a9c5`): every anchor of fee-copy-1's notes holds; `describeFeePaymentMethod` has one consumer, the History page; no e2e spec reads the private sentence or the chip lines; `rows.test.ts` and `type-roles.test.ts` open the History page of a dApp-origin row ("Set by …", one line).
 
 **Asks.**
-- A1 (OWNER-ASKS A1): the over-balance sentence.
-- A2 (OWNER-ASKS A2): the states that keep today's caption.
+- A1 ([`OWNER-ASKS.md`](OWNER-ASKS.md) A1): the over-balance sentence.
+- A2 ([`OWNER-ASKS.md`](OWNER-ASKS.md) A2): the states that keep today's caption.
 
 ## Phase 1: the four changes, their tests, the captures ✓
 
