@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 0dc22a9c5
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-17.
+- **Status:** completed. Ships in the PR titled `fix(send): the fee slip and the review's fee row as two rows, figure over method`, which carries this close-out; it lands on the owner's approve of its captures.
+- **Shipped:** the Send FEE slip as two rows, the fee bold over who pays in a caption, CHANGE on the fee's line (P165-01 = D1), and the review's fee row as the same two rows right-aligned (P165-03 = R1); one reading for both screens (`feeLine`, now the figure plus `method` on every state); `send-fee-line-method` and `send-review-fee-method` added, every other testid kept. The slip measures 30 px priced, unpriced and estimating.
+- **Gates (retry 0):** at `e2088c251`, lint, typecheck:all, test (1045 files, after one known host-load teardown flake on an untouched file), test:components (104 files), check:plans green; smoke `send-keyboard` 6/6; one proverless `e2e:agent` run over `fiat-send`, `fee-sponsor-funding`, `same-token-concurrent-sends`, `fee-methods` and `send-amount-exact`, 31/31, about 20 min. `b544ebbc2` (one test comment) reran its file. No e2e scenario added; no Firefox run was due (no fixture or helper changed).
+- **Deviations:** D1, the lane brief's `feeLineRows` name not used (`feeLine` carries the rows); `send.integration.test.ts`'s four word pins rewritten to rows (Phase 1); the before frames are the render lane's of the same base (D7).
+- **Lessons:** none promoted (`lessons.md` holds 8148 of 8192 bytes; the teardown flake is already on record); detail in [`lessons/phase-1.md`](lessons/phase-1.md).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # fee-slip-build-1: the Send fee slip and the review's fee row as two rows
 
