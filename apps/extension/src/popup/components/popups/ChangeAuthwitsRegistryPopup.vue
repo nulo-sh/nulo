@@ -10,6 +10,7 @@ import { getRandomHex } from "@/wallet/utils"
 import { classifyCancellableRejection } from "@/popup/utils/cancellable-rejection"
 
 /** Composables */
+import { createRunFence } from "@/composables/runFence"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useToast } from "@/composables/toast"
 import { useAuthRegistryStatus } from "@/composables/useAuthRegistryStatus"
@@ -63,6 +64,9 @@ const estimates = useWalletTxEstimates({
 const { results: feeEstimates, estimating: estimatingFees, failed: failedFees } = estimates
 
 const isAllowedToExecute = computed(() => Boolean(feeSettings.value) && estimates.landed() && !estimates.short())
+// A hide ends the run in flight: its rejected request says nothing of the worker's send, so the
+// hidden popup reports nothing.
+const runs = createRunFence()
 
 async function handleChangeRegistry() {
 	// Full-lifetime submit latch, handler-owned: every route (click, any future caller) self-checks
@@ -70,6 +74,7 @@ async function handleChangeRegistry() {
 	if (isLoading.value) return
 	if (!isAllowedToExecute.value) return
 
+	const isCurrent = runs.begin()
 	try {
 		isLoading.value = true
 
@@ -83,26 +88,30 @@ async function handleChangeRegistry() {
 			correlation,
 		)
 
-		openToast({ kind: "success", label: "Account authwit registry is changed" })
+		if (isCurrent()) openToast({ kind: "success", label: "Account authwit registry is changed" })
 	} catch (err) {
 		// User-initiated cancel: terminal card in RecentActivityView says
 		// "Cancelled" — suppress the failure toast + error.value.
-		if (classifyCancellableRejection(err) !== "silent") {
+		if (isCurrent() && classifyCancellableRejection(err) !== "silent") {
 			error.value = err
 			openToast({ kind: "error", label: "Failed to change registry status" })
 		}
 	} finally {
 		// Handler-owned latch release — closure via the hide watcher still
-		// happens, but the latch must not depend on it.
-		stage.stop()
-		isLoading.value = false
-		emit("onClose")
+		// happens, but the latch must not depend on it. A hide resets the latch and the line itself;
+		// from then on they belong to the next run.
+		if (isCurrent()) {
+			stage.stop()
+			isLoading.value = false
+			emit("onClose")
+		}
 	}
 }
 
 usePopupEntity(() => props.show, {
 	onShow: registry.fetch,
 	onHide: () => {
+		runs.invalidate()
 		registry.reset()
 		stage.stop()
 		estimates.cancelAll()

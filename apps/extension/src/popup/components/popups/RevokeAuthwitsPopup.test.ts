@@ -381,3 +381,89 @@ describe("RevokeAuthwitsPopup — the fee check before proving", () => {
 		expect(authwitsServiceMock.cancelFeeEstimate).toHaveBeenCalledWith(token)
 	})
 })
+
+describe("RevokeAuthwitsPopup — a hide while the revoke sends", () => {
+	// MAX_REVOKES_PER_TX is mocked to 8: nine rows are two chunks.
+	const NINE = Array.from({ length: 9 }, (_, i) => ({ id: `aw-${i}`, content: `c${i}` }))
+	const SUCCESS = { kind: "success", label: "Authwit(s) successfully revoked" }
+	const closes = (w: ReturnType<typeof mount>) => w.emitted("onClose")?.length ?? 0
+	const stageLine = (w: ReturnType<typeof mount>) => w.get('[data-testid="authwit-stage-line"]').text()
+	const revoke = async (w: ReturnType<typeof mount>) => {
+		await w.get('[data-testid="revoke-authwits-submit"]').trigger("click")
+		await flushPromises()
+	}
+
+	/** Holds every send until the test settles it; a disconnect rejects the held ones, as the client does. */
+	function holdSends() {
+		const held: { correlation: unknown; resolve: () => void; reject: (error: Error) => void }[] = []
+		authwitsServiceMock.revokeAuthwits.mockImplementation(
+			(...args: unknown[]) => new Promise<void>((resolve, reject) => held.push({ correlation: args[4], resolve, reject })),
+		)
+		authwitsServiceMock.disconnect.mockImplementation(() => {
+			for (const send of held.splice(0)) send.reject(new Error("Service client disconnected"))
+		})
+		/** Settles the held sends `pick` names, oldest first, and each send they lead to. */
+		const settle = async (pick: (correlation: unknown) => boolean = () => true) => {
+			for (let send = held.find((s) => pick(s.correlation)); send; send = held.find((s) => pick(s.correlation))) {
+				held.splice(held.indexOf(send), 1)
+				send.resolve()
+				await flushPromises()
+			}
+		}
+		return { settle }
+	}
+
+	test("closed while its first chunk sends: no toast, no close, and no other chunk is sent", async () => {
+		const sends = holdSends()
+		const w = await mountAndOpen(NINE)
+		await setAllFees(w)
+		await revoke(w)
+		await w.setProps({ show: false })
+		await flushPromises()
+		await sends.settle()
+		expect(authwitsServiceMock.revokeAuthwits).toHaveBeenCalledTimes(1)
+		expect(openToastMock).not.toHaveBeenCalled()
+		expect(closes(w)).toBe(0)
+	})
+
+	test("control: left open, both chunks send, then one success toast and one close", async () => {
+		const sends = holdSends()
+		const w = await mountAndOpen(NINE)
+		await setAllFees(w)
+		await revoke(w)
+		await sends.settle()
+		expect(authwitsServiceMock.revokeAuthwits.mock.calls.map((call) => (call[2] as string[]).length)).toEqual([8, 1])
+		expect(openToastMock.mock.calls).toEqual([[SUCCESS]])
+		expect(closes(w)).toBe(1)
+	})
+
+	test("reopened and revoking again: the hidden run never touches the new run's line or latch, which reports once", async () => {
+		const job = heldJobSubscription(journalMock.subscribeJob)
+		const sends = holdSends()
+		const w = await mountAndOpen(NINE)
+		await setAllFees(w)
+		await revoke(w)
+		await w.setProps({ show: false })
+		await flushPromises()
+		authwitsServiceMock.getRegistryEnabled.mockResolvedValueOnce(true)
+		await w.setProps({ show: true })
+		await flushPromises()
+		await setAllFees(w)
+		await revoke(w)
+		const mine = authwitsServiceMock.revokeAuthwits.mock.calls.at(-1)?.[4]
+		authwitsServiceMock.onSendStarted.invoke({ correlation: mine as string, journalId: "j2" })
+		job.show(record({ stage: "simulating" }))
+		await nextTick()
+
+		await sends.settle((correlation) => correlation !== mine)
+		expect(stageLine(w)).toBe("Simulating...")
+		expect(submitButton(w).hasAttribute("disabled")).toBe(true)
+		expect(openToastMock).not.toHaveBeenCalled()
+		expect(closes(w)).toBe(0)
+
+		await sends.settle()
+		expect(authwitsServiceMock.revokeAuthwits).toHaveBeenCalledTimes(3)
+		expect(openToastMock.mock.calls).toEqual([[SUCCESS]])
+		expect(closes(w)).toBe(1)
+	})
+})

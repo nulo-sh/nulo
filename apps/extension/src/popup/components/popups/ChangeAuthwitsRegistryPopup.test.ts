@@ -307,3 +307,37 @@ describe("ChangeAuthwitsRegistryPopup — the fee check before proving", () => {
 		expect(disabled(w)).toBe(false)
 	})
 })
+
+describe("ChangeAuthwitsRegistryPopup — a hide while the switch sends", () => {
+	const closes = (w: ReturnType<typeof mount>) => w.emitted("onClose")?.length ?? 0
+	const toggle = async (w: ReturnType<typeof mount>) => {
+		await w.get('[data-testid="registry-toggle-submit"]').trigger("click")
+		await flushPromises()
+	}
+
+	test("closed while it sends: the disconnect's rejection shows no toast and closes nothing", async () => {
+		let reject: (error: Error) => void = () => {}
+		authwitsServiceMock.setRegistryEnabled.mockReturnValueOnce(
+			new Promise((_, r) => {
+				reject = r
+			}),
+		)
+		authwitsServiceMock.disconnect.mockImplementation(() => reject(new Error("Service client disconnected")))
+		const w = await mountAndOpen()
+		await setFee(w)
+		await toggle(w)
+		await w.setProps({ show: false })
+		await flushPromises()
+		expect(openToastMock).not.toHaveBeenCalled()
+		expect(closes(w)).toBe(0)
+	})
+
+	test("control: left open, a rejected switch toasts the failure and closes", async () => {
+		authwitsServiceMock.setRegistryEnabled.mockRejectedValueOnce(new Error("node down"))
+		const w = await mountAndOpen()
+		await setFee(w)
+		await toggle(w)
+		expect(openToastMock.mock.calls).toEqual([[{ kind: "error", label: "Failed to change registry status" }]])
+		expect(closes(w)).toBe(1)
+	})
+})
