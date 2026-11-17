@@ -236,6 +236,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [network-test-triage](network-test-triage/plan.md) — completed — the failing network e2e tests diagnosed before any timeout was touched
 - [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
 - [notes-naming-build-1](notes-naming-build-1/plan.md) — completed — "Token (AIP-20)" for listed tokens' notes and the protocol contract chip, no badge (P161-01 = T3, P161-03 = P1)
+- [notes-naming-build-2](notes-naming-build-2/plan.md) — completed — a custom note card names its contract through the chip, a code name only beside a vouched level (P174 L1, k1)
 - [nulo-v6](nulo-v6/plan.md) — completed — the dependency line and the chain identity moved to Aztec V6 as Nulo V6
 - [offscreen-ping-1](offscreen-ping-1/plan.md) — completed — the worker stops pinging a PXE document it heard answer, so a busy document is no longer replaced mid-call; the READY timeout becomes a typed `RpcTimeoutError`
 - [on-camera-landing](on-camera-landing/plan.md) — completed — the landing replaced with a character-drawn CCTV-style feed
