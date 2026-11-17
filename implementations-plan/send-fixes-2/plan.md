@@ -55,7 +55,7 @@ Proportion (lane brief): four local fixes. No plan audit round, no Opus; one Cod
 
 **Asks.** A1, A2 in `OWNER-ASKS.md`; the arc ships without them.
 
-## Phase 1: the four fixes, their tests, the captures and the PR
+## Phase 1: the four fixes, their tests, the captures and the PR ✅
 
 1. `apps/extension/src/popup/components/modules/send/SendPersonStep.vue`: D1.
 2. `apps/extension/src/components/composite/send/publish-mark.module.css`: D2's `align-items`.
@@ -91,3 +91,6 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 ## Audit verdicts
 
 No plan audit round (lane brief, Proportion).
+
+- **Codex pass, round 1** (gpt-6.1-sol, high, read-only; plan and `origin/dev...db9d5344e`): `changes` on one comment-only finding, three test comments that restate their lines (`send-row-lifecycle.test.ts`, `TransactionCard.test.ts`, `TransactionsList.test.ts`). Accepted: deleted (`728f7e5c0`). No functional finding; it answered no visible change beyond the four items, D3 removes both causes rather than hiding the jump, D4 keeps the keyboard ring on both radio groups by construction.
+- **Round 2** (resumed over `db9d5344e..26c87198d`): `approve`.
