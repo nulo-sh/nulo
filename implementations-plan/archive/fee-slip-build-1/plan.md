@@ -87,7 +87,7 @@ One PR from `fee-slip-build-1-a1` (off `origin/dev`, carrying the plan commit) t
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `0dc22a9c5`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `0dc22a9c5`. Plan-specific values:
 - Step 1: `code_review: off`, so absent.
 - Step 2, bounded work: after Phase 1 is green, ONE `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` over this plan and `origin/dev...HEAD`, asking also whether any state words the fee differently on the slip and the review, whether the slip's height can still change when a quote or an estimate lands, and whether a pin was loosened rather than rewritten. Rerun only the gates a fix touches. A second round only if the first says anything but approve (`resume-codex.sh`; hard stop at three). No Opus review.
 - Step 3: `gh pr create` as Delivery says; `gh pr checks <n> --watch` once.
