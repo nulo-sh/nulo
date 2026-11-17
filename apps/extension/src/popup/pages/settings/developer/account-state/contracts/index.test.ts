@@ -119,7 +119,7 @@ test("each row reads its chip, both short ids, a copy for each and its origin", 
 	expect(read(ACCOUNT)).toEqual({ chip: "Account 1", level: "none", origin: "Your account" })
 	expect(read(PRIVATE_FPC_ADDRESS)).toEqual({ chip: "Private Fee Juice", level: "nulo", origin: "Added by Nulo, for fees" })
 	expect(read(SPONSORED_FPC_ADDRESS)).toEqual({ chip: "Sponsored", level: "nulo", origin: "Added by Nulo, for fees" })
-	expect(read(BUILT_IN)).toEqual({ chip: "Contract Instance Registry", level: "none", origin: "Built into every wallet" })
+	expect(read(BUILT_IN)).toEqual({ chip: "Contract instance registry", level: "nulo", origin: "Built into every wallet" })
 	expect(read(UNKNOWN)).toEqual({ chip: "0x2c2c2c..2c2c", level: "none", origin: "Origin not recorded" })
 	const token = rowOf(w, TOKEN)
 	expect(token.get('[data-testid="contract-row-instance"]').text()).toBe("0x0a0a..0a0a")
