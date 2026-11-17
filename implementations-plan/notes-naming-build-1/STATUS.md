@@ -1,7 +1,0 @@
-- 2026-11-17 plan written (light, thinned: no plan audit).
-- 2026-11-17 arc 1 built at 1c9470e34 + f7569eba9; lint, typecheck:all, test:components (104 files) green; smoke execute-steps.test.ts green (12 passed, 79 s).
-- 2026-11-17 bun run test: run 1 red on the type-roles inventory (the new chip site, fixed) plus 32 teardown errors in OperationCard.wire.test.ts; runs 2 and 3 green on every test but one load-bound red each (1 teardown error in the same file; a 5 s timeout in src/e2e/config.test.ts), load1 130-140; both files green alone; a full run on dev green.
-- 2026-11-17 network e2e, Chrome, one e2e:agent run at f7569eba9: type-roles-windows, fee-sponsor-funding, tx-transfer-row, tx-sendTx-default: 16 passed, 575 s.
-- 2026-11-17 Codex one pass at f7569eba9: approve; two nits fixed in 2cf236937.
-- 2026-11-17 captures: six frames, light and dark, under the lane's shots folder.
-- 2026-11-17 final head 2cf236937 (code): lint, typecheck:all, test:all green (extension 1045 files, no unhandled error).

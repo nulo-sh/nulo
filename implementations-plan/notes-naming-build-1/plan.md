@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 0dc22a9c5
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-17.
+- **Status:** completed. Ships in the PR titled `fix(notes): "Token (AIP-20)" for listed tokens' notes, and the Fee Juice chip on a claim`, which carries this close-out. It lands on the owner's approve of its captures.
+- **Shipped:** P161-01 = T3: the aztec-standards Token class's notes read "Token (AIP-20)", pinned on the real schema map. P161-03 = P1 without the badge: a `protocol` source in the shared contract reader for 0x01, 0x02 and 0x03 (D1 to D3), read on the transaction detail's call row (D5) and on every approval and raised-fee window chip; the app-paid fee row keeps its seal for the two pinned fee contracts only (D4).
+- **Gates (retry 0):** at `2cf236937` lint, typecheck:all and test:all green; test:components green at `f7569eba9`; smoke `execute-steps.test.ts` (12 passed, 79 s) and network `type-roles-windows`, `fee-sponsor-funding`, `tx-transfer-row`, `tx-sendTx-default` (16 passed, 575 s) on Chrome at `f7569eba9`. Two load-bound reds in `bun run test`, in files the change does not reach, recorded in [`lessons/phase-1.md`](lessons/phase-1.md).
+- **Deviations:** the type-roles inventory gained an entry for the detail page's chip (role `none`), which the plan's change map did not name.
+- **Lessons:** none promoted (`lessons.md` is at its budget, and the inventory point is specific to that scanner); they stay in `lessons/`.
+- **Known limits:** none.
+- **Open items:** none. P161-02 (custom notes) stays with the owner's open question on decision page 161.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # notes-naming-build-1: "Token (AIP-20)" for the listed tokens' notes, and the protocol contract chip
 
