@@ -55,16 +55,20 @@ function retry(e: Event) {
 		<div :class="$style.line">
 			<span :class="$style.key">Fee</span>
 			<span :class="$style.value" data-testid="send-fee-line-value">
-				<span v-if="line.kind === 'words'"><FeeLineText :words="line.value" /></span>
-				<Skeleton v-else-if="line.kind === 'bar'" :width="96" :height="10" />
-				<template v-else-if="line.kind === 'slow'">
-					<span :class="$style.muted">Taking longer than usual.</span>
-					<button type="button" :class="$style.link" data-testid="send-fee-line-retry" @click="retry">Try again</button>
-				</template>
-				<template v-else>
-					<span class="color--txt-danger">Couldn't estimate fee.</span>
-					<button type="button" :class="$style.link" data-testid="send-fee-line-retry" @click="retry">Try again</button>
-				</template>
+				<span :class="$style.figure_row">
+					<span v-if="line.kind === 'words'" :class="$style.figure"><FeeLineText :words="line.value" /></span>
+					<!-- A line box around the bar gives its row a figure's height, so the line holds still when the fee lands. -->
+					<span v-else-if="line.kind === 'bar'"><Skeleton :width="96" :height="10" /></span>
+					<template v-else-if="line.kind === 'slow'">
+						<span :class="$style.muted">Taking longer than usual.</span>
+						<button type="button" :class="$style.link" data-testid="send-fee-line-retry" @click="retry">Try again</button>
+					</template>
+					<template v-else>
+						<span class="color--txt-danger">Couldn't estimate fee.</span>
+						<button type="button" :class="$style.link" data-testid="send-fee-line-retry" @click="retry">Try again</button>
+					</template>
+				</span>
+				<span v-if="line.method" :class="$style.method" data-testid="send-fee-line-method">{{ line.method }}</span>
 			</span>
 			<button
 				ref="changeEl"
@@ -113,9 +117,25 @@ function retry(e: Event) {
 .value {
 	flex: 1;
 	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.figure_row {
+	display: flex;
 	flex-wrap: wrap;
 	align-items: baseline;
 	gap: 6px;
+}
+
+.figure {
+	composes: type--value from global;
+}
+
+.method {
+	composes: type--caption from global;
+	color: var(--txt-secondary);
+	overflow-wrap: anywhere;
 }
 
 .muted {
