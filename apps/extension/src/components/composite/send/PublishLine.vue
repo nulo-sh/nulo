@@ -5,7 +5,8 @@
  */
 import { computed } from "vue"
 import FpcSentence from "./FpcSentence.vue"
-import { feeWarning, type PayerKind, type PublishFacts, publishSentence } from "./publish-facts"
+import mark from "./publish-mark.module.css"
+import { feeWarningShort, type PayerKind, type PublishFacts, publishSentence } from "./publish-facts"
 
 const props = defineProps<{
 	facts: PublishFacts
@@ -18,18 +19,18 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ fix: [] }>()
 
-const warning = computed(() => feeWarning(props.facts, props.name))
+const warning = computed(() => feeWarningShort(props.facts))
 const sentence = computed(() => (warning.value ? null : publishSentence(props.facts, props.name, props.payer)))
 </script>
 
 <template>
 	<div role="status" aria-live="polite" aria-atomic="true" :class="$style.region" :data-you="facts.you" data-testid="send-publish">
-		<div v-if="warning" :class="$style.warning" data-testid="send-fee-warning">
-			<Icon name="warning" size="14" aria-hidden="true" :class="$style.mark" />
-			<span :class="$style.warning_body">
+		<div v-if="warning" :class="mark.warning_box" data-testid="send-fee-warning">
+			<Icon name="warning" size="14" aria-hidden="true" :class="mark.warning_mark" />
+			<span :class="mark.warning_body">
 				<span>{{ warning }}</span>
-				<button v-if="remedy === 'private_fpc'" type="button" :class="$style.fix" data-testid="send-fee-warning-fix" @click="emit('fix')">Pay it from private Fee Juice</button>
-				<a v-else :href="bridgeUrl" target="_blank" rel="noopener noreferrer" :class="$style.fix" data-testid="send-fee-warning-bridge">Get private Fee Juice</a>
+				<button v-if="remedy === 'private_fpc'" type="button" :class="mark.warning_fix" data-testid="send-fee-warning-fix" @click="emit('fix')">Pay it from private Fee Juice</button>
+				<a v-else :href="bridgeUrl" target="_blank" rel="noopener noreferrer" :class="mark.warning_fix" data-testid="send-fee-warning-bridge">Get private Fee Juice</a>
 			</span>
 		</div>
 		<p v-else-if="sentence" :class="$style.sentence" data-testid="send-publish-line"><FpcSentence :text="sentence" /></p>
@@ -45,37 +46,5 @@ const sentence = computed(() => (warning.value ? null : publishSentence(props.fa
 	composes: type--body from global;
 	margin: 0;
 	color: var(--txt-secondary);
-}
-
-.warning {
-	composes: warning_box from "./publish-mark.module.css";
-}
-
-.mark {
-	composes: warning_mark from "./publish-mark.module.css";
-}
-
-.warning_body {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 6px;
-	min-width: 0;
-}
-
-.fix {
-	composes: type--label-section from global;
-	background: none;
-	color: var(--nulo-accent);
-	cursor: pointer;
-
-	&:hover {
-		text-decoration: underline;
-	}
-
-	&:focus-visible {
-		outline: 2px solid var(--nulo-accent);
-		outline-offset: 2px;
-	}
 }
 </style>

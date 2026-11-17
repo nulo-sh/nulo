@@ -16,8 +16,11 @@ import {
 import {
 	assertPublishInvariant,
 	chooseRecipient,
+	doneSendFeeSheet,
 	openReview,
 	openSend,
+	openSendFeeSheet,
+	pickSendFeePayer,
 	type ReviewView,
 	readReview,
 	readSendInputs,
@@ -411,7 +414,18 @@ test.skipIf(!hasConfig)(
 			// A sponsor that does not name the account is one pick away, and lifts the warning with the tag.
 			await selectSendFeeMethod(page, "sponsored")
 			expect(await waitForTag(page, null)).toMatchObject({ warning: false, you: "hidden" })
-			await selectSendFeeMethod(page, "public")
+			// Picked back in the sheet, Public Fee Juice raises the sheet's warning under the payer group, and
+			// its fix (the bridge: private Fee Juice reads zero) is the next Tab stop after the radio group.
+			await openSendFeeSheet(page)
+			await pickSendFeePayer(page, "public")
+			await page.waitForSelector('[data-testid="send-fee-sheet"] [data-testid="send-fee-sheet-warning-bridge"]', {
+				visible: true,
+				timeout: 10_000,
+			})
+			await page.focus('[data-testid="send-fee-sheet"] [data-testid="send-fee-payer-public"]')
+			await page.keyboard.press("Tab")
+			await waitForFocus(page, "send-fee-sheet-warning-bridge")
+			await doneSendFeeSheet(page)
 			await waitForTag(page, "private-private")
 
 			// The warned send: "Review send" only opens the sheet, which takes the keyboard on Send now.

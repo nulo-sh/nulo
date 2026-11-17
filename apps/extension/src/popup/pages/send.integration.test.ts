@@ -350,6 +350,8 @@ const submit = (w: W) => w.get('[data-testid="send-submit"]')
 /** The publish line's region, which carries the facts' `you` cell. */
 const publishLine = (w: W) => w.get("[data-you]")
 const warning = (w: W) => w.find('[data-testid="send-fee-warning"]')
+/** The Fee sheet's block, inside the card the page keeps mounted while the sheet is closed. */
+const sheetWarning = (w: W) => w.find('[data-testid="send-fee-sheet-warning"]')
 const sheetOpen = (w: W) => w.get('[data-testid="send-review-sheet"]').attributes("data-open") === "true"
 const closeSheet = (w: W) => w.getComponent({ name: "SendReviewSheet" }).get('[data-testid="popup-close-btn"]').trigger("click")
 const sendNow = (w: W) => w.get('[data-testid="send-review-submit"]')
@@ -373,11 +375,12 @@ const setSide = (w: W, side: "from" | "to", want: TransferSide) => w.get(`[data-
 const checkedSide = (w: W, side: "from" | "to") =>
 	(["private", "public"] as const).filter((s) => (w.get(`[data-testid="send-${side}-${s}"]`).element as HTMLInputElement).checked)
 
-/** The one reading a settled state must give everywhere at once: the publish line's `you`, its warning
- *  and the card's own pick. */
+/** The one reading a settled state must give everywhere at once: the publish line's `you`, its warning,
+ *  the Fee sheet's and the card's own pick. */
 function settled(w: W) {
 	const you = publishLine(w).attributes("data-you")
 	expect(warning(w).exists()).toBe(you === "exposed")
+	expect(sheetWarning(w).exists()).toBe(you === "exposed")
 	expect(namesAccount(w)).toBe(you === "exposed")
 	return you
 }

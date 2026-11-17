@@ -49,7 +49,7 @@ import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { canSwitchReceiver, canSwitchSender, forcedSide, openingSendSide, sideBalanceText } from "@/components/composite/send/send-sides"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
-import { NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
+import { feeWarning, NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
 import { isValidatedTokenClass } from "@/utils/token-class"
 import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
@@ -479,6 +479,8 @@ const payerKind = computed(() => payerKindOf(feeSettings.value, payer.value))
 const facts = computed(() =>
 	isBlockedTransfer.value ? NO_FACTS : publishFacts(selectedSendType.value, selectedReceiverType.value, payerKind.value),
 )
+/** The warning whole, for the Fee sheet; the page shows its short form. */
+const feeWarningText = computed(() => feeWarning(facts.value, payeeSentenceName.value))
 const showsTokenCaveat = computed(() => !isBlockedTransfer.value && !isValidatedTokenClass(activeToken.value?.classId))
 
 /** The review sheet lives on the popup stack under this key, so it stacks and closes like any other popup. */
@@ -1190,6 +1192,7 @@ onBeforeUnmount(() => {
 					:estimateFailed="estimateFailed"
 					:estimateSlow="estimateSlow"
 					:originPrivacy="selectedSendType"
+					:warning="feeWarningText"
 					embedded
 					:txShape="feeTxShape"
 					v-model="feeSettings"
