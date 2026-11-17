@@ -64,7 +64,6 @@ vi.mock("vue-router", () => ({
 	useRoute: () => ({ params: { id: "s1" } }),
 	useRouter: () => ({ push: mocks.routerPush, go: mocks.routerGo }),
 }))
-vi.mock("@aztec-labs/wallet-sdk/crypto", () => ({ hashToEmoji: () => "" }))
 vi.mock("@/wallet/services/account/client", () => ({
 	AccountServiceClient: vi.fn(function () {
 		return clients.build("account", { getAccount: mocks.getAccount })
@@ -124,7 +123,9 @@ const session = (grants: unknown[], consent?: { broad: boolean }) => ({
 	...(consent ? { authorizationsWithoutAsking: consent } : {}),
 })
 
-async function mountPage(initial: ReturnType<typeof session>, errorHandler?: (error: unknown) => void) {
+type StoredSession = ReturnType<typeof session> & { verificationHash?: string; expiry?: number }
+
+async function mountPage(initial: StoredSession, errorHandler?: (error: unknown) => void) {
 	mocks.getDappSession.mockResolvedValue(initial)
 	const w = mount(ConnectedApp, {
 		global: {
@@ -276,6 +277,15 @@ describe("Settings › Connected app › a row no connection reached", () => {
 		mocks.updated[0]({ ...session([]), verificationHash: "ab".repeat(32) })
 		await flushPromises()
 		expect(w.find(NOT_CONNECTED).exists()).toBe(false)
+	})
+})
+
+describe("Settings › Connected app › a connected row", () => {
+	test("draws no connection check and nothing under its expiry", async () => {
+		const w = await mountPage({ ...session([accounts(false)]), verificationHash: "ab".repeat(32), expiry: Date.now() + 86_400_000 })
+		expect(w.find('[data-testid="connected-app-page"]').exists()).toBe(true)
+		expect(w.text()).toMatch(/Expires \S/)
+		expect(w.text()).not.toMatch(/connection check|emoji|connected after/i)
 	})
 })
 

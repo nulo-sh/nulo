@@ -578,7 +578,9 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   ring mid-fade); on Firefox call `prepareKeys` first, since an unfocused page matches no
   `:focus-visible`. A click ends keyboard modality, so a script focus after it draws no ring
   whatever the CSS: prove a no-ring rule after a keyed activation
-  (`implementations-plan/archive/home-onboarding-2/lessons/phase-4.md`). Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
+  (`implementations-plan/archive/home-onboarding-2/lessons/phase-4.md`). Chrome's exception: a
+  click on a control that already holds keyboard focus keeps the modality, so the script focus it
+  starts rings; open by key, then click (`implementations-plan/archive/send-fixes-2/lessons/phase-1.md`). Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
   with `DOM.resolveNode` (Chrome): `page.accessibility.snapshot()` gives no ignored flag and no
   element (`implementations-plan/archive/accessibility-1/lessons/`).
 

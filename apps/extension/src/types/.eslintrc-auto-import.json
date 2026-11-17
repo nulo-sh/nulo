@@ -603,6 +603,7 @@
     "journalCardAmount": true,
     "journalCardAmountSymbol": true,
     "journalCardDirection": true,
+    "journalCardFiat": true,
     "journalCardIcon": true,
     "journalCardOriginLabel": true,
     "journalCardTitle": true,

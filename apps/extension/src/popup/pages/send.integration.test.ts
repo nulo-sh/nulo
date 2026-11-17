@@ -1304,7 +1304,7 @@ describe("send page — the button waits for the current input's estimate", () =
 		expect(failedRow(w).exists()).toBe(true)
 		await w.get('[data-testid="stub-amount"]').setValue("")
 		expect(failedRow(w).exists()).toBe(false)
-		expect(w.getComponent({ name: "FeeCostReadout" }).text()).toBe("Fee estimated after simulation")
+		expect(w.getComponent({ name: "FeeCostReadout" }).text()).toBe("Enter an amount to see the fee.")
 		w.unmount()
 	})
 
@@ -1365,13 +1365,13 @@ describe("send page — the button waits for the current input's estimate", () =
 		w.unmount()
 	})
 
-	test("the fee row reads the same hint for an amount typed over the balance and for a landed amount the balance falls below", async () => {
+	test("the fee row asks for an amount within the balance, whether one is typed over it or the balance falls below a landed one", async () => {
 		const { w } = await mountSend(FUNDING["no gas, a sponsor"], { realFeeRow: true })
 		const row = () => w.getComponent({ name: "FeeCostReadout" })
 		await toForm(w)
 		await w.get('[data-testid="stub-amount"]').setValue("6")
 		await estimateLands()
-		expect(row().text()).toBe("Fee estimated after simulation")
+		expect(row().text()).toBe("Enter an amount within your balance to see the fee.")
 
 		await w.get('[data-testid="stub-amount"]').setValue("1.5")
 		await estimateLands()
@@ -1380,7 +1380,7 @@ describe("send page — the button waits for the current input's estimate", () =
 		balanceUpdated().invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
 		await flushPromises()
 		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(false)
-		expect(row().text()).toBe("Fee estimated after simulation")
+		expect(row().text()).toBe("Enter an amount within your balance to see the fee.")
 		w.unmount()
 	})
 

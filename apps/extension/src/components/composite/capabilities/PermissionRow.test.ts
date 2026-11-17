@@ -26,8 +26,8 @@ const toggle = (w: ReturnType<typeof mountRow>) => w.find('[data-testid="cap-tog
 
 describe("composite/capabilities/PermissionRow", () => {
 	test("renders the icon, the title and, without a switch, the line", () => {
-		const w = mountRow({ switchLabel: undefined, subOff: undefined, icon: "check", title: "Every transaction", subOn: "Line" })
-		expect(w.getComponent(Icon).props("name")).toBe("check")
+		const w = mountRow({ switchLabel: undefined, subOff: undefined, icon: "send", title: "Every transaction", subOn: "Line" })
+		expect(w.getComponent(Icon).props("name")).toBe("send")
 		expect(w.get("svg").findAll("path").length).toBeGreaterThan(0)
 		expect(w.text()).toContain("Every transaction")
 		expect(sub(w).text()).toBe("Line")
