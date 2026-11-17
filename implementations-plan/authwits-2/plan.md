@@ -98,7 +98,7 @@ A stored row carries the scope, the hash, `pending`, the grant's `txHash` and `c
 
 **The wait.** `waitForTxProven` becomes `waitForTxCheckpointed`: the same loop over the same endpoint, reading `getChainTips().checkpointed.block.number`, same 120 s bound and refusal on timeout. Its comment states the invariant: a later transaction's public calls run on the proposed chain, so the revoke binds once in a block; the wallet reports and prunes only once that block is on L1, where an L1 reorg past it, an invalidated checkpoint or an epoch prune can still undo it (a known limit). Both call sites' comments drop the wrong premise. `verifyRevoked`'s `revokeBlock` comparison for pending rows is unchanged.
 
-**The popups.** Each popup reuses `createRunFence` (`composables/runFence.ts`): `begin()` when the handler starts, `invalidate()` in `onHide`. After each await a stale run writes no chunk status, starts no chunk, toasts nothing, writes no `error`, emits no close, and leaves the latch and the stage line to the current run (`onHide` already resets both). `ChangeAuthwitsRegistryPopup.handleChangeRegistry` does the same around its one send. The worker's send runs on and reports in Activity, as Send's does.
+**The popups.** Each popup reuses `createRunFence` (`composables/runFence.ts`): `begin()` when the handler starts, `invalidate()` in `onHide`. After each await a stale run starts no chunk (its detached chunk object may still take a status no list reads), toasts nothing, writes no `error`, emits no close, and leaves the latch and the stage line to the current run (`onHide` already resets both). `ChangeAuthwitsRegistryPopup.handleChangeRegistry` does the same around its one send. The worker's send runs on and reports in Activity, as Send's does.
 
 **File-level change map**
 
@@ -115,7 +115,7 @@ A stored row carries the scope, the hash, `pending`, the grant's `txHash` and `c
 
 ## Phases
 
-### Phase 1: the revoke and the switch wait for the checkpoint (#1829)
+### Phase 1: the revoke and the switch wait for the checkpoint (#1829) ✓
 
 1. Rename the wait and read the checkpointed tip. Rewrite the three comments to the invariant above.
 2. Add `describe("the revoke and the switch report once their block is checkpointed")` in `service.test.ts`, with a node fake whose receipt names block 5 and whose tips read `checkpointed` 5 and `proven` 1, timers faked:
@@ -127,7 +127,7 @@ A stored row carries the scope, the hash, `pending`, the grant's `txHash` and `c
    - Pass: exit 0; the new cases fail on the base copy of `service.ts` (taken with `git show 0dc22a9c5:<path>`).
    - Layers: lint, typecheck, unit.
 
-### Phase 2: a popup's close ends its own follow (#1830)
+### Phase 2: a popup's close ends its own follow (#1830) ✓
 
 1. Add the run fence to both popups as above.
 2. Tests, mounted as the existing popup tests mount them; the mock holds each send until the test settles it, and its `disconnect` rejects every held send, as the client does:
@@ -139,7 +139,7 @@ A stored row carries the scope, the hash, `pending`, the grant's `txHash` and `c
    - Pass: exit 0; each new case fails on the base copy of its popup.
    - Layers: lint, typecheck, unit, component.
 
-### Phase 3: arc gate
+### Phase 3: arc gate ✓
 
 - Commands, once, in order, at retry 0: `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run --cwd apps/extension test:components`, `bun run check:plans` (after staging), then `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/authwit-lifecycle.test.ts` (Chrome; the spec that sends both flows on chain).
 - Pass: every command exits 0. No e2e scenario is added: the unit layer establishes both failure modes (the sandbox cannot show the first).
@@ -176,6 +176,7 @@ A stored row carries the scope, the hash, `pending`, the grant's `txHash` and `c
   6. Q4's third and fourth sentences narrowed (`set_authorized_private`, a forwarded witness, retained calldata from any source).
 - Codex round 1, follow-up on the same session: **conditional approve**, three leftovers, all accepted: the Architecture invariant still said only a prune undoes a checkpoint; three sentences still promised more than the ideal path; the reopen test needed an order the mock can run (each send held, the disconnect rejecting what is held, A's stale second chunk named as the base's failure).
 - Codex round 1, second follow-up: **approve**.
+- Codex pass over arc 1's diff (gpt-6.1-sol, high, read-only, bounded form): **approve**, one low finding accepted: `transaction/service.ts`'s `waitForTx` comment still named the removed proven wait and its premise; reworded. One caveat recorded above: a stale revoke run may still mark its detached chunk object.
 
 ## Delivery
 

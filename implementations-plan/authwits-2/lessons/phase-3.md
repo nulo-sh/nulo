@@ -1,0 +1,5 @@
+# authwits-2, phase 3: arc gate and the Codex pass
+
+- Gates, in order, at retry 0: `bun run lint` (first run: one format error in the new registry test, fixed with `biome format --write` on the changed files; rerun exit 0), `bun run typecheck:all` exit 0, `bun run test` (first run: 1 failure, `scripts/type-roles/inventory.test.ts`, the `action_operations` producer pins `service.ts`'s digest; re-attested, since no operation builder changed, and re-pinned; rerun 1045 files passed), `test:components` 104 files / 1498 tests passed, `check:plans` 0 findings.
+- `e2e:agent tests/e2e/network/authwit-lifecycle.test.ts`, Chrome, proverless, retry 0: 1 passed, test 81.4 s, run 293.8 s. On the sandbox every block is checkpointed and proven at once, so this spec proves the flows still end; it cannot see the Testnet wait.
+- Codex pass (gpt-6.1-sol, high, read-only, bounded form): approve, one low finding (a stale comment in `transaction/service.ts` naming the removed wait), fixed; targeted verification: lint and the inventory test.
