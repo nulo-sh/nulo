@@ -19,11 +19,12 @@
 	opacity: 0.55;
 }
 
-/* The one warning, on the form and in the review alike: a send whose fee names the account. */
+/* The one warning, on the form and in the review alike: a send whose fee names the account. Its
+   14 px glyph tops the paragraph's 15 px first line, so it sits centred on that line. */
 .warning_box {
 	composes: type--body from global;
 	display: flex;
-	align-items: baseline;
+	align-items: flex-start;
 	gap: 8px;
 	padding: 8px 10px;
 	background: var(--nulo-surface-low);
