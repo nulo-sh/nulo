@@ -1,17 +1,7 @@
 /**
- * Tests for the production note-schema map.
- *
- * Covers three areas, none on real bb.js:
- * 1. `canonicalSlotHex` normalization — pure logic.
- * 2. Storage-layout regression gates — read each bundled artifact's
- *    `storageLayout.<field>.slot` and assert it still matches the slot
- *    we hardcoded in `note-schemas.ts`. If a future aztec-packages bump
- *    moves a slot, this test fails loudly instead of the notes viewer
- *    silently falling back to raw-items rendering.
- * 3. The contract name each bundled class's notes carry, read from the real
- *    schema map. Its class ids go through `getContractClassFromArtifact`
- *    (Poseidon/bb.js), mocked here because real bb.js tends to fault under
- *    repeated unit-test calls.
+ * The production note-schema map. The slot gates fail when an Aztec bump moves a slot, which would
+ * otherwise drop the notes viewer to raw items silently. The class-id hasher is mocked: real bb.js
+ * faults under repeated unit-test calls.
  */
 import { describe, expect, test, vi } from "vitest"
 import { type ContractArtifact, loadContractArtifact } from "@aztec-labs/stdlib/abi"
@@ -23,7 +13,7 @@ import WonderlandTokenJson from "@wonderland-token-artifact"
 import PrivateFPCJson from "@private-fpc-artifact"
 import { _resetNoteSchemasForTests, canonicalSlotHex, loadProductionNoteSchemas } from "@nulo/aztec-runtime/pxe"
 
-/** An artifact's class id stand-in, from what tells the bundled artifacts apart: real bb.js faults here. */
+/** A class id stand-in from what tells the bundled artifacts apart: the two `Token`s differ in storage fields. */
 const mockClassId = vi.hoisted(
 	() => (artifact: { name: string; storageLayout: Record<string, unknown> }) =>
 		`0xmock:${artifact.name}:${Object.keys(artifact.storageLayout).sort().join(",")}`,

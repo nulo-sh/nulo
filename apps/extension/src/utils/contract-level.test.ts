@@ -96,7 +96,7 @@ describe("readContract", () => {
 			protocol("Contract instance registry"),
 			protocol("Fee Juice"),
 		])
-		expect(readContract(readerOf([]), undefined, field(3).toUpperCase().replace("0X", "0x"))).toEqual(protocol("Fee Juice"))
+		expect(readContract(readerOf([]), undefined, field(3).toUpperCase())).toEqual(protocol("Fee Juice"))
 		const flagged = readerOf([], [{ chainId: CHAIN, address: field(3) }])
 		expect(readContract(flagged, CHAIN, field(3))).toEqual({ level: "none", flagged: true })
 	})
