@@ -1,7 +1,7 @@
 ---
 plan: locked-refusal-1
 tier: light
-status: planned
+status: completed; delivered by the PR that carries this close-out
 issues: "#1833 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,18 @@ trunk: dev
 standard: implementations-plan/README.md § Post-implementation standard, read at 33906a052
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-17. Planned and delivered the same day; one arc.
+- **Status:** completed. One PR into `dev` carries the fix and this close-out; its merge closes #1833 and archives this plan.
+- **Shipped:** a request on a connected session while the wallet is locked answers `{ code: 4900, message: "The wallet is locked. Unlock it to continue.", data: { walletErrorCode: "WALLET_LOCKED", walletTraceId } }` instead of the unclassified -32603, and logs at `debug` instead of `error`. `WalletLockedError` stays a plain `Error` with its message and gains `CODE` (D1); one `CONSTANT_ENVELOPES` row; the wallet-bridge README's envelope and recipe. Tests: the envelope row, a message-level case with its unlocked control (both red before), one envelope assertion in `wallet-locked-mid-session`.
+- **Review:** no plan audit (lane proportion); Codex over the plan and the diff `approve` with three low comment findings, taken.
+- **Gates:** lint, `typecheck:all`, `test`, `test:components` and the network spec green at retry 0 ([lessons/phase-1.md](lessons/phase-1.md)); CI's required lanes on the PR head are the gate of record.
+- **Known limits:** #1841 (D8, a lock landing after a request's admission).
+- **Open items:** none.
+- **Lessons:** none promoted; the typed-error hop rule already in `lessons.md` covers it.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # locked-refusal-1: a locked wallet answers a dApp with a classified refusal
 
