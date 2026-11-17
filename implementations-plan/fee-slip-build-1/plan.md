@@ -46,7 +46,7 @@ Proportion (lane brief): two rows in two components over one helper. No plan aud
 
 Display only. The one attacker-influenced string is a hand-added sponsor's name: it reaches the method row already passed through `sentenceName` (`send.vue:523`) and renders by text interpolation, never HTML; it moves from the end of the value string to its own row, so it can no longer sit beside the fee figure. No storage, message, permission, secret, dependency or log line changes.
 
-## Phase 1: the reading, the two rows and their tests
+## Phase 1: the reading, the two rows and their tests ✓
 
 1. `apps/extension/src/popup/components/modules/send/fee-line-words.ts`: D1, D2, D3; `feeLineWords` drops its `name` option (the name is the method now).
 2. `.../send/SendFeeLine.vue`: D4. `.../send/SendReviewSheet.vue`: D5.
@@ -55,16 +55,19 @@ Display only. The one attacker-influenced string is a hand-added sponsor's name:
    - `SendFeeLine.test.ts`: figure and method per state; the method row present in the bar, slow and failed states and absent with no payer (the slip's steady height rests on it; jsdom has no layout, Phase 2 measures it); the figure one `send-fee-figure` span with no method words inside it.
    - `SendReviewSheet.test.ts`: the parity tests compare the review's rows `[figure, method, ...notes]` with the slip's; the row's words per state; the queued cap's sentence under the rows; no method on a re-ask.
    - The source scans (`copy-dash-ban`, `type-role-ban`, `red-text-ban`) stay green unedited.
+   - Deviation, the tree wins: `apps/extension/src/popup/pages/send.integration.test.ts` also read the one-line words (four pins: the review's priced row, the queued cap's and the sponsor's rows, and the review's row text while the bar runs, now "FeeSponsored"); rewritten to rows, its helper reading figure, method, notes. The re-ask's "no method" rests on the existing re-ask test, whose exact row list holds no method.
 
 **Validation gate** (retry 0, one command at a time, from the worktree root): `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension test:components`; `bun run check:plans` after staging; then from `apps/extension`, `bun run test:e2e -- tests/e2e/send-keyboard.test.ts --retry=0`; then one proverless run (`same-token-concurrent-sends` requires it; the other four run on it as most CI shards do): `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/fiat-send.test.ts tests/e2e/network/fee-sponsor-funding.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/fee-methods.test.ts tests/e2e/network/send-amount-exact.test.ts`. Chrome only (D6). Pass: every command exits 0; the new pins fail on the base; no existing assertion loosened.
 
-## Phase 2: captures and the PR
+## Phase 2: captures and the PR ✓
 
 1. Copy the render lane's kit into the lane's scratch dir (never edited in place); the capture-only override of `send.vue` is applied around the run and restored after, never committed. One proverless `agent.sh` run at 400 x 600, light and dark: `fsb1-slip-after` (priced), `-noprice`, `-estimating` (override: estimating, no figure), `-sponsor` (Nulo's sponsor picked in the Fee sheet), `-long` (override: a 32-character hand-added name), `fsb1-review-after`, `-queued` (override). `fsb1-slip-before` and `fsb1-review-before` per D7. Each stand-in's caption says it is one. The run records the slip's height in the priced, unpriced and estimating states: pass is all three equal.
 2. `captions.json` beside the frames under the lane's scratch `shots/` (keys `<id>-light`, `<id>-dark`, one sentence each, the point first).
 3. Post-implementation, then commit `fsb1-slip-after` and `fsb1-review-after` (light and dark) under `pr-captures/fee-slip-build-1/` in one commit and remove them in the next; open the PR.
 
 **Validation gate.** `git status` clean after the run (no spec, no override); every frame in both themes; the three heights equal; `bun run check:plans` exits 0 after staging.
+
+Measured at `b544ebbc2` (400 px, `send-fee-line`): priced 30 px, unpriced 30, estimating 30, sponsor 47 (its cost note), long name 47; the review's row 31, queued 63. All as the render lane measured D1 and R1.
 
 ## Delivery
 
@@ -87,3 +90,6 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 ## Audit verdicts
 
 No plan audit round (lane brief, Proportion).
+
+**Codex round 1, over the plan and the net diff** (gpt-6.1-sol, high, read-only, `origin/dev...e2088c251`), 2026-11-17: **approve**, high confidence (moderate on pixel geometry it could not measure). It walked 14 states through the real helper and found both screens drawing the same figure, method and notes in the same order, Home's re-ask unchanged (no method row, `send-review-fee-reask > span` still first); the method row never absent while Send knows a payer (`send.vue:523` names an unnamed sponsor "this FPC"); no pin loosened (exact strings became exact row arrays; the slip's slow and failed checks went from `toContain` to `toBe`); D1 sound, the intersection keeps the union's narrowing, nothing left dead; nothing visible beyond the picks; a hostile sponsor name stays sanitised text beside a dash and the FPC caveat. On height: no unconditional 30 px (a figure too wide for its row pushes CHANGE down, notes add lines), so the browser measurement stands as the proof (Phase 2: 30 px in all three states). Finding:
+- R1-1, accepted: a comment in `send.integration.test.ts` restated the assertion under it; removed (`b544ebbc2`), its file rerun green (74/74) and Biome clean. No second round (the verdict was approve).
