@@ -1,7 +1,7 @@
 ---
 plan: notes-naming-build-2
 tier: light (thinned: no plan audit round, no Opus leg; one Codex pass over this plan and the net diff)
-status: planned
+status: completed
 issues: none (closes no issue)
 driver: claude-code
 claude_model: opus
@@ -13,6 +13,18 @@ base: origin/dev at 33906a052
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-17.
+- **Status:** completed. Ships in the PR titled `fix(notes): a custom note card names its contract through the chip, no caveat line`, which carries this close-out. It lands on the orchestrator's read of its captures against the frames the owner picked.
+- **Shipped:** P174-01 = L1 with its note, and P174-02 = k1. The note service names a note no schema matched from its class's artifact (the name, the code mark, the storage field), off the incoming-transfer read. The notes page draws the shared contract chip on every custom card, and on a known card only where the reader places the contract; a code-chosen name heads a card only beside `nulo` or `scan`; no card writes a caveat (D1 to D8).
+- **Gates (retry 0):** lint, typecheck:all, test (1045 files), test:components (104 files) and check:plans green at `10bf3ebbd`; `type-roles-windows.test.ts` 6 passed on Chrome and on Firefox; later commits change comments and plan files only, re-verified by the touched tests and biome.
+- **Deviations:** the brief's two claims that did not hold (dev had no caveat; the network wait needs no change under k1); the press is #1837's one line where the L1 frame drew two; a signed flag counts as placed (A1); a Private FPC card shows two names (A2); no inventory change.
+- **Lessons:** none promoted (`lessons.md` is at its budget); the storage layout's trust point stays in [`lessons/phase-1.md`](lessons/phase-1.md).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # notes-naming-build-2: a custom note card names its contract through the chip
 
