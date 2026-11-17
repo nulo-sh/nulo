@@ -4,7 +4,9 @@
  */
 import { describe, expect, test, vi } from "vitest"
 import { KeyedLock } from "@nulo/wallet-core/utils"
+import { LogLevel } from "@/wallet/logger"
 import { RequestLog } from "@/wallet/logger/request-log"
+import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import { type MessagePipelineDeps, onWalletMessage } from "./wallet-message"
 
 const SESSION = { sessionId: "s1", origin: "https://app.example", chainInfo: { chainId: "0x7a69", version: "0x1" } } as never
@@ -16,15 +18,21 @@ function harness(
 		dispatch?: () => Promise<unknown>
 		session?: never
 		overCap?: boolean
+		locked?: boolean
 	} = {},
 ) {
 	const session = opts.session ?? SESSION
-	const sent: Array<{ error?: { data?: { walletTraceId?: string } } }> = []
+	const sent: Array<{ result?: unknown; error?: { data?: { walletTraceId?: string } } }> = []
 	const settled = Promise.withResolvers<void>()
 	let epoch = 0
 	const requests = new RequestLog(() => true)
 	const end = vi.spyOn(requests, "end")
 	const begin = vi.spyOn(requests, "begin")
+	const log = vi.fn()
+	const dispatch = vi.fn(async () => {
+		if (opts.switchMidDispatch) epoch++
+		return (opts.dispatch ?? (async () => "ok"))()
+	})
 	const hold = { admit: () => (opts.overCap ? undefined : () => settled.resolve()), outcome: Promise.resolve("released" as const) }
 	const deps = {
 		handler: {
@@ -40,21 +48,21 @@ function harness(
 			sessionProfiles: new Map([["s1", "p1"]]),
 		},
 		switchEpoch: { current: () => epoch },
-		dispatcher: {
-			dispatch: async () => {
-				if (opts.switchMidDispatch) epoch++
-				return (opts.dispatch ?? (async () => "ok"))()
+		dispatcher: { dispatch },
+		profileService: {
+			captureExecutionFence: async () => {
+				if (opts.locked) throw new WalletLockedError()
+				return { profileId: "p1", epoch: 0, session: 1 }
 			},
 		},
-		profileService: { captureExecutionFence: async () => ({ profileId: "p1", epoch: 0, session: 1 }) },
 		legal: { assertCurrent: async () => {} },
 		operationJournal: {},
-		logger: { log: () => {} },
+		logger: { log },
 		requests,
 	} as unknown as MessagePipelineDeps
 	onWalletMessage(session, { type: "getChainInfo", args: [], messageId: "m1" } as never, deps)
 	const walletTraceId = () => begin.mock.calls[0]?.[0]
-	return { sent, begin, end, walletTraceId, done: settled.promise }
+	return { sent, begin, end, walletTraceId, dispatch, log, done: settled.promise }
 }
 
 describe("onWalletMessage: the request capture ends once, with its own outcome", () => {
@@ -98,5 +106,29 @@ describe("onWalletMessage: the request capture ends once, with its own outcome",
 		await h.done
 		expect(h.end.mock.calls).toEqual([[h.walletTraceId(), "dropped"]])
 		expect(h.sent).toEqual([])
+	})
+})
+
+describe("onWalletMessage: a locked wallet", () => {
+	test("answers WALLET_LOCKED with the call's trace id, runs nothing and logs at debug; unlocked, the call is served", async () => {
+		const locked = harness({ locked: true })
+		await locked.done
+		expect(locked.sent).toEqual([
+			{
+				messageId: "m1",
+				walletId: "nulo",
+				error: {
+					code: 4900,
+					message: "The wallet is locked. Unlock it to continue.",
+					data: { walletErrorCode: "WALLET_LOCKED", walletTraceId: locked.walletTraceId() },
+				},
+			},
+		])
+		expect(locked.dispatch).not.toHaveBeenCalled()
+		expect(locked.log.mock.calls.map(([, level]) => level)).toEqual([LogLevel.Debug])
+
+		const unlocked = harness()
+		await unlocked.done
+		expect(unlocked.sent).toEqual([{ messageId: "m1", walletId: "nulo", result: "ok" }])
 	})
 })

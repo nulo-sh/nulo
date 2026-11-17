@@ -32,6 +32,7 @@ import {
 import { unwrapOperationResult } from "@nulo/wallet-bridge"
 import { assertSelectorBinding, CALL_BINDING } from "@/wallet/services/execution/contract-resolver"
 import { classifyOperationCatch } from "@/wallet/services/execution/rpc-cancel"
+import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import {
 	AUTH_REGISTRY_REFUSAL_ENVELOPE,
 	OWN_ACCOUNT_INTENT_REFUSAL_ENVELOPE,
@@ -149,6 +150,17 @@ describe("toWalletResponseError", () => {
 		})
 		// The same words on a plain Error are not a session end: the fall-through stays constant.
 		expect(toWalletResponseError(new Error(SessionEndedError.MESSAGE))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
+	})
+
+	test("WalletLockedError → {code:4900, walletErrorCode WALLET_LOCKED} with the constant message; only the class maps", () => {
+		expect(toWalletResponseError(new WalletLockedError())).toEqual({
+			code: 4900,
+			message: "The wallet is locked. Unlock it to continue.",
+			data: { walletErrorCode: "WALLET_LOCKED" },
+		})
+		// A profile whose deletion has begun refuses with the same words on a plain Error. No unlock
+		// brings that session back, so it stays unclassified.
+		expect(toWalletResponseError(new Error("Wallet locked"))).toBe(UNCLASSIFIED_ERROR_ENVELOPE)
 	})
 
 	test("ChainNotSupportedError → {code:4901, walletErrorCode CHAIN_NOT_SUPPORTED} with the constant message; only the class maps", () => {
