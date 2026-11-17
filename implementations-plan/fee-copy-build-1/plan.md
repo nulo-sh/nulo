@@ -35,6 +35,7 @@ Proportion (lane brief): no plan audit round, no Opus; one Codex pass over the p
 | D5 | A4: `FeeCostReadout` gains `waitsFor` (`"amount"`, `"amountInBalance"` or null). Its last branch reads "Enter an amount to see the fee." for `amount`, "Enter an amount within your balance to see the fee." for `amountInBalance` (OWNER-ASKS A1), else today's caption. Send computes it (`amountValidation.reason === "empty"` → `amount`; `exceedsBalance` → `amountInBalance`) and passes it through `FeeSettingsCard`'s new `waitsFor` prop; the other three hosts pass nothing. | The readout cannot tell Send from the approval window or the authorization popups (all four mount it through `FeeSettingsCard`), and only Send has an amount; the readout keeps owning its copy. Rejected: deriving it from `amountTyped` (false by default off Send, so the approval window would ask for an amount); folding `amountTyped` into one enum (changes the pending bar's behaviour for an over-balance amount, outside the picks). |
 | D6 | No e2e scenario added; `fee-sponsor-funding.test.ts` reads the two testids (`Sponsored` and `Set by ${app}`) instead of the joined string. | The unit and page tests pin every string; that spec is the one e2e read of the row. |
 | D7 | No accessibility call. | No focusable element, Tab stop, ARIA or press state changes; the caption is plain text after the method in DOM order. |
+| D8 | `feeWaitsFor` reads the token amount the estimate is asked with, not the visible USD text (Codex R1-F1, argued in round 2). | Unreadable dollars leave no amount, and the field says so; keying off the visible text would show the generic caption there and need a new model on `AmountCard` for one caller. The 250 ms conversion window is closed known limit #1836. |
 
 ## States that reach the readout's last branch
 
@@ -42,11 +43,11 @@ The branch shows when no estimate runs, landed or failed, and the card is not re
 
 | State | What the page already says | Ships |
 |---|---|---|
-| Amount empty (also: cleared after a failed estimate; the card still reading with no amount) | Send's button "Enter an amount" | A4 |
+| Amount empty (also: cleared after a failed estimate; the card still reading with no amount; in USD mode a dollar text the card cannot read, which writes no token amount) | Send's button "Enter an amount"; for unreadable dollars, "Not an amount" under the field | A4 |
 | Amount over a read balance (typed, or the balance falls below a landed amount) | "More than your balance" under the field, button "Fix the amount" | A1's sentence (owner ask, captured) |
-| Zero; an unreadable amount; the balance not read yet; unknown decimals; the Terms not current | the field's hint, the balance's state or the Terms banner | today's caption (OWNER-ASKS A2) |
+| Zero; an unreadable amount typed in tokens; the balance not read yet; unknown decimals; the Terms not current | the field's hint, the balance's state or the Terms banner | today's caption (OWNER-ASKS A2) |
 
-Off Send (approval window, the two authorization popups) the branch shows only before the card's first estimate is scheduled; it keeps today's caption (A2). The Fee sheet covers the amount field, so the fiat field's conversion cannot run while the sheet is open.
+Off Send (approval window, the two authorization popups) the branch shows only before the card's first estimate is scheduled; it keeps today's caption (A2). In USD mode the card writes the token amount 250 ms after a dollar keystroke, so Change pressed inside that window shows the old amount's sentence until the estimate's bar replaces it: known limit #1836 (D8).
 
 ## UI impact
 
@@ -70,7 +71,7 @@ Off Send (approval window, the two authorization popups) the branch shows only b
 - A1 (OWNER-ASKS A1): the over-balance sentence.
 - A2 (OWNER-ASKS A2): the states that keep today's caption.
 
-## Phase 1: the four changes, their tests, the captures ◻
+## Phase 1: the four changes, their tests, the captures ✓
 
 1. `apps/extension/src/popup/components/modules/send/AppFeeLine.vue` (D1).
 2. `apps/extension/src/components/composite/contract-chip.ts` (D2).
@@ -107,3 +108,10 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 ## Audit verdicts
 
 No plan audit round (lane brief, Proportion).
+
+**Codex pass over the plan and the net diff** (gpt-6.1-sol, high, read-only, `0dc22a9c5...247073398`), 2026-11-17: approve with fixes, high confidence. Its answers to the three questions: A4's sentence and the over-balance one never reach the three other hosts (they pass no `waitsFor`); the helper's split keeps every case's meaning (its table covers each method for both choosers); no pin was loosened except two whole-page exclusions.
+- R1-F1 [medium], rejected as a code change: in USD mode `feeWaitsFor` follows the token amount, which the card writes 250 ms after a dollar keystroke and leaves empty for unreadable dollars. Verified (`AmountCard.vue` `scheduleConvert`; `AmountCard.test.ts` "1e5", "1,234"). Unreadable dollars are no amount, so A4 is true there (D8); the 250 ms window is closed known limit #1836. Codex withdrew it in round 2.
+- R1-F2 [low], accepted: the History page test's two whole-page exclusions restored beside the testid checks (`cc19a4939`).
+- R1-F3 [low], accepted: narrating comments deleted (`contract-chip.ts`, `[id].test.ts`); `FeeMethodLabel`'s compressed; `feeWaitsFor`'s states the USD/token distinction (`cc19a4939`).
+
+**Round 2** (resumed, `cc19a4939`): approve, no findings. Comment and test changes only, so no gate beyond lint and the four touched unit files reran.
