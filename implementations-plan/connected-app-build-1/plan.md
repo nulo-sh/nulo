@@ -53,7 +53,7 @@ Proportion (lane brief): a removal and two glyph swaps. No plan audit round; one
 
 **Asks.** None.
 
-## Phase 1: the build and its tests
+## Phase 1: the build and its tests ✓
 
 1. `apps/extension/src/popup/pages/settings/connected-apps/[id].vue`: D1; `data-testid="connected-app-page"` on `SettingsPageShell` (D4).
 2. Delete `apps/extension/src/popup/components/modules/settings/connected-apps/DappSessionVerification.vue`.
@@ -66,7 +66,7 @@ Proportion (lane brief): a removal and two glyph swaps. No plan audit round; one
 
 **Validation gate** (retry 0, one command at a time, from the worktree root): `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension test:components`; `bun run check:plans` after staging. Then Chrome only, one invocation: `NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/connect-verify-mismatch.test.ts tests/e2e/network/connect-check-window.test.ts tests/e2e/network/type-roles-windows.test.ts` (`agent.sh` claims ports from `~/.agents/ports.md`; the 10-minute stall watchdog stays). `type-roles-windows` joins because it sweeps both changed surfaces. No Firefox run (no fixture, helper, focus, window or WebAuthn change); no storybook build (no story changes); CI's five lanes are the gate of record. Pass: every command exits 0; `type-role-ban`, `copy-dash-ban` and `red-text-ban` green inside `test`; every other assertion passes unedited, or the edit is recorded here with its reason.
 
-## Phase 2: captures and the PR
+## Phase 2: captures and the PR ✓
 
 1. Before run (at the plan commit, before step 1 of Phase 1): copy the kit in (D7), one `agent.sh` run with `NULO_E2E_SHOT_DIR` set and `CAB1_PHASE=before`, 400 px wide, height fitted, each `-light` and `-dark`: `cab1-page-before` (the app page, full height, the section at the bottom), `cab1-table-before` (the window, Details open). Restore the tree.
 2. After run (at the built head, after the Phase 1 gate): the same with `CAB1_PHASE=after`: `cab1-page-after`, `cab1-table-after`, `cab1-rows-after` (the window, Details closed, both swapped rows beside their titles). Restore the tree.
@@ -74,7 +74,9 @@ Proportion (lane brief): a removal and two glyph swaps. No plan audit round; one
 4. Commit `cab1-page-after` and `cab1-table-after` (light and dark) under `pr-captures/connected-app-build-1/` in one commit; delete them in the next.
 5. Post-implementation, then the PR.
 
-**Validation gate.** `git status` clean after each restore; `git grep -n cab1 -- apps` empty; all sixteen frames exist; `bun run check:plans` exits 0 after staging.
+**Outcome.** Both runs green, retry 0, Chrome: before at `4ebcbbfdb` plus the kit, after at `0904820c2` plus the kit. The page measures 1099 px before and 839 px after (260 px shorter; the before run found the section, the after run did not); the window measures 1264 px with Details open in both, 965 px closed. Both runs listed the `transaction` and `contract-details` rows.
+
+**Validation gate.** `git status` clean after each restore; `git grep -n cab1 -- apps` empty; all ten frames exist; `bun run check:plans` exits 0 after staging.
 
 ## Delivery
 
@@ -96,4 +98,10 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 
 ## Audit verdicts
 
-No plan audit round (lane brief, Proportion). The Codex pass over the plan and the net diff is recorded here after the build.
+No plan audit round (lane brief, Proportion).
+
+**Codex pass over the plan and the net diff** (gpt-6.1-sol, high, read-only, `0dc22a9c5...0a6e270d1`), 2026-11-17: approve with fixes, high confidence, no behavioural or security regression.
+- R1-1, accepted: the reconnect case's comment narrated the assertion and the case's history; it now states only the constraint ("Chrome doesn't paint hidden tabs; front the wallet for its capture, then return to the app."), `0904820c2`.
+- Its answers to the lane's questions: no dead import, state, prop, copy, selector, style, generated type, manifest entry or mock remains (docs, READMEs, the e2e README and `.claude/skills/` searched); the verify window, its confirm and its refusal are unchanged, and the glossary entry and the not-connected line's "Its next connection starts with the emoji check." stay accurate; the two glyphs meet no competing meaning in the capabilities window, its Already allowed fold included, and the discover window and the authorizations row draw neither; D4 is sound, since the root and the not-connected line render from the same `session` in one pass and no existing testid anchors a bare-connect page.
+
+**Round 2** (resumed, `0904820c2`): approve. The fix is comment-only, so no gate reran beyond biome and the e2e typecheck.
