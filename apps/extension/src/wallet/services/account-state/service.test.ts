@@ -822,15 +822,16 @@ describe("AccountStateService.getContractRows", () => {
 	})
 
 	test("a failed instance read fails the whole list with the opaque error, its cause only in the log", async () => {
+		const cause = new Error("store read failed")
 		const pxe = {
 			getContracts: vi.fn(async () => [{ toString: () => CUSTOM }]),
-			getContractInstance: vi.fn(async () => Promise.reject(new Error("store read failed"))),
+			getContractInstance: vi.fn(async () => Promise.reject(cause)),
 		}
 		const accountStateService = await rowsService(pxe)
 		const logError = vi.spyOn(accountStateService as unknown as { logError: (...a: unknown[]) => void }, "logError")
 
 		await expect(accountStateService.getContractRows("net-a")).rejects.toThrow("PXE request failed")
-		expect(logError).toHaveBeenCalledTimes(1)
-		expect(JSON.stringify(logError.mock.calls[0][0])).not.toContain(CUSTOM)
+		// The line names no contract; the cause rides as its own argument, where the redactor reaches it.
+		expect(logError.mock.calls).toEqual([["Failed to fetch registered contracts", cause]])
 	})
 })

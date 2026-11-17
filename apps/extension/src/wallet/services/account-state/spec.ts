@@ -81,10 +81,7 @@ export type Methods = {
 	 */
 	getContracts(networkId: string): string[]
 
-	/**
-	 * Returns every registered contract with its class id, read from the PXE's own store only.
-	 * @param networkId Network id.
-	 */
+	/** Returns every registered contract with its class id, read from the PXE's own store only. */
 	getContractRows(networkId: string): ContractRow[]
 }
 

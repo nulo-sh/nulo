@@ -59,12 +59,16 @@ const views = computed(() =>
 const filteredContracts = computed(() => matchingRows(views.value, searchTerm.value))
 const explorerLabel = computed(() => `View on ${explorerDisplayName(appStore.defaultExplorer)}`)
 
-// A token row or a name that fails to load only lowers what a row claims; the rows' own failure is the page's.
+// A token row or a name that fails to load only lowers what a row claims; the rows' own failure is the
+// page's. Only the latest read lands: an earlier one answers for the scope it started in.
+let latestRead = 0
 const fetchContracts = async (isRefetching?: boolean) => {
 	const { network, profile } = appStore
 	if (!network || !profile) return
+	const read = ++latestRead
 	if (isRefetching) openToast({ kind: "success", label: "Fetching contracts again" })
 	isFetchingContracts.value = true
+	error.value = undefined
 
 	try {
 		const [held, heldTokens, heldContacts] = await Promise.all([
@@ -72,13 +76,14 @@ const fetchContracts = async (isRefetching?: boolean) => {
 			tokenService.getTokens(profile.id, network.chainId).catch((): TokenInfo[] => []),
 			managers.contact.getContacts().catch((): Contact[] => []),
 		])
+		if (read !== latestRead) return
 		tokens.value = heldTokens
 		contacts.value = heldContacts
 		rows.value = held
 	} catch (err) {
-		error.value = err
+		if (read === latestRead) error.value = err
 	} finally {
-		isFetchingContracts.value = false
+		if (read === latestRead) isFetchingContracts.value = false
 	}
 }
 

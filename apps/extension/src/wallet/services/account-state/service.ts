@@ -169,7 +169,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		)
 	}
 
-	/** `pxeOnly`: a listed contract's instance is in the PXE's store, so the read never reaches the node. */
+	/** `pxeOnly` keeps a store miss from reaching the node. */
 	public async getContractRows(networkId: string): Promise<ContractRow[]> {
 		await this.ensureInitialized()
 		const network = await this.networkService.getNetwork(networkId)

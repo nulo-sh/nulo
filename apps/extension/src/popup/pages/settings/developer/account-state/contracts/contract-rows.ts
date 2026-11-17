@@ -1,7 +1,7 @@
 /**
- * What the Contracts page says of each contract the PXE holds. An origin is named only where the
- * wallet itself registered the contract (the PXE at boot, the account, the pinned fee contracts, a
- * token's interface); nothing records which app registered anything else.
+ * What the Contracts page says of each contract the PXE holds. An origin is inferred, never recorded:
+ * it is named only for a contract the wallet itself registers (the PXE at boot, an account, a fee
+ * contract Nulo offers on the chain, a token's interface), else it reads as not recorded.
  */
 import type { ChipModel } from "@/components/composite/contract-chip"
 import { type ChipContext, contractChipAt } from "@/popup/windows/execute/contract-chips"
@@ -9,6 +9,7 @@ import { type BlockExplorerType, getContractExplorerUrl } from "@/wallet/constan
 import type { ContractRow } from "@/wallet/services/account-state/client"
 import { isPrivateFpc } from "@/wallet/services/fpc/private-fpc-address"
 import { isSponsoredFpc } from "@/wallet/services/fpc/sponsored-fpc-address"
+import { offersSponsoredFpc } from "@/wallet/services/fpc/sponsored-fpc-chains"
 
 export type ContractOrigin = "builtIn" | "account" | "fees" | "token" | "unknown"
 
@@ -35,9 +36,12 @@ export type ContractRowView = {
 	origin: ContractOrigin
 	chip: ChipModel
 	explorerUrl: string | null
-	/** Lower-cased: the chip's label and title, the person's or compiled-in name, the origin and both ids. */
 	haystack: string
 }
+
+/** Nulo discovers the canonical sponsor only where it is published; elsewhere a dApp put it there. */
+const offeredSponsor = (address: string, chainId: number | undefined): boolean =>
+	isSponsoredFpc(address) && chainId !== undefined && offersSponsoredFpc(chainId)
 
 /** First match wins, so a token row never relabels an account or a pinned fee contract. */
 export function contractOriginOf(
@@ -49,23 +53,25 @@ export function contractOriginOf(
 	const address = row.address.toLowerCase()
 	if (row.builtIn) return "builtIn"
 	if (accounts.has(address)) return "account"
-	if (isPrivateFpc(address) || isSponsoredFpc(address)) return "fees"
+	if (isPrivateFpc(address) || offeredSponsor(address, chainId)) return "fees"
 	if (tokens.some((t) => t.chainId === chainId && t.contract.toLowerCase() === address)) return "token"
 	return "unknown"
 }
 
-/** An account and the PrivateFPC are never published, so no explorer has a page for either. */
+/** No explorer has a page for an account, the PrivateFPC or a sponsor on a chain where none is published. */
 export function contractExplorerUrl(
 	row: ContractRow,
 	origin: ContractOrigin,
 	chainId: number | undefined,
 	explorerId: BlockExplorerType | null | undefined,
 ): string | null {
-	if (origin === "account" || isPrivateFpc(row.address)) return null
+	const unpublished =
+		origin === "account" || isPrivateFpc(row.address) || (isSponsoredFpc(row.address) && !offeredSponsor(row.address, chainId))
+	if (unpublished) return null
 	return getContractExplorerUrl(chainId, explorerId, row.address)
 }
 
-/** A built-in reads by its compiled-in name where the person gave its address none; an unverified chip takes it. */
+/** A built-in's compiled-in name stands in the name book, so only an unverified chip reads by it. */
 export function contractRowViews(rows: readonly ContractRow[], evidence: RowEvidence): ContractRowView[] {
 	const names = new Map(evidence.names)
 	for (const row of rows) if (row.name && !names.has(row.address.toLowerCase())) names.set(row.address.toLowerCase(), row.name)
