@@ -435,6 +435,7 @@ declare global {
   const profileTypeLabel: typeof import('../utils/settings-labels').profileTypeLabel
   const profileUiKeys: typeof import('../utils/profile-ui-keys').profileUiKeys
   const projectArgument: typeof import('../utils/transfer-intent').projectArgument
+  const protocolContractName: typeof import('../utils/protocol-contracts').protocolContractName
   const provide: typeof import('vue').provide
   const purgeNumber: typeof import('../utils/amount').purgeNumber
   const reactive: typeof import('vue').reactive
@@ -447,6 +448,7 @@ declare global {
   const readLiveness: typeof import('../utils/background-liveness').readLiveness
   const readPhraseVerdict: typeof import('../utils/recovery-phrase').readPhraseVerdict
   const readPickedBackup: typeof import('../composables/full-backup-selection').readPickedBackup
+  const readProtocolContract: typeof import('../utils/contract-level').readProtocolContract
   const readRestoreOutcome: typeof import('../utils/restore-outcome').readRestoreOutcome
   const readSendPicks: typeof import('../utils/fee-picks').readSendPicks
   const readSendSlots: typeof import('../utils/fee-picks').readSendSlots
@@ -1423,6 +1425,7 @@ declare module 'vue' {
     readonly profileTypeLabel: UnwrapRef<typeof import('../utils/settings-labels')['profileTypeLabel']>
     readonly profileUiKeys: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileUiKeys']>
     readonly projectArgument: UnwrapRef<typeof import('../utils/transfer-intent')['projectArgument']>
+    readonly protocolContractName: UnwrapRef<typeof import('../utils/protocol-contracts')['protocolContractName']>
     readonly provide: UnwrapRef<typeof import('vue')['provide']>
     readonly purgeNumber: UnwrapRef<typeof import('../utils/amount')['purgeNumber']>
     readonly reactive: UnwrapRef<typeof import('vue')['reactive']>
@@ -1435,6 +1438,7 @@ declare module 'vue' {
     readonly readLiveness: UnwrapRef<typeof import('../utils/background-liveness')['readLiveness']>
     readonly readPhraseVerdict: UnwrapRef<typeof import('../utils/recovery-phrase')['readPhraseVerdict']>
     readonly readPickedBackup: UnwrapRef<typeof import('../composables/full-backup-selection')['readPickedBackup']>
+    readonly readProtocolContract: UnwrapRef<typeof import('../utils/contract-level')['readProtocolContract']>
     readonly readRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['readRestoreOutcome']>
     readonly readSendPicks: UnwrapRef<typeof import('../utils/fee-picks')['readSendPicks']>
     readonly readSendSlots: UnwrapRef<typeof import('../utils/fee-picks')['readSendSlots']>
