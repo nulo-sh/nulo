@@ -30,6 +30,7 @@ import type { NetworkService } from "@/wallet/services/network/service"
 import type { ResetRunGate } from "@/wallet/services/network-reset/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import type { ProfileService } from "@/wallet/services/profile/service"
+import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import type { ILogger } from "@/wallet/logger"
 import { type RequestLog, traceTag } from "@/wallet/logger/request-log"
 import { randomIdNotIn } from "@/wallet/services/id-allocators"
@@ -492,6 +493,7 @@ export async function handleWalletMessage(
  *  cap, so it logs at `debug`: an `error` line lands in every user's log buffer. */
 function isExpectedRefusal(error: unknown): boolean {
 	return (
+		error instanceof WalletLockedError ||
 		error instanceof TermsAcceptanceRequiredError ||
 		error instanceof ScopeViolationError ||
 		error instanceof ChainNotSupportedError ||
