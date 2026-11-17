@@ -378,7 +378,8 @@ const balanceState = computed(() => {
  *  placeholder, which the token card draws as loading. */
 const exceedsBalance = computed(() => amountValidation.value.reason === "exceedsBalance" && tokenBalance.value?.updatedAt !== 0)
 
-/** What the Fee sheet asks for while no estimate can be asked: an amount, or one the balance covers. */
+/** Read off the token amount the estimate is asked with: in USD mode a dollar text the card cannot read
+ *  leaves none, so the sheet asks for an amount. */
 const feeWaitsFor = computed(() => {
 	if (amountValidation.value.reason === "empty") return "amount"
 	return exceedsBalance.value ? "amountInBalance" : null

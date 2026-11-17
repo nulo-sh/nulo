@@ -47,7 +47,6 @@ const chip = (
 	...rest,
 })
 
-/** The name's line already says Nulo has not checked it; a contract that names nothing keeps the plain line. */
 function uncheckedLines(selfName: string | undefined): string[] {
 	const name = selfName ? sanitizeWireString(selfName, 64) : ""
 	return name.trim()

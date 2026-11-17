@@ -208,12 +208,13 @@ describe("the transaction page's fee", () => {
 		const embedded = await mountPage(dappSend(appFpc), Promise.resolve([listed]), { Text: TEXT })
 		expect(method(embedded)).toBe("Set by example.dapp.io")
 		expect(setter(embedded).exists()).toBe(false)
+		expect(embedded.text()).not.toContain("Private Fee Juice")
 		const privateFpc = { contract: PRIVATE_FPC_ADDRESS, method: "pay_fee", args: [], classId: field(0xfc2n) }
 		const picked = await mountPage(dappSend(privateFpc), Promise.resolve([listed]), { Text: TEXT })
 		expect(method(picked)).toBe("Private Fee Juice")
 		expect(setter(picked).exists()).toBe(false)
+		expect(picked.text()).not.toContain("Set by")
 
-		// The app chose the PrivateFPC: the method stands alone over who set it, the App row's spacing.
 		const chosen = await mountPage({ ...dappSend(privateFpc), feeChoice: "app" }, Promise.resolve([listed]), { Text: TEXT })
 		expect(method(chosen)).toBe("Private Fee Juice")
 		expect(setter(chosen).element.textContent).toBe("Set by example.dapp.io")

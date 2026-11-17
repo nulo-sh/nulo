@@ -46,8 +46,8 @@ export interface FeePaymentLabelInput {
 	feeChoice?: string
 }
 
-/** History's Fee method row: the method, and under it who set it when an app set a method the wallet
- *  can name. An app's method the wallet cannot prove reads as who set it, on the method's line. */
+/** `setBy` stands only beside a method the wallet can name; an app's unproven method reads as who set
+ *  it, in `method`. */
 export interface FeeMethodLabel {
 	method: string
 	setBy?: string
