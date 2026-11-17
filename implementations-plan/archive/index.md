@@ -578,3 +578,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [scroll-cue-build-1](scroll-cue-build-1/plan.md) — completed — the more-below button on the Terms sheet, the execute window and onboarding (P155-01 = B, #1658); A1 and A2 ask the owner (#1820, #1821)
 - [scroll-cue-build-2](scroll-cue-build-2/plan.md) — completed — the onboarding more-below button hidden where the window leaves no room beside the column (P158-01 = H, #1821)
 - [scroll-cue-right-1](scroll-cue-right-1/plan.md) — completed — the execute window's more-below button moves to the bottom right (P157-02, "right"; #1820)
+- [connected-app-build-1](connected-app-build-1/plan.md) — completed — the connected app page loses its Connection check section with nothing in its place, and the Details table draws `send` for Transact and `search` for Details (P163-02, P163-03 = E3)

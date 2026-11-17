@@ -96,7 +96,7 @@ One PR from `connected-app-build-1-a1` (off `origin/dev`, carrying the plan comm
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `0dc22a9c5`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `0dc22a9c5`. Plan-specific values:
 - Step 1: `code_review: off`, so absent.
 - Step 2, thinned by the lane brief: after Phase 1 is green, ONE `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` over the plan and `origin/dev...HEAD`, the prompt in the lane's scratch dir, asking also whether the removal leaves dead state or copy, whether the verify flow still proves what it did, and whether the two glyphs misread anywhere else they appear. Rerun only the gates a fix touches. A second round only if the first says anything but approve (`resume-codex.sh`; hard stop at three). No Opus review.
 - Step 3: `gh pr create` as Delivery says; `gh pr checks <n> --watch` once.
