@@ -1223,7 +1223,6 @@ describe("send page — an estimate that runs long", () => {
 		expect(sheetOpen(w)).toBe(true)
 		const fee = () => w.get('[data-testid="send-review-fee"]')
 		expect(sendNow(w).text()).toBe("Estimating fee")
-		// While the bar runs the row holds its key and who pays, and no figure.
 		expect(fee().text()).toBe("FeeSponsored")
 		await vi.advanceTimersByTimeAsync(20_000)
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(asked + 1)
