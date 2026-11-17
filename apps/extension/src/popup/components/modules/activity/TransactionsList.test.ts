@@ -37,7 +37,6 @@ vi.mock("@/wallet/services/price/client", () => ({
 	}),
 }))
 
-/** The page's price reading, which it hands the list, here over the mocked feed. */
 function surface() {
 	const prices = effectScope().run(() => usePrices(new PriceServiceClient()))
 	if (!prices) throw new Error("no reading")

@@ -63,7 +63,6 @@ const CONTRACT = `0x${"0a".repeat(32)}`
 const HASH = `0x${"5e".repeat(32)}`
 type Token = { symbol: string; decimals: number; hasDecimals: boolean; chainId: number; contract: string }
 const TOKEN: Token = { symbol: "cUSDC", decimals: 6, hasDecimals: true, chainId: CHAIN_IDS.TESTNET, contract: CONTRACT }
-/** The list's USDC, which it prices. */
 const PRICED: Token = { ...TOKEN, symbol: "USDC", contract: TEST_TOKENS.USDC }
 const ctxOf = (token: Token) => ({ tokenById: () => token, tokens: [] })
 const CTX = ctxOf(TOKEN)

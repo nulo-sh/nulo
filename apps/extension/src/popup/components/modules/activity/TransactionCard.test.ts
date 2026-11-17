@@ -43,7 +43,6 @@ import { usePrices } from "@/composables/usePrices"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import TransactionCard from "./TransactionCard.vue"
 
-/** The price reading the card takes from its surface, here over the mocked feed. */
 function surface() {
 	const prices = effectScope().run(() => usePrices(new PriceServiceClient()))
 	if (!prices) throw new Error("no reading")
