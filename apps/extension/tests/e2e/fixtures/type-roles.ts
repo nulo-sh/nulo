@@ -614,6 +614,10 @@ export const NARROW_ACCEPTED: readonly { testid: string; why: string }[] = [
 		testid: "token-name",
 		why: "an unpriced token's contract-supplied name keeps its row's ellipsis where the mark and balance leave too little room; the symbol stays above it, and Show metadata names it whole",
 	},
+	{
+		testid: "contract-row-name",
+		why: "a contract's name wider than the room beside the Contracts row's action ends in the chip's ellipsis, as every chip's label does; the chip's press names it whole",
+	},
 ]
 
 export type TextFate = { fate: "cut" | "gone" | "split"; testid: string | null; text: string }

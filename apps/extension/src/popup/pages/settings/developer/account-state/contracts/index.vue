@@ -129,7 +129,7 @@ onBeforeUnmount(() => {
 				:class="$style.card"
 			>
 				<div :class="$style.body">
-					<ContractChip :model="v.chip" />
+					<ContractChip :model="v.chip" testid="contract-row-name" />
 					<span :class="$style.id">
 						<Text variant="caption" color="tertiary">Instance</Text>
 						<Text variant="meta" color="secondary" data-testid="contract-row-instance">{{ trimAddress(v.row.address, 6, 4) }}</Text>
