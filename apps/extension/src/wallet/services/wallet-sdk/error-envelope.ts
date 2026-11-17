@@ -50,7 +50,7 @@ export type WalletErrorEnvelope = {
 /** Every schema refusal's dApp text: one sentence that names no method and no argument value. */
 export const INVALID_PARAMS_MESSAGE = "The request's arguments do not match the wallet API."
 
-/** A locked wallet's dApp text, addressed to the person a dApp may show it to; it names nothing. */
+/** A locked wallet's dApp text: safe to show the person verbatim, carrying no request or profile data. */
 export const WALLET_LOCKED_MESSAGE = "The wallet is locked. Unlock it to continue."
 
 /**
@@ -65,8 +65,8 @@ export const WALLET_LOCKED_MESSAGE = "The wallet is locked. Unlock it to continu
  *   from wallet-local data), and arguments the wallet API's schema refuses, whose own errors quote
  *   the values.
  * - 4900, a request on a connected session while the wallet is locked: as with SESSION_ENDED, the
- *   dApp may retry once the person unlocks. The one bit it discloses, locked or not, that origin can
- *   already read off every request failing until the unlock.
+ *   dApp may retry once the person unlocks. It discloses one bit, locked or not, to an origin the
+ *   person connected.
  */
 const CONSTANT_ENVELOPES = [
 	[PxeStaleAnchorError, -32603, "The wallet's view of the chain was behind the node. Retry the request."],

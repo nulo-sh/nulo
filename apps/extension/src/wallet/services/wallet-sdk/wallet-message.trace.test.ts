@@ -1,7 +1,6 @@
 /**
  * The request capture's ends at the ingress: an answered call ends with its answer, and a call
  * that is never answered (its establishment lost, its answer suppressed) ends as dropped, once.
- * A locked wallet's refusal rides the same path, with its trace id.
  */
 import { describe, expect, test, vi } from "vitest"
 import { KeyedLock } from "@nulo/wallet-core/utils"

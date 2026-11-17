@@ -36,7 +36,6 @@ test.skipIf(!hasConfig)(
 		await lockWallet(popupPage)
 		await popupPage.close()
 
-		// callExpectingNoPopup also asserts no popup opened.
 		const result = await callExpectingNoPopup(dappConnectedExtension, page, "getChainInfo", async () => {
 			await clickByTestId(page, "pg-btn-getChainInfo")
 		})

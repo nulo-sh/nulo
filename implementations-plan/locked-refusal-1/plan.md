@@ -48,7 +48,7 @@ One issue, one arc, one PR against `dev`. Facts: [recon.md](recon.md). Consults:
 - `wallet-message.ts`: `isExpectedRefusal` lists `WalletLockedError` (D6).
 - `packages/wallet-bridge/README.md` § What other error shapes look like: the new envelope and the recipe (show an unlock prompt, retry after the person unlocks; nothing queues or opens on the wallet's side).
 
-### Phase 1: The classification, its tests, the README, the PR
+### Phase 1: The classification, its tests, the README, the PR ✓
 
 **Change map**
 
@@ -74,7 +74,7 @@ Pass: every command exits 0; the e2e asserts the 4900 envelope with a trace id. 
 
 ## Security & Adversarial Considerations
 
-The change discloses one bit, locked or not, and only to an origin with an established, emoji-checked session on this profile: the fence runs only on such a session's messages, and a Connect while locked stays on the discovery queue, untouched. That origin learns nothing new: today every request it sends fails while locked and succeeds once unlocked, so the bit is already observable; the envelope labels it. It is the same order of disclosure as the Terms refusal (4100), which tells any connected origin one bit about the install. The message is a constant: no method, argument, profile, account or chain. The deletion branch (F4) stays unclassified, so a begun deletion is not told apart from a fault, and `AccountAddressInconsistencyError` stays unclassified as before. No popup, event or queue is added: a site able to summon the unlock screen at will is a nagging and phishing surface, and queued background reads would pile up across a 30-minute auto-lock; the dApp's own retry after the person unlocks is the whole recovery. The log line stays at `debug` and carries only the envelope, so a polling dApp cannot fill every user's log buffer.
+The change discloses one bit, locked or not, and only to an origin with an established, emoji-checked session on this profile: the fence runs only on such a session's messages, and a Connect while locked stays on the discovery queue, untouched. That origin could already probe it, less reliably: today every request fails while locked and succeeds once unlocked, but a failure also reads as a fault; the envelope makes the bit explicit and reliable, and adds nothing else. It is the same order of disclosure as the Terms refusal (4100), which tells any connected origin one bit about the install. The message is a constant: no method, argument, profile, account or chain. The deletion branch (F4) stays unclassified, so a begun deletion is not told apart from a fault, and `AccountAddressInconsistencyError` stays unclassified as before. No popup, event or queue is added: a site able to summon the unlock screen at will is a nagging and phishing surface, and queued background reads would pile up across a 30-minute auto-lock; the dApp's own retry after the person unlocks is the whole recovery. The log line stays at `debug` and carries only the envelope, so a polling dApp cannot fill every user's log buffer.
 
 ## UI impact
 
@@ -95,7 +95,14 @@ None. No wallet screen, copy or behaviour moves; the change is the dApp API's er
 
 ## Audit verdicts
 
-**Plan**: no audit round (lane proportion). **Build pass**: pending.
+**Plan**: no audit round (lane proportion).
+
+**Build pass** (plan and `git diff 33906a052...081ca99e3 -- apps packages`): Codex (gpt-6.1-sol, high, read-only, session `01a1eb5c`) `approve`, three low comment findings, all demonstrated and taken, comment-only, so no second round:
+- C1 the class doc named only the fence; sealed storage and the integrity coordinator throw it for absent row keys too, and "no in-wallet path sees a new type" narrated history → doc rewritten to both causes and the RPC reason.
+- C2 the trace test's added header line and the e2e's `callExpectingNoPopup` line restated their code → deleted; `WALLET_LOCKED_MESSAGE`'s "names nothing" → "safe to show the person verbatim, carrying no request or profile data".
+- C3 the table's 4900 bullet and this plan's Security paragraph said the bit was already observable; a failure also reads as a fault, so the envelope makes it explicit and reliable → both reworded.
+- Held, high confidence: D1 (nothing needs the class in the messaging package; the popup RPC and `transfer-executor.ts:640` keep their paths), every reader and thrower (keys installed before a session opens and kept across lock; no supported path answers "locked" while unlocked), `debug`, the disclosure (one bit, nothing else), D3. D8 moderate, source-traced: a supported timing race kept as a known limit (#1841).
+- Targeted verification: biome on the four files and the two unit files, green.
 
 ## Delivery
 

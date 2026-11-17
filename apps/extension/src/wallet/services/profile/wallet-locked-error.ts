@@ -1,7 +1,6 @@
 /**
- * No live session to capture an execution fence under: the wallet is locked. A plain `Error` with
- * the message callers have always matched, so a popup RPC still flattens it to that message and no
- * in-wallet path sees a new type. A dApp is answered `WALLET_LOCKED` (`toWalletResponseError`).
+ * No live session, or no row keys for the profile the work belongs to. A plain `Error`, so a popup
+ * RPC flattens it to its message; a dApp is answered `WALLET_LOCKED` (`toWalletResponseError`).
  */
 export class WalletLockedError extends Error {
 	public static readonly CODE = "WALLET_LOCKED"
