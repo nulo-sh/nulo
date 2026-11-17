@@ -106,7 +106,7 @@ One PR from `fee-copy-build-1-a1` (off `origin/dev`, carrying the plan commit) t
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `0dc22a9c5`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `0dc22a9c5`. Plan-specific values:
 - Step 1: `code_review: off`, so absent.
 - Step 2, bounded work: after Phase 1 is green, ONE `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol` over this plan and `origin/dev...HEAD`, asking: is A4's sentence ever shown while an amount exists; does the helper's two-part return hold for every fee method it names; was any pinned string loosened rather than rewritten. A second round only if the first says anything but approve (hard stop at three). Rerun only the gates a fix touches.
 - Step 3: `gh pr create`; `gh pr checks <n> --watch` once.
