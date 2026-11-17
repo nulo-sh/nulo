@@ -504,7 +504,7 @@ onBeforeUnmount(() => {
 		</Flex>
 		<template v-else-if="onSend">
 			<FeeMethodRadios ref="methodSelector" :usd="prices.feeJuiceQuote.value?.usd" :modelValue="displayMethod" :methods="menuMethods" :pending="readPending" @update:modelValue="handleMethodPicked" />
-			<!-- Mounted with the card for the page's life, so a warning that lands in it is announced inside the sheet. -->
+			<!-- Mounted with the card for the page's life: a warning raised while the sheet is open is announced there. -->
 			<div role="status" aria-live="polite" aria-atomic="true" :class="$style.warning_live" data-testid="send-fee-sheet-warning-live">
 				<div v-if="warning" :class="mark.warning_box" data-testid="send-fee-sheet-warning">
 					<Icon name="warning" size="14" aria-hidden="true" :class="mark.warning_mark" />
@@ -679,13 +679,10 @@ onBeforeUnmount(() => {
 }
 
 /* Under the whole payer group, set off from its last row by the group's own space, so it reads as the
-   pick's note and not that row's. */
-.warning_live {
+   pick's note and not that row's. Empty, it takes no space yet stays in the accessibility tree: a
+   live region a screen reader never saw empty may not announce what lands in it. */
+.warning_live:not(:empty) {
 	padding-bottom: 12px;
-
-	&:empty {
-		display: none;
-	}
 }
 
 .get_fee_juice {

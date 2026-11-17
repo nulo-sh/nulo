@@ -3414,24 +3414,29 @@ describe("FeeSettingsCard — Send: the remedy and the notices a closed card giv
 		expect(link.attributes()).toMatchObject({ href: FEE_JUICE_BRIDGE_URL, target: "_blank", rel: "noopener noreferrer" })
 	})
 
-	test("the block's fix picks private Fee Juice, then hands the keyboard to its radio", async () => {
+	test("the block's fix picks private Fee Juice, then moves the keyboard to its radio", async () => {
 		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, SPONSOR])
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: HELD })
-		const focusedWith: Array<string | undefined> = []
-		const radios = { ...STUBS.FeeMethodRadios, methods: { focus: () => focusedWith.push(payerType(w)?.type) } }
 		const w = mount(FeeSettingsCard, {
 			props: baseProps({ originPrivacy: "private", warning: WARNING }),
-			global: { stubs: { ...STUBS, FeeMethodRadios: radios } },
+			global: { stubs: { ...STUBS, FeeMethodRadios: false } },
+			attachTo: document.body,
 		}) as Card
 		await flushPromises()
-		await w.get('[data-testid="pick-fj"]').trigger("click")
+		const radio = (subtitle: string) => w.get(`[data-testid="send-fee-payer-${subtitle}"]`).element as HTMLInputElement
+		await w.get('[data-testid="send-fee-payer-public"]').setValue(true)
 		await flushPromises()
-		expect([payerType(w)?.type, focusedWith]).toEqual(["fj", []])
+		expect(payerType(w)?.type).toBe("fj")
+		const fix = w.get('[data-testid="send-fee-sheet-warning-fix"]')
+		;(fix.element as HTMLButtonElement).focus()
+		expect(document.activeElement).toBe(fix.element)
 
-		await w.get('[data-testid="send-fee-sheet-warning-fix"]').trigger("click")
+		await fix.trigger("click")
 		await flushPromises()
 		expect(payerType(w)).toMatchObject({ type: "private_fpc", fpcId: "p1" })
-		expect(focusedWith).toEqual(["private_fpc"])
+		// The checked radio is where focus lands, so focus taken before the pick would sit on Public.
+		expect([radio("private").checked, document.activeElement]).toEqual([true, radio("private")])
+		w.unmount()
 	})
 
 	test("the notices it shows, in its order, as the page must say them with the card closed", async () => {
