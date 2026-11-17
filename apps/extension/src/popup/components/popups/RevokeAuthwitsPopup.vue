@@ -10,6 +10,7 @@ import { getRandomHex } from "@/wallet/utils"
 import { classifyCancellableRejection } from "@/popup/utils/cancellable-rejection"
 
 /** Composables */
+import { createRunFence } from "@/composables/runFence"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useToast } from "@/composables/toast"
 import { useAuthRegistryStatus } from "@/composables/useAuthRegistryStatus"
@@ -87,6 +88,9 @@ function chunkAuthwits() {
 }
 
 const isAllowedToExecute = computed(() => chunkedAuthwits.value.every((ch) => ch.feeSettings) && estimates.landed() && !estimates.short())
+// A hide ends the run in flight: its rejected request says nothing of the worker's send, so the
+// hidden popup reports nothing and starts no further chunk.
+const runs = createRunFence()
 
 async function handleRevokeAuthwits() {
 	// Full-lifetime submit latch, handler-owned: every route (click, any future caller) self-checks
@@ -94,13 +98,18 @@ async function handleRevokeAuthwits() {
 	if (isLoading.value) return
 	if (!isAllowedToExecute.value) return
 
+	const isCurrent = runs.begin()
 	isLoading.value = true
 	try {
-		await revokeChunks()
+		await revokeChunks(isCurrent)
 	} finally {
-		stage.stop()
-		isLoading.value = false
+		// A hide resets the latch and the line itself; from then on they belong to the next run.
+		if (isCurrent()) {
+			stage.stop()
+			isLoading.value = false
+		}
 	}
+	if (!isCurrent()) return
 
 	const errors = chunkedAuthwits.value.filter((ch) => ch.status === "error").map((ch) => ch.error)
 	const cancelled = chunkedAuthwits.value.some((ch) => ch.status === "cancelled")
@@ -117,8 +126,9 @@ async function handleRevokeAuthwits() {
 	}
 }
 
-async function revokeChunks() {
+async function revokeChunks(isCurrent) {
 	for (const ch of chunkedAuthwits.value) {
+		if (!isCurrent()) return
 		try {
 			ch.status = "progress"
 			const correlation = getRandomHex(16)
@@ -153,6 +163,7 @@ usePopupEntity(() => props.show, {
 		chunkAuthwits()
 	},
 	onHide: () => {
+		runs.invalidate()
 		estimates.cancelAll()
 		authwits.value = []
 		chunkedAuthwits.value = []
