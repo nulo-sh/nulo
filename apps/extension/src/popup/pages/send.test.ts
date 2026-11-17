@@ -867,7 +867,7 @@ describe("send page — the footer", () => {
 		const { w } = await mountSend({ form: true })
 		await feeCard(w, FJ)
 		expect(publishLine(w).attributes("data-you")).toBe("exposed")
-		expect(warning(w).text()).toContain("Paying the fee from your public Fee Juice shows your address")
+		expect(warning(w).get("span > span").element.textContent).toBe("Paying the fee from public Fee Juice shows your address.")
 		expect(sentence(w).exists()).toBe(false)
 		expect(submit(w).attributes("disabled")).toBeDefined()
 		await submit(w).trigger("click")

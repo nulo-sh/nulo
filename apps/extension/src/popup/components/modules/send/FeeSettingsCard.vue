@@ -4,6 +4,7 @@
 import FeeMethodRow from "./FeeMethodRow.vue"
 import FeeCostReadout from "./FeeCostReadout.vue"
 import FeeAmount from "@/components/composite/FeeAmount.vue"
+import mark from "@/components/composite/send/publish-mark.module.css"
 import FeePriorityRow from "./FeePriorityRow.vue"
 import FeeMethodSelector from "./FeeMethodSelector.vue"
 import FeeMethodRadios from "./FeeMethodRadios.vue"
@@ -69,6 +70,8 @@ const props = defineProps({
 	originPrivacy: { type: String, default: null },
 	/** The transaction the fee is for, less its fee settings; a change is a new transaction. */
 	txShape: { type: String, default: "" },
+	/** Send's privacy warning while the payer in effect names the account. */
+	warning: { type: String, default: null },
 	/** Outside Send: a short sponsor's selection falls to the next payer of Send's public-side walk
 	 *  instead of to nothing. For a transaction whose calls are public, where paying from the
 	 *  account's own Fee Juice publishes nothing new. */
@@ -374,6 +377,13 @@ function applyRemedy() {
 }
 defineExpose({ applyRemedy, payerFocusTarget: () => methodSelector.value?.target?.() })
 
+/** The pressed fix leaves with the warning, so the keyboard goes to the radio it picked. */
+async function onWarningFix() {
+	applyRemedy()
+	await nextTick()
+	methodSelector.value?.focus()
+}
+
 const onFpcUpdated = (fpc) => {
 	const before = knownFpcs.value.find((f) => f.id === fpc.id)?.address ?? ""
 	fpcEdits.set(fpc.id, fpc)
@@ -494,6 +504,17 @@ onBeforeUnmount(() => {
 		</Flex>
 		<template v-else-if="onSend">
 			<FeeMethodRadios ref="methodSelector" :usd="prices.feeJuiceQuote.value?.usd" :modelValue="displayMethod" :methods="menuMethods" :pending="readPending" @update:modelValue="handleMethodPicked" />
+			<!-- Mounted with the card for the page's life: a warning raised while the sheet is open is announced there. -->
+			<div role="status" aria-live="polite" aria-atomic="true" :class="$style.warning_live" data-testid="send-fee-sheet-warning-live">
+				<div v-if="warning" :class="mark.warning_box" data-testid="send-fee-sheet-warning">
+					<Icon name="warning" size="14" aria-hidden="true" :class="mark.warning_mark" />
+					<span :class="mark.warning_body">
+						<span>{{ warning }}</span>
+						<button v-if="remedyMethod" type="button" :class="mark.warning_fix" data-testid="send-fee-sheet-warning-fix" @click="onWarningFix">Pay it from private Fee Juice</button>
+						<a v-else :href="FEE_JUICE_BRIDGE_URL" target="_blank" rel="noopener noreferrer" :class="mark.warning_fix" data-testid="send-fee-sheet-warning-bridge">Get private Fee Juice</a>
+					</span>
+				</div>
+			</div>
 			<FeePriorityRow v-if="showsCostRows" v-model="selectedPriority" />
 		</template>
 		<FeeMethodSelector
@@ -555,7 +576,7 @@ onBeforeUnmount(() => {
 				:class="$style.detail_row"
 				data-testid="fee-juice-unconfirmed"
 			>
-				<Icon name="warning" size="14" color="secondary" aria-hidden="true" />
+				<Icon name="warning" size="14" color="secondary" aria-hidden="true" :class="$style.line_mark" />
 				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">{{ unconfirmedText(shortfall) }}</Text>
 			</Flex>
 			<Flex
@@ -566,7 +587,7 @@ onBeforeUnmount(() => {
 				:class="$style.detail_row"
 				data-testid="fee-juice-shortfall"
 			>
-				<Icon name="warning" size="14" color="secondary" aria-hidden="true" />
+				<Icon name="warning" size="14" color="secondary" aria-hidden="true" :class="$style.line_mark" />
 				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
 					This send can cost up to <FeeAmount :display="shortfall.cost" :class="[$style.fee_figure, $style.whole]" />. You have {{ shortfall.balance }} FJ.
 				</Text>
@@ -574,7 +595,7 @@ onBeforeUnmount(() => {
 		</div>
 
 		<Flex v-if="feeJuiceMissing" align="center" gap="8" :class="$style.detail_row" data-testid="send-fee-nudge">
-			<Icon name="warning" size="14" color="secondary" />
+			<Icon name="warning" size="14" color="secondary" :class="$style.nudge_mark" />
 			<Flex direction="column" gap="2" :style="{ flex: 1, minWidth: 0 }">
 				<Text variant="value" color="primary">{{ nudgeCopy.title }}</Text>
 				<Text variant="caption" color="tertiary">{{ nudgeCopy.body }}</Text>
@@ -642,6 +663,26 @@ onBeforeUnmount(() => {
 
 .whole {
 	composes: whole from "./fee-shared.module.css";
+}
+
+/* The glyph's apex on the cap top of a 12 px line set 1 px down its row. */
+.line_mark {
+	flex: none;
+	margin-top: 1.5px;
+}
+
+/* Beside the title's first line, its apex on that line's cap top, not centred on title and caption. */
+.nudge_mark {
+	flex: none;
+	align-self: flex-start;
+	margin-top: 0.5px;
+}
+
+/* Under the whole payer group, set off from its last row by the group's own space, so it reads as the
+   pick's note and not that row's. Empty, it takes no space yet stays in the accessibility tree: a
+   live region a screen reader never saw empty may not announce what lands in it. */
+.warning_live:not(:empty) {
+	padding-bottom: 12px;
 }
 
 .get_fee_juice {
