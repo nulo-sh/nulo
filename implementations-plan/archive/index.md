@@ -579,3 +579,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [scroll-cue-build-2](scroll-cue-build-2/plan.md) — completed — the onboarding more-below button hidden where the window leaves no room beside the column (P158-01 = H, #1821)
 - [scroll-cue-right-1](scroll-cue-right-1/plan.md) — completed — the execute window's more-below button moves to the bottom right (P157-02, "right"; #1820)
 - [contracts-build-1](contracts-build-1/plan.md) — completed — the Contracts page as P162-01 = R24: named rows, both ids, origin, a View on Aztecscan action
+- [fee-copy-build-1](fee-copy-build-1/plan.md) — completed — the app-set Private Fee Juice sentence as two sentences, the unknown press said once, History's Fee method over a Set by caption, Send's readout asking for an amount (P164-01 to -04; #1836)

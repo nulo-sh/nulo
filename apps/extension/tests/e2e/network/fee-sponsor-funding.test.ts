@@ -350,21 +350,23 @@ test.skipIf(!hasConfig)(
 			expect(typeof txHash).toBe("string")
 
 			// The row names the app as the window's fee line does: both read the session's dApp name.
-			const expected = `Sponsored, set by ${app}`
+			const expected = { method: "Sponsored", setBy: `Set by ${app}` }
 			const wallet = await openPopup(tokenReadyExtension)
 			await waitForHash(wallet, "#/popup/general")
 			await navigateByHash(wallet, `#/popup/tx/${txHash as string}`)
+			const readRow = () =>
+				wallet.evaluate(() => ({
+					method: document.querySelector('[data-testid="tx-detail-fee-method"]')?.textContent?.trim() ?? null,
+					setBy: document.querySelector('[data-testid="tx-detail-fee-setter"]')?.textContent?.trim() ?? null,
+				}))
 			await wallet
 				.waitForFunction(
-					(want: string) => document.querySelector('[data-testid="tx-detail-fee-method"]')?.textContent?.trim() === want,
+					(want: string) => document.querySelector('[data-testid="tx-detail-fee-setter"]')?.textContent?.trim() === want,
 					{ timeout: 15_000, polling: 200 },
-					expected,
+					expected.setBy,
 				)
 				.catch(() => undefined)
-			const feeMethod = await wallet.evaluate(
-				() => document.querySelector('[data-testid="tx-detail-fee-method"]')?.textContent?.trim() ?? null,
-			)
-			expect(feeMethod, "the transaction page's Fee method row").toBe(expected)
+			expect(await readRow(), "the transaction page's Fee method row").toEqual(expected)
 			await wallet.close()
 		} finally {
 			await prices.refused.stop()

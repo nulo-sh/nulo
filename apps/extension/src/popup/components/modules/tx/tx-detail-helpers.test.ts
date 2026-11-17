@@ -63,15 +63,15 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 	})
 
 	test("FeeJuice → 'Public Fee Juice'", () => {
-		expect(describeFeePaymentMethod({ feePaymentMethod: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE })).toBe(
-			"Public Fee Juice",
-		)
+		expect(describeFeePaymentMethod({ feePaymentMethod: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE })).toStrictEqual({
+			method: "Public Fee Juice",
+		})
 	})
 
 	test("FeeJuiceWithClaim → 'Public Fee Juice (with claim)'", () => {
-		expect(describeFeePaymentMethod({ feePaymentMethod: AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM })).toBe(
-			"Public Fee Juice (with claim)",
-		)
+		expect(describeFeePaymentMethod({ feePaymentMethod: AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM })).toStrictEqual({
+			method: "Public Fee Juice (with claim)",
+		})
 	})
 
 	test("External + sponsor_unconditionally → 'Sponsored'", () => {
@@ -80,7 +80,7 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 				feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 				calls: [call(SPONSOR, "sponsor_unconditionally")],
 			}),
-		).toBe("Sponsored")
+		).toStrictEqual({ method: "Sponsored" })
 	})
 
 	test("an app's own `pay_fee` is the app's fee: a no-`from` call reads 'Set by …', and with no origin 'External FPC'", () => {
@@ -89,8 +89,8 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 			calls: [call(APP, "pay_fee")],
 			origin: { type: OriginType.DAPP, name: "Foo" },
 		}
-		expect(describeFeePaymentMethod(noFrom)).toBe("Set by Foo")
-		expect(describeFeePaymentMethod({ ...noFrom, origin: undefined })).toBe("External FPC")
+		expect(describeFeePaymentMethod(noFrom)).toStrictEqual({ method: "Set by Foo" })
+		expect(describeFeePaymentMethod({ ...noFrom, origin: undefined })).toStrictEqual({ method: "External FPC" })
 	})
 
 	test("the person's pick is the first fee call, so a fee call after it changes nothing", () => {
@@ -101,10 +101,10 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 		})
 		expect(
 			describeFeePaymentMethod(dappSend([call(PRIVATE_FPC_ADDRESS, "pay_fee"), APP_CALL, call(APP, "sponsor_unconditionally")])),
-		).toBe("Private Fee Juice")
+		).toStrictEqual({ method: "Private Fee Juice" })
 		expect(
 			describeFeePaymentMethod(dappSend([call(SPONSOR, "sponsor_unconditionally"), APP_CALL, call(PRIVATE_FPC_ADDRESS, "pay_fee")])),
-		).toBe("Sponsored")
+		).toStrictEqual({ method: "Sponsored" })
 	})
 
 	test("External + DAPP origin → 'Set by {name}'", () => {
@@ -114,7 +114,7 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 				calls: [],
 				origin: { type: OriginType.DAPP, name: "Foo" },
 			}),
-		).toBe("Set by Foo")
+		).toStrictEqual({ method: "Set by Foo" })
 	})
 
 	test("External + DAPP origin without name → 'Set by the app'", () => {
@@ -124,7 +124,7 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 				calls: [],
 				origin: { type: OriginType.DAPP },
 			}),
-		).toBe("Set by the app")
+		).toStrictEqual({ method: "Set by the app" })
 	})
 
 	/** A popup Send as `recordTransfer` writes it: its transfer call alone, and the FPC it paid through
@@ -137,27 +137,29 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 	})
 
 	test("a popup Send names the method it was paid with: Private Fee Juice, Nulo's sponsor, a sponsor added by hand", () => {
-		expect(describeFeePaymentMethod(popupSend(PRIVATE_FPC_ADDRESS))).toBe("Private Fee Juice")
-		expect(describeFeePaymentMethod(popupSend())).toBe("Sponsored")
-		expect(describeFeePaymentMethod(popupSend(SPONSOR))).toBe("Sponsored")
+		expect(describeFeePaymentMethod(popupSend(PRIVATE_FPC_ADDRESS))).toStrictEqual({ method: "Private Fee Juice" })
+		expect(describeFeePaymentMethod(popupSend())).toStrictEqual({ method: "Sponsored" })
+		expect(describeFeePaymentMethod(popupSend(SPONSOR))).toStrictEqual({ method: "Sponsored" })
 	})
 
 	test("a popup Send that records the person's pick reads the same as one that does not", () => {
-		expect(describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), feeChoice: "wallet" })).toBe("Private Fee Juice")
-		expect(describeFeePaymentMethod({ ...popupSend(), feeChoice: "wallet" })).toBe("Sponsored")
-		expect(describeFeePaymentMethod({ ...popupSend(SPONSOR), feeChoice: "wallet" })).toBe("Sponsored")
+		expect(describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), feeChoice: "wallet" })).toStrictEqual({
+			method: "Private Fee Juice",
+		})
+		expect(describeFeePaymentMethod({ ...popupSend(), feeChoice: "wallet" })).toStrictEqual({ method: "Sponsored" })
+		expect(describeFeePaymentMethod({ ...popupSend(SPONSOR), feeChoice: "wallet" })).toStrictEqual({ method: "Sponsored" })
 	})
 
 	test("a recorded fee call outranks the spender: the auth registry's own send, which keeps its pay_fee call", () => {
 		const revoke = [call(PRIVATE_FPC_ADDRESS, "pay_fee"), call(field(1n), "set_authorized", [field(0xa17n), false])]
-		expect(describeFeePaymentMethod({ ...popupSend(), calls: revoke })).toBe("Private Fee Juice")
+		expect(describeFeePaymentMethod({ ...popupSend(), calls: revoke })).toStrictEqual({ method: "Private Fee Juice" })
 	})
 
 	test("an app's send stays 'Set by …' and a row of no known origin stays 'External FPC', whatever its spender", () => {
-		expect(describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), origin: { type: OriginType.DAPP, name: "Foo" } })).toBe(
-			"Set by Foo",
-		)
-		expect(describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), origin: undefined })).toBe("External FPC")
+		expect(
+			describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), origin: { type: OriginType.DAPP, name: "Foo" } }),
+		).toStrictEqual({ method: "Set by Foo" })
+		expect(describeFeePaymentMethod({ ...popupSend(PRIVATE_FPC_ADDRESS), origin: undefined })).toStrictEqual({ method: "External FPC" })
 	})
 
 	describe("who chose the fee", () => {
@@ -177,39 +179,47 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 		})
 
 		test.each([
-			["you, Fee Juice", row("wallet", FJ), "Public Fee Juice"],
-			["you, Fee Juice with claim", row("wallet", FJWC), "Public Fee Juice (with claim)"],
-			["you, the PrivateFPC's pay_fee", row("wallet", EXTERNAL, [call(PRIVATE_FPC_ADDRESS, "pay_fee")]), "Private Fee Juice"],
-			["you, a sponsor you picked", row("wallet", EXTERNAL, [call(SPONSOR, "sponsor_unconditionally")]), "Sponsored"],
-			["you, another fee contract", row("wallet", EXTERNAL, [call(APP, "fee_entrypoint_private")]), "External FPC"],
+			["you, Fee Juice", row("wallet", FJ), { method: "Public Fee Juice" }],
+			["you, Fee Juice with claim", row("wallet", FJWC), { method: "Public Fee Juice (with claim)" }],
+			[
+				"you, the PrivateFPC's pay_fee",
+				row("wallet", EXTERNAL, [call(PRIVATE_FPC_ADDRESS, "pay_fee")]),
+				{ method: "Private Fee Juice" },
+			],
+			["you, a sponsor you picked", row("wallet", EXTERNAL, [call(SPONSOR, "sponsor_unconditionally")]), { method: "Sponsored" }],
+			["you, another fee contract", row("wallet", EXTERNAL, [call(APP, "fee_entrypoint_private")]), { method: "External FPC" }],
 			[
 				"the app, the PrivateFPC's pay_fee",
 				row("app", EXTERNAL, [call(PRIVATE_FPC_ADDRESS, "pay_fee")]),
-				"Private Fee Juice, set by Foo",
+				{ method: "Private Fee Juice", setBy: "Set by Foo" },
 			],
 			[
 				"the app, the PrivateFPC's mint_and_pay_fee after its claim",
 				row("app", EXTERNAL, [call(FEE_JUICE, "claim"), call(PRIVATE_FPC_ADDRESS, "mint_and_pay_fee")]),
-				"Private Fee Juice, set by Foo",
+				{ method: "Private Fee Juice", setBy: "Set by Foo" },
 			],
 			[
 				"the app, the protocol sponsor",
 				row("app_protocol_sponsor", EXTERNAL, [call(SPONSOR, "sponsor_unconditionally")]),
-				"Sponsored, set by Foo",
+				{ method: "Sponsored", setBy: "Set by Foo" },
 			],
 			[
 				"the app, a sponsor-named call on its own contract",
 				row("app", EXTERNAL, [call(APP, "sponsor_unconditionally")]),
-				"Set by Foo",
+				{ method: "Set by Foo" },
 			],
-			["the app, its own pay_fee", row("app", EXTERNAL, [call(APP, "pay_fee")]), "Set by Foo"],
-			["the app, a claim to the account", row("app", FJWC), "Public Fee Juice (with claim), set by Foo"],
-			["the app, Fee Juice", row("app", FJ), "Set by Foo"],
-			["the app, an unknown method", row("app", 7), "Unknown (7)"],
-			["the app, unnamed", row("app_protocol_sponsor", EXTERNAL, [], { type: OriginType.DAPP }), "Sponsored, set by the app"],
-			["an unknown chooser reads as today", row("bogus", EXTERNAL, [call(APP, "fee_entrypoint_private")]), "Set by Foo"],
+			["the app, its own pay_fee", row("app", EXTERNAL, [call(APP, "pay_fee")]), { method: "Set by Foo" }],
+			["the app, a claim to the account", row("app", FJWC), { method: "Public Fee Juice (with claim)", setBy: "Set by Foo" }],
+			["the app, Fee Juice", row("app", FJ), { method: "Set by Foo" }],
+			["the app, an unknown method", row("app", 7), { method: "Unknown (7)" }],
+			[
+				"the app, unnamed",
+				row("app_protocol_sponsor", EXTERNAL, [], { type: OriginType.DAPP }),
+				{ method: "Sponsored", setBy: "Set by the app" },
+			],
+			["an unknown chooser reads as today", row("bogus", EXTERNAL, [call(APP, "fee_entrypoint_private")]), { method: "Set by Foo" }],
 		])("%s", (_case, tx, label) => {
-			expect(describeFeePaymentMethod(tx)).toBe(label)
+			expect(describeFeePaymentMethod(tx)).toStrictEqual(label)
 		})
 
 		const DECLARED = { type: OriginType.DAPP, name: "Playground \u2705\u{1F680}" }
@@ -217,20 +227,20 @@ describe("tx-detail-helpers/describeFeePaymentMethod", () => {
 			[
 				"the app's sponsor",
 				row("app_protocol_sponsor", EXTERNAL, [call(SPONSOR, "sponsor_unconditionally")], DECLARED),
-				"Sponsored, set by Playground",
+				{ method: "Sponsored", setBy: "Set by Playground" },
 			],
 			[
 				"a row with no recorded chooser",
 				{ ...row("app", EXTERNAL, [call(APP, "fee_entrypoint_private")], DECLARED), feeChoice: undefined },
-				"Set by Playground",
+				{ method: "Set by Playground" },
 			],
 			[
 				"a name the filter empties",
 				row("app_protocol_sponsor", EXTERNAL, [], { type: OriginType.DAPP, name: "\u2705\u{1F680}" }),
-				"Sponsored, set by the app",
+				{ method: "Sponsored", setBy: "Set by the app" },
 			],
 		])("an app whose declared name carries emoji is named as its chip does: %s", (_case, tx, label) => {
-			expect(describeFeePaymentMethod(tx)).toBe(label)
+			expect(describeFeePaymentMethod(tx)).toStrictEqual(label)
 		})
 	})
 })

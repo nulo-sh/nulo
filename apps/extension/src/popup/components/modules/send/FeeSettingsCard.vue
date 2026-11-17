@@ -77,6 +77,8 @@ const props = defineProps({
 	queuedCap: { type: Object, default: null },
 	/** Send's amount field holds an amount; read only while the card reads what can pay. */
 	amountTyped: { type: Boolean, default: false },
+	/** Send only: what the person must enter before an estimate is asked (the cost row's `waitsFor`). */
+	waitsFor: { type: String, default: null },
 	/** The current input's estimate failed: the cost row offers `retryEstimate`. */
 	estimateFailed: { type: Boolean, default: false },
 	/** The running estimate has run long: the cost row offers `retryEstimate` beside its bar's place. */
@@ -590,6 +592,7 @@ onBeforeUnmount(() => {
 			v-if="showsCostRows"
 			:pending="readPending"
 			:amountTyped="amountTyped"
+			:waitsFor="waitsFor"
 			:estimate="estimatedFeeDisplay"
 			:isEstimating="isEstimating"
 			:isQueued="isQueued"
