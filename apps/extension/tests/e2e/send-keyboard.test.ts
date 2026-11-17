@@ -22,7 +22,7 @@ import {
 import { captureSoleProfileId, getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { startNodeStub } from "./fixtures/node-stub"
 import { skipUnlessListPrices } from "./fixtures/token-list"
-import { chooseRecipient, openSend, openSendFeeSheet, readSendInputs, shotSend } from "./fixtures/send-page"
+import { chooseRecipient, openSend, readSendInputs, shotSend } from "./fixtures/send-page"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { settleThemeTransitions } from "./fixtures/shots"
 import { readActivityScope, seedJournalRecord, seedTokenRow } from "./helpers/activity-seeds"
@@ -527,10 +527,10 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 	expect(await page.$eval(radio(HAND_SPONSOR.id), (el) => (el as HTMLInputElement).checked)).toBe(true)
 	await expect.poll(savedSponsor, { timeout: 10_000, interval: 200 }).toMatchObject({ type: "fpc", fpc: { id: HAND_SPONSOR.id } })
 
-	// Opened and picked by the pointer, the sheet's radios take focus with no ring.
-	await openSendFeeSheet(page)
+	// A pointer pick moves focus to the radio it presses and leaves no ring there: the ring is the keyboard's.
+	await page.keyboard.press("Enter")
 	await focusIsOn(radio(HAND_SPONSOR.id))
-	expect(await payerRing(page, radio(HAND_SPONSOR.id))).toBe("none")
+	expect(await payerRing(page, radio(HAND_SPONSOR.id))).toBe("solid")
 	const sponsors = await page.$$eval(sel("send-fee-payer-sponsored"), (els) => els.map((el) => el.getAttribute("data-fpc-id")))
 	expect([sponsors[0], sponsors.at(-1)], "Nulo's sponsor is the first or last sponsored row").toContain(SEEDED_SPONSOR_FPC_ID)
 	await pointerClick(page, "send-fee-payer-sponsored", { last: sponsors[0] !== SEEDED_SPONSOR_FPC_ID })
