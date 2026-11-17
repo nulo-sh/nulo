@@ -425,14 +425,10 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 
 			await this.transactionService.waitForTx(txHash, fence.profileId, task)
 
-			// `waitForTx` only confirms the tx left the pending queue (submitted),
-			// not that its PUBLIC effect is mined + visible. Poll the on-chain state
-			// so a fast (proverless) follow-up consume can't race a not-yet-mined
-			// revoke. See waitForOnChainState.
-			// The verify reads where the proven wait read: another endpoint may not have the grant yet, and
-			// would report a reverted revoke as unauthorized.
+			// The verify reads where the checkpoint wait read: another endpoint may not have the grant yet,
+			// and would report a reverted revoke as unauthorized.
 			const revokeNode = await this.receiptNodeFor(network, txHash)
-			const revokeBlock = await this.waitForTxProven(revokeNode, txHash)
+			const revokeBlock = await this.waitForTxCheckpointed(revokeNode, txHash)
 			// No subtask past the send: a profile switch clears the registry, and the prune must still land.
 			await this.verifyRevoked(network, revokeNode, scope, authwits, revokeBlock)
 
@@ -476,10 +472,8 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 
 			await this.transactionService.waitForTx(txHash, fence.profileId, task)
 
-			// Ensure the registry toggle is mined + visible before returning, so a
-			// fast follow-up consume reads the new state (see waitForOnChainState).
 			const toggleNode = await this.receiptNodeFor(network, txHash)
-			await this.waitForTxProven(toggleNode, txHash)
+			await this.waitForTxCheckpointed(toggleNode, txHash)
 			// No subtask past the send: a profile switch clears the registry, and the status must still land.
 			await this.applyStatus(toggleNode, scope)
 
@@ -509,25 +503,22 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	}
 
 	/**
-	 * Wait until the mutation tx's block is PROVEN, not merely at the proposed
-	 * `latest` tip. The sequencer executes public functions — e.g. a follow-up
-	 * authwit consume's `AuthRegistry.consume` — against PROVEN state, so a
-	 * revoke/toggle visible only at `latest` is invisible to that execution and a
-	 * fast consume can still spend a "revoked" grant. Poll the proven tip past the
-	 * tx's receipt block, and return that block. Throws on timeout — never report an unverifiable
-	 * security mutation as success. (Proven advances normally here: grants reach
-	 * proven within the test's own step timing, which is why their consumes work.)
+	 * Waits until the mutation's block is checkpointed on L1 and returns that block. A later consume
+	 * runs on the proposed chain, so the mutation binds once it is in a block; it is reported once that
+	 * block is on L1, where only an L1 reorg past it, an invalidated checkpoint or an epoch prune undoes
+	 * it. The proven tip trails by up to two epochs, past any bound a popup can hold. Throws on timeout:
+	 * an unverified security mutation is never reported as done.
 	 */
-	private async waitForTxProven(node: AztecNode, txHash: string, timeoutMs = 120_000): Promise<number> {
+	private async waitForTxCheckpointed(node: AztecNode, txHash: string, timeoutMs = 120_000): Promise<number> {
 		const receipt = await node.getTxReceipt(TxHash.fromString(txHash))
 		const target = receipt.blockNumber
-		if (target === undefined) throw new Error(`waitForTxProven: tx ${txHash} has no block number`)
+		if (target === undefined) throw new Error(`waitForTxCheckpointed: tx ${txHash} has no block number`)
 		const start = Date.now()
 		while (Date.now() - start < timeoutMs) {
-			if ((await node.getChainTips()).proven.block.number >= target) return target
+			if ((await node.getChainTips()).checkpointed.block.number >= target) return target
 			await sleep(1_000)
 		}
-		throw new Error(`waitForTxProven: tx ${txHash} (block ${target}) not proven within ${timeoutMs}ms`)
+		throw new Error(`waitForTxCheckpointed: tx ${txHash} (block ${target}) not checkpointed within ${timeoutMs}ms`)
 	}
 
 	private async syncAuthwits(network: Network, node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask) {
