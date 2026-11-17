@@ -110,7 +110,7 @@ const appStore = useAppStore()
 
 const profile = ref<ProfileInfo>()
 const scrollRef = useTemplateRef("scrollRef")
-const { shown: moreShown, press: showMore } = useMoreBelow(computed(() => scrollRef.value?.wrapper ?? null))
+const { shown: moreShown, gutter: moreGutter, press: showMore } = useMoreBelow(computed(() => scrollRef.value?.wrapper ?? null))
 
 const router = useRouter()
 
@@ -855,6 +855,7 @@ onUnmounted(() => {
 			<ScrollMoreButton
 				:shown="moreShown"
 				:class="$style.more_below"
+				:style="{ right: `${16 + moreGutter}px` }"
 				data-testid="execute-scroll-more"
 				@press="showMore"
 			/>
@@ -908,12 +909,11 @@ onUnmounted(() => {
 	flex-direction: column;
 }
 
-/* Bottom left, on the sections' 16 px gutter: value columns right-align, so the right corner would
- * cover the figures a person is checking. The scrollbar sits right and offsets nothing here. */
+/* Bottom right, 16 px plus the scrollbar gutter in. At first paint it may sit over a right-aligned
+ * value until the first scroll; on the left it would clip the first letters of a label. */
 .more_below {
 	position: absolute;
 	bottom: 12px;
-	left: 16px;
 	z-index: 1;
 }
 

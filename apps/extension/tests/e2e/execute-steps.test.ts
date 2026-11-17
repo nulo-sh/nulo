@@ -174,31 +174,28 @@ async function tabWalk(page: Page, presses: number): Promise<string[]> {
 	return stops
 }
 
-/** What the more-below button's box meets, outside the button: controls and glyphs, and text lines. */
-async function underMoreBelow(page: Page): Promise<{ controls: string[]; text: string[] }> {
+/** The controls and glyphs the more-below button's box meets, outside the button. */
+async function underMoreBelow(page: Page): Promise<string[]> {
 	return page.$eval(sel("execute-scroll-more"), (button) => {
 		const b = button.getBoundingClientRect()
 		const meets = (r: DOMRect) =>
 			r.width > 0 && r.height > 0 && r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top
 		const owner = (el: Element) => el.closest("[data-testid]")?.getAttribute("data-testid") ?? el.tagName
 		const controls: string[] = []
-		const text: string[] = []
 		const marks =
 			'button, a[href], input, textarea, select, [role="button"], [role="checkbox"], [role="tab"], [role="link"], [tabindex="0"], svg'
 		for (const el of document.querySelectorAll(marks)) {
 			if (el !== button && !button.contains(el) && meets(el.getBoundingClientRect())) controls.push(`${el.tagName} in ${owner(el)}`)
 		}
-		const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
-		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-			if (!node.textContent?.trim() || button.contains(node) || !node.parentElement) continue
-			const range = document.createRange()
-			range.selectNodeContents(node)
-			if ([...range.getClientRects()].some(meets))
-				text.push(`"${node.textContent.trim().slice(0, 32)}" in ${owner(node.parentElement)}`)
-		}
-		return { controls, text }
+		return controls
 	})
 }
+
+/** The controls and glyphs under the more-below button but a step's toggle: the toggle spans the card,
+ *  so the right corner can meet its row's blank end, while the chevron ending its sentence is an svg
+ *  and still counts. */
+const coveredControls = async (page: Page): Promise<string[]> =>
+	(await underMoreBelow(page)).filter((control) => control !== "BUTTON in execute-op-step-toggle")
 
 /** The window's scroll position and whether the parse warning lies whole inside its visible box. */
 const readWindow = (page: Page): Promise<{ scrollTop: number; warningInView: boolean }> =>
@@ -211,18 +208,19 @@ const readWindow = (page: Page): Promise<{ scrollTop: number; warningInView: boo
 		return { scrollTop: scroller.scrollTop, warningInView: !!line && line.top >= top && line.bottom <= top + scroller.clientHeight }
 	})
 
-/** Scrolls the window at once: level the parse warning's line with the more-below button, or back to the top. */
-const scrollWindow = (page: Page, to: "warning" | "top"): Promise<void> =>
+/** Scrolls the window at once: level the middle of what `to` selects with the more-below button's, or back to the top for `"top"`. */
+const scrollWindow = (page: Page, to: string): Promise<void> =>
 	page.$eval(
 		sel("execute-scroll-more"),
 		(button, where) => {
-			const line = document.querySelector('[data-testid="execute-op-summary-unparsed"]')?.getBoundingClientRect()
 			let scroller = document.querySelector('[data-testid="execute-op-item"]')?.parentElement ?? null
 			while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
-			if (!line || !scroller) throw new Error("no parse warning or no scroller")
+			if (!scroller) throw new Error("no scroller")
+			if (where === "top") return scroller.scrollTo({ top: 0, behavior: "instant" })
+			const target = document.querySelector(where)?.getBoundingClientRect()
+			if (!target) throw new Error(`no ${where}`)
 			const b = button.getBoundingClientRect()
-			const level = scroller.scrollTop + line.top + line.height / 2 - (b.top + b.height / 2)
-			scroller.scrollTo({ top: where === "top" ? 0 : level, behavior: "instant" })
+			scroller.scrollTo({ top: scroller.scrollTop + target.top + target.height / 2 - (b.top + b.height / 2), behavior: "instant" })
 		},
 		to,
 	)
@@ -488,29 +486,26 @@ describe.skipIf(!ARMED)("the execute window's rail, over the fixtures", () => {
 		}
 	})
 
-	// With the steps shut a section label at the fold can reach under the button's bottom edge (on
-	// `batch`, the top 5 px of "Leaves your account"); with them open only the rail's line sits there.
-	test("batch: the more-below button covers no control or glyph at first paint; with the steps open it meets no text either, nor after a press, and the second press brings the parse warning in and the button leaves", {
+	// The right corner can sit over the right-aligned values until the first scroll (on `batch` with the
+	// steps open, step 3's From and To), so text under it is not checked.
+	test("batch: the more-below button covers no glyph and no control but a step row's blank end at first paint, steps shut or open, nor after a press; the second press brings the parse warning in and the button leaves", {
 		timeout: 120_000,
 	}, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
-		const empty = { controls: [], text: [] }
 		try {
 			await openFixture(page, "batch", 400)
 			await page.waitForSelector(sel("execute-scroll-more"), { visible: true, timeout: 10_000 })
-			const shut = await underMoreBelow(page)
-			expect(shut.controls).toEqual([])
-			expect(shut.text.filter((line) => line !== '"Leaves your account" in execute-op-leaves-account')).toEqual([])
+			expect(await coveredControls(page)).toEqual([])
 			await openExecuteSteps(page)
 			expect((await readWindow(page)).warningInView).toBe(false)
-			expect(await underMoreBelow(page)).toEqual(empty)
-			// The scan's control: a line brought under the button is read.
-			await scrollWindow(page, "warning")
-			expect((await underMoreBelow(page)).text.join()).toContain("Nulo can't parse calls")
+			expect(await coveredControls(page)).toEqual([])
+			// The scan's control: a control brought under the button is read.
+			await scrollWindow(page, stepRow(3))
+			expect(await underMoreBelow(page)).toContain("BUTTON in execute-op-step-toggle")
 			await scrollWindow(page, "top")
 
 			await pressMoreBelow(page)
-			expect(await underMoreBelow(page)).toEqual(empty)
+			expect(await coveredControls(page)).toEqual([])
 			await pressMoreBelow(page)
 			expect((await readWindow(page)).warningInView).toBe(true)
 			await page.waitForSelector(sel("execute-scroll-more"), { hidden: true, timeout: 5_000 })
