@@ -583,3 +583,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [send-fixes-2](send-fixes-2/plan.md) — completed — four Send defects the owner named on 2026-11-17: the last recipient row's divider, the warning glyph, the in-flight fiat line, the radio focus ring (#1825-#1828)
 - [connected-app-build-1](connected-app-build-1/plan.md) — completed — the connected app page loses its Connection check section with nothing in its place, and the Details table draws `send` for Transact and `search` for Details (P163-02, P163-03 = E3)
 - [fee-copy-build-1](fee-copy-build-1/plan.md) — completed — the app-set Private Fee Juice sentence as two sentences, the unknown press said once, History's Fee method over a Set by caption, Send's readout asking for an amount (P164-01 to -04; #1836)
+- [locked-refusal-1](locked-refusal-1/plan.md) — completed — a locked wallet answers a dApp 4900 `WALLET_LOCKED` instead of the unclassified -32603, logged at debug (#1833)
