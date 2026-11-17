@@ -130,20 +130,22 @@ onBeforeUnmount(() => {
 			>
 				<div :class="$style.body">
 					<ContractChip :model="v.chip" testid="contract-row-name" />
-					<span :class="$style.id">
-						<Text variant="caption" color="tertiary">Instance</Text>
-						<Text variant="meta" color="secondary" data-testid="contract-row-instance">{{ trimAddress(v.row.address, 6, 4) }}</Text>
-						<RowAction label="Copy contract address" data-testid="contract-row-copy-instance" @click="copy(v.row.address, 'Contract address is copied')">
-							<Icon name="copy" size="12" color="tertiary" />
-						</RowAction>
-					</span>
-					<span v-if="v.row.classId" :class="$style.id">
-						<Text variant="caption" color="tertiary">Class</Text>
-						<Text variant="meta" color="secondary" data-testid="contract-row-class">{{ trimAddress(v.row.classId, 6, 4) }}</Text>
-						<RowAction label="Copy class id" data-testid="contract-row-copy-class" @click="copy(v.row.classId, 'Class id is copied')">
-							<Icon name="copy" size="12" color="tertiary" />
-						</RowAction>
-					</span>
+					<div :class="$style.ids">
+						<span :class="$style.id">
+							<Text variant="caption" color="tertiary">Instance</Text>
+							<Text variant="meta" color="secondary" data-testid="contract-row-instance">{{ trimAddress(v.row.address, 6, 4) }}</Text>
+							<RowAction label="Copy contract address" data-testid="contract-row-copy-instance" @click="copy(v.row.address, 'Contract address is copied')">
+								<Icon name="copy" size="12" color="tertiary" />
+							</RowAction>
+						</span>
+						<span v-if="v.row.classId" :class="$style.id">
+							<Text variant="caption" color="tertiary">Class</Text>
+							<Text variant="meta" color="secondary" data-testid="contract-row-class">{{ trimAddress(v.row.classId, 6, 4) }}</Text>
+							<RowAction label="Copy class id" data-testid="contract-row-copy-class" @click="copy(v.row.classId, 'Class id is copied')">
+								<Icon name="copy" size="12" color="tertiary" />
+							</RowAction>
+						</span>
+					</div>
 					<Text variant="caption" color="tertiary" data-testid="contract-row-origin">{{ ORIGIN_WORDS[v.origin] }}</Text>
 				</div>
 				<Tooltip v-if="v.explorerUrl" side="top" position="end" delay="350">
@@ -175,6 +177,13 @@ onBeforeUnmount(() => {
 	align-items: flex-start;
 	gap: 8px;
 	min-width: 0;
+}
+
+.ids {
+	display: flex;
+	flex-wrap: wrap;
+	column-gap: 14px;
+	row-gap: 4px;
 }
 
 .id {
