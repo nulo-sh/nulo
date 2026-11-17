@@ -28,6 +28,7 @@ import {
 	journalCardAmount,
 	journalCardAmountSymbol,
 	journalCardDirection,
+	journalCardFiat,
 	journalCardIcon,
 	journalCardOriginLabel,
 	journalCardTitle,
@@ -44,7 +45,7 @@ import { ARRIVALS_KEY } from "@/composables/useArrivals"
 import { useHeroVisible } from "@/composables/useHeroVisible"
 import { useIncomingTransfers } from "@/composables/useIncomingTransfers"
 import { useJournalMirror } from "@/composables/useJournalMirror"
-import { useTokenFlags } from "@/composables/usePrices"
+import { usePrices } from "@/composables/usePrices"
 import { useScopedTokens } from "@/composables/useScopedTokens"
 import { SENDS_IN_PROGRESS_KEY } from "@/composables/useSendsInProgress"
 
@@ -88,8 +89,9 @@ const {
 	scope: () => activeAccountScope(appStore),
 	afterRead: arrivals?.load,
 })
-/** The list's pictures and flags for the marks of the sends in progress; the list below reads its own. */
-const pendingMarks = useTokenFlags(incomingPriceService)
+/** The page's one price reading: the sends in progress and the list below read the same quotes, so a
+ *  send keeps its fiat line and mark as it lands. */
+const prices = usePrices(incomingPriceService)
 
 /** Journal terminal records.
  *  Loaded on mount + refreshed on every journal event so the list reacts to
@@ -206,7 +208,7 @@ onBeforeUnmount(() => {
 	incomingPriceService.disconnect()
 	disposeTerminalOps()
 	disposeIncomingTransfers()
-	pendingMarks.dispose()
+	prices.dispose()
 	scopedTokens.dispose()
 })
 </script>
@@ -254,8 +256,9 @@ onBeforeUnmount(() => {
 					:originLabel="journalCardOriginLabel(op)"
 					:amount="journalCardAmount(op, tokenById)"
 					:amountSymbol="journalCardAmountSymbol(op, tokenById)"
+					:amountFiat="journalCardFiat(op, tokenById, prices.tokenFiatLabel)"
 					:titleNamesToken="journalCardTitleNamesToken(op)"
-					:titleMark="journalCardTitleMark(op, { tokenById }, pendingMarks)"
+					:titleMark="journalCardTitleMark(op, { tokenById }, prices)"
 					:direction="journalCardDirection(op)"
 					:stage="op.progress?.stage ?? null"
 					:backend="op.progress?.backend ?? null"
@@ -265,7 +268,15 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<!-- Mixed activity list (chain tx + journal terminal records) -->
-			<TransactionsList v-if="visibleRows.length" :rows="visibleRows" :tokens="tokens" :isArriving="arrivals?.isArriving" />
+			<TransactionsList
+				v-if="visibleRows.length"
+				:rows="visibleRows"
+				:tokens="tokens"
+				:isArriving="arrivals?.isArriving"
+				:fiatLabel="prices.tokenFiatLabel"
+				:iconFor="prices.iconFor"
+				:isFlagged="prices.isFlagged"
+			/>
 
 			<!-- Empty state -->
 			<Flex

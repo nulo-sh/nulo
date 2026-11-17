@@ -6,6 +6,9 @@ import { describe, expect, test, vi } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { flaggedKeysOf } from "@/utils/token-flag"
 import { tokenIconsOf } from "@/utils/token-icon"
+import { effectScope } from "vue"
+import { usePrices } from "@/composables/usePrices"
+import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TEST_ICONS, TEST_LIST_ENTRIES_WITH_ICONS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import TransactionsList from "./TransactionsList.vue"
 
@@ -34,6 +37,13 @@ vi.mock("@/wallet/services/price/client", () => ({
 	}),
 }))
 
+/** The page's price reading, which it hands the list, here over the mocked feed. */
+function surface() {
+	const prices = effectScope().run(() => usePrices(new PriceServiceClient()))
+	if (!prices) throw new Error("no reading")
+	return { fiatLabel: prices.tokenFiatLabel, iconFor: prices.iconFor, isFlagged: prices.isFlagged }
+}
+
 const cardStub = (name: string) => ({
 	name,
 	props: ["to", "arriving"],
@@ -53,7 +63,7 @@ const ROWS = [
 
 const mountList = (props: Record<string, unknown>) =>
 	mount(TransactionsList, {
-		props,
+		props: { ...surface(), ...props },
 		global: {
 			stubs: {
 				Flex: { template: "<div><slot /></div>" },
@@ -96,6 +106,7 @@ describe("modules/activity/TransactionsList", () => {
 		const inc = { id: "r3", kind: "note", tokenId: 7, contract: "0xc", amountRaw: "2000000", txHash: "0xh" }
 		const w = mount(TransactionsList, {
 			props: {
+				...surface(),
 				rows: [
 					{ type: "tx", key: "tx:0xh1", sortKey: 3000, tx: { hash: "0xh1" } },
 					{ type: "journal", key: "journal:op-2", sortKey: 2000, op },
@@ -175,6 +186,7 @@ describe("modules/activity/TransactionsList", () => {
 		const inc = { id: "r4", kind: "note", tokenId: 3, contract: FLAGGED, amountRaw: "2500000", txHash: field(0x7a7an) }
 		const w = mount(TransactionsList, {
 			props: {
+				...surface(),
 				rows: [
 					{ type: "tx", key: "tx:settled", sortKey: 3000, tx: settled },
 					{ type: "journal", key: "journal:op-3", sortKey: 2000, op },

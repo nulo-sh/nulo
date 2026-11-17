@@ -23,9 +23,8 @@ import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { txAmount } from "@/utils/tx-amount"
 import { dashIfBlank } from "@/utils/string"
 import { knownDecimals } from "@/utils/token-amount"
-import { PriceServiceClient } from "@/wallet/services/price/client"
-import { usePrices } from "@/composables/usePrices"
-import { tokenMarkOf } from "@/utils/token-icon"
+import type { PricedToken } from "@/composables/usePrices"
+import { type TokenMarkLookup, tokenMarkOf } from "@/utils/token-icon"
 import { getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 import { getTxCategory, getTxTitle, getOriginLabel, getPrimaryCall, transferDirection } from "@/utils/tx-enrichment"
 import { directionWords } from "@/utils/row-direction"
@@ -41,6 +40,11 @@ const props = defineProps({
 	tokens: { type: Array as PropType<TokenInfo[]>, default: () => [] },
 	/** The route the row opens. */
 	to: { type: String, default: undefined },
+	/** The surface's price reading, which its in-flight card reads too: a reading of the row's own would
+	 *  paint the row without its fiat until its first answer, as the send lands. */
+	fiatLabel: { type: Function as PropType<(token: PricedToken, raw: bigint) => string | undefined>, required: true },
+	iconFor: { type: Function as PropType<TokenMarkLookup["iconFor"]>, required: true },
+	isFlagged: { type: Function as PropType<TokenMarkLookup["isFlagged"]>, required: true },
 })
 
 const call = computed(() => getPrimaryCall(props.tx.calls))
@@ -137,12 +141,10 @@ const amountStr = computed(() =>
 const displayAmountSymbol = computed(() => amount.value?.symbol || null)
 
 /** Fiat under the amount for priced transfer rows, at today's rate. */
-const priceService = new PriceServiceClient()
-const prices = usePrices(priceService)
 const amountFiat = computed(() => {
 	if (type.value !== "transfer" || !amount.value || figureUnknown.value || !call.value?.contract) return null
 	// The fiat follows the decimals the amount above is shown in.
-	const label = prices.tokenFiatLabel(
+	const label = props.fiatLabel(
 		{ chainId: appStore.network?.chainId, contract: call.value.contract, decimals: amount.value.decimals, hasDecimals: true },
 		amount.value.units,
 	)
@@ -151,13 +153,9 @@ const amountFiat = computed(() => {
 /** A transfer's title names its token, so its mark goes before it; a mint's names its kind. */
 const titleMark = computed(() =>
 	titleNamesToken.value && amount.value
-		? tokenMarkOf(prices, { symbol: amount.value.symbol, chainId: appStore.network?.chainId, contract: call.value?.contract })
+		? tokenMarkOf(props, { symbol: amount.value.symbol, chainId: appStore.network?.chainId, contract: call.value?.contract })
 		: null,
 )
-onBeforeUnmount(() => {
-	prices.dispose()
-	priceService.disconnect()
-})
 </script>
 
 <template>

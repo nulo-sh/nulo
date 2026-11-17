@@ -21,6 +21,7 @@ import {
 	journalCallTitle,
 	journalCardAmount,
 	journalCardDirection,
+	journalCardFiat,
 	journalCardOriginLabel,
 	journalCardTitle,
 	journalCardTitleMark,
@@ -1016,6 +1017,37 @@ describe("journalCardAmount — an in-flight send's amount, from a sealed row it
 		["a token whose decimals are unknown", "10000000", { ...TST, hasDecimals: false }, null],
 	])("%s", (_, amountRaw, token, shown) => {
 		expect(journalCardAmount(send(amountRaw), () => token)).toBe(shown)
+	})
+})
+
+describe("journalCardFiat — an in-flight send's dollar line, from the price reading its settled row reads", () => {
+	const TST = { symbol: "TST", decimals: 6, hasDecimals: true, chainId: 1, contract: "0xc" }
+	const fiatLabel = vi.fn((token: typeof TST, raw: bigint) => (token.contract === "0xc" ? `≈ $${raw / 1_000_000n}.00` : undefined))
+	const send = (overrides: Partial<OperationRecord> = {}) =>
+		recordWith({
+			kind: "transfer",
+			origin: "popup",
+			tokenId: 1,
+			amountRaw: "12000000",
+			terminalAt: null,
+			progress: { stage: "proving", enteredProveAt: 1 },
+			error: null,
+			...overrides,
+		})
+
+	test("a priced send's line, asked for the record's token and its base units", () => {
+		expect(journalCardFiat(send(), () => TST, fiatLabel)).toBe("≈ $12.00")
+		expect(fiatLabel).toHaveBeenLastCalledWith(TST, 12_000_000n)
+	})
+
+	test.each([
+		["a dApp operation", { kind: "dapp_execute" as const }, TST],
+		["an empty amount, which would read as a fake $0", { amountRaw: "" }, TST],
+		["an amount that is not an integer literal", { amountRaw: "1e5" }, TST],
+		["a token whose decimals are unknown", {}, { ...TST, hasDecimals: false }],
+		["a token the reading cannot price", {}, { ...TST, contract: "0xd" }],
+	])("no line for %s", (_, overrides, token) => {
+		expect(journalCardFiat(send(overrides), () => token, fiatLabel)).toBeNull()
 	})
 })
 
