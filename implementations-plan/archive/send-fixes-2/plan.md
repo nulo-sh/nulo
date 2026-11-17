@@ -88,7 +88,7 @@ One PR from `send-fixes-2-a1` (off `origin/dev`, carrying the plan commit) to `d
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `0dc22a9c5`. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `0dc22a9c5`. Plan-specific values:
 - Step 1: `code_review: off`, so absent.
 - Step 2, bounded work: ONE `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` over the plan and `origin/dev...HEAD`, asking whether anything but the four items changed, whether D3 removes the cause rather than hiding the jump, and whether D4 keeps keyboard focus visible on every radio group. A second round only if the first says anything but approve (resume; hard stop at three). Rerun only the gates a fix touches.
 - Step 3: `gh pr create`; `gh pr checks <n> --watch` once.

@@ -578,3 +578,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [scroll-cue-build-1](scroll-cue-build-1/plan.md) — completed — the more-below button on the Terms sheet, the execute window and onboarding (P155-01 = B, #1658); A1 and A2 ask the owner (#1820, #1821)
 - [scroll-cue-build-2](scroll-cue-build-2/plan.md) — completed — the onboarding more-below button hidden where the window leaves no room beside the column (P158-01 = H, #1821)
 - [scroll-cue-right-1](scroll-cue-right-1/plan.md) — completed — the execute window's more-below button moves to the bottom right (P157-02, "right"; #1820)
+- [send-fixes-2](send-fixes-2/plan.md) — completed — four Send defects the owner named on 2026-11-17: the last recipient row's divider, the warning glyph, the in-flight fiat line, the radio focus ring (#1825-#1828)
