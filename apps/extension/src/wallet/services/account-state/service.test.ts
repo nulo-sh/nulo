@@ -789,7 +789,7 @@ describe("AccountStateService.getContractRows", () => {
 		const listed = [PROTOCOL, STANDARD_AUTH_REGISTRY_ADDRESS.toString(), UNNAMED, CUSTOM, ORPHAN].map((a) => ({ toString: () => a }))
 		const pxe = {
 			getContracts: vi.fn(async () => listed),
-			getContractInstance: vi.fn(async (_info: unknown, address: { toString(): string }) =>
+			getContractInstance: vi.fn(async (_info: unknown, address: { toString(): string }, _opts?: { pxeOnly?: boolean }) =>
 				address.toString() === ORPHAN
 					? undefined
 					: { originalContractClassId: { toString: () => `class-of-${address.toString()}` } },
