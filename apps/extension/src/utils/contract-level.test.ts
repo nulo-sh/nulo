@@ -5,12 +5,13 @@ import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { SPONSORED_FPC_ADDRESS } from "@/wallet/services/fpc/sponsored-fpc-address"
 import { flaggedKeysOf, isFlaggedToken, listKeyOf } from "./token-flag"
 import { listedTokensOf, tokenIconFor, tokenIconsOf } from "./token-icon"
-import { type ListReader, readContract } from "./contract-level"
+import { type ListReader, readContract, readProtocolContract } from "./contract-level"
 
 const CHAIN = 1674512022
 const LISTED = "0x0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
 const UNKNOWN = "0x2d8fb63a7b035198295a451cac292a50a2a58fdf4824e2f5c18356146062ff50"
 const ICON = "data:image/svg+xml;base64,PHN2Zy8+"
+const field = (n: number): string => `0x${n.toString(16).padStart(64, "0")}`
 
 const entry = (chainId: number, address: string): TokenListEntry => ({
 	chainId,
@@ -85,6 +86,28 @@ describe("readContract", () => {
 	test("before the list answers every other contract is pending, and an answered empty list raises none", () => {
 		expect(readContract(readerOf([entry(CHAIN, LISTED)], [], false), CHAIN, LISTED)).toEqual({ level: "pending" })
 		expect(readContract(readerOf([]), CHAIN, LISTED)).toEqual({ level: "none", flagged: false })
+	})
+
+	test("the protocol's three contracts are Nulo verified by name on any chain before the list answers, and unverified once the list flags one", () => {
+		const protocol = (name: string) => ({ level: "nulo", source: "protocol", name })
+		const early = readerOf([], [], false)
+		expect([field(1), field(2), field(3)].map((address) => readContract(early, CHAIN, address))).toEqual([
+			protocol("Contract class registry"),
+			protocol("Contract instance registry"),
+			protocol("Fee Juice"),
+		])
+		expect(readContract(readerOf([]), undefined, field(3).toUpperCase())).toEqual(protocol("Fee Juice"))
+		const flagged = readerOf([], [{ chainId: CHAIN, address: field(3) }])
+		expect(readContract(flagged, CHAIN, field(3))).toEqual({ level: "none", flagged: true })
+	})
+
+	test("an address past the protocol's three, or one spelled short, is no protocol contract", () => {
+		const reader = readerOf([])
+		expect([field(4), field(11), "0x3", 3].map((address) => readContract(reader, CHAIN, address))).toEqual(
+			Array(4).fill({ level: "none", flagged: false }),
+		)
+		expect(readProtocolContract(field(3))).toEqual({ level: "nulo", source: "protocol", name: "Fee Juice" })
+		expect([field(0), field(4), "0x3", undefined].map(readProtocolContract)).toEqual(Array(4).fill(undefined))
 	})
 
 	test("chain 0 is a chain: a contract listed there is Nulo verified", () => {

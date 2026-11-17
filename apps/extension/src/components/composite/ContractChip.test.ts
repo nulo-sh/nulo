@@ -171,6 +171,29 @@ describe("composite/ContractChip", () => {
 		])
 	})
 
+	test("a protocol contract reads by the wallet's name for it with the solid seal and no badge, and its card says it is part of the protocol", async () => {
+		const FEE_JUICE = `0x${"3".padStart(64, "0")}`
+		const w = mountChip(
+			contractChipOf({ level: "nulo", source: "protocol", name: "Fee Juice" }, FEE_JUICE, { selfName: "FeeJuice" }),
+			null,
+		)
+		expect(chip(w).attributes()).toMatchObject({ "aria-label": "Fee Juice, Nulo verified", "data-level": "nulo" })
+		expect(w.get('[data-testid="label"]').text()).toBe("Fee Juice")
+		expect(w.findAll('[data-testid="contract-chip-seal"] path[stroke="none"]').length, "the solid seal").toBeGreaterThan(0)
+		expect(
+			[...chip(w).element.children].map((el) => el.getAttribute("data-testid")),
+			"no mark, no badge",
+		).toEqual(["label", "contract-chip-seal"])
+		await press(w)
+		expect(inPanel("contract-chip-level")[0].textContent).toBe("Nulo verified")
+		expect(inPanel("contract-chip-title")[0].textContent).toBe("Fee Juice")
+		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual([
+			"Nulo knows this contract. Knowing it isn't a promise that it's safe.",
+			"It's part of the Aztec protocol, at the same address on every network.",
+		])
+		expect(inPanel("contract-chip-short-address")[0].textContent).toBe("0x000000..0003")
+	})
+
 	test("a pending card names no level and says Nulo is still checking, above the short address", async () => {
 		const w = mountChip(contractChipOf({ level: "pending" }, OTHER))
 		await press(w)

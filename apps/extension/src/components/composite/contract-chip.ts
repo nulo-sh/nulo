@@ -33,6 +33,7 @@ export type ChipModel = {
 }
 
 const KNOWN = "Nulo knows this contract. Knowing it isn't a promise that it's safe."
+const PROTOCOL = "It's part of the Aztec protocol, at the same address on every network."
 
 const chip = (
 	label: string,
@@ -92,14 +93,16 @@ export function contractChipOf(
 		case "pending":
 			return chip(short, true, null, { mark: null, lines: ["Nulo is still checking this contract."], address })
 		case "nulo":
-			return reading.source === "token"
-				? verifiedToken(reading, address)
-				: chip(PINNED_NAME[reading.source], false, "nulo", {
-						mark: null,
-						title: PINNED_NAME[reading.source],
-						lines: [KNOWN],
-						address,
-					})
+			if (reading.source === "token") return verifiedToken(reading, address)
+			if (reading.source === "protocol") {
+				return chip(reading.name, false, "nulo", { mark: null, title: reading.name, lines: [KNOWN, PROTOCOL], address })
+			}
+			return chip(PINNED_NAME[reading.source], false, "nulo", {
+				mark: null,
+				title: PINNED_NAME[reading.source],
+				lines: [KNOWN],
+				address,
+			})
 		case "scan": {
 			const scanName = sanitizeWireString(reading.name, 64) || short
 			return chip(scanName, scanName === short, "scan", {

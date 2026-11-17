@@ -10,6 +10,7 @@
 <script setup>
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
+import ContractChip from "@/components/composite/ContractChip.vue"
 import TxFeeRow from "@/popup/components/modules/tx/TxFeeRow.vue"
 import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
 import DetailHeroMeta from "@/popup/components/modules/tx/DetailHeroMeta.vue"
@@ -42,6 +43,8 @@ import {
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { explorerDisplayName, getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 import { buildGasBreakdown, computeFeeSavings, describeFeePaymentMethod } from "@/popup/components/modules/tx/tx-detail-helpers"
+import { contractChipOf } from "@/components/composite/contract-chip"
+import { readProtocolContract } from "@/utils/contract-level"
 
 /** Composables */
 import { usePrices } from "@/composables/usePrices"
@@ -144,6 +147,13 @@ const userCalls = computed(() => {
 	return filtered.length ? filtered : tx.value.calls
 })
 const callRowTitle = (c) => settledCallTitle(c, tokens.value)
+/** Only a protocol contract reads as a chip here: the page holds no token list, so no other level is known. */
+const protocolChips = computed(() =>
+	userCalls.value.map((c) => {
+		const reading = readProtocolContract(c.contract)
+		return reading ? contractChipOf(reading, c.contract) : null
+	}),
+)
 
 onMounted(async () => {
 	tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
@@ -312,7 +322,10 @@ onBeforeUnmount(() => {
 						:class="[$style.call_row, idx > 0 && $style.call_row_divider]"
 					>
 						<span data-testid="tx-call-method" :class="$style.call_method">{{ callRowTitle(c) }}</span>
-						<span data-testid="tx-call-contract" @click="endsSelection($event) || handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
+						<span v-if="protocolChips[idx]" data-testid="tx-call-contract" :class="$style.call_chip">
+							<ContractChip :model="protocolChips[idx]" testid="tx-call-contract-name" />
+						</span>
+						<span v-else data-testid="tx-call-contract" @click="endsSelection($event) || handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
 							{{ trimAddress(c.contract, 6, 4) }}
 						</span>
 					</Flex>
@@ -433,6 +446,10 @@ onBeforeUnmount(() => {
 	color: var(--txt-primary);
 
 	word-break: break-word;
+}
+
+.call_chip {
+	display: flex;
 }
 
 .call_contract {
