@@ -108,6 +108,8 @@ async function mountPage(tx: unknown, tokens: Promise<unknown[]>, stubs: Record<
 }
 
 const amountBlock = (w: Awaited<ReturnType<typeof mountPage>>) => w.find("[class*='amount_value']")
+/** The design `Text`, which unit tests resolve to nothing: its slot in a span that keeps its attributes. */
+const TEXT = { template: "<span><slot /></span>" }
 
 describe("the transaction page's time", () => {
 	test("the hero line reads when the send was made, not its last status change", async () => {
@@ -201,13 +203,23 @@ describe("the transaction page's fee", () => {
 			args: [field(1n), field(2n)],
 			classId: field(0xfc1n),
 		}
-		const embedded = await mountPage(dappSend(appFpc), Promise.resolve([listed]))
-		expect(embedded.text()).toContain("Set by example.dapp.io")
-		expect(embedded.text()).not.toContain("Private Fee Juice")
+		const method = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="tx-detail-fee-method"]').element.textContent
+		const setter = (w: Awaited<ReturnType<typeof mountPage>>) => w.find('[data-testid="tx-detail-fee-setter"]')
+		const embedded = await mountPage(dappSend(appFpc), Promise.resolve([listed]), { Text: TEXT })
+		expect(method(embedded)).toBe("Set by example.dapp.io")
+		expect(setter(embedded).exists()).toBe(false)
 		const privateFpc = { contract: PRIVATE_FPC_ADDRESS, method: "pay_fee", args: [], classId: field(0xfc2n) }
-		const picked = await mountPage(dappSend(privateFpc), Promise.resolve([listed]))
-		expect(picked.text()).toContain("Private Fee Juice")
-		expect(picked.text()).not.toContain("Set by")
+		const picked = await mountPage(dappSend(privateFpc), Promise.resolve([listed]), { Text: TEXT })
+		expect(method(picked)).toBe("Private Fee Juice")
+		expect(setter(picked).exists()).toBe(false)
+
+		// The app chose the PrivateFPC: the method stands alone over who set it, the App row's spacing.
+		const chosen = await mountPage({ ...dappSend(privateFpc), feeChoice: "app" }, Promise.resolve([listed]), { Text: TEXT })
+		expect(method(chosen)).toBe("Private Fee Juice")
+		expect(setter(chosen).element.textContent).toBe("Set by example.dapp.io")
+		const row = chosen.get('[data-testid="tx-detail-fee-method"]').element.parentElement?.parentElement as HTMLElement
+		expect([row.getAttribute("align"), row.getAttribute("gap")]).toEqual(["start", "16"])
+		expect(row.firstElementChild?.className).toContain("app_key")
 	})
 })
 

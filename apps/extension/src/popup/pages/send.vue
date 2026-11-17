@@ -378,6 +378,12 @@ const balanceState = computed(() => {
  *  placeholder, which the token card draws as loading. */
 const exceedsBalance = computed(() => amountValidation.value.reason === "exceedsBalance" && tokenBalance.value?.updatedAt !== 0)
 
+/** What the Fee sheet asks for while no estimate can be asked: an amount, or one the balance covers. */
+const feeWaitsFor = computed(() => {
+	if (amountValidation.value.reason === "empty") return "amount"
+	return exceedsBalance.value ? "amountInBalance" : null
+})
+
 /** The estimate watch's source for validity, a boolean: `amountValidation` is a new object on every
  *  balance recompute, and a deep watch runs on any change it subscribes to, so only a flip re-asks. */
 const amountSendable = computed(() => amountValidation.value.valid)
@@ -1179,6 +1185,7 @@ onBeforeUnmount(() => {
 					:isQueued="feeQueued"
 					:queuedCap="queueCap"
 					:amountTyped="Boolean(amountTerm)"
+					:waitsFor="feeWaitsFor"
 					:estimateFailed="estimateFailed"
 					:estimateSlow="estimateSlow"
 					:originPrivacy="selectedSendType"

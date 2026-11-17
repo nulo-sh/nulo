@@ -122,7 +122,6 @@ describe("composite/ContractChip", () => {
 		expect(w.get('[data-testid="label"]').text()).toBe("0x2d8fb6..ff50")
 		await press(w)
 		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual([
-			"Nulo hasn't checked this contract.",
 			"The name Crowdfunding comes from the contract's code. Nulo hasn't checked it.",
 		])
 		const listed = contractChipOf({ level: "nulo", source: "token", symbol: "TST", name: "Test Token" }, TOKEN, { selfName: "Token" })
@@ -142,7 +141,6 @@ describe("composite/ContractChip", () => {
 		await press(w)
 		expect(inPanel("contract-chip-title")[0].textContent).toBe("@Alice")
 		expect([...inPanel("contract-chip-line")].map((l) => l.textContent)).toEqual([
-			"Nulo hasn't checked this contract.",
 			"The name Crowdfunding comes from the contract's code. Nulo hasn't checked it.",
 		])
 		expect(inPanel("contract-chip-short-address")[0].textContent).toBe("0x2d8fb6..ff50")

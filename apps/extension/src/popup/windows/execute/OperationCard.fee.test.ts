@@ -663,13 +663,13 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			expect(seal(w).exists()).toBe(true)
 		})
 
-		test("Private Fee Juice: the person pays, the app's method under it, and nothing about the balance", async () => {
+		test("Private Fee Juice: the person pays, then the app's method in its own sentence, and nothing about the balance", async () => {
 			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { op: privatePaid() })
-			expect(shownText(figure(w).element)).toBe("You pay about ~3.577824 FJ ($0.215) from Private Fee Juice method set by Swap")
+			expect(shownText(figure(w).element)).toBe("You pay about ~3.577824 FJ ($0.215) from Private Fee Juice. Method set by Swap.")
 			expect(w.find('[data-testid="execute-op-private-fee-notice"]').exists()).toBe(false)
 			expect(w.text()).not.toContain("must cover")
 			const estimating = await mountWith(undefined, { op: privatePaid(), isEstimating: true })
-			expect(shownText(waiting(estimating).element)).toBe("You pay about from Private Fee Juice method set by Swap")
+			expect(shownText(waiting(estimating).element)).toBe("You pay about from Private Fee Juice. Method set by Swap.")
 			expect(seal(estimating).exists()).toBe(true)
 		})
 
@@ -688,7 +688,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 				{ op: privatePaid() },
 			)
 			expect(shownText(figure(w).element)).toBe(
-				"You pay about ~0.016 FJ (<$0.001) from Private Fee Juice method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
+				"You pay about ~0.016 FJ (<$0.001) from Private Fee Juice. Method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
 			)
 		})
 	})

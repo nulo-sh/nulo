@@ -247,7 +247,7 @@ describe("execute/SendTxSummary — the contract chip", () => {
 		const unchecked = "Nulo hasn't checked this contract."
 		const listed = ["Nulo knows this contract. Knowing it isn't a promise that it's safe.", "Nulo names it from its token list."]
 		expect(w.findAllComponents(ContractChip).map((chip) => (chip.props("model") as ChipModel).lines)).toEqual([
-			[unchecked, "The name Hub comes from the contract's code. Nulo hasn't checked it."],
+			["The name Hub comes from the contract's code. Nulo hasn't checked it."],
 			listed,
 			[unchecked],
 			[unchecked],
@@ -257,7 +257,7 @@ describe("execute/SendTxSummary — the contract chip", () => {
 			[unchecked],
 			[unchecked],
 			[unchecked],
-			[unchecked, "The name Vault comes from the contract's code. Nulo hasn't checked it."],
+			["The name Vault comes from the contract's code. Nulo hasn't checked it."],
 		])
 	})
 
