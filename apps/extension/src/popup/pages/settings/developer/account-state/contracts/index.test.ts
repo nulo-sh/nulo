@@ -185,6 +185,10 @@ test("a read that answers after a later one lands nothing, so the rows are the l
 	const { w, appStore } = await mountPage()
 	appStore.network = { id: "n2", chainId: CHAIN_IDS.TESTNET } as never
 	await flushPromises()
+	// The new scope reads only once its account is set, after its accounts.
+	expect(getContractRows).toHaveBeenCalledTimes(1)
+	appStore.account = { address: ACCOUNT } as never
+	await flushPromises()
 	expect(shown(w)).toEqual(ROWS.map((r) => r.address))
 	answerFirst([{ address: `0x${"3a".repeat(31)}0a`, classId: CLASS("0c"), builtIn: false }])
 	await flushPromises()
@@ -203,6 +207,7 @@ test("a read whose scope ended before any other read began lands nothing", async
 	expect(getContractRows).toHaveBeenCalledTimes(1)
 	// Control: the next scope reads and shows its own rows.
 	appStore.network = { id: "n2", chainId: CHAIN_IDS.TESTNET } as never
+	appStore.account = { address: ACCOUNT } as never
 	await flushPromises()
 	expect(shown(w)).toEqual(ROWS.map((r) => r.address))
 })

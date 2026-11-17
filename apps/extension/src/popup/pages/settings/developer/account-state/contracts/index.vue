@@ -62,7 +62,8 @@ const explorerLabel = computed(() => `View on ${explorerDisplayName(appStore.def
 // A token row or a name that fails to load only lowers what a row claims; the rows' own failure is the
 // page's. Only the latest read lands: an earlier one answers for the scope it started in.
 let latestRead = 0
-// A profile reboot keeps this page mounted, so a new scope drops what the old one held or will answer.
+// A profile reboot keeps this page mounted, so a new scope drops what the old one held or will answer;
+// its read waits for the scope's account, set only after its accounts, which the rows are judged by.
 const dropReads = () => {
 	latestRead++
 	rows.value = []
@@ -98,10 +99,11 @@ const fetchContracts = async (isRefetching?: boolean) => {
 
 const copy = (value: string, label: string) => void copyWithToast(value, openToast, label)
 
+watch(() => [appStore.profile?.id, appStore.network?.id], dropReads)
+
 watch(
-	() => [appStore.profile?.id, appStore.network?.id],
+	() => appStore.account,
 	() => {
-		dropReads()
 		fetchContracts()
 	},
 )
