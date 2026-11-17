@@ -1,0 +1,1 @@
+- 2026-11-17 plan written (light, thinned: no plan audit).
