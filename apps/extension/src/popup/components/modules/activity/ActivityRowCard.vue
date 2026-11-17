@@ -29,7 +29,15 @@ const terminalProps = computed(() => {
 </script>
 
 <template>
-	<TransactionCard v-if="row.type === 'tx'" :tx="row.tx" :tokens="tokens" :to="activityRowRoute(row)" />
+	<TransactionCard
+		v-if="row.type === 'tx'"
+		:tx="row.tx"
+		:tokens="tokens"
+		:to="activityRowRoute(row)"
+		:fiatLabel="fiatLabel"
+		:iconFor="iconFor"
+		:isFlagged="isFlagged"
+	/>
 	<TransactionIncomingCard
 		v-else-if="row.type === 'incoming'"
 		v-bind="buildIncomingCardProps(row.inc, tokens, fiatLabel, { iconFor, isFlagged })"

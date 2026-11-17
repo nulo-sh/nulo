@@ -129,6 +129,10 @@ function onEnter(e: KeyboardEvent) {
 	}
 }
 
+.person:last-child {
+	border-bottom: none;
+}
+
 .who {
 	display: flex;
 	flex-direction: column;

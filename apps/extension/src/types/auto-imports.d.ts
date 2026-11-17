@@ -333,6 +333,7 @@ declare global {
   const journalCardAmount: typeof import('../utils/journal-state').journalCardAmount
   const journalCardAmountSymbol: typeof import('../utils/journal-state').journalCardAmountSymbol
   const journalCardDirection: typeof import('../utils/journal-state').journalCardDirection
+  const journalCardFiat: typeof import('../utils/journal-state').journalCardFiat
   const journalCardIcon: typeof import('../utils/journal-state').journalCardIcon
   const journalCardOriginLabel: typeof import('../utils/journal-state').journalCardOriginLabel
   const journalCardTitle: typeof import('../utils/journal-state').journalCardTitle
@@ -1321,6 +1322,7 @@ declare module 'vue' {
     readonly journalCardAmount: UnwrapRef<typeof import('../utils/journal-state')['journalCardAmount']>
     readonly journalCardAmountSymbol: UnwrapRef<typeof import('../utils/journal-state')['journalCardAmountSymbol']>
     readonly journalCardDirection: UnwrapRef<typeof import('../utils/journal-state')['journalCardDirection']>
+    readonly journalCardFiat: UnwrapRef<typeof import('../utils/journal-state')['journalCardFiat']>
     readonly journalCardIcon: UnwrapRef<typeof import('../utils/journal-state')['journalCardIcon']>
     readonly journalCardOriginLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardOriginLabel']>
     readonly journalCardTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitle']>

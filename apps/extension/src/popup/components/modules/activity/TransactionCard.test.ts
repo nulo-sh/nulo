@@ -38,7 +38,16 @@ vi.mock("@/wallet/services/price/client", () => ({
 }))
 
 import { RowAction } from "@nulo/design"
+import { effectScope } from "vue"
+import { usePrices } from "@/composables/usePrices"
+import { PriceServiceClient } from "@/wallet/services/price/client"
 import TransactionCard from "./TransactionCard.vue"
+
+function surface() {
+	const prices = effectScope().run(() => usePrices(new PriceServiceClient()))
+	if (!prices) throw new Error("no reading")
+	return { fiatLabel: prices.tokenFiatLabel, iconFor: prices.iconFor, isFlagged: prices.isFlagged }
+}
 
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
@@ -100,7 +109,7 @@ const dappTransferTx = {
 }
 
 const mountCard = (tx: Record<string, unknown>, props: Record<string, unknown> = {}) =>
-	mount(TransactionCard, { props: { tx, ...props } as never, global: { stubs: STUBS, components: { RowAction } } })
+	mount(TransactionCard, { props: { ...surface(), tx, ...props } as never, global: { stubs: STUBS, components: { RowAction } } })
 
 describe("modules/activity/TransactionCard (settled)", () => {
 	test.each([
@@ -347,7 +356,7 @@ describe("TransactionCard fiat (D2 activity rows)", () => {
 
 	test("priced transfer row renders the ≈ fiat under the amount", async () => {
 		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
-		const w = mount(TransactionCard, { props: { tx: mkTransferTx(TEST_USDC) }, global: { stubs: STUBS } })
+		const w = mount(TransactionCard, { props: { ...surface(), tx: mkTransferTx(TEST_USDC) }, global: { stubs: STUBS } })
 		await flushPromises()
 		const fiat = w.find('[data-testid="activity-fiat"]')
 		expect(fiat.exists()).toBe(true)
@@ -356,7 +365,7 @@ describe("TransactionCard fiat (D2 activity rows)", () => {
 
 	test("unpriced transfer row renders NO fiat element", async () => {
 		mockQuotes = {}
-		const w = mount(TransactionCard, { props: { tx: mkTransferTx("0xunmapped") }, global: { stubs: STUBS } })
+		const w = mount(TransactionCard, { props: { ...surface(), tx: mkTransferTx("0xunmapped") }, global: { stubs: STUBS } })
 		await flushPromises()
 		expect(w.find('[data-testid="activity-fiat"]').exists()).toBe(false)
 	})
@@ -367,7 +376,10 @@ describe("TransactionCard fiat (D2 activity rows)", () => {
 	])("a priced transfer of a listed token with %s; the title keeps the symbol", async (_label, hasDecimals, want) => {
 		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
 		const tokens = [{ contract: TEST_USDC, symbol: "cUSD", decimals: hasDecimals ? 6 : 0, hasDecimals }]
-		const w = mount(TransactionCard, { props: { tx: mkTransferTx(TEST_USDC), tokens } as never, global: { stubs: STUBS } })
+		const w = mount(TransactionCard, {
+			props: { ...surface(), tx: mkTransferTx(TEST_USDC), tokens } as never,
+			global: { stubs: STUBS },
+		})
 		await flushPromises()
 		expect({
 			title: w.find(".title").text(),
