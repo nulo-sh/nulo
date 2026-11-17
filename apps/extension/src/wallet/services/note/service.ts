@@ -1,4 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import type { ContractArtifact } from "@aztec-labs/stdlib/abi"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { NoteStatus, type NoteDao } from "@aztec-labs/stdlib/note"
 import { computeUniqueNoteHash, siloNoteHash } from "@aztec-labs/stdlib/hash"
@@ -50,6 +52,9 @@ const safeNumber = (read: () => unknown): number => {
 	}
 }
 
+type CodeNames = Pick<Note, "contractName" | "contractNameFromCode" | "location">
+type CodeNamesOf = (classId: string | undefined, storageSlot: string) => Promise<CodeNames | undefined>
+
 export class NoteService extends Service<Methods> implements ServiceSpec<Methods> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("getNotes", "getNotesRaw", "getBlockTimestamp", "getSyncedBlock")
 	public static name = NOTE_SERVICE_NAME
@@ -67,7 +72,7 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 	}
 
 	public async getNotes(networkId: string, account: string, contract?: string): Promise<Note[]> {
-		const read = await this.readNotes(networkId, account, contract, "active")
+		const read = await this.readNotes(networkId, account, contract, "active", true)
 		return read.map(({ note }) => note)
 	}
 
@@ -116,12 +121,14 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 	}
 
 	/** Fetches and parses the notes. Each note parses in isolation, so a single malformed note can't
-	 *  blank out the entire page: it surfaces as a `renderError` card on the UI instead. */
+	 *  blank out the entire page: it surfaces as a `renderError` card on the UI instead. `codeNames`
+	 *  costs an artifact read per unmatched class, which only the notes page shows. */
 	private async readNotes(
 		networkId: string,
 		account: string,
 		contract: string | undefined,
 		status: NoteReadStatus,
+		codeNames = false,
 	): Promise<Array<{ dao: NoteDao; note: Note }>> {
 		await this.ensureInitialized()
 		const network = await this.networkService.getNetwork(networkId)
@@ -142,11 +149,12 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 		// round-trips when many notes share a contract.
 		const classIdByContract = new Map<string, string | undefined>()
 		const noteSchemas = await this.loadNoteSchemasSafe()
+		const codeNamesOf = codeNames ? this.codeNamesFor(network) : undefined
 
 		const res: Array<{ dao: NoteDao; note: Note }> = []
 		for (const dao of notes) {
 			try {
-				res.push({ dao, note: await this.parseNote(network, dao, classIdByContract, noteSchemas) })
+				res.push({ dao, note: await this.parseNote(network, dao, classIdByContract, noteSchemas, codeNamesOf) })
 			} catch (error) {
 				const message = getErrorMessage(error)
 				this.logError("Failed to parse note", { error })
@@ -176,6 +184,37 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 		}
 	}
 
+	/** One artifact read per class for the batch. The class id binds the artifact's name, not its
+	 *  storage layout, and its author chose both: the note is marked as named by its own code. */
+	private codeNamesFor(network: Network): CodeNamesOf {
+		const artifacts = new Map<string, Promise<ContractArtifact | undefined>>()
+		return async (classId, storageSlot) => {
+			if (!classId) return undefined
+			let read = artifacts.get(classId)
+			if (!read) {
+				read = this.loadArtifactSafe(network, classId)
+				artifacts.set(classId, read)
+			}
+			const artifact = await read
+			if (!artifact) return undefined
+			const slot = canonicalSlotHex(storageSlot)
+			const location = Object.entries(artifact.storageLayout).find(
+				([, field]) => canonicalSlotHex(field.slot.toString()) === slot,
+			)?.[0]
+			return { contractName: artifact.name, contractNameFromCode: true, ...(location ? { location } : {}) }
+		}
+	}
+
+	/** Best-effort like the schema map: a failed read leaves the note's raw card. */
+	private async loadArtifactSafe(network: Network, classId: string): Promise<ContractArtifact | undefined> {
+		try {
+			return await this.pxeService.getContractArtifact(networkInfoFrom(network), Fr.fromString(classId))
+		} catch (error) {
+			this.logWarn("Failed to load a contract artifact for a note's names", { classId, error })
+			return undefined
+		}
+	}
+
 	private async fetchKnownContractsNotes(network: Network, account: string, status: NoteStatus): Promise<NoteDao[]> {
 		const res = []
 		const knownContracts = await this.pxeService.getContracts(networkInfoFrom(network))
@@ -198,6 +237,7 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 		note: NoteDao,
 		classIdByContract: Map<string, string | undefined>,
 		noteSchemas: Record<string, Record<string, NoteSchema>>,
+		codeNamesOf: CodeNamesOf | undefined,
 	): Promise<Note> {
 		const contract = note.contractAddress.toString()
 		const storageSlot = note.storageSlot.toString()
@@ -206,13 +246,16 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 
 		const schema = await this.lookupSchema(network, note, classIdByContract, noteSchemas)
 		const content = this.buildContent(note, schema)
+		const names = schema
+			? { type: schema.noteName, contractName: schema.contractName }
+			: await codeNamesOf?.(classIdByContract.get(contract), storageSlot)
 
 		return {
 			contract,
 			storageSlot,
 			txHash,
 			rawContent,
-			...(schema ? { type: schema.noteName, contractName: schema.contractName } : {}),
+			...names,
 			...(content ? { content } : {}),
 		}
 	}
