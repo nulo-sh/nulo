@@ -92,8 +92,8 @@ describe("readContract", () => {
 		const protocol = (name: string) => ({ level: "nulo", source: "protocol", name })
 		const early = readerOf([], [], false)
 		expect([field(1), field(2), field(3)].map((address) => readContract(early, CHAIN, address))).toEqual([
-			protocol("Contract class registry"),
-			protocol("Contract instance registry"),
+			protocol("Contract Class Registry"),
+			protocol("Contract Instance Registry"),
 			protocol("Fee Juice"),
 		])
 		expect(readContract(readerOf([]), undefined, field(3).toUpperCase())).toEqual(protocol("Fee Juice"))
