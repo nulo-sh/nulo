@@ -344,9 +344,8 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	}
 
 	/**
-	 * Poll until `txHash` leaves the pending queue (submitted — NOT proven; see
-	 * the callers' `waitForTxProven` for public-effect visibility), bounded by
-	 * `timeoutMs`. A locked wallet stalls the sync worker indefinitely, so an
+	 * Poll until `txHash` leaves the pending queue (not yet on L1; a caller that
+	 * needs the chain effect verifies it itself), bounded by `timeoutMs`. A locked wallet stalls the sync worker indefinitely, so an
 	 * unbounded wait spun for the whole lock period holding its task open —
 	 * which also blocked the task tree's GC (roots need `finishedAt`).
 	 *

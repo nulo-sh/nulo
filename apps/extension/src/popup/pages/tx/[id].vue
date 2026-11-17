@@ -100,7 +100,7 @@ const handleCopy = (target) => {
 	void copyWithToast(target, openToast, "Successfully copied")
 }
 
-const feePaymentLabel = computed(() => describeFeePaymentMethod(tx.value))
+const feeMethod = computed(() => describeFeePaymentMethod(tx.value))
 
 // Live pricing at TODAY'S AZTEC rate — historical fees are valued at the
 // current spot, not the price at execution time (TxFeeRow labels this).
@@ -241,9 +241,14 @@ onBeforeUnmount(() => {
 						<span :class="$style.app_value" data-testid="tx-detail-app">{{ originLabel }}</span>
 					</Flex>
 
-					<Flex v-if="feePaymentLabel" wide justify="between" align="center">
-						<span :class="$style.detail_key">Fee method</span>
-						<span :class="$style.detail_value" data-testid="tx-detail-fee-method">{{ feePaymentLabel }}</span>
+					<Flex v-if="feeMethod" wide justify="between" align="start" gap="16">
+						<span :class="$style.app_key">Fee method</span>
+						<Flex direction="column" align="end" gap="2" :class="$style.fee_method">
+							<span :class="$style.detail_value" data-testid="tx-detail-fee-method">{{ feeMethod.method }}</span>
+							<Text v-if="feeMethod.setBy" variant="caption" color="tertiary" :class="$style.fee_setter" data-testid="tx-detail-fee-setter">{{
+								feeMethod.setBy
+							}}</Text>
+						</Flex>
 					</Flex>
 
 					<TxFeeRow
@@ -376,6 +381,16 @@ onBeforeUnmount(() => {
 .detail_value_mono {
 	composes: type--meta from global;
 	color: var(--txt-primary);
+}
+
+.fee_method {
+	min-width: 0;
+}
+
+/* An app's name can be one unbreakable word. */
+.fee_setter {
+	text-align: right;
+	overflow-wrap: anywhere;
 }
 
 .app_key {

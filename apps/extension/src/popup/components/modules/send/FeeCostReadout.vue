@@ -19,6 +19,9 @@ const props = defineProps({
 	pending: { type: Boolean, default: false },
 	/** Send's amount field holds an amount. While `pending`, You pay draws a bar only then. */
 	amountTyped: { type: Boolean, default: false },
+	/** Send only: what the person must enter before any estimate is asked, `amount` (the field is
+	 *  empty) or `amountInBalance` (the amount is over the balance read). Off Send there is no amount. */
+	waitsFor: { type: String, default: null, validator: (v) => v === null || ["amount", "amountInBalance"].includes(v) },
 	/** The current input's estimate failed: the row offers to ask again, as `retry`. */
 	failed: { type: Boolean, default: false },
 	/** The running estimate has passed the page's patience: the bar gives way to an offer to ask again. */
@@ -30,6 +33,12 @@ const props = defineProps({
 const emit = defineEmits(["retry"])
 
 const estimating = computed(() => props.isEstimating && !props.estimate && !props.pending)
+
+const WAITING_COPY = {
+	amount: "Enter an amount to see the fee.",
+	amountInBalance: "Enter an amount within your balance to see the fee.",
+}
+const waitingCopy = computed(() => WAITING_COPY[props.waitsFor] ?? "Fee estimated after simulation")
 
 /** Screen readers skip a strikethrough, so the sponsored row is spoken as this sentence alone. */
 const sponsoredSentence = computed(() => {
@@ -104,7 +113,7 @@ const sponsoredSentence = computed(() => {
 	</Flex>
 	<Flex v-else align="center" gap="4" :class="$style.detail_row">
 		<Icon name="info" size="12" color="tertiary" />
-		<Text variant="caption" color="tertiary">Fee estimated after simulation</Text>
+		<Text variant="caption" color="tertiary">{{ waitingCopy }}</Text>
 	</Flex>
 </template>
 

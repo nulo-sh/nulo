@@ -158,7 +158,7 @@ export function contractsRow(cap: ContractsCapability, names: readonly KnownName
 		return {
 			key: "contract-details",
 			group: "without-asking",
-			icon: "info",
+			icon: "search",
 			title: listed ? `See details of ${reachOf(listed, names)} in your wallet` : "See details of any contract in your wallet",
 			flagged: listed === undefined,
 			...(listed ? {} : { chip: ANY_CONTRACT }),
@@ -247,7 +247,7 @@ export function transactionRow(cap: TransactionCapability, names: readonly Known
 	return {
 		key: "transaction",
 		group: "always-asks",
-		icon: "check",
+		icon: "send",
 		title: `Every transaction, on ${
 			scope
 				? reachOf(
