@@ -44,10 +44,9 @@ onBeforeUnmount(() => {
 
 <template>
 	<Text variant="body" color="secondary" height="150" :data-testid="fee ? 'execute-op-app-fee' : 'execute-op-app-fee-estimating'">
-		<template v-if="privateFeeJuice"><span :class="$style.line">You pay about <FeeAmount v-if="fee" :display="fee" :class="$style.figure" /><Skeleton v-else :class="$style.bar" /> from Private Fee Juice</span> method set by <slot /></template>
+		<template v-if="privateFeeJuice">You pay about <FeeAmount v-if="fee" :display="fee" :class="$style.figure" /><Skeleton v-else :class="$style.bar" /> from Private Fee Juice. Method set by <slot /></template>
 		<template v-else-if="claimed">You pay about <FeeAmount v-if="fee" :display="fee" :class="$style.figure" /><Skeleton v-else :class="$style.bar" /> from the Fee&nbsp;Juice this app claims to your account</template>
-		<template v-else>About <FeeAmount v-if="fee" :display="fee" :class="$style.figure" /><Skeleton v-else :class="$style.bar" />; payment method set by <slot /></template><template v-if="priority">. Includes a <FeeAmount :display="priority" :class="$style.fee_figure" /> <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template><template v-if="priority || !privateFeeJuice">.</template>
-	</Text>
+		<template v-else>About <FeeAmount v-if="fee" :display="fee" :class="$style.figure" /><Skeleton v-else :class="$style.bar" />; payment method set by <slot /></template><template v-if="priority">. Includes a <FeeAmount :display="priority" :class="$style.fee_figure" /> <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template>.</Text>
 </template>
 
 <style module>
@@ -62,9 +61,5 @@ onBeforeUnmount(() => {
 
 .bar {
 	vertical-align: middle;
-}
-
-.line {
-	display: block;
 }
 </style>
