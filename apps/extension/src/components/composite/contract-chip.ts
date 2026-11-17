@@ -49,10 +49,9 @@ const chip = (
 
 function uncheckedLines(selfName: string | undefined): string[] {
 	const name = selfName ? sanitizeWireString(selfName, 64) : ""
-	return [
-		"Nulo hasn't checked this contract.",
-		...(name.trim() ? [`The name ${name} comes from the contract's code. Nulo hasn't checked it.`] : []),
-	]
+	return name.trim()
+		? [`The name ${name} comes from the contract's code. Nulo hasn't checked it.`]
+		: ["Nulo hasn't checked this contract."]
 }
 
 /** The fee contracts this build pins, by the names the fee card gives them. */
