@@ -86,4 +86,5 @@ Per `implementations-plan/README.md` § Post-implementation standard at `b22893f
 
 ## Audit verdicts
 
-(Filled after the Codex pass.)
+- **Codex, pass 1 (gpt-6.1-sol, high, read-only), plan + net diff at 3a927454a: approve with changes.** No implementation bug; the matched marks end on success and failure, and a pending line that never resolves fails after 60 s naming its testid. D4 agreed (no pending mark on the summary line; product-side fix out of scope). Findings: (1, minor) the helper's doc-comment promised a 60 s answer for every mark, false for the authorization preview, and implied universal settlement despite D4: accepted, rewritten; (2, nit) the selector-list comment restated the selectors instead of why they are named one by one: accepted.
+- **Codex, verification (same session):** the helper's comment verified; the list comment's "replaced by its answer or failure" excluded the chip hold's timer release: accepted, that sentence dropped. Comment-only; no behaviour changed after 3a927454a.

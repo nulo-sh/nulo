@@ -729,9 +729,8 @@ export async function textFates(page: Page, mode: "record" | "compare"): Promise
 	}, mode === "record")
 }
 
-/** What a surface draws while a read is in flight, each replaced by the read's answer or its failure
- *  line: a list fetching, a call's, grant's or authorization's arguments decoding, a no-account
- *  send's authorizations previewed, a token's metadata loading, a contract chip held for its level. */
+/** Named one by one, since `aria-busy` also marks surfaces that can stay busy long (a token row's
+ *  first sync, holdings' prices). */
 const READS_IN_FLIGHT = [
 	'[data-testid="loading-state"]',
 	'[data-testid$="-args-pending"]',
@@ -741,10 +740,9 @@ const READS_IN_FLIGHT = [
 ].join(", ")
 
 /**
- * Resolves once `page` draws no read in flight, so a sweep never measures a line its answer replaces
- * mid-check. Each is a popup RPC that answers or fails within `DEFAULT_RPC_TIMEOUT_MS` of its start,
- * and a chip's hold ends within a second, so a surface at rest ends the wait; one still drawn past
- * the bound fails it, by testid.
+ * Waits up to a popup RPC's own bound for `page` to draw no read in flight, then fails naming what is
+ * still drawn. An authorization preview can outlast it (its bound is 15 min) and then fails the wait;
+ * a discovered authorization's summary line draws no mark while it decodes, so it is not waited for.
  */
 export async function waitForReadsSettled(page: Page, label: string): Promise<void> {
 	await withTimeoutMessage(
