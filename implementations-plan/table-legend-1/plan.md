@@ -79,3 +79,7 @@ Gate, at retry 0, once, in order (pass: every command exits 0, counts recorded i
 ## Audit verdicts
 
 - Plan audit: none (the lane brief's Proportion thins it to the one pass below).
+- **Codex, one pass over the plan and the net diff (gpt-6.1-sol, high, read-only), at `d6fff21d0`: approve with comment cleanup.** No functional or security finding: the legend's words and glyphs are constants, and the grant predicates, escaping and sanitising are unchanged.
+  - D4 upheld: keep `aria-hidden`. Each row's native button already carries its full permission name through `aria-labelledby`, and the exact-string spoken-name cases cover all six words; exposed, the legend would add six unassociated words and possibly unnamed images (`Icon` renders `role="img"`); a list adds no relationship, `role="presentation"` would leave the text exposed.
+  - D2 upheld: the capitalised words in `COLUMNS`, lower-cased only for the spoken names, are simple and correct; no second map.
+  - Accepted, fixed in `653a1f0eb`: the `COLUMNS` doc-comment back to its one sentence, and the two test doc-comments over the legend fixtures deleted (each restated its code). Verified: the four touched test files green (103 tests), Biome clean. No second round: the fix is comments only.
