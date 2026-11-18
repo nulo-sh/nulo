@@ -63,8 +63,8 @@ export const vSnackSheet: ObjectDirective<HTMLElement, number | undefined> = {
 const asides = ref(0)
 
 /** A review sheet's content: while one is mounted, the Sending toast stays closed (`useSendsInProgress`'s
- *  `reviewing`), so it never covers what the sheet asks the person to read. `Popup` unmounts the content
- *  after its leave transition, so the toast returns once the sheet has gone. */
+ *  `reviewing`), so it never covers what the sheet asks the person to read. Like `vSnackSheet`, the mark
+ *  goes as the sheet starts to leave, so the toast fades back in while the sheet fades out. */
 export const vSnackAside: ObjectDirective<HTMLElement> = {
 	mounted() {
 		asides.value++
@@ -74,7 +74,6 @@ export const vSnackAside: ObjectDirective<HTMLElement> = {
 	},
 }
 
-/** True while an element marked `v-snack-aside` is mounted. */
 export const snackAside = computed(() => asides.value > 0)
 
 /** The sheet drawn on top: the highest order and, between equals, the one mounted last, which the
