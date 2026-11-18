@@ -81,7 +81,7 @@ One PR against `dev` from `nightly-green-1-a1` (off `origin/dev`, carrying this 
 
 ## Post-implementation
 
-[`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `90c2f61ab`, bounded work: one Codex pass (gpt-6.1-sol, high, read-only) over this plan and the net diff, with the two verbatim rules and the adversarial ask, plus the lane's question: does each skip or seed keep the artifact smoke meaningful, and does accepting 400 weaken the script-free invariant. A second round only if the first finds something material; hard stop at three.
+[`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `90c2f61ab`, bounded work: one Codex pass (gpt-6.1-sol, high, read-only) over this plan and the net diff, with the two verbatim rules and the adversarial ask, plus the lane's question: does each skip or seed keep the artifact smoke meaningful, and does accepting 400 weaken the script-free invariant. A second round only if the first finds something material; hard stop at three.
 
 ## Gates run
 
