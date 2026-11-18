@@ -265,7 +265,6 @@ describe("Settings › Connected app › Permissions", () => {
 			.findAll(`.${ROW_STYLE.title}`)
 			.map((title) => title.text())
 	const tableRows = (w: Page) => w.findAll('[data-testid="cap-details-row"]').map((target) => target.attributes("data-details-key"))
-	/** Each legend item's glyph and word, in the head's order. */
 	const legend = (w: Page) => {
 		const line = section(w).find('[data-testid="cap-details-legend"]')
 		const glyphs = w.findAllComponents(Icon).filter((glyph) => line.element.contains(glyph.element))

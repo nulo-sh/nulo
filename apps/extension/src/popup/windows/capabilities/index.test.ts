@@ -448,7 +448,6 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 	const identity = () => w!.find('[data-testid="identity-block"]').attributes("data-action-label")
 	const confirmLabel = () => w!.find('[data-testid="cap-approve-btn"]').text()
 
-	/** The legend's glyph and word per column, in the head's order. */
 	const LEGEND = [
 		["play", "Simulate"],
 		["add", "Add"],
