@@ -640,6 +640,7 @@ declare global {
   const useReaskReview: typeof import('../composables/useReaskReview').useReaskReview
   const useReceiptFee: typeof import('../composables/useReceiptFee').useReceiptFee
   const useRestoreAgain: typeof import('../composables/useRestoreAgain').useRestoreAgain
+  const useRevokeTasks: typeof import('../composables/useRevokeTasks').useRevokeTasks
   const useRoute: typeof import('vue-router').useRoute
   const useRouteSnapshot: typeof import('../composables/useRouteSnapshot').useRouteSnapshot
   const useRouter: typeof import('vue-router').useRouter
@@ -806,6 +807,9 @@ declare global {
   // @ts-ignore
   export type { RestoreAgainProfileClient, UseRestoreAgainOptions, UseRestoreAgainResult } from '../composables/useRestoreAgain'
   import('../composables/useRestoreAgain')
+  // @ts-ignore
+  export type { RevokeState } from '../composables/useRevokeTasks'
+  import('../composables/useRevokeTasks')
   // @ts-ignore
   export type { UseRouteSnapshotDeps, NetworkRouteView, UseRouteSnapshot } from '../composables/useRouteSnapshot'
   import('../composables/useRouteSnapshot')
@@ -1631,6 +1635,7 @@ declare module 'vue' {
     readonly useReaskReview: UnwrapRef<typeof import('../composables/useReaskReview')['useReaskReview']>
     readonly useReceiptFee: UnwrapRef<typeof import('../composables/useReceiptFee')['useReceiptFee']>
     readonly useRestoreAgain: UnwrapRef<typeof import('../composables/useRestoreAgain')['useRestoreAgain']>
+    readonly useRevokeTasks: UnwrapRef<typeof import('../composables/useRevokeTasks')['useRevokeTasks']>
     readonly useRoute: UnwrapRef<typeof import('vue-router')['useRoute']>
     readonly useRouteSnapshot: UnwrapRef<typeof import('../composables/useRouteSnapshot')['useRouteSnapshot']>
     readonly useRouter: UnwrapRef<typeof import('vue-router')['useRouter']>

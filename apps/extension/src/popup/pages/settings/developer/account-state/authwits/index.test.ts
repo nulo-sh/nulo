@@ -7,6 +7,7 @@ import { installChromeStorage } from "../../../../../../../tests/helpers/chrome-
 import { useAppStore } from "@/stores/app.store"
 import { trimAddress } from "@/utils/string"
 import type { Authwit } from "@/wallet/services/auth-registry/client"
+import { authwitRowKey } from "@/wallet/services/auth-registry/spec"
 import { ContentKind, type Task, TaskStatus } from "@/wallet/services/task/spec"
 import AuthwitsIndex from "./index.vue"
 
@@ -144,7 +145,12 @@ const chips = (w: Awaited<ReturnType<typeof mountPage>>) => w.findAll('[data-tes
 /** A revoke task as the worker keeps it: it names its rows by id from the request to the registry read. */
 const revokeTask = (ids: number[], status: TaskStatus, finishedAt?: number): Task => ({
 	id: `t-${ids.join("-")}`,
-	content: { kind: ContentKind.RevokeAuthwits, label: "Revoke public authwits", authwitIds: ids } as Task["content"],
+	content: {
+		kind: ContentKind.RevokeAuthwits,
+		label: "Revoke public authwits",
+		authwitIds: ids,
+		authwitKeys: ids.map((id) => authwitRowKey(row(id, false))),
+	} as Task["content"],
 	status,
 	createdAt: 1,
 	subtasks: [],

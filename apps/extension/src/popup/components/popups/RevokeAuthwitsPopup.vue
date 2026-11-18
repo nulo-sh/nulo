@@ -41,6 +41,12 @@ const chunksCount = computed(() => chunkedAuthwits.value.length)
 const isErrorOccurred = computed(() => !!error.value)
 /** Set by Revoke until the next show: the popup hands one revoke to the worker. */
 const handedOff = ref(false)
+/** A request on a connected client is on the port before its call returns; one made while the port
+ *  reopens (after a worker restart) waits for Ready, and a window closed meanwhile loses it. */
+const connected = ref(authwitsService.isConnected)
+const readConnection = () => (connected.value = authwitsService.isConnected)
+authwitsService.onConnected.add(readConnection)
+authwitsService.onDisconnected.add(readConnection)
 
 const estimates = useWalletTxEstimates({
 	estimate: (p, token, flowKey) => authwitsService.estimateRevokeFee(p.networkId, p.account, p.ids, p.feeSettings, token, flowKey),
@@ -83,13 +89,13 @@ const isAllowedToExecute = computed(() => chunkedAuthwits.value.every((ch) => ch
 let outstanding = 0
 
 /**
- * Posts every chunk at once and closes. The client is connected, every estimate having landed on it,
- * so each request is on the port before its call returns and the worker runs it to its end, whatever
- * the person closes next; its revoke task and Activity report it, so the popup reports nothing.
+ * Posts every chunk at once, on a connected client, and closes: each request is on the port before
+ * the close, and the worker runs it to its end whatever the person closes next. Its revoke task and
+ * Activity report it, so the popup reports nothing.
  */
 function handleRevokeAuthwits() {
 	// Handler-owned latch: every route self-checks here; the button's :disabled is defense-in-depth.
-	if (isLoading.value || handedOff.value) return
+	if (isLoading.value || handedOff.value || !authwitsService.isConnected) return
 	if (!isAllowedToExecute.value) return
 
 	handedOff.value = true
@@ -119,6 +125,7 @@ usePopupEntity(() => props.show, {
 	onShow: async () => {
 		handedOff.value = false
 		await registry.fetch()
+		readConnection()
 
 		authwits.value = cacheStore.preselectedAuthwits
 		chunkAuthwits()
@@ -135,6 +142,8 @@ usePopupEntity(() => props.show, {
 })
 
 onBeforeUnmount(() => {
+	authwitsService.onConnected.remove(readConnection)
+	authwitsService.onDisconnected.remove(readConnection)
 	registry.dispose()
 	estimates.dispose()
 })
@@ -232,7 +241,7 @@ onBeforeUnmount(() => {
 						size="medium"
 						wide
 						:loading="isLoading"
-						:disabled="!isAllowedToExecute || isErrorOccurred || isLoading || handedOff"
+						:disabled="!isAllowedToExecute || isErrorOccurred || isLoading || handedOff || !connected"
 					>
 						Revoke
 					</Button>

@@ -236,7 +236,7 @@ onBeforeUnmount(() => {
 					:key="aw.id"
 					:authwit="aw"
 					:chip="chipOf(aw)"
-					:revokeState="revokeTasks.stateOf(aw.id)"
+					:revokeState="revokeTasks.stateOf(aw)"
 					@open="handleOpenAuthwit"
 					@revoke="revokeAuthwits"
 				/>

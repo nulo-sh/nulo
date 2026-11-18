@@ -36,9 +36,8 @@ export function decorateAuthwit(aw: RawAuthwit): DecoratedAuthwit {
 }
 
 /**
- * What a `call` row allows, named by its function's first word (`transfer_in_public` → `Transfer`):
- * its hash was computed from that function on that contract. Null for every other kind, since an
- * encoded call's `name` is the app's label beside the selector its hash binds.
+ * What a `call` row allows, named by its function's first word (`transfer_in_public` → `Transfer`),
+ * which its hash binds; null for every other kind.
  */
 export function authwitAction(content: AuthwitContent): string | null {
 	if (content.kind !== "call" || typeof content.method !== "string") return null

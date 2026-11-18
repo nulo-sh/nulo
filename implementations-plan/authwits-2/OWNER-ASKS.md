@@ -23,7 +23,7 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 ## OA-2: naming what an authorization allows (Q5)
 
-**Answered: N1** (P166-02, no note). Built in arc 2 for `call` rows; an `encoded_call` row keeps "Encoded Call", since its function name is the app's word beside the selector the hash binds (plan.md D10).
+**Answered: N1** (P166-02, no note). Built in arc 2 for `call` rows, as drawn. An `encoded_call` row keeps "Encoded Call": its function name is bound to its selector too (the wallet takes it from the contract's ABI before hashing), so titling it "Transfer · " and the chip is a one-line change, not drawn for you; say if you want it (plan.md D10).
 
 **Surface.** The Authwits page's rows.
 

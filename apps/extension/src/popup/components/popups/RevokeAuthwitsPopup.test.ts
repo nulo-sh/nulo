@@ -7,6 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { EventHandler } from "@nulo/wallet-core/utils"
 import { type ToastOptions, useToast } from "@/composables/toast"
 import { pressOn } from "../../../../tests/helpers/press-key"
 import { describeSendPopupKeyboard } from "../../../../tests/helpers/send-popup-keyboard"
@@ -19,6 +20,9 @@ const authwitsServiceMock = {
 	disconnect: vi.fn(),
 	onRegistryEnabled: { add: vi.fn(), remove: vi.fn() },
 	onRegistryDisabled: { add: vi.fn(), remove: vi.fn() },
+	isConnected: true,
+	onConnected: new EventHandler<void>(),
+	onDisconnected: new EventHandler<void>(),
 }
 
 const ESTIMATE = { maxFee: "1000", gasDetails: {} }
@@ -146,6 +150,7 @@ beforeEach(() => {
 	authwitsServiceMock.cancelFeeEstimate.mockReset().mockResolvedValue(undefined)
 	vi.useFakeTimers()
 	authwitsServiceMock.disconnect.mockReset()
+	authwitsServiceMock.isConnected = true
 	openToastMock.mockReset()
 	popupOpenMock.mockReset()
 	feeControlClick.mockReset()
@@ -372,6 +377,26 @@ describe("RevokeAuthwitsPopup — Revoke hands the revoke to the worker", () => 
 		expect(authwitsServiceMock.disconnect).not.toHaveBeenCalled()
 		await sends.settleOne()
 		expect(authwitsServiceMock.disconnect).toHaveBeenCalledTimes(1)
+	})
+
+	test("while the port reopens after a worker restart, Revoke stays off and posts nothing; once Ready, it posts", async () => {
+		const w = await mountAndOpen(NINE)
+		await setAllFees(w)
+		authwitsServiceMock.isConnected = false
+		authwitsServiceMock.onDisconnected.invoke()
+		await flushPromises()
+		expect(submitButton(w).hasAttribute("disabled")).toBe(true)
+		pressOn(submitButton(w), "Enter")
+		await flushPromises()
+		expect(authwitsServiceMock.revokeAuthwits).not.toHaveBeenCalled()
+		expect(closes(w)).toBe(0)
+
+		authwitsServiceMock.isConnected = true
+		authwitsServiceMock.onConnected.invoke()
+		await flushPromises()
+		await revoke(w)
+		expect(authwitsServiceMock.revokeAuthwits).toHaveBeenCalledTimes(2)
+		expect(closes(w)).toBe(1)
 	})
 
 	test("control: hidden with nothing out, the client disconnects at once", async () => {
