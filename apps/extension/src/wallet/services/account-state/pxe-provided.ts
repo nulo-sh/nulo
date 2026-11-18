@@ -22,6 +22,25 @@ export const PRELOADED_CONTRACT_ADDRESSES: ReadonlySet<bigint> = new Set(
 	),
 )
 
+/** Display names for the built-ins, compiled in; `pxe-provided.test.ts` pins the protocol entries to
+ *  upstream's `ProtocolContractAddress`. */
+const PXE_PROVIDED_NAMES: ReadonlyMap<bigint, string> = new Map([
+	[1n, "Contract Class Registry"],
+	[2n, "Contract Instance Registry"],
+	[3n, "Fee Juice"],
+	[STANDARD_AUTH_REGISTRY_ADDRESS.toBigInt(), "Auth Registry"],
+	[STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS.toBigInt(), "Multi Call Entrypoint"],
+	[STANDARD_HANDSHAKE_REGISTRY_ADDRESS.toBigInt(), "Handshake Registry"],
+])
+
+export function pxeProvidedName(address: string): string | undefined {
+	try {
+		return PXE_PROVIDED_NAMES.get(AztecAddress.fromStringUnsafe(address).toBigInt())
+	} catch {
+		return undefined
+	}
+}
+
 export function isPxeProvidedAddress(value: bigint): boolean {
 	return (value >= 0n && value <= MAX_PROTOCOL_ADDRESS) || PRELOADED_CONTRACT_ADDRESSES.has(value)
 }
