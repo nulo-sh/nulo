@@ -41,7 +41,7 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 ## OA-3: check the registry when the Authwits page opens (Q4, would be arc 3)
 
-**Answered: S, on page open** (P166-03). Arc 3, stacked on arc 2.
+**Answered: S, on page open** (P166-03, decision page 166, signed 2026-11-17 at 15:40 UTC at dev `0dc22a9c5`), the option as stated below. Built in arc 3, stacked on arc 2, with exactly the two effects it names; no checking line, spinner or error line (a failed check leaves the page as it opened). Implementation note: a revoke popup opened before the check prunes a row now skips that row instead of failing its estimate (plan.md D18); nothing on screen changes for it.
 
 **Surface.** The Authwits page: its "registry disabled" warning and its rows.
 
@@ -53,7 +53,7 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 **Recommendation: yes, on page open**, not on every account start: the page is where the answer is read.
 
-**What ships now.** Nothing in arc 2; arc 3 builds it.
+**What ships now.** S, in arc 3.
 
 ## OA-4: where a Not revoked row's reason shows when Activity has none (new, arc 2)
 
@@ -80,4 +80,4 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 **Before.** A grant whose own transaction was not yet in a block drew Pending, and a revoke of it drew Revoking beside it (the revoke waits for that block), so one row read "Pending" and "Revoking" side by side; a failed revoke of such a row read "Pending" and "Not revoked".
 
-**Built.** A row shows one status chip, by this precedence: Revoking, then Not revoked, then Pending. Revoking covers the wait for the grant's block; the row's accessible name reads the one chip shown. The chips keep their words, look and colours, and the rest of the row is unchanged. Recorded as plan.md D14.
+**Built.** A row shows one status chip, by this precedence: Revoking, then Not revoked, then Pending. Revoking covers the wait for the grant's block; the row's accessible name reads the one chip shown. The chips keep their words, look and colours, and the rest of the row is unchanged. Recorded as plan.md D20.
