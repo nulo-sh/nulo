@@ -741,7 +741,6 @@ describe("OperationCard — a step's chevron ends its sentence beside the last w
 		while (at && (at.nodeType === Node.COMMENT_NODE || at.textContent === "")) at = at.previousSibling
 		return at
 	}
-	/** `node`, or the first sibling after it that renders. */
 	const rendered = (node: Node | null | undefined): Node | null | undefined => {
 		let at = node
 		while (at && (at.nodeType === Node.COMMENT_NODE || at.textContent === "")) at = at.nextSibling

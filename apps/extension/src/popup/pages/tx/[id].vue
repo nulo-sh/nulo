@@ -321,7 +321,6 @@ onBeforeUnmount(() => {
 						gap="4"
 						:class="[$style.call_row, idx > 0 && $style.call_row_divider]"
 					>
-						<!-- One sentence; "on" and the contract break as one word. -->
 						<span :class="$style.call_line"
 							><span data-testid="tx-call-method" :class="$style.call_method">{{ callRowTitle(c) }}</span>{{ " " }}<span :class="$style.call_tail"
 								>on&nbsp;<span v-if="protocolChips[idx]" data-testid="tx-call-contract" :class="$style.call_chip"
@@ -443,12 +442,14 @@ onBeforeUnmount(() => {
 	border-top: 1px solid var(--nulo-border);
 }
 
+/* Isolated, a stored name's direction controls end with it and never reorder the contract after it. */
 .call_method {
 	composes: type--row-title from global;
 	font-size: 13px;
 	color: var(--txt-primary);
 
 	word-break: break-word;
+	unicode-bidi: isolate;
 }
 
 .call_line {
@@ -457,13 +458,17 @@ onBeforeUnmount(() => {
 	line-height: 1.6;
 }
 
+/* "on" and the contract break as one word. Inline, a chip after "on" keeps the row's full width and
+ * runs past it; as a flex item it clips to what "on" leaves. Baseline alignment keeps every glyph where
+ * inline flow puts it. */
 .call_tail {
-	white-space: nowrap;
+	display: inline-flex;
+	align-items: baseline;
+	max-width: 100%;
 }
 
 .call_chip {
-	display: inline-flex;
-	vertical-align: middle;
+	min-width: 0;
 }
 
 .call_contract {

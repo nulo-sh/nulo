@@ -265,9 +265,14 @@ describe("the transaction page's contract for a call", () => {
 		expect(mocks.copy).toHaveBeenCalledExactlyOnceWith(OTHER, expect.any(Function), "Successfully copied")
 	})
 
-	test('each call reads as one sentence, "{title} on {contract}", "on" held to the protocol chip or the short address in one nowrap box', async () => {
+	test('each call reads as one sentence, "{title} on {contract}": "on" held to the protocol chip or the short address in one box the chip clips in, the title\'s direction controls kept to the title', async () => {
 		const STYLE = (TxDetail as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style
-		expect(declarationsOf(parseSource("apps/extension/src/popup/pages/tx/[id].vue"), ".call_tail")).toEqual({ "white-space": "nowrap" })
+		const source = parseSource("apps/extension/src/popup/pages/tx/[id].vue")
+		expect([declarationsOf(source, ".call_tail"), declarationsOf(source, ".call_chip")]).toEqual([
+			{ display: "inline-flex", "align-items": "baseline", "max-width": "100%" },
+			{ "min-width": "0" },
+		])
+		expect(declarationsOf(source, ".call_method")).toMatchObject({ "unicode-bidi": "isolate" })
 		const w = await mountPage(claim, Promise.resolve([listed]), { ContractChip: chipStub })
 		const sentences = w.findAll("[data-testid='tx-call-method']").map((method) => {
 			const line = method.element.parentElement as HTMLElement
