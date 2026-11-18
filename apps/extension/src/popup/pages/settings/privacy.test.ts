@@ -19,6 +19,7 @@ vi.mock("@/components/ui/Dropdown", () => ({
 import PrivacyPage from "./privacy.vue"
 
 const Toggle = defineComponent({
+	name: "Toggle",
 	props: { modelValue: Boolean },
 	emits: ["update:modelValue"],
 	template: '<div :data-on="String(modelValue)" />',
@@ -80,7 +81,7 @@ async function mountPrivacy() {
 
 describe("settings/privacy", () => {
 	test("renders the search registry's rows", async () => {
-		expectOwnedRows(await mountPrivacy(), "/popup/settings/privacy", settingsContext())
+		expectOwnedRows(await mountPrivacy(), "/popup/settings/privacy", settingsContext(), 2)
 	})
 
 	test("is titled Privacy, goes back to Settings, and shows the fiat toggle as read", async () => {
