@@ -762,6 +762,17 @@
 			"state": "a hidden account"
 		},
 		{
+			"file": "apps/extension/src/popup/pages/settings/developer/account-state/authwits/index.vue",
+			"expression": "chipOf(aw)",
+			"branch": "appStore.isLogined && filteredAuthwits.length",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "popup-settings-developer-account-state-authwits",
+			"state": "",
+			"why": "the contract chip's model handed to AuthwitCard; its short address renders at ContractChip's own site"
+		},
+		{
 			"file": "apps/extension/src/popup/pages/settings/developer/account-state/contracts/index.vue",
 			"expression": "trimAddress(v.row.address, 6, 4)",
 			"branch": "appStore.isLogined && rows.length && !(searchTerm && filteredContracts.length === 0)",
