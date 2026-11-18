@@ -1,7 +1,7 @@
 ---
 plan: toast-hide-1
 tier: light (thinned: no plan audit round, no Opus leg; one Codex pass over the plan and the net diff)
-status: planned
+status: delivered (one PR against dev, merge pending)
 issues: "closes #1796"
 driver: claude-code
 claude_model: opus
@@ -16,6 +16,18 @@ post_implementation_hardening: not scheduled
 ---
 
 # toast-hide-1: an earlier send's toast steps aside while a review sheet is open
+
+## Outcome
+
+- **Date:** 2026-11-18.
+- **Status:** delivered. The fix, its tests and this close-out are one PR against `dev`, which lands on the orchestrator's word after it reads the captures against the pick.
+- **Owner sign-off:** P190-01 = H, quoted below and in the PR body; the fade timing decided under the owner's 2026-10-19 delegation.
+- **Shipped:** `vSnackAside` / `snackAside` in `snackInset.ts`; `SendReviewSheet` marks its dialog; `useSendsInProgress` takes `reviewing` and, while it holds, closes its own toast quietly and shows nothing, reopening through the usual path; `app.vue` wires it. Tests: three `useSendsInProgress` cases, one `snackInset`, one `SendReviewSheet`, two bounded waits in the re-ask step of `network/same-token-concurrent-sends.test.ts`. Captures byte-identical to page 190's H frames with the sheet open. Closes #1796.
+- **Dispositions:** holding the mark to the sheet's leave end rejected (D3, round 1): the toast fades back in during the sheet's 150 ms fade out.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted; `lessons.md` is at its 8 KiB budget. The directive-timing gotcha is in [lessons/phase-0.md](lessons/phase-0.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 While a popup send is in flight its info toast "Sending … to …" stays up until it is closed, and every review sheet's Send now carries `v-snack-footer`, so the toast lands 12 px above Send, over the fee row: on the re-ask it covers "Fee is now …, above the … you accepted.", the one fact that review exists to show (#1796).
 
@@ -60,7 +72,7 @@ No trust boundary moves. The change reads only in-document UI state (which sheet
 
 **Captures** (untracked, never committed as code): the render lane's kit adapted, a capture story mounting the real `SendReviewSheet` and the real `ToastManager` with the toast opened by the real `useSendsInProgress` over a fake journal (one in-flight popup send), `reviewing` wired as `app.vue` wires it; a static Storybook build served on a port claimed in the host registry; Puppeteer at 360 × 600, 2x. Frames `th1-reask`, `th1-plain` (sheet open, toast away) and `th1-after` (sheet closed, toast back), light and dark, with `captions.json`, into the lane's scratch `shots/`. Then one `pr-captures/toast-hide-1/` commit holding them beside page 190's H frames, embedded in the PR body, and the next commit removes them.
 
-**Validation gate** (retry 0, in order, once):
+**Validation gate** (retry 0, in order, once; results on the final head's code, comments aside):
 
 1. `bun run lint`; `bun run typecheck:all` (root).
 2. From `apps/extension`: `bun run test -- src/composables src/components/ui src/components/Popup src/popup/components/modules/send src/popup/pages/send type-role-ban copy-dash-ban red-text-ban`. Red/green: D5(a)–(c) and the sheet case fail with the source change reverted.
@@ -69,6 +81,8 @@ No trust boundary moves. The change reads only in-document UI state (which sheet
 5. Network, from the root: `bun run e2e:agent tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/in-flight-send-guard.test.ts tests/e2e/network/snack-placement.test.ts` on Chrome, then `NULO_E2E_BROWSER=firefox`. Pass: every file green; counts per browser in the PR body.
 
 No e2e scenario is added, so no suite wall-clock is measured.
+
+**Gate results:** lint and `typecheck:all` pass; the named unit run 113 files, 2601 passed, 1 skipped, plus 10 more files that reach the change, 154 passed; red with the gate or the mark reverted (4 cases); `check:plans` pass; smoke `snackbar.test.ts` Chrome 9/9 (41 s), Firefox 9/9 (50 s); network (proverless) Chrome 3 files 23/23 (977 s), Firefox 3 files 23/23 (1327 s).
 
 ## Post-implementation (single arc, bounded work)
 
