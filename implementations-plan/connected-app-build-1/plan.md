@@ -69,7 +69,7 @@ Arc 2:
 
 **Facts** (checked at `8ff0e6489`): the recon's arc 2 section. **Asks:** none; P185-01's second half waits on page 186, outside this arc.
 
-## Phase 3: arc 2, the build and its tests
+## Phase 3: arc 2, the build and its tests ✓
 
 1. `apps/extension/src/wallet/services/dapp-interaction/{spec,service,client}.ts`: D15; `service.test.ts`: a known session answers the names, another profile's session is refused.
 2. `apps/extension/src/popup/windows/capabilities/details-table.ts`: `listsFunctionNames` (D13); `details-table.test.ts`.
@@ -79,11 +79,15 @@ Arc 2:
 
 **Validation gate** (retry 0, one at a time): `bun run lint`; `bun run typecheck:all`; from `apps/extension`, `bun run test -- src/popup/pages/settings/connected-apps src/popup/components/modules/settings/connected-apps src/components/composite/capabilities src/popup/windows/capabilities src/wallet/services/dapp-interaction scripts/type-roles type-role-ban copy-dash-ban red-text-ban`; `bun run check:plans` after staging. Smoke, from `apps/extension`, `bun run test:e2e tests/e2e/type-roles.test.ts`, Chrome then `NULO_E2E_BROWSER=firefox`. Network, from the root, one invocation per browser: `bun run e2e:agent tests/e2e/network/connect-check-window.test.ts tests/e2e/network/connect-verify-mismatch.test.ts tests/e2e/network/type-roles-windows.test.ts tests/e2e/network/cap-window.test.ts tests/e2e/network/authwit-variants.test.ts` (`cap-window` reads the table, `authwit-variants` the switch). Pass: every command exits 0; any edited assertion is recorded here with its reason. No e2e scenario is added.
 
-## Phase 4: arc 2, captures, review and the PR
+**Outcome.** At `530bf6a42`, retry 0: lint (red once on one formatting error in the new page test, formatted), typecheck:all and the targeted tests (25 files, 561 passed) green; `check:plans` green; smoke `type-roles.test.ts` Chrome 14 passed and 1 Firefox-only skip, Firefox 15 passed; network, one `e2e:agent` run per browser over the five specs, Chrome 19 passed, Firefox 18 passed and 1 Chrome-only skip. The review fix `a43cfdb89` reran lint, typecheck:all and the targeted tests (25 files, 562 passed); it changes behaviour only for a stored simulation holder that is not an object, which no e2e scenario carries. Edited assertions: `[id].test.ts`'s `line` helper reads the switch row's own line, since the list-accounts row now comes first; the "If you allow, it can" label checks became its absence.
+
+## Phase 4: arc 2, captures, review and the PR ✓
 
 1. Captures through the render lane's capture page (the real page under Vite over fake service clients, copied in uncommitted from `782858322` and removed after each run), 400 px at 2x, light and dark, into the lane's scratch `shots-a2/` with `captions.json`: before at `8ff0e6489` (`cab2-before`, `cab2-before-one`, `cab2-before-page`, `cab2-window-before`), after at the built head (`cab2-d1`, `cab2-d1-open`, `cab2-d1-one`, `cab2-d1-page`, `cab2-window`). The window frames mount the window's `DetailsTable` from `buildDetailsTable` in the window's chain of widths (a full-width wrapper, 16 px padding), not the whole window.
 2. The before and after pairs committed under `pr-captures/connected-app-build-1/` in one commit, removed in the next.
 3. Post-implementation, then the PR.
+
+**Outcome.** Before at `8ff0e6489`, after at `530bf6a42` (`a43cfdb89` changes nothing these frames draw). The many-permission section measures 403 px before and 595 px after (the page 775 px and 967 px); the read-only grant 62 px and 106 px; the head stands 24 px under the kind rows. On the page the table is 312 px wide and draws narrow, every name whole; in the window it is 342 px wide and draws wide, and its frames are byte-identical before and after in both themes.
 
 ## Delivery
 
@@ -107,4 +111,9 @@ Execution contract: this plan plus [`implementations-plan/README.md` § Post-imp
 
 **Arc 1.** No plan audit round. Codex over the plan and the net diff (gpt-6.1-sol, high, read-only, `0dc22a9c5...0a6e270d1`), 2026-11-17: approve with one comment fix (`0904820c2`); round 2: approve. No dead state, copy or selector left; the verify flow unchanged; the two glyphs meet no competing meaning in the window.
 
-**Arc 2.** Pending.
+**Arc 2.** No plan audit round (the bounded form). Codex over the plan amendment and `origin/dev...HEAD` (gpt-6.1-sol, high, read-only, at `530bf6a42`), 2026-11-18: approve with fixes, high confidence.
+- R1-1, demonstrated, accepted (`a43cfdb89`): a stored `{ type: "simulation", utilities: null }`, which the session schema keeps, threw in `simulationRow` (`holder.scope` on `null`) once the page called `isBroadRequest`. A holder that is not an object now reads as any contract, as `isAnyContractScope` reads an unreadable scope; a page case with a listed-scope control is red on the old file and green after.
+- R1-2, accepted (`a43cfdb89`): the container query's comment shortened, its arithmetic stated as "under 132 px".
+- Found sound: the table waits for the names while the kind rows and the switch do not; a refused read falls to an empty list; no call after unmount; every client disconnected once; the switch's testids, write and rollback; the read's input and profile checks; both hosts stretch the table, so the container never takes its own width; no dangling reference after the removals; wire-shaped fixtures and paired controls; the e2e page leg still sweeps.
+
+**Round 2** (resumed, `a43cfdb89`): approve, no new finding.
