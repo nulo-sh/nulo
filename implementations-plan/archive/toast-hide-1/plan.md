@@ -86,7 +86,7 @@ No e2e scenario is added, so no suite wall-clock is measured.
 
 ## Post-implementation (single arc, bounded work)
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at b8ec26b1f, bounded-work form: ONE Codex pass (`gpt-6.1-sol`, high, read-only) over this plan and the net diff, with the standard's two verbatim rules and adversarial ask, plus the lane's questions: can the toast stay away after every review is gone, can a quiet close ever be stored as a dismissal, and does any path draw the Sending toast over an open review. A second round only on a material finding. No Opus leg, no `/code-review`.
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at b8ec26b1f, bounded-work form: ONE Codex pass (`gpt-6.1-sol`, high, read-only) over this plan and the net diff, with the standard's two verbatim rules and adversarial ask, plus the lane's questions: can the toast stay away after every review is gone, can a quiet close ever be stored as a dismissal, and does any path draw the Sending toast over an open review. A second round only on a material finding. No Opus leg, no `/code-review`.
 
 ## Delivery
 
