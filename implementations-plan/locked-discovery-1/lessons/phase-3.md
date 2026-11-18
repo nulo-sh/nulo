@@ -21,3 +21,9 @@
 ## Review, round 3 (Codex resumed, over `1f6ddf00f`)
 
 - Codex: `approve`. No findings; its in-memory checks over the real queue, drain and refit kept the newer drain's window, closed a window with no live row, left other origins alone, and confirmed `mayOpen: false` never opens one. The loop converged.
+
+## Final gates (2026-11-18)
+
+- Network at `1f6ddf00f`, retry 0, the 7 files: Chrome 9/9 (`connect-locked-queue` 46.1 s, sw-restart 22.2 s); Firefox 9/9 (`connect-locked-queue` 74.4 s, sw-restart 40.3 s, a slower host than the phase 3 run). Smoke not rerun: the review touched only comments on the lock screen and the unlock page.
+- After merging `origin/dev` (two commits, no file this plan touches): lint 0; `typecheck:all` 0; `check:plans` 0 findings. The first `test:all` caught three failures from round 2's fix, which the round's narrow test run had missed: two background fakes lacked `getPendingDiscoveries`, the shared stub lacked `retime`, and the profile-chaos citation of `auth-delete-retired` moved a line with the reflowed `advancePastAuth` comment. Fixed at `d535faf08`. The next run passed every test but exited 1 on two `EnvironmentTeardownError`s from `OperationCard.wire.test.ts`, a file this plan does not touch; three runs of it alone were green and the one rerun of `test:all` exited 0. Filed as #1858.
+- Lesson: after a fix inside a shared flow, run the flow's whole test directory, not only the file the regression lives in.

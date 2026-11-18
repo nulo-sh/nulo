@@ -1,7 +1,7 @@
 ---
 plan: locked-discovery-1
 tier: mid
-status: planned
+status: completed; delivered by the PR that closes #1849, which carries this close-out
 issues: "closes #1849"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,38 @@ base: origin/dev at eb42af540
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-18. Planned and delivered the same day, in one arc.
+- **Status:** completed. The PR into `dev` that closes #1849 carries the implementation and this close-out. Its merge closes #1849 and archives this plan.
+- **Shipped:**
+  - A locked discovery from a site with a profile to unlock opens one unlock window per origin. The window:
+    - shows the site's band over the popup's lock screen, which moved into `LockScreen.vue`;
+    - times out at the SDK row's cut-off, which a later discovery from the site moves;
+    - shares the connect caps, and the origin's own window counts toward its hand-over.
+  - After the unlock, the drain hands the window to the site's connect window or network notice (`WindowPort.navigate`, restored) and brings it to the front.
+  - The window closes when:
+    - none of the site's discoveries is left (a remembered site's drain, a tab teardown, the drain's refit);
+    - the person closes it, which refuses nothing;
+    - a worker restart ends it.
+  - The shell's three `/popup/auth` writers leave the window on its route.
+  - `useDappApprovalWindow` asks the worker for the session (D6, D17).
+  - The two locked-connect network specs and the restart spec now pin the window.
+- **Review loop:**
+  - Plan: Codex reject and Opus conditional approve, all folded; a final fresh Codex conditional approve, folded; then Codex approve.
+  - Diff, round 1: Codex and Opus conditional approve (the drain's cleanup, fixed at `d04664dbc`).
+  - Round 2: Codex conditional approve (the second-unlock gap, fixed at `1f6ddf00f`).
+  - Round 3: Codex approve.
+- **Gates** on the final head ([lessons/phase-3.md](lessons/phase-3.md)):
+  - lint, `typecheck:all`, `test:all` and `check:plans` exit 0 (one `test:all` teardown flake in a file this plan does not touch, rerun once green, filed as #1858).
+  - Smoke: the lock screen's readers, 29/29 on Chrome and on Firefox.
+  - Network: 7 files, 9/9 on Chrome and on Firefox, at retry 0.
+- **Dropped:** a smoke scenario (D9). Firefox captures, which Firefox 157+ refuses on extension pages (D18).
+- **Known limits:** #1855 (KL-1, a dApp page that navigates away leaves its window until the cut-off) and #1856 (KL-2, a flow started from the window's lock screen can be cut by the cut-off or the hand-over), both closed as not planned with their reopening conditions.
+- **Open items:** none. The pin reminder stays the owner's ask, [OWNER-ASKS.md](OWNER-ASKS.md) OA-1.
+- **Lessons:** none promoted. `lessons.md` is at its budget, and the drain's ownership rule lives in its code and the regression test.
+- **Seeds retired:** the `/goal` and `/loop` below are not live instructions.
 
 # locked-discovery-1: a dApp's discovery while Nulo is locked opens an unlock window, then the connect window
 
