@@ -2,14 +2,6 @@
 // .vue call sites that already import it without types.
 import { DateTime } from "luxon"
 
-import { getSafeDisplay } from "@/wallet/services/dapp-session/capability-meta"
-
-export function getCapabilityLabel(type: string): string {
-	// Route through getSafeDisplay so an unknown wire type renders as the constant
-	// "Unknown permission", never as its raw cap.type label.
-	return getSafeDisplay(type).label
-}
-
 export function formatSessionExpiry(expiryMs: number | undefined): string {
 	if (!expiryMs) return ""
 	return DateTime.fromMillis(expiryMs).toFormat("LLL dd 'at' HH:mm")

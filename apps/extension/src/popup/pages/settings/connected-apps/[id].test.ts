@@ -1,15 +1,17 @@
 import { createTestingPinia } from "@pinia/testing"
-import { Icon, Toggle, Tooltip } from "@nulo/design"
+import { Icon, RowAction, Toggle, Tooltip } from "@nulo/design"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { isClientDisconnectRejection } from "@nulo/extension-messaging/errors"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
+import DetailsTable from "@/components/composite/capabilities/DetailsTable.vue"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
 import ConnectedApp from "./[id].vue"
 
 const mocks = vi.hoisted(() => ({
 	openToast: vi.fn(),
 	getDappSession: vi.fn(),
+	getKnownContracts: vi.fn(),
 	setAuthorizationsWithoutAsking: vi.fn(),
 	getNetworks: vi.fn(),
 	getAccount: vi.fn(),
@@ -74,6 +76,11 @@ vi.mock("@/wallet/services/network/client", () => ({
 		return clients.build("network", { getNetworks: mocks.getNetworks })
 	}),
 }))
+vi.mock("@/wallet/services/dapp-interaction/client", () => ({
+	DappInteractionServiceClient: vi.fn(function () {
+		return clients.build("interaction", { getKnownContracts: mocks.getKnownContracts })
+	}),
+}))
 vi.mock("@/wallet/services/dapp-session/client", () => ({
 	DappSessionServiceClient: vi.fn(function () {
 		return clients.build(
@@ -94,6 +101,7 @@ beforeEach(() => {
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
 	installChromeStorage({}, { persist: false })
+	mocks.getKnownContracts.mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -131,7 +139,7 @@ async function mountPage(initial: StoredSession, errorHandler?: (error: unknown)
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn, initialState: { app: { profile: { id: "p1" } } } })],
 			config: errorHandler ? { errorHandler } : {},
-			components: { Icon, Toggle, Tooltip },
+			components: { Icon, RowAction, Toggle, Tooltip },
 			mocks: { confirmationPolicies: [] },
 			stubs: {
 				SettingsPageShell: { template: "<div><slot /></div>" },
@@ -140,7 +148,6 @@ async function mountPage(initial: StoredSession, errorHandler?: (error: unknown)
 				Text: { template: "<span><slot /></span>" },
 				SectionLabel: { props: ["label"], template: "<h2>{{ label }}</h2>" },
 				ItemsContainer: { template: "<div><slot /></div>" },
-				GrantedCapabilitiesList: true,
 			},
 		},
 	})
@@ -150,18 +157,18 @@ async function mountPage(initial: StoredSession, errorHandler?: (error: unknown)
 
 const row = (w: Awaited<ReturnType<typeof mountPage>>) => w.find('[data-testid="connected-app-authorizations"]')
 const toggle = (w: Awaited<ReturnType<typeof mountPage>>) => w.find('[data-testid="connected-app-authorizations-toggle"]')
-/** The line as read: the dotted term's always-mounted definition copy is `hidden`. */
+/** The switch row's line as read: the dotted term's always-mounted definition copy is `hidden`. */
 const line = (w: Awaited<ReturnType<typeof mountPage>>) => {
-	const copy = w.find('[data-testid="cap-row-sub"]').element.cloneNode(true) as HTMLElement
+	const copy = row(w).find('[data-testid="cap-row-sub"]').element.cloneNode(true) as HTMLElement
 	for (const hidden of copy.querySelectorAll("[hidden]")) hidden.remove()
 	return copy.textContent?.replace(/\s+/g, " ").trim()
 }
 const FLAGGED = (PermissionRow as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style.flagged
 
-describe("Settings › Connected app › If you allow, it can", () => {
+describe("Settings › Connected app › the act-for-you switch", () => {
 	test("the row shows the consent, with the dotted term, and its switch writes it", async () => {
 		const w = await mountPage(session([accounts(true), txListed], { broad: false }))
-		expect(w.text()).toContain("If you allow, it can")
+		expect(w.text()).not.toContain("If you allow, it can")
 		expect(row(w).text()).toContain("Act for you in transactions you approve")
 		expect(toggle(w).attributes("aria-checked")).toBe("true")
 		expect(toggle(w).attributes("aria-label")).toBe("Authorizations without asking")
@@ -189,7 +196,6 @@ describe("Settings › Connected app › If you allow, it can", () => {
 	test("absent when the app cannot ask for authorizations", async () => {
 		const w = await mountPage(session([accounts(false), txListed]))
 		expect(row(w).exists()).toBe(false)
-		expect(w.text()).not.toContain("If you allow, it can")
 	})
 
 	test("with no transaction or simulation scope: no switch, and the off line", async () => {
@@ -223,6 +229,126 @@ describe("Settings › Connected app › If you allow, it can", () => {
 		expect(toggle(w).attributes("aria-checked")).toBe("true")
 		expect(line(w)).toBe("Nulo signs its authorizations without asking.")
 		expect(mocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't save this setting" })
+	})
+})
+
+const TABLE = (DetailsTable as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style
+const ROW_STYLE = (PermissionRow as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style
+
+describe("Settings › Connected app › Permissions", () => {
+	const SPONSORED = `0x${"0c".repeat(32)}`
+	const CLASS_ID = `0x${"2e".repeat(32)}`
+	const NAMES = [{ address: SPONSORED, name: "Sponsored fee payer" }]
+	const many = [
+		accounts(true),
+		txListed,
+		{
+			type: "simulation",
+			transactions: {
+				scope: [
+					{ contract: TOKEN, function: "*" },
+					{ contract: SPONSORED, function: "sponsor_unconditionally" },
+				],
+			},
+			utilities: { scope: "*" },
+		},
+		contracts,
+		{ type: "contractClasses", classes: [CLASS_ID], canGetMetadata: true },
+		{ type: "data", addressBook: true, privateEvents: { contracts: [TOKEN] } },
+	]
+	const readOnly = { type: "contracts", contracts: "*", canRegister: false, canGetMetadata: true }
+
+	type Page = Awaited<ReturnType<typeof mountPage>>
+	const section = (w: Page) => w.find('[data-testid="connected-app-permissions"]')
+	const kindTitles = (w: Page) =>
+		section(w)
+			.findAll(`.${ROW_STYLE.title}`)
+			.map((title) => title.text())
+	const tableRows = (w: Page) => w.findAll('[data-testid="cap-details-row"]').map((target) => target.attributes("data-details-key"))
+	const shownNames = (w: Page) =>
+		w
+			.findAll('[data-testid="cap-details-row"]')
+			.map((target) => target.element.parentElement?.querySelector(`.${TABLE.name}, .${TABLE.address_text}`)?.textContent)
+
+	test("the many-permission grant: three kind rows, then the window's table under its tag", async () => {
+		mocks.getKnownContracts.mockResolvedValue(NAMES)
+		const w = await mountPage(session(many, { broad: false }))
+		expect(mocks.getKnownContracts).toHaveBeenCalledWith("s1")
+		expect(section(w).find("h2").text()).toBe("Permissions · any contract")
+		expect(kindTitles(w)).toEqual([
+			"Let this app list all your accounts",
+			"Act for you in transactions you approve",
+			"See your address book",
+		])
+		expect(section(w).find('[data-kind-row="address-book"]').classes()).toContain(FLAGGED)
+
+		expect(section(w).find(`.${TABLE.head}`).text()).toBe("Contract")
+		expect(
+			section(w)
+				.findAll(`.${TABLE.sub}`)
+				.map((sub) => sub.text()),
+		).toEqual(["Nulo knows", "Nulo doesn't know", "Contract classes"])
+		expect(tableRows(w)).toEqual(["known-0", "unknown-0", "classes-0", "any"])
+		expect(shownNames(w)).toEqual(["Sponsored fee payer", "0x1b1b…1b1b", "0x2e2e…2e2e", "Any contract"])
+		expect(w.find('[data-testid="cap-detail-toggle"]').exists()).toBe(false)
+		expect(w.find(`.${TABLE.foot}`).exists()).toBe(true)
+		expect(w.text()).not.toMatch(/Granted permissions|Account access|Contract registration/)
+
+		await w.find('[data-testid="cap-details-row"][data-details-key="unknown-0"]').trigger("click")
+		const lines = w
+			.findAll(`[data-testid="cap-details-fns"] .${TABLE.fn}`)
+			.map((line) => line.findAll("span").map((cell) => cell.text()))
+		expect(lines).toEqual([
+			["Simulate", "Any function"],
+			["Transact", "transfer_public_to_public"],
+		])
+	})
+
+	test("the read-only grant: one Any contract row with the Details mark, no kind row, no footnote", async () => {
+		const w = await mountPage(session([readOnly]))
+		expect(section(w).find("h2").text()).toBe("Permissions · any contract")
+		expect(kindTitles(w)).toEqual([])
+		expect(tableRows(w)).toEqual(["any"])
+		const marks = [...(w.find('[data-testid="cap-details-row"]').element.parentElement?.children ?? [])]
+			.filter((el) => el.classList.contains(TABLE.yes) || el.classList.contains(TABLE.no))
+			.map((el) => el.classList.contains(TABLE.yes))
+		expect(marks).toEqual([false, false, false, true, false, false])
+		expect(w.find(`.${TABLE.foot}`).exists()).toBe(false)
+		expect(w.text()).not.toContain("Contract registration")
+	})
+
+	test("a refused names read lists every contract by its address, under Nulo doesn't know", async () => {
+		mocks.getKnownContracts.mockRejectedValue(new Error("Invalid id"))
+		const w = await mountPage(session(many))
+		expect(tableRows(w)).toEqual(["unknown-0", "unknown-1", "classes-0", "any"])
+		expect(shownNames(w)).toEqual(["0x1b1b…1b1b", "0x0c0c…0c0c", "0x2e2e…2e2e", "Any contract"])
+	})
+
+	test("the table waits for the names read; the kind rows and the switch do not", async () => {
+		mocks.getKnownContracts.mockImplementationOnce(() => clients.HOLD)
+		const w = await mountPage(session(many, { broad: false }))
+		expect(toggle(w).exists()).toBe(true)
+		expect(section(w).find("h2").text()).toBe("Permissions · any contract")
+		expect(tableRows(w)).toEqual([])
+
+		clients.held[0].resolve(NAMES)
+		await flushPromises()
+		expect(tableRows(w)).toEqual(["known-0", "unknown-0", "classes-0", "any"])
+	})
+
+	test("the kind rows and the table stand 24 px apart, the gap between the page's sections", async () => {
+		const w = await mountPage(session(many))
+		expect(section(w).attributes("gap")).toBe("10")
+		const column = section(w).find('[gap="24"]')
+		expect(column.element.children).toHaveLength(2)
+		expect(column.element.children[0].querySelector('[data-testid="connected-app-kind-row"]')).not.toBeNull()
+		expect(column.element.children[1].querySelector(`.${TABLE.head}`)).not.toBeNull()
+	})
+
+	test("a type Nulo doesn't recognize draws the window's row for it; no grant draws no section", async () => {
+		const w = await mountPage(session([readOnly, { type: "teleport" }]))
+		expect(kindTitles(w)).toEqual(["Use 1 permission Nulo doesn't recognize"])
+		expect(section(await mountPage(session([]))).exists()).toBe(false)
 	})
 })
 
@@ -306,7 +432,7 @@ describe("Settings › Connected app › leaving the page", () => {
 		expect(w.findAll(ACCOUNT_ROW)).toHaveLength(2)
 
 		w.unmount()
-		expect(clients.built.map((c) => c.kind).sort()).toEqual(["account", "network", "session"])
+		expect(clients.built.map((c) => c.kind).sort()).toEqual(["account", "interaction", "network", "session"])
 		for (const c of clients.built) expect(c.disconnect, c.kind).toHaveBeenCalledOnce()
 	})
 

@@ -299,26 +299,6 @@
 			"why": "the Terms version label: a document version, not an identifier"
 		},
 		{
-			"file": "apps/extension/src/components/ScopeAddress.vue",
-			"expression": "sanitizeWireString(trimAddress(address), 128)",
-			"branch": "",
-			"ordinal": 0,
-			"role": "meta",
-			"selector": "[data-testid=\"scope-address-value\"]",
-			"surface": "popup-settings-connected-apps-id",
-			"state": "a connected app whose grant holds a contract scope (network)"
-		},
-		{
-			"file": "apps/extension/src/components/ScopeClassId.vue",
-			"expression": "sanitizeWireString(trimAddress(id), 128)",
-			"branch": "",
-			"ordinal": 0,
-			"role": "meta",
-			"selector": "[data-testid=\"scope-class-id-value\"]",
-			"surface": "popup-settings-connected-apps-id",
-			"state": "a connected app whose grant holds a class scope (network)"
-		},
-		{
 			"file": "apps/extension/src/popup/components/modules/activity/TransactionCard.vue",
 			"expression": "hashSlice",
 			"branch": "hashSlice && explorerUrl",
