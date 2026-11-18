@@ -5,3 +5,4 @@
 - Inside an inline-flex box each flex item is its own bidi paragraph, so an override before the box cannot reverse the text in it; it can still move the box against the space before it.
 - Codex round 2 (resumed): approve. Its probe and mine both said the flex tail left the detail's chip in place; the real page, pixel-compared with the signed frame, put it 1.1 px higher. A wrapper that is `vertical-align: middle` around a chip that is itself middle-aligned places it lower than a single middle alignment; making that wrapper a baseline-aligned flex item drops the outer step. Compare captures with the signed frames pixel for pixel, not a scratch page's boxes.
 - The capture kit's revert checks the patched files out to HEAD: commit a variant before capturing it, or the revert drops it.
+- Codex round 3 (resumed, the last): approve with one test fix, accepted: a declaration pin does not prove the template uses the rule; pin the element too.

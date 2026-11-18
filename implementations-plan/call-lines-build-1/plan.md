@@ -89,3 +89,5 @@ No plan audit round (lane brief, Proportion).
 **Codex round 2, resumed, over the fix diff** (`448132c83..7e7e6ea4b`): **approve**, no remaining findings (the address still one click and copy target behind the selection guard; `min-width: 0` collapses no normal chip; the new comments earn their bytes).
 
 After round 2, the capture run's pixel comparison with the signed c2 frames showed the detail's chip 1.1 px higher under `bd7e6cccf`; `7d19049b1` keeps the drawn wrapper inside the shrinking item (D4).
+
+**Codex round 3, resumed, verification only** (`7e7e6ea4b..7d19049b1`): **approve with fixes**. Its probe kept the drawn chip positions and shrank the widest chip to 156.3 px at the content edge. R3-1, accepted: the test pinned the new box's declarations but not its use; it now requires the chip inside `.call_chip_box` and fails with the span removed (`e70efec9b`). Round 3 is the last; nothing material remains.
