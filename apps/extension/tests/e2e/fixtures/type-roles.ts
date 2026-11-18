@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { fonts, MIN_MONO_PX, MIN_TEXT_PX, type TypeRole, typeRoleNames, typeRoles } from "@nulo/design/tokens"
+import { DEFAULT_RPC_TIMEOUT_MS } from "@nulo/extension-messaging/background"
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { OVERRIDES } from "../../../scripts/type-roles/exceptions"
@@ -726,6 +727,31 @@ export async function textFates(page: Page, mode: "record" | "compare"): Promise
 			return fate ? [{ fate, testid: before.testid, text: before.text }] : []
 		})
 	}, mode === "record")
+}
+
+/** What a surface draws while a read is in flight, each replaced by the read's answer or its failure
+ *  line: a list fetching, a call's, grant's or authorization's arguments decoding, a no-account
+ *  send's authorizations previewed, a token's metadata loading, a contract chip held for its level. */
+const READS_IN_FLIGHT = [
+	'[data-testid="loading-state"]',
+	'[data-testid$="-args-pending"]',
+	'[data-testid="execute-op-authwits-pending"]',
+	'[data-testid="register-token-details"][aria-busy="true"]',
+	'[data-testid^="contract-chip-held-"]',
+].join(", ")
+
+/**
+ * Resolves once `page` draws no read in flight, so a sweep never measures a line its answer replaces
+ * mid-check. Each is a popup RPC that answers or fails within `DEFAULT_RPC_TIMEOUT_MS` of its start,
+ * and a chip's hold ends within a second, so a surface at rest ends the wait; one still drawn past
+ * the bound fails it, by testid.
+ */
+export async function waitForReadsSettled(page: Page, label: string): Promise<void> {
+	await withTimeoutMessage(
+		page.waitForFunction((s) => !document.querySelector(s), { timeout: DEFAULT_RPC_TIMEOUT_MS, polling: 100 }, READS_IN_FLIGHT),
+		async () =>
+			`${label}: still reading after ${DEFAULT_RPC_TIMEOUT_MS / 1000} s: ${await page.evaluate((s) => [...document.querySelectorAll(s)].map((el) => el.getAttribute("data-testid")).join(", "), READS_IN_FLIGHT)}`,
+	)
 }
 
 /** The narrowest width a page is laid out for: Firefox's sidebar opens at 240 px. */
