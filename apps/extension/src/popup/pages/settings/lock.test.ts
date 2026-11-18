@@ -78,7 +78,7 @@ async function mountLock(type: "password" | "passkey" = "password", { realInput 
 
 describe("settings/lock", () => {
 	test.each(["password", "passkey"] as const)("renders the search registry's rows for a %s profile", async (type) => {
-		expectOwnedRows(await mountLock(type), "/popup/settings/lock", settingsContext({ passkey: type === "passkey" }))
+		expectOwnedRows(await mountLock(type), "/popup/settings/lock", settingsContext({ passkey: type === "passkey" }), 1)
 	})
 
 	test("is titled Lock, and Lock now renders while the config reads hang", async () => {

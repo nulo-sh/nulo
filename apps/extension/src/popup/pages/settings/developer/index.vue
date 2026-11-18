@@ -64,6 +64,7 @@ const handleOpenLogs = () => {
 
 const isLoading = ref(true)
 const logsTitleId = useId()
+const toggleTitleId = useId()
 
 const defaultConfig = makeDefaultConfig()
 const isDeveloperModeEnabled = ref(defaultConfig.developerMode)
@@ -125,11 +126,12 @@ onBeforeUnmount(() => {
 			<template v-for="sk in Object.keys(settings)" :key="sk">
 				<Flex v-if="settings[sk].visible.value" align="center" justify="between" :data-testid="settings[sk].testid" v-settings-row="settings[sk].id">
 					<Flex direction="column" justify="center" gap="6">
-						<Text :class="$style.title" color="primary">{{ settings[sk].title }}</Text>
+						<Text :id="`${toggleTitleId}-${sk}`" :class="$style.title" color="primary">{{ settings[sk].title }}</Text>
 						<Text variant="caption" color="tertiary">{{ settings[sk].description }}</Text>
 					</Flex>
 
 					<Toggle
+						:aria-labelledby="`${toggleTitleId}-${sk}`"
 						:data-testid="`settings-toggle-${sk}`"
 						@update:modelValue="updateSetting(sk, $event)"
 						:modelValue="settings[sk].model.value"

@@ -224,8 +224,10 @@ onBeforeUnmount(() => {
 				align="center"
 				:data-testid="strictRow.testid"
 				v-settings-row="strictRow.id"
+				v-slot="{ titleId }"
 			>
 				<Toggle
+					:aria-labelledby="titleId"
 					:modelValue="strictSecurityMode"
 					@update:modelValue="onStrictToggle"
 					data-testid="strict-security-toggle"

@@ -92,7 +92,7 @@ describe("settings/display", () => {
 
 	test.each([false, true])("renders the search registry's rows, with a side panel: %s", async (sidePanel) => {
 		if (sidePanel) Object.assign(chrome, { sidePanel: { open: vi.fn() } })
-		expectOwnedRows(await mountDisplay(), "/popup/settings/display", settingsContext({ sidePanel }))
+		expectOwnedRows(await mountDisplay(), "/popup/settings/display", settingsContext({ sidePanel }), sidePanel ? 4 : 3)
 	})
 
 	test("a reread that finds the side panel setting changed shows it and closes nothing", async () => {
@@ -139,7 +139,7 @@ describe("settings/display", () => {
 		}
 
 		test("renders the search registry's rows, the side panel's included", async () => {
-			expectOwnedRows(await mountDisplay(), "/popup/settings/display", settingsContext({ sidePanel: true }))
+			expectOwnedRows(await mountDisplay(), "/popup/settings/display", settingsContext({ sidePanel: true }), 4)
 		})
 
 		test("turning it on opens the sidebar in the same event, after the write is posted, and closes the page once stored", async () => {

@@ -191,9 +191,10 @@ onBeforeUnmount(() => {
 			:data-testid="everySiteRow.testid"
 			v-settings-row="everySiteRow.id"
 			:class="$style.every_site"
+			v-slot="{ titleId }"
 		>
 			<Toggle
-				:aria-label="everySiteRow.title"
+				:aria-labelledby="titleId"
 				:modelValue="everySite"
 				:disabled="everySiteProfile === null"
 				@update:modelValue="onEverySiteToggle"
