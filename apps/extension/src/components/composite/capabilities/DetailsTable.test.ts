@@ -65,7 +65,7 @@ const ADDRESS_PX = 112
 
 /** The declarations of the one rule whose selector is exactly `selector`; none when two could compete. */
 const rule = (css: string, selector: string): Record<string, string> => {
-	const escaped = selector.replace(/[.>]/g, "\\$&")
+	const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 	const matches = [...css.matchAll(new RegExp(`^\\s*${escaped} \\{([^}]*)\\}`, "gm"))]
 	const body = matches.length === 1 ? matches[0][1] : ""
 	return Object.fromEntries(
