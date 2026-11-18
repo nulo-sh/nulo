@@ -1,8 +1,8 @@
 ---
 plan: authwits-2
 tier: mid (thinned: one Codex round on the plan, no Opus leg; one Codex pass over arc 1's net diff)
-status: planned
-issues: "arc 1 closes #1829 and #1830"
+status: arc 1 merged (#1832); arc 2 in progress
+issues: "arc 1 closed #1829 and #1830; arc 2 closes none"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -113,7 +113,7 @@ A stored row carries the scope, the hash, `pending`, the grant's `txHash` and `c
 
 **Trade-offs and alternatives** (decision ledger D1 to D3).
 
-## Phases
+## Phases (arc 1)
 
 ### Phase 1: the revoke and the switch wait for the checkpoint (#1829) ✓
 
@@ -144,6 +144,50 @@ A stored row carries the scope, the hash, `pending`, the grant's `txHash` and `c
 - Commands, once, in order, at retry 0: `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run --cwd apps/extension test:components`, `bun run check:plans` (after staging), then `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/authwit-lifecycle.test.ts` (Chrome; the spec that sends both flows on chain).
 - Pass: every command exits 0. No e2e scenario is added: the unit layer establishes both failure modes (the sandbox cannot show the first).
 
+## Arc 2: the revoke reports through Activity, and a row names its action
+
+Base: `origin/dev` at `6aaebe886` (arc 1 merged as #1832). Branch `authwits-2-a2`.
+
+**The owner's picks** (decision page 166, signed 2026-11-17 at 15:40 UTC at dev `0dc22a9c5`):
+- **P166-01 (OA-1) = B**, note: *"\"B\" but once revoke is clicked and.. (sent?) should take you to home? Like any other transaction / transfer?"* Asked whether Revoke should go Home, the owner answered on 2026-11-18 at about 15:05 UTC: *"Authwit: Ok. Stay there. On authwits page."* B as drawn: *"Activity carries it, as every send: Revoke closes the popup at once, a line under Revoke says beforehand "Revoking continues if you close this. Its progress shows in Activity.", each row being revoked carries a "Revoking" chip until the registry confirms and then leaves the list, a failed one reads "Not revoked" with the reason in Activity, and Home's Activity holds the revoke's transaction row."* The person stays on the Authwits page.
+- **P166-02 (OA-2) = N1**, no note: *"The title names the action and the contract: "Transfer · " and the contract chip the approval window uses. Nothing the row lacks; every kind of row keeps its details."* A listed token reads its symbol with Nulo's seal; any other contract reads its short address as an unknown contract; `intent` and `message_hash` rows keep today's title and details.
+- **P166-03 (OA-3) = S**, the registry check on page open: arc 3, which stacks on this arc. Nothing of it here.
+
+**The popup hands the revoke to the worker.** Revoke posts every chunk's `revokeAuthwits` at once, on the popup's own client (connected, since every estimate landed on it, so each request is on the port before the call returns), then emits close. The worker runs each request to its end whether the popup, the page or the wallet window stays open; its execution lane serializes the sends. The popup reports nothing: no toast, no stage line, no chunk status, no run fence. A latch refuses a second press until the next show. The hide disconnects the client only once no revoke request is outstanding; the last one to settle disconnects it if the popup is hidden (the Send page's rule: the request's settle owns the teardown). Network and account are read once, at Revoke.
+
+**The rows read the worker's revoke tasks.** `revokeAuthwits` already starts a task, `RevokeAuthwitsContent(ids)`, before its grant wait and settles it after the registry read: completed once every row is pruned, failed on any throw, cancelled on a cancel. Tasks live in the worker's memory for an hour after they end, cleared on a profile switch. A new composable, `useRevokeTasks`, keeps the revoke tasks from a `getTasks` snapshot plus the task events (as `useBalanceTasks` does) and answers per row id from the latest task naming it: unfinished → `revoking`, failed → `failed`, else none. The page passes that to each card.
+
+**N1.** A pure helper names a `call` row's action: the first word of its function name, capitalised (`transfer_in_public` → `Transfer`). The page builds the chip with `contractChipAt` (the approval window's builder) from the signed list's reader, the profile's tokens on this chain and the default explorer, with no name book, so an unlisted contract reads its short address. The card titles such a row `Transfer · ` then the chip, in its own slot above the row's target, as the Notes page places its chip; the title wraps rather than cut the chip. Every other kind keeps `kindName`.
+
+**File-level change map (arc 2)**
+
+| File | Change |
+|---|---|
+| `apps/extension/src/popup/components/popups/RevokeAuthwitsPopup.vue` | hand-off at Revoke; the line under Revoke; drop the stage line, the chunk status lines but the resting one, the toasts, the run fence |
+| `apps/extension/src/popup/components/popups/RevokeAuthwitsPopup.test.ts` | the hand-off describe replaces the stage-line and hide describes |
+| `apps/extension/src/popup/utils/cancellable-rejection.ts` | its doc drops the revoke popup from its callers |
+| `apps/extension/src/composables/useRevokeTasks.ts` (+ `.test.ts`) | new: per-row revoke state from the task snapshot and events |
+| `apps/extension/src/popup/components/modules/settings/authwits/authwit-helpers.ts` (+ `.test.ts`) | `authwitAction(content)` |
+| `apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue` (+ `.test.ts`) | props `chip`, `revokeState`; the N1 title; the Revoking and Not revoked chips |
+| `apps/extension/src/popup/pages/settings/developer/account-state/authwits/index.vue` (+ `index.test.ts`) | token, price and task clients; the chip context; the revoke state per row |
+
+### Phase 4: a row names its action and contract (N1)
+
+1. `authwitAction` with its unit cases; the card's N1 title and chip slot; the page's chip context.
+2. Tests, wire-shaped (every address `0x` + 64 hex): a `call` row on a listed token titles `Transfer ·` with the symbol chip sealed `nulo`; one on an unlisted contract titles with its short address, level `none`; an `intent` row keeps `Intent` and no chip; pressing the chip opens its press, not the data viewer; the row's name reads the action, the chip and each status chip.
+3. Gate: `bun run lint`, `bun run typecheck:all`, `bun run --cwd apps/extension test src/popup/components/modules/settings/authwits src/popup/pages/settings/developer/account-state/authwits`. Pass: exit 0.
+
+### Phase 5: Revoke hands off; the rows carry its state (B)
+
+1. The popup's hand-off and line; `useRevokeTasks`; the card's two chips; the page's task client.
+2. Tests: Revoke posts every chunk at once with the network and account read at the press, closes once, toasts nothing, and a second press posts nothing (the shared keyboard contract's in-flight pin holds); a hide while a request is out keeps the client, whose settle disconnects it; the line reads under Revoke; the composable's snapshot, events, latest-wins, failure, cancel and dispose; the page draws Revoking from a task snapshot taken on open, then drops the row when the registry prunes it, and reads Not revoked from a failed task.
+3. Gate: `bun run lint`, `bun run typecheck:all`, `bun run --cwd apps/extension test <the dirs touched> type-role-ban copy-dash-ban red-text-ban`. Pass: exit 0.
+
+### Phase 6: arc gate
+
+- Once, in order, at retry 0: `bun run lint`; `bun run typecheck:all`; from `apps/extension`, `bun run test -- <the dirs touched> type-role-ban copy-dash-ban red-text-ban`; `bun run test` (the type-roles inventory pins producers); `bun run check:plans` after staging; smoke from `apps/extension`, `bun run test:e2e tests/e2e/type-roles.test.ts`, Chrome then `NULO_E2E_BROWSER=firefox`; network from the root, `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/authwit-lifecycle.test.ts tests/e2e/network/authwit-variants.test.ts tests/e2e/network/authwit-consume-smoke.test.ts`, Chrome then Firefox. The brief names `tests/e2e/authwit-consume-smoke.test.ts` as smoke; the file is a network spec, so it joins the network run.
+- Pass: every command exits 0. No e2e scenario is added: the lifecycle spec already closes the wallet window right after Revoke and then reads the registry, which is the hand-off's failure mode; the rest is component-level.
+
 ## Security & Adversarial Considerations
 
 - **Threat model.** A dApp holding a public grant wants to consume it after the person revokes it; a network that drops or reorders blocks; a popup closed mid-send.
@@ -151,11 +195,20 @@ A stored row carries the scope, the hash, `pending`, the grant's `txHash` and `c
 - **The endpoint stays trusted.** A node that lies about its tips or the registry can make the wallet prune a live grant, before and after the change; the same-endpoint reads only keep the wait and the verify consistent. A slow node can hold an awaited read past the nominal bound.
 - **Fail closed.** A timeout still refuses and keeps the rows; the verify still reads the endpoint the wait read (`receiptNodeFor`), never the route.
 - **The popups.** The run fence only drops a hidden popup's reading of a result and stops its next chunk; it sends, signs and stores nothing. Least privilege, cryptography and supply chain: no change, no dependency.
+- **Arc 2, the chips.** They read the worker's in-memory tasks through `getTasks` and the task events, as Home's Activity does; nothing new is written, stored or sent, and no stored shape changes (no stamp, no migration). A task names row ids only; the page matches them to the rows of its own scope, and an id never names a row of another scope (ids are unique in the store). The chip shows no task error text, so nothing of a failure reaches the screen or a log line beyond what the journal already holds.
+- **Arc 2, the hand-off.** The popup closing at Revoke changes nothing the run fence did not already cover: the worker owned each send from its request (arc 1), and the popup now reports nothing at all. Each request still captures the execution fence before any read, builds from the scope's own rows and refuses foreign ids, so a request the person no longer watches authorizes nothing a watched one would not. A switch, lock or reset before a posted request runs refuses it there. A row revoked again while it reads Revoking sends a second transaction, as two windows could already: a second fee, no wrong state (D9).
+- **Arc 2, the title.** A `call` row's method and contract are the inputs its hash was computed from (`computeCallMessageHash`), so the title names what the grant allows. An `encoded_call` row's `name` is the dApp's label beside a selector the hash binds, so it titles nothing (D10). The method is wire text: shown through `sanitizeWireString`, never as HTML.
 
 ## UI impact
 
 - Revoke and registry popups: no new words, rows or layout. On Testnet and Mainnet a landed send whose checkpoint reaches L1 on the ideal path now ends in the success they already show on the sandbox, instead of the failure toast; a later checkpoint still ends in today's failure; a popup closed mid-send shows no toast of either kind. Both end a wrong state, so the existing copy stays.
 - Authwits page: none in arc 1. Arcs 2 and 3 wait for OA-1, OA-2 and OA-3.
+- **Arc 2, each signed by P166-01 or P166-02 (quoted above):**
+  - Revoke popup, under Revoke: one body line, "Revoking continues if you close this. Its progress shows in Activity.", shown while the popup is open. Before: the stage words appeared there only while sending.
+  - Revoke popup, at Revoke: it closes at once and the person stays on the Authwits page. Before: it stayed open with a moving line and the stage words, then closed on a success toast or stayed on a failure toast. Now no toast either way.
+  - Authwits page rows: a "Revoking" chip beside the title (and beside Pending, when both hold) from the press until the registry read prunes the row, which then leaves the list; a "Not revoked" chip in danger text when the revoke failed, for an hour or until the next revoke of the row. Before: nothing on the row.
+  - Authwits page, a `call` row's title: "Transfer · " and the contract chip (a listed token's symbol, mark and solid seal; an unlisted contract's short address, no seal), pressing it opens the chip's card; the title wraps under the row's width rather than cut the chip. Before: "Call". Every other kind, and every row's details, unchanged.
+  - Home's Activity: unchanged; it already lists the revoke's journal and transaction rows.
 
 ## Decision ledger
 
@@ -164,6 +217,13 @@ A stored row carries the scope, the hash, `pending`, the grant's `txHash` and `c
 - **D3, Q1.** No arc 1 change: no defect was shown and both candidate fixes are visible or widen a cache.
 - **D4, the brief's two-chunk case.** Did not hold; multi-chunk paths are covered by the Phase 2 tests.
 - **D5, captures.** One prototype build with a runtime switch (A, B, C, N1, N2), so one sandbox run takes every frame.
+- **D6, Revoke stays on the page** (the owner, 2026-11-18): the popup closes and nothing navigates. Rejected: going Home as Send does (the owner's own answer).
+- **D7, the chip's source: the worker's revoke task, not the journal record.** OWNER-ASKS suggested the in-flight journal record; read against the tree it cannot carry the chip: the record holds no row id or hash (only the primary call's contract and argument count), it turns `succeeded` when the node accepts while the revoke still waits for its block, its checkpoint and the registry read, and a failure after the send never reaches it. The task the service already starts per revoke names the ids, spans the request to the registry read, fails on any throw, and lives in worker memory (no storage), so it survives the page and the popup closing while the wallet runs. Rejected: a new journal field (an additive stored-shape stamp the brief asked to avoid); a page-side set of revoking ids (lost on reopen). Limits, both visible only as plain rows: a worker restart drops the tasks (the journal's interrupted record says what happened); a request the worker refuses before its task starts (an unreadable network, a locked wallet) leaves no task.
+- **D8, what "the registry confirms" reads.** `verifyRevoked`: once the revoke's block is checkpointed (arc 1), the endpoint that took the send reads each hash unauthorized, and a pending grant's block is at or below the revoke's; the row is then deleted (`onAuthwitDeleted`) and leaves the list before the task completes. A row it cannot verify stays, and the task fails: Not revoked.
+- **D9, the hand-off: every chunk posted at once.** Chosen: the worker holds every chunk from the press, so closing the popup, the page or the wallet window loses none, and every chunk's rows read Revoking from the start (the owner's "each row being revoked"). Rejected: chunks one after another from the hidden popup (a closed wallet window drops the later chunks, and their rows read plain while they wait); one worker RPC that loops the chunks (a new public contract). Costs, both multi-chunk only: the lane caps a requester's queue at eight, so a Revoke all of 225 or more authwits (nine or ten chunks) has its last chunks refused and reading Not revoked (a known limit at close-out, reopening: a report, or the cap or Revoke all leaving Developer mode); and a later chunk may build before an earlier one is mined, as today's per-chunk shortfall check already allowed. A row revoked again while Revoking keeps its control (drawn so) and sends a second transaction.
+- **D10, N1's reach.** `call` rows only: their method is bound to the hash. `encoded_call` rows keep "Encoded Call": the selector is bound, the `name` beside it is the dApp's word. No name book: the pick says an unlisted contract reads its short address. The press carries the default explorer's link, as the approval window's does.
+- **D11, "the reason in Activity".** Holds for a failure the journal records (a simulation, a proof or a send refused): Activity's failed card names it. It does not hold for a failure outside the journal: a grant not yet in a block (refused before any send), or one after the send (the checkpoint wait timing out, the registry still reading authorized), where Activity shows the transaction confirmed. Those rows read Not revoked with no reason on screen; the popup's old raw-error tooltip went with the popup. Where such a reason should show is a visible choice: OA-4, shipped without.
+- **D12, accessibility (owner's 2026-10-19 delegation).** The row's name is the action, the chip's own name ("TST, Nulo verified"), then each status chip; the middle dot is hidden from it. The chip is its own Tab stop above the row's target, as on the Notes page.
 
 ## Audit verdicts
 
@@ -181,8 +241,9 @@ A stored row carries the scope, the hash, `pending`, the grant's `txHash` and `c
 ## Delivery
 
 - Arc 1, phases 1 to 3: branch `authwits-2-a1` off `origin/dev`, carrying the plan commit; `gh pr create`; title `fix(authwits): a landed revoke reports success, and a closed popup reports nothing` (82 characters); body ends with `Closes #1829` and `Closes #1830`; no label. Code review: off.
-- Arc 2 (OA-1, OA-2 picks) and arc 3 (OA-3, if yes) are planned when the orchestrator resumes the lane with the picks; they stack on arc 1 (`gh stack`). The close-out is the stack's top layer, `authwits-2-close-out`, never in arc 1.
-- Parallelism: none; arc 1 is two short phases.
+- Arc 2, phases 4 to 6: arc 1 merged before arc 2 began, so arc 2 is branch `authwits-2-a2` off `origin/dev` and a plain PR against `dev`; title `feat(authwits): a revoke reports through Activity, and a row names its action and contract` (88 characters); the body quotes P166-01, the owner's 2026-11-18 answer and P166-02 as the sign-off; no Closes line; no label; not merged by the lane.
+- Arc 3 (P166-03, the registry check on page open) stacks on arc 2. The close-out is the stack's top layer, `authwits-2-close-out`.
+- Parallelism: none.
 
 ## Post-implementation
 
@@ -190,10 +251,12 @@ Follows `implementations-plan/README.md` § Post-implementation standard at `0dc
 - Step 1 is absent (`code_review: off`).
 - Step 2, bounded form: after arc 1's Phase 3, ONE Codex pass (`~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over arc 1's diff against `origin/dev`, with the plan, the arc map ("arc 1 of up to 3; arcs 2 and 3 change the popup and the page on the owner's picks") and the README's two verbatim rules; then targeted verification of each material fix. Log it in `lessons/phase-3.md` and above.
 - Step 3: `gh pr checks <n> --watch` once; a known flake gets one rerun.
-- Steps 4 and 5 (close-out, teardown) run after the last arc merges: the known limits named above (Q1, the cancel loop, the foreign grants, a rolled-back checkpoint, a checkpoint past 120 s) are filed then, closed as not planned. Teardown: `agent-worktree done authwits-2 --merged` once `implementations-plan/archive/authwits-2/plan.md` is on `dev`.
+- Arc 2, step 2, bounded form: after Phase 6's gates, ONE Codex pass over this plan's arc 2 sections and arc 2's diff against `origin/dev`, arc map "arc 2 of 3; arc 3 checks the registry on page open", the README's two verbatim rules; fix what is material, re-run the gates the fixes touch, log it in `lessons/phase-6.md` and § Audit verdicts. A second round only on a finding. Captures (capture-only code, never committed) go to the orchestrator with the PR.
+- Steps 4 and 5 (close-out, teardown) run after the last arc merges: the known limits named above (Q1, the cancel loop, the foreign grants, a rolled-back checkpoint, a checkpoint past 120 s, D9's refused chunks past the lane's cap) are filed then, closed as not planned. Teardown: `agent-worktree done authwits-2 --merged` once `implementations-plan/archive/authwits-2/plan.md` is on `dev`.
 
 ## Seeds (not run; the orchestrator drives this lane)
 
 ```
 /goal Arc 1 of implementations-plan/authwits-2/plan.md: phases 1-3 marked ✓, each gate reported passing, the Codex pass logged, PR open with Closes lines and checks green.
+/goal Arc 2 of implementations-plan/authwits-2/plan.md: phases 4-6 marked ✓, each gate reported passing, the Codex pass logged, captures delivered, PR open against dev with checks green.
 ```

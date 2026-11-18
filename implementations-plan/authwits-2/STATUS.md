@@ -6,3 +6,4 @@
 - 2026-11-17: plan drafted; Codex plan round: conditional approve, two follow-ups, approve.
 - 2026-11-17: #1829 and #1830 filed (`bug`); frames recaptured (52, exit 0).
 - 2026-11-17: arc 1 built on `authwits-2-a1`: phases 1 to 3 green, Codex pass approve.
+- 2026-11-18: arc 2 planned on `authwits-2-a2` off dev `6aaebe886`: P166-01 B (stays on the page), P166-02 N1, P166-03 S for arc 3; chip source D7.
