@@ -111,7 +111,7 @@ One PR from `connected-app-build-1-a2` (off `origin/dev`) to `dev`, opened ready
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `8ff0e6489`, bounded work. Plan-specific values:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `8ff0e6489`, bounded work. Plan-specific values:
 - Step 1: `code_review: off`, so absent.
 - Step 2: ONE `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol` over the plan amendment and `origin/dev...HEAD`, with the arc map ("arc 2 of 2, then the close-out") and the two verbatim rules; the prompt in the lane's scratch dir. Fix what is material, rerun the gates the fixes touch, log the verdict. A second round only on a finding (`resume-codex.sh`; hard stop at three). No Opus review.
 - Step 3: `gh pr create`, `gh pr ready`, `gh pr checks <n> --watch` (a known flake gets one rerun).
