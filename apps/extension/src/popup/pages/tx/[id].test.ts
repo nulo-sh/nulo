@@ -283,12 +283,14 @@ describe("the transaction page's contract for a call", () => {
 				reads: line.textContent,
 				tail: contract?.parentElement?.className,
 				held: contract?.previousSibling?.textContent,
+				box: contract?.firstElementChild?.className,
+				inBox: contract?.firstElementChild?.firstElementChild?.getAttribute("data-testid"),
 			}
 		})
 		const sentence = { line: STYLE.call_line, tail: STYLE.call_tail, held: "on\u00a0" }
 		expect(sentences).toEqual([
-			{ ...sentence, reads: "Claim Fee Juice on\u00a0Fee Juice" },
-			{ ...sentence, reads: "Checkpoint on\u00a00x0b0b..0b0b" },
+			{ ...sentence, reads: "Claim Fee Juice on\u00a0Fee Juice", box: STYLE.call_chip_box, inBox: "contract-chip" },
+			{ ...sentence, reads: "Checkpoint on\u00a00x0b0b..0b0b", box: undefined, inBox: undefined },
 		])
 	})
 })
