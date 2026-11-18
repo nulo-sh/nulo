@@ -1,7 +1,7 @@
 ---
 plan: nightly-green-1
 tier: light (thinned: no plan audit round, no Opus leg; one Codex pass over the plan and the net diff)
-status: planned
+status: delivered (one PR against dev, merge pending)
 issues: "closes #1845 and #1846"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 90c2f61ab
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-18.
+- **Status:** delivered. The fixes and this close-out are one PR against `dev`, which merges on the orchestrator's word; the next scheduled nightly is the proof of record.
+- **Shipped:** the floor-chip test in `rows.test.ts` takes the held list's priced token (D1); `secondToken` draws from the scope's own pool with a distinct symbol (D2); the RP live probe accepts 400 or 404 on `/cdn-cgi/` (D3). Closes #1845 and #1846.
+- **Proof:** the two smoke files at retry 0, Chrome and Firefox, on the armed build and on a production build run as the artifact leg: four green runs (§ Gates run). `infra/passkey-rp` tests green offline and live.
+- **Dispositions:** #1845's "token seeds" hypothesis did not hold; the cause is the held list's pricing and `secondToken`'s pool. No workflow, Worker or source change.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted; the convention the floor test broke is already in `apps/extension/tests/e2e/README.md` (Held), and `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # nightly-green-1: the nightly back to green
 
@@ -71,9 +83,26 @@ One PR against `dev` from `nightly-green-1-a1` (off `origin/dev`, carrying this 
 
 [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `90c2f61ab`, bounded work: one Codex pass (gpt-6.1-sol, high, read-only) over this plan and the net diff, with the two verbatim rules and the adversarial ask, plus the lane's question: does each skip or seed keep the artifact smoke meaningful, and does accepting 400 weaken the script-free invariant. A second round only if the first finds something material; hard stop at three.
 
+## Gates run
+
+At retry 0, once, in order, on `79032943c` (the final test code; `origin/dev`'s `eb42af540` merged after, touching none of these files and only network-owned identifier sites).
+
+| Gate | Result |
+|---|---|
+| `bun run lint`, `bun run typecheck:all` | exit 0 (one pre-existing warning in a file this lane does not touch) |
+| `bun run --cwd infra/passkey-rp test` | 5 pass, 6 skip (live describe off) |
+| same with `RP_HOST_LIVE=1` | 11 pass |
+| `bun run check:plans` | 0 findings |
+| smoke, armed build, Chrome | 24 passed, 1 skipped, 178 s |
+| smoke, armed build, Firefox | 25 passed, 316 s |
+| smoke, production build, artifact leg, Chrome | 23 passed, 2 skipped, 327 s |
+| smoke, production build, artifact leg, Firefox | 24 passed, 1 skipped, 429 s |
+
+The floor transfer's chip read 20 px in all four. The skips are the base's: the placeholder-row test skips on the artifact leg (`liveLeg`), and one type-roles test skips on Chrome.
+
 ## Audit verdicts
 
-- Codex pass over plan and diff: pending.
+- **Codex pass over plan and diff** (gpt-6.1-sol, high, read-only): **approve**, high confidence. The floor seed and the second token keep the artifact smoke meaningful (same symbol, amount, 20 px assertion and tolerances; production pricing and rendering); accepting 400 relaxes an incidental status, not the script or mitigation checks, and 200, redirects, 403, 429 and 503 still fail. One nit, accepted: `secondToken`'s comment restated its body; cut to one sentence of invariant. Noted, no change: the artifact type-roles test needs the first distinct-symbol published entry to be priced; `openSeededHome` already throws on an unpriced one, so a reordered list fails loudly, never green. No second round: nothing material.
 
 ## Seeds
 
