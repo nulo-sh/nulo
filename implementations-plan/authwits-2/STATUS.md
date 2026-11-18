@@ -15,3 +15,4 @@
 - 2026-11-18: phase 6 network Chrome, proverless, retry 0: lifecycle, variants (4), consume-smoke: 6 passed, run 291.1 s.
 - 2026-11-18: phase 6 network Firefox, proverless, retry 0: 6 passed, run 302.5 s.
 - 2026-11-18: Codex pass on arc 2: conditional approve; findings 1, 2, 4 fixed (row identity, Revoke gated on Ready, encoded_call wording), 3 rejected (D13); lint 0, typecheck:all 0, touched tests + bans 345 passed (the `action_operations` digest re-pinned).
+- 2026-11-18: after the Codex fixes, network authwit specs, proverless, retry 0: Chrome 6 passed (266.9 s), Firefox 6 passed (282.4 s).
