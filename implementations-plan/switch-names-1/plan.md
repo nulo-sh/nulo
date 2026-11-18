@@ -1,7 +1,7 @@
 ---
 plan: switch-names-1
 tier: light (thinned: no plan audit round, no Opus leg; one Codex pass over the plan and the net diff)
-status: planned
+status: delivered (one PR against dev, merge pending)
 issues: "closes #1733"
 driver: claude-code
 claude_model: opus
@@ -16,6 +16,18 @@ post_implementation_hardening: not scheduled
 ---
 
 # switch-names-1: every switch is named by the words beside it
+
+## Outcome
+
+- **Date:** 2026-11-18.
+- **Status:** delivered. The fix, its tests and this close-out are one PR against `dev`, which merges on the orchestrator's word.
+- **Owner sign-off:** none needed: no visible change and no new words (the lane brief); ARIA wiring decided under the owner's 2026-10-19 delegation.
+- **Shipped:** the seven unnamed switches (display ×2 tags, privacy ×2, lock, developer, the confirm toggle) and connected apps' switch are named through `aria-labelledby` by the title beside them; `SettingControlRow` hands its title id to its slot; `expectOwnedRows` counts each page's switches and resolves every name page-wide against its row's title; one name test each in `SettingControlRow` and `ConfirmPopup`; the template scan `switch-name.scan.test.ts`. Closes #1733.
+- **Dispositions:** `PermissionRow` keeps its own `switchLabel` (D5). Connected apps' separate name pin is folded into `expectOwnedRows` (D6).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget; the anonymous-stub gotcha is in [lessons/phase-0.md](lessons/phase-0.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 Most `Toggle`s render `role="switch"` with no accessible name, so a screen reader says "switch, off" and nothing else (#1733). Each one gets the name a sighted person already reads beside it: no visible change, no new words.
 
@@ -98,3 +110,7 @@ Branch `switch-names-1-a1` off origin/dev carrying the plan commit; one PR again
 - *Nit, accepted.* The rule could run zero times on an anonymous stub (privacy's needed a name). Fix: `expectOwnedRows` takes the page's switch count.
 - *Nit, accepted.* The scan header overclaimed; a blank literal binding (`:aria-label="'  '"`) passed. Fix: header lists what passes it; blank literals refused, with a case.
 - *Nit, accepted.* The resolver's comment overclaimed AccName; the `scan` doc comment narrated. Fix: reworded, deleted.
+
+**Round 2** (the same session resumed over `9e7894d3f..9b231bc8e`): approve, high confidence; both reproduced wrong-row paths closed, no zero-switch pass, no regression.
+
+**Final gates** (sources unchanged since the smoke runs; the round-1 fixes touched tests only): `bun run lint` pass; `bun run typecheck:all` pass; 10 unit files 149/149 pass; `bun run check:plans` pass; smoke at retry 0 on the 12 named specs: Chrome 11 files passed, 1 skipped (`firefox-sidebar`, Firefox-only), 71 tests passed, 6 skipped, 476 s; Firefox 12 files passed, 71 tests passed, 6 skipped, 618 s.
