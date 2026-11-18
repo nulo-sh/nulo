@@ -3,3 +3,4 @@
 - 2026-11-18 arc 1: lint pass; typecheck:all pass
 - 2026-11-18 arc 1: unit gate pass (113 files, 2601 passed, 1 skipped) + RecentActivityView/app-level tests; check:plans pass
 - 2026-11-18 arc 1: smoke snackbar.test.ts pass, Chrome 9/9 (41 s), Firefox 9/9 (50 s)
+- 2026-11-18 arc 1: network Chrome pass (3 files, 23 tests, 977 s, proverless, retry 0); Codex r1 changes needed (timing claim), r2 approve
