@@ -1,0 +1,1 @@
+- 2026-11-18 plan: written at b8ec26b1f (light, thinned; one Codex pass after the build)
