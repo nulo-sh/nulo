@@ -1,0 +1,5 @@
+# call-lines-build-1: phase 1
+
+- Codex round 1 (gpt-6.1-sol, high, read-only), over the plan and `eb42af540...448132c83`: approve with fixes, four findings. R1-1 (the detail's chip past its row at 240 px) and R1-2 (the title's bidi containment) accepted after my own measurement in both engines; R1-3 (the chevron past the row at labels wider than the line) filed as closed known limit #1850; R1-4 (two comments) accepted. Verdicts and reasons in `plan.md` § Audit verdicts.
+- My plan measured the detail only to 300 px, the prototype's narrowest; the narrowest width a page is laid out for is 240 px (`NARROW_WIDTH` in `tests/e2e/fixtures/type-roles.ts`, Firefox's sidebar). Measure a page layout change there.
+- Inside an inline-flex box each flex item is its own bidi paragraph, so an override before the box cannot reverse the text in it; it can still move the box against the space before it.
