@@ -91,7 +91,7 @@ No e2e scenario is added, so no suite wall-clock is measured.
 
 ## Post-implementation (single arc, bounded work)
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at b22893f42, bounded-work form: ONE Codex pass (`gpt-6.1-sol`, high, read-only) over this plan and the net diff, with the standard's two verbatim rules and adversarial ask, plus the lane's questions: does every switch now carry exactly the words beside it, and can the scan test be fooled. A second round only if the first finds something material. No Opus leg, no `/code-review`.
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at b22893f42, bounded-work form: ONE Codex pass (`gpt-6.1-sol`, high, read-only) over this plan and the net diff, with the standard's two verbatim rules and adversarial ask, plus the lane's questions: does every switch now carry exactly the words beside it, and can the scan test be fooled. A second round only if the first finds something material. No Opus leg, no `/code-review`.
 
 ## Delivery
 
