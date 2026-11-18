@@ -18,17 +18,17 @@ import {
  * Static guard: a `Toggle` renders `role="switch"`, which a screen reader announces by its state
  * alone unless it has a name. Every `<Toggle>` a template states (any case) carries a non-empty
  * `aria-label` or `aria-labelledby`, static or bound; a `v-bind` object spread does not count. No
- * source imports `Toggle` or reads `.Toggle`, so an aliased tag or a render function cannot hold a
- * switch this scan never sees: templates take it from the component resolver.
+ * source imports `Toggle` or reads `.Toggle`, which shuts out an aliased tag and a render function.
  *
- * Limits: it cannot tell whether an `aria-labelledby` id exists or what text it holds, nor whether a
- * bound expression yields nothing at run time; the page and component tests resolve each name. A
- * template inside a story's string is not read.
+ * It checks syntax, not names: a wrong text, an id that names another row or nothing, a binding empty
+ * at run time, a later `v-bind` object overwriting the attribute, and a Toggle reached through
+ * `<component :is>`, `resolveComponent` or a re-export all pass it. The page and component tests
+ * resolve each name. A template inside a story's string is not read.
  */
 
 const POLICY = { roots: ["apps/extension/src"], exts: ["vue", "ts", "js"], skip: [TEST_FILE, STORY_FILE, DECLARATION, GENERATED_TYPES] }
 const NAME_ATTRS = new Set(["aria-label", "aria-labelledby"])
-const EMPTY_BINDINGS = new Set(["''", '""', "``", "undefined", "null"])
+const EMPTY_BINDING = /^(?:(["'`])\s*\1|undefined|null)$/
 const DESIGN = /^@nulo\/design(\/|$)/
 const TOGGLE_MODULE = /(^|\/)Toggle(\.vue)?$/
 
@@ -38,7 +38,7 @@ function names(prop: TemplateProp): boolean {
 	if (prop.type === NODE.ATTRIBUTE) return NAME_ATTRS.has(prop.name) && (prop.value?.content.trim() ?? "") !== ""
 	if (prop.type !== NODE.DIRECTIVE || prop.name !== "bind" || !prop.arg?.isStatic || !NAME_ATTRS.has(prop.arg.content)) return false
 	const exp = prop.exp?.content.trim() ?? ""
-	return exp !== "" && !EMPTY_BINDINGS.has(exp)
+	return exp !== "" && !EMPTY_BINDING.test(exp)
 }
 
 const isToggle = (node: TemplateNode): boolean => node.tag?.toLowerCase() === "toggle"
@@ -80,7 +80,6 @@ function scanScript(file: string, content: string, startLine: number, out: Hit[]
 	visit(tree)
 }
 
-/** Every unnamed `<Toggle>` and every script reach for `Toggle` in one parsed source, and its tag count. */
 function scan(parsed: ParsedSource): { hits: Hit[]; tags: number } {
 	const hits: Hit[] = []
 	for (const block of parsed.scripts) scanScript(parsed.file, block.content, block.startLine, hits)
@@ -105,6 +104,7 @@ describe("switch names (static)", () => {
 		["a bound aria-labelledby", sfc('<Toggle :aria-labelledby="titleId" />'), 0],
 		["a long-form bound aria-label", sfc('<Toggle v-bind:aria-label="row.title" />'), 0],
 		["an empty literal bound", sfc("<Toggle :aria-label=\"''\" />"), 1],
+		["a blank literal bound", sfc("<Toggle :aria-label=\"'  '\" />"), 1],
 		["undefined bound", sfc('<Toggle :aria-labelledby="undefined" />'), 1],
 		["an object spread alone", sfc('<Toggle v-bind="attrs" />'), 1],
 		["a description alone", sfc('<Toggle aria-describedby="sub" />'), 1],

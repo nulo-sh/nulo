@@ -5,3 +5,4 @@
 - 2026-11-18 gate 1 lint: pass. gate 2 typecheck:all: pass (after a Node-vs-Element fix in the connected-apps pin). gate 3 vitest, 10 files: 148/148 pass.
 - 2026-11-18 gate 4 check:plans: pass. gate 5 smoke Chrome, 12 files at retry 0: 11 passed, 1 skipped (firefox-sidebar); 71 tests passed, 6 skipped; 476 s.
 - 2026-11-18 gate 5 smoke Firefox, same 12 files at retry 0: 12 passed; 71 tests passed, 6 skipped; 618 s.
+- 2026-11-18 Codex round 1: changes needed (1 material, 3 nits), all accepted and fixed; 10 files 149/149 pass; typecheck pass; both fooling paths reproduced red.

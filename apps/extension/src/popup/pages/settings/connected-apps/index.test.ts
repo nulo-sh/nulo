@@ -5,7 +5,6 @@ import type { VueWrapper } from "@vue/test-utils"
 import { SETTING_UPDATE_FAILED } from "@/composables/useSettingUpdate"
 import { useAppStore } from "@/stores/app.store"
 import { EVERY_SITE_CONFIRM } from "@/utils/every-site"
-import { accessibleName } from "../../../../../tests/helpers/accessible-name"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { expectOwnedRows, settingsContext } from "../../../../../tests/helpers/settings-rows"
 import ConnectedApps from "./index.vue"
@@ -239,13 +238,9 @@ describe("Settings › Connected apps — the every-site switch", () => {
 
 	test("the page owns the row, first, above the sessions", async () => {
 		const w = await mountPage([session("s1", "alpha", 1)])
-		expectOwnedRows(w, "/popup/settings/connected-apps", settingsContext())
+		expectOwnedRows(w, "/popup/settings/connected-apps", settingsContext(), 1)
 		const order = w.findAll('[data-testid="privacy-row-every-site"], h2').map((el) => el.element.tagName)
 		expect(order).toEqual(["DIV", "H2"])
-		const row = w.get('[data-testid="privacy-row-every-site"]')
-		expect(accessibleName(row.get('[data-testid="every-site-toggle"]').element, row.element)).toBe(
-			"Let every site see that Nulo is installed",
-		)
 	})
 
 	test("the Toggle is disabled until the switch is read, then shows it", async () => {
