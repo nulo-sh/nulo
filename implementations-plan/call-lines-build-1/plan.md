@@ -8,8 +8,20 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at eb42af540
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-18.
+- **Status:** completed. Ships in the PR titled `fix(execute): call lines read "{function} on {contract}" on a wrap and in the tx detail`, which carries this close-out; it lands after the orchestrator reads its captures against the frames the owner picked.
+- **Shipped:** P180-01 = c2. The window's "on" opens the chip's nowrap box, in an inner flex box the chip clips in (D2); the transaction's Calls row reads "{title} on {contract}" as one sentence, its tail a flex box around the drawn, middle-aligned chip box (D4), its title isolating its own direction controls (D6). No copy, role, testid, chip or authorization-line change. The frames equal the signed c2 frames pixel for pixel but for the run's own account address.
+- **Gates (retry 0):** at `85ef0bea6`, lint, typecheck:all, the named unit set (33 files, 688 passed, 1 skipped), check:plans green. Smoke `execute-steps` + `type-roles` at `448132c83`: Chrome 26 passed, 3 skipped (163.5 s); Firefox 27 passed, 2 skipped (250.4 s). Smoke `type-roles` again at `7d19049b1` (the detail's last code change): Chrome 14 passed, 1 skipped (114.6 s); Firefox 15 passed (175.0 s). Network, prover-ON, `type-roles-windows` + `tx-sendTx-default` at `448132c83` (the window's last code change): Chrome 8 passed (364.8 s), Firefox 8 passed (613.6 s). No e2e scenario added.
+- **Deviations:** D2 and D4 (a chip after "on" clips inside its row, in the window as the network spec pins and on the detail at 240 px), D6 (Codex R1-2), R3-1's test pin; the detail's first fix (`bd7e6cccf`) moved its chip 1.1 px and was replaced (`7d19049b1`).
+- **Lessons:** none promoted (`lessons.md` holds 8148 of 8192 bytes); the scratch-versus-real-page measure and the 240 px floor are in [`lessons/phase-1.md`](lessons/phase-1.md).
+- **Known limits:** #1850.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # call-lines-build-1: a contract call reads as one sentence on both screens
 
