@@ -40,6 +40,7 @@ import {
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
 import { isWindowEnd, WindowEndedError } from "./window-end"
 import { knownContracts } from "./known-contracts"
+import { UnlockWindows } from "./unlock-windows"
 import { applyFeeSelection, isShownTokenMetadata, type OperationApprovalDelta } from "./approval-delta"
 import {
 	DAPP_INTERACTION_SERVICE_NAME,
@@ -146,6 +147,9 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	 *  with: what a held send's question shows. Never in `storage`, so it is never approvable again. */
 	private readonly approved = new Map<string, { payload: ExecutionPayload; deltas: OperationApprovalDelta[] }>()
 	private readonly lock = new Lock()
+	/** The window each locked discovery's site waits in. Worker-internal: the discovery flow opens,
+	 *  retimes and closes them; a connect window or notice for the site takes its window over. */
+	public readonly unlockWindows: UnlockWindows
 
 	private profileService: ProfileService = null!
 	private networkService: NetworkService = null!
@@ -163,6 +167,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		private readonly requests?: RequestLog,
 	) {
 		super(DAPP_INTERACTION_SERVICE_NAME, logger)
+		this.unlockWindows = new UnlockWindows(windowManager, (hash) => chrome.runtime.getURL(`src/popup/index.html${hash}`))
 	}
 
 	/** An unknown speed level is refused before the method runs; fee math never reads one. */
@@ -662,6 +667,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				timeoutMs,
 				kind: type,
 				placement: "top-right",
+				reuseWindowId: this.takeUnlockWindow(payload),
 			})
 
 			const interaction: DappInteraction = {
@@ -693,6 +699,13 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		if (hooks?.queuedJournalId) void this.reconcileCancelledJournal(hooks.queuedJournalId)
 		if ("session" in payload) void this.reconcileRevokedSession(registeredId, payload.session)
 		return pending
+	}
+
+	/** A connect window or notice opens in its site's unlock window, when one is open. */
+	private takeUnlockWindow(payload: InteractionPayload): number | undefined {
+		if (!isDiscoveryPayload(payload) && !isNoticePayload(payload)) return undefined
+		const origin = payload.params.dappMetadata.url
+		return origin === undefined ? undefined : this.unlockWindows.take(origin)
 	}
 
 	private async silentInteraction(payload: ExecutionPayload, hooks?: ExecutionHooks): Promise<ExecutionResult> {

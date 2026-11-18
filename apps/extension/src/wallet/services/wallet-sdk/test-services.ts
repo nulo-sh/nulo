@@ -38,6 +38,10 @@ export function fakeSdkServices(
 		resetRun?: () => Promise<void>
 		/** What `getActiveProfile` answers; `p1` by default. */
 		activeProfile?: () => Promise<{ id: string } | undefined>
+		/** What `getProfiles` answers; none by default, so a locked discovery opens no unlock window. */
+		profiles?: () => Promise<Array<{ id: string }>>
+		/** A dApp-interaction service in place of the `popup` and `notice` stubs. */
+		dappInteraction?: unknown
 		/** The approval's second durable write; resolves at once by default. */
 		setCapabilityGrants?: () => Promise<unknown>
 		/** Establishment's write of the session's hash to its row; resolves at once by default. */
@@ -90,6 +94,7 @@ export function fakeSdkServices(
 				profile: {
 					onActiveProfileChanged,
 					getActiveProfile,
+					getProfiles: opts.profiles ?? (async () => []),
 					getDeletionState: () => ({ capture: () => 0 }),
 					setRestartPreparation: opts.setRestartPreparation ?? (() => {}),
 					captureExecutionFence: async () => {
@@ -98,9 +103,10 @@ export function fakeSdkServices(
 						return { profileId: profile.id, epoch: 0, session: 1 }
 					},
 				},
-				"dapp-interaction": {
+				"dapp-interaction": opts.dappInteraction ?? {
 					discover: opts.popup ?? (async () => ({ approved: true })),
 					notifyNetworkUnavailable: opts.notice ?? (async () => undefined),
+					unlockWindows: { origins: () => [], close: () => {} },
 				},
 				"dapp-session": opts.dappSession ?? {
 					onDappSessionDeleted,

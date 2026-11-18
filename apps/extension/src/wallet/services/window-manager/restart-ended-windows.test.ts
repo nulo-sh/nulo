@@ -16,6 +16,7 @@ describe("isRestartEndedUrl", () => {
 		["send or sign", `${POPUP}#/windows/execute?requestId=0x01`],
 		["fee question", `${POPUP}#/windows/fee?requestId=0x01`],
 		["network notice", `${POPUP}#/windows/network-unavailable?requestId=0x01`],
+		["unlock window", `${POPUP}#/windows/unlock?origin=https%3A%2F%2Fapp.example`],
 		["a route with no query", `${POPUP}#/windows/verify`],
 	])("closes %s", (_name, url) => {
 		expect(isRestartEndedUrl(url, POPUP)).toBe(true)
@@ -128,6 +129,8 @@ describe("trackOpenWindows", () => {
 		expect(fake.creates).toEqual([{ type: "popup", url: at("discover"), width: 1, height: 1 }])
 		expect(await windows.isPopup(id as number)).toBe(true)
 		await expect(windows.update(999, { focused: true })).rejects.toThrow("No window with id: 999.")
+		await windows.navigate(id as number, at("verify"))
+		expect((fake as unknown as { navigates: unknown[] }).navigates).toEqual([{ windowId: id, url: at("verify") }])
 	})
 
 	test("closes every window it opened, the passkey window included", async () => {

@@ -1,7 +1,7 @@
 /**
  * One pending discovery, from admission to the session write: the origin and Terms checks, the
- * locked queue, the popup caps and the `(origin, chainId)` dedupe, a remembered session's
- * auto-approval, the connect window and the network-unavailable notice.
+ * locked queue and its unlock window, the popup caps and the `(origin, chainId)` dedupe, a remembered
+ * session's auto-approval, the connect window and the network-unavailable notice.
  */
 import type { BackgroundConnectionHandler, PendingDiscovery } from "@aztec-labs/wallet-sdk/extension/handlers"
 import type { NetworkService } from "@/wallet/services/network/service"
@@ -72,6 +72,58 @@ const DEDUPE_WAITERS_CAP = 8
 
 const discoveryDeadline = (discovery: PendingDiscovery): number => discovery.timestamp + DISCOVERY_STALE_MS
 
+/** A locked discovery opens its site's unlock window when there is a profile to unlock; with none
+ *  (onboarding unfinished) only the badge shows. Read after the enqueue, never before: an await
+ *  ahead of it could let an unlock drain the queue before the request is in it. A list that cannot
+ *  be read opens nothing and leaves the request queued. */
+async function offerUnlockWindow(origin: string, deps: DiscoveryDeps): Promise<void> {
+	const profiles = await deps.profileService.getProfiles().catch(() => [])
+	if (profiles.length > 0) fitUnlockWindow(origin, true, deps)
+}
+
+export type UnlockWindowDeps = Pick<
+	DiscoveryDeps,
+	"handler" | "dappInteractionService" | "discoveryQueue" | "pendingDiscoveryPromises" | "logger"
+>
+
+/**
+ * Fits the origin's unlock window to the origin's discoveries the SDK still holds: closed when none
+ * is left, its cut-off moved to the latest one's, or, with `mayOpen`, opened while the queue still
+ * holds a request of the origin and the caps leave room. The queue empties into the drain in the
+ * unlock's own tick, so with nothing awaited between `holds` and the open, no window opens after
+ * an unlock.
+ */
+export function fitUnlockWindow(origin: string, mayOpen: boolean, deps: UnlockWindowDeps): void {
+	const windows = deps.dappInteractionService.unlockWindows
+	const deadline = latestPendingDeadline(deps.handler, origin)
+	if (deadline === undefined) {
+		windows.close(origin)
+		return
+	}
+	if (windows.retime(origin, deadline) || !mayOpen) return
+	if (!deps.discoveryQueue.holds(origin) || !unlockWindowFits(origin, deps)) return
+	windows.open(origin, deadline)
+	deps.logger.log("wallet-sdk", LogLevel.Debug, "Opened an unlock window for a locked discovery")
+}
+
+/** The latest cut-off among the origin's live discoveries: queued, mid-drain or behind a window. */
+function latestPendingDeadline(handler: BackgroundConnectionHandler, origin: string): number | undefined {
+	let latest: number | undefined
+	for (const discovery of handler.getPendingDiscoveries()) {
+		if (discovery.origin !== origin || isDiscoveryExpired(discovery)) continue
+		latest = Math.max(latest ?? 0, discoveryDeadline(discovery))
+	}
+	return latest
+}
+
+/** An unlock window takes a connect window's place under the connect caps. */
+function unlockWindowFits(origin: string, deps: UnlockWindowDeps): boolean {
+	const connect = [...deps.pendingDiscoveryPromises.keys()]
+	const originWindows = connect.filter((key) => isOriginKey(key, origin)).length
+	const allWindows = connect.length + deps.dappInteractionService.unlockWindows.origins().length
+	return originWindows < DISCOVERY_PENDING_PER_ORIGIN_CAP && allWindows < DISCOVERY_PENDING_GLOBAL_CAP
+}
+
 /** Fail closed: an answer that cannot be read is "no". */
 async function isLegalCurrent(legal: LegalAdmission): Promise<boolean> {
 	return legal.assertCurrent().then(
@@ -114,6 +166,7 @@ async function handleSecureDiscovery(discovery: PendingDiscovery, deps: Discover
 			// The queue rejects what it refuses or supersedes, and only while the SDK's row is still
 			// this request's: a reject here could drop a resend that has since replaced it.
 			deps.discoveryQueue.enqueue(discovery, chainId)
+			await offerUnlockWindow(discovery.origin, deps)
 			return
 		}
 
@@ -351,17 +404,17 @@ async function approveAfterPopup(
 /** Cap concurrent connect popups per-origin and globally. The
  *  `(origin,chainId)` dedupe collapses exact duplicates; this bounds the
  *  distinct-key fan-out so a dApp can't spawn unbounded popup work via many
- *  chainIds (or a botnet of origins). Returns true when rejected at the cap. */
+ *  chainIds (or a botnet of origins). Other sites' unlock windows count; the
+ *  site's own does not, since its connect window takes that window over.
+ *  Returns true when rejected at the cap. */
 function checkDiscoveryPopupCaps(discovery: PendingDiscovery, deps: DiscoveryDeps): boolean {
 	const { pendingDiscoveryPromises } = deps
 	const originPopups = [...pendingDiscoveryPromises.keys()].filter((k) => isOriginKey(k, discovery.origin)).length
-	if (originPopups >= DISCOVERY_PENDING_PER_ORIGIN_CAP || pendingDiscoveryPromises.size >= DISCOVERY_PENDING_GLOBAL_CAP) {
+	const otherUnlockWindows = deps.dappInteractionService.unlockWindows.origins().filter((o) => o !== discovery.origin).length
+	const globalPopups = pendingDiscoveryPromises.size + otherUnlockWindows
+	if (originPopups >= DISCOVERY_PENDING_PER_ORIGIN_CAP || globalPopups >= DISCOVERY_PENDING_GLOBAL_CAP) {
 		deps.handler.rejectDiscovery(discovery.requestId)
-		deps.logger.log(
-			"wallet-sdk",
-			LogLevel.Warn,
-			`Discovery rejected (popup cap) [origin=${originPopups}, global=${pendingDiscoveryPromises.size}]`,
-		)
+		deps.logger.log("wallet-sdk", LogLevel.Warn, `Discovery rejected (popup cap) [origin=${originPopups}, global=${globalPopups}]`)
 		return true
 	}
 	return false
