@@ -1,1 +1,3 @@
 - 2026-11-18 plan: written at b8ec26b1f (light, thinned; one Codex pass after the build)
+- 2026-11-18 arc 1: branch toast-hide-1-a1 off the plan commit; build started
+- 2026-11-18 arc 1: lint pass; typecheck:all pass
