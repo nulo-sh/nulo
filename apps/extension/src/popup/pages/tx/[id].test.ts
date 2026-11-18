@@ -268,9 +268,10 @@ describe("the transaction page's contract for a call", () => {
 	test('each call reads as one sentence, "{title} on {contract}": "on" held to the protocol chip or the short address in one box the chip clips in, the title\'s direction controls kept to the title', async () => {
 		const STYLE = (TxDetail as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style
 		const source = parseSource("apps/extension/src/popup/pages/tx/[id].vue")
-		expect([declarationsOf(source, ".call_tail"), declarationsOf(source, ".call_chip")]).toEqual([
+		expect([".call_tail", ".call_chip", ".call_chip_box"].map((rule) => declarationsOf(source, rule))).toEqual([
 			{ display: "inline-flex", "align-items": "baseline", "max-width": "100%" },
 			{ "min-width": "0" },
+			{ display: "inline-flex", "vertical-align": "middle", "max-width": "100%" },
 		])
 		expect(declarationsOf(source, ".call_method")).toMatchObject({ "unicode-bidi": "isolate" })
 		const w = await mountPage(claim, Promise.resolve([listed]), { ContractChip: chipStub })

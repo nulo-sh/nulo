@@ -324,7 +324,7 @@ onBeforeUnmount(() => {
 						<span :class="$style.call_line"
 							><span data-testid="tx-call-method" :class="$style.call_method">{{ callRowTitle(c) }}</span>{{ " " }}<span :class="$style.call_tail"
 								>on&nbsp;<span v-if="protocolChips[idx]" data-testid="tx-call-contract" :class="$style.call_chip"
-									><ContractChip :model="protocolChips[idx]" testid="tx-call-contract-name" /></span
+									><span :class="$style.call_chip_box"><ContractChip :model="protocolChips[idx]" testid="tx-call-contract-name" /></span></span
 								><span v-else data-testid="tx-call-contract" @click="endsSelection($event) || handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">{{
 									trimAddress(c.contract, 6, 4)
 								}}</span></span
@@ -459,8 +459,8 @@ onBeforeUnmount(() => {
 }
 
 /* "on" and the contract break as one word. Inline, a chip after "on" keeps the row's full width and
- * runs past it; as a flex item it clips to what "on" leaves. Baseline alignment keeps every glyph where
- * inline flow puts it. */
+ * runs past it; as a flex item it clips to what "on" leaves. Baseline alignment, and the chip's box
+ * middle-aligned inside its item, keep every glyph where inline flow puts it. */
 .call_tail {
 	display: inline-flex;
 	align-items: baseline;
@@ -469,6 +469,12 @@ onBeforeUnmount(() => {
 
 .call_chip {
 	min-width: 0;
+}
+
+.call_chip_box {
+	display: inline-flex;
+	vertical-align: middle;
+	max-width: 100%;
 }
 
 .call_contract {
