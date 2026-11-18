@@ -2,6 +2,7 @@ import { Icon, RowAction } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import DetailsTable from "./DetailsTable.vue"
+import source from "./DetailsTable.vue?raw"
 
 // Wire-shaped: 0x + 64 hex, each value below the field modulus.
 const TOKEN = `0x0c1e${"0".repeat(56)}5a7f`
@@ -212,5 +213,28 @@ describe("composite/capabilities/DetailsTable", () => {
 		expect(w.find(`.${STYLE.foot}`).text()).toBe(
 			"Function names come from the app. Anything it didn't list is refused instantly; you won't be asked.",
 		)
+	})
+
+	test("bare draws the table open, with no fold, the same rows and the footnote unless told not to", async () => {
+		const w = mountTable({ bare: true })
+		expect(w.find('[data-testid="cap-detail-toggle"]').exists()).toBe(false)
+		expect(targets(w)).toHaveLength(3)
+		expect(w.find(`.${STYLE.foot}`).exists()).toBe(true)
+
+		await targets(w)[1].trigger("click")
+		expect(fnLines(w)).toEqual([
+			["Simulate", "balance_of_public"],
+			["Transact", "transfer · burn_public"],
+		])
+
+		expect(mountTable({ bare: true, foot: false }).find(`.${STYLE.foot}`).exists()).toBe(false)
+	})
+
+	test("the narrow drawing keys on the table's own width, never the viewport's", () => {
+		const w = mountTable({ bare: true })
+		expect(w.find(`.${STYLE.table}`).element.parentElement?.classList).toContain(STYLE.frame)
+		expect(source).toMatch(/\.frame \{\s*container: details-table \/ inline-size;\s*\}/)
+		expect(source).toMatch(/@container details-table \(width < 330px\) \{\s*\.table \{\s*display: grid;/)
+		expect(source).not.toMatch(/@media \([^)]*width/)
 	})
 })

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { effectiveGrants, enforceScope } from "@nulo/wallet-bridge"
-import { buildDetailsTable, type DetailsRow } from "./details-table"
+import { buildDetailsTable, type DetailsRow, listsFunctionNames } from "./details-table"
 
 // Wire-shaped: 0x + 64 hex, each value below the field modulus.
 const FEE_JUICE = `0x${"0".repeat(63)}3`
@@ -188,6 +188,13 @@ describe("the Details table", () => {
 		const table = buildDetailsTable([tx({ scope: "odd" }), sim([null, { contract: 7, function: "f" }, { contract: A }])], [])
 		expect(table.anyContract).toEqual(row({ name: "Any contract", simulate: ["Any function", "f"], transact: ["Any function"] }))
 		expect(table.unknown).toEqual([row({ address: A, simulate: ["Any function"] })])
+	})
+
+	test("lists function names only when a row names one, on any contract or a listed one", () => {
+		const readOnly = { type: "contracts", contracts: "*", canRegister: false, canGetMetadata: true }
+		expect(listsFunctionNames(buildDetailsTable([readOnly, sim(undefined, "*"), tx([{ contract: A, function: "*" }])], []))).toBe(false)
+		expect(listsFunctionNames(buildDetailsTable([readOnly, tx([{ contract: A, function: "transfer" }])], []))).toBe(true)
+		expect(listsFunctionNames(buildDetailsTable([sim([{ contract: "*", function: "balance_of" }])], []))).toBe(true)
 	})
 })
 

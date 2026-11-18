@@ -21,14 +21,21 @@ type Row = {
 	code: boolean
 }
 
-const props = defineProps<{
-	known: readonly Row[]
-	unknown: readonly Row[]
-	classes: readonly Row[]
-	anyContract: Row | null
-	/** "any contract", or the count of listed contracts or, with none, of classes. */
-	label: string
-}>()
+const props = withDefaults(
+	defineProps<{
+		known: readonly Row[]
+		unknown: readonly Row[]
+		classes: readonly Row[]
+		anyContract: Row | null
+		/** "any contract", or the count of listed contracts or, with none, of classes. */
+		label: string
+		/** Drawn open, with no fold and no box. */
+		bare?: boolean
+		/** The footnote on the function names the app listed. */
+		foot?: boolean
+	}>(),
+	{ bare: false, foot: true },
+)
 
 const emit = defineEmits<{ copy: [address: string] }>()
 
@@ -86,71 +93,80 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 </script>
 
 <template>
-	<CapabilityDisclosure label="Details" :tag="label" testid="cap-detail-toggle">
-		<div :class="$style.table">
-			<div :class="[$style.grid, $style.head]" aria-hidden="true">
-				<span>Contract</span>
-				<Icon v-for="[column, glyph] in COLUMNS" :key="column" :name="glyph" :size="14" :class="$style.head_glyph" />
-				<span />
-			</div>
+	<component
+		:is="bare ? 'div' : CapabilityDisclosure"
+		v-bind="bare ? {} : { label: 'Details', tag: label, testid: 'cap-detail-toggle' }"
+	>
+		<div :class="$style.frame">
+			<div :class="$style.table">
+				<div :class="[$style.grid, $style.head]" aria-hidden="true">
+					<span>Contract</span>
+					<Icon v-for="[column, glyph] in COLUMNS" :key="column" :name="glyph" :size="14" :class="$style.head_glyph" />
+					<span />
+				</div>
 
-			<template v-for="entry in entries" :key="entry.key">
-				<div v-if="entry.kind === 'sub'" :class="$style.sub">{{ entry.text }}</div>
+				<template v-for="entry in entries" :key="entry.key">
+					<div v-if="entry.kind === 'sub'" :class="$style.sub">{{ entry.text }}</div>
 
-				<template v-else>
-					<div :class="[$style.grid, $style.row, opened.has(entry.key) && $style.open]" @click="toggle(entry.key)">
-						<RowTarget
-							:labelledby="`${uid}-${entry.key}`"
-							:aria-expanded="opened.has(entry.key)"
-							data-testid="cap-details-row"
-							:data-details-key="entry.key"
-						/>
-
-						<span :id="`${uid}-${entry.key}`" hidden>{{ spokenName(entry) }}</span>
-						<span v-if="isNamed(entry)" :class="$style.name">{{ entry.row.name }}</span>
-						<span v-else :class="$style.address">
-							<span :class="$style.address_text" data-testid="capability-address">{{ shownAddress(entry.row.address) }}</span>
-							<RowAction
-								label="Copy address"
-								tabindex="-1"
-								data-testid="cap-details-copy"
+					<template v-else>
+						<div :class="[$style.grid, $style.row, opened.has(entry.key) && $style.open]" @click="toggle(entry.key)">
+							<RowTarget
+								:labelledby="`${uid}-${entry.key}`"
+								:aria-expanded="opened.has(entry.key)"
+								data-testid="cap-details-row"
 								:data-details-key="entry.key"
-								:class="$style.copy"
-								@click="emit('copy', stripWireControl(entry.row.address ?? ''))"
-							>
-								<Icon name="copy" :size="12" :class="$style.copy_glyph" aria-hidden="true" />
-							</RowAction>
-						</span>
+							/>
 
-						<template v-for="[column, , has] in COLUMNS" :key="column">
-							<Icon v-if="has(entry.row)" name="check" :size="15" :class="$style.yes" aria-hidden="true" />
-							<span v-else :class="$style.no" aria-hidden="true" />
-						</template>
+							<span :id="`${uid}-${entry.key}`" hidden>{{ spokenName(entry) }}</span>
+							<span v-if="isNamed(entry)" :class="$style.name">{{ entry.row.name }}</span>
+							<span v-else :class="$style.address">
+								<span :class="$style.address_text" data-testid="capability-address">{{ shownAddress(entry.row.address) }}</span>
+								<RowAction
+									label="Copy address"
+									tabindex="-1"
+									data-testid="cap-details-copy"
+									:data-details-key="entry.key"
+									:class="$style.copy"
+									@click="emit('copy', stripWireControl(entry.row.address ?? ''))"
+								>
+									<Icon name="copy" :size="12" :class="$style.copy_glyph" aria-hidden="true" />
+								</RowAction>
+							</span>
 
-						<Icon name="chevron" :size="14" :class="$style.chevron" aria-hidden="true" />
-					</div>
+							<template v-for="[column, , has] in COLUMNS" :key="column">
+								<Icon v-if="has(entry.row)" name="check" :size="15" :class="$style.yes" aria-hidden="true" />
+								<span v-else :class="$style.no" aria-hidden="true" />
+							</template>
 
-					<div v-if="opened.has(entry.key)" data-testid="cap-details-fns" :class="$style.fns">
-						<div v-if="entry.row.simulate.length" :class="$style.fn">
-							<span :class="$style.fn_label">Simulate</span>
-							<span :class="$style.fn_names">{{ functions(entry.row.simulate) }}</span>
+							<Icon name="chevron" :size="14" :class="$style.chevron" aria-hidden="true" />
 						</div>
-						<div v-if="entry.row.transact.length" :class="$style.fn">
-							<span :class="$style.fn_label">Transact</span>
-							<span :class="$style.fn_names">{{ functions(entry.row.transact) }}</span>
+
+						<div v-if="opened.has(entry.key)" data-testid="cap-details-fns" :class="$style.fns">
+							<div v-if="entry.row.simulate.length" :class="$style.fn">
+								<span :class="$style.fn_label">Simulate</span>
+								<span :class="$style.fn_names">{{ functions(entry.row.simulate) }}</span>
+							</div>
+							<div v-if="entry.row.transact.length" :class="$style.fn">
+								<span :class="$style.fn_label">Transact</span>
+								<span :class="$style.fn_names">{{ functions(entry.row.transact) }}</span>
+							</div>
 						</div>
-					</div>
+					</template>
 				</template>
-			</template>
 
-			<div :class="$style.foot">
-				Function names come from the app. Anything it didn't list is refused instantly; you won't be asked.
+				<div v-if="foot" :class="$style.foot">
+					Function names come from the app. Anything it didn't list is refused instantly; you won't be asked.
+				</div>
 			</div>
 		</div>
-	</CapabilityDisclosure>
+	</component>
 </template>
 
 <style module>
+.frame {
+	container: details-table / inline-size;
+}
+
 .table {
 	display: flex;
 	flex-direction: column;
@@ -179,11 +195,13 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 	justify-self: center;
 }
 
-/* Below the popup's width a name, and the heading's "Contract", take their own line above the marks,
- * since the six mark columns leave it no room. The head and every row share one grid's columns, so
- * each mark stays under its glyph at the right, and a mark column shrinks to 15 px before the table
- * overflows. */
-@media (width < 359px) {
+/* The six mark columns, the chevron and their gaps take 198 px, so below 330 px a name has less than
+ * the 131 px of the longest one the wallet gives ("Sponsored fee payer"): a name, and the heading's
+ * "Contract", take their own line above the marks. Keyed on the table's own width, since the page
+ * draws it in the popup's column and the window in its own. The head and every row share one grid's
+ * columns, so each mark stays under its glyph at the right, and a mark column shrinks to 15 px before
+ * the table overflows. */
+@container details-table (width < 330px) {
 	.table {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) repeat(6, minmax(15px, 26px)) 14px;
