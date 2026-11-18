@@ -147,8 +147,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	 *  with: what a held send's question shows. Never in `storage`, so it is never approvable again. */
 	private readonly approved = new Map<string, { payload: ExecutionPayload; deltas: OperationApprovalDelta[] }>()
 	private readonly lock = new Lock()
-	/** The window each locked discovery's site waits in. Worker-internal: the discovery flow opens,
-	 *  retimes and closes them; a connect window or notice for the site takes its window over. */
+	/** The window each locked discovery's site waits in; worker-internal, not an RPC method. */
 	public readonly unlockWindows: UnlockWindows
 
 	private profileService: ProfileService = null!

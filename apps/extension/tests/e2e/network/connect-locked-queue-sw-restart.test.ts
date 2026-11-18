@@ -32,7 +32,7 @@ async function readBadgeText(page: Page): Promise<string> {
  */
 describe("connect-locked-queue — background restart", () => {
 	test.skipIf(!hasConfig)(
-		"connect-locked-queue-sw-restart — a killed SW drops the queue cleanly: unlock window closed and badge reconciled at boot, no popup on unlock",
+		"connect-locked-queue-sw-restart — a killed SW drops the queue cleanly: badge reconciled and an outliving unlock window closed at boot, no popup on unlock",
 		{ timeout: 120_000 },
 		async ({ registeredExtensionPerTest }) => {
 			const ext = registeredExtensionPerTest
@@ -59,7 +59,7 @@ describe("connect-locked-queue — background restart", () => {
 			// Re-open the popup (wakes the replacement worker) and wait for its boot.
 			const popupPage2 = await openPopup(ext)
 			await waitForWorkerLiveness(popupPage2, await readLivenessBaseline(popupPage2))
-			await waitForPopupClosed(unlockWindow, 15_000)
+			if (stopsBackgroundUnderOpenPage) await waitForPopupClosed(unlockWindow, 15_000)
 
 			// Boot reconciliation: the ghost badge is cleared BEFORE any unlock/drain.
 			await popupPage2.waitForFunction(async () => (await chrome.action.getBadgeText({})) === "", { timeout: 10_000, polling: 250 })

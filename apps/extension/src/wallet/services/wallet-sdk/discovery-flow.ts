@@ -87,11 +87,9 @@ export type UnlockWindowDeps = Pick<
 >
 
 /**
- * Fits the origin's unlock window to the origin's discoveries the SDK still holds: closed when none
- * is left, its cut-off moved to the latest one's, or, with `mayOpen`, opened while the queue still
- * holds a request of the origin and the caps leave room. The queue empties into the drain in the
- * unlock's own tick, so with nothing awaited between `holds` and the open, no window opens after
- * an unlock.
+ * The window lives as long as the SDK's pending rows, which outlive the queue entry behind a connect
+ * window, but opens only while the queue holds the origin: the queue empties into the drain in the
+ * unlock's own tick, so with nothing awaited between `holds` and the open, none opens after an unlock.
  */
 export function fitUnlockWindow(origin: string, mayOpen: boolean, deps: UnlockWindowDeps): void {
 	const windows = deps.dappInteractionService.unlockWindows

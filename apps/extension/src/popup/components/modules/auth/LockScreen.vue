@@ -98,8 +98,9 @@ const isAllowedToContinue = computed(() => {
  *  claim flag elects one winner atomically (a hash comparison alone cannot — the winner's
  *  navigation moves the hash only after async route resolution). The exact-path check keeps
  *  the advance on THIS screen only: a substring test also matched off-screen routes carrying
- *  `?from=/popup/auth` (profile import / new-profile from the select-profile popup). A failed
- *  navigation releases the claim so a later attempt isn't locked out. */
+ *  `?from=/popup/auth` (profile import / new-profile from the select-profile popup), and it
+ *  keeps the unlock window, which renders this screen on its own route, there for the worker's
+ *  hand-over. A failed navigation releases the claim so a later attempt isn't locked out. */
 let postAuthNavClaimed = false
 const advancePastAuth = async () => {
 	if (postAuthNavClaimed) return

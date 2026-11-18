@@ -393,8 +393,9 @@ async function drainQueuedDiscovery(discovery: PendingDiscovery, deps: SdkDeps, 
 	}
 	logger.log("wallet-sdk", LogLevel.Info, `Processing queued discovery: request ${describeExternalId(discovery.requestId)}`)
 	await handleDiscovery(discovery, discoveryDeps(deps, state))
-	// A connect window or notice took the site's window over; any other end leaves it to close.
-	deps.dappInteractionService.unlockWindows.close(discovery.origin)
+	// A connect window or notice took the site's window over; any other end leaves it to close, unless
+	// the queue, which the drain emptied, holds the site again: a request behind a later lock waits in it.
+	if (!state.late.discoveryQueue!.holds(discovery.origin)) deps.dappInteractionService.unlockWindows.close(discovery.origin)
 	logger.log("wallet-sdk", LogLevel.Info, `Queued discovery processed: request ${describeExternalId(discovery.requestId)}`)
 	return true
 }

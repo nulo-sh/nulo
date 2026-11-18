@@ -276,6 +276,24 @@ describe("after the unlock", () => {
 		expect(approved()).toEqual(["r1"])
 		expect(h.fake.navigates).toEqual([])
 	})
+
+	test("a drain that ends after a re-lock leaves the window the site's new discovery opened", async () => {
+		const h = boot()
+		h.discover("r1")
+		await arrival("r1")
+		h.unlock()
+		await expect.poll(() => h.fake.navigates.length).toBe(1)
+
+		h.lock()
+		h.discover("r2", { chainInfo: { chainId: "2", version: "1" } })
+		await arrival("r2")
+		expect(h.kinds()).toEqual(["unlock", "discover", "unlock"])
+
+		h.fake.closeByUser(FIRST_WINDOW)
+		await expect.poll(() => rejected()).toEqual(["r1"])
+		await flush()
+		expect(h.removed).toEqual([FIRST_WINDOW])
+	})
 })
 
 describe("a dApp tab's close", () => {

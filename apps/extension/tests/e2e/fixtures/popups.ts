@@ -177,12 +177,12 @@ export async function approveDiscover(page: Page): Promise<void> {
 	await clickByTestId(page, "discover-allow-btn")
 }
 
-/** Read inside the page: BiDi has no window handles, so Puppeteer cannot name a window on Firefox. */
-/** The id of the browser window `page` shows in; it survives a load of another URL in that window. */
+/** The id of the window `page` shows in, which outlives a load of another URL in that window. */
 export async function readWindowId(page: Page): Promise<number | undefined> {
 	return page.evaluate(async () => (await chrome.windows.getCurrent()).id)
 }
 
+/** Read inside the page: BiDi has no window handles, so Puppeteer cannot name a window on Firefox. */
 function readPopupWindows(page: Page): Promise<{ id: number | undefined; popups: number[] }> {
 	return page.evaluate(async () => ({
 		id: (await chrome.windows.getCurrent()).id,

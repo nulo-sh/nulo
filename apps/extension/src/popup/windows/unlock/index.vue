@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * The window a locked discovery opens: the site that asks, over the wallet's own lock screen. It
- * grants nothing and never navigates; once the wallet unlocks, the worker loads the site's connect
+ * grants nothing; once the wallet unlocks, the worker, never this page, loads the site's connect
  * window or notice in it, and until then the site shows over a spinner.
  */
 
@@ -18,7 +18,6 @@ const appStore = useAppStore()
 
 const route = useRoute()
 
-// The worker wrote the origin into the URL from the content script's sender: never dApp text.
 const site = computed(() => ({ url: siteOfUnlockWindowHash(`#${route.fullPath}`) }))
 </script>
 
