@@ -65,6 +65,7 @@ const {
 	isLoading: isFetchingAuthwits,
 	error,
 	refresh: refreshAuthwits,
+	loaded: listLoaded,
 } = useEntityCrud({
 	fetch: async () => (await authwitsService.getAuthwits(appStore.network.chainId, appStore.account.address)) ?? [],
 	added: authwitsService.onAuthwitAdded,
@@ -127,6 +128,19 @@ async function fetchRegistryStatus() {
 	}
 }
 
+/** Brings the warning and the rows to what the chain holds, through the worker's events. Started
+ *  only once the page's own reads have landed, so neither older read overwrites what it prunes or
+ *  sets; a failure leaves the page as it opened. */
+async function checkRegistry() {
+	const { network, account } = appStore
+	if (!network || !account) return
+	try {
+		await authwitsService.syncRegistry(network.id, account.address)
+	} catch (error) {
+		console.debug("[authwits] registry check failed", { error })
+	}
+}
+
 function handleRefetch() {
 	openToast({ kind: "success", label: "Fetching authwits again" })
 	refreshAuthwits()
@@ -164,7 +178,8 @@ onMounted(async () => {
 	if (appStore.account && appStore.isLogined) {
 		void fetchTokens()
 		void revokeTasks.snapshot()
-		await fetchRegistryStatus()
+		await Promise.all([fetchRegistryStatus(), listLoaded])
+		void checkRegistry()
 	}
 })
 

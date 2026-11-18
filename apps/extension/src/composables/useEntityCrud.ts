@@ -57,6 +57,8 @@ export interface UseEntityCrudResult<T> {
 	 * routine add/delete doesn't blank the whole list for a round-trip.
 	 */
 	refresh: (opts?: { clear?: boolean }) => Promise<void>
+	/** The initial fetch, settled: resolves once it lands or fails, never rejects. */
+	loaded: Promise<void>
 	dispose: () => void
 }
 
@@ -144,7 +146,7 @@ export function useEntityCrud<T>(options: UseEntityCrudOptions<T>): UseEntityCru
 	updated?.add(onUpdated)
 	deleted?.add(onDeleted)
 
-	void refresh()
+	const loaded = refresh()
 
 	const dispose = () => {
 		if (disposed) return
@@ -156,5 +158,5 @@ export function useEntityCrud<T>(options: UseEntityCrudOptions<T>): UseEntityCru
 
 	onScopeDispose(dispose)
 
-	return { entities, isLoading, error, refresh, dispose }
+	return { entities, isLoading, error, refresh, loaded, dispose }
 }

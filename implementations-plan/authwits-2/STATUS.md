@@ -21,3 +21,4 @@
 - 2026-11-18: page 188 frames on the sandbox, 400 px, light and dark: `aw2f-rows-revoking` (page 188's two rows, the pending second one now Revoking alone) and `aw2f-row-pending`; two earlier runs did not hold that shape (no row pending at open; both rows pending).
 - 2026-11-18: arc 3 planned on `authwits-2-a3` off `authwits-2-a2` (`b4905adfd`): P166-03 S, the check on page open; D14 to D19.
 - 2026-11-18: phase 7 gate: lint 0 (second run; first: one format in the new tests), typecheck:all 0, auth-registry + cross-profile isolation + type-roles 6 files 143 passed; the four new behaviours fail on `authwits-2-a2`'s `service.ts`; `service.ts` re-attested and its digest re-pinned.
+- 2026-11-18: phase 8 gate: lint 0 (second run; first: one format in the page test), typecheck:all 0, `useEntityCrud` + page + the three bans 5 files 160 passed, 1 skipped; log-payload, type-roles and storage-facade bans pass; the four page cases fail on `authwits-2-a2`'s page.

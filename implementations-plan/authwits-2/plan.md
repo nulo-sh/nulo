@@ -218,7 +218,7 @@ Base: `authwits-2-a2` at `b4905adfd` (#1853, open). Branch `authwits-2-a3`, stac
 2. Tests in `service.test.ts`, every hash and address `0x` + 64 hex: the chain's switch disagreeing with the stored flag stores the chain's and emits once each way, agreeing emits nothing; a consumed grant and one revoked elsewhere leave with `onAuthwitDeleted`, a live one stays, a pending one is never read; every read failing leaves every row and the flag, one failing leaves its row while the other's prune lands before the call rejects; two calls in flight make one set of reads, a call after it settles reads again, another account's runs its own; 300 confirmed rows read the 256 lowest ids plus the switch; a revoke naming a pruned row and a live one sends one action and its task names the live row, one naming only pruned rows is refused.
 3. Gate: `bun run lint`, `bun run typecheck:all`, from `apps/extension` `bun run test -- src/wallet/services/auth-registry src/wallet/services/cross-profile-isolation.test.ts scripts/type-roles`. Pass: exit 0.
 
-### Phase 8: the page runs it on open
+### Phase 8: the page runs it on open ✓
 
 1. `useEntityCrud` returns `loaded`; the page awaits it and the flag read in `onMounted`, then starts the check.
 2. Tests: the check starts once, only after a held list read lands, with the shown network and account; the warning shows once the check's switch read reports the registry off; a failed check leaves the rows and the warning, shows no error and logs at `debug`, nothing at `warn` or `error`; an unmount mid-check rejects quietly; `loaded` resolves once the first read settles, a failed one included.

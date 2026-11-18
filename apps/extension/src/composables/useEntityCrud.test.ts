@@ -73,6 +73,39 @@ describe("useEntityCrud", () => {
 		scope.stop()
 	})
 
+	it("loaded resolves once the initial fetch lands, and once it fails, never rejecting", async () => {
+		let release!: () => void
+		const held = new Promise<void>((r) => (release = r))
+		const scope = effectScope()
+		const landing = scope.run(() =>
+			useEntityCrud<Item>({
+				fetch: async () => {
+					await held
+					return [{ id: "a", name: "A" }]
+				},
+				added,
+			}),
+		)!
+		const failing = scope.run(() =>
+			useEntityCrud<Item>({
+				fetch: async () => {
+					throw new Error("fetch failed")
+				},
+			}),
+		)!
+		let landed = false
+		void landing.loaded.then(() => (landed = true))
+		await flush()
+		expect(landed).toBe(false)
+
+		release()
+		await landing.loaded
+		expect(landing.entities.value).toEqual([{ id: "a", name: "A" }])
+		await expect(failing.loaded).resolves.toBeUndefined()
+		expect(failing.error.value).toBeInstanceOf(Error)
+		scope.stop()
+	})
+
 	it("appends an entity on the added event (incremental mode)", async () => {
 		const scope = effectScope()
 		const result = scope.run(() =>
