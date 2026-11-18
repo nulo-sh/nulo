@@ -180,7 +180,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 							     The chevron ends the sentence's last line: its no-break space holds it to the last word, and
 							     its nowrap box removes the break a browser keeps beside an inline svg even after U+00A0. -->
 							<Text :id="part(j, 'head')" data-testid="execute-op-summary-call-head" variant="body" color="primary" height="130">
-								<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text><template v-if="row.amount">{{ " " }}<Text variant="meta" data-testid="execute-op-line-amount">{{ row.amount.text }}</Text>{{ row.amount.baseUnits ? " base units " : " " }}</template><template v-else> on </template><span data-testid="execute-op-call-to" :class="$style.chip_tail"><ContractChip v-bind="callChips[j]" testid="execute-op-summary-call-to" /><template v-if="!row.amount">&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></template></span>
+								<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text><template v-if="row.amount">{{ " " }}<Text variant="meta" data-testid="execute-op-line-amount">{{ row.amount.text }}</Text>{{ row.amount.baseUnits ? " base units " : " " }}</template><template v-else>{{ " " }}</template><span data-testid="execute-op-call-to" :class="$style.chip_tail"><span :class="$style.chip_fit"><template v-if="!row.amount">on&nbsp;</template><ContractChip v-bind="callChips[j]" testid="execute-op-summary-call-to" /></span><template v-if="!row.amount">&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></template></span>
 							</Text>
 							<Text
 								v-if="row.amount && (row.surface.kind === 'transfer' || row.surface.kind === 'mint')"
@@ -374,9 +374,18 @@ const onRetryPreview = (event: MouseEvent): void => {
 	white-space: nowrap;
 }
 
-/* The chip and the chevron after it break as one word. */
+/* Its contents break as one word: a wrap never leaves a call's "on" at a line's end, nor a chevron
+ * alone at a line's start. */
 .chip_tail {
 	white-space: nowrap;
+}
+
+/* Inline, a chip after "on" keeps the line's full width and runs past the row; as a flex item it clips to
+ * what "on" leaves. Baseline alignment puts every glyph where inline flow does. */
+.chip_fit {
+	display: inline-flex;
+	align-items: baseline;
+	max-width: 100%;
 }
 
 .chevron {
