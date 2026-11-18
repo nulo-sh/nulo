@@ -1,7 +1,7 @@
 ---
 plan: authwits-2
 tier: mid (thinned: one Codex round on the plan, no Opus leg; one Codex pass over arc 1's net diff)
-status: arc 1 merged (#1832); arc 2 open (#1853); arc 3 in progress
+status: completed; delivered by #1832, #1853 and the arc 3 PR that carries this close-out
 issues: "arc 1 closed #1829 and #1830; arcs 2 and 3 close none"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at 0dc22a9c5
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-18. Planned 2026-11-17; three arcs.
+- **Status:** completed. Arc 1 merged as #1832 (closed #1829, #1830); arc 2 is #1853; arc 3 and this close-out ride one PR stacked on #1853, whose merge archives this plan.
+- **Shipped:** arc 1: a revoke or registry switch reports once its block is checkpointed on L1, and a popup closed mid-send reports nothing and sends nothing more. Arc 2 (P166-01 = B, P166-02 = N1): Revoke hands every chunk to the worker and closes; rows read Revoking, then leave, or Not revoked, from the worker's revoke task; a `call` row's title names its action and the approval window's contract chip; a row shows one status chip, Revoking, then Not revoked, then Pending (P188-01, D20). Arc 3 (P166-03 = S): the page checks the registry once it opens, so the warning follows the chain's switch and grants the chain no longer authorizes leave the list; the check joins one already running for its scope, reads at most 256 confirmed rows and settles every read; a revoke skips a row already gone; `useEntityCrud` applies events that arrive during a fetch again over its snapshot, and the page keeps a flag event over an older flag read.
+- **Review:** plan: Codex round 1 and two follow-ups, approve. Arc 1: Codex approve. Arc 2: conditional approve, three fixed, one rejected (D13). Arc 3: conditional approve, four fixed; round 2 conditional approve, one fixed (§ Audit verdicts).
+- **Gates:** each arc's at retry 0 in `lessons/phase-3.md`, `lessons/phase-6.md` and `lessons/phase-9.md`; CI's required lanes on each PR head are the gate of record.
+- **Known limits:** #1860 (Q1, a slow first figure on Testnet), #1861 (grants made from another install with no backup), #1862 (a rolled-back checkpoint), #1863 (a checkpoint past 120 s), #1864 (a stale or false registry read on page open), #397 (extended with D9: chunks past the execution lane's queue cap).
+- **Dispositions:** the cancel-loop limit Q2 named is superseded: since arc 2 each chunk is its own request with its own Activity row and Cancel, so nothing goes on after a cancel. The class #780 recorded (an event lost under an older fetch's snapshot) is fixed by arc 3's replay in `useEntityCrud`.
+- **Open items:** none of the owner's asks: #1865 (OA-4, `owner-decision`: where a Not revoked row's reason shows when Activity has none) was answered R0, as shipped, by P188-02 on decision page 188 (D20).
+- **Lessons:** none promoted: `lessons.md` is at its budget, and the one general gotcha (a sealed read can answer older than an event that arrived first) is now handled where lists bite, in `useEntityCrud`, with its comment.
+- **Seeds retired:** the `/goal` lines below; they are no live instructions.
 
 # authwits-2: the Authwits page's revoke flow, what an imported wallet can recover, and naming what an authwit allows
 
@@ -224,7 +237,7 @@ Base: `authwits-2-a2` at `b4905adfd` (#1853, open). Branch `authwits-2-a3`, stac
 2. Tests: the check starts once, only after a held list read lands, with the shown network and account; the warning shows once the check's switch read reports the registry off; a failed check leaves the rows and the warning, shows no error and logs at `debug`, nothing at `warn` or `error`; an unmount mid-check rejects quietly; `loaded` resolves once the first read settles, a failed one included.
 3. Gate: `bun run lint`, `bun run typecheck:all`, from `apps/extension` `bun run test -- src/composables/useEntityCrud src/popup/pages/settings/developer/account-state/authwits type-role-ban copy-dash-ban red-text-ban`. Pass: exit 0.
 
-### Phase 9: arc gate
+### Phase 9: arc gate ✓
 
 - Once, in order, at retry 0: `bun run lint`; `bun run typecheck:all`; from `apps/extension`, `bun run test -- <the dirs touched> type-role-ban copy-dash-ban red-text-ban`; `bun run check:plans` after staging; smoke from `apps/extension`, `bun run test:e2e tests/e2e/type-roles.test.ts` (it seeds authwit rows and opens the page, whose check meets the stand-in node), Chrome then Firefox; network from the root, `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/authwit-lifecycle.test.ts tests/e2e/network/authwit-variants.test.ts tests/e2e/network/authwit-consume-smoke.test.ts tests/e2e/network/popup-escape-layered.test.ts`, Chrome then Firefox (`popup-escape-layered` opens the page too).
 - Pass: every command exits 0. No e2e scenario is added: the lifecycle spec opens the page with its consumed first grant still listed and a live one beside it, then presses Revoke all at once, so on the sandbox the check keeps a live grant against a real node and may prune the consumed one around the press (D18's case); the rest is established at the unit layer.

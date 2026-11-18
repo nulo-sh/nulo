@@ -49,7 +49,7 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 **Option.** On opening the page, run `syncRegistry`: one read for the switch plus one per listed row (at most 256). Effects a person sees: the warning matches the chain; consumed grants and grants revoked from another install leave the list.
 
-**Not recoverable (a known limit, filed at close-out).** Grants made from another install with no backup. Reopening condition: an indexer the owner approves as a new dependency, or an Aztec API that lists a contract's storage writes by sender.
+**Not recoverable (a known limit, #1861).** Grants made from another install with no backup. Reopening condition: an indexer the owner approves as a new dependency, or an Aztec API that lists a contract's storage writes by sender.
 
 **Recommendation: yes, on page open**, not on every account start: the page is where the answer is read.
 
@@ -70,7 +70,7 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 **Recommendation: R0 now.** Each case is rare (a pending grant past its wait, a checkpoint past 120 s on Testnet), and R1 or R2 needs worded reasons for each failure. Revisit with arc 3, whose registry check on page open prunes a row the revoke did land.
 
-**What ships now.** R0.
+**What ships now.** R0. Filed as #1865 (`owner-decision`) at close-out; the owner then approved R0 (P188-02).
 
 ## Page 188: one status chip per row (arc 2, a change the owner asked for)
 
