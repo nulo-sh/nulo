@@ -53,9 +53,14 @@ const tokenOf = (entry: TokenListEntry): ActivityScope["token"] => ({
 	priceId: entry.priceId,
 })
 
-/** A second contract, for specs that tell two tokens' rows apart. */
+/** Another token, for specs that tell two rows apart by symbol: from the scope's own pool, since an
+ *  artifact run's published list reuses each fixture's symbol at another address. */
 export function secondToken(scope: ActivityScope): ActivityScope["token"] {
-	return tokenOf(E2E_LIST_TOKENS.find((e) => e.address !== scope.token.contract) ?? E2E_LIST_TOKENS[1])
+	const listed = heldListEntries().filter((e) => e.chainId === scope.chainId)
+	const pool = listed.some((e) => e.address === scope.token.contract) ? listed : E2E_LIST_TOKENS
+	const other = pool.find((e) => e.address !== scope.token.contract && e.symbol !== scope.token.symbol)
+	if (other === undefined) throw new Error(`no second token beside ${scope.token.symbol}`)
+	return tokenOf(other)
 }
 
 export type TransferSeed = {
