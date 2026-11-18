@@ -69,8 +69,8 @@ const functions = (names: readonly string[]) => names.map((name) => sanitizeWire
 const COLUMNS = [
 	["simulate", "play", (row: Row) => row.simulate.length > 0],
 	["add", "add", (row: Row) => row.add],
-	["transact", "check", (row: Row) => row.transact.length > 0],
-	["details", "info", (row: Row) => row.details],
+	["transact", "send", (row: Row) => row.transact.length > 0],
+	["details", "search", (row: Row) => row.details],
 	["events", "mail-lock", (row: Row) => row.events],
 	["code", "code", (row: Row) => row.code],
 ] as const

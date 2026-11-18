@@ -167,6 +167,14 @@ export function publishSentence(facts: PublishFacts, name: string | null, payer:
 	return parts ?? "Nobody watching the chain can see who sent it, who got it or how much."
 }
 
+/** The page's short form of `feeWarning`, non-null in the same cells: the Fee sheet and the review say it whole. */
+export function feeWarningShort(facts: PublishFacts): string | null {
+	if (facts.you !== "exposed") return null
+	return facts.recipient === "hidden"
+		? "Paying the fee from public Fee Juice shows your address."
+		: "Paying the fee from public Fee Juice ties this payment to your address."
+}
+
 /** The one warning Send gives: a private origin whose fee, paid from public Fee Juice, names the account. */
 export function feeWarning(facts: PublishFacts, name: string | null): string | null {
 	if (facts.you !== "exposed") return null

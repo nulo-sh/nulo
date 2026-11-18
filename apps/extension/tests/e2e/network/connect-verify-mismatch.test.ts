@@ -14,6 +14,8 @@ const hasConfig = aztecConfig !== undefined
 const CONNECTED = '[data-testid="pg-status"][data-status="connected"]'
 const DISCONNECTED = '[data-testid="pg-status"][data-status="disconnected"]'
 const APP_ROW = '[data-testid="connected-app-row"]'
+const APP_PAGE = '[data-testid="connected-app-page"]'
+const APP_NOT_CONNECTED = '[data-testid="connected-app-not-connected"]'
 
 /** The wallet tab stays on Connected apps across the refusal, so the row is seen before it and its
  *  removal is the wallet's own delete event, never the list's first empty render. */
@@ -75,14 +77,13 @@ test.skipIf(!hasConfig)(
 		await approveVerify(await approveConnect(ctx, await discoverP))
 		await dapp.waitForSelector(CONNECTED, { timeout: 20_000 })
 
-		// The app's page shows the last connection's grid. On Chrome the playground's tab hides the
-		// wallet's, and a hidden tab draws no frame to photograph; the dApp is fronted again after, so
-		// the rest of the case runs in the order it always has.
+		// Chrome doesn't paint hidden tabs; front the wallet for its capture, then return to the app.
 		await bringToFront(wallet)
 		await listConnectedApps(wallet)
 		await clickByTestId(wallet, "connected-app-row")
-		await wallet.waitForSelector('[data-testid="connected-app-verification"]', { visible: true, timeout: 15_000 })
-		await shotSend(wallet, "verify-mismatch-settings-row", "connected-app-verification")
+		await wallet.waitForSelector(APP_PAGE, { visible: true, timeout: 15_000 })
+		expect(await wallet.$(APP_NOT_CONNECTED), "the page drew the not-connected line").toBeNull()
+		await shotSend(wallet, "verify-mismatch-settings-row", "connected-app-page")
 
 		await bringToFront(dapp)
 		await clickByTestId(dapp, "pg-btn-disconnect")

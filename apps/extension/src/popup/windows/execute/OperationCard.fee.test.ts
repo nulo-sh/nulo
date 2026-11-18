@@ -656,6 +656,13 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			unknown.unmount()
 			const token = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { marks: listing(APP_FPC) })
 			expect(seal(token).exists(), "a listed token is no fee contract Nulo pins").toBe(false)
+			token.unmount()
+			const feeJuice = field(3n)
+			const protocol = await mountWith(
+				{ ...ESTIMATE, appPayerFunding: { ...covered, address: feeJuice } },
+				{ op: { ...appPaid(), exec: { ...appPaid().exec, feePayer: feeJuice } } },
+			)
+			expect(seal(protocol).exists(), "a protocol contract is no fee contract Nulo pins").toBe(false)
 		})
 
 		test("the PrivateFPC's seal needs no list: it shows before the list answers", async () => {

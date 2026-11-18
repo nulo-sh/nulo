@@ -350,6 +350,8 @@ const submit = (w: W) => w.get('[data-testid="send-submit"]')
 /** The publish line's region, which carries the facts' `you` cell. */
 const publishLine = (w: W) => w.get("[data-you]")
 const warning = (w: W) => w.find('[data-testid="send-fee-warning"]')
+/** The Fee sheet's block, inside the card the page keeps mounted while the sheet is closed. */
+const sheetWarning = (w: W) => w.find('[data-testid="send-fee-sheet-warning"]')
 const sheetOpen = (w: W) => w.get('[data-testid="send-review-sheet"]').attributes("data-open") === "true"
 const closeSheet = (w: W) => w.getComponent({ name: "SendReviewSheet" }).get('[data-testid="popup-close-btn"]').trigger("click")
 const sendNow = (w: W) => w.get('[data-testid="send-review-submit"]')
@@ -373,11 +375,12 @@ const setSide = (w: W, side: "from" | "to", want: TransferSide) => w.get(`[data-
 const checkedSide = (w: W, side: "from" | "to") =>
 	(["private", "public"] as const).filter((s) => (w.get(`[data-testid="send-${side}-${s}"]`).element as HTMLInputElement).checked)
 
-/** The one reading a settled state must give everywhere at once: the publish line's `you`, its warning
- *  and the card's own pick. */
+/** The one reading a settled state must give everywhere at once: the publish line's `you`, its warning,
+ *  the Fee sheet's and the card's own pick. */
 function settled(w: W) {
 	const you = publishLine(w).attributes("data-you")
 	expect(warning(w).exists()).toBe(you === "exposed")
+	expect(sheetWarning(w).exists()).toBe(you === "exposed")
 	expect(namesAccount(w)).toBe(you === "exposed")
 	return you
 }
@@ -386,14 +389,15 @@ const reviewCells = (w: W) => {
 	const row = (id: string) => w.get(`[data-testid="send-review-row-${id}"]`).attributes("data-visibility")
 	return { you: row("you"), to: row("to"), amount: row("amount") }
 }
-/** The review's fee row and the form's fee line, each as its value then its notes. */
+/** The review's fee row and the form's fee line, each as its figure, who pays, then its notes. */
 const reviewFeeLines = (w: W) =>
 	w
 		.get('[data-testid="send-review-fee"]')
 		.findAll(":scope > span:last-child > span")
 		.map((el) => el.text())
 const formFeeLines = (w: W) => [
-	w.get('[data-testid="send-fee-line-value"]').text(),
+	w.get('[data-testid="send-fee-line-value"] > :first-child').text(),
+	...w.findAll('[data-testid="send-fee-line-method"]').map((m) => m.text()),
 	...w.findAll('[data-testid="send-fee-line-note"] p').map((p) => p.text()),
 ]
 /** The review's warning's shape, or undefined when it shows no warning. */
@@ -825,10 +829,13 @@ describe("send page with the real fee card — the card lives with the page, its
 			await nextTick()
 			expect(sheetState(w)).toBe("true")
 			expect(inSheet(w)).toBe(true)
+			// The sheet speaks the warning from its own region; the page's, behind it, stays quiet.
+			expect(publishLine(w).attributes("aria-live")).toBe("off")
 			await close()
 			await nextTick()
 			expect(sheetState(w)).toBe("false")
 			expect(inSheet(w)).toBe(false)
+			expect(publishLine(w).attributes("aria-live")).toBe("polite")
 			expect(w.get('[data-testid="fee-settings-card"]').element.closest("[hidden]")).not.toBeNull()
 		}
 		expect(cardMounts()).toBe(1)
@@ -957,7 +964,7 @@ describe("send page with the real fee card — the review sheet's fee", () => {
 		const shown = w.get('[data-testid="stub-fee-cost"]').attributes("data-usd")
 		expect(shown).toMatch(/^\$0\.0\d0$/)
 		await submit(w).trigger("click")
-		expect(reviewFeeLines(w)).toEqual([`~1 FJ (${shown}), public Fee Juice`])
+		expect(reviewFeeLines(w)).toEqual([`~1 FJ (${shown})`, "Public Fee Juice"])
 		expect(reviewFeeLines(w)).toEqual(formFeeLines(w))
 		w.unmount()
 	})
@@ -1055,7 +1062,7 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		await submit(w).trigger("click")
 		expect(w.find('[data-testid="send-review-fee-cap"]').exists()).toBe(true)
 		expect(reviewFeeLines(w)).toEqual(formFeeLines(w))
-		expect(reviewFeeLines(w)[1]).toBe("Goes out after your earlier send, for at most ~4.47228 FJ.")
+		expect(reviewFeeLines(w).slice(1)).toEqual(["Private Fee Juice", "Goes out after your earlier send, for at most ~4.47228 FJ."])
 		expect(sendNow(w).text()).toBe("Queue send")
 		await armed()
 		await sendNow(w).trigger("click")
@@ -1101,7 +1108,7 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		expect(sendDisabled(w)).toBe(false)
 		await submit(w).trigger("click")
 		expect(w.find('[data-testid="send-review-fee-queued"]').exists()).toBe(true)
-		expect(reviewFeeLines(w)).toEqual(["Nothing · Sponsored", "Goes out after your earlier send."])
+		expect(reviewFeeLines(w)).toEqual(["Nothing", "Sponsored", "Goes out after your earlier send."])
 		expect(reviewFeeLines(w)).toEqual(formFeeLines(w))
 		expect(sendNow(w).text()).toBe("Queue send")
 		await armed()
@@ -1222,7 +1229,7 @@ describe("send page — an estimate that runs long", () => {
 		expect(sheetOpen(w)).toBe(true)
 		const fee = () => w.get('[data-testid="send-review-fee"]')
 		expect(sendNow(w).text()).toBe("Estimating fee")
-		expect(fee().text()).toBe("Fee")
+		expect(fee().text()).toBe("FeeSponsored")
 		await vi.advanceTimersByTimeAsync(20_000)
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(asked + 1)
 		expect(w.get('[data-testid="send-review-fee-slow"]').text()).toContain("Taking longer than usual.")
@@ -1230,7 +1237,7 @@ describe("send page — an estimate that runs long", () => {
 		await w.get('[data-testid="send-review-fee-retry"]').trigger("click")
 		await vi.advanceTimersByTimeAsync(800)
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(asked + 2)
-		expect(fee().text()).toBe("Fee")
+		expect(fee().text()).toBe("FeeSponsored")
 		w.unmount()
 	})
 })

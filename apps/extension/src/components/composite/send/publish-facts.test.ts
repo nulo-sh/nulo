@@ -4,6 +4,7 @@ import {
 	FACT_WORDS,
 	factWord,
 	feeWarning,
+	feeWarningShort,
 	NO_FACTS,
 	PAID_BY,
 	type PayerDescriptor,
@@ -197,10 +198,15 @@ describe("Send's publish line", () => {
 		else expect([sentence ?? "-", warning]).toEqual([expected, null])
 	})
 
-	test("the table is every cell, and the warning shows exactly where the fee names your account", () => {
+	test("the table is every cell, and the warning, whole or short, shows exactly where the fee names your account", () => {
 		expect(new Set(LINES.map(([o, d, p]) => `${o}/${d}/${p}`)).size).toBe(16)
-		for (const [o, d, p] of LINES)
-			expect(feeWarning(publishFacts(o, d, p), null) !== null).toBe(publishFacts(o, d, p).you === "exposed")
+		for (const [o, d, p] of LINES) {
+			const exposed = publishFacts(o, d, p).you === "exposed"
+			expect([feeWarning(publishFacts(o, d, p), null) !== null, feeWarningShort(publishFacts(o, d, p)) !== null]).toEqual([
+				exposed,
+				exposed,
+			])
+		}
 	})
 
 	test("an unnamed recipient is their address", () => {
@@ -222,7 +228,16 @@ describe("Send's publish line", () => {
 		)
 	})
 
+	test("the page's short form says what the fee shows, alone or with the payment", () => {
+		expect(feeWarningShort(publishFacts("private", "private", "account"))).toBe(
+			"Paying the fee from public Fee Juice shows your address.",
+		)
+		expect(feeWarningShort(publishFacts("private", "public", "account"))).toBe(
+			"Paying the fee from public Fee Juice ties this payment to your address.",
+		)
+	})
+
 	test("no sendable token, no line", () => {
-		expect([publishSentence(NO_FACTS, "Ana", null), feeWarning(NO_FACTS, "Ana")]).toEqual([null, null])
+		expect([publishSentence(NO_FACTS, "Ana", null), feeWarning(NO_FACTS, "Ana"), feeWarningShort(NO_FACTS)]).toEqual([null, null, null])
 	})
 })

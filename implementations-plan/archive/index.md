@@ -235,6 +235,8 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [network-playground-testing](network-playground-testing/plan.md) — completed — the wallet's dApp surface covered in the network suite through a local playground dApp
 - [network-test-triage](network-test-triage/plan.md) — completed — the failing network e2e tests diagnosed before any timeout was touched
 - [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
+- [notes-naming-build-1](notes-naming-build-1/plan.md) — completed — "Token (AIP-20)" for listed tokens' notes and the protocol contract chip, no badge (P161-01 = T3, P161-03 = P1)
+- [notes-naming-build-2](notes-naming-build-2/plan.md) — completed — a custom note card names its contract through the chip, a code name only beside a vouched level (P174 L1, k1)
 - [nulo-v6](nulo-v6/plan.md) — completed — the dependency line and the chain identity moved to Aztec V6 as Nulo V6
 - [offscreen-ping-1](offscreen-ping-1/plan.md) — completed — the worker stops pinging a PXE document it heard answer, so a busy document is no longer replaced mid-call; the READY timeout becomes a typed `RpcTimeoutError`
 - [on-camera-landing](on-camera-landing/plan.md) — completed — the landing replaced with a character-drawn CCTV-style feed
@@ -579,4 +581,9 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [scroll-cue-build-2](scroll-cue-build-2/plan.md) — completed — the onboarding more-below button hidden where the window leaves no room beside the column (P158-01 = H, #1821)
 - [scroll-cue-right-1](scroll-cue-right-1/plan.md) — completed — the execute window's more-below button moves to the bottom right (P157-02, "right"; #1820)
 - [contracts-build-1](contracts-build-1/plan.md) — completed — the Contracts page as P162-01 = R24: named rows, both ids, origin, a View on Aztecscan action
+- [fee-slip-build-1](fee-slip-build-1/plan.md) — completed — the Send fee slip and the review's fee row as two rows, figure over method (P165-01 = D1, P165-03 = R1)
+- [send-fixes-2](send-fixes-2/plan.md) — completed — four Send defects the owner named on 2026-11-17: the last recipient row's divider, the warning glyph, the in-flight fiat line, the radio focus ring (#1825-#1828)
+- [connected-app-build-1](connected-app-build-1/plan.md) — completed — the connected app page loses its Connection check section with nothing in its place, and the Details table draws `send` for Transact and `search` for Details (P163-02, P163-03 = E3)
 - [fee-copy-build-1](fee-copy-build-1/plan.md) — completed — the app-set Private Fee Juice sentence as two sentences, the unknown press said once, History's Fee method over a Set by caption, Send's readout asking for an amount (P164-01 to -04; #1836)
+- [fee-slip-build-2](fee-slip-build-2/plan.md) — completed — the Fee sheet's warning under the payer group and the warning glyph's apex on the cap top (P169-01 = P2b, P175-01 = B)
+- [locked-refusal-1](locked-refusal-1/plan.md) — completed — a locked wallet answers a dApp 4900 `WALLET_LOCKED` instead of the unclassified -32603, logged at debug (#1833)

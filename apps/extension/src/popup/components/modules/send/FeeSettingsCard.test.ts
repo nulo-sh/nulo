@@ -105,6 +105,7 @@ import { drawsFeeWhole } from "../../../../../tests/helpers/fee-whole"
 import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { INIT_FETCH_TIMEOUT_MS, INIT_RETRY_BACKOFF_MS, useBalancesStore } from "@/stores/balances.store"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { FEE_JUICE_BRIDGE_URL } from "./fee-helpers"
 
 /** Send's radios and the windows' menu offer the same rows to pick from. */
 const PICKER = {
@@ -3079,6 +3080,7 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 		await w.setProps({ feeEstimate: SHORT })
 		await flushPromises()
 		expect(w.get('[data-testid="fee-sponsor-live"]').text()).toBe("This send can cost up to ~0.0021 FJ. You have 0.0015 FJ.")
+		expect(shortfall(w).find('i[class*="line_mark"]').exists(), "the glyph's offset onto the cap top").toBe(true)
 		expect(
 			shortfall(w)
 				.findAll('[class*="whole"]')
@@ -3127,6 +3129,7 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 		expect(w.get('[data-testid="fee-juice-unconfirmed"]').text()).toBe(
 			"Your balance couldn't be confirmed: one check found 38.1638 FJ and a fresh one found 0 FJ. If the network refuses this send, nothing is charged.",
 		)
+		expect(w.find('[data-testid="fee-juice-unconfirmed"] > i[class*="line_mark"]').exists()).toBe(true)
 		expect(mocks.getGasBalances).toHaveBeenCalledTimes(1)
 		w.unmount()
 	})
@@ -3212,6 +3215,10 @@ describe("FeeSettingsCard — Send: the payers as radios", () => {
 		const priv = mountSend()
 		await flushPromises()
 		expect(priv.find('[data-testid="send-fee-nudge"]').text()).toContain("You have no private Fee Juice yet")
+		expect(
+			priv.find('[data-testid="send-fee-nudge"] > i[class*="nudge_mark"]').exists(),
+			"the glyph beside the title's first line",
+		).toBe(true)
 		expect(priv.find('[data-testid="send-fee-get-juice"]').text()).toBe("Get private Fee Juice")
 		priv.unmount()
 
@@ -3369,6 +3376,67 @@ describe("FeeSettingsCard — Send: the remedy and the notices a closed card giv
 		await w.get('[data-testid="pick-fj"]').trigger("click")
 		await flushPromises()
 		expect(remedy(w)).toBeNull()
+	})
+
+	const WARNING = "Paying the fee from your public Fee Juice shows your address: anyone can see this account sent something, and when."
+	const region = (w: Card) => w.get('[data-testid="send-fee-sheet-warning-live"]')
+	const block = (w: Card) => w.find('[data-testid="send-fee-sheet-warning"]')
+
+	test("the page's warning sits under the payer group, above priority, in a region mounted while empty", async () => {
+		const w = await paidFromPublic({ publicFeeJuice: HELD, privateFeeJuice: HELD }, [PRIVATE_FPC, SPONSOR])
+		const order = [...w.get('[data-testid="fee-settings-card"]').element.children].map((el) => el.getAttribute("data-testid"))
+		expect(order.slice(0, 3)).toEqual(["fee-method-selector", "send-fee-sheet-warning-live", "fee-priority-row"])
+		const live = region(w).element
+		expect([live.getAttribute("role"), live.getAttribute("aria-live"), live.getAttribute("aria-atomic")]).toEqual([
+			"status",
+			"polite",
+			"true",
+		])
+		expect(live.children).toHaveLength(0)
+
+		await w.setProps({ warning: WARNING })
+		expect(region(w).element).toBe(live)
+		expect(block(w).get("span > span").element.textContent).toBe(WARNING)
+		expect(block(w).find('i[class*="warning_mark"]').exists(), "the page's glyph rule").toBe(true)
+		expect(w.get('[data-testid="send-fee-sheet-warning-fix"]').text()).toBe("Pay it from private Fee Juice")
+		expect(w.find('[data-testid="send-fee-sheet-warning-bridge"]').exists()).toBe(false)
+
+		await w.setProps({ warning: null })
+		expect(region(w).element).toBe(live)
+		expect(live.children).toHaveLength(0)
+	})
+
+	test("when private Fee Juice cannot pay, the block's fix is the bridge, opened in a new tab", async () => {
+		const w = await paidFromPublic({ publicFeeJuice: HELD, privateFeeJuice: "0" }, [PRIVATE_FPC, SPONSOR], { warning: WARNING })
+		expect(w.find('[data-testid="send-fee-sheet-warning-fix"]').exists()).toBe(false)
+		const link = w.get('[data-testid="send-fee-sheet-warning-bridge"]')
+		expect(link.text()).toBe("Get private Fee Juice")
+		expect(link.attributes()).toMatchObject({ href: FEE_JUICE_BRIDGE_URL, target: "_blank", rel: "noopener noreferrer" })
+	})
+
+	test("the block's fix picks private Fee Juice, then moves the keyboard to its radio", async () => {
+		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, SPONSOR])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: HELD })
+		const w = mount(FeeSettingsCard, {
+			props: baseProps({ originPrivacy: "private", warning: WARNING }),
+			global: { stubs: { ...STUBS, FeeMethodRadios: false } },
+			attachTo: document.body,
+		}) as Card
+		await flushPromises()
+		const radio = (subtitle: string) => w.get(`[data-testid="send-fee-payer-${subtitle}"]`).element as HTMLInputElement
+		await w.get('[data-testid="send-fee-payer-public"]').setValue(true)
+		await flushPromises()
+		expect(payerType(w)?.type).toBe("fj")
+		const fix = w.get('[data-testid="send-fee-sheet-warning-fix"]')
+		;(fix.element as HTMLButtonElement).focus()
+		expect(document.activeElement).toBe(fix.element)
+
+		await fix.trigger("click")
+		await flushPromises()
+		expect(payerType(w)).toMatchObject({ type: "private_fpc", fpcId: "p1" })
+		// The checked radio is where focus lands, so focus taken before the pick would sit on Public.
+		expect([radio("private").checked, document.activeElement]).toEqual([true, radio("private")])
+		w.unmount()
 	})
 
 	test("the notices it shows, in its order, as the page must say them with the card closed", async () => {

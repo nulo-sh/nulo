@@ -20,6 +20,8 @@ const line = (w: ReturnType<typeof mountLine>) => w.find('[data-testid="send-pub
 const warning = (w: ReturnType<typeof mountLine>) => w.find('[data-testid="send-fee-warning"]')
 const fix = (w: ReturnType<typeof mountLine>) => w.find('[data-testid="send-fee-warning-fix"]')
 const bridge = (w: ReturnType<typeof mountLine>) => w.find('[data-testid="send-fee-warning-bridge"]')
+/** The sentence alone, without the fix under it. */
+const warningText = (w: ReturnType<typeof mountLine>) => warning(w).get("span > span").element.textContent
 
 describe("composite/send/PublishLine", () => {
 	test("a private send paid privately is one calm sentence", () => {
@@ -36,11 +38,14 @@ describe("composite/send/PublishLine", () => {
 		expect(line(mountLine("public", "private", "account")).text()).toBe("Anyone can see your address as the sender and the amount.")
 	})
 
-	test("a private send paid from public Fee Juice is the warning, with its glyph, and no sentence", () => {
+	test("a private send paid from public Fee Juice is the warning's short form, with its glyph, and no sentence", () => {
 		const w = mountLine("private", "private", "account")
 		expect(line(w).exists()).toBe(false)
-		expect(warning(w).text()).toContain("Paying the fee from your public Fee Juice shows your address")
+		expect(warningText(w)).toBe("Paying the fee from public Fee Juice shows your address.")
 		expect(warning(w).get('[data-testid="stub-icon"]').attributes("data-name")).toBe("warning")
+		expect(warningText(mountLine("private", "public", "account"))).toBe(
+			"Paying the fee from public Fee Juice ties this payment to your address.",
+		)
 	})
 
 	test("private Fee Juice that can pay is the fix, and a press emits fix", async () => {
@@ -88,6 +93,15 @@ describe("composite/send/PublishLine", () => {
 		await w.setProps({ facts: publishFacts("private", "private", "account"), payer: "account" })
 		expect(w.get('[role="status"]').element).toBe(region.element)
 		expect(region.attributes("data-you")).toBe("exposed")
+	})
+
+	test("quiet, the region stays mounted and announces nothing", async () => {
+		const w = mountLine("private", "private", "account", { quiet: true })
+		const region = w.get('[role="status"]')
+		expect([region.attributes("aria-live"), warning(w).exists()]).toEqual(["off", true])
+		await w.setProps({ quiet: false })
+		expect(w.get('[role="status"]').element).toBe(region.element)
+		expect(region.attributes("aria-live")).toBe("polite")
 	})
 
 	test("no sendable token, no line", () => {

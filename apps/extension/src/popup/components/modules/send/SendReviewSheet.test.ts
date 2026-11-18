@@ -105,7 +105,7 @@ const mountSheet = (props: Partial<SheetProps> = {}) =>
 type W = ReturnType<typeof mountSheet>
 const submit = (w: W) => w.get('[data-testid="send-review-submit"]')
 const feeRow = (w: W) => w.get('[data-testid="send-review-fee"]')
-/** The row's value and the notes under it, each on its own line. */
+/** The row's figure, who pays and the notes under them, each on its own line. */
 const feeLines = (w: W) =>
 	Array.from(feeRow(w).element.querySelectorAll(":scope > span:last-child > span:not([class*=fee_state] span)")).map((el) =>
 		(el.textContent ?? "").trim(),
@@ -217,14 +217,15 @@ describe("modules/send/SendReviewSheet", () => {
 			["public", `Amount PUBLIC ${FACT_SENTENCES.amount}`],
 		])
 		expect(w.find('[data-testid="send-review-warning"]').exists()).toBe(false)
-		expect(feeLines(w)).toEqual(["~0.00214 FJ ($0.027), public Fee Juice"])
+		expect(feeLines(w)).toEqual(["~0.00214 FJ ($0.027)", "Public Fee Juice"])
 	})
 
-	test("paid from private Fee Juice: the fee row reads as the form's line, label left and value right", () => {
+	test("paid from private Fee Juice: the fee row reads as the form's line, label left, the figure over who pays at the right", () => {
 		w = mountSheet()
 		expect(feeRow(w).attributes("data-payer")).toBe("contract")
 		expect(feeRow(w).element.firstElementChild?.textContent).toBe("Fee")
-		expect(feeLines(w)).toEqual(["~0.00214 FJ ($0.027), private Fee Juice"])
+		expect(feeLines(w)).toEqual(["~0.00214 FJ ($0.027)", "Private Fee Juice"])
+		expect(feeRow(w).get('[data-testid="send-review-fee-method"]').text()).toBe("Private Fee Juice")
 		expect(w.find('[data-testid="send-review-warning"]').exists()).toBe(false)
 	})
 
@@ -237,7 +238,7 @@ describe("modules/send/SendReviewSheet", () => {
 				.map((f) => f.text())
 		expect(figures()).toEqual(["~0.00214 FJ ($0.027)"])
 		await sheet.setProps({ fee: { payer: "sponsor", display: { amount: "0.00214", usd: null } } })
-		expect(feeLines(sheet)).toEqual(["Nothing · Sponsored", "The sponsor covers ~0.00214 FJ"])
+		expect(feeLines(sheet)).toEqual(["Nothing", "Sponsored", "The sponsor covers ~0.00214 FJ"])
 		expect(figures()).toEqual(["~0.00214 FJ"])
 	})
 
@@ -264,7 +265,7 @@ describe("modules/send/SendReviewSheet", () => {
 				"send-review-fee",
 				"send-review-submit",
 			])
-			expect(feeLines(w)).toEqual(["~0.00214 FJ ($0.027), public Fee Juice"])
+			expect(feeLines(w)).toEqual(["~0.00214 FJ ($0.027)", "Public Fee Juice"])
 			expect(w.find("a").exists()).toBe(false)
 		},
 	)
@@ -283,9 +284,9 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(rows(w)[0]).toEqual(["public", `Your address SENDER ${FACT_SENTENCES.sender}`])
 	})
 
-	test("Sponsored: Nothing · Sponsored over the sponsor's cost, nothing struck", () => {
+	test("Sponsored: Nothing over Sponsored, the sponsor's cost under them, nothing struck", () => {
 		w = mountSheet({ payerType: "fpc", fee: { payer: "sponsor", display: PRICED } })
-		expect(feeLines(w)).toEqual(["Nothing · Sponsored", "The sponsor covers ~0.00214 FJ ($0.027)"])
+		expect(feeLines(w)).toEqual(["Nothing", "Sponsored", "The sponsor covers ~0.00214 FJ ($0.027)"])
 		expect(feeRow(w).find("s").exists()).toBe(false)
 	})
 
@@ -303,7 +304,7 @@ describe("modules/send/SendReviewSheet", () => {
 			})
 			expect(rows(w)[0]).toEqual([visibility, row])
 			expect(w.text().split(UNVOUCHED_PUBLISH_SENTENCE)).toHaveLength(2)
-			expect(feeLines(w)).toEqual(["—, My FPC", UNVOUCHED_FEE_SENTENCE])
+			expect(feeLines(w)).toEqual(["—", "My FPC", UNVOUCHED_FEE_SENTENCE])
 			expect(feeRow(w).text()).not.toContain("0.00214")
 			// Each sentence's "FPC" is the glossary's term, the sponsor's own name never: two, the screen's cap.
 			expect(w.findAll("[data-term]").map((t) => [t.attributes("data-term"), t.text()])).toEqual([
@@ -335,17 +336,23 @@ describe("modules/send/SendReviewSheet", () => {
 			],
 		],
 	]
-	test.each(STATES)("%s: the review's fee row says what the form's line says", (_name, fee, notices) => {
+	test.each(STATES)("%s: the review's fee row says what the form's line says, row for row", (_name, fee, notices) => {
 		w = mountSheet({ fee, notices })
 		const line = mount(SendFeeLine, { props: { ...fee, notices }, global: { stubs: STUBS } })
-		const formValue = line.get('[data-testid="send-fee-line-value"]').text()
+		const figure = line.get('[data-testid="send-fee-line-value"] > :first-child').text()
+		const method = line.findAll('[data-testid="send-fee-line-method"]').map((m) => m.text())
 		const formNotes = line.findAll('[data-testid="send-fee-line-note"] p').map((p) => p.text())
-		expect(feeLines(w)).toEqual([formValue, ...formNotes])
+		expect(feeLines(w)).toEqual([figure, ...method, ...formNotes])
 		line.unmount()
 	})
 
 	test("queued: the cap's reading keeps its marker and the button queues; behind the sponsor likewise", async () => {
 		w = mountSheet({ queueing: true, fee: STATES[5][1] })
+		expect(feeLines(w)).toEqual([
+			"~0.00214 FJ ($0.027)",
+			"Private Fee Juice",
+			"Goes out after your earlier send, for at most ~0.00214 FJ ($0.027).",
+		])
 		expect(feeRow(w).find('[data-testid="send-review-fee-cap"]').exists()).toBe(true)
 		expect(submit(w).text()).toBe("Queue send")
 		await submit(w).trigger("click")
@@ -357,6 +364,7 @@ describe("modules/send/SendReviewSheet", () => {
 	test("estimating: the bar, and Send now says it waits; slow, Try again asks again and hands the keyboard to Send now", async () => {
 		w = mountSheet({ canSend: false, fee: { payer: "private_fpc", display: null, estimating: true } })
 		expect(feeRow(w).find('[data-testid="stub-bar"]').exists()).toBe(true)
+		expect(feeRow(w).get('[data-testid="send-review-fee-method"]').text()).toBe("Private Fee Juice")
 		expect(submit(w).text()).toBe("Estimating fee")
 		await w.setProps({ fee: { payer: "private_fpc", display: null, estimating: true, slow: true } })
 		expect(feeRow(w).get('[data-testid="send-review-fee-slow"]').text()).toContain("Taking longer than usual.")

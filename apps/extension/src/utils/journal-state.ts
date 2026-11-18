@@ -72,14 +72,34 @@ export function journalTransferAmount(
 	return op.amountRaw && decimals !== null ? { raw: op.amountRaw, decimals } : null
 }
 
-/** An in-flight send's amount: null for a dApp operation, an empty or unreadable `amountRaw`, and a
- *  token whose decimals the wallet does not know. */
-export function journalCardAmount(op: OperationRecord, tokenById: (id: number) => CardToken | undefined): string | null {
+/** An in-flight send's token and base units: null for a dApp operation, an empty or unreadable
+ *  `amountRaw`, and a token whose decimals the wallet does not know. */
+function journalCardUnits<T extends CardToken>(
+	op: OperationRecord,
+	tokenById: (id: number) => T | undefined,
+): { token: T; units: bigint; decimals: number } | null {
 	if (op.kind !== "transfer" || op.tokenId === undefined) return null
-	const amount = journalTransferAmount(op, tokenById(op.tokenId))
+	const token = tokenById(op.tokenId)
+	const amount = journalTransferAmount(op, token)
 	const units = amount ? parseSide(amount.raw) : undefined
-	if (!amount || units === undefined) return null
-	return formatListAmount(units, amount.decimals, ROW_AMOUNT_LENGTH)
+	return token && amount && units !== undefined ? { token, units, decimals: amount.decimals } : null
+}
+
+/** An in-flight send's amount, null wherever `journalCardUnits` is. */
+export function journalCardAmount(op: OperationRecord, tokenById: (id: number) => CardToken | undefined): string | null {
+	const sent = journalCardUnits(op, tokenById)
+	return sent && formatListAmount(sent.units, sent.decimals, ROW_AMOUNT_LENGTH)
+}
+
+/** An in-flight send's `≈ $` line, read by the price reading its settled row reads, so the row keeps its
+ *  lines when it lands: null wherever the amount is, and for a token that reading cannot price. */
+export function journalCardFiat<T extends CardToken>(
+	op: OperationRecord,
+	tokenById: (id: number) => T | undefined,
+	fiatLabel: (token: T, raw: bigint) => string | undefined,
+): string | null {
+	const sent = journalCardUnits(op, tokenById)
+	return (sent && fiatLabel(sent.token, sent.units)) ?? null
 }
 
 /** An in-flight send's symbol, set whenever its token is known, amount or not. */

@@ -13,7 +13,11 @@ const STUBS = {
 
 const mountLine = (props: Record<string, unknown> = {}) =>
 	mount(SendFeeLine, { props: { payer: "private_fpc", display: PRICED, ...props }, global: { stubs: STUBS } })
-const value = (w: ReturnType<typeof mountLine>) => w.get('[data-testid="send-fee-line-value"]').text()
+/** The value column's rows: the figure row's words, then who pays, or null with no method row. */
+const rows = (w: ReturnType<typeof mountLine>) => [
+	w.get('[data-testid="send-fee-line-value"] > :first-child').text(),
+	w.find('[data-testid="send-fee-line-method"]').exists() ? w.get('[data-testid="send-fee-line-method"]').text() : null,
+]
 const notes = (w: ReturnType<typeof mountLine>) => w.findAll('[data-testid="send-fee-line-note"] p').map((n) => n.text())
 /** Each fee drawn whole, as `[where, its text]`: the line's value or a note under it. */
 const figures = (w: ReturnType<typeof mountLine>) =>
@@ -64,9 +68,9 @@ describe("modules/send/SendFeeLine", () => {
 		expect([repeat?.defaultPrevented, press?.defaultPrevented]).toEqual([true, false])
 	})
 
-	test("a paid fee: the figure with its dollars, drawn whole, then who pays", () => {
+	test("a paid fee: the figure with its dollars, drawn whole, over who pays", () => {
 		const w = mountLine()
-		expect(value(w)).toBe("~0.00214 FJ ($0.027), private Fee Juice")
+		expect(rows(w)).toEqual(["~0.00214 FJ ($0.027)", "Private Fee Juice"])
 		expect(figures(w)).toEqual([["value", "~0.00214 FJ ($0.027)"]])
 		expect(notes(w)).toEqual([])
 		expect(w.get('[data-testid="send-fee-line"]').attributes("data-payer")).toBe("private_fpc")
@@ -74,44 +78,59 @@ describe("modules/send/SendFeeLine", () => {
 
 	test("no price known: the Fee Juice alone, nothing reserved for dollars", () => {
 		const w = mountLine({ payer: "fj", display: { amount: "0.00214", usd: null } })
-		expect(value(w)).toBe("~0.00214 FJ, public Fee Juice")
+		expect(rows(w)).toEqual(["~0.00214 FJ", "Public Fee Juice"])
 		expect(figures(w)).toEqual([["value", "~0.00214 FJ"]])
 		const sponsored = mountLine({ payer: "sponsor", display: { amount: "0.00214", usd: null } })
 		expect(notes(sponsored)).toEqual(["The sponsor covers ~0.00214 FJ"])
 	})
 
-	test("Sponsored: Nothing · Sponsored over the sponsor's cost with its dollars", () => {
+	test("Sponsored: Nothing over Sponsored, the sponsor's cost with its dollars under them", () => {
 		const w = mountLine({ payer: "sponsor" })
-		expect(value(w)).toBe("Nothing · Sponsored")
+		expect(rows(w)).toEqual(["Nothing", "Sponsored"])
 		expect(notes(w)).toEqual(["The sponsor covers ~0.00214 FJ ($0.027)"])
 		expect(figures(w)).toEqual([["note", "~0.00214 FJ ($0.027)"]])
 	})
 
-	test("a hand-added sponsor: no figure, its name, and why", () => {
+	test("a hand-added sponsor: a dash over its name, and why", () => {
 		const w = mountLine({ payer: "unvouched", payerName: "Mine" })
-		expect(value(w)).toBe("—, Mine")
+		expect(rows(w)).toEqual(["—", "Mine"])
 		expect(notes(w)).toEqual([UNVOUCHED_FEE_SENTENCE])
 		expect(w.findAll("[data-term]").map((t) => [t.attributes("data-term"), t.text()])).toEqual([["fpc", "FPC"]])
 	})
 
-	test("estimating: a bar where the figure goes", () => {
+	test("estimating: a bar where the figure goes, over who pays", () => {
 		const w = mountLine({ display: null, estimating: true })
-		expect(w.find('[data-testid="stub-bar"]').exists()).toBe(true)
+		expect(w.find('[data-testid="send-fee-line-value"] > :first-child [data-testid="stub-bar"]').exists()).toBe(true)
+		expect(rows(w)[1]).toBe("Private Fee Juice")
+	})
+
+	// jsdom has no layout: the steady height rests on the column holding both rows in every state.
+	test.each([
+		["priced", {}],
+		["no price", { display: { amount: "0.00214", usd: null } }],
+		["estimating", { display: null, estimating: true }],
+		["slow", { display: null, estimating: true, slow: true }],
+		["failed", { display: null, failed: true }],
+		["no amount yet", { display: null }],
+	])("%s: the method row holds its place under the figure row", (_name, props) => {
+		const w = mountLine(props)
+		expect(w.findAll('[data-testid="send-fee-line-value"] > *')).toHaveLength(2)
+		expect(rows(w)[1]).toBe("Private Fee Juice")
 	})
 
 	test("slow and failed offer Try again, emitted as retry", async () => {
 		const slow = mountLine({ display: null, estimating: true, slow: true })
-		expect(value(slow)).toContain("Taking longer than usual.")
+		expect(rows(slow)[0]).toBe("Taking longer than usual.Try again")
 		await slow.get('[data-testid="send-fee-line-retry"]').trigger("click")
 		expect(slow.emitted("retry")).toHaveLength(1)
 
 		const failed = mountLine({ display: null, failed: true })
-		expect(value(failed)).toContain("Couldn't estimate fee.")
+		expect(rows(failed)[0]).toBe("Couldn't estimate fee.Try again")
 		await failed.get('[data-testid="send-fee-line-retry"]').trigger("click")
 		expect(failed.emitted("retry")).toHaveLength(1)
 	})
 
-	test("queued against a cap: the last fee, then the cap on the line under it", () => {
+	test("queued against a cap: the last fee over who pays, then the cap under them", () => {
 		const w = mountLine({
 			payer: "fj",
 			display: null,
@@ -119,7 +138,7 @@ describe("modules/send/SendFeeLine", () => {
 			queued: true,
 			queuedCap: { about: PRICED, cap: { amount: "0.0024", usd: "$0.030" } },
 		})
-		expect(value(w)).toBe("~0.00214 FJ ($0.027), public Fee Juice")
+		expect(rows(w)).toEqual(["~0.00214 FJ ($0.027)", "Public Fee Juice"])
 		expect(notes(w)).toEqual(["Goes out after your earlier send, for at most ~0.0024 FJ ($0.030)."])
 		expect(figures(w)).toEqual([
 			["value", "~0.00214 FJ ($0.027)"],
@@ -129,9 +148,9 @@ describe("modules/send/SendFeeLine", () => {
 
 	test("queued with Nulo's sponsor, and queued with no cap", () => {
 		const sponsored = mountLine({ payer: "sponsor", display: null, estimating: true, queued: true, queuedSponsored: true })
-		expect([value(sponsored), notes(sponsored)]).toEqual(["Nothing · Sponsored", [QUEUED_SPONSORED_COPY]])
+		expect([rows(sponsored), notes(sponsored)]).toEqual([["Nothing", "Sponsored"], [QUEUED_SPONSORED_COPY]])
 		const held = mountLine({ display: null, estimating: true, queued: true })
-		expect(value(held)).toBe(QUEUED_FEE_COPY)
+		expect(rows(held)).toEqual([QUEUED_FEE_COPY, "Private Fee Juice"])
 	})
 
 	test("the card's notices, two at once, in its order under the line, a fee one names drawn whole", () => {
@@ -151,7 +170,9 @@ describe("modules/send/SendFeeLine", () => {
 		expect(w.emitted("change")).toHaveLength(1)
 	})
 
-	test("no payer yet reads a dash", () => {
-		expect(value(mountLine({ payer: null, display: null }))).toBe("—")
+	test("no payer yet reads a dash, with no method row", () => {
+		const w = mountLine({ payer: null, display: null })
+		expect(rows(w)).toEqual(["—", null])
+		expect(w.findAll('[data-testid="send-fee-line-value"] > *')).toHaveLength(1)
 	})
 })

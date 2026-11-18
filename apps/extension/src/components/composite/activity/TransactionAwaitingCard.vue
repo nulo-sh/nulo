@@ -23,6 +23,8 @@ const props = defineProps({
 	icon: { type: String as PropType<GlyphName>, default: "zap" },
 	amount: { type: String, default: null },
 	amountSymbol: { type: String, default: null },
+	/** The `≈ $` line the settled row will show, from the same price reading, so landing moves nothing. */
+	amountFiat: { type: String, default: null },
 	titleNamesToken: { type: Boolean, default: false },
 	/** The mark of the token the title names, as the settled row draws it. */
 	titleMark: { type: Object as PropType<TokenMarkOf | null>, default: null },
@@ -67,6 +69,7 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 			:icon="icon"
 			:amount="amount"
 			:amountSymbol="amountSymbol"
+			:amountFiat="amountFiat"
 			:titleNamesToken="titleNamesToken"
 			:titleMark="titleMark"
 			:direction="direction"

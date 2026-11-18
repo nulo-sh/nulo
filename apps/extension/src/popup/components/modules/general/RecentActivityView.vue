@@ -25,7 +25,7 @@ import { useJournalMirror } from "@/composables/useJournalMirror"
 import { usePrices } from "@/composables/usePrices"
 import { formatListAmount } from "@/utils/amount.js"
 import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
-import { knownDecimals } from "@/utils/token-amount"
+import { knownDecimals, parseSide } from "@/utils/token-amount"
 import { dashIfBlank, isBlank } from "@/utils/string"
 import { activeAccountScope } from "@/utils/active-scope"
 import { filterPendingDoubleRender, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
@@ -36,6 +36,7 @@ import {
 	journalCardAmount,
 	journalCardAmountSymbol,
 	journalCardDirection,
+	journalCardFiat,
 	journalProgressWord,
 	journalCardIcon,
 	journalCardOriginLabel,
@@ -208,6 +209,11 @@ const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null
 	return tokenById(executingTask.value.content.tokenId)?.symbol || null
 })
+const executingAmountFiat = computed(() => {
+	if (!executingAmount.value) return null
+	const raw = parseSide(String(executingTask.value.content.amount))
+	return raw === undefined ? null : (incomingPrices.tokenFiatLabel(tokenById(executingTask.value.content.tokenId), raw) ?? null)
+})
 const executingTitleMark = computed(() =>
 	isUiTransfer.value ? tokenMarkOf(incomingPrices, tokenById(executingTask.value.content.tokenId)) : null,
 )
@@ -345,6 +351,7 @@ const renderedInFlightOps = computed(() => [...inFlightJournalOps.value].sort((a
 
 const cardAmountFor = (op) => journalCardAmount(op, tokenById)
 const cardAmountSymbolFor = (op) => journalCardAmountSymbol(op, tokenById)
+const cardAmountFiatFor = (op) => journalCardFiat(op, tokenById, incomingPrices.tokenFiatLabel)
 
 function awaitingSubtitleFor(op) {
 	return isQueuedTransfer(op) ? journalProgressWord(op) : cardSubtitleFor(op)
@@ -638,6 +645,7 @@ onBeforeUnmount(() => {
 				:originLabel="journalCardOriginLabel(op)"
 				:amount="cardAmountFor(op)"
 				:amountSymbol="cardAmountSymbolFor(op)"
+				:amountFiat="cardAmountFiatFor(op)"
 				:titleNamesToken="journalCardTitleNamesToken(op)"
 				:titleMark="journalCardTitleMark(op, { tokenById }, incomingPrices)"
 				:direction="journalCardDirection(op)"
@@ -663,6 +671,7 @@ onBeforeUnmount(() => {
 				:originLabel="executingOriginLabel"
 				:amount="executingAmount"
 				:amountSymbol="executingAmountSymbol"
+				:amountFiat="executingAmountFiat"
 				:titleNamesToken="isUiTransfer"
 				:titleMark="executingTitleMark"
 				:direction="executingDirection"
