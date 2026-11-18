@@ -8,12 +8,28 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 0dc22a9c5 (arc 1); dev at 8ff0e6489 (arc 2)
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-18.
+- **Status:** completed in two arcs. Arc 1 shipped in #1835 (merged). Arc 2 ships in the PR titled `feat(connected-apps): the app's permissions as the pop-up's per-contract table`, which carries this close-out; it lands on the owner's decision page with its captures.
+- **Shipped:**
+  - Arc 1: the connected app page lost its Connection check section with nothing in its place (P163-02 with its note); the Details table and its two rows draw `send` for Transact and `search` for Details (P163-03 = E3); the page root carries the unseen `connected-app-page` testid.
+  - Arc 2: the page's "If you allow, it can" and "Granted permissions" sections became one "Permissions · {tag}" section: the window's kind rows (list accounts, act for you with its switch, address book, and the unknown row when held), 24 px, then the window's Details table drawn open, its footnote only when a row lists a function name (P185-01 = D1 and its note). The table's narrow drawing keys on its own width, below 330 px (P185-02): whole names on the page, the window unchanged at 400 px. The worker answers the page the window's contract names (`getKnownContracts`). The cards and their only callees (`CapabilityDetailPanel`, `ScopePatternList`, `ScopeAddress`, `ScopeClassId`, `getCapabilityLabel`) are deleted. A stored simulation holder that is not an object reads as any contract.
+- **Gates** (retry 0):
+  - Arc 1, at `0a6e270d1`, Chrome: lint, typecheck:all, test (1045 files), test:components (104 files) and check:plans green; `e2e:agent` connect-verify-mismatch 2/2, connect-check-window 2/2, type-roles-windows 6/6.
+  - Arc 2: Phase 3's outcome below; smoke and network on Chrome and Firefox.
+- **Deviations:** the plan was archived at arc 1's close-out, not on dev unarchived as arc 2's brief said, so arc 2 reopened it; arc 2's captures mount the window's table in a host of the window's widths rather than the whole window; `cap-window` and `authwit-variants` joined arc 2's network gate (they read the table and the switch).
+- **Lessons:** none promoted (`lessons.md` sits at its budget); the inline-size container that collapses in a shrink-to-fit host is in [`lessons/phase-3.md`](lessons/phase-3.md).
+- **Known limits:** none.
+- **Open items:** none. P185-01's second half, words for the icons, is the owner's page 186, outside this plan.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # connected-app-build-1: the connected app page and the Details table, built from the owner's picks
 
-Two arcs, one PR each against `dev`; each changes what users see, so neither lands on its own: the orchestrator lands it on the owner's approve of its captures. No issue owns either arc (searched "connection check connected app emoji", "details table glyph transact", "connected app permissions", "Granted permissions"), so neither PR carries `Closes` or `Part of`. Recon: [`recon.md`](recon.md). Owner asks: [`OWNER-ASKS.md`](OWNER-ASKS.md). Over the light tier's 150 lines: two arcs, each a page.
+Two arcs, one PR each against `dev`; each changes what users see, so neither lands on its own: the orchestrator lands it on the owner's approve of its captures. No issue owns either arc (searched "connection check connected app emoji", "details table glyph transact", "connected app permissions", "Granted permissions"), so neither PR carries `Closes` or `Part of`. Recon: [`recon.md`](recon.md). Owner asks: none open ([`OWNER-ASKS.md`](OWNER-ASKS.md)). Over the light tier's 150 lines: two arcs, each a page.
 
 - **Arc 1** (#1835, merged): decision page 163, signed 2026-11-17 at 15:37 UTC.
 - **Arc 2** (this amendment): decision page 185, signed 2026-11-18 at 16:27 UTC at dev `6aaebe886`. Arc 1 archived the plan; arc 2 reopened it with a `git mv` back out of `archive/`, and its close-out moves it back.
