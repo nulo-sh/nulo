@@ -6,6 +6,7 @@ import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { OriginType, TransferType, TxStatus } from "@/wallet/services/transaction/spec"
 import TxDetail from "./[id].vue"
+import { declarationsOf, parseSource } from "../../../../scripts/type-roles/source-scan"
 
 const mocks = vi.hoisted(() => ({
 	getTokens: vi.fn(),
@@ -262,6 +263,27 @@ describe("the transaction page's contract for a call", () => {
 		expect(other.textContent?.trim()).toBe("0x0b0b..0b0b")
 		other.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 		expect(mocks.copy).toHaveBeenCalledExactlyOnceWith(OTHER, expect.any(Function), "Successfully copied")
+	})
+
+	test('each call reads as one sentence, "{title} on {contract}", "on" held to the protocol chip or the short address in one nowrap box', async () => {
+		const STYLE = (TxDetail as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style
+		expect(declarationsOf(parseSource("apps/extension/src/popup/pages/tx/[id].vue"), ".call_tail")).toEqual({ "white-space": "nowrap" })
+		const w = await mountPage(claim, Promise.resolve([listed]), { ContractChip: chipStub })
+		const sentences = w.findAll("[data-testid='tx-call-method']").map((method) => {
+			const line = method.element.parentElement as HTMLElement
+			const contract = line.querySelector("[data-testid='tx-call-contract']")
+			return {
+				line: line.className,
+				reads: line.textContent,
+				tail: contract?.parentElement?.className,
+				held: contract?.previousSibling?.textContent,
+			}
+		})
+		const sentence = { line: STYLE.call_line, tail: STYLE.call_tail, held: "on\u00a0" }
+		expect(sentences).toEqual([
+			{ ...sentence, reads: "Claim Fee Juice on\u00a0Fee Juice" },
+			{ ...sentence, reads: "Checkpoint on\u00a00x0b0b..0b0b" },
+		])
 	})
 })
 

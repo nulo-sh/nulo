@@ -741,6 +741,12 @@ describe("OperationCard — a step's chevron ends its sentence beside the last w
 		while (at && (at.nodeType === Node.COMMENT_NODE || at.textContent === "")) at = at.previousSibling
 		return at
 	}
+	/** `node`, or the first sibling after it that renders. */
+	const rendered = (node: Node | null | undefined): Node | null | undefined => {
+		let at = node
+		while (at && (at.nodeType === Node.COMMENT_NODE || at.textContent === "")) at = at.nextSibling
+		return at
+	}
 	const isChip = (node: Node | null | undefined) =>
 		node instanceof Element &&
 		(node.matches('[data-testid="contract-chip"]') || node.querySelector('[data-testid="contract-chip"]') !== null)
@@ -776,5 +782,25 @@ describe("OperationCard — a step's chevron ends its sentence beside the last w
 		const w = await mountCard({ decodedCalls: entry.decodedCalls }, entry.op)
 		expect(sentence(w)).toEqual([`Transfer (private) 5 ${trimAddress(USDC)}`, "to Savings for the long winter. Caller: none"])
 		expect(tails(w)).toEqual([ON_WORD])
+	})
+
+	test("a call's \"on\" opens the chip's nowrap box, held to the chip by a no-break space inside the box the chip clips in, so a wrap moves them together", async () => {
+		const source = parseSource("apps/extension/src/popup/windows/execute/SendTxSummary.vue")
+		expect(declarationsOf(source, ".chip_fit")).toEqual({ display: "inline-flex", "align-items": "baseline", "max-width": "100%" })
+		const heads = (await mountFixture()).findAll('[data-testid="execute-op-summary-call-head"]').map((head) => {
+			const box = head.get('[data-testid="execute-op-call-to"]').element
+			const fit = box.firstElementChild
+			const opens = rendered(fit?.firstChild)
+			return {
+				box: box.className,
+				fit: fit?.className,
+				opens: isChip(opens) ? "chip" : opens?.textContent,
+				beside: isChip(rendered(opens?.nextSibling)),
+				before: previous(box)?.textContent,
+			}
+		})
+		const call = { box: STYLE.chip_tail, fit: STYLE.chip_fit, opens: "on\u00a0", beside: true, before: " " }
+		// The transfer's chip is its amount's unit: the same box, no "on".
+		expect(heads).toEqual([call, { ...call, opens: "chip", beside: false }, call])
 	})
 })
