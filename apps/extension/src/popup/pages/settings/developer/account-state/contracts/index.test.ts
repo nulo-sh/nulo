@@ -1,3 +1,4 @@
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { Flex, Input, RowAction } from "@nulo/design"
 import { createTestingPinia } from "@pinia/testing"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
@@ -19,12 +20,15 @@ const { TOKEN, ACCOUNT, UNKNOWN, BUILT_IN, CLASS, getContractRows } = vi.hoisted
 	CLASS: (n: string) => `0x${n.repeat(32)}`,
 	getContractRows: vi.fn(),
 }))
+/** A built-in outside the protocol set, so only its compiled-in name can name it. */
+const AUTH_REGISTRY = STANDARD_AUTH_REGISTRY_ADDRESS.toString()
 const ROWS = [
 	{ address: TOKEN, classId: CLASS("0e"), builtIn: false },
 	{ address: ACCOUNT, classId: CLASS("0f"), builtIn: false },
 	{ address: PRIVATE_FPC_ADDRESS, classId: CLASS("1d"), builtIn: false },
 	{ address: SPONSORED_FPC_ADDRESS, classId: CLASS("0d"), builtIn: false },
 	{ address: BUILT_IN, classId: CLASS("2e"), builtIn: true, name: "Contract Instance Registry" },
+	{ address: AUTH_REGISTRY, classId: CLASS("3e"), builtIn: true, name: "Auth Registry" },
 	{ address: UNKNOWN, classId: CLASS("1f"), builtIn: false },
 ]
 
@@ -120,6 +124,7 @@ test("each row reads its chip, both short ids, a copy for each and its origin", 
 	expect(read(PRIVATE_FPC_ADDRESS)).toEqual({ chip: "Private Fee Juice", level: "nulo", origin: "Added by Nulo, for fees" })
 	expect(read(SPONSORED_FPC_ADDRESS)).toEqual({ chip: "Sponsored", level: "nulo", origin: "Added by Nulo, for fees" })
 	expect(read(BUILT_IN)).toEqual({ chip: "Contract Instance Registry", level: "nulo", origin: "Built into every wallet" })
+	expect(read(AUTH_REGISTRY)).toEqual({ chip: "Auth Registry", level: "none", origin: "Built into every wallet" })
 	expect(read(UNKNOWN)).toEqual({ chip: "0x2c2c2c..2c2c", level: "none", origin: "Origin not recorded" })
 	const token = rowOf(w, TOKEN)
 	expect(token.get('[data-testid="contract-row-instance"]').text()).toBe("0x0a0a..0a0a")
@@ -169,7 +174,8 @@ test.each([
 test.each([
 	{ case: "an account's name", term: "account 1", shown: [ACCOUNT] },
 	{ case: "a class id's start", term: CLASS("2e").slice(0, 12), shown: [BUILT_IN] },
-	{ case: "a built-in's compiled-in name", term: "instance registry", shown: [BUILT_IN] },
+	{ case: "a protocol contract's name", term: "instance registry", shown: [BUILT_IN] },
+	{ case: "a built-in's compiled-in name", term: "auth registry", shown: [AUTH_REGISTRY] },
 	{ case: "an address pasted with a zero-width space", term: `${UNKNOWN.slice(0, 20)}​${UNKNOWN.slice(20)}`, shown: [UNKNOWN] },
 	{ case: "an address with a visible wrong character", term: `${UNKNOWN.slice(0, -1)}g`, shown: [] },
 ])("a search for $case shows $shown", async ({ term, shown: expected }) => {
