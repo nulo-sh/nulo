@@ -26,6 +26,7 @@ import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useRouter } from "vue-router"
 import { useAppStore } from "@/stores/app.store"
 import { closeCurrentWindow } from "@/utils/close-current-window"
+import { authRequiredGate } from "@/popup/auth-guard"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import type { WindowEnd } from "@/wallet/services/dapp-interaction/client"
 
@@ -44,6 +45,8 @@ export interface UseDappApprovalWindowOptions {
 	disconnectServices: () => void
 	/** The window's payload init. Awaited after the session gate + auth redirect. */
 	init: () => Promise<void>
+	/** The worker's active profile, through the window's connected client. */
+	getActiveProfile: () => Promise<{ id: string } | undefined>
 	/**
 	 * The window-local reject. Bound to `beforeunload` and to the
 	 * active-profile-change guard; guard divergences stay in the window.
@@ -140,7 +143,9 @@ export function useDappApprovalWindow(options: UseDappApprovalWindowOptions): Us
 
 		if (!appStore.isSessionChecked) await untilSessionChecked(() => appStore.isSessionChecked)
 
-		if (!appStore.isLogined) {
+		// The worker's session decides, as in the route guard: the shell marks an unlock only once its
+		// activation ends, and a window handed over before then must not pass the lock screen again.
+		if (!appStore.isLogined && (await authRequiredGate(false, appStore.isSessionChecked, options.getActiveProfile)) === "auth") {
 			appStore.pageAwaitingAuth = router.currentRoute.value.fullPath
 			router.push({ path: "/popup/auth" })
 			return

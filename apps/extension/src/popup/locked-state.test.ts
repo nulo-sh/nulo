@@ -207,6 +207,31 @@ describe("the lock event", () => {
 		expect([choosing.store.selected, choosing.routes]).toEqual([p3, []])
 	})
 
+	test("on the unlock window it seals and reselects but stays on its route; elsewhere, or with no profile left, it lands", async () => {
+		const unlock = shell([p1, p2], { routeName: "windows-unlock" })
+		unlock.store.selected = p3
+		await unlock.onLockEvent(
+			async () => [p1, p2],
+			() => true,
+		)
+		expectSealed(unlock)
+		expect([unlock.store.selected, unlock.routes]).toEqual([p1, []])
+
+		const connect = shell([p1], { routeName: "windows-discover" })
+		await connect.onLockEvent(
+			async () => [p1],
+			() => true,
+		)
+		expect(connect.routes).toEqual(["/popup/auth"])
+
+		const emptied = shell([p1], { routeName: "windows-unlock" })
+		await emptied.onLockEvent(
+			async () => [],
+			() => true,
+		)
+		expect(emptied.routes).toEqual(["/popup/register"])
+	})
+
 	test("a rejected lookup lands on the cached list", async () => {
 		const s = shell()
 		const lookup = deferred<P[]>()

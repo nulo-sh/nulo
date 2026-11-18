@@ -1,4 +1,5 @@
 import { watch } from "vue"
+import { UNLOCK_WINDOW_ROUTE } from "./lock-landing"
 import { type LockScreenCandidate, lockScreenProfile } from "./lock-screen-profile"
 
 /** Pages that need no selected profile, as the route guard leaves them without one. */
@@ -54,6 +55,8 @@ export function createLockedState<P extends LockScreenCandidate>(shell: LockedSt
 	const land = (profiles: P[], lastActiveId?: string) => {
 		shell.setProfiles(profiles)
 		reselect(profiles, lastActiveId)
+		// The unlock window shows the lock screen itself and keeps the URL a restart finds it by.
+		if (profiles.length && shell.routeName() === UNLOCK_WINDOW_ROUTE) return
 		shell.route(profiles.length ? "/popup/auth" : "/popup/register")
 	}
 	/** Lands a window whose selection is gone. A page that needs no profile only changes the
