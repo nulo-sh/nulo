@@ -195,12 +195,10 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 	justify-self: center;
 }
 
-/* The six mark columns, the chevron and their gaps take 198 px, so below 330 px a name has less than
- * the 131 px of the longest one the wallet gives ("Sponsored fee payer"): a name, and the heading's
- * "Contract", take their own line above the marks. Keyed on the table's own width, since the page
- * draws it in the popup's column and the window in its own. The head and every row share one grid's
- * columns, so each mark stays under its glyph at the right, and a mark column shrinks to 15 px before
- * the table overflows. */
+/* Below 330 px the marks, the chevron and their gaps (198 px) leave a name under 132 px, the room
+ * "Sponsored fee payer", the wallet's longest, needs: names and the head's "Contract" take their own
+ * line. Head and rows share one grid's columns, so each mark stays under its glyph, and a mark column
+ * shrinks to 15 px before the table overflows. */
 @container details-table (width < 330px) {
 	.table {
 		display: grid;

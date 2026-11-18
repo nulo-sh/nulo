@@ -345,6 +345,15 @@ describe("Settings › Connected app › Permissions", () => {
 		expect(column.element.children[1].querySelector(`.${TABLE.head}`)).not.toBeNull()
 	})
 
+	test("a stored simulation grant it cannot read still draws, flagged as any contract; a listed one is not", async () => {
+		const book = { type: "data", addressBook: true }
+		const unreadable = await mountPage(session([{ type: "simulation", utilities: null }, book]))
+		expect(section(unreadable).find('[data-kind-row="address-book"]').classes()).toContain(FLAGGED)
+		const listed = { type: "simulation", utilities: { scope: [{ contract: TOKEN, function: "balance_of_public" }] } }
+		const control = await mountPage(session([listed, book]))
+		expect(section(control).find('[data-kind-row="address-book"]').classes()).not.toContain(FLAGGED)
+	})
+
 	test("a type Nulo doesn't recognize draws the window's row for it; no grant draws no section", async () => {
 		const w = await mountPage(session([readOnly, { type: "teleport" }]))
 		expect(kindTitles(w)).toEqual(["Use 1 permission Nulo doesn't recognize"])
