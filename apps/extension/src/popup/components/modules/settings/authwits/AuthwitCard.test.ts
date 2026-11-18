@@ -156,15 +156,24 @@ describe("modules/settings/authwits/AuthwitCard — the title names the action a
 	})
 })
 
-describe("modules/settings/authwits/AuthwitCard — a revoke's state", () => {
+const statusChips = (w: ReturnType<typeof mountCard>) =>
+	w.findAll('[data-testid^="authwit-"][data-testid$="-chip"]').map((c) => [c.attributes("data-testid"), c.text()])
+
+describe("modules/settings/authwits/AuthwitCard — one status chip: Revoking, then Not revoked, then Pending", () => {
 	test.each([
 		["revoking", "authwit-revoking-chip", "Revoking"],
 		["failed", "authwit-not-revoked-chip", "Not revoked"],
-	])("%s: one chip, read in the row's name after Pending", (revokeState, testid, words) => {
+	])("a pending row whose revoke reads %s shows that chip alone, and the row's name reads it", (revokeState, testid, words) => {
 		const w = mountCard({ ...callRow(TOKEN), pending: true }, { chip: LISTED, revokeState })
-		expect(w.get(`[data-testid="${testid}"]`).text()).toBe(words)
-		expect(w.findAll('[data-testid^="authwit-"][data-testid$="-chip"]').map((c) => c.text())).toEqual(["Pending", words])
-		expect(w.find("[data-row-target]").attributes("aria-labelledby")?.split(" ")).toHaveLength(4)
+		expect(statusChips(w)).toEqual([[testid, words]])
+		expect(rowName(w)).toBe(`Transfer · TST ${words}`)
+		w.unmount()
+	})
+
+	test("a pending row with no revoke shows Pending alone, and the row's name reads it", () => {
+		const w = mountCard({ ...callRow(TOKEN), pending: true }, { chip: LISTED })
+		expect(statusChips(w)).toEqual([["authwit-pending-chip", "Pending"]])
+		expect(rowName(w)).toBe("Transfer · TST Pending")
 		w.unmount()
 	})
 

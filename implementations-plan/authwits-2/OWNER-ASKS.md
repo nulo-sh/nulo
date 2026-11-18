@@ -57,6 +57,8 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 ## OA-4: where a Not revoked row's reason shows when Activity has none (new, arc 2)
 
+**Answered: R0** (P188-02, decision page 188, signed 2026-11-18 at 19:12 UTC at dev `b22893f42`), approved as the default: the chip alone, as shipped.
+
 **Surface.** The Authwits page's "Not revoked" chip.
 
 **Why it comes up.** B says a failed revoke reads "Not revoked" with the reason in Activity. That holds when the journal records the failure (a simulation, a proof or a send refused: Activity's failed card names it). It does not when the revoke fails outside the journal: a grant not yet in a block (refused before any send), or after the send (the checkpoint wait running out, the registry still reading authorized), where Activity shows the transaction confirmed. Today's popup showed the raw error in an "An error occurred" tooltip; under B the popup is gone by then.
@@ -69,3 +71,13 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 **Recommendation: R0 now.** Each case is rare (a pending grant past its wait, a checkpoint past 120 s on Testnet), and R1 or R2 needs worded reasons for each failure. Revisit with arc 3, whose registry check on page open prunes a row the revoke did land.
 
 **What ships now.** R0.
+
+## Page 188: one status chip per row (arc 2, a change the owner asked for)
+
+**Answered: change** (P188-01, decision page 188, signed 2026-11-18 at 19:12 UTC at dev `b22893f42`), with the note *"Why does somethinbg have "Pending" + "Revoking"? It's either one or the other? This is looking a bit confusing."*
+
+**Surface.** The Authwits page's rows.
+
+**Before.** A grant whose own transaction was not yet in a block drew Pending, and a revoke of it drew Revoking beside it (the revoke waits for that block), so one row read "Pending" and "Revoking" side by side; a failed revoke of such a row read "Pending" and "Not revoked".
+
+**Built.** A row shows one status chip, by this precedence: Revoking, then Not revoked, then Pending. Revoking covers the wait for the grant's block; the row's accessible name reads the one chip shown. The chips keep their words, look and colours, and the rest of the row is unchanged. Recorded as plan.md D14.

@@ -20,13 +20,16 @@ const emit = defineEmits(["open", "revoke"])
 
 const action = computed(() => (props.chip ? authwitAction(props.authwit.content) : null))
 
+// One status chip: a revoke's state outranks Pending, so Revoking also covers the wait for the grant's block.
+const status = computed(() => {
+	if (props.revokeState === "revoking" || props.revokeState === "failed") return props.revokeState
+	return props.authwit.pending ? "pending" : null
+})
+
 const titleId = useId()
 const chipId = useId()
-const pendingId = useId()
-const stateId = useId()
-const labelledby = computed(() =>
-	[titleId, action.value && chipId, props.authwit.pending && pendingId, props.revokeState && stateId].filter(Boolean).join(" "),
-)
+const statusId = useId()
+const labelledby = computed(() => [titleId, action.value && chipId, status.value && statusId].filter(Boolean).join(" "))
 </script>
 
 <template>
@@ -38,9 +41,9 @@ const labelledby = computed(() =>
 				<span :id="titleId" :class="$style.type">{{ action ?? authwit.kindName ?? "Custom Authwit" }}<span v-if="action" aria-hidden="true" :class="$style.dot"> ·</span></span>
 				<!-- Raised above the card's target and kept from its click, so a press opens the chip's card, not the data viewer. -->
 				<span v-if="action" :id="chipId" :class="$style.chip_slot" @click.stop><ContractChip :model="chip.model" :explorer="chip.explorer" testid="authwit-contract" /></span>
-				<span v-if="authwit.pending" :id="pendingId" data-testid="authwit-pending-chip" :class="$style.pending">Pending</span>
-				<span v-if="revokeState === 'revoking'" :id="stateId" data-testid="authwit-revoking-chip" :class="$style.pending">Revoking</span>
-				<span v-else-if="revokeState === 'failed'" :id="stateId" data-testid="authwit-not-revoked-chip" :class="[$style.pending, $style.failed]">Not revoked</span>
+				<span v-if="status === 'revoking'" :id="statusId" data-testid="authwit-revoking-chip" :class="$style.pending">Revoking</span>
+				<span v-else-if="status === 'failed'" :id="statusId" data-testid="authwit-not-revoked-chip" :class="[$style.pending, $style.failed]">Not revoked</span>
+				<span v-else-if="status === 'pending'" :id="statusId" data-testid="authwit-pending-chip" :class="$style.pending">Pending</span>
 			</span>
 
 			<Tooltip position="end">

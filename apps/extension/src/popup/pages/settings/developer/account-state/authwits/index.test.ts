@@ -214,6 +214,7 @@ test("a revoke running when the page opens marks its row Revoking; the registry'
 	tasks.snapshot = [revokeTask([1], TaskStatus.Processing)]
 	const w = await mountPage()
 	expect(stateChips(w)).toEqual(["Revoking"])
+	expect(chips(w)).toHaveLength(0)
 
 	emit("onAuthwitDeleted", row(1, true))
 	emitTask("onTaskUpdated", revokeTask([1], TaskStatus.Completed, 2))
@@ -232,7 +233,7 @@ test("a revoke that fails leaves its row reading Not revoked; one that another r
 	emitTask("onTaskUpdated", revokeTask([1], TaskStatus.Failed, 2))
 	await flushPromises()
 	expect(stateChips(w)).toEqual(["Not revoked"])
-	expect(chips(w)).toHaveLength(1)
+	expect(chips(w)).toHaveLength(0)
 })
 
 test("leaving the page removes its three task handlers and disconnects the task client", async () => {

@@ -16,3 +16,6 @@
 - 2026-11-18: phase 6 network Firefox, proverless, retry 0: 6 passed, run 302.5 s.
 - 2026-11-18: Codex pass on arc 2: conditional approve; findings 1, 2, 4 fixed (row identity, Revoke gated on Ready, encoded_call wording), 3 rejected (D13); lint 0, typecheck:all 0, touched tests + bans 345 passed (the `action_operations` digest re-pinned).
 - 2026-11-18: after the Codex fixes, network authwit specs, proverless, retry 0: Chrome 6 passed (266.9 s), Firefox 6 passed (282.4 s).
+- 2026-11-18: decision page 188 (signed 19:12 UTC at dev `b22893f42`): P188-01 change, one status chip per row (Revoking, then Not revoked, then Pending); P188-02 R0 approved. Built on `authwits-2-a2` (plan.md D14).
+- 2026-11-18: page 188 gates, retry 0: lint 0, typecheck:all 0, authwits card + page + helper tests and the three bans 163 passed (1 skipped), check:plans 0; smoke `type-roles` (armed build) Chrome 14 passed, 1 skipped (102.2 s), Firefox 15 passed (159.4 s).
+- 2026-11-18: page 188 frames on the sandbox, 400 px, light and dark: `aw2f-rows-revoking` (page 188's two rows, the pending second one now Revoking alone) and `aw2f-row-pending`; two earlier runs did not hold that shape (no row pending at open; both rows pending).
