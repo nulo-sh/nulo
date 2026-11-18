@@ -15,12 +15,14 @@ import AuthwitCard from "@/popup/components/modules/settings/authwits/AuthwitCar
 /** Services */
 import { AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
+import { TaskServiceClient } from "@/wallet/services/task/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
 import { useEntityCrud } from "@/composables/useEntityCrud"
 import { useTokenFlags } from "@/composables/usePrices"
+import { useRevokeTasks } from "@/composables/useRevokeTasks"
 
 /** Helpers */
 import {
@@ -51,6 +53,12 @@ const tokenService = new TokenServiceClient()
 const priceService = new PriceServiceClient()
 const marks = useTokenFlags(priceService)
 const tokens = ref([])
+// A revoke runs on in the worker after its popup closes; its task tells each row how it stands.
+const taskService = new TaskServiceClient()
+const revokeTasks = useRevokeTasks({ client: taskService })
+taskService.onTaskCreated.add(revokeTasks.onTaskCreated)
+taskService.onTaskUpdated.add(revokeTasks.onTaskUpdated)
+taskService.onTaskDeleted.add(revokeTasks.onTaskDeleted)
 
 const {
 	entities: authwits,
@@ -148,12 +156,14 @@ watch(
 		void refreshAuthwits({ clear: true })
 		void fetchRegistryStatus()
 		void fetchTokens()
+		void revokeTasks.snapshot()
 	},
 )
 
 onMounted(async () => {
 	if (appStore.account && appStore.isLogined) {
 		void fetchTokens()
+		void revokeTasks.snapshot()
 		await fetchRegistryStatus()
 	}
 })
@@ -165,6 +175,11 @@ onBeforeUnmount(() => {
 	tokenService.disconnect()
 	priceService.disconnect()
 	marks.dispose()
+	taskService.onTaskCreated.remove(revokeTasks.onTaskCreated)
+	taskService.onTaskUpdated.remove(revokeTasks.onTaskUpdated)
+	taskService.onTaskDeleted.remove(revokeTasks.onTaskDeleted)
+	revokeTasks.dispose()
+	taskService.disconnect()
 })
 </script>
 
@@ -221,6 +236,7 @@ onBeforeUnmount(() => {
 					:key="aw.id"
 					:authwit="aw"
 					:chip="chipOf(aw)"
+					:revokeState="revokeTasks.stateOf(aw.id)"
 					@open="handleOpenAuthwit"
 					@revoke="revokeAuthwits"
 				/>
