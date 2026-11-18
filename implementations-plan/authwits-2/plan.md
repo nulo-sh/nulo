@@ -212,7 +212,7 @@ Base: `authwits-2-a2` at `b4905adfd` (#1853, open). Branch `authwits-2-a3`, stac
 | `apps/extension/src/composables/useEntityCrud.ts` (+ `.test.ts`) | `loaded`: the first read's promise |
 | `apps/extension/src/popup/pages/settings/developer/account-state/authwits/index.vue` (+ `index.test.ts`) | the check on open |
 
-### Phase 7: the worker's check, and a revoke of a row already gone
+### Phase 7: the worker's check, and a revoke of a row already gone ✓
 
 1. `syncRegistry` and `revokeOperation` as above.
 2. Tests in `service.test.ts`, every hash and address `0x` + 64 hex: the chain's switch disagreeing with the stored flag stores the chain's and emits once each way, agreeing emits nothing; a consumed grant and one revoked elsewhere leave with `onAuthwitDeleted`, a live one stays, a pending one is never read; every read failing leaves every row and the flag, one failing leaves its row while the other's prune lands before the call rejects; two calls in flight make one set of reads, a call after it settles reads again, another account's runs its own; 300 confirmed rows read the 256 lowest ids plus the switch; a revoke naming a pruned row and a live one sends one action and its task names the live row, one naming only pruned rows is refused.
