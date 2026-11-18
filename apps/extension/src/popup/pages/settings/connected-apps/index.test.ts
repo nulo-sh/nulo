@@ -242,7 +242,10 @@ describe("Settings › Connected apps — the every-site switch", () => {
 		expectOwnedRows(w, "/popup/settings/connected-apps", settingsContext())
 		const order = w.findAll('[data-testid="privacy-row-every-site"], h2').map((el) => el.element.tagName)
 		expect(order).toEqual(["DIV", "H2"])
-		expect(accessibleName(toggle(w).element, w.element)).toBe("Let every site see that Nulo is installed")
+		const row = w.get('[data-testid="privacy-row-every-site"]')
+		expect(accessibleName(row.get('[data-testid="every-site-toggle"]').element, row.element)).toBe(
+			"Let every site see that Nulo is installed",
+		)
 	})
 
 	test("the Toggle is disabled until the switch is read, then shows it", async () => {
