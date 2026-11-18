@@ -106,7 +106,7 @@ export function fakeSdkServices(
 				"dapp-interaction": opts.dappInteraction ?? {
 					discover: opts.popup ?? (async () => ({ approved: true })),
 					notifyNetworkUnavailable: opts.notice ?? (async () => undefined),
-					unlockWindows: { origins: () => [], close: () => {} },
+					unlockWindows: { origins: () => [], retime: () => false, close: () => {} },
 				},
 				"dapp-session": opts.dappSession ?? {
 					onDappSessionDeleted,

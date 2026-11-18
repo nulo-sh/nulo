@@ -34,6 +34,9 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 		getPendingDiscovery(id: string) {
 			return pending.get(id)
 		}
+		getPendingDiscoveries() {
+			return [...pending.values()]
+		}
 		approveDiscovery(id: string) {
 			handlerCalls.push(`approve:${id}`)
 			return true
