@@ -657,12 +657,13 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const log = instrument(h)
 		const tasks = (h.service as unknown as { taskService: { startNewTask: (content: unknown) => unknown } }).taskService
-		const start = tasks.startNewTask
-		const contents: unknown[] = []
-		tasks.startNewTask = (content: unknown) => (contents.push(content), start(content))
+		const started = vi.spyOn(tasks, "startNewTask")
 		await h.service.revokeAuthwits("net-1", A, [1], FEE)
 		// The task names each row by its whole identity, which the Authwits page matches its rows by.
-		expect(contents[0]).toMatchObject({ authwitIds: [1], authwitKeys: [authwitRowKey({ id: 1, ...P1, hash: "0xh1", txHash: TX1 })] })
+		expect(started.mock.calls[0]?.[0]).toMatchObject({
+			authwitIds: [1],
+			authwitKeys: [authwitRowKey({ id: 1, ...P1, hash: "0xh1", txHash: TX1 })],
+		})
 		const fence = JSON.stringify(await h.captureExecutionFence.mock.results.at(-1)?.value)
 		const request = {
 			kind: "send_transaction",
