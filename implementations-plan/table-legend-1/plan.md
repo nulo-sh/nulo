@@ -8,8 +8,23 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: connected-app-build-1-a2 at 449baa5ec (dev at b22893f42 plus #1854)
-status: planned
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-18.
+- **Status:** completed in one arc. It ships in #1866 (`feat(capabilities): a legend names the details table's six icons`), a draft stacked on #1854, which carries this close-out. It lands on the orchestrator's read of its captures against the owner's E2 frames, after a rebase onto `dev` once #1854 lands.
+- **Shipped:** one `aria-hidden` legend line under the Details table's rows, the head's six glyphs each beside its column's word, in `type--caption`, on the capabilities window's table and the connected app page's (P186-01 = E2). `COLUMNS` carries the words, and the spoken names lower-case them, so no row's words changed.
+- **Gates** (retry 0): lint, typecheck:all, the named unit run (16 files, 398 passed) and check:plans green at `653a1f0eb`. Smoke `type-roles` Chrome 14 + 1 skipped and Firefox 15; network `type-roles-windows` + `cap-window` Chrome 11 and Firefox 10 + 1 skipped, at `d6fff21d0`.
+- **Deviations:**
+  - The PR is a draft on `connected-app-build-1-a2`, not ready on `dev` (the spawn's instruction; #1854 had not landed).
+  - The close-out took the PR's base, which had not moved, rather than `origin/dev`, so the stacked diff stays the legend alone. `dev`'s `index.md` and `lessons.md` were unchanged against that base; its `archive/index.md` gained one line (`switch-names-1`), which merges by union.
+  - The capture's window view sets `data-fills-window`, as the capabilities route does ([`lessons/phase-1.md`](lessons/phase-1.md)).
+- **Lessons:** none promoted (`lessons.md` sits at its budget; the capture widths are in `lessons/phase-1.md`).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # table-legend-1: a legend line names the Details table's six icons
 
@@ -63,7 +78,7 @@ Gate, at retry 0, once, in order (pass: every command exits 0, counts recorded i
 
 ## Post-implementation
 
-[`README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `449baa5ec`, step 2 as bounded work: ONE Codex pass (`run-codex.sh`, gpt-6.1-sol, high, read-only) over this plan and the net diff against `connected-app-build-1-a2`, carrying the step's two rules verbatim, the adversarial ask and D4's question; targeted verification of what it finds; a second round only if it finds something. No Opus review (the lane brief's Proportion).
+[`README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `449baa5ec`, step 2 as bounded work: ONE Codex pass (`run-codex.sh`, gpt-6.1-sol, high, read-only) over this plan and the net diff against `connected-app-build-1-a2`, carrying the step's two rules verbatim, the adversarial ask and D4's question; targeted verification of what it finds; a second round only if it finds something. No Opus review (the lane brief's Proportion).
 
 ## Delivery
 
