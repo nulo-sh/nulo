@@ -25,6 +25,7 @@ import { useTokenFlags } from "@/composables/usePrices"
 import { useRevokeTasks } from "@/composables/useRevokeTasks"
 
 /** Helpers */
+import { createRunFence } from "@/composables/runFence"
 import {
 	authwitAction,
 	authwitMatchesSearch,
@@ -128,9 +129,9 @@ async function fetchRegistryStatus() {
 	}
 }
 
-/** Brings the warning and the rows to what the chain holds, through the worker's events. Started
- *  only once the page's own reads have landed, so neither older read overwrites what it prunes or
- *  sets; a failure leaves the page as it opened. */
+// The check is for the scope the page opened on, once its reads land: a flag read landing after the
+// check's event would undo it. A switch or a leave before then drops the check.
+const opening = createRunFence()
 async function checkRegistry() {
 	const { network, account } = appStore
 	if (!network || !account) return
@@ -167,6 +168,7 @@ const handleOpenAuthwit = (aw) => {
 watch(
 	() => [appStore.profile?.id, appStore.network?.chainId, appStore.account?.address],
 	() => {
+		opening.invalidate()
 		void refreshAuthwits({ clear: true })
 		void fetchRegistryStatus()
 		void fetchTokens()
@@ -176,14 +178,16 @@ watch(
 
 onMounted(async () => {
 	if (appStore.account && appStore.isLogined) {
+		const isOpening = opening.begin()
 		void fetchTokens()
 		void revokeTasks.snapshot()
 		await Promise.all([fetchRegistryStatus(), listLoaded])
-		void checkRegistry()
+		if (isOpening()) void checkRegistry()
 	}
 })
 
 onBeforeUnmount(() => {
+	opening.invalidate()
 	authwitsService.onRegistryEnabled.remove(onRegistryEnabled)
 	authwitsService.onRegistryDisabled.remove(onRegistryDisabled)
 	authwitsService.disconnect()

@@ -1235,7 +1235,10 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		const util = await import("@/wallet/utils/auth-registry")
 		let release!: () => void
 		const parked = new Promise<void>((r) => (release = r))
+		let reached!: () => void
+		const reading = new Promise<void>((r) => (reached = r))
 		vi.spyOn(util, "isAuthwitConsumable").mockImplementation(async () => {
+			reached()
 			await parked
 			return false
 		})
@@ -1246,7 +1249,7 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		const [row] = await h.service.getAuthwits(1, A)
 
 		const sync = h.service.syncRegistry("net-1", A)
-		await new Promise((r) => setTimeout(r, 5))
+		await reading
 		// Purge + restore during the await: the numeric id now holds a p2 row.
 		await h.service.purgeForProfile("p1")
 		await h.api.storage.local.set({

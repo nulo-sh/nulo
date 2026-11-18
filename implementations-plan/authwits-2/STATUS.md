@@ -22,3 +22,8 @@
 - 2026-11-18: arc 3 planned on `authwits-2-a3` off `authwits-2-a2` (`b4905adfd`): P166-03 S, the check on page open; D14 to D19.
 - 2026-11-18: phase 7 gate: lint 0 (second run; first: one format in the new tests), typecheck:all 0, auth-registry + cross-profile isolation + type-roles 6 files 143 passed; the four new behaviours fail on `authwits-2-a2`'s `service.ts`; `service.ts` re-attested and its digest re-pinned.
 - 2026-11-18: phase 8 gate: lint 0 (second run; first: one format in the page test), typecheck:all 0, `useEntityCrud` + page + the three bans 5 files 160 passed, 1 skipped; log-payload, type-roles and storage-facade bans pass; the four page cases fail on `authwits-2-a2`'s page.
+- 2026-11-18: phase 9: lint 0, typecheck:all 0, touched tests + bans 13 files 391 passed 1 skipped, check:plans 0; smoke type-roles Chrome (armed build): 14 passed, 1 skipped, 133.5 s, retry 0.
+- 2026-11-18: phase 9: smoke type-roles Firefox (armed build): 15 passed, 219.9 s, retry 0.
+- 2026-11-18: phase 9 network Chrome, proverless, retry 0: lifecycle, variants (4), consume-smoke, popup-escape-layered (2): 8 passed, run 517.0 s.
+- 2026-11-18: phase 9 network Firefox, proverless, retry 0: 8 passed, run 484.1 s.
+- 2026-11-18: Codex pass on arc 3: conditional approve, four findings, all fixed (event replay in `useEntityCrud`, a run fence on the page's check, claims corrected, a test signal); lint 0 (second run; first: complexity 19 in `refresh`, refactored), typecheck:all 0, settings pages + auth-registry + bans 43 files 945 passed, 1 skipped.

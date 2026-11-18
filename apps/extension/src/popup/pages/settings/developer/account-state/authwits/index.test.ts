@@ -279,6 +279,25 @@ test("opening the page checks the registry once, after its list read lands, for 
 	expect(syncRegistry().mock.calls).toEqual([["n", ACCOUNT]])
 })
 
+test.each([
+	{ case: "leaving the page", act: (w: Awaited<ReturnType<typeof mountPage>>) => w.unmount() },
+	{
+		case: "switching the account",
+		act: () => {
+			useAppStore().account = { address: `0x${"cd".repeat(32)}` } as never
+		},
+	},
+])("$case before the page's reads land starts no check", async ({ act }) => {
+	let release!: () => void
+	calls.list = new Promise<void>((r) => (release = r))
+	const w = await mountPage()
+	act(w)
+	await flushPromises()
+	release()
+	await flushPromises()
+	expect(syncRegistry()).not.toHaveBeenCalled()
+})
+
 test("the check's reads reach the page: the warning shows when the switch reads off, and a pruned row leaves", async () => {
 	calls.check = async () => {
 		emit("onAuthwitDeleted", row(1, false))
