@@ -3,29 +3,73 @@ import { createAztecNodeClient } from "@aztec-labs/aztec.js/node"
 import type { Page } from "puppeteer"
 import { describe, expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { reloadExtensionPage } from "../fixtures/browser"
-import { clickByTestId, grantCapBundle, openPopup, test, waitForHash, type ExtensionContext } from "../fixtures/extension"
-import { ensureUnlocked, lockWallet, switchToLocalNetwork } from "../fixtures/helpers"
+import { isFirefox, reloadExtensionPage } from "../fixtures/browser"
+import { TEST_PASSWORD } from "../fixtures/constants"
+import {
+	clickByTestId,
+	grantCapBundle,
+	openPopup,
+	replaceInputValue,
+	test,
+	waitForHash,
+	type ExtensionContext,
+} from "../fixtures/extension"
+import { lockWallet, switchToLocalNetwork } from "../fixtures/helpers"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "../fixtures/passkey"
 import { assertPgOk, callExpectingNoPopup, openPlayground, selectPgBundle, setPgInput, setPgTextarea } from "../fixtures/playground"
-import { approveConnect, approveVerify, waitForPopup } from "../fixtures/popups"
+import { approveConnect, approveVerify, readWindowId, recordCreatedWindows, waitForPopup } from "../fixtures/popups"
 import { serializeInstance } from "../fixtures/selfpay-phase"
+import { shotSend } from "../fixtures/shots"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * A dApp that asks to connect while the wallet is locked: the discovery queues (no window while
- * locked), the unlock drains it into a connect window, and the session that opens serves every
- * method the app uses, from the same page and from a reloaded one. Run for a password unlock and a
- * passkey unlock, which open the session through different paths.
+ * A dApp that asks to connect while the wallet is locked opens one window: the site's origin over the
+ * lock screen. Unlocked there, the same window becomes the connect window. Closed instead, it refuses
+ * nothing: the badge keeps the request, and an unlock from the toolbar still connects. Either way the
+ * session that opens serves every method the app uses, from the same page and from a reloaded one.
+ * The password run unlocks in the window; the passkey run, whose credential lives on the toolbar
+ * page, closes the window and unlocks there.
  */
-async function connectWhileLocked(ctx: ExtensionContext, unlock: () => Promise<void>): Promise<Page> {
+async function openUnlockWindow(ctx: ExtensionContext, control: Page) {
 	const dappPage = await openPlayground(ctx)
+	const created = await recordCreatedWindows(control)
+	const unlockP = waitForPopup(ctx, "unlock", { timeout: 30_000 })
 	await clickByTestId(dappPage, "pg-btn-connect")
+	const unlockWindow = await unlockP
+	await unlockWindow.waitForSelector('[data-testid="auth-submit"]', { visible: true, timeout: 15_000 })
+	const site = await unlockWindow.$eval('[data-testid="unlock-site"]', (el) => el.textContent?.trim())
+	expect(site).toBe(new URL(dappPage.url()).origin)
+	expect(await created()).toHaveLength(1)
+	return { dappPage, unlockWindow, created }
+}
 
-	await new Promise((r) => setTimeout(r, 1_500))
-	expect(ctx.browser.targets().some((t) => t.url().includes("#/windows/discover"))).toBe(false)
+/** Typed into the unlock window, the password turns that window into the connect window. */
+async function unlockInWindow(ctx: ExtensionContext, control: Page): Promise<Page> {
+	const { dappPage, unlockWindow, created } = await openUnlockWindow(ctx, control)
+	await shotSend(unlockWindow, isFirefox ? "ld1-unlock-window-firefox" : "ld1-unlock-window", "unlock-site")
+	const windowId = await readWindowId(unlockWindow)
+	const discoverP = waitForPopup(ctx, "discover", { timeout: 30_000 })
+	await replaceInputValue(unlockWindow, '[data-testid="auth-password-input"]', TEST_PASSWORD)
+	await clickByTestId(unlockWindow, "auth-submit")
+	const discoverPage = await discoverP
+	expect(await readWindowId(discoverPage)).toBe(windowId)
+	await discoverPage.waitForSelector('[data-testid="discover-allow-btn"]', { visible: true, timeout: 30_000 })
+	expect(await created()).toHaveLength(1)
+	await shotSend(discoverPage, isFirefox ? "ld1-after-unlock-firefox" : "ld1-after-unlock", "discover-allow-btn")
+	await approveVerify(await approveConnect(ctx, discoverPage))
+	await dappPage.waitForSelector('[data-testid="pg-status"][data-status="connected"]', { timeout: 20_000 })
+	return dappPage
+}
+
+/** Closed without an unlock, the window leaves the request queued; `unlock` then drains it into a
+ *  connect window of its own. */
+async function closeThenUnlock(ctx: ExtensionContext, control: Page, unlock: () => Promise<void>): Promise<Page> {
+	const { dappPage, unlockWindow } = await openUnlockWindow(ctx, control)
+	await shotSend(unlockWindow, isFirefox ? "ld1-unlock-passkey-firefox" : "ld1-unlock-passkey", "unlock-site")
+	await unlockWindow.close()
+	await control.waitForFunction(async () => (await chrome.action.getBadgeText({})) === "1", { timeout: 10_000, polling: 250 })
 
 	const discoverP = waitForPopup(ctx, "discover", { timeout: 30_000 })
 	await unlock()
@@ -85,8 +129,8 @@ const firstAccount = async (accountIds: (string | null)[]): Promise<string[]> =>
 }
 
 /** The whole flow after the wallet is unlocked from a queued discovery. */
-async function expectLockedConnectServes(ctx: ExtensionContext, unlock: () => Promise<void>, label: string): Promise<void> {
-	const page = await connectWhileLocked(ctx, unlock)
+async function expectLockedConnectServes(ctx: ExtensionContext, connect: () => Promise<Page>, label: string): Promise<void> {
+	const page = await connect()
 	const [account] = await grantCapBundle(ctx, page, "accounts", firstAccount)
 	await expectSessionServes(ctx, page, account!, label)
 
@@ -95,9 +139,9 @@ async function expectLockedConnectServes(ctx: ExtensionContext, unlock: () => Pr
 	await page.close()
 }
 
-describe("connect-locked-queue — discovery queued while locked, drained on unlock", () => {
+describe("connect-locked-queue — a discovery while locked opens the unlock window", () => {
 	test.skipIf(!hasConfig)(
-		"connect-locked-queue — password unlock: the drained connection serves every method, also after a reload",
+		"connect-locked-queue — password unlock in the window: the same window connects, and the session serves every method, also after a reload",
 		{ timeout: 300_000 },
 		async ({ registeredExtensionPerTest }) => {
 			const ctx = registeredExtensionPerTest
@@ -106,13 +150,13 @@ describe("connect-locked-queue — discovery queued while locked, drained on unl
 			await switchToLocalNetwork(popup)
 			await lockWallet(popup)
 
-			await expectLockedConnectServes(ctx, () => ensureUnlocked(popup), "password")
+			await expectLockedConnectServes(ctx, () => unlockInWindow(ctx, popup), "password")
 			await popup.close()
 		},
 	)
 
 	test.skipIf(!hasConfig)(
-		"connect-locked-queue — passkey unlock: the drained connection serves every method, also after a reload",
+		"connect-locked-queue — passkey: the window closed refuses nothing, a toolbar unlock connects, and the session serves every method, also after a reload",
 		{ timeout: 300_000 },
 		async ({ freshExtensionPerTest }) => {
 			const ctx = freshExtensionPerTest
@@ -136,7 +180,7 @@ describe("connect-locked-queue — discovery queued while locked, drained on unl
 					await clickByTestId(anchor, "auth-submit")
 					await waitForHash(anchor, "#/popup/general", 60_000)
 				}
-				await expectLockedConnectServes(ctx, unlockWithPasskey, "passkey")
+				await expectLockedConnectServes(ctx, () => closeThenUnlock(ctx, anchor, unlockWithPasskey), "passkey")
 			} finally {
 				await auth.cleanup()
 			}

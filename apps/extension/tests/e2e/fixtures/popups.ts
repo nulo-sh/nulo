@@ -28,6 +28,9 @@ export type PopupKind =
 	/** Arm the wait before the open: a logger window's URL can repeat, and a URL already open never
 	 *  matches. */
 	| "logger"
+	/** A locked discovery's window; it keeps this route while locked, until the connect window or
+	 *  notice loads in it. */
+	| "unlock"
 
 /**
  * Wait for a popup window of the given kind to open. If `requestId` is given,
@@ -175,6 +178,11 @@ export async function approveDiscover(page: Page): Promise<void> {
 }
 
 /** Read inside the page: BiDi has no window handles, so Puppeteer cannot name a window on Firefox. */
+/** The id of the browser window `page` shows in; it survives a load of another URL in that window. */
+export async function readWindowId(page: Page): Promise<number | undefined> {
+	return page.evaluate(async () => (await chrome.windows.getCurrent()).id)
+}
+
 function readPopupWindows(page: Page): Promise<{ id: number | undefined; popups: number[] }> {
 	return page.evaluate(async () => ({
 		id: (await chrome.windows.getCurrent()).id,
