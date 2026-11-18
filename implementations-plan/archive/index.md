@@ -589,3 +589,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [locked-refusal-1](locked-refusal-1/plan.md) — completed — a locked wallet answers a dApp 4900 `WALLET_LOCKED` instead of the unclassified -32603, logged at debug (#1833)
 - [nightly-green-1](nightly-green-1/plan.md) — completed — the nightly's artifact smoke seeds the rows it reads and its RP live probe accepts Cloudflare's 400 (#1845, #1846)
 - [call-lines-build-1](call-lines-build-1/plan.md) — completed — a contract call reads "{function} on {contract}" in the approval window and the transaction detail, a chip after "on" clipping inside its row (P180-01 = c2)
+- [locked-discovery-1](locked-discovery-1/plan.md) — completed — a dApp's discovery while Nulo is locked opens an unlock window that continues to the connect window (#1849)
