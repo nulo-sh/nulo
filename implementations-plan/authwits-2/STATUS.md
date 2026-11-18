@@ -27,3 +27,4 @@
 - 2026-11-18: phase 9 network Chrome, proverless, retry 0: lifecycle, variants (4), consume-smoke, popup-escape-layered (2): 8 passed, run 517.0 s.
 - 2026-11-18: phase 9 network Firefox, proverless, retry 0: 8 passed, run 484.1 s.
 - 2026-11-18: Codex pass on arc 3: conditional approve, four findings, all fixed (event replay in `useEntityCrud`, a run fence on the page's check, claims corrected, a test signal); lint 0 (second run; first: complexity 19 in `refresh`, refactored), typecheck:all 0, settings pages + auth-registry + bans 43 files 945 passed, 1 skipped.
+- 2026-11-18: Codex round 2: conditional approve, one finding (flag read race), fixed; lint 0, typecheck:all 0, 43 files 947 passed, 1 skipped.

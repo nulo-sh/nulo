@@ -109,19 +109,27 @@ async function fetchTokens() {
 
 const isShownScope = (scope) =>
 	scope.profileId === appStore.profile?.id && scope.chainId === appStore.network?.chainId && scope.account === appStore.account?.address
+// A sealed read can capture the flag before an event's write and answer after its event; the event wins.
+let flagEvents = 0
 function onRegistryEnabled(scope) {
-	if (isShownScope(scope)) isRegistryEnabled.value = true
+	if (!isShownScope(scope)) return
+	flagEvents++
+	isRegistryEnabled.value = true
 }
 function onRegistryDisabled(scope) {
-	if (isShownScope(scope)) isRegistryEnabled.value = false
+	if (!isShownScope(scope)) return
+	flagEvents++
+	isRegistryEnabled.value = false
 }
 authwitsService.onRegistryEnabled.add(onRegistryEnabled)
 authwitsService.onRegistryDisabled.add(onRegistryDisabled)
 
 async function fetchRegistryStatus() {
+	const eventsBefore = flagEvents
 	isFetchingRegistryStatus.value = true
 	try {
-		isRegistryEnabled.value = await authwitsService.getRegistryEnabled(appStore.network.chainId, appStore.account.address)
+		const enabled = await authwitsService.getRegistryEnabled(appStore.network.chainId, appStore.account.address)
+		if (flagEvents === eventsBefore) isRegistryEnabled.value = enabled
 	} catch {
 		// surfaced via the entity-crud error ref already
 	} finally {
@@ -129,8 +137,8 @@ async function fetchRegistryStatus() {
 	}
 }
 
-// The check is for the scope the page opened on, once its reads land: a flag read landing after the
-// check's event would undo it. A switch or a leave before then drops the check.
+// The check is for the scope the page opened on, once its reads land; a switch or a leave before
+// then drops it.
 const opening = createRunFence()
 async function checkRegistry() {
 	const { network, account } = appStore

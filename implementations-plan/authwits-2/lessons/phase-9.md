@@ -5,3 +5,4 @@
 - Network, proverless, retry 0, `authwit-lifecycle`, `authwit-variants`, `authwit-consume-smoke`, `popup-escape-layered`: Chrome 8 passed, run 517.0 s; Firefox 8 passed, run 484.1 s.
 - Codex pass (gpt-6.1-sol, high, read-only, bounded form): conditional approve, four findings, all fixed (§ Audit verdicts). The useful one: a sealed read captures storage before it decrypts, so a list snapshot can predate a delete whose event arrives first; `useEntityCrud` now replays events that arrive during a fetch over its snapshot.
 - The replay pushed `useEntityCrud`'s `refresh` to cognitive complexity 19; two small helpers (`land`, `stopRecording`) bring it back under 15 with no suppression.
+- Codex round 2: conditional approve, one finding (the flag read's race when joining another window's check), fixed with the event counter Codex proposed.

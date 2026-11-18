@@ -30,6 +30,7 @@ const client = vi.hoisted(() => ({ current: undefined as undefined | Record<stri
 /** The page's list read and its registry check, each settled by the test when it says so. */
 const calls = vi.hoisted(() => ({
 	list: undefined as undefined | Promise<void>,
+	flag: undefined as undefined | Promise<boolean>,
 	check: undefined as undefined | (() => Promise<void>),
 }))
 const tasks = vi.hoisted(() => ({ snapshot: [] as unknown[], current: undefined as undefined | Record<string, unknown> }))
@@ -43,7 +44,7 @@ vi.mock("@/wallet/services/auth-registry/client", async () => {
 					await calls.list
 					return [row(1, true)]
 				}),
-				getRegistryEnabled: vi.fn(async () => true),
+				getRegistryEnabled: vi.fn(async () => (await calls.flag) ?? true),
 				syncRegistry: vi.fn(async () => calls.check?.()),
 				onAuthwitAdded: new EventHandler(),
 				onAuthwitUpdated: new EventHandler(),
@@ -99,6 +100,7 @@ enableAutoUnmount(afterEach)
 beforeEach(() => {
 	tasks.snapshot = []
 	calls.list = undefined
+	calls.flag = undefined
 	calls.check = undefined
 	vi.stubGlobal("chrome", { storage: {} })
 	installChromeStorage({}, { persist: false })
@@ -307,6 +309,21 @@ test("the check's reads reach the page: the warning shows when the switch reads 
 	expect(w.text()).toContain(WARNING)
 	expect(chips(w)).toHaveLength(0)
 	expect(w.findAll('[data-testid="contract-chip"]')).toHaveLength(0)
+})
+
+test.each([
+	{ case: "an off event that arrives during the read outlives its older answer, on", event: true, answered: true },
+	{ case: "with no event, the read's answer shows: off", event: false, answered: false },
+])("the stored flag: $case", async ({ event, answered }) => {
+	let answer!: (enabled: boolean) => void
+	calls.flag = new Promise<boolean>((r) => (answer = r))
+	const w = await mountPage()
+	if (event) {
+		;(client.current as unknown as { onRegistryDisabled: { invoke: (s: typeof SCOPE) => void } }).onRegistryDisabled.invoke(SCOPE)
+	}
+	answer(answered)
+	await flushPromises()
+	expect(w.text()).toContain(WARNING)
 })
 
 test("a check that fails leaves the page as it opened, shows no error, and logs only at debug", async () => {
