@@ -1,0 +1,6 @@
+# locked-discovery-1: status
+
+- 2026-11-18 recon green (2 explorers); plan drafted at eb42af540.
+- 2026-11-18 round 1: Codex reject, Opus conditional approve; every finding folded (D2-D5, D14, D15).
+- 2026-11-18 final fresh Codex: conditional approve; both findings folded (D5, Phase 2 gate).
+- 2026-11-18 final Codex re-check: approve. Plan committed; arc 1 next.
