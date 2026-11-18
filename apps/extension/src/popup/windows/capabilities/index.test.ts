@@ -448,6 +448,16 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 	const identity = () => w!.find('[data-testid="identity-block"]').attributes("data-action-label")
 	const confirmLabel = () => w!.find('[data-testid="cap-approve-btn"]').text()
 
+	/** The legend's glyph and word per column, in the head's order. */
+	const LEGEND = [
+		["play", "Simulate"],
+		["add", "Add"],
+		["send", "Transact"],
+		["search", "Details"],
+		["mail-lock", "Events"],
+		["code", "Code"],
+	]
+
 	describe("S1: listed scopes, one contract Nulo knows", () => {
 		const simulation = {
 			type: "simulation",
@@ -520,6 +530,9 @@ describe("capabilities window — permission rows and the answer (real rows)", (
 			expect(detailsToggle().find("span").text()).toBe("Details · 2 contracts")
 			await detailsToggle().trigger("click")
 			expect(w!.findAll('[data-testid="cap-details-row"]')).toHaveLength(2)
+			// The suite's Icon stub keeps its glyph name as an attribute.
+			const items = [...w!.find('[data-testid="cap-details-legend"]').element.children]
+			expect(items.map((item) => [item.firstElementChild?.getAttribute("name"), item.textContent])).toEqual(LEGEND)
 			await w!.find('[data-testid="cap-details-copy"]').trigger("click")
 			expect(copyWithToastMock).toHaveBeenCalledExactlyOnceWith(TOKEN, expect.any(Function), "Address is copied", { sanitize: true })
 		})

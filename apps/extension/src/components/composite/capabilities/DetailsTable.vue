@@ -72,14 +72,15 @@ const shownAddress = (address: string | undefined) => trimAddress(sanitizeWireSt
 
 const functions = (names: readonly string[]) => names.map((name) => sanitizeWireString(name, 64)).join(" · ")
 
-/** A column's glyph is the icon of the permission row it stands for. */
+/** A column's glyph is the icon of the permission row it stands for; its word is what the legend
+ *  writes and, lower-cased, what a row's target speaks. */
 const COLUMNS = [
-	["simulate", "play", (row: Row) => row.simulate.length > 0],
-	["add", "add", (row: Row) => row.add],
-	["transact", "send", (row: Row) => row.transact.length > 0],
-	["details", "search", (row: Row) => row.details],
-	["events", "mail-lock", (row: Row) => row.events],
-	["code", "code", (row: Row) => row.code],
+	["Simulate", "play", (row: Row) => row.simulate.length > 0],
+	["Add", "add", (row: Row) => row.add],
+	["Transact", "send", (row: Row) => row.transact.length > 0],
+	["Details", "search", (row: Row) => row.details],
+	["Events", "mail-lock", (row: Row) => row.events],
+	["Code", "code", (row: Row) => row.code],
 ] as const
 
 /** A row's target reads "{name}: {columns}", since the head is hidden from screen readers, and an
@@ -87,7 +88,7 @@ const COLUMNS = [
 const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 	const shown = shownAddress(entry.row.address)
 	const name = isNamed(entry) ? entry.row.name : entry.section === "classes" ? `Contract class ${shown}` : `Unknown contract ${shown}`
-	const columns = COLUMNS.filter(([, , has]) => has(entry.row)).map(([column]) => column)
+	const columns = COLUMNS.filter(([, , has]) => has(entry.row)).map(([column]) => column.toLowerCase())
 	return `${name}: ${columns.join(", ")}`
 }
 </script>
@@ -153,6 +154,14 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 						</div>
 					</template>
 				</template>
+
+				<!-- Hidden from screen readers: it keys the head's glyphs, which are hidden too, and each row's
+				     target already speaks its columns' words. -->
+				<div data-testid="cap-details-legend" :class="$style.legend" aria-hidden="true">
+					<span v-for="[column, glyph] in COLUMNS" :key="column" :class="$style.legend_item">
+						<Icon :name="glyph" :size="12" />{{ column }}
+					</span>
+				</div>
 
 				<div v-if="foot" :class="$style.foot">
 					Function names come from the app. Anything it didn't list is refused instantly; you won't be asked.
@@ -361,6 +370,22 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 .fn_names {
 	overflow-wrap: anywhere;
 	color: var(--txt-tertiary);
+}
+
+.legend {
+	composes: type--caption from global;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+
+	padding-top: 8px;
+	color: var(--nulo-secondary);
+}
+
+.legend_item {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
 }
 
 .foot {
