@@ -193,8 +193,10 @@ onBeforeUnmount(() => {
 				:description="settings[sk].description"
 				:data-testid="settings[sk].testid"
 				v-settings-row="settings[sk].id"
+				v-slot="{ titleId }"
 			>
 				<Toggle
+					:aria-labelledby="titleId"
 					@update:modelValue="toggleSetting(sk, $event)"
 					:modelValue="settings[sk].model.value"
 					:data-testid="TOGGLE_TESTIDS[sk] || null"
@@ -208,8 +210,10 @@ onBeforeUnmount(() => {
 				:description="settings.incomingTransfersVisible.description"
 				:data-testid="settings.incomingTransfersVisible.testid"
 				v-settings-row="settings.incomingTransfersVisible.id"
+				v-slot="{ titleId }"
 			>
 				<Toggle
+					:aria-labelledby="titleId"
 					@update:modelValue="updateSetting('incomingTransfersVisible', $event)"
 					:modelValue="settings.incomingTransfersVisible.model.value"
 				/>

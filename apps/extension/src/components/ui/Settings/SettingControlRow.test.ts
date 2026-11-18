@@ -2,6 +2,7 @@ import { Flex, Text } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import { type Directive, defineComponent, h, withDirectives } from "vue"
+import { accessibleName } from "../../../../tests/helpers/accessible-name"
 import SettingControlRow from "./SettingControlRow.vue"
 
 const ROW = { title: "Show fiat values", description: "Show balances in USD" }
@@ -31,6 +32,21 @@ describe("ui/Settings — SettingControlRow", () => {
 		const w = mountRow({}, '<button data-testid="the-toggle" />')
 		const root = w.element as HTMLElement
 		expect(root.lastElementChild?.getAttribute("data-testid")).toBe("the-toggle")
+	})
+
+	test("the slot's titleId names each row's control by that row's own title", () => {
+		const control = ({ titleId }: { titleId: string }) => h("button", { "aria-labelledby": titleId })
+		const w = mount(
+			defineComponent({
+				render: () =>
+					h("div", [
+						h(SettingControlRow, ROW, { default: control }),
+						h(SettingControlRow, { title: "Privacy mode", description: "Hide every amount" }, { default: control }),
+					]),
+			}),
+			{ global: { components: { Flex, Text } } },
+		)
+		expect(w.findAll("button").map((b) => accessibleName(b.element, w.element))).toEqual([ROW.title, "Privacy mode"])
 	})
 
 	test("align, gap and the row's testid reach the root", () => {

@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, reactive } from "vue"
+import { accessibleName } from "../../tests/helpers/accessible-name"
 
 const H = vi.hoisted(() => ({
 	store: { current: null as unknown as { confirm: Record<string, unknown> } },
@@ -147,5 +148,17 @@ describe("ConfirmPopup — the confirm button's variant", () => {
 		await nextTick()
 		await open(wrapper, { confirm_color: "red" })
 		expect(wrapper.find('[data-testid="confirm-submit"]').attributes("data-variant")).toBeUndefined()
+	})
+})
+
+describe("ConfirmPopup — the optional toggle", () => {
+	beforeEach(() => {
+		H.store.current = reactive({ confirm: {} })
+	})
+
+	test("the switch is named by its label alone, not its description", async () => {
+		const wrapper = mount(ConfirmPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await open(wrapper, { toggle: { label: "Forget the session", description: "Ask again next time", model: false } })
+		expect(accessibleName(wrapper.get('[data-testid="confirm-toggle"]').element, wrapper.element)).toBe("Forget the session")
 	})
 })
