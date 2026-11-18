@@ -1111,10 +1111,14 @@ async function readMethodRow(page: Page, shot: string, text: string): Promise<Me
 
 test("a dApp's long function name and host never widen Home or History, named or not: the title is cut on one line, the app chip at 96px with a short one whole, a transfer's symbol whole with its app chip cut beside it, up to its cap or, under a 16-letter symbol, at its 20px floor, and at 240px no row's text is hidden or newly cut; the App value of the transaction and journal pages breaks anywhere against the box's right edge; the journal page's Method value wraps 16px clear of its label", async ({
 	listedExtensionPerTest,
+	skip,
 }) => {
+	// Only a priced row's fiat line leaves the 16-letter symbol's chip at its floor, so the rows name
+	// a listed, priced token.
+	skipUnlessListPrices(skip)
 	const page = await openPopup(listedExtensionPerTest)
 	await waitForHash(page, "#/popup/general")
-	const scope = await readActivityScope(page)
+	const scope = await readActivityScope(page, { priced: true })
 	const now = Date.now()
 	await seedJournalRecord(page, scope, {
 		id: NAMED_RECORD,
@@ -1153,7 +1157,7 @@ test("a dApp's long function name and host never widen Home or History, named or
 			at: now - 2_500,
 		},
 	)
-	await seedUsdQuoteAndReload(page)
+	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await bringToFront(page)
 
 	// The reload's start-up navigation lands on Home and overrides a hash set before it settles, and
