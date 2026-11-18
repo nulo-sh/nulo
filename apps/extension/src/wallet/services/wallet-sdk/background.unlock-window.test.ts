@@ -91,8 +91,12 @@ function boot(opts: { profiles?: () => Promise<Array<{ id: string }>>; remembere
 	const opens = vi.spyOn(windowManager, "openAndAwait")
 	const retimes = vi.spyOn(windowManager, "retime")
 	let active: { id: string } | undefined
+	let profileReads: Promise<void> = Promise.resolve()
 	const { services, onActiveProfileChanged } = fakeSdkServices({
-		activeProfile: async () => active,
+		activeProfile: async () => {
+			await profileReads
+			return active
+		},
 		profiles: opts.profiles ?? (async () => [{ id: "p1" }]),
 		dappInteraction: new DappInteractionService(noopLogger, windowManager),
 		remembered: opts.remembered,
@@ -133,6 +137,10 @@ function boot(opts: { profiles?: () => Promise<Array<{ id: string }>>; remembere
 		kinds,
 		discover,
 		unlock: () => setActive({ id: "p1" }),
+		/** Holds every later read of the active profile, a drain's first step, until `until` settles. */
+		holdProfileReads: (until: Promise<void>) => {
+			profileReads = until
+		},
 		lock: () => setActive(undefined),
 		closeTab: (tabId: number) => {
 			for (const l of tabRemoved) l(tabId)
@@ -277,7 +285,8 @@ describe("after the unlock", () => {
 		expect(h.fake.navigates).toEqual([])
 	})
 
-	test("a drain that ends after a re-lock leaves the window the site's new discovery opened", async () => {
+	test("a drain that ends after a re-lock and a second unlock leaves the window the site's new discovery takes", async () => {
+		const profileRead = deferred<void>()
 		const h = boot()
 		h.discover("r1")
 		await arrival("r1")
@@ -289,10 +298,17 @@ describe("after the unlock", () => {
 		await arrival("r2")
 		expect(h.kinds()).toEqual(["unlock", "discover", "unlock"])
 
+		h.holdProfileReads(profileRead.promise)
+		h.unlock()
 		h.fake.closeByUser(FIRST_WINDOW)
 		await expect.poll(() => rejected()).toEqual(["r1"])
 		await flush()
 		expect(h.removed).toEqual([FIRST_WINDOW])
+
+		profileRead.resolve()
+		await expect.poll(() => h.fake.navigates.length).toBe(2)
+		expect(h.fake.navigates[1].windowId).toBe(FIRST_WINDOW + 1)
+		expect(h.fake.creates).toHaveLength(2)
 	})
 })
 
