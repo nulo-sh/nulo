@@ -6,8 +6,8 @@ const at = (n: number): string => AztecAddress.fromNumberUnsafe(n).toString().to
 
 /** The protocol's own contracts, keyed by their canonical addresses: protocol constants, the same on every network. */
 const PROTOCOL_NAMES: ReadonlyMap<string, string> = new Map([
-	[at(CONTRACT_CLASS_REGISTRY_CONTRACT_ADDRESS), "Contract class registry"],
-	[at(CONTRACT_INSTANCE_REGISTRY_CONTRACT_ADDRESS), "Contract instance registry"],
+	[at(CONTRACT_CLASS_REGISTRY_CONTRACT_ADDRESS), "Contract Class Registry"],
+	[at(CONTRACT_INSTANCE_REGISTRY_CONTRACT_ADDRESS), "Contract Instance Registry"],
 	[feeJuiceAddress.toLowerCase(), feeJuiceName],
 ])
 

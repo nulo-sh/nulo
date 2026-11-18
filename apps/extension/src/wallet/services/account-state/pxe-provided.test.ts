@@ -5,7 +5,7 @@ import { getStandardHandshakeRegistry } from "@aztec-labs/standard-contracts/han
 import { getStandardMultiCallEntrypoint } from "@aztec-labs/standard-contracts/multi-call-entrypoint"
 import { resolvePackageAsset } from "@nulo/resolve-asset"
 import { describe, expect, test } from "vitest"
-import { isPxeProvidedAddress, isPxeProvidedContract, PRELOADED_CONTRACT_ADDRESSES } from "./pxe-provided"
+import { isPxeProvidedAddress, isPxeProvidedContract, PRELOADED_CONTRACT_ADDRESSES, pxeProvidedName } from "./pxe-provided"
 
 const hex64 = (value: bigint) => value.toString(16).padStart(64, "0")
 
@@ -45,5 +45,30 @@ describe("isPxeProvidedContract", () => {
 		expect(isPxeProvidedContract(`0x${"07".repeat(32)}`)).toBe(false)
 		expect(isPxeProvidedContract("0x05")).toBe(false)
 		expect(isPxeProvidedAddress(7n)).toBe(false)
+	})
+})
+
+describe("pxeProvidedName", () => {
+	test("each protocol contract reads by its upstream name, spaced, and each preloaded one by its own", async () => {
+		const spaced: Record<string, string> = {
+			ContractClassRegistry: "Contract Class Registry",
+			ContractInstanceRegistry: "Contract Instance Registry",
+			FeeJuice: "Fee Juice",
+		}
+		for (const [key, address] of Object.entries(ProtocolContractAddress)) expect(pxeProvidedName(address.toString())).toBe(spaced[key])
+		const [entrypoint, auth, handshake] = await Promise.all([
+			getStandardMultiCallEntrypoint(),
+			getStandardAuthRegistry(),
+			getStandardHandshakeRegistry(),
+		])
+		expect(pxeProvidedName(entrypoint.address.toString())).toBe("Multi Call Entrypoint")
+		expect(pxeProvidedName(auth.address.toString())).toBe("Auth Registry")
+		expect(pxeProvidedName(handshake.address.toString().toUpperCase().replace("0X", "0x"))).toBe("Handshake Registry")
+	})
+
+	test("a provided address with no name, a dApp's address and an unparsable spelling read by none", () => {
+		expect(pxeProvidedName(`0x${hex64(6n)}`)).toBeUndefined()
+		expect(pxeProvidedName(`0x${"07".repeat(32)}`)).toBeUndefined()
+		expect(pxeProvidedName("0x05")).toBeUndefined()
 	})
 })

@@ -19,6 +19,7 @@ import {
 	type BackupAccountState,
 	type BackupContract,
 	type BackupSender,
+	type ContractRow,
 	type Events,
 	type Methods,
 } from "./spec"
@@ -30,7 +31,7 @@ import {
 	normalizeAccountStateSlice,
 	truncateErrorMessage,
 } from "./normalize"
-import { isPxeProvidedAddress, isPxeProvidedContract } from "./pxe-provided"
+import { isPxeProvidedAddress, isPxeProvidedContract, pxeProvidedName } from "./pxe-provided"
 
 export * from "./spec"
 
@@ -46,6 +47,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		"addSender",
 		"deleteSender",
 		"getContracts",
+		"getContractRows",
 	)
 	public static name = ACCOUNT_STATE_SERVICE_NAME
 
@@ -165,6 +167,29 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		return this.viaPxe("fetch registered contracts", async () =>
 			(await this.pxeService.getContracts(networkInfoFrom(network))).map((x) => x.toString()),
 		)
+	}
+
+	/** `pxeOnly` keeps a store miss from reaching the node. */
+	public async getContractRows(networkId: string): Promise<ContractRow[]> {
+		await this.ensureInitialized()
+		const network = await this.networkService.getNetwork(networkId)
+		const info = networkInfoFrom(network)
+		return this.viaPxe("fetch registered contracts", async () => {
+			const addresses = await this.pxeService.getContracts(info)
+			return Promise.all(
+				addresses.map(async (address): Promise<ContractRow> => {
+					const instance = await this.pxeService.getContractInstance(info, address, { pxeOnly: true })
+					const row = address.toString()
+					const name = pxeProvidedName(row)
+					return {
+						address: row,
+						...(instance ? { classId: instance.originalContractClassId.toString() } : {}),
+						builtIn: isPxeProvidedContract(row),
+						...(name ? { name } : {}),
+					}
+				}),
+			)
+		})
 	}
 
 	/** Every PXE failure surfaces as the same opaque error; the cause goes to the log. The network

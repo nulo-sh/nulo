@@ -29,4 +29,5 @@ definePassthroughsExhaustive<Methods>()(AccountStateServiceClient.prototype, [
 	"addSender",
 	"deleteSender",
 	"getContracts",
+	"getContractRows",
 ])
