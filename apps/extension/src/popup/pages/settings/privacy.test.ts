@@ -19,6 +19,7 @@ vi.mock("@/components/ui/Dropdown", () => ({
 import PrivacyPage from "./privacy.vue"
 
 const Toggle = defineComponent({
+	name: "Toggle",
 	props: { modelValue: Boolean },
 	emits: ["update:modelValue"],
 	template: '<div :data-on="String(modelValue)" />',
