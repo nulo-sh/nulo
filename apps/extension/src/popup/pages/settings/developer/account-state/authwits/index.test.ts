@@ -2,21 +2,26 @@ import { Flex, Input, RowAction } from "@nulo/design"
 import { createTestingPinia } from "@pinia/testing"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
+import { ref } from "vue"
 import { installChromeStorage } from "../../../../../../../tests/helpers/chrome-storage-mock"
 import { useAppStore } from "@/stores/app.store"
+import { trimAddress } from "@/utils/string"
 import type { Authwit } from "@/wallet/services/auth-registry/client"
 import AuthwitsIndex from "./index.vue"
 
+// Wire-shaped: 0x + 64 hex.
 const ACCOUNT = `0x${"ab".repeat(32)}`
+const { TOKEN } = vi.hoisted(() => ({ TOKEN: `0x${"1b".repeat(32)}` }))
+const UNKNOWN = `0x${"2c".repeat(32)}`
 const SCOPE = { profileId: "p", chainId: 1, account: ACCOUNT }
-const row = (id: number, pending: boolean): Authwit =>
+const row = (id: number, pending: boolean, contract = TOKEN): Authwit =>
 	({
 		...SCOPE,
 		id,
 		hash: `0x${id}`,
 		txHash: `0x${"cd".repeat(32)}`,
 		pending,
-		content: { kind: "call", caller: `0x${"1a".repeat(32)}`, contract: `0x${"1b".repeat(32)}`, method: "transfer_in_public", args: [] },
+		content: { kind: "call", caller: `0x${"1a".repeat(32)}`, contract, method: "transfer_in_public", args: [] },
 	}) as unknown as Authwit
 
 const client = vi.hoisted(() => ({ current: undefined as undefined | Record<string, unknown> }))
@@ -39,6 +44,27 @@ vi.mock("@/wallet/services/auth-registry/client", async () => {
 		},
 	}
 })
+
+vi.mock("@/wallet/services/token/client", () => ({
+	TokenServiceClient: function TokenServiceClient() {
+		return { getTokens: vi.fn(async () => []), disconnect: vi.fn() }
+	},
+}))
+vi.mock("@/wallet/services/price/client", () => ({
+	PriceServiceClient: function PriceServiceClient() {
+		return { disconnect: vi.fn() }
+	},
+}))
+vi.mock("@/composables/usePrices", () => ({
+	useTokenFlags: () => ({
+		mapped: ref(true),
+		isFlagged: () => false,
+		iconFor: () => undefined,
+		listedAt: (t: { chainId?: number; contract?: string } | undefined) =>
+			t?.chainId === 1 && t.contract === TOKEN ? { symbol: "TST", name: "Test Token" } : undefined,
+		dispose: vi.fn(),
+	}),
+}))
 
 enableAutoUnmount(afterEach)
 
@@ -83,6 +109,10 @@ async function mountPage({ realInput = false } = {}) {
 				Tooltip: { template: "<span><slot /></span>" },
 				Icon: true,
 				Text: { template: "<span><slot /></span>" },
+				ContractChip: {
+					props: ["model", "explorer", "testid"],
+					template: `<button type="button" data-testid="contract-chip" :data-level="model.level ?? 'pending'">{{ model.label }}</button>`,
+				},
 				...(realInput ? {} : { Input: INPUT_STUB }),
 			},
 		},
@@ -96,13 +126,27 @@ const chips = (w: Awaited<ReturnType<typeof mountPage>>) => w.findAll('[data-tes
 test("a grant proven while the page is open loses its Pending chip in place, and keeps its title", async () => {
 	const w = await mountPage()
 	expect(chips(w)).toHaveLength(1)
-	expect(w.text()).toContain("Call")
+	expect(w.text()).toContain("Transfer")
 
 	emit("onAuthwitUpdated", row(1, false))
 	await flushPromises()
 	expect(chips(w)).toHaveLength(0)
-	expect(w.text()).toContain("Call")
+	expect(w.text()).toContain("Transfer")
 	expect(w.text()).not.toContain("Custom Authwit")
+})
+
+test("a call row names its action and its contract: a listed token by its symbol, any other by its short address", async () => {
+	const w = await mountPage()
+	emit("onAuthwitAdded", row(2, false, UNKNOWN))
+	emit("onAuthwitAdded", { ...row(3, false), content: { kind: "intent", consumer: TOKEN, intent: [] } } as never)
+	await flushPromises()
+	const contracts = w.findAll('[data-testid="contract-chip"]').map((c) => [c.text(), c.attributes("data-level")])
+	expect(contracts).toEqual([
+		["TST", "nulo"],
+		[trimAddress(UNKNOWN), "none"],
+	])
+	expect(w.text().match(/Transfer/g)).toHaveLength(2)
+	expect(w.text()).toContain("Intent")
 })
 
 test("a grant added while the page is open reads its kind, and a search that misses it filters it out", async () => {

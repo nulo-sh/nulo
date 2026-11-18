@@ -1,4 +1,5 @@
 import { capitalize, stringCompare } from "@/utils/string"
+import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
 export interface AuthwitContent {
 	kind: "call" | "encoded_call" | "intent" | "message_hash"
@@ -32,6 +33,19 @@ export function decorateAuthwit(aw: RawAuthwit): DecoratedAuthwit {
 		.map((k) => capitalize(k))
 		.join(" ")
 	return { ...aw, kindName }
+}
+
+/**
+ * What a `call` row allows, named by its function's first word (`transfer_in_public` → `Transfer`):
+ * its hash was computed from that function on that contract. Null for every other kind, since an
+ * encoded call's `name` is the app's label beside the selector its hash binds.
+ */
+export function authwitAction(content: AuthwitContent): string | null {
+	if (content.kind !== "call" || typeof content.method !== "string") return null
+	const word = sanitizeWireString(content.method, 64)
+		.split("_")
+		.find((part) => part.trim())
+	return word ? capitalize(word.trim()) : null
 }
 
 /**

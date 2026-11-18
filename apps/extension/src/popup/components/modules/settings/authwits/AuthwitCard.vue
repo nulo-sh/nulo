@@ -1,5 +1,7 @@
 <script setup>
+import ContractChip from "@/components/composite/ContractChip.vue"
 import RowTarget from "@/components/ui/RowTarget.vue"
+import { authwitAction } from "./authwit-helpers"
 
 /**
  * Single authwit card. Renders the kind-specific kv_grid (call /
@@ -8,22 +10,37 @@ import RowTarget from "@/components/ui/RowTarget.vue"
  */
 const props = defineProps({
 	authwit: { type: Object, required: true },
+	/** The contract chip a `call` row is titled with (`{ model, explorer }`); null keeps the kind's title. */
+	chip: { type: Object, default: null },
+	/** The latest revoke of this row: "revoking" until the registry read prunes it, "failed" after it failed. */
+	revokeState: { type: String, default: null },
 })
 
 const emit = defineEmits(["open", "revoke"])
 
+const action = computed(() => (props.chip ? authwitAction(props.authwit.content) : null))
+
 const titleId = useId()
+const chipId = useId()
 const pendingId = useId()
+const stateId = useId()
+const labelledby = computed(() =>
+	[titleId, action.value && chipId, props.authwit.pending && pendingId, props.revokeState && stateId].filter(Boolean).join(" "),
+)
 </script>
 
 <template>
 	<div @click="emit('open', authwit)" :class="$style.card">
-		<RowTarget :labelledby="authwit.pending ? `${titleId} ${pendingId}` : titleId" />
+		<RowTarget :labelledby="labelledby" />
 
 		<div :class="$style.header">
 			<span :class="$style.title">
-				<span :id="titleId" :class="$style.type">{{ authwit.kindName ?? "Custom Authwit" }}</span>
+				<span :id="titleId" :class="$style.type">{{ action ?? authwit.kindName ?? "Custom Authwit" }}<span v-if="action" aria-hidden="true" :class="$style.dot"> ·</span></span>
+				<!-- Raised above the card's target and kept from its click, so a press opens the chip's card, not the data viewer. -->
+				<span v-if="action" :id="chipId" :class="$style.chip_slot" @click.stop><ContractChip :model="chip.model" :explorer="chip.explorer" testid="authwit-contract" /></span>
 				<span v-if="authwit.pending" :id="pendingId" data-testid="authwit-pending-chip" :class="$style.pending">Pending</span>
+				<span v-if="revokeState === 'revoking'" :id="stateId" data-testid="authwit-revoking-chip" :class="$style.pending">Revoking</span>
+				<span v-else-if="revokeState === 'failed'" :id="stateId" data-testid="authwit-not-revoked-chip" :class="[$style.pending, $style.failed]">Not revoked</span>
 			</span>
 
 			<Tooltip position="end">
@@ -87,16 +104,38 @@ const pendingId = useId()
 	composes: type from "../record-card.module.css";
 }
 
-/* Holds the chip beside the kind: on its own, the kind's `flex: 1` would push the chip against Revoke. */
+/* Holds the chips beside the title, wrapping under the row's width rather than cutting the contract
+ * chip. On its own, the title's `flex: 1` would push them against Revoke and keep them from wrapping. */
 .title {
 	display: inline-flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: 8px;
+	gap: 4px 8px;
 	min-width: 0;
+}
+
+.title > .type {
+	flex: 0 1 auto;
+}
+
+.dot {
+	color: var(--txt-tertiary);
+}
+
+.chip_slot {
+	position: relative;
+	z-index: 1;
+	min-width: 0;
+	max-width: 100%;
 }
 
 .pending {
 	composes: chip from "../../../../../components/composite/activity/activity-card.module.css";
+}
+
+/* Two classes, so it outranks the composed chip's colour in whatever order the sheets load. */
+.pending.failed {
+	color: var(--txt-danger);
 }
 
 .revoke {

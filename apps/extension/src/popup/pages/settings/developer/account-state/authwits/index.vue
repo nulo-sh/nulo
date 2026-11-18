@@ -14,13 +14,22 @@ import AuthwitCard from "@/popup/components/modules/settings/authwits/AuthwitCar
 
 /** Services */
 import { AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
+import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
 import { useEntityCrud } from "@/composables/useEntityCrud"
+import { useTokenFlags } from "@/composables/usePrices"
 
 /** Helpers */
-import { authwitMatchesSearch, decorateAuthwit, sortAuthwits } from "@/popup/components/modules/settings/authwits/authwit-helpers"
+import {
+	authwitAction,
+	authwitMatchesSearch,
+	decorateAuthwit,
+	sortAuthwits,
+} from "@/popup/components/modules/settings/authwits/authwit-helpers"
+import { contractChipAt } from "@/popup/windows/execute/contract-chips"
 import { stripBidiAndZeroWidth } from "@/utils/string"
 
 const { openToast } = useToast()
@@ -38,6 +47,10 @@ const isFetchingRegistryStatus = ref(false)
 const searchTerm = ref("")
 
 const authwitsService = new AuthRegistryServiceClient()
+const tokenService = new TokenServiceClient()
+const priceService = new PriceServiceClient()
+const marks = useTokenFlags(priceService)
+const tokens = ref([])
 
 const {
 	entities: authwits,
@@ -65,6 +78,24 @@ const filteredAuthwits = computed(() => {
 })
 
 const isErrorOccurred = computed(() => !!error.value)
+
+// No name book: an unlisted contract reads its short address, never a name the person gave it.
+const chipContext = computed(() => ({
+	reader: marks,
+	chainId: appStore.network?.chainId,
+	tokens: tokens.value,
+	explorerId: appStore.defaultExplorer,
+}))
+const chipOf = (aw) => (authwitAction(aw.content) ? contractChipAt(chipContext.value, aw.content.contract) : null)
+
+// A token list that fails to load only lowers what a chip claims; only the latest read lands.
+let latestTokenRead = 0
+async function fetchTokens() {
+	const read = ++latestTokenRead
+	const { profile, network } = appStore
+	const held = profile && network ? await tokenService.getTokens(profile.id, network.chainId).catch(() => []) : []
+	if (read === latestTokenRead) tokens.value = held ?? []
+}
 
 const isShownScope = (scope) =>
 	scope.profileId === appStore.profile?.id && scope.chainId === appStore.network?.chainId && scope.account === appStore.account?.address
@@ -116,11 +147,13 @@ watch(
 	() => {
 		void refreshAuthwits({ clear: true })
 		void fetchRegistryStatus()
+		void fetchTokens()
 	},
 )
 
 onMounted(async () => {
 	if (appStore.account && appStore.isLogined) {
+		void fetchTokens()
 		await fetchRegistryStatus()
 	}
 })
@@ -129,6 +162,9 @@ onBeforeUnmount(() => {
 	authwitsService.onRegistryEnabled.remove(onRegistryEnabled)
 	authwitsService.onRegistryDisabled.remove(onRegistryDisabled)
 	authwitsService.disconnect()
+	tokenService.disconnect()
+	priceService.disconnect()
+	marks.dispose()
 })
 </script>
 
@@ -184,6 +220,7 @@ onBeforeUnmount(() => {
 					v-for="aw in filteredAuthwits"
 					:key="aw.id"
 					:authwit="aw"
+					:chip="chipOf(aw)"
 					@open="handleOpenAuthwit"
 					@revoke="revokeAuthwits"
 				/>
