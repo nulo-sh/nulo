@@ -195,11 +195,28 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 	justify-self: center;
 }
 
-/* Below 330 px the marks, the chevron and their gaps (198 px) leave a name under 132 px, the room
- * "Sponsored fee payer", the wallet's longest, needs: names and the head's "Contract" take their own
- * line. Head and rows share one grid's columns, so each mark stays under its glyph, and a mark column
- * shrinks to 15 px before the table overflows. */
-@container details-table (width < 330px) {
+/* 22 px mark tracks and 3 px gaps hold the marks and the chevron to 167 px, so the page's 312 px table
+ * keeps the head and each row on one line with 145 px for a name, more than "Sponsored fee payer", the
+ * wallet's longest, takes (131 px), and a longer name wraps inside its cell. */
+@container details-table (290px <= width < 330px) {
+	.grid {
+		grid-template-columns: minmax(0, 1fr) repeat(6, 22px) 14px;
+		column-gap: 3px;
+	}
+
+	.row {
+		padding-block: 4px;
+	}
+
+	.row > .name {
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+}
+
+/* Below 290 px, a margin over the 279 px a shortened address and its copy button (112 px) need beside
+ * those 167 px, names, addresses and the head's "Contract" take their own line over a shared subgrid. */
+@container details-table (width < 290px) {
 	.table {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) repeat(6, minmax(15px, 26px)) 14px;
