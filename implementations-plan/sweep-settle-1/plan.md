@@ -1,7 +1,7 @@
 ---
 plan: sweep-settle-1
 tier: light (thinned: no plan audit round, no Opus leg; one Codex pass over the plan and the net diff)
-status: in progress
+status: completed (delivered in the PR that closes #1794)
 issues: "#1794"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at b22893f42
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-18.
+- **Status:** delivered in one PR against `dev` (tests only) that closes #1794, awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:** `waitForReadsSettled` in `apps/extension/tests/e2e/fixtures/type-roles.ts` waits up to 60 s for none of the five marks in the table below and fails naming the testids still drawn; `sweepWindow` calls it before its site waits; `goAndSweep` calls it in place of its inline `loading-state` wait.
+- **Evidence, retry 0:** smoke `type-roles.test.ts` Chrome 14 passed, 1 skipped (Firefox-only), Firefox 15/15. Network `type-roles-windows.test.ts`, prover-ON, one `e2e:agent` run at a time: Chrome 10/10 runs green, 6/6 tests each (file 194 to 310 s, run wall 274 to 635 s); Firefox 2/2, 6/6 each (file 324 and 359 s, wall 470 and 419 s); longest silence 120.6 s. Heads 3a927454a and a7557fc2c (comment-only difference), before the `dev` merge; CI on the PR head certifies the rest.
+- **Lessons:** nothing promoted; the gotchas here are this sweep's own, and `lessons.md` sits at its budget.
+- **Dropped, rejected, superseded:** a generic `aria-busy` wait (D3), a text-shaped predicate for the summary line (D4) and a `repeats` edit (D5): rejected.
+- **Known limits:** #1868 (D4).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # sweep-settle-1: the window sweep waits for the argument previews to settle
 
@@ -46,7 +58,7 @@ Every read is a popup RPC that fails at most `DEFAULT_RPC_TIMEOUT_MS` (60 s) aft
 - **D1, one helper in `fixtures/type-roles.ts`, used by both sweeps.** `goAndSweep`'s wait is the same wait with a smaller set; the shared helper replaces its inline copy. Its set grows by markers no popup page draws except the chip hold, which ends within a second.
 - **D2, wait before the sites.** `sweepWindow` waits for rest, then for its states' sites: a decoded row's sites exist only after its decode, so the site wait is no longer spent on a row still pending.
 - **D3, named testids, not `[aria-busy]`.** `aria-busy` also marks surfaces that can rest busy on popup pages (`TokenCard`'s loading row, holdings' prices), which would turn a slow price into a 60 s red in `goAndSweep`.
-- **D4, the summary's authorization line is left out (plausible, unverified).** A discovered authorization's summary row (`SendTxSummary.vue`) shows the selector until its decode lands and carries no pending mark; on a registered token's transfer from a named sender the line then swaps from "call" to "move", which the narrow check would read as `execute-discovered-line-function` gone. The path is traced, never observed: the move-form test already waits for `execute-discovered-line-from` (post-decode); the on-behalf test's line form is unverified. The clean fix is a product-side mark on the pending row, outside this lane's "no product code"; a text-shaped test predicate (a `0x` + 8 hex function name) would select by content, against the testid rule. Filed as a closed `known-limit` issue at close-out, reopened by a red naming an `execute-discovered-line-*` site.
+- **D4, the summary's authorization line is left out (plausible, unverified).** A discovered authorization's summary row (`SendTxSummary.vue`) shows the selector until its decode lands and carries no pending mark; on a registered token's transfer from a named sender the line then swaps from "call" to "move", which the narrow check would read as `execute-discovered-line-function` gone. The path is traced, never observed: the move-form test already waits for `execute-discovered-line-from` (post-decode); the on-behalf test's line form is unverified. The clean fix is a product-side mark on the pending row, outside this lane's "no product code"; a text-shaped test predicate (a `0x` + 8 hex function name) would select by content, against the testid rule. Filed as #1868, a closed `known-limit` issue, reopened by a red naming an `execute-discovered-line-*` site.
 - **D5, ten sequential Chrome runs, two Firefox.** Vitest 4.1.12 has no CLI repeat and dedupes a file listed twice, and `agent.sh` boots one sandbox per invocation; a `repeats` edit would also re-run the file's stateful requests (the approved `registerToken`) against a wallet that already holds the token. So twelve sequential `e2e:agent` runs, one at a time.
 
 ## Phase 1: the wait, its two callers, the proof
