@@ -94,7 +94,7 @@ One draft PR against `dev`, never marked ready or merged by the lane, opened wit
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `c1bca82cb`. Step 1 is absent (`code_review: off`). Step 2, bounded form: ONE Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and `git diff origin/dev...HEAD`, with both verbatim rules, asked for a path where the default overrides a remembered pick, one where it selects a method that cannot pay, and a race between the balance read and the default; then targeted verification of material fixes. Approval boundary (stop): a stored key, a migration, a view change, or a default beyond private Fee Juice. Close-out as the PR's final commits; merging and teardown are the orchestrator's.
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `c1bca82cb`. Step 1 is absent (`code_review: off`). Step 2, bounded form: ONE Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and `git diff origin/dev...HEAD`, with both verbatim rules, asked for a path where the default overrides a remembered pick, one where it selects a method that cannot pay, and a race between the balance read and the default; then targeted verification of material fixes. Approval boundary (stop): a stored key, a migration, a view change, or a default beyond private Fee Juice. Close-out as the PR's final commits; merging and teardown are the orchestrator's.
 
 ## Seeds
 
