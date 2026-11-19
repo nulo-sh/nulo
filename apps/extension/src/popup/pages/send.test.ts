@@ -17,6 +17,7 @@ const DESTINATION = `0x2${"b".repeat(63)}`
 /** A second payee, on the curve like `DESTINATION`. */
 const BEN = "0x1259300cc3f28f7051594427d01711cacf0a7c1eecd0035e5ee8f744e3ca4059"
 const HASH = `0x${"e".repeat(64)}`
+const UNLEASHED_URL = "https://testnet.app.unleashed.systems"
 const TOKEN = {
 	id: 7,
 	contract: `0x${"c".repeat(64)}`,
@@ -162,7 +163,6 @@ vi.mock("vue-router", () => ({
 }))
 
 import { REVIEW_ARM_MS } from "@/composables/useSendReview"
-import { FEE_JUICE_BRIDGE_URL } from "@/popup/components/modules/send/fee-helpers"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
@@ -902,7 +902,7 @@ describe("send page — the footer", () => {
 		await fillForm(w, FJ)
 		expect(warning(w).exists()).toBe(true)
 		expect(w.find('[data-testid="send-fee-warning-fix"]').exists()).toBe(false)
-		expect(w.get('[data-testid="send-fee-warning-bridge"]').attributes("href")).toBe(FEE_JUICE_BRIDGE_URL)
+		expect(w.get('[data-testid="send-fee-warning-bridge"]').attributes("href")).toBe(UNLEASHED_URL)
 		w.findComponent({ name: "FeeSettingsCard" }).vm.$emit("update:remedy", "private_fpc")
 		await nextTick()
 		const fix = w.get('[data-testid="send-fee-warning-fix"]')
@@ -911,6 +911,25 @@ describe("send page — the footer", () => {
 		await nextTick()
 		expect(mocks.applyRemedy).toHaveBeenCalledTimes(1)
 		expect(document.activeElement).toBe(w.get('[data-testid="send-fee-change"]').element)
+		w.unmount()
+	})
+
+	test.each([
+		{ chain: "Mainnet", chainId: CHAIN_IDS.MAINNET, url: "https://shield.human.tech/fee-juice" },
+		{ chain: "Testnet", chainId: CHAIN_IDS.TESTNET, url: UNLEASHED_URL },
+	])("on $chain, the publish line's bridge and the footer's Get Fee Juice open $url", async ({ chainId, url }) => {
+		const open = vi.spyOn(window, "open").mockImplementation(() => null)
+		const { w } = await mountSend({ chainId })
+		await fillForm(w, FJ)
+		expect(w.get('[data-testid="send-fee-warning-bridge"]').attributes()).toMatchObject({
+			href: url,
+			target: "_blank",
+			rel: "noopener noreferrer",
+		})
+		w.findComponent({ name: "FeeSettingsCard" }).vm.$emit("update:needsFeeJuice", true)
+		await nextTick()
+		await w.get('[data-testid="send-get-fee-juice"]').trigger("click")
+		expect(open).toHaveBeenCalledExactlyOnceWith(url, "_blank", "noopener,noreferrer")
 		w.unmount()
 	})
 

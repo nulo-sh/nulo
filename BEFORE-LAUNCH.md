@@ -294,6 +294,21 @@ since they were archived before their dates were known:
       `nulo.sh/terms/v1.2.4/` show no DRAFT banner, and AMO's Privacy policy field carries the 1.3.1
       text (`apps/extension/store/listing.md` § Privacy policy text)
 
+**Due at the release that publishes privacy 1.3.2:** § 5.10 says that on Alpha the "Get Fee Juice"
+and "Get private Fee Juice" links open Shield, which human.tech, a third party, operates, and on
+every other network the bridge application the Developer operates (the owner's decision of
+2026-11-18). A patch, so nobody is asked to accept again (the owner's pick of 2026-11-19: "1.3.2,
+a patch"). It is in place, and 1.3.1 is archived; its effective date is the day the promote
+publishes it, so until then it reads `«FILL: effective date»`. A promote that publishes it with
+1.3 and 1.3.1 dates all three, and the archived `legal/archive/privacy-1.3.1.md` with them:
+
+- [ ] `legal/privacy.md` — the version line and the 1.3.2 history row, dated the day it is
+      published
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3.2 (now `null`), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.3.2/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.3.2 text (`apps/extension/store/listing.md`
+      § Privacy policy text)
+
 **Due at the release that publishes website notice 1.1:** the notice drops the email at store
 launch and says replies reach hello@nulo.sh. It is dated for the promote that publishes it, 5
 November 2026; the landing and `nulo-subscribe` both deploy from that promote's push to `main`:
