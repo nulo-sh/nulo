@@ -9,7 +9,7 @@ const STUBS = {
 	Text: { props: ["variant"], template: '<span :data-variant="variant"><slot /></span>' },
 }
 
-const FE0F = "️"
+const FE0F = "\uFE0F"
 const ALL_BYTES = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, "0")).join("")
 
 const mountGrid = (emojis: string) => mount(EmojiGrid, { props: { emojis }, global: { stubs: STUBS } })
@@ -36,7 +36,7 @@ describe("composite/EmojiGrid", () => {
 		expect(cellTexts("🐷🐔🐮🦊🐭🦁🐶🐱🐰")).toEqual(["🐷", "🐔", "🐮", "🦊", "🐭", "🦁", "🐶", "🐱", "🐰"])
 	})
 
-	test("draws every cell in the emoji role", () => {
+	test("gives every cell the emoji role", () => {
 		const variants = mountGrid("🐷🐔🐮🦊🐭🦁🐶🐱🐰")
 			.findAll("[class*='cell'] > span")
 			.map((s) => s.attributes("data-variant"))
@@ -54,7 +54,7 @@ describe("composite/EmojiGrid", () => {
 	})
 
 	test("keeps a ZWJ sequence in one cell, unchanged", () => {
-		expect(cellTexts("👩‍💻🐷")).toEqual(["👩‍💻", "🐷"])
+		expect(cellTexts("👩\u200D💻🐷")).toEqual(["👩\u200D💻", "🐷"])
 	})
 
 	test("keeps a flag's two regional indicators in one cell", () => {

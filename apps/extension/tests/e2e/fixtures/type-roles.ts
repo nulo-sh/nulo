@@ -79,7 +79,7 @@ export type TypeReading = {
  */
 export type ReadScope = { kind: "roles" } | { kind: "own-text" } | { kind: "laid-out" } | { kind: "at"; selector: string; native?: boolean }
 
-/** One read of a document: the three face variables as its root resolves them, and the elements. */
+/** One read of a document: the font variables as its root resolves them, and the elements. */
 export type PageTypography = { vars: Vars; readings: TypeReading[] }
 
 export type SweepFailure = { testid: string | null; text: string; role: string; property: string; expected: string; actual: string }
