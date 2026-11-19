@@ -1,8 +1,0 @@
-{
-  "ha-warning-light": "A flagged address on Holdings (\"Flagged as a scam\" under Add): Add opens the New token pop-up, which now repeats \"Flagged as a scam\" under the address (P195-02 = 3).",
-  "ha-warning-dark": "A flagged address on Holdings (\"Flagged as a scam\" under Add): Add opens the New token pop-up, which now repeats \"Flagged as a scam\" under the address (P195-02 = 3).",
-  "ha-flag-popup-light": "Holdings' flagged press opens the New token pop-up with the one new line: \"Flagged as a scam\" under the address field, in the danger text colour. The owner checks this line.",
-  "ha-flag-popup-dark": "Holdings' flagged press opens the New token pop-up with the one new line: \"Flagged as a scam\" under the address field, in the danger text colour. The owner checks this line.",
-  "ha-empty-kept-light": "A searched whole address whose token was just added with a zero balance: its row stays in view under the search, with no \"1 empty\" fold, and keeps the focus (P195-03 = 2).",
-  "ha-empty-kept-dark": "A searched whole address whose token was just added with a zero balance: its row stays in view under the search, with no \"1 empty\" fold, and keeps the focus (P195-03 = 2)."
-}
