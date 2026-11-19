@@ -51,7 +51,7 @@ Surfaces: `release-notes/1.3.0.md` (the GitHub Release's opening and AMO's versi
 
 ## Architecture & Implementation (arc 1, branch `notes-1-3-0-a1` off this plan's commit)
 
-### Phase 1: the notes, the page, the cards ✓ (gate green; notes 2,884 code points)
+### Phase 1: the notes, the page, the cards ✓ (gate green; notes 2,952 code points after review)
 1. `release-notes/1.3.0.md`: a lead line, a blank line, `- ` bullets in 1.2.0's order (D2), each mapped to its PRs in [recon.md](recon.md).
 2. `apps/landing/content/changelog/1.3.0.toml`: `version = "1.3.0"`, `date` per A1, a title, a lede, five changes (D6).
 3. `bun run --cwd apps/landing og:cards`; commit what it adds and changes (`1.3.0.og.png`, `index.og.png`). Copy both cards to `~/.cache/nulo-backlog/notes-1-3-0/shots/`.
@@ -85,7 +85,9 @@ Surfaces: `release-notes/1.3.0.md` (the GitHub Release's opening and AMO's versi
 
 ## Review verdicts
 
-(Filled after the Codex pass.)
+- **Codex round 1** (gpt-6.1-sol, high, over the plan and the arc diff): `changes needed`, seven findings, all accepted after checking the tree. (1) The relay: a return needs two passing checks, and it is a new recipient of requests (privacy § 5.12): the bullet states who runs it and when Nulo uses it. (2) Dollars show only where a price is shown (`SendReviewSheet.vue:193`), and the fee warning's fix is paying from private Fee Juice or a link to get some (`FeeSettingsCard.vue:513-514`). (3) The app chip carries no seal (`contract-chip.ts:141`) and a seal means "Nulo knows this contract", not safety (`:35`). (4) Allow every site also reveals the version (`every-site.ts:5`). (5) #1859 covers discovery and continues with the app's request, not always the connect window. (6) Authwits: only call-shaped rows name an action, and the check reads confirmed grants; Contracts: the explorer link does not apply everywhere. (7) The What's new row stays until dismissed. Applied in shorter words; for the cap, "say who pays the fee" and "every switch has a spoken name" were cut (the latter a `fix(a11y)` inside the fix count).
+- **Codex round 2** (resumed, verification): `changes needed`, one finding, accepted: "only while" broke on a send carried by the relay, whose receipt checks stay there until final (`packages/aztec-runtime/src/routing/routed-node.ts:291,592-593`).
+- **Codex round 3** (resumed): **approve**.
 
 ## Delivery
 

@@ -8,19 +8,19 @@ lede = "Five changes you will notice first. The full notes are below."
 icon = "send"
 area = "Send"
 title = "Send starts with a person"
-line = "Pick who you pay first. Every send opens a review with the amount in dollars and the fee."
+line = "Pick who you pay first. Every send opens a review with the amount and the fee, in dollars where Nulo shows a price."
 
 [[change]]
 icon = "signature"
 area = "Approvals"
 title = "Every step, named"
-line = "Approval windows number a send's calls and name its contracts, sealed when Nulo verified them."
+line = "Approval windows number a send's calls and name its contracts, with a seal on those Nulo knows."
 
 [[change]]
 icon = "network-edit"
 area = "Networks"
 title = "A second endpoint"
-line = "Alpha and Testnet use Nulo's relay while their first endpoint fails, then go back to it."
+line = "Alpha and Testnet fall back to Nulo's relay while their first endpoint fails or recovers."
 
 [[change]]
 icon = "holdings"
