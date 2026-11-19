@@ -2,6 +2,8 @@ import type { Page } from "puppeteer"
 import { clickByTestId } from "../dom"
 import { approveDiscover } from "../popups"
 import { type FeeMethodSubtitle, selectFeeMethod } from "../fee-method"
+import { chooseRecipient, openSend, selectSendFeeMethod } from "../send-page"
+import type { ReleaseTraits } from "./release"
 
 /**
  * Allow a connection on a 0.31.0 build, whose emoji check replaces the connect window's page where
@@ -16,13 +18,19 @@ export async function approveReleaseConnect(discoverPage: Page): Promise<Page> {
 	return discoverPage
 }
 
-/** Opens the release's own Send from Home, a form that shows its sides at once. */
-export async function openReleaseSend(page: Page): Promise<void> {
+/**
+ * Opens the release's own Send from Home and picks its fee payer, which saves Send's pick: on a
+ * `one-form` release through the menu of the fee card in its form, on a `person-first` one through
+ * its Fee sheet, once `recipient` answers who is paid.
+ */
+export async function pickReleaseSendFee(page: Page, release: ReleaseTraits, recipient: string, method: FeeMethodSubtitle): Promise<void> {
+	if (release.send === "person-first") {
+		await openSend(page)
+		await chooseRecipient(page, recipient)
+		await selectSendFeeMethod(page, method)
+		return
+	}
 	await clickByTestId(page, "actions-send")
 	await page.waitForSelector('[data-testid="send-from-type"]', { timeout: 10_000 })
-}
-
-/** Picks the fee method on the release's own Send, whose fee card sits in its form. */
-export async function selectReleaseSendFee(page: Page, method: FeeMethodSubtitle): Promise<void> {
 	await selectFeeMethod(page, method)
 }

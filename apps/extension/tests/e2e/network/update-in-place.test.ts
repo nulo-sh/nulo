@@ -91,7 +91,7 @@ import { recordingProblems, writeRecording } from "../fixtures/update/recording"
 import { type ReleaseTraits, releaseTraits } from "../fixtures/update/release"
 import { readRelease } from "../fixtures/update/read-release"
 import { isLoopbackUrl, loopbackOrigins, namedHostCount, type ReleasePreferences } from "../fixtures/update/release-reads"
-import { approveReleaseConnect, openReleaseSend, selectReleaseSendFee } from "../fixtures/update/release-ui"
+import { approveReleaseConnect, pickReleaseSendFee } from "../fixtures/update/release-ui"
 import { storedRows } from "../fixtures/update/stored-rows"
 import { BARRIERS, missingFamilies, shownOverlays, unofferedSponsorIds, updateProblems } from "../fixtures/update/verify"
 import {
@@ -276,7 +276,7 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 		timeoutMs: 180_000,
 	})
 	const incoming = await incomingCards(page, 2)
-	await pickPreferences(page, release)
+	await pickPreferences(page, release, cfg.minterAddress)
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)
@@ -329,15 +329,14 @@ async function endOnSecondAccount(ctx: ExtensionContext): Promise<{
 	return { selection: reads.selection, preferences: reads.preferences, fpcs: reads.rows.fpcs, dials: loopbackOrigins({ reads, stored }) }
 }
 
-/** Pins the sandbox token and picks Send's fee payer for a private send, each through the release's
- *  own UI, which saves both maps; the app window's pick is the send's below. */
-async function pickPreferences(page: Page, release: ReleaseTraits): Promise<void> {
+/** Pins the sandbox token and picks Send's fee payer for a send to `recipient`, each through the
+ *  release's own UI, which saves both maps; the app window's pick is the send's below. */
+async function pickPreferences(page: Page, release: ReleaseTraits, recipient: string): Promise<void> {
 	await navigateByHash(page, "#/popup/general", 15_000)
 	await navigateToTokenDetail(page)
 	await pinFromTokenPage(page)
 	await navigateByHash(page, "#/popup/general", 15_000)
-	await openReleaseSend(page)
-	await selectReleaseSendFee(page, sandboxFeeMethod(release))
+	await pickReleaseSendFee(page, release, recipient, sandboxFeeMethod(release))
 	await navigateByHash(page, "#/popup/general", 15_000)
 }
 
@@ -504,8 +503,7 @@ async function populatePending(
 	})
 	// The release keeps an account's gas balances for minutes and reads them again on a Send mount,
 	// so the app window's fee row sees the funding only after one.
-	await openReleaseSend(page)
-	await selectReleaseSendFee(page, sandboxFeeMethod(release))
+	await pickReleaseSendFee(page, release, cfg.minterAddress, sandboxFeeMethod(release))
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)

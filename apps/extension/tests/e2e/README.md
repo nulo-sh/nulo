@@ -170,10 +170,13 @@ uncommitted changes a build reads, is refused, so commit before you build it.
   candidate's `profile/profile-row.ts` classifies the row the release wrote, the hostname alone of
   the Testnet node it seeds, which the egress guard declares as a refusal, and whether it offers the
   canonical Sponsored fee payer on every chain or only on the chains it lists, which leaves the
-  run's sandbox network none (from v1.2.0). A tag with none is refused before its zip is downloaded.
+  run's sandbox network none (from v1.2.0), and whether its Send opens on one form or asks first
+  who is paid and picks the payer in a sheet (from v1.3.0). A tag with none is refused before its
+  zip is downloaded.
 - The live scenario populates the release through its own UI: a password profile with a second and
   an imported account and two contacts on Testnet (switched to first, as a release that seeds
-  Mainnet opens there), then a network on the run's sandbox with a token it pins, a Send fee pick,
+  Mainnet opens there), then a network on the run's sandbox with a token it pins, a Send fee pick
+  (on a release whose Send asks who is paid first, for the minter, the send's recipient below),
   a public and a private receipt, a connected playground and one send from the wallet whose fee
   payer it picks: the sponsor, or, on a release that offers none there, public Fee Juice the run
   bridges to the account first. It requires every key family `HELD` names for the release's
