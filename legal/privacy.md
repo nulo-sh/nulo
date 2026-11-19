@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.3.1 — effective «FILL: effective date»**
+**Version 1.4 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -273,16 +273,17 @@ the files or byte ranges requested.
 These requests **download** public parameters; they do not upload transaction witnesses. Replacing
 the RPC endpoint or disabling fiat prices does not disable them.
 
-### 5.10 The "Get Fee Juice" and "Get private gas" links
+### 5.10 The "Get Fee Juice" and "Get private Fee Juice" links
 
-**What it is:** the send screens link to `https://testnet.app.unleashed.systems`, a bridge application
-I operate as a separate project: when an account cannot pay a transaction's fee, and on the review
-screen when paying the fee would publish your address as the fee payer. The link is the same on
-every network.
+**What it is:** the wallet links to a bridge application when an account cannot pay a transaction's
+fee, on the review screen when paying the fee would publish your address as the fee payer, and in
+Home's Get started list. On Alpha the links open `https://shield.human.tech/fee-juice`, Shield, a
+bridge application that human.tech, a third party, operates. On every other network they open
+`https://testnet.app.unleashed.systems`, a bridge application I operate as a separate project.
 
 **What it reveals:** nothing until you click. The link carries no account address or other wallet
-data and opens without a referrer, so a click is an ordinary website visit: the site and Cloudflare,
-Inc., which hosts it, receive your IP address and browser headers.
+data and opens without a referrer, so a click is an ordinary website visit: the site and its host
+receive your IP address and browser headers. Cloudflare, Inc. hosts the application I operate.
 
 **After it opens:** the application runs on its own. The requests it makes, for example to an Aztec
 node, are not Nulo's, and this policy does not describe them.
@@ -518,3 +519,4 @@ described in § 5.
 | 1.2.11 | «FILL: effective date» | With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7). |
 | 1.3 | «FILL: effective date» | Nulo's relay, which the Developer operates, is the second default endpoint of Alpha and Testnet and receives the requests the endpoint before it fails to answer (§§ 1, 2, 5.1, 5.5, 5.12, 12). |
 | 1.3.1 | «FILL: effective date» | After the primary endpoint fails, the others are used until it has answered two checks at least 30 seconds apart, up to 30 minutes apart after repeated failures (§ 5.1). |
+| 1.4 | «FILL: effective date» | On Alpha, the "Get Fee Juice" and "Get private Fee Juice" links open Shield, which human.tech, a third party, operates; on every other network, the bridge application the Developer operates (§ 5.10). |
