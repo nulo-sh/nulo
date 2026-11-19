@@ -73,6 +73,12 @@ function assertRevokeCount(ids: number[]): void {
 	if (ids.length > MAX_REVOKES_PER_TX) throw new Error(`Cannot revoke more than ${MAX_REVOKES_PER_TX} authwits per single tx`)
 }
 
+/** Awaits every promise, then throws the first rejection: nothing started outlives the call. */
+async function settleAll(promises: Promise<unknown>[]): Promise<void> {
+	const failure = (await Promise.allSettled(promises)).find((outcome) => outcome.status === "rejected")
+	if (failure) throw failure.reason
+}
+
 const grantNotInBlock = (authwit: Authwit): Error =>
 	new Error(`Authwit #${authwit.id}'s grant is not in a block yet. Revoke it again later.`)
 
@@ -110,6 +116,8 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	private readonly authwits: SealedEntityStorage<Authwit>
 	private readonly statuses: SealedEntityStorage<boolean>
 	private readonly lock = new Lock()
+	/** The registry check running per scope; a call while one runs joins it. */
+	private readonly registryChecks = new Map<string, Promise<void>>()
 
 	private profileService: ProfileService = null!
 	private networkService: NetworkService = null!
@@ -339,8 +347,10 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		return { onJournalCreated: (journalId) => this.emit("onSendStarted", { correlation, journalId }) }
 	}
 
-	/** The revoke's transaction, built from this scope's own rows: a foreign id reads as missing, so
-	 *  no caller revokes another profile's, chain's or account's authwit and nothing discloses one. */
+	/** The revoke's transaction, built from this scope's own rows. A missing id is skipped as already
+	 *  revoked, since a check or another revoke may prune a row after its popup opened; a foreign id
+	 *  reads as missing, so no caller revokes another profile's, chain's or account's authwit and
+	 *  nothing discloses one. A request naming none of the scope's rows is refused. */
 	private async revokeOperation(
 		networkId: string,
 		account: string,
@@ -353,9 +363,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		for (const id of ids) {
 			const authwit = await this.authwits.get(`${id}`)
 			const inScope = authwit?.profileId === scope.profileId && authwit.chainId === scope.chainId && authwit.account === scope.account
-			if (!authwit || !inScope) throw new Error(`Authwit #${id} doesn't exist`)
-			authwits.push(authwit)
+			if (authwit && inScope) authwits.push(authwit)
 		}
+		if (!authwits.length) throw new Error(`Authwit #${ids.join(", #")} doesn't exist`)
 		const registryAddress = getAuthRegistryAddress().toString()
 		const operation: SendTransactionOperation = {
 			kind: "send_transaction",
@@ -413,7 +423,12 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const fence = await this.profileService.captureExecutionFence()
 		const { network, scope, authwits, operation } = await this.revokeOperation(networkId, account, ids, feeSettings)
 
-		const task = this.taskService.startNewTask(new RevokeAuthwitsContent(ids, authwits.map(authwitRowKey)))
+		const task = this.taskService.startNewTask(
+			new RevokeAuthwitsContent(
+				authwits.map((authwit) => authwit.id),
+				authwits.map(authwitRowKey),
+			),
+		)
 		try {
 			await this.awaitGrantBlocks(network, authwits)
 			const txHash = await this.executionService.executeSendTransaction(
@@ -492,10 +507,19 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		await this.ensureInitialized()
 		const network = await this.networkService.getNetwork(networkId)
 		const scope: AuthwitScope = { profileId: network.profileId, chainId: network.chainId, account }
+		const key = JSON.stringify([scope.profileId, scope.chainId, scope.account])
+		const running = this.registryChecks.get(key)
+		if (running) return running
+		const check = this.checkRegistry(network, scope).finally(() => this.registryChecks.delete(key))
+		this.registryChecks.set(key, check)
+		return check
+	}
+
+	private async checkRegistry(network: Network, scope: AuthwitScope): Promise<void> {
 		const task = this.taskService.startNewTask(new StepContent("Sync auth registry"))
 		try {
 			const node = await this.networkService.getNodeFor(network)
-			await Promise.all([this.syncAuthwits(network, node, scope, task), this.syncStatus(node, scope, task)])
+			await settleAll([this.syncAuthwits(network, node, scope, task), this.syncStatus(node, scope, task)])
 			task.complete()
 		} catch (error) {
 			task.fail(error)
@@ -525,8 +549,14 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	private async syncAuthwits(network: Network, node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask) {
 		const task = parentTask.startSubtask(new StepContent("Sync authwits"))
 		try {
-			const authwits = await this.rowsForScope(scope)
-			await Promise.all(authwits.map((authwit) => this.syncAuthwit(network, node, scope, authwit, task)))
+			// A pending row's grant may still land, so a node that reads its hash unauthorized proves
+			// nothing about it: its tx outcome reconciles it, or a revoke that saw the grant's block prunes
+			// it. Only a restored backup holds rows past the bound (restore keeps every grant).
+			const confirmed = (await this.rowsForScope(scope))
+				.filter((authwit) => !authwit.pending)
+				.sort((a, b) => a.id - b.id)
+				.slice(0, MAX_TRACKED_AUTHWITS_PER_ACCOUNT)
+			await settleAll(confirmed.map((authwit) => this.syncAuthwit(network, node, scope, authwit, task)))
 			task.complete()
 		} catch (error) {
 			task.fail(error)
@@ -535,10 +565,6 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	}
 
 	private async syncAuthwit(network: Network, node: AztecNode, scope: AuthwitScope, authwit: Authwit, parentTask: WrappedTask) {
-		// A `pending` row's grant may still land, so a node that reads its hash unauthorized proves
-		// nothing about it: its tx outcome reconciles it, or a revoke that saw the grant's block
-		// prunes it. Skipped before the subtask starts, so no open subtask blocks the parent.
-		if (authwit.pending) return
 		if (await this.stillConsumable(network, node, authwit)) return
 		const task = parentTask.startSubtask(new StepContent(`Sync authwit #${authwit.id}`))
 		try {
@@ -623,7 +649,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		authwits: Authwit[],
 		revokeBlock: number,
 	): Promise<void> {
-		const outcomes = await Promise.allSettled(
+		await settleAll(
 			authwits.map(async (authwit) => {
 				if (await isAuthwitConsumable(node, authwit.account, authwit.hash)) {
 					throw new Error(`Authwit #${authwit.id} is still authorized after the revoke`)
@@ -636,8 +662,6 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 				await this.deleteTracked(scope, authwit, { confirmedOnly: false })
 			}),
 		)
-		const failure = outcomes.find((outcome) => outcome.status === "rejected")
-		if (failure) throw failure.reason
 	}
 
 	private async syncStatus(node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask): Promise<void> {
