@@ -2,7 +2,7 @@ import { enableAutoUnmount, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h, nextTick, ref, withDirectives } from "vue"
 import { useToast } from "@/composables/toast"
-import { SNACK_GAP, snackInset, useSnackInset, vSnackFooter, vSnackSheet } from "./snackInset"
+import { SNACK_GAP, snackAside, snackInset, useSnackInset, vSnackAside, vSnackFooter, vSnackSheet } from "./snackInset"
 
 const VIEWPORT = 600
 const NAV_BASE = 76
@@ -183,6 +183,28 @@ describe("snackInset: a listed row", () => {
 		const stacked = [433, 353, 273, 193, 113, 33].map(row)
 		expect(snackInset(NAV_BASE, VIEWPORT, stacked, SNACK)).toBe(NAV_BASE)
 		expect(snackInset(NAV_BASE, VIEWPORT, [...stacked, { top: 500, bottom: 536 }], SNACK)).toBe(VIEWPORT - 500 + SNACK_GAP)
+	})
+})
+
+describe("vSnackAside", () => {
+	test("holds while any marked element is mounted, and lets go when the last one leaves", async () => {
+		const marks = ref([true, true])
+		const Host = defineComponent({
+			setup: () => () =>
+				h(
+					"div",
+					marks.value.map((on, i) => (on ? withDirectives(h("span", { key: i }), [[vSnackAside]]) : null)),
+				),
+		})
+		expect(snackAside.value).toBe(false)
+		mount(Host)
+		expect(snackAside.value).toBe(true)
+		marks.value = [false, true]
+		await nextTick()
+		expect(snackAside.value).toBe(true)
+		marks.value = [false, false]
+		await nextTick()
+		expect(snackAside.value).toBe(false)
 	})
 })
 

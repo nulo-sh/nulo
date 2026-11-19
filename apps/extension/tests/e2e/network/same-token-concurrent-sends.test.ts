@@ -729,6 +729,17 @@ async function readReaskSheet(page: Page): Promise<{ line: string; button: strin
 	}))
 }
 
+/** Waits until the page shows the Sending toast, or until it shows none. Asserted by its text, never clicked by it. */
+async function waitForSendingToast(page: Page, shown: boolean): Promise<void> {
+	await page.waitForFunction(
+		(want) =>
+			Array.from(document.querySelectorAll('[data-testid="snackbar-title"]')).some((t) => t.textContent?.startsWith("Sending")) ===
+			want,
+		{ timeout: 15_000, polling: 100 },
+		shown,
+	)
+}
+
 async function readRecordedFee(page: Page, hash: string): Promise<string | undefined> {
 	return (await readSealedRows<{ estimatedFee?: string }>(page, "txs")).find((tx) => tx.naturalId === hash)?.row.estimatedFee
 }
@@ -814,13 +825,20 @@ test.skipIf(!hasConfig)(
 				await burst.page.waitForSelector('[data-testid="activity-feed-root"][data-fee-quote="ready"]', { timeout: 30_000 })
 			}
 			expect((await waitForAwaitingCard(burst.page, "queued")).subtitle).toBe("Fee went up. Review")
-			if (asks === 1) await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
+			if (asks === 1) {
+				await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
+				// B's own Sending toast is up on Home, and steps aside while its re-ask is open.
+				await waitForSendingToast(burst.page, true)
+			}
 			await pointerClick(burst.page, "tx-awaiting-card")
 			const sheet = await readReaskSheet(burst.page)
 			const [now, cap] = [pinnedFeeText(asking.reask.fee), pinnedFeeText(asking.reask.cap)]
 			expect(sheet.line).toBe(`Fee is now ${now}, above the ${cap} you accepted.`)
 			expect(sheet.button).toBe("Send")
-			if (asks === 1) await shotSend(burst.page, "4-reask-sheet", "send-review-fee")
+			if (asks === 1) {
+				await waitForSendingToast(burst.page, false)
+				await shotSend(burst.page, "4-reask-sheet", "send-review-fee")
+			}
 			await pointerClick(burst.page, "send-review-submit")
 			accepted = asking.reask.fee
 		}

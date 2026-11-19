@@ -73,6 +73,68 @@ describe("useEntityCrud", () => {
 		scope.stop()
 	})
 
+	it("loaded resolves once the initial fetch lands, and once it fails, never rejecting", async () => {
+		let release!: () => void
+		const held = new Promise<void>((r) => (release = r))
+		const scope = effectScope()
+		const landing = scope.run(() =>
+			useEntityCrud<Item>({
+				fetch: async () => {
+					await held
+					return [{ id: "a", name: "A" }]
+				},
+				added,
+			}),
+		)!
+		const failing = scope.run(() =>
+			useEntityCrud<Item>({
+				fetch: async () => {
+					throw new Error("fetch failed")
+				},
+			}),
+		)!
+		let landed = false
+		void landing.loaded.then(() => (landed = true))
+		await flush()
+		expect(landed).toBe(false)
+
+		release()
+		await landing.loaded
+		expect(landing.entities.value).toEqual([{ id: "a", name: "A" }])
+		await expect(failing.loaded).resolves.toBeUndefined()
+		expect(failing.error.value).toBeInstanceOf(Error)
+		scope.stop()
+	})
+
+	it("an event that arrives while a fetch runs is applied again over its snapshot, in order; a later refresh replays none", async () => {
+		let release!: (rows: Item[]) => void
+		let next: Promise<Item[]> = new Promise((r) => (release = r))
+		const scope = effectScope()
+		const result = scope.run(() => useEntityCrud<Item>({ fetch: () => next, added, updated, deleted }))!
+		await flush()
+		deleted.invoke({ id: "a", name: "A" })
+		updated.invoke({ id: "b", name: "B2" })
+		added.invoke({ id: "c", name: "C" })
+		deleted.invoke({ id: "c", name: "C" })
+		added.invoke({ id: "c", name: "C2" })
+
+		// A snapshot read before every one of those writes.
+		release([
+			{ id: "a", name: "A" },
+			{ id: "b", name: "B1" },
+		])
+		await result.loaded
+		expect(result.entities.value).toEqual([
+			{ id: "b", name: "B2" },
+			{ id: "c", name: "C2" },
+		])
+
+		next = Promise.resolve([{ id: "b", name: "B3" }])
+		await result.refresh()
+		expect(result.entities.value).toEqual([{ id: "b", name: "B3" }])
+		scope.stop()
+	})
+
 	it("appends an entity on the added event (incremental mode)", async () => {
 		const scope = effectScope()
 		const result = scope.run(() =>
