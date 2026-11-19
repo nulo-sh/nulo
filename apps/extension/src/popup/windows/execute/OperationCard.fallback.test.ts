@@ -5,8 +5,8 @@
  * `CallArguments` are mounted so trimming and the toggle are asserted on the components that do them.
  */
 
-import { flushPromises, mount } from "@vue/test-utils"
-import { describe, expect, test, vi } from "vitest"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import AddressDisplay from "@/components/AddressDisplay.vue"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
@@ -74,6 +74,9 @@ const mountCard = async (op: unknown, props: Record<string, unknown> = {}) => {
 }
 const all = (w: ReturnType<typeof mount>, testid: string) => w.findAll(`[data-testid="${testid}"]`)
 const one = (w: ReturnType<typeof mount>, testid: string) => w.find(`[data-testid="${testid}"]`)
+
+// A mounted card's chip holds fire after the file ends and log as the worker closes.
+enableAutoUnmount(afterEach)
 
 describe("OperationCard — the vocabulary reading", () => {
 	test("transfer(to, amount) on a registered token from the account: 'From: this account', a trimmed recipient, the amount in token units", async () => {

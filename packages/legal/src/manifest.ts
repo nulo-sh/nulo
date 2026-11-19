@@ -180,6 +180,15 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 				"After the primary endpoint fails, the others are used until it has answered two checks at least 30 seconds apart, up to 30 minutes apart after repeated failures (§ 5.1).",
 			],
 		},
+		{
+			version: "1.3.2",
+			effective: null,
+			material: false,
+			changes: [
+				'On Alpha, the "Get Fee Juice" and "Get private Fee Juice" links open Shield, a bridge application that human.tech, a third party, operates; on every other network they open the bridge application I operate (§ 5.10).',
+				"A click still carries no wallet data: the site and its host receive your IP address and browser headers.",
+			],
+		},
 	],
 }
 

@@ -99,10 +99,13 @@ const makeShell = (overrides: Partial<Parameters<typeof useDappApprovalWindow>[0
 			}),
 	)
 	const reject = vi.fn(() => callLog.push("reject"))
+	// The worker holds no session unless a test says otherwise.
+	const getActiveProfile = vi.fn(async (): Promise<{ id: string } | undefined> => undefined)
 	const shell = useDappApprovalWindow({
 		connectServices,
 		disconnectServices,
 		init,
+		getActiveProfile,
 		reject,
 		profile,
 		isInteractionCancelled,
@@ -153,6 +156,16 @@ describe("useDappApprovalWindow", () => {
 		expect(routerPushMock).toHaveBeenCalledWith({ path: "/popup/auth" })
 		expect(init).not.toHaveBeenCalled()
 		expect(beforeunloadAdds()).toBe(0)
+	})
+
+	test("a session the worker holds before the shell marks it runs init and redirects nowhere", async () => {
+		appStoreMock.isLogined = false
+		const { shell, init } = makeShell({ getActiveProfile: vi.fn(async () => ({ id: "p1" })) })
+		void shell.start()
+		await flushPromises()
+		expect(init).toHaveBeenCalledTimes(1)
+		expect(routerPushMock).not.toHaveBeenCalled()
+		expect(appStoreMock.pageAwaitingAuth).toBe("")
 	})
 
 	test("beforeunload is registered only AFTER init resolves", async () => {

@@ -105,7 +105,6 @@ import { drawsFeeWhole } from "../../../../../tests/helpers/fee-whole"
 import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { INIT_FETCH_TIMEOUT_MS, INIT_RETRY_BACKOFF_MS, useBalancesStore } from "@/stores/balances.store"
 import { CHAIN_IDS } from "@/utils/chain-ids"
-import { FEE_JUICE_BRIDGE_URL } from "./fee-helpers"
 
 /** Send's radios and the windows' menu offer the same rows to pick from. */
 const PICKER = {
@@ -161,6 +160,8 @@ const FEE_METHOD_LS_KEY = feePicksKey("p1")
 
 const profile = { id: "p1", name: "Profile 1" }
 const network = { id: "n1", chainId: 11155111 }
+const SHIELD_URL = "https://shield.human.tech/fee-juice"
+const UNLEASHED_URL = "https://testnet.app.unleashed.systems"
 const account = { id: "a1", address: "0xacct" }
 
 const baseProps = (over: Record<string, unknown> = {}) => ({
@@ -3227,6 +3228,18 @@ describe("FeeSettingsCard — Send: the payers as radios", () => {
 		expect(pub.find('[data-testid="send-fee-nudge"]').text()).toContain("You have no Fee Juice yet")
 		expect(pub.find('[data-testid="send-fee-get-juice"]').text()).toBe("Get Fee Juice")
 	})
+
+	test("the nudge's link opens Shield on Mainnet and Unleashed on Testnet, following the card's network", async () => {
+		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: "0" })
+		const w = mountSend({ network: { id: "n1", chainId: CHAIN_IDS.MAINNET } })
+		await flushPromises()
+		const link = () => w.get('[data-testid="send-fee-get-juice"]')
+		expect(link().attributes()).toMatchObject({ href: SHIELD_URL, target: "_blank", rel: "noopener noreferrer" })
+		await w.setProps({ network: { id: "n2", chainId: CHAIN_IDS.TESTNET } })
+		await flushPromises()
+		expect(link().attributes()).toMatchObject({ href: UNLEASHED_URL, target: "_blank", rel: "noopener noreferrer" })
+	})
 })
 
 describe("FeeSettingsCard — Send: the payer model", () => {
@@ -3406,12 +3419,18 @@ describe("FeeSettingsCard — Send: the remedy and the notices a closed card giv
 		expect(live.children).toHaveLength(0)
 	})
 
-	test("when private Fee Juice cannot pay, the block's fix is the bridge, opened in a new tab", async () => {
-		const w = await paidFromPublic({ publicFeeJuice: HELD, privateFeeJuice: "0" }, [PRIVATE_FPC, SPONSOR], { warning: WARNING })
+	test.each([
+		{ chain: "Mainnet", chainId: CHAIN_IDS.MAINNET, href: SHIELD_URL },
+		{ chain: "Testnet", chainId: CHAIN_IDS.TESTNET, href: UNLEASHED_URL },
+	])("when private Fee Juice cannot pay on $chain, the block's fix is $href, opened in a new tab", async ({ chainId, href }) => {
+		const w = await paidFromPublic({ publicFeeJuice: HELD, privateFeeJuice: "0" }, [PRIVATE_FPC, SPONSOR], {
+			warning: WARNING,
+			network: { id: "n1", chainId },
+		})
 		expect(w.find('[data-testid="send-fee-sheet-warning-fix"]').exists()).toBe(false)
 		const link = w.get('[data-testid="send-fee-sheet-warning-bridge"]')
 		expect(link.text()).toBe("Get private Fee Juice")
-		expect(link.attributes()).toMatchObject({ href: FEE_JUICE_BRIDGE_URL, target: "_blank", rel: "noopener noreferrer" })
+		expect(link.attributes()).toMatchObject({ href, target: "_blank", rel: "noopener noreferrer" })
 	})
 
 	test("the block's fix picks private Fee Juice, then moves the keyboard to its radio", async () => {

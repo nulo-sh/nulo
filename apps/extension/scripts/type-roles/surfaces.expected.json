@@ -217,6 +217,15 @@
 			"suite": "network"
 		},
 		{
+			"id": "windows-unlock",
+			"name": "Unlock window",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/unlock/index.vue",
+			"reach": "#/windows/unlock, opened by a dApp's discovery while the wallet is locked",
+			"states": ["locked", "unlocked, waiting"],
+			"suite": "network"
+		},
+		{
 			"id": "windows-logger",
 			"name": "Logger window",
 			"kind": "route",
@@ -677,7 +686,7 @@
 			"name": "Forgot password",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/ForgotPasswordPopup.vue",
-			"reach": "open 'forgot_password' from popup/pages/auth.vue",
+			"reach": "open 'forgot_password' from popup/components/modules/auth/LockScreen.vue",
 			"states": ["default"],
 			"suite": "smoke"
 		},
@@ -713,7 +722,7 @@
 			"name": "Select profile",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/SelectProfilePopup.vue",
-			"reach": "open 'select_profile' from popup/pages/auth.vue",
+			"reach": "open 'select_profile' from popup/components/modules/auth/LockScreen.vue",
 			"states": ["default"],
 			"suite": "smoke"
 		},

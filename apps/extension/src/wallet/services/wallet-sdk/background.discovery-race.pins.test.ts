@@ -63,6 +63,7 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 				log.push("discover")
 				return popup
 			},
+			unlockWindows: { origins: () => [] },
 		},
 		"dapp-session": {
 			onDappSessionDeleted: new EventHandler<unknown>(),

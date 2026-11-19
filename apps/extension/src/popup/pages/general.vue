@@ -30,7 +30,7 @@ import { useGetStarted } from "@/composables/useGetStarted"
 import { useSeedStatus } from "@/composables/useSeedStatus"
 
 /** Utils */
-import { FEE_JUICE_BRIDGE_URL } from "../components/modules/send/fee-helpers"
+import { feeJuiceBridgeUrl } from "../components/modules/send/fee-helpers"
 import { combineHoldings, gasHoldings, getStartedView, HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 
 /** Store */
@@ -118,7 +118,7 @@ async function onGetStartedSelect(item) {
 		return
 	}
 	if (item === "aztec") await getStarted.mark("aztecOpened")
-	window.open(item === "aztec" ? HOW_AZTEC_WORKS_URL : FEE_JUICE_BRIDGE_URL, "_blank", "noopener,noreferrer")
+	window.open(item === "aztec" ? HOW_AZTEC_WORKS_URL : feeJuiceBridgeUrl(appStore.network?.chainId), "_blank", "noopener,noreferrer")
 }
 
 function onScroll(event) {
