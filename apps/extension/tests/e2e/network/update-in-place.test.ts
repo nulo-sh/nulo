@@ -30,7 +30,7 @@
  *
  * Runtime: estimated 6 min on Chrome, 9 min on Firefox; measured 102 to 162 s and 182 to 186 s, the
  * release's real proof of the account's deployment included; from a release that pays from bridged
- * Fee Juice, 133 s and 184 s.
+ * Fee Juice, 128 to 133 s and 181 to 184 s.
  */
 import type { Page } from "puppeteer"
 import { afterEach, expect, inject } from "vitest"
