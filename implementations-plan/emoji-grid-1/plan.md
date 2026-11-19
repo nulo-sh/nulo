@@ -1,7 +1,7 @@
 ---
 plan: emoji-grid-1
 tier: light (thinned: no plan audit round, no Opus leg; one Codex design consult, one Codex pass over plan and diff)
-status: planned
+status: arc 1 in progress
 issues: none
 driver: claude-code
 claude_model: opus
@@ -9,7 +9,7 @@ codex_model: sol
 code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
-base: origin/dev at 846f26379
+base: origin/dev at f336e0f22 (planned at 846f26379; nothing this plan touches differs between them)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
