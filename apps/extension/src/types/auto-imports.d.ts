@@ -187,6 +187,7 @@ declare global {
   const contactAddressError: typeof import('../utils/contact-rules').contactAddressError
   const contactNameError: typeof import('../utils/contact-rules').contactNameError
   const contactNameKey: typeof import('../utils/contact-name').contactNameKey
+  const contractVerdict: typeof import('../composables/useTokenImport').contractVerdict
   const copyFor: typeof import('../utils/presto-ui-state').copyFor
   const copyToClipboard: typeof import('../utils/clipboard').copyToClipboard
   const copyWithToast: typeof import('../utils/clipboard').copyWithToast
@@ -667,6 +668,7 @@ declare global {
   const useToast: typeof import('../composables/toast.js').useToast
   const useTokenBalanceSnapshot: typeof import('../composables/useTokenBalanceSnapshot').useTokenBalanceSnapshot
   const useTokenFlags: typeof import('../composables/usePrices').useTokenFlags
+  const useTokenImport: typeof import('../composables/useTokenImport').useTokenImport
   const useWalletTxEstimates: typeof import('../composables/useWalletTxEstimates').useWalletTxEstimates
   const vSnackAside: typeof import('../composables/snackInset').vSnackAside
   const vSnackFooter: typeof import('../composables/snackInset').vSnackFooter
@@ -843,6 +845,9 @@ declare global {
   // @ts-ignore
   export type { TokenBalanceSnapshotState } from '../composables/useTokenBalanceSnapshot'
   import('../composables/useTokenBalanceSnapshot')
+  // @ts-ignore
+  export type { TokenImportPhase, TokenImportOutcome } from '../composables/useTokenImport'
+  import('../composables/useTokenImport')
   // @ts-ignore
   export type { WalletTxEstimatesDeps } from '../composables/useWalletTxEstimates'
   import('../composables/useWalletTxEstimates')
@@ -1185,6 +1190,7 @@ declare module 'vue' {
     readonly contactAddressError: UnwrapRef<typeof import('../utils/contact-rules')['contactAddressError']>
     readonly contactNameError: UnwrapRef<typeof import('../utils/contact-rules')['contactNameError']>
     readonly contactNameKey: UnwrapRef<typeof import('../utils/contact-name')['contactNameKey']>
+    readonly contractVerdict: UnwrapRef<typeof import('../composables/useTokenImport')['contractVerdict']>
     readonly copyFor: UnwrapRef<typeof import('../utils/presto-ui-state')['copyFor']>
     readonly copyToClipboard: UnwrapRef<typeof import('../utils/clipboard')['copyToClipboard']>
     readonly copyWithToast: UnwrapRef<typeof import('../utils/clipboard')['copyWithToast']>
@@ -1665,6 +1671,7 @@ declare module 'vue' {
     readonly useToast: UnwrapRef<typeof import('../composables/toast.js')['useToast']>
     readonly useTokenBalanceSnapshot: UnwrapRef<typeof import('../composables/useTokenBalanceSnapshot')['useTokenBalanceSnapshot']>
     readonly useTokenFlags: UnwrapRef<typeof import('../composables/usePrices')['useTokenFlags']>
+    readonly useTokenImport: UnwrapRef<typeof import('../composables/useTokenImport')['useTokenImport']>
     readonly useWalletTxEstimates: UnwrapRef<typeof import('../composables/useWalletTxEstimates')['useWalletTxEstimates']>
     readonly vSnackAside: UnwrapRef<typeof import('../composables/snackInset')['vSnackAside']>
     readonly vSnackFooter: UnwrapRef<typeof import('../composables/snackInset')['vSnackFooter']>
