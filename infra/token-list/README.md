@@ -83,7 +83,7 @@ means changing its row; a picture is never bundled in the extension.
 
 | Picture | Used by | Drawn by | Source | Terms | SHA-256 |
 |---|---|---|---|---|---|
-| USDC token logo | USDC, cUSDC | Circle | `https://www.circle.com/pressroom`, `usdc.zip` → `Token Logo/USDC Token.svg` | Circle's pressroom ("use approved logos as provided … do not alter") and Brand Use Policy | `fe4f9d5f34ef4ebeb5d80e1f5ff63dcaf5a0d5495f4adf206e4c3011d1f5c57d` |
+| USDC token logo | USDC, cUSDC, rUSDC | Circle | `https://www.circle.com/pressroom`, `usdc.zip` → `Token Logo/USDC Token.svg` | Circle's pressroom ("use approved logos as provided … do not alter") and Brand Use Policy | `fe4f9d5f34ef4ebeb5d80e1f5ff63dcaf5a0d5495f4adf206e4c3011d1f5c57d` |
 | EURC token logo | EURC | Circle | `https://www.circle.com/pressroom`, `eurc.zip` → `Token Logo/EURC Token.svg` | as USDC's | `6ae03397ca1775169d5371b1e40562714a779e9656ab0ce41ca71f79da0b3e2d` |
 | USD₮ token logo, colour | USDT | Tether | `https://tether.io/en/media`, `tether_USDt_token_v2@3x.svg` | Tether's media page (copied from Tether's materials, not altered) | `7bde6a7d982a998566c8688599615410f60453994e73d31cf7636fecf3fcde74` |
 | Letter mark "G" | GBPC | Nulo | this repository; the disc is the dark theme's `--app-bg`, `#0a0908` (`packages/design/src/base.css`) | Nulo's own | `7f068e3e57727bda2cf7f036041f41da59c7b6b94831c4141414b53506d34bef` |
