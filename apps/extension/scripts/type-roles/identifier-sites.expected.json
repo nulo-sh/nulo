@@ -21,7 +21,7 @@
 				}
 			],
 			"digests": {
-				"apps/extension/src/wallet/services/auth-registry/service.ts": "811fd92f5e4daca70a765e71ff942a9ee0cb4147f4ffdba15a8d8da346a1f51a",
+				"apps/extension/src/wallet/services/auth-registry/service.ts": "eff65ea28d86ef2b77960764bf7169bec08719289fb15ca61cc49a6bdca96eda",
 				"apps/extension/src/wallet/services/execution/operation-planner.ts": "3bdb4c1538359fe7d11572c82d19fa07677be5b74a40429ea7cb64e02d47d1ec",
 				"packages/wallet-bridge/src/dispatcher.ts": "a7a81b849e72d78ec910e2d883faac29b117233f98554a7d98f748e5e1443b41"
 			},
@@ -760,6 +760,17 @@
 			"selector": "[data-testid=\"manage-accounts-hidden-row\"] [data-testid=\"setting-description\"]",
 			"surface": "popup-settings-accounts",
 			"state": "a hidden account"
+		},
+		{
+			"file": "apps/extension/src/popup/pages/settings/developer/account-state/authwits/index.vue",
+			"expression": "chipOf(aw)",
+			"branch": "appStore.isLogined && filteredAuthwits.length",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "popup-settings-developer-account-state-authwits",
+			"state": "",
+			"why": "the contract chip's model handed to AuthwitCard; its short address renders at ContractChip's own site"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/developer/account-state/contracts/index.vue",
