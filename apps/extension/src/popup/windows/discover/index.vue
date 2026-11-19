@@ -100,6 +100,7 @@ const {
 		sessionService.disconnect()
 	},
 	init: () => init(),
+	getActiveProfile: () => profileService.getActiveProfile(),
 	reject: (end) => reject(end),
 })
 

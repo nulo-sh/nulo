@@ -73,6 +73,18 @@ export class DiscoveryQueue {
 		this.admit(entry)
 	}
 
+	/** Whether a live request of `origin` waits in the queue. Reads only: an expired entry is
+	 *  left for the next sweep to reject. */
+	holds(origin: string): boolean {
+		return this.queue.some(
+			({ discovery }) =>
+				discovery.origin === origin &&
+				discovery.status === "pending" &&
+				this.handler.getPendingDiscovery(discovery.requestId) === discovery &&
+				!isDiscoveryExpired(discovery),
+		)
+	}
+
 	/**
 	 * Drain the queue. Calls `processFn` for each live discovery. If `processFn` returns false (the
 	 * wallet locked mid-drain), the unprocessed rest is queued again under the same rule.
