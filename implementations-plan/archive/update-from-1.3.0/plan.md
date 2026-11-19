@@ -11,7 +11,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: no recon agent (the planner read the tag by hand); one Codex pass (gpt-6.1-sol, high) over the plan and the completed diff, then targeted verification of material fixes (bounded work)
 post_implementation_hardening: not scheduled
-base: origin/dev at 93aeedbc1 (tested at T = 32702d7b7, dev at 93877b8b1)
+base: origin/dev at 93aeedbc1 (tested at T = 32702d7b7, dev at 93877b8b1; live reruns at T2 = 1e4bb58c0)
 trunk: dev
 ---
 
@@ -19,8 +19,8 @@ trunk: dev
 
 - Date: 2026-11-19.
 - Status: completed, delivered as one PR against `dev`, awaiting the merge.
-- Shipped: `RELEASE_DIGESTS` and `RELEASE_TRAITS` pin v1.3.0 (zips checked four ways, F1); a required `send` trait, `person-first` for v1.3.0, drives its Send through the candidate's own helpers and writes its Send pick through its own `saveFeePick` (D1, D5); `fixtures/update/v1.3.0.storage.json` is its Chrome recording; the README and the release skill name the trait. At `T` = `32702d7b7` the live scenario and all four replay cases pass from v1.3.0 on both browsers, and the live scenario from v1.2.0 on Chrome. Closes #1901.
-- Did not hold: "pin and record" alone. Besides F4 (demonstrated by the red control) and F5 (moot once #1900 merged at 22:26Z), the Codex pass found F8 (no Send pick saved on a preselected radio) and the first recording run found the pin's toast covering the Fee sheet's Done; both fixed in the test code, no product change.
+- Shipped: `RELEASE_DIGESTS` and `RELEASE_TRAITS` pin v1.3.0 (zips checked four ways, F1); a required `send` trait, `person-first` for v1.3.0, drives its Send through the candidate's own helpers and writes its Send pick through its own `saveFeePick` (D1, D5); `fixtures/update/v1.3.0.storage.json` is its Chrome recording; the README and the release skill name the trait. At `T` = `32702d7b7` the live scenario and all four replay cases pass from v1.3.0 on both browsers, and the live scenario from v1.2.0 on Chrome; after one more fix to the live file, the three live runs pass again at `T2` = `1e4bb58c0`. Closes #1901.
+- Did not hold: "pin and record" alone. Besides F4 (demonstrated by the red control) and F5 (moot once #1900 merged at 22:26Z), the Codex pass found F8 (no Send pick saved on a preselected radio) and the first recording run found the pin's toast covering the Fee sheet's Done (its wait then made to see the toast appear first, Codex's second verification); all fixed in the test code, no product change.
 - Lessons: none promoted; `lessons.md` holds 8148 of its 8192 bytes. The nearest generalizable one (a press on a checked radio fires no `change`) sits beside the Vue radio line already there.
 - Known limits: none.
 - Open items: none.
@@ -73,7 +73,7 @@ Never set `NULO_E2E_BACKUP_RECORD`; never touch another tag's recording or the p
 5. Rebuild both candidates at that commit `T`, then at retry 0: live Chrome, live Firefox, replay Chrome, replay Firefox, and the D3 control, live Chrome from v1.2.0.
 - **Gate:** step 2 red as expected; steps 3 and 5 pass, all four replay cases on both browsers (a skipped case is not a pass). A red a pin, a trait or the driver answers returns to Phase 1 (fix, commit, rebuild, restart at step 3). A red the candidate causes is reported, not patched: `ARC_FAILED`. The scenario writes the recording inside `populate`, before the update and its checks (`update-in-place.test.ts:622`): after any recording run that did not pass, delete `v1.3.0.storage.json` and check it is gone before the next run; a file that exists, or passes `recordingProblems`, proves nothing.
 
-### Phase 3: delivery ✓ (`dev` merged before `T`; `lint`, `typecheck:all`, `test:all` green at `T`; the close-out above)
+### Phase 3: delivery ✓ (`dev` merged before `T`; `lint`, `typecheck:all`, `test:all` green at `T`, `lint` and `typecheck:all` again at `T2`; the live reruns at `T2`; the close-out above)
 1. Targeted verification of any material fix since the Codex pass; a fix outside `implementations-plan/` moves `T`: rebuild, rerun step 5.
 2. Merge `origin/dev`; if anything outside the plan moved (`git diff --stat T HEAD -- . ':(exclude)implementations-plan'`), rebuild and rerun step 5 at the merged head. `lint`, `typecheck:all`, `test:all`, `check:plans` at the final head.
 3. Close-out commits; push; open the PR ready, no label (`apps/extension/**` trips both e2e filters); `gh pr checks <n> --watch`.
@@ -102,7 +102,8 @@ None. Test files and docs only; no screen changes.
 ## Review verdicts
 
 - **Codex pass** (gpt-6.1-sol, high, read-only, session `01a1f5e3`, over the plan and `aa9d10d2a`): **reject**, high confidence. P1: a press on the already chosen radio saves nothing (F8): accepted, fixed by D5. P2: a failed recording run leaves a recording, since it is written before the update: accepted, Phase 2's gate. P3: F2's diff inventory missed `BEFORE-LAUNCH.md`: accepted. Verified and held: every trait at the tag, F3/D2 (no relay trait; dials, interception and resets carry two endpoints), F4-F7, the recipient writes nothing, the `one-form` branch unchanged, no further trait, the run order.
-- **Codex targeted verification** (resumed, over `6699e3575` merged with `dev`): **verified**, high confidence; one P3, the helper's TSDoc cut to the radio constraint, accepted. Converged.
+- **Codex targeted verification** (resumed, over `6699e3575` merged with `dev`): **verified**, high confidence; one P3, the helper's TSDoc cut to the radio constraint, accepted.
+- **Codex verification of the run's toast fix** (resumed, `3cf32b482`): **not verified**: the toast's absence can mean it has not shown yet (P2, accepted, applied as proposed in `1e4bb58c0`); resumed over that commit: **verified**, no findings. Converged.
 
 ## Delivery
 

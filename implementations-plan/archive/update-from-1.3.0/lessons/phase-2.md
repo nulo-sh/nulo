@@ -30,3 +30,13 @@ The recording: written 22:57:40 UTC, SHA-256 `91d35df33073cceafa6f7b0b289fcd61ac
 
 - Like for like on Chrome at `T`: the populate-and-update test takes 132.6 s from v1.3.0 and 150.7 s from v1.2.0, under load1 between 32 and 118 from other leads; the person-first path adds no measurable cost.
 - Noise, not reds: the aztec CLI's bind error at boot (once per live run); the stall watchdog's longest silences 79.2-126.9 s, under its 10-minute bound.
+
+## At `T2` = `1e4bb58c0` (one fix since `T`, in `update-in-place.test.ts` alone)
+
+The Codex verification of `3cf32b482` returned **not verified**: the toast shows only once the pin's write lands, so its absence right after the menu closes can mean "not shown yet" (P2, accepted; its fix applied as proposed, then verified in the same session). The fix reaches only the live file, so the live runs were redone; the replay's evidence stays at `T`, its file untouched since.
+
+| Run (UTC) | Outcome | Wall-clock |
+|---|---|---|
+| Live, Chrome, from v1.3.0, 23:38:34-23:43:16 | 2 passed: 135.4 s, 76.4 s | vitest 282.0 s |
+| Live, Firefox, from v1.3.0, 23:43:44-23:50:28 | 2 passed: 194.4 s, 135.5 s | vitest 403.5 s |
+| Live, Chrome, from v1.2.0 (D3 control), 23:50:52-23:55:31 | 2 passed: 133.5 s, 76.6 s | vitest 278.6 s |
