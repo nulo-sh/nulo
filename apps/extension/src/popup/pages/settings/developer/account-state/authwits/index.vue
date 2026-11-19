@@ -25,6 +25,7 @@ import { useTokenFlags } from "@/composables/usePrices"
 import { useRevokeTasks } from "@/composables/useRevokeTasks"
 
 /** Helpers */
+import { createRunFence } from "@/composables/runFence"
 import {
 	authwitAction,
 	authwitMatchesSearch,
@@ -65,6 +66,7 @@ const {
 	isLoading: isFetchingAuthwits,
 	error,
 	refresh: refreshAuthwits,
+	loaded: listLoaded,
 } = useEntityCrud({
 	fetch: async () => (await authwitsService.getAuthwits(appStore.network.chainId, appStore.account.address)) ?? [],
 	added: authwitsService.onAuthwitAdded,
@@ -107,23 +109,44 @@ async function fetchTokens() {
 
 const isShownScope = (scope) =>
 	scope.profileId === appStore.profile?.id && scope.chainId === appStore.network?.chainId && scope.account === appStore.account?.address
+// A sealed read can capture the flag before an event's write and answer after its event; the event wins.
+let flagEvents = 0
 function onRegistryEnabled(scope) {
-	if (isShownScope(scope)) isRegistryEnabled.value = true
+	if (!isShownScope(scope)) return
+	flagEvents++
+	isRegistryEnabled.value = true
 }
 function onRegistryDisabled(scope) {
-	if (isShownScope(scope)) isRegistryEnabled.value = false
+	if (!isShownScope(scope)) return
+	flagEvents++
+	isRegistryEnabled.value = false
 }
 authwitsService.onRegistryEnabled.add(onRegistryEnabled)
 authwitsService.onRegistryDisabled.add(onRegistryDisabled)
 
 async function fetchRegistryStatus() {
+	const eventsBefore = flagEvents
 	isFetchingRegistryStatus.value = true
 	try {
-		isRegistryEnabled.value = await authwitsService.getRegistryEnabled(appStore.network.chainId, appStore.account.address)
+		const enabled = await authwitsService.getRegistryEnabled(appStore.network.chainId, appStore.account.address)
+		if (flagEvents === eventsBefore) isRegistryEnabled.value = enabled
 	} catch {
 		// surfaced via the entity-crud error ref already
 	} finally {
 		isFetchingRegistryStatus.value = false
+	}
+}
+
+// The check is for the scope the page opened on, once its reads land; a switch or a leave before
+// then drops it.
+const opening = createRunFence()
+async function checkRegistry() {
+	const { network, account } = appStore
+	if (!network || !account) return
+	try {
+		await authwitsService.syncRegistry(network.id, account.address)
+	} catch (error) {
+		console.debug("[authwits] registry check failed", { error })
 	}
 }
 
@@ -153,6 +176,7 @@ const handleOpenAuthwit = (aw) => {
 watch(
 	() => [appStore.profile?.id, appStore.network?.chainId, appStore.account?.address],
 	() => {
+		opening.invalidate()
 		void refreshAuthwits({ clear: true })
 		void fetchRegistryStatus()
 		void fetchTokens()
@@ -162,13 +186,16 @@ watch(
 
 onMounted(async () => {
 	if (appStore.account && appStore.isLogined) {
+		const isOpening = opening.begin()
 		void fetchTokens()
 		void revokeTasks.snapshot()
-		await fetchRegistryStatus()
+		await Promise.all([fetchRegistryStatus(), listLoaded])
+		if (isOpening()) void checkRegistry()
 	}
 })
 
 onBeforeUnmount(() => {
+	opening.invalidate()
 	authwitsService.onRegistryEnabled.remove(onRegistryEnabled)
 	authwitsService.onRegistryDisabled.remove(onRegistryDisabled)
 	authwitsService.disconnect()

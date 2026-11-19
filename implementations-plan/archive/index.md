@@ -593,3 +593,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [toast-hide-1](toast-hide-1/plan.md) — completed — an earlier send's Sending toast steps aside while a review sheet is open and comes back with the same words, built at the toast's owner (P190-01 = H, #1796)
 - [sweep-settle-1](sweep-settle-1/plan.md) — completed — the type-roles window sweep waits until no read in flight is drawn before it measures (#1794)
 - [teardown-log-1](teardown-log-1/plan.md) — completed — six suites left cards mounted whose timers logged after the file ended, failing a green run; each now auto-unmounts (#1858)
+- [authwits-2](authwits-2/plan.md) — completed — a landed revoke or switch reports success and a closed popup reports nothing (#1829, #1830); Revoke hands off to Activity and rows name their action (P166-01 = B, P166-02 = N1); the page checks the registry on open (P166-03 = S)
