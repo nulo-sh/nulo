@@ -1,6 +1,6 @@
 # Website Privacy Notice
 
-**Version 1.2 — effective «FILL: effective date»**
+**Version 1.2 — effective 19 November 2026**
 
 This notice explains what happens to information when you visit `nulo.sh` or join its mailing list.
 The Nulo wallet itself is covered by the [Privacy Policy](privacy.md); this notice adds nothing to
@@ -89,7 +89,8 @@ rewritten.
 ### 3.5 Confirming your address
 
 When you sign up, I send one email to the address you entered, with a link that works for 24 hours.
-Your address joins the list only when you open the link and press Confirm. If you did not ask,
+Your address joins the list only when you open the link in a browser: the page confirms it as it
+loads, and if that does not go through, you press Confirm. If you did not ask,
 ignore the email: your address is not added. The form sends at most one confirmation email to the
 same address in 24 hours, and none to an address already on the list or one that left it (§ 3.6).
 Before each product update I review the list and remove entries that are plainly not real.
@@ -155,4 +156,4 @@ describe, I will ask for your consent.
 |---|---|---|
 | 1.0 | 27 October 2026 | First published version. |
 | 1.1 | 5 November 2026 | Drops the one-time email at store launch (summary, §§ 3.2 and 3.4); replies reach hello@nulo.sh (§ 3.4); the list is reviewed before each send (§ 3.5). |
-| 1.2 | «FILL: effective date» | Sign-ups are confirmed by email before they join the list (summary, §§ 3.1, 3.3, 3.4, 3.5, 3.6 and 6). |
+| 1.2 | 19 November 2026 | Sign-ups are confirmed by email before they join the list (summary, §§ 3.1, 3.3, 3.4, 3.5, 3.6 and 6). |

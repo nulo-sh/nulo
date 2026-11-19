@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.3 — effective «FILL: effective date»**
+**Version 1.3 — effective 19 November 2026**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -514,6 +514,6 @@ described in § 5.
 | 1.2.7 | 27 October 2026 | The website and its mailing list are described in a separate Website Privacy Notice; § 5.5 keeps the hosts the wallet's functions involve. |
 | 1.2.8 | 5 November 2026 | Prices are requested for the price identifiers the signed token list names, and for AZTEC, which prices Fee Juice (§ 5.2). |
 | 1.2.9 | 5 November 2026 | The token list is downloaded about every six hours, retried within minutes then less often after a failure, and on request in Settings → Tokens (§§ 5.11, 6). |
-| 1.2.10 | «FILL: effective date» | When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails; each endpoint you add can receive its requests (§ 5.1). |
-| 1.2.11 | «FILL: effective date» | With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7). |
-| 1.3 | «FILL: effective date» | Nulo's relay, which the Developer operates, is the second default endpoint of Alpha and Testnet and receives the requests the endpoint before it fails to answer (§§ 1, 2, 5.1, 5.5, 5.12, 12). |
+| 1.2.10 | 19 November 2026 | When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails; each endpoint you add can receive its requests (§ 5.1). |
+| 1.2.11 | 19 November 2026 | With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7). |
+| 1.3 | 19 November 2026 | Nulo's relay, which the Developer operates, is the second default endpoint of Alpha and Testnet and receives the requests the endpoint before it fails to answer (§§ 1, 2, 5.1, 5.5, 5.12, 12). |

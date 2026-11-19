@@ -240,9 +240,9 @@ requests. Both are patches, so nobody is asked to accept again. Both versions ar
 place; their effective dates are the day the promote publishes them, so until then they read
 `«FILL: effective date»`:
 
-- [ ] `legal/privacy.md` and `legal/terms.md` — the version lines and the 1.2.10 and 1.2.2 history
-      rows, dated the day they are published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.10 and `terms` 1.2.2, same date
+- [x] `legal/privacy.md` and `legal/terms.md` — the version lines and the 1.2.10 and 1.2.2 history
+      rows, dated the day they are published (19 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.10 and `terms` 1.2.2 (19 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.2.10/`, `nulo.sh/terms` and
       `nulo.sh/terms/v1.2.2/` show no DRAFT banner, and AMO's Privacy policy field carries the
       1.2.10 text (`apps/extension/store/listing.md` § Privacy policy text)
@@ -253,8 +253,8 @@ its version without asking. A patch, so nobody is asked to accept again (the own
 page 119). The version is archived and in place; its effective date is the day the promote publishes
 it, so until then it reads `«FILL: effective date»`:
 
-- [ ] `legal/privacy.md` — the version line and the 1.2.11 history row, dated the day it is published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.11 (now `null`), same date
+- [x] `legal/privacy.md` — the version line and the 1.2.11 history row, dated the day it is published (19 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.11 (19 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.11/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.11 text (`apps/extension/store/listing.md`
       § Privacy policy text)
@@ -265,10 +265,10 @@ Alpha and Testnet. Privacy 1.3 is material, a new recipient, and no privacy vers
 accept again; Terms 1.2.3 is a patch. Both versions are archived and in place; their effective
 dates are the day the promote publishes them, so until then they read `«FILL: effective date»`:
 
-- [ ] `legal/privacy.md` and `legal/terms.md` — the version lines and the 1.3 and 1.2.3 history
-      rows, dated the day they are published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3 and `terms` 1.2.3 (now
-      `null`), same date
+- [x] `legal/privacy.md` and `legal/terms.md` — the version lines and the 1.3 and 1.2.3 history
+      rows, dated the day they are published (19 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3 and `terms` 1.2.3
+      (19 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.3/`, `nulo.sh/terms` and
       `nulo.sh/terms/v1.2.3/` show no DRAFT banner, and AMO's Privacy policy field carries the 1.3
       text (`apps/extension/store/listing.md` § Privacy policy text)
@@ -286,10 +286,10 @@ effective dates are the day the promote publishes them, so until then they read
 four, and the archived `legal/archive/privacy-1.3.md` and `legal/archive/terms-1.2.3.md` with them,
 since they were archived before their dates were known:
 
-- [ ] `legal/privacy.md` and `legal/terms.md` — the version lines and the 1.3.1 and 1.2.4 history
-      rows, dated the day they are published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3.1 and `terms` 1.2.4 (now
-      `null`), same date
+- [x] `legal/privacy.md` and `legal/terms.md` — the version lines and the 1.3.1 and 1.2.4 history
+      rows, dated the day they are published (19 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3.1 and `terms` 1.2.4
+      (19 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.3.1/`, `nulo.sh/terms` and
       `nulo.sh/terms/v1.2.4/` show no DRAFT banner, and AMO's Privacy policy field carries the 1.3.1
       text (`apps/extension/store/listing.md` § Privacy policy text)
@@ -302,9 +302,9 @@ a patch"). It is in place, and 1.3.1 is archived; its effective date is the day 
 publishes it, so until then it reads `«FILL: effective date»`. A promote that publishes it with
 1.3 and 1.3.1 dates all three, and the archived `legal/archive/privacy-1.3.1.md` with them:
 
-- [ ] `legal/privacy.md` — the version line and the 1.3.2 history row, dated the day it is
-      published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3.2 (now `null`), same date
+- [x] `legal/privacy.md` — the version line and the 1.3.2 history row, dated the day it is
+      published (19 November 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3.2 (19 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.3.2/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.3.2 text (`apps/extension/store/listing.md`
       § Privacy policy text)
@@ -324,9 +324,11 @@ confirmed by email before they join the list. The landing and `nulo-subscribe` b
 promote's push to `main`, each by its own build:
 
 - [x] The owner's answers to `implementations-plan/archive/double-optin-1/OWNER-ASKS.md` (OA1–OA8) are in the PR
-- [ ] `legal/website-privacy.md` § 3.5 carries the owner's wording for OA9: its sentence "joins the
+- [x] `legal/website-privacy.md` § 3.5 carries the owner's wording for OA9: its sentence "joins the
       list only when you open the link and press Confirm" predates the pick that confirms on open
-- [ ] `legal/website-privacy.md` — the version line and the 1.2 history row carry the day the promote lands
+      (the owner's pick, decision page 192, P192-03 a)
+- [x] `legal/website-privacy.md` — the version line and the 1.2 history row carry the day the promote lands
+      (19 November 2026); on any other day, both move to it before the promote merges
 - [ ] The secret `CONFIRM_SECRET` is set on `nulo-subscribe` before the promote merges
       (`infra/subscribe/README.md`, owner checklist item 3); without it every signup answers 503
 - [ ] Both builds green after the push. If either fails, turn the kill switch on until both are; a
