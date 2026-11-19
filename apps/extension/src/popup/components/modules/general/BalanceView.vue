@@ -110,7 +110,8 @@ const displayedTokenFiat = computed(() => {
 
 const fiatOf = prices.fiatOfRow
 /** Holdings that lack a price count as $0.00, unless every priceable one lacks it (`noPrices`). The
- *  total carries no caption for them: each unpriced row shows its name where a dollar value would be. */
+ *  total carries no caption for them, even for one ranked past Home's listed rows: a listed one shows
+ *  its name where a dollar value would be. */
 const aggregateMicro = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
 const aggregateFiatDisplay = computed(() => prices.formatUsdMicro(aggregateMicro.value))
 
