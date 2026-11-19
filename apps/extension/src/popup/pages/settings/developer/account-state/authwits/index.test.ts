@@ -27,6 +27,12 @@ const row = (id: number, pending: boolean, contract = TOKEN): Authwit =>
 	}) as unknown as Authwit
 
 const client = vi.hoisted(() => ({ current: undefined as undefined | Record<string, unknown> }))
+/** The page's list read and its registry check, each settled by the test when it says so. */
+const calls = vi.hoisted(() => ({
+	list: undefined as undefined | Promise<void>,
+	flag: undefined as undefined | Promise<boolean>,
+	check: undefined as undefined | (() => Promise<void>),
+}))
 const tasks = vi.hoisted(() => ({ snapshot: [] as unknown[], current: undefined as undefined | Record<string, unknown> }))
 
 vi.mock("@/wallet/services/auth-registry/client", async () => {
@@ -34,8 +40,12 @@ vi.mock("@/wallet/services/auth-registry/client", async () => {
 	return {
 		AuthRegistryServiceClient: function AuthRegistryServiceClient() {
 			client.current = {
-				getAuthwits: vi.fn(async () => [row(1, true)]),
-				getRegistryEnabled: vi.fn(async () => true),
+				getAuthwits: vi.fn(async () => {
+					await calls.list
+					return [row(1, true)]
+				}),
+				getRegistryEnabled: vi.fn(async () => (await calls.flag) ?? true),
+				syncRegistry: vi.fn(async () => calls.check?.()),
 				onAuthwitAdded: new EventHandler(),
 				onAuthwitUpdated: new EventHandler(),
 				onAuthwitDeleted: new EventHandler(),
@@ -89,11 +99,15 @@ enableAutoUnmount(afterEach)
 // The app store reads and watches `chrome.storage.local` when it is created.
 beforeEach(() => {
 	tasks.snapshot = []
+	calls.list = undefined
+	calls.flag = undefined
+	calls.check = undefined
 	vi.stubGlobal("chrome", { storage: {} })
 	installChromeStorage({}, { persist: false })
 })
 afterEach(() => {
 	vi.unstubAllGlobals()
+	vi.restoreAllMocks()
 })
 
 function emit(event: string, payload: Authwit): void {
@@ -243,4 +257,102 @@ test("leaving the page removes its three task handlers and disconnects the task 
 	w.unmount()
 	expect(removals.map((spy) => spy.mock.calls.length)).toEqual([1, 1, 1])
 	expect((tasks.current as { disconnect: ReturnType<typeof vi.fn> }).disconnect).toHaveBeenCalledTimes(1)
+})
+
+const syncRegistry = () => (client.current as { syncRegistry: ReturnType<typeof vi.fn> }).syncRegistry
+const WARNING = "Account authwits registry"
+/** The `warn` and `error` lines that carry the check's failure; the mount's own Vue warnings are not. */
+const loudLinesAbout = (error: Error) =>
+	[vi.spyOn(console, "warn"), vi.spyOn(console, "error")].map(
+		(spy) => () =>
+			spy.mock.calls.filter((args) =>
+				args.some((arg) => arg === error || (typeof arg === "string" && arg.includes("registry check"))),
+			),
+	)
+
+test("opening the page checks the registry once, after its list read lands, for the shown network and account", async () => {
+	let release!: () => void
+	calls.list = new Promise<void>((r) => (release = r))
+	await mountPage()
+	expect(syncRegistry()).not.toHaveBeenCalled()
+
+	release()
+	await flushPromises()
+	expect(syncRegistry().mock.calls).toEqual([["n", ACCOUNT]])
+})
+
+test.each([
+	{ case: "leaving the page", act: (w: Awaited<ReturnType<typeof mountPage>>) => w.unmount() },
+	{
+		case: "switching the account",
+		act: () => {
+			useAppStore().account = { address: `0x${"cd".repeat(32)}` } as never
+		},
+	},
+])("$case before the page's reads land starts no check", async ({ act }) => {
+	let release!: () => void
+	calls.list = new Promise<void>((r) => (release = r))
+	const w = await mountPage()
+	act(w)
+	await flushPromises()
+	release()
+	await flushPromises()
+	expect(syncRegistry()).not.toHaveBeenCalled()
+})
+
+test("the check's reads reach the page: the warning shows when the switch reads off, and a pruned row leaves", async () => {
+	calls.check = async () => {
+		emit("onAuthwitDeleted", row(1, false))
+		;(client.current as unknown as { onRegistryDisabled: { invoke: (s: typeof SCOPE) => void } }).onRegistryDisabled.invoke(SCOPE)
+	}
+	const w = await mountPage()
+	expect(w.text()).toContain(WARNING)
+	expect(chips(w)).toHaveLength(0)
+	expect(w.findAll('[data-testid="contract-chip"]')).toHaveLength(0)
+})
+
+test.each([
+	{ case: "an off event that arrives during the read outlives its older answer, on", event: true, answered: true },
+	{ case: "with no event, the read's answer shows: off", event: false, answered: false },
+])("the stored flag: $case", async ({ event, answered }) => {
+	let answer!: (enabled: boolean) => void
+	calls.flag = new Promise<boolean>((r) => (answer = r))
+	const w = await mountPage()
+	if (event) {
+		;(client.current as unknown as { onRegistryDisabled: { invoke: (s: typeof SCOPE) => void } }).onRegistryDisabled.invoke(SCOPE)
+	}
+	answer(answered)
+	await flushPromises()
+	expect(w.text()).toContain(WARNING)
+})
+
+test("a check that fails leaves the page as it opened, shows no error, and logs only at debug", async () => {
+	const error = new Error("node down")
+	calls.check = async () => {
+		throw error
+	}
+	const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
+	const loud = loudLinesAbout(error)
+	const w = await mountPage()
+	expect(syncRegistry()).toHaveBeenCalledTimes(1)
+	expect(chips(w)).toHaveLength(1)
+	expect(w.text()).not.toContain(WARNING)
+	expect(w.findComponent({ name: "AsyncListStatus" }).exists()).toBe(false)
+	expect(debug).toHaveBeenCalledWith("[authwits] registry check failed", { error })
+	expect(loud.flatMap((lines) => lines())).toEqual([])
+})
+
+test("leaving the page mid-check ends its call quietly: the disconnect's rejection logs only at debug", async () => {
+	let reject!: (error: Error) => void
+	calls.check = () => new Promise<void>((_, r) => (reject = r))
+	const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
+	const disconnected = new Error("client disconnected")
+	const loud = loudLinesAbout(disconnected)
+	const w = await mountPage()
+	;(client.current as { disconnect: ReturnType<typeof vi.fn> }).disconnect.mockImplementation(() => reject(disconnected))
+
+	w.unmount()
+	await flushPromises()
+	expect(debug).toHaveBeenCalledWith("[authwits] registry check failed", { error: disconnected })
+	expect(loud.flatMap((lines) => lines())).toEqual([])
 })
