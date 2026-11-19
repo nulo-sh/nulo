@@ -169,8 +169,8 @@ interface AppCtx extends FeeSelectionInput {
 	chosenUnasked: boolean
 	/** Counts explicit picks: a re-pick of the selected row leaves the reference unchanged. */
 	pickSeq: number
-	/** This mount's picks by `pickSlot`: newer than any read, and a save still pending or refused has
-	 *  not stored them. */
+	/** This mount's picks whose save has not been confirmed, by `pickSlot`: newer than any read of
+	 *  storage, which a pending or refused save leaves without them. */
 	ownPicks: Record<string, AppPick>
 }
 
@@ -183,10 +183,9 @@ const lockedOption = (c: AppCtx) => c.methods.value.find((m) => m.type === c.loc
  */
 async function persistSelection(c: AppCtx, pick: AppPick) {
 	const update: FeePickUpdate = { kind: "app", address: c.props.account!.address, pick }
-	await c.saveFeePick(c.props.profile!.id, update)
+	return c.saveFeePick(c.props.profile!.id, update)
 }
 
-/** The saved picks, with this mount's own pick for the scope's account over them. */
 async function readSavedPicks(c: AppCtx, scope: BalanceScope): Promise<Record<string, AppPick>> {
 	const saved = (await c.getFeePicks(scope.profileId)).app
 	const own = c.ownPicks[pickSlot(scope.profileId, scope.accountAddress)]
@@ -316,8 +315,14 @@ function pickForApp(c: AppCtx, m: FeeMethodOption) {
 	c.pickSeq++
 	c.chosenUnasked = false
 	const pick = savedSelectionOf(m)
-	c.ownPicks[pickSlot(c.props.profile!.id, c.props.account!.address)] = pick
-	persistSelection(c, pick).catch((error) => console.error("Failed to save the fee method", { error }))
+	const slot = pickSlot(c.props.profile!.id, c.props.account!.address)
+	c.ownPicks[slot] = pick
+	persistSelection(c, pick)
+		.then((stored) => {
+			// Stored, storage is the truth again: a later deletion or another card's newer pick reads there.
+			if (stored === true && c.ownPicks[slot] === pick) delete c.ownPicks[slot]
+		})
+		.catch((error) => console.error("Failed to save the fee method", { error }))
 }
 
 function fpcUpdatedForApp(c: AppCtx, fpc: RegisteredFpc) {

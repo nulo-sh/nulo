@@ -344,26 +344,38 @@ describe("the app windows' rule book", () => {
 		touched.stop()
 	})
 
-	test("a recovery keeps a pick its save has not stored, and re-derives an unpicked default from the new balances", async () => {
-		// The harness records saves without storing them, as a save still pending or refused leaves storage.
-		const recover = async (t: ReturnType<typeof setup>) => {
-			const load = await t.rules.reload(SCOPE)
-			t.snapshot.gasBalances.value = { publicFeeJuice: HELD, privateFeeJuice: HELD }
-			t.rules.reconcile(load, SCOPE)
-		}
-		const picked = setup({})
-		await picked.commit(undefined)
-		picked.rules.pick(picked.row("fpc", "s1")!)
-		await recover(picked)
-		expect(fpcId(picked.rules)).toBe("s1")
+	test.each([
+		{ save: "refused", answer: () => Promise.resolve(false), stored: undefined, shows: ["fpc", "s1"] },
+		{ save: "pending", answer: () => new Promise<boolean>(() => {}), stored: undefined, shows: ["fpc", "s1"] },
+		{
+			save: "stored, then another card's newer pick",
+			answer: () => Promise.resolve(true),
+			stored: { type: "fj" },
+			shows: ["fj", undefined],
+		},
+	])("a recovery after a pick whose save is $save", async ({ answer, stored, shows }) => {
+		const t = setup({})
+		t.client.saveFeePick = answer
+		await t.commit(undefined)
+		t.rules.pick(t.row("fpc", "s1")!)
+		await Promise.resolve()
+		if (stored) storage[feePicksKey("p1")] = { "0xa": stored }
+		const load = await t.rules.reload(SCOPE)
+		t.snapshot.gasBalances.value = { publicFeeJuice: HELD, privateFeeJuice: HELD }
+		t.rules.reconcile(load, SCOPE)
+		expect([type(t.rules), fpcId(t.rules)]).toEqual(shows)
+		t.stop()
+	})
 
-		const defaulted = setup({})
-		await defaulted.commit(undefined)
-		expect(fpcId(defaulted.rules)).toBe("s1")
-		await recover(defaulted)
-		expect([type(defaulted.rules), fpcId(defaulted.rules)]).toEqual(["private_fpc", "p1"])
-		picked.stop()
-		defaulted.stop()
+	test("a recovery re-derives an unpicked default from the new balances", async () => {
+		const t = setup({})
+		await t.commit(undefined)
+		expect(fpcId(t.rules)).toBe("s1")
+		const load = await t.rules.reload(SCOPE)
+		t.snapshot.gasBalances.value = { publicFeeJuice: HELD, privateFeeJuice: HELD }
+		t.rules.reconcile(load, SCOPE)
+		expect([type(t.rules), fpcId(t.rules)]).toEqual(["private_fpc", "p1"])
+		t.stop()
 	})
 
 	test("a pick is saved as an app pick for the live account", async () => {
