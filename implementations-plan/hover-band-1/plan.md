@@ -1,7 +1,7 @@
 ---
 plan: hover-band-1
 tier: light
-status: implementing
+status: delivered as a draft PR, held for the owner's smoke test (P193-01)
 issues: "#1884 (part of it; the owner closes it after the smoke test)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 0d5afc774
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-19.
+- **Status:** delivered as a draft PR against `dev`, held for the owner's smoke test (P193-01); it lands only on the owner's word, after 1.3.0 is published, and the owner closes #1884.
+- **Owner sign-off:** P193-01 = H1 (page 193, 2026-11-19 20:48Z); the owner's smoke test of the PR's build is the sign-off on the result.
+- **Shipped:** the hover and focus band of every link row on Home, Holdings, History and a token page spans the popup's full width (`TokenCard .link`, `TransactionCardLayout .wrapper`), tied to a `--page-gutter` each host sets with its gutter; the actions corner reads it; Holdings' sticky search bar bleeds with it. Send's picker rows are unchanged. E2E pins on Home, Holdings and its search bar, History and a token page.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted; the e2e seeding note is in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # hover-band-1: the row hover runs from edge to edge (H1)
 
