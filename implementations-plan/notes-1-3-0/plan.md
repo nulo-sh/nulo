@@ -29,7 +29,7 @@ The owner, 2026-11-19: "I want to work towards the 1.3.0 release." The release s
 
 **Facts** (verified 2026-11-19 at `846f26379`):
 - F1. `v1.2.0` (`7793112bc`) is an ancestor of HEAD: 96 commits, 91 first-parent, 35 `feat` subjects. No `type!:` subject, `BREAKING CHANGE:` footer or `Release-As:` in `git log v1.2.0..HEAD --format=%B`, nor in the five in-flight PRs' titles and bodies. `.release-please-manifest.json` holds `1.2.0`. So release-please picks 1.3.0.
-- F2. CI runs `bun scripts/release/release-notes-run.ts check` (`pr-quick.yml`), whose rules are `scripts/release/release-notes.ts`: non-empty, at most 3,000 code points, no line or item opening with `#`, no line of only `=` or `-`, no em dash, no `@SOURCE_COMMIT@`.
+- F2. The rules are `scripts/release/release-notes.ts`, applied to every file in `release-notes/` by `release-notes.test.ts` (in `test:release`) and to the version the tree would release by `release-notes-run.ts check` (`pr-quick.yml`): non-empty, at most 3,000 code points, no line or item opening with `#`, no line of only `=` or `-`, no em dash, no `@SOURCE_COMMIT@`.
 - F3. The landing's `scripts/build-changelog.ts` refuses notes without their TOML and the reverse, an unknown key or glyph, an em dash and markup beyond `p`, `ul`, `ol`, `li`, `strong`, `em`, `code`. The TOML holds `version`, `date` (printed on the page and the card), `title`, `lede` and three to five `[[change]]` of `icon` (a `core/glyphs.ts` name), `area`, `title`, `line`. `og:cards` writes `1.3.0.og.png` and re-renders `index.og.png`; `og-card.test.ts` refuses a missing or stale card (`apps/landing/README.md` § Changelog pages).
 - F4. Legal since `v1.2.0` (`packages/legal/src/manifest.ts`): Terms 1.2.1 → 1.2.4, all patches; Privacy 1.2.9 → 1.3.1, where 1.3 is material, but acceptance derives from the Terms alone (`status.ts`, Terms § 23) and Settings → About only notes a policy change (`utils/legal-about.ts`). So nothing asks to be accepted again.
 - F5. The relay reaches an existing profile once per network kind at unlock, only while that network's primary is still its seed's endpoint (`wallet/services/unlock-conversions.ts:58-68`, `network/seeds.ts:189-197`); Testnet and Mainnet seeds carry it (`seeds.ts:70,88`). A Mainnet-kind row still named "Alpha V6" or "Mainnet" takes "Alpha" unless the profile already has a network so named (`seeds.ts:109-111,202-207`).
@@ -51,12 +51,12 @@ Surfaces: `release-notes/1.3.0.md` (the GitHub Release's opening and AMO's versi
 
 ## Architecture & Implementation (arc 1, branch `notes-1-3-0-a1` off this plan's commit)
 
-### Phase 1: the notes, the page, the cards
+### Phase 1: the notes, the page, the cards ✓ (gate green; notes 2,884 code points)
 1. `release-notes/1.3.0.md`: a lead line, a blank line, `- ` bullets in 1.2.0's order (D2), each mapped to its PRs in [recon.md](recon.md).
 2. `apps/landing/content/changelog/1.3.0.toml`: `version = "1.3.0"`, `date` per A1, a title, a lede, five changes (D6).
 3. `bun run --cwd apps/landing og:cards`; commit what it adds and changes (`1.3.0.og.png`, `index.og.png`). Copy both cards to `~/.cache/nulo-backlog/notes-1-3-0/shots/`.
 4. Commit: `docs(release): the 1.3.0 notes and changelog page`.
-- **Gate**, in order: `bun run lint`; `bun scripts/release/release-notes-run.ts check`; `bun run --cwd apps/landing scripts/build-changelog.ts`; `bun run --cwd apps/landing test` (`og-card.test.ts`, `changelog-pages.test.ts` included); `bun run check:plans` after staging. Pass: every command exits 0. No e2e (lane brief).
+- **Gate**, in order: `bun run lint`; `bun test scripts/release/release-notes.test.ts` (D9); `bun run --cwd apps/landing scripts/build-changelog.ts`; `bun run --cwd apps/landing test` (`og-card.test.ts`, `changelog-pages.test.ts` included); `bun run check:plans` after staging. Pass: every command exits 0. No e2e (lane brief).
 
 ### Phase 2: review, PR, close-out
 1. One Codex pass (§ Post-implementation); fix what holds, commit, re-run Phase 1's gate.
@@ -80,6 +80,7 @@ Surfaces: `release-notes/1.3.0.md` (the GitHub Release's opening and AMO's versi
 | D5 | "Over 30 fixes" | an exact count | 34 `fix` subjects since `v1.2.0` plus #1870; in-flight PRs can move it |
 | D6 | Five changes: Send (`send`), approvals (`signature`), the relay (`network-edit`), token pictures (`holdings`), app permissions (`app`) | the What's new row; Authwits | the five a person meets first; What's new is the page itself; Authwits is a Developer page |
 | D7 | `OWNER-ASKS.md` holds no ask: the text's sign-off is the draft PR, by the lane's design | an ask per review point | the lane routes the whole text to the owner; A1-A3 are review points in the body |
+| D9 | Phase 1's gate runs `release-notes.test.ts`, which checks every file in `release-notes/` | `release-notes-run.ts check` (the plan's first gate) | the run script checks only the root `package.json` version, 1.2.0 until the Release PR, so it never reads `1.3.0.md`; deviation found in Phase 1 |
 | D8 | The PR opens and stays a draft | ready (the implementer brief) | the lane brief and the spawn message: the owner signs the text before it is ready |
 
 ## Review verdicts

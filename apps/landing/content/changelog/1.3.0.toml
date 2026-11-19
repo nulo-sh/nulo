@@ -1,0 +1,35 @@
+# The top of the 1.3.0 changelog page. Its bottom part is release-notes/1.3.0.md.
+version = "1.3.0"
+date = "2026-11-19"
+title = "Who you pay, what you sign."
+lede = "Five changes you will notice first. The full notes are below."
+
+[[change]]
+icon = "send"
+area = "Send"
+title = "Send starts with a person"
+line = "Pick who you pay first. Every send opens a review with the amount in dollars and the fee."
+
+[[change]]
+icon = "signature"
+area = "Approvals"
+title = "Every step, named"
+line = "Approval windows number a send's calls and name its contracts, sealed when Nulo verified them."
+
+[[change]]
+icon = "network-edit"
+area = "Networks"
+title = "A second endpoint"
+line = "Alpha and Testnet use Nulo's relay while their first endpoint fails, then go back to it."
+
+[[change]]
+icon = "holdings"
+area = "Tokens"
+title = "Every token, its picture"
+line = "Token rows, Send, History and approval windows draw each listed token's picture."
+
+[[change]]
+icon = "app"
+area = "Connected apps"
+title = "Permissions, contract by contract"
+line = "An app's page lists what it may do per contract, as its request did, with a legend for the icons."
