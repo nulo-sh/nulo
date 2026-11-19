@@ -24,7 +24,8 @@ post_implementation_hardening: not scheduled
 A probe (a scratch setup file appended to the extension's vitest config, kept outside the repo) records every real timer still pending at the file's last `afterAll`, then holds the worker 1.2 s and records every console call made after the last test.
 
 - **Base, the file alone:** 47 `ContractChip` hold timers (1000 ms, armed by the watcher in `apps/extension/src/components/composite/ContractChip.vue`) are pending when the last test ends, and 94 `console.warn` calls follow it: `[Vue warn]: Failed to resolve component: Skeleton` and `… Popover`, from `ContractChip`'s re-render.
-- **Path.** The file mounts 47 `OperationCard`s and unmounts none. Their chips have `level === null` (the test supplies no level reader), so each arms its `HOLD_MS` hold on first paint. The last tests end within a second of their mounts, so the holds fire after the file's last test, set `released`, and re-render chips nobody owns. That render resolves `Skeleton` and `Popover`, which the test does not register, and Vue warns through `console.warn`. Vitest 4.1.12's worker awaits the RPC calls pending when the run ends (`rpcDone`), then rejects whatever is still pending (`$rejectPendingCalls` in its `execute` cleanup). When the host is loaded, environment teardown stretches into the holds' second and a warn's `onUserConsoleLog` is still in flight at that rejection: an unhandled `EnvironmentTeardownError`, exit 1.
+- **Path.** The file mounts 47 `OperationCard`s and unmounts none. Their chips have `level === null` (the test supplies no level reader), so each arms its `HOLD_MS` hold on first paint. The last tests end within a second of their mounts, so the holds fire after the file's last test, set `released`, and re-render chips nobody owns. That render resolves `Skeleton` and `Popover`, which the test does not register, and Vue warns through `console.warn`. In vitest 4.1.12's worker a console write flushes on a microtask into an `onUserConsoleLog` RPC. When the run ends, `rpcDone()` snapshots the calls in flight and awaits them, then the `execute` cleanup rejects every call still pending (`$rejectPendingCalls`). A warn issued during that await is in no snapshot. When the host is loaded, the main process answers the final calls late, the await spans the holds' second, and the warn's call is rejected: an unhandled `EnvironmentTeardownError`, exit 1.
+- **The error itself, red then green.** A second probe stands in for the loaded host: its last `afterAll` waits a set delay, then leaves twelve imports of a 4 MB contract artifact in flight (a fresh query each, so the main process transforms each anew), which keeps the final `rpcDone()` waiting. At base every one of the six files below exits 1 with every test green, on `Closing rpc while "onUserConsoleLog" was pending` (wire 37 times, `SendTxSummary` 20, `OperationCard.fallback` 1, at no delay; `OperationCard.discovered` 5, `OperationCard.selfpay` 7, `RecentActivityView` 1, at 300 ms). On the fix, at the delays where base failed: exit 0, no such error.
 - **Invariant broken:** a test file's work ends with the file. **Consequence:** a green suite fails `quality-status`, and holds the 1.3.0 promote, which needs `bun run test` green on the dev tip.
 - **The product is right.** `ContractChip` clears its hold in `onBeforeUnmount(stopHold)`, pinned by `ContractChip.test.ts` ("unmounting a held chip leaves no timer"). The leak is the test's.
 
@@ -51,6 +52,8 @@ The same probe over the whole extension suite at base (1047 files, 1.2 s hold): 
 - **D3, no new committed test.** The change is test-only, and both product halves are already pinned (see "The product is right" and the table). The proof is the probe, red on base and green on the fix, plus the 50-run and `test:all` gates. A committed guard that fails any file leaving a mount standing would be a new suite-wide gate with about 149 current violators, outside this lane.
 - **D4, `RecentActivityView`'s own unmounts.** The last test's trailing `w.unmount()` goes: auto-unmount does it. The `w.unmount()` in "an unmount while the mount awaits its task snapshot…" stays, since it is the act under test. Auto-unmount's second unmount there prints Vue's "Cannot unmount an app that is not mounted." inside that test's `afterEach`, which settles before the file ends. Seven existing files mix both the same way.
 
+- **D5, `useReaskReview.test.ts` stays as it is.** It leaves two `useSendReview` timers pending, at base and on the fix: a composable test whose effect scope is never stopped. The timer sets a ref that nothing renders, and neither sweep saw it log. No consequence, so no change.
+
 ## Assumptions
 
 - **Ask (orchestrator):** the five other files are inside #1858's scope. They are the same defect with the same consequence, found by the sweep the lane's Codex question asks for. Working assumption: yes; the PR names them.
@@ -59,14 +62,14 @@ The same probe over the whole extension suite at base (1047 files, 1.2 s hold): 
 
 **Change map** (all under `apps/extension/src/`):
 
-- `popup/windows/execute/OperationCard.wire.test.ts`, `OperationCard.fallback.test.ts`, `OperationCard.discovered.test.ts`, `OperationCard.selfpay.test.ts`, `SendTxSummary.test.ts`: import `enableAutoUnmount` (and `afterEach` where missing) and call `enableAutoUnmount(afterEach)` at module level, with a one-line why on the first.
+- `popup/windows/execute/OperationCard.wire.test.ts`, `OperationCard.fallback.test.ts`, `OperationCard.discovered.test.ts`, `OperationCard.selfpay.test.ts`, `SendTxSummary.test.ts`: import `enableAutoUnmount` (and `afterEach` where missing) and call `enableAutoUnmount(afterEach)` at module level, with a one-line why (each file stands alone).
 - `popup/components/modules/general/RecentActivityView.test.ts`: the same, plus D4.
 
 **Validation gate** (retry 0, in order; each must pass before the next):
 
 1. `bun run lint` and `bun run typecheck:all`: exit 0.
 2. The six files: `cd apps/extension && bun --bun vitest run <the six> --retry=0`: all green.
-3. The probe over the whole extension suite on the fix: no file logs after it ends, and no `ContractChip` or `useSendReview` timer is pending at any file's end (base: six files, table above).
+3. The probe over the whole extension suite on the fix: no file logs after it ends (base: six files, table above). As first written this gate also required no `ContractChip` or `useSendReview` timer pending at any file's end; the sweep showed one that cannot log (D5), so the gate reads the consequence.
 4. `OperationCard.wire.test.ts` alone, 50 runs: 50 of 50 green, none reporting an error.
 5. `bun run test:all` once at the final head: every workspace green and exit 0.
 6. `bun run check:plans` after staging: exit 0.
