@@ -33,7 +33,7 @@ import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
 import { GRANT_BLOCK_WAIT_MS } from "./grant-block"
 import { AuthRegistryService, MAX_TRACKED_AUTHWITS_PER_ACCOUNT } from "./service"
-import { type Authwit, authwitStatusRowId } from "./spec"
+import { type Authwit, authwitRowKey, authwitStatusRowId } from "./spec"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 /** One key for every profile; the conversion event stays inert. */
@@ -656,7 +656,14 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		const h = await makeHarness()
 		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const log = instrument(h)
+		const tasks = (h.service as unknown as { taskService: { startNewTask: (content: unknown) => unknown } }).taskService
+		const started = vi.spyOn(tasks, "startNewTask")
 		await h.service.revokeAuthwits("net-1", A, [1], FEE)
+		// The task names each row by its whole identity, which the Authwits page matches its rows by.
+		expect(started.mock.calls[0]?.[0]).toMatchObject({
+			authwitIds: [1],
+			authwitKeys: [authwitRowKey({ id: 1, ...P1, hash: "0xh1", txHash: TX1 })],
+		})
 		const fence = JSON.stringify(await h.captureExecutionFence.mock.results.at(-1)?.value)
 		const request = {
 			kind: "send_transaction",

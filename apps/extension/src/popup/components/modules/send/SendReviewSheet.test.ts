@@ -17,6 +17,7 @@ import {
 	UNVOUCHED_FEE_SENTENCE,
 	UNVOUCHED_PUBLISH_SENTENCE,
 } from "@/components/composite/send/publish-facts"
+import { snackAside } from "@/composables/snackInset"
 import type { FeeLineState, FeeWords } from "./fee-line-words"
 import SendFeeLine from "./SendFeeLine.vue"
 import SendReviewSheet from "./SendReviewSheet.vue"
@@ -151,6 +152,15 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(w.find('[data-testid="stub-popup"]').exists()).toBe(false)
 		await w.setProps({ show: true })
 		expect(w.get('[data-testid="send-review-sheet"]').attributes("data-open")).toBe("true")
+	})
+
+	test("while it renders, the Sending toast is held aside; closed, it is let go", async () => {
+		w = mountSheet({ show: false })
+		expect(snackAside.value).toBe(false)
+		await w.setProps({ show: true })
+		expect(snackAside.value).toBe(true)
+		await w.setProps({ show: false })
+		expect(snackAside.value).toBe(false)
 	})
 
 	test("To, the amount, the three publish rows, the fee row, then Send now; two Tab stops, the close and Send now", () => {

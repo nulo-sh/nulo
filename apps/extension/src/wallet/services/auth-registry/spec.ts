@@ -75,6 +75,11 @@ export function authwitStatusRowId(profileId: string, chainId: number, account: 
 	return JSON.stringify(["authwit-status", profileId, chainId, account])
 }
 
+/** A row's whole identity: its id alone can name another grant once a prune or purge frees it. */
+export function authwitRowKey(row: Pick<Authwit, "id" | "profileId" | "chainId" | "account" | "hash" | "txHash">): string {
+	return JSON.stringify([row.id, row.profileId, row.chainId, row.account, row.hash, row.txHash ?? null])
+}
+
 /** Inverse of `authwitStatusRowId`: the byte-canonical scope tuple a key encodes, or undefined
  *  for a legacy/foreign key. Ownership evidence must be byte-canonical (see `parseAccountRowId`):
  *  a crafted non-canonical key must not donate a foreign account to a purge cascade. */

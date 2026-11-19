@@ -37,6 +37,7 @@ import {
 	AUTH_REGISTRY_SERVICE_NAME,
 	type Authwit,
 	type AuthwitRegistryScope,
+	authwitRowKey,
 	authwitStatusRowId,
 	type Events,
 	MAX_REVOKES_PER_TX,
@@ -412,7 +413,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const fence = await this.profileService.captureExecutionFence()
 		const { network, scope, authwits, operation } = await this.revokeOperation(networkId, account, ids, feeSettings)
 
-		const task = this.taskService.startNewTask(new RevokeAuthwitsContent(ids))
+		const task = this.taskService.startNewTask(new RevokeAuthwitsContent(ids, authwits.map(authwitRowKey)))
 		try {
 			await this.awaitGrantBlocks(network, authwits)
 			const txHash = await this.executionService.executeSendTransaction(
