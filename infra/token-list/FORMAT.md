@@ -124,7 +124,7 @@ the key and keeps its own table.
 
 `icon` and `bridgeIcon` are each `data:image/svg+xml;base64,` followed by the SVG file in standard
 base64 with padding and no whitespace, at most 3,072 characters in all for `icon` and 16,384 for
-`bridgeIcon`, a bridge's mark as its issuer publishes it. The file is a static drawing whose literal text is
+`bridgeIcon`. The file is a static drawing whose literal text is
 what a parser reads:
 
 - valid UTF-8, starting with `<svg`, with no `&`, `\`, `<!` or `<?` anywhere;

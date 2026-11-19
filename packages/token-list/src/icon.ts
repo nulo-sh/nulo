@@ -9,7 +9,7 @@
 export const ICON_PREFIX = "data:image/svg+xml;base64,"
 /** Bounds an entry's `icon`, the whole data URL, prefix included. */
 export const MAX_ICON_CHARS = 3072
-/** Bounds an entry's `bridgeIcon` the same way: a bridge's mark is used as its issuer publishes it. */
+/** Bounds an entry's `bridgeIcon` the same way. */
 export const MAX_BRIDGE_ICON_CHARS = 16_384
 
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
