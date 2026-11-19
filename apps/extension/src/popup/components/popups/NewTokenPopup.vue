@@ -1,6 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 /** Services */
+import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TaskServiceClient } from "@/wallet/services/task/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
@@ -12,6 +13,7 @@ import { ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 import { useFormState } from "@/composables/useFormState"
 import { usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
+import { useTokenFlags } from "@/composables/usePrices"
 import { contractVerdict, useTokenImport } from "@/composables/useTokenImport"
 
 /** Store */
@@ -31,6 +33,9 @@ const tokenService = new TokenServiceClient()
 const tokenBalanceService = new TokenBalanceServiceClient()
 const taskService = new TaskServiceClient()
 const importer = useTokenImport({ tokenService, tokenBalanceService, taskService })
+const priceService = new PriceServiceClient()
+/** The signed list's flags, read afresh for each showing; the line follows a read that lands late. */
+const flags = shallowRef()
 
 const tokens = ref([])
 
@@ -42,6 +47,9 @@ const form = useFormState({
 })
 
 const contractTerm = form.fields.contract.value
+
+const isFlagged = computed(() => !!flags.value?.isFlagged({ chainId: appStore.network?.chainId, contract: contractTerm.value }))
+const flaggedId = useId()
 
 const isAlreadyExist = computed(() => form.fields.contract.error.value === ALREADY_EXISTS)
 const isInvalidAddress = computed(() => form.fields.contract.error.value === INVALID_ADDRESS)
@@ -100,12 +108,16 @@ usePopupEntity(
 			// Cleared again on open: a disconnect rejection can repopulate the error after hide reset it.
 			error.value = null
 			request = popupStore.getPayload("new_token")
+			flags.value = useTokenFlags(priceService)
 			tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
 			if (request?.address) contractTerm.value = request.address
 		},
 		onHide: () => {
 			request = undefined
 			importer.abort()
+			flags.value?.dispose()
+			flags.value = undefined
+			priceService.disconnect()
 			form.reset()
 			error.value = null
 			taskService.disconnect()
@@ -116,7 +128,11 @@ usePopupEntity(
 	{ submitWaitsForShow: true },
 )
 
-onBeforeUnmount(() => importer.dispose())
+onBeforeUnmount(() => {
+	importer.dispose()
+	flags.value?.dispose()
+	priceService.disconnect()
+})
 </script>
 
 <template>
@@ -130,6 +146,7 @@ onBeforeUnmount(() => importer.dispose())
 		:submitDisabled="!isAvailableToCreateToken"
 		:submitLoading="isBusy"
 		submitTestId="import-token-button"
+		:submitDescribedby="isFlagged ? flaggedId : undefined"
 		@submit="handleAddToken"
 	>
 		<Input
@@ -142,6 +159,7 @@ onBeforeUnmount(() => importer.dispose())
 			autofocus
 			sanitize
 			:disabled="isBusy"
+			:ariaDescribedby="isFlagged ? flaggedId : undefined"
 		>
 			<template #suffix>
 				<Icon v-if="isAvailableToCreateToken && !error" name="square-check" size="14" color="green" />
@@ -158,6 +176,9 @@ onBeforeUnmount(() => importer.dispose())
 					</Flex>
 				</Transition>
 			</template>
+			<template v-if="isFlagged" #bottom>
+				<span :id="flaggedId" role="alert" data-testid="new-token-flagged" :class="$style.flagged">Flagged as a scam</span>
+			</template>
 		</Input>
 
 		<template v-if="error" #belowSubmit>
@@ -172,6 +193,11 @@ onBeforeUnmount(() => importer.dispose())
 </template>
 
 <style module>
+.flagged {
+	composes: type--caption from global;
+	color: var(--txt-danger);
+}
+
 .error_row {
 	padding: 8px 20px 0;
 }

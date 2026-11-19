@@ -51,7 +51,7 @@ const STUBS = {
 	// Button stub mirrors the real Button's disabled-on-loading rule.
 	Button: {
 		template:
-			'<button :data-testid="$attrs[\'data-testid\']" :disabled="disabled || loading" :class="variant" @click="!(disabled || loading) && $emit(\'click\', $event)"><slot /></button>',
+			'<button :data-testid="$attrs[\'data-testid\']" :aria-describedby="$attrs[\'aria-describedby\']" :disabled="disabled || loading" :class="variant" @click="!(disabled || loading) && $emit(\'click\', $event)"><slot /></button>',
 		props: ["variant", "size", "disabled", "loading", "wide", "leftIcon", "rightIcon"],
 		emits: ["click"],
 		inheritAttrs: false,
@@ -128,6 +128,16 @@ describe("composite/FormPopup", () => {
 		mountFormPopup({ submitLabel: "Save", submitTestId: "save-btn" })
 		await flushPromises()
 		expect(popupRoot.querySelector("button[data-testid='save-btn']")).not.toBeNull()
+	})
+
+	test("submitDescribedby names a message on the button, and none is set when not given", async () => {
+		mountFormPopup({ submitTestId: "save-btn", submitDescribedby: "note-1" })
+		await flushPromises()
+		expect(popupRoot.querySelector("button[data-testid='save-btn']")?.getAttribute("aria-describedby")).toBe("note-1")
+		popupRoot.replaceChildren()
+		mountFormPopup({ submitTestId: "save-btn" })
+		await flushPromises()
+		expect(popupRoot.querySelector("button[data-testid='save-btn']")?.hasAttribute("aria-describedby")).toBe(false)
 	})
 
 	test("clicking the submit button emits 'submit'", async () => {
