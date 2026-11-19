@@ -1,0 +1,2 @@
+- 2026-11-19: plan written (light, bounded); decisions D1-D5, asks A1-A2.
+- 2026-11-19: build green on the touched suites; D2a (card edit event) replaces the model hook after the USD case.

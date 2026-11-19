@@ -73,11 +73,13 @@ tokenBalanceService.onTokenBalanceUpdated.add((tb) => balances.inActiveScope(tb)
 tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
 
 const handleSelectToken = (id) => {
+	const changed = cacheStore.activeTokenIdx !== id
 	cacheStore.activeTokenIdx = id
+	if (changed) request?.onPicked?.(id)
 	emit("onClose")
 }
 
-/** The opener's `{ onAdded }`, kept on show: closing a popup deletes its payload. */
+/** The opener's `{ onAdded, onPicked }`, kept on show: closing a popup deletes its payload. */
 let request
 const openAddToken = (address) => {
 	const opener = request

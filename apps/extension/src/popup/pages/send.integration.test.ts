@@ -181,6 +181,7 @@ import { INIT_RETRY_BACKOFF_MS } from "@/stores/balances.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
 import { PriceServiceClient } from "@/wallet/services/price/client"
+import { TokenServiceClient } from "@/wallet/services/token/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import { TransferType } from "@/wallet/services/transaction/client"
@@ -299,6 +300,8 @@ async function mountSend(
 		realAmountCard?: boolean
 		realPopup?: boolean
 		chainId?: number
+		/** The popup document's stores, kept across a remount: Send opened again in the same popup. */
+		pinia?: ReturnType<typeof createTestingPinia>
 	} = {},
 ) {
 	vi.useFakeTimers()
@@ -307,7 +310,7 @@ async function mountSend(
 	const gas = deferred<Gas>()
 	if (opts.holdGas) mocks.getGasBalances.mockReturnValue(gas.promise)
 	else mocks.getGasBalances.mockResolvedValue(funding.gas)
-	const pinia = createTestingPinia({ stubActions: false })
+	const pinia = opts.pinia ?? createTestingPinia({ stubActions: false })
 	const appStore = useAppStore(pinia)
 	appStore.isLogined = true
 	appStore.profile = { id: "p1" } as never
@@ -331,7 +334,7 @@ async function mountSend(
 		},
 	})
 	await flushPromises()
-	return { w, appStore, cacheStore, popupStore, gas }
+	return { w, appStore, cacheStore, popupStore, gas, pinia }
 }
 
 /** The person step's way to the form for a pasted address: the field takes it, then Pay this address. */
@@ -1451,7 +1454,7 @@ describe("send page — Same as last time, over the real amount card", () => {
 		expect(w.get('[data-testid="send-payee-address"]').text()).toBe(ANA)
 		expect(w.find('[data-testid="send-payee-check"]').exists()).toBe(false)
 		expect(again(w).text()).toBe("Same as last time: 1,234,567.5 OTH, publicly")
-		expect(document.activeElement).toBe(again(w).element)
+		expect(document.activeElement?.getAttribute("data-testid")).toBe("send-amount-input")
 
 		await again(w).trigger("click")
 		await flushPromises()
@@ -1467,18 +1470,15 @@ describe("send page — Same as last time, over the real amount card", () => {
 		const PRICED = { ...TOKEN, chainId: CHAIN_IDS.TESTNET, contract: TEST_TOKENS.USDC, symbol: "USDC" }
 		const PLAIN = { ...OTHER, chainId: CHAIN_IDS.TESTNET }
 
-		test.each([
-			["the same token, its conversion landed", PRICED, "2500000", true],
-			["another token, its conversion landed", PLAIN, "250", true],
-			["the same token, its conversion still pending", PRICED, "2500000", false],
-		])("%s: a press ends the USD session and the amount it sets survives", async (_name, last, amountRaw, landed) => {
+		/** Ana picked with a live USDC quote, the last send in `last`. */
+		async function pricedForm(last: typeof PRICED | typeof PLAIN, amountRaw: string) {
 			mocks.getTokens.mockResolvedValue([PRICED, PLAIN])
 			mocks.getTokenBalances.mockResolvedValue([
 				{ ...BALANCE, token: PRICED },
 				{ ...BALANCE, id: "b8", token: PLAIN, privateBalance: "500" },
 			])
 			mocks.getOperations.mockResolvedValue([sent({ tokenId: last.id, amountRaw })])
-			const { w, cacheStore } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, chainId: CHAIN_IDS.TESTNET })
+			const mounted = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, chainId: CHAIN_IDS.TESTNET })
 			for (const { value } of vi.mocked(PriceServiceClient).mock.results) {
 				value.onQuotesUpdated.invoke({
 					quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
@@ -1486,21 +1486,35 @@ describe("send page — Same as last time, over the real amount card", () => {
 					tokenIcons: {},
 				})
 			}
-			await payRecent(w)
-			expect(cacheStore.activeTokenIdx).toBe(PRICED.id)
-			await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
-			await w.get('[data-testid="send-amount-fiat-input"]').setValue("2")
-			if (landed) await vi.waitFor(() => expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 2 USDC"))
-			else expect(w.find('[data-testid="send-amount-converting"]').exists()).toBe(true)
+			await payRecent(mounted.w)
+			expect(mounted.cacheStore.activeTokenIdx).toBe(PRICED.id)
+			await mounted.w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+			return mounted
+		}
+
+		test.each([
+			["the same token", PRICED, "2500000"],
+			["another token", PLAIN, "250"],
+		])("%s: a press with nothing typed ends the USD session and the amount it sets survives", async (_name, last, amountRaw) => {
+			const { w, cacheStore } = await pricedForm(last, amountRaw)
+			expect(w.find('[data-testid="send-amount-fiat-input"]').exists()).toBe(true)
 
 			await again(w).trigger("click")
 			await flushPromises()
-			// Past the conversion's 250 ms debounce, so a pending one would have landed by now.
 			await vi.advanceTimersByTimeAsync(300)
 			expect(w.find('[data-testid="send-amount-fiat-input"]').exists()).toBe(false)
 			expect(cacheStore.activeTokenIdx).toBe(last.id)
 			expect(amountText()).toBe("2.5")
 			expect(checkedSide(w, "to")).toEqual(["public"])
+			expect(again(w).exists()).toBe(false)
+			w.unmount()
+		})
+
+		test("a dollar figure typed passes it over at once, before its conversion lands", async () => {
+			const { w } = await pricedForm(PRICED, "2500000")
+			expect(again(w).exists()).toBe(true)
+			await w.get('[data-testid="send-amount-fiat-input"]').setValue("2")
+			expect(w.find('[data-testid="send-amount-converting"]').exists()).toBe(true)
 			expect(again(w).exists()).toBe(false)
 			w.unmount()
 		})
@@ -1529,5 +1543,99 @@ describe("send page — Same as last time, over the real amount card", () => {
 		expect(w.find('[data-testid="send-payee-check"]').exists()).toBe(false)
 		expect(again(w).exists()).toBe(false)
 		w.unmount()
+	})
+
+	describe("once used or passed over, gone for the rest of the visit", () => {
+		/** A second payee the journal has paid, in the other token, so its words differ from Ana's. */
+		const BEN = DESTINATION
+		const typeAmount = (w: W, text: string) => w.get('[data-testid="send-amount-input"]').setValue(text)
+		const back = (w: W) => w.get('[data-testid="subpage-back"]').trigger("click")
+		const payRecentTo = (w: W, address: string) => w.get(`[data-testid="send-recent"][data-address="${address}"]`).trigger("click")
+
+		test("an amount typed passes it over, and clearing the amount does not bring it back", async () => {
+			mocks.getOperations.mockResolvedValue([sent()])
+			const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+			await payRecent(w)
+			expect(again(w).text()).toBe("Same as last time: 2.5 TST, publicly")
+			await typeAmount(w, "40")
+			expect(again(w).exists()).toBe(false)
+			await typeAmount(w, "")
+			expect(amountText()).toBe("")
+			expect(again(w).exists()).toBe(false)
+			w.unmount()
+		})
+
+		test("a token pick or an arrival change passes it over; the page's own switch to another token does not", async () => {
+			mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+			mocks.getTokenBalances.mockResolvedValue([BALANCE, { ...BALANCE, id: "b8", token: OTHER, privateBalance: "500000000" }])
+			mocks.getOperations.mockResolvedValue([sent({ tokenId: OTHER.id, amountRaw: "250" })])
+			const picked = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, realTokenCard: true })
+			await payRecent(picked.w)
+			expect(picked.cacheStore.activeTokenIdx).toBe(TOKEN.id)
+			expect(again(picked.w).exists()).toBe(true)
+			// The picker writes the shared selection and reports the pick to the card's opener, as
+			// `SelectTokenPopup` does.
+			await picked.w.get('[data-testid="send-token-trigger"]').trigger("click")
+			picked.cacheStore.activeTokenIdx = OTHER.id
+			;(picked.popupStore.getPayload("select_token") as { onPicked: (id: number) => void }).onPicked(OTHER.id)
+			await flushPromises()
+			expect(again(picked.w).exists()).toBe(false)
+			picked.w.unmount()
+
+			const sided = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+			await payRecent(sided.w)
+			vi.mocked(TokenServiceClient).mock.results.at(-1)?.value.onTokenDeleted.invoke(TOKEN)
+			await flushPromises()
+			expect(sided.cacheStore.activeTokenIdx).toBe(OTHER.id)
+			expect(again(sided.w).text()).toBe("Same as last time: 2.5 OTH, publicly")
+			await setSide(sided.w, "to", "public")
+			await flushPromises()
+			expect(again(sided.w).exists()).toBe(false)
+			sided.w.unmount()
+		})
+
+		test("back to the person step, the same payee offers nothing and another past payee is offered theirs", async () => {
+			mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+			mocks.getTokenBalances.mockResolvedValue([BALANCE, { ...BALANCE, id: "b8", token: OTHER, privateBalance: "500000000" }])
+			mocks.getOperations.mockResolvedValue([
+				sent(),
+				sent({
+					id: "op-2",
+					recipientAddress: BEN,
+					tokenId: OTHER.id,
+					amountRaw: "1200",
+					transferType: TransferType.Private,
+					terminalAt: 900,
+				}),
+			])
+			const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+			await payRecentTo(w, ANA)
+			await typeAmount(w, "1.5")
+			expect(again(w).exists()).toBe(false)
+			await back(w)
+			await flushPromises()
+			await payRecentTo(w, ANA)
+			expect(again(w).exists()).toBe(false)
+			await back(w)
+			await flushPromises()
+			await payRecentTo(w, BEN)
+			expect(again(w).text()).toBe("Same as last time: 12 OTH, privately")
+			w.unmount()
+		})
+
+		test("Send opened again in the same popup offers the pressed payee's last send again", async () => {
+			mocks.getOperations.mockResolvedValue([sent()])
+			const first = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+			await payRecent(first.w)
+			await again(first.w).trigger("click")
+			await flushPromises()
+			expect(again(first.w).exists()).toBe(false)
+			first.w.unmount()
+
+			const next = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, pinia: first.pinia })
+			await payRecent(next.w)
+			expect(again(next.w).text()).toBe("Same as last time: 2.5 TST, publicly")
+			next.w.unmount()
+		})
 	})
 })

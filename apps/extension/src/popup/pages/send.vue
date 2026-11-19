@@ -282,10 +282,20 @@ const payeeKnown = computed(() =>
 /** The recipient's name as a sentence may carry it, or null. */
 const payeeSentenceName = computed(() => (payeeName.value ? sentenceName(payeeName.value, "") || null : null))
 
-/** The last send to this person, offered while the form does not already hold it. A record that kept
- *  no sides, or whose token can no longer arrive on its side, offers nothing. */
+/** Payees, lower-cased, whose last send was pressed or passed over on this visit: it is offered no
+ *  more until Send opens again. Marked from the person's own controls, never by watching the values,
+ *  which the page also writes (a load's first token and sides, a token pick clearing the amount). */
+const sendAgainSpent = reactive(new Set())
+function spendSendAgain() {
+	if (personChosen.value) sendAgainSpent.add(searchTerm.value.toLowerCase())
+}
+
+/** The last send to this person, offered while the form does not already hold it and until it is used
+ *  or passed over. A record that kept no sides, or whose token can no longer arrive on its side,
+ *  offers nothing. */
 const sendAgain = computed(() => {
-	const last = personChosen.value ? lastSendTo(pastSends.value, searchTerm.value) : null
+	const chosen = personChosen.value && !sendAgainSpent.has(searchTerm.value.toLowerCase())
+	const last = chosen ? lastSendTo(pastSends.value, searchTerm.value) : null
 	const token = last && tokenById(last.tokenId)
 	if (!last || last.arrival === null || !token) return null
 	if (!canSwitchReceiver(token) && forcedSide(token) !== last.arrival) return null
@@ -301,6 +311,7 @@ const sendAgain = computed(() => {
 function applySendAgain() {
 	const again = sendAgain.value
 	if (!again) return
+	spendSendAgain()
 	amountCardRef.value?.exitFiat()
 	if (cacheStore.activeTokenIdx !== again.token.id) {
 		keepFormFor = again.token.id
@@ -318,11 +329,8 @@ function choosePerson(address, candidate) {
 	personChosen.value = true
 	nextTick(focusForm)
 }
-/** The form opens on its first question: last time's send when offered, else the amount, which takes
- *  no focus with nothing to spend; then the token row. */
+/** The form opens on the amount, which takes no focus with nothing to spend; then the token row. */
 function focusForm() {
-	const again = pageEl.value?.querySelector('[data-testid="send-again"]')
-	if (again) return again.focus()
 	amountCardRef.value?.focusAmount()
 	if (!pageEl.value?.contains(document.activeElement)) pageEl.value?.querySelector('[data-testid="send-token-trigger"]')?.focus()
 }
@@ -803,6 +811,7 @@ async function pickAddedToken(token) {
 	// Only a token the list holds can be active: any other leaves the card with no token. A token
 	// picked while the list was read is the later choice, and keeps its own form.
 	if (cancelled || appStore.scopeEpoch !== epoch || cacheStore.activeTokenIdx !== current || !listed() || current === token.id) return
+	spendSendAgain()
 	keepFormFor = token.id
 	cacheStore.activeTokenIdx = token.id
 }
@@ -1083,6 +1092,7 @@ onBeforeUnmount(() => {
 						:loading="tokensLoading"
 						:failed="tokensFailed"
 						:onTokenAdded="pickAddedToken"
+						:onTokenPicked="spendSendAgain"
 						:class="[prices.isFlagged(activeToken) && $style.token_row_after, showsTokenCaveat && $style.token_row_before]"
 						@retry="retryTokens"
 					/>
@@ -1093,6 +1103,7 @@ onBeforeUnmount(() => {
 					<AmountCard
 						ref="amountCardRef"
 						v-model="amountTerm"
+						@edit="spendSendAgain"
 						v-model:rested="amountRested"
 						v-model:usdFigure="amountFiat"
 						v-model:fiatMode="fiatMode"
@@ -1131,6 +1142,7 @@ onBeforeUnmount(() => {
 					/>
 					<SideChoice
 						v-model="selectedReceiverType"
+						@update:modelValue="spendSendAgain"
 						label="They receive it"
 						:words="{ private: 'Privately', public: 'Publicly' }"
 						:hints="toHints"
