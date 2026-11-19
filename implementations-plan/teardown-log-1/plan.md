@@ -1,7 +1,7 @@
 ---
 plan: teardown-log-1
 tier: light (thinned: no plan audit round, no Opus leg; one Codex pass over the plan and the net diff)
-status: in progress
+status: completed
 issues: "closes #1858"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 91887c4c3
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-19.
+- **Status**: completed.
+- **Cause**: six test files left their Vue mounts standing. `ContractChip`'s 1 s hold and `useSendReview`'s 800 ms arm, which their components clear on unmount, fired after the file's last test and re-rendered, logging Vue warnings. On a loaded host those `onUserConsoleLog` calls landed after vitest's final `rpcDone()` snapshot and were rejected at worker close: `EnvironmentTeardownError`, exit 1 on a green suite.
+- **Shipped**: #1874. Each of the six files calls `enableAutoUnmount(afterEach)`. Red/green reproduction of the error itself in all six files; the probe sweep finds no file logging after it ends; `test:all` green.
+- **Lessons**: none promoted. `lessons.md` stands at 8148 of its 8192 B, and the gotcha is findable through #1858 and this record.
+- **Known limits**: none.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` strings below are a record, not instructions.
 
 # teardown-log-1: mounts left standing log after their file ends, and vitest exits 1 on a green suite
 
