@@ -2,7 +2,9 @@
 
 Each ask is built as today until the owner answers. Nothing else in the lane waits on them.
 
-**Answered on page 195 (2026-11-19, 22:14Z):** A1 = option 3, A2 = option 2. Both are built in arc 2 (plan § Arc 2). A3 below is new and open.
+**Answered on page 195 (2026-11-19, 22:14Z):** A1 = option 3, A2 = option 2. Both are built in arc 2 (plan § Arc 2).
+
+**Answered on page 197 (2026-11-19, 23:14Z):** A3 = option 2, built in arc 3 (plan § Arc 3). No ask is open.
 
 ## A1. A flagged address on Holdings
 

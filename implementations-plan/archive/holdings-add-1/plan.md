@@ -13,10 +13,10 @@ base: c1bca82cb
 ## Outcome
 
 - **Date:** 2026-11-19.
-- **Status:** delivered in draft PR #1892 against `dev`, in two arcs. It stays a draft until the owner approves arc 2's captures, and merges on the orchestrator's word.
-- **Owner sign-off:** page 195, 2026-11-19 at 22:14Z. P195-01 approved arc 1 as built, the refusal under the Add row included. P195-02 = 3 and P195-03 = 2 are built in arc 2. The new popup line is the one thing the owner checks on arc 2's captures (`ha-flag-popup`).
-- **Owner asks:** A1 and A2 are answered (§ Arc 2). A3 (the field's green check beside a flagged address) is open in [OWNER-ASKS.md](OWNER-ASKS.md) and built as today.
-- **Shipped:** `useTokenImport`, the New token import extracted from `NewTokenPopup.vue` and shared, with `contractVerdict`. Holdings' Add imports in one press with the popup's checks, words and toasts. Its row stays busy while the add runs, a refusal shows under it as an alert, and focus lands on the added row. A flagged address, or any before the signed list is read, keeps the popup. `TokenCard` gains `data-token-id` and refuses a repeat Enter. The smoke spec `holdings-add-token.test.ts` is deleted and the network add scenario presses once from the keyboard. Arc 2: the New token popup reads the signed list itself and shows "Flagged as a scam" under a flagged address, for every way in and for a list that lands late; `Input` gains `ariaDescribedby` and `FormPopup` gains `submitDescribedby`. Holdings keeps a searched whole address's row out of the fold, and `focusToken` loses its fold fallback. Closes #1881.
+- **Status:** delivered in draft PR #1892 against `dev`, in three arcs. It merges on the orchestrator's word.
+- **Owner sign-off:** page 195, 2026-11-19 at 22:14Z. P195-01 approved arc 1 as built, the refusal under the Add row included. P195-02 = 3 and P195-03 = 2 are built in arc 2. Page 197, 2026-11-19 at 23:14Z: P197-01 approved arc 2 as built, and P197-02 = 2 is built in arc 3.
+- **Owner asks:** A1 and A2 are answered (§ Arc 2), A3 (§ Arc 3). None is open.
+- **Shipped:** `useTokenImport`, the New token import extracted from `NewTokenPopup.vue` and shared, with `contractVerdict`. Holdings' Add imports in one press with the popup's checks, words and toasts. Its row stays busy while the add runs, a refusal shows under it as an alert, and focus lands on the added row. A flagged address, or any before the signed list is read, keeps the popup. `TokenCard` gains `data-token-id` and refuses a repeat Enter. The smoke spec `holdings-add-token.test.ts` is deleted and the network add scenario presses once from the keyboard. Arc 2: the New token popup reads the signed list itself and shows "Flagged as a scam" under a flagged address, for every way in and for a list that lands late; `Input` gains `ariaDescribedby` and `FormPopup` gains `submitDescribedby`. Holdings keeps a searched whole address's row out of the fold, and `focusToken` loses its fold fallback. Arc 3: the field's green check is hidden while the address is flagged. Closes #1881.
 - **Dispositions:** D1 and D5 keep the popup for a flagged or unread-list address, and arc 2's line now says why. D8 (focus following an empty row into the fold) is moot under E5 and E6. D9's wait with no timer stays #1681's. The plan audit's ask for a placement of a late refusal is rejected (D6).
 - **Known limits:** #1893 (D6).
 - **Open items:** none.
@@ -162,3 +162,30 @@ Result: static gates and `test:all` green. Smoke: 12 tests green on each browser
 One Codex pass (`gpt-6.1-sol`, high) over the arc-2 diff, adversarial on four points: a way into the popup that misses the line, the late read, a row that never folds again, and focus lost when the search changes. Then targeted verification. Captures come from the lane's kit: `ha-flag-popup` and `ha-empty-kept`, light and dark, plus `ha-warning` re-shot. They are pushed in one commit and removed in the next. The PR body gets the page-195 sign-off.
 
 Verdict, Codex at `2334574d9`: **approve**, no runtime bug. It found all five ways in reach the popup's own reader, a late read and a broadcast update the open popup, and the fold rule is derived from the current query, with the picker never setting it. Taken: one test (a read an earlier showing left out never reaches the current one), two comment nits, and a correction to E6's rationale. Captures: `ha-flag-popup`, `ha-empty-kept` and `ha-warning` re-shot, light and dark. Shooting them raised A3.
+
+## Arc 3 — the page-197 pick
+
+Signed by the owner on 2026-11-19 at 23:14Z:
+
+- **P197-01 approved** (the default, no note): the popup's "Flagged as a scam" line and the searched row that never folds, as built at `45c939bc6`.
+- **P197-02 = 2** (answers A3): "Hide the check while the address is flagged, so the red line is the only mark beside the field."
+
+**UI impact.** The New token popup's address field: no green check while the signed list flags the address in it. An unflagged well-formed address keeps the check, and every other state of the field is unchanged. No words change. Sign-off: the pick above.
+
+**Change.** The check's condition gains `!isFlagged`, the flag that shows the line, so the two follow one read, a late one included. No storage, migration, RPC or testid change.
+
+### Phase 6 — the hidden check ✓
+
+1. `NewTokenPopup.vue`: the check's `v-if`. `NewTokenPopup.test.ts`: the flagged case asserts no check beside the line, the unflagged one the check and no line, and the late read takes the check away when it adds the line. Without the change both cases are red.
+2. e2e: no spec asserts the check, which has no testid. The flagged scenario of `token-list.test.ts` proves the popup's real read reaches `isFlagged`; the component test proves the check follows it.
+
+**Validation gate**: `bun run lint && bun run typecheck:all`, the extension's `bun run test`. From `apps/extension`: `bun run test:e2e -- tests/e2e/token-list.test.ts --retry=0`, on Chrome and on Firefox.
+
+Result: lint, `typecheck:all` and the extension's `bun run test` green (1,050 files). `token-list.test.ts`: 2 tests green on Chrome and on Firefox ([lessons/phase-6.md](lessons/phase-6.md)).
+
+### Phase 7 — review, capture, delivery ✓
+
+One Codex pass (`gpt-6.1-sol`, high) over the arc-3 diff, adversarial: a flagged state that still shows the check, an unflagged state that loses it, the late read. Capture `ha-flag-nocheck`, light and dark, pushed in one commit and removed in the next. The PR body gets the page-197 sign-off.
+
+Verdict, Codex at `2faf38359`: **approve**, no findings. It traced the check and the line to the one `isFlagged`, found the flag's address normalisation consistent with the field's, a parked read of an earlier showing unable to reach the current reader, and both test cases red without the change. Capture: `ha-flag-nocheck`, light and dark.
+
