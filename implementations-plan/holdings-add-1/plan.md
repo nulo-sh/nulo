@@ -10,6 +10,19 @@ eli5_mode: skipped (orchestrator-owned)
 base: c1bca82cb
 ---
 
+## Outcome
+
+- **Date:** 2026-11-19.
+- **Status:** delivered in draft PR #1892 against `dev`, which stays a draft until 1.3.0 is published and merges on the orchestrator's word.
+- **Owner sign-off:** the owner's words of 2026-11-19 for the one-press flow. The refusal's placement under the Add row is the one thing the owner checks on the captures (`ha-refused`).
+- **Owner asks:** A1 (a flagged address) and A2 (an added empty token folds) are open in [OWNER-ASKS.md](OWNER-ASKS.md). Each is built as today until answered.
+- **Shipped:** `useTokenImport`, the New token import extracted from `NewTokenPopup.vue` and shared, with `contractVerdict`. Holdings' Add imports in one press with the popup's checks, words and toasts. Its row stays busy while the add runs, a refusal shows under it as an alert, and focus lands on the added row. A flagged address, or any before the signed list is read, keeps the popup. `TokenCard` gains `data-token-id` and refuses a repeat Enter. The smoke spec `holdings-add-token.test.ts` is deleted and the network add scenario presses once from the keyboard. Closes #1881.
+- **Dispositions:** D1 and D5 keep the popup for a flagged or unread-list address. D8 (focus following an empty row into the fold) is folded into A2. D9's wait with no timer stays #1681's. The plan audit's ask for a placement of a late refusal is rejected (D6).
+- **Known limits:** #1893 (D6).
+- **Open items:** none.
+- **Lessons:** none promoted. The e2e skill already says `clickByTestId` never focuses (§ focus assertions), and `lessons.md` is at its 8 KiB budget. The dispose-between-helpers finding is in [lessons/phase-3.md](lessons/phase-3.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
+
 # holdings-add-1: add a token in one press from Holdings (#1881)
 
 The owner, 2026-11-19, on the 1.3.0 candidate: "Importing a token through holdings, once I paste the address I need to click on the "Add 0x0..." which ten opens the pop-up for mporting the token and I need to press again import. That last import token pop-up should not happened if I have already clicked add on holdings? Let's save that step for the user."
