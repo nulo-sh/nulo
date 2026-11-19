@@ -1,6 +1,6 @@
 # update-from-1.3.0: recon (2026-11-19)
 
-No Explore agent: the release's source equals `dev`'s at `93aeedbc1` but for the version files and `CHANGELOG.md`, so the planner read the tag by hand. Every `git show` was at the tag named; `apps/extension/src/wallet/constants/network-endpoints.ts` was opened at no revision.
+No Explore agent: the release's product sources equal `dev`'s at `93aeedbc1` (the rest of the diff is the version files, `CHANGELOG.md` and `BEFORE-LAUNCH.md`), so the planner read the tag by hand. Every `git show` was at the tag named; `apps/extension/src/wallet/constants/network-endpoints.ts` was opened at no revision.
 
 ## The release
 

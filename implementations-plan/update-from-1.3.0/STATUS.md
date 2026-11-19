@@ -2,3 +2,4 @@
 
 - 2026-11-19: zips verified four ways; traits read from the tag; issue #1901 filed; `send` trait found necessary (F4); candidate blocked on #1900 (F5).
 - 2026-11-19: Phase 1 code written, gate as expected (one red: the missing v1.3.0 recording).
+- 2026-11-19: Codex pass: reject (P1 the Send pick unsaved on a preselected radio; P2 recording before checks; P3 inventory); all accepted, D5 written.

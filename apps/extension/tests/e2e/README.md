@@ -176,7 +176,9 @@ uncommitted changes a build reads, is refused, so commit before you build it.
 - The live scenario populates the release through its own UI: a password profile with a second and
   an imported account and two contacts on Testnet (switched to first, as a release that seeds
   Mainnet opens there), then a network on the run's sandbox with a token it pins, a Send fee pick
-  (on a release whose Send asks who is paid first, for the minter, the send's recipient below),
+  (on a release whose Send asks who is paid first, for the minter, the send's recipient below, and
+  written through the release's own service, since its sheet saves only a press that changes the
+  payer and the sandbox leaves it one),
   a public and a private receipt, a connected playground and one send from the wallet whose fee
   payer it picks: the sponsor, or, on a release that offers none there, public Fee Juice the run
   bridges to the account first. It requires every key family `HELD` names for the release's

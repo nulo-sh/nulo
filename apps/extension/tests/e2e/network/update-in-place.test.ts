@@ -276,7 +276,7 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 		timeoutMs: 180_000,
 	})
 	const incoming = await incomingCards(page, 2)
-	await pickPreferences(page, release, cfg.minterAddress)
+	await pickPreferences(page, release, { recipient: cfg.minterAddress, account })
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)
@@ -329,14 +329,15 @@ async function endOnSecondAccount(ctx: ExtensionContext): Promise<{
 	return { selection: reads.selection, preferences: reads.preferences, fpcs: reads.rows.fpcs, dials: loopbackOrigins({ reads, stored }) }
 }
 
-/** Pins the sandbox token and picks Send's fee payer for a send to `recipient`, each through the
- *  release's own UI, which saves both maps; the app window's pick is the send's below. */
-async function pickPreferences(page: Page, release: ReleaseTraits, recipient: string): Promise<void> {
+/** Pins the sandbox token and picks Send's fee payer for `account`'s send to `recipient`, each
+ *  through the release's own UI, which saves both maps (a `person-first` release's Send pick through
+ *  its own service: {@link pickReleaseSendFee}); the app window's pick is the send's below. */
+async function pickPreferences(page: Page, release: ReleaseTraits, send: { recipient: string; account: string }): Promise<void> {
 	await navigateByHash(page, "#/popup/general", 15_000)
 	await navigateToTokenDetail(page)
 	await pinFromTokenPage(page)
 	await navigateByHash(page, "#/popup/general", 15_000)
-	await pickReleaseSendFee(page, release, recipient, sandboxFeeMethod(release))
+	await pickReleaseSendFee(page, release, { recipient: send.recipient, method: sandboxFeeMethod(release), saveFor: send.account })
 	await navigateByHash(page, "#/popup/general", 15_000)
 }
 
@@ -503,7 +504,7 @@ async function populatePending(
 	})
 	// The release keeps an account's gas balances for minutes and reads them again on a Send mount,
 	// so the app window's fee row sees the funding only after one.
-	await pickReleaseSendFee(page, release, cfg.minterAddress, sandboxFeeMethod(release))
+	await pickReleaseSendFee(page, release, { recipient: cfg.minterAddress, method: sandboxFeeMethod(release) })
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)
