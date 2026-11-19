@@ -1,5 +1,142 @@
 # Changelog
 
+## [1.3.0](https://github.com/nulo-sh/nulo/compare/v1.2.0...v1.3.0) (2026-11-19)
+
+
+### Features
+
+* **activity:** activity rows and the approval line draw each token's picture ([#1787](https://github.com/nulo-sh/nulo/issues/1787)) ([52e2099](https://github.com/nulo-sh/nulo/commit/52e2099ad47d41b6171e73aae204a3ac6d3b5607))
+* **activity:** no symbol where the title names the token; in-flight sends draw their pair ([#1730](https://github.com/nulo-sh/nulo/issues/1730)) ([819dde8](https://github.com/nulo-sh/nulo/commit/819dde8c166f70ca3a147b404828f923e4abfa5f))
+* **activity:** settled and received rows draw their direction in the icon box ([#1723](https://github.com/nulo-sh/nulo/issues/1723)) ([9cc384c](https://github.com/nulo-sh/nulo/commit/9cc384c34d703c004a96f07bf968d9836087bec7))
+* **authwits:** a revoke reports through Activity, and a row names its action and contract ([#1853](https://github.com/nulo-sh/nulo/issues/1853)) ([846f263](https://github.com/nulo-sh/nulo/commit/846f263797758fd9eb08db9898d5032f738525af))
+* **authwits:** the page checks the registry when it opens; the plan closes ([#1867](https://github.com/nulo-sh/nulo/issues/1867)) ([201936f](https://github.com/nulo-sh/nulo/commit/201936fad7f52a69007f3cdaa602a81295b2a07c))
+* **aztec-runtime:** a routed node that fails over between a network's endpoints ([#1664](https://github.com/nulo-sh/nulo/issues/1664)) ([98c0ad9](https://github.com/nulo-sh/nulo/commit/98c0ad9bf3adc39c1d0335a74d1e90b8de91babb))
+* **capabilities:** a legend names the details table's six icons ([#1866](https://github.com/nulo-sh/nulo/issues/1866)) ([ffb0243](https://github.com/nulo-sh/nulo/commit/ffb0243ea72e6c3aab72ad5cb991905a2d781cce))
+* **connect:** an opt-in switch lets every site see nulo, off in connected apps ([#1734](https://github.com/nulo-sh/nulo/issues/1734)) ([ced7f8e](https://github.com/nulo-sh/nulo/commit/ced7f8ea504946fd0c0ef60c41deaf863cbc4fb8))
+* **connected-apps:** the app's permissions as the pop-up's per-contract table ([#1854](https://github.com/nulo-sh/nulo/issues/1854)) ([f336e0f](https://github.com/nulo-sh/nulo/commit/f336e0f228206040f91a98dd1f2b798838cfc8c1))
+* **connect:** the connect window says what allow reveals, with two glossary terms ([#1722](https://github.com/nulo-sh/nulo/issues/1722)) ([961f906](https://github.com/nulo-sh/nulo/commit/961f90642543be2e57a53d985c558e1087b8e3f8))
+* **contracts:** named rows with both ids, origin and a View on Aztecscan action ([#1840](https://github.com/nulo-sh/nulo/issues/1840)) ([eb42af5](https://github.com/nulo-sh/nulo/commit/eb42af540a682a0fac2a9f29acd9926425d970bd))
+* **execute:** a value tree and raw values under every call in the approval window ([#1776](https://github.com/nulo-sh/nulo/issues/1776)) ([21acbab](https://github.com/nulo-sh/nulo/commit/21acbab5922387d2a268bb70276b1d946a1c28a9))
+* **execute:** contracts and the app become chips, with a seal for nulo verified ([#1805](https://github.com/nulo-sh/nulo/issues/1805)) ([06aeddf](https://github.com/nulo-sh/nulo/commit/06aeddff981611877f1797754927b1be85abac1f))
+* **execute:** fee row seal, held chips, contact names and callers as chips; the plan closes ([#1808](https://github.com/nulo-sh/nulo/issues/1808)) ([4fd3d8f](https://github.com/nulo-sh/nulo/commit/4fd3d8fcc11ed0454c7fa83c8cf7d8b004a87880))
+* **execute:** numbered steps on a rail, each step its own details, in the approval window ([#1782](https://github.com/nulo-sh/nulo/issues/1782)) ([c1d04e8](https://github.com/nulo-sh/nulo/commit/c1d04e8786fd464ff1c886661e5ed65ecb065d7f))
+* **fee-window:** fee row strikes the approved figure, send button takes two lines ([#1803](https://github.com/nulo-sh/nulo/issues/1803)) ([8f379de](https://github.com/nulo-sh/nulo/commit/8f379de267df2d9b445d5d0e53bda9cb45ab06ec))
+* **fees:** mainnet's fee juice links open shield until unleashed is on alpha ([#1872](https://github.com/nulo-sh/nulo/issues/1872)) ([8080306](https://github.com/nulo-sh/nulo/commit/8080306190899a3d809e0ff69c29aeb97f17fb13))
+* **home:** a what's new row once per minor; about links the version's changelog ([#1724](https://github.com/nulo-sh/nulo/issues/1724)) ([f4896bd](https://github.com/nulo-sh/nulo/commit/f4896bd1a1640b72c914d86a18bdd9de7a713483))
+* **landing:** a committed open graph card per changelog release ([#1777](https://github.com/nulo-sh/nulo/issues/1777)) ([f5d00cc](https://github.com/nulo-sh/nulo/commit/f5d00cc520e5fb4541bbe3540005027c43e4913d))
+* **landing:** changelog pages at /changelog, one per stable release ([#1713](https://github.com/nulo-sh/nulo/issues/1713)) ([e3c30fa](https://github.com/nulo-sh/nulo/commit/e3c30fa5433c8f7715da4266dc7d6d4477d524c8))
+* **landing:** changelog pages at /changelog, one per stable release ([#1713](https://github.com/nulo-sh/nulo/issues/1713)) ([b738509](https://github.com/nulo-sh/nulo/commit/b738509482537f47b5f7127bef2d7da7679b3e7f))
+* **logs:** developer mode downloads the logs of one failed request ([#1739](https://github.com/nulo-sh/nulo/issues/1739)) ([b57c4d8](https://github.com/nulo-sh/nulo/commit/b57c4d8d7d0bbbbd5dea8145104287246a32c748))
+* **network:** fail over to a network's next endpoint and return to the primary ([#1687](https://github.com/nulo-sh/nulo/issues/1687)) ([19e9e66](https://github.com/nulo-sh/nulo/commit/19e9e661cce42fb90cc126a89b93195fe0215d2f))
+* **networks:** nulo's relay as each default network's second endpoint ([#1757](https://github.com/nulo-sh/nulo/issues/1757)) ([8538a4b](https://github.com/nulo-sh/nulo/commit/8538a4bb351c21697969dcc096c99e8550f40751))
+* **networks:** the endpoints list shows order, status and a drag to reorder ([#1741](https://github.com/nulo-sh/nulo/issues/1741)) ([38dcd52](https://github.com/nulo-sh/nulo/commit/38dcd5290f018ec351c7079c9d208ec0dfebf5bf))
+* **popup:** the more-below button on the terms sheet, the execute window and onboarding ([#1822](https://github.com/nulo-sh/nulo/issues/1822)) ([35c5809](https://github.com/nulo-sh/nulo/commit/35c58090112aa1bb773332e8725fbb456c09bcc1))
+* **release:** per-version release notes on the github release and amo, from ci ([#1694](https://github.com/nulo-sh/nulo/issues/1694)) ([5f7da07](https://github.com/nulo-sh/nulo/commit/5f7da07c5367c382909ec464dcec786d648401f0))
+* **rpc-proxy:** setup scripts for the Cloudflare account, and the checklist steps they did ([#1689](https://github.com/nulo-sh/nulo/issues/1689)) ([7eed331](https://github.com/nulo-sh/nulo/commit/7eed331bb3af6fe916c1a40a69aa437d0f068f71))
+* **send:** dollars on every fee figure, the fee named once, and the plan closes ([#1811](https://github.com/nulo-sh/nulo/issues/1811)) ([612d280](https://github.com/nulo-sh/nulo/commit/612d2809de0428192dcb4db2522a0ff66d013a33))
+* **send:** pay a person: the person first, the fee line pinned over review send ([#1795](https://github.com/nulo-sh/nulo/issues/1795)) ([26a1d73](https://github.com/nulo-sh/nulo/commit/26a1d73c3da69fa90d86963d7a6e921f266b3f8c))
+* **send:** payer balances stack the FJ figure over its dollars in the row's own face ([#1813](https://github.com/nulo-sh/nulo/issues/1813)) ([3017f19](https://github.com/nulo-sh/nulo/commit/3017f1928cea9a7237eaaf8d6ee67b937833b2c6))
+* **send:** the review shows to, the amount, the privacy strip and the fee ([#1797](https://github.com/nulo-sh/nulo/issues/1797)) ([13ae6ed](https://github.com/nulo-sh/nulo/commit/13ae6ed81c2547e33a5924a83eb7e6a1e2022be8))
+* **settings:** every connected app's row shows the site's host under its name ([#1762](https://github.com/nulo-sh/nulo/issues/1762)) ([12f2137](https://github.com/nulo-sh/nulo/commit/12f21378e72764eda601c7fdf32560273ae78e33))
+* **subscribe:** confirm each signup by email before it joins the list ([#1695](https://github.com/nulo-sh/nulo/issues/1695)) ([de9321e](https://github.com/nulo-sh/nulo/commit/de9321e329ee2f5f094db87ae8a8bbfb8272be40))
+* **token-list:** each listed token carries its picture, signed with the list ([#1778](https://github.com/nulo-sh/nulo/issues/1778)) ([b557cb1](https://github.com/nulo-sh/nulo/commit/b557cb159ecbc616e39b6c82247796f4ad61a6fb))
+* **token-list:** the letter mark on a near-black disc, and ethereum's diamond for cweth ([#1780](https://github.com/nulo-sh/nulo/issues/1780)) ([8e77cdb](https://github.com/nulo-sh/nulo/commit/8e77cdb16c0d91ee9e92c88c3c5ae50cc036fe46))
+* **tokens:** a listed import draws its picture, a long title cuts, a stopped default dims ([#1800](https://github.com/nulo-sh/nulo/issues/1800)) ([fb0c265](https://github.com/nulo-sh/nulo/commit/fb0c2658e89ae1d4f8858f8cbce4d3129a8ba12a))
+* **tokens:** send's asset row and the token page draw each token's picture ([#1785](https://github.com/nulo-sh/nulo/issues/1785)) ([5736a92](https://github.com/nulo-sh/nulo/commit/5736a920a1be662fd025d85e18b7cdfe6aafb345))
+* **tokens:** token rows, home's other rows, a dapp's transfer and the fee line draw marks ([#1792](https://github.com/nulo-sh/nulo/issues/1792)) ([1593cf0](https://github.com/nulo-sh/nulo/commit/1593cf0278fa505fa7d6d5eb653e8642d39c92c4))
+* **wallet-sdk:** a locked discovery opens an unlock window that continues to connect ([#1859](https://github.com/nulo-sh/nulo/issues/1859)) ([d8f3adb](https://github.com/nulo-sh/nulo/commit/d8f3adb7a0a0e5b88bbbfa8ab3d6137d409886c5))
+
+
+### Bug Fixes
+
+* **a11y:** every switch is named by the words beside it ([#1857](https://github.com/nulo-sh/nulo/issues/1857)) ([b8ec26b](https://github.com/nulo-sh/nulo/commit/b8ec26b1f85ca124ed3b76faa6433bcaa8144d95))
+* **authwits:** a landed revoke reports success, and a closed popup reports nothing ([#1832](https://github.com/nulo-sh/nulo/issues/1832)) ([5d74546](https://github.com/nulo-sh/nulo/commit/5d745467281e7b5f6f78f38c9e283254130a7e8e))
+* **connected-apps:** the connection check section goes; two "Details" glyphs stop misreading ([#1835](https://github.com/nulo-sh/nulo/issues/1835)) ([28695db](https://github.com/nulo-sh/nulo/commit/28695db800e4bfee23c1a3eb47780eea3df8e5b1))
+* **deps:** fast-xml-parser 5.12.0 under the storage client clears its scan advisory ([#1885](https://github.com/nulo-sh/nulo/issues/1885)) ([0d5afc7](https://github.com/nulo-sh/nulo/commit/0d5afc774164f34cb4733ea7cf2d12016abfe751))
+* **execute:** a step's chevron stays on its sentence's last line, beside its last word ([#1790](https://github.com/nulo-sh/nulo/issues/1790)) ([8a97ab0](https://github.com/nulo-sh/nulo/commit/8a97ab094919e475255a6ec895e4998fb17d95dd))
+* **execute:** call lines read "{function} on {contract}" on a wrap and in the tx detail ([#1851](https://github.com/nulo-sh/nulo/issues/1851)) ([b22893f](https://github.com/nulo-sh/nulo/commit/b22893f420c67fc41747f4300cd7be3389a0bb30))
+* **execute:** count the sender's carried authorization; refuse a no-account utility or batch ([#1727](https://github.com/nulo-sh/nulo/issues/1727)) ([ca5b1da](https://github.com/nulo-sh/nulo/commit/ca5b1da841f417cb9f4014dfbf289bd1ff1132db))
+* **execute:** name the app's failing assertion; refuse a public call without an account ([#1706](https://github.com/nulo-sh/nulo/issues/1706)) ([4d6bce0](https://github.com/nulo-sh/nulo/commit/4d6bce0252d8f460074d09f3b1241974ef373eec))
+* **execute:** name the sender's attached authorization; own text for an unattached refusal ([#1696](https://github.com/nulo-sh/nulo/issues/1696)) ([253ff88](https://github.com/nulo-sh/nulo/commit/253ff883367778d5e9cd37b2c753ae6dd8f64cc7))
+* **execute:** refuse a no-account request with no call up front ([#1729](https://github.com/nulo-sh/nulo/issues/1729)) ([96fc716](https://github.com/nulo-sh/nulo/commit/96fc71670d93ad36002801d75e9dc33ac7783346))
+* **execute:** the claim-paid fee row says who pays ([#1817](https://github.com/nulo-sh/nulo/issues/1817)) ([1f94c09](https://github.com/nulo-sh/nulo/commit/1f94c09385b4efc45a096b3f8f1d9ed962304f04))
+* **execute:** the fee sentence prints the app's name as its chip does, pictographs stripped ([#1809](https://github.com/nulo-sh/nulo/issues/1809)) ([4397000](https://github.com/nulo-sh/nulo/commit/43970003bd13acf1a4813e417842c1b6e0d8cb5d))
+* **execute:** the more-below button sits at the bottom right of the request ([#1823](https://github.com/nulo-sh/nulo/issues/1823)) ([aacd29d](https://github.com/nulo-sh/nulo/commit/aacd29dd8110d10db8cff413c53a2278d3445376))
+* **fee:** History's fee method and the failed row's label name the app as its chip does ([#1810](https://github.com/nulo-sh/nulo/issues/1810)) ([6922eae](https://github.com/nulo-sh/nulo/commit/6922eae4f5d5a55288b8a083e3ad720d1f4378d4))
+* **fees:** price simulations on the predicted fee; count setup tabs via chrome.tabs ([#1688](https://github.com/nulo-sh/nulo/issues/1688)) ([e3f19a8](https://github.com/nulo-sh/nulo/commit/e3f19a8a652959450e72c8e1189c1ef5668082b5))
+* **fees:** the app-set fee sentence, the unknown press, History's method row and the readout ([#1837](https://github.com/nulo-sh/nulo/issues/1837)) ([46d3089](https://github.com/nulo-sh/nulo/commit/46d3089b40135a5e1b38e1315cb052c2c2526023))
+* **fee:** two balance reads that disagree are read again, then warn without refusing ([#1819](https://github.com/nulo-sh/nulo/issues/1819)) ([f6290e8](https://github.com/nulo-sh/nulo/commit/f6290e89edb00a12486f6b46c5ca60b9cd944954))
+* **firefox:** an import and an unlock-method change hand their window back to the panel ([#1716](https://github.com/nulo-sh/nulo/issues/1716)) ([24d5988](https://github.com/nulo-sh/nulo/commit/24d59880f877cc851a322ea61d7a017b48320c69))
+* **network:** a seeded default row still named "Alpha V6" or "Mainnet" takes "Alpha" ([#1697](https://github.com/nulo-sh/nulo/issues/1697)) ([002b76f](https://github.com/nulo-sh/nulo/commit/002b76fc7deef83efb451d691175886304e370a9))
+* **network:** a status probe shares its budget across the endpoints still to ask ([#1766](https://github.com/nulo-sh/nulo/issues/1766)) ([36b4e08](https://github.com/nulo-sh/nulo/commit/36b4e0882f21561268a81632ba04f617dec420ad))
+* **networks:** the endpoint dots refresh right after an edit ([#1768](https://github.com/nulo-sh/nulo/issues/1768)) ([c96ae18](https://github.com/nulo-sh/nulo/commit/c96ae18bb3733b86edfe501464dfa85cea8e68f0))
+* **notes:** "Token (AIP-20)" for listed tokens' notes, and the Fee Juice chip on a claim ([#1839](https://github.com/nulo-sh/nulo/issues/1839)) ([33906a0](https://github.com/nulo-sh/nulo/commit/33906a0528884be47f7228e3f8335551076388e3))
+* **notes:** a custom note card names its contract through the chip, no caveat line ([#1843](https://github.com/nulo-sh/nulo/issues/1843)) ([707ebf9](https://github.com/nulo-sh/nulo/commit/707ebf9cb8c9d852c0a0efcf5b634a444b32bd83))
+* **onboarding:** the more-below button hides where no room is left beside the column ([#1824](https://github.com/nulo-sh/nulo/issues/1824)) ([0dc22a9](https://github.com/nulo-sh/nulo/commit/0dc22a9c5cb375cdcf05019cb2670c5224e2946b))
+* **popup:** sending toast dismissal lasts the session; the password hint keeps its space ([#1721](https://github.com/nulo-sh/nulo/issues/1721)) ([4ae04b1](https://github.com/nulo-sh/nulo/commit/4ae04b1941e436890efdec854e1430f775dfc578))
+* **popup:** the Receive QR at 240 px; the Holdings header counts tokens on one row ([#1709](https://github.com/nulo-sh/nulo/issues/1709)) ([0bfd2c0](https://github.com/nulo-sh/nulo/commit/0bfd2c088d8b83e5acaf9e4f9baab26415e5c5d0))
+* **profile:** a restore locked before finalize stays locked until its next unlock ([#1693](https://github.com/nulo-sh/nulo/issues/1693)) ([4291a8c](https://github.com/nulo-sh/nulo/commit/4291a8c98ba1c4d3c62184c6c2a011da9ca90859))
+* **send:** an earlier send's toast steps aside while a review sheet is open ([#1870](https://github.com/nulo-sh/nulo/issues/1870)) ([62faab8](https://github.com/nulo-sh/nulo/commit/62faab8ca3f8555d415d86ee239c89ba9996017b))
+* **send:** recipient divider, warning glyph, in-flight fiat line and radio focus ring ([#1831](https://github.com/nulo-sh/nulo/issues/1831)) ([2d3b0be](https://github.com/nulo-sh/nulo/commit/2d3b0be77bac396f79b417607939d3c3132d299f))
+* **send:** the fee sheet's warning under the payer group, the warning glyph on its cap top ([#1844](https://github.com/nulo-sh/nulo/issues/1844)) ([90c2f61](https://github.com/nulo-sh/nulo/commit/90c2f61ab4708883c194fad58aa7e61a7bb92683))
+* **send:** the fee slip and the review's fee row as two rows, figure over method ([#1838](https://github.com/nulo-sh/nulo/issues/1838)) ([a51d39f](https://github.com/nulo-sh/nulo/commit/a51d39ff6828b408e1567a1b57eb32339bf858db))
+* **settings:** unlock-method and export pages take the new secret before the passkey step ([#1703](https://github.com/nulo-sh/nulo/issues/1703)) ([3655150](https://github.com/nulo-sh/nulo/commit/36551502f945301a3df68fd6afbe102bac5fc195))
+* **tokens:** an import caught by a worker restart says so and offers retry ([#1815](https://github.com/nulo-sh/nulo/issues/1815)) ([9e2124d](https://github.com/nulo-sh/nulo/commit/9e2124ddbfe9f2b4a5be92b2a407093d52c9ed8e))
+* **tokens:** list amounts follow one tiered digits rule; split lines never read 0 ([#1707](https://github.com/nulo-sh/nulo/issues/1707)) ([c66e9cf](https://github.com/nulo-sh/nulo/commit/c66e9cf50156a051294714015e371337b1db9c31))
+* **wallet-sdk:** a locked wallet answers a dapp with a `WALLET_LOCKED` refusal ([#1842](https://github.com/nulo-sh/nulo/issues/1842)) ([8af00f4](https://github.com/nulo-sh/nulo/commit/8af00f481e8fc2095f22e428539dd86f0504cd06))
+* **wallet:** balance batch failures, the payload row's address wrap, the priority tablist ([#1676](https://github.com/nulo-sh/nulo/issues/1676)) ([bae8b7e](https://github.com/nulo-sh/nulo/commit/bae8b7ed6cf3f524ae388f9b3b2f9a575fb56b3a))
+
+
+### Refactoring
+
+* **network:** one ordered list of the row conversions a sealed root takes at unlock ([#1726](https://github.com/nulo-sh/nulo/issues/1726)) ([859efb2](https://github.com/nulo-sh/nulo/commit/859efb285e753f729b81f0c9e32829d6c8657423))
+* **popup:** one home for send's side rule and the entity forms' shared rules ([#1674](https://github.com/nulo-sh/nulo/issues/1674)) ([5f95ea1](https://github.com/nulo-sh/nulo/commit/5f95ea108a6e0eaa652acbb526a5a535a4c19c0a))
+
+
+### Tests
+
+* **e2e:** a fault relay and a sandbox suite for routing between endpoints ([#1669](https://github.com/nulo-sh/nulo/issues/1669)) ([8febeff](https://github.com/nulo-sh/nulo/commit/8febefff56012e5e21148c324e6f63d3dc082387))
+* **e2e:** re-record the v1.2.0 update fixture for the 1.3.0 promote ([#1876](https://github.com/nulo-sh/nulo/issues/1876)) ([d0dc69a](https://github.com/nulo-sh/nulo/commit/d0dc69a85923e46acd8629acbc006bb2dad65a6f))
+* **e2e:** the update scenarios run from v1.2.0 ([#1686](https://github.com/nulo-sh/nulo/issues/1686)) ([8be55e0](https://github.com/nulo-sh/nulo/commit/8be55e0fcd3bd4b0026b695f21eb208f3988ac97))
+* **e2e:** the window sweep waits for argument previews to settle ([#1869](https://github.com/nulo-sh/nulo/issues/1869)) ([91887c4](https://github.com/nulo-sh/nulo/commit/91887c4c35ccfee61e3d2f8538c3de7f2820ede3))
+* **extension:** six suites unmount their cards, so nothing logs after a file ends ([#1874](https://github.com/nulo-sh/nulo/issues/1874)) ([9ad4e4e](https://github.com/nulo-sh/nulo/commit/9ad4e4edb1f7aaff4830f700e981bca3d7d130eb))
+* **network:** failover chaos, a pending send across the update, an edit mid-proof ([#1738](https://github.com/nulo-sh/nulo/issues/1738)) ([b49e06d](https://github.com/nulo-sh/nulo/commit/b49e06d4c591e7c7d8e68430a994055fc1f7cf8b))
+* **nightly:** artifact smoke seeds its rows; rp live probe accepts cloudflare's 400 ([#1848](https://github.com/nulo-sh/nulo/issues/1848)) ([6aaebe8](https://github.com/nulo-sh/nulo/commit/6aaebe886d1d2149f8460c81ac3405c9702f0593))
+* senders sweep waits for its list, probe budget on a frozen clock, smoke egress log ([#1791](https://github.com/nulo-sh/nulo/issues/1791)) ([6cf4ee0](https://github.com/nulo-sh/nulo/commit/6cf4ee01c333e2a5bd0a79980dd521d909775287))
+
+
+### CI
+
+* **nightly:** the rpc failover chaos runs every night at a fixed seed ([#1761](https://github.com/nulo-sh/nulo/issues/1761)) ([c5c2c1b](https://github.com/nulo-sh/nulo/commit/c5c2c1b98011843f0d6e7b508f95742378f79b71))
+
+
+### Misc
+
+* **deps:** bump reviewdog/action-actionlint from 1.80.6 to 1.81.1 ([#1770](https://github.com/nulo-sh/nulo/issues/1770)) ([32fd50e](https://github.com/nulo-sh/nulo/commit/32fd50e6038a9c8517ac87b798dbaff38204ffc2))
+* **deps:** bump reviewdog/action-actionlint from 1.81.1 to 1.83.0 ([#1818](https://github.com/nulo-sh/nulo/issues/1818)) ([c850da3](https://github.com/nulo-sh/nulo/commit/c850da329148cf194ac350917589f6b02ab8fa94))
+* **infra:** the nulo workers build on a workers-scripts-only token; setup scripts leave ([#1690](https://github.com/nulo-sh/nulo/issues/1690)) ([2cc7d81](https://github.com/nulo-sh/nulo/commit/2cc7d81b9839d4e2b167e982f2b4015a86ed08ad))
+* **landing:** the changelog pages reach nulo.sh ahead of the next promote ([#1771](https://github.com/nulo-sh/nulo/issues/1771)) ([db2b32c](https://github.com/nulo-sh/nulo/commit/db2b32c38dd66e9c70055219d2970caf83fe1c32))
+* re-baseline prerelease manifest to 1.2.0 ([6d9be4d](https://github.com/nulo-sh/nulo/commit/6d9be4dae9fab597e9b34581a40f9e5608f30175))
+* sync main → dev ([#1677](https://github.com/nulo-sh/nulo/issues/1677)) ([c4767e8](https://github.com/nulo-sh/nulo/commit/c4767e8e7ed500b12882fdc76a8421e3151318a2))
+* sync main → dev ([#1774](https://github.com/nulo-sh/nulo/issues/1774)) ([d9e8479](https://github.com/nulo-sh/nulo/commit/d9e8479c86380d0248ba60ebe87a24a89d3af216))
+* sync main → dev (the changelog pages on main, [#1771](https://github.com/nulo-sh/nulo/issues/1771)) ([84ad91b](https://github.com/nulo-sh/nulo/commit/84ad91b25331df94114328e149d93762eb8fc7c3))
+* **token-list:** publish sequence 1794349423 ([#1781](https://github.com/nulo-sh/nulo/issues/1781)) ([0e31082](https://github.com/nulo-sh/nulo/commit/0e31082a4bd29b0dcdfe3ef2fdab2b300da65fe8))
+
+
+### Docs
+
+* **legal:** date the versions the 1.3.0 promote publishes, "19 November 2026" ([#1877](https://github.com/nulo-sh/nulo/issues/1877)) ([c1bca82](https://github.com/nulo-sh/nulo/commit/c1bca82cb224596ca823f57323bbc3347b733aec))
+* **legal:** terms §§ 2 and 7.5 and privacy § 5.1 name nulo's relay ([#1765](https://github.com/nulo-sh/nulo/issues/1765)) ([fc411f9](https://github.com/nulo-sh/nulo/commit/fc411f938824382fb0203fa82dd4ebe83bacdcac))
+* local e2e is the affected specs, required lanes the gate of record; review proportion ([#1812](https://github.com/nulo-sh/nulo/issues/1812)) ([a763870](https://github.com/nulo-sh/nulo/commit/a763870d4273d44880ea7e8eaeb93e205053d597))
+* **plans:** close and archive prover-warm-1 (a warm prover saves under 1 s) ([#1705](https://github.com/nulo-sh/nulo/issues/1705)) ([7244320](https://github.com/nulo-sh/nulo/commit/7244320a694fe19d4ed179227f2953478e9fa061))
+* **plans:** p126-build-1 closes, the approval window as pages 126 and 130 signed ([#1783](https://github.com/nulo-sh/nulo/issues/1783)) ([4c93173](https://github.com/nulo-sh/nulo/commit/4c931737acdeb7c6f60d41361ca4b0275c8756eb))
+* **plans:** pxe-flag-1 closes with the sync flag off, per page 123 ([#1769](https://github.com/nulo-sh/nulo/issues/1769)) ([ccd14c8](https://github.com/nulo-sh/nulo/commit/ccd14c85fe6e839949eccc3c59ef3c0fd7a348a9))
+* **release:** release notes for 1.1.0 and 1.2.0, the changelog pages' source ([8d269f4](https://github.com/nulo-sh/nulo/commit/8d269f4da8b7d9bc740e24716e87f4c8f09baaa3))
+* **release:** the 1.3.0 notes and changelog page ([#1873](https://github.com/nulo-sh/nulo/issues/1873)) ([2fb5662](https://github.com/nulo-sh/nulo/commit/2fb566259e0404ee59a7e01fadf08470e2f313e8))
+* **release:** the chrome store refusal on an unsubmitted visibility change ([#1685](https://github.com/nulo-sh/nulo/issues/1685)) ([96ce37c](https://github.com/nulo-sh/nulo/commit/96ce37c5419e1a2f845cca1ba4ec4ab1dfae41fa))
+* **store:** the long description says not audited beside the open-source line ([#1684](https://github.com/nulo-sh/nulo/issues/1684)) ([01aa06a](https://github.com/nulo-sh/nulo/commit/01aa06abfd8a526aa1cfb7556728daa6a55d8074))
+* the custom `RPC` surface is frozen, the owner's standing rule ([#1852](https://github.com/nulo-sh/nulo/issues/1852)) ([8ff0e64](https://github.com/nulo-sh/nulo/commit/8ff0e6489fe80d006cc3eb86a562304bdce1e270))
+
 ## [1.2.0](https://github.com/nulo-sh/nulo/compare/v1.1.0...v1.2.0) (2026-11-05)
 
 
