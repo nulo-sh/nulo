@@ -1,7 +1,7 @@
 ---
 plan: update-from-1.3.0
 tier: light
-status: in progress
+status: completed
 issues: "#1901 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -11,9 +11,21 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: no recon agent (the planner read the tag by hand); one Codex pass (gpt-6.1-sol, high) over the plan and the completed diff, then targeted verification of material fixes (bounded work)
 post_implementation_hardening: not scheduled
-base: origin/dev at 93aeedbc1
+base: origin/dev at 93aeedbc1 (tested at T = 32702d7b7, dev at 93877b8b1)
 trunk: dev
 ---
+
+## Outcome
+
+- Date: 2026-11-19.
+- Status: completed, delivered as one PR against `dev`, awaiting the merge.
+- Shipped: `RELEASE_DIGESTS` and `RELEASE_TRAITS` pin v1.3.0 (zips checked four ways, F1); a required `send` trait, `person-first` for v1.3.0, drives its Send through the candidate's own helpers and writes its Send pick through its own `saveFeePick` (D1, D5); `fixtures/update/v1.3.0.storage.json` is its Chrome recording; the README and the release skill name the trait. At `T` = `32702d7b7` the live scenario and all four replay cases pass from v1.3.0 on both browsers, and the live scenario from v1.2.0 on Chrome. Closes #1901.
+- Did not hold: "pin and record" alone. Besides F4 (demonstrated by the red control) and F5 (moot once #1900 merged at 22:26Z), the Codex pass found F8 (no Send pick saved on a preselected radio) and the first recording run found the pin's toast covering the Fee sheet's Done; both fixed in the test code, no product change.
+- Lessons: none promoted; `lessons.md` holds 8148 of its 8192 bytes. The nearest generalizable one (a press on a checked radio fires no `change`) sits beside the Vue radio line already there.
+- Known limits: none.
+- Open items: none.
+- Deadline: the v1.3.0 recording's dApp session expires about 2026-11-26 22:54 UTC; the replay refuses it from about 22:44. Re-record before the next promote if that has passed (the v1.2.0 recording expires 2026-11-26 about 15:08 UTC, #1876).
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # update-from-1.3.0: the update scenarios run from v1.3.0
 
@@ -52,7 +64,7 @@ Files: `fixtures/update/release.ts`, `fixtures/update/release-ui.ts`, `network/u
 - **Gate:** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e`. Pass: exit 0 except exactly one failure, `the committed v1.3.0 recording …` (F6). Met before the commit: lint 0, typecheck 0, 770 passed and that one failure.
 6. The Codex pass (§ Post-implementation) over the plan and this diff, before any build, so its fixes cost no rerun.
 
-### Phase 2: record and run, retry 0, one e2e run at a time
+### Phase 2: record and run, retry 0, one e2e run at a time ✓ (the red control red as expected; a driver red fixed at its cause, `3cf32b482`; the recording `6ae62ed77`; all five runs at `T` = `32702d7b7` green: [lessons/phase-2.md](lessons/phase-2.md))
 Never set `NULO_E2E_BACKUP_RECORD`; never touch another tag's recording or the pinned backups. Each run through `e2e:agent` (live) or `test:e2e` (replay) with `NULO_E2E_UPDATE_FROM`, `NULO_E2E_UPDATE_TO`, `NULO_E2E_RETRY=0` / `--retry=0`, its log polled in a bounded loop inside one tool call. Before each: `git status --porcelain -- apps/extension` empty (except step 2's one edit and the untracked recording before its commit).
 1. After #1900 merges: merge `origin/dev`; `apps/extension/package.json` reads `1.3.0`. Build both candidates (`build-update-candidate.sh chrome|firefox`): manifests `1.3.0.1`. Note the browser versions.
 2. Red control for D1: v1.3.0's `send` set to `one-form` in the working tree only (`git diff` shows that one line). Live, Chrome. Expected: red at `waitForSelector('[data-testid="send-from-type"]')` (10 s) inside `pickReleaseSendFee`, no other error first. Restore; `git diff --quiet`.
@@ -61,7 +73,7 @@ Never set `NULO_E2E_BACKUP_RECORD`; never touch another tag's recording or the p
 5. Rebuild both candidates at that commit `T`, then at retry 0: live Chrome, live Firefox, replay Chrome, replay Firefox, and the D3 control, live Chrome from v1.2.0.
 - **Gate:** step 2 red as expected; steps 3 and 5 pass, all four replay cases on both browsers (a skipped case is not a pass). A red a pin, a trait or the driver answers returns to Phase 1 (fix, commit, rebuild, restart at step 3). A red the candidate causes is reported, not patched: `ARC_FAILED`. The scenario writes the recording inside `populate`, before the update and its checks (`update-in-place.test.ts:622`): after any recording run that did not pass, delete `v1.3.0.storage.json` and check it is gone before the next run; a file that exists, or passes `recordingProblems`, proves nothing.
 
-### Phase 3: delivery
+### Phase 3: delivery ✓ (`dev` merged before `T`; `lint`, `typecheck:all`, `test:all` green at `T`; the close-out above)
 1. Targeted verification of any material fix since the Codex pass; a fix outside `implementations-plan/` moves `T`: rebuild, rerun step 5.
 2. Merge `origin/dev`; if anything outside the plan moved (`git diff --stat T HEAD -- . ':(exclude)implementations-plan'`), rebuild and rerun step 5 at the merged head. `lint`, `typecheck:all`, `test:all`, `check:plans` at the final head.
 3. Close-out commits; push; open the PR ready, no label (`apps/extension/**` trips both e2e filters); `gh pr checks <n> --watch`.

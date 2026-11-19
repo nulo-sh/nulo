@@ -17,3 +17,16 @@ Every run at retry 0, through `e2e:agent` (live) or `test:e2e` (replay), with no
 | Live, Firefox, 22:59:34-23:05:42 | 2 passed: 180.7 s, 119.9 s | vitest 362.3 s |
 
 The recording: written 22:57:40 UTC, SHA-256 `91d35df33073cceafa6f7b0b289fcd61ac61e4ab3d127bffc841b011b95c4263`, 41 keys, tag `v1.3.0`, browser `chrome`, 5 dials all loopback, no `nulo:e2e:` key, 5 plaintext URLs all loopback (the dials), no `0x` plaintext. Against `v1.2.0.storage.json`: the same families and counts plus `nulo:ui:whatsNewSeen` (`"1.3"`, F7). `update-recording.test.ts`: 19 passed. Its dApp session was made between 22:54:44 and 22:57:40; the replay refuses it from about 2026-11-26 22:44 UTC.
+
+## At `T` = `32702d7b7` (the recording `6ae62ed77` merged with `dev` at `93877b8b1`; candidates naming it)
+
+| Run (UTC) | Outcome | Wall-clock |
+|---|---|---|
+| Live, Chrome, from v1.3.0, 23:07:37-23:12:20 | 2 passed: 132.6 s, 81.1 s | vitest 282.7 s |
+| Live, Firefox, from v1.3.0, 23:12:45-23:19:22 | 2 passed: 190.2 s, 140.7 s | vitest 397.2 s |
+| Replay, Chrome, from v1.3.0, 23:19:42-23:20:52 | 4 passed: 26.5 s, 15.0 s, 10.6 s, 13.4 s | vitest 70.5 s |
+| Replay, Firefox, from v1.3.0, 23:21:09-23:22:50 | 4 passed: 42.0 s, 24.2 s, 14.9 s, 15.1 s | vitest 100.8 s |
+| Live, Chrome, from v1.2.0 (D3 control), 23:23:20-23:28:44 | 2 passed: 150.7 s, 86.9 s | vitest 324.3 s |
+
+- Like for like on Chrome at `T`: the populate-and-update test takes 132.6 s from v1.3.0 and 150.7 s from v1.2.0, under load1 between 32 and 118 from other leads; the person-first path adds no measurable cost.
+- Noise, not reds: the aztec CLI's bind error at boot (once per live run); the stall watchdog's longest silences 79.2-126.9 s, under its 10-minute bound.
