@@ -116,7 +116,6 @@ function leaveUnusable() {
 }
 
 const feeJuiceUrl = computed(() => feeJuiceBridgeUrl(appStore.network?.chainId))
-/** Open the fee-juice bridge in a new tab. */
 const openFeeJuiceBridge = () => {
 	window.open(feeJuiceUrl.value, "_blank", "noopener,noreferrer")
 }

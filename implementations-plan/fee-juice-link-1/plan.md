@@ -116,3 +116,4 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | Round | Leg | Verdict | Accepted | Rejected |
 |---|---|---|---|---|
 | plan | none (lane brief: no plan audit round) | n/a | n/a | n/a |
+| plan + diff | Codex, gpt-6.1-sol high read-only (session 01a1f440) | approve | the selector's TSDoc cut to the rule and the override's scope; `send.vue`'s narrating comment removed | none |

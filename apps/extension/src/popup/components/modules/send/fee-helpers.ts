@@ -338,12 +338,9 @@ function privateFeeJuiceOption(privateFpc: RegisteredFpc | undefined, gasBalance
 const SHIELD_FEE_JUICE_URL = "https://shield.human.tech/fee-juice"
 const UNLEASHED_TESTNET_URL = "https://testnet.app.unleashed.systems"
 
-/**
- * Where a "Get Fee Juice" link leads on the chain: Mainnet opens human.tech's Shield until Unleashed
- * is deployed on Alpha (the owner's decision of 2026-11-18); every other chain, unknown included,
- * opens Unleashed's testnet app. `VITE_FEE_JUICE_BRIDGE_URL`, when a build sets it, wins on every
- * chain. The URL never carries wallet state.
- */
+/** Mainnet's fee juice links open human.tech's Shield until Unleashed is deployed on Alpha (the
+ *  owner's decision of 2026-11-18); every other chain opens Unleashed's testnet app. A build's
+ *  `VITE_FEE_JUICE_BRIDGE_URL` replaces both. */
 export function feeJuiceBridgeUrl(chainId: number | undefined): string {
 	const override = import.meta.env.VITE_FEE_JUICE_BRIDGE_URL as string | undefined
 	if (override !== undefined) return override
