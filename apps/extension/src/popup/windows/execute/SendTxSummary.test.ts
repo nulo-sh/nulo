@@ -8,8 +8,8 @@
  * unreadable authorization in one line under its own, and a send carries no closing advice.
  */
 
-import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ref } from "vue"
 import { BUNDLED_TOKEN_CLASS_IDS, type TokenListEntry, type TokenListPair } from "@nulo/token-list"
 import SectionLabel from "@nulo/design/ui/SectionLabel.vue"
@@ -148,6 +148,9 @@ const unverified = (address: string) => ({
 })
 const TRANSFER_LINE = `from Main to ${trimAddress(RECIPIENT)}`
 const wireCalls = () => (fixtureOp() as unknown as { exec: { calls: unknown[] } }).exec.calls
+
+// A mounted card's chip holds fire after the file ends and log as the worker closes.
+enableAutoUnmount(afterEach)
 
 beforeEach(() => {
 	lookups.accounts.splice(0)
