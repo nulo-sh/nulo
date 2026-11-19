@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { fonts, MIN_MONO_PX, MIN_TEXT_PX, type TypeRole, typeRoleNames, typeRoles } from "@nulo/design/tokens"
+import { DEFAULT_RPC_TIMEOUT_MS } from "@nulo/extension-messaging/background"
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { OVERRIDES } from "../../../scripts/type-roles/exceptions"
@@ -726,6 +727,29 @@ export async function textFates(page: Page, mode: "record" | "compare"): Promise
 			return fate ? [{ fate, testid: before.testid, text: before.text }] : []
 		})
 	}, mode === "record")
+}
+
+/** Named one by one, since `aria-busy` also marks surfaces that can stay busy long (a token row's
+ *  first sync, holdings' prices). */
+const READS_IN_FLIGHT = [
+	'[data-testid="loading-state"]',
+	'[data-testid$="-args-pending"]',
+	'[data-testid="execute-op-authwits-pending"]',
+	'[data-testid="register-token-details"][aria-busy="true"]',
+	'[data-testid^="contract-chip-held-"]',
+].join(", ")
+
+/**
+ * Waits up to a popup RPC's own bound for `page` to draw no read in flight, then fails naming what is
+ * still drawn. An authorization preview can outlast it (its bound is 15 min) and then fails the wait;
+ * a discovered authorization's summary line draws no mark while it decodes, so it is not waited for.
+ */
+export async function waitForReadsSettled(page: Page, label: string): Promise<void> {
+	await withTimeoutMessage(
+		page.waitForFunction((s) => !document.querySelector(s), { timeout: DEFAULT_RPC_TIMEOUT_MS, polling: 100 }, READS_IN_FLIGHT),
+		async () =>
+			`${label}: still reading after ${DEFAULT_RPC_TIMEOUT_MS / 1000} s: ${await page.evaluate((s) => [...document.querySelectorAll(s)].map((el) => el.getAttribute("data-testid")).join(", "), READS_IN_FLIGHT)}`,
+	)
 }
 
 /** The narrowest width a page is laid out for: Firefox's sidebar opens at 240 px. */

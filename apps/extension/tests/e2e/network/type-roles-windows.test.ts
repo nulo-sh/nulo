@@ -53,6 +53,7 @@ import {
 	observeIdentifierSites,
 	siteSuite,
 	sweepTypeRoles,
+	waitForReadsSettled,
 } from "../fixtures/type-roles"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -101,8 +102,10 @@ async function waitForStateSites(win: Page, surface: string, state: string): Pro
 	}
 }
 
-/** The faces and roles of the window, then the identifier sites of each state it renders. */
+/** The faces and roles of the window at rest, then the identifier sites of each state it renders. A
+ *  decoded row's sites exist only once its decode lands, so the reads settle before the sites are awaited. */
 async function sweepWindow(win: Page, surface: string, states: readonly string[]): Promise<IdentifierObservation[]> {
+	await waitForReadsSettled(win, surface)
 	for (const state of states) await waitForStateSites(win, surface, state)
 	expectSweepClean(await sweepTypeRoles(win), surface)
 	await expectLaidOut(win, surface)
@@ -174,7 +177,8 @@ test.skipIf(!hasConfig)("the capabilities window holds its roles", { timeout: 18
 	}
 	expect((await waitForPgResult(pg, "requestCapabilities", seq, 30_000)).status).toBe("error")
 
-	// The connected app's page reads back what the dApp was granted: its account and each listed scope.
+	// The connected app's page reads back what the dApp was granted: its account, and its contract and
+	// class in the table, a row open.
 	await setPgInput(pg, "tokenAddress", aztecConfig!.tokenAddress)
 	await setPgInput(pg, "classId", aztecConfig!.tokenClassId)
 	await grantCapBundle(ctx, pg, "contractClasses-listed", async (ids) => [ids[0]!])
@@ -182,14 +186,9 @@ test.skipIf(!hasConfig)("the capabilities window holds its roles", { timeout: 18
 	try {
 		await waitForHash(wallet, "#/popup/general")
 		await openConnectedApp(wallet, new URL(PLAYGROUND_TEST_URL).host, sel("connected-app-account-row"))
-		for (const type of ["contracts", "contractClasses"]) {
-			await clickSelector(wallet, `${sel("granted-capability-toggle")}[data-capability-type="${type}"]`)
-		}
-		await sweepWindow(wallet, "popup-settings-connected-apps-id", [
-			"a connected dApp (network)",
-			"a connected app whose grant holds a contract scope (network)",
-			"a connected app whose grant holds a class scope (network)",
-		])
+		await clickSelector(wallet, `${sel("connected-app-permissions")} ${sel("cap-details-row")}`)
+		await wallet.waitForSelector(sel("cap-details-fns"), { visible: true, timeout: 10_000 })
+		await sweepWindow(wallet, "popup-settings-connected-apps-id", ["a connected dApp (network)"])
 	} finally {
 		await wallet.close()
 	}

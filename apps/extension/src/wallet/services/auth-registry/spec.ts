@@ -75,6 +75,11 @@ export function authwitStatusRowId(profileId: string, chainId: number, account: 
 	return JSON.stringify(["authwit-status", profileId, chainId, account])
 }
 
+/** A row's whole identity: its id alone can name another grant once a prune or purge frees it. */
+export function authwitRowKey(row: Pick<Authwit, "id" | "profileId" | "chainId" | "account" | "hash" | "txHash">): string {
+	return JSON.stringify([row.id, row.profileId, row.chainId, row.account, row.hash, row.txHash ?? null])
+}
+
 /** Inverse of `authwitStatusRowId`: the byte-canonical scope tuple a key encodes, or undefined
  *  for a legacy/foreign key. Ownership evidence must be byte-canonical (see `parseAccountRowId`):
  *  a crafted non-canonical key must not donate a foreign account to a purge cascade. */
@@ -107,7 +112,8 @@ export type Methods = {
 	 * Revokes up to MAX_REVOKES_PER_TX authwits (sends a transaction).
 	 * @param networkId Network id.
 	 * @param account Account address.
-	 * @param ids Ids of the authwits to revoke.
+	 * @param ids Ids of the authwits to revoke. An id no longer listed is skipped as already revoked;
+	 *   a call naming none that is listed is refused.
 	 * @param feeSettings Fee settings to be used for sending the transaction.
 	 * @param correlation The caller's key for this call, echoed by `onSendStarted`.
 	 */
@@ -156,7 +162,10 @@ export type Methods = {
 	/** Aborts the estimate minted with `estimateToken`; an unknown token is a no-op. */
 	cancelFeeEstimate(estimateToken: string): void
 	/**
-	 * Triggers synchronization of the auth registry for the account.
+	 * Reads the account's registry switch and each confirmed row's grant, at most
+	 * MAX_TRACKED_AUTHWITS_PER_ACCOUNT rows, and stores what the chain answers: the switch, and the
+	 * deletion of a row no longer authorized. A call while one runs for the same scope joins it. Rejects
+	 * with the first failed read once every read has settled; a failed read changes nothing.
 	 * @param networkId Network id.
 	 * @param account Account address.
 	 */

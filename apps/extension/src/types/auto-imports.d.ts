@@ -540,6 +540,7 @@ declare global {
   const showsRestoreErrorCtas: typeof import('../utils/full-backup-ctas').showsRestoreErrorCtas
   const sidebarAction: typeof import('../utils/browser-surface').sidebarAction
   const smallFieldDecimal: typeof import('../utils/transfer-intent').smallFieldDecimal
+  const snackAside: typeof import('../composables/snackInset').snackAside
   const snackInset: typeof import('../composables/snackInset').snackInset
   const stageSubtitle: typeof import('../utils/card-subtitle').stageSubtitle
   const stepFailedTitle: typeof import('../utils/passkey-copy').stepFailedTitle
@@ -641,6 +642,7 @@ declare global {
   const useReaskReview: typeof import('../composables/useReaskReview').useReaskReview
   const useReceiptFee: typeof import('../composables/useReceiptFee').useReceiptFee
   const useRestoreAgain: typeof import('../composables/useRestoreAgain').useRestoreAgain
+  const useRevokeTasks: typeof import('../composables/useRevokeTasks').useRevokeTasks
   const useRoute: typeof import('vue-router').useRoute
   const useRouteSnapshot: typeof import('../composables/useRouteSnapshot').useRouteSnapshot
   const useRouter: typeof import('vue-router').useRouter
@@ -666,6 +668,7 @@ declare global {
   const useTokenBalanceSnapshot: typeof import('../composables/useTokenBalanceSnapshot').useTokenBalanceSnapshot
   const useTokenFlags: typeof import('../composables/usePrices').useTokenFlags
   const useWalletTxEstimates: typeof import('../composables/useWalletTxEstimates').useWalletTxEstimates
+  const vSnackAside: typeof import('../composables/snackInset').vSnackAside
   const vSnackFooter: typeof import('../composables/snackInset').vSnackFooter
   const vSnackSheet: typeof import('../composables/snackInset').vSnackSheet
   const visibleSettingsRows: typeof import('../utils/settings-search').visibleSettingsRows
@@ -807,6 +810,9 @@ declare global {
   // @ts-ignore
   export type { RestoreAgainProfileClient, UseRestoreAgainOptions, UseRestoreAgainResult } from '../composables/useRestoreAgain'
   import('../composables/useRestoreAgain')
+  // @ts-ignore
+  export type { RevokeState } from '../composables/useRevokeTasks'
+  import('../composables/useRevokeTasks')
   // @ts-ignore
   export type { UseRouteSnapshotDeps, NetworkRouteView, UseRouteSnapshot } from '../composables/useRouteSnapshot'
   import('../composables/useRouteSnapshot')
@@ -1532,6 +1538,7 @@ declare module 'vue' {
     readonly showsRestoreErrorCtas: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsRestoreErrorCtas']>
     readonly sidebarAction: UnwrapRef<typeof import('../utils/browser-surface')['sidebarAction']>
     readonly smallFieldDecimal: UnwrapRef<typeof import('../utils/transfer-intent')['smallFieldDecimal']>
+    readonly snackAside: UnwrapRef<typeof import('../composables/snackInset')['snackAside']>
     readonly snackInset: UnwrapRef<typeof import('../composables/snackInset')['snackInset']>
     readonly stageSubtitle: UnwrapRef<typeof import('../utils/card-subtitle')['stageSubtitle']>
     readonly stepFailedTitle: UnwrapRef<typeof import('../utils/passkey-copy')['stepFailedTitle']>
@@ -1633,6 +1640,7 @@ declare module 'vue' {
     readonly useReaskReview: UnwrapRef<typeof import('../composables/useReaskReview')['useReaskReview']>
     readonly useReceiptFee: UnwrapRef<typeof import('../composables/useReceiptFee')['useReceiptFee']>
     readonly useRestoreAgain: UnwrapRef<typeof import('../composables/useRestoreAgain')['useRestoreAgain']>
+    readonly useRevokeTasks: UnwrapRef<typeof import('../composables/useRevokeTasks')['useRevokeTasks']>
     readonly useRoute: UnwrapRef<typeof import('vue-router')['useRoute']>
     readonly useRouteSnapshot: UnwrapRef<typeof import('../composables/useRouteSnapshot')['useRouteSnapshot']>
     readonly useRouter: UnwrapRef<typeof import('vue-router')['useRouter']>
@@ -1658,6 +1666,7 @@ declare module 'vue' {
     readonly useTokenBalanceSnapshot: UnwrapRef<typeof import('../composables/useTokenBalanceSnapshot')['useTokenBalanceSnapshot']>
     readonly useTokenFlags: UnwrapRef<typeof import('../composables/usePrices')['useTokenFlags']>
     readonly useWalletTxEstimates: UnwrapRef<typeof import('../composables/useWalletTxEstimates')['useWalletTxEstimates']>
+    readonly vSnackAside: UnwrapRef<typeof import('../composables/snackInset')['vSnackAside']>
     readonly vSnackFooter: UnwrapRef<typeof import('../composables/snackInset')['vSnackFooter']>
     readonly vSnackSheet: UnwrapRef<typeof import('../composables/snackInset')['vSnackSheet']>
     readonly visibleSettingsRows: UnwrapRef<typeof import('../utils/settings-search')['visibleSettingsRows']>

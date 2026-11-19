@@ -2,6 +2,7 @@ import { Icon, RowAction } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import DetailsTable from "./DetailsTable.vue"
+import source from "./DetailsTable.vue?raw"
 
 // Wire-shaped: 0x + 64 hex, each value below the field modulus.
 const TOKEN = `0x0c1e${"0".repeat(56)}5a7f`
@@ -45,6 +46,42 @@ const fnLines = (w: ReturnType<typeof mountTable>) =>
 		.find('[data-testid="cap-details-fns"]')
 		.findAll(`.${STYLE.fn}`)
 		.map((line) => line.findAll("span").map((cell) => cell.text()))
+
+/** The body of the `@container details-table` block with exactly `query`, and the block itself. */
+const container = (query: string) => {
+	const at = source.indexOf(`@container details-table ${query} {\n`)
+	const end = source.indexOf("\n}\n", at)
+	return at < 0 || end < 0
+		? { block: "", body: "" }
+		: { block: source.slice(at, end + 2), body: source.slice(source.indexOf("{", at) + 1, end) }
+}
+const ONE_LINE = container("(290px <= width < 330px)")
+const SPLIT = container("(width < 290px)")
+const WIDE = source.replace(ONE_LINE.block, "").replace(SPLIT.block, "")
+/** "Sponsored fee payer", the wallet's longest name, at the name's 13 px: 130.6 px in Chrome. */
+const LONGEST_NAME_PX = 131
+/** A shortened address and its copy button's box: 111.5 px in Chrome. */
+const ADDRESS_PX = 112
+
+/** The declarations of the one rule whose selector is exactly `selector`; none when two could compete. */
+const rule = (css: string, selector: string): Record<string, string> => {
+	const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+	const matches = [...css.matchAll(new RegExp(`^\\s*${escaped} \\{([^}]*)\\}`, "gm"))]
+	const body = matches.length === 1 ? matches[0][1] : ""
+	return Object.fromEntries(
+		body
+			.split(";")
+			.map((declaration) => declaration.split(":").map((part) => part.trim()))
+			.filter(([property, value]) => property && value),
+	)
+}
+
+/** The width the six mark tracks, the chevron and the gaps between all eight columns take; NaN on any other tracks. */
+const fixedWidth = (grid: Record<string, string>) => {
+	const [, mark, chevron] = /^minmax\(0, 1fr\) repeat\(6, (\d+)px\) (\d+)px$/.exec(grid["grid-template-columns"] ?? "") ?? []
+	return 6 * Number(mark) + Number(chevron) + 7 * Number.parseFloat(grid["column-gap"])
+}
+
 /** What a screen reader says for the row: the text of the element its target is labelled by. */
 const spoken = (w: ReturnType<typeof mountTable>, i: number) => w.find(`[id="${targets(w)[i].attributes("aria-labelledby")}"]`).text()
 
@@ -212,5 +249,74 @@ describe("composite/capabilities/DetailsTable", () => {
 		expect(w.find(`.${STYLE.foot}`).text()).toBe(
 			"Function names come from the app. Anything it didn't list is refused instantly; you won't be asked.",
 		)
+	})
+
+	test("bare draws the table open, with no fold, the same rows and the footnote unless told not to", async () => {
+		const w = mountTable({ bare: true })
+		expect(w.find('[data-testid="cap-detail-toggle"]').exists()).toBe(false)
+		expect(targets(w)).toHaveLength(3)
+		expect(w.find(`.${STYLE.foot}`).exists()).toBe(true)
+
+		await targets(w)[1].trigger("click")
+		expect(fnLines(w)).toEqual([
+			["Simulate", "balance_of_public"],
+			["Transact", "transfer · burn_public"],
+		])
+
+		expect(mountTable({ bare: true, foot: false }).find(`.${STYLE.foot}`).exists()).toBe(false)
+	})
+
+	test("the narrow drawings key on the table's own width, never the viewport's", () => {
+		const w = mountTable({ bare: true })
+		expect(w.find(`.${STYLE.table}`).element.parentElement?.classList).toContain(STYLE.frame)
+		expect(source).toMatch(/\.frame \{\s*container: details-table \/ inline-size;\s*\}/)
+		expect([ONE_LINE.body, SPLIT.body]).not.toContain("")
+		expect(source.match(/@container /g)).toHaveLength(2)
+		expect(source).not.toMatch(/@media \([^)]*width/)
+	})
+
+	// jsdom lays nothing out: these read the rules the browser applies, and the captures measure them.
+	test("at 312 px the head and each row are one line: the narrower tracks leave a name its room", () => {
+		expect(312 - fixedWidth(rule(ONE_LINE.body, ".grid"))).toBeGreaterThanOrEqual(LONGEST_NAME_PX)
+		expect(ONE_LINE.body).not.toMatch(/grid-column|subgrid|display:/)
+
+		// Head and rows share one set of tracks, so each glyph stands over its column's marks.
+		const w = mountTable({ bare: true })
+		const head = w.find(`.${STYLE.head}`)
+		const cells = (el: Element) => [...el.children].filter((c) => !c.hasAttribute("hidden") && !c.hasAttribute("data-row-target"))
+		expect(head.classes()).toContain(STYLE.grid)
+		expect(cells(head.element)).toHaveLength(8)
+		for (const target of targets(w)) {
+			expect(target.element.parentElement?.classList).toContain(STYLE.grid)
+			expect(cells(target.element.parentElement as Element)).toHaveLength(8)
+		}
+	})
+
+	test("a 30-character name wraps inside its cell, whole, its row padded off the hairlines", () => {
+		const long = "Private token bridge registrar"
+		const w = mountTable({ bare: true, known: [{ ...feeJuice, name: long }] })
+		expect(rowOf(w, 0).querySelector(`.${STYLE.name}`)?.textContent).toBe(long)
+		expect(rule(ONE_LINE.body, ".row > .name")).toEqual({ "white-space": "normal", "overflow-wrap": "anywhere" })
+		expect(rule(ONE_LINE.body, ".row")).toEqual({ "padding-block": "4px" })
+	})
+
+	test("below 290 px, where an address no longer fits beside the marks, names and addresses take their own line", () => {
+		expect(290 - fixedWidth(rule(ONE_LINE.body, ".grid"))).toBeGreaterThanOrEqual(ADDRESS_PX)
+		expect(rule(SPLIT.body, ".table > .grid")).toEqual({ "grid-template-columns": "subgrid", "row-gap": "4px" })
+		expect(SPLIT.body).toMatch(/\.grid > \.name,\s*\.grid > \.address,\s*\.head > span:first-child \{\s*grid-column: 1 \/ -1;\s*\}/)
+		expect(SPLIT.body).toMatch(
+			/\.grid > \.name \+ \*,\s*\.grid > \.address \+ \*,\s*\.head > span:first-child \+ \* \{\s*grid-column-start: 2;\s*\}/,
+		)
+	})
+
+	test("at 342 px nothing changes: the narrow rules start below 330 px and the wide tracks hold", () => {
+		expect(rule(WIDE, ".grid")).toEqual({
+			display: "grid",
+			"grid-template-columns": "minmax(0, 1fr) repeat(6, 26px) 14px",
+			"align-items": "center",
+			"column-gap": "4px",
+		})
+		expect(342 - fixedWidth(rule(WIDE, ".grid"))).toBeGreaterThanOrEqual(LONGEST_NAME_PX)
+		expect(rule(WIDE, ".name")).toMatchObject({ "white-space": "nowrap", "text-overflow": "ellipsis" })
 	})
 })

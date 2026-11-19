@@ -23,6 +23,7 @@ const props = defineProps({
 /** Informational use: one button, no Cancel, no callback required; cleared with the rest on close. */
 const isSingle = computed(() => cacheStore.confirm.single === true)
 
+const toggleLabelId = useId()
 const confirmationInputEl = useTemplateRef("confirmationInputEl")
 const confirmationTerm = ref()
 const isConfirmed = computed(() => !cacheStore.confirm.confirmation_text || cacheStore.confirm.confirmation_text === confirmationTerm.value)
@@ -73,7 +74,7 @@ watch(
 					:class="$style.toggle_row"
 				>
 					<Flex direction="column" gap="2" :class="$style.toggle_text">
-						<Text variant="row-title" color="primary" :class="$style.toggle_label_size">
+						<Text :id="toggleLabelId" variant="row-title" color="primary" :class="$style.toggle_label_size">
 							{{ cacheStore.confirm.toggle.label }}
 						</Text>
 						<Text v-if="cacheStore.confirm.toggle.description" variant="caption" color="tertiary" height="140">
@@ -81,6 +82,7 @@ watch(
 						</Text>
 					</Flex>
 					<Toggle
+						:aria-labelledby="toggleLabelId"
 						v-model="cacheStore.confirm.toggle.model"
 						data-testid="confirm-toggle"
 					/>

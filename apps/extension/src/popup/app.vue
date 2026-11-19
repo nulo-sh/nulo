@@ -48,6 +48,7 @@ import { ARRIVALS_KEY, useArrivals } from "@/composables/useArrivals"
 import { SENDS_IN_PROGRESS_KEY, useSendsInProgress } from "@/composables/useSendsInProgress"
 import { runUnattended, STALE_NETWORK_KEY, useStaleNetwork } from "@/composables/useStaleNetwork"
 import { NETWORK_ARRIVAL_KEY, useNetworkArrival } from "@/composables/useNetworkArrival"
+import { snackAside } from "@/composables/snackInset"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -128,6 +129,7 @@ const sends = useSendsInProgress({
 	},
 	tokenEvents: arrivalsTokens,
 	session: () => managers.profile.getSessionHandle(),
+	reviewing: () => snackAside.value,
 	toast,
 	openToast,
 	updateToast,

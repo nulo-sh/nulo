@@ -14,6 +14,7 @@ import type {
 import type { QueuedFeePayer } from "@nulo/wallet-core/jobs"
 import type { DefaultEntrypointRefusal, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import type { WindowEnd } from "./window-end"
+import type { KnownContract } from "./known-contracts"
 
 /** Protocol-shape types (`ExecutionParams`, `ExecutionResult`,
  *  `CapabilityParams`, `CapabilityResult`, all `OperationRequest`
@@ -185,6 +186,8 @@ export type Methods = {
 	/** Bring the approval popup of the live interaction for `journalId` to the
 	 *  front. `false` when there is none, or it belongs to another profile. */
 	focusInteractionWindow(journalId: string): boolean
+	/** The contracts Nulo names on the chain of `sessionId`; refused for an app of another profile. */
+	getKnownContracts(sessionId: string): KnownContract[]
 }
 
 export type Events = {

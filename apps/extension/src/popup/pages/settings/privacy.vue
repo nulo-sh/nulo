@@ -89,8 +89,10 @@ onBeforeUnmount(() => {
 				align="center"
 				:data-testid="settings.showFiatValues.testid"
 				v-settings-row="settings.showFiatValues.id"
+				v-slot="{ titleId }"
 			>
 				<Toggle
+					:aria-labelledby="titleId"
 					@update:modelValue="updateSetting('showFiatValues', $event)"
 					:modelValue="settings.showFiatValues.model.value"
 					data-testid="fiat-values-toggle"
@@ -150,8 +152,10 @@ onBeforeUnmount(() => {
 				align="center"
 				:data-testid="settings.privacyMode.testid"
 				v-settings-row="settings.privacyMode.id"
+				v-slot="{ titleId }"
 			>
 				<Toggle
+					:aria-labelledby="titleId"
 					@update:modelValue="updateSetting('privacyMode', $event)"
 					:modelValue="settings.privacyMode.model.value"
 					data-testid="privacy-mode-toggle"

@@ -33,7 +33,7 @@ import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
 import { GRANT_BLOCK_WAIT_MS } from "./grant-block"
 import { AuthRegistryService, MAX_TRACKED_AUTHWITS_PER_ACCOUNT } from "./service"
-import { type Authwit, authwitStatusRowId } from "./spec"
+import { type Authwit, authwitRowKey, authwitStatusRowId } from "./spec"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 /** One key for every profile; the conversion event stays inert. */
@@ -656,7 +656,14 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		const h = await makeHarness()
 		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const log = instrument(h)
+		const tasks = (h.service as unknown as { taskService: { startNewTask: (content: unknown) => unknown } }).taskService
+		const started = vi.spyOn(tasks, "startNewTask")
 		await h.service.revokeAuthwits("net-1", A, [1], FEE)
+		// The task names each row by its whole identity, which the Authwits page matches its rows by.
+		expect(started.mock.calls[0]?.[0]).toMatchObject({
+			authwitIds: [1],
+			authwitKeys: [authwitRowKey({ id: 1, ...P1, hash: "0xh1", txHash: TX1 })],
+		})
 		const fence = JSON.stringify(await h.captureExecutionFence.mock.results.at(-1)?.value)
 		const request = {
 			kind: "send_transaction",
@@ -675,6 +682,35 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 			`verify:${JSON.stringify(P1)}:1:2`,
 			"complete",
 		])
+	})
+
+	test("a revoke naming a row already gone sends the rest and names only them; naming none that is listed is refused", async () => {
+		const h = await makeHarness()
+		const hash1 = `0x${"c1".repeat(32)}`
+		const hash2 = `0x${"c2".repeat(32)}`
+		const tx2 = `0x${"02".repeat(32)}`
+		await h.service.recordPendingAuthwits(P1, [{ hash: hash1, content }], TX1, LIVE_EPOCH)
+		await h.service.recordPendingAuthwits(P1, [{ hash: hash2, content }], tx2, LIVE_EPOCH)
+		// The grant of #1 is dropped after a popup listed it.
+		await h.service.reconcileAuthwits(P1, TX1, "dropped")
+		instrument(h)
+		const tasks = (h.service as unknown as { taskService: { startNewTask: (content: unknown) => unknown } }).taskService
+		const started = vi.spyOn(tasks, "startNewTask")
+
+		await h.service.estimateRevokeFee("net-1", A, [1, 2], FEE)
+		await h.service.revokeAuthwits("net-1", A, [1, 2], FEE)
+		const actions = [{ kind: "call", contract: getAuthRegistryAddress().toString(), method: "set_authorized", args: [hash2, false] }]
+		expect(h.estimateSendTransactionFee.mock.calls[0]?.[0]).toMatchObject({ actions })
+		expect(h.executeSendTransaction.mock.calls[0]?.[0]).toMatchObject({ actions })
+		expect(started.mock.calls[0]?.[0]).toMatchObject({
+			authwitIds: [2],
+			authwitKeys: [authwitRowKey({ id: 2, ...P1, hash: hash2, txHash: tx2 })],
+		})
+
+		await expect(h.service.revokeAuthwits("net-1", A, [1], FEE)).rejects.toThrow(/^Authwit #1 doesn't exist$/)
+		await expect(h.service.estimateRevokeFee("net-1", A, [1, 99], FEE)).rejects.toThrow(/^Authwit #1, #99 doesn't exist$/)
+		expect(h.executeSendTransaction).toHaveBeenCalledTimes(1)
+		expect(h.estimateSendTransactionFee).toHaveBeenCalledTimes(1)
 	})
 
 	test("a registry toggle settles in the same order with its own action and sync", async () => {
@@ -1199,7 +1235,10 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		const util = await import("@/wallet/utils/auth-registry")
 		let release!: () => void
 		const parked = new Promise<void>((r) => (release = r))
+		let reached!: () => void
+		const reading = new Promise<void>((r) => (reached = r))
 		vi.spyOn(util, "isAuthwitConsumable").mockImplementation(async () => {
+			reached()
 			await parked
 			return false
 		})
@@ -1210,7 +1249,7 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		const [row] = await h.service.getAuthwits(1, A)
 
 		const sync = h.service.syncRegistry("net-1", A)
-		await new Promise((r) => setTimeout(r, 5))
+		await reading
 		// Purge + restore during the await: the numeric id now holds a p2 row.
 		await h.service.purgeForProfile("p1")
 		await h.api.storage.local.set({
@@ -1222,6 +1261,134 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		h.setActive({ id: "p2" })
 		expect((await h.service.getAuthwits(1, A)).map((r) => r.hash)).toEqual(["0xforeign"])
 		vi.restoreAllMocks()
+	})
+})
+
+describe("AuthRegistryService.syncRegistry — the check the Authwits page runs when it opens", () => {
+	const hex = (byte: string) => `0x${byte.repeat(32)}`
+	const ACCOUNT = hex("ab")
+	const SCOPE = { profileId: "p1", chainId: 1, account: ACCOUNT }
+	afterEach(() => vi.restoreAllMocks())
+
+	/** One endpoint, so a row's verdict is its one read; `hashes` become confirmed rows, ids in order. */
+	async function checking(hashes: string[]) {
+		const h = await makeHarness({ node: {} })
+		const row = await h.getNetwork()
+		h.getNetwork.mockResolvedValue({ ...row, endpoints: row.endpoints.slice(0, 1) })
+		const grant = hex("0f")
+		if (hashes.length) {
+			await h.service.recordPendingAuthwits(
+				SCOPE,
+				hashes.map((hash) => ({ hash, content })),
+				grant,
+				LIVE_EPOCH,
+			)
+			await h.service.reconcileAuthwits(SCOPE, grant, "mined")
+		}
+		const util = await import("@/wallet/utils/auth-registry")
+		const consumable = vi.spyOn(util, "isAuthwitConsumable").mockResolvedValue(true)
+		const enabled = vi.spyOn(util, "isAuthRegistryEnabled").mockResolvedValue(true)
+		const events: string[] = []
+		h.service.onAuthwitDeleted.add((a) => void events.push(`deleted:${a.hash}`))
+		h.service.onRegistryEnabled.add((scope) => void events.push(`enabled:${scope.account}`))
+		h.service.onRegistryDisabled.add((scope) => void events.push(`disabled:${scope.account}`))
+		const check = (account = ACCOUNT) => h.service.syncRegistry("net-1", account)
+		const hashesLeft = async () => (await rowsOf(h.service, SCOPE)).map((r) => r.hash)
+		return { h, consumable, enabled, events, check, hashesLeft }
+	}
+
+	test("the chain's switch replaces a stored flag that disagrees, each way, and an agreeing one emits nothing", async () => {
+		const { h, enabled, events, check } = await checking([])
+		enabled.mockResolvedValue(false)
+		await check()
+		expect(await h.service.getRegistryEnabled(1, ACCOUNT)).toBe(false)
+		await check()
+		expect(events).toEqual([`disabled:${ACCOUNT}`])
+
+		enabled.mockResolvedValue(true)
+		await check()
+		await check()
+		expect(await h.service.getRegistryEnabled(1, ACCOUNT)).toBe(true)
+		expect(events).toEqual([`disabled:${ACCOUNT}`, `enabled:${ACCOUNT}`])
+	})
+
+	test("a consumed grant and one revoked elsewhere leave; a live one stays, and a pending one is never read", async () => {
+		const [consumed, revokedElsewhere, live, pending] = [hex("c1"), hex("c2"), hex("c3"), hex("c4")]
+		const { h, consumable, events, check, hashesLeft } = await checking([consumed, revokedElsewhere, live])
+		await h.service.recordPendingAuthwits(SCOPE, [{ hash: pending, content }], hex("0e"), LIVE_EPOCH)
+		consumable.mockImplementation(async (_node, _account, hash) => hash === live)
+
+		await check()
+
+		expect(await hashesLeft()).toEqual([live, pending])
+		expect(events.sort()).toEqual([`deleted:${consumed}`, `deleted:${revokedElsewhere}`])
+		expect(consumable.mock.calls.map((call) => call[2]).sort()).toEqual([consumed, revokedElsewhere, live])
+	})
+
+	test("a failed read changes nothing it read: all failing keep every row and the flag", async () => {
+		const { h, consumable, enabled, events, check, hashesLeft } = await checking([hex("c1"), hex("c2")])
+		consumable.mockRejectedValue(new Error("node down"))
+		enabled.mockRejectedValue(new Error("node down"))
+
+		await expect(check()).rejects.toThrow("node down")
+
+		expect(await hashesLeft()).toEqual([hex("c1"), hex("c2")])
+		expect(await h.service.getRegistryEnabled(1, ACCOUNT)).toBe(true)
+		expect(events).toEqual([])
+	})
+
+	test("one failed read keeps its row, and the other's prune lands before the call rejects", async () => {
+		const [failing, consumed] = [hex("c1"), hex("c2")]
+		const { consumable, events, check, hashesLeft } = await checking([failing, consumed])
+		consumable.mockImplementation(async (_node, _account, hash) => {
+			if (hash === failing) throw new Error("node down")
+			await new Promise((r) => setTimeout(r, 5))
+			return false
+		})
+
+		await expect(check()).rejects.toThrow("node down")
+
+		expect(events).toEqual([`deleted:${consumed}`])
+		expect(await hashesLeft()).toEqual([failing])
+	})
+
+	test("one check per scope at a time: a call while one runs joins it, a later one reads again, another account runs its own", async () => {
+		const other = hex("cd")
+		const { h, consumable, enabled, check } = await checking([hex("c1")])
+		let release!: () => void
+		const held = new Promise<void>((r) => (release = r))
+		consumable.mockImplementation(async () => {
+			await held
+			return true
+		})
+
+		const first = check()
+		const joined = check()
+		const otherAccount = check(other)
+		await vi.waitFor(() => expect(enabled).toHaveBeenCalledTimes(2))
+		release()
+		await Promise.all([first, joined, otherAccount])
+		expect(consumable).toHaveBeenCalledTimes(1)
+		expect(enabled.mock.calls.map((call) => call[1]).sort()).toEqual([ACCOUNT, other].sort())
+
+		await check()
+		expect(consumable).toHaveBeenCalledTimes(2)
+		expect(enabled).toHaveBeenCalledTimes(3)
+		expect(h.nodeForNetwork).toHaveBeenCalledTimes(3)
+	})
+
+	test("reads at most MAX_TRACKED_AUTHWITS_PER_ACCOUNT confirmed rows, the lowest ids, plus the switch", async () => {
+		// Only a restored backup holds more: restore keeps every grant it carries.
+		const hashes = Array.from(
+			{ length: MAX_TRACKED_AUTHWITS_PER_ACCOUNT + 44 },
+			(_, i) => `0x${(i + 1).toString(16).padStart(64, "0")}`,
+		)
+		const { consumable, enabled, check } = await checking(hashes)
+
+		await check()
+
+		expect(consumable.mock.calls.map((call) => call[2]).sort()).toEqual(hashes.slice(0, MAX_TRACKED_AUTHWITS_PER_ACCOUNT).sort())
+		expect(enabled).toHaveBeenCalledTimes(1)
 	})
 })
 

@@ -57,6 +57,8 @@ export interface UseEntityCrudResult<T> {
 	 * routine add/delete doesn't blank the whole list for a round-trip.
 	 */
 	refresh: (opts?: { clear?: boolean }) => Promise<void>
+	/** The initial fetch, settled: resolves once it lands or fails, never rejects. */
+	loaded: Promise<void>
 	dispose: () => void
 }
 
@@ -77,9 +79,23 @@ export function useEntityCrud<T>(options: UseEntityCrudOptions<T>): UseEntityCru
 
 	const fence = createRunFence()
 	let disposed = false
+	/** The incremental events since the current fetch began: its snapshot can be read before an
+	 *  event's write and delivered after it, so each is applied again over the snapshot. */
+	let sinceFetch: Array<() => void> | undefined
+
+	const land = (result: T[], missed: Array<() => void>) => {
+		entities.value = result
+		for (const splice of missed) splice()
+		error.value = null
+	}
+	const stopRecording = (missed: Array<() => void>) => {
+		if (sinceFetch === missed) sinceFetch = undefined
+	}
 
 	const refresh = async (opts?: { clear?: boolean }) => {
 		const isCurrent = fence.begin()
+		const missed: Array<() => void> = []
+		sinceFetch = missed
 		if (opts?.clear) {
 			// Synchronous with `begin()`: the foreign-scope rows are gone
 			// before ANY await, and a failed fetch below leaves the list empty
@@ -91,15 +107,30 @@ export function useEntityCrud<T>(options: UseEntityCrudOptions<T>): UseEntityCru
 		try {
 			const result = await fetch()
 			if (disposed || !isCurrent()) return
-			entities.value = result
-			error.value = null
+			land(result, missed)
 		} catch (err) {
 			if (disposed || !isCurrent()) return
 			error.value = err
 			onError?.(err)
 		} finally {
+			stopRecording(missed)
 			if (!disposed && isCurrent()) isLoading.value = false
 		}
+	}
+
+	const apply = (splice: () => void) => {
+		splice()
+		sinceFetch?.push(splice)
+	}
+	const upsert = (entity: T) => {
+		const id = identity(entity)
+		// Same id reappearing as `added` is treated as an update — common in
+		// services that re-emit on reconnect.
+		if (entities.value.some((e) => identity(e) === id)) {
+			entities.value = entities.value.map((e) => (identity(e) === id ? entity : e))
+			return
+		}
+		entities.value = [...entities.value, entity]
 	}
 
 	const onAdded = (entity: T) => {
@@ -108,43 +139,25 @@ export function useEntityCrud<T>(options: UseEntityCrudOptions<T>): UseEntityCru
 			return
 		}
 		if (accept && !accept(entity)) return
-		const id = identity(entity)
-		if (entities.value.some((e) => identity(e) === id)) {
-			// Same id reappearing as `added` is treated as an update — common in
-			// services that re-emit on reconnect.
-			entities.value = entities.value.map((e) => (identity(e) === id ? entity : e))
-			return
-		}
-		entities.value = [...entities.value, entity]
+		apply(() => upsert(entity))
 	}
-	const onUpdated = (entity: T) => {
-		if (mode === "resync") {
-			void refresh()
-			return
-		}
-		if (accept && !accept(entity)) return
-		const id = identity(entity)
-		const idx = entities.value.findIndex((e) => identity(e) === id)
-		if (idx === -1) {
-			entities.value = [...entities.value, entity]
-			return
-		}
-		entities.value = entities.value.map((e, i) => (i === idx ? entity : e))
-	}
+	const onUpdated = (entity: T) => onAdded(entity)
 	const onDeleted = (entity: T) => {
 		if (mode === "resync") {
 			void refresh()
 			return
 		}
 		const id = identity(entity)
-		entities.value = entities.value.filter((e) => identity(e) !== id)
+		apply(() => {
+			entities.value = entities.value.filter((e) => identity(e) !== id)
+		})
 	}
 
 	added?.add(onAdded)
 	updated?.add(onUpdated)
 	deleted?.add(onDeleted)
 
-	void refresh()
+	const loaded = refresh()
 
 	const dispose = () => {
 		if (disposed) return
@@ -156,5 +169,5 @@ export function useEntityCrud<T>(options: UseEntityCrudOptions<T>): UseEntityCru
 
 	onScopeDispose(dispose)
 
-	return { entities, isLoading, error, refresh, dispose }
+	return { entities, isLoading, error, refresh, loaded, dispose }
 }

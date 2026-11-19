@@ -64,6 +64,12 @@ export function buildDetailsTable(grants: readonly unknown[], knownContracts: re
 	}
 }
 
+/** Whether a row lists a function by name, the only thing the table's footnote explains. */
+export function listsFunctionNames(table: DetailsTable): boolean {
+	const rows = [...table.known, ...table.unknown, ...table.classes, ...(table.anyContract ? [table.anyContract] : [])]
+	return rows.some((row) => [...row.simulate, ...row.transact].some((fn) => fn !== ANY_FUNCTION))
+}
+
 function collect(into: Collected, cap: Record<string, unknown>): void {
 	switch (cap.type) {
 		case "simulation":
