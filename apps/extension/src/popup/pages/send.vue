@@ -38,7 +38,7 @@ import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { entityListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
-import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
+import { feeJuiceBridgeUrl, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
 import { formatBaseUnits } from "@/utils/amount"
 import { goBack } from "@/utils/page-back"
 import { sentenceName } from "@/utils/string"
@@ -115,9 +115,10 @@ function leaveUnusable() {
 	router.replace("/popup/general")
 }
 
+const feeJuiceUrl = computed(() => feeJuiceBridgeUrl(appStore.network?.chainId))
 /** Open the fee-juice bridge in a new tab. */
 const openFeeJuiceBridge = () => {
-	window.open(FEE_JUICE_BRIDGE_URL, "_blank", "noopener,noreferrer")
+	window.open(feeJuiceUrl.value, "_blank", "noopener,noreferrer")
 }
 
 const awaitingNewToken = ref(false)
@@ -1139,7 +1140,7 @@ onBeforeUnmount(() => {
 						testid="send-to-type"
 						prefix="send-to"
 					/>
-					<PublishLine :facts="facts" :name="payeeSentenceName" :payer="payerKind" :remedy="feeRemedy" :bridgeUrl="FEE_JUICE_BRIDGE_URL" :quiet="feeSheetOpen" @fix="applyFeeFix" />
+					<PublishLine :facts="facts" :name="payeeSentenceName" :payer="payerKind" :remedy="feeRemedy" :bridgeUrl="feeJuiceUrl" :quiet="feeSheetOpen" @fix="applyFeeFix" />
 				</Flex>
 			</Flex>
 

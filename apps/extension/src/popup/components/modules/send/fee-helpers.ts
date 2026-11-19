@@ -2,6 +2,7 @@ import { FpcType } from "@/wallet/services/fpc/client"
 import { FEE_DECIMALS, FEE_JUICE_DECIMALS, FEE_READOUT_UNIT, type FeeDisplay, feeDisplay, formatGasBalance } from "@/utils/fee-estimation"
 import { formatBaseUnits } from "@/utils/amount"
 import type { AppPick } from "@/utils/fee-picks"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 
 export { formatGasBalance }
 
@@ -334,13 +335,20 @@ function privateFeeJuiceOption(privateFpc: RegisteredFpc | undefined, gasBalance
 	return privateFj
 }
 
+const SHIELD_FEE_JUICE_URL = "https://shield.human.tech/fee-juice"
+const UNLEASHED_TESTNET_URL = "https://testnet.app.unleashed.systems"
+
 /**
- * Destination of the "get fee juice" nudge: unleashed's testnet app, on every network (the owner's
- * call; unleashed has no public mainnet bridge). Override at build time with
- * `VITE_FEE_JUICE_BRIDGE_URL`.
+ * Where a "Get Fee Juice" link leads on the chain: Mainnet opens human.tech's Shield until Unleashed
+ * is deployed on Alpha (the owner's decision of 2026-11-18); every other chain, unknown included,
+ * opens Unleashed's testnet app. `VITE_FEE_JUICE_BRIDGE_URL`, when a build sets it, wins on every
+ * chain. The URL never carries wallet state.
  */
-export const FEE_JUICE_BRIDGE_URL: string =
-	(import.meta.env.VITE_FEE_JUICE_BRIDGE_URL as string | undefined) ?? "https://testnet.app.unleashed.systems"
+export function feeJuiceBridgeUrl(chainId: number | undefined): string {
+	const override = import.meta.env.VITE_FEE_JUICE_BRIDGE_URL as string | undefined
+	if (override !== undefined) return override
+	return chainId === CHAIN_IDS.MAINNET ? SHIELD_FEE_JUICE_URL : UNLEASHED_TESTNET_URL
+}
 
 /** The identity a fee card's balance snapshot belongs to. Fields stay in this order everywhere. */
 export interface FeeScope {
