@@ -1,7 +1,7 @@
 ---
 plan: fee-juice-link-1
 tier: light
-status: planned
+status: delivered (one PR against dev, merge pending)
 issues: "#77 (closes), #1806 (part of: its Privacy half)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at b8ec26b1f
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-19.
+- **Status:** delivered. One PR against `dev` carries the change and this close-out; it merges on the orchestrator's word, after the owner answers OA-1.
+- **Owner sign-off:** the two quotes of 2026-11-18 (Fact 1), for where Mainnet's links lead. Nothing a person sees changes otherwise.
+- **Shipped:** `feeJuiceBridgeUrl(chainId)` in `fee-helpers.ts` (Mainnet → `https://shield.human.tech/fee-juice`, every other chain → `https://testnet.app.unleashed.systems`, a build override wins everywhere), read by the fee card's two links, Send's publish line and footer, and Home's Get started row; per-site tests on Mainnet and Testnet, red on the base for Mainnet; privacy 1.4 (§ 5.10 names Shield on Alpha and the links' real words), its archive, manifest entry and `BEFORE-LAUNCH.md` § 4 block; `CLAUDE.md` § The wallet repo. Closes #77; part of #1806 (its Privacy half).
+- **Dispositions:** D1 keys on the wallet chain id; Shield's own bundle names the same chain and PrivateFPC (lessons/phase-1.md). D2 keeps the override global. #1806's Terms half (§ 8's lower-case "fee juice") stays open, outside this lane.
+- **Known limits:** none.
+- **Open items:** #1871 (Mainnet's links move to Unleashed once it is deployed on Alpha); the privacy 1.4 dates, `BEFORE-LAUNCH.md` § 4 ("Due at the release that publishes privacy 1.4").
+- **Lessons:** none promoted; the one slip is already in `lessons.md` (Agent tooling).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # fee-juice-link-1: Mainnet's fee juice links open Shield
 
