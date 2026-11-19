@@ -984,7 +984,7 @@ declare global {
   export type { Snack, Outcome } from '../utils/snack'
   import('../utils/snack')
   // @ts-ignore
-  export type { Aggregate, PriceMapping } from '../utils/token-aggregate'
+  export type { PriceMapping } from '../utils/token-aggregate'
   import('../utils/token-aggregate')
   // @ts-ignore
   export type { FiatOf } from '../utils/token-amount'

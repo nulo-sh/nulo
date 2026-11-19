@@ -112,12 +112,12 @@ const pins = usePinnedTokens({
 })
 void pins.refresh()
 
-const aggregate = computed(() => aggregateFiat(rows.value, fiatOf))
+const aggregateMicro = computed(() => aggregateFiat(rows.value, fiatOf))
 /** Home's unavailable state, from the first price answer on: before it no quote has had a chance. */
 const unavailable = computed(() => showFiatValues.value && prices.settled.value && pricesUnavailable(rows.value, fiatOf, prices))
 /** A list that failed to read has no total, whatever rows live events stored since. */
 const totalUnknown = computed(() => error.value || unavailable.value)
-const totalDisplay = computed(() => (totalUnknown.value ? "—" : prices.formatUsdMicro(aggregate.value.micro)))
+const totalDisplay = computed(() => (totalUnknown.value ? "—" : prices.formatUsdMicro(aggregateMicro.value)))
 /** An unread list has no total yet, so the skeleton stands from the start, not from the first rows. */
 const awaitingPrices = computed(
 	() => showFiatValues.value && !error.value && (isLoading.value || awaitingFirstPriceAnswer(rows.value, prices)),

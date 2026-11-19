@@ -20,10 +20,9 @@ test("fresh wallet state matrix: truthful $0.00, zero fiat artifacts", async ({ 
 	expect(balanceText).toBe("$0.00")
 
 	// And with no quotes, no fiat LINES render anywhere (no per-token fiat,
-	// no header secondary line, no partial-aggregate label).
+	// no header secondary line).
 	expect(await page.$('[data-testid="token-fiat"]')).toBeNull()
 	expect(await page.$('[data-testid="balance-fiat"]')).toBeNull()
-	expect(await page.$('[data-testid="balance-fiat-partial"]')).toBeNull()
 
 	expect(registeredExtension.pageErrors).toEqual([])
 })

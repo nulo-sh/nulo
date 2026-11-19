@@ -22,7 +22,6 @@
     "ActivityRowTx": true,
     "ActivitySlice": true,
     "AdmittedUnlock": true,
-    "Aggregate": true,
     "AmountRead": true,
     "AppPick": true,
     "AppServices": true,

@@ -144,7 +144,7 @@ describe("meta text reads in --nulo-secondary; --nulo-outline is for borders and
 		["popup/components/modules/activity/TransactionCard.vue", ".hash"],
 		["components/composite/activity/TransactionIncomingCard.vue", ".hash"],
 		["components/composite/activity/TransactionCardLayout.vue", ".amount_symbol"],
-		["popup/components/modules/general/BalanceView.vue", ".fiat_partial"],
+		["popup/components/modules/general/BalanceView.vue", ".prices_unavailable"],
 		["popup/components/modules/general/BalanceView.vue", ".breakdown_divider"],
 		["popup/components/modules/holdings/TokenList.vue", ".fold_action"],
 	])("%s: %s", (path, selector) => {
