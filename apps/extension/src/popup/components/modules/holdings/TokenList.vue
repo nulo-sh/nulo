@@ -46,6 +46,8 @@ const props = defineProps({
 	adding: { type: String, default: "" },
 	/** The last add's refusal, shown while the query is the address it judged. */
 	addRefusal: { type: Object as PropType<{ address: string; message: string }>, default: undefined },
+	/** While the query is a whole address, the row it names stays out of the fold, empty or dust. */
+	keepSearchedRow: { type: Boolean, default: false },
 })
 
 const query = ref("")
@@ -56,6 +58,8 @@ const ctx = computed<OrderCtx<Row>>(() => ({ pinnedContracts: props.pinnedContra
 const thresholdMicro = computed(() => usdThresholdToMicro(props.dustThresholdUsd))
 
 const matching = computed(() => props.rows.filter((tb) => matchesQuery(tb.token, query.value)))
+/** A whole address matches only its own contract, so every matching row is the one it names. */
+const keepsMatching = computed(() => props.keepSearchedRow && isValidAztecAddress(query.value.trim()))
 
 /** Value order comes from the shared comparator; name order is plain, with pins still first. */
 const ordered = computed(() => {
@@ -76,7 +80,10 @@ const partition = computed(() => {
 	for (const tb of ordered.value) {
 		if (classifyRow(tb, ctx.value) === "pinned") {
 			pinned.push(tb)
-		} else if (isHiddenHolding(tb, { ctx: ctx.value, usdRate: props.usdRateOf(tb), thresholdMicro: thresholdMicro.value })) {
+		} else if (
+			!keepsMatching.value &&
+			isHiddenHolding(tb, { ctx: ctx.value, usdRate: props.usdRateOf(tb), thresholdMicro: thresholdMicro.value })
+		) {
 			hidden.push(tb)
 			if (classifyRow(tb, ctx.value) === "empty") empty += 1
 		} else {
@@ -122,15 +129,12 @@ const toggleSort = () => {
 }
 
 const root = useTemplateRef<ComponentPublicInstance>("root")
-const fold = useTemplateRef<HTMLButtonElement>("fold")
 
-/** Moves focus to a token's row, or to the fold it sits behind, only when the Add row it replaced
- *  left focus on nothing: a control the person moved to keeps it. */
+/** Moves focus to a token's row only when the Add row it replaced left focus on nothing: a control
+ *  the person moved to keeps it. */
 function focusToken(tokenId: number | string) {
 	if (document.activeElement && document.activeElement !== document.body) return
-	const row = (root.value?.$el as HTMLElement | undefined)?.querySelector<HTMLElement>(`[data-token-id="${tokenId}"]`)
-	if (row) return row.focus()
-	if (partition.value.hidden.some((tb) => tb.token.id === tokenId)) fold.value?.focus()
+	;(root.value?.$el as HTMLElement | undefined)?.querySelector<HTMLElement>(`[data-token-id="${tokenId}"]`)?.focus()
 }
 defineExpose({ focusToken })
 </script>
@@ -175,7 +179,6 @@ defineExpose({ focusToken })
 				<TokenCard v-for="tb in partition.rest" :key="tb.id" :tokenBalance="tb" v-bind="rowProps(tb)" />
 				<button
 					v-if="foldText"
-					ref="fold"
 					type="button"
 					@keydown.enter="refuseRepeatEnter"
 					@click="showHidden = !showHidden"

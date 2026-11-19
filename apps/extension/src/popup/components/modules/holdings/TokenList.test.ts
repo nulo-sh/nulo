@@ -188,6 +188,34 @@ describe("TokenList — fold", () => {
 		expect(w.findAll('[data-malformed="true"]')).toHaveLength(2)
 	})
 
+	test("a host that keeps the searched row shows it, empty or dust, while the query is its whole address; a partial or cleared query folds it", async () => {
+		const EMPTY_AT = "0x0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
+		const DUST_AT = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
+		const w = mountList({
+			rows: [
+				row(1, "HELD", { privateBalance: ONE }),
+				row(2, "E", { contract: EMPTY_AT }),
+				row(3, "DUST", { contract: DUST_AT, privateBalance: "1000" }),
+			],
+			fiatOf: fiatBy({ HELD: 2_000_000n, DUST: 1n }),
+			usdRateOf: rateBy({ HELD: 2, DUST: 2 }),
+			dustThresholdUsd: 1,
+			keepSearchedRow: true,
+		})
+		await setQuery(w, EMPTY_AT.toUpperCase().replace("0X", "0x"))
+		expect(symbols(w)).toEqual(["E"])
+		expect(w.find('[data-testid="holdings-fold"]').exists()).toBe(false)
+		await setQuery(w, DUST_AT)
+		expect(symbols(w)).toEqual(["DUST"])
+
+		await setQuery(w, EMPTY_AT.slice(0, 20))
+		expect(symbols(w)).toEqual([])
+		expect(w.find('[data-testid="holdings-fold"]').text()).toContain("1 hidden")
+		await setQuery(w, "")
+		expect(symbols(w)).toEqual(["HELD"])
+		expect(w.find('[data-testid="holdings-fold"]').text()).toContain("2 hidden")
+	})
+
 	test("no rows at all renders no fold, no rule and no results line", async () => {
 		const w = mountList({ rows: [] })
 		await flushPromises()
@@ -325,16 +353,11 @@ describe("TokenList — an add from the host", () => {
 		expect(w.find('[data-testid="holdings-add-token-error"]').exists()).toBe(false)
 	})
 
-	test("focusToken takes a focus the Add row left on nothing to the row, or to the fold an empty row sits behind", async () => {
+	test("focusToken takes a focus the Add row left on nothing to the row", async () => {
 		const w = attached({ rows: [arrived({ privateBalance: ONE })] })
 		await setQuery(w, UNLISTED)
 		;(w.vm as unknown as { focusToken: (id: number) => void }).focusToken(9)
 		expect(document.activeElement?.getAttribute("data-token-id")).toBe("9")
-
-		;(document.activeElement as HTMLElement).blur()
-		await w.setProps({ rows: [arrived()] })
-		;(w.vm as unknown as { focusToken: (id: number) => void }).focusToken(9)
-		expect(document.activeElement).toBe(w.get('[data-testid="holdings-fold"]').element)
 		w.unmount()
 	})
 

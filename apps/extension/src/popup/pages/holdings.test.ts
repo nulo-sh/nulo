@@ -759,6 +759,29 @@ describe("holdings page — Add imports in one press", () => {
 		w.unmount()
 	})
 
+	test("an added token whose balance lands empty stays in view under its searched address, and keeps the focus", async () => {
+		const unsynced = { ...added, publicBalance: "0", privateBalance: "0", updatedAt: 0 }
+		tokenCalls.addToken.mockImplementation(async () => {
+			seedRows = [...seedRows, unsynced]
+			balanceEvents.added.invoke(unsynced as never)
+			return unsynced.token
+		})
+		const { w, add } = await pasteAndFocusAdd()
+		await add.trigger("click")
+		await flushPromises()
+		// The worker finishes the balance task, then sends the balance it read.
+		taskEvents.updated.invoke({ id: "t1", content: { kind: ContentKind.BalanceUpdate, tbId: "b9", account: "0xacct" }, finishedAt: 1 })
+		await flushPromises()
+		const focusedSymbol = () => document.activeElement?.querySelector('[data-testid="token-symbol"]')?.getAttribute("data-symbol")
+		expect(focusedSymbol()).toBe("NEW")
+
+		balanceEvents.updated.invoke({ ...unsynced, updatedAt: 2 } as never)
+		await flushPromises()
+		expect(w.find('[data-testid="holdings-fold"]').exists()).toBe(false)
+		expect(focusedSymbol()).toBe("NEW")
+		w.unmount()
+	})
+
 	test("a scope change mid-add ends its wait: no refusal, no focus, and Add is free in the new scope", async () => {
 		let parsed!: (v: unknown) => void
 		tokenCalls.parseTokenInterface.mockImplementationOnce(() => new Promise((resolve) => (parsed = resolve)))

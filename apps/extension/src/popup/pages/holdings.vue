@@ -270,6 +270,7 @@ onBeforeUnmount(() => {
 				:refreshing="refreshing"
 				:adding="adding"
 				:addRefusal="addRefusal"
+				keepSearchedRow
 				@addToken="addPasted"
 			/>
 		</Flex>
