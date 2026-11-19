@@ -109,12 +109,11 @@ const displayedTokenFiat = computed(() => {
 })
 
 const fiatOf = prices.fiatOfRow
-const aggregate = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
-
-/** Holdings that lack a price count as $0.00 under the "priced assets only" caption, unless every
- *  priceable one lacks it (`noPrices`). */
-const aggregateFiatDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
-const isAggregatePartial = computed(() => aggregate.value.partial)
+/** Holdings that lack a price count as $0.00, unless every priceable one lacks it (`noPrices`). The
+ *  total carries no caption for them, even for one ranked past Home's listed rows: a listed one shows
+ *  its name where a dollar value would be. */
+const aggregateMicro = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
+const aggregateFiatDisplay = computed(() => prices.formatUsdMicro(aggregateMicro.value))
 
 /** The hero's figure while it counts toward the aggregate; null shows the aggregate's own string. */
 const countMicro = ref(null)
@@ -132,7 +131,7 @@ const chipCalm = ref(false)
 
 /** Every form the hero's figure may take, longest first; the fit draws the longest that fits. */
 const heroCandidates = computed(() => {
-	if (!tokenToDisplay.value) return fiatHeroCandidates(countMicro.value ?? aggregate.value.micro)
+	if (!tokenToDisplay.value) return fiatHeroCandidates(countMicro.value ?? aggregateMicro.value)
 	const sides = heroSides.value
 	if (!sides) return ["—"]
 	return tokenHeroCandidates(sides.publicRaw + sides.privateRaw, sides.decimals, 20)
@@ -230,7 +229,7 @@ watch(
 watch(
 	() =>
 		!tokenToDisplay.value && showFiatValues.value && !heroPending.value && isTotalKnown.value && !noPrices.value
-			? aggregate.value.micro
+			? aggregateMicro.value
 			: null,
 	(micro) => (micro === null ? balanceCount.reset() : balanceCount.observe(micro)),
 	{ immediate: true },
@@ -320,16 +319,9 @@ onBeforeUnmount(() => {
 			<div
 				v-if="!tokenToDisplay && !heroPending && isTotalKnown && noPrices"
 				data-testid="balance-prices-unavailable"
-				:class="$style.fiat_partial"
+				:class="$style.prices_unavailable"
 			>
 				Prices unavailable
-			</div>
-			<div
-				v-else-if="!tokenToDisplay && !heroPending && isTotalKnown && isAggregatePartial"
-				data-testid="balance-fiat-partial"
-				:class="$style.fiat_partial"
-			>
-				priced assets only
 			</div>
 
 			<!-- Glyphs only: the two marks are the token rows' vocabulary, so no word doubles them. -->
@@ -492,7 +484,7 @@ onBeforeUnmount(() => {
 	margin-top: 4px;
 }
 
-.fiat_partial {
+.prices_unavailable {
 	composes: type--meta from global;
 	color: var(--nulo-secondary);
 	margin-top: 4px;
