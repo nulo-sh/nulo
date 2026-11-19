@@ -7,7 +7,7 @@ codex_model: sol
 code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
-base: dev at 46dc91c3f
+base: dev at 93877b8b1 (rebased from 46dc91c3f before arc 1)
 trunk: dev
 ---
 
@@ -34,7 +34,7 @@ Codex model: `gpt-6.1-sol` ran every consult (the lane brief names it; the previ
 **Facts** (sources in `recon.md` § Facts unless cited):
 - F1. `wallet` mode ignores unknown payload and entry keys; `strict` refuses them (`packages/token-list/src/parse.ts:87-94`). `packages/token-list/src` at HEAD is byte-identical to `v1.3.0`.
 - F2. 1.3.0 refuses a new format string: a new signing domain fails its compiled `DOMAIN_PREFIX` (`envelope.ts:12-13`), and a new payload `format` under the old domain fails `parse.ts:239`.
-- F3. The envelope cap is 65,536 bytes (`envelope.ts:15`), checked before parsing; today's envelope is 13,783 bytes.
+- F3. The envelope cap is 65,536 bytes (`envelope.ts:15`), checked before parsing; the served envelope is 16,491 bytes (sequence 1795127181, after rUSDC).
 - F4. A per-entry picture already exists: `icon`, checked by `checkIcon` (`parse.ts:177-181`), dropped in `wallet` mode and refused in `strict`; `selectEntries` keeps every entry field but `priceId` (`parse.ts:291-307`); the digest hashes the whole `tokens` array (`sign.ts:33-35`). Circle's USDC file already repeats byte for byte on three entries.
 - F5. A flagged pair is never listed, in both modes (`parse.ts:225-235`). Pictures attach by exact chain and contract (`apps/extension/src/utils/token-icon.ts`).
 - F6. The stored list is the envelope string (`stored-shapes.ts:137-142`); no stored shape changes.
@@ -48,14 +48,15 @@ Codex model: `gpt-6.1-sol` ran every consult (the lane brief names it; the previ
 - I2. The Send card's warning also marks a blocked token, read from the person's own row (`SelectTokenCard.vue:51-53`, `wallet/services/token/utils.ts:14-17`), not from the list. A listed Token class is probably never blocked; D7 makes the question harmless (worst case: a missing badge).
 - I3. Four zero-blur CSS `drop-shadow`s draw a similar outline in Chrome and Firefox. Only a look at both browsers checks it (Phase 2).
 
-**Asks** (each in `OWNER-ASKS.md`; the plan builds the "ships now" form):
-- A1 small sizes: ships a badge at every size, as picked. A2 the warning's place: ships "keeps the top right; the warning wins". A3 the bridge pictures and A5 cWETH's base picture: nothing ships until answered. A4 the letters and the ship gate: arc 3 waits. A6 the outline: ships the page-colour outline the P194 mock-up drew.
+**Asks**, answered on page 196 (2026-11-19 23:13:36Z) and in the owner's message after it (`OWNER-ASKS.md` § Answers, verbatim): A1 = a, a badge at every size. A2 = a, the warning keeps the top right. A3: Shield's published `icon.svg`, unaltered, under a raised `bridgeIcon` cap ("Raise the cap. Or try to compress via a library. But it doesn't sound plausible. So raise the cap."); Raven House = b, the raven on a white disc. A4: all three permissions recorded by the owner on 2026-11-19 ("We got Circle's approval. Move on."), so arc 3 is not gated. A5 = b, CC BY 4.0. A6 = a, the page-colour outline.
 
 ## Architecture & Implementation
 
 ### Format (`nulo-token-list/1`, an additive revision)
 
-- **The field.** An entry gains optional `bridgeIcon`: the picture of the bridge that carries the token, under § Pictures (the same rule and 3,072-character cap as `icon`). Readers draw it only as an image, only as a badge over that entry's own picture. It names no bridge and proves no affiliation: it is the publisher's statement, like `name`.
+- **The field.** An entry gains optional `bridgeIcon`: the picture of the bridge that carries the token, under § Pictures (every rule of `icon` but the size cap, below). Readers draw it only as an image, only as a badge over that entry's own picture. It names no bridge and proves no affiliation: it is the publisher's statement, like `name`.
+- **The cap (amended after A3).** `bridgeIcon` takes at most `MAX_BRIDGE_ICON_CHARS` = 16,384 characters, the whole data URL; `icon` keeps 3,072. Shield's published file is 13,238 characters, so 16,384 leaves 3,146 (24 %) for a re-issue; it is the smallest power of two above the file (D13). `isBridgeIcon` and `bridgeIconBytes` apply the picture rule under that cap, beside `isTokenIcon` and `iconBytes`; `checkIcon`, `pictureFindings` and the summary use them for `bridgeIcon` (D14). Every other check of the picture rule is unchanged.
+- **The cost, measured with the arc 3 source.** The envelope carries the payload as base64url, so a picture costs 4/3 of its characters there. Two copies of Shield's file plus the raven add 29,102 payload bytes (Shield's two strings 26,476, the raven 2,578, field syntax 48) and 38,803 envelope bytes: the served 16,491-byte envelope becomes 55,294, leaving 10,242 of the 65,536 every shipped wallet enforces (F3). Another Shield-sized badge would not fit. A wallet downloads the whole envelope every six hours with no conditional request (`token-list/service.ts`), so about 39 KB more per fetch, 155 KB a day uncompressed; it stores the envelope string, 39 KB more. It verifies and parses every download before the unchanged-sequence check, and the stored list at each boot (`service.ts:181,236-242`): `readTokenList` on the arc 3 envelope takes 2.3 ms median against 0.7 ms today (Bun, this host, 200 runs). A Shield re-issue at the largest accepted URL (16,382 characters) would leave 1,858 bytes. The signer self-verifies every envelope (`sign.ts:75`), so a list over 64 KiB is refused at signing and never published; the binding constraint on later entries is that envelope, not this cap. A lossless svgo pass (4.1.0, path data, numbers, transforms and group attributes untouched) takes Shield's file from 9,908 to 9,887 bytes (−0.2 %); the default preset reaches 2,531 bytes only by baking the transform and rounding to integers, which alters the mark. Recorded only: the file ships as published.
 - **Key order.** `chainId, address, classId, symbol, decimals, name, priceId, bridgeIcon, icon` (`icon` stays last, `parse.test.ts:154-165`).
 - **Rules.** `checkEntry` runs `bridgeIcon` through `checkIcon`: `wallet` mode drops one it cannot accept and keeps the entry; `strict` refuses it. `ENTRY_KEYS` gains the key. `selectEntries`, `readTokenList`, `VerifiedTokenList`, `listSha256` and `signList` need no change (F4).
 - **Publisher rule.** `pictureFindings` (`infra/token-list/scripts/check.ts`) requires a README § Pictures row for every `bridgeIcon` as for every `icon`.
@@ -80,7 +81,7 @@ readTokenList entries (bridgeIcon rides on each entry) → toSnapshot → TokenL
 
 | Arc | Files |
 |---|---|
-| 1 | `packages/token-list/src/parse.ts` + `parse.test.ts`; `infra/token-list/scripts/{check,summary}.ts` + `test/{tree,summary}.test.ts`; `infra/token-list/FORMAT.md` (entry row, § Pictures covers `bridgeIcon`, "What a reader does", Revisions); `infra/token-list/README.md` (§ Files, § Invariants, § Pictures prose: a bridge picture needs a row; no row yet); `ARCHITECTURE.md` / `SECURITY.md` only where they enumerate entry fields (grep first) |
+| 1 | `packages/token-list/src/icon.ts` + `icon.test.ts` (the bridge cap and its checkers); `packages/token-list/src/parse.ts` + `parse.test.ts`; `infra/token-list/scripts/{check,summary}.ts` + `test/{tree,publish}.test.ts` (the summary's token diff is tested in `publish.test.ts`); `infra/token-list/FORMAT.md` (entry row, § Pictures covers `bridgeIcon`, "What a reader does", Revisions); `infra/token-list/README.md` (§ Files, § Invariants, § Pictures prose: a bridge picture needs a row, and the D15 rule; no row yet); `ARCHITECTURE.md` / `SECURITY.md` only where they enumerate entry fields (grep first) |
 | 2 | `apps/extension/src/wallet/services/price/{service,spec}.ts` + `service.test.ts`; `utils/token-icon.ts` + test; `composables/usePrices.ts` + `usePrices.test.ts`; `utils/contract-level.ts`, `components/composite/contract-chip.ts`; `TokenMark.vue` + test; `ContractChip.vue` + test; `activity/TransactionCardLayout.vue` + test; `ActivityRowCard.vue`, `TransactionsList.vue`, `RecentActivityView.vue`, `pages/activity.vue`; the other hosts above; `tests/helpers/price-client-fake.ts`; `popup/windows/execute/execute.fixture.ts`; test mocks that build a `PriceSnapshot` or a `ListReader` (at least `TokenList.test.ts`, `TokensView.test.ts`, `SelectTokenPopup.test.ts`, `RecentActivityView.test.ts`, `activity.test.ts`, `contract-level.test.ts`, `fee/index.test.ts`, `journal-state.test.ts`, `received-display.test.ts`, `OperationCard.fee.test.ts`; `tsc` and the run name the rest); `tests/e2e/token-list.test.ts` (a list override with one `bridgeIcon`, through `signTestList`'s options) |
 | 3 | `infra/token-list/list.source.json` (`bridgeIcon` on cUSDC, cWETH and rUSDC); `infra/token-list/README.md` § Pictures rows (provenance, terms, the written permission and its date) |
 
@@ -90,17 +91,18 @@ No new file under `packages/token-list/src` (`import-closure.test.ts`). No new d
 
 - **A `bridge` field plus a signed `bridges` table of `{name, icon}`** (the first draft, modelled on `priceId` + `priceFeeds`): one picture per bridge and a name for other readers. It adds a payload key, fields on four types, digest and signer changes, a cap, two-way coverage, four tolerance rules and table parsing in the summary, to save about 4 KB per repeated picture (the format already repeats Circle's file) and to carry a `name` nothing reads. Rejected in round 1 (D1).
 - **A composite picture baked into the list** (USDC with the badge drawn in): no wallet change, no release. It alters Circle's file, cannot fit 3,072 characters without redrawing both marks, and the owner's pick names the format, extension and release route. Rejected.
-- **A larger picture budget for bridge pictures** (fit Shield's 13,238-character file as published): a second budget for one caller. Rejected (D6); the letter asks human.tech for a file that fits.
+- **A larger picture budget for bridge pictures** (fit Shield's 13,238-character file as published): rejected in planning as a second budget for one caller (D6), then taken on the owner's A3 answer (D13).
+- **One copy of Shield's file through a table** (D1's rejected form): saves about 17.7 KB of envelope now that the repeated picture is 13 KB. Not reopened: the table's cost (a payload key, coverage, tolerance rules) still stands, the envelope keeps 10 KB of headroom, and a later list that needs the room can move to it as an additive revision.
 
 ## Security & Adversarial Considerations
 
 - **Who can put which badge on which token.** Only the owner-approved `sign` run: `bridgeIcon` is in the signed payload and in the `tokens` digest the approver approves. A host, DNS or CDN attacker cannot add or move one (signature). It can serve a fresh install an older signed list (known limits #386, #1610); a withdrawn badge never raises the floor (F10), so such a host can show it until an unrelated list raises the floor. On a revoked permission, raising the floor by hand in that publish PR is the owner's call; no new mechanism. A leaked key (#385) could badge any token it lists, a power it already has over the token's picture and name.
 - **A look-alike never borrows a badge.** A deployer or dApp can create or register a contract with the symbol `cUSDC`; the badge, like the picture, attaches only by exact chain and contract (F5), so the look-alike draws initials and no badge. Arc 2 proves it with a never-happens test beside its success control.
 - **A flagged token never shows a badge.** The parser refuses a list that lists and flags one pair (F5), and `TokenMark` draws the warning instead of the badge if both ever arrive (D7). A badge never replaces or hides the warning.
-- **Pictures.** `bridgeIcon` passes `isTokenIcon` (no `image`, `href`, `filter`, outside `url(`, `on*`; 3,072 characters), is covered by the signature and needs a README § Pictures row by SHA-256 (`check.ts`). The wallet draws it only as `<img>`: no script, no outside load. The outline is the wallet's CSS, not picture content.
-- **Availability.** A bad `bridgeIcon` drops alone (`wallet` mode); it never costs the entry or the list's flags. Three bridge pictures at the cap add at most about 12.4 KB to a 13.8 KB envelope (cap 64 KiB; closed limit #1786).
+- **Pictures.** `bridgeIcon` passes `isTokenIcon` under its own cap (no `image`, `href`, `filter`, outside `url(`, `on*`; 16,384 characters), is covered by the signature and needs a README § Pictures row by SHA-256 (`check.ts`). The wallet draws it only as `<img>`: no script, no outside load. A larger file is more of the same drawing elements under the same checks; it changes nothing the `<img>` boundary relies on. The outline is the wallet's CSS, not picture content.
+- **Availability.** A bad `bridgeIcon` drops alone (`wallet` mode); it never costs the entry or the list's flags. Arc 3 takes the envelope from 16,491 to 55,294 bytes of the 64 KiB cap (§ Format, the cost; closed limit #1786); the signer refuses an envelope over the cap, so no wallet is ever served one from this host. A 1.3.0 wallet drops an over-3,072 `bridgeIcon` field with the rest of the unknown key, so the larger cap changes nothing for it.
 - **What a badge claims.** That the publisher believes the token comes through that bridge. The chain is not asked; arc 3's review checks each address against the bridge's public contracts page or its written confirmation, and the PR cites the source.
-- **Brand and legal.** No list publish carrying a `bridgeIcon`, and no merge of arc 3, before the owner records the written permissions (A4).
+- **Brand and legal.** The owner recorded all three permissions on 2026-11-19 (A4); README § Pictures records each in the picture's row. A bridge picture is issued as published or, where it differs from the issuer's published mark (the raven on its disc), used only as the issuer approved.
 - **Supply chain, crypto, least privilege.** No new dependency, key or workflow permission; Ed25519 signing is unchanged.
 
 ## Phases
@@ -109,12 +111,12 @@ All gates add `bun run lint` and `bun run typecheck:all`, exit 0. Plan files: `b
 
 ### Phase 1 (arc 1): the format, parser, checker and summary
 
-1. Add `bridgeIcon` to `TokenListEntry`, `ENTRY_KEYS` and `checkEntry` in `parse.ts`, through `checkIcon`, before `icon`.
+1. Add `MAX_BRIDGE_ICON_CHARS`, `isBridgeIcon` and `bridgeIconBytes` to `icon.ts`; add `bridgeIcon` to `TokenListEntry`, `ENTRY_KEYS` and `checkEntry` in `parse.ts`, through `checkIcon` with the bridge cap, before `icon`.
 2. Extend `pictureFindings` to `bridgeIcon`, and give `summary.ts`'s token diff a `bridgeIcon` column through `iconCell`.
 3. Update FORMAT.md and `infra/token-list/README.md`.
 4. Prove forward compatibility: copy `packages/token-list/src` at `v1.3.0` into a scratch directory outside the repo. Sign two envelopes with the test keys and identical signing inputs (`nowMs` included) from one source with non-empty `flagged` and `priceFeeds`: one with `bridgeIcon` fields, one without. Read both through that copy's `readTokenList`. Record in `lessons/phase-1.md` that the two results are equal.
 
-Tests: `wallet` mode drops a `bridgeIcon` that fails the picture rule and keeps the entry; `strict` refuses it; key order; `readTokenList` keeps a valid `bridgeIcon` on the selected entry. Tree test: a `bridgeIcon` with no README row is refused; with one, accepted. Summary: the column renders a changed `bridgeIcon`.
+Tests: the cap bounds the whole data URL at each budget (largest accepted, four more refused); `icon` still refuses a picture `bridgeIcon` accepts; `wallet` mode drops a `bridgeIcon` that fails the picture rule and keeps the entry; `strict` refuses it; key order; `readTokenList` keeps a valid `bridgeIcon` on the selected entry. Tree test: a `bridgeIcon` with no README row is refused; with one, accepted. Summary: the column renders a changed `bridgeIcon`.
 
 **Validation gate:** `bun run --cwd packages/token-list test`, `bun run --cwd infra/token-list test`, `bun run --cwd infra/token-list check`, `bun run test:all`, all exit 0; the step-4 proof logged. Layers: typecheck, lint, unit.
 
@@ -134,14 +136,15 @@ E2E budget: no new scenario; the override stays inside `token-list.test.ts`, so 
 
 ### Phase 3 (arc 3): the entries and pictures, after the permission gate
 
-**Warning:** do not start until the owner has recorded every permission A4 names and answered A3, A5 and A6. If they have not when Phase 2's loop converges, skip to the close-out and file this phase as an issue (D11).
+The owner answered A3, A5 and A6 and recorded every permission A4 names on 2026-11-19; the phase is not gated.
 
 1. Add `bridgeIcon` to cUSDC and cWETH (Shield's file) and rUSDC (Raven House's file), the files A3 settles.
-2. Add one README § Pictures row per bridge picture: picture, "badge on …", drawn by, source, terms (the written permission and its date), SHA-256.
-3. Re-check each address against Shield's contracts page and Raven House's written confirmation; cite both in the PR body.
-4. Repeat Phase 2's look at the chip and the row with the final files, both themes, both browsers, and attach the frames for the owner.
+2. Add one README § Pictures row per bridge picture: picture, "badge on …", drawn by, source, terms (the permission and its date), SHA-256.
+3. Re-check cUSDC's and cWETH's addresses against Shield's contracts page and rUSDC's against the source #1886 used; cite them in the PR body.
+4. Point `token-list.test.ts`'s override at cUSDC's `bridgeIcon` from `list.source.json` (Shield's 13,238-character file) and assert it decodes (`naturalWidth > 0`), Chrome and Firefox: the real file through the worker → popup channel.
+5. Repeat Phase 2's look at the chip and the row with the final files (16 px chip and 32 px row, resting and hovered, both themes, both browsers), plus one Home frame with the three tokens in each theme; attach the frames.
 
-**Validation gate:** `bun run --cwd infra/token-list check` and `bun run --cwd infra/token-list test`, exit 0; `bun run test:all`, exit 0. Layers: typecheck, lint, unit.
+**Validation gate:** `bun run --cwd infra/token-list check` and `bun run --cwd infra/token-list test`, exit 0; `bun run test:all`, exit 0; from `apps/extension`, `bun run test:e2e -- tests/e2e/token-list.test.ts --retry=0`, Chrome then Firefox, green. Layers: typecheck, lint, unit, smoke e2e.
 
 ## UI impact
 
@@ -156,10 +159,10 @@ One `gh stack` on trunk `dev`. Every arc: the Post-implementation loop at its bo
 |---|---|---|---|
 | 1 | `worktree-bridge-badge-1` (holds the plan commit) | 1 | ``feat(token-list): an entry's optional `bridgeIcon`, signed with the list`` |
 | 2 | `bridge-badge-1-wallet` | 2 | `feat(extension): draw a listed token's bridge picture as a badge on its mark` |
-| 3 | `bridge-badge-1-entries` | 3, gated | ``feat(token-list): shield and raven house badges on `cUSDC`, `cWETH` and `rUSDC` `` |
+| 3 | `bridge-badge-1-entries` | 3 | ``feat(token-list): shield and raven house badges on `cUSDC`, `cWETH` and `rUSDC` `` |
 | close-out | `bridge-badge-1-close-out` | close-out | `docs(plans): close bridge-badge-1` |
 
-Arc 3's PR opens as a draft and stays one until the owner's word. Parallelism: arc 2 needs arc 1's type, arc 3 both; no lanes.
+Arc 3's PR opens as a normal PR (A4 answered). Merging it starts `publish-token-list.yml`, whose sign job waits for the owner. Parallelism: arc 2 needs arc 1's type, arc 3 both; no lanes.
 
 ## Decision ledger
 
@@ -169,13 +172,16 @@ Arc 3's PR opens as a draft and stays one until the owner's word. Parallelism: a
 | D2 | Keep `nulo-token-list/1`; add a Revisions list to FORMAT.md | `/2` + `/v2/`: every 1.3.0 wallet would refuse the list (F2) for an additive change | all agree |
 | D3 | `wallet` mode drops a bad `bridgeIcon` and keeps the entry, as `checkIcon` does for `icon` | Refuse the entry or list: a cosmetic field would cost a wallet entries or flags | all agree |
 | D4, D5 | Withdrawn with the table (a record `name`; `MAX_BRIDGES`) | — | round 1 |
-| D6 | `bridgeIcon` under the token picture rule and its 3,072 cap | A larger cap for Shield's file: a second budget for one caller | all agree |
+| D6 | `bridgeIcon` under the token picture rule; its cap superseded by D13 | — | all agree; owner A3 |
 | D7 | Ships: the warning keeps its corner and wins over the badge (A2 a) | Move the warning (A2 b, c): changes every flagged token for a clash the parser forbids | all agree; owner A2 |
 | D8 | Accessibility call (owner's 2026-10-19 delegation): the badge is decorative inside the `aria-hidden` mark; the symbol stays the name a screen reader reads | An accessible name per badge: spoken copy is an owner question, and no name is carried | all agree |
 | D9 | No new e2e scenario; a list override and assertions inside `token-list.test.ts` | A shared fixture change: alters the list for about 15 specs (Opus) | all agree |
 | D10 | A third function prop beside `iconFor` and `isFlagged`; required lookup and mark fields so `tsc` finds every builder | One `marks` lookup prop: edits the same files and renames two existing props; either is acceptable | all agree |
-| D11 | Arc 3 waits on A4; if still closed, the close-out files it as a `blocked:external` issue and the plan closes | Hold the plan open for weeks on outside replies | lead |
-| D12 | Geometry from the P194 frame (half size, 12 % overhang); the page-colour outline is owner ask A6 | Per-bridge plates and radii as the mock-up drew: bridge-specific code; a surface-colour variable per host: wiring and hover states for one look (Codex) | Opus, Codex: ask the owner |
+| D11 | Arc 3 waits on A4; if still closed, the close-out files it as a `blocked:external` issue. Does not apply: A4 answered | Hold the plan open for weeks on outside replies | lead; owner A4 |
+| D12 | Geometry from the P194 frame (half size, 12 % overhang); the page-colour outline is owner ask A6 | Per-bridge plates and radii as the mock-up drew: bridge-specific code; a surface-colour variable per host: wiring and hover states for one look (Codex) | Opus, Codex: ask the owner; owner A6 = a |
+| D13 | `bridgeIcon` cap 16,384 characters (owner A3: "Raise the cap") | 14,336 (8 % headroom: a re-issue a few hundred bytes larger fails); 32,768 or none (only the envelope bounds it, so one field could take half the list) | Codex: 16,384 reasonable, the power of two has no technical merit; lead keeps it |
+| D14 | One private checker with the cap as a parameter; one-argument exports `iconBytes`/`isTokenIcon` and `bridgeIconBytes`/`isBridgeIcon`; `MAX_BRIDGE_ICON_CHARS` beside `MAX_ICON_CHARS` in `icon.ts` | A defaulted cap parameter on the existing exports (the first build): `every(isTokenIcon)` in `token-icon.test.ts` bound the array index as the cap and failed (demonstrated by `test:all`) | Codex: either acceptable; the run decided |
+| D15 | README § Pictures: a bridge picture is issued as published or, where it differs from the issuer's published mark, used only as the issuer approved, with the approval in its row | No rule: the raven on its disc would read as a breach of "used as published, unaltered" | lead (the brief's wording) |
 
 ## Audit verdicts
 
@@ -193,12 +199,14 @@ Also accepted: reuse `tokenIconFor`; the forward-compatibility proof compares ag
 
 **Final fresh Codex pass** (new session, `gpt-6.1-sol`, high): ``conditional approve (with conditions: add `bun run audit:vue` to the Phase 2 gate)``. Accepted: `audit:vue` in the Phase 2 gate (demonstrated: CLAUDE.md § Quality gates requires it before a UI PR); F2 restated (the signing domain and the payload field are separate checks); F9 restated as what the inspected sources showed, not an exhaustive absence; F10's citation fixed; the compatibility proof signs both envelopes with identical inputs. It found the threading complete and the per-entry design the smallest right one, and kept A3, A5 and A6 as answers Phase 3 needs. Resumed to verify the fixes: `approve` ("All accepted fixes are present … No regression or new material finding identified").
 
+**Amendment, Codex** (`gpt-6.1-sol`, high, on the `bridgeIcon` cap after A3): `conditional approve` ("retain 16,384; correct the cost claims and strengthen the large-image validation gates"). Accepted: the cost figures corrected (Shield's strings 26,476 plus 48 bytes of syntax; the largest accepted URL 16,382, leaving 1,858; verification runs per download and per boot, now benchmarked); the tree and summary tests use a bridge picture above 3,072 beside an `icon` that still fails; Phase 3 decodes Shield's real file in both browsers. Found no CSP, transport or regex obstacle (`img-src 'self' data: blob:` in both manifests).
+
 ## Post-implementation
 
 The steps are `implementations-plan/README.md` § Post-implementation standard at revision `46dc91c3f`. Plan-specific values:
 
 - **Reviewer**: Codex, `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`; resume with `resume-codex.sh`. Prompt: the arc diff, this plan with its ledger, the arc map ("arc N of 3; later arcs build …"), the adversarial ask and the two verbatim rules of step 2.
-- **Placement**: per arc at its boundary while it is the stack tip; then one fresh Codex session over the net diff from `46dc91c3f` for cross-arc issues. Until clean; **hard stop after three rounds**, then report.
+- **Placement**: per arc at its boundary while it is the stack tip; then one fresh Codex session over the net diff from `93877b8b1` for cross-arc issues. Until clean; **hard stop after three rounds**, then report.
 - **Delivery**: `gh stack submit --auto`, then `gh pr edit` per body; open each PR without labels and add `e2e:extension-smoke` only if the path filter skips a needed suite. Then `gh pr checks <n> --watch`.
 - **Close-out** (`bridge-badge-1-close-out`): merge `origin/dev` first and read `index.md` and `lessons.md`; the Outcome block; lessons promotion; arc 3 as a `blocked:external` issue if D11 applies; `STATUS.md` deleted; `git mv` into `archive/` in its own commit; `bun run check:plans`.
 - **Approval boundaries**: nothing merges before the orchestrator's word; no sign run, list publish or release from this plan; a fix that grows the design stops for approval.

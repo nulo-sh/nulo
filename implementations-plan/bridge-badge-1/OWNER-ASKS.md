@@ -1,5 +1,19 @@
 # bridge-badge-1: owner asks
 
+## Answers
+
+Page 196, signed 2026-11-19 23:13:36Z (head 93877b8b1), then the owner's message of 2026-11-19 at about 23:25Z:
+
+- **A1 = (a)**, a badge at every size (P196-01 = a).
+- **A2 = (a)**, the warning keeps the top right (P196-02 = a).
+- **A3, Shield**: P196-03 note: "Can't we source it from their page? Happy to ask if needed though." Then: "Raise the cap. Or try to compress via a library. But it doesn't sound plausible. So raise the cap." Shield's picture is its published app icon, `https://shield.human.tech/icon.svg`, byte for byte, unaltered; `bridgeIcon` gets its own, larger size cap (plan § Format, D13); `icon` keeps 3,072.
+- **A3, Raven House = (b)** (P196-04 = b): the raven cut from the wordmark on a white disc, 2,578 characters, as frames `bb-pic-b-*` show.
+- **A4**: P196-05 note: "I've already talked with everyone except Circle, and it's ok." Then: "We got Circle's approval. Move on." All three permissions are recorded by the owner on 2026-11-19: human.tech and Raven House before page 196's sign-off, Circle after it. Arc 3 is not gated (D11 does not apply).
+- **A5 = (b)** (P196-06 = b): cWETH's diamond under CC BY 4.0, no letter to the Ethereum Foundation.
+- **A6 = (a)** (P196-07 = a): keep the page-colour outline.
+
+The asks as put to the owner follow, unchanged.
+
 The pick these asks follow: P194-03 = b, with the note "Also, do the same for cWETH" (page 194, 2026-11-19 22:13Z). Frames, 360 px at 2x, light and dark, are kept outside the repository with `captions.json` (the capture-page method: the real `TokenList`, `TokenMark` and `ContractChip`, the badge drawn as arc 2 would draw it). They are mock-ups: neither bridge has licensed its mark.
 
 **What ships without waiting.** Arc 1 (the list format) and arc 2 (the wallet) build now. Arc 2 draws a badge only for a list entry that carries a bridge picture, and no served list carries one until arc 3, so a release carrying arc 2 changes nothing anyone sees. Arc 3 (the entries and pictures) waits for A4.
