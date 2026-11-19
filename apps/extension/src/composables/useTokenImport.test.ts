@@ -218,6 +218,14 @@ describe("useTokenImport", () => {
 		reject(new Error("client disconnected"))
 		expect(await droppedRun).toEqual({ kind: "aborted" })
 
+		// Disposed in the turn between the listed check and the parse.
+		const preflight = setup()
+		const pasted = preflight.importer.importPasted(CONTRACT)
+		queueMicrotask(() => preflight.importer.dispose())
+		expect(await pasted).toEqual({ kind: "aborted" })
+		expect(preflight.tokenService.getTokens).toHaveBeenCalledTimes(1)
+		expect(preflight.tokenService.parseTokenInterface).not.toHaveBeenCalled()
+
 		const control = setup()
 		control.tokenBalanceService.getTokenBalances.mockResolvedValueOnce([{ id: 70, updatedAt: 5 }])
 		await control.importer.importToken(CONTRACT)

@@ -125,15 +125,14 @@ const awaitingPrices = computed(
 
 const tokenService = new TokenServiceClient()
 const importer = useTokenImport({ tokenService, tokenBalanceService, taskService })
-/** The address an add runs for, and the last refusal with the address it judged. */
 const adding = ref("")
 const addRefusal = ref<{ address: string; message: string }>()
 /** Bumped by each add and each scope change: an add whose screen is gone touches nothing. */
 let addRun = 0
 const tokenList = useTemplateRef<{ focusToken: (tokenId: number) => void }>("tokenList")
 
-/** Add imports with the New token popup's own checks. A flagged address keeps the popup, and so
- *  does any address pasted before the signed list is read, when no flag can be known. */
+/** A flagged address keeps the popup, and so does an unread signed list: it cannot show an address
+ *  is unflagged. */
 async function addPasted(address: string) {
 	if (adding.value) return
 	if (!prices.mapped.value || isFlaggedAddress(address)) return popupStore.open("new_token", { address })

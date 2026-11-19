@@ -128,7 +128,6 @@ function createBalanceWait(deps: TokenImportDeps, submittingAccount: string) {
 /** The identity an import runs under, read at its press: the store is reactive and can switch mid-wait. */
 type Submission = { profileId: string; networkId: string; chainId: number; account: string; epoch: number }
 
-/** One import's view of its hook. */
 interface ImportRun {
 	deps: TokenImportDeps
 	submission: Submission
@@ -137,11 +136,9 @@ interface ImportRun {
 	live: () => boolean
 	added: (token: TokenInfo, label: string) => Extract<TokenImportOutcome, { kind: "added" }>
 	refused: (message: string) => TokenImportOutcome
-	/** The wait for the first balance begins. */
 	waiting: () => void
 }
 
-/** The New token field's check against the listed tokens, for a caller with no field. */
 async function listedRefusal(run: ImportRun, contract: string): Promise<TokenImportOutcome | undefined> {
 	const listed = await run.deps.tokenService.getTokens(run.submission.profileId, run.submission.chainId)
 	if (!run.live()) return ABORTED
@@ -151,6 +148,8 @@ async function listedRefusal(run: ImportRun, contract: string): Promise<TokenImp
 
 async function addAndWait(run: ImportRun, contract: string): Promise<TokenImportOutcome> {
 	const { deps, submission: s, wait } = run
+	// A dispose can land in the turn after the listed check.
+	if (!run.live()) return ABORTED
 	const parsingResult = await deps.tokenService.parseTokenInterface(s.networkId, contract)
 	if (!run.live()) return ABORTED
 	// Registry-only: an interface no known standard matches is refused; a dApp can still register it
@@ -179,9 +178,8 @@ async function addAndWait(run: ImportRun, contract: string): Promise<TokenImport
 }
 
 /**
- * The New token popup's import: parse the contract, add the token, wait for the active account's
- * first balance, then toast. Holdings runs the same import from its Add row, after the field's own
- * check (`importPasted`).
+ * The New token import. Callers own the clients' connections; one import runs at a time, and a call
+ * while one runs returns `aborted`.
  */
 export function useTokenImport(deps: TokenImportDeps) {
 	const appStore = useAppStore()
@@ -253,7 +251,8 @@ export function useTokenImport(deps: TokenImportDeps) {
 		phase.value = "idle"
 	}
 
-	/** Ends the running import's balance wait and frees `phase`; calls already sent still land. */
+	/** Detaches the running import: its wait ends and `phase` frees, but a parse in flight still goes on
+	 *  to add (`dispose` stops that). */
 	function abort() {
 		activeWait?.abort()
 		activeWait = null
