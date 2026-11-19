@@ -34,7 +34,7 @@ The owner, 2026-11-19: "I want to work towards the 1.3.0 release." The release s
 - F4. Legal since `v1.2.0` (`packages/legal/src/manifest.ts`): Terms 1.2.1 → 1.2.4, all patches; Privacy 1.2.9 → 1.3.1, where 1.3 is material, but acceptance derives from the Terms alone (`status.ts`, Terms § 23) and Settings → About only notes a policy change (`utils/legal-about.ts`). So nothing asks to be accepted again.
 - F5. The relay reaches an existing profile once per network kind at unlock, only while that network's primary is still its seed's endpoint (`wallet/services/unlock-conversions.ts:58-68`, `network/seeds.ts:189-197`); Testnet and Mainnet seeds carry it (`seeds.ts:70,88`). A Mainnet-kind row still named "Alpha V6" or "Mainnet" takes "Alpha" unless the profile already has a network so named (`seeds.ts:109-111,202-207`).
 - F6. Home's What's new row shows on a stable build whose minor is above the device's marker; an update writes the minor it came from, so 1.2.0 → 1.3.0 prompts, and the row opens `https://nulo.sh/changelog/v1.3.0/` (`utils/whats-new.ts`).
-- F7. In flight at plan time: #1870 (`c1383298`), #1854 (`9a47bd85`), #1866 (`454a02e0`, draft, stacked on #1854), #1867 (`a3f2bbce`; #1853 merged), #1859 (`bcb6a3a4`, waits on decision page 191). fee-juice-link-1 has no PR; its lane routes Mainnet's Fee Juice links to Shield and rewrites privacy § 5.10, likely as a new privacy version.
+- F7. In flight at plan time: #1870 (`c1383298`), #1854 (`9a47bd85`), #1866 (`454a02e0`, draft, stacked on #1854), #1867 (`a3f2bbce`; #1853 merged), #1859 (`bcb6a3a4`, waits on decision page 191). fee-juice-link-1 had no PR at plan time; during the arc it opened as #1872 (`47b2982d`): Mainnet's Fee Juice links open Shield, and privacy § 5.10 is rewritten as 1.4, material, for the owner to confirm (or 1.3.2).
 - F8. The wallet's own names: the nav tab reads HISTORY (`Navigation.vue:26`), the settings page "Connected Apps" (`settings-search.ts:82`), the authwit page "Authwits" under Settings → Developer → Account State (`account-state/index.vue:27`). A single private call with no account is still sent; only a public, utility, several-call or empty request without one is refused (`windows/execute/refusal.ts`).
 
 **Inferences:**
@@ -42,8 +42,8 @@ The owner, 2026-11-19: "I want to work towards the 1.3.0 release." The release s
 
 **Asks** (to the orchestrator; working assumption in force):
 - A1. The TOML `date`: the draft day, `2026-11-19`. The page and both cards print it; at sign-off it moves to the promote day (one line, then `og:cards`). A review point in the PR body.
-- A2. The legal bullet names privacy 1.3.1. If fee-juice-link-1 lands a new privacy version first, the number follows on a resume.
-- A3. The #1859 and fee-juice-link-1 bullets are drafted as shipped and marked conditional in the PR body; a resume drops either one that misses the promote.
+- A2. The legal bullet follows #1872's head: privacy 1.4 and "the Shield link". If #1872 lands as 1.3.2 the number follows; if it misses the promote, the bullet reads 1.3.1 and drops the clause (on a resume).
+- A3. The #1859 and #1872 bullets are drafted as shipped and marked conditional in the PR body; a resume drops either one that misses the promote.
 
 ## UI impact
 
