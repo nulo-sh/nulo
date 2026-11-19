@@ -1,7 +1,7 @@
 ---
 plan: emoji-grid-1
 tier: light (thinned: no plan audit round, no Opus leg; one Codex design consult, one Codex pass over plan and diff)
-status: arc 1 in progress
+status: completed
 issues: none
 driver: claude-code
 claude_model: opus
@@ -13,6 +13,29 @@ base: origin/dev at f336e0f22 (planned at 846f26379; nothing this plan touches d
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-19.
+- **Status:** completed. Ships in the PR titled `fix(verify): the connection check draws every symbol as colour emoji`, which carries this close-out. It lands on the owner's approval of its before and after captures.
+- **Shipped:**
+  - the `emoji` type role (`--font-emoji`, the four colour faces first; 24 px), which draws the grid's cells;
+  - `emojiCells`, which splits by grapheme and adds U+FE0F, at render time, to the 21 symbols a text face can claim;
+  - the e2e face check limited to the bundled faces, and the network check's exact compare through `emojiCells`.
+- **Gates (retry 0):**
+  - static gates green at `0389a6078`, and lint plus the touched unit tests again after the trunk merge;
+  - smoke `type-roles.test.ts`: Chrome 14 pass and 1 skip (134 s, a build whose runtime equals `0389a6078`), Firefox 15/15 (165 s);
+  - network, three specs: Chrome 10/10 (331 s), Firefox 10/10 (454 s);
+  - no e2e scenario added.
+- **Deviations:**
+  - the selector covers 21 symbols, not the brief's two (D2; Codex consult);
+  - the brief's "every other symbol already draws as colour emoji" did not hold on this host (F2);
+  - the role carries the 24 px size, so the cell's carve-out went (D1);
+  - `base.css.test.ts`'s hash was re-pinned for the new font token.
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget, and the tooling gotcha in `lessons/phase-1.md` (a tool call's JSON turns `\u` escapes into literal characters) applies to one harness.
+- **Known limits:** none.
+- **Open items:** none. The upstream wallet-sdk note sits in the PR body, for the owner to file or not.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds.
 
 # emoji-grid-1: the connection check draws every symbol as colour emoji
 

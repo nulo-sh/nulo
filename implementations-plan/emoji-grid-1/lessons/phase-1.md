@@ -5,3 +5,4 @@
 - **Design tests red, once**: `base.css.test.ts` pins `base.css` by hash, so the new `--font-emoji` line needs the hash moved and the choice named in its comment. Done in the same commit.
 - **Commitlint red, once**: a commit body line over 100 characters. Rewrapped.
 - **Capture harness** (scratch, outside the repo): a Vite dev server whose root is the scratch dir, with the extension's `vue`, auto-import and component plugins and the design resolver, aliasing `vue` to its `esm-bundler` build (Bun resolves the bare `vue` to the Node entry, whose CJS re-export lacks `createBlock`). Its port is claimed in `~/.agents/ports.md` and released after.
+- **Invisible literals from a tool call**: a `\uFE0F` escape written through a JSON tool parameter arrives as the literal character, so the source held an invisible U+FE0F. Found in review; the files now spell `\u` escapes (written with a doubled backslash through the tool).
