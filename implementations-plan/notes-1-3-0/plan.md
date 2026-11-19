@@ -1,7 +1,7 @@
 ---
 plan: notes-1-3-0
 tier: light
-status: planned
+status: delivered as a draft PR, awaiting the owner's sign-off on the text
 issues: none
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ post_implementation_hardening: not scheduled
 base: origin/dev at 846f26379
 trunk: dev
 ---
+
+## Outcome
+
+- **Date:** 2026-11-19. Planned and delivered the same day; one arc.
+- **Status:** delivered as draft #1873 against `dev`, whose merge archives this plan. It stays a draft until the owner signs the notes, the page on its Workers Builds preview and the cards; the orchestrator marks it ready.
+- **Shipped:** `release-notes/1.3.0.md` (2,960 of 3,000 code points), `apps/landing/content/changelog/1.3.0.toml`, `1.3.0.og.png` and the re-rendered `index.og.png`. The bullets map to PRs in [recon.md](recon.md) and the PR body; #1870 and #1854 merged during the arc, and #1866, #1867, #1859 and #1872 were still open at close-out.
+- **Did not hold:** the brief's "Activity" and "the Authorizations page" (the wallet says History and Authwits, D3); the plan's first notes gate, `release-notes-run.ts check`, which reads only the root version (D9).
+- **Review:** no plan audit (lane proportion); Codex over the plan and the diff: round 1 seven findings, round 2 one, round 3 approve (§ Review verdicts).
+- **Known limits:** none.
+- **Open items:** none. The review points (the page's date, the conditional #1859 and #1872 bullets, the privacy version) are the owner's sign-off on #1873; the legal dates due at the promote are already steps in `BEFORE-LAUNCH.md` § 4.
+- **Lessons:** none promoted; the release skill already says the notes rule runs over every committed file, and the rest is in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # notes-1-3-0: the 1.3.0 release notes and changelog page, drafted for the owner's sign-off
 
@@ -58,7 +70,7 @@ Surfaces: `release-notes/1.3.0.md` (the GitHub Release's opening and AMO's versi
 4. Commit: `docs(release): the 1.3.0 notes and changelog page`.
 - **Gate**, in order: `bun run lint`; `bun test scripts/release/release-notes.test.ts` (D9); `bun run --cwd apps/landing scripts/build-changelog.ts`; `bun run --cwd apps/landing test` (`og-card.test.ts`, `changelog-pages.test.ts` included); `bun run check:plans` after staging. Pass: every command exits 0. No e2e (lane brief).
 
-### Phase 2: review, PR, close-out
+### Phase 2: review, PR, close-out ✓ (Codex approve at round 3; draft #1873)
 1. One Codex pass (§ Post-implementation); fix what holds, commit, re-run Phase 1's gate.
 2. Push; `gh pr create --base dev --draft` (§ Delivery); `gh pr checks <n> --watch` once; read the Workers Builds preview URL off the PR and add it to the body.
 3. Close-out commits (§ Post-implementation); push; checks once more. Leave the PR a draft.
