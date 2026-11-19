@@ -42,7 +42,7 @@ The same probe over the whole extension suite at base (1047 files, 1.2 s hold): 
 | `popup/windows/execute/OperationCard.selfpay.test.ts` | same | 14 |
 | `popup/components/modules/general/RecentActivityView.test.ts` | `useSendReview` arm, 800 ms (cleared by `onScopeDispose(disarm)`, pinned by `useSendReview.test.ts`, "disposing the scope clears the pending wait") | 1 |
 
-- **Longer timers.** The 34 files that leave a 2 to 12 s timer pending were rerun with a 12.5 s hold: none of them logs. Longer ones (the 30 s ticker interval, 60 s request timeouts, 65 to 300 s) would need a teardown that outlives them; each file runs in its own worker, which exits after it. No path.
+- **Longer timers.** The 34 files that leave a 2 to 12 s timer pending were rerun with a 12.5 s hold: none of them logs. Longer ones (the 30 s ticker interval, 60 s request timeouts, 65 to 300 s) fell outside both observation windows: no failure demonstrated, and none excluded, since `rpcDone()` waits with no timeout.
 - **Other workspaces.** `packages/design`, the other jsdom suite, swept the same way: no late log. No other workspace mounts Vue.
 
 ## Decision ledger
@@ -50,7 +50,7 @@ The same probe over the whole extension suite at base (1047 files, 1.2 s hold): 
 - **D1, per file, not suite-wide.** Each of the six files calls `enableAutoUnmount(afterEach)`, the idiom 21 extension test files already use (`OperationCard.rail.test.ts` beside these). Turning it on once in `tests/vitest.setup.ts` would change teardown for about 290 test files, 149 of which never unmount, and run every leaked component's `onBeforeUnmount` (service `disconnect()`s among them) in files never written for it. That is a suite-wide change for a six-file defect. Codex asked (Audit verdicts).
 - **D2, no stubs for `Skeleton` or `Popover`.** Registering them would silence the warn and leave the late re-render running. Any other log on that path would still race the close. The warn is the symptom.
 - **D3, no new committed test.** The change is test-only, and both product halves are already pinned (see "The product is right" and the table). The proof is the probe, red on base and green on the fix, plus the 50-run and `test:all` gates. A committed guard that fails any file leaving a mount standing would be a new suite-wide gate with about 149 current violators, outside this lane.
-- **D4, `RecentActivityView`'s own unmounts.** The last test's trailing `w.unmount()` goes: auto-unmount does it. The `w.unmount()` in "an unmount while the mount awaits its task snapshot…" stays, since it is the act under test. Auto-unmount's second unmount there prints Vue's "Cannot unmount an app that is not mounted." inside that test's `afterEach`, which settles before the file ends. Seven existing files mix both the same way.
+- **D4, `RecentActivityView`'s own unmounts.** The last test's trailing `w.unmount()` goes: auto-unmount does it. The `w.unmount()` in "an unmount while the mount awaits its task snapshot…" stays, since it is the act under test. Auto-unmount's second unmount there is silent: Vue 3.5.42 never clears an app's mounted flag, so it re-renders `null` into the emptied container (verified: no warning in the file's 69 tests). Seven existing files mix both the same way.
 
 - **D5, `useReaskReview.test.ts` stays as it is.** It leaves two `useSendReview` timers pending, at base and on the fix: a composable test whose effect scope is never stopped. The timer sets a ref that nothing renders, and neither sweep saw it log. No consequence, so no change.
 
@@ -104,4 +104,6 @@ The execution contract is `implementations-plan/README.md` § Post-implementatio
 
 ## Audit verdicts
 
-(The Codex pass is recorded here after the build.)
+- **Codex, one pass over the plan and the net diff** (gpt-6.1-sol, high, read-only; 2026-11-19): **approve**, no material code finding. Cause, not symptom (high confidence): the leaked mounts' timers make the late console traffic and unmounting removes it; stubbing the warnings would hide the defect. No other file shown to log after its end (moderate confidence: a sweep cannot prove absence). D1 per-file is right (`enableAutoUnmount` throws if enabled twice, so a global call would also break the 21 files that already register it); D3, D4's kept unmount and D5 agreed. Comments need no change. Codex ran the nine related files: 182 tests green.
+  - Accepted, minor: "No path" for the longer timers overstated the evidence; reworded (The class across the suite).
+  - Accepted, nit: D4's duplicate-unmount warning does not occur; verified against Vue 3.5.42's `app.unmount` and a verbose run, D4 corrected.
