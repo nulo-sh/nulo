@@ -1,5 +1,5 @@
 /** Vendor */
-import { type ObjectDirective, onScopeDispose, type Ref, readonly, ref, watch } from "vue"
+import { computed, type ObjectDirective, onScopeDispose, type Ref, readonly, ref, watch } from "vue"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -59,6 +59,22 @@ export const vSnackSheet: ObjectDirective<HTMLElement, number | undefined> = {
 		changed()
 	},
 }
+
+const asides = ref(0)
+
+/** A review sheet's content: while one is mounted, the Sending toast stays closed (`useSendsInProgress`'s
+ *  `reviewing`), so it never covers what the sheet asks the person to read. Like `vSnackSheet`, the mark
+ *  goes as the sheet starts to leave, so the toast fades back in while the sheet fades out. */
+export const vSnackAside: ObjectDirective<HTMLElement> = {
+	mounted() {
+		asides.value++
+	},
+	unmounted() {
+		asides.value--
+	},
+}
+
+export const snackAside = computed(() => asides.value > 0)
 
 /** The sheet drawn on top: the highest order and, between equals, the one mounted last, which the
  *  DOM draws over the other. */
