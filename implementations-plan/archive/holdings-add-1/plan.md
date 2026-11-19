@@ -13,14 +13,14 @@ base: c1bca82cb
 ## Outcome
 
 - **Date:** 2026-11-19.
-- **Status:** delivered in draft PR #1892 against `dev`, which stays a draft until 1.3.0 is published and merges on the orchestrator's word.
-- **Owner sign-off:** the owner's words of 2026-11-19 for the one-press flow. The refusal's placement under the Add row is the one thing the owner checks on the captures (`ha-refused`).
-- **Owner asks:** A1 (a flagged address) and A2 (an added empty token folds) are open in [OWNER-ASKS.md](OWNER-ASKS.md). Each is built as today until answered.
-- **Shipped:** `useTokenImport`, the New token import extracted from `NewTokenPopup.vue` and shared, with `contractVerdict`. Holdings' Add imports in one press with the popup's checks, words and toasts. Its row stays busy while the add runs, a refusal shows under it as an alert, and focus lands on the added row. A flagged address, or any before the signed list is read, keeps the popup. `TokenCard` gains `data-token-id` and refuses a repeat Enter. The smoke spec `holdings-add-token.test.ts` is deleted and the network add scenario presses once from the keyboard. Closes #1881.
-- **Dispositions:** D1 and D5 keep the popup for a flagged or unread-list address. D8 (focus following an empty row into the fold) is folded into A2. D9's wait with no timer stays #1681's. The plan audit's ask for a placement of a late refusal is rejected (D6).
+- **Status:** delivered in draft PR #1892 against `dev`, in two arcs. It stays a draft until the owner approves arc 2's captures, and merges on the orchestrator's word.
+- **Owner sign-off:** page 195, 2026-11-19 at 22:14Z. P195-01 approved arc 1 as built, the refusal under the Add row included. P195-02 = 3 and P195-03 = 2 are built in arc 2. The new popup line is the one thing the owner checks on arc 2's captures (`ha-flag-popup`).
+- **Owner asks:** A1 and A2 are answered (§ Arc 2). A3 (the field's green check beside a flagged address) is open in [OWNER-ASKS.md](OWNER-ASKS.md) and built as today.
+- **Shipped:** `useTokenImport`, the New token import extracted from `NewTokenPopup.vue` and shared, with `contractVerdict`. Holdings' Add imports in one press with the popup's checks, words and toasts. Its row stays busy while the add runs, a refusal shows under it as an alert, and focus lands on the added row. A flagged address, or any before the signed list is read, keeps the popup. `TokenCard` gains `data-token-id` and refuses a repeat Enter. The smoke spec `holdings-add-token.test.ts` is deleted and the network add scenario presses once from the keyboard. Arc 2: the New token popup reads the signed list itself and shows "Flagged as a scam" under a flagged address, for every way in and for a list that lands late; `Input` gains `ariaDescribedby` and `FormPopup` gains `submitDescribedby`. Holdings keeps a searched whole address's row out of the fold, and `focusToken` loses its fold fallback. Closes #1881.
+- **Dispositions:** D1 and D5 keep the popup for a flagged or unread-list address, and arc 2's line now says why. D8 (focus following an empty row into the fold) is moot under E5 and E6. D9's wait with no timer stays #1681's. The plan audit's ask for a placement of a late refusal is rejected (D6).
 - **Known limits:** #1893 (D6).
 - **Open items:** none.
-- **Lessons:** none promoted. The e2e skill already says `clickByTestId` never focuses (§ focus assertions), and `lessons.md` is at its 8 KiB budget. The dispose-between-helpers finding is in [lessons/phase-3.md](lessons/phase-3.md).
+- **Lessons:** none promoted. The e2e skill already says `clickByTestId` never focuses (§ focus assertions), and `lessons.md` is at its 8 KiB budget. The dispose-between-helpers finding is in [lessons/phase-3.md](lessons/phase-3.md), and arc 2's log in [lessons/phase-4.md](lessons/phase-4.md).
 - **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # holdings-add-1: add a token in one press from Holdings (#1881)
@@ -124,3 +124,41 @@ Single arc, one PR against `dev`, opened as a **draft** and never marked ready o
 `/goal` Phases 1-3 marked ✓ in implementations-plan/holdings-add-1/plan.md with each gate's output in the transcript; one Codex pass over plan + diff with material fixes verified; draft PR open with the close-out archived; `bun run test` and `bun run lint` exit 0.
 
 `/loop 15m` Drive implementations-plan/holdings-add-1 per its plan.md and README § Post-implementation standard; never mark the PR ready or merge; after the close-out, babysit CI only.
+
+## Arc 2 — the page-195 picks
+
+This plan runs past the `light` target of 150 lines because it carries two arcs.
+
+Signed by the owner on 2026-11-19 at 22:14Z, on this PR, which stays a draft until the owner approves the arc's captures:
+
+- **P195-01 approved**: the one-press add as built, the refusal under the Add row.
+- **P195-02 = 3** (answers A1): "Two presses, and the pop-up shows "Flagged as a scam" under the address. One line added to the pop-up; its capture comes back to you before it lands."
+- **P195-03 = 2** (answers A2): "A searched address never folds: while the search holds a whole contract address, its row shows even when empty, and the focus stays on it."
+
+**UI impact.** The New token popup: "Flagged as a scam" under the address field while the signed list flags the address in it, for every way in (the Tokens menu and its empty state, Settings → Tokens, Send's token card, the Send picker's add row, Holdings' flagged press). Holdings: while the search holds a whole valid address, that token's row stays in view, empty or dust, instead of folding. The Send picker keeps its fold. Sign-off: the picks above; the popup line is the one thing the owner checks on the captures (`ha-flag-popup`).
+
+### Decision ledger (arc 2)
+
+- E1. The popup reads the flags itself: a `PriceServiceClient` and `useTokenFlags`, allocated when it shows and disposed when it hides, the fee window's pattern. The read never touches the network, and a broadcast updates it. Rejected: the flag in the opener's payload (it misses a typed address and four of the five ways in), and a reader built once in setup (the popup stays mounted for the popup's life, so the port would stay open or go deaf after a hide).
+- E2. A list read after the popup opened adds the line while the popup is open (the brief's recommendation). Holdings opens the popup when it has not read the list yet, and the popup's own read always lands after it shows, so this is the main path, not a corner case. Pinned by a test.
+- E3. Accessibility, under the owner's 2026-10-19 delegation: the line is `role="alert"` and named by `aria-describedby` on the field and on Import. The line always arrives after the autofocused field took focus (E2), so a description alone would stay unread until the person reaches Import. Same pattern as Send's amount refusal (`AmountCard.vue`). The field gets this through a new `ariaDescribedby` prop on `@nulo/design`'s `Input`, the twin of `ariaLabelledby`. Import gets it through `FormPopup`'s new `submitDescribedby`.
+- E4. The line goes in `Input`'s `#bottom` slot, in Holdings' style (`type--caption`, `--txt-danger`), with the exact words. Its testid is `new-token-flagged`.
+- E5. The fold rule is a `TokenList` prop, `keepSearchedRow`, set by Holdings only. While the trimmed query passes `isValidAztecAddress` (the Add row's own test), no matching row folds. A whole-address query matches only the exact contract (`matchesQuery`), so the rows it keeps are the one the owner named. Rejected: the rule always on (it changes the Send picker, which folds its empty rows), and keying it on `selectable` (that ties two unrelated meanings).
+- E6. `focusToken`'s fallback to the fold toggle is removed. With E5, the token Holdings just added is never folded while its address is in the search. A query the person changed during the add leaves focus in the search field, which `focusToken` never takes, and no other caller exists. D8 is moot.
+
+### Phase 4 — the popup line and the kept row ✓
+
+1. `Input` `ariaDescribedby`, `FormPopup` `submitDescribedby`, each with one test case. `NewTokenPopup`: the reader (E1), the line (E3, E4).
+2. `TokenList` `keepSearchedRow` (E5, E6); Holdings passes it.
+3. Tests. `NewTokenPopup.test.ts`: a flagged wire-shaped address shows the line, which the field and Import name, and an unflagged one shows none; a late read adds the line; a hide disposes the reader. `TokenList.test.ts`: a searched whole-address zero row stays out of the fold, and the fold comes back when the search is cleared; a partial query still folds it; without the prop it folds. `holdings.test.ts`: the searched zero-balance row stays visible and focused after the add, once its balance lands.
+4. e2e: in `token-list.test.ts`, the flagged picker scenario presses Add and finds `new-token-flagged` in the popup. That proves the popup's real list read through the worker, which the component test mocks. It adds one step to an existing scenario, not a new scenario.
+
+**Validation gate**: `bun run lint && bun run typecheck:all && bun run test && bun run test:all`. From `apps/extension`: `bun run test:e2e -- tests/e2e/token-list.test.ts tests/e2e/send-picker-add.test.ts tests/e2e/settings-crud.test.ts --retry=0`. From the root: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/holdings.test.ts tests/e2e/network/send-picker.test.ts`. Each runs on Chrome and on Firefox, because focus is touched.
+
+Result: static gates and `test:all` green. Smoke: 12 tests green on each browser, and the new step adds about 0.3 s. Network: 4 tests green on each browser ([lessons/phase-4.md](lessons/phase-4.md)).
+
+### Phase 5 — review, captures, delivery ✓
+
+One Codex pass (`gpt-6.1-sol`, high) over the arc-2 diff, adversarial on four points: a way into the popup that misses the line, the late read, a row that never folds again, and focus lost when the search changes. Then targeted verification. Captures come from the lane's kit: `ha-flag-popup` and `ha-empty-kept`, light and dark, plus `ha-warning` re-shot. They are pushed in one commit and removed in the next. The PR body gets the page-195 sign-off.
+
+Verdict, Codex at `2334574d9`: **approve**, no runtime bug. It found all five ways in reach the popup's own reader, a late read and a broadcast update the open popup, and the fold rule is derived from the current query, with the picker never setting it. Taken: one test (a read an earlier showing left out never reaches the current one), two comment nits, and a correction to E6's rationale. Captures: `ha-flag-popup`, `ha-empty-kept` and `ha-warning` re-shot, light and dark. Shooting them raised A3.

@@ -2,6 +2,8 @@
 
 Each ask is built as today until the owner answers. Nothing else in the lane waits on them.
 
+**Answered on page 195 (2026-11-19, 22:14Z):** A1 = option 3, A2 = option 2. Both are built in arc 2 (plan § Arc 2). A3 below is new and open.
+
 ## A1. A flagged address on Holdings
 
 **Surface.** Holdings' search with a pasted address that the signed list flags. Holdings already shows "Flagged as a scam" under the Add row. The New token popup does not repeat it: it shows the address field and the Import button only. Built: a flagged address keeps the popup, and so does any address pasted before the wallet has read the list, when no flag can be known.
@@ -24,3 +26,13 @@ Each ask is built as today until the owner answers. Nothing else in the lane wai
 2. **A searched address never folds.** While the search holds a whole contract address, its row shows even when empty.
 
 **Recommendation: option 2.** A person who searched one token wants to see that token, and focus then stays on it. This is a small rule in the list, outside this lane until the owner says so. With option 1, focus should follow the row into the fold, a small change of its own.
+
+## A3. The green check beside a flagged address in the New token popup
+
+**Surface.** The New token popup's address field. While an address is valid, the field shows a green check at its right end. With a flagged address, that check now sits beside the new "Flagged as a scam" line under the field (captures `ha-flag-popup-light`, `ha-flag-popup-dark`).
+
+**Options.**
+1. **Leave it (built).** The check says the address is well formed, and the line says the list flags it.
+2. **Hide the check while the address is flagged.** The line is then the only mark beside the field.
+
+**Recommendation: option 2.** A green check next to a scam warning reads as a mixed signal, and the field's well-formedness adds nothing once the list names the token. This changes no words.
