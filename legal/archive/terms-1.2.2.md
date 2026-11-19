@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Version 1.2.2 — effective «FILL: effective date»**
+**Version 1.2.2 — effective 19 November 2026**
 
 These Terms are a binding agreement between you and the developer of Nulo. Read them before you
 install or use Nulo. If you do not agree, do not install or use it.
@@ -569,4 +569,4 @@ public feedback forms.
 | 1.1 | 26 October 2026 | First version in effect. |
 | 1.2 | 27 October 2026 | Passkey profiles now have a recovery phrase. A full backup of a passkey profile is always protected with a file password. |
 | 1.2.1 | 5 November 2026 | The summary box names the default network as Nulo shows it, Alpha. |
-| 1.2.2 | «FILL: effective date» | When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails; each endpoint you add can receive its requests (§ 7.1). |
+| 1.2.2 | 19 November 2026 | When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails; each endpoint you add can receive its requests (§ 7.1). |
