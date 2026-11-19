@@ -27,12 +27,12 @@ The owner picked H1 on page 193 (P193-01, 2026-11-19): "The same fill colour acr
 
 ## Architecture & Implementation
 
-- **Bleed tied to the gutter.** Each of the four hosts sets `--page-gutter: 24px` on its content column and pads with `var(--page-gutter)`; a row bleeds by `calc(-1 * var(--page-gutter))` and pads by `var(--page-gutter)`. A host that sets nothing keeps today's geometry through the fallback (0 for a token row, 8 px for an activity row), so a story, a test mount or a later host with another gutter cannot overflow.
+- **Bleed tied to the gutter.** Each of the four hosts sets `--page-gutter: 24px` on its content column and pads with `var(--page-gutter)`; a row bleeds by `calc(-1 * var(--page-gutter))` and pads by `var(--page-gutter)`. A host that sets nothing keeps the earlier geometry through the fallback (0 for a token row, 8 px for an activity row). The bleed equals the host's gutter only while nothing between the host and the row adds a side inset; the rows' comments say so.
 - **Activity rows.** `TransactionCardLayout.vue` takes the inset once, `--row-inset: var(--page-gutter, 8px)` on `.wrapper`, and the actions corner reads it: `padding-right: calc(var(--row-inset) + 28px)` (one action) and `+ 52px` (two), `.actions { right: var(--row-inset) }`, and the narrow reset `padding-right: var(--row-inset)`. The 28 and 52 are today's 36 − 8 and 60 − 8.
 - **Token rows.** `TokenCard.vue`'s `.link` gets `margin-inline: calc(-1 * var(--page-gutter, 0px)); padding-inline: var(--page-gutter, 0px)`. `.pick` follows `.link` in the module and sets its own `margin` and `padding`, so a picker row is unchanged.
 - **Holdings' sticky search** (`TokenList.vue` `.sticky`) is 312 px wide over rows that now paint 360 px: a hovered row scrolled under it would show two 24 px stubs beside the search field. The sticky box takes the same bleed (`margin-inline` and `padding-inline` from `--page-gutter`, fallback 0), so its opaque background covers the band; the field stays where it is. In the Send sheet no `--page-gutter` is set, so the sheet's sticky is unchanged.
 - **Unchanged**: the fill colour, the ring (2 px accent, offset −2 px, on the row's own box), `:active`, and the arrival glow, which animates the row's background and widens with it.
-- **Files**: `TokenCard.vue`, `TransactionCardLayout.vue`, `TokenList.vue`, `popup/pages/{general,holdings,activity}.vue`, `popup/pages/tokens/[id].vue`; tests `TransactionCardLayout.test.ts` (stale comment) and `tests/e2e/rows.test.ts` (the −8px spec).
+- **Files**: `TokenCard.vue`, `TransactionCardLayout.vue`, `TokenList.vue` (the bleed and a `search-bar` testid), `popup/pages/{general,holdings,activity}.vue`, `popup/pages/tokens/[id].vue`; tests `TransactionCardLayout.test.ts` (stale comment) and `tests/e2e/rows.test.ts`.
 - **Alternative not taken**: a global `--page-gutter` on `:root`. Every row anywhere would then bleed 24 px, including rows in a host with no 24 px gutter, which scroll sideways. Host-scoped is the brief's "set where the gutter is set".
 
 ## Security & Adversarial Considerations
@@ -61,13 +61,13 @@ CSS geometry only: no data, storage, message or permission changes. The one risk
 
 - D1. Host-scoped `--page-gutter` with today's geometry as the fallback (above). 
 - D2. The ring stays inset on the row's own box: the box ends at the scroller's padding edge, inside every `overflow` clip, so all four sides stay whole. Accessibility call under the owner's 2026-10-19 delegation.
-- D3. The edge pin is an amended e2e, not a new scenario: the existing History spec (`rows.test.ts`, the −8px one) also opens Home, so it reads a token row and the activity row there and History's row, and asserts each box spans 0 to the viewport width. No new e2e scenario, so no suite wall-clock change.
+- D3. The edge pins amend existing e2e scenarios, so no suite wall-clock change: the −8px History spec now reads Home's and History's activity rows; the placeholder-row spec, which already ends on a loaded token row, reads it on Home and Holdings and reads Holdings' sticky search bar; the pinned-hero spec reads the token page's rows. Each box must span 0 to the viewport width. jsdom has no layout, so a browser is the cheapest layer. On the base CSS the pins fail (16 px and 24 px short); on the change they pass.
 
 ## Phase 1: build H1 and pin it
 
 1. Add `--page-gutter` to the four hosts and the bleed to the two rows and the sticky search.
 2. Fix the stale "36px" comment in `TransactionCardLayout.test.ts`.
-3. Rename and amend the −8px spec in `rows.test.ts` as D3 says.
+3. Rename and amend the e2e specs in `rows.test.ts` as D3 says.
 
 **Validation gate**
 - Commands: `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`, `bun run check:plans` (after staging); from `apps/extension`: `bun run test:e2e -- tests/e2e/rows.test.ts tests/e2e/type-roles.test.ts tests/e2e/token-list.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`.
@@ -80,6 +80,13 @@ CSS geometry only: no data, storage, message or permission changes. The one risk
 2. Serialize the same pages into one self-contained `look.html` (both variants, CSS-only theme switch).
 
 **Validation gate**: 32 frames on disk; `look.html` under 8 MB with no URL but `data:`; opened in Chrome from disk, hover, Tab and the theme switch checked by hand-driven Puppeteer.
+
+## Review verdicts
+
+Codex (`gpt-6.1-sol`, high), one pass over this plan and the diff: no demonstrated regression; host scoping, fallbacks, the actions corner and teleport boundaries sound.
+- R1 (accepted): the sticky bleed and the token page had no pin. Added to existing scenarios (D3).
+- R2 (accepted): the plan said the fallback makes a later host safe; it only keeps the earlier geometry. Reworded.
+- R3 (accepted): the rows' comments now state the constraint (no side inset between host and row) instead of the arithmetic.
 
 ## Post-implementation
 
