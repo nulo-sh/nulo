@@ -1,7 +1,7 @@
 ---
 plan: fee-default-1
 tier: light
-status: building (one draft PR against dev, never marked ready by the lane)
+status: delivered (one draft PR against dev; it lands on the orchestrator's word after 1.3.0 is published and the owner signs off the frames and OA-2)
 issues: "#1879"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at c1bca82cb
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-19.
+- **Status:** delivered as one draft PR against `dev`, carrying the change and this close-out; never marked ready by the lane. It lands after 1.3.0 is published, on the owner's sign-off on the frames and OA-2.
+- **Shipped:** `appDefault` in `composables/useFeeSelection.ts`: with nothing remembered for the account, the app windows open on private Fee Juice when a balance read shows it can pay, then Nulo's sponsor, else nothing (D1-D4); a remembered pick, a pick made during the read and a dApp lock still win; nothing is saved. Tests: the default by class and its controls, a wire-shaped Mainnet window, the identity-switch test made to see a transient leak. Closes #1879.
+- **Dispositions:** D5, the overlay of a card's unsaved picks, built and reverted (design growth). D2 kept per the brief; Codex's sponsor-first lean is OA-2.
+- **Known limits:** #1888 (a pick whose save is not yet stored gives way to the default on a recovery), #1889 (the default reads balances cached up to five minutes).
+- **Open items:** #1890 (OA-1: public Fee Juice as Mainnet's default when private Fee Juice cannot pay, the owner's call). OA-2 and the frames are this PR's sign-off, not open work.
+- **Lessons:** none promoted: the gotchas are this card's (`lessons/phase-1.md`), and `lessons.md` sits at its budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # fee-default-1: the first transaction window opens on private Fee Juice when it can pay
 
