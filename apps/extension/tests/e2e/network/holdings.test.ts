@@ -29,6 +29,12 @@ const test = base.extend<{ extraTokens: Record<string, string> }>({
 	]),
 })
 
+const pressAdd = async (page: Awaited<ReturnType<typeof openPopup>>) => {
+	await page.waitForSelector('[data-testid="holdings-add-token"]', { visible: true, timeout: 5_000 })
+	await page.focus('[data-testid="holdings-add-token"]')
+	await page.keyboard.press("Enter")
+}
+
 const listedSymbols = (page: Awaited<ReturnType<typeof openPopup>>) =>
 	page.$$eval('[data-testid="holdings-page"] [data-testid="token-symbol"]', (els) => els.map((el) => (el as HTMLElement).dataset.symbol))
 
@@ -116,8 +122,10 @@ test.skipIf(!hasConfig)(
 			{ timeout: 60_000 },
 		)
 
+		// A keyboard press, as a person's: a synthetic click moves no focus, and focus left in the search
+		// field stays there.
 		await replaceInputValue(page, '[data-testid="holdings-search"]', pasted)
-		await clickByTestId(page, "holdings-add-token")
+		await pressAdd(page)
 		await waitForToast(page, "Token added", 60_000)
 		await page.waitForSelector('[data-testid="holdings-page"] [data-testid="token-symbol"][data-symbol="PASTE"]', {
 			visible: true,
@@ -133,7 +141,7 @@ test.skipIf(!hasConfig)(
 		await waitForToastGone(page, "Token added", 10_000)
 
 		await replaceInputValue(page, '[data-testid="holdings-search"]', NO_CONTRACT)
-		await clickByTestId(page, "holdings-add-token")
+		await pressAdd(page)
 		await page.waitForFunction(
 			() =>
 				document.querySelector('[data-testid="holdings-add-token-error"]')?.textContent?.trim() ===
