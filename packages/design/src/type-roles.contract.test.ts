@@ -117,9 +117,9 @@ describe("type roles against the signed board", () => {
 		expect(drawnOf("amount-hero")).toEqual(BOARD_B_HERO_AMOUNT)
 	})
 
-	test("every role carries a board row, except input, which keeps today's typed words", () => {
+	test("every role carries a board row, except input, which keeps today's typed words, and emoji, the connection check's symbols", () => {
 		const carried = new Set<string | null>([...BOARD_A.map((r) => r.role), "amount-hero"])
-		expect(typeRoleNames.filter((name) => !carried.has(name))).toEqual(["input"])
+		expect(typeRoleNames.filter((name) => !carried.has(name))).toEqual(["input", "emoji"])
 	})
 
 	test("every fixed size sits on the floors", () => {

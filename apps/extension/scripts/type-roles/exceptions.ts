@@ -104,13 +104,6 @@ export const CARVE_OUTS: CarveOut[] = [
 		why: "title-hero's size on Activity and the Settings hub",
 	},
 	{
-		file: "apps/extension/src/components/composite/general/EmojiGrid.vue",
-		rule: "faceless",
-		text: "font-size: 24px",
-		selector: ".cell",
-		why: "the verification emoji's size, a glyph a person compares, which no role carries",
-	},
-	{
 		file: CONTACT_ROW,
 		rule: "faceless",
 		text: "font-size: 10px",

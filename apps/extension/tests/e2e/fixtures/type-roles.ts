@@ -22,6 +22,8 @@ type RoleSpec = (typeof typeRoles)[TypeRole]
 type Vars = Record<string, string>
 
 const FONT_TOKENS: readonly FontToken[] = Object.values(fonts)
+/** The faces the wallet ships; `--font-emoji` names the platform's, which no `@font-face` declares. */
+const BUNDLED_FONT_TOKENS: readonly FontToken[] = FONT_TOKENS.filter((token) => token !== fonts.emoji)
 const MONO_ROLES: readonly TypeRole[] = typeRoleNames.filter((role) => typeRoles[role].family === fonts.mono)
 
 /** Elements a size floor does not hold, by the testid they sit under. */
@@ -455,10 +457,10 @@ export const judgeTypography = ({ vars, readings }: PageTypography): SweepFailur
 // ── Faces ───────────────────────────────────────────────────────────────
 
 /**
- * Every face a role names has loaded and none failed. Waits for the document's font loads to
+ * Every bundled face a role names has loaded and none failed. Waits for the document's font loads to
  * settle first; a family never requested stays `unloaded`, so only `required` must reach `loaded`.
  */
-export async function checkFontFaces(page: Page, required: readonly FontToken[] = FONT_TOKENS): Promise<FontCheck> {
+export async function checkFontFaces(page: Page, required: readonly FontToken[] = BUNDLED_FONT_TOKENS): Promise<FontCheck> {
 	const { vars } = await readPageTypography(page, NO_ELEMENTS)
 	const names = (tokens: readonly FontToken[]) => tokens.map((token) => firstFamily(vars[token] ?? ""))
 	await page
@@ -484,7 +486,7 @@ export async function checkFontFaces(page: Page, required: readonly FontToken[] 
 		})
 		return seen
 	})
-	const faces = FONT_TOKENS.map((token) => {
+	const faces = BUNDLED_FONT_TOKENS.map((token) => {
 		const face = firstFamily(vars[token] ?? "")
 		return { token, face, statuses: statuses.filter((entry) => entry.family === face).map((entry) => entry.status) }
 	})
@@ -504,7 +506,7 @@ function faceFailures({ token, face, statuses }: FontCheck["faces"][number], req
 export async function sweepTypeRoles(page: Page, options: SweepOptions = {}): Promise<SweepResult> {
 	const typography = await readPageTypography(page, { kind: "roles" })
 	const used = new Set(typography.readings.flatMap((reading) => reading.roles.filter(isRole).map((role) => typeRoles[role].family)))
-	const fontCheck = await checkFontFaces(page, options.requireFaces ?? FONT_TOKENS.filter((token) => used.has(token)))
+	const fontCheck = await checkFontFaces(page, options.requireFaces ?? BUNDLED_FONT_TOKENS.filter((token) => used.has(token)))
 	return { fonts: fontCheck, readings: typography.readings, failures: judgeTypography(typography) }
 }
 

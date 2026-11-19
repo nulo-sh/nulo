@@ -42,7 +42,7 @@ the light page, so `red` paints glyphs, fills, borders and large text. The exten
 
 ## Type roles
 
-A face, letter spacing or upper case comes only from a **type role**: one of the 24 records of
+A face, letter spacing or upper case comes only from a **type role**: one of the 25 records of
 `typeRoles` in the contract, each the type for one job (`label-section`, `meta`, `body`, …). Each
 renders one generated class, `.type--<role>`, which sets its family, weight, tracking, case and
 figures, and its size unless the role leaves the size to the element (`siteSizedTypeRoles`). No
@@ -58,7 +58,8 @@ not set a role property: which of two equal selectors wins depends on stylesheet
 `weight`, `mono` or `tabular` on a `<Text>`.
 
 Pick a role by the job the text does, from the last column. G is Space Grotesk (`--font-headline`),
-I Inter (`--font-body`), M JetBrains Mono (`--font-mono`). "Site" leaves the size to the element,
+I Inter (`--font-body`), M JetBrains Mono (`--font-mono`), E the platform's colour-emoji face
+(`--font-emoji`, which lists them ahead of any text face). "Site" leaves the size to the element,
 which sets it in its own rule (at least the floors). Tracking is in em. A dagger marks tabular
 figures. `segment`'s selected item takes weight 700 through the component's own compound rule;
 Send's publish facts keep 10 px / 600 / 0.08 em in `label-section` the same way, and Manage accounts' address lines keep 11 px in `meta` (each an
@@ -90,6 +91,7 @@ Send's publish facts keep 10 px / 600 / 0.08 em in `label-section` the same way,
 | `meta` | M | 13 | 400 | none | normal | Addresses, hashes, ids, function names, inline amounts and fees, symbols beside amounts, counts, hints, conversions |
 | `value` | I | 12 | 600 | none | normal | Values in key/value rows, Settings trailing values, banner titles |
 | `input` | I | 15 | 500 | none | normal | Text a person types into `Input` |
+| `emoji` | E | 24 | 400 | none | normal | The connection check's symbols |
 
 Avatar initials take no role: `AccountAvatar` sizes them from their box.
 

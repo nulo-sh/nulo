@@ -244,6 +244,15 @@
 	font-variant-numeric: normal;
 }
 
+.type--emoji {
+	font-family: var(--font-emoji);
+	font-size: 24px;
+	font-weight: 400;
+	letter-spacing: normal;
+	text-transform: none;
+	font-variant-numeric: normal;
+}
+
 .ta--center {
 	text-align: center;
 }
