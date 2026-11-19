@@ -308,16 +308,22 @@ describe("SelectTokenPopup", () => {
 		expect(wrapper.find('[data-testid="select-token-no-results"]').exists()).toBe(true)
 	})
 
-	test("selecting a row writes the TOKEN id (not the balance row id), marks it selected, and closes", async () => {
+	test("selecting a row writes the TOKEN id (not the balance row id), marks it selected, reports the pick and closes", async () => {
+		const onPicked = vi.fn()
+		H.payload.current = { onPicked }
 		const wrapper = await mountOpen([row(7, "ONE"), row(9, "TWO")])
 		expect(wrapper.findAll('[data-testid="select-token-row"]').map((el) => el.attributes("data-selected"))).toEqual(["false", "false"])
 
 		await wrapper.find('[data-testid="select-token-row"][data-symbol="TWO"]').trigger("click")
 		expect(H.cache.activeTokenIdx).toBe(9)
+		expect(onPicked.mock.calls).toEqual([[9]])
 		expect(wrapper.emitted("onClose")).toHaveLength(1)
 
 		await nextTick()
 		expect(wrapper.find('[data-testid="select-token-row"][data-symbol="TWO"]').attributes("data-selected")).toBe("true")
+		await wrapper.find('[data-testid="select-token-row"][data-symbol="TWO"]').trigger("click")
+		expect(onPicked).toHaveBeenCalledTimes(1)
+		expect(wrapper.emitted("onClose")).toHaveLength(2)
 	})
 
 	test("a fetch for the previous account that resolves late never lands; the scope change refetches", async () => {

@@ -260,6 +260,19 @@ describe("composite/AmountCard", () => {
 		expect(emits[emits.length - 1]?.[0]).toBe("1,234,567.123456")
 	})
 
+	test("a blur's rest, a re-clamp and a write from the page each write the amount and none is an edit", async () => {
+		const w: ReturnType<typeof mountCard> = mountCard({
+			modelValue: "1000.123456789",
+			token: { symbol: "ETH", decimals: 18 },
+			"onUpdate:modelValue": (v: unknown) => w.setProps({ modelValue: v }),
+		})
+		await w.get("input[data-testid='send-amount-input']").trigger("blur")
+		await w.setProps({ token: { symbol: "USDC", decimals: 4 } })
+		await w.setProps({ modelValue: "" })
+		expect(w.emitted("update:modelValue")).toEqual([["1,000.123456789"], ["1,000.1234"]])
+		expect(w.emitted("edit")).toBeUndefined()
+	})
+
 	test("clamps to 0 decimals (token with no fractional units strips the dot)", async () => {
 		const w = mountCard({
 			tokenBalanceByType: 100,
@@ -333,6 +346,24 @@ describe("composite/AmountCard — C3 fiat input", () => {
 		expect(label.exists()).toBe(true)
 		expect(label.text()).toBe("≈ $124.98")
 		expect(label.attributes("title")).toContain("via USDC")
+	})
+
+	test("a key in either field and Max in either mode are each one edit; the unit switch is none", async () => {
+		const w: ReturnType<typeof mountCard> = mountFiat({
+			"onUpdate:modelValue": (v: unknown) => w.setProps({ modelValue: v }),
+			"onUpdate:fiatMode": (v: unknown) => w.setProps({ fiatMode: v }),
+			"onUpdate:fiatGuard": (v: unknown) => w.setProps({ fiatGuard: v }),
+		})
+		const edits = () => w.emitted("edit")?.length ?? 0
+		await w.get("input[data-testid='send-amount-input']").setValue("5")
+		await w.get("[data-testid='send-amount-max']").trigger("click")
+		expect(edits()).toBe(2)
+		await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
+		expect(edits()).toBe(2)
+		await w.get("input[data-testid='send-amount-fiat-input']").setValue("3")
+		await w.get("[data-testid='send-amount-max']").trigger("click")
+		expect(edits()).toBe(4)
+		expect(w.props("modelValue")).toBe("1000")
 	})
 
 	test("entering fiat mode freezes the session quote and swaps the input", async () => {

@@ -31,6 +31,8 @@ const props = defineProps({
 	},
 	/** Called with a token the picker's paste-to-add imported, for the page to pick. */
 	onTokenAdded: Function,
+	/** Called with the id of the listed token the person picked, only when it replaces the active one. */
+	onTokenPicked: Function,
 	/** The signed list flags the token as a scam. */
 	flagged: {
 		type: Boolean,
@@ -60,7 +62,7 @@ let skeletonTimer
 const handleSelectToken = () => {
 	if (isLoading.value) return
 	if (props.token) {
-		popupStore.open("select_token", { onAdded: props.onTokenAdded })
+		popupStore.open("select_token", { onAdded: props.onTokenAdded, onPicked: props.onTokenPicked })
 	} else if (props.failed) {
 		emit("retry")
 	} else {
