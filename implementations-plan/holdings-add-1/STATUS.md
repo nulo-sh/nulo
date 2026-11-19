@@ -1,0 +1,2 @@
+- 2026-11-19 recon done; plan.md drafted (light); plan audit next.
+- 2026-11-19 plan audit: Codex conditional approve; Opus conditional approve; conditions folded in (D1-D9). Phases 1-2 implemented, unit green.
