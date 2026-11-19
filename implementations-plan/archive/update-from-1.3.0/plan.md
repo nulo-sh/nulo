@@ -29,7 +29,7 @@ trunk: dev
 
 # update-from-1.3.0: the update scenarios run from v1.3.0
 
-v1.3.0 shipped on 2026-11-19, so the next promote updates from it (`.claude/skills/release/SKILL.md` § Stable release, step 1). One arc, one PR against `dev`, test files and docs only, closing #1901, in the shape #1686 set for v1.2.0 ([archive](../archive/update-from-1.2.0/plan.md)). Two things stand between "pin and record" and a green run (F4, F5). Evidence: [recon.md](recon.md).
+v1.3.0 shipped on 2026-11-19, so the next promote updates from it (`.claude/skills/release/SKILL.md` § Stable release, step 1). One arc, one PR against `dev`, test files and docs only, closing #1901, in the shape #1686 set for v1.2.0 ([archive](../update-from-1.2.0/plan.md)). Two things stand between "pin and record" and a green run (F4, F5). Evidence: [recon.md](recon.md).
 
 ## Outcome & Quality Bar
 
