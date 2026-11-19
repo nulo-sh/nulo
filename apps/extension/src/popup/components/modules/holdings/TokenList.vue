@@ -172,12 +172,14 @@ const toggleSort = () => {
 	composes: dot from "@/components/refreshing-dot.module.css";
 }
 
+/* As wide as the rows' band, so a hovered row scrolling under it is covered edge to edge. */
 .sticky {
 	position: sticky;
 	top: 0;
 	z-index: 2;
 
-	padding: 4px 0 6px;
+	margin-inline: calc(-1 * var(--page-gutter, 0px));
+	padding: 4px var(--page-gutter, 0px) 6px;
 	background: var(--token-list-bg, var(--app-bg));
 }
 

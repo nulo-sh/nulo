@@ -153,7 +153,7 @@ describe("composite/TransactionCardLayout", () => {
 	// A parent template like `<template #actions><Btn v-if="cancellable"/></template>`
 	// declares the slot but can render zero VNodes when the condition is false.
 	// `$slots.actions` is still truthy in that case, so we must invoke the slot
-	// and check VNode count; otherwise the wrapper picks up 36px of right-padding
+	// and check VNode count; otherwise the wrapper reserves the actions' right padding
 	// for nothing and the empty `.actions` container ships in the DOM.
 	test("wrapper does NOT have the modifier when actions slot is declared but renders nothing", () => {
 		// A parent like `<template #actions><Btn v-if="cancellable"/></template>`

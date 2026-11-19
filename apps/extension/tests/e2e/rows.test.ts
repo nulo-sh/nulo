@@ -534,18 +534,13 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 	expect(listedExtension.pageErrors).toEqual([])
 }, 90_000)
 
-test("History's list keeps the −8px row box inside the page: nothing scrolls sideways", async ({ listedExtension }) => {
-	const page = await openHomeWithRow(listedExtension, { priced: false })
-	await clickNavTab(page, "activity")
-	await waitForHash(page, "#/popup/activity")
-	await page.waitForSelector(`${sel("activity-feed-root")} ${sel("tx-card")}`, { visible: true, timeout: 15_000 })
-
-	// The row's box bleeds 8px into the page padding by design; what must not happen is a scroll
-	// container or the document gaining width, or the row leaving the viewport.
-	const layout = await page.evaluate(() => {
+/** Each `selector` row's box against the viewport, and every clipping ancestor of the first that
+ *  scrolls sideways (or the document). */
+function readBands(page: Page, selector: string) {
+	return page.evaluate((rowSel: string) => {
+		const rows = [...document.querySelectorAll(rowSel)]
 		const overflowing: string[] = []
-		const row = document.querySelector('[data-testid="tx-card"]')
-		let el: Element | null = row
+		let el: Element | null = rows[0] ?? null
 		while (el && el !== document.body) {
 			const clips = getComputedStyle(el).overflowX !== "visible"
 			if (clips && el.scrollWidth > el.clientWidth)
@@ -553,12 +548,33 @@ test("History's list keeps the −8px row box inside the page: nothing scrolls s
 			el = el.parentElement
 		}
 		if (document.documentElement.scrollWidth > window.innerWidth) overflowing.push("html")
-		const box = row?.getBoundingClientRect()
-		return { overflowing, left: box?.left ?? -1, right: box?.right ?? -1, width: window.innerWidth }
-	})
-	expect(layout.overflowing).toEqual([])
-	expect(layout.left).toBeGreaterThanOrEqual(0)
-	expect(layout.right).toBeLessThanOrEqual(layout.width)
+		const edges = rows.map((row) => {
+			const box = row.getBoundingClientRect()
+			return { left: box.left, right: box.right }
+		})
+		return { overflowing, edges, width: window.innerWidth }
+	}, selector)
+}
+
+function expectEdgeToEdge(bands: Awaited<ReturnType<typeof readBands>>, label: string): void {
+	expect(bands.overflowing, `${label}: sideways scroll`).toEqual([])
+	expect(bands.edges.length, `${label}: rows`).toBeGreaterThan(0)
+	for (const { left, right } of bands.edges) {
+		expect(left, `${label}: left edge`).toBeCloseTo(0, 0)
+		expect(right, `${label}: right edge`).toBeCloseTo(bands.width, 0)
+	}
+}
+
+test("an activity row's band spans the gutter to both popup edges on Home and History, and nothing scrolls sideways", async ({
+	listedExtension,
+}) => {
+	const page = await openHomeWithRow(listedExtension, { priced: false })
+	expectEdgeToEdge(await readBands(page, sel("tx-card")), "Home's activity rows")
+
+	await clickNavTab(page, "activity")
+	await waitForHash(page, "#/popup/activity")
+	await page.waitForSelector(`${sel("activity-feed-root")} ${sel("tx-card")}`, { visible: true, timeout: 15_000 })
+	expectEdgeToEdge(await readBands(page, `${sel("activity-feed-root")} ${sel("tx-card")}`), "History's rows")
 
 	expect(listedExtension.consoleErrors).toEqual([])
 	expect(listedExtension.pageErrors).toEqual([])
@@ -1213,7 +1229,7 @@ test("a dApp's long function name and host never widen Home or History, named or
 const rowHeight = (page: Page, selector: string) => page.$eval(selector, (row) => row.getBoundingClientRect().height)
 
 test.skipIf(inject("liveLeg") === true)(
-	"a default token's placeholder row, still working, stands as tall as a loaded token row",
+	"a default token's placeholder row, still working, stands as tall as a loaded token row, whose band spans both popup edges",
 	{ timeout: 120_000 },
 	async ({ freshExtensionPerTest: ctx }) => {
 		const host = await serveTokenList()
@@ -1263,6 +1279,7 @@ test.skipIf(inject("liveLeg") === true)(
 			await unlockAfterBackgroundDeath(page)
 			await page.waitForSelector(`${sel("tokens-card")} ${sel("token-amount")}`, { visible: true, timeout: 30_000 })
 			expect(await rowHeight(page, sel("tokens-card"))).toBeCloseTo(loading, 1)
+			expectEdgeToEdge(await readBands(page, sel("tokens-card")), "Home's token rows")
 			await shotSend(page, "home-token-rows-loaded", "tokens-list")
 		} finally {
 			await held.stop()

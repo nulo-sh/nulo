@@ -160,10 +160,14 @@ function hasActionsContent() {
 </template>
 
 <style module>
+/* The fill and ring span the host's gutter to the popup's edges; the content keeps it as padding.
+   A host that declares no `--page-gutter` gets an 8px bleed. */
 .wrapper {
+	--row-inset: var(--page-gutter, 8px);
+
 	position: relative;
-	margin: 0 -8px;
-	padding: 6px 8px;
+	margin: 0 calc(-1 * var(--row-inset));
+	padding: 6px var(--row-inset);
 }
 
 .interactive {
@@ -186,19 +190,19 @@ function hasActionsContent() {
 	}
 }
 
-/* One 24px action plus 4px of air, inside the 8px side padding. */
+/* One 24px action plus 4px of air, inside the side padding. */
 .wrapper_has_actions {
-	padding-right: 36px;
+	padding-right: calc(var(--row-inset) + 28px);
 }
 
 .wrapper_two_actions {
-	padding-right: 60px;
+	padding-right: calc(var(--row-inset) + 52px);
 }
 
 .actions {
 	position: absolute;
 	top: 6px;
-	right: 8px;
+	right: var(--row-inset);
 	z-index: 1;
 	display: flex;
 	align-items: center;
@@ -286,7 +290,7 @@ function hasActionsContent() {
 
 	.wrapper_has_actions,
 	.wrapper_two_actions {
-		padding-right: 8px;
+		padding-right: var(--row-inset);
 	}
 
 	.left_content {
