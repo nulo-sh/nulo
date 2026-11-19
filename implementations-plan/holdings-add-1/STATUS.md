@@ -1,2 +1,4 @@
 - 2026-11-19 recon done; plan.md drafted (light); plan audit next.
 - 2026-11-19 plan audit: Codex conditional approve; Opus conditional approve; conditions folded in (D1-D9). Phases 1-2 implemented, unit green.
+- 2026-11-19 phase 3 done: e2e green on both browsers, captures shot; Codex diff review running.
+- 2026-11-19 Codex diff review: conditional approve; the addAndWait guard + regression case and comment trims applied; affected suites, lint, typecheck green.

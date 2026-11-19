@@ -73,30 +73,34 @@ Plan audit: Codex (`gpt-6.1-sol`, high), **conditional approve**: handle the unr
 - D8. Focus does not follow an empty row into the fold (Opus P3-a, demonstrated by the worker's order: `balance-job-queue.ts:402` finishes the task before `:409` sends the balance). Following it needs a watcher on the fold, a new lifecycle for a symptom whose cause, folding the searched row, is the owner's A2; option 2 there removes both. Recorded in A2.
 - D9. A wait with no timer (#1681's race, a missed row event) holds Holdings' Add busy until the page is left (Opus P2-c, needs unsupported conditions); #1681 covers it.
 
-## Phase 1 — extract the shared add
+## Phase 1 — extract the shared add ✓
 
 1. Add `useTokenImport.ts` and `useTokenImport.test.ts` (≥10 cases: verdict classes, each outcome, listed refusal, account-loading refusal, busy, `inScope` on an epoch move, abort, terminal dispose).
 2. Point `NewTokenPopup.vue` at it. Keep every testid and every message.
 
 **Validation gate**: `bun run lint && bun run typecheck:all && bun run test` green; `NewTokenPopup.test.ts` passes with only extraction edits. Layers: lint, typecheck, unit.
 
-## Phase 2 — Holdings adds in one press
+## Phase 2 — Holdings adds in one press ✓
 
 1. Wire `holdings.vue` and `TokenList.vue` as above.
 2. `holdings.test.ts`: replace the popup pin with: a double press imports once and opens no popup, the row takes focus; a flagged address and an unread list open the popup; one case per refusal class Holdings can reach (already exists, interface, no contract, other) with focus left on Add ("Account is still loading" is the composable test's: Holdings lists nothing without an account). `TokenList.test.ts`: the kept row while adding, the refusal line and its `aria-describedby`, `focusToken` to the row, to the fold, and not from another control.
 
 **Validation gate**: `bun run lint && bun run typecheck:all && bun run test && bun run test:all` green. Layers: lint, typecheck, unit, component.
 
-## Phase 3 — e2e and captures
+## Phase 3 — e2e and captures ✓
 
 1. Delete `tests/e2e/holdings-add-token.test.ts` (D4). Update `network/holdings.test.ts:107-143`: Add → "Token added" toast → PASTE row, focused, no New token field; no-contract → `holdings-add-token-error` reads the popup's sentence.
 2. Captures (uncommitted kit from `782858322`): `ha-before`, `ha-added`, `ha-refused`, `ha-warning`, each `-light`/`-dark`, plus `ha-adding`, into `~/.cache/nulo-backlog/holdings-add-1/shots/` with `captions.json`.
 
 **Validation gate**: from `apps/extension`, `bun run test:e2e -- tests/e2e/type-roles.test.ts tests/e2e/token-list.test.ts tests/e2e/send-picker-add.test.ts --retry=0`; from the root, `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/holdings.test.ts tests/e2e/network/send-picker.test.ts`, then the same with `NULO_E2E_BROWSER=firefox` (focus moves). All green. Layers: smoke e2e, network e2e, both browsers.
 
+Result: smoke 3 files, 17 tests green; network green on Chrome (add scenario 14.7 s) and Firefox (16.3 s) after one red: the house `clickByTestId` is a synthetic `click()` that moves no focus, so the spec presses Add from the keyboard (`lessons/phase-3.md`). All ten frames shot.
+
 ## Post-implementation
 
 Execution contract: `implementations-plan/README.md` § Post-implementation standard at `c1bca82cb`, bounded work: one Codex pass (`run-codex.sh … high read-only gpt-6.1-sol`) over this plan and the net diff from `c1bca82cb`, with the two verbatim rules and the adversarial ask (a check the direct path skips, a double add, a press racing a scope switch, a refusal that disappears); then targeted verification of material fixes. Log it in `lessons/phase-3.md` and below.
+
+Verdict, Codex at `0b6d9066c`: **conditional approve**. One finding, demonstrated by a reproducer: a dispose in the turn between `importPasted`'s listed check and the parse still sent the parse (the outcome was suppressed, the RPC was not). Fixed with a liveness check at the top of `addAndWait`, its regression case red before and green after. Its comment trims were taken, except the case-insensitivity line the extraction moved verbatim. It found the other paths sound by inspection (the shared checks, the busy guard before the flag branch, scope invalidation, the flagged and unread fallbacks, the popup's behaviour and pinned quirk, `TokenCard`'s inert additions) and confirmed D6, D8 and D9 as the documented limits.
 
 ## Delivery
 
