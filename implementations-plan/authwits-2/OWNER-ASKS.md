@@ -4,6 +4,8 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 ## OA-1: how the revoke popup shows its send (Q3)
 
+**Answered: B** (P166-01, decision page 166, signed 2026-11-17 at 15:40 UTC at dev `0dc22a9c5`), with the note *"\"B\" but once revoke is clicked and.. (sent?) should take you to home? Like any other transaction / transfer?"*; asked, the owner answered on 2026-11-18 at about 15:05 UTC: *"Authwit: Ok. Stay there. On authwits page."* Built in arc 2 as drawn, staying on the page. Implementation note: the row chip's source is the revoke task the worker already keeps per revoke, not the journal record, which names no row and turns `succeeded` before the registry confirms (plan.md D7); no new stored shape.
+
 **Surface.** Settings → Developer → Account state → Authwits → Revoke (one authwit or all), the popup from Revoke until it ends.
 
 **Today.** A thin coloured line under each chunk's fee card (grey, a moving blue line, green, red), and under the button the journal's words ("Simulating...", "Generating proof...", "Submitting..."). Once the transaction is sent the words go away while the wallet waits for its block: about 3 s on the sandbox, up to two slots on Testnet. The popup then closes with "Authwit(s) successfully revoked", or stays with "Failed to revoke authwit(s)" and an "An error occurred" line whose tooltip holds the raw error. Send closes at Confirm and lets Activity carry the send; nothing else in the app draws a status line like this one.
@@ -17,9 +19,11 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 **Recommendation: B.** It is the owner's own test ("differs from everything else in the app"): every other send closes at Confirm and reports in Activity. Second choice C.
 
-**What ships now.** Today's layout, unchanged.
+**What ships now.** B, in arc 2.
 
 ## OA-2: naming what an authorization allows (Q5)
+
+**Answered: N1** (P166-02, no note). Built in arc 2 for `call` rows, as drawn. An `encoded_call` row keeps "Encoded Call": its function name is bound to its selector too (the wallet takes it from the contract's ABI before hashing), so titling it "Transfer · " and the chip is a one-line change, not drawn for you; say if you want it (plan.md D10).
 
 **Surface.** The Authwits page's rows.
 
@@ -33,9 +37,11 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 **Recommendation: N1 now, N2 later** once the decoder reads stored calls.
 
-**What ships now.** Today's rows, unchanged.
+**What ships now.** N1, in arc 2.
 
 ## OA-3: check the registry when the Authwits page opens (Q4, would be arc 3)
+
+**Answered: S, on page open** (P166-03). Arc 3, stacked on arc 2.
 
 **Surface.** The Authwits page: its "registry disabled" warning and its rows.
 
@@ -47,4 +53,31 @@ Arc 1 depends on none of these. It ships no new words, rows or layout: a revoke 
 
 **Recommendation: yes, on page open**, not on every account start: the page is where the answer is read.
 
-**What ships now.** Nothing.
+**What ships now.** Nothing in arc 2; arc 3 builds it.
+
+## OA-4: where a Not revoked row's reason shows when Activity has none (new, arc 2)
+
+**Answered: R0** (P188-02, decision page 188, signed 2026-11-18 at 19:12 UTC at dev `b22893f42`), approved as the default: the chip alone, as shipped.
+
+**Surface.** The Authwits page's "Not revoked" chip.
+
+**Why it comes up.** B says a failed revoke reads "Not revoked" with the reason in Activity. That holds when the journal records the failure (a simulation, a proof or a send refused: Activity's failed card names it). It does not when the revoke fails outside the journal: a grant not yet in a block (refused before any send), or after the send (the checkpoint wait running out, the registry still reading authorized), where Activity shows the transaction confirmed. Today's popup showed the raw error in an "An error occurred" tooltip; under B the popup is gone by then.
+
+**Options.**
+- **R0, as shipped.** The chip alone; the reason shows only where Activity has it.
+- **R1.** Pressing a Not revoked row's chip opens a short card with the reason, in plain words ("The revoke's block wasn't on L1 within 2 minutes. Revoke again to check.").
+- **R2.** A grey line under the row's title, "Not revoked: <reason>", until the next revoke.
+
+**Recommendation: R0 now.** Each case is rare (a pending grant past its wait, a checkpoint past 120 s on Testnet), and R1 or R2 needs worded reasons for each failure. Revisit with arc 3, whose registry check on page open prunes a row the revoke did land.
+
+**What ships now.** R0.
+
+## Page 188: one status chip per row (arc 2, a change the owner asked for)
+
+**Answered: change** (P188-01, decision page 188, signed 2026-11-18 at 19:12 UTC at dev `b22893f42`), with the note *"Why does somethinbg have "Pending" + "Revoking"? It's either one or the other? This is looking a bit confusing."*
+
+**Surface.** The Authwits page's rows.
+
+**Before.** A grant whose own transaction was not yet in a block drew Pending, and a revoke of it drew Revoking beside it (the revoke waits for that block), so one row read "Pending" and "Revoking" side by side; a failed revoke of such a row read "Pending" and "Not revoked".
+
+**Built.** A row shows one status chip, by this precedence: Revoking, then Not revoked, then Pending. Revoking covers the wait for the grant's block; the row's accessible name reads the one chip shown. The chips keep their words, look and colours, and the rest of the row is unchanged. Recorded as plan.md D14.
