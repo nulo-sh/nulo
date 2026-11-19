@@ -36,6 +36,10 @@ const props = defineProps({
 	side: { type: String, default: "private" },
 })
 
+/** The person's own change to the amount: a key or a paste in either field, or Max. A write from the
+ *  page, and the card's own rest, re-clamp or clear, never emit it. */
+const emit = defineEmits(["edit"])
+
 /** Token amount string — ALWAYS the value that validates + sends, in both
  *  modes. In fiat mode it is derived (round-DOWN, bigint) at the FROZEN
  *  session quote and shown on the secondary line: what you see is what sends. */
@@ -138,6 +142,7 @@ const handleAmountInput = (e) => {
 	wasClamped.value = next.hint === "clamp"
 	readHint.value = next.hint === "clamp" ? null : next.hint
 	writeAmount(next.text, { point: next.commaPoint })
+	emit("edit")
 	// When the text equals what the parent already holds, no re-render comes to correct the field.
 	showText(e.target, next.text)
 }
@@ -349,6 +354,7 @@ const handleFiatInput = (e) => {
 	showText(e.target, text)
 	writeFiat(text, next.commaPoint && text.includes("."))
 	scheduleConvert()
+	emit("edit")
 }
 
 /** Entering fiat mode FREEZES the session quote: background refreshes never
@@ -469,6 +475,7 @@ const handleMax = () => {
 	// in one write, as `model.value` reads the page's old value until the page re-renders.
 	writeAmount(restingAmount(plainAmount(BigInt(props.balanceRawByType)), tokenDecimals.value), { atRest: true })
 	readHint.value = null
+	emit("edit")
 }
 
 /** Fiat-mode Max/Half: bigint-exact from the RAW balance — the sent amount is
@@ -482,6 +489,7 @@ const handleFiatBalanceAction = (divisor) => {
 	readHint.value = null
 	fiatGuard.value = { ...guard, converting: false }
 	clearTimeout(convertTimer)
+	emit("edit")
 }
 </script>
 

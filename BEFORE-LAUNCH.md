@@ -205,7 +205,7 @@ place; its effective date is the day the promote publishes it, so until then it 
 
 - [x] `legal/terms.md` — the version line and the 1.2.1 history row, dated the day it is published (5 November 2026)
 - [x] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.2.1 (5 November 2026), same date
-- [ ] After the deploy, `nulo.sh/terms` and `nulo.sh/terms/v1.2.1/` show no DRAFT banner
+- [x] After the deploy, `nulo.sh/terms` and `nulo.sh/terms/v1.2.1/` show no DRAFT banner (verified 2026-11-19)
 
 **Due at the release that publishes privacy 1.2.8:** § 5.2 says prices are requested for the price
 identifiers the signed token list names, and for AZTEC. A patch, so nobody is asked to accept again.
@@ -216,7 +216,7 @@ until then it reads `«FILL: effective date»`:
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.8 (5 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.8/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.8 text (`apps/extension/store/listing.md`
-      § Privacy policy text)
+      § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
 
 **Due at the release that publishes privacy 1.2.9:** §§ 5.11 and 6 say the token list is downloaded
 about every six hours, retried within minutes then less often after a failure, and on request in
@@ -229,7 +229,7 @@ place; its effective date is the day the promote publishes it, so until then it 
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.9 (5 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.9/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.9 text (`apps/extension/store/listing.md`
-      § Privacy policy text)
+      § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
 - [ ] The Chrome Web Store's `alarms` justification is re-pasted from `apps/extension/store/listing.md`
       § Permissions, which now says the token list refreshes about every six hours
 
@@ -245,7 +245,7 @@ place; their effective dates are the day the promote publishes them, so until th
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.10 and `terms` 1.2.2 (19 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.2.10/`, `nulo.sh/terms` and
       `nulo.sh/terms/v1.2.2/` show no DRAFT banner, and AMO's Privacy policy field carries the
-      1.2.10 text (`apps/extension/store/listing.md` § Privacy policy text)
+      1.2.10 text (`apps/extension/store/listing.md` § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
 
 **Due at the release that publishes privacy 1.2.11:** § 5.7 says that with Let every site see that
 Nulo is installed on, any site you open, and the scripts it runs, learns that Nulo is installed and
@@ -257,7 +257,7 @@ it, so until then it reads `«FILL: effective date»`:
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.11 (19 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.11/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.11 text (`apps/extension/store/listing.md`
-      § Privacy policy text)
+      § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
 
 **Due at the release that publishes privacy 1.3 and Terms 1.2.3:** privacy § 5.12, with a line in
 §§ 1, 2, 5.1, 5.5 and 12, and Terms § 7.1 describe Nulo's relay, the second default endpoint of
@@ -271,7 +271,7 @@ dates are the day the promote publishes them, so until then they read `«FILL: e
       (19 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.3/`, `nulo.sh/terms` and
       `nulo.sh/terms/v1.2.3/` show no DRAFT banner, and AMO's Privacy policy field carries the 1.3
-      text (`apps/extension/store/listing.md` § Privacy policy text)
+      text (`apps/extension/store/listing.md` § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
 - [ ] The Chrome Web Store's Privacy tab and the Firefox data-collection declaration are re-read
       against the relay, which `apps/extension/store/listing.md` § Data inventory now names as a
       destination of the node's requests
@@ -292,7 +292,7 @@ since they were archived before their dates were known:
       (19 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.3.1/`, `nulo.sh/terms` and
       `nulo.sh/terms/v1.2.4/` show no DRAFT banner, and AMO's Privacy policy field carries the 1.3.1
-      text (`apps/extension/store/listing.md` § Privacy policy text)
+      text (`apps/extension/store/listing.md` § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
 
 **Due at the release that publishes privacy 1.3.2:** § 5.10 says that on Alpha the "Get Fee Juice"
 and "Get private Fee Juice" links open Shield, which human.tech, a third party, operates, and on
@@ -307,7 +307,7 @@ publishes it, so until then it reads `«FILL: effective date»`. A promote that 
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3.2 (19 November 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.3.2/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.3.2 text (`apps/extension/store/listing.md`
-      § Privacy policy text)
+      § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
 
 **Due at the release that publishes website notice 1.1:** the notice drops the email at store
 launch and says replies reach hello@nulo.sh. It is dated for the promote that publishes it, 5
@@ -315,9 +315,11 @@ November 2026; the landing and `nulo-subscribe` both deploy from that promote's 
 
 - [x] `legal/website-privacy.md` — the version line and the 1.1 history row carry the day the
       promote lands (5 November 2026); on any other day, both move to it before the promote merges
-- [ ] After the deploy, `nulo.sh/website-privacy` shows 1.1 and `nulo.sh/website-privacy/v1.0/`
-      shows the 1.0 text
+- [x] After the deploy, `nulo.sh/website-privacy` shows 1.1 and `nulo.sh/website-privacy/v1.0/`
+      shows the 1.0 text (verified 2026-11-19: `v1.0/` and `v1.1/` show their texts; the page itself
+      now shows 1.2, which supersedes 1.1)
 - [ ] `nulo-subscribe` deployed from the same push, so a new signup records `consent_version` 1.1
+      (superseded by 1.2: the fresh-address check under 1.2 below reads the version it records)
 
 **Due at the release that publishes website notice 1.2** (double opt-in, #1236): signups are
 confirmed by email before they join the list. The landing and `nulo-subscribe` both deploy from the
@@ -329,12 +331,14 @@ promote's push to `main`, each by its own build:
       (the owner's pick, decision page 192, P192-03 a)
 - [x] `legal/website-privacy.md` — the version line and the 1.2 history row carry the day the promote lands
       (19 November 2026); on any other day, both move to it before the promote merges
-- [ ] The secret `CONFIRM_SECRET` is set on `nulo-subscribe` before the promote merges
+- [x] The secret `CONFIRM_SECRET` is set on `nulo-subscribe` before the promote merges
       (`infra/subscribe/README.md`, owner checklist item 3); without it every signup answers 503
-- [ ] Both builds green after the push. If either fails, turn the kill switch on until both are; a
+      (verified 2026-11-19: `/api/confirm` answers a forged token 400, not 503)
+- [x] Both builds green after the push. If either fails, turn the kill switch on until both are; a
       `nulo-subscribe` deploy resets the switch from `wrangler.jsonc`, so recheck it after each one.
       Run the checks below once both are live: until the landing is, a link opens the home page (it
-      works afterwards, for its 24 h)
+      works afterwards, for its 24 h) (verified 2026-11-19: both builds green on the promote's push and
+      on the release's, and the switch is off)
 - [ ] With a fresh address you control that Resend does not hold: one email arrives, its link
       unrewritten in the HTML and the text part (also once through a client that wraps links); a
       second submission inside 24 h sends nothing; opening the link creates the contact with
@@ -343,8 +347,8 @@ promote's push to `main`, each by its own build:
 - [ ] On a disposable contact you withdraw first: look up a case variant of it before creating
       anything (absent: kill switch on, stop); submit the variant (no email, no write); create a
       contact twice and record whether the second create upserts
-- [ ] After the deploy, `nulo.sh/website-privacy` shows 1.2 and `nulo.sh/website-privacy/v1.1/`
-      shows the 1.1 text
+- [x] After the deploy, `nulo.sh/website-privacy` shows 1.2 and `nulo.sh/website-privacy/v1.1/`
+      shows the 1.1 text (verified 2026-11-19)
 
 **Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
 2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
