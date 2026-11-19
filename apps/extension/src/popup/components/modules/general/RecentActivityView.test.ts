@@ -16,11 +16,11 @@
  */
 
 import { deferred } from "@nulo/wallet-core/utils"
-import { flushPromises, mount } from "@vue/test-utils"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 import { nextTick, ref } from "vue"
 import { createMemoryHistory, createRouter } from "vue-router"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 import { createAppStoreHarness } from "../../../../../tests/helpers/app-store-harness"
 
@@ -242,6 +242,9 @@ const mountView = () => mount(RecentActivityView, { shallow: true, global: { plu
 
 // biome-ignore lint/suspicious/noExplicitAny: JS SFC exposes untyped refs via defineExpose.
 const vmOf = (wrapper: ReturnType<typeof mountView>) => wrapper.vm as any
+
+// A mounted view's review-sheet timer fires after the file ends and logs as the worker closes.
+enableAutoUnmount(afterEach)
 
 beforeEach(() => {
 	H.getOperations.mockReset().mockResolvedValue([])
@@ -1548,6 +1551,5 @@ describe("RecentActivityView — the journal list's own rules", () => {
 		H.journalConnected.emit()
 		await flushPromises()
 		expect(vmOf(w).journalOps).toEqual([])
-		w.unmount()
 	})
 })

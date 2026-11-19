@@ -4,9 +4,9 @@
  * (the payload carries no payment) and never a free picker (a picker's default on a gasless
  * account is the sponsored FPC).
  */
-import { mount } from "@vue/test-utils"
+import { enableAutoUnmount, mount } from "@vue/test-utils"
 import { CLAIM_AND_END_SETUP, CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
-import { describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test } from "vitest"
 import OperationCard from "./OperationCard.vue"
 
 const OWNER = "0xowner0000000000000000000000000000000000000000000000000000000cc"
@@ -59,6 +59,9 @@ const mountCard = (op: unknown) =>
 			},
 		},
 	})
+
+// A mounted card's chip holds fire after the file ends and log as the worker closes.
+enableAutoUnmount(afterEach)
 
 describe("OperationCard — a dApp-requested self-pay", () => {
 	test("renders the fee card locked to Fee Juice, not the set-by-the-app badge", () => {
