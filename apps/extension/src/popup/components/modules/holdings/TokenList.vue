@@ -115,7 +115,7 @@ const toggleSort = () => {
 
 <template>
 	<Flex direction="column" gap="12">
-		<div :class="$style.sticky">
+		<div :class="$style.sticky" :data-testid="tid('search-bar')">
 			<SearchField v-model="query" :placeholder :testid="tid('search')" />
 		</div>
 

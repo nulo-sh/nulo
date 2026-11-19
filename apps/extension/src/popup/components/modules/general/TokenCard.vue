@@ -158,8 +158,8 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	text-decoration: none;
 }
 
-/* The fill and ring span the host's gutter to the popup's edges; the content keeps it as padding.
-   A host that declares no `--page-gutter` keeps the row inside its column. */
+/* The fill and ring span the host's `--page-gutter` to the popup's edges, so nothing between the
+   host and the row may add a side inset. A host that declares no gutter keeps the row inside its column. */
 .link {
 	margin-inline: calc(-1 * var(--page-gutter, 0px));
 	padding-inline: var(--page-gutter, 0px);

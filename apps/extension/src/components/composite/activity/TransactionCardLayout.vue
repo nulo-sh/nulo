@@ -160,8 +160,8 @@ function hasActionsContent() {
 </template>
 
 <style module>
-/* The fill and ring span the host's gutter to the popup's edges; the content keeps it as padding.
-   A host that declares no `--page-gutter` gets an 8px bleed. */
+/* The fill and ring span the host's `--page-gutter` to the popup's edges, so nothing between the
+   host and the row may add a side inset. A host that declares no gutter gets an 8px bleed. */
 .wrapper {
 	--row-inset: var(--page-gutter, 8px);
 
