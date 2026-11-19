@@ -44,8 +44,8 @@ A user reported, through the owner on 2026-11-19 with a screenshot, that an app 
 
 ## Security & Adversarial Considerations
 
-- **What a person compares.** A hostile dApp or a man in the middle controls only the hash. `hashToEmoji` maps each byte to one of 256 distinct single code points, so the input to `emojiCells` is always nine alphabet symbols. Appending U+FE0F keeps every cell's base code point, so two different grids never render alike (Codex: injective). The grapheme split never merges two alphabet symbols (D3). The danger runs the other way: a renderer that draws a symbol differently from the app's makes a true match look false, which teaches people to click past a mismatch. This plan removes that.
-- **Trust.** The fix trusts the platform to install one of the four colour faces. Where none is installed, U+FE0F still asks for emoji presentation (F3). A host with no colour-emoji face at all draws text glyphs in both grids alike.
+- **What a person compares.** A hostile dApp or a man in the middle controls only the hash. `hashToEmoji` maps each byte to one of 256 distinct single code points, so the input to `emojiCells` is always nine alphabet symbols. Appending U+FE0F keeps every cell's base code point, so two different grids stay different strings (Codex: injective). That is not visual distinctness: on a host that lacks glyphs for two symbols, both draw as the same missing-glyph box, as before this change. The grapheme split never merges two alphabet symbols (D3). The danger runs the other way: a renderer that draws a symbol differently from the app's makes a true match look false, which teaches people to click past a mismatch. This plan removes that.
+- **Trust.** The fix trusts the platform to install one of the four colour faces. Where none is installed, U+FE0F still asks for emoji presentation (F3). On a host with no colour-emoji face at all, both browsers fall back to monochrome glyphs where a face has them; what the app draws there depends on its own fonts.
 
 ## Phase 1: the role, the grid, its tests, the captures
 
@@ -106,3 +106,15 @@ The execution contract is this plan plus [`implementations-plan/README.md` § Po
 ## Audit verdicts
 
 **Codex design consult** (gpt-6.1-sol, high, read-only), 2026-11-19, on the selector's scope with the probe evidence: narrowed selector (D2), confidence high for today's alphabet and moderate across untested hosts. Accepted: the rule of D2, which replaces the draft's selector on all 256; the fixed 24 size (D1); independent expected outputs in T1 (D5); the flag comment fixed. Noted: `textContent` and copy carry U+FE0F; the SDK's string stays canonical (D2, D8).
+
+**Codex pass over the plan and the diff** (gpt-6.1-sol, high, read-only, `origin/dev...HEAD` at `a3875a2de`), 2026-11-19: approve with changes; high confidence in the data path, moderate across untested font environments. On the lane's questions: (1) a symbol can still draw from a text face only where no colour glyph is available, or where a person picked a monochrome emoji font in Firefox; the cell's CSS sets no competing family. (2) The split and the selector change appearance and DOM text only. The confirmation sends the original hash, and no display string reaches storage or messaging. All 65,536 pairs stay apart, and the 256 outputs are distinct with exactly 21 selectors. Accepted:
+- § Security: string injectivity is no visual distinctness, and the no-colour-face fallback depends on the app's own fonts (rewritten);
+- `type-roles.contract.test.ts` pins the whole `typeRoles.emoji` record, which the board exemption left unpinned;
+- the `emojiCells` TSDoc no longer promises colour, and the fixture's `PageTypography` doc says "font variables";
+- the component test is renamed "gives every cell the emoji role", since its stub checks a prop.
+
+The invisible U+FE0F, U+2B1B, U+2B1C and U+200D literals that the source and test files held became `\u` escapes in the same commit (`0389a6078`). Rejected:
+- deleting `EmojiGrid.vue`'s `/** Utils */` header, because CLAUDE.md § Vue SFC ordering groups imports under comment headers;
+- dropping the `--font-emoji` clause from `base.css.test.ts`'s comment, which enumerates the deliberate choices its hash pins.
+
+Verify round (resumed): approve, high confidence, no new finding or regression.
