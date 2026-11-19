@@ -19,7 +19,8 @@ Range `v1.2.0..846f26379` (first-parent, 91 commits). Two Explore agents (sonnet
 | Authwits and Contracts under Developer → Account State | #1832, #1853, #1867 (in flight), #1840, #1843 | |
 | Mainnet's Fee Juice links open Shield | #1872 (in flight, conditional) | opened during the arc |
 | Also: endpoint list, "more below", request logs | #1741, #1768, #1822, #1823, #1824, #1739 | Receive's QR (#1709) and switch names (#1857) went into the fix count for length |
-| Terms 1.2.4, Privacy 1.4 | #1757, #1765, the PRs that bumped 1.2.10 and 1.2.11, #1872 (in flight: 1.4, material, for the owner to confirm) | nothing asks to be accepted again (plan F4) |
+| Connection check's colour emoji | emoji-grid-1 (no PR yet, conditional) | added on the resume |
+| Terms 1.2.4, Privacy 1.3.2 | #1757, #1765, the PRs that bumped 1.2.10 and 1.2.11, #1872 (in flight: 1.3.2, a patch, the owner's call) | nothing asks to be accepted again (plan F4) |
 | Fixes | the `fix` subjects in the range | 34 since `v1.2.0`, plus #1870 |
 
 ## No bullet

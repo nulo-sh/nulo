@@ -19,7 +19,7 @@ trunk: dev
 
 - **Date:** 2026-11-19. Planned and delivered the same day; one arc.
 - **Status:** delivered as draft #1873 against `dev`, whose merge archives this plan. It stays a draft until the owner signs the notes, the page on its Workers Builds preview and the cards; the orchestrator marks it ready.
-- **Shipped:** `release-notes/1.3.0.md` (2,960 of 3,000 code points), `apps/landing/content/changelog/1.3.0.toml`, `1.3.0.og.png` and the re-rendered `index.og.png`. The bullets map to PRs in [recon.md](recon.md) and the PR body; #1870 and #1854 merged during the arc, and #1866, #1867, #1859 and #1872 were still open at close-out.
+- **Shipped:** `release-notes/1.3.0.md` (2,980 of 3,000 code points after the resume below), `apps/landing/content/changelog/1.3.0.toml`, `1.3.0.og.png` and the re-rendered `index.og.png`. The bullets map to PRs in [recon.md](recon.md) and the PR body; #1870 and #1854 merged during the arc, and #1866, #1867, #1859 and #1872 were still open at close-out.
 - **Did not hold:** the brief's "Activity" and "the Authorizations page" (the wallet says History and Authwits, D3); the plan's first notes gate, `release-notes-run.ts check`, which reads only the root version (D9).
 - **Review:** no plan audit (lane proportion); Codex over the plan and the diff: round 1 seven findings, round 2 one, round 3 approve (§ Review verdicts).
 - **Known limits:** none.
@@ -54,7 +54,7 @@ The owner, 2026-11-19: "I want to work towards the 1.3.0 release." The release s
 
 **Asks** (to the orchestrator; working assumption in force):
 - A1. The TOML `date`: the draft day, `2026-11-19`. The page and both cards print it; at sign-off it moves to the promote day (one line, then `og:cards`). A review point in the PR body.
-- A2. The legal bullet follows #1872's head: privacy 1.4 and "the Shield link". If #1872 lands as 1.3.2 the number follows; if it misses the promote, the bullet reads 1.3.1 and drops the clause (on a resume).
+- A2. The legal bullet follows #1872's head: privacy 1.4 and "the Shield link". If #1872 lands as 1.3.2 the number follows; if it misses the promote, the bullet reads 1.3.1 and drops the clause (on a resume). Settled on the resume: the owner, 2026-11-19, "1.3.2, a patch"; #1872's head (`4a30632ea`) prints 1.3.2, not material.
 - A3. The #1859 and #1872 bullets are drafted as shipped and marked conditional in the PR body; a resume drops either one that misses the promote.
 
 ## UI impact
@@ -100,6 +100,7 @@ Surfaces: `release-notes/1.3.0.md` (the GitHub Release's opening and AMO's versi
 - **Codex round 1** (gpt-6.1-sol, high, over the plan and the arc diff): `changes needed`, seven findings, all accepted after checking the tree. (1) The relay: a return needs two passing checks, and it is a new recipient of requests (privacy § 5.12): the bullet states who runs it and when Nulo uses it. (2) Dollars show only where a price is shown (`SendReviewSheet.vue:193`), and the fee warning's fix is paying from private Fee Juice or a link to get some (`FeeSettingsCard.vue:513-514`). (3) The app chip carries no seal (`contract-chip.ts:141`) and a seal means "Nulo knows this contract", not safety (`:35`). (4) Allow every site also reveals the version (`every-site.ts:5`). (5) #1859 covers discovery and continues with the app's request, not always the connect window. (6) Authwits: only call-shaped rows name an action, and the check reads confirmed grants; Contracts: the explorer link does not apply everywhere. (7) The What's new row stays until dismissed. Applied in shorter words; for the cap, "say who pays the fee" and "every switch has a spoken name" were cut (the latter a `fix(a11y)` inside the fix count).
 - **Codex round 2** (resumed, verification): `changes needed`, one finding, accepted: "only while" broke on a send carried by the relay, whose receipt checks stay there until final (`packages/aztec-runtime/src/routing/routed-node.ts:291,592-593`).
 - **Codex round 3** (resumed): **approve**.
+- **Resume (dev still at `f336e0f22`)**: the legal bullet names privacy 1.3.2 (A2); one conditional bullet for the connection check's colour emoji (emoji-grid-1, no PR yet); trims kept every claim. Codex (gpt-6.1-sol, high) over the delta: round 1 `changes needed`, one finding, accepted: "so both grids look alike" promised what the fix cannot control (the app's font; a host with no colour-emoji face draws text glyphs, emoji-grid-1 plan § Security); round 2 the same finding against "not outlines or plain text"; round 3 **approve** on "Where your system has colour emoji, the connection check draws its grid in them."
 
 ## Delivery
 
