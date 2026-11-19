@@ -1,0 +1,6 @@
+{
+  "sab-offered": "Built page, 360 px at 2x. Ben (no contact name), last paid 250 USDC publicly three days ago, picked from Recent: the row is offered as today, and the form opens with the caret in the amount field, not on the row.",
+  "sab-typed": "40 typed into the amount: the row is gone for the rest of this visit, and everything below the payee moves up. The caret stays in the amount.",
+  "sab-same-payee": "Back to the person step and Ben again: no row, though his last send is still 250 USDC publicly and the form holds 40. The amount and token carry over as today.",
+  "sab-other-payee": "Back again and Ana (a contact), paid 10 USDC privately an hour ago: her row is offered, since only Ben's was passed over."
+}
