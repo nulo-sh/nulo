@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.4 — effective «FILL: effective date»**
+**Version 1.3.2 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -519,4 +519,4 @@ described in § 5.
 | 1.2.11 | «FILL: effective date» | With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7). |
 | 1.3 | «FILL: effective date» | Nulo's relay, which the Developer operates, is the second default endpoint of Alpha and Testnet and receives the requests the endpoint before it fails to answer (§§ 1, 2, 5.1, 5.5, 5.12, 12). |
 | 1.3.1 | «FILL: effective date» | After the primary endpoint fails, the others are used until it has answered two checks at least 30 seconds apart, up to 30 minutes apart after repeated failures (§ 5.1). |
-| 1.4 | «FILL: effective date» | On Alpha, the "Get Fee Juice" and "Get private Fee Juice" links open Shield, which human.tech, a third party, operates; on every other network, the bridge application the Developer operates (§ 5.10). |
+| 1.3.2 | «FILL: effective date» | On Alpha, the "Get Fee Juice" and "Get private Fee Juice" links open Shield, which human.tech, a third party, operates; on every other network, the bridge application the Developer operates (§ 5.10). |

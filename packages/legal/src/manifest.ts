@@ -181,9 +181,9 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			],
 		},
 		{
-			version: "1.4",
+			version: "1.3.2",
 			effective: null,
-			material: true,
+			material: false,
 			changes: [
 				'On Alpha, the "Get Fee Juice" and "Get private Fee Juice" links open Shield, a bridge application that human.tech, a third party, operates; on every other network they open the bridge application I operate (§ 5.10).',
 				"A click still carries no wallet data: the site and its host receive your IP address and browser headers.",

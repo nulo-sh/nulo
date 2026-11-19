@@ -18,12 +18,12 @@ post_implementation_hardening: not scheduled
 ## Outcome
 
 - **Date:** 2026-11-19.
-- **Status:** delivered. One PR against `dev` carries the change and this close-out; it merges on the orchestrator's word, after the owner answers OA-1.
+- **Status:** delivered. One PR against `dev` carries the change and this close-out; it merges on the orchestrator's word. OA-1 is answered (the owner, 2026-11-19: "1.3.2, a patch"), so privacy ships as 1.3.2, not material.
 - **Owner sign-off:** the two quotes of 2026-11-18 (Fact 1), for where Mainnet's links lead. Nothing a person sees changes otherwise.
-- **Shipped:** `feeJuiceBridgeUrl(chainId)` in `fee-helpers.ts` (Mainnet → `https://shield.human.tech/fee-juice`, every other chain → `https://testnet.app.unleashed.systems`, a build override wins everywhere), read by the fee card's two links, Send's publish line and footer, and Home's Get started row; per-site tests on Mainnet and Testnet, red on the base for Mainnet; privacy 1.4 (§ 5.10 names Shield on Alpha and the links' real words), its archive, manifest entry and `BEFORE-LAUNCH.md` § 4 block; `CLAUDE.md` § The wallet repo. Closes #77; part of #1806 (its Privacy half).
+- **Shipped:** `feeJuiceBridgeUrl(chainId)` in `fee-helpers.ts` (Mainnet → `https://shield.human.tech/fee-juice`, every other chain → `https://testnet.app.unleashed.systems`, a build override wins everywhere), read by the fee card's two links, Send's publish line and footer, and Home's Get started row; per-site tests on Mainnet and Testnet, red on the base for Mainnet; privacy 1.3.2, a patch (§ 5.10 names Shield on Alpha and the links' real words), its archive, manifest entry and `BEFORE-LAUNCH.md` § 4 block; `CLAUDE.md` § The wallet repo. Closes #77; part of #1806 (its Privacy half).
 - **Dispositions:** D1 keys on the wallet chain id; Shield's own bundle names the same chain and PrivateFPC (lessons/phase-1.md). D2 keeps the override global. #1806's Terms half (§ 8's lower-case "fee juice") stays open, outside this lane.
 - **Known limits:** none.
-- **Open items:** #1871 (Mainnet's links move to Unleashed once it is deployed on Alpha); the privacy 1.4 dates, `BEFORE-LAUNCH.md` § 4 ("Due at the release that publishes privacy 1.4").
+- **Open items:** #1871 (Mainnet's links move to Unleashed once it is deployed on Alpha); the privacy 1.3.2 dates, `BEFORE-LAUNCH.md` § 4 ("Due at the release that publishes privacy 1.3.2").
 - **Lessons:** none promoted; the one slip is already in `lessons.md` (Agent tooling).
 - **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
@@ -56,7 +56,7 @@ Claims that did not hold: #77's `Where` names `fee-helpers.ts:318-319` and `FeeS
 
 **Inferences:** I1. Shield funds the canonical Mainnet rollup, the one `CHAIN_IDS.MAINNET` names, so the exact wallet chain id is the right key (D1). I2. A privacy version marks no re-acceptance; Settings → About's notice shows for any newer version, patch or not (`utils/legal-about.ts:13-20`), so materiality here is a record, not a behaviour.
 
-**Asks:** OA-1, the version's materiality: the plan ships 1.4, material, on Fact 7's precedent; the orchestrator takes it to the owner before landing (lane brief).
+**Asks:** OA-1, the version's materiality: the plan proposed 1.4, material, on Fact 7's precedent. Answered (the owner, 2026-11-19: "1.3.2, a patch"): it ships as 1.3.2, `material: false`.
 
 ## Decisions
 
@@ -64,7 +64,7 @@ Claims that did not hold: #77's `Where` names `fee-helpers.ts:318-319` and `FeeS
 - **D2. The override** keeps today's meaning: when set, it is the destination on every network, Mainnet included, as it is today. A build that sets it names the one bridge it wants; the shipped builds never set it (Fact 5), so they open Shield on Mainnet. The selector reads `import.meta.env` per call, so a test can stub it. Rejected: the override replaces only the Unleashed side (it would change what a build that sets it does on Mainnet).
 - **D3. The sites.** `FeeSettingsCard` computes `feeJuiceUrl` from `props.network?.chainId` for both its links. `send.vue` computes it from `appStore.network?.chainId` for `PublishLine`'s `bridgeUrl` and the CTA. `general.vue` calls the selector at click time. Every site keeps its `target`, `rel` or `window.open` features. The constant `FEE_JUICE_BRIDGE_URL` goes; the two URLs stay module-private.
 - **D4. Tests.** `fee-helpers.test.ts`: one table (Mainnet → Shield; Testnet, Local Network 0, a custom chain and `undefined` → Unleashed), plus the override row on Mainnet and Testnet (`vi.stubEnv`). Per site, a Mainnet screen opens Shield and a Testnet one Unleashed: `FeeSettingsCard.test.ts` (both links, and a `network` prop change on a mounted card), `send.test.ts` (the publish line's link and the CTA's `window.open`), `general.test.ts` (Get started's Fee Juice row). Tests assert literal URLs. No e2e is added: no spec reads an `href`, and jsdom proves an attribute.
-- **D5. Privacy 1.4**, material (OA-1): archive 1.3.1 as `legal/archive/privacy-1.3.1.md`; § 5.10 retitled with the links' words and rewritten (recon § The text); version line, history row and `@nulo/legal` manifest entry (`effective: null`); a `BEFORE-LAUNCH.md` § 4 block like 1.3.1's.
+- **D5. Privacy 1.3.2**, a patch (OA-1, the owner, 2026-11-19: "1.3.2, a patch"; the plan proposed 1.4, material): archive 1.3.1 as `legal/archive/privacy-1.3.1.md`; § 5.10 retitled with the links' words and rewritten (recon § The text); version line, history row and `@nulo/legal` manifest entry (`effective: null`); a `BEFORE-LAUNCH.md` § 4 block like 1.3.1's.
 - **D6. Docs.** `CLAUDE.md` § The wallet repo and the selector's TSDoc state the rule in one sentence each. A `blocked:external` issue names the selector as the one line to change once Unleashed is deployed on Alpha.
 
 ## Architecture & Implementation
@@ -129,3 +129,4 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 |---|---|---|---|---|
 | plan | none (lane brief: no plan audit round) | n/a | n/a | n/a |
 | plan + diff | Codex, gpt-6.1-sol high read-only (session 01a1f440) | approve | the selector's TSDoc cut to the rule and the override's scope; `send.vue`'s narrating comment removed | none |
+| OA-1 answer | none: the 1.4 → 1.3.2 change applies the owner's answer mechanically | n/a | n/a | n/a |
