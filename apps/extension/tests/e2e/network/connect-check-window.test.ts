@@ -1,6 +1,7 @@
 import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
 import type { ConsoleMessage, Page } from "puppeteer"
 import { expect, inject } from "vitest"
+import { emojiCells } from "@/components/composite/general/emoji-cells"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER, bringToFront, prepareKeys } from "../fixtures/browser"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
@@ -202,7 +203,7 @@ test.skipIf(!aztecConfig)(
 			}
 		}, GRID)
 		expect(read).toEqual({
-			grid: hashToEmoji((await hash.jsonValue()) as string),
+			grid: emojiCells(hashToEmoji((await hash.jsonValue()) as string)).join(""),
 			header: { lead: "Local Network", network: null },
 			error: null,
 		})

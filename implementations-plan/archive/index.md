@@ -597,3 +597,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [teardown-log-1](teardown-log-1/plan.md) — completed — six suites left cards mounted whose timers logged after the file ended, failing a green run; each now auto-unmounts (#1858)
 - [table-legend-1](table-legend-1/plan.md) — completed — a legend line under the Details table names its six icons (P186-01 = E2)
 - [authwits-2](authwits-2/plan.md) — completed — a landed revoke or switch reports success and a closed popup reports nothing (#1829, #1830); Revoke hands off to Activity and rows name their action (P166-01 = B, P166-02 = N1); the page checks the registry on open (P166-03 = S)
+- [emoji-grid-1](emoji-grid-1/plan.md) — completed — the connection check draws every symbol in a colour-emoji role, with U+FE0F on the 21 symbols a text face can claim, as the app it is compared with does
