@@ -7,8 +7,8 @@
  * under its line with the authorizations' node, its arguments and inner hash with them.
  */
 
-import { mount } from "@vue/test-utils"
-import { describe, expect, test } from "vitest"
+import { enableAutoUnmount, mount } from "@vue/test-utils"
+import { afterEach, describe, expect, test } from "vitest"
 import { openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 
@@ -55,6 +55,9 @@ const mountCard = async (op: { kind: string }, props: Record<string, unknown> = 
 	if (op.kind === "aztec_sendTx") await openAllSteps(w)
 	return w
 }
+
+// A mounted card's chip holds fire after the file ends and log as the worker closes.
+enableAutoUnmount(afterEach)
 
 describe("OperationCard — discovered authorizations", () => {
 	test("a standard aztec_sendTx lists what the estimate found: consumer, delegate and function, its args and inner hash open; one press closes them", async () => {

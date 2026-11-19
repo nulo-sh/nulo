@@ -112,7 +112,8 @@ export type Methods = {
 	 * Revokes up to MAX_REVOKES_PER_TX authwits (sends a transaction).
 	 * @param networkId Network id.
 	 * @param account Account address.
-	 * @param ids Ids of the authwits to revoke.
+	 * @param ids Ids of the authwits to revoke. An id no longer listed is skipped as already revoked;
+	 *   a call naming none that is listed is refused.
 	 * @param feeSettings Fee settings to be used for sending the transaction.
 	 * @param correlation The caller's key for this call, echoed by `onSendStarted`.
 	 */
@@ -161,7 +162,10 @@ export type Methods = {
 	/** Aborts the estimate minted with `estimateToken`; an unknown token is a no-op. */
 	cancelFeeEstimate(estimateToken: string): void
 	/**
-	 * Triggers synchronization of the auth registry for the account.
+	 * Reads the account's registry switch and each confirmed row's grant, at most
+	 * MAX_TRACKED_AUTHWITS_PER_ACCOUNT rows, and stores what the chain answers: the switch, and the
+	 * deletion of a row no longer authorized. A call while one runs for the same scope joins it. Rejects
+	 * with the first failed read once every read has settled; a failed read changes nothing.
 	 * @param networkId Network id.
 	 * @param account Account address.
 	 */

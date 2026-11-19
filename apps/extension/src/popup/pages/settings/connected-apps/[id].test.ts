@@ -265,6 +265,19 @@ describe("Settings › Connected app › Permissions", () => {
 			.findAll(`.${ROW_STYLE.title}`)
 			.map((title) => title.text())
 	const tableRows = (w: Page) => w.findAll('[data-testid="cap-details-row"]').map((target) => target.attributes("data-details-key"))
+	const legend = (w: Page) => {
+		const line = section(w).find('[data-testid="cap-details-legend"]')
+		const glyphs = w.findAllComponents(Icon).filter((glyph) => line.element.contains(glyph.element))
+		return glyphs.map((glyph) => [glyph.props("name"), glyph.element.parentElement?.textContent])
+	}
+	const LEGEND = [
+		["play", "Simulate"],
+		["add", "Add"],
+		["send", "Transact"],
+		["search", "Details"],
+		["mail-lock", "Events"],
+		["code", "Code"],
+	]
 	const shownNames = (w: Page) =>
 		w
 			.findAll('[data-testid="cap-details-row"]')
@@ -291,6 +304,7 @@ describe("Settings › Connected app › Permissions", () => {
 		expect(tableRows(w)).toEqual(["known-0", "unknown-0", "classes-0", "any"])
 		expect(shownNames(w)).toEqual(["Sponsored fee payer", "0x1b1b…1b1b", "0x2e2e…2e2e", "Any contract"])
 		expect(w.find('[data-testid="cap-detail-toggle"]').exists()).toBe(false)
+		expect(legend(w)).toEqual(LEGEND)
 		expect(w.find(`.${TABLE.foot}`).exists()).toBe(true)
 		expect(w.text()).not.toMatch(/Granted permissions|Account access|Contract registration/)
 
@@ -313,6 +327,7 @@ describe("Settings › Connected app › Permissions", () => {
 			.filter((el) => el.classList.contains(TABLE.yes) || el.classList.contains(TABLE.no))
 			.map((el) => el.classList.contains(TABLE.yes))
 		expect(marks).toEqual([false, false, false, true, false, false])
+		expect(legend(w)).toEqual(LEGEND)
 		expect(w.find(`.${TABLE.foot}`).exists()).toBe(false)
 		expect(w.text()).not.toContain("Contract registration")
 	})

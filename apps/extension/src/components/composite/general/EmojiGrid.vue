@@ -1,4 +1,7 @@
 <script setup>
+/** Utils */
+import { emojiCells } from "./emoji-cells"
+
 const props = defineProps({
 	emojis: {
 		type: String,
@@ -7,7 +10,7 @@ const props = defineProps({
 })
 
 const rows = computed(() => {
-	const chars = [...props.emojis]
+	const chars = emojiCells(props.emojis)
 	return [chars.slice(0, 3), chars.slice(3, 6), chars.slice(6, 9)]
 })
 </script>
@@ -22,7 +25,7 @@ const rows = computed(() => {
 				justify="center"
 				:class="$style.cell"
 			>
-				<Text>{{ emoji }}</Text>
+				<Text variant="emoji">{{ emoji }}</Text>
 			</Flex>
 		</Flex>
 	</Flex>
@@ -36,7 +39,6 @@ const rows = computed(() => {
 .cell {
 	width: 48px;
 	height: 48px;
-	font-size: 24px;
 
 	border-radius: 0;
 	background: var(--nulo-surface-low);

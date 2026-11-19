@@ -24,7 +24,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 /** Helpers */
 import {
 	buildFeeMethods,
-	FEE_JUICE_BRIDGE_URL,
+	feeJuiceBridgeUrl,
 	feePayerOf,
 	formatGasBalance,
 	liveFeeScope,
@@ -223,6 +223,7 @@ const nudgeCopy = computed(() =>
 			}
 		: { title: "You have no Fee Juice yet", body: "Bridge some to cover the network fee.", link: "Get Fee Juice" },
 )
+const feeJuiceUrl = computed(() => feeJuiceBridgeUrl(props.network?.chainId))
 
 /** The paying method, or the saved pick's row while loading. */
 const displayMethod = computed(() => effectiveMethod.value ?? previewMethod.value)
@@ -511,7 +512,7 @@ onBeforeUnmount(() => {
 					<span :class="mark.warning_body">
 						<span>{{ warning }}</span>
 						<button v-if="remedyMethod" type="button" :class="mark.warning_fix" data-testid="send-fee-sheet-warning-fix" @click="onWarningFix">Pay it from private Fee Juice</button>
-						<a v-else :href="FEE_JUICE_BRIDGE_URL" target="_blank" rel="noopener noreferrer" :class="mark.warning_fix" data-testid="send-fee-sheet-warning-bridge">Get private Fee Juice</a>
+						<a v-else :href="feeJuiceUrl" target="_blank" rel="noopener noreferrer" :class="mark.warning_fix" data-testid="send-fee-sheet-warning-bridge">Get private Fee Juice</a>
 					</span>
 				</div>
 			</div>
@@ -601,7 +602,7 @@ onBeforeUnmount(() => {
 				<Text variant="caption" color="tertiary">{{ nudgeCopy.body }}</Text>
 			</Flex>
 			<a
-				:href="FEE_JUICE_BRIDGE_URL"
+				:href="feeJuiceUrl"
 				target="_blank"
 				rel="noopener noreferrer"
 				:class="$style.get_fee_juice"

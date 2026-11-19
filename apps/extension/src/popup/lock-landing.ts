@@ -35,6 +35,8 @@ export interface LockLandingState {
 	holdsSession: boolean
 	/** The current route's flow opens a profile's session: an import or a profile create. */
 	onOpeningRoute: boolean
+	/** The page renders its own lock screen (`ownsLockScreen`). */
+	ownsLockScreen: boolean
 }
 
 export type LockLandingAction =
@@ -57,9 +59,20 @@ export function isEstablishedAtDecision(establishedAtStart: boolean, pathAtStart
 	return establishedAtStart || (pathAtStart !== undefined && pathNow !== pathAtStart)
 }
 
+/** The route of a locked discovery's unlock window, which renders the lock screen itself. */
+export const UNLOCK_WINDOW_ROUTE = "windows-unlock"
+
+/** Whether the page renders its own lock screen, so the shell leaves it on its route while locked:
+ *  the unlock window's URL is how a worker restart finds and closes it. Before the router resolves
+ *  the first route, the boot record stands in; it outlives the hand-over to the connect window, so
+ *  a resolved route always decides. */
+export function ownsLockScreen(route: { resolved: boolean; name: unknown }, unlockWindowDocument: boolean): boolean {
+	return route.resolved ? route.name === UNLOCK_WINDOW_ROUTE : unlockWindowDocument
+}
+
 export function decideLockLanding(state: LockLandingState): LockLandingAction {
 	if (state.isPasskeyRoute && !state.hasProfile) return "passkey-hold"
-	if (!state.hasProfile) return state.hasCandidate && !state.pageEstablished ? "select-and-auth" : "settle"
+	if (!state.hasProfile) return state.hasCandidate && !state.pageEstablished && !state.ownsLockScreen ? "select-and-auth" : "settle"
 	if (state.holdsSession && state.onOpeningRoute) return "end-flow"
 	return state.onAuthRequiredRoute ? "lock" : "settle"
 }
@@ -68,6 +81,7 @@ export interface UnreachableLandingState {
 	hasProfile: boolean
 	hasCandidate: boolean
 	pageEstablished: boolean
+	ownsLockScreen: boolean
 }
 
 export type UnreachableLandingAction =
@@ -83,6 +97,7 @@ export type UnreachableLandingAction =
  *  flow-preservation rule as `decideLockLanding`: an established page is never routed away to
  *  select a candidate. */
 export function decideUnreachableLanding(state: UnreachableLandingState): UnreachableLandingAction {
+	if (state.ownsLockScreen) return "stay"
 	if (state.hasProfile) return "auth"
 	return state.hasCandidate && !state.pageEstablished ? "select-and-auth" : "stay"
 }

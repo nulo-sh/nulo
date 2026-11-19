@@ -266,19 +266,21 @@ describe("the fee question window", () => {
 	})
 
 	test.each([
-		["still checking its session", { isSessionChecked: false, isLogined: true }],
-		["locked", { isSessionChecked: true, isLogined: false }],
+		["still checking its session", { isSessionChecked: false, isLogined: true }, { id: "p1" }],
+		["locked", { isSessionChecked: true, isLogined: false }, undefined],
 	])(
 		"a window %s reads no price; one signed in reads the cache twice, its fee card's quote and the list's marks",
-		async (_case, session) => {
+		async (_case, session, workerProfile) => {
 			priceFake.reset(2)
 			Object.assign(appStoreMock, session)
+			activeProfile = workerProfile
 			await opened()
 			expect(byId("fee-raised-card").exists()).toBe(false)
 			expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
 
 			w!.unmount()
 			Object.assign(appStoreMock, { isSessionChecked: true, isLogined: true })
+			activeProfile = { id: "p1" }
 			await opened()
 			expect(byId("fee-raised-card").exists()).toBe(true)
 			expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])

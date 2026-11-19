@@ -417,7 +417,7 @@ test("the narrow gate fails what a page scroller pushes sideways past the view, 
 	expect(ctx.pageErrors).toEqual([])
 })
 
-test("the three faces the roles name load, and none fails", async ({ registeredExtension: ctx }) => {
+test("the three bundled faces the roles name load, and none fails", async ({ registeredExtension: ctx }) => {
 	const page = await openHome(ctx)
 	const fonts = await withProbes(page, () => checkFontFaces(page))
 

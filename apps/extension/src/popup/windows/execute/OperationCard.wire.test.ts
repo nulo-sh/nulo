@@ -8,10 +8,10 @@
 
 // @ts-expect-error — raw JSON import via vite alias
 import WonderlandTokenJson from "@wonderland-token-artifact"
-import { flushPromises, mount } from "@vue/test-utils"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { TokenBridgeContractArtifact } from "@aztec-labs/noir-contracts.js/TokenBridge"
 import { type ContractArtifact, FunctionSelector, loadContractArtifact } from "@aztec-labs/stdlib/abi"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import AddressDisplay from "@/components/AddressDisplay.vue"
 import { trimAddress } from "@/utils/string"
 import { decodeCallForDisplay } from "@/wallet/services/execution/call-decoder"
@@ -115,6 +115,9 @@ const intentKind = (w: Awaited<ReturnType<typeof mountCard>>) => one(w, "execute
 const decodedNames = (w: Awaited<ReturnType<typeof mountCard>>) =>
 	w.findAll('[data-testid="execute-op-decoded-param"]').map((p) => p.attributes("data-param"))
 const unparsed = (w: Awaited<ReturnType<typeof mountCard>>) => w.findAll('[data-testid="execute-op-summary-unparsed"]').map((l) => l.text())
+
+// A mounted card's chip holds fire after the file ends and log as the worker closes.
+enableAutoUnmount(afterEach)
 
 beforeEach(() => {
 	lookups.accounts.splice(0)

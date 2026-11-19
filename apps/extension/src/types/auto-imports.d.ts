@@ -323,6 +323,7 @@ declare global {
   const isToolbarPopup: typeof import('../utils/browser-surface').isToolbarPopup
   const isUnknownParsedRow: typeof import('../utils/token-amount').isUnknownParsedRow
   const isUnknownRow: typeof import('../utils/token-amount').isUnknownRow
+  const isUnlockWindowDocument: typeof import('../utils/window-document').isUnlockWindowDocument
   const isValidAztecAddress: typeof import('../utils/aztec-address').isValidAztecAddress
   const isValidDecimals: typeof import('../utils/token-amount').isValidDecimals
   const isValidatedTokenClass: typeof import('../utils/token-class').isValidatedTokenClass
@@ -1320,6 +1321,7 @@ declare module 'vue' {
     readonly isToolbarPopup: UnwrapRef<typeof import('../utils/browser-surface')['isToolbarPopup']>
     readonly isUnknownParsedRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownParsedRow']>
     readonly isUnknownRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownRow']>
+    readonly isUnlockWindowDocument: UnwrapRef<typeof import('../utils/window-document')['isUnlockWindowDocument']>
     readonly isValidAztecAddress: UnwrapRef<typeof import('../utils/aztec-address')['isValidAztecAddress']>
     readonly isValidDecimals: UnwrapRef<typeof import('../utils/token-amount')['isValidDecimals']>
     readonly isValidatedTokenClass: UnwrapRef<typeof import('../utils/token-class')['isValidatedTokenClass']>
