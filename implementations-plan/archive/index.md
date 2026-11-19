@@ -590,4 +590,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [nightly-green-1](nightly-green-1/plan.md) — completed — the nightly's artifact smoke seeds the rows it reads and its RP live probe accepts Cloudflare's 400 (#1845, #1846)
 - [call-lines-build-1](call-lines-build-1/plan.md) — completed — a contract call reads "{function} on {contract}" in the approval window and the transaction detail, a chip after "on" clipping inside its row (P180-01 = c2)
 - [switch-names-1](switch-names-1/plan.md) — completed — every settings and confirm switch is named through aria-labelledby by the title beside it, pinned page-wide and by a template scan (#1733)
+- [toast-hide-1](toast-hide-1/plan.md) — completed — an earlier send's Sending toast steps aside while a review sheet is open and comes back with the same words, built at the toast's owner (P190-01 = H, #1796)
 - [sweep-settle-1](sweep-settle-1/plan.md) — completed — the type-roles window sweep waits until no read in flight is drawn before it measures (#1794)

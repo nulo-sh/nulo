@@ -4,7 +4,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
 import FpcSentence from "@/components/composite/send/FpcSentence.vue"
 import PayeeBlock from "@/components/composite/send/PayeeBlock.vue"
-import { vSnackFooter } from "@/composables/snackInset"
+import { vSnackAside, vSnackFooter } from "@/composables/snackInset"
 import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 import {
 	type FactCell,
@@ -176,7 +176,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 	<div data-testid="send-review-sheet" :data-open="show" hidden />
 	<Popup :show="show" :displaceIdx="order" initial-focus='[data-testid="send-review-submit"]' @onClose="emit('close')">
 		<PopupCard :displaceIdx="depth">
-			<div role="dialog" aria-modal="true" aria-labelledby="send-review-title" data-testid="send-review">
+			<div v-snack-aside role="dialog" aria-modal="true" aria-labelledby="send-review-title" data-testid="send-review">
 				<PopupHeader closable @onClose="emit('close')">
 					<template #title>
 						<span id="send-review-title" :class="$style.title">Review</span>

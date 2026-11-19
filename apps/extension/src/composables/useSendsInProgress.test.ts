@@ -62,6 +62,7 @@ function harness(
 	const handle = ref<string | undefined>("w:1")
 	const session = vi.fn(opts.session ?? (async () => handle.value))
 	const scope = ref<SendsScope | undefined>(A)
+	const reviewing = ref(false)
 	const svc = {
 		getOperations: vi.fn(async (f?: OperationFilter) =>
 			stored.filter((op) => op.accountAddress === f?.accountAddress && (f?.isTerminal !== false || op.terminalAt === null)),
@@ -83,6 +84,7 @@ function harness(
 			lookupToken,
 			tokenEvents,
 			session,
+			reviewing: () => reviewing.value,
 			toast: toasts.toast,
 			openToast,
 			updateToast: toasts.updateToast,
@@ -95,7 +97,7 @@ function harness(
 		sends.dispose()
 		effect.stop()
 	}
-	return { svc, scope, sends, lookupToken, tokenEvents, toasts, label, stop, area, handle, session, openToast }
+	return { svc, scope, reviewing, sends, lookupToken, tokenEvents, toasts, label, stop, area, handle, session, openToast }
 }
 
 /** Lets reads, lookups and the watchers that follow them settle. */
@@ -261,6 +263,55 @@ describe("useSendsInProgress — the toast follows the sends", () => {
 		h.svc.onOperationUpdated.invoke(ended(op))
 		await settle()
 		expect(h.label()).toBe("Couldn't estimate fee. Try again.")
+	})
+})
+
+describe("useSendsInProgress — a review sheet open", () => {
+	test("its opening closes the toast and is no ×: nothing is stored, the same words come back on its close, and a × then dismisses", async () => {
+		const op = send()
+		const h = track(harness({ stored: [op] }))
+		await settle()
+		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
+		h.reviewing.value = true
+		await settle()
+		expect(h.toasts.toast.value).toBeNull()
+		h.reviewing.value = false
+		await settle()
+		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
+		expect(h.area.set).not.toHaveBeenCalled()
+		h.toasts.closeToast()
+		await settle()
+		expect(h.area.data).toStrictEqual({ [dismissedKey(op)]: "w:1" })
+	})
+
+	test("a send that starts during the review opens its toast only once the review closes", async () => {
+		const h = track(harness())
+		h.reviewing.value = true
+		await settle()
+		h.svc.onOperationAdded.invoke(send({ amountRaw: "3000000" }))
+		await settle()
+		expect(h.toasts.toast.value).toBeNull()
+		h.reviewing.value = false
+		await settle()
+		expect(h.label()).toBe("Sending 3 TST to 0x04d7…457a")
+	})
+
+	test("a message raised during the review shows; once it closes, the toast still waits for the review to close", async () => {
+		const op = send()
+		const h = track(harness({ stored: [op] }))
+		await settle()
+		h.reviewing.value = true
+		await settle()
+		h.toasts.openToast({ kind: "error", label: "Send failed" })
+		await settle()
+		expect(h.label()).toBe("Send failed")
+		h.toasts.closeToast()
+		await settle()
+		expect(h.toasts.toast.value).toBeNull()
+		h.reviewing.value = false
+		await settle()
+		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
+		expect(h.area.set).not.toHaveBeenCalled()
 	})
 })
 

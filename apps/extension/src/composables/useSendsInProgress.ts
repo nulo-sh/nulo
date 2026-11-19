@@ -33,6 +33,8 @@ export interface UseSendsInProgressOptions {
 	tokenEvents: { onTokenDeleted: EventHandler<TokenDeleted> }
 	/** The unlocked session's handle, undefined while locked; read once per scope, at its reset. */
 	session: () => Promise<string | undefined>
+	/** True while a review sheet is open: the toast stays closed, and opens again once none is. */
+	reviewing: () => boolean
 	toast: Readonly<Ref<ToastState | null | undefined>>
 	openToast: (options: ToastOptions) => number
 	updateToast: (id: number, label: string) => void
@@ -105,13 +107,16 @@ function sessionDismissals(session: () => Promise<string | undefined>) {
 	}
 }
 
-type ToastDeps = Pick<UseSendsInProgressOptions, "lookupToken" | "session" | "toast" | "openToast" | "updateToast" | "closeToast">
+type ToastDeps = Pick<
+	UseSendsInProgressOptions,
+	"lookupToken" | "session" | "reviewing" | "toast" | "openToast" | "updateToast" | "closeToast"
+>
 
 /**
  * The one Sending toast over a list of sends in progress. It names the newest popup send the person
- * has not dismissed and closes when none is left; another message replacing it is not a dismissal,
- * so it opens again once that message closes. Its × dismisses every send running then, until
- * `reset()`, which closes it first.
+ * has not dismissed and closes when none is left; another message replacing it, or a review sheet
+ * opening, is not a dismissal, so it opens again once that message closes or no review is open. Its ×
+ * dismisses every send running then, until `reset()`, which closes it first.
  */
 function sendingToast(records: Readonly<Ref<readonly OperationRecord[]>>, deps: ToastDeps) {
 	/** Bumped on every reset: a lookup begun before one lands nothing. */
@@ -186,6 +191,8 @@ function sendingToast(records: Readonly<Ref<readonly OperationRecord[]>>, deps: 
 
 	function reconcile() {
 		if (!live) return
+		// Over an open review it would sit on the fee row above Send.
+		if (deps.reviewing()) return closeOwn()
 		const want = wanted()
 		if (want === PENDING) {
 			// Waiting on a label never keeps naming a send that has ended.
@@ -267,7 +274,7 @@ export function useSendsInProgress(options: UseSendsInProgressOptions) {
 	const onTokenDeleted = () => sending.forgetLabels()
 	tokenEvents.onTokenDeleted.add(onTokenDeleted)
 
-	watch([records, sending.labels], sending.reconcile)
+	watch([records, sending.labels, options.reviewing], sending.reconcile)
 	watch(options.toast, sending.onToastChange, { flush: "sync" })
 	watch(
 		() => scopeKey(scope()),
