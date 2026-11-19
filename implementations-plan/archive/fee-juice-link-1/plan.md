@@ -113,7 +113,7 @@ Pass: every command exits 0; each new site test is red on the base `.vue` (`git 
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `b8ec26b1f`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `b8ec26b1f`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 is the bounded-work form: ONE pass, `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, over this plan and `git diff origin/dev...HEAD`, with the standard's inputs and both verbatim rules, and asked: can any site still open the wrong network's destination, a screen whose network changes while open included; does the URL leak anything; is § 5.10 true and is its version right. Then targeted verification of each material fix; a second round only on a finding. Prompts go under `~/.cache/nulo-backlog/fee-juice-link-1/`. No Opus pass (lane brief).
 - Approval boundary (a plan change; stop): a change to a link's words, place, style or testid; a new link, notice or network; any stored shape, permission or dependency.
 - Close-out, as the PR's final commits: merge `origin/dev` and read `index.md` and `lessons.md`; the Outcome; the follow-up issue on its `Open items:` line; `STATUS.md` deleted; `git mv` into `archive/`, the index line moved to `archive/index.md`; `bun run check:plans`. Merging and teardown (`agent-worktree done fee-juice-link-1 --merged`, trunk `dev`) are the orchestrator's.
