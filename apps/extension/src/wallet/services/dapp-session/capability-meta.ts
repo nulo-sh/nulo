@@ -9,8 +9,7 @@
  * This module is pure: no Vue, no `chrome.*`, no service-client / managers
  * imports. Keeping it pure is a code-review responsibility — the biome
  * `noRestrictedGlobals` ban on `chrome.*` is scoped to `wallet-core`, not
- * here. The contact-book lookup that some renderers need lives in the flat
- * `src/components/ScopeAddress.vue` instead of in this file.
+ * here.
  */
 
 export type CapabilityRisk = "low" | "medium" | "high"

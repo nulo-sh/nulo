@@ -6,6 +6,7 @@ import type { ILogger } from "@/wallet/logger"
 import { type RequestLog, traceTag } from "@/wallet/logger/request-log"
 import { ProfileService } from "@/wallet/services/profile/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
+import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService } from "@/wallet/services/network/service"
 import { AccountService } from "@/wallet/services/account/service"
 import { FpcService } from "@/wallet/services/fpc/service"
@@ -39,7 +40,7 @@ import {
 } from "@nulo/wallet-bridge"
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
 import { isWindowEnd, WindowEndedError } from "./window-end"
-import { knownContracts } from "./known-contracts"
+import { type KnownContract, knownContracts } from "./known-contracts"
 import { applyFeeSelection, isShownTokenMetadata, type OperationApprovalDelta } from "./approval-delta"
 import {
 	DAPP_INTERACTION_SERVICE_NAME,
@@ -136,6 +137,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		"rejectInteraction",
 		"isInteractionCancelled",
 		"focusInteractionWindow",
+		"getKnownContracts",
 	)
 	public static name = DAPP_INTERACTION_SERVICE_NAME
 
@@ -612,13 +614,25 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	public async requestCapabilities(params: CapabilityParams, cancellationToken?: string): Promise<CapabilityResult> {
 		await this.ensureInitialized()
 		const session = await this.dappSessionService.getDappSession(params.sessionId)
+		const payload: CapabilityPayload = { params: { ...params, knownContracts: await this.knownContractsOf(session) }, session }
+		return (await this.interaction("capabilities", payload, cancellationToken)) as CapabilityResult
+	}
+
+	public async getKnownContracts(sessionId: string): Promise<KnownContract[]> {
+		if (typeof sessionId !== "string") throw new Error("Invalid id")
+		await this.ensureInitialized()
+		const session = await this.dappSessionService.getDappSession(sessionId)
+		const active = await requireActiveProfile(this.profileService)
+		if (session.profileId !== active.id) throw new Error("Invalid id")
+		return await this.knownContractsOf(session)
+	}
+
+	private async knownContractsOf(session: DappSession): Promise<KnownContract[]> {
 		const chainId = Number(session.chainId)
-		const known = knownContracts(
+		return knownContracts(
 			await this.fpcService.getOrComputeProtocolAddresses(chainId),
 			await this.tokenService.getVerifiedDefaults(session.profileId, chainId),
 		)
-		const payload: CapabilityPayload = { params: { ...params, knownContracts: known }, session }
-		return (await this.interaction("capabilities", payload, cancellationToken)) as CapabilityResult
 	}
 
 	public async discover(params: DiscoveryParams, cancellationToken?: string): Promise<DiscoveryResult> {
