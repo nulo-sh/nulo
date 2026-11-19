@@ -8,8 +8,21 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev at 0d5afc774
-status: in progress
+status: completed
 ---
+
+## Outcome
+
+- **Date:** 2026-11-19.
+- **Status:** completed in one draft PR against `dev`, closing #1880; it is never marked ready here, and the orchestrator lands it after 1.3.0 is published, on the pick (rule C).
+- **Shipped:** S0′ as signed on page 193 (P193-03): the row keeps today's per-payee rule and leaves for the rest of the visit once pressed or passed over (an amount typed in either unit or by Max, another token picked or imported, the arrival side changed); page state only, nothing stored. The form opens on the amount field, else the token row (D5, an accessibility call under the owner's 2026-10-19 delegation). Frames from the real page, both themes, at `db49f315f` (removed in the next commit).
+- **Dispositions:** `held` kept (A1); the From side is no skip (A2); the build spec's model-update hook replaced by the card's `edit` event (D2a). The re-clamp case: under D2a it never counts, and under the model hook it could only follow the person's own token change.
+- **Review:** one bounded Codex pass, three findings accepted and fixed, verified by a resumed pass with no regression (§ Audit verdicts).
+- **Gates:** lint, typecheck, `test`, `test:all` (18 workspaces) and `check:plans` green at both heads; smoke `send-keyboard.test.ts` Chrome and Firefox 6/6 at both heads; network `fee-methods.test.ts` Chrome 8/8 and Firefox 8/8 at `97dd4759e` (the fixes touch no path it drives: it holds a balance, so the amount takes the focus, and imports no token).
+- **Lessons:** none promoted. The one candidate (a `v-model` update is no person's edit: the page and the control write the same value) stays in D2a; `lessons.md` is at 8,148 of its 8,192 bytes.
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds under Seeds; never run them.
 
 # send-again-build-1: "Same as last time" leaves for the visit once used or skipped (#1880)
 
@@ -58,7 +71,7 @@ E2E, no spec added or edited: `network/fee-methods.test.ts` (presses the row on 
 
 ## Review and delivery
 
-Bounded work ([`README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `0d5afc774`, step 2's bounded form): one Codex pass (`gpt-6.1-sol`, high) over this plan and the completed diff, adversarial on a page write counted as a skip, an edit not counted, the focus landing nowhere with nothing to spend, a press after a skip; then targeted verification of material fixes. Captures (360 px, 2x, light and dark) are pushed in one commit and removed in the next. One draft PR against `dev`, `Closes #1880`, never marked ready; the close-out commits archive this plan in the same PR.
+Bounded work ([`README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `0d5afc774`, step 2's bounded form): one Codex pass (`gpt-6.1-sol`, high) over this plan and the completed diff, adversarial on a page write counted as a skip, an edit not counted, the focus landing nowhere with nothing to spend, a press after a skip; then targeted verification of material fixes. Captures (360 px, 2x, light and dark) are pushed in one commit and removed in the next. One draft PR against `dev`, `Closes #1880`, never marked ready; the close-out commits archive this plan in the same PR.
 
 ## Audit verdicts
 
