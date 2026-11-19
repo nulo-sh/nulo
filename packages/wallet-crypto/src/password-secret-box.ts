@@ -20,7 +20,7 @@
  *   - `restorePasswordSession`  → silent close (SessionManager owns this)
  *
  * These strings / types are NOT compatibility-fluff; auth UI code
- * matches on `InvalidPasswordError` (`popup/pages/auth.vue:65-74`)
+ * matches on `InvalidPasswordError` (`popup/components/modules/auth/LockScreen.vue`)
  * and the error-shape differences are observable.
  *
  * ## Null vs throw

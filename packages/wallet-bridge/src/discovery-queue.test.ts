@@ -175,6 +175,28 @@ describe("DiscoveryQueue — the newest live request per (origin, chainId)", () 
 	})
 })
 
+describe("DiscoveryQueue — holds", () => {
+	test("true for a live queued request of the origin; false for another origin, once the drain starts, and once expired", async () => {
+		const sdk = fakeSdk()
+		const q = sdk.queue()
+		q.enqueue(sdk.receive("r1"), "1")
+		expect(q.holds("https://a.com")).toBe(true)
+		expect(q.holds("https://b.com")).toBe(false)
+
+		let duringDrain: boolean | undefined
+		await q.drain(async () => {
+			duringDrain = q.holds("https://a.com")
+			return true
+		})
+		expect(duringDrain).toBe(false)
+
+		q.enqueue(sdk.receive("r2"), "1")
+		at(DISCOVERY_STALE_MS + 1)
+		expect(q.holds("https://a.com")).toBe(false)
+		expect(sdk.rejected).toEqual([])
+	})
+})
+
 describe("DiscoveryQueue — flood caps", () => {
 	test("entries that can no longer succeed free their cap slots", () => {
 		const sdk = fakeSdk()

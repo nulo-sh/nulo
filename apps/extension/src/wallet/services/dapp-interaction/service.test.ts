@@ -1084,6 +1084,47 @@ describe("DappInteractionService — a connect window closes with its answer", (
 	})
 })
 
+describe("DappInteractionService — a site's unlock window becomes its connect window or notice", () => {
+	const SITE = "https://dapp.example"
+	const METADATA = { name: "dapp.example", url: SITE }
+
+	async function unlockHarness() {
+		const api = new FakeBrowserApi()
+		api.reset()
+		vi.mocked(chrome.runtime.getURL).mockImplementation((path) => `chrome-extension://nulo/${path}`)
+		const dapp = new DappInteractionService(noopLogger, new WindowManager(api.windows, new MockClock(), noopLogger))
+		const fake = api.windows as unknown as { creates: Array<{ url: string }>; navigates: Array<{ windowId: number; url: string }> }
+		dapp.unlockWindows.open(SITE, Date.now() + 50_000)
+		await flush()
+		await flush()
+		fake.creates.length = 0
+		return { dapp, fake, unlockWindowId: 1000 }
+	}
+
+	test.each([
+		["a connect window", "discover", (dapp: DappInteractionService) => dapp.discover({ dappMetadata: METADATA, chainId: "1" })],
+		["a notice", "network-unavailable", (dapp: DappInteractionService) => dapp.notifyNetworkUnavailable({ dappMetadata: METADATA })],
+	])("%s for the site loads in its unlock window and creates none", async (_name, route, start) => {
+		const h = await unlockHarness()
+		void start(h.dapp)
+		await expect.poll(() => h.fake.navigates.length).toBe(1)
+
+		expect(h.fake.navigates[0]?.windowId).toBe(h.unlockWindowId)
+		expect(h.fake.navigates[0]?.url).toContain(`#/windows/${route}?requestId=`)
+		expect(h.fake.creates).toEqual([])
+		expect(h.dapp.unlockWindows.origins()).toEqual([])
+	})
+
+	test("another site's connect window opens a window of its own and leaves the unlock window alone", async () => {
+		const h = await unlockHarness()
+		void h.dapp.discover({ dappMetadata: { name: "other", url: "https://other.example" }, chainId: "1" })
+		await expect.poll(() => h.fake.creates.length).toBe(1)
+
+		expect(h.fake.navigates).toEqual([])
+		expect(h.dapp.unlockWindows.origins()).toEqual([SITE])
+	})
+})
+
 describe("DappInteractionService — the network-unavailable notice only informs", () => {
 	const PARAMS = { dappMetadata: { name: "dapp.example", url: "https://dapp.example" } }
 

@@ -82,6 +82,7 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 				log.push("discover")
 				return discoverImpl()
 			},
+			unlockWindows: { origins: () => [] },
 		},
 		"dapp-session": {
 			onDappSessionDeleted,

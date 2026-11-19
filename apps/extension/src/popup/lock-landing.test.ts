@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision } from "./lock-landing"
+import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision, ownsLockScreen } from "./lock-landing"
 
 const base = {
 	hasProfile: false,
@@ -9,6 +9,7 @@ const base = {
 	pageEstablished: false,
 	holdsSession: false,
 	onOpeningRoute: false,
+	ownsLockScreen: false,
 }
 
 describe("decideLockLanding", () => {
@@ -62,8 +63,23 @@ describe("decideLockLanding", () => {
 		expect(decideLockLanding({ ...base, hasProfile: true, holdsSession: true, onAuthRequiredRoute: true })).toBe("lock")
 	})
 
+	test("a page that renders its own lock screen stays on its route; it settles with a profile too", () => {
+		expect(decideLockLanding({ ...base, ownsLockScreen: true })).toBe("settle")
+		expect(decideLockLanding({ ...base, ownsLockScreen: true, hasProfile: true })).toBe("settle")
+		expect(decideLockLanding(base)).toBe("select-and-auth")
+	})
+
 	test("a reconnect whose mount-time boot was lost (no route resolved yet) still lands on auth", () => {
 		expect(decideLockLanding({ ...base, pageEstablished: false })).toBe("select-and-auth")
+	})
+})
+
+describe("ownsLockScreen", () => {
+	test("a resolved route decides; the boot record speaks only before the router resolves", () => {
+		expect(ownsLockScreen({ resolved: true, name: "windows-unlock" }, false)).toBe(true)
+		expect(ownsLockScreen({ resolved: true, name: "windows-discover" }, true)).toBe(false)
+		expect(ownsLockScreen({ resolved: false, name: undefined }, true)).toBe(true)
+		expect(ownsLockScreen({ resolved: false, name: undefined }, false)).toBe(false)
 	})
 })
 
@@ -71,7 +87,7 @@ describe("isEstablishedAtDecision", () => {
 	test("a page the person reached while the run waited keeps its flow, whatever the run finds", () => {
 		const pageEstablished = isEstablishedAtDecision(false, "/popup/auth", "/popup/profile/new?from=/popup/auth")
 		expect(decideLockLanding({ ...base, pageEstablished })).toBe("settle")
-		expect(decideUnreachableLanding({ hasProfile: false, hasCandidate: true, pageEstablished })).toBe("stay")
+		expect(decideUnreachableLanding({ hasProfile: false, hasCandidate: true, pageEstablished, ownsLockScreen: false })).toBe("stay")
 	})
 
 	test("the page the run started on, replayed in place, still gets the candidate", () => {
@@ -86,7 +102,11 @@ describe("isEstablishedAtDecision", () => {
 })
 
 describe("decideUnreachableLanding", () => {
-	const u = { hasProfile: false, hasCandidate: true, pageEstablished: false }
+	const u = { hasProfile: false, hasCandidate: true, pageEstablished: false, ownsLockScreen: false }
+	test("a page that renders its own lock screen keeps its route, with a profile selected or not", () => {
+		expect(decideUnreachableLanding({ ...u, ownsLockScreen: true, hasProfile: true })).toBe("stay")
+		expect(decideUnreachableLanding({ ...u, ownsLockScreen: true })).toBe("stay")
+	})
 	test("a selected profile: the lock screen is the recovery", () => {
 		expect(decideUnreachableLanding({ ...u, hasProfile: true })).toBe("auth")
 		expect(decideUnreachableLanding({ ...u, hasProfile: true, pageEstablished: true })).toBe("auth")

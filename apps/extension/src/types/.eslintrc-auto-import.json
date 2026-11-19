@@ -594,6 +594,7 @@
     "isToolbarPopup": true,
     "isUnknownParsedRow": true,
     "isUnknownRow": true,
+    "isUnlockWindowDocument": true,
     "isValidAztecAddress": true,
     "isValidDecimals": true,
     "isValidatedTokenClass": true,

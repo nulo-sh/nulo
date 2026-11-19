@@ -556,6 +556,95 @@ describe("WindowManager", () => {
 		expect(value).not.toHaveBeenCalled()
 	})
 
+	describe("reuseWindowId", () => {
+		const OPTS = { url: "popup.html", width: 400, height: 800, timeoutMs: TIMEOUT_MS, kind: "test", placement: "top-right" as const }
+		const fake = () => browser.windows as unknown as { creates: unknown[]; navigates: unknown[]; updates: unknown[] }
+
+		/** A window handed over by an earlier handle, as `interaction()` receives it. */
+		async function handedWindow(): Promise<number> {
+			const first = manager.openAndAwait<number | undefined>(OPTS)
+			await flushCreate()
+			manager.handOver(first.handleId, (id) => id)
+			return (await first.promise) as number
+		}
+
+		it("loads the URL in the handed window, brings it to the front, and creates nothing", async () => {
+			const windowId = await handedWindow()
+			const { handleId, promise } = manager.openAndAwait<string>({ ...OPTS, url: "next.html", reuseWindowId: windowId })
+			await flushCreate()
+
+			expect(fake().creates).toHaveLength(1)
+			expect(fake().navigates).toEqual([{ windowId, url: "next.html" }])
+			expect(fake().updates).toEqual([{ windowId, options: { focused: true, drawAttention: true, state: "normal" } }])
+			manager.settle(handleId, "ok")
+			await expect(promise).resolves.toBe("ok")
+		})
+
+		it("a person's close of the reused window rejects as a close", async () => {
+			const windowId = await handedWindow()
+			const { promise } = manager.openAndAwait<string>({ ...OPTS, reuseWindowId: windowId })
+			await flushCreate()
+
+			fakeWindows.closeByUser(windowId)
+			await expect(promise).rejects.toBe(WINDOW_CLOSED_BY_USER)
+		})
+
+		it("a failed navigate settles as a failed open and logs no browser text", async () => {
+			const lines: unknown[][] = []
+			manager = new WindowManager(browser.windows, clock, { log: (...args: unknown[]) => lines.push(args) } as unknown as ILogger)
+			const windowId = await handedWindow()
+			vi.spyOn(browser.windows, "navigate").mockRejectedValueOnce(new Error("No tab for chrome-extension://abc/#/windows/SENTINEL"))
+
+			const { promise } = manager.openAndAwait<string>({ ...OPTS, reuseWindowId: windowId })
+			await expect(promise).rejects.toBe("Failed to open window.")
+			expect(fake().updates).toEqual([])
+			expect(JSON.stringify(lines)).not.toContain("SENTINEL")
+		})
+	})
+
+	describe("retime", () => {
+		const OPTS = { url: "popup.html", width: 400, height: 800, timeoutMs: TIMEOUT_MS, kind: "test", placement: "top-right" as const }
+
+		it("moves the timeout: it fires at the new time, not the old", async () => {
+			const { handleId, promise } = manager.openAndAwait<string>(OPTS)
+			await flushCreate()
+			const settled = vi.fn()
+			promise.catch(settled)
+
+			expect(manager.retime(handleId, TIMEOUT_MS * 3)).toBe(true)
+			clock.advance(TIMEOUT_MS * 2)
+			await flushCreate()
+			expect(settled).not.toHaveBeenCalled()
+			clock.advance(TIMEOUT_MS)
+			await expect(promise).rejects.toMatch(/timed out/i)
+		})
+
+		it("false once settled, and nothing is scheduled", async () => {
+			const { handleId, promise } = manager.openAndAwait<string>(OPTS)
+			await flushCreate()
+			manager.settle(handleId, "ok")
+			await promise
+
+			expect(manager.retime(handleId, TIMEOUT_MS)).toBe(false)
+			expect(clock.pendingCount).toBe(0)
+		})
+	})
+
+	it("timeoutLogLevel sets the timeout line's level; the default stays warn", async () => {
+		const levels: unknown[] = []
+		manager = new WindowManager(browser.windows, clock, {
+			log: (_s: string, level: unknown, msg: string) => /timed out/.test(msg) && levels.push(level),
+		} as unknown as ILogger)
+		const OPTS = { url: "popup.html", width: 400, height: 800, timeoutMs: TIMEOUT_MS, kind: "test", placement: "top-right" as const }
+		const quiet = manager.openAndAwait<string>({ ...OPTS, timeoutLogLevel: LogLevel.Debug })
+		const loud = manager.openAndAwait<string>(OPTS)
+		await flushCreate()
+
+		clock.advance(TIMEOUT_MS)
+		await Promise.allSettled([quiet.promise, loud.promise])
+		expect(levels).toEqual([LogLevel.Debug, LogLevel.Warn])
+	})
+
 	describe("positioning on the last-focused window", () => {
 		const OPTS = { url: "popup.html", width: 400, height: 800, timeoutMs: TIMEOUT_MS, kind: "test", placement: "top-right" as const }
 		/** Test-only surface of FakeWindowsAdapter. */

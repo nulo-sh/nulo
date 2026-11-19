@@ -141,6 +141,7 @@ const {
 		interactionService.disconnect()
 	},
 	init: () => init(),
+	getActiveProfile: () => profileService.getActiveProfile(),
 	reject: (end) => reject(end),
 })
 

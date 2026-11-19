@@ -244,6 +244,36 @@ describe("composite/capabilities/DetailsTable", () => {
 		expect(w.emitted("copy")).toEqual([[TOKEN]])
 	})
 
+	test("a legend under the rows names each head glyph once, in its order, hidden from screen readers", async () => {
+		const legendOf = (w: ReturnType<typeof mountTable>) => {
+			const legend = w.find('[data-testid="cap-details-legend"]')
+			const glyphs = w.findAllComponents(Icon).filter((glyph) => legend.element.contains(glyph.element))
+			return { legend, pairs: glyphs.map((glyph) => [glyph.props("name"), glyph.element.parentElement?.textContent]) }
+		}
+		const w = await opened({ anyContract })
+		const { legend, pairs } = legendOf(w)
+		expect(pairs).toEqual([
+			["play", "Simulate"],
+			["add", "Add"],
+			["send", "Transact"],
+			["search", "Details"],
+			["mail-lock", "Events"],
+			["code", "Code"],
+		])
+		const head = w.find(`.${STYLE.head}`).element
+		const headGlyphs = w.findAllComponents(Icon).filter((glyph) => head.contains(glyph.element))
+		expect(pairs.map(([glyph]) => glyph)).toEqual(headGlyphs.map((glyph) => glyph.props("name")))
+		expect(legend.attributes("aria-hidden")).toBe("true")
+		const order = [...w.find(`.${STYLE.table}`).element.children]
+		const lastRow = order.findLastIndex((el) => el.classList.contains(STYLE.row))
+		expect(order.indexOf(legend.element)).toBe(lastRow + 1)
+		expect(order[lastRow + 2]?.classList).toContain(STYLE.foot)
+
+		const bare = legendOf(mountTable({ bare: true, foot: false }))
+		expect(bare.pairs).toEqual(pairs)
+		expect(bare.legend.element.nextElementSibling).toBeNull()
+	})
+
 	test("the footnote says where the function names come from", async () => {
 		const w = await opened()
 		expect(w.find(`.${STYLE.foot}`).text()).toBe(
