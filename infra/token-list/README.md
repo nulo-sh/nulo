@@ -13,7 +13,7 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
 | `public/_headers` | The response policy (CORS `*`, `max-age=300`, `nosniff`, CSP `default-src 'none'`, HSTS, `no-referrer`). Parsed by wrangler, never served. |
 | `wrangler.jsonc` | Static assets only, `workers_dev` and preview URLs off, observability off. |
 | `keys.env.example` | Keyed-run template for the key ceremony. |
-| `scripts/check.ts` | The tree invariants (`bun run check`), the picture rule of § Pictures included; `test/tree.test.ts` asserts them. |
+| `scripts/check.ts` | The tree invariants (`bun run check`), the picture rules of § Pictures included; `test/tree.test.ts` asserts them. |
 | `scripts/summary.ts` | The `prepare` job's review summary and its tokens, flags and price feeds digest. |
 | `scripts/live-check.ts` | The `prepare` job's advisory live check: each entry's instance, class, symbol and decimals as a public node holds them. |
 | `scripts/price-check.ts` | The `prepare` job's advisory price feed check: whether CoinGecko's quote for each feed sits inside its band. |
@@ -33,7 +33,7 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
   up to the new list, counts as served for this rule, so such a list, signed but never served, is
   retired as a served one would be; one that cannot be read raises the floor too.
 - **The tree tests are strict** (`bun run test`, in `test:all`): the source passes the strict rules in
-  canonical form, and every entry carries a picture § Pictures records; every pinned key is real (a placeholder fails) and is the one `FORMAT.md` publishes;
+  canonical form, and every entry carries a picture § Pictures records, as does every bridge picture an entry carries; every pinned key is real (a placeholder fails) and is the one `FORMAT.md` publishes;
   `public/` holds `_headers` and `v1/list.json` only; a committed envelope is canonical, verifies and
   parses strictly; the floor is canonical, at least 1 and at most the committed list's sequence.
 - **One name.** `tokens.nulo.sh` only: no workers.dev origin, no preview URLs, no route in the file.
@@ -73,13 +73,17 @@ artifact, kept 7 days: the floor rule does not read it (known limit #1001).
 
 ## Pictures
 
-Every entry's `icon` is one of these files, embedded byte for byte (`FORMAT.md` § Pictures).
-Issuers' marks are used as published, unaltered and never recoloured, on the owner's recorded
-decision of 2026-11-10, on test and bridged tokens too. cWETH, which no issuer draws for, carries
-Ethereum's diamond under the same rule, on the owner's decision of the same day; any other token
-with no issuer's mark gets Nulo's letter mark, a white letter on a near-black disc. The tree check
-refuses an entry with no picture or with one whose SHA-256 has no row here, so changing a picture
-means changing its row; a picture is never bundled in the extension.
+Every entry's `icon`, and every `bridgeIcon` an entry carries, is one of these files, embedded byte
+for byte (`FORMAT.md` § Pictures). Issuers' marks are used as published, unaltered and never
+recoloured, on the owner's recorded decision of 2026-11-10, on test and bridged tokens too. cWETH,
+which no issuer draws for, carries Ethereum's diamond under the same rule, on the owner's decision of
+the same day; any other token with no issuer's mark gets Nulo's letter mark, a white letter on a
+near-black disc. A bridge picture is the bridge's mark as its issuer publishes it; one that differs
+from the published mark (a symbol cut from a wordmark, a backing added) is used only as the issuer
+approved, and its row records that approval and its date. The wallet draws a bridge picture only as
+a badge on its entry's picture, which it never alters. The tree check
+refuses an entry with no picture, or with a picture or bridge picture whose SHA-256 has no row here,
+so changing either means changing its row; a picture is never bundled in the extension.
 
 | Picture | Used by | Drawn by | Source | Terms | SHA-256 |
 |---|---|---|---|---|---|

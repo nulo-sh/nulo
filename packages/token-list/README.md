@@ -14,7 +14,7 @@ and no `node_modules`.
 |---|---|
 | `src/envelope.ts` | Envelope encode, sign and verify (Ed25519, domain prefix `nulo-token-list/1\n`), canonical base64url, seed import. |
 | `src/parse.ts` | Payload and source validation in `wallet` and `strict` modes, the `flagged` set included; `selectEntries` (bundled class, first 16 per chain, a price id only with its list's accepted feed). |
-| `src/icon.ts` | An entry's picture: an SVG `data:` URL within the budget whose text passes the drawing allowlist (`isTokenIcon`, `iconBytes`). |
+| `src/icon.ts` | An entry's picture or bridge picture: an SVG `data:` URL within its budget (`MAX_ICON_CHARS`, `MAX_BRIDGE_ICON_CHARS`) whose text passes the drawing allowlist (`isTokenIcon`, `iconBytes`). |
 | `src/index.ts` | `readTokenList(text, keys, floor)`: verify, then parse, then refuse a sequence below the floor, then select. The wallet's one entry point. |
 | `src/floor.json` | The compiled sequence floor, `SEQUENCE_FLOOR`: the last list that delisted or flagged a token. Raised by that list's publish PR. |
 | `src/keys.ts` | The pinned public keys, `nulo-ci-1` and `nulo-recovery-1`. |

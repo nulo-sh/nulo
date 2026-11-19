@@ -7,8 +7,10 @@
  */
 
 export const ICON_PREFIX = "data:image/svg+xml;base64,"
-/** Bounds the whole data URL, prefix included. */
+/** Bounds an entry's `icon`, the whole data URL, prefix included. */
 export const MAX_ICON_CHARS = 3072
+/** Bounds an entry's `bridgeIcon` the same way: a bridge's mark is used as its issuer publishes it. */
+export const MAX_BRIDGE_ICON_CHARS = 16_384
 
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
 /** Elements of a static drawing: no script, style, image, use, animation, filter or foreign content. */
@@ -60,9 +62,8 @@ function isDrawing(svg: string): boolean {
 	return Array.from(text.matchAll(TAG), (match) => match[1]).every((name) => ELEMENTS.has(name))
 }
 
-/** The SVG bytes of a picture `isTokenIcon` accepts, or `undefined`. */
-export function iconBytes(value: unknown): Uint8Array | undefined {
-	if (typeof value !== "string" || value.length > MAX_ICON_CHARS || !value.startsWith(ICON_PREFIX)) return undefined
+function pictureBytes(value: unknown, maxChars: number): Uint8Array | undefined {
+	if (typeof value !== "string" || value.length > maxChars || !value.startsWith(ICON_PREFIX)) return undefined
 	const bytes = decodeBase64(value.slice(ICON_PREFIX.length))
 	if (!bytes) return undefined
 	let svg: string
@@ -75,6 +76,23 @@ export function iconBytes(value: unknown): Uint8Array | undefined {
 	return isDrawing(svg) ? bytes : undefined
 }
 
+// Each export takes one argument, so passed as an array callback it cannot take an index as its budget.
+
+/** The SVG bytes of a picture `isTokenIcon` accepts, or `undefined`. */
+export function iconBytes(value: unknown): Uint8Array | undefined {
+	return pictureBytes(value, MAX_ICON_CHARS)
+}
+
 export function isTokenIcon(value: unknown): value is string {
 	return iconBytes(value) !== undefined
+}
+
+/** The SVG bytes of a picture `isBridgeIcon` accepts, or `undefined`. */
+export function bridgeIconBytes(value: unknown): Uint8Array | undefined {
+	return pictureBytes(value, MAX_BRIDGE_ICON_CHARS)
+}
+
+/** The same rule as `isTokenIcon` under the bridge picture's budget. */
+export function isBridgeIcon(value: unknown): value is string {
+	return bridgeIconBytes(value) !== undefined
 }
