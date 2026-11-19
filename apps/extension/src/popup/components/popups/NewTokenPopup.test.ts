@@ -725,14 +725,16 @@ describe("NewTokenPopup — the signed list's flag", () => {
 	const FLAGGED = `0x1${"b".repeat(63)}`
 	const flaggedList = async () => ({ ...(await LIST()), flaggedTokens: [listKeyOf(1, FLAGGED)] })
 	const flagLine = (w: ReturnType<typeof mount>) => w.find('[data-testid="new-token-flagged"]')
+	const check = (w: ReturnType<typeof mount>) => w.find('[data-icon="square-check"]').exists()
 	const nativeField = (w: ReturnType<typeof mount>) =>
 		w.findAll('[data-testid="token-address-input"]').find((el) => el.element.tagName === "INPUT")
 
-	test("a flagged address shows the line under the field, which the field and Import name; another shows none", async () => {
+	test("a flagged address shows the line under the field, which the field and Import name, and no check; another shows the check and no line", async () => {
 		answerList = flaggedList
 		const w = await mountAndOpen()
 		await typeAddress(w, validHex)
 		expect(flagLine(w).exists()).toBe(false)
+		expect(check(w)).toBe(true)
 		expect(nativeField(w)?.attributes("aria-describedby")).toBeUndefined()
 		expect(submitBtn(w).attributes("aria-describedby")).toBeUndefined()
 
@@ -743,19 +745,22 @@ describe("NewTokenPopup — the signed list's flag", () => {
 		expect(nativeField(w)?.attributes("aria-describedby")).toBe(line.attributes("id"))
 		expect(submitBtn(w).attributes("aria-describedby")).toBe(line.attributes("id"))
 		expect(submitBtn(w).attributes("disabled")).toBeUndefined()
+		expect(check(w)).toBe(false)
 	})
 
-	test("a list read that lands after the popup opened adds the line to the address it holds", async () => {
+	test("a list read that lands after the popup opened adds the line to the address it holds and takes its check away", async () => {
 		let answer!: (list: unknown) => void
 		answerList = () => new Promise((resolve) => (answer = resolve))
 		payloads.set("new_token", { address: FLAGGED })
 		const w = await mountAndOpen()
 		expect((nativeField(w)?.element as HTMLInputElement | undefined)?.value).toBe(FLAGGED)
 		expect(flagLine(w).exists()).toBe(false)
+		expect(check(w)).toBe(true)
 
 		answer(await flaggedList())
 		await flushPromises()
 		expect(flagLine(w).exists()).toBe(true)
+		expect(check(w)).toBe(false)
 	})
 
 	test("a hide releases the reader and its port; the next showing reads afresh and follows a list published meanwhile", async () => {

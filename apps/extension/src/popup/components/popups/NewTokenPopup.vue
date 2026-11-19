@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
 			:ariaDescribedby="isFlagged ? flaggedId : undefined"
 		>
 			<template #suffix>
-				<Icon v-if="isAvailableToCreateToken && !error" name="square-check" size="14" color="green" />
+				<Icon v-if="isAvailableToCreateToken && !error && !isFlagged" name="square-check" size="14" color="green" />
 			</template>
 			<template #right>
 				<Transition name="fade">
