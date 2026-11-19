@@ -6,3 +6,4 @@
   - P2, accepted: the recording is written inside `populate`, before the update's checks, so a failed recording run leaves one. Phase 2's gate now deletes it after any failed recording run.
   - P3, accepted: F2's diff inventory also holds `BEFORE-LAUNCH.md`.
   - Held: every trait at the tag, D2, F4-F7, the `one-form` branch unchanged, no further trait, the run order.
+- 2026-11-19, Codex targeted verification (same session, over `6699e3575` merged with `dev` at `49d65d90e`): **verified**, high confidence: the profile id, account, side and records match `pickForSend`/`recordOf` at the tag; `saveFeePick` returns `true` only after the sealed write; the pending send unchanged; `tsc -p tsconfig.e2e.json` clean. One P3, accepted: the helper's TSDoc cut to the radio constraint.

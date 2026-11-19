@@ -43,7 +43,7 @@ v1.3.0 shipped on 2026-11-19, so the next promote updates from it (`.claude/skil
 
 Files: `fixtures/update/release.ts`, `fixtures/update/release-ui.ts`, `network/update-in-place.test.ts`, `fixtures/update/v1.3.0.storage.json` (new, written by the scenario), all under `apps/extension/tests/e2e/`; `apps/extension/tests/e2e/README.md`; `.claude/skills/release/SKILL.md`. No product file; none of the colliding leads' files.
 
-### Phase 1: pins, the `send` trait, docs
+### Phase 1: pins, the `send` trait, docs ✓ (`aa9d10d2a`, the D5 fix `6699e3575`; Codex verified: [lessons/phase-1.md](lessons/phase-1.md))
 1. `RELEASE_DIGESTS["v1.3.0"]` from F1; `RELEASE_TRAITS["v1.3.0"]` from F2 plus `send: "person-first"`.
 2. `ReleaseTraits` gains `send: "one-form" | "person-first"` (D1), one TSDoc sentence beside the others; v0.31.0 through v1.2.0 `one-form`.
 3. `release-ui.ts`: `openReleaseSend` and `selectReleaseSendFee`, always called as a pair, become one `pickReleaseSendFee(page, release, { recipient, method, saveFor? })`. `one-form` keeps today's steps exactly; `person-first` runs the candidate's own Send helpers (`openSend`, `chooseRecipient`, `selectSendFeeMethod` in `fixtures/send-page.ts`), which drive v1.3.0's source as is (F2). The recipient is `cfg.minterAddress`, the send's recipient in both scenarios; choosing it writes nothing (`send.vue:315-319`). With `saveFor` (the populate's call, not the pending send's, which mounts Send only for its balance read), the release's own `saveFeePick` then writes the record the press would have (F8, D5), for the form's origin side, and a refusal throws.
@@ -90,6 +90,7 @@ None. Test files and docs only; no screen changes.
 ## Review verdicts
 
 - **Codex pass** (gpt-6.1-sol, high, read-only, session `01a1f5e3`, over the plan and `aa9d10d2a`): **reject**, high confidence. P1: a press on the already chosen radio saves nothing (F8): accepted, fixed by D5. P2: a failed recording run leaves a recording, since it is written before the update: accepted, Phase 2's gate. P3: F2's diff inventory missed `BEFORE-LAUNCH.md`: accepted. Verified and held: every trait at the tag, F3/D2 (no relay trait; dials, interception and resets carry two endpoints), F4-F7, the recipient writes nothing, the `one-form` branch unchanged, no further trait, the run order.
+- **Codex targeted verification** (resumed, over `6699e3575` merged with `dev`): **verified**, high confidence; one P3, the helper's TSDoc cut to the radio constraint, accepted. Converged.
 
 ## Delivery
 

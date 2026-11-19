@@ -28,12 +28,8 @@ const FEE_JUICE_PICKS: Readonly<Record<Exclude<FeeMethodSubtitle, "sponsored">, 
 	private: { type: "private_fpc" },
 }
 
-/**
- * Picks `method` on the release's own Send, opened from Home, and leaves Send open. A `person-first`
- * release's Fee sheet saves a pick only when a press changes the payer, so on the sandbox, where
- * `method` is the one payer and already chosen, `saveFor` names the account whose pick the release's
- * own `saveFeePick` then writes, as the press would have.
- */
+/** Leaves Send open. `saveFor`'s pick goes through the release's own `saveFeePick`: a `person-first`
+ *  release's radio saves only on a change, and the sandbox's one payer is already chosen. */
 export async function pickReleaseSendFee(
 	page: Page,
 	release: ReleaseTraits,
