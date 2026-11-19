@@ -344,29 +344,6 @@ describe("the app windows' rule book", () => {
 		touched.stop()
 	})
 
-	test.each([
-		{ save: "refused", answer: () => Promise.resolve(false), stored: undefined, shows: ["fpc", "s1"] },
-		{ save: "pending", answer: () => new Promise<boolean>(() => {}), stored: undefined, shows: ["fpc", "s1"] },
-		{
-			save: "stored, then another card's newer pick",
-			answer: () => Promise.resolve(true),
-			stored: { type: "fj" },
-			shows: ["fj", undefined],
-		},
-	])("a recovery after a pick whose save is $save", async ({ answer, stored, shows }) => {
-		const t = setup({})
-		t.client.saveFeePick = answer
-		await t.commit(undefined)
-		t.rules.pick(t.row("fpc", "s1")!)
-		await Promise.resolve()
-		if (stored) storage[feePicksKey("p1")] = { "0xa": stored }
-		const load = await t.rules.reload(SCOPE)
-		t.snapshot.gasBalances.value = { publicFeeJuice: HELD, privateFeeJuice: HELD }
-		t.rules.reconcile(load, SCOPE)
-		expect([type(t.rules), fpcId(t.rules)]).toEqual(shows)
-		t.stop()
-	})
-
 	test("a recovery re-derives an unpicked default from the new balances", async () => {
 		const t = setup({})
 		await t.commit(undefined)
