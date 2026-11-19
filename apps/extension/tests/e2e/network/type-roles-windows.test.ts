@@ -53,6 +53,7 @@ import {
 	observeIdentifierSites,
 	siteSuite,
 	sweepTypeRoles,
+	waitForReadsSettled,
 } from "../fixtures/type-roles"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -101,8 +102,10 @@ async function waitForStateSites(win: Page, surface: string, state: string): Pro
 	}
 }
 
-/** The faces and roles of the window, then the identifier sites of each state it renders. */
+/** The faces and roles of the window at rest, then the identifier sites of each state it renders. A
+ *  decoded row's sites exist only once its decode lands, so the reads settle before the sites are awaited. */
 async function sweepWindow(win: Page, surface: string, states: readonly string[]): Promise<IdentifierObservation[]> {
+	await waitForReadsSettled(win, surface)
 	for (const state of states) await waitForStateSites(win, surface, state)
 	expectSweepClean(await sweepTypeRoles(win), surface)
 	await expectLaidOut(win, surface)
