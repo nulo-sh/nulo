@@ -1594,7 +1594,8 @@ describe("send page — Same as last time, over the real amount card", () => {
 			sided.w.unmount()
 		})
 
-		test("back to the person step, the same payee offers nothing and another past payee is offered theirs", async () => {
+		/** Ana's last send in TOKEN, Ben's in OTHER, with both tokens held. */
+		function twoPayees() {
 			mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
 			mocks.getTokenBalances.mockResolvedValue([BALANCE, { ...BALANCE, id: "b8", token: OTHER, privateBalance: "500000000" }])
 			mocks.getOperations.mockResolvedValue([
@@ -1608,10 +1609,21 @@ describe("send page — Same as last time, over the real amount card", () => {
 					terminalAt: 900,
 				}),
 			])
+		}
+		const BEN_AGAIN = "Same as last time: 12 OTH, privately"
+
+		test("back to the person step, a payee used or passed over offers nothing and another past payee is offered theirs", async () => {
+			twoPayees()
 			const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
 			await payRecentTo(w, ANA)
+			await again(w).trigger("click")
+			await flushPromises()
+			await back(w)
+			await flushPromises()
+			await payRecentTo(w, BEN)
+			expect(again(w).text()).toBe(BEN_AGAIN)
 			await typeAmount(w, "1.5")
-			expect(again(w).exists()).toBe(false)
+			// Ana's values are no longer the form's, so only her press keeps her row away.
 			await back(w)
 			await flushPromises()
 			await payRecentTo(w, ANA)
@@ -1619,7 +1631,43 @@ describe("send page — Same as last time, over the real amount card", () => {
 			await back(w)
 			await flushPromises()
 			await payRecentTo(w, BEN)
-			expect(again(w).text()).toBe("Same as last time: 12 OTH, privately")
+			expect(again(w).exists()).toBe(false)
+			w.unmount()
+		})
+
+		test("a token imported on one payee's form passes over that payee's, though its list read lands on another's", async () => {
+			const NEW = { ...TOKEN, id: 10, contract: `0x${"f".repeat(64)}`, symbol: "NEW" }
+			twoPayees()
+			const { w, cacheStore } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, realTokenCard: true })
+			await payRecentTo(w, ANA)
+			const reload = deferred<unknown[]>()
+			mocks.getTokens.mockReturnValueOnce(reload.promise)
+			const pick = w.findComponent({ name: "SelectTokenCard" }).props("onTokenAdded") as (token: unknown) => Promise<void>
+			const imported = pick(NEW)
+			await back(w)
+			await flushPromises()
+			await payRecentTo(w, BEN)
+			reload.resolve([TOKEN, OTHER, NEW])
+			await imported
+			await flushPromises()
+			expect(cacheStore.activeTokenIdx).toBe(NEW.id)
+			expect(again(w).text()).toBe(BEN_AGAIN)
+			await back(w)
+			await flushPromises()
+			await payRecentTo(w, ANA)
+			expect(again(w).exists()).toBe(false)
+			w.unmount()
+		})
+
+		test("with nothing to spend the form opens on the token row, though the header held the focus", async () => {
+			mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, privateBalance: "0", publicBalance: "0" }])
+			mocks.getOperations.mockResolvedValue([sent()])
+			const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, realTokenCard: true })
+			;(w.get('[data-testid="subpage-back"]').element as HTMLElement).focus()
+			await payRecent(w)
+			await flushPromises()
+			expect(again(w).exists()).toBe(true)
+			expect(document.activeElement?.getAttribute("data-testid")).toBe("send-token-trigger")
 			w.unmount()
 		})
 

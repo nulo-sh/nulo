@@ -31,7 +31,7 @@ const props = defineProps({
 	},
 	/** Called with a token the picker's paste-to-add imported, for the page to pick. */
 	onTokenAdded: Function,
-	/** Called once the person picks a listed token in place of the active one. */
+	/** Called with the id of the listed token the person picked, only when it replaces the active one. */
 	onTokenPicked: Function,
 	/** The signed list flags the token as a scam. */
 	flagged: {

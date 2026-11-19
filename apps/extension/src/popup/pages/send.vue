@@ -282,20 +282,21 @@ const payeeKnown = computed(() =>
 /** The recipient's name as a sentence may carry it, or null. */
 const payeeSentenceName = computed(() => (payeeName.value ? sentenceName(payeeName.value, "") || null : null))
 
-/** Payees, lower-cased, whose last send was pressed or passed over on this visit: it is offered no
- *  more until Send opens again. Marked from the person's own controls, never by watching the values,
- *  which the page also writes (a load's first token and sides, a token pick clearing the amount). */
+/** Payees, lower-cased, whose last send was pressed or passed over on this visit. Only the person's
+ *  own controls mark one: the page writes the same values itself. */
 const sendAgainSpent = reactive(new Set())
-function spendSendAgain() {
-	if (personChosen.value) sendAgainSpent.add(searchTerm.value.toLowerCase())
+const shownPayee = () => (personChosen.value ? searchTerm.value.toLowerCase() : null)
+function spendSendAgainFor(payee) {
+	if (payee) sendAgainSpent.add(payee)
 }
+const spendSendAgain = () => spendSendAgainFor(shownPayee())
 
 /** The last send to this person, offered while the form does not already hold it and until it is used
  *  or passed over. A record that kept no sides, or whose token can no longer arrive on its side,
  *  offers nothing. */
 const sendAgain = computed(() => {
-	const chosen = personChosen.value && !sendAgainSpent.has(searchTerm.value.toLowerCase())
-	const last = chosen ? lastSendTo(pastSends.value, searchTerm.value) : null
+	const payee = shownPayee()
+	const last = payee && !sendAgainSpent.has(payee) ? lastSendTo(pastSends.value, payee) : null
 	const token = last && tokenById(last.tokenId)
 	if (!last || last.arrival === null || !token) return null
 	if (!canSwitchReceiver(token) && forcedSide(token) !== last.arrival) return null
@@ -329,10 +330,12 @@ function choosePerson(address, candidate) {
 	personChosen.value = true
 	nextTick(focusForm)
 }
-/** The form opens on the amount, which takes no focus with nothing to spend; then the token row. */
+/** The amount refuses focus with nothing to spend; the token row then takes it. */
 function focusForm() {
 	amountCardRef.value?.focusAmount()
-	if (!pageEl.value?.contains(document.activeElement)) pageEl.value?.querySelector('[data-testid="send-token-trigger"]')?.focus()
+	if (document.activeElement?.getAttribute("data-testid") !== "send-amount-input") {
+		pageEl.value?.querySelector('[data-testid="send-token-trigger"]')?.focus()
+	}
 }
 /** Back to the person step keeps the token and the amount; the amount card unmounts, so a USD
  *  session ends first, in the token amount it settled on. */
@@ -805,13 +808,15 @@ const submitLabel = computed(() =>
 let keepFormFor
 async function pickAddedToken(token) {
 	const epoch = appStore.scopeEpoch
+	// The import was made on this payee's form, whichever form shows once the list is read.
+	const payee = shownPayee()
 	const current = cacheStore.activeTokenIdx
 	const listed = () => tokens.value.some((t) => t.id === token.id)
 	if (!listed()) await reloadTokens().catch(onReadFailed)
 	// Only a token the list holds can be active: any other leaves the card with no token. A token
 	// picked while the list was read is the later choice, and keeps its own form.
 	if (cancelled || appStore.scopeEpoch !== epoch || cacheStore.activeTokenIdx !== current || !listed() || current === token.id) return
-	spendSendAgain()
+	spendSendAgainFor(payee)
 	keepFormFor = token.id
 	cacheStore.activeTokenIdx = token.id
 }

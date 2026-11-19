@@ -321,7 +321,6 @@ describe("SelectTokenPopup", () => {
 
 		await nextTick()
 		expect(wrapper.find('[data-testid="select-token-row"][data-symbol="TWO"]').attributes("data-selected")).toBe("true")
-		// The active token picked again changes nothing, so it reports nothing.
 		await wrapper.find('[data-testid="select-token-row"][data-symbol="TWO"]').trigger("click")
 		expect(onPicked).toHaveBeenCalledTimes(1)
 		expect(wrapper.emitted("onClose")).toHaveLength(2)
