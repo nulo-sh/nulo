@@ -77,6 +77,7 @@ import {
 	waitForFreshBalanceRow,
 	waitForShownAccount,
 	waitForToast,
+	waitForToastGone,
 } from "../fixtures/helpers"
 import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
 import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
@@ -336,6 +337,8 @@ async function pickPreferences(page: Page, release: ReleaseTraits, send: { recip
 	await navigateByHash(page, "#/popup/general", 15_000)
 	await navigateToTokenDetail(page)
 	await pinFromTokenPage(page)
+	// The pin's toast lasts 2 s and covers the foot of the popup, where the Fee sheet's Done sits.
+	await waitForToastGone(page, "Pinned to Home")
 	await navigateByHash(page, "#/popup/general", 15_000)
 	await pickReleaseSendFee(page, release, { recipient: send.recipient, method: sandboxFeeMethod(release), saveFor: send.account })
 	await navigateByHash(page, "#/popup/general", 15_000)
