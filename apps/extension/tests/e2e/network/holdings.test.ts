@@ -4,20 +4,14 @@
  * token. Two deployed tokens join the fixture's TST: ZED (funded above TST) and EMPTY (never
  * minted, so its projected balance is a genuine 0). Each import is waited for with the fixture's
  * freshness-gated row check, so the assertions never race the balance projector. The second test
- * adds tokens of its own, so it runs after the first and deploys a fresh contract on every attempt.
+ * adds tokens of its own, so it runs after the first and deploys a fresh contract on every attempt:
+ * Add imports in one press, and the popup it replaced never opens.
  */
 
 import { expect, inject } from "vitest"
 import { test as base, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
 import { extraTokensFixture } from "../fixtures/extra-tokens"
-import {
-	clickNewTokenSubmit,
-	openHoldings,
-	seedUsdQuoteAndReload,
-	submitNewTokenPopup,
-	waitForNewTokenAddress,
-	waitForToastGone,
-} from "../fixtures/helpers"
+import { openHoldings, seedUsdQuoteAndReload, waitForToast, waitForToastGone } from "../fixtures/helpers"
 import { shotSend } from "../fixtures/send-page"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
@@ -105,7 +99,7 @@ test.skipIf(!hasConfig)(
 )
 
 test.skipIf(!hasConfig)(
-	"holdings: a pasted contract address adds its token; one with no contract says there is no token there",
+	"holdings: one press on Add imports a pasted contract and focuses its row; one with no contract is refused there",
 	{ timeout: 420_000 },
 	async ({ tokenReadyExtension }) => {
 		const { deployExtraTokensForAccount } = await import("../fixtures/aztec")
@@ -114,30 +108,41 @@ test.skipIf(!hasConfig)(
 		])
 		const page = await openPopup(tokenReadyExtension)
 		await waitForHash(page, "#/popup/general")
+		await seedUsdQuoteAndReload(page)
 		await openHoldings(page)
+		// A fiat line needs the signed list's mapping, and Add opens the popup until that list is read.
+		await page.waitForFunction(
+			() => document.querySelector('[data-testid="holdings-page"] [data-testid="token-fiat"]')?.textContent?.trim().startsWith("≈ $"),
+			{ timeout: 60_000 },
+		)
 
 		await replaceInputValue(page, '[data-testid="holdings-search"]', pasted)
 		await clickByTestId(page, "holdings-add-token")
-		await waitForNewTokenAddress(page, pasted)
-		await submitNewTokenPopup(page)
+		await waitForToast(page, "Token added", 60_000)
 		await page.waitForSelector('[data-testid="holdings-page"] [data-testid="token-symbol"][data-symbol="PASTE"]', {
 			visible: true,
 			timeout: 30_000,
 		})
-		// A success toast closes itself after two seconds; it would sit over the next popup's field.
+		await page.waitForFunction(
+			() =>
+				document.activeElement?.matches('[data-testid="tokens-card"]') &&
+				document.activeElement.querySelector('[data-testid="token-symbol"]')?.getAttribute("data-symbol") === "PASTE",
+			{ timeout: 5_000 },
+		)
+		expect(await page.$('[data-testid="token-address-field"]')).toBeNull()
 		await waitForToastGone(page, "Token added", 10_000)
 
 		await replaceInputValue(page, '[data-testid="holdings-search"]', NO_CONTRACT)
 		await clickByTestId(page, "holdings-add-token")
-		await waitForNewTokenAddress(page, NO_CONTRACT)
-		await clickNewTokenSubmit(page)
 		await page.waitForFunction(
 			() =>
-				document.querySelector('[data-testid="new-token-error"]')?.textContent?.trim() ===
+				document.querySelector('[data-testid="holdings-add-token-error"]')?.textContent?.trim() ===
 				"There is no token at this address on this network.",
 			{ timeout: 60_000 },
 		)
-		await shotSend(page, "new-token-error", "new-token-error")
+		expect(await page.evaluate(() => document.activeElement?.getAttribute("data-testid"))).toBe("holdings-add-token")
+		expect(await page.$('[data-testid="token-address-field"]')).toBeNull()
+		await shotSend(page, "holdings-add-token-error", "holdings-add-token-error")
 
 		expect(tokenReadyExtension.consoleErrors).toEqual([])
 		expect(tokenReadyExtension.pageErrors).toEqual([])

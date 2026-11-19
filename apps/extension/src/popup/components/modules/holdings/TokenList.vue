@@ -3,13 +3,14 @@
  * The full token list, presentational: the host owns the clients and hands in rows, prices, the
  * dust threshold and the pinned set; the list owns its search, sort and fold, reset on every mount.
  */
-import type { PropType } from "vue"
-import { computed, ref, useId } from "vue"
+import type { ComponentPublicInstance, PropType } from "vue"
+import { computed, ref, useId, useTemplateRef } from "vue"
 import { SectionLabel } from "@nulo/design"
 import ListStatusMessage from "@/components/composite/ListStatusMessage.vue"
 import SearchField from "@/components/composite/SearchField.vue"
 import TokenCard from "@/popup/components/modules/general/TokenCard.vue"
 import { isValidAztecAddress } from "@/utils/aztec-address"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { usdThresholdToMicro } from "@/utils/incoming-dust"
 import { stringCompare, trimAddress } from "@/utils/string"
 import { foldLabel, isHiddenHolding } from "@/utils/token-fold"
@@ -41,6 +42,10 @@ const props = defineProps({
 	dustThresholdUsd: { type: Number, default: 0 },
 	/** A listed row's balance is being re-read: one mark beside the label, none on the rows. */
 	refreshing: { type: Boolean, default: false },
+	/** The address an add runs for; `""` when none runs. */
+	adding: { type: String, default: "" },
+	/** The last add's refusal, shown while the query is the address it judged. */
+	addRefusal: { type: Object as PropType<{ address: string; message: string }>, default: undefined },
 })
 
 const query = ref("")
@@ -94,8 +99,11 @@ const showDivider = computed(() => partition.value.pinned.length > 0 && partitio
  *  no curve point gets the no-results line, never an add offer. */
 const addCandidate = computed(() => {
 	const q = query.value.trim()
+	// The add in flight keeps its row while its token's own row arrives, so the focus on it holds.
+	if (props.adding !== "" && q === props.adding) return q
 	return matching.value.length === 0 && isValidAztecAddress(q) ? q : undefined
 })
+const addRefused = computed(() => (props.addRefusal?.address === addCandidate.value ? props.addRefusal?.message : undefined))
 const addFlagged = computed(() => addCandidate.value !== undefined && props.isFlagged(addCandidate.value))
 const noResults = computed(() => query.value.trim() !== "" && matching.value.length === 0)
 const visibleCount = computed(() => matching.value.length)
@@ -103,6 +111,7 @@ const visibleCount = computed(() => matching.value.length)
 const tid = (suffix: string) => `${props.testidPrefix}-${suffix}`
 const addFlagId = useId()
 const addNoteId = useId()
+const addRefusedId = useId()
 const rowProps = (tb: Row) =>
 	props.selectable
 		? { pickPrefix: props.testidPrefix, selected: tb.token.id === props.selectedId, onPick: () => emit("pick", tb.token.id) }
@@ -111,10 +120,23 @@ const rowProps = (tb: Row) =>
 const toggleSort = () => {
 	sort.value = sort.value === "value" ? "name" : "value"
 }
+
+const root = useTemplateRef<ComponentPublicInstance>("root")
+const fold = useTemplateRef<HTMLButtonElement>("fold")
+
+/** Moves focus to a token's row, or to the fold it sits behind, only when the Add row it replaced
+ *  left focus on nothing: a control the person moved to keeps it. */
+function focusToken(tokenId: number | string) {
+	if (document.activeElement && document.activeElement !== document.body) return
+	const row = (root.value?.$el as HTMLElement | undefined)?.querySelector<HTMLElement>(`[data-token-id="${tokenId}"]`)
+	if (row) return row.focus()
+	if (partition.value.hidden.some((tb) => tb.token.id === tokenId)) fold.value?.focus()
+}
+defineExpose({ focusToken })
 </script>
 
 <template>
-	<Flex direction="column" gap="12">
+	<Flex ref="root" direction="column" gap="12">
 		<div :class="$style.sticky">
 			<SearchField v-model="query" :placeholder :testid="tid('search')" />
 		</div>
@@ -134,12 +156,15 @@ const toggleSort = () => {
 				<Button
 					wide
 					variant="secondary"
+					:loading="adding !== ''"
 					:data-testid="tid('add-token')"
-					:aria-describedby="[addFlagged && addFlagId, $slots['add-note'] && addNoteId].filter(Boolean).join(' ') || undefined"
+					:aria-describedby="[addRefused && addRefusedId, addFlagged && addFlagId, $slots['add-note'] && addNoteId].filter(Boolean).join(' ') || undefined"
+					@keydown.enter="refuseRepeatEnter"
 					@click="emit('addToken', addCandidate)"
 				>
 					<span>Add token <span class="type--meta" :data-testid="tid('add-token-address')">{{ trimAddress(addCandidate, 4, 2, "…") }}</span></span>
 				</Button>
+				<span v-if="addRefused" :id="addRefusedId" role="alert" :data-testid="tid('add-token-error')" :class="$style.add_refused">{{ addRefused }}</span>
 				<span v-if="addFlagged" :id="addFlagId" :data-testid="tid('add-token-flagged')" :class="$style.add_flagged">Flagged as a scam</span>
 				<span v-if="$slots['add-note']" :id="addNoteId" :class="$style.add_note"><slot name="add-note" /></span>
 			</template>
@@ -150,7 +175,9 @@ const toggleSort = () => {
 				<TokenCard v-for="tb in partition.rest" :key="tb.id" :tokenBalance="tb" v-bind="rowProps(tb)" />
 				<button
 					v-if="foldText"
+					ref="fold"
 					type="button"
+					@keydown.enter="refuseRepeatEnter"
 					@click="showHidden = !showHidden"
 					:data-testid="tid('fold')"
 					:data-open="showHidden || undefined"
@@ -202,6 +229,12 @@ const toggleSort = () => {
 
 .add_flagged {
 	composes: type--caption from global;
+	margin-top: 8px;
+	color: var(--txt-danger);
+}
+
+.add_refused {
+	composes: type--body from global;
 	margin-top: 8px;
 	color: var(--txt-danger);
 }

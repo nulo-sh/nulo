@@ -1368,8 +1368,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (!network) return
 
 		// Every TokenService.addToken call is a user-explicit add path —
-		// either the in-popup "Add custom token" form or a dApp's
-		// register_token approved through the dapp-interaction modal. Both
+		// a person's import of a pasted address (New token, or Holdings' Add) or a
+		// dApp's register_token approved through the dapp-interaction modal. Both
 		// already require the user to confirm the contract address, so the
 		// first-receive trust popup that fires moments later is redundant
 		// friction. Flip trust→trusted BEFORE the rebuild kicks scans, so the

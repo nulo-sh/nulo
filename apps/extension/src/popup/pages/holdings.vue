@@ -20,6 +20,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TaskServiceClient } from "@/wallet/services/task/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
+import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Utils */
 import { managers } from "@/utils/core"
@@ -34,6 +35,7 @@ import { useConfigRead } from "@/composables/useConfigRead"
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
 import { type TokenBalanceSnapshotState, useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
+import { useTokenImport } from "@/composables/useTokenImport"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -121,7 +123,31 @@ const awaitingPrices = computed(
 	() => showFiatValues.value && !error.value && (isLoading.value || awaitingFirstPriceAnswer(rows.value, prices)),
 )
 
-const openAddToken = (address: string) => popupStore.open("new_token", { address })
+const tokenService = new TokenServiceClient()
+const importer = useTokenImport({ tokenService, tokenBalanceService, taskService })
+/** The address an add runs for, and the last refusal with the address it judged. */
+const adding = ref("")
+const addRefusal = ref<{ address: string; message: string }>()
+/** Bumped by each add and each scope change: an add whose screen is gone touches nothing. */
+let addRun = 0
+const tokenList = useTemplateRef<{ focusToken: (tokenId: number) => void }>("tokenList")
+
+/** Add imports with the New token popup's own checks. A flagged address keeps the popup, and so
+ *  does any address pasted before the signed list is read, when no flag can be known. */
+async function addPasted(address: string) {
+	if (adding.value) return
+	if (!prices.mapped.value || isFlaggedAddress(address)) return popupStore.open("new_token", { address })
+	const mine = ++addRun
+	addRefusal.value = undefined
+	adding.value = address
+	const outcome = await importer.importPasted(address)
+	if (mine !== addRun) return
+	adding.value = ""
+	if (outcome.kind === "refused" && outcome.inScope) addRefusal.value = { address, message: outcome.message }
+	if (outcome.kind !== "added" || !outcome.inScope) return
+	await nextTick()
+	if (mine === addRun) tokenList.value?.focusToken(outcome.token.id)
+}
 
 const summary = useTemplateRef<ComponentPublicInstance>("summary")
 const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
@@ -175,6 +201,11 @@ watch(
 	() => {
 		rows.value = []
 		balancesState.value = "loading"
+		// The add's wait ends with its screen; a profile switch would otherwise never send its row.
+		addRun++
+		importer.abort()
+		adding.value = ""
+		addRefusal.value = undefined
 		void balances.fetchTokenBalances()
 		readTasks()
 		void pins.refresh()
@@ -199,6 +230,8 @@ onBeforeUnmount(() => {
 	fiatRead.dispose()
 	dustRead.dispose()
 	pins.dispose()
+	importer.dispose()
+	tokenService.disconnect()
 })
 </script>
 
@@ -228,6 +261,7 @@ onBeforeUnmount(() => {
 			<span v-else-if="error" :class="$style.error" data-testid="holdings-error">Couldn't load holdings</span>
 			<TokenList
 				v-else
+				ref="tokenList"
 				:rows="rows"
 				:pinnedContracts="pins.pinnedContracts.value"
 				:fiatOf="fiatOf"
@@ -235,7 +269,9 @@ onBeforeUnmount(() => {
 				:dustThresholdUsd="dustThresholdUsd"
 				:isFlagged="isFlaggedAddress"
 				:refreshing="refreshing"
-				@addToken="openAddToken"
+				:adding="adding"
+				:addRefusal="addRefusal"
+				@addToken="addPasted"
 			/>
 		</Flex>
 	</Flex>
