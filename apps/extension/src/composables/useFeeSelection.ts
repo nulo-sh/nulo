@@ -169,6 +169,9 @@ interface AppCtx extends FeeSelectionInput {
 	chosenUnasked: boolean
 	/** Counts explicit picks: a re-pick of the selected row leaves the reference unchanged. */
 	pickSeq: number
+	/** This mount's picks by `pickSlot`: newer than any read, and a save still pending or refused has
+	 *  not stored them. */
+	ownPicks: Record<string, AppPick>
 }
 
 /** The dApp-locked method's fresh row from `methods` (balance-aware), never a saved record. */
@@ -178,9 +181,16 @@ const lockedOption = (c: AppCtx) => c.methods.value.find((m) => m.type === c.loc
  * Persist the user's explicit selection. Idempotent: re-saving the same
  * selection is safe. Called only from the pick — never from data-refresh paths.
  */
-async function persistSelection(c: AppCtx, method: FeeMethodOption) {
-	const update: FeePickUpdate = { kind: "app", address: c.props.account!.address, pick: savedSelectionOf(method) }
+async function persistSelection(c: AppCtx, pick: AppPick) {
+	const update: FeePickUpdate = { kind: "app", address: c.props.account!.address, pick }
 	await c.saveFeePick(c.props.profile!.id, update)
+}
+
+/** The saved picks, with this mount's own pick for the scope's account over them. */
+async function readSavedPicks(c: AppCtx, scope: BalanceScope): Promise<Record<string, AppPick>> {
+	const saved = (await c.getFeePicks(scope.profileId)).app
+	const own = c.ownPicks[pickSlot(scope.profileId, scope.accountAddress)]
+	return own ? { ...saved, [scope.accountAddress]: own } : saved
 }
 
 /** What a card picks unasked: the account's private Fee Juice on a balance read that can pay, then
@@ -240,7 +250,7 @@ function prefillSelection(c: AppCtx, saved: Record<string, AppPick>) {
  *  the pre-fill would clobber that run's reconcile. */
 async function loadApp(c: AppCtx, scope: BalanceScope, isCurrent: () => boolean): Promise<SelectionLoad | null> {
 	const beforeRead = { method: c.selectedMethod.value, pick: c.pickSeq }
-	const saved = (await c.getFeePicks(scope.profileId)).app
+	const saved = await readSavedPicks(c, scope)
 	if (!isCurrent()) return null
 	if (touchedSince(c, beforeRead)) return { saved, baseline: beforeRead }
 	prefillSelection(c, saved)
@@ -253,7 +263,7 @@ async function reloadApp(c: AppCtx, scope: BalanceScope): Promise<SelectionLoad>
 	// so the reconcile keeps the pick instead of re-applying a stale
 	// snapshot over it.
 	const baseline = { method: c.selectedMethod.value, pick: c.pickSeq }
-	const saved = (await c.getFeePicks(scope.profileId)).app
+	const saved = await readSavedPicks(c, scope)
 	return { saved, baseline }
 }
 
@@ -305,7 +315,9 @@ function pickForApp(c: AppCtx, m: FeeMethodOption) {
 	c.selectedMethod.value = m
 	c.pickSeq++
 	c.chosenUnasked = false
-	persistSelection(c, m).catch((error) => console.error("Failed to save the fee method", { error }))
+	const pick = savedSelectionOf(m)
+	c.ownPicks[pickSlot(c.props.profile!.id, c.props.account!.address)] = pick
+	persistSelection(c, pick).catch((error) => console.error("Failed to save the fee method", { error }))
 }
 
 function fpcUpdatedForApp(c: AppCtx, fpc: RegisteredFpc) {
@@ -330,7 +342,7 @@ function exposedForApp(c: AppCtx): FeeMethodOption | undefined {
 export function useAppFeeSelection(
 	input: FeeSelectionInput & { lockedMethod: () => string | null; fallsBack: () => boolean },
 ): FeeSelection {
-	const c: AppCtx = { ...input, selectedMethod: ref(), chosenUnasked: false, pickSeq: 0 }
+	const c: AppCtx = { ...input, selectedMethod: ref(), chosenUnasked: false, pickSeq: 0, ownPicks: {} }
 	return {
 		effectiveMethod: computed(() => exposedForApp(c)),
 		previewMethod: computed(() => undefined),

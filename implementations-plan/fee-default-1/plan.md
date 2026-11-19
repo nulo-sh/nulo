@@ -17,7 +17,7 @@ post_implementation_hardening: not scheduled
 
 # fee-default-1: the first transaction window opens on private Fee Juice when it can pay
 
-The app windows' fee card (the execute window, the two authorization popups) picks a payer unasked when nothing is remembered for the account. Today that default is Nulo's sponsor, else nothing; since Mainnet stopped offering the sponsor, a Mainnet window with nothing remembered opens with no method even when private Fee Juice could pay. After this change the default is private Fee Juice when a balance read shows it can pay, then Nulo's sponsor, else nothing. Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Paths are under `apps/extension/src/` unless they name another root.
+The app windows' fee card (the execute window, the two authorization popups) picks a payer unasked when nothing is remembered for the account. Today that default is Nulo's sponsor, else nothing; since Mainnet stopped offering the sponsor, a Mainnet window with nothing remembered opens with no method even when private Fee Juice could pay. After this change the default is private Fee Juice when a balance read shows it can pay, then Nulo's sponsor, else nothing. Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consult: [lessons/phase-1.md](lessons/phase-1.md). Paths are under `apps/extension/src/` unless they name another root.
 
 ## The issue, checked (#1879)
 
@@ -38,7 +38,7 @@ The app windows' fee card (the execute window, the two authorization popups) pic
 3. On a first load the reconcile runs before the gate opens, so `methods` is built without balances (`useFeeSnapshot.ts:86-106`): a `private_fpc` row there is not `disabled` even when the balance is zero or unread. `isEligible` (`fee-privacy.ts:30-41`) reads the balances themselves: the PrivateFPC row present and a private balance read as a non-zero string.
 4. `buildFeeMethods` offers the private row only for the protocol PrivateFPC (`fee-helpers.ts:216`); a non-protocol one yields a row with `fpc: null`.
 
-**Asks:** OA-1, Mainnet with private Fee Juice unable to pay but public Fee Juice able: should the window default to public Fee Juice? Left as today (nothing selected) until answered.
+**Asks:** OA-1, Mainnet with private Fee Juice unable to pay but public Fee Juice able: should the window default to public Fee Juice? Left as today (nothing selected) until answered. OA-2, where Nulo's sponsor is offered (Testnet, local): private Fee Juice first (built, D2) or the free sponsor first?
 
 ## Decisions
 
@@ -48,28 +48,33 @@ The app windows' fee card (the execute window, the two authorization popups) pic
 | D2 | Private Fee Juice before Nulo's sponsor on every chain | sponsor first, private only where no sponsor is offered | the owner's words ask for private Fee Juice as the default, unconditionally; the brief orders it first. Consequence: on Testnet an account holding private Fee Juice now opens on it instead of the free sponsor (UI impact) |
 | D3 | Eligibility from `isEligible` over `snapshot.gasBalances`, not the row's `disabled` | `!row.disabled` | Fact 3: on a first load a zero or unread balance leaves the row enabled; a mutation of D1 to `!disabled` reds 9 tests |
 | D4 | No stored key, no migration, no view change: the default stays unsaved and `chosenUnasked` keeps marking it (an edited PrivateFPC drops it, as an edited sponsor default is dropped) | saving the default | Fact 2; the brief |
+| D5 | The app windows read their saved picks under this mount's own pick for the account (`ownPicks`, in memory, by `pickSlot`), as Send's `loadSend` already does | keep the current selection on every recovery; leave it | Codex F1: a pick made while the first read is degraded, whose save has not landed (pending or refused) when the recovery re-reads storage, was reconciled away to the default, now possibly the account's own private Fee Juice; the overlay keeps "a remembered pick wins" without changing how a saved pick resolves |
 
 ## UI impact
 
 The app windows' fee card (execute window, Change and Revoke authorizations popups), only when no pick is remembered for the account:
 - **Mainnet, private Fee Juice can pay.** Before: trigger "Select method", no cost row, Confirm waits. After: trigger "Private Fee Juice", the estimate runs, "You pay" shows. Frames `fd-before-*`, `fd-after-*`.
-- **Testnet or local network, private Fee Juice can pay.** Before: Nulo's sponsor ("Sponsored", You pay Nothing). After: Private Fee Juice (the account pays from its private balance). D2.
+- **Testnet or local network, private Fee Juice can pay.** Before: Nulo's sponsor ("Sponsored", You pay Nothing). After: Private Fee Juice (the account pays from its private balance). D2, OA-2. Frames `fd-testnet-before-*`, `fd-testnet-after-*`.
 - **Private Fee Juice cannot pay** (read as zero, unread, failed, or no protocol PrivateFPC): unchanged; Nulo's sponsor where offered, else nothing. Frame `fd-cannot-pay-*` (Mainnet).
 No copy, layout, row or format changes. Sign-off: the owner's words (Fact 1) ask for this default; the frames go to the owner through the orchestrator, and the PR stays a draft until then.
 
 ## Security & Adversarial Considerations
 
-- **A default over a remembered pick:** impossible by order; the saved pick and a pick made during the read are consulted first (Fact 2). Tested: a saved Public Fee Juice pick and a pick made during the read both win while private Fee Juice can pay.
+- **A default over a remembered pick:** the saved pick, this mount's own pick (D5) and a pick made during the read are consulted first (Fact 2). Tested: a saved Public Fee Juice pick, a pick made during the read, and a pick whose save never landed across a recovery all win while private Fee Juice can pay; an unpicked default re-derives from the recovered balances.
 - **A default that cannot pay:** eligibility needs a positive read (D3); zero, `null`, a failed whole read and a non-protocol PrivateFPC each fall back (one test per class). A private balance below this fee is caught where a picked Private Fee Juice is today, by the estimate.
-- **Balance read racing the default:** the default is computed inside the synchronous commit from the balances it commits; before the commit nothing is defaulted; a recovery reconcile re-derives it from the new balances only while nobody picked.
-- **dApp influence:** a dApp chooses the operation's network and can lock "fj"; a lock still wins (`reconcileSelection`). It cannot make the wallet pick private Fee Juice unless the account's own balance can pay. Paying privately publishes no payer address; nothing new crosses a boundary. No permission, log line, storage, message or dependency changes. Known limits: none.
+- **Balance read racing the default:** the default is computed inside the synchronous commit from the balances it commits; before the commit nothing is defaulted; a recovery reconcile re-derives it from the new balances only while nobody picked. The committed balances can be the reader's cache (5 minutes, invalidated by this wallet's settled transactions only): a balance moved from elsewhere inside that window gives today's no-default (cached zero) or a Private Fee Juice whose estimate refuses (cached positive). Known limit (Codex F2): forcing a fresh read on every app window would slow every window, a behaviour change outside this lane.
+- **dApp influence:** a dApp chooses the operation's network and can lock "fj"; a lock still wins (`reconcileSelection`). It cannot make the wallet pick private Fee Juice unless the account's own balance can pay. Paying privately publishes no payer address; nothing new crosses a boundary. No permission, log line, storage, message or dependency changes.
 
 ## Phase 1: the default, its tests, the gates
 
-1. Red first: `useFeeSelection.test.ts` (the default by class; the remembered-pick and during-read controls), `OperationCard.fee.test.ts` (wire-shaped Mainnet window: opens on Private Fee Juice and saves nothing; zero and unread leave it unselected). The identity-switch test in `FeeSettingsCard.test.ts` gives identity B a zero private balance so B's default still differs from A's saved pick. Then D1. Commit.
+1. Red first: `useFeeSelection.test.ts` (the default by class; the remembered-pick, during-read and unsaved-pick-across-recovery controls), `OperationCard.fee.test.ts` (wire-shaped Mainnet window: opens on Private Fee Juice and saves nothing; zero and unread leave it unselected). The identity-switch test in `FeeSettingsCard.test.ts` gives identity B a zero private balance so B's default still differs from A's saved pick, and asserts no emission after B's commit names A's pick. Then D1 and D5. Commit.
 2. Gate, retry 0: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`; `bun run check:plans` after staging; the new tests red on the base `useFeeSelection.ts`.
-3. E2E, Chrome, one `e2e:agent` run of the network specs that read the windows' fee card testids: `tx-sendTx-default`, `tx-sendTx-sponsoredFpc`, `tx-sendTx-selfPay`, `tx-sendTx-feePayer`, `fee-sponsor-funding`, `fee-shortfall-recheck`, `popup-escape-layered`, `type-roles-windows`. None funds private Fee Juice, so each should keep its sponsor or locked default; the specs that do fund it (`selfpay-phase`, `same-token-concurrent-sends`) pick explicitly or are locked. No Firefox: no focus, window or fixture change.
-4. Captures: a Vite capture page (the real `OperationCard` over fake clients, uncommitted, under `apps/extension/capture/`), 400 px, 2x, light and dark, into the lane's scratch `shots/` with `captions.json`.
+3. E2E, Chrome, one `e2e:agent` run of the network specs that read the windows' fee card testids: `tx-sendTx-default`, `tx-sendTx-sponsoredFpc`, `tx-sendTx-selfPay`, `tx-sendTx-feePayer`, `fee-sponsor-funding`, `fee-shortfall-recheck`, `popup-escape-layered`, `type-roles-windows`. Of these only `fee-shortfall-recheck` holds private Fee Juice (`feeJuiceImportedExtension` mints 1,000 FJ, `fixtures/aztec.ts:566`), and it drives Send, whose rule is unchanged; every spec that opens an app window while holding private Fee Juice (`selfpay-phase`, `same-token-concurrent-sends`, `send-chaos`) picks a payer explicitly or is locked. No Firefox: no focus, window or fixture change.
+4. Captures: a Vite capture page (the real `OperationCard` over fake clients, uncommitted, under `apps/extension/capture/`), 400 px, 2x, light and dark, into the lane's scratch `shots/` with `captions.json`: `fd-before`, `fd-after`, `fd-cannot-pay` (Mainnet), `fd-testnet-before`, `fd-testnet-after` (for OA-2).
+
+## Audit verdicts
+
+- **Codex, the one bounded pass** (gpt-6.1-sol, high, read-only, plan and diff at `91f749aaf`): `findings: 2 material, 2 minor`. F1 (material, plausible, traced): an unsaved pick lost to the default on recovery, accepted, D5 with a red-first test. F2 (material, plausible): the reader's 5-minute cache can stale the default, a known limit (Security). F3 (minor): the identity test checked only the final settings, accepted. F4 (minor, demonstrated): Phase 1 step 3 said no listed spec funds private Fee Juice, corrected. On D2 Codex leans sponsor-first where a sponsor is offered (moderate); recorded as OA-2, the build keeps the brief's order. It found the commit order sound and no comment finding. Targeted verification of D5: below.
 
 ## Delivery
 

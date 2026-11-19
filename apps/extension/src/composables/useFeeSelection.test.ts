@@ -344,6 +344,28 @@ describe("the app windows' rule book", () => {
 		touched.stop()
 	})
 
+	test("a recovery keeps a pick its save has not stored, and re-derives an unpicked default from the new balances", async () => {
+		// The harness records saves without storing them, as a save still pending or refused leaves storage.
+		const recover = async (t: ReturnType<typeof setup>) => {
+			const load = await t.rules.reload(SCOPE)
+			t.snapshot.gasBalances.value = { publicFeeJuice: HELD, privateFeeJuice: HELD }
+			t.rules.reconcile(load, SCOPE)
+		}
+		const picked = setup({})
+		await picked.commit(undefined)
+		picked.rules.pick(picked.row("fpc", "s1")!)
+		await recover(picked)
+		expect(fpcId(picked.rules)).toBe("s1")
+
+		const defaulted = setup({})
+		await defaulted.commit(undefined)
+		expect(fpcId(defaulted.rules)).toBe("s1")
+		await recover(defaulted)
+		expect([type(defaulted.rules), fpcId(defaulted.rules)]).toEqual(["private_fpc", "p1"])
+		picked.stop()
+		defaulted.stop()
+	})
+
 	test("a pick is saved as an app pick for the live account", async () => {
 		const t = setup({})
 		await t.commit({ publicFeeJuice: HELD, privateFeeJuice: null })
