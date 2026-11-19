@@ -2,21 +2,17 @@
 <script setup>
 /** Services */
 import { TaskServiceClient } from "@/wallet/services/task/client"
-import { ContentKind } from "@/wallet/services/task/spec"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
-import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 
 /** Utils */
-import { isFieldAddress } from "@nulo/wallet-bridge"
 import { ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 
 /** Composables */
-import { useToast } from "@/composables/toast"
 import { useFormState } from "@/composables/useFormState"
 import { usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
-const { openToast } = useToast()
+import { contractVerdict, useTokenImport } from "@/composables/useTokenImport"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -34,19 +30,14 @@ const emit = defineEmits(["onClose"])
 const tokenService = new TokenServiceClient()
 const tokenBalanceService = new TokenBalanceServiceClient()
 const taskService = new TaskServiceClient()
+const importer = useTokenImport({ tokenService, tokenBalanceService, taskService })
 
 const tokens = ref([])
 
 const form = useFormState({
 	contract: {
 		initial: "",
-		validate: (v) => {
-			if (!v?.length) return null
-			if (!isFieldAddress(v)) return INVALID_ADDRESS
-			// Hex is case-insensitive: another spelling of a listed contract is that token.
-			if (tokens.value.some((t) => t.contract.toLowerCase() === v.toLowerCase())) return ALREADY_EXISTS
-			return null
-		},
+		validate: (v) => contractVerdict(v, tokens.value),
 	},
 })
 
@@ -59,14 +50,14 @@ const isAvailableToCreateToken = computed(() => {
 	if (form.fields.contract.error.value) return false
 	// Belt + suspenders for the network-switch race: keep the submit button
 	// disabled until we have a real (profile, network, account) tuple. The
-	// click handler also re-checks; this gate keeps the UI honest.
+	// import also re-checks; this gate keeps the UI honest.
 	if (!appStore.profile || !appStore.network || !appStore.account?.address) return false
 	return true
 })
 
 // 'idle' → 'adding' (parsing + addToken in flight)
 //        → 'loading-balance' (waiting for the active account's first projector run)
-const phase = ref("idle")
+const phase = importer.phase
 const error = ref()
 
 const isBusy = computed(() => phase.value !== "idle")
@@ -77,200 +68,22 @@ const submitLabel = computed(() => {
 	return "Import new token"
 })
 
-const BALANCE_WAIT_TIMEOUT_MS = 30_000
-
-// Holds the active wait so popup-close can abort it.
-let activeBalanceWait = null
-
 /** The opener's `{ address, onAdded }`, kept on show: closing a popup deletes its payload. */
 let request
 
-const closeAdded = (token, label, submittingEpoch) => {
-	const onAdded = request?.onAdded
-	openToast({ kind: "success", label })
-	emit("onClose")
-	if (appStore.scopeEpoch === submittingEpoch) onAdded?.(token)
-}
-
-/**
- * Subscribe to the two service streams BEFORE addToken is called, so we
- * cannot miss the events that fire while addToken's bg handlers are
- * still running. The wait resolves with one of:
- *   "success"  — BalanceUpdate task finished without error
- *   "error"    — BalanceUpdate task finished with task.error set
- *   "timeout"  — no terminal event in BALANCE_WAIT_TIMEOUT_MS
- *   "aborted"  — popup was dismissed mid-wait
- */
-function createBalanceWait(submittingAccount) {
-	let expectedTokenId = null
-	let pendingTbId = null
-	let timer = null
-	let resolveOutcome = null
-
-	const promise = new Promise((resolve) => {
-		resolveOutcome = (outcome) => {
-			if (!resolveOutcome) return
-			resolveOutcome = null
-			cleanup()
-			resolve(outcome)
-		}
-	})
-
-	const startTimer = () => {
-		if (timer !== null) return
-		timer = setTimeout(() => resolveOutcome?.("timeout"), BALANCE_WAIT_TIMEOUT_MS)
-	}
-
-	const onBalanceAdded = (tb) => {
-		if (pendingTbId !== null) return
-		if (expectedTokenId !== null && tb?.token?.id !== expectedTokenId) return
-		if (tb?.account !== submittingAccount) return
-		pendingTbId = tb.id
-		startTimer()
-	}
-
-	const onTaskUpdated = (task) => {
-		if (task?.content?.kind !== ContentKind.BalanceUpdate) return
-		if (pendingTbId === null || task.content.tbId !== pendingTbId) return
-		if (!task.finishedAt) return
-		resolveOutcome?.(task.error ? "error" : "success")
-	}
-
-	const cleanup = () => {
-		tokenBalanceService.onTokenBalanceAdded.remove(onBalanceAdded)
-		taskService.onTaskUpdated.remove(onTaskUpdated)
-		if (timer !== null) {
-			clearTimeout(timer)
-			timer = null
-		}
-	}
-
-	tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
-	taskService.onTaskUpdated.add(onTaskUpdated)
-
-	return {
-		promise,
-		setExpectedToken(tokenId) {
-			expectedTokenId = tokenId
-		},
-		seedPending(tbId, tokenId) {
-			expectedTokenId = tokenId
-			pendingTbId = tbId
-			startTimer()
-		},
-		abort() {
-			resolveOutcome?.("aborted")
-		},
-	}
-}
-
 const handleAddToken = async () => {
 	if (!isAvailableToCreateToken.value || phase.value !== "idle") return
-
-	// `appStore.account` can be transiently undefined immediately after a
-	// network switch if the chain had no prior accounts and the auto-create
-	// path is still in flight (see app.vue's network watcher). Surface a
-	// clear error instead of throwing inside `addToken` — without this guard
-	// the snapshot below crashes on `appStore.account.address` and the catch
-	// silently swallows it, so the popup hangs on the "Adding…" spinner with
-	// no toast.
-	if (!appStore.account?.address || !appStore.network || !appStore.profile) {
-		error.value = "Account is still loading. Please wait a moment and try again."
-		return
-	}
-
 	error.value = null
-	phase.value = "adding"
-
-	// Snapshot identity at submit time — appStore is reactive and the user
-	// could switch accounts / networks mid-wait.
-	const submittingProfileId = appStore.profile.id
-	const submittingNetworkId = appStore.network.id
-	const submittingChainId = appStore.network.chainId
-	const submittingAccount = appStore.account.address
-	const submittingEpoch = appStore.scopeEpoch
-
-	let balanceWait = null
-
-	try {
-		// Explicit connect — `EventHandler.add` does not open the port.
-		// Without this, the new TaskServiceClient never receives events.
-		await taskService.connect()
-
-		// Subscribe BEFORE addToken so we can't miss the events fired by the
-		// bg's onTokenAdded → createTokenBalance chain.
-		balanceWait = createBalanceWait(submittingAccount)
-		activeBalanceWait = balanceWait
-
-		const parsingResult = await tokenService.parseTokenInterface(submittingNetworkId, contractTerm.value)
-
-		// Registry-only path: ambiguous interfaces error out (the manual
-		// candidate-picker UX was dropped). User should ask the contract
-		// maintainer to standardize the interface or use the dApp registry
-		// flow which can pass an explicit artifact.
-		if (!parsingResult.isComplete) {
-			error.value = "Couldn't auto-detect this token's interface. Try a contract whose ABI matches a known standard."
-			balanceWait.abort()
-			return
-		}
-
-		const newToken = await tokenService.addToken(submittingProfileId, submittingNetworkId, submittingAccount, parsingResult, {
-			origin: "popup",
-		})
-		balanceWait.setExpectedToken(newToken.id)
-
-		// Chain mismatch — no TB for this account will ever be created on this chain.
-		if (newToken.chainId !== submittingChainId) {
-			balanceWait.abort()
-			openToast({ kind: "success", label: "Token added" })
-			emit("onClose")
-			return
-		}
-
-		// Re-import / already-synced shortcut. addToken is idempotent
-		// (token/service.ts:120) and won't re-emit onTokenAdded for an
-		// existing token, so there'd be no event to wait for.
-		const existing = await tokenBalanceService.getTokenBalances(newToken.id, submittingAccount)
-		if (existing.length > 0 && (existing[0].updatedAt ?? 0) > 0) {
-			balanceWait.abort()
-			closeAdded(newToken, "Token added", submittingEpoch)
-			return
-		}
-
-		// If a TB already exists (rare race), seed pendingTbId so the timer
-		// can start immediately instead of waiting for an event that's already
-		// past.
-		if (existing.length > 0) {
-			balanceWait.seedPending(existing[0].id, newToken.id)
-		}
-
-		phase.value = "loading-balance"
-		const outcome = await balanceWait.promise
-
-		switch (outcome) {
-			case "success":
-				closeAdded(newToken, "Token added", submittingEpoch)
-				break
-			case "timeout":
-				closeAdded(newToken, "Token added. Balance will appear in a moment", submittingEpoch)
-				break
-			case "error":
-				closeAdded(newToken, "Token added. Couldn't load balance. We'll retry automatically.", submittingEpoch)
-				break
-			case "aborted":
-				// Popup was dismissed by the user mid-wait. Bg keeps refreshing.
-				break
-		}
-	} catch (err) {
-		// Only a lookup the node answered empty has copy of its own; any other refusal's text is a
-		// developer's, for the log.
-		error.value =
-			err instanceof ContractNotFoundError ? "There is no token at this address on this network." : "Something went wrong. Try again."
-		console.debug("[new-token] add refused", { reason: err })
-		balanceWait?.abort()
-	} finally {
-		activeBalanceWait = null
-		phase.value = "idle"
+	// `EventHandler.add` does not open the port: without it this client never receives the events the
+	// balance wait listens for.
+	void taskService.connect()
+	const outcome = await importer.importToken(contractTerm.value)
+	if (outcome.kind === "refused") {
+		error.value = outcome.message
+	} else if (outcome.kind === "added") {
+		const onAdded = request?.onAdded
+		emit("onClose")
+		if (outcome.inScope) onAdded?.(outcome.token)
 	}
 }
 
@@ -286,18 +99,15 @@ usePopupEntity(
 		onShow: async () => {
 			// Cleared again on open: a disconnect rejection can repopulate the error after hide reset it.
 			error.value = null
-			phase.value = "idle"
 			request = popupStore.getPayload("new_token")
 			tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
 			if (request?.address) contractTerm.value = request.address
 		},
 		onHide: () => {
 			request = undefined
-			activeBalanceWait?.abort()
-			activeBalanceWait = null
+			importer.abort()
 			form.reset()
 			error.value = null
-			phase.value = "idle"
 			taskService.disconnect()
 			tokenBalanceService.disconnect()
 			tokenService.disconnect()
@@ -305,6 +115,8 @@ usePopupEntity(
 	},
 	{ submitWaitsForShow: true },
 )
+
+onBeforeUnmount(() => importer.dispose())
 </script>
 
 <template>
