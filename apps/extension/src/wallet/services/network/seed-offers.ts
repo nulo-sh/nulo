@@ -5,13 +5,21 @@ import type { DefaultSeed } from "./seeds"
 import { type ChainKind, ChainKindSchema } from "./spec"
 
 /** Per-profile raw `storage.local` root (`<root>@<profileId>`): the default seeds a profile has been
- *  offered, by kind, and the ones added to it after it had networks whose arrival the person has not
- *  answered yet. Never in a backup slice: a restored profile is seeded afresh. */
+ *  offered, by kind, the ones added to it after it had networks whose arrival the person has not
+ *  answered yet, and the kinds whose network has been offered Nulo's relay. Never in a backup slice:
+ *  a restored profile is seeded afresh. */
 export const SEED_OFFERS_ROOT = "nulo:core:network-seeded"
 
 export const seedOffersKey = (profileId: string) => `${SEED_OFFERS_ROOT}@${profileId}`
 
-export const SeedOffersSchema = z.object({ offered: z.array(ChainKindSchema), announce: z.array(ChainKindSchema).optional() })
+export const SeedOffersSchema = z.object({
+	offered: z.array(ChainKindSchema),
+	announce: z.array(ChainKindSchema).optional(),
+	/** Kinds whose network was given the relay, seeded or appended, or passed over at the unlock
+	 *  because its primary was not the seeded one: never offered again, so a removed relay stays
+	 *  removed. Absent on a record written before the relay. */
+	relay: z.array(ChainKindSchema).optional(),
+})
 export type SeedOffers = z.infer<typeof SeedOffersSchema>
 
 /**
@@ -27,10 +35,14 @@ export async function readSeedOffers(storage: StorageArea, profileId: string): P
 	return decodeRow(SeedOffersSchema, res[key])
 }
 
-/** Sorted and deduplicated, with no `announce` key while it names nothing. */
-export function normalizeSeedOffers({ offered, announce }: SeedOffers): SeedOffers {
+/** Sorted and deduplicated, with no `announce` or `relay` key while it names nothing. */
+export function normalizeSeedOffers({ offered, announce, relay }: SeedOffers): SeedOffers {
 	const sorted = (list: readonly ChainKind[]) => [...new Set(list)].sort()
-	return announce?.length ? { offered: sorted(offered), announce: sorted(announce) } : { offered: sorted(offered) }
+	return {
+		offered: sorted(offered),
+		...(announce?.length ? { announce: sorted(announce) } : {}),
+		...(relay?.length ? { relay: sorted(relay) } : {}),
+	}
 }
 
 export function sameSeedOffers(a: SeedOffers, b: SeedOffers): boolean {

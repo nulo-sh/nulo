@@ -28,7 +28,7 @@ PRIVATE BY DEFAULT
 
 YOURS ALONE
 • Your keys stay on your device, behind your password or passkey.
-• No account, no telemetry. Not audited. See the Privacy Policy for what leaves your device.
+• No account, no telemetry. See the Privacy Policy for what leaves your device.
 • Back up your profile whenever you want.
 
 APPS HAVE TO ASK
@@ -36,7 +36,7 @@ APPS HAVE TO ASK
 • Every transaction it proposes waits for your yes.
 • Settings → Connected Apps lists every permission and lets you take it back.
 
-Open source, Apache-2.0: https://github.com/nulo-sh/nulo
+Open source, Apache-2.0, not audited: https://github.com/nulo-sh/nulo
 
 ### Data inventory
 
@@ -48,8 +48,8 @@ destination the user chooses (the node) or installs (the local prover) is still 
 | Recovery entropy, master secret, signing keys | Extension local storage, encrypted | Only when the user exports a backup file, or an account file (one account's signing key) | The file the user saves (`downloads`) |
 | Passkey credential id and the random value it is used with | Extension local storage | Only to the browser and the user's authenticator, during a passkey prompt; never in a backup or an account file | The browser and the user's authenticator |
 | Passkey label ("Nulo wallet · \<profile name\>") | Handed to WebAuthn at creation, `wallet/utils/passkey-ceremony.ts:40-44` | Yes | The browser and the user's authenticator; the authenticator's provider may sync it (`legal/privacy.md` § 5.4) |
-| Account addresses | Extension local storage, encrypted | Yes | The configured Aztec node (queries name the address); approved applications; the files the user exports |
-| Balances, transactions, proofs | Extension local storage; private state in the browser's OPFS, encrypted | Yes | The configured Aztec node; approved applications for what the user confirms; a backup file the user exports (balances and transactions) |
+| Account addresses | Extension local storage, encrypted | Yes | The configured Aztec node (queries name the address), which on Alpha and Testnet is Nulo's relay while the endpoint before it fails (§ 5.12); approved applications; the files the user exports |
+| Balances, transactions, proofs | Extension local storage; private state in the browser's OPFS, encrypted | Yes | The configured Aztec node, Nulo's relay included (§ 5.12); approved applications for what the user confirms; a backup file the user exports (balances and transactions) |
 | Proving inputs (witnesses) | Process memory | Only with the optional local prover installed | `127.0.0.1` (`legal/privacy.md` § 5.8) |
 | Public proving parameters | Browser cache | Downloaded, never uploaded | `crs.aztec-cdn.foundation`, fallback `crs.aztec-labs.com` (§ 5.9) |
 | Token prices | Extension local storage (cache) | A request naming the tokens, no address | CoinGecko, unless fiat display is off (§ 5.2) |
@@ -179,23 +179,10 @@ match them.
 
 ### Release notes
 
-The version's "Release notes" field, which Chrome's dashboard does not have. It covers the span
-since the last version the store listed, not since the last tag: for 1.1.0 that is 0.31.0.0, so it
-names the 1.0.0 changes too, led by the one an existing user must act on.
-
-```
-The first stable Nulo V6, on Aztec's Alpha V6.
-
-• Alpha V6, Aztec's main network, is now the default; Testnet stays beside it. Testnet was reset with Aztec 6.0.0, so a profile from an earlier version is offered a Testnet reset when it opens.
-• Passkey profiles keep a recovery phrase their passkey unlocks. A passkey profile made with an earlier version needs to be set up again. After a phrase import or a backup restore you choose how to unlock.
-• Everything the wallet stores is encrypted under each profile's key: accounts, contacts, tokens, balances, activity, app sessions and networks.
-• Updated Terms and Privacy Policy, shown once for acceptance.
-• App windows read a multi-call transaction as rows, show what a grant reaches, and ask again when a fee rises above the approved figure.
-• Default tokens come from a signed list; a token off the list is flagged with a warning.
-• On Firefox, passkey steps run in a sidebar and Presto's loopback permission is asked in place.
-• Redrawn icons, a shield and a globe for private and public, settings search, and every page fits a 240 px window.
-• Over a hundred fixes across send, backup, connect, import and the activity view.
-```
+The version's "Release notes" field, which Chrome's dashboard does not have. The Firefox store job
+sends `release-notes/X.Y.Z.md` as the version's `release_notes`; nothing is pasted by hand. The
+`release` skill (§ Release notes) says who writes the file and what it may hold, and what to paste
+when the previous stable never reached AMO.
 
 ### Privacy policy text
 

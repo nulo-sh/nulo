@@ -149,8 +149,16 @@ describe("NodeStatusSchema", () => {
 })
 
 describe("networkInfoFrom", () => {
-	test("projects the primary endpoint's URL, not the first endpoint's", () => {
-		expect(networkInfoFrom(network())).toEqual({ profileId: "p1", chainId: 7, rpcUrl: "https://two.example" })
+	test("lists the primary endpoint first, then the rest as stored", () => {
+		expect(networkInfoFrom(network())).toEqual({
+			profileId: "p1",
+			chainId: 7,
+			l1ChainId: 1,
+			endpoints: [
+				{ id: "e2", rpcUrl: "https://two.example" },
+				{ id: "e1", rpcUrl: "https://one.example" },
+			],
+		})
 	})
 
 	test("a primaryEndpointId that names no endpoint throws", () => {

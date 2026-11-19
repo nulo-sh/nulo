@@ -4,8 +4,10 @@
 import FeeMethodRow from "./FeeMethodRow.vue"
 import FeeCostReadout from "./FeeCostReadout.vue"
 import FeeAmount from "@/components/composite/FeeAmount.vue"
+import mark from "@/components/composite/send/publish-mark.module.css"
 import FeePriorityRow from "./FeePriorityRow.vue"
 import FeeMethodSelector from "./FeeMethodSelector.vue"
+import FeeMethodRadios from "./FeeMethodRadios.vue"
 
 /** Vendor */
 import { getRandomHex } from "@/wallet/utils"
@@ -22,7 +24,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 /** Helpers */
 import {
 	buildFeeMethods,
-	FEE_JUICE_BRIDGE_URL,
+	feeJuiceBridgeUrl,
 	feePayerOf,
 	formatGasBalance,
 	liveFeeScope,
@@ -63,13 +65,13 @@ const props = defineProps({
 	 *  and the network's default never replace it. */
 	lockedMethod: { type: String, default: null },
 	/** "private" | "public" — the side the transfer spends from. Non-null only on the Send page, where
-	 *  the fee source follows it; null keeps the one-pick-per-account behaviour of the dApp windows. */
+	 *  the fee source follows it and the payers show as radios; null keeps the dApp windows'
+	 *  one-pick-per-account behaviour and their menu. */
 	originPrivacy: { type: String, default: null },
-	/** The page's reading of what this send's fee publishes — the selector's tag is drawn from it,
-	 *  never from this card's own selection, so the tag can only ever agree with the footer. */
-	payerNoticeShape: { type: String, default: null },
 	/** The transaction the fee is for, less its fee settings; a change is a new transaction. */
 	txShape: { type: String, default: "" },
+	/** Send's privacy warning while the payer in effect names the account. */
+	warning: { type: String, default: null },
 	/** Outside Send: a short sponsor's selection falls to the next payer of Send's public-side walk
 	 *  instead of to nothing. For a transaction whose calls are public, where paying from the
 	 *  account's own Fee Juice publishes nothing new. */
@@ -78,6 +80,8 @@ const props = defineProps({
 	queuedCap: { type: Object, default: null },
 	/** Send's amount field holds an amount; read only while the card reads what can pay. */
 	amountTyped: { type: Boolean, default: false },
+	/** Send only: what the person must enter before an estimate is asked (the cost row's `waitsFor`). */
+	waitsFor: { type: String, default: null },
 	/** The current input's estimate failed: the cost row offers `retryEstimate`. */
 	estimateFailed: { type: Boolean, default: false },
 	/** The running estimate has run long: the cost row offers `retryEstimate` beside its bar's place. */
@@ -102,11 +106,19 @@ const payerOut = defineModel("payer", { default: null })
  *  than pricing it again, since the page's own price client can hold a different quote. */
 const feeDisplayOut = defineModel("feeDisplay", { default: null })
 
-/** One-way child→parent: the cap as the readout words it, for the review sheet, priced once here. */
-const queuedCapTextOut = defineModel("queuedCapText", { default: null })
+/** The queued cap's two figures as the card prices them, so a line elsewhere quotes the same dollars. */
+const queuedCapFiguresOut = defineModel("queuedCapFigures", { default: null })
 
 /** One-way child→parent: the fee read refused the account because its imported key does not open. */
 const accountUnusableOut = defineModel("accountUnusable", { type: Boolean, default: false })
+
+/** One-way child→parent: the notices this card shows, in its order, for a page that shows the card
+ *  closed. Each is `FeeWords`, so the fee one names is drawn whole there too. */
+const noticesOut = defineModel("notices", { type: Array, default: () => [] })
+
+/** One-way child→parent, Send only: `"private_fpc"` while the account's private Fee Juice can take
+ *  over a private send's fee that names the account, else null. `applyRemedy` picks it. */
+const remedyOut = defineModel("remedy", { type: String, default: null })
 
 const methodId = getRandomHex(6)
 
@@ -145,7 +157,7 @@ const methods = computed(() =>
 	}),
 )
 
-/** The dropdown's rows: `methods` once the live identity's snapshot is in. Before that, rows come
+/** The rows on offer: `methods` once the live identity's snapshot is in. Before that, rows come
  *  from that identity's early FPC list alone, never another identity's, and load wherever no read
  *  has answered them. Display only: no selection is ever resolved against them. */
 const menuMethods = computed(() => {
@@ -174,10 +186,10 @@ const selectionInput = {
 	saveFeePick: (profileId, update) => managers.uiPreference.saveFeePick(profileId, update),
 }
 /** Chosen once: Send always passes an origin, the app windows never do. */
-const rules =
-	props.originPrivacy !== null
-		? useSendFeeSelection({ ...selectionInput, origin: () => props.originPrivacy })
-		: useAppFeeSelection({ ...selectionInput, lockedMethod: () => props.lockedMethod, fallsBack: () => props.fallsBack })
+const onSend = props.originPrivacy !== null
+const rules = onSend
+	? useSendFeeSelection({ ...selectionInput, origin: () => props.originPrivacy })
+	: useAppFeeSelection({ ...selectionInput, lockedMethod: () => props.lockedMethod, fallsBack: () => props.fallsBack })
 const { effectiveMethod, previewMethod, held, sponsorShort, feeJuiceMissing } = rules
 
 const feeJuiceBalanceFormatted = computed(() =>
@@ -205,19 +217,20 @@ const queuedCapDisplay = computed(() => {
 const nudgeCopy = computed(() =>
 	props.originPrivacy === "private"
 		? {
-				title: "You have no private gas yet",
-				body: "A private send pays its fee from private gas, so the fee contract is the payer instead of you. Bridge some to cover this send.",
-				link: "Get private gas",
+				title: "You have no private Fee Juice yet",
+				body: "A private send pays its fee from private Fee Juice, which keeps your address hidden. Bridge some to cover this send.",
+				link: "Get private Fee Juice",
 			}
-		: { title: "You have no fee juice yet", body: "Bridge some to cover the network fee.", link: "Get fee juice" },
+		: { title: "You have no Fee Juice yet", body: "Bridge some to cover the network fee.", link: "Get Fee Juice" },
 )
+const feeJuiceUrl = computed(() => feeJuiceBridgeUrl(props.network?.chainId))
 
-/** What the dropdown trigger shows: the paying method, or the saved pick's row while loading. */
+/** The paying method, or the saved pick's row while loading. */
 const displayMethod = computed(() => effectiveMethod.value ?? previewMethod.value)
 
 /** Send's read for the live identity is in flight; the app windows keep their own loading look.
  *  Priority needs no balance, so it answers before the read lands. */
-const readPending = computed(() => props.originPrivacy !== null && snapshotPending.value)
+const readPending = computed(() => onSend && snapshotPending.value)
 const showsCostRows = computed(() => readPending.value || (Boolean(effectiveMethod.value) && !feeJuiceMissing.value))
 
 /** Who pays the estimate the readout shows; an estimate shows only while a method is chosen. */
@@ -230,7 +243,7 @@ const SPONSOR_SHORT = "The sponsor you chose can't cover this fee right now."
 /** The payer that takes over, named by kind: a sponsor's row title can be the short one's too. */
 const takeoverName = (m) => {
 	if (m?.type === "fj") return "Public Fee Juice"
-	if (m?.type === "private_fpc") return "Private FPC"
+	if (m?.type === "private_fpc") return "Private Fee Juice"
 	return m?.type === "fpc" && m.fpc?.isProtocol === true ? "The default sponsor" : null
 }
 const sponsorShortText = computed(() => {
@@ -238,11 +251,36 @@ const sponsorShortText = computed(() => {
 	return name ? `${SPONSOR_SHORT} ${name} pays it instead.` : SPONSOR_SHORT
 })
 
-/** The account's own Fee Juice, read short of this estimate's fee while it pays. */
+/** The account's own Fee Juice, read short of this estimate's fee while it pays. `lastRead` is the
+ *  wallet's other read when the two still disagreed after a recheck: then the row warns, never refuses. */
 const shortfall = computed(() => {
 	const short = props.feeEstimate?.feeJuiceShortfall
-	return short && effectiveMethod.value?.type === "fj" ? shortfallFigures(short, prices.feeJuiceQuote.value?.usd) : null
+	if (!short || effectiveMethod.value?.type !== "fj") return null
+	return {
+		...shortfallFigures(short, prices.feeJuiceQuote.value?.usd),
+		lastRead: short.lastRead ? formatGasBalance(short.lastRead) : null,
+	}
 })
+const unconfirmedText = (s) =>
+	`Your balance couldn't be confirmed: one check found ${s.lastRead} FJ and a fresh one found ${s.balance} FJ. If the network refuses this send, nothing is charged.`
+
+/** A confirmed shortfall against a figure that covered the fee: the worker's recheck has just read the
+ *  balance afresh into its reader's cache, so an unforced read takes exactly that figure, once per
+ *  estimate, and the two rows agree. Forcing would read the network a third time, maybe elsewhere. */
+const rereadFor = new WeakSet()
+watch(
+	() => props.feeEstimate,
+	(estimate) => {
+		const short = estimate?.feeJuiceShortfall
+		const cached = gasBalances.value?.publicFeeJuice
+		if (!short || short.lastRead || cached == null || BigInt(cached) < BigInt(short.maxFee) || rereadFor.has(estimate)) return
+		rereadFor.add(estimate)
+		balancesStore
+			.ensure(liveFeeScope(props), { legs: ["gas"] })
+			.then(() => snapshot.refreshGas())
+			.catch((error) => console.debug("Fee Juice re-read failed", { error }))
+	},
+)
 
 /** `short` while the notice shows, `funded` while the sponsor a funded verdict named pays. */
 const sponsorFunding = computed(() => {
@@ -276,14 +314,14 @@ watch(derivedSettings, (val) => {
 watch(
 	effectiveMethod,
 	(m) => {
-		payerOut.value = m ? { type: m.type, fpcId: m.fpc?.id, isProtocol: m.fpc?.isProtocol === true } : null
+		payerOut.value = m ? { type: m.type, fpcId: m.fpc?.id, isProtocol: m.fpc?.isProtocol === true, name: m.title } : null
 	},
 	{ immediate: true },
 )
 watch(
 	queuedCapDisplay,
 	(d) => {
-		queuedCapTextOut.value = d ? feeText(d.cap) : null
+		queuedCapFiguresOut.value = d
 	},
 	{ immediate: true },
 )
@@ -295,8 +333,8 @@ watch(
 	{ immediate: true },
 )
 
-/** The retry's button leaves with the failure, so a keyboard press keeps its place on the trigger
- *  above, or on the locked method's row, which has no trigger. */
+/** The retry's button leaves with the failure, so a keyboard press keeps its place on the payer
+ *  choice above, or on the locked method's row, which has none. */
 const onRetryEstimate = (event) => {
 	emit("retryEstimate")
 	if (!event.currentTarget.matches(":focus-visible")) return
@@ -309,6 +347,42 @@ const handleMethodPicked = (m) => {
 	if (m.checking) return
 	verdicts.picked(m)
 	rules.pick(m)
+}
+
+/** The private balance holds the fee estimated for the payer in use, or nothing has priced it yet.
+ *  An approximation: the PrivateFPC's own estimate differs in gas and in its cap's multiplier. A zero
+ *  balance is ruled out by the row's own `disabled`. */
+const privateCoversFee = computed(() => {
+	const balance = gasBalances.value?.privateFeeJuice
+	const fee = props.feeEstimate?.maxFee
+	return typeof balance === "string" && (!fee || BigInt(balance) >= BigInt(fee))
+})
+
+/** Only the PrivateFPC the wallet derives. Never a sponsor: Nulo's exists on some networks only, and
+ *  a hand-added one may publish anything. Read from the rows at the press too, so a row that changed
+ *  since is never picked. */
+const remedyMethod = computed(() => {
+	if (props.originPrivacy !== "private" || effectiveMethod.value?.type !== "fj" || !privateCoversFee.value) return null
+	return methods.value.find((m) => m.type === "private_fpc" && m.fpc?.isProtocol === true && !m.disabled && !m.checking) ?? null
+})
+watch(
+	remedyMethod,
+	(m) => {
+		remedyOut.value = m ? "private_fpc" : null
+	},
+	{ immediate: true },
+)
+function applyRemedy() {
+	const m = remedyMethod.value
+	if (m) handleMethodPicked(m)
+}
+defineExpose({ applyRemedy, payerFocusTarget: () => methodSelector.value?.target?.() })
+
+/** The pressed fix leaves with the warning, so the keyboard goes to the radio it picked. */
+async function onWarningFix() {
+	applyRemedy()
+	await nextTick()
+	methodSelector.value?.focus()
 }
 
 const onFpcUpdated = (fpc) => {
@@ -341,7 +415,7 @@ fpcService.onFpcUpdated.add(onFpcUpdated)
 const FEE_DATA_UNAVAILABLE = "Couldn't load fee data. Retrying in the background."
 /** A thrown init never committed, so no store retry can reach it: nothing runs it again on its own. */
 const FEE_INIT_FAILED = "Couldn't load fee data. Close and reopen to try again."
-const PRIVATE_GAS_UNCHECKED = "Couldn't check your private gas. Pick a fee source to continue."
+const PRIVATE_GAS_UNCHECKED = "Couldn't check your private Fee Juice. Pick a fee source to continue."
 
 /** The info row's text. A hold with a healthy store is a read that came back without a balance —
  *  nothing is retrying, so the row never promises a retry: a private origin says what to do, and a
@@ -353,6 +427,28 @@ const statusNotice = computed(() => {
 	if (sponsorShort.value) return ""
 	return held.value && props.originPrivacy === "private" ? PRIVATE_GAS_UNCHECKED : ""
 })
+
+const notices = computed(() => {
+	const shown = []
+	const plain = (text) => ({ text, figure: null })
+	if (statusNotice.value) shown.push(plain(statusNotice.value))
+	if (sponsorShort.value) shown.push(plain(sponsorShortText.value))
+	if (shortfall.value?.lastRead) shown.push(plain(unconfirmedText(shortfall.value)))
+	else if (shortfall.value) {
+		const figure = feeText(shortfall.value.cost)
+		shown.push({ text: `This send can cost up to ${figure}. You have ${shortfall.value.balance} FJ.`, figure })
+	}
+	if (feeJuiceMissing.value) shown.push(plain(nudgeCopy.value.title))
+	return shown
+})
+const said = (shown) => shown.map((notice) => notice.text).join("\n")
+watch(
+	notices,
+	(shown) => {
+		if (said(shown) !== said(noticesOut.value)) noticesOut.value = shown
+	},
+	{ immediate: true },
+)
 
 // Keep this order: watchers one dependency triggers run in creation order.
 watchFeeSnapshot(snapshot)
@@ -407,13 +503,27 @@ onBeforeUnmount(() => {
 			<Text variant="label-section" color="primary">Fee</Text>
 			<Text variant="name" color="primary" :class="$style.method_size">Public Fee Juice · set by the app</Text>
 		</Flex>
+		<template v-else-if="onSend">
+			<FeeMethodRadios ref="methodSelector" :usd="prices.feeJuiceQuote.value?.usd" :modelValue="displayMethod" :methods="menuMethods" :pending="readPending" @update:modelValue="handleMethodPicked" />
+			<!-- Mounted with the card for the page's life: a warning raised while the sheet is open is announced there. -->
+			<div role="status" aria-live="polite" aria-atomic="true" :class="$style.warning_live" data-testid="send-fee-sheet-warning-live">
+				<div v-if="warning" :class="mark.warning_box" data-testid="send-fee-sheet-warning">
+					<Icon name="warning" size="14" aria-hidden="true" :class="mark.warning_mark" />
+					<span :class="mark.warning_body">
+						<span>{{ warning }}</span>
+						<button v-if="remedyMethod" type="button" :class="mark.warning_fix" data-testid="send-fee-sheet-warning-fix" @click="onWarningFix">Pay it from private Fee Juice</button>
+						<a v-else :href="feeJuiceUrl" target="_blank" rel="noopener noreferrer" :class="mark.warning_fix" data-testid="send-fee-sheet-warning-bridge">Get private Fee Juice</a>
+					</span>
+				</div>
+			</div>
+			<FeePriorityRow v-if="showsCostRows" v-model="selectedPriority" />
+		</template>
 		<FeeMethodSelector
 			ref="methodSelector"
 			v-else
 			:modelValue="displayMethod"
 			@update:modelValue="handleMethodPicked"
 			:methods="menuMethods"
-			:payerNoticeShape="payerNoticeShape"
 			:pending="readPending"
 			@open="isMethodsDropdownOpen = true"
 			@close="isMethodsDropdownOpen = false"
@@ -437,10 +547,9 @@ onBeforeUnmount(() => {
 		</div>
 
 		<FeeMethodRow
-			v-if="readPending || !statusNotice"
+			v-if="!onSend && !statusNotice"
 			:method="effectiveMethod"
 			:isLoading="isLoading"
-			:pending="readPending"
 			:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
 			:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
 		/>
@@ -461,28 +570,39 @@ onBeforeUnmount(() => {
 				</Text>
 			</Flex>
 			<Flex
-				v-if="shortfall"
+				v-if="shortfall?.lastRead"
+				align="start"
+				gap="6"
+				wide
+				:class="$style.detail_row"
+				data-testid="fee-juice-unconfirmed"
+			>
+				<Icon name="warning" size="14" color="secondary" aria-hidden="true" :class="$style.line_mark" />
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">{{ unconfirmedText(shortfall) }}</Text>
+			</Flex>
+			<Flex
+				v-else-if="shortfall"
 				align="start"
 				gap="6"
 				wide
 				:class="$style.detail_row"
 				data-testid="fee-juice-shortfall"
 			>
-				<Icon name="warning" size="14" color="secondary" aria-hidden="true" />
+				<Icon name="warning" size="14" color="secondary" aria-hidden="true" :class="$style.line_mark" />
 				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
-					This send can cost up to <FeeAmount :display="shortfall.cost" :class="$style.fee_figure" />. You have {{ shortfall.balance }} FJ.
+					This send can cost up to <FeeAmount :display="shortfall.cost" :class="[$style.fee_figure, $style.whole]" />. You have {{ shortfall.balance }} FJ.
 				</Text>
 			</Flex>
 		</div>
 
 		<Flex v-if="feeJuiceMissing" align="center" gap="8" :class="$style.detail_row" data-testid="send-fee-nudge">
-			<Icon name="warning" size="14" color="secondary" />
+			<Icon name="warning" size="14" color="secondary" :class="$style.nudge_mark" />
 			<Flex direction="column" gap="2" :style="{ flex: 1, minWidth: 0 }">
 				<Text variant="value" color="primary">{{ nudgeCopy.title }}</Text>
 				<Text variant="caption" color="tertiary">{{ nudgeCopy.body }}</Text>
 			</Flex>
 			<a
-				:href="FEE_JUICE_BRIDGE_URL"
+				:href="feeJuiceUrl"
 				target="_blank"
 				rel="noopener noreferrer"
 				:class="$style.get_fee_juice"
@@ -494,6 +614,7 @@ onBeforeUnmount(() => {
 			v-if="showsCostRows"
 			:pending="readPending"
 			:amountTyped="amountTyped"
+			:waitsFor="waitsFor"
 			:estimate="estimatedFeeDisplay"
 			:isEstimating="isEstimating"
 			:isQueued="isQueued"
@@ -505,7 +626,7 @@ onBeforeUnmount(() => {
 			@retry="onRetryEstimate"
 		/>
 
-		<FeePriorityRow v-if="showsCostRows" v-model="selectedPriority" />
+		<FeePriorityRow v-if="!onSend && showsCostRows" v-model="selectedPriority" />
 	</Flex>
 </template>
 
@@ -539,6 +660,30 @@ onBeforeUnmount(() => {
 
 .fee_figure {
 	composes: fee_figure from "./fee-shared.module.css";
+}
+
+.whole {
+	composes: whole from "./fee-shared.module.css";
+}
+
+/* The glyph's apex on the cap top of a 12 px line set 1 px down its row. */
+.line_mark {
+	flex: none;
+	margin-top: 1.5px;
+}
+
+/* Beside the title's first line, its apex on that line's cap top, not centred on title and caption. */
+.nudge_mark {
+	flex: none;
+	align-self: flex-start;
+	margin-top: 0.5px;
+}
+
+/* Under the whole payer group, set off from its last row by the group's own space, so it reads as the
+   pick's note and not that row's. Empty, it takes no space yet stays in the accessibility tree: a
+   live region a screen reader never saw empty may not announce what lands in it. */
+.warning_live:not(:empty) {
+	padding-bottom: 12px;
 }
 
 .get_fee_juice {

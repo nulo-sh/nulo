@@ -124,11 +124,12 @@ export function accountAddressRow(): PermissionRowEntry {
 	}
 }
 
-/** Either sub-scope reaching any contract makes the row "any contract"; only transactions can
- *  make authorizations broad, since utilities never authorize a call intent. */
+/** Either sub-scope reaching any contract, or unreadable as a stored grant's can be, makes the row
+ *  "any contract"; only transactions can make authorizations broad, since utilities never authorize
+ *  a call intent. */
 export function simulationRow(cap: SimulationCapability): PermissionRowEntry {
-	const scopes = [cap.transactions, cap.utilities].filter((holder) => holder !== undefined)
-	const any = scopes.some((holder) => isAnyContractScope(holder.scope))
+	const scopes: unknown[] = [cap.transactions, cap.utilities].filter((holder) => holder !== undefined)
+	const any = scopes.some((holder) => !isObjectLike(holder) || isAnyContractScope(holder.scope))
 	return {
 		key: "simulation",
 		group: "without-asking",
@@ -158,7 +159,7 @@ export function contractsRow(cap: ContractsCapability, names: readonly KnownName
 		return {
 			key: "contract-details",
 			group: "without-asking",
-			icon: "info",
+			icon: "search",
 			title: listed ? `See details of ${reachOf(listed, names)} in your wallet` : "See details of any contract in your wallet",
 			flagged: listed === undefined,
 			...(listed ? {} : { chip: ANY_CONTRACT }),
@@ -247,7 +248,7 @@ export function transactionRow(cap: TransactionCapability, names: readonly Known
 	return {
 		key: "transaction",
 		group: "always-asks",
-		icon: "check",
+		icon: "send",
 		title: `Every transaction, on ${
 			scope
 				? reachOf(

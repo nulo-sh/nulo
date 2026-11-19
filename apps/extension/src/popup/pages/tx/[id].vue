@@ -10,6 +10,7 @@
 <script setup>
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
+import ContractChip from "@/components/composite/ContractChip.vue"
 import TxFeeRow from "@/popup/components/modules/tx/TxFeeRow.vue"
 import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
 import DetailHeroMeta from "@/popup/components/modules/tx/DetailHeroMeta.vue"
@@ -42,6 +43,8 @@ import {
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { explorerDisplayName, getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 import { buildGasBreakdown, computeFeeSavings, describeFeePaymentMethod } from "@/popup/components/modules/tx/tx-detail-helpers"
+import { contractChipOf } from "@/components/composite/contract-chip"
+import { readProtocolContract } from "@/utils/contract-level"
 
 /** Composables */
 import { usePrices } from "@/composables/usePrices"
@@ -100,7 +103,7 @@ const handleCopy = (target) => {
 	void copyWithToast(target, openToast, "Successfully copied")
 }
 
-const feePaymentLabel = computed(() => describeFeePaymentMethod(tx.value))
+const feeMethod = computed(() => describeFeePaymentMethod(tx.value))
 
 // Live pricing at TODAY'S AZTEC rate — historical fees are valued at the
 // current spot, not the price at execution time (TxFeeRow labels this).
@@ -144,6 +147,13 @@ const userCalls = computed(() => {
 	return filtered.length ? filtered : tx.value.calls
 })
 const callRowTitle = (c) => settledCallTitle(c, tokens.value)
+/** Only a protocol contract reads as a chip here: the page holds no token list, so no other level is known. */
+const protocolChips = computed(() =>
+	userCalls.value.map((c) => {
+		const reading = readProtocolContract(c.contract)
+		return reading ? contractChipOf(reading, c.contract) : null
+	}),
+)
 
 onMounted(async () => {
 	tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
@@ -241,9 +251,14 @@ onBeforeUnmount(() => {
 						<span :class="$style.app_value" data-testid="tx-detail-app">{{ originLabel }}</span>
 					</Flex>
 
-					<Flex v-if="feePaymentLabel" wide justify="between" align="center">
-						<span :class="$style.detail_key">Fee method</span>
-						<span :class="$style.detail_value" data-testid="tx-detail-fee-method">{{ feePaymentLabel }}</span>
+					<Flex v-if="feeMethod" wide justify="between" align="start" gap="16">
+						<span :class="$style.app_key">Fee method</span>
+						<Flex direction="column" align="end" gap="2" :class="$style.fee_method">
+							<span :class="$style.detail_value" data-testid="tx-detail-fee-method">{{ feeMethod.method }}</span>
+							<Text v-if="feeMethod.setBy" variant="caption" color="tertiary" :class="$style.fee_setter" data-testid="tx-detail-fee-setter">{{
+								feeMethod.setBy
+							}}</Text>
+						</Flex>
 					</Flex>
 
 					<TxFeeRow
@@ -306,10 +321,15 @@ onBeforeUnmount(() => {
 						gap="4"
 						:class="[$style.call_row, idx > 0 && $style.call_row_divider]"
 					>
-						<span data-testid="tx-call-method" :class="$style.call_method">{{ callRowTitle(c) }}</span>
-						<span data-testid="tx-call-contract" @click="endsSelection($event) || handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
-							{{ trimAddress(c.contract, 6, 4) }}
-						</span>
+						<span :class="$style.call_line"
+							><span data-testid="tx-call-method" :class="$style.call_method">{{ callRowTitle(c) }}</span>{{ " " }}<span :class="$style.call_tail"
+								>on&nbsp;<span v-if="protocolChips[idx]" data-testid="tx-call-contract" :class="$style.call_chip"
+									><span :class="$style.call_chip_box"><ContractChip :model="protocolChips[idx]" testid="tx-call-contract-name" /></span></span
+								><span v-else data-testid="tx-call-contract" @click="endsSelection($event) || handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">{{
+									trimAddress(c.contract, 6, 4)
+								}}</span></span
+							></span
+						>
 					</Flex>
 				</Flex>
 			</Flex>
@@ -378,6 +398,16 @@ onBeforeUnmount(() => {
 	color: var(--txt-primary);
 }
 
+.fee_method {
+	min-width: 0;
+}
+
+/* An app's name can be one unbreakable word. */
+.fee_setter {
+	text-align: right;
+	overflow-wrap: anywhere;
+}
+
 .app_key {
 	composes: app_key from "../detail-page.module.css";
 }
@@ -412,12 +442,39 @@ onBeforeUnmount(() => {
 	border-top: 1px solid var(--nulo-border);
 }
 
+/* Isolated, a stored name's direction controls end with it and never reorder the contract after it. */
 .call_method {
 	composes: type--row-title from global;
 	font-size: 13px;
 	color: var(--txt-primary);
 
 	word-break: break-word;
+	unicode-bidi: isolate;
+}
+
+.call_line {
+	composes: type--body from global;
+	color: var(--txt-primary);
+	line-height: 1.6;
+}
+
+/* "on" and the contract break as one word. Inline, a chip after "on" keeps the row's full width and
+ * runs past it; as a flex item it clips to what "on" leaves. Baseline alignment, and the chip's box
+ * middle-aligned inside its item, keep every glyph where inline flow puts it. */
+.call_tail {
+	display: inline-flex;
+	align-items: baseline;
+	max-width: 100%;
+}
+
+.call_chip {
+	min-width: 0;
+}
+
+.call_chip_box {
+	display: inline-flex;
+	vertical-align: middle;
+	max-width: 100%;
 }
 
 .call_contract {

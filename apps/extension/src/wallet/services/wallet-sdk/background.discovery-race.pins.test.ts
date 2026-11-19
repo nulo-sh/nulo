@@ -63,6 +63,7 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 				log.push("discover")
 				return popup
 			},
+			unlockWindows: { origins: () => [] },
 		},
 		"dapp-session": {
 			onDappSessionDeleted: new EventHandler<unknown>(),
@@ -75,6 +76,7 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 				timedLookupRequested.resolve()
 				return timedLookup
 			},
+			allowsNewSite: async () => false,
 			addDappSession: async () => {
 				log.push("session:add")
 				return { id: "s1", profileId: "p1" }

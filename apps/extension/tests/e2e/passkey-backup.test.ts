@@ -9,13 +9,13 @@
  * the migrated path. New surface, new file.
  *
  * Coverage:
- *   1. Export full backup as a passkey profile: modal appears, virtual authenticator completes,
- *      the file password is asked (a short one keeps Protect off), the file is encrypted under it,
- *      holds the recovery phrase and no passkey input, and its body restores under a new passkey,
- *      at an input of its own, on the same address after the profile is deleted.
- *   2. Export cancel UX — Escape during the modal is marked handled and
- *      returns the user to the agreement gate (`isAgreed = false`), NOT a
- *      dead form or a toast+bounce.
+ *   1. Export full backup as a passkey profile: the file password is asked first (a short one
+ *      keeps Create off), then Create shows the modal over the working card, the virtual
+ *      authenticator completes, the file is encrypted under that password before Download saves
+ *      it, holds the recovery phrase and no passkey input, and its body restores under a new
+ *      passkey, at an input of its own, on the same address after the profile is deleted.
+ *   2. Export cancel UX — Escape during the modal is marked handled and returns the user to the
+ *      typed file password, NOT a dead form or a toast+bounce.
  */
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
@@ -118,54 +118,62 @@ test("passkey full-backup export: modal, status card, a file password of its own
 		})
 		await waitForHash(page, "#/popup/settings/security/export/full", 5_000)
 
-		// For a passkey profile, Agree starts the backup and its passkey request (`handleAgree`); there
-		// is no Create Backup button.
+		// For a passkey profile, Agree asks the file password; no passkey runs before it is typed.
 		await page.waitForSelector('[data-testid="agree-continue-btn"]', { visible: true, timeout: 5_000 })
-		// The held passkey request keeps the working card on screen; a run never returns to `progress`,
-		// so the card still mounted after the 240 px check proves the check read it.
+		await clickByTestId(page, "agree-continue-btn")
+		await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 5_000 })
+		expect(await page.$('[data-testid="passkey-ceremony-dialog"]'), "Agree asked the passkey").toBeNull()
+		await shotSend(page, "export-full-file-password-passkey", "create-protected-backup-btn")
+
+		// The file holds the recovery phrase, so it is protected with a password of its own: Create
+		// waits for it, and a password shorter than 8 characters never reaches the passkey.
+		const enabled = (testid: string) =>
+			page.$eval(`[data-testid="${testid}"]`, (el) => !(el as HTMLButtonElement).disabled).catch(() => false)
+		expect(await enabled("create-protected-backup-btn"), "a passkey backup starts before it has a file password").toBe(false)
+		await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', "short12")
+		await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', "short12")
+		expect(await enabled("create-protected-backup-btn"), "a 7-character file password reaches the passkey").toBe(false)
+		await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', FILE_PASSWORD)
+		await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', FILE_PASSWORD)
+		await page.waitForFunction(
+			() => !document.querySelector<HTMLButtonElement>('[data-testid="create-protected-backup-btn"]')?.disabled,
+			{ timeout: 5_000, polling: 100 },
+		)
+
+		// The held passkey request keeps the working card on screen, under the dialog Create opened.
 		const release = await holdNextPasskeyRequest(page)
 		try {
 			// Without the progress state, the CTA-enabled wait below would pass on a body left blank
 			// during the export.
 			await armProgressObserver(page, CREATING)
-			await clickByTestId(page, "agree-continue-btn")
+			await clickByTestId(page, "create-protected-backup-btn")
 			await page.waitForSelector('[data-testid="backup-status-card"]', { visible: true, timeout: 5_000 })
 			await page.waitForSelector('[data-testid="passkey-ceremony-dialog"]', { visible: true, timeout: 5_000 })
 			await expectFitsNarrow(page, "the working card under the passkey dialog")
-			expect(await page.$('[data-testid="backup-status-card"]')).not.toBeNull()
-			expect(await page.$('[data-testid="passkey-ceremony-dialog"]')).not.toBeNull()
+			expect(await progressSeen(page), "the export never showed its in-progress card with a disabled Creating Backup CTA").toBe(true)
+			// The Encrypting card mounts only for the PBKDF2 + AES-GCM run, which follows the export in
+			// the same run.
+			await armProgressObserver(page, ENCRYPTING)
 		} finally {
 			await release()
 		}
 
-		// The card unmounts and the file password is asked once the status reads "finished"; 180 s
-		// leaves a loaded hosted runner room without masking a deadlock.
-		await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 180_000 })
-		expect(await progressSeen(page), "the export never showed its in-progress card with a disabled Creating Backup CTA").toBe(true)
-		await shotSend(page, "export-full-ready-passkey", "download-backup-btn")
-
-		// The file holds the recovery phrase, so it is protected with a password of its own: Download
-		// waits for it, and a password shorter than 8 characters never reaches the encryption.
-		const enabled = (testid: string) =>
-			page.$eval(`[data-testid="${testid}"]`, (el) => !(el as HTMLButtonElement).disabled).catch(() => false)
-		expect(await enabled("download-backup-btn"), "a passkey backup downloads before it has a file password").toBe(false)
-		await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', "short12")
-		await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', "short12")
-		expect(await enabled("download-backup-btn"), "a 7-character file password reaches the encryption").toBe(false)
-		await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', FILE_PASSWORD)
-		await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', FILE_PASSWORD)
+		// The sealed file and its warnings show before anything is saved; 180 s leaves a loaded hosted
+		// runner room without masking a deadlock.
 		await page.waitForFunction(() => !document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')?.disabled, {
-			timeout: 5_000,
+			timeout: 180_000,
 			polling: 100,
 		})
-		await shotSend(page, "export-full-file-password-passkey", "download-backup-btn")
-		// The Encrypting card mounts only for the PBKDF2 + AES-GCM run, which the one press runs before
-		// it saves the file.
-		await armProgressObserver(page, ENCRYPTING)
+		expect(await progressSeen(page), "the encryption never showed its Encrypting card").toBe(true)
+		expect(
+			await page.$('[data-testid="backup-done-banner"]'),
+			"the sealed file shows no done banner before its download",
+		).not.toBeNull()
+		expect(await page.$('[data-testid="backup-encrypt-password-input"]'), "the file password stays on the page once sealed").toBeNull()
+		await shotSend(page, "export-full-ready-passkey", "download-backup-btn")
 		await armDownloadCapture(page, { gzip: true, withinMs: 90_000 })
 		await clickByTestId(page, "download-backup-btn")
 		const file = await readCapturedDownload(page)
-		expect(await progressSeen(page), "the encryption never showed its Encrypting card").toBe(true)
 		await page.waitForSelector('[data-testid="backup-close-btn"]', { visible: true, timeout: 5_000 })
 		await expectFitsNarrow(page, "a saved backup")
 		await shotSend(page, "export-full-saved-passkey", "backup-close-btn")
@@ -211,7 +219,7 @@ test("passkey full-backup export: modal, status card, a file password of its own
 	}
 })
 
-test("passkey full-backup export: Escape during modal resets agreement gate", async ({ freshExtensionPerTest }) => {
+test("passkey full-backup export: Escape during modal returns to the typed file password", async ({ freshExtensionPerTest }) => {
 	const page = await openPopup(freshExtensionPerTest)
 
 	// IMPORTANT: do NOT attach a virtual authenticator here. Without it,
@@ -228,42 +236,45 @@ test("passkey full-backup export: Escape during modal resets agreement gate", as
 		})
 		await waitForHash(page, "#/popup/settings/security/export/full", 5_000)
 
-		// Click agree to launch the passkey ceremony, then immediately
-		// detach the virtual authenticator so the prompt won't resolve.
-		// (Without this, the virtual authenticator's `automaticPresence-
-		// Simulation:true` would auto-complete the ceremony before our
-		// Escape key fires.)
+		// Create launches the passkey ceremony once the file password is typed. The virtual
+		// authenticator is detached first so the prompt won't resolve (its `automaticPresence-
+		// Simulation:true` would auto-complete the ceremony before our Escape key fires).
 		await page.waitForSelector('[data-testid="agree-continue-btn"]', { visible: true, timeout: 5_000 })
+		await clickByTestId(page, "agree-continue-btn")
+		await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 5_000 })
+		await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', FILE_PASSWORD)
+		await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', FILE_PASSWORD)
 
-		// Tear down the virtual authenticator BEFORE clicking agree so
+		// Tear down the virtual authenticator BEFORE clicking Create so
 		// navigator.credentials.get hangs, giving the Escape handler a
 		// real chance to abort first.
 		await stallNextPasskeyCeremony(page, auth)
 		auth = undefined
 
-		await clickByTestId(page, "agree-continue-btn")
+		await clickByTestId(page, "create-protected-backup-btn")
 
 		// Wait for the ceremony modal to actually MOUNT before pressing Escape.
 		// Its Escape handler is a `window` keydown listener attached in the
-		// dialog's onMounted; agree → handleBackup → getPasskeyUnlockParams
+		// dialog's onMounted; Create → handleBackup → getPasskeyUnlockParams
 		// (async) → runCeremony mounts the dialog. On a loaded CI runner that
 		// async gap can exceed the old immediate-Escape, so the key was lost and
-		// the ceremony hung (authenticator torn down) → gate never reset. Waiting
-		// for the dialog first makes the Escape land deterministically.
+		// the ceremony hung (authenticator torn down) → the pair never came back.
+		// Waiting for the dialog first makes the Escape land deterministically.
 		await page.waitForSelector('[data-testid="passkey-ceremony-dialog"]', { visible: true, timeout: 15_000 })
 
 		// Chrome closes its toolbar popup, the whole wallet, on an Escape the page leaves unhandled.
 		expect(await pressEscape(page), "the dialog's Escape went unhandled; the toolbar popup would close").toBe(true)
 
+		// The typed pair is back, and Create with it, ready for another try.
 		await page.waitForFunction(
 			() => {
-				// `isAgreed = false` → the "Before you continue" copy is shown
-				// AND the agree-continue button is rendered again.
-				const btn = document.querySelector<HTMLButtonElement>('[data-testid="agree-continue-btn"]')
+				const btn = document.querySelector<HTMLButtonElement>('[data-testid="create-protected-backup-btn"]')
 				return btn !== null && !btn.disabled
 			},
 			{ timeout: 10_000, polling: 200 },
 		)
+		const typed = await page.$eval('[data-testid="backup-encrypt-password-input"] input', (el) => (el as HTMLInputElement).value)
+		expect(typed, "the cancelled card cleared the file password").toBe(FILE_PASSWORD)
 
 		const nonBenign = freshExtensionPerTest.pageErrors.filter((e) => !e.message.includes("Client disconnected"))
 		expect(nonBenign).toEqual([])

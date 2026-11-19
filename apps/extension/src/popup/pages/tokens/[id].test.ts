@@ -2,14 +2,15 @@
  * The token page's "Pin to Home" menu item: the label and `data-pinned` follow the stored pins, a
  * pin writes the contract and toasts, an unpin removes it, and a fourth pin opens the single-action
  * "Home is full" popup listing the pinned symbols — read from the token client AT CLICK TIME, so a
- * token added after mount is named too. And the banner on a token the signed list flags.
+ * token added after mount is named too. And the banner and the header's mark on a token the signed
+ * list flags or pictures.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, reactive } from "vue"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
-import { flaggedKeysOf } from "@/utils/token-flag"
-import { TEST_FLAGGED } from "@/wallet/services/token-list/list.fixture"
+import { flaggedKeysOf, listKeyOf } from "@/utils/token-flag"
+import { TEST_FLAGGED, TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
 
 const { pinStore } = await vi.hoisted(() => import("../../../../tests/helpers/ui-preference-fake"))
 
@@ -37,6 +38,7 @@ const H = vi.hoisted(() => {
 		store: { current: null as unknown as Record<string, unknown> },
 		cache: { current: null as unknown as { confirm: Record<string, unknown>; activeTokenIdx: unknown } },
 		flagged: { current: [] as string[] },
+		icons: { current: {} as Record<string, string> },
 	}
 })
 
@@ -63,7 +65,7 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 }))
 vi.mock("@/wallet/services/price/client", async () => {
 	const { EventHandler } = await import("@nulo/wallet-core/utils")
-	const snapshot = async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: H.flagged.current })
+	const snapshot = async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: H.flagged.current, tokenIcons: H.icons.current })
 	return {
 		PriceServiceClient: vi.fn(function () {
 			return {
@@ -100,7 +102,7 @@ const addr = (n: number) => `0x${n.toString(16).padStart(64, "0")}`
 const tok = (id: number, symbol: string) => ({ id, contract: addr(id), symbol, name: `${symbol} Token`, decimals: 18, chainId: 7 })
 
 const STUBS = {
-	SubPageHeader: { template: "<div><slot /><slot name='trailing' /><slot name='actions' /></div>" },
+	SubPageHeader: { template: "<div><slot name='leading' /><slot /><slot name='trailing' /><slot name='actions' /></div>" },
 	// The page imports `Dropdown` from the family index, whose SFC is named DropdownRoot.
 	DropdownRoot: { template: "<div><slot /><slot name='popup' /></div>" },
 	// `emits` keeps the parent's @click out of $attrs, so a click fires the handler exactly once.
@@ -271,6 +273,46 @@ describe("token page — a token the signed list flags", () => {
 		H.getToken.mockResolvedValue(tok(1, "AAA"))
 		const plain = await mountPage()
 		expect(plain.find('[data-testid="token-flagged-banner"]').exists()).toBe(false)
+	})
+})
+
+describe("token page — the header's mark", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		installChromeStorage()
+		H.store.current = reactive({
+			isLogined: true,
+			profile: { id: "p1" },
+			network: { id: "n1", chainId: 7 },
+			account: { address: "0xacct" },
+		})
+		H.cache.current = reactive({ confirm: {}, activeTokenIdx: undefined })
+		H.flagged.current = flaggedKeysOf([{ chainId: 7, address: TEST_FLAGGED.address }])
+		H.icons.current = { [listKeyOf(7, addr(1))]: TEST_ICONS.USDC }
+	})
+
+	const mark = (w: ReturnType<typeof mount>) => w.get('[data-testid="token-mark"]')
+
+	test("a listed token leads its title with the list's picture at 20 px, no badge", async () => {
+		H.getToken.mockResolvedValue(tok(1, "USDC"))
+		const w = await mountPage()
+		expect(mark(w).attributes("data-kind")).toBe("logo")
+		expect(mark(w).attributes("style")).toContain("width: 20px")
+		expect(w.get('[data-testid="token-mark"] img').attributes("src")).toBe(TEST_ICONS.USDC)
+		expect(mark(w).find("i").exists()).toBe(false)
+	})
+
+	test("a custom token draws its initials, and a flagged one the badge", async () => {
+		H.getToken.mockResolvedValue(tok(2, "mine"))
+		const custom = await mountPage()
+		expect(mark(custom).attributes("data-kind")).toBe("initials")
+		expect(mark(custom).text()).toBe("M")
+		expect(mark(custom).find("i").exists()).toBe(false)
+
+		H.getToken.mockResolvedValue({ ...tok(9, "SCAM"), contract: TEST_FLAGGED.address })
+		const flagged = await mountPage()
+		expect(mark(flagged).attributes("data-kind")).toBe("initials")
+		expect(mark(flagged).findAll("i")).toHaveLength(1)
 	})
 })
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { ref } from "vue"
-import { contactListReducers, withoutId } from "./entity-list"
+import { entityListReducers, withoutId } from "./entity-list"
 
 type Row = { id: string; n: number }
 const rows = (...spec: [string, number][]): Row[] => spec.map(([id, n]) => ({ id, n }))
@@ -19,10 +19,10 @@ describe("withoutId", () => {
 	})
 })
 
-describe("contactListReducers", () => {
+describe("entityListReducers", () => {
 	const listed = () => {
 		const list = ref(rows(["a", 1], ["b", 2], ["a", 3]))
-		return { list, before: list.value, on: contactListReducers(list) }
+		return { list, before: list.value, on: entityListReducers(list) }
 	}
 
 	test("an add appends in place, even for a listed id", () => {
@@ -38,6 +38,17 @@ describe("contactListReducers", () => {
 		on.onUpdated({ id: "z", n: 6 })
 		expect(list.value).toBe(before)
 		expect(list.value).toEqual(rows(["a", 5], ["b", 2], ["a", 3], ["z", 6]))
+	})
+
+	test("with appendUnlistedUpdate false, an update for an unlisted id leaves the list; a listed one is still replaced in place", () => {
+		const list = ref(rows(["a", 1], ["b", 2]))
+		const before = list.value
+		const on = entityListReducers(list, { appendUnlistedUpdate: false })
+		on.onUpdated({ id: "z", n: 6 })
+		expect(list.value).toEqual(rows(["a", 1], ["b", 2]))
+		on.onUpdated({ id: "b", n: 7 })
+		expect(list.value).toBe(before)
+		expect(list.value).toEqual(rows(["a", 1], ["b", 7]))
 	})
 
 	test("a delete swaps in a new array without any row of its id", () => {

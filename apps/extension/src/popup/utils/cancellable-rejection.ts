@@ -4,7 +4,6 @@
  * Used by every popup that awaits a long-running wallet operation that the
  * user can cancel mid-flight:
  *   - `send.vue` → `executionService.executeTransfer`
- *   - `RevokeAuthwitsPopup.vue` → `authwitsService.revokeAuthwits`
  *   - `ChangeAuthwitsRegistryPopup.vue` → `authwitsService.setRegistryEnabled`
  *
  * Returns "silent" when the user intentionally cancelled — the caller

@@ -7,6 +7,7 @@
 
 /** Components */
 import { Skeleton } from "@nulo/design"
+import TokenMark from "@/components/composite/general/TokenMark.vue"
 
 /** Utils */
 import { isSeedWorking } from "./home-slots"
@@ -16,6 +17,8 @@ const props = defineProps({
 		type: Object,
 		required: true,
 	},
+	/** The signed list's picture for this entry; a list without one leaves its initials. */
+	icon: String,
 })
 const emit = defineEmits(["retry"])
 
@@ -33,10 +36,13 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 		:aria-busy="isWorking || undefined"
 		:class="$style.row"
 	>
-		<Flex direction="column" gap="2">
-			<span :class="[$style.symbol, !isWorking && $style.dimmed]">{{ entry.symbol }}</span>
-			<span v-if="isWorking" :class="$style.sub">{{ entry.displayName }}</span>
-			<span v-else :class="$style.reason" data-testid="token-seed-reason">{{ reason }}</span>
+		<Flex align="center" gap="12" :class="$style.lead">
+			<TokenMark :symbol="entry.symbol" :icon="icon" :size="32" :badge="false" :class="!isWorking && $style.dimmed" />
+			<Flex direction="column" gap="2" :class="$style.lead">
+				<span :class="[$style.symbol, !isWorking && $style.dimmed]">{{ entry.symbol }}</span>
+				<span v-if="isWorking" :class="$style.sub">{{ entry.displayName }}</span>
+				<span v-else :class="$style.reason" data-testid="token-seed-reason">{{ reason }}</span>
+			</Flex>
 		</Flex>
 
 		<Flex v-if="isWorking" direction="column" align="end" justify="center" gap="2" :class="$style.loading_block">
@@ -78,29 +84,15 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 	color: var(--txt-danger);
 }
 
+.lead {
+	composes: lead from "./token-row.module.css";
+}
+
 .loading_block {
 	composes: loading_block from "./token-row.module.css";
 }
 
 .retry {
-	composes: type--label-section from global;
-	height: 28px;
-	padding: 0 12px;
-	background: transparent;
-	box-shadow: inset 0 0 0 1px var(--nulo-outline);
-
-	color: var(--nulo-accent);
-	cursor: pointer;
-
-	transition: box-shadow 0.2s var(--bezier);
-
-	&:hover {
-		box-shadow: inset 0 0 0 1px var(--nulo-accent);
-	}
-
-	&:focus-visible {
-		outline: 2px solid var(--nulo-accent);
-		outline-offset: 2px;
-	}
+	composes: retry from "./token-row.module.css";
 }
 </style>

@@ -36,6 +36,30 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			material: false,
 			changes: ["The summary box names the default network as Nulo shows it, Alpha."],
 		},
+		{
+			version: "1.2.2",
+			effective: "19 November 2026",
+			material: false,
+			changes: [
+				"When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails. Each endpoint you add can receive its requests (§ 7.1).",
+			],
+		},
+		{
+			version: "1.2.3",
+			effective: "19 November 2026",
+			material: false,
+			changes: [
+				"The second default endpoint of Alpha and Testnet is Nulo's relay, operated by the Developer, which passes requests to a third-party provider (§ 7.1).",
+			],
+		},
+		{
+			version: "1.2.4",
+			effective: "19 November 2026",
+			material: false,
+			changes: [
+				"Transactions sent through Nulo's relay go through it to its provider (§ 2), and edge hosting for Nulo's relay is among the supporting services (§ 7.5).",
+			],
+		},
 	],
 	privacy: [
 		{ version: "1.0", effective: "23 September 2026", material: true, changes: ["First published version."] },
@@ -123,6 +147,46 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			material: false,
 			changes: [
 				"The token list is downloaded about every six hours, retried within minutes then less often after a failure, and on request in Settings → Tokens (§§ 5.11, 6).",
+			],
+		},
+		{
+			version: "1.2.10",
+			effective: "19 November 2026",
+			material: false,
+			changes: [
+				"When a network has more than one endpoint, Nulo uses the primary first and the others, in order, while it fails. Each endpoint you add can receive its requests (§ 5.1).",
+			],
+		},
+		{
+			version: "1.2.11",
+			effective: "19 November 2026",
+			material: false,
+			changes: ["With Let every site see that Nulo is installed on, any site learns that Nulo is installed and its version (§ 5.7)."],
+		},
+		{
+			version: "1.3",
+			effective: "19 November 2026",
+			material: true,
+			changes: [
+				"Nulo's relay, which the Developer operates, is the second default endpoint of Alpha and Testnet.",
+				"It receives a network's requests while the endpoints before it fail and recover, passes them to a provider without your IP address, and its application writes no log of them; Cloudflare's hosting records apply (§ 5.12).",
+			],
+		},
+		{
+			version: "1.3.1",
+			effective: "19 November 2026",
+			material: false,
+			changes: [
+				"After the primary endpoint fails, the others are used until it has answered two checks at least 30 seconds apart, up to 30 minutes apart after repeated failures (§ 5.1).",
+			],
+		},
+		{
+			version: "1.3.2",
+			effective: "19 November 2026",
+			material: false,
+			changes: [
+				'On Alpha, the "Get Fee Juice" and "Get private Fee Juice" links open Shield, a bridge application that human.tech, a third party, operates; on every other network they open the bridge application I operate (§ 5.10).',
+				"A click still carries no wallet data: the site and its host receive your IP address and browser headers.",
 			],
 		},
 	],

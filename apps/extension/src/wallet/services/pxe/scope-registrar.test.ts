@@ -3,7 +3,13 @@ import { describe, expect, test, vi } from "vitest"
 import { createScopeRegistrar } from "./scope-registrar"
 
 const pxe = {} as IPXE
-const network = { profileId: "p1", chainId: 31337, rpcUrl: "http://n/1", pxeGeneration: "gen-A" }
+const network = {
+	profileId: "p1",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [{ id: "primary", rpcUrl: "http://n/1" }],
+	pxeGeneration: "gen-A",
+}
 
 function makeDeps(liveness: boolean[] = [true, true]) {
 	const ensureRegistered = vi.fn(async () => {})

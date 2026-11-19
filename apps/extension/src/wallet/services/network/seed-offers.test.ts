@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { KINDS_SEEDED_BEFORE_RECORD, normalizeSeedOffers, sameSeedOffers, seedsToOffer } from "./seed-offers"
+import { KINDS_SEEDED_BEFORE_RECORD, normalizeSeedOffers, SeedOffersSchema, sameSeedOffers, seedsToOffer } from "./seed-offers"
 import { DEFAULT_SEEDS, type DefaultSeed } from "./seeds"
 import type { ChainKind } from "./spec"
 
@@ -81,6 +81,17 @@ describe("seedsToOffer", () => {
 		expect(normalizeSeedOffers({ offered: ["testnet", "local", "testnet"], announce: [] })).toEqual({ offered: ["local", "testnet"] })
 		expect(sameSeedOffers({ offered: ["testnet", "local"] }, { offered: ["local", "testnet"], announce: [] })).toBe(true)
 		expect(sameSeedOffers({ offered: ["local"] }, { offered: ["local"], announce: ["mainnet"] })).toBe(false)
+	})
+
+	test("the relay's offers are kept sorted and deduplicated, with no relay key while it names nothing", () => {
+		expect(normalizeSeedOffers({ offered: ["local"], relay: ["testnet", "mainnet", "testnet"] })).toEqual({
+			offered: ["local"],
+			relay: ["mainnet", "testnet"],
+		})
+		expect(normalizeSeedOffers({ offered: ["local"], relay: [] })).toEqual({ offered: ["local"] })
+		expect(sameSeedOffers({ offered: ["local"] }, { offered: ["local"], relay: ["testnet"] })).toBe(false)
+		expect(SeedOffersSchema.safeParse({ offered: ["local"], relay: ["testnet"] }).success).toBe(true)
+		expect(SeedOffersSchema.safeParse({ offered: ["local"], relay: ["nowhere"] }).success).toBe(false)
 	})
 
 	test("pins: the pre-record kinds, and one seed per kind and per chain", () => {

@@ -5,7 +5,7 @@ import { reloadExtensionPage } from "../fixtures/browser"
 import { sessionChainsForOrigin } from "../fixtures/dappSession"
 import { clickByTestId, grantCapBundle, openPopup, test, waitForHash, type ExtensionContext } from "../fixtures/extension"
 import { deleteNetworkRow, navigateByHash, switchToLocalNetwork, switchToNetwork } from "../fixtures/helpers"
-import { callExpectingNoPopup, openPlayground } from "../fixtures/playground"
+import { callExpectingNoPopup, errorEnvelopeOf, openPlayground, tracedEnvelope } from "../fixtures/playground"
 import { approveConnect, approveVerify, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -89,9 +89,9 @@ describe("connect-unserved-chain — a dApp on a chain the wallet has no network
 
 			const accounts = await callExpectingNoPopup(ctx, app, "getAccounts", () => clickByTestId(app, "pg-btn-getAccounts"))
 			expect(accounts.status).toBe("error")
-			const payload = accounts.errorJson as string | { message?: string } | undefined
-			const envelope = JSON.parse((typeof payload === "string" ? payload : payload?.message) ?? "null")
-			expect(envelope).toEqual({ code: 4901, message: expect.any(String), data: { walletErrorCode: "CHAIN_NOT_SUPPORTED" } })
+			expect(errorEnvelopeOf(accounts)).toEqual(
+				tracedEnvelope({ code: 4901, message: expect.any(String), data: { walletErrorCode: "CHAIN_NOT_SUPPORTED" } }),
+			)
 			expect(await sessionChainsForOrigin(ctx, origin)).toEqual(["0"])
 
 			await reloadExtensionPage(app)

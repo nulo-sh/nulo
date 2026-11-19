@@ -6,8 +6,8 @@ const app = read("./app.vue")
 
 /** The shell has no harness: these pin the wiring its unit-tested pieces rely on. */
 describe("the shell's lock and failure wiring", () => {
-	test("both lock paths supersede the network-switch run", () => {
-		expect(app).toMatch(/const endScopeOnLock = \(\) => \{\s*onLocked\(\)\s*switchNetwork\.supersede\(\)\s*\}/)
+	test("both lock paths end the Sending toast's scope before any message closes, and supersede the network-switch run", () => {
+		expect(app).toMatch(/const endScopeOnLock = \(\) => \{\s*sends\.endScope\(\)\s*onLocked\(\)\s*switchNetwork\.supersede\(\)\s*\}/)
 		expect(app).toContain("watchLockStart(() => appStore.isLogined, endScopeOnLock)")
 		expect(app).toContain("onLocked: endScopeOnLock,")
 	})

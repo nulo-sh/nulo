@@ -191,7 +191,7 @@ describe("settings hub — rows", () => {
 		{ profile: PASSKEY, passkey: true },
 	])("renders the search registry's rows for a $profile.type profile", async ({ profile, passkey }) => {
 		const context = settingsContext({ passkey, provingStatus: "Presto · connected" })
-		expectOwnedRows(await mountHub(profile), "/popup/settings", context)
+		expectOwnedRows(await mountHub(profile), "/popup/settings", context, 0)
 	})
 
 	test("each row sits under the caption a search shows it under", async () => {

@@ -8,7 +8,15 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { extensionUrl, gotoExtensionPage } from "./fixtures/browser"
-import { clickByTestId, type ExtensionContext, expectNoNameField, openPopup, test, waitForHash } from "./fixtures/extension"
+import {
+	clickByTestId,
+	type ExtensionContext,
+	expectNoNameField,
+	openPopup,
+	replaceInputValue,
+	test,
+	waitForHash,
+} from "./fixtures/extension"
 import { navigateByHash, waitForToast, waitForToastGone } from "./fixtures/helpers"
 import {
 	holdNextPasskeyRequest,
@@ -18,6 +26,7 @@ import {
 	setupPasskeyVirtualAuth,
 	withholdCreatePrf,
 } from "./fixtures/passkey"
+import { FILE_PASSWORD } from "./helpers/backup-export"
 import { readActiveAccount } from "./helpers/import-drivers"
 
 /** Onboarding in the same tab: a wallet with no profile runs it again. */
@@ -91,11 +100,14 @@ const STEPS: Step[] = [
 		reach: async (_ctx, page) => {
 			await registerPasskeyProfile(page)
 			await navigateByHash(page, "#/popup/settings/security/export/full")
+			await clickByTestId(page, "agree-continue-btn")
+			await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', FILE_PASSWORD)
+			await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', FILE_PASSWORD)
 			return undefined
 		},
-		control: "agree-continue-btn",
-		// The backup's card shows before the prompt; the file password is asked once the backup is made.
-		finished: (page) => page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 180_000 }),
+		// The refused try keeps the typed file password, so Create is offered again as it was.
+		control: "create-protected-backup-btn",
+		finished: (page) => page.waitForSelector('[data-testid="backup-done-banner"]', { visible: true, timeout: 180_000 }),
 	},
 ]
 

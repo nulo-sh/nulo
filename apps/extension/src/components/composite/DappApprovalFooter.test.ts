@@ -29,6 +29,21 @@ const factory = (props: Record<string, unknown> = {}) =>
 	mount(DappApprovalFooter, { props: { ...base, ...props }, global: { stubs: STUBS } })
 
 describe("composite/DappApprovalFooter", () => {
+	test("the below slot renders under the two buttons, inside the strip; without it nothing follows them", () => {
+		const below = mount(DappApprovalFooter, {
+			props: base,
+			slots: { below: '<button data-testid="under">Under</button>' },
+			global: { stubs: STUBS },
+		})
+		const order = below.findAll('[data-testid="dapp-approval-footer"] button').map((b) => b.attributes("data-testid") ?? b.text())
+		expect(order).toEqual(["x-reject-btn", "x-confirm-btn", "under"])
+		expect(
+			factory()
+				.findAll("button")
+				.map((b) => b.text()),
+		).toEqual(["Reject", "Confirm"])
+	})
+
 	test("renders the reject + confirm buttons with their forwarded testids", () => {
 		const w = factory()
 		expect(w.find('[data-testid="x-reject-btn"]').exists()).toBe(true)
@@ -65,17 +80,18 @@ describe("composite/DappApprovalFooter", () => {
 		expect(w.emitted("approve")).toHaveLength(1)
 	})
 
-	test("a confirm detail is the label's second line, read with it as one name", () => {
-		const w = factory({ confirmLabel: "Send for ~0.021 FJ", confirmDetail: "($0.042)" })
+	test("a confirm detail is the label's smaller second line, read with it as one name", () => {
+		const w = factory({ confirmLabel: "Send", confirmDetail: "for ~0.021 FJ ($0.042)" })
 		const confirm = w.get('[data-testid="x-confirm-btn"]')
-		expect(confirm.get('[data-testid="dapp-approval-confirm-detail"]').text()).toBe("($0.042)")
+		const detail = confirm.get('[data-testid="dapp-approval-confirm-detail"]')
+		expect([detail.text(), detail.classes()]).toEqual(["for ~0.021 FJ ($0.042)", expect.arrayContaining(["type--caption"])])
 		expect(confirm.element.textContent).toBe("Send for ~0.021 FJ ($0.042)")
 	})
 
 	test("without a detail the label is one line", () => {
-		const confirm = factory({ confirmLabel: "Send for ~0.021 FJ" }).get('[data-testid="x-confirm-btn"]')
+		const confirm = factory({ confirmLabel: "Confirm" }).get('[data-testid="x-confirm-btn"]')
 		expect(confirm.find('[data-testid="dapp-approval-confirm-detail"]').exists()).toBe(false)
-		expect(confirm.element.textContent).toBe("Send for ~0.021 FJ")
+		expect(confirm.element.textContent).toBe("Confirm")
 	})
 
 	test("rejectDisabled disables the reject button", () => {

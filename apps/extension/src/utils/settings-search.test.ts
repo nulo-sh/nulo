@@ -37,6 +37,11 @@ describe("matching", () => {
 		])
 	})
 
+	test('"discover" and "prompt" find the every-site switch on Connected Apps by its synonyms', () => {
+		expect(find("discover")).toEqual([["Connected Apps", ["connected-apps-every-site"]]])
+		expect(find("prompt")).toEqual([["Connected Apps", ["connected-apps-every-site"]]])
+	})
+
 	test("case and accents fold: THÉME finds Theme", () => {
 		expect(find("THÉME")).toEqual([
 			["Preferences", ["hub-display"]],

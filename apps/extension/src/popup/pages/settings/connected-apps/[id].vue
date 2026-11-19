@@ -10,18 +10,15 @@
 <script setup>
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
-import DappSessionVerification from "@/popup/components/modules/settings/connected-apps/DappSessionVerification.vue"
-import GrantedCapabilitiesList from "@/popup/components/modules/settings/connected-apps/GrantedCapabilitiesList.vue"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
+import DetailsTable from "@/components/composite/capabilities/DetailsTable.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { getChainName } from "@/components/ui/utils.js"
-
-/** Vendor */
-import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
 
 /** Services */
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { DappSessionServiceClient } from "@/wallet/services/dapp-session/client"
+import { DappInteractionServiceClient } from "@/wallet/services/dapp-interaction/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { formatCaipAccount, parseCaipAccount } from "@/wallet/utils/caip"
 
@@ -33,8 +30,20 @@ const { requestConfirm } = useConfirm()
 
 /** Helpers */
 import { formatSessionExpiry, parseSessionParams } from "@/popup/components/modules/settings/connected-apps/connected-app-helpers"
-import { authorizationsRow, holdsCallScope, holdsCanCreateAuthWit } from "@/popup/windows/capabilities/permission-rows"
+import {
+	accountAddressRow,
+	addressBookRow,
+	authorizationsRow,
+	holdsCallScope,
+	holdsCanCreateAuthWit,
+	isBroadRequest,
+	plainText,
+	unknownRow,
+} from "@/popup/windows/capabilities/permission-rows"
+import { buildDetailsTable, listsFunctionNames } from "@/popup/windows/capabilities/details-table"
+import { isKnownCapability } from "@/wallet/services/dapp-session/capability-meta"
 import { authorizationsEffective, coversAnyContract } from "@nulo/wallet-bridge"
+import { isObjectLike } from "@nulo/wallet-core/utils"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -62,8 +71,6 @@ const sessionChainName = computed(() => {
 	return getChainName(Number(cid))
 })
 
-const verificationEmojis = computed(() => (session.value?.verificationHash ? hashToEmoji(session.value.verificationHash) : ""))
-
 const expiryFormatted = computed(() => formatSessionExpiry(session.value?.expiry))
 
 const hasSessionAllowances = computed(() => methods.value.length > 0 || events.value.length > 0)
@@ -89,6 +96,38 @@ const authorizationsLine = computed(() => {
 	const row = authorizations.value
 	return (row?.switchLabel && !authorizationsOn.value ? row.subOff : row?.subOn) ?? []
 })
+
+/** The kinds that name no contract, each the window's entry over a held grant, in its row order. */
+const kindRows = computed(() => {
+	const caps = grantedCaps.value.filter(isObjectLike)
+	const held = (type) => caps.find((cap) => cap.type === type)
+	const unknowns = caps.filter((cap) => !isKnownCapability(cap.type)).length
+	const broad = isBroadRequest(caps)
+	return [
+		...(held("accounts")?.canGet === true ? [accountAddressRow()] : []),
+		...(authorizations.value ? [authorizations.value] : []),
+		...(held("data")?.addressBook === true ? [addressBookRow({ broadRequest: broad })] : []),
+		...(unknowns > 0 ? [unknownRow(unknowns, { broadRequest: broad })] : []),
+	]
+})
+
+// Unset until the names read settles, so a contract Nulo knows never shows first among those it doesn't.
+const knownNames = ref()
+const detailsTable = computed(() => {
+	const table = buildDetailsTable(grantedCaps.value, knownNames.value ?? [])
+	return table.known.length || table.unknown.length || table.classes.length || table.anyContract ? table : undefined
+})
+const permissionsLabel = computed(() => (detailsTable.value ? `Permissions · ${detailsTable.value.label}` : "Permissions"))
+
+async function fetchKnownNames() {
+	let names = []
+	try {
+		names = await interactionService.getKnownContracts(route.params.id)
+	} catch {
+		// Nothing named: every contract shows by its address.
+	}
+	if (!unmounted) knownNames.value = names
+}
 
 const fetchSession = async () => {
 	let read
@@ -160,6 +199,8 @@ const handleCopyAddress = (target) => {
 	void copyWithToast(target, openToast, "Address is copied")
 }
 
+const copyScopeAddress = (address) => void copyWithToast(address, openToast, "Address is copied", { sanitize: true })
+
 const getAccountAlias = (acc) => {
 	if (!session.value?.accountAliases) return acc.name
 	const caip = formatCaipAccount(acc.chainId, acc.address)
@@ -183,6 +224,7 @@ const setAuthorizations = async (on) => {
 const dappSessionService = new DappSessionServiceClient()
 const networkService = new NetworkServiceClient()
 const accountService = new AccountServiceClient()
+const interactionService = new DappInteractionServiceClient()
 function onDappSessionUpdated(ds) {
 	if (ds.id !== session.value?.id) return
 	const prevBlob = session.value.dappMetadata?.logoBlobUrl
@@ -200,6 +242,7 @@ dappSessionService.onDappSessionUpdated.add(onDappSessionUpdated)
 dappSessionService.onDappSessionDeleted.add(onDappSessionDeleted)
 
 onMounted(async () => {
+	void fetchKnownNames()
 	await fetchSession()
 	if (!session.value || unmounted) return
 	await fetchAccounts()
@@ -210,11 +253,12 @@ onBeforeUnmount(() => {
 	dappSessionService.disconnect()
 	networkService.disconnect()
 	accountService.disconnect()
+	interactionService.disconnect()
 })
 </script>
 
 <template>
-	<SettingsPageShell title="Connected App" :backTo="'/popup/settings/connected-apps'" gap="24" v-if="session">
+	<SettingsPageShell title="Connected App" :backTo="'/popup/settings/connected-apps'" gap="24" v-if="session" data-testid="connected-app-page">
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Session actions">
@@ -334,37 +378,49 @@ onBeforeUnmount(() => {
 			</Text>
 		</Flex>
 
-		<Flex v-if="authorizations" direction="column" gap="10" wide>
-			<SectionLabel label="If you allow, it can" />
-			<ItemsContainer>
-				<PermissionRow
-					data-testid="connected-app-authorizations"
-					switchTestid="connected-app-authorizations-toggle"
-					:icon="authorizations.icon"
-					:title="authorizations.title"
-					:switchLabel="authorizations.switchLabel"
-					:flagged="authorizations.flagged"
-					:modelValue="authorizationsOn"
-					@update:modelValue="setAuthorizations"
-				>
-					<template #sub>
-						<template v-for="(segment, i) in authorizationsLine" :key="i">
-							<DottedTerm v-if="'term' in segment" term="authorization" testid="cap-auth-term">{{ segment.term }}</DottedTerm>
-							<template v-else>{{ segment.text }}</template>
-						</template>
+		<Flex v-if="kindRows.length || detailsTable" direction="column" gap="10" wide data-testid="connected-app-permissions">
+			<SectionLabel :label="permissionsLabel" />
+			<Flex direction="column" gap="24" wide>
+				<ItemsContainer v-if="kindRows.length">
+					<template v-for="row in kindRows" :key="row.key">
+						<PermissionRow
+							v-if="row.key === 'authorizations'"
+							data-testid="connected-app-authorizations"
+							switchTestid="connected-app-authorizations-toggle"
+							:icon="row.icon"
+							:title="row.title"
+							:switchLabel="row.switchLabel"
+							:flagged="row.flagged"
+							:modelValue="authorizationsOn"
+							@update:modelValue="setAuthorizations"
+						>
+							<template #sub>
+								<template v-for="(segment, i) in authorizationsLine" :key="i">
+									<DottedTerm v-if="'term' in segment" term="authorization" testid="cap-auth-term">{{ segment.term }}</DottedTerm>
+									<template v-else>{{ segment.text }}</template>
+								</template>
+							</template>
+						</PermissionRow>
+						<PermissionRow
+							v-else
+							data-testid="connected-app-kind-row"
+							:data-kind-row="row.key"
+							:icon="row.icon"
+							:title="row.title"
+							:subOn="plainText(row.subOn)"
+							:flagged="row.flagged"
+						/>
 					</template>
-				</PermissionRow>
-			</ItemsContainer>
+				</ItemsContainer>
+				<DetailsTable
+					v-if="detailsTable && knownNames"
+					v-bind="detailsTable"
+					bare
+					:foot="listsFunctionNames(detailsTable)"
+					@copy="copyScopeAddress"
+				/>
+			</Flex>
 		</Flex>
-
-		<!-- Granted permissions -->
-		<Flex v-if="grantedCapabilities.length" direction="column" gap="10" wide>
-			<SectionLabel label="Granted permissions" :count="grantedCapabilities.length" />
-			<GrantedCapabilitiesList :grants="grantedCapabilities" />
-		</Flex>
-
-		<!-- Connection check -->
-		<DappSessionVerification v-if="verificationEmojis" :emojis="verificationEmojis" />
 	</SettingsPageShell>
 </template>
 

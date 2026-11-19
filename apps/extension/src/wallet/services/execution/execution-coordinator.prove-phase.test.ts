@@ -29,8 +29,10 @@ function harness(opts: { journalRejects?: boolean } = {}) {
 		if (journalRejects) throw new Error("journal closed")
 		journal.push([id, backend])
 	})
+	const provePhase = vi.fn()
 	const coordinator = new ExecutionCoordinator(tasks, new LoggerStore(new ConfigStore()), { assertCurrent: async () => {} }, undefined, {
 		updateProvingBackend,
+		provePhase,
 	})
 	const pending: Array<{ proveId: string; finish: () => void }> = []
 	const pxe = {
@@ -50,7 +52,7 @@ function harness(opts: { journalRejects?: boolean } = {}) {
 	}
 	const emit = (proveId: string, seq: number, phase: Phase, backend?: Backend) =>
 		coordinator.onProvePhase({ proveId, seq, phase, backend })
-	return { coordinator, journal, updateProvingBackend, setJournalRejects, dispatch, emit }
+	return { coordinator, journal, updateProvingBackend, provePhase, setJournalRejects, dispatch, emit }
 }
 
 describe("ExecutionCoordinator prove-phase attribution", () => {
@@ -78,6 +80,21 @@ describe("ExecutionCoordinator prove-phase attribution", () => {
 		await h.emit(a.proveId, 6, "proved", "browser")
 		expect(h.journal.at(-1)).toEqual(["op-1", "browser"])
 		expect(h.coordinator.getLastProveOutcome().denial).toBeNull()
+		a.finish()
+		await a.done
+	})
+
+	test("every accepted phase reaches the capture sink, two with one backend included; a stale one does not", async () => {
+		const h = harness()
+		const a = await h.dispatch("op-1")
+		await h.emit(a.proveId, 3, "transmit", "presto")
+		await h.emit(a.proveId, 4, "proving", "presto")
+		await h.emit(a.proveId, 2, "serialize")
+		expect(h.provePhase.mock.calls).toEqual([
+			["op-1", "transmit", "presto"],
+			["op-1", "proving", "presto"],
+		])
+		expect(h.journal).toEqual([["op-1", "presto"]])
 		a.finish()
 		await a.done
 	})

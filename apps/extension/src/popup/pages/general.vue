@@ -21,6 +21,7 @@ import RecentActivityView from "../components/modules/general/RecentActivityView
 import RecoveryModeBanner from "../components/modules/general/RecoveryModeBanner.vue"
 import RestoreOutcomeBanner from "../components/modules/general/RestoreOutcomeBanner.vue"
 import TokensView from "../components/modules/general/TokensView.vue"
+import WhatsNewRow from "../components/modules/general/WhatsNewRow.vue"
 
 /** Composables */
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
@@ -29,7 +30,7 @@ import { useGetStarted } from "@/composables/useGetStarted"
 import { useSeedStatus } from "@/composables/useSeedStatus"
 
 /** Utils */
-import { FEE_JUICE_BRIDGE_URL } from "../components/modules/send/fee-helpers"
+import { feeJuiceBridgeUrl } from "../components/modules/send/fee-helpers"
 import { combineHoldings, gasHoldings, getStartedView, HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 
 /** Store */
@@ -117,7 +118,7 @@ async function onGetStartedSelect(item) {
 		return
 	}
 	if (item === "aztec") await getStarted.mark("aztecOpened")
-	window.open(item === "aztec" ? HOW_AZTEC_WORKS_URL : FEE_JUICE_BRIDGE_URL, "_blank", "noopener,noreferrer")
+	window.open(item === "aztec" ? HOW_AZTEC_WORKS_URL : feeJuiceBridgeUrl(appStore.network?.chainId), "_blank", "noopener,noreferrer")
 }
 
 function onScroll(event) {
@@ -165,6 +166,7 @@ onBeforeUnmount(() => {
 			<Flex direction="column" gap="16" :class="$style.content">
 				<RecoveryModeBanner />
 				<RestoreOutcomeBanner />
+				<WhatsNewRow />
 				<GetStartedCard
 					v-if="reminders?.steps.length"
 					:steps="reminders.steps"

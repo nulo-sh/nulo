@@ -98,11 +98,9 @@ describe("TransactionService — a mined row until its block is final", () => {
 		const node = { getTxReceipt, getBlockData, findLeavesIndexes }
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
-				getNodeForUrl: async () => node,
 				getNode: async () => node,
 				getSingleAttemptNodeForUrl: async () => node,
 				getNetworks: async () => [{ chainId: 1 }],
-				reportEndpointFailure: () => {},
 			}),
 		)
 		const built = new TransactionService(new LoggerStore(new ConfigStore()), api, finalityReadMs)

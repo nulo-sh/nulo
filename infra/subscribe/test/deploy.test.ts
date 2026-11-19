@@ -15,11 +15,12 @@ describe("wrangler.jsonc", () => {
 		expect(WRANGLER.observability).toEqual({ enabled: false })
 	})
 
-	test("carries the list ids, the notice version and the switch off as vars, and no secret", () => {
+	test("carries the list ids, the notice version and the switch off as vars, and neither secret", () => {
 		expect(Object.keys(WRANGLER.vars).sort()).toEqual(["CONSENT_VERSION", "RESEND_SEGMENT_ID", "RESEND_TOPIC_ID", "SUBSCRIBE_OFF"])
 		expect(WRANGLER.vars.SUBSCRIBE_OFF).toBe("0")
 		const raw = readFileSync(join(WORKSPACE, "wrangler.jsonc"), "utf8")
 		expect(raw).not.toContain("RESEND_API_KEY")
+		expect(raw).not.toContain("CONFIRM_SECRET")
 		expect(raw).not.toMatch(/\bre_[A-Za-z0-9_]{8,}/)
 	})
 

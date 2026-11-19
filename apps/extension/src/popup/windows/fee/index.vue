@@ -1,3 +1,11 @@
+<route lang="json">
+{
+	"meta": {
+		"fillsWindow": true
+	}
+}
+</route>
+
 <script setup lang="ts">
 /**
  * The question a dApp send asks when its fee came out above the figure the person approved. The
@@ -6,7 +14,7 @@
  */
 
 /** Vendor */
-import { onMounted, onUnmounted } from "vue"
+import { onMounted, onUnmounted, shallowRef } from "vue"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 
@@ -19,7 +27,7 @@ import OperationCard from "../execute/OperationCard.vue"
 import SignerIdentityStrip from "../execute/SignerIdentityStrip.vue"
 
 /** Utils */
-import { type FeeDisplay, feeDisplay, feeFigure, formatGasBalance } from "@/utils/fee-estimation"
+import { type FeeDisplay, feeDisplay, feeText, formatGasBalance } from "@/utils/fee-estimation"
 import { openJsonWindow } from "@/utils/json-window"
 import {
 	authwitDisplayCall,
@@ -29,6 +37,8 @@ import {
 	grantContentsOf,
 } from "../execute/display-calls"
 import { grantRefusalRow } from "../execute/call-surface"
+import { type NameBook, nameBookOf } from "../execute/contract-chips"
+import { managers } from "@/utils/core"
 import {
 	WrongProfileError,
 	assertRequestProfile,
@@ -44,11 +54,14 @@ import type { DraftUIOperation } from "../execute/types"
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
 import { type DecodedCall, type DecodedGrant, ExecutionServiceClient } from "@/wallet/services/execution/client"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
+import type { Contact } from "@/wallet/services/contact/client"
 import { DappInteractionServiceClient, type FeeQuestionPayload, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
 
 /** Composables */
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
+import { useTokenFlags } from "@/composables/usePrices"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -73,6 +86,20 @@ const interactionService = new DappInteractionServiceClient()
 const tokenService = new TokenServiceClient()
 const tokenFollow = followKnownTokens(tokenService, knownTokens)
 const profileService = new ProfileServiceClient()
+const priceService = new PriceServiceClient()
+const marks = shallowRef<ReturnType<typeof useTokenFlags>>()
+/** The person's names for the chips' addresses, from one read of the profile's contacts that the
+ *  cards never wait for; a failed read names no contact. */
+const contacts = shallowRef<readonly Contact[]>()
+const names = computed((): NameBook => (contacts.value ? nameBookOf(contacts.value, appStore.accounts) : "loading"))
+async function readContacts(): Promise<void> {
+	try {
+		contacts.value = await managers.contact.getContacts()
+	} catch (error) {
+		console.warn("[Fee] Contacts read failed", { error })
+		contacts.value = []
+	}
+}
 
 const {
 	requestId,
@@ -110,29 +137,38 @@ const {
 		interactionService.disconnect()
 		executionService.disconnect()
 		tokenService.disconnect()
+		priceService.disconnect()
+		marks.value?.dispose()
 	},
 	init: () => init(),
+	getActiveProfile: () => profileService.getActiveProfile(),
 	reject: (end) => reject(requestEnd(end, isWrongProfile.value, profile.value)),
 })
 
 const question = computed(() => payload.value?.feeQuestion)
 const grantsPending = computed(() => !!operation.value && awaitsGrantDecode(operation.value, !!decodedGrants.value))
 const grantRefusal = computed(() => grantRefusalRow(decodedGrants.value ?? []))
-/** Read from the question, so it needs no quote and names the fee before the card mounts. */
-const confirmLabel = computed(() => (question.value ? `Send for ${feeFigure(feeDisplay(question.value.fee, undefined))}` : "Send for FJ"))
-/** The card's own quote of the new fee: the window reads no price, so its dollars are the card's. */
+/** Reuse the fee card's quote so the button and card cannot show different dollar amounts. */
 const nowFee = ref<FeeDisplay | null>(null)
-const confirmDetail = computed(() => (nowFee.value?.usd ? `(${nowFee.value.usd})` : undefined))
+/** The figure is read from the question, so the button names the fee before the card mounts. */
+const confirmDetail = computed(() =>
+	question.value
+		? `for ${feeText({ amount: feeDisplay(question.value.fee, undefined).amount, usd: nowFee.value?.usd ?? null })}`
+		: undefined,
+)
 /** The app's own payment set the fee path: no speed was picked, and its claim, not the balance, pays. */
 const setByApp = computed(() => question.value?.feeSettings?.paymentMethod.kind === "embedded")
 const priority = computed(() => (setByApp.value ? undefined : (question.value?.feeSettings?.priorityLevel ?? "normal")))
 
 const init = async () => {
+	// Allocate after authentication but before any await so unmount cannot precede reader ownership.
+	marks.value = useTokenFlags(priceService)
 	try {
 		profile.value = await profileService.getActiveProfile()
 		await loadInteractionPayload()
 		if (!payload.value) return
 		assertRequestProfile(profile.value, payload.value.session.profileId)
+		void readContacts()
 		const resolved = await resolveForProfile([payload.value.operation], profile.value.id)
 		const op = resolved.operations[0]
 		operation.value = op
@@ -258,6 +294,9 @@ onUnmounted(() => {
 					:decodedAuthwits="decodedAuthwits"
 					:decodedGrants="decodedGrants"
 					:tokens="knownTokens"
+					:marks="marks"
+					:explorerId="appStore.defaultExplorer"
+					:names="names"
 				>
 					<template #fee>
 						<FeeRaisedCard
@@ -281,7 +320,7 @@ onUnmounted(() => {
 			reject-label="Reject"
 			:reject-disabled="isLoading || !requestId"
 			confirm-testid="fee-confirm-btn"
-			:confirm-label="confirmLabel"
+			confirm-label="Send"
 			:confirm-detail="confirmDetail"
 			:confirm-loading="isLoading"
 			:confirm-disabled="

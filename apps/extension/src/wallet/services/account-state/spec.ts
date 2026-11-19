@@ -23,6 +23,17 @@ export type BackupAccountState = {
 	contracts: Restored<BackupContract>[]
 }
 
+/** One contract the PXE holds, as its own store has it. */
+export type ContractRow = {
+	address: string
+	/** The class the instance was deployed with; absent when the PXE lists an address it holds no instance for. */
+	classId?: string
+	/** Every PXE registers it at boot: a protocol contract or a preloaded standard one. */
+	builtIn: boolean
+	/** A built-in's compiled-in name, when the wallet knows one. */
+	name?: string
+}
+
 export type Methods = {
 	/**
 	 * Returns a list of registered accounts.
@@ -69,6 +80,9 @@ export type Methods = {
 	 * @param networkId Network id.
 	 */
 	getContracts(networkId: string): string[]
+
+	/** Returns every registered contract with its class id, read from the PXE's own store only. */
+	getContractRows(networkId: string): ContractRow[]
 }
 
 export type Events = {

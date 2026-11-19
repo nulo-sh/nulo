@@ -38,6 +38,10 @@ export function fakeSdkServices(
 		resetRun?: () => Promise<void>
 		/** What `getActiveProfile` answers; `p1` by default. */
 		activeProfile?: () => Promise<{ id: string } | undefined>
+		/** What `getProfiles` answers; none by default, so a locked discovery opens no unlock window. */
+		profiles?: () => Promise<Array<{ id: string }>>
+		/** A dApp-interaction service in place of the `popup` and `notice` stubs. */
+		dappInteraction?: unknown
 		/** The approval's second durable write; resolves at once by default. */
 		setCapabilityGrants?: () => Promise<unknown>
 		/** Establishment's write of the session's hash to its row; resolves at once by default. */
@@ -48,6 +52,11 @@ export function fakeSdkServices(
 		dappSession?: unknown
 		/** Receives the restart preparation the handler registers. */
 		setRestartPreparation?: (prepare: () => void) => void
+		/** Whether the every-site switch lets a new connection from the origin skip the connect window;
+		 *  off by default. */
+		everySite?: (origin: string) => boolean | Promise<boolean>
+		/** Runs before a row's delete; a throw leaves the row. */
+		beforeDelete?: (id: string) => Promise<void>
 	} = {},
 ): {
 	services: never
@@ -85,6 +94,7 @@ export function fakeSdkServices(
 				profile: {
 					onActiveProfileChanged,
 					getActiveProfile,
+					getProfiles: opts.profiles ?? (async () => []),
 					getDeletionState: () => ({ capture: () => 0 }),
 					setRestartPreparation: opts.setRestartPreparation ?? (() => {}),
 					captureExecutionFence: async () => {
@@ -93,15 +103,17 @@ export function fakeSdkServices(
 						return { profileId: profile.id, epoch: 0, session: 1 }
 					},
 				},
-				"dapp-interaction": {
+				"dapp-interaction": opts.dappInteraction ?? {
 					discover: opts.popup ?? (async () => ({ approved: true })),
 					notifyNetworkUnavailable: opts.notice ?? (async () => undefined),
+					unlockWindows: { origins: () => [], retime: () => false, close: () => {} },
 				},
 				"dapp-session": opts.dappSession ?? {
 					onDappSessionDeleted,
 					onVerificationRefused,
 					onVerificationConfirmed,
 					tryGetDappSessionByOriginAndChain: async (origin: string, chainId: string) => rows.get(`${origin}|${chainId}`),
+					allowsNewSite: async (_profileId: string, origin: string) => (await opts.everySite?.(origin)) ?? false,
 					addDappSession: async (metadata: { url: string }, _p: unknown, _a: unknown, _l: unknown, chainId: string) => {
 						const row = { id: `row-${++rowSeq}`, profileId: "p1", chainId }
 						rows.set(`${metadata.url}|${chainId}`, row)
@@ -109,6 +121,7 @@ export function fakeSdkServices(
 					},
 					setCapabilityGrants: opts.setCapabilityGrants ?? (async () => undefined),
 					deleteDappSession: async (id: string) => {
+						await opts.beforeDelete?.(id)
 						for (const [key, row] of rows) if (row.id === id) rows.delete(key)
 					},
 					setVerificationHash:

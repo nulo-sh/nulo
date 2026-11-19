@@ -2084,6 +2084,28 @@ describe("useFullBackupImport — failure branches", () => {
 		expect(profileClient.deleteProfile).not.toHaveBeenCalled()
 		expect(opts.completeImport).not.toHaveBeenCalled()
 	})
+
+	it("a restore finalize refuses as ended says the import stopped and how to open the profile it kept", async () => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		const backup = await buildBackup()
+		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "password" }
+
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		accountClient.restore.mockResolvedValue([])
+		profileClient.finalizeRestore.mockRejectedValue(new SessionEndedError())
+
+		await c.restoreBackup()
+
+		expect(c.restoreStatus.value).toBe("failed")
+		expect(opts.fillError).toHaveBeenCalledWith(
+			"full_backup",
+			"Couldn't open the imported profile",
+			"The import stopped before the profile opened. Unlock the profile to open it.",
+		)
+		expect(profileClient.deleteProfile).not.toHaveBeenCalled()
+	})
 })
 
 // ── A passkey profile's backup ───────────────────────────────────────────────

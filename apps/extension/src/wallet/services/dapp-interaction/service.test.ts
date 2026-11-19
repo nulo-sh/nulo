@@ -910,13 +910,14 @@ describe("DappInteractionService — the capability window's known contracts", (
 		expiry: Number.MAX_SAFE_INTEGER,
 	}
 
-	test("names only what the wallet vouches for, whatever the stores and the request carry", async () => {
+	/** The window's known contracts over stores and a request that each carry a misleading name. */
+	async function namesHarness(activeProfileId = "p1") {
 		const api = new FakeBrowserApi()
 		api.reset()
 		const logger = new LoggerStore(new ConfigStore())
 		const dapp = new DappInteractionService(logger, new WindowManager(api.windows, new MockClock(), logger))
 		const collection = new ServiceCollection()
-		collection.add(stub(ProfileService.name, { getActiveProfile: async () => ({ id: "p1" }) }))
+		collection.add(stub(ProfileService.name, { getActiveProfile: async () => ({ id: activeProfileId }) }))
 		collection.add(stub(NetworkService.name, {}))
 		collection.add(stub(AccountService.name, {}))
 		collection.add(
@@ -960,6 +961,22 @@ describe("DappInteractionService — the capability window's known contracts", (
 		)
 		collection.add(dapp)
 		await collection.start()
+		return { dapp, getVerifiedDefaults }
+	}
+
+	const VOUCHED = [
+		{ address: `0x${"0".repeat(63)}3`, name: "Fee Juice" },
+		{ address: SPONSORED, name: "Sponsored fee payer" },
+		{ address: PRIVATE, name: "Private fee payer" },
+		{ address: "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83", name: "Auth registry" },
+		{ address: TEST_TOKENS.USDC, name: "Test USDC" },
+		{ address: TEST_TOKENS.USDT, name: "Test USDT" },
+		{ address: TEST_TOKENS.EURC, name: "Test EURC" },
+		{ address: TEST_TOKENS.GBPC, name: "Test GBPC" },
+	]
+
+	test("names only what the wallet vouches for, whatever the stores and the request carry", async () => {
+		const { dapp, getVerifiedDefaults } = await namesHarness()
 		const storage = (dapp as unknown as { storage: Map<string, DappInteraction> }).storage
 
 		void dapp
@@ -974,17 +991,20 @@ describe("DappInteractionService — the capability window's known contracts", (
 		await expect.poll(() => storage.size).toBe(1)
 
 		const { params } = [...storage.values()][0].payload as CapabilityPayload
-		expect(params.knownContracts).toEqual([
-			{ address: `0x${"0".repeat(63)}3`, name: "Fee Juice" },
-			{ address: SPONSORED, name: "Sponsored fee payer" },
-			{ address: PRIVATE, name: "Private fee payer" },
-			{ address: "0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83", name: "Auth registry" },
-			{ address: TEST_TOKENS.USDC, name: "Test USDC" },
-			{ address: TEST_TOKENS.USDT, name: "Test USDT" },
-			{ address: TEST_TOKENS.EURC, name: "Test EURC" },
-			{ address: TEST_TOKENS.GBPC, name: "Test GBPC" },
-		])
+		expect(params.knownContracts).toEqual(VOUCHED)
 		expect(getVerifiedDefaults).toHaveBeenCalledWith("p1", CHAIN_IDS.TESTNET)
+	})
+
+	test("the connected app's page reads the same names for an app of the active profile", async () => {
+		const { dapp, getVerifiedDefaults } = await namesHarness()
+		await expect(dapp.getKnownContracts(SESSION.id)).resolves.toEqual(VOUCHED)
+		expect(getVerifiedDefaults).toHaveBeenCalledWith("p1", CHAIN_IDS.TESTNET)
+	})
+
+	test("an app of another profile gets no names, and its profile's verified tokens are never read", async () => {
+		const { dapp, getVerifiedDefaults } = await namesHarness("p2")
+		await expect(dapp.getKnownContracts(SESSION.id)).rejects.toThrow("Invalid id")
+		expect(getVerifiedDefaults).not.toHaveBeenCalled()
 	})
 })
 
@@ -1061,6 +1081,47 @@ describe("DappInteractionService — a connect window closes with its answer", (
 
 		await expect(w.pending).resolves.toEqual(answer)
 		expect(h.removes).toHaveBeenCalledWith(w.windowId)
+	})
+})
+
+describe("DappInteractionService — a site's unlock window becomes its connect window or notice", () => {
+	const SITE = "https://dapp.example"
+	const METADATA = { name: "dapp.example", url: SITE }
+
+	async function unlockHarness() {
+		const api = new FakeBrowserApi()
+		api.reset()
+		vi.mocked(chrome.runtime.getURL).mockImplementation((path) => `chrome-extension://nulo/${path}`)
+		const dapp = new DappInteractionService(noopLogger, new WindowManager(api.windows, new MockClock(), noopLogger))
+		const fake = api.windows as unknown as { creates: Array<{ url: string }>; navigates: Array<{ windowId: number; url: string }> }
+		dapp.unlockWindows.open(SITE, Date.now() + 50_000)
+		await flush()
+		await flush()
+		fake.creates.length = 0
+		return { dapp, fake, unlockWindowId: 1000 }
+	}
+
+	test.each([
+		["a connect window", "discover", (dapp: DappInteractionService) => dapp.discover({ dappMetadata: METADATA, chainId: "1" })],
+		["a notice", "network-unavailable", (dapp: DappInteractionService) => dapp.notifyNetworkUnavailable({ dappMetadata: METADATA })],
+	])("%s for the site loads in its unlock window and creates none", async (_name, route, start) => {
+		const h = await unlockHarness()
+		void start(h.dapp)
+		await expect.poll(() => h.fake.navigates.length).toBe(1)
+
+		expect(h.fake.navigates[0]?.windowId).toBe(h.unlockWindowId)
+		expect(h.fake.navigates[0]?.url).toContain(`#/windows/${route}?requestId=`)
+		expect(h.fake.creates).toEqual([])
+		expect(h.dapp.unlockWindows.origins()).toEqual([])
+	})
+
+	test("another site's connect window opens a window of its own and leaves the unlock window alone", async () => {
+		const h = await unlockHarness()
+		void h.dapp.discover({ dappMetadata: { name: "other", url: "https://other.example" }, chainId: "1" })
+		await expect.poll(() => h.fake.creates.length).toBe(1)
+
+		expect(h.fake.navigates).toEqual([])
+		expect(h.dapp.unlockWindows.origins()).toEqual([SITE])
 	})
 })
 

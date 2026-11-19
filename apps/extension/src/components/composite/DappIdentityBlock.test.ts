@@ -104,6 +104,27 @@ describe("composite/DappIdentityBlock", () => {
 		expect(w.find('[data-testid="discover-dapp-name"]').exists()).toBe(true)
 	})
 
+	test("a window that fills the name slot shows it under the name's testid in place of the caption", () => {
+		const w = mount(DappIdentityBlock, {
+			props: { dapp: { name: "MyDapp" }, nameTestId: "execute-dapp-name" },
+			slots: { name: '<button data-testid="app-chip">MyDapp</button>' },
+			global: { stubs: STUBS },
+		})
+		expect(w.get('[data-testid="execute-dapp-name"]').find('[data-testid="app-chip"]').exists()).toBe(true)
+		expect(w.findAll('[data-testid="execute-dapp-name"]')).toHaveLength(1)
+		expect(
+			factory({ dapp: { name: "MyDapp" }, nameTestId: "execute-dapp-name" })
+				.get('[data-testid="execute-dapp-name"]')
+				.text(),
+		).toBe("MyDapp")
+	})
+
+	test("a window that draws the name as a chip shows no caption when the name makes none", () => {
+		const w = factory({ dapp: { name: "\u2705\u{1F680}" }, nameTestId: "execute-dapp-name", nameAsChip: true })
+		expect(w.find('[data-testid="execute-dapp-name"]').exists()).toBe(false)
+		expect(w.text()).not.toContain("\u2705")
+	})
+
 	test("a network name wider than the action line breaks at its edge", () => {
 		const parsed = parseSource("apps/extension/src/components/composite/DappIdentityBlock.vue")
 		const actions: TemplateNode[] = []

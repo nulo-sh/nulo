@@ -5,14 +5,14 @@
  * `CallArguments` are mounted so trimming and the toggle are asserted on the components that do them.
  */
 
-import { flushPromises, mount } from "@vue/test-utils"
-import { describe, expect, test, vi } from "vitest"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import AddressDisplay from "@/components/AddressDisplay.vue"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { TokenInfo } from "@/wallet/services/token/client"
+import { openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
-import { shownText } from "../../../../tests/helpers/shown-text"
 
 vi.mock("@/utils/core", () => ({ managers: { contact: { getContactByAddress: vi.fn(async () => null) } } }))
 // The real store's setup opens chrome.storage; the card only needs its account list.
@@ -68,12 +68,15 @@ const mountCard = async (op: unknown, props: Record<string, unknown> = {}) => {
 		props: { op: op as never, index: 0, tokens: [USDC], ...props },
 		global: { stubs, components: { AddressDisplay } },
 	})
-	await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
+	await openAllSteps(w)
 	await flushPromises()
 	return w
 }
 const all = (w: ReturnType<typeof mount>, testid: string) => w.findAll(`[data-testid="${testid}"]`)
 const one = (w: ReturnType<typeof mount>, testid: string) => w.find(`[data-testid="${testid}"]`)
+
+// A mounted card's chip holds fire after the file ends and log as the worker closes.
+enableAutoUnmount(afterEach)
 
 describe("OperationCard — the vocabulary reading", () => {
 	test("transfer(to, amount) on a registered token from the account: 'From: this account', a trimmed recipient, the amount in token units", async () => {
@@ -177,10 +180,10 @@ describe("OperationCard — the vocabulary reading", () => {
 			args: [OWNER, TO, field(5n), field(0n)],
 		}
 		const w = await mountCard(sendTx([lie]), { decodedCalls: [abi("transfer_in_public", ["from", "to", "amount", "authwit_nonce"])] })
-		const row = one(w, "execute-op-payload-row")
-		expect(row.attributes("data-intent-kind")).toBe("transfer")
-		expect(row.text()).toContain("Transfer (public)")
-		expect(row.text()).not.toContain("private")
+		expect(one(w, "execute-op-payload-row").attributes("data-intent-kind")).toBe("transfer")
+		const head = one(w, "execute-op-summary-call-head")
+		expect(head.text()).toContain("Transfer (public)")
+		expect(head.text()).not.toContain("private")
 	})
 
 	test("a 2-arg transfer that hides its msg_sender never claims the account: it takes the ABI decode", async () => {
@@ -251,9 +254,9 @@ describe("OperationCard — the ABI decode and the raw fallback", () => {
 				]),
 			],
 		})
-		const row = one(w, "execute-op-payload-row")
-		expect(row.attributes("data-intent-kind")).toBe("decoded")
-		expect(row.text()).not.toContain("claim_lie")
+		expect(one(w, "execute-op-payload-row").attributes("data-intent-kind")).toBe("decoded")
+		expect(one(w, "execute-op-summary-call-head").text()).not.toContain("claim_lie")
+		expect(w.text()).not.toContain("claim_lie")
 		const params = all(w, "execute-op-decoded-param")
 		expect(params.map((p) => p.attributes("data-param"))).toEqual(["to", "amount", "secret", "shielded"])
 		expect(params[0]!.text()).toContain(trimAddress(TO))
@@ -271,17 +274,21 @@ describe("OperationCard — the ABI decode and the raw fallback", () => {
 	test("while the wallet is still decoding, the card says so and shows no field", async () => {
 		const w = await mountCard(sendTx([claim]))
 		expect(one(w, "execute-op-payload-row").attributes("data-intent-kind")).toBe("pending")
-		expect(one(w, "execute-op-args-pending").exists()).toBe(true)
+		// Once, under the step's sentence: the open step does not say it again.
+		expect(all(w, "execute-op-summary-args-pending")).toHaveLength(1)
+		expect(one(w, "execute-op-args-pending").exists()).toBe(false)
 		expect(w.text()).not.toContain(TO)
 		expect(one(w, "execute-op-unverified-args").exists()).toBe(false)
 	})
 
-	test("an undecodable call shows the notice and keeps its raw fields behind a toggle; fields trim and small ones read as decimals", async () => {
+	test("an undecodable call is named by the one line after the steps and keeps its raw fields behind a toggle; fields trim and small ones read as decimals", async () => {
 		const w = await mountCard(sendTx([claim]), { decodedCalls: [undecoded("unknown-contract")] })
 		const block = one(w, "execute-op-unverified-args")
 		expect(block.attributes("data-reason")).toBe("unknown-contract")
-		expect(one(w, "execute-op-unverified-warning").text()).toContain("Can't read the arguments")
-		expect(shownText(one(w, "execute-op-unverified-reason").element)).toBe("Nulo doesn't have this contract's interface.")
+		// The line after the steps says it; neither the step's sentence nor the open step warns or gives a reason.
+		expect(all(w, "execute-op-summary-unparsed").map((l) => l.text())).toEqual(["Nulo can't parse this call."])
+		expect(w.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(0)
+		expect(w.findAll('[data-testid$="-unverified-reason"]')).toHaveLength(0)
 		expect(one(w, "execute-op-raw-args").exists()).toBe(false)
 		expect(w.text()).not.toContain(TO)
 		const toggle = one(w, "execute-op-raw-toggle")

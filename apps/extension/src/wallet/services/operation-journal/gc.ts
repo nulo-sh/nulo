@@ -56,6 +56,7 @@ const NO_ACCOUNT = "<no-account>"
 const REFUSED_BEFORE_SENDING: ReadonlySet<string> = new Set([
 	"scope_refused",
 	"registry_refused",
+	"unattached_refused",
 	"malformed_request",
 	"terms_refused",
 	"wallet_refused",

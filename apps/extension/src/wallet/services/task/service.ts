@@ -44,7 +44,13 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
 	}
 
-	private createTask(content: ITaskContent, parentId?: string, origin?: TxOrigin, status: TaskStatus = TaskStatus.Pending): WrappedTask {
+	private createTask(
+		content: ITaskContent,
+		parentId?: string,
+		origin?: TxOrigin,
+		status: TaskStatus = TaskStatus.Pending,
+		walletTraceId?: string,
+	): WrappedTask {
 		const taskId = randomIdNotIn((id) => this.tasks.has(id))
 
 		const parent = parentId ? this.getTaskById(parentId) : undefined
@@ -64,6 +70,7 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 			finishedAt: undefined,
 			result: undefined,
 			error: undefined,
+			walletTraceId: walletTraceId ?? parent?.walletTraceId,
 		}
 
 		if (status !== TaskStatus.Pending) {
@@ -96,10 +103,11 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 	 * @param content - Task content
 	 * @param parentId - Optional parent task ID
 	 * @param origin - Optional origin of the task
+	 * @param walletTraceId - The dApp request a root task runs for
 	 * @returns Created task wrapper
 	 */
-	public startNewTask(content: ITaskContent, parentId?: string, origin?: TxOrigin): WrappedTask {
-		return this.createTask(content, parentId, origin, TaskStatus.Processing)
+	public startNewTask(content: ITaskContent, parentId?: string, origin?: TxOrigin, walletTraceId?: string): WrappedTask {
+		return this.createTask(content, parentId, origin, TaskStatus.Processing, walletTraceId)
 	}
 
 	private validateTaskBeforeFinish(task: Task): void {

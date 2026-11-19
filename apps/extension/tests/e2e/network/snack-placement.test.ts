@@ -4,6 +4,7 @@
  *  that fails once its record is written offers Details, which opens that record. */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { type Tx, TxStatus } from "@/wallet/services/transaction/spec"
 import { readSealedRows } from "../fixtures/sealed-rows"
 import {
@@ -33,7 +34,7 @@ import {
 import { readSendRecords, waitForBalanceQueueIdle } from "../fixtures/journal"
 import { pollUntil } from "../fixtures/poll"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { shotSend } from "../fixtures/send-page"
+import { chooseRecipient, readSendView, shotSend, submitSend } from "../fixtures/send-page"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 import { bringToFront, setViewport } from "../fixtures/browser"
 
@@ -43,7 +44,15 @@ const hasConfig = aztecConfig !== undefined
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const SNACK = sel("snackbar")
 
-type Placement = { snackTop: number; snackBottom: number; footerTop: number; left: number; width: number; columnCentre: number }
+type Placement = {
+	snackTop: number
+	snackBottom: number
+	footerTop: number
+	left: number
+	width: number
+	columnCentre: number
+	windowWidth: number
+}
 type AtEnd = { viewport: number; inset: number; footerTop: number; footerTopAtEnd: number; snackBottom: number }
 type Hit = { id: string; hit: string; covered: boolean }
 
@@ -79,6 +88,7 @@ async function placement(page: Page, footer: string): Promise<Placement> {
 					const body = document.body.getBoundingClientRect()
 					return body.left + body.width / 2
 				})(),
+				windowWidth: document.documentElement.clientWidth,
 			}
 		},
 		SNACK,
@@ -394,19 +404,20 @@ const ONE_TO_MINTER = () => ({ amount: "1", destination: (aztecConfig as AztecTe
 
 async function openPublicSend(page: Page): Promise<void> {
 	await navigateByHash(page, "#/popup/send", 10_000)
-	await page.waitForSelector(sel("send-from-type"), { timeout: 10_000 })
+	await page.waitForSelector(sel("send-person-step"), { timeout: 10_000 })
+	await chooseRecipient(page, ONE_TO_MINTER().destination)
 	await setActiveSendType(page, "send-from-type", "public")
 	await setActiveSendType(page, "send-to-type", "public")
 }
 
 /** On Send: 1 token, public to public, to the sandbox minter, from a balance the chain no longer
- *  holds, until the estimate has failed. Nothing goes out on a fee the person has not seen, so the
- *  footer stays off. */
+ *  holds, until the estimate has failed. Nothing goes out on a fee the person has not seen, so
+ *  "Review send" stays off. */
 async function sendFromDrainedBalance(page: Page): Promise<void> {
 	await openPublicSend(page)
 	await enterSendForm(page, ONE_TO_MINTER())
 	await waitForToast(page, "Couldn't estimate fee", 120_000, { kind: "error" })
-	expect(await page.$eval(sel("send-submit"), (el) => getComputedStyle(el).pointerEvents)).toBe("none")
+	expect(await page.$eval(sel("send-submit"), (el) => (el as HTMLButtonElement).disabled)).toBe(true)
 }
 
 /**
@@ -424,9 +435,9 @@ async function estimateOnSend(page: Page): Promise<void> {
  *  record is written. */
 async function confirmDrainedSend(page: Page): Promise<void> {
 	await bringToFront(page)
-	// A public origin needs no review, so the footer sends at once.
-	expect(await page.$eval(sel("send-submit"), (el) => el.getAttribute("data-action"))).toBe("send")
-	await clickByTestId(page, "send-submit")
+	// A public origin names the sender, never the fee payer: no warning stands before the review.
+	expect(await readSendView(page)).toMatchObject({ warning: false, you: "public" })
+	await submitSend(page)
 }
 
 /** Asks, through the playground, for a public transfer of 1,000,000 base units from an account that
@@ -498,12 +509,67 @@ test.skipIf(!hasConfig)(
 	},
 )
 
+/** The same transfer, its fee paid by the app's own PrivateFPC payment, which charges the account's
+ *  Private Fee Juice, of which it holds none. A payment the app set has no fee card, so its failure
+ *  is always the snack's, whoever's call failed. */
+async function openFeePathFailure(ctx: ExtensionContext & { playgroundPage: Page }): Promise<Page> {
+	const config = aztecConfig as AztecTestConfig
+	const pg = ctx.playgroundPage
+	await setPgInput(pg, "tokenAddress", config.tokenAddress)
+	await setPgInput(pg, "recipient", config.minterAddress)
+	await setPgInput(pg, "amount", "1000000")
+	await setPgInput(pg, "feePayer", PRIVATE_FPC_ADDRESS)
+	const execute = waitForPopup(ctx, "execute", { timeout: 60_000 })
+	await clickByTestId(pg, "pg-btn-sendTx-feePayer")
+	return execute
+}
+
+test.skipIf(!hasConfig)(
+	"the execute window: an estimate failing inside the app's call names the app's assertion under the fee card, and no snack",
+	{ timeout: 300_000 },
+	async ({ dappConnectedExtensionWithTransactionCap }) => {
+		const ctx = dappConnectedExtensionWithTransactionCap
+		const config = aztecConfig as AztecTestConfig
+		const pg = ctx.playgroundPage
+		// A private transfer of 1 TST from an account that holds no private TST: Token's own assertion.
+		await pg.select(sel("pg-select-transferFn"), "transfer_private_to_private")
+		await setPgInput(pg, "tokenAddress", config.tokenAddress)
+		await setPgInput(pg, "recipient", config.minterAddress)
+		await setPgInput(pg, "amount", "1000000000000000000")
+		const opened = waitForPopup(ctx, "execute", { timeout: 60_000 })
+		await clickByTestId(pg, "pg-btn-sendTx-default")
+		const execute = await opened
+		const LINE = "The app's transaction cannot run right now: Balance too low. Fee estimation needs it to run."
+		await execute.waitForSelector(sel("execute-op-app-failure"), { visible: true, timeout: 180_000 })
+		expect(await execute.$eval(sel("execute-op-app-failure"), (el) => el.textContent?.replace(/\s+/g, " ").trim())).toBe(LINE)
+		// The line and the snack it replaces are decided in one handler, so the snack's absence is settled here.
+		expect(await execute.$(SNACK)).toBeNull()
+		expect(await execute.$(sel("fee-estimate-failed"))).not.toBeNull()
+		await shotSend(execute, "execute-app-assertion", "execute-op-app-failure")
+
+		// Try again asks again: the line leaves with its failure, and the same failure brings it back.
+		await clickByTestId(execute, "fee-estimate-retry")
+		await execute.waitForFunction(
+			(s: string) => document.querySelector(s) === null,
+			{ timeout: 5_000, polling: 50 },
+			sel("execute-op-app-failure"),
+		)
+		await execute.waitForSelector(sel("execute-op-app-failure"), { visible: true, timeout: 180_000 })
+		expect(await execute.$(SNACK)).toBeNull()
+
+		await rejectExecute(execute)
+		await waitForPopupClosed(execute)
+		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
+	},
+)
+
 test.skipIf(!hasConfig)(
 	"the execute window: a fee-estimate error sits 12px above the approve/reject footer",
 	{ timeout: 300_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
 		const ctx = dappConnectedExtensionWithTransactionCap
-		const execute = await openUnfundedDappSend(ctx)
+		const execute = await openFeePathFailure(ctx)
 		await waitForToast(execute, "Couldn't estimate fee", 180_000, { kind: "error" })
 		await execute.waitForSelector(sel("fee-estimate-failed"), { visible: true, timeout: 10_000 })
 
@@ -511,8 +577,8 @@ test.skipIf(!hasConfig)(
 		console.log(`[snack-placement] execute: ${Math.round(at.footerTop - at.snackBottom)}px above the footer, ${at.width}px wide`)
 		expect(at.footerTop - at.snackBottom).toBeGreaterThanOrEqual(11.5)
 		expect(at.footerTop - at.snackBottom).toBeLessThanOrEqual(12.5)
-		// The window centres the 360px column; the card spans it less 16px a side.
-		expect(Math.abs(at.width - 328)).toBeLessThanOrEqual(0.5)
+		// The execute window fills its width, so the card spans the window less 16px a side.
+		expect(Math.abs(at.width - (at.windowWidth - 32))).toBeLessThanOrEqual(0.5)
 		expect(Math.abs(at.left + at.width / 2 - at.columnCentre)).toBeLessThanOrEqual(0.5)
 
 		const grown = await growFooter(execute, sel("dapp-approval-footer"), at)

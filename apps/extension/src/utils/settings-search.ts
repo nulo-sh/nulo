@@ -202,6 +202,14 @@ export const SETTINGS_ROWS = {
 		testid: "delete-profile-link-btn",
 		to: "/popup/settings/security/reset",
 	},
+	"connected-apps-every-site": {
+		page: "/popup/settings/connected-apps",
+		section: "Connected Apps",
+		title: "Let every site see that Nulo is installed",
+		description: "Skips the connect window. Connecting and sharing an account still ask you.",
+		synonyms: ["connect", "discover", "allow", "sites", "dapps", "prompt"],
+		testid: "privacy-row-every-site",
+	},
 	"lock-now": {
 		page: "/popup/settings/lock",
 		section: "Lock",

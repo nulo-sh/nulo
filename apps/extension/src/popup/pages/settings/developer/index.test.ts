@@ -168,5 +168,5 @@ test("a failed write leaves Developer Mode as stored and writes no dependent; as
 
 test.each([false, true])("renders the search registry's rows with developer mode %s", async (developerMode) => {
 	config.getProps.mockResolvedValue([{ key: "developerMode", value: developerMode }] as ConfigProp[])
-	expectOwnedRows(await mountAdvanced(), "/popup/settings/developer", settingsContext({ developerMode }))
+	expectOwnedRows(await mountAdvanced(), "/popup/settings/developer", settingsContext({ developerMode }), developerMode ? 3 : 1)
 })

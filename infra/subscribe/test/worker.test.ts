@@ -1,20 +1,27 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
 import { BODY_CAP_BYTES, HONEYPOT_FIELD } from "../src/body"
+import { CONFIRM_URL } from "../src/confirmation"
 import { RESEND_API, retryWaitMs, type Upstream } from "../src/resend"
 import { SUCCESS_PATH } from "../src/respond"
-import { createHandler, type Env } from "../src/worker"
+import { readToken, sendKey, signToken, TOKEN_TTL_MS } from "../src/token"
+import { CONFIRM_PATH, createHandler, type Env, SUBSCRIBE_PATH } from "../src/worker"
 import {
 	ADDRESS,
+	confirmWith,
 	fakeUpstream,
 	form,
 	IP,
 	json,
+	KEY_MARKER,
 	makeEnv,
 	NORMALIZED,
 	post,
+	type Recorded,
 	reply,
 	resendStore,
 	TEST_KEY,
+	TEST_SECRET,
+	TOKEN_MARKER,
 	UPSTREAM_TEXT,
 	WRANGLER,
 } from "./fakes"
@@ -33,11 +40,13 @@ beforeEach(() => {
 })
 
 // Every test, so every branch, runs under the spy: no log line may carry the address, its local
-// part, the visitor's IP, the key or anything Resend said.
+// part, the visitor's IP, the key, the confirmation secret, a token, a send key or anything Resend said.
 afterEach(() => {
 	for (const undo of restore) undo()
 	const text = Bun.inspect(logged, { depth: 20 }).toLowerCase()
-	for (const marker of [NORMALIZED, "probe.person", IP, TEST_KEY, UPSTREAM_TEXT]) expect(text).not.toContain(marker.toLowerCase())
+	for (const marker of [NORMALIZED, "probe.person", IP, TEST_KEY, TEST_SECRET, TOKEN_MARKER, KEY_MARKER, UPSTREAM_TEXT]) {
+		expect(text).not.toContain(marker.toLowerCase())
+	}
 })
 
 // Owned by the test, not read from the source: nothing inherits nulo-landing's `_headers`.
@@ -51,6 +60,9 @@ const EXPECTED_HEADERS = {
 	"x-content-type-options": "nosniff",
 	"x-frame-options": "DENY",
 }
+
+/** The fake upstream's clock at rest. */
+const START = Date.parse("2026-10-27T12:00:00.000Z")
 
 /** Runs the handler and holds every response, whatever its branch, to the Worker's own headers. */
 async function run(request: Request, env: Env, up: Upstream): Promise<Response> {
@@ -71,21 +83,32 @@ async function snapshot(response: Response) {
 	return { status: response.status, headers: [...response.headers.entries()], body: await response.text() }
 }
 
-describe("refusals before the body is read", () => {
+const found = (state: Record<string, unknown> = {}) => Response.json({ object: "contact", email: NORMALIZED, ...state })
+const sends = (requests: Recorded[]) => requests.filter((r) => r.url === `${RESEND_API}/emails`)
+const linkToken = (text: string) => (/https:\/\/nulo\.sh\/confirm#(\S+)/.exec(text) as RegExpExecArray)[1] as string
+
+// A request each path refuses on its own merits, without calling Resend, so what a test observes is
+// the admission in front of it.
+describe.each([
+	{ path: SUBSCRIBE_PATH, harmless: (headers?: Record<string, string>) => json({ email: "not an address" }, headers) },
+	{ path: CONFIRM_PATH, harmless: (headers?: Record<string, string>) => confirmWith("not-a-token", headers) },
+])("admission on $path", ({ path, harmless }) => {
+	const url = `https://nulo.sh${path}`
+
 	test("the kill switch answers 503 before the method, the Origin, the limiters or Resend are consulted", async () => {
 		const env = makeEnv({ SUBSCRIBE_OFF: "1" })
 		const upstream = noUpstream()
-		await expectRefusal(await run(new Request("https://nulo.sh/api/subscribe"), env, upstream.up), 503)
-		await expectRefusal(await run(form({ email: ADDRESS }), env, upstream.up), 503)
+		await expectRefusal(await run(new Request(url), env, upstream.up), 503)
+		await expectRefusal(await run(harmless(), env, upstream.up), 503)
 		expect(env.IP_LIMITER.keys).toEqual([])
 		expect(upstream.requests).toEqual([])
 		// Control: with the switch off, the same GET reaches the method check.
-		expect((await run(new Request("https://nulo.sh/api/subscribe"), makeEnv(), upstream.up)).status).toBe(405)
+		expect((await run(new Request(url), makeEnv(), upstream.up)).status).toBe(405)
 	})
 
 	test("every method but POST is a 405 naming POST", async () => {
 		for (const method of ["GET", "HEAD", "PUT", "DELETE", "OPTIONS"]) {
-			const response = await run(new Request("https://nulo.sh/api/subscribe", { method }), makeEnv(), noUpstream().up)
+			const response = await run(new Request(url, { method }), makeEnv(), noUpstream().up)
 			expect(response.status).toBe(405)
 			expect(response.headers.get("allow")).toBe("POST")
 		}
@@ -104,7 +127,7 @@ describe("refusals before the body is read", () => {
 			"https://evil.example",
 		]
 		for (const origin of origins) {
-			const request = form({ email: ADDRESS })
+			const request = harmless()
 			if (origin === null) request.headers.delete("origin")
 			else request.headers.set("origin", origin)
 			await expectRefusal(await run(request, env, noUpstream().up), 403)
@@ -115,35 +138,30 @@ describe("refusals before the body is read", () => {
 
 	test("a request without CF-Connecting-IP is a 400, never a shared limiter bucket", async () => {
 		const env = makeEnv()
-		const request = form({ email: ADDRESS })
+		const request = harmless()
 		request.headers.delete("cf-connecting-ip")
 		await expectRefusal(await run(request, env, noUpstream().up), 400)
 		expect(env.IP_LIMITER.keys).toEqual([])
 	})
 
-	test("the sixth submission from one IP in a window is a 429, and another IP is still admitted", async () => {
+	test("the sixth request from one IP in a window is a 429, and another IP is still admitted", async () => {
 		const env = makeEnv()
-		const store = resendStore(409)
-		const { up } = fakeUpstream(store.answer)
-		for (let i = 0; i < 5; i++) expect((await run(json({ email: `p${i}@example.com` }), env, up)).status).toBe(200)
-		await expectRefusal(await run(json({ email: "p5@example.com" }), env, up), 429)
-		expect(store.attempts()).toBe(5)
-		const other = json({ email: "p6@example.com" }, { "cf-connecting-ip": "198.51.100.9" })
-		expect((await run(other, env, up)).status).toBe(200)
+		for (let i = 0; i < 5; i++) await expectRefusal(await run(harmless(), env, noUpstream().up), 400)
+		await expectRefusal(await run(harmless(), env, noUpstream().up), 429)
+		await expectRefusal(await run(harmless({ "cf-connecting-ip": "198.51.100.9" }), env, noUpstream().up), 400)
 		expect(new Set(env.IP_LIMITER.keys)).toEqual(new Set([IP, "198.51.100.9"]))
 	})
 
 	test("the global ceiling refuses with a 429 once spent, whatever the IP", async () => {
 		const env = makeEnv()
 		const { limit } = WRANGLER.ratelimits.find((r: { name: string }) => r.name === "GLOBAL_LIMITER").simple
-		const decoy = (i: number) => form({ email: "x@example.com", [HONEYPOT_FIELD]: "bot" }, { "cf-connecting-ip": `10.0.0.${i}` })
-		for (let i = 0; i < limit; i++) expect((await run(decoy(i), env, noUpstream().up)).status).toBe(303)
-		await expectRefusal(await run(decoy(limit), env, noUpstream().up), 429)
+		for (let i = 0; i < limit; i++) {
+			await expectRefusal(await run(harmless({ "cf-connecting-ip": `10.0.0.${i}` }), env, noUpstream().up), 400)
+		}
+		await expectRefusal(await run(harmless({ "cf-connecting-ip": `10.0.0.${limit}` }), env, noUpstream().up), 429)
 		expect(new Set(env.GLOBAL_LIMITER.keys).size).toBe(1)
 	})
-})
 
-describe("the body", () => {
 	test("a body past 2 KB is a 413 even when Content-Length lies, and the stream is not pulled past the cap", async () => {
 		// Large rather than endless, so a reader that ignores the cap fails on the status, not a hang.
 		let pulls = 0
@@ -153,15 +171,10 @@ describe("the body", () => {
 				else controller.enqueue(new Uint8Array(1024).fill(0x61))
 			},
 		})
-		const request = new Request("https://nulo.sh/api/subscribe", {
+		const request = new Request(url, {
 			method: "POST",
 			body: endless,
-			headers: {
-				origin: "https://nulo.sh",
-				"cf-connecting-ip": IP,
-				"content-type": "application/x-www-form-urlencoded",
-				"content-length": "10",
-			},
+			headers: { origin: "https://nulo.sh", "cf-connecting-ip": IP, "content-type": "application/json", "content-length": "10" },
 			duplex: "half",
 		} as RequestInit)
 		const upstream = noUpstream()
@@ -170,32 +183,42 @@ describe("the body", () => {
 		expect(upstream.requests).toEqual([])
 	})
 
-	test("a body of exactly the cap is read; one byte more is a 413", async () => {
-		const exact = (extra: number) => {
-			const base = new URLSearchParams({ email: "fits@example.com", pad: "" }).toString()
-			return post(base + "x".repeat(BODY_CAP_BYTES - base.length + extra))
-		}
-		const { up } = fakeUpstream(resendStore(409).answer)
-		expect((await run(exact(0), makeEnv(), up)).status).toBe(303)
-		await expectRefusal(await run(exact(1), makeEnv(), up), 413)
-	})
-
 	test("a malformed body is a 400 that reaches no one", async () => {
+		const malformed = (body: RequestInit["body"], contentType: string) => post(body, { contentType, path })
 		const cases: Request[] = [
-			post("{not json", { contentType: "application/json" }),
-			post(`["${NORMALIZED}"]`, { contentType: "application/json" }),
-			post(`"${NORMALIZED}"`, { contentType: "application/json" }),
-			post(JSON.stringify({ email: 5 }), { contentType: "application/json" }),
-			post(JSON.stringify({ email: NORMALIZED, [HONEYPOT_FIELD]: 1 }), { contentType: "application/json" }),
-			post(`email=${NORMALIZED}`, { contentType: "text/plain" }),
-			post(`email=${NORMALIZED}`, { contentType: "multipart/form-data; boundary=x" }),
-			post(new Uint8Array([0x65, 0x6d, 0x61, 0x69, 0x6c, 0x3d, 0xff, 0xfe])),
-			post("name=someone"),
+			malformed("{not json", "application/json"),
+			malformed(`["${NORMALIZED}"]`, "application/json"),
+			malformed(`"${NORMALIZED}"`, "application/json"),
+			malformed(JSON.stringify({ email: 5 }), "application/json"),
+			malformed(JSON.stringify({ token: 5 }), "application/json"),
+			malformed(JSON.stringify({ email: NORMALIZED, [HONEYPOT_FIELD]: 1 }), "application/json"),
+			malformed(`email=${NORMALIZED}`, "text/plain"),
+			malformed(`email=${NORMALIZED}`, "multipart/form-data; boundary=x"),
+			malformed(new Uint8Array([0x65, 0x6d, 0x61, 0x69, 0x6c, 0x3d, 0xff, 0xfe]), "application/x-www-form-urlencoded"),
+			malformed("name=someone", "application/x-www-form-urlencoded"),
 		]
 		const upstream = noUpstream()
 		for (const request of cases) await expectRefusal(await run(request, makeEnv(), upstream.up), 400)
 		expect(upstream.requests).toEqual([])
 	})
+})
+
+test("any other path is a 404 before the limiters", async () => {
+	const env = makeEnv()
+	for (const path of ["/", "/api/unsubscribe", "/api/confirm/", "/api/Subscribe", "/api/subscribe/x"]) {
+		await expectRefusal(await run(json({ email: ADDRESS }, {}, path), env, noUpstream().up), 404)
+	}
+	expect(env.IP_LIMITER.keys).toEqual([])
+})
+
+test("a body of exactly the cap is read; one byte more is a 413", async () => {
+	const exact = (extra: number) => {
+		const base = new URLSearchParams({ email: "fits@example.com", pad: "" }).toString()
+		return post(base + "x".repeat(BODY_CAP_BYTES - base.length + extra))
+	}
+	const { up } = fakeUpstream(resendStore(409).answer)
+	expect((await run(exact(0), makeEnv(), up)).status).toBe(303)
+	await expectRefusal(await run(exact(1), makeEnv(), up), 413)
 })
 
 describe("the address", () => {
@@ -225,44 +248,40 @@ describe("the address", () => {
 		expect(upstream.requests).toEqual([])
 	})
 
-	test("normalization trims and lowercases the domain only; every accepted character reaches Resend's path verbatim", async () => {
+	test("normalization trims and lowercases the domain only; every accepted character reaches Resend verbatim", async () => {
 		const store = resendStore(409)
 		const upstream = fakeUpstream(store.answer)
 		expect((await run(json({ email: ADDRESS }), makeEnv(), upstream.up)).status).toBe(200)
-		expect(new URL(upstream.requests[0].url).pathname).toBe(`/contacts/${NORMALIZED}`)
+		expect(new URL(upstream.requests[0]?.url as string).pathname).toBe(`/contacts/${NORMALIZED}`)
 		const unusual = "o'brien!$&*+=_~-x.y@sub-domain.example.org"
 		expect((await run(json({ email: unusual }, { "cf-connecting-ip": "198.51.100.2" }), makeEnv(), upstream.up)).status).toBe(200)
-		expect(new URL(upstream.requests[2].url).pathname).toBe(`/contacts/${unusual}`)
-		expect([...store.contacts.keys()]).toEqual([NORMALIZED, unusual])
+		expect(new URL(upstream.requests[2]?.url as string).pathname).toBe(`/contacts/${unusual}`)
+		expect(store.emails.map((e) => JSON.parse(e.body).to)).toEqual([NORMALIZED, unusual])
 	})
 })
 
-describe("Resend", () => {
-	test("a new address is looked up, then created once with the segment, the opted-in topic and the three properties", async () => {
+describe("signup", () => {
+	test("a new address is looked up, then sent one confirmation email under its key; no contact is written", async () => {
 		const store = resendStore(409)
 		const upstream = fakeUpstream(store.answer)
 		const response = await run(json({ email: ADDRESS }), makeEnv(), upstream.up)
-		expect(response.status).toBe(200)
-		expect(await response.text()).toBe('{"ok":true}')
-		const [lookup, create] = upstream.requests
+		expect([response.status, await response.text()]).toEqual([200, '{"ok":true}'])
+		const [lookup, send] = upstream.requests
 		expect(upstream.requests).toHaveLength(2)
-		for (const request of [lookup, create]) {
-			expect(request.headers.get("authorization")).toBe(`Bearer ${TEST_KEY}`)
-			expect(request.headers.get("user-agent")).toBe("nulo-subscribe")
+		for (const request of [lookup, send]) {
+			expect(request?.headers.get("authorization")).toBe(`Bearer ${TEST_KEY}`)
+			expect(request?.headers.get("user-agent")).toBe("nulo-subscribe")
 		}
-		expect([lookup.method, lookup.url]).toEqual(["GET", `${RESEND_API}/contacts/${NORMALIZED}`])
-		expect([create.method, create.url, create.headers.get("content-type")]).toEqual([
-			"POST",
-			`${RESEND_API}/contacts`,
-			"application/json",
-		])
-		expect(JSON.parse(create.body)).toEqual({
-			email: NORMALIZED,
-			unsubscribed: false,
-			segments: [{ id: WRANGLER.vars.RESEND_SEGMENT_ID }],
-			topics: [{ id: WRANGLER.vars.RESEND_TOPIC_ID, subscription: "opt_in" }],
-			properties: { source: "landing", consent_version: WRANGLER.vars.CONSENT_VERSION, consented_at: "2026-10-27T12:00:00.000Z" },
-		})
+		expect([lookup?.method, lookup?.url]).toEqual(["GET", `${RESEND_API}/contacts/${NORMALIZED}`])
+		expect([send?.method, send?.url, send?.headers.get("content-type")]).toEqual(["POST", `${RESEND_API}/emails`, "application/json"])
+		expect(send?.headers.get("idempotency-key")).toBe(await sendKey(TEST_SECRET, NORMALIZED))
+		const email = JSON.parse(send?.body as string)
+		expect(email).toMatchObject({ from: "Nulo <hello@news.nulo.sh>", reply_to: "hello@nulo.sh", to: NORMALIZED })
+		const token = linkToken(email.text)
+		expect(email.html).toContain(`href="${CONFIRM_URL}#${token}"`)
+		expect(await readToken(TEST_SECRET, token, START)).toBe(NORMALIZED)
+		expect(JSON.parse(Buffer.from(token.split(".")[0] as string, "base64url").toString()).t).toBe(START)
+		expect(store.contacts.size).toBe(0)
 	})
 
 	const states: [string, Record<string, unknown>][] = [
@@ -272,17 +291,49 @@ describe("Resend", () => {
 		["with foreign properties", { unsubscribed: false, properties: { source: { value: "import", type: "string" } } }],
 	]
 
-	test.each(states)("a known address %s gets no write and the answer a new address gets", async (_, state) => {
+	test.each(states)("a known address %s gets no email, no write and the answer a new address gets", async (_, state) => {
 		const fresh = await snapshot(await run(json({ email: ADDRESS }), makeEnv(), fakeUpstream(resendStore(409).answer).up))
-		const upstream = fakeUpstream(() => Response.json({ object: "contact", email: NORMALIZED, ...state }))
+		const upstream = fakeUpstream(() => found(state))
 		const known = await snapshot(await run(json({ email: ADDRESS }), makeEnv(), upstream.up))
 		expect(upstream.requests.map((r) => r.method)).toEqual(["GET", "GET"])
 		expect(known).toEqual(fresh)
 	})
 
+	test("a repeat inside 24 h sends the same key with a new body: Resend refuses it, one email, identical answers", async () => {
+		const store = resendStore(409)
+		const upstream = fakeUpstream(store.answer)
+		const env = makeEnv()
+		const first = await snapshot(await run(json({ email: ADDRESS }), env, upstream.up))
+		upstream.advance(60_000)
+		const second = await snapshot(await run(json({ email: ADDRESS }, { "cf-connecting-ip": "198.51.100.3" }), env, upstream.up))
+		expect(second).toEqual(first)
+		const [a, b] = sends(upstream.requests)
+		expect(b?.headers.get("idempotency-key")).toBe(a?.headers.get("idempotency-key") as string)
+		expect(b?.body).not.toBe(a?.body as string)
+		expect(store.emails).toHaveLength(1)
+		// Once Resend lets the key go, the address can be sent another email.
+		upstream.advance(TOKEN_TTL_MS)
+		expect((await run(json({ email: ADDRESS }, { "cf-connecting-ip": "198.51.100.4" }), env, upstream.up)).status).toBe(200)
+		expect(store.emails).toHaveLength(2)
+	})
+
+	test("each key-conflict 409 counts as sent; another 409, a 409 without a body and a 422 are a 502", async () => {
+		for (const name of ["invalid_idempotent_request", "concurrent_idempotent_requests"]) {
+			const script = [reply(404), reply(409, {}, name)]
+			const upstream = fakeUpstream(() => script.shift() ?? reply(500))
+			expect((await run(json({ email: ADDRESS }), makeEnv(), upstream.up)).status).toBe(200)
+		}
+		for (const refusal of [reply(409, {}, "resource_locked"), new Response(null, { status: 409 }), reply(422)]) {
+			const script = [reply(404), refusal]
+			const upstream = fakeUpstream(() => script.shift() ?? reply(500))
+			await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), upstream.up), 502)
+			expect(upstream.requests.map((r) => r.method)).toEqual(["GET", "POST"])
+		}
+	})
+
 	test("a known address makes as many round trips as a new one, so a saturated Resend answers both with the same 503", async () => {
 		let lookups = 0
-		const known = fakeUpstream(() => (++lookups === 1 ? Response.json({ object: "contact" }) : reply(429)))
+		const known = fakeUpstream(() => (++lookups === 1 ? found() : reply(429)))
 		const fresh = fakeUpstream((r) => (r.method === "GET" ? reply(404) : reply(429)))
 		for (const { up } of [known, fresh]) await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), up), 503)
 		expect(known.requests.map((r) => r.method)).toEqual(["GET", "GET", "GET"])
@@ -290,15 +341,13 @@ describe("Resend", () => {
 		expect(known.sleeps).toEqual(fresh.sleeps)
 	})
 
-	test("no request ever follows a redirect, so the key cannot be forwarded to another host", async () => {
-		const upstream = fakeUpstream(
-			() => new Response(null, { status: 307, headers: { location: "https://elsewhere.example/contacts" } }),
-		)
-		await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), upstream.up), 502)
-		const store = fakeUpstream(resendStore(409).answer)
-		await run(json({ email: ADDRESS }), makeEnv(), store.up)
-		for (const request of [...upstream.requests, ...store.requests]) expect(request.redirect).toBe("manual")
-		expect(upstream.requests.map((r) => r.url)).toEqual([`${RESEND_API}/contacts/${NORMALIZED}`])
+	// A known limit, kept visible: a refusal of sends alone (the daily send quota spent) fails a new
+	// address while a listed one, which needs no send, still succeeds.
+	test("a refusal of sends alone answers a new address 503 while a listed one still gets the success answer", async () => {
+		const fresh = fakeUpstream((r) => (r.method === "GET" ? reply(404) : reply(429)))
+		await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), fresh.up), 503)
+		const known = fakeUpstream(() => found())
+		expect((await run(json({ email: ADDRESS }), makeEnv(), known.up)).status).toBe(200)
 	})
 
 	test("a filled honeypot answers exactly like a new address and calls Resend not at all", async () => {
@@ -311,23 +360,60 @@ describe("Resend", () => {
 		expect((await run(form({ email: ADDRESS, [HONEYPOT_FIELD]: "x" }), makeEnv(), upstream.up)).status).toBe(303)
 		expect(upstream.requests).toEqual([])
 	})
+})
+
+describe("confirmation", () => {
+	const token = () => signToken(TEST_SECRET, NORMALIZED, START)
+
+	test("a valid token creates the contact once, with the segment, the topic and the confirmation's version and time", async () => {
+		const store = resendStore(409)
+		const upstream = fakeUpstream(store.answer)
+		upstream.advance(60 * 60 * 1000)
+		const response = await run(confirmWith(await token()), makeEnv(), upstream.up)
+		expect([response.status, response.headers.get("content-type"), await response.text()]).toEqual([
+			200,
+			"application/json",
+			'{"ok":true}',
+		])
+		const [lookup, create] = upstream.requests
+		expect(upstream.requests).toHaveLength(2)
+		expect([lookup?.method, lookup?.url]).toEqual(["GET", `${RESEND_API}/contacts/${NORMALIZED}`])
+		expect([create?.method, create?.url]).toEqual(["POST", `${RESEND_API}/contacts`])
+		expect(JSON.parse(create?.body as string)).toEqual({
+			email: NORMALIZED,
+			unsubscribed: false,
+			segments: [{ id: WRANGLER.vars.RESEND_SEGMENT_ID }],
+			topics: [{ id: WRANGLER.vars.RESEND_TOPIC_ID, subscription: "opt_in" }],
+			properties: { source: "landing", consent_version: WRANGLER.vars.CONSENT_VERSION, consented_at: "2026-10-27T13:00:00.000Z" },
+		})
+	})
+
+	test("a token used twice creates one contact and answers 200 both times", async () => {
+		const store = resendStore(409)
+		const upstream = fakeUpstream(store.answer)
+		for (const ip of [IP, "198.51.100.5"]) {
+			expect((await run(confirmWith(await token(), { "cf-connecting-ip": ip }), makeEnv(), upstream.up)).status).toBe(200)
+		}
+		expect(store.attempts()).toBe(1)
+		expect(upstream.requests.map((r) => r.method)).toEqual(["GET", "POST", "GET", "GET"])
+	})
 
 	test.each([409, 422, "upsert"] as const)(
-		"two concurrent first submissions of one address both succeed and leave one contact (duplicate create: %p)",
+		"two concurrent confirmations of one address both succeed and leave one contact (duplicate create: %p)",
 		async (duplicate) => {
 			const store = resendStore(duplicate)
 			let release: () => void = () => {}
 			const bothLookedUp = new Promise<void>((resolve) => (release = resolve))
 			let lookups = 0
-			const upstream = fakeUpstream(async (request) => {
+			const upstream = fakeUpstream(async (request, init, now) => {
 				if (request.method === "GET" && ++lookups === 2) release()
 				if (request.method === "GET" && lookups <= 2) await bothLookedUp
-				return store.answer(request)
+				return store.answer(request, init, now)
 			})
 			const env = makeEnv()
 			const answers = await Promise.all([
-				run(json({ email: ADDRESS }), env, upstream.up),
-				run(json({ email: ADDRESS }), env, upstream.up),
+				run(confirmWith(await token()), env, upstream.up),
+				run(confirmWith(await token()), env, upstream.up),
 			])
 			expect(answers.map((a) => a.status)).toEqual([200, 200])
 			expect(store.contacts.size).toBe(1)
@@ -335,27 +421,80 @@ describe("Resend", () => {
 		},
 	)
 
-	test("a 429 or 5xx is retried once after its retry-after, capped at 2 s", async () => {
-		const script = [
-			reply(429, { "retry-after": "1" }),
-			reply(404),
-			reply(503, { "retry-after": "30" }),
-			new Response(null, { status: 201 }),
+	test("a listed address, unsubscribed, is not written by a valid token", async () => {
+		const upstream = fakeUpstream(() => found({ unsubscribed: true }))
+		expect((await run(confirmWith(await token()), makeEnv(), upstream.up)).status).toBe(200)
+		expect(upstream.requests.map((r) => r.method)).toEqual(["GET", "GET"])
+	})
+
+	test("every token that does not verify gets the same 400 and reaches no one", async () => {
+		const valid = await token()
+		const [payload, mac] = valid.split(".") as [string, string]
+		const other = (await signToken(TEST_SECRET, "someone@example.com", START)).split(".")[0] as string
+		const at = (clock: number) => {
+			const upstream = noUpstream()
+			upstream.advance(clock - START)
+			return upstream
+		}
+		const cases: [string, Request, ReturnType<typeof noUpstream>][] = [
+			["expired", confirmWith(valid), at(START + TOKEN_TTL_MS + 1)],
+			["forged", confirmWith(await signToken("another-secret-of-thirty-two-chars!!", NORMALIZED, START)), at(START)],
+			["another payload under this MAC", confirmWith(`${other}.${mac}`), at(START)],
+			["a changed MAC", confirmWith(`${payload}.${mac.startsWith("A") ? "B" : "A"}${mac.slice(1)}`), at(START)],
+			["malformed", confirmWith("not-a-token"), at(START)],
+			["three parts", confirmWith(`${valid}.x`), at(START)],
+			["empty", confirmWith(""), at(START)],
+			["missing", confirmWith(undefined), at(START)],
+			["over-long", confirmWith(`${valid}${"A".repeat(1024)}`), at(START)],
 		]
+		const answers = []
+		for (const [, request, upstream] of cases) {
+			answers.push(await snapshot(await run(request, makeEnv(), upstream.up)))
+			expect(upstream.requests).toEqual([])
+		}
+		for (const answer of answers) expect(answer).toEqual({ ...(answers[0] as (typeof answers)[0]), body: REFUSED })
+		expect(answers[0]?.status).toBe(400)
+		// Control: the same valid token one millisecond inside its life still confirms.
+		const live = fakeUpstream(resendStore(409).answer)
+		live.advance(TOKEN_TTL_MS)
+		expect((await run(confirmWith(valid), makeEnv(), live.up)).status).toBe(200)
+	})
+})
+
+describe("Resend", () => {
+	test("no request ever follows a redirect, so the key cannot be forwarded to another host", async () => {
+		const upstream = fakeUpstream(
+			() => new Response(null, { status: 307, headers: { location: "https://elsewhere.example/contacts" } }),
+		)
+		await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), upstream.up), 502)
+		const store = fakeUpstream(resendStore(409).answer)
+		await run(json({ email: ADDRESS }), makeEnv(), store.up)
+		await run(confirmWith(await signToken(TEST_SECRET, NORMALIZED, START)), makeEnv(), store.up)
+		for (const request of [...upstream.requests, ...store.requests]) expect(request.redirect).toBe("manual")
+		expect(upstream.requests.map((r) => r.url)).toEqual([`${RESEND_API}/contacts/${NORMALIZED}`])
+	})
+
+	test("a 429 or 5xx is retried once after its retry-after, capped at 2 s, with the same key and body", async () => {
+		const script = [reply(429, { "retry-after": "1" }), reply(404), reply(503, { "retry-after": "30" }), Response.json({ id: "x" })]
 		const upstream = fakeUpstream(() => script.shift() ?? reply(500))
 		expect((await run(json({ email: ADDRESS }), makeEnv(), upstream.up)).status).toBe(200)
 		expect(upstream.requests.map((r) => r.method)).toEqual(["GET", "GET", "POST", "POST"])
 		expect(upstream.sleeps).toEqual([1000, 2000])
+		const [first, retry] = sends(upstream.requests)
+		expect([retry?.headers.get("idempotency-key"), retry?.body]).toEqual([first?.headers.get("idempotency-key"), first?.body])
 		expect(retryWaitMs("Tue, 27 Oct 2026 12:00:01 GMT", Date.parse("2026-10-27T12:00:00Z"))).toBe(1000)
 		expect(retryWaitMs(null, 0)).toBe(1000)
 	})
 
-	test("a second 429 or 5xx is a 503, and the create is never sent a third time", async () => {
+	test("a second 429 or 5xx is a 503, and a write is never sent a third time", async () => {
 		const lookupFails = fakeUpstream(() => reply(500))
 		await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), lookupFails.up), 503)
 		expect(lookupFails.requests).toHaveLength(2)
-		const createFails = fakeUpstream((request) => (request.method === "GET" ? reply(404) : reply(429)))
-		await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), createFails.up), 503)
+		const sendFails = fakeUpstream((request) => (request.method === "GET" ? reply(404) : reply(429)))
+		await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), sendFails.up), 503)
+		expect(sendFails.requests.map((r) => r.method)).toEqual(["GET", "POST", "POST"])
+		const createFails = fakeUpstream((request) => (request.method === "GET" ? reply(404) : reply(503)))
+		await expectRefusal(await run(confirmWith(await signToken(TEST_SECRET, NORMALIZED, START)), makeEnv(), createFails.up), 503)
 		expect(createFails.requests.map((r) => r.method)).toEqual(["GET", "POST", "POST"])
 	})
 
@@ -371,47 +510,67 @@ describe("Resend", () => {
 		expect(upstream.requests).toHaveLength(1)
 	})
 
-	test("any other Resend answer is a 502 that carries none of Resend's text, on the known path and the new one alike", async () => {
-		const found = () => Response.json({ object: "contact" })
+	test("any other Resend answer is a 502 that carries none of Resend's text, on every path", async () => {
 		const redirect = () => new Response(null, { status: 307, headers: { location: "https://elsewhere.example/" } })
-		const scripts: [string, Response[], string[]][] = [
-			["the lookup refused (bad key)", [reply(401)], ["GET"]],
-			["the lookup forbidden", [reply(403)], ["GET"]],
-			["the mirror read refused", [found(), reply(403)], ["GET", "GET"]],
-			["the mirror read finding nothing", [found(), reply(404)], ["GET", "GET"]],
-			["the create refused and the address still unknown", [reply(404), reply(422), reply(404)], ["GET", "POST", "GET"]],
-			["the create redirected, even with the address existing by now", [reply(404), redirect(), found()], ["GET", "POST"]],
+		const confirmation = () => signToken(TEST_SECRET, NORMALIZED, START)
+		const scripts: [string, () => Promise<Request> | Request, Response[], string[]][] = [
+			["the lookup refused (bad key)", () => json({ email: ADDRESS }), [reply(401)], ["GET"]],
+			["the lookup forbidden", () => json({ email: ADDRESS }), [reply(403)], ["GET"]],
+			["the mirror read refused", () => json({ email: ADDRESS }), [found(), reply(403)], ["GET", "GET"]],
+			["the mirror read finding nothing", () => json({ email: ADDRESS }), [found(), reply(404)], ["GET", "GET"]],
+			["the send redirected", () => json({ email: ADDRESS }), [reply(404), redirect()], ["GET", "POST"]],
+			[
+				"the create refused and the address still unknown",
+				async () => confirmWith(await confirmation()),
+				[reply(404), reply(422), reply(404)],
+				["GET", "POST", "GET"],
+			],
+			[
+				"the create redirected, even with the address existing by now",
+				async () => confirmWith(await confirmation()),
+				[reply(404), redirect(), found()],
+				["GET", "POST"],
+			],
 		]
-		for (const [, script, methods] of scripts) {
+		for (const [, request, script, methods] of scripts) {
 			const upstream = fakeUpstream(() => script.shift() ?? reply(500))
-			await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), upstream.up), 502)
+			await expectRefusal(await run(await request(), makeEnv(), upstream.up), 502)
 			expect(upstream.requests.map((r) => r.method)).toEqual(methods)
 		}
 		expect(logged.length).toBe(scripts.length)
 		expect(Bun.inspect(logged)).toContain("status")
 	})
 
-	test("a missing key or id is a 503 before Resend is called", async () => {
+	test("a missing key, id or confirmation secret, or a short secret, is a 503 on both paths before Resend is called", async () => {
 		const upstream = noUpstream()
+		const requests = async () => [json({ email: ADDRESS }), confirmWith(await signToken(TEST_SECRET, NORMALIZED, START))]
 		for (const overrides of [
 			{ RESEND_API_KEY: undefined },
 			{ RESEND_API_KEY: "" },
 			{ RESEND_SEGMENT_ID: undefined },
 			{ CONSENT_VERSION: "" },
+			{ CONFIRM_SECRET: undefined },
+			{ CONFIRM_SECRET: "s".repeat(31) },
 		]) {
-			await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(overrides), upstream.up), 503)
+			for (const request of await requests()) await expectRefusal(await run(request, makeEnv(overrides), upstream.up), 503)
 		}
 		expect(upstream.requests).toEqual([])
+		// Control: a secret of exactly the floor is accepted.
+		const store = fakeUpstream(resendStore(409).answer)
+		expect((await run(json({ email: ADDRESS }), makeEnv({ CONFIRM_SECRET: "s".repeat(32) }), store.up)).status).toBe(200)
 	})
 })
 
 describe("answers", () => {
-	test("a plain form post is sent on to the confirmation page; a fetch caller gets JSON", async () => {
+	test("a plain form post is sent on to /subscribed; a fetch caller gets JSON; a confirmation always gets JSON", async () => {
 		const { up } = fakeUpstream(resendStore(409).answer)
 		const plain = await run(form({ email: ADDRESS }), makeEnv(), up)
 		expect([plain.status, plain.headers.get("location"), await plain.text()]).toEqual([303, SUCCESS_PATH, ""])
 		const cors = await run(form({ email: ADDRESS }, { "sec-fetch-mode": "cors" }), makeEnv(), up)
 		expect([cors.status, cors.headers.get("content-type"), await cors.text()]).toEqual([200, "application/json", '{"ok":true}'])
+		const token = await signToken(TEST_SECRET, NORMALIZED, START)
+		const confirmForm = await run(post(new URLSearchParams({ token }).toString(), { path: CONFIRM_PATH }), makeEnv(), up)
+		expect([confirmForm.status, await confirmForm.text()]).toEqual([200, '{"ok":true}'])
 	})
 
 	test("an unexpected failure is a 503 whose log line names the error, never its message", async () => {

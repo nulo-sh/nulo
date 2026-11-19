@@ -479,11 +479,25 @@ jobs:
             --include-path 'apps/extension/**'
             ${{ env.CLIFF_RANGE }}
         env:
-          OUTPUT: /tmp/release-notes.md
+          OUTPUT: /tmp/cliff.md
           # The template links each commit through remote.github, which git-cliff
           # reads from the checked-out branch's upstream; a detached checkout has
           # none, so every link came out empty until the remote was named here.
           GITHUB_REPO: ${{ github.repository }}
+
+      # No workspace install: the composer imports only node: modules and relative files.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+          token: ""
+          no-cache: true
+      # The tag's own composer and notes run, so every dispatch for a tag writes the same body.
+      - name: Compose the release body
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          CLIFF: /tmp/cliff.md
+          OUT: /tmp/release-notes.md
+        run: bun --no-install scripts/release/release-notes-run.ts compose
 
       - name: Show generated notes
         run: |

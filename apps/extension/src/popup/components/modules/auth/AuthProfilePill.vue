@@ -1,6 +1,6 @@
 <script setup>
 /**
- * Compact "Current Profile" pill used by `pages/auth.vue` to show
+ * Compact "Current Profile" pill used by `LockScreen.vue` to show
  * which profile the user is about to unlock and surface the
  * "Switch profile" affordance.
  */

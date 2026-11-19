@@ -1,5 +1,6 @@
 import type { FeePayer } from "@/popup/components/modules/send/fee-helpers"
 import type { TransferFeeEstimate, TransferFeeQueued } from "@/wallet/services/execution/client"
+import { refusesShortfall } from "@nulo/wallet-bridge"
 
 /** The fee side of the Send page, as its card reads it. */
 export interface SendFeeState {
@@ -33,7 +34,7 @@ export function feeAllowsSend(state: SendFeeState): boolean {
 	const queueMode = queueModeOf(state)
 	if (state.queued && !queueMode) return false
 	if (!queueMode && !state.estimate) return false
-	return !state.estimate?.feeJuiceShortfall
+	return !refusesShortfall(state.estimate?.feeJuiceShortfall)
 }
 
 /** The fee a press hands the transfer: the queued cap, or the estimate to reuse and, where the person

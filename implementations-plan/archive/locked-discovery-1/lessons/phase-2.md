@@ -1,0 +1,8 @@
+# Phase 2: the page
+
+- The move: `pages/auth.vue` → `popup/components/modules/auth/LockScreen.vue` by `git mv`; only the `<route>` block and the `shake.module.css` path changed (`@/components/composite/…`, the alias other modules already compose from). `auth.test.ts` passed unchanged (69), then a build.
+- Deviation, D6: `useDappApprovalWindow` takes the worker's profile through a new `getActiveProfile` option, the window's own connected `ProfileServiceClient`, instead of `managers.profile` (composables receive their client from the parent). The gate runs only when the shell's flag is false: `authRequiredGate`'s own first test is that flag, and an `await` on the signed-in path moved init off the tick two existing tests pin.
+- The fee window's "locked" case now also makes the worker hold no session: a locked window means the worker says so, as the route guard reads it.
+- Path-keyed references the move touched: `scripts/type-roles/surfaces.expected.json` (the new `windows-unlock` surface; two `reach` notes), the profile-chaos citation of `auth-delete-retired` (now `LockScreen.vue:385`), and three comments. Phase 1 had moved a cited line of `background.ts` (`discoveryQueue.drain(`); `scripts/e2e/profile-chaos-model.test.ts` caught it here, outside Phase 1's gate directories.
+- A slip, caught before commit: `window-document.test.ts` already existed and was overwritten; its cases are restored beside the new ones.
+- Gate (2026-11-18): lint 0; typecheck:all 0; extension `src/utils src/popup src/composables src/components` + the three bans: 511 files, 8982 passed, 1 skipped; `scripts/type-roles` and `scripts/e2e/profile-chaos-model` 291 passed; `build:chrome` 0.

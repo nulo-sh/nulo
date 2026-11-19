@@ -12,10 +12,11 @@ import { legalSheetMayCover } from "@/utils/legal-sheet"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { pointToolbarAtSidebar } from "@/utils/browser-surface"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { isUnlockWindowDocument } from "@/utils/window-document"
 import { ownWindowRoute, postAuthRoute, releaseOwnWindow } from "@/utils/own-window"
 import { shouldAdvanceToGeneral } from "./should-advance-to-general"
 import { resolveBootSession } from "./boot-session"
-import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision } from "./lock-landing"
+import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision, ownsLockScreen } from "./lock-landing"
 import { endOpeningFlows, isOpeningRoute } from "./opening-flow"
 import { reconcileLockedBoot } from "./reconcile-locked-boot"
 import { applyBootOutcome } from "./apply-boot-outcome"
@@ -47,6 +48,7 @@ import { ARRIVALS_KEY, useArrivals } from "@/composables/useArrivals"
 import { SENDS_IN_PROGRESS_KEY, useSendsInProgress } from "@/composables/useSendsInProgress"
 import { runUnattended, STALE_NETWORK_KEY, useStaleNetwork } from "@/composables/useStaleNetwork"
 import { NETWORK_ARRIVAL_KEY, useNetworkArrival } from "@/composables/useNetworkArrival"
+import { snackAside } from "@/composables/snackInset"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -126,6 +128,8 @@ const sends = useSendsInProgress({
 		return { symbol, decimals, hasDecimals }
 	},
 	tokenEvents: arrivalsTokens,
+	session: () => managers.profile.getSessionHandle(),
+	reviewing: () => snackAside.value,
 	toast,
 	openToast,
 	updateToast,
@@ -325,6 +329,7 @@ provide(SWITCH_SETTLED_KEY, () => settleLatestRun(() => switchRun, nextTick, swi
 watch([() => appStore.profile?.id, () => appStore.network?.id, () => appStore.account?.address], onScopeChanged, { flush: "sync" })
 /** Both lock paths run this: a lock control's at once, a lock event's under its seal. */
 const endScopeOnLock = () => {
+	sends.endScope()
 	onLocked()
 	switchNetwork.supersede()
 }
@@ -439,6 +444,8 @@ const bootRetrying = ref(false)
 provide("bootOutcome", bootOutcome)
 provide("bootRetrying", bootRetrying)
 
+const pageOwnsLockScreen = () => ownsLockScreen({ resolved: route.matched.length > 0, name: route.name }, isUnlockWindowDocument())
+
 /** The boot-time check gave up. Mark it done so the guard's own retry takes over — an
  *  un-checked session would park the popup on /popup/auth for good. Unreachable with a known
  *  profile lands on the lock screen (the password path is a recovery, so it must be reachable,
@@ -449,7 +456,12 @@ const settleUndecidedBoot = (outcome, candidate, pageEstablished) => {
 	bootOutcome.value = outcome
 	appStore.isSessionChecked = true
 	if (outcome !== "unreachable") return
-	const action = decideUnreachableLanding({ hasProfile: !!appStore.profile, hasCandidate: !!candidate, pageEstablished })
+	const action = decideUnreachableLanding({
+		hasProfile: !!appStore.profile,
+		hasCandidate: !!candidate,
+		pageEstablished,
+		ownsLockScreen: pageOwnsLockScreen(),
+	})
 	if (action === "stay") return
 	if (action === "select-and-auth") appStore.profile = candidate
 	router.push("/popup/auth")
@@ -466,6 +478,7 @@ const lockLandingState = (result, pageEstablished) => ({
 	pageEstablished,
 	holdsSession: appStore.isLogined,
 	onOpeningRoute: isOpeningRoute(route.name),
+	ownsLockScreen: pageOwnsLockScreen(),
 })
 const lockLandingActions = {
 	selectAndAuth: (result) => {

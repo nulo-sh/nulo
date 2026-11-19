@@ -23,6 +23,13 @@ export function addressEnds(address: string): { head: string; middle: string; ta
 	return { head: address.slice(0, 6), middle: address.slice(6, -4), tail: address.slice(-4) }
 }
 
+/** A whole address as two even lines of 33, so its first and last characters sit at the line edges a
+ *  person compares; null for any other length. */
+export function addressHalves(address: string): [string, string] | null {
+	if (address.length !== 66) return null
+	return [address.slice(0, 33), address.slice(33)]
+}
+
 /**
  * Initials for an entity name: first letters of the first two words, or the
  * first 1–2 characters of a single word, uppercased. Empty/whitespace → "".
@@ -33,6 +40,14 @@ export function getInitials(name: string): string {
 	if (words.length === 0) return ""
 	if (words.length === 1) return words[0].substring(0, Math.min(words[0].length, 2)).toUpperCase()
 	return (words[0][0] + words[1][0]).toUpperCase()
+}
+
+/** A token mark's letters: the symbol's first letters and digits by code point, upper case, one in a
+ *  mark under 24 px and two from 24 px; "—" when it has none. The symbol may be contract-supplied, so
+ *  a control, bidi or emoji character never reaches the mark. */
+export function tokenInitials(symbol: string, size: number): string {
+	const glyphs = Array.from(symbol.toUpperCase()).filter((c) => /^[\p{L}\p{Nd}]$/u.test(c))
+	return glyphs.slice(0, size < 24 ? 1 : 2).join("") || "—"
 }
 
 export function sanitizeString(s: string, length = 0): string {
@@ -65,6 +80,20 @@ export const isBlank = (s: string | null | undefined): boolean => stripWireContr
 
 /** The empty-value "—" for a blank name, title or label; any other value exactly as given. */
 export const dashIfBlank = (s: string | null | undefined): string => (isBlank(s) ? "—" : (s as string))
+
+/** A keycap is a digit, `#` or `*` drawn as an emoji: removed whole, so it leaves no digit behind. */
+const KEYCAP = /[0-9#*]\uFE0F?\u20E3/gu
+/** Characters drawn as emoji, and the joiners, modifiers, selectors and tags that build emoji from
+ *  them; a pictographic character that is also punctuation stays. The check marks U+2713, U+1F5F8 and
+ *  U+1F5F9 are not pictographic but read as a seal, so they go too. */
+const PICTOGRAPHIC =
+	/(?!\p{P})\p{Extended_Pictographic}|\p{Emoji_Modifier}|\p{Regional_Indicator}|[\u200D\u20E3\uFE00-\uFE0F\u2713]|[\u{1F5F8}\u{1F5F9}]|[\u{E0020}-\u{E007F}]|[\u{E0100}-\u{E01EF}]/gu
+
+/** `text` without emoji or check marks, so a seal-like one in a name cannot sit beside a level; letters, digits and
+ *  punctuation in every script stay. Spaces the removal leaves are collapsed and trimmed. */
+export function stripPictographs(text: string): string {
+	return text.replace(KEYCAP, "").replace(PICTOGRAPHIC, "").replace(/ {2,}/g, " ").trim()
+}
 
 export function stringCompare(a: string, b: string): number {
 	return (a || "").localeCompare(b || "", undefined, { sensitivity: "base", numeric: true })

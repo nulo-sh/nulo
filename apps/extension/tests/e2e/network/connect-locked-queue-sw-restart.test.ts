@@ -1,10 +1,11 @@
 import type { Page } from "puppeteer"
 import { describe, expect, inject } from "vitest"
-import { stopBackground } from "../fixtures/browser"
+import { stopBackground, stopsBackgroundUnderOpenPage } from "../fixtures/browser"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { ensureUnlocked, lockWallet, readLivenessBaseline, waitForWorkerLiveness } from "../fixtures/helpers"
 import { openPlayground } from "../fixtures/playground"
+import { waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -26,11 +27,12 @@ async function readBadgeText(page: Page): Promise<string> {
  * can reissue on user/app retry). What the wallet MUST do instead: reconcile the toolbar badge at boot, so the surviving Chrome-level badge
  * never ghosts a count over an empty queue (before this fix the ghost was
  * permanent — even unlocking never cleared it, because the empty-queue drain
- * early-returns without touching the badge).
+ * early-returns without touching the badge). The unlock window the discovery opened is a window a
+ * restart ended: the replacement worker closes it by its route.
  */
 describe("connect-locked-queue — background restart", () => {
 	test.skipIf(!hasConfig)(
-		"connect-locked-queue-sw-restart — a killed SW drops the queue cleanly: badge reconciled at boot, no popup on unlock",
+		"connect-locked-queue-sw-restart — a killed SW drops the queue cleanly: badge reconciled and an outliving unlock window closed at boot, no popup on unlock",
 		{ timeout: 120_000 },
 		async ({ registeredExtensionPerTest }) => {
 			const ext = registeredExtensionPerTest
@@ -40,20 +42,24 @@ describe("connect-locked-queue — background restart", () => {
 			await waitForHash(popupPage, "#/popup/general")
 			await lockWallet(popupPage)
 
-			// Fire discovery — queued (no popup while locked), badge shows the count.
+			// Fire discovery — queued behind the unlock window, badge shows the count.
 			const dappPage = await openPlayground(ext)
+			const unlockP = waitForPopup(ext, "unlock", { timeout: 30_000 })
 			await clickByTestId(dappPage, "pg-btn-connect")
-			await new Promise((r) => setTimeout(r, 1_500))
+			const unlockWindow = await unlockP
 			expect(ext.browser.targets().some((t) => t.url().includes("#/windows/discover"))).toBe(false)
 			expect(await readBadgeText(popupPage)).toBe("1")
 
-			// Kill the SW for real.
+			// Kill the SW for real. Firefox does not end an event page an open extension page keeps
+			// busy, so there the window goes first.
 			await popupPage.close()
+			if (!stopsBackgroundUnderOpenPage) await unlockWindow.close()
 			await stopBackground(ext)
 
 			// Re-open the popup (wakes the replacement worker) and wait for its boot.
 			const popupPage2 = await openPopup(ext)
 			await waitForWorkerLiveness(popupPage2, await readLivenessBaseline(popupPage2))
+			if (stopsBackgroundUnderOpenPage) await waitForPopupClosed(unlockWindow, 15_000)
 
 			// Boot reconciliation: the ghost badge is cleared BEFORE any unlock/drain.
 			await popupPage2.waitForFunction(async () => (await chrome.action.getBadgeText({})) === "", { timeout: 10_000, polling: 250 })
@@ -61,7 +67,7 @@ describe("connect-locked-queue — background restart", () => {
 			// Unlock — the queue was in-memory, so nothing drains: clean loss, no popup.
 			await ensureUnlocked(popupPage2)
 			await new Promise((r) => setTimeout(r, 3_000))
-			expect(ext.browser.targets().some((t) => t.url().includes("#/windows/discover"))).toBe(false)
+			expect(ext.browser.targets().some((t) => /#\/windows\/(discover|unlock)/.test(t.url()))).toBe(false)
 			expect(await readBadgeText(popupPage2)).toBe("")
 
 			await dappPage.close()

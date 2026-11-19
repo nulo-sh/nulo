@@ -28,11 +28,11 @@ import type { ServiceSpec } from "@nulo/wallet-core/base"
 import { type RequestErrorMeta, type ResponseContentLike, ServiceClient, type TerminalRecord } from "@nulo/extension-messaging/offscreen"
 import type { NetworkInfo } from "./chain-runtime"
 import type { IPXE } from "./ipxe"
-import type { Methods, NotesFilter, NoteSchema, PxeEvents } from "./spec"
+import type { Methods, NotesFilter, NoteSchema, PxeEvents, RouteSnapshot } from "./spec"
 import type { ProvePhaseEvent } from "./chain-runtime"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { PXE_SERVICE_NAME } from "./spec"
-import { NoteDaoSchema, PackedPrivateEventSchema } from "./schemas"
+import { NoteDaoSchema, PackedPrivateEventSchema, RouteSnapshotSchema } from "./schemas"
 import {
 	type PublicScanTips,
 	type PublicTokenClassStatus,
@@ -111,6 +111,7 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 	/** Prove-phase events from the offscreen prover, already sender-gated by the
 	 *  transport; the payload is still untrusted until the consumer validates it. */
 	public readonly onProvePhase = new EventHandler<ProvePhaseEvent>()
+	public readonly onRouteChanged = new EventHandler<PxeEvents["onRouteChanged"]>()
 	/** SW-side derivation hook for the per-profile store encryption key (see
 	 *  `setStoreKeyProvider`). Undefined until the embedder wires it at boot. */
 	private storeKeyProvider?: (profileId: string) => Promise<StoreKeyProvision | undefined>
@@ -512,6 +513,23 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 	): Promise<PublicTokenClassStatus> {
 		const result = await this.request("getPublicTokenClassStatus", network, contract, checkpointHash)
 		return await PublicTokenClassStatusSchema.parseAsync(result)
+	}
+
+	/** The endpoint the offscreen pinned `tx` to; the caller submits there and nowhere else. */
+	public async pickSendEndpoint(network: NetworkInfo, tx: { txHash: string; anchorHash: string }): Promise<{ rpcUrl: string }> {
+		const result = await this.request("pickSendEndpoint", network, tx)
+		return await z.object({ rpcUrl: z.string().url() }).strict().parseAsync(result)
+	}
+
+	/** The account engine's route for `network`'s endpoint list; `null` before a runtime is built for it. */
+	public async getRouteSnapshot(network: NetworkInfo): Promise<RouteSnapshot | null> {
+		return await RouteSnapshotSchema.parseAsync(await this.request("getRouteSnapshot", network))
+	}
+
+	/** Rebinds the chain's runtime to `network`'s endpoint list if it was built for another and the
+	 *  chain is idle; builds none. */
+	public async rebuildRoute(network: NetworkInfo): Promise<void> {
+		await this.request("rebuildRoute", network)
 	}
 
 	/** Dispose the offscreen runtime for `(profileId, chainId)` and remove

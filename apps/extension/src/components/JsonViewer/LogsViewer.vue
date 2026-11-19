@@ -177,7 +177,7 @@ const handleSelectAll = (kind) => {
 
 async function exportLogsToCSV() {
 	try {
-		const csv = buildLogsCsv(logs.value)
+		const csv = buildLogsCsv(filteredLogs.value)
 		await downloadFile({
 			data: csv,
 			filename: `NuloWalletLogs_${Math.floor(Date.now() / 1000)}.csv`,

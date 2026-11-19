@@ -23,9 +23,10 @@ vi.mock("./opfs-store", async (importOriginal) => ({
 import type { PXE } from "@aztec-labs/pxe/client/bundle"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { StoreErasedError } from "./lifecycle-coordinator"
 import { PxeService, type IProfileReader } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const noopProfiles: IProfileReader = {
@@ -38,11 +39,18 @@ const GEN_1 = "11111111111111111111111111111111"
 const GEN_2 = "22222222222222222222222222222222"
 const GEN_3 = "33333333333333333333333333333333"
 
-const net = (pxeGeneration?: string): NetworkInfo => ({ profileId: "p1", chainId: 31337, rpcUrl: "http://n/1", pxeGeneration })
+const net = (pxeGeneration?: string): NetworkInfo => ({
+	profileId: "p1",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [{ id: "primary", rpcUrl: "http://n/1" }],
+	pxeGeneration,
+})
 
 function makeService(): { service: PxeService; disposeShouldFail: (v: boolean) => void } {
 	let failDispose = false
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n, storeKey) => {
 			// Mirror the production factory's fail-close (chain-runtime.ts): no provisioned key,
 			// no runtime. Without this the harness silently boots keyless runtimes and every
@@ -57,7 +65,7 @@ function makeService(): { service: PxeService; disposeShouldFail: (v: boolean) =
 					if (failDispose) throw new Error("close failed")
 				},
 			} as never
-			return new ChainRuntime(n.chainId, node, pxe, n.rpcUrl, store)
+			return new ChainRuntime(n.chainId, node as never, pxe, endpointsKey(n.endpoints), store)
 		},
 	}
 	const service = new PxeService(noopProfiles, noopLogger, factory)
@@ -285,10 +293,11 @@ describe("incarnation fence", () => {
 		// rejecting is not enough, the mutation would already have landed.
 		let factoryCalls = 0
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n, storeKey) => {
 				factoryCalls += 1
 				if (!storeKey) throw new Error(`PXE_STORE_KEY_MISSING: no store key provisioned for profile ${n.profileId}`)
-				return new ChainRuntime(n.chainId, {} as never, { getNotes: async () => [] } as never, n.rpcUrl, {
+				return new ChainRuntime(n.chainId, {} as never, { getNotes: async () => [] } as never, endpointsKey(n.endpoints), {
 					close: async () => {},
 				} as never)
 			},

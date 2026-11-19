@@ -1,0 +1,71 @@
+import { computed, ref } from "vue"
+import { createRunFence } from "@/composables/runFence"
+import { type Authwit, authwitRowKey } from "@/wallet/services/auth-registry/spec"
+import type { TaskServiceClient } from "@/wallet/services/task/client"
+import { ContentKind, type RevokeAuthwitsContent, type Task, TaskStatus } from "@/wallet/services/task/spec"
+
+export type RevokeState = "revoking" | "failed"
+
+type RowIdentity = Pick<Authwit, "id" | "profileId" | "chainId" | "account" | "hash" | "txHash">
+
+interface RevokeTasksDeps {
+	/** Connected and disconnected by the parent, which also registers the returned handlers. */
+	client: Pick<TaskServiceClient, "getTasks">
+}
+
+const isRevoke = (task: Task): task is Task & { content: RevokeAuthwitsContent } =>
+	task.content?.kind === ContentKind.RevokeAuthwits && Array.isArray((task.content as RevokeAuthwitsContent).authwitKeys)
+
+function stateOfTask(task: Task): RevokeState | undefined {
+	if (!task.finishedAt) return "revoking"
+	return task.status === TaskStatus.Failed ? "failed" : undefined
+}
+
+/**
+ * Each authwit row's revoke, as the worker's revoke tasks tell it. A task names its rows from the
+ * request until the registry read prunes them, and lives in worker memory, so it outlasts the page
+ * and the popup that asked. The latest task naming a row decides: running reads `revoking`, failed
+ * reads `failed`, completed or cancelled reads nothing. Rows match by their whole identity, so a
+ * grant that later takes a pruned row's id inherits nothing.
+ */
+export function useRevokeTasks(deps: RevokeTasksDeps) {
+	const tasks = ref<(Task & { content: RevokeAuthwitsContent })[]>([])
+	const reads = createRunFence()
+
+	/** Latest wins; false when a newer snapshot, `dispose` or a failed read dropped this one. */
+	async function snapshot(): Promise<boolean> {
+		const current = reads.begin()
+		try {
+			const all = await deps.client.getTasks()
+			if (!current()) return false
+			tasks.value = all.filter(isRevoke)
+			return true
+		} catch {
+			return false
+		}
+	}
+
+	/** Created and updated alike: an update may reach a task the snapshot has not landed yet. */
+	function onTask(task: Task): void {
+		if (!isRevoke(task)) return
+		const others = tasks.value.filter((t) => t.id !== task.id)
+		tasks.value = [...others, task]
+	}
+
+	function onTaskDeleted(task: Task): void {
+		tasks.value = tasks.value.filter((t) => t.id !== task.id)
+	}
+
+	const states = computed(() => {
+		const byRow = new Map<string, RevokeState | undefined>()
+		for (const task of [...tasks.value].sort((a, b) => a.createdAt - b.createdAt)) {
+			const state = stateOfTask(task)
+			for (const key of task.content.authwitKeys) byRow.set(key, state)
+		}
+		return byRow
+	})
+
+	const stateOf = (row: RowIdentity): RevokeState | null => states.value.get(authwitRowKey(row)) ?? null
+
+	return { snapshot, onTaskCreated: onTask, onTaskUpdated: onTask, onTaskDeleted, stateOf, dispose: reads.invalidate }
+}

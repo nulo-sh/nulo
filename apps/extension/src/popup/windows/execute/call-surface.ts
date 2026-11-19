@@ -55,8 +55,6 @@ export const wire = (v: unknown, max: number): string => safeWire(v === undefine
 
 /** Raw-field rows are capped: past this the JSON view is the disclosure, not a 200-row card. */
 export const MAX_ARG_ROWS = 32
-/** Array items shown inline; the full list stays available as the row's title. */
-const MAX_INLINE_ITEMS = 8
 const FULL_TEXT_MAX = 4096
 
 const rawRow = (arg: unknown): RawRow => {
@@ -206,38 +204,63 @@ export const amountOf = (
 	return symbol ? { text: `${text} ${symbol}`, baseUnits: false } : { text, baseUnits: true }
 }
 
-export type AccountOutflow = { contract: string; count: number; amount: { text: string; baseUnits: boolean } }
+export type AccountOutflow = {
+	contract: string
+	transfers: number
+	authorizations: number
+	amount: { text: string; baseUnits: boolean }
+}
+
+type OutflowRow = { call: WireCall; surface: CallSurface }
 
 const sentBy = (sender: TransferSender, account: string): boolean => sender.kind !== "none" && sameFieldAddress(sender.address, account)
 
 /**
- * Per token contract, the calls the wallet reads as a direct transfer from `account` to another
- * address, counted and summed. A gross figure of what the calls say, not a balance change: a call it
- * cannot read, and an authorization the transaction uses, add nothing.
+ * Per token contract, what the wallet reads as moving `account`'s tokens to another address: the
+ * direct transfers among `calls`, and the authorizations the account signs for another contract to
+ * move them, counted apart and summed together. A gross figure of what the calls say, not a
+ * balance change: a call or an authorization it cannot read adds nothing.
  */
 export const accountOutflows = (
-	rows: readonly { call: WireCall; surface: CallSurface }[],
+	calls: readonly OutflowRow[],
 	account: string,
 	tokens: readonly TokenInfo[] | undefined,
 	chainId: number | undefined,
+	authorizations: readonly (OutflowRow & { caller: string })[] = [],
 ): AccountOutflow[] => {
-	const sums = new Map<string, { contract: string; count: number; sum: bigint }>()
-	for (const { call, surface } of rows) {
-		if (surface.kind !== "transfer" || !sentBy(surface.sender, account) || sameFieldAddress(surface.to, account)) continue
+	const sums = new Map<string, { contract: string; transfers: number; authorizations: number; sum: bigint }>()
+	const add = ({ call, surface }: OutflowRow, counted: "transfers" | "authorizations") => {
+		if (surface.kind !== "transfer" || !sentBy(surface.sender, account) || sameFieldAddress(surface.to, account)) return
 		const contract = wire(call.to, 80)
-		const prior = sums.get(contract.toLowerCase()) ?? { contract, count: 0, sum: 0n }
-		sums.set(contract.toLowerCase(), { contract, count: prior.count + 1, sum: prior.sum + BigInt(surface.amount) })
+		const prior = sums.get(contract.toLowerCase()) ?? { contract, transfers: 0, authorizations: 0, sum: 0n }
+		sums.set(contract.toLowerCase(), { ...prior, [counted]: prior[counted] + 1, sum: prior.sum + BigInt(surface.amount) })
 	}
-	return [...sums.values()].map(({ contract, count, sum }) => ({
+	for (const row of calls) add(row, "transfers")
+	// An authorization naming the account as caller licenses only a call the account makes itself,
+	// which `calls` already reads; `caller` is the decoded request, so this is a reading, not a proof.
+	for (const row of authorizations) if (!sameFieldAddress(row.caller, account)) add(row, "authorizations")
+	return [...sums.values()].map(({ contract, transfers, authorizations, sum }) => ({
 		contract,
-		count,
+		transfers,
+		authorizations,
 		amount: amountOf(tokens, chainId, contract, sum.toString()),
 	}))
 }
 
-/** A one-line reading of a decoded value. Trimmed and summarized for the row; `full` prints every
- *  value whole, for the hover text. An address on its own row is left to `AddressDisplay`. */
-export const valueText = (v: DecodedValue, full = false): string => {
+export const outflowLabel = ({ transfers, authorizations }: Pick<AccountOutflow, "transfers" | "authorizations">): string =>
+	[
+		transfers ? `${transfers} ${pluralize(transfers, "transfer", "transfers")}` : "",
+		authorizations ? `${authorizations} ${pluralize(authorizations, "authorization", "authorizations")}` : "",
+	]
+		.filter(Boolean)
+		.join(", ")
+
+/** A decoded value that reads on one row; a struct or an array is rows of its own (`ValueTree`). */
+export type ScalarValue = Exclude<DecodedValue, { kind: "array" | "struct" }>
+
+/** A one-row reading of a scalar value, trimmed for the row; `full` prints it whole, for the hover
+ *  text. An address on its own row is left to `AddressDisplay`. */
+export const valueText = (v: ScalarValue, full = false): string => {
 	switch (v.kind) {
 		case "integer":
 		case "selector":
@@ -252,26 +275,19 @@ export const valueText = (v: DecodedValue, full = false): string => {
 			return full ? v.value : trimAddress(v.value)
 		case "none":
 			return "none"
-		case "array": {
-			const shown = full ? v.items : v.items.slice(0, MAX_INLINE_ITEMS)
-			const more = v.items.length - shown.length
-			return `[${[...shown.map((item) => valueText(item, full)), ...(more ? [`+${more} more`] : [])].join(", ")}]`
-		}
-		case "struct":
-			return `{ ${v.fields.map((f) => `${safeWire(f.name, 32)}: ${valueText(f.value, full)}`).join(", ")} }`
 	}
 }
 
 /** An authwit nonce as the raw rows read a field: its decimal below 2^64, else the 32-byte hex. */
-export const nonceValue = (nonce: string): DecodedValue => {
+export const nonceValue = (nonce: string): ScalarValue => {
 	const decimal = smallFieldDecimal(nonce)
 	return decimal !== undefined
 		? { kind: "integer", value: decimal }
 		: { kind: "field", value: `0x${BigInt(nonce).toString(16).padStart(64, "0")}` }
 }
 
-/** What the row reveals on hover: the whole field, or the whole list when the line summarized it. */
-export const valueTitle = (v: DecodedValue): string | undefined => {
+/** What the row reveals on hover: the whole value, when the row trimmed it. */
+export const valueTitle = (v: ScalarValue): string | undefined => {
 	if (v.kind === "field") return v.value
 	const full = valueText(v, true)
 	return full === valueText(v) ? undefined : full
@@ -292,19 +308,22 @@ export const RAW_LINE: Readonly<Record<UndecodedReason, readonly NoticeSegment[]
 /** Said once per window, never on a request the wallet refuses; `OperationCard` picks its place. */
 export const RAW_ADVICE = "Check what the app says this does before approving."
 
-const callsNamed = (places: readonly number[], total: number): string => {
-	if (places.length === total) return total === 1 ? "this call does" : "these calls do"
-	if (places.length === 1) return `call ${places[0]} does`
-	return `calls ${places.slice(0, -1).join(", ")} and ${places.at(-1)} do`
+/**
+ * The summary's one line on the calls it cannot read as a transfer or a mint, named by their step
+ * numbers: undecodable or decoded without the wallet's reading alike. It waits for every decode, so
+ * it never names some calls and then more.
+ */
+export const unparsedCallsLine = (surfaces: readonly CallSurface[]): string | undefined => {
+	if (surfaces.some((surface) => surface.kind === "pending")) return undefined
+	const steps = surfaces.flatMap((surface, j) => (surface.kind === "raw" || surface.kind === "decoded" ? [j + 1] : []))
+	if (steps.length === 0) return undefined
+	if (surfaces.length === 1) return "Nulo can't parse this call."
+	if (steps.length === 1) return `Nulo can't parse the call from step ${steps[0]}.`
+	return `Nulo can't parse calls from steps ${steps.slice(0, -1).join(", ")} and ${steps.at(-1)}.`
 }
 
-/** The summary's one line on the calls it decoded but did not read, by their place in the list; a
- *  call still being read or unreadable is not named, as its own row says so. */
-export const uncheckedCallsLine = (surfaces: readonly CallSurface[]): string | undefined => {
-	const places = surfaces.flatMap((surface, j) => (surface.kind === "decoded" ? [j + 1] : []))
-	if (places.length === 0) return undefined
-	return `Nulo can only check transfers and mints of tokens in your list, so it can't say what ${callsNamed(places, surfaces.length)}.`
-}
+/** An authorization has no step number, so one Nulo cannot decode says so under its own line. */
+export const UNPARSED_AUTHWIT = "Nulo can't parse this authorization."
 
 export const LABELS_TITLE = "Labels from the contract"
 export const LABELS_LINE: readonly NoticeSegment[] = [

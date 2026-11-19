@@ -21,4 +21,4 @@ export class LogViewerServiceClient extends ServiceClient<Methods, Events> imple
 }
 // Every client method is a pure request-passthrough; the installer's
 // signature checks the name list in both directions against `Methods`.
-definePassthroughsExhaustive<Methods>()(LogViewerServiceClient.prototype, ["getLogs", "clearLogs"])
+definePassthroughsExhaustive<Methods>()(LogViewerServiceClient.prototype, ["getLogs", "clearLogs", "findRequestTrace", "getRequestReport"])

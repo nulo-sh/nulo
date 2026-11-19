@@ -70,6 +70,7 @@ export const fonts = {
 	headline: "--font-headline",
 	body: "--font-body",
 	mono: "--font-mono",
+	emoji: "--font-emoji",
 } as const
 
 export const easings = {
@@ -131,6 +132,7 @@ export const typeRoles = {
 	meta: { family: "--font-mono", size: 13, weight: 400, tracking: 0, uppercase: false, tabular: false },
 	value: { family: "--font-body", size: 12, weight: 600, tracking: 0, uppercase: false, tabular: false },
 	input: { family: "--font-body", size: 15, weight: 500, tracking: 0, uppercase: false, tabular: false },
+	emoji: { family: "--font-emoji", size: 24, weight: 400, tracking: 0, uppercase: false, tabular: false },
 } as const
 
 export const typeRoleNames = [
@@ -158,6 +160,7 @@ export const typeRoleNames = [
 	"meta",
 	"value",
 	"input",
+	"emoji",
 ] as const
 
 export const siteSizedTypeRoles = ["title-hero", "amount-hero", "amount-total", "row-title", "name", "fiat"] as const

@@ -44,3 +44,14 @@ export const TEST_FLAGGED: TokenListPair = {
 	chainId: CHAIN_IDS.TESTNET,
 	address: "0x2b5ce8f0a8d4f6b3c1e7a9d0f4b2c6e8a1d3f5b7c9e0a2b4d6f8a1c3e5b7d9f0",
 }
+
+const disc = (fill: string) =>
+	`data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><circle cx="48" cy="48" r="48" fill="${fill}"/></svg>`)}`
+
+/** Pictures as the list carries them (`isTokenIcon` accepts each), told apart by their fill. */
+export const TEST_ICONS = { USDC: disc("#2775ca"), GBPC: disc("#a8480c") } as const
+
+/** The entries with USDC's and GBPC's pictures; USDT and EURC carry none. */
+export const TEST_LIST_ENTRIES_WITH_ICONS: readonly TokenListEntry[] = TEST_LIST_ENTRIES.map((e) =>
+	Object.hasOwn(TEST_ICONS, e.symbol) ? { ...e, icon: TEST_ICONS[e.symbol as keyof typeof TEST_ICONS] } : e,
+)

@@ -171,14 +171,10 @@ async function acquirePasskeyCredential(ctx: ExportCtx, isCurrent: () => boolean
 		return { credentialData }
 	} catch (err) {
 		if (!isCurrent()) return "handled"
+		// A cancel or an unconfirmed prompt returns to the file password, still typed: the next press
+		// asks the passkey again.
 		state.backupStatus.value = ""
-		// A cancel or an unconfirmed prompt resets the agreement gate so the user can re-confirm or
-		// back out without bouncing off the page — passkey export auto-fires on agree (no "Create
-		// Backup" CTA), so without this reset they'd be stuck on a dead form.
-		if (handleCancelOrUnconfirmed(err, ctx.openToast)) {
-			state.isAgreed.value = false
-			return "handled"
-		}
+		if (handleCancelOrUnconfirmed(err, ctx.openToast)) return "handled"
 		// User-facing copy stays generic; the underlying error goes to the console so a failed
 		// export is diagnosable (this catch and the key-export one below are otherwise
 		// indistinguishable — same toast, same navigation).
@@ -267,7 +263,6 @@ function buildBackupEnvelope(ctx: ExportCtx, { key, entropyB64, dekB64 }: KeyMat
 function rejectOversizedBackup(ctx: ExportCtx, pretty: string) {
 	if (new TextEncoder().encode(pretty).length <= MAX_BACKUP_FILE_BYTES) return false
 	ctx.state.backupStatus.value = ""
-	if (ctx.isPasskeyProfile.value) ctx.state.isAgreed.value = false
 	ctx.openToast({ kind: "error", label: "Backup is too large to create" })
 	return true
 }
@@ -278,7 +273,6 @@ function rejectOversizedBackup(ctx: ExportCtx, pretty: string) {
 function reportAssemblyFailure(ctx: ExportCtx, isCurrent: () => boolean, err: unknown) {
 	if (!isCurrent()) return
 	ctx.state.backupStatus.value = ""
-	if (ctx.isPasskeyProfile.value) ctx.state.isAgreed.value = false
 	console.error("[export/full] backup assembly failed:", err)
 	ctx.openToast({ kind: "error", label: "Failed to create the backup" })
 }
@@ -312,7 +306,45 @@ function showFileWarnings(ctx: ExportCtx, material: KeyMaterial) {
 	state.chainStateOmitted.value = !!ctx.profile().recoveryMode
 }
 
-async function runBackup(ctx: ExportCtx) {
+/** The seal and the encrypted-side size check, for both unlock methods: null for a file the import
+ *  gate would refuse (the tag, base64 and AES-GCM overhead could cross the line a plain file sits
+ *  under). The text is pure ASCII, so string length is the byte count. */
+async function sealForDownload(compact: string, password: string): Promise<string | null> {
+	const sealed = await sealFullBackupText(compact, password)
+	return sealed.length > MAX_BACKUP_FILE_BYTES ? null : sealed
+}
+
+/** A passkey profile's run seals what it made under the file password read at its press, and
+ *  publishes only the sealed file: the plaintext never leaves the run. A failed seal or a file too
+ *  large returns to the typed pair, where the next press asks the passkey again. */
+async function sealInRun(ctx: ExportCtx, isCurrent: () => boolean, compact: string, filePassword: string) {
+	const { state } = ctx
+	state.backupStatus.value = "encrypting"
+	let sealed: string | null
+	try {
+		sealed = await sealForDownload(compact, filePassword)
+	} catch (error) {
+		if (!isCurrent()) return
+		console.error("[export/full] seal failed:", { error })
+		ctx.openToast({ kind: "error", label: "Failed to encrypt the backup" })
+		state.backupStatus.value = ""
+		return
+	}
+	if (!isCurrent()) return
+	if (sealed === null) {
+		state.backupStatus.value = ""
+		ctx.openToast({ kind: "error", label: "Backup is too large to create" })
+		return
+	}
+	ctx.artifacts.sealed = sealed
+	state.password.value = null
+	state.repeatedPassword.value = null
+	state.backupStatus.value = "encrypted"
+}
+
+/** `filePassword`, a passkey profile's, makes the run seal what it made; without it the run publishes
+ *  the plaintext for a password profile's seal at the next press. */
+async function runBackup(ctx: ExportCtx, filePassword?: string) {
 	const { state } = ctx
 	// Re-entry latch: closes synchronously, before the first await, so a double click or Enter cannot
 	// start a second run.
@@ -340,8 +372,9 @@ async function runBackup(ctx: ExportCtx) {
 		// Fence first: a superseded run must not run the oversize UI writes.
 		if (!isCurrent() || rejectOversizedBackup(ctx, result.pretty)) return
 
-		ctx.artifacts.compact = result.compact
 		ctx.madeIn = fence
+		if (filePassword !== undefined) return await sealInRun(ctx, isCurrent, result.compact, filePassword)
+		ctx.artifacts.compact = result.compact
 		state.backupStatus.value = "finished"
 	} catch (err) {
 		reportAssemblyFailure(ctx, isCurrent, err)
@@ -353,10 +386,18 @@ async function runBackup(ctx: ExportCtx) {
 }
 
 /** A passkey profile's file gets a password of its own, typed on this page; it meets the new-password
- *  rule, since the file holds the recovery phrase. Returns true when encryption must not start. */
+ *  rule, since the file holds the recovery phrase. Returns true when the run must not start. */
 function filePasswordBlocked(ctx: ExportCtx) {
 	const { state } = ctx
 	return ctx.isPasskeyProfile.value && !isNewPasswordValid(state.password.value ?? "", state.repeatedPassword.value ?? "")
+}
+
+/** A passkey profile's one press: the file password is checked and read before the passkey is
+ *  asked, and the run that answer opens seals under it. */
+function createProtected(ctx: ExportCtx) {
+	const { state } = ctx
+	if (!ctx.appStore.isLogined || state.backupStatus.value !== "" || filePasswordBlocked(ctx)) return
+	return runBackup(ctx, state.password.value as string)
 }
 
 /** Whether a password profile's backup was made in the session still open, so the password it is
@@ -376,7 +417,6 @@ async function madeInSessionStands(ctx: ExportCtx, madeIn: ProfileRunFence | nul
 async function runEncrypt(ctx: ExportCtx) {
 	const { state } = ctx
 	if (ctx.disposed || state.isBusy.value || state.isDownloading.value) return
-	if (filePasswordBlocked(ctx)) return
 	state.isBusy.value = true
 	const isCurrent = ctx.runs.snapshot()
 	const plaintext = ctx.artifacts.compact
@@ -385,7 +425,7 @@ async function runEncrypt(ctx: ExportCtx) {
 	state.backupStatus.value = "encrypting"
 
 	try {
-		const sealed = await sealFullBackupText(plaintext as string, state.password.value as string)
+		const sealed = await sealForDownload(plaintext as string, state.password.value as string)
 		if (!isCurrent()) return
 		// After the seal, so a change committed while the seal ran is caught too.
 		const stands = await madeInSessionStands(ctx, madeIn)
@@ -395,10 +435,7 @@ async function runEncrypt(ctx: ExportCtx) {
 			ctx.openToast({ kind: "error", label: "Failed to encrypt the backup" })
 			return
 		}
-		// Encrypted-side half of the shared size invariant (the tag, base64 and AES-GCM
-		// overhead could in principle cross the line a plain file sits under).
-		// The text is pure ASCII, so string length IS the byte count here.
-		if (sealed.length > MAX_BACKUP_FILE_BYTES) {
+		if (sealed === null) {
 			state.backupStatus.value = "finished"
 			ctx.openToast({ kind: "error", label: "Backup is too large to create" })
 			return
@@ -456,8 +493,9 @@ async function runDownload(ctx: ExportCtx) {
 	}
 }
 
-/** The one press that seals the made backup and saves the sealed file. A failed save keeps the sealed
- *  file, so the next press saves it without sealing again. The press is fenced as a whole: one begun
+/** The press that seals a password profile's made backup and saves the sealed file, or saves the file
+ *  a passkey profile's run sealed. A failed save keeps the sealed file, so the next press saves it
+ *  without sealing again. The press is fenced as a whole: one begun
  *  before a reset never saves the file a later run sealed. */
 async function protectAndDownload(ctx: ExportCtx) {
 	const isCurrent = ctx.runs.snapshot()
@@ -555,8 +593,8 @@ export function useFullBackupExport(opts: UseFullBackupExportOptions) {
 		openToast,
 		opts,
 	}
-	/** A passkey profile's file password meets the new-password rule; a password profile's file
-	 *  takes the profile password it was unlocked with. */
+	/** A passkey profile's file password meets the new-password rule, so its run may start; a password
+	 *  profile's file takes the profile password it was unlocked with. */
 	const canEncrypt = computed(
 		() => !isPasskeyProfile.value || isNewPasswordValid(state.password.value ?? "", state.repeatedPassword.value ?? ""),
 	)
@@ -565,7 +603,8 @@ export function useFullBackupExport(opts: UseFullBackupExportOptions) {
 		...state,
 		isPasskeyProfile,
 		canEncrypt,
-		handleBackup: () => runBackup(ctx),
+		/** A passkey profile's run starts only from a valid file password, which it seals under. */
+		handleBackup: () => (isPasskeyProfile.value ? createProtected(ctx) : runBackup(ctx)),
 		protectAndDownload: () => protectAndDownload(ctx),
 		/** The scrub, then every flow ref back to its initial value. */
 		reset: () => resetFlow(ctx),

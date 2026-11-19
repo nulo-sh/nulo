@@ -16,8 +16,8 @@ name: nightly
 #   2. The full gate battery runs at that sha: lint+typecheck, unit, the
 #      complete network e2e suite and the seeded send chaos run on chrome and
 #      on firefox, chrome+firefox builds, smoke against each built artifact.
-#      Beside them, one advisory leg runs the canary files on the in-browser
-#      prover and gates nothing.
+#      Beside them, two advisory legs gate nothing: the canary files on the
+#      in-browser prover, and the rpc failover chaos file at its fixed seed.
 #   3. Only if EVERY gate is green, publish-nightly creates the tag at that
 #      sha, then fills, checks and publishes a draft PRE-release with the
 #      zips + SHASUMS256.txt + git-cliff notes (scripts/release/
@@ -41,8 +41,8 @@ name: nightly
 #   passes within its normal retry budget. So the network calls below OMIT
 #   the `retry` input (config default = 2 retries, 3 attempts) and keep
 #   the reusable workflow's built-in exit-86 infra-boot retry. Smoke has
-#   retry 2 baked into its vitest config already. The chaos file pins its
-#   own retry 0: a retry would replay a burst against balances the first
+#   retry 2 baked into its vitest config already. Each chaos file pins its
+#   own retry 0: a retry would replay its sends against balances the first
 #   attempt moved.
 
 on:
@@ -209,6 +209,24 @@ jobs:
       shard_label: "canary-wasm"
       test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       disable_presto: true
+
+  # rpc-failover-chaos.test.ts at one fixed seed, proverless on Chrome, beside the lane's send chaos
+  # run: 441604806 draws the proof's second witness read on the primary, then the primary killed for
+  # 15.2 s, the draw that exercises the most of the routing in one run. ADVISORY, like the leg above:
+  # no job needs it, so a red leg reds the run but neither `status` nor the publish. Making it a gate
+  # is the owner's call, after 30 green nights in a row.
+  network-e2e-rpc-chaos:
+    name: Run / chaos / rpc failover (seed 441604806)
+    needs: resolve
+    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+      shard_label: "chaos-rpc"
+      test_files: "tests/e2e/network/rpc-failover-chaos.test.ts"
+      proverless: true
+      chaos: true
+      chaos_seed: "441604806"
 
   # Advisory duplication trend (jscpd) — a report instrument, never a gate.
   # Deliberately absent from publish-nightly's needs; continue-on-error keeps a

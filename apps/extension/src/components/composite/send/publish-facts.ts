@@ -27,7 +27,7 @@ export interface PublishFacts {
 
 export type FactCell = "you" | "recipient" | "amount"
 
-/** Nothing can be sent, so nothing is published: no strip, no tag, no review. */
+/** Nothing can be sent, so nothing is published: no publish line, no tag, no warning. */
 export const NO_FACTS: Readonly<PublishFacts> = Object.freeze({
 	you: "unknown",
 	recipient: "hidden",
@@ -46,30 +46,22 @@ export const FACT_WORDS = {
 	amount: Record<SideVisibility, string>
 }
 
-const NOTICE_BODY: Record<NoticeShape, string> = {
-	"private-private":
-		"This send hides the amount and the recipient, but the fee names your account publicly. Anyone watching the chain learns this account sent something, and when.",
-	"private-public":
-		"The recipient and amount on this send are already public. Paying from public Fee Juice adds your address to them, and the whole transfer becomes readable as yours.",
-}
-
 export const FACT_SENTENCES = {
 	sender: "A public origin shows the balance leaving your account, so your address is on the chain as the sender.",
-	unvouched: "This fee contract was added by hand. Nulo cannot tell what it publishes about you.",
 	recipient: "A public destination shows the balance arriving at the recipient's address.",
 	amount: "Either side being public shows the balance change, and with it the amount.",
 } as const
 
 export const PAID_BY = {
 	account: "paid by your address",
-	contract: "paid by the fee contract",
+	contract: "paid from your private Fee Juice",
 	sponsor: "paid by the sponsor",
 } as const
 
 /** Spoken in place of a hand-added contract's fee, which is drawn as "—". */
-export const UNVOUCHED_FEE_SENTENCE = "Nulo can't tell what this fee contract charges you."
+export const UNVOUCHED_FEE_SENTENCE = "Nulo can't tell what this FPC charges you."
 
-/** Under the strip for a token whose class Nulo has not validated: the strip's words assume its code. */
+/** Under the token for one whose class Nulo has not validated: what a send publishes assumes its code. */
 export const TOKEN_CAVEAT = "Nulo can't check this token's contract. What a send publishes depends on its code."
 
 /** The fee row while an earlier send holds the transfer's chain state. */
@@ -129,17 +121,16 @@ export function publishGlyph(visibility: Visibility): "private" | "public" | nul
 	}
 }
 
-export function noticeBodyFor(shape: NoticeShape): string {
-	return NOTICE_BODY[shape]
-}
-
-/** The sentence under a review row. Hidden rows carry none; "—" carries one only for a hand-added contract. */
+/** The sentence under a review row. Hidden rows carry none; "—" carries one only for a hand-added contract;
+ *  an exposed one none, since `feeWarning` says it once under the rows. A hand-added contract's caveat
+ *  leads the sender's sentence too (it may publish more than a public origin does), first so `FpcSentence`
+ *  dots its "FPC". */
 export function rowSentence(cell: FactCell, facts: PublishFacts, payer: PayerKind): string | null {
 	if (cell === "recipient") return facts.recipient === "public" ? FACT_SENTENCES.recipient : null
 	if (cell === "amount") return facts.amount === "public" ? FACT_SENTENCES.amount : null
-	if (facts.you === "public") return FACT_SENTENCES.sender
-	if (facts.you === "exposed") return noticeBodyFor(facts.noticeShape ?? "private-private")
-	return facts.you === "unknown" && payer === "unvouched" ? FACT_SENTENCES.unvouched : null
+	const caveat = payer === "unvouched" ? UNVOUCHED_PUBLISH_SENTENCE : null
+	if (facts.you === "public") return caveat ? `${caveat} ${FACT_SENTENCES.sender}` : FACT_SENTENCES.sender
+	return facts.you === "unknown" ? caveat : null
 }
 
 /**
@@ -155,17 +146,41 @@ export function paidBy(payer: PayerKind, type: PayerDescriptor["type"] | undefin
 const joinList = (items: string[]): string =>
 	items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`
 
-export function stripAriaLabel(facts: PublishFacts): string {
-	const published: string[] = []
-	if (facts.you === "public") published.push("your address as the sender")
-	if (facts.you === "exposed") published.push("your address as the fee payer")
-	if (facts.recipient === "public") published.push("the recipient")
-	if (facts.amount === "public") published.push("the amount")
+/** Said once on Send for a hand-added sponsor, which may publish anything about the sender. */
+export const UNVOUCHED_PUBLISH_SENTENCE = "Nulo can't tell what this FPC publishes about you."
 
-	const sentences: string[] = []
-	if (published.length > 0) sentences.push(`This send publishes ${joinList(published)}.`)
-	else if (facts.you !== "unknown") sentences.push("This send publishes nothing.")
-	if (facts.you === "unknown") sentences.push("Your address: not known yet.")
-	sentences.push("Open details")
-	return sentences.join(" ")
+/**
+ * What anyone watching the chain can see, as one sentence in Send's form. `name` is the recipient's
+ * name, already made safe for a sentence, or null. Null while the payer is unresolved, on either origin,
+ * and for a send whose fee names the account: that one reads `feeWarning` instead.
+ */
+export function publishSentence(facts: PublishFacts, name: string | null, payer: PayerKind): string | null {
+	if (facts.you === "exposed" || payer === null) return null
+	const theirs = name ? `${name}'s address` : "their address"
+	const shown: string[] = []
+	if (facts.you === "public") shown.push("your address as the sender")
+	if (facts.recipient === "public") shown.push(theirs)
+	if (facts.amount === "public") shown.push("the amount")
+	const parts = shown.length > 0 ? `Anyone can see ${joinList(shown)}.` : null
+	// A hand-added sponsor is never "Nobody…": it may publish anything about the sender.
+	if (payer === "unvouched") return parts ? `${UNVOUCHED_PUBLISH_SENTENCE} ${parts}` : UNVOUCHED_PUBLISH_SENTENCE
+	return parts ?? "Nobody watching the chain can see who sent it, who got it or how much."
+}
+
+/** The page's short form of `feeWarning`, non-null in the same cells: the Fee sheet and the review say it whole. */
+export function feeWarningShort(facts: PublishFacts): string | null {
+	if (facts.you !== "exposed") return null
+	return facts.recipient === "hidden"
+		? "Paying the fee from public Fee Juice shows your address."
+		: "Paying the fee from public Fee Juice ties this payment to your address."
+}
+
+/** The one warning Send gives: a private origin whose fee, paid from public Fee Juice, names the account. */
+export function feeWarning(facts: PublishFacts, name: string | null): string | null {
+	if (facts.you !== "exposed") return null
+	if (facts.recipient === "hidden") {
+		return "Paying the fee from your public Fee Juice shows your address: anyone can see this account sent something, and when."
+	}
+	const theirs = name ? `${name}'s` : "their"
+	return `Paying the fee from your public Fee Juice adds your address to ${theirs} address and the amount, so anyone can read the whole payment as yours.`
 }

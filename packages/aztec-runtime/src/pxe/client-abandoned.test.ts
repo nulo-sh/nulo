@@ -10,7 +10,7 @@ import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
 import type { NetworkInfo } from "./chain-runtime"
 import { PxeServiceClientBase } from "./client"
 
-const net: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://n/1" }
+const net: NetworkInfo = { profileId: "p1", chainId: 31337, l1ChainId: 31337, endpoints: [{ id: "primary", rpcUrl: "http://n/1" }] }
 const SIM_TIMEOUT_MS = 90_000
 const LIFETIME_MS = 15 * 60_000
 const DOCUMENT = { id: "ext" } as chrome.runtime.MessageSender

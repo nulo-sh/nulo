@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs"
 import { resolvePackageAsset } from "@nulo/resolve-asset"
 import { describe, expect, test } from "vitest"
 import { isPrivateFpc, PRIVATE_FPC_ADDRESS } from "./private-fpc-address"
+import { isSponsoredFpc, SPONSORED_FPC_ADDRESS } from "./sponsored-fpc-address"
 import { derivePrivateFpc, deriveSponsoredFpc } from "./protocol-fpcs"
 
 /** The PrivateFPC's canonical address, the same on every network: the reviewed artifact under this
@@ -74,6 +75,14 @@ describe("protocol FPC derivation", () => {
 			deployer: instance.deployer.toString(),
 			address: instance.address.toString(),
 		}).toEqual(CANONICAL_SPONSORED_FPC)
+	})
+
+	// The window tells Nulo's sponsor by this constant, without loading the artifact.
+	test("the constant the window tells Nulo's sponsor by is the derived address, in any case", () => {
+		expect(SPONSORED_FPC_ADDRESS).toBe(CANONICAL_SPONSORED_FPC.address)
+		expect(isSponsoredFpc(CANONICAL_SPONSORED_FPC.address.toUpperCase().replace("0X", "0x"))).toBe(true)
+		expect(isSponsoredFpc(CANONICAL_PRIVATE_FPC.address)).toBe(false)
+		expect(isSponsoredFpc(undefined)).toBe(false)
 	})
 
 	// The class id leaves out function flags such as `isStatic`, which the wallet copies into the

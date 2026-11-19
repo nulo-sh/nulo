@@ -4,7 +4,7 @@
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError } from "@/utils/contact-rules"
 import { ALREADY_EXISTS } from "@/utils/entity-rules"
-import { contactListReducers } from "@/utils/entity-list"
+import { entityListReducers } from "@/utils/entity-list"
 
 /** Components */
 import ContactFormFields from "@/popup/components/modules/settings/contacts/ContactFormFields.vue"
@@ -29,7 +29,7 @@ const props = defineProps({
 const contacts = ref([])
 
 const contactService = new ContactServiceClient()
-const contactList = contactListReducers(contacts)
+const contactList = entityListReducers(contacts)
 contactService.onContactAdded.add(contactList.onAdded)
 contactService.onContactUpdated.add(contactList.onUpdated)
 contactService.onContactDeleted.add(contactList.onDeleted)

@@ -7,12 +7,17 @@
  * timed-out step and a SIGINT, SIGTERM or SIGHUP (which also ends the running child); a SIGKILL, a
  * lost host or an unreachable GitHub can still leave the caller admitted.
  *
+ * A stable version is refused unless the commit carries release notes that can ship: the tag is
+ * permanent, and the release job reads its notes from the tagged tree.
+ *
  * Usage: `bun scripts/release/tag-by-hand-run.ts <X.Y.Z or X.Y.Z-rc.N> <40-hex commit>`.
  * Exit 0: origin's tag names the commit; the ruleset read back closed. 1: refused before anything
  * changed. 2: origin has no such tag; the ruleset read back closed. 3: the ruleset was not read back
  * closed; the printed command closes it. 4: the ruleset read back closed, but origin's tag could not
  * be confirmed at the commit; the local tag is kept for the check the log prints.
  */
+
+import { needsNotes, notesPath, notesRefusal } from "./release-notes"
 
 export const REPO = "nulo-sh/nulo"
 export const RULESET_ID = 25437716
@@ -56,6 +61,8 @@ export interface TagByHandIO {
 	callerId(): Promise<number>
 	remoteTag(tag: string): Promise<RemoteTag | null>
 	commitExists(sha: string): Promise<boolean>
+	/** A file's text at `sha`, or null when the commit does not hold it. */
+	fileAt(sha: string, path: string): Promise<string | null>
 	createLocalTag(tag: string, sha: string, message: string): Promise<void>
 	pushTag(tag: string): Promise<void>
 	deleteLocalTag(tag: string): Promise<void>
@@ -89,6 +96,10 @@ async function refusal(version: string, sha: string, io: TagByHandIO): Promise<s
 	if (!VERSION.test(version)) return `${version} is not a stable or rc version (X.Y.Z or X.Y.Z-rc.N)`
 	if (!COMMIT.test(sha)) return `${sha} is not a full 40-hex commit`
 	if (!(await io.commitExists(sha))) return `${sha} is not a commit in this clone; fetch it first`
+	if (needsNotes(version)) {
+		const notes = notesRefusal(version, await io.fileAt(sha, notesPath(version)))
+		if (notes) return `${notes} (at ${sha})`
+	}
 	const existing = await io.remoteTag(`v${version}`)
 	if (existing) return `v${version} already exists on origin at ${existing.commit}; nothing to push`
 	if (!isClosed(await io.readRuleset())) return `ruleset ${RULESET_ID} is not in its applied state; repair it before tagging`
@@ -225,6 +236,11 @@ if (import.meta.main) {
 		},
 		async commitExists(sha) {
 			return (await Bun.spawn(["git", "cat-file", "-e", `${sha}^{commit}`], { stderr: "ignore" }).exited) === 0
+		},
+		async fileAt(sha, path) {
+			const show = Bun.spawn(["git", "show", `${sha}:${path}`], { stdout: "pipe", stderr: "ignore" })
+			const text = await new Response(show.stdout).text()
+			return (await show.exited) === 0 ? text : null
 		},
 		async createLocalTag(tag, sha, msg) {
 			await run(["git", "tag", "-a", tag, sha, "-m", msg])

@@ -1,8 +1,8 @@
 /**
  * The `nulo-landing` Worker. `run_worker_first` sends it `/api/*` only; every other path is the
  * static assets. It holds no secret: the subscribe Worker behind the `SUBSCRIBE` service binding
- * owns the mailing-list key and checks the request's `Origin`, so the request is passed on as
- * received, headers and body untouched.
+ * owns the mailing-list key and checks the request's `Origin`, so a signup or a confirmation is
+ * passed on as received, headers and body untouched.
  */
 
 export interface Env {
@@ -18,13 +18,15 @@ export const OWN_HEADERS: Readonly<Record<string, string>> = {
 	"content-security-policy": "default-src 'none'",
 }
 
+const FORWARDED: ReadonlySet<string> = new Set(["/api/subscribe", "/api/confirm"])
+
 function own(status: number, extra: Record<string, string> = {}): Response {
 	return new Response(null, { status, headers: { ...OWN_HEADERS, ...extra } })
 }
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
-		if (new URL(request.url).pathname !== "/api/subscribe") return own(404)
+		if (!FORWARDED.has(new URL(request.url).pathname)) return own(404)
 		if (request.method !== "POST") return own(405, { allow: "POST" })
 		if (!env.SUBSCRIBE) return own(503)
 		try {

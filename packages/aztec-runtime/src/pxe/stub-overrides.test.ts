@@ -37,15 +37,21 @@ import { getContractClassFromArtifact } from "@aztec-labs/stdlib/contract"
 import { GasSettings } from "@aztec-labs/stdlib/gas"
 import { TxContext, TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { PxeService, type IProfileReader } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const noopProfiles: IProfileReader = {
 	connect: async () => {},
 	getProfiles: async () => [],
 }
-const network: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://localhost:8080" }
+const network: NetworkInfo = {
+	profileId: "p1",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [{ id: "primary", rpcUrl: "http://localhost:8080" }],
+}
 
 const accountHex = "0x000000000000000000000000000000000000000000000000000000000000ab12"
 
@@ -83,6 +89,7 @@ function makeHarness(opts?: { instanceMissing?: boolean }) {
 	const registered: unknown[] = []
 	const simulateCalls: { opts: Record<string, unknown> }[] = []
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n) => {
 			const pxe = {
 				getRegisteredAccounts: async () => [{ address: { toString: () => accountHex } }],
@@ -95,7 +102,7 @@ function makeHarness(opts?: { instanceMissing?: boolean }) {
 					return { marker: "sim-result" }
 				},
 			} as unknown as PXE
-			return new ChainRuntime(n.chainId, {} as never, pxe, n.rpcUrl)
+			return new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints))
 		},
 	}
 	const service = new PxeService(noopProfiles, noopLogger, factory)

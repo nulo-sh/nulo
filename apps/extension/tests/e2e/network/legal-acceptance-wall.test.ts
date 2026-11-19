@@ -19,6 +19,7 @@ import { waitForSendRecord } from "../fixtures/journal"
 import { readErrorKind, readJournalDetail, readTerminalCard } from "../fixtures/journal-page"
 import { assertPgOk, callExpectingNoPopup, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { chooseRecipient } from "../fixtures/send-page"
 import { mintPublicTokensForAccount, type AztecTestConfig } from "../fixtures/aztec"
 import { pointerClick, readLegalRecord, waitForSheet } from "../helpers/legal-drivers"
 
@@ -94,6 +95,7 @@ test.skipIf(!hasConfig)(
 		await waitForHash(wallet, "#/popup/legal/declined", 10_000)
 		await navigateByHash(wallet, "#/popup/send", 15_000)
 		await wallet.waitForSelector('[data-testid="send-legal-banner"]', { visible: true, timeout: 15_000 })
+		await chooseRecipient(wallet, aztecConfig!.minterAddress)
 		expect(await wallet.$eval('[data-testid="send-submit"]', (el) => (el as HTMLButtonElement).disabled)).toBe(true)
 
 		// ── Accept through the real sheet. ─────────────────────────────────

@@ -30,6 +30,7 @@ const PLAINTEXT: Partial<Record<StoredShapeName, string>> = {
 	tokenIdHighWater: "the highest token id the device ever reserved, a count kept across every profile's deletion",
 	uiActiveAccount: "the pre-seal pointer, kept until its profile claims it or a selection overwrites it",
 	uiLastActiveProfile: "the profile id the lock screen opens on",
+	uiWhatsNewSeen: "the last minor version the device was told about, read by Home's What's new row",
 	uiLoggerWindowId: "the log viewer's window id",
 	onboardingCompleted: "a device-wide flag",
 	uiRestoreOutcome: "how a restore ended: a run token, the backup's checksum and network ids",

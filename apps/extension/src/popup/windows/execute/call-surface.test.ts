@@ -9,6 +9,7 @@ import {
 	type CallSurface,
 	type TransferSender,
 	accountOutflows,
+	outflowLabel,
 	amountLabel,
 	authwitLine,
 	authwitTitle,
@@ -19,7 +20,7 @@ import {
 	readableGrants,
 	rowTitle,
 	tokenAt,
-	uncheckedCallsLine,
+	unparsedCallsLine,
 	valueText,
 	valueTitle,
 } from "./call-surface"
@@ -224,24 +225,15 @@ describe("rawRows, tokenAt, amountLabel, valueText, valueTitle", () => {
 		expect(amountLabel([{ ...USDC, symbol: BEL }], 1, TOKEN, "5000000")).toEqual({ text: "5000000" })
 	})
 
-	test("values read on one line; a long list is summarized inline and complete in the title", () => {
+	test("a scalar reads on one row, trimmed, and whole in the title when trimmed", () => {
 		expect(valueText({ kind: "integer", value: "5" })).toBe("5")
 		expect(valueText({ kind: "boolean", value: false })).toBe("false")
 		expect(valueText({ kind: "field", value: TO })).toBe(trimAddress(TO, 10, 6))
 		expect(valueText({ kind: "address", value: TO })).toBe(trimAddress(TO))
 		expect(valueText({ kind: "string", value: `hi${BEL}` })).toBe("hi")
 		expect(valueText({ kind: "none" })).toBe("none")
-		const ten: DecodedValue = {
-			kind: "array",
-			items: Array.from({ length: 10 }, (_, i) => ({ kind: "integer", value: String(i + 1) })),
-		}
-		expect(valueText(ten)).toBe("[1, 2, 3, 4, 5, 6, 7, 8, +2 more]")
-		expect(valueTitle(ten)).toBe("[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]")
-		const two: DecodedValue = { kind: "array", items: [{ kind: "integer", value: "1" }] }
-		expect(valueTitle(two)).toBeUndefined()
+		expect(valueTitle({ kind: "integer", value: "5" })).toBeUndefined()
 		expect(valueTitle({ kind: "field", value: TO })).toBe(TO)
-		expect(valueText({ kind: "struct", fields: [{ name: "a", value: { kind: "boolean", value: true } }] })).toBe("{ a: true }")
-		expect(valueTitle({ kind: "struct", fields: [{ name: "list", value: ten }] })).toContain("10]")
 	})
 })
 
@@ -264,18 +256,10 @@ describe("a wire alias cannot outrank the decoded name; hover text is complete",
 	})
 
 	test("full mode prints whole addresses, fields and strings, so a title never collapses distinct values", () => {
-		const other = `0x${"d".repeat(64)}`
-		const pair: DecodedValue = {
-			kind: "array",
-			items: [
-				{ kind: "address", value: TO },
-				{ kind: "address", value: other },
-			],
-		}
-		expect(valueText(pair)).toBe(`[${trimAddress(TO)}, ${trimAddress(other)}]`)
-		expect(valueTitle(pair)).toBe(`[${TO}, ${other}]`)
-		const nested: DecodedValue = { kind: "struct", fields: [{ name: "secret", value: { kind: "field", value: TO } }] }
-		expect(valueTitle(nested)).toBe(`{ secret: ${TO} }`)
+		const alike = `${TO.slice(0, 10)}${"d".repeat(TO.length - 16)}${TO.slice(-6)}`
+		expect(valueText({ kind: "address", value: alike })).toBe(valueText({ kind: "address", value: TO }))
+		expect(valueText({ kind: "address", value: TO }, true)).toBe(TO)
+		expect(valueTitle({ kind: "address", value: alike })).toBe(alike)
 		const long = "x".repeat(100)
 		expect(valueText({ kind: "string", value: long }).length).toBeLessThan(100)
 		expect(valueTitle({ kind: "string", value: long })).toBe(long)
@@ -485,7 +469,7 @@ describe("readableGrants", () => {
 	})
 })
 
-describe("uncheckedCallsLine", () => {
+describe("unparsedCallsLine", () => {
 	const read: CallSurface = { kind: "transfer", fn: "transfer", to: TO, amount: "5", sender: { kind: "account", address: OWNER } }
 	const minted: CallSurface = { kind: "mint", fn: "mint_to_public", to: TO, amount: "5" }
 	const named: CallSurface = { kind: "decoded", fn: "exit_to_l1", params: [] }
@@ -496,34 +480,14 @@ describe("uncheckedCallsLine", () => {
 	test.each([
 		["no call", [], undefined],
 		["every call read", [read, minted], undefined],
-		["calls still being read or unreadable", [pending, raw], undefined],
-		[
-			"a one-call transaction",
-			[named],
-			"Nulo can only check transfers and mints of tokens in your list, so it can't say what this call does.",
-		],
-		[
-			"every call in the list",
-			[named, claimed],
-			"Nulo can only check transfers and mints of tokens in your list, so it can't say what these calls do.",
-		],
-		[
-			"one call among several",
-			[read, raw, named],
-			"Nulo can only check transfers and mints of tokens in your list, so it can't say what call 3 does.",
-		],
-		[
-			"two of three",
-			[named, minted, claimed],
-			"Nulo can only check transfers and mints of tokens in your list, so it can't say what calls 1 and 3 do.",
-		],
-		[
-			"three of four",
-			[named, read, named, claimed],
-			"Nulo can only check transfers and mints of tokens in your list, so it can't say what calls 1, 3 and 4 do.",
-		],
+		["a decode still landing, so the line waits rather than name some calls and then more", [raw, pending, named], undefined],
+		["a one-call request, undecodable", [raw], "Nulo can't parse this call."],
+		["a one-call request, decoded without the wallet's reading", [named], "Nulo can't parse this call."],
+		["one call among several", [read, raw, minted], "Nulo can't parse the call from step 2."],
+		["both kinds named together, by step", [named, minted, raw, claimed], "Nulo can't parse calls from steps 1, 3 and 4."],
+		["every call of several", [raw, named], "Nulo can't parse calls from steps 1 and 2."],
 	] as const)("%s", (_, surfaces, line) => {
-		expect(uncheckedCallsLine(surfaces)).toBe(line)
+		expect(unparsedCallsLine(surfaces)).toBe(line)
 	})
 })
 
@@ -536,7 +500,7 @@ describe("rawToggleLabel", () => {
 })
 
 // `sameFieldAddress` refuses the `0xaa…` constants above (beyond the field), so these use valid ones.
-describe("accountOutflows: the direct transfers this account sends to another address, per token", () => {
+describe("accountOutflows: the transfers and authorizations that move this account's tokens to another address, per token", () => {
 	const TST = { id: 2, chainId: 1, contract: VAULT, name: "Test", symbol: "TST", decimals: 18 } as TokenInfo
 	const USDC_TOKEN = { ...USDC, contract: USDC_AT }
 	const units = (n: bigint, decimals: number) => (n * 10n ** BigInt(decimals)).toString()
@@ -559,8 +523,8 @@ describe("accountOutflows: the direct transfers this account sends to another ad
 			{ call: { to: USDC_AT }, surface: { kind: "raw", reason: "unknown-function", rows: [], hidden: 0 } as CallSurface },
 		]
 		expect(accountOutflows(rows, MAIN, [TST, USDC_TOKEN], 1)).toEqual([
-			{ contract: VAULT, count: 2, amount: { text: "6 TST", baseUnits: false } },
-			{ contract: USDC_AT, count: 1, amount: { text: "10 USDC", baseUnits: false } },
+			{ contract: VAULT, transfers: 2, authorizations: 0, amount: { text: "6 TST", baseUnits: false } },
+			{ contract: USDC_AT, transfers: 1, authorizations: 0, amount: { text: "10 USDC", baseUnits: false } },
 		])
 	})
 
@@ -568,7 +532,52 @@ describe("accountOutflows: the direct transfers this account sends to another ad
 		expect(accountOutflows([send(RECIPIENT, VAULT, units(1n, 18), { kind: "none" })], MAIN, [TST], 1)).toEqual([])
 		const blank = { ...TST, symbol: BEL }
 		expect(accountOutflows([send(RECIPIENT, VAULT, "5000000", fromAccount)], MAIN, [blank], 1)).toEqual([
-			{ contract: VAULT, count: 1, amount: { text: "5000000", baseUnits: true } },
+			{ contract: VAULT, transfers: 1, authorizations: 0, amount: { text: "5000000", baseUnits: true } },
 		])
+	})
+
+	// An authorization reads its `from` from its own arguments, as the authorizations block reads it.
+	const FPC = field(0xf9cn)
+	const authorize = (to: string, contract: string, amount: string, from: string, caller = FPC) => ({
+		...send(to, contract, amount, { kind: "explicit", address: from }),
+		caller,
+	})
+
+	test("an authorization moving the account's tokens counts apart from transfers and sums with them", () => {
+		expect(accountOutflows([], MAIN, [TST], 1, [authorize(RECIPIENT, VAULT, units(5n, 18), MAIN)])).toEqual([
+			{ contract: VAULT, transfers: 0, authorizations: 1, amount: { text: "5 TST", baseUnits: false } },
+		])
+		const rows = [send(RECIPIENT, VAULT, units(5n, 18), fromAccount)]
+		expect(accountOutflows(rows, MAIN, [TST], 1, [authorize(RECIPIENT, VAULT, units(3n, 18), MAIN)])).toEqual([
+			{ contract: VAULT, transfers: 1, authorizations: 1, amount: { text: "8 TST", baseUnits: false } },
+		])
+	})
+
+	test("an authorization from another account, to the account itself, unread, or whose caller is the account adds nothing", () => {
+		const unread = {
+			call: { to: VAULT },
+			surface: { kind: "raw", reason: "unknown-function", rows: [], hidden: 0 } as CallSurface,
+			caller: FPC,
+		}
+		const authorizations = [
+			authorize(RECIPIENT, VAULT, units(2n, 18), RECIPIENT),
+			authorize(MAIN, VAULT, units(2n, 18), MAIN),
+			unread,
+			// The account's own call, which the transfer row already reads: counted once.
+			authorize(RECIPIENT, VAULT, units(5n, 18), MAIN, MAIN),
+		]
+		expect(accountOutflows([send(RECIPIENT, VAULT, units(5n, 18), fromAccount)], MAIN, [TST], 1, authorizations)).toEqual([
+			{ contract: VAULT, transfers: 1, authorizations: 0, amount: { text: "5 TST", baseUnits: false } },
+		])
+	})
+
+	test.each([
+		[1, 0, "1 transfer"],
+		[2, 0, "2 transfers"],
+		[0, 1, "1 authorization"],
+		[0, 3, "3 authorizations"],
+		[1, 1, "1 transfer, 1 authorization"],
+	])("%i transfers and %i authorizations read %j", (transfers, authorizations, label) => {
+		expect(outflowLabel({ transfers, authorizations })).toBe(label)
 	})
 })

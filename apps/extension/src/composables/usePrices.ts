@@ -10,7 +10,8 @@ import { isQuoteFresh } from "@/wallet/services/price/spec"
 import { getPriceMapEntry, inBand, FEE_JUICE_ENTRY, type PriceMapEntry, type PricedTokens } from "@/wallet/services/price/price-map"
 import { tokenAmountToUsdMicro, formatUsdMicro } from "@/wallet/services/price/convert"
 import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
-import { isFlaggedToken } from "@/utils/token-flag"
+import { isFlaggedToken, listKeyOf } from "@/utils/token-flag"
+import { type ListedToken, tokenIconFor } from "@/utils/token-icon"
 import { isWindowDocument } from "@/utils/window-document"
 
 /** A token as pricing reads it: priced only when its decimals are known (`knownDecimals`). */
@@ -19,12 +20,17 @@ export type PricedToken = { chainId?: number; contract?: string; decimals?: numb
 /** A balance row as pricing reads it. */
 type PricedRow = { token?: PricedToken; publicBalance?: string; privateBalance?: string }
 
-/** The signed list's half of every snapshot: which token each id prices and which pairs it flags. */
+/** The signed list's half of every snapshot: which token each id prices, which pairs it flags and
+ *  each entry's picture, symbol and name. */
 function listState() {
 	/** Which token each id prices. It comes from the signed list, through the worker, with the quotes. */
 	const pricedTokens = ref<PricedTokens>({})
 	/** The pairs the signed list flags as scams, as `flaggedKeysOf` keys. */
 	const flaggedTokens = ref<ReadonlySet<string>>(new Set())
+	/** Each entry's picture, as `tokenIconsOf` keys it. A list without pictures empties it. */
+	const tokenIcons = ref<Readonly<Record<string, string>>>({})
+	/** Each entry's symbol and name, as `listedTokensOf` keys them. */
+	const listedTokens = ref<Readonly<Record<string, ListedToken>>>({})
 	/** The mapping has arrived. Until then no surface can tell a priced token from an unpriced one. */
 	const mapped = ref(false)
 	/** Bumped by each full snapshot, a broadcast or a refresh answer: a read begun before one is older. */
@@ -33,12 +39,22 @@ function listState() {
 	const adopt = (snapshot: PriceSnapshot) => {
 		pricedTokens.value = snapshot.pricedTokens
 		flaggedTokens.value = new Set(snapshot.flaggedTokens)
+		tokenIcons.value = snapshot.tokenIcons
+		listedTokens.value = snapshot.listedTokens
 		mapped.value = true
 	}
 	return {
 		pricedTokens,
 		flaggedTokens,
 		mapped,
+		/** The signed list's picture for this token, on its chain and contract; undefined until `mapped`. */
+		iconFor: (token: PricedToken | undefined): string | undefined => tokenIconFor(tokenIcons.value, token),
+		/** The entry the signed list holds for this contract, on its chain; undefined until `mapped`. */
+		listedAt: (token: PricedToken | undefined): ListedToken | undefined => {
+			if (typeof token?.chainId !== "number" || typeof token.contract !== "string") return undefined
+			const key = listKeyOf(token.chainId, token.contract)
+			return Object.hasOwn(listedTokens.value, key) ? listedTokens.value[key] : undefined
+		},
 		adoptFull(snapshot: PriceSnapshot) {
 			adopted++
 			adopt(snapshot)
@@ -175,6 +191,7 @@ export function usePrices(priceService: PriceServiceClient) {
 		mapped: readonly(list.mapped),
 		isPriced,
 		isFlagged,
+		iconFor: list.iconFor,
 		priceEntryFor,
 		quoteFor,
 		feeJuiceQuote,
@@ -187,9 +204,9 @@ export function usePrices(priceService: PriceServiceClient) {
 }
 
 /**
- * The signed list's flags alone, from the network-free read and the worker's broadcasts, for a
- * surface inside transaction execution: it never asks the worker for a price fetch (Privacy Policy
- * § 5.2). Receives the connected client, as `usePrices` does.
+ * The signed list's flags and pictures alone, from the network-free read and the worker's broadcasts,
+ * for a surface inside transaction execution: it never asks the worker for a price fetch (Privacy
+ * Policy § 5.2). Receives the connected client, as `usePrices` does.
  */
 export function useTokenFlags(priceService: PriceServiceClient) {
 	const list = listState()
@@ -201,6 +218,8 @@ export function useTokenFlags(priceService: PriceServiceClient) {
 		mapped: readonly(list.mapped),
 		/** The signed list flags this token as a scam, on its chain and contract. False until `mapped`. */
 		isFlagged: (token: PricedToken | undefined): boolean => isFlaggedToken(list.flaggedTokens.value, token),
+		iconFor: list.iconFor,
+		listedAt: list.listedAt,
 		dispose: () => {
 			priceService.onQuotesUpdated.remove(list.adoptFull)
 			priceService.onConnected.remove(read)

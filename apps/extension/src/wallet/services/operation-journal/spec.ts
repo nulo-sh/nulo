@@ -95,13 +95,11 @@ export interface JournalMetadata {
 	 */
 	contractAddress?: string
 	/**
-	 * `TransferType` enum value for `kind: "transfer"` records. Lets the
-	 * in-flight `TransactionAwaitingCard` render the same Private/Public
-	 * direction chip the settled card shows via `formatTransferType()`.
+	 * `TransferType` enum value for `kind: "transfer"` records, from which the
+	 * in-flight and failed cards draw the transfer's sides.
 	 * Undefined for non-transfer kinds AND for legacy records persisted
-	 * before this field existed — gate consumers on `=== undefined` because
-	 * `TransferType.Private === 0` (a truthy check would silently drop the
-	 * Private → Private chip).
+	 * before this field existed; `TransferType.Private` is 0, so a truthy
+	 * check would drop a private transfer's sides.
 	 */
 	transferType?: TransferType
 	/** A `dapp_execute` record's primary call, as the settled history will read it. */

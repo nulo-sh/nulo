@@ -8,6 +8,8 @@
  */
 import type { GlyphName } from "@nulo/design"
 import type { PropType } from "vue"
+import { directionWords, type RowDirection } from "@/utils/row-direction"
+import type { TokenMarkOf } from "@/utils/token-icon"
 import { STATUS_ICON_FILL, type StatusTone } from "./status-icon-fill"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
@@ -29,12 +31,13 @@ defineProps({
 	/** Origin chip — for dApp-initiated txs, the dApp hostname. UI-initiated
 	 *  transfers leave this null and the chip is suppressed. */
 	originLabel: { type: String as PropType<string | null>, default: null },
-	/** Privacy-direction chip ("Private → Public" etc.) for UI transfers.
-	 *  Mutually exclusive with originLabel — transfer-kind ops carry only
-	 *  transferTypeLabel; dapp_execute-kind ops carry only originLabel. */
-	transferTypeLabel: { type: String as PropType<string | null>, default: null },
+	/** A send's sides and way, drawn as its settled row draws them; null for a dApp op. */
+	direction: { type: Object as PropType<RowDirection | null>, default: null },
 	amount: { type: String as PropType<string | null>, default: null },
 	amountSymbol: { type: String as PropType<string | null>, default: null },
+	titleNamesToken: { type: Boolean, default: false },
+	/** The mark of the token the title names, as the awaiting and settled rows draw it. */
+	titleMark: { type: Object as PropType<TokenMarkOf | null>, default: null },
 	/** The title names the function a dApp called: one line, cut at its end. */
 	oneLineTitle: { type: Boolean, default: false },
 	/** The route the row opens. */
@@ -48,6 +51,9 @@ defineProps({
 		:icon="activityIcon"
 		:amount="amount"
 		:amountSymbol="amountSymbol"
+		:titleNamesToken="titleNamesToken"
+		:titleMark="titleMark"
+		:direction="direction"
 		:to="to"
 		:oneLineTitle="oneLineTitle"
 		testId="tx-terminal-card"
@@ -56,13 +62,13 @@ defineProps({
 			<Icon :name="icon" size="12" :color="STATUS_ICON_FILL[color]" :class="$style.status_icon" :data-color="color" data-testid="activity-status-icon" />
 		</template>
 
-		<template v-if="transferTypeLabel || originLabel" #title-trailing>
+		<template v-if="originLabel" #title-trailing>
 			<span :class="$style.title_sep" data-testid="activity-title-sep">·</span>
-			<span v-if="transferTypeLabel" :class="$style.chip">{{ transferTypeLabel }}</span>
-			<span v-else :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
+			<span :class="$style.app_chip" data-testid="activity-app-chip">{{ originLabel }}</span>
 		</template>
 
 		<template #secondary>
+			<span v-if="direction" :class="$style.direction" data-testid="activity-direction-chip">{{ directionWords(direction) }}</span>
 			<span :class="[$style.subtitle, $style[`subtitle_${color}`]]" role="status" aria-live="polite" aria-atomic="true" data-testid="tx-terminal-subtitle">{{ subtitle }}</span>
 		</template>
 	</TransactionCardLayout>
@@ -94,8 +100,8 @@ defineProps({
 	composes: title_sep from "./activity-card.module.css";
 }
 
-.chip {
-	composes: chip from "./activity-card.module.css";
+.direction {
+	composes: visually_hidden from "./activity-card.module.css";
 }
 
 .app_chip {

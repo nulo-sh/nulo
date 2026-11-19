@@ -3,10 +3,10 @@
  * this module the form still posts, and the subscribe Worker redirects to `/subscribed`.
  */
 
-export type SignupOutcome = "subscribed" | "invalid" | "retry"
+export type SignupOutcome = "requested" | "invalid" | "retry"
 
 export const SIGNUP_MESSAGES: Record<SignupOutcome, string> = {
-	subscribed: "On the list.",
+	requested: "Check your inbox to confirm.",
 	invalid: "Enter a valid email address.",
 	retry: "That didn't go through. Try again in a minute.",
 }
@@ -16,7 +16,7 @@ type Fetch = (input: string, init: RequestInit) => Promise<Response>
 // A stalled connection would otherwise hold the button disabled with nothing said.
 const TIMEOUT_MS = 20_000
 
-/** Only the contract's `200 { "ok": true }` counts as subscribed, so a page served in the Worker's place never reads as success. */
+/** Only the contract's `200 { "ok": true }` counts as accepted, so a page served in the Worker's place never reads as success. */
 export async function postSignup(action: string, body: URLSearchParams, fetchImpl: Fetch): Promise<SignupOutcome> {
 	let response: Response
 	try {
@@ -32,7 +32,7 @@ export async function postSignup(action: string, body: URLSearchParams, fetchImp
 	if (response.status === 400) return "invalid"
 	if (response.status !== 200) return "retry"
 	const reply: unknown = await response.json().catch(() => null)
-	return typeof reply === "object" && reply !== null && (reply as { ok?: unknown }).ok === true ? "subscribed" : "retry"
+	return typeof reply === "object" && reply !== null && (reply as { ok?: unknown }).ok === true ? "requested" : "retry"
 }
 
 type Attributes = Pick<Element, "getAttribute" | "setAttribute" | "removeAttribute">
@@ -60,19 +60,19 @@ export async function submitSignup(view: SignupView, action: string, fetchImpl: 
 	// Emptied first, so a repeated message is a change the live region announces again.
 	view.status.textContent = ""
 	view.field.removeAttribute("aria-invalid")
-	let subscribed = false
+	let requested = false
 	try {
 		const outcome = await postSignup(action, view.body(), fetchImpl)
-		subscribed = outcome === "subscribed"
+		requested = outcome === "requested"
 		if (outcome === "invalid") view.field.setAttribute("aria-invalid", "true")
-		if (subscribed) view.field.setAttribute("readonly", "")
-		view.form.setAttribute("data-state", subscribed ? "ok" : "error")
+		if (requested) view.field.setAttribute("readonly", "")
+		view.form.setAttribute("data-state", requested ? "ok" : "error")
 		view.button.textContent =
-			view.button.getAttribute(subscribed ? "data-label-ok" : "data-label-retry") ?? view.button.getAttribute("data-label-idle")
-		view.status.dataset.state = subscribed ? "ok" : "error"
+			view.button.getAttribute(requested ? "data-label-ok" : "data-label-retry") ?? view.button.getAttribute("data-label-idle")
+		view.status.dataset.state = requested ? "ok" : "error"
 		view.status.textContent = SIGNUP_MESSAGES[outcome]
 	} finally {
-		if (!subscribed) view.button.removeAttribute("aria-disabled")
+		if (!requested) view.button.removeAttribute("aria-disabled")
 	}
 }
 

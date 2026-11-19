@@ -14,6 +14,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [amount-honesty](amount-honesty/plan.md) — completed — the wallet never guesses an amount's magnitude, and what it cannot state exactly it does not state
 - [approval-card-decoding](approval-card-decoding/plan.md) — completed — a readable execute-window approval card that decodes call arguments without guessing
 - [approval-scope-follow](approval-scope-follow/plan.md) — completed — a dApp transaction runs in the scope the dApp pinned, with a banner when the wallet's view differs
+- [authwit-copy-1](authwit-copy-1/plan.md) — completed — an app-paid window names the sender's attached authorization; an unattached refusal gets its own History text and app error
 - [authwit-index-1](authwit-index-1/plan.md) — completed — a dApp send's public authwits reach the index whatever History's write does, and are listed once the network took the send
 - [authwit-lifecycle-and-execution-followups](authwit-lifecycle-and-execution-followups/plan.md) — completed — a testable public-authwit lifecycle, plus the previous arc's execution follow-ups
 - [aztec-4.2.0-bump](aztec-4.2.0-bump/plan.md) — superseded by aztec-5.0-upgrade — move the Aztec packages from the last 4.2.0 nightly to the 4.2.0 stable release
@@ -148,6 +149,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [firefox-background-kill](firefox-background-kill/plan.md) — completed — the e2e suite ends the Firefox background page through the browser driver
 - [firefox-files-1](firefox-files-1/plan.md) — completed — file pickers leave Firefox's toolbar panel for the wallet's own window (contacts, account file, Restore again), the full backup's "Saved to your downloads" done state with Close, the contacts export probed at once in 5 s with a working card (#160); known limits #960 #961
 - [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome
+- [firefox-import-window-1](firefox-import-window-1/plan.md) — completed — an import and an unlock-method change on Firefox's toolbar panel close their window, and the panel reopens on Home, Settings or the lock screen (#1716); known limits #1718 #1719 #1720 #1725
 - [firefox-passkey-unlock](firefox-passkey-unlock/plan.md) — completed — passkey steps started in Firefox's toolbar panel run in a window, and every passkey failure shows a way out
 - [firefox-pin-1](firefox-pin-1/plan.md) — completed — the e2e suite's Firefox pin on Puppeteer's 158, its four extension-page differences absorbed on the driver (#1111)
 - [first-account-token-seeding](first-account-token-seeding/plan.md) — completed — default tokens seeded on the first account through an account-added subscription
@@ -233,6 +235,8 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [network-playground-testing](network-playground-testing/plan.md) — completed — the wallet's dApp surface covered in the network suite through a local playground dApp
 - [network-test-triage](network-test-triage/plan.md) — completed — the failing network e2e tests diagnosed before any timeout was touched
 - [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
+- [notes-naming-build-1](notes-naming-build-1/plan.md) — completed — "Token (AIP-20)" for listed tokens' notes and the protocol contract chip, no badge (P161-01 = T3, P161-03 = P1)
+- [notes-naming-build-2](notes-naming-build-2/plan.md) — completed — a custom note card names its contract through the chip, a code name only beside a vouched level (P174 L1, k1)
 - [nulo-v6](nulo-v6/plan.md) — completed — the dependency line and the chain identity moved to Aztec V6 as Nulo V6
 - [offscreen-ping-1](offscreen-ping-1/plan.md) — completed — the worker stops pinging a PXE document it heard answer, so a busy document is no longer replaced mid-call; the READY timeout becomes a typed `RpcTimeoutError`
 - [on-camera-landing](on-camera-landing/plan.md) — completed — the landing replaced with a character-drawn CCTV-style feed
@@ -538,3 +542,60 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [legal-dating-2](legal-dating-2/plan.md) — completed — Terms 1.2.1 and privacy 1.2.8 and 1.2.9 dated 4 November 2026 for the 1.2.0 promote, superseding #1538
 - [update-fpc-1](update-fpc-1/plan.md) — completed — the update test expects the canonical sponsor's removal, with its fee picks, on a chain that offers none (the run's custom sandbox network); all four update runs from v1.1.0 green
 - [scroll-cue-3](scroll-cue-3/plan.md) — completed — a "more below" button on the nine signed CollapsingHeroLayout screens and Restore again (part of #1658)
+- [wallet-bugs-3](wallet-bugs-3/plan.md) — completed — a balance batch finishes every task when a failure write throws (#1627), the payload row keeps a short address whole (#1653), the fee priority row is one roving tablist (#1535)
+- [popup-dedupe-1](popup-dedupe-1/plan.md) — completed — one helper for Send's side rule (#1470) and the entity forms' shared rules (#1449), no behaviour change (#1674)
+- [e2e-flakes-3](e2e-flakes-3/plan.md) — completed — the onboarding spec counts the setup tab through `chrome.tabs`; a simulation's default fee cap pads the predicted worst minimum (#1667, #1590)
+- [update-from-1.2.0](update-from-1.2.0/plan.md) — completed — the update scenarios run from v1.2.0: its pins, a `sponsor` trait that pays its sandbox send from bridged Fee Juice, and its Chrome recording; all five runs green (closes #1680)
+- [release-notes-1](release-notes-1/plan.md) — completed — per-version release notes atop the GitHub Release and on AMO, composed and checked in CI (#1668)
+- [network-rename-1](network-rename-1/plan.md) — completed — a seeded default row still named "Alpha V6" or "Mainnet" takes "Alpha" at unlock (closes #1364)
+- [double-optin-1](double-optin-1/plan.md) — completed — the mailing list confirms each signup by email before it counts (#1236)
+- [lows-1](lows-1/plan.md) — completed — a passkey answer is used in the step that collected it: three passkey flows take the new secret first, and any restore opens only on its own admission (#1693 and arc 2)
+- [prover-warm-1](prover-warm-1/plan.md) — completed — a kept-warm browser prover saves under 1 s at the median, so nothing ships; #1623 a known limit
+- [p116-build-1](p116-build-1/plan.md) — completed — the Receive QR at 240 px and the Holdings header on one row, the count alone, as page 116 picked (#1709)
+- [token-digits-1](token-digits-1/plan.md) — completed — list amounts follow one tiered digits rule, truncated ahead of the width cut, and a split side never reads 0 (#1702); #1708 a known limit
+- [p110-build-1](p110-build-1/plan.md) — completed — the execute window names the app's failing assertion and refuses a no-account public call; the leaves block counts authorizations; a Sending toast's × lasts its session; the password hint keeps its space (#1706 and arc 2); #1714, #1715, #1717 known limits
+- [whats-new-1](whats-new-1/plan.md) — completed — the Home row and About row that say Nulo was updated (P117-08 A, #1724)
+- [unlock-conversions-1](unlock-conversions-1/plan.md) — completed — the unlock-time row conversions of a sealed root are entries of one ordered list, applied by one runner, with an AST guard over every unlock handler (#1726)
+- [discovery-allow-1](discovery-allow-1/plan.md) — completed (arc 1 #1722; arc 2 carries the close-out) — the connect window says what Allow reveals; an opt-in "every site may see Nulo" switch
+- [chips-3](chips-3/plan.md) — completed — activity rows draw their direction as a glyph pair and way badge in the icon box, from queued to settled; a row titled by its token drops the symbol under its amount (#1723 and arc 2)
+- [exec-empty-1](exec-empty-1/plan.md) — completed — a no-account request with no call is refused up front, as its two siblings are (P120-04 A, #1728)
+- [rpc-fallback-1](rpc-fallback-1/plan.md) — completed — each network fails over to its next endpoint and returns to its primary; Nulo's relay second on Alpha and Testnet (#1624)
+- [tx-logs-1](tx-logs-1/plan.md) — completed — developer mode downloads one failed request's logs as a scrubbed file, behind a full-width outline bar; every dApp error carries the trace id (P116-15 B, P117-03 A, P121, #1739)
+- [pxe-flag-1](pxe-flag-1/plan.md) — completed — PXE's concurrent contract sync measured in the lab and on Testnet, bridged tokens included: the one first-sync saving of 1.4 s had no lab corroboration and the bridged refresh split in sign, so no switch ships (P123-01 A); reopens on an Aztec line that changes the flag or a user's slow first syncs with many tokens
+- [og-cards-1](og-cards-1/plan.md) — completed — a committed 1200×630 Open Graph card per changelog release and one for the index, stamped with its inputs' hash and refused by CI when stale; each changelog page names its own (P132-02, P132-03 A, #1775)
+- [token-icons-build-1](token-icons-build-1/plan.md) — completed — the signed list carries each listed token's picture, drawn round and unaltered on Send's asset row, the token page, Activity rows and the approval line, initials when none, the red badge when flagged (P124, P129, P132); the token rows, a dApp's transfer row and the fee-raised window's line wait on the owner (A4, A5, A6)
+- [p126-build-1](p126-build-1/plan.md) — completed — the approval window's sends as numbered steps on a rail, each step its own press and details, every authorization in one node, a value tree and raw values under every call, the window at its full width (P126-01 to P126-05, P130-01, P130-03; OA-1 pending)
+- [test-issues-1](test-issues-1/plan.md) — completed — the Senders sweep waits for its list, the probe budget tests on a frozen clock, the held Mainnet request located and logged on smoke (#1743 open), two fee comments corrected (#1763, #1742, #1735, #1683)
+- [token-icons-build-2](token-icons-build-2/plan.md) — completed — the approval window step's chevron ends its sentence (#1789); the 32 px mark on the token rows, Home's seed, import and skeleton rows, a dApp's transfer row and the fee-raised window's line, as page 134 answered (P134-04, -06, -07); B1 to B4 ask the owner
+- [fee-window-1](fee-window-1/plan.md) — completed — the raised-fee window's fee row strikes the approved figure beside the new one (P116-20 D) and its Send button reads Send over a wrapping "for ~X FJ ($Y)" (P116-21 A); A1 asks the owner
+- [token-icons-build-3](token-icons-build-3/plan.md) — completed — page 136's three (b) answers on Home: a listed import row draws the list's picture, a stopped default's picture dims with its symbol, a long import title ends in an ellipsis at its spinner or × (P136-02, -03, -05); #1801 known limit
+- [send-build-1](send-build-1/plan.md) — completed — Send's B, pay a person: the person step, the fee line pinned over Review send, a review for every send, every fee figure in the one grammar and drawn whole (P129, P131, P133, P137, P138, P145); #1807 known limit
+- [verified-contracts-build-1](verified-contracts-build-1/plan.md) — completed — contract and app chips with the s1 seal from the signed token list and the pinned fee contracts; the fee row's seal, held chips, the person's names and every party a chip (P135, P139, P140, P143, P144)
+- [fee-method-emoji-1](fee-method-emoji-1/plan.md) — completed — the approval window's fee row names the app as its chip does, pictographs stripped (P146-04); A1 and A2 ask the owner
+- [fee-words-1](fee-words-1/plan.md) — completed — History's fee method and the failed row's payer label name the app as its chip does (P147-02, P147-03)
+- [fee-claim-build-1](fee-claim-build-1/plan.md) — completed — the claim-paid fee row says who pays: "You pay about ~X from the Fee Juice this app claims to your account." (P151-01 = W1); A1 asks the owner (#1816)
+- [import-retry-1](import-retry-1/plan.md) — completed — a token import a worker restart ended reads the wallet's sentence and offers Retry (#1799)
+- [fee-balances-build-1](fee-balances-build-1/plan.md) — completed — the Fee sheet's two Fee Juice rows stack the FJ figure in `value` over its dollars in `caption`, right-aligned, no dollars unpriced or on a row that cannot pay (P150-01 = B3)
+- [fee-zero-build-1](fee-zero-build-1/plan.md) — completed — two balance reads that disagree are read again before the fee card refuses: one recheck, a warning that refuses nothing (S1, #1802)
+- [scroll-cue-build-1](scroll-cue-build-1/plan.md) — completed — the more-below button on the Terms sheet, the execute window and onboarding (P155-01 = B, #1658); A1 and A2 ask the owner (#1820, #1821)
+- [scroll-cue-build-2](scroll-cue-build-2/plan.md) — completed — the onboarding more-below button hidden where the window leaves no room beside the column (P158-01 = H, #1821)
+- [scroll-cue-right-1](scroll-cue-right-1/plan.md) — completed — the execute window's more-below button moves to the bottom right (P157-02, "right"; #1820)
+- [contracts-build-1](contracts-build-1/plan.md) — completed — the Contracts page as P162-01 = R24: named rows, both ids, origin, a View on Aztecscan action
+- [fee-slip-build-1](fee-slip-build-1/plan.md) — completed — the Send fee slip and the review's fee row as two rows, figure over method (P165-01 = D1, P165-03 = R1)
+- [send-fixes-2](send-fixes-2/plan.md) — completed — four Send defects the owner named on 2026-11-17: the last recipient row's divider, the warning glyph, the in-flight fiat line, the radio focus ring (#1825-#1828)
+- [fee-copy-build-1](fee-copy-build-1/plan.md) — completed — the app-set Private Fee Juice sentence as two sentences, the unknown press said once, History's Fee method over a Set by caption, Send's readout asking for an amount (P164-01 to -04; #1836)
+- [fee-slip-build-2](fee-slip-build-2/plan.md) — completed — the Fee sheet's warning under the payer group and the warning glyph's apex on the cap top (P169-01 = P2b, P175-01 = B)
+- [locked-refusal-1](locked-refusal-1/plan.md) — completed — a locked wallet answers a dApp 4900 `WALLET_LOCKED` instead of the unclassified -32603, logged at debug (#1833)
+- [nightly-green-1](nightly-green-1/plan.md) — completed — the nightly's artifact smoke seeds the rows it reads and its RP live probe accepts Cloudflare's 400 (#1845, #1846)
+- [call-lines-build-1](call-lines-build-1/plan.md) — completed — a contract call reads "{function} on {contract}" in the approval window and the transaction detail, a chip after "on" clipping inside its row (P180-01 = c2)
+- [locked-discovery-1](locked-discovery-1/plan.md) — completed — a dApp's discovery while Nulo is locked opens an unlock window that continues to the connect window (#1849)
+- [connected-app-build-1](connected-app-build-1/plan.md) — completed — arc 1: the Connection check section gone, `send` and `search` in the Details table (P163-02, P163-03 = E3); arc 2: the app page's permissions as the window's kind rows and per-contract table, narrow by its own width (P185-01 = D1, P185-02)
+- [switch-names-1](switch-names-1/plan.md) — completed — every settings and confirm switch is named through aria-labelledby by the title beside it, pinned page-wide and by a template scan (#1733)
+- [toast-hide-1](toast-hide-1/plan.md) — completed — an earlier send's Sending toast steps aside while a review sheet is open and comes back with the same words, built at the toast's owner (P190-01 = H, #1796)
+- [sweep-settle-1](sweep-settle-1/plan.md) — completed — the type-roles window sweep waits until no read in flight is drawn before it measures (#1794)
+- [notes-1-3-0](notes-1-3-0/plan.md) — completed — the 1.3.0 release notes, changelog page and cards, delivered as a draft for the owner's sign-off (2,960 of 3,000 code points)
+- [fee-juice-link-1](fee-juice-link-1/plan.md) — completed — Mainnet's fee juice links open human.tech's Shield, every other network Unleashed's testnet app; privacy 1.3.2 says so (#77)
+- [teardown-log-1](teardown-log-1/plan.md) — completed — six suites left cards mounted whose timers logged after the file ended, failing a green run; each now auto-unmounts (#1858)
+- [table-legend-1](table-legend-1/plan.md) — completed — a legend line under the Details table names its six icons (P186-01 = E2)
+- [authwits-2](authwits-2/plan.md) — completed — a landed revoke or switch reports success and a closed popup reports nothing (#1829, #1830); Revoke hands off to Activity and rows name their action (P166-01 = B, P166-02 = N1); the page checks the registry on open (P166-03 = S)
+- [emoji-grid-1](emoji-grid-1/plan.md) — completed — the connection check draws every symbol in a colour-emoji role, with U+FE0F on the 21 symbols a text face can claim, as the app it is compared with does

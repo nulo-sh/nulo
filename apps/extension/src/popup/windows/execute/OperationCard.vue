@@ -7,8 +7,8 @@
  * - `send_transaction` + `aztec_sendTx` — header + From account +
  *   Payload list + fee settings (either the embedded "set by app"
  *   badge or a `<FeeSettingsCard>` v-modeled into the parent's
- *   `op.feeSettings`). An `aztec_sendTx` reads as its summary first;
- *   the Payload list and the authorizations' rows open under one toggle.
+ *   `op.feeSettings`). An `aztec_sendTx` reads as its steps on a rail,
+ *   each step and the authorizations opening their own details.
  * - All other read-only / register / simulate variants — header +
  *   from account (when present) + per-kind detail rows.
  *
@@ -25,7 +25,7 @@ import AppFeeLine from "@/popup/components/modules/send/AppFeeLine.vue"
 import FeeCostReadout from "@/popup/components/modules/send/FeeCostReadout.vue"
 import FlaggedTokenBanner from "@/popup/components/modules/general/FlaggedTokenBanner.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
-import { isSelfPay } from "@nulo/wallet-bridge"
+import { isSelfPay, sameFieldAddress } from "@nulo/wallet-bridge"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import type {
 	DecodedCall,
@@ -40,28 +40,29 @@ import type { Account } from "@/wallet/services/account/client"
 import type { Network } from "@/wallet/services/network/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import CallArguments from "./CallArguments.vue"
-import DetailsToggle from "./DetailsToggle.vue"
 import OperationActionRow from "./OperationActionRow.vue"
-import SendTxSummary from "./SendTxSummary.vue"
+import SendTxSummary, { type AuthwitGroup } from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
-import { type FeePayerPick, paysFromPrivateFeeJuice, personPaysAppPayment } from "./fee-figure"
+import { type FeePayerPick, claimsToAccount, payingContract, paysFromPrivateFeeJuice, personPaysAppPayment } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
 import {
 	type CallSurface,
 	type CallerContext,
 	type WireCall,
 	accountOutflows,
-	authwitTitle,
+	outflowLabel,
 	callSurface,
 	rowTitle,
 	tokenAt,
 	wire,
 } from "./call-surface"
-import { pluralize } from "@/utils/plural"
 import { trimAddress } from "@/utils/string"
+import { type ListReader, readContract } from "@/utils/contract-level"
+import { LEVEL_GLYPH, LEVEL_LABEL, appLabelOf } from "@/components/composite/contract-chip"
+import type { BlockExplorerType } from "@/wallet/constants/explorers"
 import { callTitle } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
-import { refuseRepeatEnter } from "@/composables/usePopupEntity"
+import type { NameBook } from "./contract-chips"
 import { grantContentsOf } from "./display-calls"
 
 // `DraftUIOperation` is the shared honest type. Send-like `feeSettings` is optional during user
@@ -103,6 +104,12 @@ const props = defineProps<{
 	decodedGrants?: readonly DecodedGrant[]
 	/** The wallet's registered tokens, so an amount can carry its symbol and decimals. */
 	tokens?: readonly TokenInfo[]
+	/** The signed list's reader, for each contract chip's level and picture; without one every level is pending. */
+	marks?: ListReader
+	/** The explorer the person picked, for a chip's link. */
+	explorerId?: BlockExplorerType | null
+	/** The person's own names for addresses, for the chips of a send's parties. */
+	names?: NameBook
 	/**
 	 * A `register_token` operation's metadata, read by the parent while
 	 * `tokenMetadataLoading` holds; Confirm stays off until every token is read.
@@ -120,6 +127,8 @@ const props = defineProps<{
 	tokenFlagAcknowledged?: boolean
 	/** The wallet refuses this request: nothing on the card advises approving it. */
 	refused?: boolean
+	/** The app's own failing assertion, sanitized, while the estimate that met it stands. */
+	appFailure?: string
 }>()
 
 const emit = defineEmits<{
@@ -149,21 +158,47 @@ const opTitle = (kind: UIOperation["kind"]): string => (kind === "aztec_createAu
 const decodedAt = (j: number): DecodedCall | undefined =>
 	props.decodedCalls ? (props.decodedCalls[j] ?? { kind: "undecoded", reason: "unavailable" }) : undefined
 
-const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: CallSurface }[] => {
+/** The name a decoded contract's own code gives it; only an unverified chip's press repeats it. */
+const selfNameOf = (decoded: DecodedCall | undefined): string | undefined => (decoded?.kind === "decoded" ? decoded.contract : undefined)
+
+const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: CallSurface; selfName?: string }[] => {
 	const ctx: CallerContext = { accountAddress: op.accountAddress, noFrom: isNoFrom(op as SendLikeUIOp) }
-	return (op.exec.calls as WireCall[]).map((call, j) => ({ call, surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)) }))
+	return (op.exec.calls as WireCall[]).map((call, j) => ({
+		call,
+		surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)),
+		selfName: selfNameOf(decodedAt(j)),
+	}))
 }
 const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
+/** What this account gives away by authorization, read as the authorizations block reads it: what the
+ *  wallet signs for it, and its own the app carries. Another account's moves that account's tokens. */
+const signedAuthorizations = computed(() => {
+	const sender = props.op.kind === "aztec_sendTx" ? props.op.accountAddress : ""
+	return (summaryAuthwits.value ?? [])
+		.filter(({ authwit }) => authwit.onBehalfOf === undefined || sameFieldAddress(authwit.onBehalfOf, sender))
+		.map(({ authwit, surface }) => ({ call: { to: authwit.consumer }, surface, caller: authwit.caller }))
+})
 const outflows = computed(() =>
 	props.op.kind === "aztec_sendTx"
-		? accountOutflows(sendTxRows.value, props.op.accountAddress, props.tokens, props.op.network?.chainId)
+		? accountOutflows(sendTxRows.value, props.op.accountAddress, props.tokens, props.op.network?.chainId, signedAuthorizations.value)
 		: [],
 )
-const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
+/** Every line of the fee row that names the app names it as its chip does. */
+const appName = computed(() => appLabelOf(props.dapp?.name) || "the app")
 /** The app picked the method but the person pays, so the card claims nothing for the app and never
  *  reads the fee contract's own pool as the person's. */
 const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
+const claimPaid = computed(() => claimsToAccount(props.op))
 const appFeeFailed = computed(() => props.estimateFailed && !props.feeEstimate && !props.isEstimating)
+/** The row's seal stands for the contract that pays, read as the chips read it, and only for a fee
+ *  contract Nulo pins: the row names no contract, so a weaker level, or a listed token or protocol
+ *  contract named as the payer, would read as a mark on the app. */
+const feeSealed = computed(() => {
+	const payer = payingContract(props.op)
+	if (payer === undefined || !props.marks) return false
+	const reading = readContract(props.marks, props.op.network?.chainId, payer)
+	return reading.level === "nulo" && (reading.source === "fpc" || reading.source === "sponsor")
+})
 const appFeeRow = ref<{ $el: HTMLElement } | null>(null)
 /** The retry's button leaves with the failure, so a keyboard press keeps its place on the row. Read
  *  `currentTarget` here, inside the click's dispatch: it is null once the dispatch ends. */
@@ -221,9 +256,9 @@ const createAuthwitSurface = (m: unknown): CreateAuthwitSurface => {
 
 /** Which surface lists the authorizations this operation uses: the preview for a NO_FROM
  *  operation, the fee estimate for a standard one; `send_transaction` adds none at confirm, and
- *  an embedded-fee standard operation signs none, so it lists only those another account already
- *  gave. Nothing is rendered when there is nothing to list: an absent row must not read as a claim
- *  of absence. */
+ *  an embedded-fee standard operation signs none, so it lists only those an account of the
+ *  person already gave. Nothing is rendered when there is nothing to list: an absent row must not
+ *  read as a claim of absence. */
 type AuthwitSurface =
 	| { kind: "list"; authwits: readonly DiscoveredAuthwit[] }
 	| { kind: "pending" }
@@ -256,67 +291,36 @@ const authwitArgs = (a: DiscoveredAuthwit): CallSurface =>
 		Number.POSITIVE_INFINITY,
 	)
 
+/** The details keep what the wallet signs apart from what an account already gave, the sending
+ *  account's own apart from another's. */
+const authwitGroup = (a: DiscoveredAuthwit): AuthwitGroup => {
+	if (a.onBehalfOf === undefined)
+		return { testid: "execute-op-discovered-authwits", label: "Authorizations the wallet will sign (found during estimation)" }
+	const sender = props.op.kind === "aztec_sendTx" ? props.op.accountAddress : ""
+	return sameFieldAddress(a.onBehalfOf, sender)
+		? { testid: "execute-op-sender-authwits", label: "Authorizations this account already gave" }
+		: { testid: "execute-op-consumed-authwits", label: "Authorizations your other accounts already gave" }
+}
+
 const summaryAuthwits = computed(() =>
-	authwits.value.kind === "list" ? authwits.value.authwits.map((authwit) => ({ authwit, surface: authwitArgs(authwit) })) : undefined,
+	authwits.value.kind === "list"
+		? authwits.value.authwits.map((authwit) => ({
+				authwit,
+				surface: authwitArgs(authwit),
+				group: authwitGroup(authwit),
+				selfName: selfNameOf(authwitDecode(authwit)),
+			}))
+		: undefined,
 )
 
-/** The details keep what the wallet signs apart from what another account already gave; `k` stays
- *  each record's index in the listed order, which the advice reads. */
-const authwitGroups = computed(() => {
-	const rows = (authwits.value.kind === "list" ? authwits.value.authwits : []).map((a, k) => ({ a, k }))
-	return [
-		{
-			testid: "execute-op-discovered-authwits",
-			label: "Authorizations the wallet will sign (found during estimation)",
-			rows: rows.filter(({ a }) => a.onBehalfOf === undefined),
-		},
-		{
-			testid: "execute-op-consumed-authwits",
-			label: "Authorizations your other accounts already gave",
-			rows: rows.filter(({ a }) => a.onBehalfOf !== undefined),
-		},
-	].filter((group) => group.rows.length)
-})
-
-const detailsOpen = ref(false)
-const detailsId = useId()
-const detailsToggle = ref<{ $el: HTMLElement } | null>(null)
-/** The retry's line leaves with the failure, so a keyboard press moves on to the control after it,
- *  read inside the click's dispatch as above. */
-const onRetryPreview = (event: MouseEvent) => {
-	emit("retryPreview", props.index)
-	if ((event.currentTarget as HTMLElement).matches(":focus-visible")) detailsToggle.value?.$el.focus()
-}
-
-/** Which discovered authorizations the person closed: once the rows are open, an authorization's
- *  values are open too, so a raw one stays within two presses of the card at rest. */
-const closedAuthwits = ref(new Set<string>())
-const isAuthwitOpen = (a: DiscoveredAuthwit): boolean => !closedAuthwits.value.has(a.messageHash)
-const toggleAuthwit = (a: DiscoveredAuthwit): void => {
-	const next = new Set(closedAuthwits.value)
-	if (next.has(a.messageHash)) next.delete(a.messageHash)
-	else next.add(a.messageHash)
-	closedAuthwits.value = next
-}
-
-type AdviceSite = { on: "calls" } | { on: "authwit"; index: number }
-
-/** An unreadable grant always refuses its request, so a grant never carries the advice. The fallback
- *  takes an authorization whose details are open, so closing one hands the advice to one still shown.
- *  The bridge builds one operation per window, so once per card is once per window. */
-const adviceSite = computed((): AdviceSite | undefined => {
+/** The standalone authorization card's call is the one place the advice stays: a send names its
+ *  unreadable calls in one line instead. An unreadable grant always refuses its request. */
+const advises = computed((): boolean => {
 	const op = props.op
-	if (props.refused) return undefined
-	if (op.kind === "aztec_createAuthWit") {
-		const intent = createAuthwitSurface(op.messageHashOrIntent)
-		return intent.kind === "call" && intent.args.kind === "raw" ? { on: "calls" } : undefined
-	}
-	if (op.kind !== "aztec_sendTx") return undefined
-	if (sendTxRows.value.some((row) => row.surface.kind === "raw")) return { on: "calls" }
-	const index = summaryAuthwits.value?.findLastIndex(({ authwit, surface }) => isAuthwitOpen(authwit) && surface.kind === "raw") ?? -1
-	return index < 0 ? undefined : { on: "authwit", index }
+	if (props.refused || op.kind !== "aztec_createAuthWit") return false
+	const intent = createAuthwitSurface(op.messageHashOrIntent)
+	return intent.kind === "call" && intent.args.kind === "raw"
 })
-const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "authwit" && adviceSite.value.index === index
 </script>
 
 <template>
@@ -372,101 +376,23 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					:previewFailed="authwits.kind === 'failed'"
 					:chainId="op.network?.chainId"
 					:tokens="tokens"
-					:advice="adviceSite?.on === 'calls'"
-					@retryPreview="onRetryPreview"
+					:marks="marks"
+					:explorerId="explorerId"
+					:names="names"
+					@retryPreview="emit('retryPreview', index)"
 				/>
-				<Flex :class="$style.group">
-					<DetailsToggle
-						ref="detailsToggle"
-						data-testid="execute-op-details-toggle"
-						:open="detailsOpen"
-						:controls="detailsId"
-						:label="detailsOpen ? 'Hide all details' : 'Show all details'"
-						@click="detailsOpen = !detailsOpen"
-						@keydown.enter="refuseRepeatEnter"
-					/>
-				</Flex>
-				<Flex v-if="detailsOpen" :id="detailsId" data-testid="execute-op-details" direction="column" wide>
-					<Flex :class="$style.group"><Text variant="label-section" color="secondary">Payload</Text></Flex>
-					<Flex v-for="({ call, surface }, j) in sendTxRows" :key="`${index}:${j}`" :data-call-index="j" direction="column" gap="4" :class="$style.call">
-						<Flex
-							data-testid="execute-op-payload-row"
-							:data-call-name="call.name ?? ''"
-							:data-call-to="call.to?.toString() ?? ''"
-							:data-intent-kind="surface.kind"
-							justify="between"
-							align="center"
-							:class="[$style.row, $style.call_row]"
-						>
-							<Text variant="meta" color="primary">{{ rowTitle(call, surface) }}</Text>
-							<Text variant="caption" color="secondary">on <AddressDisplay :address="call.to" data-testid="execute-op-call-to" /></Text>
-						</Flex>
-						<CallArguments :surface="surface" :contract="call.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-op" json-view />
-					</Flex>
-					<Flex
-						v-for="group in authwitGroups"
-						:key="group.testid"
-						:data-testid="group.testid"
-						direction="column"
-						gap="4"
-						:class="$style.group"
-					>
-						<Text variant="label-section" color="secondary">{{ group.label }}</Text>
-						<!-- The hash in the key remounts a re-estimated row: AddressDisplay reads its address once, at mount. -->
-						<Flex
-							v-for="{ a, k } in group.rows"
-							:key="`${k}:${a.messageHash}`"
-							data-testid="execute-op-discovered-authwit"
-							:data-message-hash="a.messageHash"
-							direction="column"
-							gap="2"
-							:class="$style.structured_args"
-						>
-							<Flex justify="between" :class="$style.row">
-								<Text variant="label-section" color="secondary">Consumer:</Text>
-								<AddressDisplay :address="a.consumer" data-testid="execute-discovered-consumer" />
-							</Flex>
-							<Flex justify="between" :class="$style.row">
-								<Text variant="label-section" color="secondary">Authorizes:</Text>
-								<AddressDisplay :address="a.caller" data-testid="execute-discovered-caller" />
-							</Flex>
-							<Flex justify="between" :class="$style.row">
-								<Text variant="label-section" color="secondary">Function:</Text>
-								<Text variant="meta" color="primary" data-testid="execute-discovered-authwit-function">{{ authwitTitle(a.selector, a.consumer, authwitArgs(a)) }}</Text>
-							</Flex>
-							<Flex v-if="a.onBehalfOf" justify="between" :class="$style.row">
-								<Text variant="label-section" color="secondary">Authorized by:</Text>
-								<AddressDisplay :address="a.onBehalfOf" data-testid="execute-discovered-authorized-by" />
-							</Flex>
-							<DetailsToggle
-								data-testid="execute-discovered-authwit-toggle"
-								:open="isAuthwitOpen(a)"
-								:controls="`${detailsId}-${k}`"
-								:label="isAuthwitOpen(a) ? 'Hide details' : 'Show details'"
-								@click="toggleAuthwit(a)"
-							/>
-							<Flex v-if="isAuthwitOpen(a)" :id="`${detailsId}-${k}`" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
-								<CallArguments :surface="authwitArgs(a)" :contract="a.consumer" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-discovered-authwit" :advice="adviceOnAuthwit(k)" />
-								<Flex justify="between" :class="$style.row">
-									<Text variant="label-section" color="secondary">Inner hash:</Text>
-									<Text variant="meta" color="primary" :title="safeWire(a.innerHash, 80)" data-testid="execute-discovered-inner-hash">{{ trimAddress(safeWire(a.innerHash, 80), 10, 6) }}</Text>
-								</Flex>
-							</Flex>
-						</Flex>
-					</Flex>
-				</Flex>
 			</template>
 		</Flex>
 
 		<div :class="$style.op_divider" />
 
-		<!-- Part of the card's own fee section: where a slot replaces that section, this goes too. -->
-		<template v-if="outflows.length && !$slots.fee">
-			<Flex data-testid="execute-op-leaves-account" direction="column" gap="8" wide :class="$style.leaves">
+		<!-- Opens every fee section, a window's own block in the slot included. -->
+		<template v-if="outflows.length">
+			<Flex data-testid="execute-op-leaves-account" data-scroll-section direction="column" gap="8" wide :class="$style.leaves">
 				<Text variant="label-section" color="secondary">Leaves your account</Text>
 				<Flex v-for="row in outflows" :key="row.contract" data-testid="execute-op-leaves-row" :data-contract="row.contract" justify="between" align="center" :class="$style.row">
-					<Text variant="body" color="secondary" :class="$style.leaves_count">{{ row.count }} {{ pluralize(row.count, "transfer", "transfers") }}</Text>
-					<Text variant="amount-row" color="primary">{{ row.amount.text }}<template v-if="row.amount.baseUnits"> base units</template></Text>
+					<Text data-testid="execute-op-leaves-count" variant="body" color="secondary" :class="$style.leaves_count">{{ outflowLabel(row) }}</Text>
+					<Text data-testid="execute-op-leaves-amount" variant="amount-row" color="primary">{{ row.amount.text }}<template v-if="row.amount.baseUnits"> base units</template></Text>
 				</Flex>
 			</Flex>
 			<div :class="$style.leaves_rule" />
@@ -478,6 +404,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			<Flex
 				ref="appFeeRow"
 				data-testid="execute-op-fee-set-badge"
+				data-scroll-section
 				direction="column"
 				wide
 				tabindex="-1"
@@ -494,9 +421,11 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					<FeeCostReadout failed :label="personPaysAppPayment(op) ? 'You pay' : `${appName} pays`" @retry="onRetryAppEstimate" />
 				</Flex>
 				<Flex v-else align="start" gap="8" wide :class="$style.op_fee_set">
-					<Icon v-if="!privateFeeJuice" name="square-check" size="14" color="green" />
+					<span v-if="feeSealed" data-testid="execute-op-fee-seal" role="img" :aria-label="LEVEL_LABEL.nulo" :class="$style.fee_seal">
+						<Icon :name="LEVEL_GLYPH.nulo" size="15" color="primary" aria-hidden="true" />
+					</span>
 					<Flex direction="column" :class="$style.fee_lines">
-						<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice">
+						<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice" :claimed="claimPaid">
 							<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
 						</AppFeeLine>
 						<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">
@@ -520,36 +449,33 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					<Text variant="body" color="secondary">This app's fee contract may not cover this fee right now.</Text>
 				</Flex>
 			</div>
-			<Flex
-				v-if="privateFeeJuice"
-				align="start"
-				gap="6"
-				wide
-				:class="[$style.op_fee_set, appFeeFailed && $style.hairline]"
-				data-testid="execute-op-private-fee-notice"
-			>
-				<Icon name="info" size="14" color="secondary" aria-hidden="true" />
-				<Text variant="body" color="secondary">Your Private Fee Juice must cover this fee.</Text>
-			</Flex>
 		</template>
 
-		<FeeSettingsCard
-			v-else
-			embedded
-			:lockedMethod="requestedMethod(op)"
-			:profile="profile"
-			:network="op.network"
-			:account="op.account"
-			:feeEstimate="feeEstimate"
-			:isEstimating="isEstimating"
-			:isQueued="isQueued"
-			:offersQueue="false"
-			:estimateFailed="estimateFailed"
-			:modelValue="op.feeSettings"
-			@update:modelValue="(value: FeeSettings | undefined) => emit('updateFeeSettings', index, value)"
-			@update:payer="(payer: FeePayerPick | null) => emit('updatePayer', index, payer)"
-			@retryEstimate="emit('retryEstimate', index)"
-		/>
+		<template v-else>
+			<FeeSettingsCard
+				data-scroll-section
+				embedded
+				:lockedMethod="requestedMethod(op)"
+				:profile="profile"
+				:network="op.network"
+				:account="op.account"
+				:feeEstimate="feeEstimate"
+				:isEstimating="isEstimating"
+				:isQueued="isQueued"
+				:offersQueue="false"
+				:estimateFailed="estimateFailed"
+				:modelValue="op.feeSettings"
+				@update:modelValue="(value: FeeSettings | undefined) => emit('updateFeeSettings', index, value)"
+				@update:payer="(payer: FeePayerPick | null) => emit('updatePayer', index, payer)"
+				@retryEstimate="emit('retryEstimate', index)"
+			/>
+			<!-- Mounted with the card: a region created with its text in place may go unannounced. -->
+			<div role="status" aria-live="polite" aria-atomic="true" data-testid="execute-op-app-failure-live">
+				<p v-if="appFailure" data-testid="execute-op-app-failure" :class="[$style.app_failure, 'color--txt-danger']">
+					The app's transaction cannot run right now: <bdi>{{ appFailure }}</bdi>. Fee estimation needs it to run.
+				</p>
+			</div>
+		</template>
 	</Flex>
 
 	<Flex
@@ -739,7 +665,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					</Flex>
 					<Flex data-testid="execute-authwit-args" direction="column" gap="4" :class="$style.group">
 						<Text variant="label-section" color="secondary">Arguments</Text>
-						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view :advice="adviceSite?.on === 'calls'" />
+						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view :advice="advises" />
 					</Flex>
 				</template>
 				<template v-else>
@@ -794,6 +720,15 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	white-space: nowrap;
 }
 
+/* The text is the contract's: stacked combining marks, which the sanitizer leaves, stay in the box. */
+.app_failure {
+	composes: type--body from global;
+	margin: 0;
+	padding: 0 12px 12px;
+	overflow-wrap: anywhere;
+	overflow: hidden;
+}
+
 .leaves_rule {
 	height: 1px;
 	margin: 8px 12px 0;
@@ -827,8 +762,9 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	composes: fee_label from "@/popup/components/modules/send/fee-shared.module.css";
 }
 
-.hairline {
-	border-top: 1px solid var(--hairline-soft);
+.fee_seal {
+	display: inline-flex;
+	flex-shrink: 0;
 }
 
 .flag_banner {
@@ -853,16 +789,6 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	padding-top: 12px;
 }
 
-.call {
-	width: 100%;
-	padding-top: 8px;
-}
-
-.call + .call {
-	margin-top: 8px;
-	border-top: 1px solid var(--nulo-border);
-}
-
 .row {
 	width: 100%;
 	gap: 12px;
@@ -874,19 +800,9 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	}
 }
 
-/* A dApp names the call and its contract; a long unbroken name must break inside the card, not push the address out. */
-.call_row > * {
-	min-width: 0;
-	overflow-wrap: anywhere;
-}
-
 .payload {
 	min-width: 0;
 	overflow-wrap: anywhere;
-}
-
-.structured_args {
-	width: 100%;
 }
 
 .title_size {
@@ -923,10 +839,6 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	.row > :last-child,
 	.prop > :last-child {
 		margin-left: auto;
-	}
-
-	.call_row > :first-child {
-		overflow-wrap: break-word;
 	}
 }
 </style>

@@ -18,3 +18,47 @@
 	color: var(--txt-tertiary);
 	opacity: 0.55;
 }
+
+/* The one warning, on the form, in the Fee sheet and in the review alike: a send whose fee names the account. */
+.warning_box {
+	composes: type--body from global;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 8px 10px;
+	background: var(--nulo-surface-low);
+	color: var(--txt-warning);
+	box-shadow: inset 3px 0 0 var(--yellow);
+}
+
+.warning_mark {
+	flex: none;
+	/* The triangle's apex, 1.67 of the glyph's 24 units below its box, on the first line's cap top:
+	   Inter's 0.7275 em cap height under a baseline 12 px down the 15 px line. */
+	margin-top: 2.5px;
+	color: var(--yellow);
+}
+
+.warning_body {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	min-width: 0;
+}
+
+.warning_fix {
+	composes: type--label-section from global;
+	background: none;
+	color: var(--nulo-accent);
+	cursor: pointer;
+
+	&:hover {
+		text-decoration: underline;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
+}

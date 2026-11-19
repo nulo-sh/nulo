@@ -1,11 +1,23 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<route lang="json">
+{
+	"meta": {
+		"fillsWindow": true
+	}
+}
+</route>
+
 <script setup lang="ts">
 /** Vendor */
-import { onMounted, onUnmounted } from "vue"
+import { onMounted, onUnmounted, shallowRef } from "vue"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
 
 /** Components */
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
+import ContractChip from "@/components/composite/ContractChip.vue"
+import { appChipOf } from "@/components/composite/contract-chip"
+import { type NameBook, nameBookOf } from "./contract-chips"
+import type { Contact } from "@/wallet/services/contact/client"
 import DappCancelledOverlay from "@/components/composite/DappCancelledOverlay.vue"
 import DappApprovalFooter from "@/components/composite/DappApprovalFooter.vue"
 import OperationCard from "./OperationCard.vue"
@@ -19,7 +31,7 @@ import { uniqueSignerAccounts, uniqueSignerNetworks } from "./signers"
 import { resolveOperationScope, scopeBannerCopy, scopeBannerState } from "./scope-mismatch"
 import { createScopeFollow, selectionWriter } from "./scope-follow"
 import { managers, requireNetwork } from "@/utils/core"
-import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
+import { carriesFeeSettings, isSelfPay, refusesShortfall } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { type FeePayerPick, holdsConfirm, personPaysAppPayment } from "./fee-figure"
 import { approvalDeltas } from "./approval-deltas"
@@ -32,7 +44,8 @@ import {
 	pendingAuthwitDecodes,
 } from "./display-calls"
 import { REFUSAL_REASON, REFUSAL_TITLE, type RefusalKind, refusalKind } from "./refusal"
-import { grantRefusalRow } from "./call-surface"
+import { grantRefusalRow, type WireCall } from "./call-surface"
+import { appAssertion } from "./app-assertion"
 import {
 	WrongProfileError,
 	assertRequestProfile,
@@ -42,6 +55,9 @@ import {
 	resolveForProfile,
 } from "./operation-display"
 import { openJsonWindow } from "@/utils/json-window"
+import { E2E_EXECUTE_FIXTURE_BUILD_STAMP } from "@/e2e/config"
+import { armedExecuteFixture } from "@/e2e/execute-fixture-gate"
+import { fixtureGas } from "@/e2e/execute-fixture-gas"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
@@ -56,6 +72,7 @@ import {
 	type OperationAuthwitPreview,
 	type TransferFeeEstimate,
 } from "@/wallet/services/execution/client"
+import type { GasBalances } from "@/wallet/services/execution/models"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import {
@@ -72,7 +89,9 @@ import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
 import { estimateWhenClear } from "@/utils/estimate-when-clear"
 import { useTokenFlags } from "@/composables/usePrices"
+import { useDappOrigin } from "@/composables/useDappOrigin"
 import { useToast } from "@/composables/toast"
+import { useMoreBelow } from "@/composables/useMoreBelow"
 
 const { openToast, toast, closeToast } = useToast()
 
@@ -90,14 +109,44 @@ import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 const profile = ref<ProfileInfo>()
+const scrollRef = useTemplateRef("scrollRef")
+const { shown: moreShown, gutter: moreGutter, press: showMore } = useMoreBelow(computed(() => scrollRef.value?.wrapper ?? null))
 
 const router = useRouter()
+
+/**
+ * Armed builds only: the fixture the route names, shown in place of a stored request. It answers no
+ * request: `requestId` stays unset, so Confirm, Reject and the unload reach none, and its estimates
+ * come from the fixture, never the worker.
+ */
+const fixtureName = armedExecuteFixture ? router.currentRoute.value.query.fixture?.toString() : undefined
+let fixtureEstimates: readonly TransferFeeEstimate[] | undefined
+/** The shown fixture's footer answers as a stored request's would: no request stands behind it. */
+const fixtureFooterLive = ref(false)
+let fixtureGasAfterEstimate: GasBalances | undefined
+/** The fixture's estimate; one the account pays from its own Fee Juice leaves the recheck's balance behind. */
+const fixtureEstimate = (estimates: readonly TransferFeeEstimate[], params: { index: number; feeSettings: FeeSettings }) => {
+	if (fixtureGasAfterEstimate && params.feeSettings.paymentMethod?.kind === "fj") fixtureGas.value = fixtureGasAfterEstimate
+	return Promise.resolve(estimates[params.index])
+}
 
 const session = ref()
 const operations = ref<UIOperation[]>([])
 /** Per operation, the paying method its fee card reports. */
 const feePayers = ref<Record<number, FeePayerPick | null>>({})
 const accounts = ref<Account[]>([])
+/** The person's names for the chips' addresses, from one read of the profile's contacts that the
+ *  cards never wait for; a failed read names no contact. */
+const contacts = shallowRef<readonly Contact[]>()
+const names = computed((): NameBook => (contacts.value ? nameBookOf(contacts.value, appStore.accounts) : "loading"))
+async function readContacts(): Promise<void> {
+	try {
+		contacts.value = await managers.contact.getContacts()
+	} catch (error) {
+		console.warn("[Execute] Contacts read failed", { error })
+		contacts.value = []
+	}
+}
 
 const isLoading = ref(false)
 const isWrongProfile = ref(false)
@@ -191,6 +240,10 @@ const {
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
 
+/** No list vouches for an app yet, so its own chip always reads unverified. */
+const { origin: dappOrigin } = useDappOrigin(dapp)
+const appChip = computed(() => appChipOf(dapp.value?.name, dappOrigin.value))
+
 /** Per operation, whether its estimate or preview waits behind another send; cleared once its run
  *  starts, a new fee setting asks again, or neither is in flight. */
 const queuedOps = ref<Record<number, boolean>>({})
@@ -203,6 +256,9 @@ const queueWatch = (index: number, estimateToken: string, signal: AbortSignal) =
 
 /** The snack that reported a failed estimate: closed once none it reported stands, unless replaced. */
 let feeFailureSnackId: number | undefined
+/** Per operation, the app's own failing assertion from its last estimate, drawn under the fee card in
+ *  place of the snack while that failure stands. */
+const appFailures = ref<Record<number, string>>({})
 const {
 	results: feeEstimates,
 	estimating: estimatingOps,
@@ -217,17 +273,24 @@ const {
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
 	estimate: (params, estimateToken, flowKey, signal) =>
-		estimateWhenClear(
-			() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
-			signal,
-			queueWatch(params.index, estimateToken, signal),
-		),
-	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
+		armedExecuteFixture && fixtureEstimates
+			? fixtureEstimate(fixtureEstimates, params)
+			: estimateWhenClear(
+					() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
+					signal,
+					queueWatch(params.index, estimateToken, signal),
+				),
+	cancelRemote: (estimateToken) =>
+		armedExecuteFixture && fixtureEstimates ? undefined : executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 500,
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
 		console.error("[Execute] Fee estimation failed", { op: key, error: err })
-		if (reportsEstimateFailure(operations.value[key] as unknown as UIOperation)) {
+		const op = operations.value[key] as unknown as UIOperation
+		const inline = feeCardAppFailure(op, err)
+		if (inline) appFailures.value[key] = inline
+		else delete appFailures.value[key]
+		if (!inline && reportsEstimateFailure(op)) {
 			feeFailureSnackId = openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 		}
 	},
@@ -236,9 +299,17 @@ const {
 /** An app-paid operation's estimate only checks the app's fee contract, so its other failures are
  *  unknown, never a verdict. A payment the person makes all the same keeps Confirm waiting on a retry. */
 const reportsEstimateFailure = (op: UIOperation): boolean => !isAppPaid(op) || personPaysAppPayment(op)
+/** Only a send whose fee card the window draws shows the app's failure in place of the snack. */
+const feeCardAppFailure = (op: UIOperation | undefined, err: unknown): string | undefined =>
+	op?.kind === "aztec_sendTx" && !isEmbeddedFeePayment(op) ? appAssertion(err, (op.exec?.calls ?? []) as WireCall[]) : undefined
+const retireSnack = (id: number | undefined) => {
+	if (id !== undefined && toast.value?.id === id) closeToast()
+}
+/** The snack reports only the failures not already drawn under their card. */
 const retireFeeFailureSnack = () => {
-	if (operations.value.some((op, i) => failedFeeEstimates.value[i] && reportsEstimateFailure(op as unknown as UIOperation))) return
-	if (feeFailureSnackId !== undefined && toast.value?.id === feeFailureSnackId) closeToast()
+	const reported = (op: UIOperation, i: number) => failedFeeEstimates.value[i] && !appFailures.value[i] && reportsEstimateFailure(op)
+	if (operations.value.some((op, i) => reported(op as unknown as UIOperation, i))) return
+	retireSnack(feeFailureSnackId)
 	feeFailureSnackId = undefined
 }
 
@@ -257,7 +328,7 @@ const isAppPaid = (op: UIOperation | undefined): boolean => carriesFeeSettings(o
 /** An estimate whose payer the node would refuse at submission: an app's fee contract proven unable
  *  to pay, or the account's own Fee Juice below the fee. Confirm stays off, so nothing is proven. */
 const isShortEstimate = (estimate: TransferFeeEstimate): boolean =>
-	estimate.appPayerFunding?.provenShort === true || estimate.feeJuiceShortfall !== undefined
+	estimate.appPayerFunding?.provenShort === true || refusesShortfall(estimate.feeJuiceShortfall)
 /** Each operation's last landed verdict. A replacement estimate clears the result while it runs, so a
  *  shortfall already shown holds Confirm until the replacement answers. */
 const lastLandedShort = ref<Record<number, boolean>>({})
@@ -268,6 +339,8 @@ const payerShort = computed(() =>
 	}),
 )
 
+/** The snack that reported a failed preview: closed, as the fee's is, once none stands. */
+let previewFailureSnackId: number | undefined
 // A `default_entrypoint` operation never gets a fee estimate (the dApp pays), so
 // the authorizations it uses are previewed through their own slot
 // of the same engine: same attempt token, flow key, cancel and handoff rules.
@@ -292,11 +365,19 @@ const {
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
 		console.error(`[Execute] Authorization preview failed for op ${key}:`, err)
-		openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
+		previewFailureSnackId = openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
 	},
 })
 
-const retryAuthwitPreview = (index: number) => scheduleAuthwitPreview(index, { index })
+const retirePreviewFailureSnack = () => {
+	if (operations.value.some((_, i) => failedAuthwitPreviews.value[i])) return
+	retireSnack(previewFailureSnackId)
+	previewFailureSnackId = undefined
+}
+const retryAuthwitPreview = (index: number) => {
+	scheduleAuthwitPreview(index, { index })
+	retirePreviewFailureSnack()
+}
 
 const awaitsEstimates = computed(() =>
 	operations.value.some((op, i) =>
@@ -338,17 +419,20 @@ const {
 		tokenFlags.dispose()
 	},
 	init: () => init(),
+	getActiveProfile: () => profileService.getActiveProfile(),
 	reject: (end) => reject(requestEnd(end, isWrongProfile.value, profile.value)),
 })
 
 const init = async () => {
 	try {
 		profile.value = await profileService.getActiveProfile()
+		if (armedExecuteFixture && fixtureName) return showFixture(armedExecuteFixture, fixtureName)
 		await loadInteractionPayload()
 		if (!payload.value) return
 
 		// TODO: redirect to sign in page with preconfigured profile id
 		assertRequestProfile(profile.value, payload.value.session.profileId)
+		void readContacts()
 
 		const resolved = await resolveForProfile(payload.value.params.operations, profile.value.id)
 		session.value = payload.value.session
@@ -358,11 +442,7 @@ const init = async () => {
 		// is dismissed mid-init (cancel from another window) we want the
 		// approve gate to stay closed.
 		initComplete.value = resolved.operations.length > 0
-		for (const [index, op] of resolved.operations.entries()) {
-			if (op.kind === "aztec_sendTx" && op.executionMode === "default_entrypoint") scheduleAuthwitPreview(index, { index })
-			// No fee card asks for these: the estimate runs once, to check the app's own fee contract.
-			else if (isAppPaid(op)) scheduleFeeEstimate(index, { index, feeSettings: { paymentMethod: { kind: "embedded" } } })
-		}
+		askOpeningEstimates(resolved.operations)
 		// None is awaited here. A call's decode never gates Confirm: a slow one leaves the card on its
 		// vocabulary reading or "Reading arguments…", and a failed one falls back to the raw fields.
 		void decodeOperationArguments(resolved.operations, executionService, (index, decoded) => decodedCalls.value.set(index, decoded))
@@ -385,6 +465,37 @@ const init = async () => {
 		console.error("Failed to initialize execution", { error })
 		setError("Something went wrong")
 	}
+}
+
+/** The asks no fee card makes: the previews of a send the dApp pays, and the one estimate of a send
+ *  its app pays, which checks the app's own fee contract. */
+function askOpeningEstimates(ops: UIOperation[]): void {
+	for (const [index, op] of ops.entries()) {
+		if (op.kind === "aztec_sendTx" && op.executionMode === "default_entrypoint") scheduleAuthwitPreview(index, { index })
+		else if (isAppPaid(op)) scheduleFeeEstimate(index, { index, feeSettings: { paymentMethod: { kind: "embedded" } } })
+	}
+}
+
+/** Commits the named fixture as `init` commits a loaded request, with no request behind it. */
+function showFixture(executeFixture: NonNullable<typeof armedExecuteFixture>, name: string): void {
+	const { account, network } = appStore
+	const fixture = account && network ? executeFixture(name, account, network) : undefined
+	if (!account || !fixture) return
+	;(globalThis as { __NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP__?: string | null }).__NULO_E2E_EXECUTE_FIXTURE_BUILD_STAMP__ =
+		E2E_EXECUTE_FIXTURE_BUILD_STAMP
+	fixtureEstimates = fixture.feeEstimates
+	fixtureGas.value = fixture.gasBalances
+	fixtureFooterLive.value = fixture.footerLive === true
+	fixtureGasAfterEstimate = fixture.gasAfterEstimate
+	dapp.value = fixture.dapp
+	knownTokens.value = fixture.tokens
+	decodedAuthwits.value = new Map(fixture.decodedAuthwits)
+	for (const [index, decoded] of fixture.decodedCalls.entries()) decodedCalls.value.set(index, decoded)
+	accounts.value = [account]
+	void readContacts()
+	operations.value = fixture.operations
+	initComplete.value = true
+	askOpeningEstimates(fixture.operations)
 }
 
 /** Best-effort per-op metadata prefetch; a failed preview records its error
@@ -475,7 +586,7 @@ const retryFeeEstimate = (index: number) =>
 	handleFeeUpdate(index, (operations.value[index] as { feeSettings?: FeeSettings } | undefined)?.feeSettings)
 
 const approve = async () => {
-	if (isLoading.value || refusal.value || confirmBlocked.value) return
+	if (!requestId.value || isLoading.value || refusal.value || confirmBlocked.value) return
 	if (needsFeeSelection.value) {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
@@ -577,6 +688,7 @@ const needsFeeSelection = computed(() =>
 /** Every hold on Confirm but the fee pick, which approve() answers with a warning instead. */
 const confirmBlocked = computed(
 	() =>
+		(!requestId.value && !fixtureFooterLive.value) ||
 		isInteractionCancelled.value ||
 		!initComplete.value ||
 		operations.value.length === 0 ||
@@ -586,6 +698,14 @@ const confirmBlocked = computed(
 		tokenFlagHold.value ||
 		grantsPending.value ||
 		grantRefusal.value !== undefined ||
+		processingError.value?.type === "error",
+)
+
+/** A failure the window shows before approval: the request's logs are worth a download then. */
+const showsFailure = computed(
+	() =>
+		refusal.value !== undefined ||
+		operations.value.some((_, i) => failedFeeEstimates.value[i] || failedAuthwitPreviews.value[i]) ||
 		processingError.value?.type === "error",
 )
 
@@ -638,98 +758,119 @@ onUnmounted(() => {
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
 		<SignerIdentityStrip :signerAccounts="signerAccounts" :signerNetworks="signerNetworks" :status="stripStatus" />
 
-		<Flex direction="column" :class="$style.scroll_area">
-			<DappIdentityBlock
-				:dapp="dapp ?? undefined"
-				hostnameTestId="execute-hostname"
-				actionLabel="wants to execute the following"
-			/>
-
-			<Flex direction="column" gap="16" :class="$style.sections">
-				<Banner
-					v-if="scopeBanner"
-					data-testid="execute-scope-banner"
-					:data-state="scopeBanner.state"
-					:class="$style.scope_banner"
-					variant="info"
-					direction="vertical"
-					wide
-					:action="scopeBanner.action ? { name: scopeBanner.action, callback: toggleFollow, testId: 'execute-scope-action-btn' } : undefined"
+		<div :class="$style.frame">
+			<Flex ref="scrollRef" direction="column" :class="$style.scroll_area">
+				<DappIdentityBlock
+					:dapp="dapp ?? undefined"
+					hostnameTestId="execute-hostname"
+					nameTestId="execute-dapp-name"
+					actionLabel="wants to execute the following"
+					nameAsChip
 				>
-					<template #title>{{ scopeBanner.title }}</template>
-					<template #description>{{ scopeBanner.body }}</template>
-				</Banner>
+					<template v-if="appChip" #name><ContractChip :model="appChip" testid="execute-app-chip-label" /></template>
+				</DappIdentityBlock>
 
-				<Flex v-if="operations.length" direction="column" gap="10" wide>
-					<Flex wide justify="between" align="center">
-						<SectionLabel label="Requested operations" :count="operations.length" />
-						<Icon
-							data-testid="execute-show-json-btn"
-							@click="showJson"
-							name="expand"
-							size="16"
-							color="tertiary"
-							:class="$style.fullscreen_icon"
-						/>
-					</Flex>
-
-					<OperationCard
-						v-for="(op, i) in operations"
-						:key="i"
-						:op="op as UIOperation"
-						:index="i"
-						:profile="profile"
-						:dapp="dapp ?? undefined"
-						:feeEstimate="feeEstimates[i] ?? undefined"
-						:isEstimating="!!estimatingOps[i]"
-						:estimateFailed="!!failedFeeEstimates[i]"
-						:authwitPreview="authwitPreviews[i] ?? undefined"
-						:isPreviewing="!!previewingOps[i]"
-						:previewFailed="!!failedAuthwitPreviews[i]"
-						:isQueued="!!queuedOps[i]"
-						:decodedCalls="decodedCalls.get(i)"
-						:decodedAuthwits="decodedAuthwits"
-						:decodedGrants="decodedGrants.get(i)"
-						:tokens="knownTokens"
-						:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
-						:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
-						:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"
-						:tokenFlagged="isFlaggedAdd(op as UIOperation)"
-						:tokenFlagAcknowledged="flagAcknowledged.has(i)"
-						:refused="refusal !== undefined"
-						@updateFeeSettings="handleFeeUpdate"
-						@retryEstimate="retryFeeEstimate"
-						@retryPreview="retryAuthwitPreview"
-						@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
-						@acknowledgeTokenFlag="acknowledgeTokenFlag"
+				<Flex direction="column" gap="16" :class="$style.sections">
+					<Banner
+						v-if="scopeBanner"
+						data-testid="execute-scope-banner"
+						:data-state="scopeBanner.state"
+						:class="$style.scope_banner"
+						variant="info"
+						direction="vertical"
+						wide
+						:action="scopeBanner.action ? { name: scopeBanner.action, callback: toggleFollow, testId: 'execute-scope-action-btn' } : undefined"
 					>
-						<template v-if="refusal" #fee>
-							<Flex
-								data-testid="execute-op-refusal"
-								:data-kind="refusal"
-								role="alert"
-								direction="column"
-								gap="4"
-								wide
-								:class="$style.refusal"
-							>
-								<Flex align="center" gap="4">
-									<Icon name="warning" size="12" color="orange" />
-									<Text data-testid="execute-op-refusal-title" variant="body" color="orange">{{ REFUSAL_TITLE }}</Text>
+						<template #title>{{ scopeBanner.title }}</template>
+						<template #description>{{ scopeBanner.body }}</template>
+					</Banner>
+
+					<Flex v-if="operations.length" direction="column" gap="10" wide>
+						<Flex wide justify="between" align="center">
+							<SectionLabel label="Requested operations" :count="operations.length" />
+							<Icon
+								data-testid="execute-show-json-btn"
+								@click="showJson"
+								name="expand"
+								size="16"
+								color="tertiary"
+								:class="$style.fullscreen_icon"
+							/>
+						</Flex>
+
+						<OperationCard
+							v-for="(op, i) in operations"
+							:key="i"
+							:op="op as UIOperation"
+							:index="i"
+							:profile="profile"
+							:dapp="dapp ?? undefined"
+							:feeEstimate="feeEstimates[i] ?? undefined"
+							:isEstimating="!!estimatingOps[i]"
+							:estimateFailed="!!failedFeeEstimates[i]"
+							:authwitPreview="authwitPreviews[i] ?? undefined"
+							:isPreviewing="!!previewingOps[i]"
+							:previewFailed="!!failedAuthwitPreviews[i]"
+							:isQueued="!!queuedOps[i]"
+							:decodedCalls="decodedCalls.get(i)"
+							:decodedAuthwits="decodedAuthwits"
+							:decodedGrants="decodedGrants.get(i)"
+							:tokens="knownTokens"
+							:marks="tokenFlags"
+							:explorerId="appStore.defaultExplorer"
+							:names="names"
+							:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
+							:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
+							:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"
+							:tokenFlagged="isFlaggedAdd(op as UIOperation)"
+							:tokenFlagAcknowledged="flagAcknowledged.has(i)"
+							:refused="refusal !== undefined"
+							:appFailure="failedFeeEstimates[i] ? appFailures[i] : undefined"
+							@updateFeeSettings="handleFeeUpdate"
+							@retryEstimate="retryFeeEstimate"
+							@retryPreview="retryAuthwitPreview"
+							@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
+							@acknowledgeTokenFlag="acknowledgeTokenFlag"
+						>
+							<template v-if="refusal" #fee>
+								<Flex
+									data-testid="execute-op-refusal"
+									:data-kind="refusal"
+									role="alert"
+									direction="column"
+									gap="4"
+									wide
+									:class="$style.refusal"
+								>
+									<Flex align="center" gap="4">
+										<Icon name="warning" size="12" color="orange" />
+										<Text data-testid="execute-op-refusal-title" variant="body" color="orange">{{ REFUSAL_TITLE }}</Text>
+									</Flex>
+									<Text data-testid="execute-op-refusal-reason" variant="body" color="secondary">{{ REFUSAL_REASON[refusal] }}</Text>
 								</Flex>
-								<Text data-testid="execute-op-refusal-reason" variant="body" color="secondary">{{ REFUSAL_REASON[refusal] }}</Text>
-							</Flex>
-						</template>
-					</OperationCard>
+							</template>
+						</OperationCard>
+					</Flex>
 				</Flex>
 			</Flex>
+			<ScrollMoreButton
+				:shown="moreShown"
+				:class="$style.more_below"
+				:style="{ right: `${16 + moreGutter}px` }"
+				data-testid="execute-scroll-more"
+				@press="showMore"
+			/>
+		</div>
+
+		<Flex v-if="showsFailure && requestId" wide :class="$style.request_log_row">
+			<RequestLogButton :interaction-id="requestId" />
 		</Flex>
 
 		<DappApprovalFooter
 			:processing-error="grantRefusal ?? processingError"
 			reject-testid="execute-reject-btn"
 			reject-label="Reject"
-			:reject-disabled="isLoading || !requestId"
+			:reject-disabled="isLoading || (!requestId && !fixtureFooterLive)"
 			confirm-testid="execute-confirm-btn"
 			:confirm-hidden="refusal !== undefined"
 			:confirm-label="isLoading ? 'EXECUTING' : 'Confirm'"
@@ -761,8 +902,29 @@ onUnmounted(() => {
 	composes: scroll_area from "../window-shell.module.css";
 }
 
+.frame {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+/* Bottom right, 16 px plus the scrollbar gutter in. At first paint it may sit over a right-aligned
+ * value until the first scroll; on the left it would clip the first letters of a label. */
+.more_below {
+	position: absolute;
+	bottom: 12px;
+	z-index: 1;
+}
+
+/* The bottom padding is the button's footprint, so at the end only blank room sits under it. */
 .sections {
-	padding: 16px;
+	padding: 16px 16px 48px;
+}
+
+.request_log_row {
+	padding: 0 16px 8px;
 }
 
 /* The action repeats a typed name on a line of its own, so the whole banner breaks a word wider

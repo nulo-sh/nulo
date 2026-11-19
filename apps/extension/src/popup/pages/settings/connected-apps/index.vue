@@ -11,18 +11,30 @@
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
 import RowTarget from "@/components/ui/RowTarget.vue"
+import SettingControlRow from "@/components/ui/Settings/SettingControlRow.vue"
 
 /** Services */
 import { DappSessionServiceClient } from "@/wallet/services/dapp-session/client"
 import { getSafeDisplay } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Utils */
-import { withoutId } from "@/utils/entity-list"
+import { entityListReducers } from "@/utils/entity-list"
+import { EVERY_SITE_CONFIRM } from "@/utils/every-site"
 import { pluralize } from "@/utils/plural"
+import { settingsRow } from "@/utils/settings-search"
+
+/** Stores */
+import { useAppStore } from "@/stores/app.store"
 
 /** Composables */
+import { useToast } from "@/composables/toast"
 import { useConfirm } from "@/composables/useConfirm"
-const { requestConfirm } = useConfirm()
+import { SETTING_UPDATE_FAILED } from "@/composables/useSettingUpdate"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
+const appStore = useAppStore()
+const { openToast } = useToast()
+const { requestConfirm, askConfirm } = useConfirm()
+const { vSettingsRow } = useSettingsRowHighlight()
 
 const formatGrantSummary = (grants) => {
 	// getSafeDisplay returns the constant "Unknown" shortLabel for
@@ -31,7 +43,7 @@ const formatGrantSummary = (grants) => {
 	return grants.map((g) => getSafeDisplay(g.capability.type).shortLabel).join(" \u00B7 ")
 }
 
-/** The app's host, so e2e can pick one app's row without reading its text. */
+/** The host of the origin discovery stored, never text the site sent; "" when the URL has none. */
 const appHost = (session) => {
 	try {
 		return new URL(session.dappMetadata?.url ?? "").host
@@ -41,13 +53,22 @@ const appHost = (session) => {
 }
 
 const dappSessions = ref([])
+const sessionList = entityListReducers(dappSessions)
 
 const sortedSessions = computed(() => [...dappSessions.value].sort((a, b) => a.expiry - b.expiry))
+
+const everySiteRow = settingsRow("connected-apps-every-site")
+/** The profile the switch was read for, `null` until read: the Toggle waits for it. */
+const everySiteProfile = ref(null)
+const everySite = ref(false)
+let everySiteReads = 0
 
 const dappSessionService = new DappSessionServiceClient()
 dappSessionService.onDappSessionAdded.add(onDappSessionAdded)
 dappSessionService.onDappSessionUpdated.add(onDappSessionUpdated)
-dappSessionService.onDappSessionDeleted.add(onDappSessionDeleted)
+dappSessionService.onDappSessionDeleted.add(sessionList.onDeleted)
+// The connect window's "Allow every site" turns it on too, maybe while this page stays open.
+dappSessionService.onEverySiteChanged.add(readEverySite)
 
 function hydrateLogo(session) {
 	if (!session.dappMetadata?.logo || session.dappMetadata.logoBlobUrl) return
@@ -55,27 +76,48 @@ function hydrateLogo(session) {
 }
 
 function onDappSessionAdded(session) {
-	dappSessions.value.push(session)
+	sessionList.onAdded(session)
 	hydrateLogo(session)
 }
 function onDappSessionUpdated(session) {
-	const idx = dappSessions.value.findIndex((ds) => ds.id === session.id)
-	if (idx !== -1) {
-		const prevBlob = dappSessions.value[idx].dappMetadata?.logoBlobUrl
-		dappSessions.value[idx] = session
-		if (prevBlob && session.dappMetadata) {
-			session.dappMetadata.logoBlobUrl = prevBlob
-		}
-	} else {
-		dappSessions.value.push(session)
+	const prevBlob = dappSessions.value.find((ds) => ds.id === session.id)?.dappMetadata?.logoBlobUrl
+	if (prevBlob && session.dappMetadata) {
+		session.dappMetadata.logoBlobUrl = prevBlob
 	}
+	sessionList.onUpdated(session)
 	hydrateLogo(session)
-}
-function onDappSessionDeleted(session) {
-	dappSessions.value = withoutId(dappSessions.value, session)
 }
 
 const rowIdBase = useId()
+
+/** Only the latest read lands. Unread, the Toggle is disabled: showing off for a switch that may be
+ *  on would mislead. */
+async function readEverySite() {
+	const read = ++everySiteReads
+	try {
+		const { profileId, on } = await dappSessionService.getEverySite()
+		if (read !== everySiteReads) return
+		everySiteProfile.value = profileId
+		everySite.value = on
+	} catch {
+		if (read === everySiteReads) everySiteProfile.value = null
+	}
+}
+
+/** On asks first and writes only on Turn on; off writes at once. The Toggle shows what was written.
+ *  A confirm is for the profile shown when it opened: answered after a switch, it writes nothing. */
+async function onEverySiteToggle(next) {
+	const profileId = everySiteProfile.value
+	if (next && !(await askConfirm(EVERY_SITE_CONFIRM))) return
+	if (profileId === null || everySiteProfile.value !== profileId) return
+	try {
+		await dappSessionService.setEverySite(profileId, next)
+		everySite.value = next
+	} catch {
+		openToast({ kind: "error", label: SETTING_UPDATE_FAILED })
+		void readEverySite()
+	}
+}
 
 const handleDropSession = (session) => {
 	requestConfirm({
@@ -102,7 +144,17 @@ const handleDropAllSessions = () => {
 	})
 }
 
+// Another window can switch the profile while this page stays open; the switch is per profile.
+watch(
+	() => appStore.profile?.id,
+	() => {
+		everySiteProfile.value = null
+		void readEverySite()
+	},
+)
+
 onBeforeMount(async () => {
+	void readEverySite()
 	const sessions = await dappSessionService.getDappSessions()
 	dappSessions.value = sessions
 	for (const session of sessions) hydrateLogo(session)
@@ -132,6 +184,24 @@ onBeforeUnmount(() => {
 			</Dropdown>
 		</template>
 
+		<SettingControlRow
+			:title="everySiteRow.title"
+			:description="everySiteRow.description"
+			align="center"
+			:data-testid="everySiteRow.testid"
+			v-settings-row="everySiteRow.id"
+			:class="$style.every_site"
+			v-slot="{ titleId }"
+		>
+			<Toggle
+				:aria-labelledby="titleId"
+				:modelValue="everySite"
+				:disabled="everySiteProfile === null"
+				@update:modelValue="onEverySiteToggle"
+				data-testid="every-site-toggle"
+			/>
+		</SettingControlRow>
+
 		<SectionLabel label="Sessions" :count="sortedSessions.length" />
 
 		<ItemsContainer v-if="sortedSessions.length">
@@ -152,6 +222,7 @@ onBeforeUnmount(() => {
 
 					<Flex direction="column" gap="2" wide :class="$style.row_text">
 						<span :id="`${rowIdBase}-${i}`" :class="$style.row_name">{{ ds.dappMetadata.name }}</span>
+						<span v-if="appHost(ds)" data-testid="connected-app-row-host" :class="$style.row_host">{{ appHost(ds) }}</span>
 						<!-- Establishment writes the hash, so a row without one was allowed and never connected. -->
 						<span v-if="!ds.verificationHash" data-testid="connected-app-row-not-connected" :class="$style.row_grants">
 							Allowed. Not connected yet.
@@ -182,6 +253,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
+/* The page's 12 px gap separates list rows; the switch above the list takes Privacy's 32 px. */
+.every_site {
+	margin-bottom: 20px;
+}
+
 .row {
 	composes: divider row from "../../../../components/ui/Settings/settings-row.module.css";
 }
@@ -213,6 +289,18 @@ onBeforeUnmount(() => {
 .row_grants {
 	composes: type--caption from global;
 	composes: row_sub from "../../../../components/ui/Settings/settings-row.module.css";
+}
+
+.row_host {
+	composes: type--data-lead from global;
+	composes: row_sub from "../../../../components/ui/Settings/settings-row.module.css";
+}
+
+/* A host wraps at every width, never cut: its end names the site's owner, the part a long
+ * lookalike prefix would push out of sight. */
+.row .row_host {
+	white-space: normal;
+	overflow-wrap: anywhere;
 }
 
 .actions {

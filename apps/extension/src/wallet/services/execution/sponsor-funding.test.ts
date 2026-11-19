@@ -11,7 +11,15 @@ import { trim } from "@/wallet/logger/utils"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import type { FeeEstimate } from "./fee/fee-strategy"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
-import { SPONSOR_PROBE_TIMEOUT_MS, callsFeeJuice, probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
+import {
+	SPONSOR_PROBE_TIMEOUT_MS,
+	callsFeeJuice,
+	ownFeeJuiceShortfall,
+	probeAppPayerFunding,
+	probeOwnFeeJuice,
+	probeSponsorFunding,
+	recheckShortfall,
+} from "./sponsor-funding"
 
 const SPONSOR = AztecAddress.fromNumberUnsafe(0x5f)
 const NETWORK = { id: "net-1", chainId: 7 }
@@ -106,6 +114,20 @@ describe("probeOwnFeeJuice", () => {
 		expect(result).toBeUndefined()
 		expect(log.mock.calls).toEqual([["own fee juice probe", { outcome: "failed" }]])
 	})
+
+	test("a short probe against a covering reader figure reads the account's balance once more through each, by its own address", async () => {
+		const read = vi.fn(async () => new Fr(0n))
+		const reads = {
+			readPublicStorageOnce: read,
+			peekPublicFeeJuice: vi.fn(() => "900"),
+			rereadPublicFeeJuice: vi.fn(async () => "900"),
+		}
+		const result = await ownFeeJuiceShortfall(paying(AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE), reads, vi.fn())
+		expect(result).toEqual({ maxFee: "800", balance: "0", lastRead: "900" })
+		expect(read).toHaveBeenCalledTimes(2)
+		expect(reads.peekPublicFeeJuice).toHaveBeenCalledExactlyOnceWith(NETWORK.id, ACCOUNT.toString())
+		expect(reads.rereadPublicFeeJuice).toHaveBeenCalledExactlyOnceWith(NETWORK.id, ACCOUNT.toString())
+	})
 })
 
 const APP_PAYER = AztecAddress.fromNumberUnsafe(0xa9)
@@ -123,6 +145,45 @@ function appBuilt(callsFeeJuice: boolean | undefined): FeeEstimate {
 	const base = built(false) as unknown as Record<string, unknown>
 	return { ...base, ...(callsFeeJuice === undefined ? {} : { appPayer: { address: APP_PAYER, callsFeeJuice } }) } as FeeEstimate
 }
+
+describe("recheckShortfall", () => {
+	const SHORT = { maxFee: "4160515300000000000", balance: "0" }
+	const COVERS = "38163812345678901234"
+	const recheck = (peek: string | null, fresh: string | null, probed: bigint | undefined) => ({
+		peek: vi.fn(() => peek),
+		reread: vi.fn(async () => fresh),
+		reprobe: vi.fn(async () => probed),
+	})
+
+	test("reads nothing again when the reader's last figure is also short or unread", async () => {
+		for (const peek of ["0", null]) {
+			const r = recheck(peek, COVERS, BigInt(COVERS))
+			expect(await recheckShortfall(SHORT, r)).toBe(SHORT)
+			expect(r.reread).not.toHaveBeenCalled()
+			expect(r.reprobe).not.toHaveBeenCalled()
+		}
+	})
+
+	test("two reads that still disagree mark the shortfall unconfirmed with the fresh reader figure, after one recheck", async () => {
+		const r = recheck(COVERS, COVERS, 0n)
+		expect(await recheckShortfall(SHORT, r)).toEqual({ ...SHORT, lastRead: COVERS })
+		expect(r.reread).toHaveBeenCalledTimes(1)
+		expect(r.reprobe).toHaveBeenCalledTimes(1)
+	})
+
+	test("agreeing reads keep the refusal with the second probe's figure; a covering second probe clears it whatever the reader read", async () => {
+		expect(await recheckShortfall(SHORT, recheck(COVERS, "1", 1n))).toEqual({ ...SHORT, balance: "1" })
+		for (const fresh of [COVERS, "0", null])
+			expect(await recheckShortfall(SHORT, recheck(COVERS, fresh, BigInt(COVERS)))).toBeUndefined()
+	})
+
+	test("a read that fails is no read: a failed reader read never counts as funds, a failed probe keeps the first figure", async () => {
+		const readerDown = { ...recheck(COVERS, null, 0n), reread: vi.fn(async () => Promise.reject(new Error("down"))) }
+		expect(await recheckShortfall(SHORT, readerDown)).toEqual(SHORT)
+		expect(await recheckShortfall(SHORT, recheck(COVERS, "0", undefined))).toEqual(SHORT)
+		expect(await recheckShortfall(SHORT, recheck(COVERS, COVERS, undefined))).toEqual({ ...SHORT, lastRead: COVERS })
+	})
+})
 
 describe("callsFeeJuice", () => {
 	test.each([

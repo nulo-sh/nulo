@@ -11,7 +11,10 @@
 // @ts-expect-error — raw JSON import via vite alias
 import WonderlandTokenJson from "@wonderland-token-artifact"
 import { FunctionSelector, loadContractArtifact } from "@aztec-labs/stdlib/abi"
+import type { VueWrapper } from "@vue/test-utils"
 import { vi } from "vitest"
+import { ref } from "vue"
+import type { ListReader } from "@/utils/contract-level"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import { decodeCallForDisplay, decodeGrantForDisplay } from "@/wallet/services/execution/call-decoder"
@@ -19,6 +22,23 @@ import type { CallAuthwitContent, DecodedCall, DecodedGrant, DiscoveredAuthwit }
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { authwitDisplayCall, displayCallsOf } from "./display-calls"
 import type { DraftUIOperation } from "./types"
+
+/** The signed list as the window reads it once answered, naming nothing: every chip settles and none
+ *  is sealed, so a card's text reads at once instead of behind a held chip's placeholders. */
+export const answeredList = (): ListReader => ({
+	mapped: ref(true),
+	isFlagged: () => false,
+	iconFor: () => undefined,
+	listedAt: () => undefined,
+})
+
+/** Opens a mounted send card's every step, then its authorizations' node: the rail opens each on its
+ *  own press, and the node lists every authorization's details at once. */
+export const openAllSteps = async (w: VueWrapper): Promise<void> => {
+	for (const row of w.findAll('[data-testid="execute-op-step-toggle"][aria-expanded="false"]')) await row.trigger("click")
+	const node = w.find('[data-testid="execute-op-authwits-toggle"][aria-expanded="false"]')
+	if (node.exists()) await node.trigger("click")
+}
 
 /** Every address passes `isValidAztecAddress`; each is told apart by its trimmed form. */
 export const MAIN = "0x0a1b2c0000000000000000000000000000000000000000000000000000009c2d"
@@ -160,8 +180,11 @@ export const decodeFixture = async ({ vaultDecoded = true } = {}) => {
 	}
 }
 
+/** The decode the window fetches for an authorization on the fixture's USDC. */
+export const decodeAuthwit = (authwit: DiscoveredAuthwit): Promise<DecodedCall> => decodeCallForDisplay(lookup, authwitDisplayCall(authwit))
+
 /** The decode the window fetches for {@link CONSUMED}. */
-export const decodeConsumed = (): Promise<DecodedCall> => decodeCallForDisplay(lookup, authwitDisplayCall(CONSUMED))
+export const decodeConsumed = (): Promise<DecodedCall> => decodeAuthwit(CONSUMED)
 
 /** A `grantPublicAuthwit` content as the playground sends it: the owner and spender as hex, the
  *  amount and nonce as decimal strings. */
@@ -176,24 +199,36 @@ export const GRANT: CallAuthwitContent = {
 /** The grant's decode as the worker returns it; call `stubTokenSelectors` first under jsdom. */
 export const decodeGrantFixture = (content: CallAuthwitContent = GRANT): Promise<DecodedGrant> => decodeGrantForDisplay(lookup, content)
 
-/** A fact the window shows today: text in its row, or a row element's `title`. A row is every element
- *  carrying its `data-call-index` (a call) or `data-message-hash` (an authorization). */
-export type Fact = { row: string; text: string }
+/** A fact the window shows today: text a person reads in its row, or, `title`, a whole value on a row
+ *  element's hover. A row is every element carrying its `data-call-index` (a call) or
+ *  `data-message-hash` (an authorization). */
+export type Fact = { row: string; text: string; title?: true }
 
-const call = (j: number, ...texts: string[]): Fact[] => texts.map((text) => ({ row: `[data-call-index="${j}"]`, text }))
-const authwit = (hash: string, ...texts: string[]): Fact[] => texts.map((text) => ({ row: `[data-message-hash="${hash}"]`, text }))
+const callRow = (j: number) => `[data-call-index="${j}"]`
+const authwitRow = (hash: string) => `[data-message-hash="${hash}"]`
+const call = (j: number, ...texts: string[]): Fact[] => texts.map((text) => ({ row: callRow(j), text }))
+const authwit = (hash: string, ...texts: string[]): Fact[] => texts.map((text) => ({ row: authwitRow(hash), text }))
+export const titles = (row: string, ...texts: string[]): Fact[] => texts.map((text) => ({ row, text, title: true }))
 
 export const FACTS: readonly Fact[] = [
 	...call(0, "Exit To L1", trimAddress(HUB), "token:", trimAddress(USDC), "amount:", "25000000", "recipient:"),
-	...call(0, trimAddress(L1_RECIPIENT), "authwit_nonce:", trimAddress(EXIT_NONCE, 10, 6), EXIT_NONCE),
+	...call(0, trimAddress(L1_RECIPIENT), "authwit_nonce:", trimAddress(EXIT_NONCE, 10, 6)),
+	...titles(callRow(0), EXIT_NONCE),
 	...call(1, "Transfer (private)", trimAddress(USDC), "Main", trimAddress(RECIPIENT), "0.1 USDC"),
-	...call(2, "Checkpoint", trimAddress(UNKNOWN), "Can't read the arguments", "Nulo doesn't have this contract's interface"),
-	...call(2, trimAddress(CHECKPOINT_ROOT, 10, 6), CHECKPOINT_ROOT, "= 7"),
+	...call(2, "Checkpoint", trimAddress(UNKNOWN)),
+	...call(2, trimAddress(CHECKPOINT_ROOT, 10, 6), "= 7"),
+	...titles(callRow(2), CHECKPOINT_ROOT),
 	...authwit(MESSAGE_1, trimAddress(USDC), trimAddress(HUB), "Transfer to public", "Main", "25 USDC"),
-	...authwit(MESSAGE_1, trimAddress(AUTH_NONCE, 10, 6), AUTH_NONCE, trimAddress(INNER_1, 10, 6), INNER_1),
-	...authwit(MESSAGE_2, trimAddress(VAULT), trimAddress(HUB), trimAddress(INNER_2, 10, 6), INNER_2),
+	...authwit(MESSAGE_1, trimAddress(AUTH_NONCE, 10, 6), trimAddress(INNER_1, 10, 6)),
+	...titles(authwitRow(MESSAGE_1), AUTH_NONCE, INNER_1),
+	...authwit(MESSAGE_2, trimAddress(VAULT), trimAddress(HUB), trimAddress(INNER_2, 10, 6)),
+	...titles(authwitRow(MESSAGE_2), INNER_2),
+	{ row: '[data-testid="execute-op-summary-unparsed"]', text: "Nulo can't parse calls from steps 1 and 3." },
 ]
 
 /** The Vault authorization's facts when it decodes, and when it reads as raw fields. */
 export const VAULT_DECODED_FACTS: readonly Fact[] = authwit(MESSAGE_2, "Withdraw For", "owner:", "Main", "amount:", "1000")
-export const VAULT_RAW_FACTS: readonly Fact[] = authwit(MESSAGE_2, WITHDRAW_SELECTOR, trimAddress(MAIN, 10, 6), MAIN, "= 1000")
+export const VAULT_RAW_FACTS: readonly Fact[] = [
+	...authwit(MESSAGE_2, WITHDRAW_SELECTOR, trimAddress(MAIN, 10, 6), "= 1000"),
+	...titles(authwitRow(MESSAGE_2), MAIN),
+]

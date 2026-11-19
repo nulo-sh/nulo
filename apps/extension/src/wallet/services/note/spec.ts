@@ -12,9 +12,11 @@ export type Note = {
 	rawContent: string[]
 	/** Guessed type of the note (e.g., "UintNote", "NFTNote"). */
 	type?: string
-	/** Friendly name of the parent contract (e.g., "Aztec Token", "Private FPC"),
-	 *  populated when the contract's class id is in the bundled-standards set. */
+	/** The parent contract's name: the bundled-standards table's (e.g., "Aztec Token") when a schema
+	 *  matched, else, with `contractNameFromCode`, the name its own artifact gives it. */
 	contractName?: string
+	/** `contractName` is the one the contract's author chose, which no list vouches for. */
+	contractNameFromCode?: true
 	/** Location in the contract storage. */
 	location?: string
 	/** Parsed (according to the guessed type) content. */

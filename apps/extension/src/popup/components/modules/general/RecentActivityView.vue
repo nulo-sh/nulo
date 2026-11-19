@@ -23,9 +23,9 @@ import { useJournalMirror } from "@/composables/useJournalMirror"
 
 /** Utils */
 import { usePrices } from "@/composables/usePrices"
-import { balanceFormatted } from "@/utils/amount.js"
+import { formatListAmount } from "@/utils/amount.js"
 import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
-import { knownDecimals } from "@/utils/token-amount"
+import { knownDecimals, parseSide } from "@/utils/token-amount"
 import { dashIfBlank, isBlank } from "@/utils/string"
 import { activeAccountScope } from "@/utils/active-scope"
 import { filterPendingDoubleRender, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
@@ -35,14 +35,18 @@ import {
 	isQueuedTransfer,
 	journalCardAmount,
 	journalCardAmountSymbol,
+	journalCardDirection,
+	journalCardFiat,
 	journalProgressWord,
 	journalCardIcon,
 	journalCardOriginLabel,
 	journalCardTitle,
-	journalCardTransferTypeLabel,
+	journalCardTitleMark,
+	journalCardTitleNamesToken,
 	sanitizeJournalSubtitle,
 } from "@/utils/journal-state"
-import { callTitle } from "@/utils/tx-enrichment"
+import { tokenMarkOf } from "@/utils/token-icon"
+import { callTitle, transferDirection } from "@/utils/tx-enrichment"
 import { buildCancelHandler, buildFocusHandler, isMatchingTask } from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
 
@@ -199,11 +203,25 @@ const executingAmount = computed(() => {
 	if (!isUiTransfer.value) return null
 	const decimals = knownDecimals(tokenById(executingTask.value.content.tokenId))
 	if (decimals === null) return null
-	return balanceFormatted(String(executingTask.value.content.amount), decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
+	return formatListAmount(String(executingTask.value.content.amount), decimals, ROW_AMOUNT_LENGTH)
 })
 const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null
 	return tokenById(executingTask.value.content.tokenId)?.symbol || null
+})
+const executingAmountFiat = computed(() => {
+	if (!executingAmount.value) return null
+	const raw = parseSide(String(executingTask.value.content.amount))
+	return raw === undefined ? null : (incomingPrices.tokenFiatLabel(tokenById(executingTask.value.content.tokenId), raw) ?? null)
+})
+const executingTitleMark = computed(() =>
+	isUiTransfer.value ? tokenMarkOf(incomingPrices, tokenById(executingTask.value.content.tokenId)) : null,
+)
+/** The task holds the request's own sender and recipient, as the send's journal record does. */
+const executingDirection = computed(() => {
+	if (!isUiTransfer.value) return null
+	const { transferType, senderAddress, recipientAddress } = executingTask.value.content
+	return transferDirection(transferType, senderAddress, recipientAddress)
 })
 
 /** Durable journal records. Survives SW restart + popup close/reopen so if
@@ -333,6 +351,7 @@ const renderedInFlightOps = computed(() => [...inFlightJournalOps.value].sort((a
 
 const cardAmountFor = (op) => journalCardAmount(op, tokenById)
 const cardAmountSymbolFor = (op) => journalCardAmountSymbol(op, tokenById)
+const cardAmountFiatFor = (op) => journalCardFiat(op, tokenById, incomingPrices.tokenFiatLabel)
 
 function awaitingSubtitleFor(op) {
 	return isQueuedTransfer(op) ? journalProgressWord(op) : cardSubtitleFor(op)
@@ -626,7 +645,10 @@ onBeforeUnmount(() => {
 				:originLabel="journalCardOriginLabel(op)"
 				:amount="cardAmountFor(op)"
 				:amountSymbol="cardAmountSymbolFor(op)"
-				:transferTypeLabel="journalCardTransferTypeLabel(op)"
+				:amountFiat="cardAmountFiatFor(op)"
+				:titleNamesToken="journalCardTitleNamesToken(op)"
+				:titleMark="journalCardTitleMark(op, { tokenById }, incomingPrices)"
+				:direction="journalCardDirection(op)"
 				:cancellable="true"
 				:jobId="op.id"
 				:stage="op.progress?.stage ?? null"
@@ -649,6 +671,10 @@ onBeforeUnmount(() => {
 				:originLabel="executingOriginLabel"
 				:amount="executingAmount"
 				:amountSymbol="executingAmountSymbol"
+				:amountFiat="executingAmountFiat"
+				:titleNamesToken="isUiTransfer"
+				:titleMark="executingTitleMark"
+				:direction="executingDirection"
 				:oneLineTitle="!isUiTransfer"
 			/>
 			<TransactionAwaitingCard v-else-if="!renderedInFlightOps.length && showFallbackAwaiting" />
@@ -661,6 +687,8 @@ onBeforeUnmount(() => {
 				:tokens="tokens"
 				:tokenById="tokenById"
 				:fiatLabel="incomingPrices.tokenFiatLabel"
+				:iconFor="incomingPrices.iconFor"
+				:isFlagged="incomingPrices.isFlagged"
 				:isArriving="token ? undefined : arrivals?.isArriving"
 			/>
 		</div>

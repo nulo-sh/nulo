@@ -3,7 +3,7 @@ export const BODY_CAP_BYTES = 2048
 /** The decoy field: hidden from people, filled by naive bots. */
 export const HONEYPOT_FIELD = "website"
 
-export type Fields = { email: string | null; honeypot: string }
+export type Fields = { email: string | null; honeypot: string; token: string | null }
 
 /**
  * Reads at most `cap` bytes and stops pulling past it, so a body that lies about its
@@ -37,6 +37,9 @@ export async function readCapped(body: ReadableStream<Uint8Array> | null, cap: n
 	return bytes
 }
 
+/** `undefined` for an absent field, `false` for one that is not a string. */
+const stringField = (value: unknown): string | undefined | false => (value === undefined || typeof value === "string" ? value : false)
+
 function fromJson(text: string): Fields | null {
 	let parsed: unknown
 	try {
@@ -45,15 +48,15 @@ function fromJson(text: string): Fields | null {
 		return null
 	}
 	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null
-	const { email, [HONEYPOT_FIELD]: honeypot } = parsed as Record<string, unknown>
-	if (email !== undefined && typeof email !== "string") return null
-	if (honeypot !== undefined && typeof honeypot !== "string") return null
-	return { email: email ?? null, honeypot: (honeypot ?? "").trim() }
+	const record = parsed as Record<string, unknown>
+	const [email, token, honeypot] = [record.email, record.token, record[HONEYPOT_FIELD]].map(stringField)
+	if (email === false || token === false || honeypot === false) return null
+	return { email: email ?? null, honeypot: (honeypot ?? "").trim(), token: token ?? null }
 }
 
 function fromForm(text: string): Fields {
 	const params = new URLSearchParams(text)
-	return { email: params.get("email"), honeypot: (params.get(HONEYPOT_FIELD) ?? "").trim() }
+	return { email: params.get("email"), honeypot: (params.get(HONEYPOT_FIELD) ?? "").trim(), token: params.get("token") }
 }
 
 /** `null` for a body that is not UTF-8 form data or a JSON object of string fields. */

@@ -129,6 +129,7 @@ describe("the version gate", () => {
 	test("production ships no draft: no page, no index card, no pager link; its pages are indexable", () => {
 		const pages = plan({ sources, siteVersion: "1.2.0", production: true })
 		expect(pages.map((p) => p.path)).toEqual(["changelog/index.html", "changelog/v1.2.0/index.html"])
+		expect(pages.map((p) => p.card.source)).toEqual(["index.og.png", "1.2.0.og.png"])
 		expect(pages.map((p) => p.html).join("")).not.toContain("1.3.0")
 		for (const p of pages) expect(p.html).not.toContain(NOINDEX)
 	})
@@ -160,6 +161,42 @@ describe("the pages", () => {
 		expect(latest).toContain('href="https://github.com/nulo-sh/nulo/releases/tag/v1.2.0"')
 		expect(latest).toContain('<a href="/changelog/v1.1.0/">Earlier: 1.1.0</a>')
 		expect(earlier).toContain('<a href="/changelog/v1.2.0/">Later: 1.2.0</a>')
+	})
+
+	const tags = (html: string) =>
+		[...html.matchAll(/<meta (?:property|name)="((?:og|twitter):[^"]+)" content="([^"]*)" \/>/g)].map((m) => `${m[1]}=${m[2]}`)
+
+	test("a release page and the index name their own card, with the full Open Graph and Twitter set", () => {
+		expect(tags(latest)).toEqual([
+			"og:type=website",
+			"og:url=https://nulo.sh/changelog/v1.2.0/",
+			"og:site_name=NULO",
+			"og:title=Nulo 1.2.0: A title | NULO",
+			"og:description=The lead line.",
+			"og:image=https://nulo.sh/changelog/v1.2.0/og.png",
+			"og:image:width=1200",
+			"og:image:height=630",
+			"og:image:alt=Nulo 1.2.0: A title.",
+			"twitter:card=summary_large_image",
+			"twitter:image=https://nulo.sh/changelog/v1.2.0/og.png",
+			"twitter:title=Nulo 1.2.0: A title | NULO",
+			"twitter:description=The lead line.",
+		])
+		expect(tags(index)).toEqual([
+			"og:type=website",
+			"og:url=https://nulo.sh/changelog/",
+			"og:site_name=NULO",
+			"og:title=Changelog | NULO",
+			"og:description=What changed in each stable release of Nulo.",
+			"og:image=https://nulo.sh/changelog/og.png",
+			"og:image:width=1200",
+			"og:image:height=630",
+			"og:image:alt=Nulo changelog: Nulo 1.2.0, A title.",
+			"twitter:card=summary_large_image",
+			"twitter:image=https://nulo.sh/changelog/og.png",
+			"twitter:title=Changelog | NULO",
+			"twitter:description=What changed in each stable release of Nulo.",
+		])
 	})
 
 	test("the index: one card per release, newest first, each with its lead line", () => {

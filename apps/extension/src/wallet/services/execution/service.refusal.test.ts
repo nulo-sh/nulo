@@ -6,10 +6,19 @@
  * lives in a real interaction service.
  */
 import { describe, expect, test, vi } from "vitest"
-import { AuthRegistryRefusalError, JobCancelledError, ScopeViolationError } from "@nulo/extension-messaging/errors"
+import {
+	AuthRegistryRefusalError,
+	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
+	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
+	JobCancelledError,
+	ScopeViolationError,
+} from "@nulo/extension-messaging/errors"
 import type { FeeSettings } from "@nulo/wallet-bridge"
 import type { WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { DappInteractionService } from "@/wallet/services/dapp-interaction/service"
+import { RequestLog } from "@/wallet/logger/request-log"
 import { ExecutionService } from "./service"
 
 const FEE = { paymentMethod: { kind: "sponsored" } } as unknown as FeeSettings
@@ -40,10 +49,31 @@ function makeSelf() {
 	return { self, interactions, dappSendExecutor, materializeStoredOperation }
 }
 
+describe("an estimate and a preview of a traced request are its stages", () => {
+	test("each records its label and outcome in the capture the interaction names", async () => {
+		const { self, dappSendExecutor } = makeSelf()
+		const requests = new RequestLog(() => true)
+		requests.begin("1a2b3c4d", { method: "sendTx", originHost: "app.example", chainId: 7 })
+		requests.alias("1a2b3c4d", { interactionId: "req-1" })
+		Object.assign(self, { requests })
+		dappSendExecutor.estimateOperationFee.mockRejectedValueOnce(new Error("Assertion failed: balance too low"))
+		await expect(self.estimateOperationFee("req-1", 0, FEE)).rejects.toThrow()
+		await self.previewOperationAuthwits("req-1", 0)
+		expect(requests.get("1a2b3c4d")?.stages.map(({ kind, stage, outcome }) => ({ kind, stage, outcome }))).toEqual([
+			{ kind: "estimate", stage: "fee estimate", outcome: "failed: Assertion failed: balance too low" },
+			{ kind: "estimate", stage: "authwit preview", outcome: "ok" },
+		])
+	})
+})
+
 describe("a refusal an estimate or preview meets is the request's", () => {
 	test.each([
 		["estimate", "registry", new AuthRegistryRefusalError(REGISTRY)],
 		["preview", "call binding", new ScopeViolationError("Scope violation: call name does not match selector's function")],
+		["preview", "default-entrypoint public call", new DefaultEntrypointPublicCallError()],
+		["preview", "default-entrypoint utility call", new DefaultEntrypointUtilityCallError()],
+		["preview", "default-entrypoint several calls", new DefaultEntrypointMultiCallError()],
+		["preview", "default-entrypoint no call", new DefaultEntrypointNoCallError()],
 	] as const)(
 		"the %s that meets a %s refusal records it, and every later attempt answers it without running",
 		async (first, _, refusal) => {
@@ -78,13 +108,15 @@ describe("a refusal an estimate or preview meets is the request's", () => {
 		expect(interactions.refusalOf("req-1")).toBe(first)
 	})
 
-	test("a failure that is not a scope refusal records nothing, and the next estimate runs", async () => {
+	test("a failure that is not a recorded refusal records nothing, and the next estimate runs", async () => {
 		const { self, interactions, dappSendExecutor } = makeSelf()
 		dappSendExecutor.estimateOperationFee.mockRejectedValueOnce(new Error("node unreachable"))
 		dappSendExecutor.previewOperationAuthwits.mockRejectedValueOnce(new JobCancelledError(undefined, { jobId: "t-1" }))
+		dappSendExecutor.previewOperationAuthwits.mockRejectedValueOnce(new Error(DefaultEntrypointPublicCallError.MESSAGE))
 
 		await expect(self.estimateOperationFee("req-1", 0, FEE)).rejects.toThrow("node unreachable")
 		await expect(self.previewOperationAuthwits("req-1", 0)).rejects.toBeInstanceOf(JobCancelledError)
+		await expect(self.previewOperationAuthwits("req-1", 0)).rejects.toThrow(DefaultEntrypointPublicCallError.MESSAGE)
 		expect(interactions.refusalOf("req-1")).toBeUndefined()
 		await expect(self.estimateOperationFee("req-1", 0, FEE)).resolves.toEqual({ estimateId: "e-1" })
 	})

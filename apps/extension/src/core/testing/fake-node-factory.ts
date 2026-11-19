@@ -18,8 +18,18 @@
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
-import type { NodeFactory } from "@nulo/aztec-runtime/ports"
+import type { NodeFactory, RoutedNodeOptions } from "@nulo/aztec-runtime/ports"
+import { type RouteSpec, type RoutedNode, realTimer, routeNode } from "@nulo/aztec-runtime/routing"
+import { type TransportFailure, withTransportFailure } from "@nulo/aztec-runtime/utils"
 import { walletChainId } from "@/utils/chain-ids"
+
+/** The error a node client's caller sees when its request failed in transport with `kind`: the SDK
+ *  hands the fetch's tagged error to every entry of the batch as `cause.data`. Throw it from a fake
+ *  node to drive a routed node's failover. */
+export function transportFailure(kind: TransportFailure): Error {
+	const fetchError = withTransportFailure(new Error(`FakeNode: ${kind}`), kind)
+	return new Error(fetchError.message, { cause: { code: -32000, data: fetchError, message: fetchError.message } })
+}
 
 export type FakeNodeOverrides = Partial<AztecNode>
 
@@ -28,6 +38,8 @@ export class FakeNodeFactory implements NodeFactory {
 	public readonly created: Array<{ rpcUrl: string; node: AztecNode }> = []
 	/** The URLs of the `created` entries that came from `createSingleAttemptNode`, in call order. */
 	public readonly singleAttempt: string[] = []
+	/** Each endpoint client a routed node built, with the attempt timeout it was built for. */
+	public readonly routedClients: Array<{ rpcUrl: string; timeoutMs: number }> = []
 
 	private readonly perUrl = new Map<string, FakeNodeOverrides>()
 	private template: FakeNodeOverrides = {}
@@ -62,6 +74,27 @@ export class FakeNodeFactory implements NodeFactory {
 	 *  enforced, as for `probeChainId`. */
 	public async readPublicStorageOnce(rpcUrl: string, contract: AztecAddress, slot: Fr, _timeoutMs: number): Promise<Fr> {
 		return this.createNode(rpcUrl).getPublicStorageAt("latest", contract, slot)
+	}
+
+	/** The real router over this factory's fake nodes, one per endpoint URL. A lone endpoint is
+	 *  never probed, so a one-endpoint consumer needs no `getNodeInfo` or `getChainTips` stub. */
+	public createRoutedNode(spec: RouteSpec, options: RoutedNodeOptions = {}): RoutedNode {
+		return routeNode(
+			(rpcUrl, timeoutMs) => {
+				this.routedClients.push({ rpcUrl, timeoutMs })
+				return this.createNode(rpcUrl)
+			},
+			spec,
+			{
+				now: Date.now,
+				sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+				timer: realTimer,
+				log: () => {},
+				changed: options.onChange,
+				retryWhile: options.retryWhile,
+				pins: options.pins,
+			},
+		)
 	}
 
 	public createNode(rpcUrl: string): AztecNode {

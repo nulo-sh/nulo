@@ -1,8 +1,8 @@
 /**
- * Pins for full.vue's passkey path (ceremony cancel, refusal and failure, own-window handling, the
- * file password a passkey profile's file leaves under) and its password-export edge cases
- * (recovery mode, wrong password), which the main suite's password-path tests don't fix.
- * Scaffolding mirrors full.test.ts (client modules mocked at the import level).
+ * Pins for full.vue's passkey path (the file password typed before the passkey, ceremony cancel,
+ * refusal and failure, own-window handling, the seal in the passkey's run, a lock) and its
+ * password-export edge cases (recovery mode, wrong password), which the main suite's password-path
+ * tests don't fix. Scaffolding mirrors full.test.ts (client modules mocked at the import level).
  */
 import { SessionEndedError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { deferred } from "@nulo/wallet-core/utils"
@@ -213,13 +213,38 @@ beforeEach(() => {
 const backupMade = (wrapper: ReturnType<typeof mountPage>) =>
 	vi.waitFor(() => expect(wrapper.find("[data-testid='download-backup-btn']").text()).toBe("Download protected backup"))
 
+type Page = ReturnType<typeof mountPage>
+const FILE_PASSWORD = "pass1234"
+const createButton = (wrapper: Page) => wrapper.get("[data-testid='create-protected-backup-btn']")
+const pairValues = (wrapper: Page) =>
+	["backup-encrypt-password-input", "backup-encrypt-password-confirm-input"].map(
+		(id) => (wrapper.get(`[data-testid='${id}']`).element as HTMLInputElement).value,
+	)
+
+async function typePair(wrapper: Page, password: string, repeated: string) {
+	await wrapper.get("[data-testid='backup-encrypt-password-input']").setValue(password)
+	await wrapper.get("[data-testid='backup-encrypt-password-confirm-input']").setValue(repeated)
+}
+
+/** A passkey profile's page past Continue, its pair typed, and Create pressed. */
+async function pressCreate(wrapper: Page, password = FILE_PASSWORD) {
+	await wrapper.get("[data-testid='agree-continue-btn']").trigger("click")
+	await typePair(wrapper, password, password)
+	await createButton(wrapper).trigger("click")
+	await flushPromises()
+}
+
 function mountPage(profileType: "passkey" | "password", recoveryMode = false) {
 	return mount(FullExportPage, {
 		global: {
 			plugins: [
 				createTestingPinia({
 					initialState: {
-						app: { profile: { id: "p1", type: profileType, name: "Test Profile", recoveryMode }, network: { id: "net1" } },
+						app: {
+							isLogined: true,
+							profile: { id: "p1", type: profileType, name: "Test Profile", recoveryMode },
+							network: { id: "net1" },
+						},
 					},
 					stubActions: false,
 				}),
@@ -251,24 +276,31 @@ function mountPage(profileType: "passkey" | "password", recoveryMode = false) {
 }
 
 describe("export/full.vue — passkey acquisition + wrong-password pins", () => {
-	it("ceremony cancel is SILENT: agreement gate resets, no toast, no navigation", async () => {
+	it("Continue asks no passkey: it shows the file password", async () => {
+		const wrapper = mountPage("passkey")
+		await wrapper.get("[data-testid='agree-continue-btn']").trigger("click")
+		await flushPromises()
+		expect(pairValues(wrapper)).toEqual(["", ""])
+		expect(runCeremony).not.toHaveBeenCalled()
+		expect(captureRunFence).not.toHaveBeenCalled()
+	})
+
+	it("ceremony cancel is SILENT: the typed pair stays, no toast, no navigation", async () => {
 		runCeremony.mockRejectedValueOnce(new UserRejectedError("user cancelled"))
 		const wrapper = mountPage("passkey")
-		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
-		await flushPromises()
-		// The agree CTA is back (isAgreed reset) so the user can retry or leave.
-		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
+		await pressCreate(wrapper)
+		expect(pairValues(wrapper)).toEqual([FILE_PASSWORD, FILE_PASSWORD])
+		expect(createButton(wrapper).attributes("disabled")).toBeUndefined()
 		expect(openToast).not.toHaveBeenCalled()
 		expect(routerGo).not.toHaveBeenCalled()
 		expect(exportFullBackupKeys).not.toHaveBeenCalled()
 	})
 
-	it("an unconfirmed prompt resets the agreement and says so, without navigating", async () => {
+	it("an unconfirmed prompt keeps the typed pair and says so, without navigating", async () => {
 		runCeremony.mockRejectedValueOnce(new DOMException("not allowed", "NotAllowedError"))
 		const wrapper = mountPage("passkey")
-		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
-		await flushPromises()
-		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
+		await pressCreate(wrapper)
+		expect(pairValues(wrapper)).toEqual([FILE_PASSWORD, FILE_PASSWORD])
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Passkey not confirmed. Try again." })
 		expect(routerGo).not.toHaveBeenCalled()
 		expect(exportFullBackupKeys).not.toHaveBeenCalled()
@@ -277,22 +309,21 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 	it("ceremony failure toasts the generic passkey copy and navigates back", async () => {
 		runCeremony.mockRejectedValueOnce(new Error("authenticator exploded"))
 		const wrapper = mountPage("passkey")
-		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
-		await flushPromises()
+		await pressCreate(wrapper)
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to authenticate by passkey" })
 		expect(routerGo).toHaveBeenCalledWith(-1)
 		expect(exportFullBackupKeys).not.toHaveBeenCalled()
 	})
 
-	it("in an own window, a failed passkey step resets to the agreement with its toast instead of going back", async () => {
+	it("in an own window, a failed passkey step starts over at the agreement with its toast, the pair dropped", async () => {
 		surface.ownRoute.mockReturnValue("/popup/settings/security/export/full")
 		runCeremony.mockRejectedValueOnce(new Error("authenticator exploded"))
 		const wrapper = mountPage("passkey")
-		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
-		await flushPromises()
+		await pressCreate(wrapper)
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to authenticate by passkey" })
-		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
 		expect(routerGo).not.toHaveBeenCalled()
+		await wrapper.get("[data-testid='agree-continue-btn']").trigger("click")
+		expect(pairValues(wrapper)).toEqual(["", ""])
 	})
 
 	it("in Firefox's toolbar panel, a passkey export moves to its own window; a password export stays", async () => {
@@ -309,8 +340,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		exportFullBackupKeys.mockResolvedValueOnce({ ...MATERIAL, dekReplaced: true })
 		const wrapper = mountPage("passkey")
-		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
-		await flushPromises()
+		await pressCreate(wrapper)
 		expect(runCeremony).toHaveBeenCalledWith({
 			mode: "get",
 			credentialId: "cred-1",
@@ -326,7 +356,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 
 		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		const healthy = mountPage("passkey")
-		await healthy.find("[data-testid='agree-continue-btn']").trigger("click")
+		await pressCreate(healthy)
 		await backupMade(healthy)
 		expect(healthy.text()).not.toContain("are not in this backup")
 	})
@@ -388,7 +418,7 @@ describe("export/full.vue — imported accounts that will not restore", () => {
 		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		exportFullBackupKeys.mockResolvedValueOnce({ ...MATERIAL, ...material })
 		const wrapper = mountPage("passkey")
-		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await pressCreate(wrapper)
 		await backupMade(wrapper)
 		return wrapper
 	}
@@ -432,11 +462,8 @@ describe("export/full.vue — imported accounts that will not restore", () => {
 	it("a passkey file carries the account and key rows the count was made over", async () => {
 		const rows = [{ profileId: "p1", chainId: 0, address: "0xaa", encryptedSigningKey: "sealed-row" }]
 		const accounts = [{ profileId: "p1", chainId: 0, address: "0xaa", name: "Imp" }]
-		const wrapper = await passkeyExport({ unopenedImportedKeys: 1, importedKeyRows: rows, accounts })
-		await wrapper.get("[data-testid='backup-encrypt-password-input']").setValue("pass1234")
-		await wrapper.get("[data-testid='backup-encrypt-password-confirm-input']").setValue("pass1234")
-		await wrapper.get("[data-testid='download-backup-btn']").trigger("click")
-		await vi.waitFor(() => expect(seal).toHaveBeenCalledTimes(1))
+		await passkeyExport({ unopenedImportedKeys: 1, importedKeyRows: rows, accounts })
+		expect(seal).toHaveBeenCalledTimes(1)
 		const { data } = JSON.parse(seal.mock.calls[0][0]) as { data: Record<string, unknown> }
 		expect(data["imported-account-keys"]).toEqual(rows)
 		expect(data.account).toEqual(accounts)
@@ -445,33 +472,33 @@ describe("export/full.vue — imported accounts that will not restore", () => {
 })
 
 // The file holds the recovery phrase and every key, so a passkey profile's leaves only encrypted,
-// under a password typed for it that meets the new-password rule.
+// under a password typed for it, before its passkey is asked, that meets the new-password rule.
 describe("export/full.vue — a passkey profile's file leaves only under its own password", () => {
-	type Wrapper = ReturnType<typeof mountPage>
-	const downloadButton = (wrapper: Wrapper) => wrapper.get("[data-testid='download-backup-btn']")
+	const downloadButton = (wrapper: Page) => wrapper.get("[data-testid='download-backup-btn']")
 
-	async function reachBackupReady(): Promise<Wrapper> {
+	async function atPair(): Promise<Page> {
+		const wrapper = mountPage("passkey")
+		await wrapper.get("[data-testid='agree-continue-btn']").trigger("click")
+		return wrapper
+	}
+
+	async function sealed(): Promise<Page> {
 		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		const wrapper = mountPage("passkey")
-		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await pressCreate(wrapper)
 		await backupMade(wrapper)
 		return wrapper
 	}
 
-	async function typePair(wrapper: Wrapper, password: string, repeated: string) {
-		await wrapper.get("[data-testid='backup-encrypt-password-input']").setValue(password)
-		await wrapper.get("[data-testid='backup-encrypt-password-confirm-input']").setValue(repeated)
-	}
-
-	it("Download stays off before a file password is typed, by click or by Enter, and asks nothing", async () => {
-		const wrapper = await reachBackupReady()
-		expect(wrapper.text()).not.toContain("Choose a password for this file")
-		expect(downloadButton(wrapper).attributes("disabled")).toBeDefined()
-		await downloadButton(wrapper).trigger("click")
-		pressOn(downloadButton(wrapper).element as HTMLElement, "Enter")
+	it("Create stays off before a file password is typed, by click or by Enter, and asks nothing", async () => {
+		const wrapper = await atPair()
+		expect(createButton(wrapper).attributes("disabled")).toBeDefined()
+		await createButton(wrapper).trigger("click")
+		pressOn(createButton(wrapper).element as HTMLElement, "Enter")
+		pressOn(wrapper.get("[data-testid='backup-encrypt-password-input']").element as HTMLElement, "Enter")
 		await flushPromises()
+		expect(runCeremony).not.toHaveBeenCalled()
 		expect(seal).not.toHaveBeenCalled()
-		expect(downloadFile).not.toHaveBeenCalled()
 		expect(usePopupStore().isOpened("confirm")).toBe(false)
 	})
 
@@ -479,30 +506,43 @@ describe("export/full.vue — a passkey profile's file leaves only under its own
 		["", "", NEW_PASSWORD_HINTS.short],
 		["1234567", "1234567", NEW_PASSWORD_HINTS.short],
 		["12345678", "12345679", NEW_PASSWORD_HINTS.mismatch],
-	])("Download stays off for %j / %j, and the hint says %s", async (password, repeated, hint) => {
-		const wrapper = await reachBackupReady()
+	])("Create stays off for %j / %j, and the hint says %s", async (password, repeated, hint) => {
+		const wrapper = await atPair()
 		await typePair(wrapper, password, repeated)
 		expect(wrapper.get("[data-testid='backup-encrypt-password-hint']").text()).toBe(hint)
-		expect(downloadButton(wrapper).attributes("disabled")).toBeDefined()
-		await downloadButton(wrapper).trigger("click")
-		pressOn(downloadButton(wrapper).element as HTMLElement, "Enter")
+		expect(createButton(wrapper).attributes("disabled")).toBeDefined()
+		await createButton(wrapper).trigger("click")
+		pressOn(wrapper.get("[data-testid='backup-encrypt-password-confirm-input']").element as HTMLElement, "Enter")
 		await flushPromises()
+		expect(runCeremony).not.toHaveBeenCalled()
 		expect(seal).not.toHaveBeenCalled()
-		expect(downloadFile).not.toHaveBeenCalled()
 	})
 
-	it("the file leaves sealed under the password typed here, carrying the password body", async () => {
-		const wrapper = await reachBackupReady()
-		await typePair(wrapper, "pass1234", "pass1234")
-		expect(wrapper.get("[data-testid='backup-encrypt-password-hint']").text()).toBe(NEW_PASSWORD_HINTS.common)
-		await downloadButton(wrapper).trigger("click")
-		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
-		expect(wrapper.text()).toMatch(/Don't forget your\s+password, as it will be required to restore your backup\./)
+	it("Enter in the typed pair runs the press Create does", async () => {
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
+		const wrapper = await atPair()
+		await typePair(wrapper, FILE_PASSWORD, FILE_PASSWORD)
+		pressOn(wrapper.get("[data-testid='backup-encrypt-password-confirm-input']").element as HTMLElement, "Enter")
+		await backupMade(wrapper)
+		expect(runCeremony).toHaveBeenCalledOnce()
+		expect(seal.mock.calls[0][1]).toBe(FILE_PASSWORD)
+	})
+
+	it("the press seals under the password typed here, and the warnings show before any download", async () => {
+		const wrapper = await sealed()
 		const [plaintext, password] = seal.mock.calls[0]
-		expect(password).toBe("pass1234")
+		expect(password).toBe(FILE_PASSWORD)
 		const body = JSON.parse(plaintext) as Record<string, unknown>
 		expect(body).toMatchObject({ "master-key": "mk", entropy: "en", "imported-keys-dek": "dk" })
 		expect(body).not.toHaveProperty("backup-mac")
+		expect(wrapper.get("[data-testid='backup-done-banner']").text()).toContain("Backup is successfully encrypted")
+		expect(wrapper.find("[data-testid='backup-encrypt-password-input']").exists()).toBe(false)
+		expect(downloadFile).not.toHaveBeenCalled()
+
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		expect(wrapper.text()).toMatch(/Don't forget your\s+password, as it will be required to restore your backup\./)
+		expect(seal).toHaveBeenCalledOnce()
 		expect(downloadFile.mock.calls[0][0]).toMatchObject({
 			data: "SEALED",
 			filename: expect.stringMatching(/^nulo-backup-\d{4}-\d{2}-\d{2}\.txt$/),
@@ -510,26 +550,80 @@ describe("export/full.vue — a passkey profile's file leaves only under its own
 		expect(usePopupStore().isOpened("confirm")).toBe(false)
 	})
 
-	it("a change of the profile's unlock made elsewhere starts the page over before the file is protected", async () => {
-		const wrapper = await reachBackupReady()
+	it("a seal that fails returns to the typed pair, and the next press asks the passkey again", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {})
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER).mockResolvedValueOnce(CEREMONY_ANSWER)
+		seal.mockRejectedValueOnce(new Error("seal broke"))
+		const wrapper = mountPage("passkey")
+		await pressCreate(wrapper)
+		await vi.waitFor(() => expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to encrypt the backup" }))
+		await flushPromises()
+		expect(pairValues(wrapper)).toEqual([FILE_PASSWORD, FILE_PASSWORD])
+		await createButton(wrapper).trigger("click")
+		await backupMade(wrapper)
+		expect(runCeremony).toHaveBeenCalledTimes(2)
+	})
+
+	it("a lock while the seal runs publishes nothing and starts the page over, the pair dropped", async () => {
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
+		const sealing = deferred<string>()
+		seal.mockReturnValueOnce(sealing.promise)
+		const wrapper = mountPage("passkey")
+		await pressCreate(wrapper)
+		await vi.waitFor(() => expect(seal).toHaveBeenCalledOnce())
+		useAppStore().isLogined = false
+		await flushPromises()
+		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
+		sealing.resolve("SEALED")
+		await flushPromises()
+		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
+		await wrapper.get("[data-testid='agree-continue-btn']").trigger("click")
+		expect(pairValues(wrapper)).toEqual(["", ""])
+		pressOn(wrapper.element as HTMLElement, "Enter")
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	it("a lock once the file is sealed drops it and starts the page over", async () => {
+		const wrapper = await sealed()
+		useAppStore().isLogined = false
+		await flushPromises()
+		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
+		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	it("a lock while the passkey card is open ends the card", async () => {
+		runCeremony.mockReturnValueOnce(new Promise(() => {}))
+		const wrapper = mountPage("passkey")
+		await pressCreate(wrapper)
+		await vi.waitFor(() => expect(runCeremony).toHaveBeenCalledOnce())
+		useAppStore().isLogined = false
+		expect(rejectCeremony).toHaveBeenCalledOnce()
+		await flushPromises()
+		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
+	})
+
+	it("a change of the profile's unlock made elsewhere starts the page over before the file leaves", async () => {
+		const wrapper = await sealed()
 		useAppStore().profile = { id: "p1", type: "password", name: "Test Profile" } as never
 		await flushPromises()
 		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
 		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
 		pressOn(wrapper.element as HTMLElement, "Enter")
 		await flushPromises()
-		expect(seal).not.toHaveBeenCalled()
 		expect(downloadFile).not.toHaveBeenCalled()
 	})
 
-	it("a rename made elsewhere keeps the backup ready, and it still leaves under the password typed here", async () => {
-		const wrapper = await reachBackupReady()
+	it("a rename made elsewhere keeps the typed pair, and the file still seals under it", async () => {
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
+		const wrapper = await atPair()
+		await typePair(wrapper, FILE_PASSWORD, FILE_PASSWORD)
 		useAppStore().profile = { id: "p1", type: "passkey", name: "Renamed" } as never
 		await flushPromises()
-		await typePair(wrapper, "pass1234", "pass1234")
-		await downloadButton(wrapper).trigger("click")
-		await vi.waitFor(() => expect(seal).toHaveBeenCalledTimes(1))
-		expect(seal.mock.calls[0][1]).toBe("pass1234")
+		await createButton(wrapper).trigger("click")
+		await backupMade(wrapper)
+		expect(seal.mock.calls[0][1]).toBe(FILE_PASSWORD)
 	})
 
 	it("a switch during the passkey prompt ends that prompt, and the new profile's backup runs", async () => {
@@ -541,7 +635,7 @@ describe("export/full.vue — a passkey profile's file leaves only under its own
 		)
 		rejectCeremony.mockImplementationOnce((err: Error) => endPrompt(err))
 		const wrapper = mountPage("passkey")
-		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await pressCreate(wrapper)
 		await vi.waitFor(() => expect(runCeremony).toHaveBeenCalledTimes(1))
 		expect(rejectCeremony).not.toHaveBeenCalled()
 
@@ -553,7 +647,7 @@ describe("export/full.vue — a passkey profile's file leaves only under its own
 		expect(routerGo).not.toHaveBeenCalled()
 		captureRunFence.mockResolvedValueOnce({ ...FENCE, profileId: "p2", session: 2 })
 		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
-		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await pressCreate(wrapper)
 		await backupMade(wrapper)
 	})
 })
@@ -682,12 +776,10 @@ describe("export/full.vue — a password profile's file opens with the password 
 	it("a passkey profile's file keeps its own password through a change of its passkey made elsewhere", async () => {
 		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		const wrapper = mountPage("passkey")
-		await wrapper.get("[data-testid='agree-continue-btn']").trigger("click")
+		await pressCreate(wrapper)
 		await backupMade(wrapper)
 		updates.emit({ id: "p1", type: "passkey", name: "Test Profile" })
 		await flushPromises()
-		await wrapper.get("[data-testid='backup-encrypt-password-input']").setValue("pass1234")
-		await wrapper.get("[data-testid='backup-encrypt-password-confirm-input']").setValue("pass1234")
 		await downloadButton(wrapper).trigger("click")
 		await vi.waitFor(() => expect(wrapper.text()).toContain("Saved to your downloads"))
 		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Backup downloaded successfully" })
@@ -696,10 +788,8 @@ describe("export/full.vue — a password profile's file opens with the password 
 
 describe("export/full.vue — the encrypt pair", () => {
 	it("asks a password manager for a new password on both fields", async () => {
-		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		const wrapper = mountPage("passkey")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
-		await backupMade(wrapper)
 
 		for (const id of ["backup-encrypt-password-input", "backup-encrypt-password-confirm-input"]) {
 			expect(wrapper.get(`[data-testid='${id}']`).attributes("autocomplete")).toBe("new-password")

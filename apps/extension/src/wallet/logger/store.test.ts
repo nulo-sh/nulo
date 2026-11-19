@@ -232,7 +232,7 @@ describe("LoggerStore", () => {
 			// persisted copy is gone. Sleeping instead would pass even if clear() returned nothing.
 			await store.clear()
 
-			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
+			expect(session.remove).toHaveBeenCalledWith(["nulo:logs", "nulo:request-logs"])
 		})
 
 		test("a removal that fails rejects clear(), and the next one still runs", async () => {
@@ -332,7 +332,7 @@ describe("LoggerStore", () => {
 			config.onUpdate.invoke({ key: "developerMode", value: false })
 			await vi.runAllTimersAsync()
 
-			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
+			expect(session.remove).toHaveBeenCalledWith(["nulo:logs", "nulo:request-logs"])
 
 			// And it must stop writing from here on.
 			store.log("a", LogLevel.Error, "after opt-out")
@@ -362,7 +362,7 @@ describe("LoggerStore", () => {
 
 			resolveSet()
 			await vi.runAllTimersAsync()
-			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
+			expect(session.remove).toHaveBeenCalledWith(["nulo:logs", "nulo:request-logs"])
 		})
 
 		test("a write queued behind a hung one still cannot land after a purge", async () => {
@@ -397,7 +397,7 @@ describe("LoggerStore", () => {
 			resolvers[1]() // B completes → the removal finally runs
 			await vi.runAllTimersAsync()
 
-			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
+			expect(session.remove).toHaveBeenCalledWith(["nulo:logs", "nulo:request-logs"])
 			const removeOrder = session.remove.mock.invocationCallOrder[0]
 			const lastSetOrder = Math.max(...session.set.mock.invocationCallOrder)
 			expect(removeOrder).toBeGreaterThan(lastSetOrder)
@@ -468,7 +468,7 @@ describe("LoggerStore", () => {
 			await store.rehydrate()
 
 			await expect(store.applyRetentionPolicy()).resolves.toBeUndefined()
-			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
+			expect(session.remove).toHaveBeenCalledWith(["nulo:logs", "nulo:request-logs"])
 			expect(store.get(10)).toHaveLength(0)
 		})
 
@@ -484,7 +484,7 @@ describe("LoggerStore", () => {
 			await store.applyRetentionPolicy()
 
 			expect(store.get(10)).toHaveLength(0)
-			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
+			expect(session.remove).toHaveBeenCalledWith(["nulo:logs", "nulo:request-logs"])
 		})
 
 		const savedRun = (count: number) =>
@@ -554,7 +554,7 @@ describe("LoggerStore", () => {
 			await Promise.all([importing, retention, store.rehydrate()])
 			expect(session.get).toHaveBeenCalledTimes(1)
 			expect(store.get(10)).toEqual([])
-			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
+			expect(session.remove).toHaveBeenCalledWith(["nulo:logs", "nulo:request-logs"])
 		})
 
 		test("retention stays off after the load, so nothing is written", async () => {
@@ -567,6 +567,66 @@ describe("LoggerStore", () => {
 			await vi.advanceTimersByTimeAsync(5000)
 
 			expect(session.set).not.toHaveBeenCalled()
+		})
+	})
+
+	describe("request captures", () => {
+		beforeEach(() => vi.useFakeTimers())
+		afterEach(() => vi.useRealTimers())
+		const ID = "1a2b3c4d"
+		const meta = { method: "sendTx", originHost: "app.example", chainId: 31337 }
+		const written = (session: ReturnType<typeof mockSessionStorage>) =>
+			session.set.mock.calls.flatMap(([items]) => (items["nulo:request-logs"] ? [items["nulo:request-logs"]] : [])).at(-1) as
+				| Array<{ walletTraceId: string; lines: unknown[] }>
+				| undefined
+
+		test("a tagged line lands in its capture and in the ring; an untagged one only in the ring", () => {
+			mockSessionStorage()
+			const store = new LoggerStore(mockConfig(false, true))
+			store.requests.begin(ID, meta)
+			store.log("wallet-sdk", LogLevel.Error, "tagged", { walletTraceId: ID })
+			store.log("wallet-sdk", LogLevel.Error, "untagged")
+			expect(store.get(10).map((log) => log.data[0])).toEqual(["tagged", "untagged"])
+			expect(store.requests.get(ID)?.lines.map((l) => l.text)).toEqual([`tagged {"walletTraceId":"${ID}"}`])
+		})
+
+		test("a capture with no line persists, and a worker restart finds it again", async () => {
+			const session = mockSessionStorage()
+			const store = new LoggerStore(mockConfig(false, true))
+			store.requests.begin(ID, meta)
+			store.requests.alias(ID, { journalId: "0123456789abcdef" })
+			await vi.advanceTimersByTimeAsync(5000)
+			expect(written(session)?.map((c) => c.walletTraceId)).toEqual([ID])
+
+			session.get.mockResolvedValue({ "nulo:request-logs": written(session) })
+			const restarted = new LoggerStore(mockConfig(false, true))
+			await restarted.rehydrate()
+			expect(restarted.requests.find({ journalId: "0123456789abcdef" })).toBe(ID)
+		})
+
+		test("Developer Mode off then on, and Clear logs, leave no capture in memory or storage; a later one is kept", async () => {
+			const session = mockSessionStorage()
+			const config = mutableConfig({ developerMode: true })
+			const store = new LoggerStore(config)
+			store.requests.begin(ID, meta)
+			store.requests.alias(ID, { journalId: "0123456789abcdef" })
+
+			config.set("developerMode", false)
+			config.onUpdate.invoke({ key: "developerMode", value: false })
+			config.set("developerMode", true)
+			config.onUpdate.invoke({ key: "developerMode", value: true })
+			await vi.advanceTimersByTimeAsync(5000)
+			expect(store.requests.snapshot()).toEqual([])
+			expect(store.requests.find({ journalId: "0123456789abcdef" })).toBeUndefined()
+
+			store.requests.begin("00ff00ff", meta)
+			store.requests.alias("00ff00ff", { journalId: "fedcba9876543210" })
+			await vi.advanceTimersByTimeAsync(5000)
+			expect(written(session)?.map((c) => c.walletTraceId)).toEqual(["00ff00ff"])
+
+			await store.clear()
+			expect(store.requests.snapshot()).toEqual([])
+			expect(session.remove).toHaveBeenLastCalledWith(["nulo:logs", "nulo:request-logs"])
 		})
 	})
 })

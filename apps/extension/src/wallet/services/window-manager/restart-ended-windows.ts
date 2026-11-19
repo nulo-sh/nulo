@@ -14,6 +14,7 @@ export const RESTART_ENDED_ROUTES: ReadonlySet<string> = new Set([
 	"execute",
 	"fee",
 	"network-unavailable",
+	"unlock",
 ])
 
 export const POPUP_PAGE = "src/popup/index.html"
@@ -127,6 +128,7 @@ export function trackOpenWindows(windows: WindowPort, runtime: Pick<RuntimePort,
 		closeTab: (tabId) => windows.closeTab(tabId),
 		isPopup: (windowId) => windows.isPopup(windowId),
 		update: (windowId, options) => windows.update(windowId, options),
+		navigate: (windowId, url) => windows.navigate(windowId, url),
 		getLastFocused: () => windows.getLastFocused(),
 		closeOwnWindows: () => {
 			for (const windowId of own) removeQuietly(windowId)

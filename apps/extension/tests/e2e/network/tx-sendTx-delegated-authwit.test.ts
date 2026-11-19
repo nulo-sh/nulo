@@ -8,6 +8,7 @@ import { waitForDappExecuteWorked } from "../fixtures/journal"
 import { assertPgOk, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, openExecuteDetails, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { serializeInstance } from "../fixtures/selfpay-phase"
+import { shotSend } from "../fixtures/send-page"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -82,8 +83,9 @@ test.skipIf(!hasConfig)(
 		)
 		expect(ops).toEqual(["aztec_sendTx"])
 
-		// The discovered authwit sits under the card's "Show all details", closed at rest, and its
-		// values open with it once the estimate lands.
+		// The discovered authwit's rows sit under the authorizations' node, closed at rest; its values
+		// open with the node once the estimate has listed it.
+		await execPopup.waitForSelector(sel("execute-op-summary-authwit"), { visible: true, timeout: 60_000 })
 		await openExecuteDetails(execPopup)
 		await execPopup.waitForSelector(sel("execute-discovered-authwit-structured-args"), { visible: true, timeout: 60_000 })
 		// Each address fills itself in after its own contact lookup. The row is read in the same pass
@@ -115,6 +117,16 @@ test.skipIf(!hasConfig)(
 			to: trimAddress(consumerAddress),
 			amount: "5 PULL",
 		})
+		// What the donation signs away opens the fee section: one authorization, the pulled amount.
+		const leaves = await execPopup.$$eval('[data-testid="execute-op-leaves-row"]', (rows) =>
+			rows.map((row) =>
+				["execute-op-leaves-count", "execute-op-leaves-amount"].map((id) =>
+					row.querySelector(`[data-testid="${id}"]`)?.textContent?.replace(/\s+/g, " ").trim(),
+				),
+			),
+		)
+		expect(leaves).toEqual([["1 authorization", "5 PULL"]])
+		await shotSend(execPopup, "execute-leaves-authorization", "execute-op-leaves-account")
 
 		await approveExecute(execPopup)
 

@@ -1,6 +1,9 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { clickByTestId, openPopup, test } from "../fixtures/extension"
+import { setViewport } from "../fixtures/browser"
+import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
+import { importToken } from "../fixtures/helpers"
+import { feeDisplay, feeFigure } from "@/utils/fee-estimation"
 import { pinnedFeeText, refusePrices, seedFeeJuiceQuote, settledText } from "../fixtures/fee-quote"
 import { shotSend } from "../fixtures/send-page"
 import { callService } from "../fixtures/helpers"
@@ -12,6 +15,38 @@ import { createTestWallet, fundPublicFeeJuice, mintPublicTokensForAccount, type 
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
+
+/** Each element's text runs, a `Range` per text node, and whether every run sits inside `within`'s
+ *  padding box: a figure clipped by `overflow: hidden` keeps its `textContent`, so only its boxes
+ *  show the cut. `lines` counts distinct run tops, exact for an element in one role. */
+async function textFit(page: Page, ids: readonly string[], within: string): Promise<{ id: string; lines: number; inside: boolean }[]> {
+	return page.evaluate(
+		(ids: readonly string[], within: string) => {
+			const host = document.querySelector(`[data-testid="${within}"]`) as HTMLElement
+			const box = host.getBoundingClientRect()
+			const [left, top] = [box.left + host.clientLeft, box.top + host.clientTop]
+			const [right, bottom] = [left + host.clientWidth, top + host.clientHeight]
+			return ids.map((id) => {
+				const runs: DOMRect[] = []
+				const walker = document.createTreeWalker(
+					document.querySelector(`[data-testid="${id}"]`) as HTMLElement,
+					NodeFilter.SHOW_TEXT,
+				)
+				for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+					const range = document.createRange()
+					range.selectNodeContents(node)
+					runs.push(...[...range.getClientRects()].filter((run) => run.width > 0 && run.height > 0))
+				}
+				const inside = runs.every(
+					(run) => run.left >= left - 0.5 && run.right <= right + 0.5 && run.top >= top - 0.5 && run.bottom <= bottom + 0.5,
+				)
+				return { id, lines: new Set(runs.map((run) => Math.round(run.top))).size, inside }
+			})
+		},
+		ids,
+		within,
+	)
+}
 
 /** The playground's transfer of one fixture token to the minter. */
 async function setTransferInputs(page: Page): Promise<void> {
@@ -140,6 +175,11 @@ test.skipIf(!hasConfig)(
 		} finally {
 			await cleanup()
 		}
+		// A registered token, so the windows read the call as the account's transfer.
+		const home = await openPopup(ctx)
+		await waitForHash(home, "#/popup/general")
+		await importToken(home, aztecConfig!.tokenAddress)
+		await home.close()
 
 		await setTransferInputs(page)
 		const seqTx = await snapshotResultSeq(page)
@@ -174,6 +214,7 @@ test.skipIf(!hasConfig)(
 		])
 		const feePopup = await feePopupP
 		await feePopup.waitForSelector('[data-testid="fee-raised"]', { visible: true, timeout: 60_000 })
+		expect(await feePopup.evaluate(() => document.documentElement.getAttribute("data-fills-window"))).toBe("true")
 
 		// Held, unproven: the record asks the question the window shows, with the figure approved.
 		type Asked = { kind?: string; progress?: { stage?: string; reask?: { fee: string; cap: string; payer: unknown } } }
@@ -184,16 +225,76 @@ test.skipIf(!hasConfig)(
 		expect(asked).toEqual([{ fee: expect.any(String), cap: approved.toString(), payer: { type: "fj", isProtocol: false } }])
 		const fee = BigInt(asked[0]!.fee)
 		const text = (id: string) => feePopup.$eval(`[data-testid="${id}"]`, (el) => el.textContent?.replace(/\s+/g, " ").trim())
-		const [was, now] = [`Was ${pinnedFeeText(approved)}`, `Now ${pinnedFeeText(fee)}`]
+		const [was, now] = [`was ${feeFigure(feeDisplay(approved, undefined))}`, pinnedFeeText(fee)]
 		expect(await settledText(feePopup, "fee-raised-was", was)).toBe(was)
 		expect(await settledText(feePopup, "fee-raised-now", now)).toBe(now)
 		expect(await text("fee-raised-method")).toBe("Public Fee Juice")
-		// The Confirm repeats the card's figure, its dollars on a second line.
+		const row = ["fee-raised-now", "fee-raised-was", "fee-raised-method"]
+		const rowFit = (await textFit(feePopup, row, "fee-raised-card")).map(({ id, lines, inside }) => ({ id, drawn: lines > 0, inside }))
+		expect(rowFit).toEqual(row.map((id) => ({ id, drawn: true, inside: true })))
+		// Confirm reads Send over the card's figure and its dollars.
 		const confirmText = `Send for ${pinnedFeeText(fee)}`
 		expect(await settledText(feePopup, "fee-confirm-btn", confirmText)).toBe(confirmText)
+		// The second line wraps rather than being cut: on one line Confirm keeps Reject's height, and where
+		// it must wrap Confirm grows to hold it. Each width asserts which branch it met. Under 359 px the
+		// design's Button lets every label wrap, so the detail's own `normal` is read above it.
+		const branches: { width: number; narrow: boolean; wraps: string; lines: number; inside: boolean; height: string }[] = []
+		for (const width of [560, 320]) {
+			await setViewport(feePopup, { width, height: 800 })
+			const [{ lines, inside }] = await textFit(feePopup, ["dapp-approval-confirm-detail"], "fee-confirm-btn")
+			const [confirmH, rejectH, narrow, wraps] = await feePopup.evaluate(() => {
+				const [confirm, reject, detail] = ["fee-confirm-btn", "fee-reject-btn", "dapp-approval-confirm-detail"].map(
+					(id) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement,
+				)
+				const height = (el: HTMLElement) => el.getBoundingClientRect().height
+				return [
+					height(confirm),
+					height(reject),
+					matchMedia("(width < 359px)").matches,
+					getComputedStyle(detail).whiteSpace,
+				] as const
+			})
+			const height = Math.abs(confirmH - rejectH) <= 0.5 ? "level" : confirmH > rejectH ? "taller" : "shorter"
+			branches.push({ width, narrow, wraps, lines: Math.min(lines, 2), inside, height })
+		}
+		await setViewport(feePopup, null)
+		expect(branches).toEqual([
+			{ width: 560, narrow: false, wraps: "normal", lines: 1, inside: true, height: "level" },
+			{ width: 320, narrow: true, wraps: "normal", lines: 2, inside: true, height: "taller" },
+		])
 		expect(await prices.refused.failures(), "price interception failures").toEqual([])
 		await prices.refused.stop()
 		await shotSend(feePopup, "fee-window-raised", "fee-raised")
+		// What leaves the account opens the window's own fee block.
+		const leaves = await feePopup.$$eval('[data-testid="execute-op-leaves-row"]', (rows) =>
+			rows.map((row) =>
+				["execute-op-leaves-count", "execute-op-leaves-amount"].map((id) =>
+					row.querySelector(`[data-testid="${id}"]`)?.textContent?.replace(/\s+/g, " ").trim(),
+				),
+			),
+		)
+		expect(leaves).toEqual([["1 transfer", expect.stringMatching(/ TST$/)]])
+		expect(
+			await feePopup.$eval('[data-testid="execute-op-leaves-account"]', (block) => {
+				const raised = document.querySelector('[data-testid="fee-raised"]')
+				return raised !== null && (block.compareDocumentPosition(raised) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+			}),
+		).toBe(true)
+		await shotSend(feePopup, "execute-leaves-raised-fee", "execute-op-leaves-account")
+		// TST is absent from the list, so its chip reads its short address with no mark and no seal.
+		const chip = '[data-testid="execute-op-summary-call-head"] [data-testid="contract-chip"]'
+		await feePopup.waitForSelector(`${chip}[data-level="none"]`, { visible: true, timeout: 15_000 })
+		const token = aztecConfig!.tokenAddress.toLowerCase()
+		expect(
+			await feePopup.$$eval(chip, (chips) =>
+				chips.map((el) => ({
+					label: el.querySelector('[data-testid="execute-op-summary-call-to"]')?.textContent?.trim(),
+					mark: el.querySelector('[data-testid="token-mark"]') !== null,
+					seal: el.querySelector('[data-testid="contract-chip-seal"]') !== null,
+				})),
+			),
+		).toEqual([{ label: `${token.slice(0, 8)}..${token.slice(-4)}`, mark: false, seal: false }])
+		await shotSend(feePopup, "fee-window-contract-chip", "execute-op-summary-call-head")
 		// The dApp's own row is pending from its request on; only a settled one would mean an answer.
 		const settled = await page.evaluate(
 			(after) =>

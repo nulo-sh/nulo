@@ -9,8 +9,15 @@ import { describe, expect, inject } from "vitest"
 import { TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
 import { extensionUrl, isFirefox, newPage, openScratchPage, stopBackground } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
-import { navigateByHash, navigateToSettings, openHoldings, switchToNetwork, unlockAfterBackgroundDeath } from "./fixtures/helpers"
-import { shotSend } from "./fixtures/send-page"
+import {
+	getAccountAddress,
+	navigateByHash,
+	navigateToSettings,
+	openHoldings,
+	switchToNetwork,
+	unlockAfterBackgroundDeath,
+} from "./fixtures/helpers"
+import { chooseRecipient, shotSend } from "./fixtures/send-page"
 import {
 	E2E_LIST_FLAGGED,
 	E2E_LIST_TOKENS,
@@ -185,7 +192,9 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 			await shotSend(page, "flagged-token-page", "token-flagged-banner")
 
 			await navigateByHash(page, "#/popup/send?tokenId=1", 10_000)
-			await page.waitForSelector(sel("token-flagged-banner"), VISIBLE)
+			await page.waitForSelector(sel("send-person-step"), VISIBLE)
+			await chooseRecipient(page, await getAccountAddress(page))
+			await page.waitForSelector(`${sel("send-page")} ${sel("token-flagged-banner")}`, VISIBLE)
 			await shotSend(page, "flagged-send", "token-flagged-banner")
 
 			await clickByTestId(page, "send-token-trigger")

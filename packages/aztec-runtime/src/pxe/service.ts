@@ -45,13 +45,14 @@ import { ArtifactRegistry } from "./artifact-registry"
 import { PxeLifecycleCoordinator, StoreErasedError } from "./lifecycle-coordinator"
 import { loadProductionKnownArtifacts } from "./known-artifacts"
 import { loadProductionNoteSchemas, type NoteSchema } from "./note-schemas"
-import { type Methods, PXE_SERVICE_NAME, type PxeEvents } from "./spec"
+import { type Methods, PXE_SERVICE_NAME, type PxeEvents, type RouteSnapshot } from "./spec"
 import type { ProvePhaseSink } from "./prove-phase-sink"
 import { type PrivateEventFilter, PrivateEventFilterSchema } from "@aztec-labs/aztec.js/wallet"
 import { NotesFilterSchema } from "./schemas"
 import { PXE_NOT_SYNCED_DIAGNOSTIC, withStaleAnchorRetry } from "./stale-anchor"
 import { assertScopesRegistered } from "./scope-guard"
-import { PxeScopeUnregisteredError } from "@nulo/extension-messaging/errors"
+import { ContractAssertionError, PxeScopeUnregisteredError } from "@nulo/extension-messaging/errors"
+import { SimulationError } from "@aztec-labs/stdlib/errors"
 import {
 	type PublicEventLogger,
 	type PublicScanTips,
@@ -74,6 +75,20 @@ interface ProfileLifecycle {
 	clearing?: { gen: string; done: Promise<void> }
 }
 
+const ASSERTION_PREFIX = "Assertion failed: "
+
+/** A simulation that failed on a contract's assertion leaves this process typed, with the failing
+ *  call path, which no later hop can recover from the message. Any other error is returned as is. */
+function typedSimulationError(err: unknown): unknown {
+	if (!(err instanceof SimulationError)) return err
+	const original = err.getOriginalMessage()
+	if (!original.startsWith(ASSERTION_PREFIX)) return err
+	return new ContractAssertionError(err.message, {
+		assertion: original.slice(ASSERTION_PREFIX.length),
+		frames: err.getCallStack().map((f) => ({ contract: f.contractAddress.toString(), selector: f.functionSelector?.toString() })),
+	})
+}
+
 /**
  * Minimal structural shape of profile-service surface this service uses.
  * Extension's `ProfileServiceClient` satisfies this via structural
@@ -84,9 +99,13 @@ export interface IProfileReader {
 	getProfiles(): Promise<Array<{ id: string }>>
 }
 
+const HASH32 = z.string().regex(/^0x[0-9a-fA-F]{64}$/)
+const SendPickSchema = z.object({ txHash: HASH32, anchorHash: HASH32 }).strict()
+
 export class PxeService extends Service<Methods, PxeEvents> implements ServiceSpec<Methods, PxeEvents> {
 	public static name = PXE_SERVICE_NAME
 	public readonly onProvePhase = new EventHandler<ProvePhaseEvent>()
+	public readonly onRouteChanged = new EventHandler<PxeEvents["onRouteChanged"]>()
 
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getContractInstance",
@@ -112,6 +131,9 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		"getPublicScanTips",
 		"getLatestBlockNumber",
 		"getPublicTokenClassStatus",
+		"pickSendEndpoint",
+		"getRouteSnapshot",
+		"rebuildRoute",
 		"clearChainState",
 		"clearProfileState",
 		"provisionChainStoreKey",
@@ -180,7 +202,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		this.profiles = profiles
 		this.guardLogger = logger
 		this.artifacts = new ArtifactRegistry(loadProductionKnownArtifacts, { logger })
-		this.registry = new ChainRuntimeRegistry(factory)
+		this.registry = new ChainRuntimeRegistry(factory, (profileId, chainId) => this.emit("onRouteChanged", { profileId, chainId }))
 		// A dead SW loses the event (the transport swallows the rejection); the
 		// journal only ever goes stale, never wrong, so no retry.
 		provePhaseSink?.subscribe((payload) => this.emit("onProvePhase", payload))
@@ -549,6 +571,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			// could flip it and silently break overrides. Pass it
 			// explicitly when we know we need it.
 			const request = await TxExecutionRequest.schema.parseAsync(txRequest)
+			// Typed outside the stale-anchor retry, so its text matching still reads the simulator's error.
 			return this.retryOnceOnStaleAnchor("simulateTx", pxe, () =>
 				pxe.simulateTx(request, {
 					simulatePublic: opts.simulatePublic,
@@ -561,7 +584,9 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 					// not set" during private execution. First scope is the tx sender by our convention.
 					senderForTags: simScopes[0],
 				}),
-			)
+			).catch((err: unknown) => {
+				throw typedSimulationError(err)
+			})
 		})
 	}
 
@@ -686,6 +711,59 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		return this.withPxeRead("getPublicTokenClassStatus", network, (_pxe, node) =>
 			resolveTokenClassStatus(node, contract, checkpointHash, this.logPublicEvent),
 		)
+	}
+
+	/** Holds only the profile barrier's read side: a pick must not wait behind another operation's
+	 *  proof on the chain guard, and must not rebuild a runtime for an endpoint list. */
+	public async pickSendEndpoint(network: NetworkInfo, tx: { txHash: string; anchorHash: string }): Promise<{ rpcUrl: string }> {
+		const start = Date.now()
+		try {
+			const { txHash, anchorHash } = SendPickSchema.parse(tx)
+			return await this.getProfileBarrier(network.profileId).read(async () => {
+				this.assertGenerationCurrent(network)
+				const picked = await this.registry.sendRoute(network).pickForSend(txHash, anchorHash)
+				return { rpcUrl: picked.rpcUrl }
+			})
+		} catch (err) {
+			this.logOpFailure("READ", "pickSendEndpoint", start, err)
+			throw err
+		}
+	}
+
+	/** Reads only the registry's in-memory route, no PXE or store state, so the profile barrier's
+	 *  read side suffices: a chain's proof never holds it up. */
+	public async getRouteSnapshot(network: NetworkInfo): Promise<RouteSnapshot | null> {
+		return this.getProfileBarrier(network.profileId).read(async () => {
+			this.assertGenerationCurrent(network)
+			const route = this.registry.peekMatching(network)?.node.route
+			if (!route) return null
+			return { activeId: route.active()?.id ?? null, endpoints: route.snapshot().map((entry) => ({ ...entry })) }
+		})
+	}
+
+	/** What the chain's next operation would do to its runtime, and nothing else: rebinds one built
+	 *  for another endpoint list. A chain with no runtime gets none, so no store opens and no PXE
+	 *  starts for a chain the wallet is not using. It runs at once on an idle chain or not at all:
+	 *  queued behind another operation, it could run after a later edit replaced this list or after
+	 *  the page that asked is gone, and the operation in the way rebinds on its own or before the
+	 *  next. */
+	public async rebuildRoute(network: NetworkInfo): Promise<void> {
+		const { profileId, chainId } = network
+		if (!this.registry.peek(profileId, chainId) || this.registry.peekMatching(network)) return
+		if (!this.getChainGuard(profileId, chainId).idle) return
+		const start = Date.now()
+		const purgeEpochAtEntry = this.lifecycle.current(this.chainKey(profileId, chainId))
+		try {
+			await this.underChainWrite(network, "rebuildRoute", purgeEpochAtEntry, async () => {
+				if (!this.registry.peek(profileId, chainId)) return
+				await this.reopeningCorruptStore(network, { spent: false }, () =>
+					this.registry.ensure(network, this.storeKeys.get(profileId)),
+				)
+			})
+		} catch (err) {
+			this.logOpFailure("WRITE", "rebuildRoute", start, err)
+			throw err
+		}
 	}
 
 	/**
@@ -938,24 +1016,15 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 					this.logDebug(`[DEBUG] [READ] ${label} completed (${Date.now() - start}ms)`)
 					return result as T
 				}
-				await barrier.read(async () => {
-					await chainGuard.write(async () => {
-						// A stale op parked at this rebind can outlive a clearProfileState
-						// (which never bumps the CHAIN purge epoch) — without re-asserting
-						// the generation here, `ensure` would rebuild a runtime/store for
-						// the erased incarnation using the successor's key. Same assert,
-						// same placement, as withPxeWrite's ensure.
-						this.assertGenerationCurrent(network)
-						this.lifecycle.assertUnchanged(chainKey, purgeEpochAtEntry, label)
-						// Another op may have purged and reopened the store meanwhile: only a still-bound
-						// corrupt runtime is purged, never the fresh one.
-						if (corrupt && this.registry.peek(network.profileId, network.chainId) === corrupt) {
-							await this.purgeCorruptStore(network)
-						}
-						await this.reopeningCorruptStore(network, recovery, () =>
-							this.registry.ensure(network, this.storeKeys.get(network.profileId)),
-						)
-					})
+				await this.underChainWrite(network, label, purgeEpochAtEntry, async () => {
+					// Another op may have purged and reopened the store meanwhile: only a still-bound
+					// corrupt runtime is purged, never the fresh one.
+					if (corrupt && this.registry.peek(network.profileId, network.chainId) === corrupt) {
+						await this.purgeCorruptStore(network)
+					}
+					await this.reopeningCorruptStore(network, recovery, () =>
+						this.registry.ensure(network, this.storeKeys.get(network.profileId)),
+					)
 				})
 			}
 			throw new Error(`${label}: chain runtime kept rebinding/vanishing after ${PxeService.MAX_RUNTIME_BIND_ATTEMPTS} attempts`)
@@ -996,33 +1065,39 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		fn: (pxe: PXE, node: AztecNode, runtime: ChainRuntime) => Promise<T>,
 	): Promise<T> {
 		const start = Date.now()
-		const barrier = this.getProfileBarrier(network.profileId)
-		const chainGuard = this.getChainGuard(network.profileId, network.chainId)
-		const chainKey = this.chainKey(network.profileId, network.chainId)
-		const purgeEpochAtEntry = this.lifecycle.current(chainKey)
+		const purgeEpochAtEntry = this.lifecycle.current(this.chainKey(network.profileId, network.chainId))
 		try {
 			this.logDebug(`[DEBUG] [WRITE] ${label} waiting for lock`)
-			return await barrier.read(async () => {
-				return chainGuard.write(async () => {
-					this.assertGenerationCurrent(network)
-					// A write op that captured NetworkInfo before a mid-flight clearChainState must
-					// NOT resurrect the purged chain by re-creating its runtime + a fresh OPFS store
-					// (the read path fenced this but the write path called ensure directly). Same epoch check as withPxeRead — now the shared fence.
-					this.lifecycle.assertUnchanged(chainKey, purgeEpochAtEntry, label)
-					return this.reopeningCorruptStore(network, { spent: false }, async () => {
-						// Already under the chain WRITE guard — `ensure` may rebind here.
-						const runtime = await this.registry.ensure(network, this.storeKeys.get(network.profileId))
-						this.logDebug(`[DEBUG] [WRITE] ${label} lock acquired, executing`)
-						const result = await fn(runtime.pxe, runtime.node, runtime)
-						this.logDebug(`[DEBUG] [WRITE] ${label} completed (${Date.now() - start}ms)`)
-						return result
-					})
-				})
-			})
+			return await this.underChainWrite(network, label, purgeEpochAtEntry, () =>
+				this.reopeningCorruptStore(network, { spent: false }, async () => {
+					const runtime = await this.registry.ensure(network, this.storeKeys.get(network.profileId))
+					this.logDebug(`[DEBUG] [WRITE] ${label} lock acquired, executing`)
+					const result = await fn(runtime.pxe, runtime.node, runtime)
+					this.logDebug(`[DEBUG] [WRITE] ${label} completed (${Date.now() - start}ms)`)
+					return result
+				}),
+			)
 		} catch (err) {
 			this.logOpFailure("WRITE", label, start, err)
 			throw err
 		}
+	}
+
+	/**
+	 * Runs `fn` under the profile barrier's read side and the chain's WRITE guard, where `ensure` may
+	 * build or rebind a runtime, once the op's incarnation is still live and the chain's purge epoch is
+	 * the one captured at its entry. An op parked here can outlive a clearProfileState (which bumps no
+	 * chain epoch) or a clearChainState; without both checks `ensure` would recreate the erased
+	 * runtime and store, the first under the successor's key.
+	 */
+	private underChainWrite<T>(network: NetworkInfo, label: string, purgeEpochAtEntry: number, fn: () => Promise<T>): Promise<T> {
+		return this.getProfileBarrier(network.profileId).read(() =>
+			this.getChainGuard(network.profileId, network.chainId).write(async () => {
+				this.assertGenerationCurrent(network)
+				this.lifecycle.assertUnchanged(this.chainKey(network.profileId, network.chainId), purgeEpochAtEntry, label)
+				return fn()
+			}),
+		)
 	}
 
 	/**

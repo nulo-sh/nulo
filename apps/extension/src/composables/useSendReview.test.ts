@@ -161,4 +161,27 @@ describe("composables/useSendReview", () => {
 		vi.advanceTimersByTime(REVIEW_ARM_MS)
 		expect(review.ready.value).toBe(false)
 	})
+
+	test("an armed sheet whose disclosure changes waits the full time again; an equal reading does not", () => {
+		const disclosed = ref("hidden")
+		const open = ref(true)
+		const scope = effectScope()
+		const review = scope.run(() =>
+			useSendReview({ isGated: () => true, isOpen: () => open.value, isTop: () => true, rearmOn: () => disclosed.value }),
+		)
+		if (!review) throw new Error("scope did not run")
+		vi.advanceTimersByTime(REVIEW_ARM_MS)
+		expect(review.authorises("review")).toBe(true)
+
+		disclosed.value = "exposed"
+		expect(review.authorises("review")).toBe(false)
+		vi.advanceTimersByTime(REVIEW_ARM_MS - 1)
+		expect(review.ready.value).toBe(false)
+		vi.advanceTimersByTime(1)
+		expect(review.authorises("review")).toBe(true)
+
+		disclosed.value = "exposed"
+		expect(review.ready.value).toBe(true)
+		scope.stop()
+	})
 })

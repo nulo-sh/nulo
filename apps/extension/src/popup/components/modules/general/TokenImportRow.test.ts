@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
+import { TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
 import TokenImportRow from "./TokenImportRow.vue"
 
 const STUBS = {
@@ -20,6 +21,24 @@ const baseOp = {
 }
 
 describe("TokenImportRow", () => {
+	test("with no picture from the list, leads with grey initials of its title at 32 px; a title that names no letter, or none yet, gets the mark's dash", () => {
+		const mark = (title: string | undefined) =>
+			mount(TokenImportRow, { props: { op: { ...baseOp, title } }, global: { stubs: STUBS } }).get('[data-testid="token-mark"]')
+		const named = mark("USDC")
+		expect(named.attributes()).toMatchObject({ "data-kind": "initials", "aria-hidden": "true" })
+		expect(named.attributes("style")).toContain("width: 32px")
+		expect([named.text(), named.find("img").exists()]).toEqual(["US", false])
+		for (const title of [undefined, "", "   ", "…!"]) expect([title, mark(title).text()]).toEqual([title, "—"])
+	})
+
+	test("draws the list's picture it is given, whether or not its symbol has been read", () => {
+		for (const title of ["USDC", undefined]) {
+			const w = mount(TokenImportRow, { props: { op: { ...baseOp, title }, icon: TEST_ICONS.USDC }, global: { stubs: STUBS } })
+			const mark = w.get('[data-testid="token-mark"]')
+			expect([title, mark.attributes("data-kind"), mark.get("img").attributes("src")]).toEqual([title, "logo", TEST_ICONS.USDC])
+		}
+	})
+
 	test("in-flight: renders truncated contract address as title and the configured subtitle", () => {
 		const w = mount(TokenImportRow, { props: { op: baseOp }, global: { stubs: STUBS } })
 		expect(w.find('[data-testid="token-import-title"]').text()).toBe("0x1234…5678")
@@ -54,6 +73,60 @@ describe("TokenImportRow", () => {
 		expect(w.find('[data-testid="token-import-spinner"]').exists()).toBe(false)
 		expect(w.find('[data-testid="token-import-failed"]').exists()).toBe(true)
 		expect(w.find('[data-testid="token-import-subtitle"]').text()).toBe("Could not fetch decimals")
+		expect(w.find('[data-testid="token-import-retry"]').exists()).toBe(false)
+	})
+
+	const REAPED = "Job declared lost: SW restart with non-terminal record in pending — unrecoverable"
+	const interruptedOp = {
+		...baseOp,
+		origin: "popup",
+		profileId: "p1",
+		networkId: "net1",
+		accountAddress: "0xacc1",
+		progress: { stage: "failed" as const },
+		error: { kind: "interrupted_by_restart", message: REAPED, normalizedRaw: null },
+		terminalAt: Date.now(),
+	}
+	const wordsOf = (text: string) =>
+		text
+			.toLowerCase()
+			.split(/[^a-z0-9-]+/)
+			.filter(Boolean)
+
+	test("a restart's failure reads the wallet's sentence and no word of the reaper's, with Retry; pressing it asks the parent", async () => {
+		const w = mount(TokenImportRow, { props: { op: interruptedOp }, global: { stubs: STUBS } })
+		expect(w.get('[data-testid="token-import-subtitle"]').element.textContent).toBe("The wallet restarted while adding this token.")
+		const shown = new Set(wordsOf(w.get('[data-testid="token-import-row"]').element.textContent ?? ""))
+		expect(wordsOf(REAPED).filter((word) => shown.has(word))).toEqual([])
+		expect(w.find('[data-testid="token-import-failed"]').exists()).toBe(true)
+		await w.get('[data-testid="token-import-retry"]').trigger("click")
+		expect(w.emitted("retry")).toHaveLength(1)
+
+		const seeded = mount(TokenImportRow, { props: { op: { ...interruptedOp, origin: "seed" } }, global: { stubs: STUBS } })
+		expect(seeded.get('[data-testid="token-import-subtitle"]').text()).toBe("The wallet restarted while adding this token.")
+		expect(seeded.find('[data-testid="token-import-retry"]').exists()).toBe(false)
+	})
+
+	test("while its retry runs the row reads in flight: the spinner, no Retry and no mark", () => {
+		const w = mount(TokenImportRow, {
+			props: { op: { ...interruptedOp, subtitle: "Requested by app.example" }, retrying: true },
+			global: { stubs: STUBS },
+		})
+		expect(w.find('[data-testid="token-import-spinner"]').exists()).toBe(true)
+		expect(w.find('[data-testid="token-import-retry"]').exists()).toBe(false)
+		expect(w.find('[data-testid="token-import-failed"]').exists()).toBe(false)
+		expect(w.get('[data-testid="token-import-subtitle"]').text()).toBe("Adding token…")
+	})
+
+	test("its title takes the cut in flight and failed", () => {
+		const CUT = (TokenImportRow as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style.title
+		const cut = (op: Record<string, unknown>) =>
+			mount(TokenImportRow, { props: { op: { ...baseOp, title: "USDC", ...op } }, global: { stubs: STUBS } })
+				.get('[data-testid="token-import-title"]')
+				.classes()
+				.includes(CUT)
+		const failed = { progress: { stage: "failed" }, error: { kind: "unknown", message: "", normalizedRaw: null }, terminalAt: 1 }
+		expect([typeof CUT, cut({}), cut(failed)]).toEqual(["string", true, true])
 	})
 
 	test("failed: subtitle falls back to a generic copy if the error envelope has no message", () => {

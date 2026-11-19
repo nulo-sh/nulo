@@ -1,5 +1,5 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
-<script setup>
+<script setup lang="ts">
 /**
  * The shared footer for the three dApp approval windows (execute /
  * discover / capabilities) — the error-tooltip banner + Reject/Confirm button
@@ -24,7 +24,7 @@ defineProps({
 	rejectDisabled: { type: Boolean, default: false },
 	confirmTestid: { type: String, required: true },
 	confirmLabel: { type: String, required: true },
-	/** A second line under the label, read with it as one name: `Send for ~X FJ ($Y)`. */
+	/** A smaller second line under the label, read with it as one name: `Send for ~X FJ ($Y)`. */
 	confirmDetail: { type: String, default: undefined },
 	confirmLoading: { type: Boolean, default: false },
 	confirmDisabled: { type: Boolean, default: false },
@@ -33,6 +33,11 @@ defineProps({
 })
 
 const emit = defineEmits(["reject", "approve"])
+
+defineSlots<{
+	/** Under the two buttons, inside the strip. */
+	below?: () => unknown
+}>()
 </script>
 
 <template>
@@ -64,9 +69,11 @@ const emit = defineEmits(["reject", "approve"])
 				:loading="confirmLoading"
 				:disabled="confirmDisabled"
 			>
-				<Text color="inverse" align="center">{{ confirmLabel }}<template v-if="confirmDetail">{{ " " }}<span :class="$style.detail" data-testid="dapp-approval-confirm-detail">{{ confirmDetail }}</span></template></Text>
+				<Text color="inverse" align="center" :class="confirmDetail ? $style.two_line : undefined">{{ confirmLabel }}<template v-if="confirmDetail">{{ " " }}<span class="type--caption" :class="$style.detail" data-testid="dapp-approval-confirm-detail">{{ confirmDetail }}</span></template></Text>
 			</Button>
 		</Flex>
+
+		<slot name="below" />
 	</Flex>
 </template>
 
@@ -79,9 +86,17 @@ const emit = defineEmits(["reject", "approve"])
 	background: var(--nulo-surface);
 }
 
-/* Two 13 px lines and this gap fit the medium button's 40 px, so a window with a detail moves nothing. */
+/* At the label's line-height of 1 the two lines and their gap take 28 px; the inset makes 40, the
+ * medium button's minimum, so the button grows only when the detail wraps, its text off the edges. */
+.two_line {
+	padding-block: 6px;
+}
+
+/* The button clips a line it cannot fit, so the detail wraps instead, inside a figure if it must. */
 .detail {
 	display: block;
 	margin-top: 4px;
+	white-space: normal;
+	overflow-wrap: anywhere;
 }
 </style>

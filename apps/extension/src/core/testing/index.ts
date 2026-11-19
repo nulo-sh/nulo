@@ -7,4 +7,4 @@
  * Other port fakes (`FakeBrowserApi`, `MockClock`, `FakeBackgroundTicker`)
  * live in `@nulo/wallet-core/testing` — import from there directly.
  */
-export { FakeNodeFactory, type FakeNodeOverrides } from "./fake-node-factory"
+export { FakeNodeFactory, type FakeNodeOverrides, transportFailure } from "./fake-node-factory"

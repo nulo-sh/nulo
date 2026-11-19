@@ -398,6 +398,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			// was crossed WITHOUT stubbing the node-touching prove/sync tail.
 			services.add(svc(ExecutionService.name, { executeSendTransaction: async () => throwExecReached() }))
 			services.add(svc(TransactionService.name, { onTransactionUpdated: new EventHandler() }))
+			services.add(svc(OperationJournalService.name, {}))
 			services.add(svc(TaskService.name, { startNewTask: () => ({ cancel() {}, fail() {}, complete() {} }) }))
 			authRegistry = new AuthRegistryService(mkLogger(), api)
 			services.add(authRegistry)

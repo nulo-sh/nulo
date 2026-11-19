@@ -34,6 +34,7 @@ export default defineConfig({
 				"index.html",
 				"how-aztec-works.html",
 				"subscribed.html",
+				"confirm.html",
 				...generatedPages("legal-pages.json"),
 				...generatedPages("changelog-pages.json"),
 			].map((path) => resolve(here, path)),

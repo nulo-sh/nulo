@@ -3,7 +3,7 @@ import type { ConfigProp } from "@/wallet/services/config/client"
 export const DETAIL_TIME_FORMAT = "MMM dd, yyyy 'at' HH:mm"
 
 /** The characters a detail page's hero gives its token amount. Named apart from `ROW_AMOUNT_LENGTH`:
- *  the hero and the row agree today, not by rule. */
+ *  the hero keeps every digit the width holds, where the row takes the list rule's. */
 export const DETAIL_AMOUNT_LENGTH = 8
 
 export function showsDeveloperFields(props: readonly ConfigProp[]): boolean {

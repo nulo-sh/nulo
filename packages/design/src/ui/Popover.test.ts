@@ -262,6 +262,48 @@ describe("Popover", () => {
 		})
 	})
 
+	describe("inline", () => {
+		test("root and trigger are spans, so the trigger can sit in a sentence", () => {
+			const w = mountPopover({ inline: true })
+			expect(w.element.tagName).toBe("SPAN")
+			expect(w.element.firstElementChild?.tagName).toBe("SPAN")
+			expect(mountPopover().element.firstElementChild?.tagName, "a block popover keeps its div trigger").toBe("DIV")
+		})
+
+		test("a trigger at the left edge of a narrow view opens a card that fits inside it", async () => {
+			vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(240)
+			vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(600)
+			const w = mountPopover({ open: false, inline: true, width: "280" })
+			vi.spyOn(w.element.firstElementChild as HTMLElement, "getBoundingClientRect").mockReturnValue(new DOMRect(16, 40, 60, 20))
+			await w.setProps({ open: true })
+			await flushPromises()
+			const placed = popoverRoot.querySelector<HTMLElement>("[style*='top']") as HTMLElement
+			expect(placed.style.left).toBe("8px")
+			expect(placed.style.top).toBe("68px")
+			expect((placed.firstElementChild as HTMLElement).style.width).toBe("224px")
+		})
+
+		test("an open card whose content grows re-places when its key changes, so it stays inside the view", async () => {
+			vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(400)
+			vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(600)
+			const w = mountPopover({ open: false, inline: true, width: "280", placeKey: "pending" })
+			vi.spyOn(w.element.firstElementChild as HTMLElement, "getBoundingClientRect").mockReturnValue(new DOMRect(40, 458, 60, 20))
+			const height = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(80)
+			await w.setProps({ open: true })
+			await flushPromises()
+			const placed = popoverRoot.querySelector<HTMLElement>("[style*='top']") as HTMLElement
+			expect(Number.parseFloat(placed.style.top) + 80).toBeLessThanOrEqual(600)
+			height.mockReturnValue(200)
+			await w.setProps({ placeKey: "settled" })
+			await flushPromises()
+			expect(Number.parseFloat(placed.style.top) + 200, "the taller card moved").toBeLessThanOrEqual(600)
+			const top = placed.style.top
+			await w.setProps({ open: false })
+			await w.setProps({ placeKey: "again" })
+			expect(placed.style.top, "a closed card is never placed").toBe(top)
+		})
+	})
+
 	test("disabled prop applies the disabled CSS class on the wrapper", () => {
 		expect(mountPopover({ disabled: true }).html()).toMatch(/disabled/)
 	})

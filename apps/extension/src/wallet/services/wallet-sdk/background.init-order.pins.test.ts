@@ -82,12 +82,14 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 				log.push("discover")
 				return discoverImpl()
 			},
+			unlockWindows: { origins: () => [] },
 		},
 		"dapp-session": {
 			onDappSessionDeleted,
 			onVerificationRefused: new EventHandler<unknown>(),
 			onVerificationConfirmed: new EventHandler<unknown>(),
 			tryGetDappSessionByOriginAndChain: async () => undefined,
+			allowsNewSite: async () => false,
 			addDappSession: async () => {
 				const s = { id: `s${sessions.size + 1}`, profileId: "p1" }
 				sessions.set(s.id, s)

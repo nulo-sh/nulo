@@ -169,7 +169,7 @@ describe("canary-expectations.json", () => {
 			.map((name) => `tests/e2e/network/${name}`)
 		expect(onDisk.length).toBeGreaterThan(0)
 		for (const file of onDisk) expect(expectations[file], file).toBeDefined()
-		// The lane holds every caller's canary and chaos jobs; nightly adds its in-browser leg.
+		// The lane holds every caller's canary and chaos jobs; nightly adds its in-browser and rpc chaos legs.
 		for (const workflow of ["_extension-network-e2e-lane.yml", "nightly.yml"]) {
 			const listed = canaryJobFiles(workflow)
 			expect(listed.length, `${workflow} lists canary or chaos files`).toBeGreaterThan(0)

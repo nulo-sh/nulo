@@ -38,12 +38,14 @@ import { createHash } from "node:crypto"
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { minorOf, WHATS_NEW_SEEN_KEY } from "@/utils/whats-new"
 import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
 import { INCOMING_TRANSFER_SERVICE_NAME, IncomingTransferRecordSchema } from "@/wallet/services/incoming-transfer/spec"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
 import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { LEGACY_SELECTED_ACCOUNT_KEY } from "@/wallet/services/ui-preference/spec"
+import { seedForKind } from "@/wallet/services/network/seeds"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { STORES } from "@/wallet/storage/stores"
 import { BROWSER, extensionUrl, gotoExtensionPage } from "./fixtures/browser"
@@ -65,6 +67,7 @@ import { holdNodeStubs } from "./fixtures/node-stub"
 import { registerPasskeyProfile, setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import {
 	inPlaceUpdate,
+	manifestVersion,
 	readLocalStorage,
 	type UpdateBuilds,
 	updateBuilds,
@@ -222,6 +225,12 @@ const recordedTestnet = (expected: Expected): number => recordedNetwork(expected
 
 const testnetNetworkId = (expected: Expected): string => recordedNetwork(expected).id
 
+/** The name the candidate shows for a recorded network: the unlock gives Mainnet's row this build's
+ *  seed name, since every recording's Mainnet row carries a name its release seeded; the others keep
+ *  theirs. */
+const nameAfterUpdate = (network: NetworkRow): string =>
+	network.kind === "mainnet" ? (seedForKind("mainnet")?.name ?? network.name) : network.name
+
 const otherChains = (expected: Expected): Array<{ id: string; chainId: number }> =>
 	expected.networks.filter((network) => network.kind !== "testnet").map(({ id, chainId }) => ({ id, chainId }))
 
@@ -351,8 +360,8 @@ const IDENTITY_ROOTS = (["accounts", "importedAccountKeys", "networks", "tokens"
  * The recorded accounts, imported keys, networks, tokens and fee payers are stored sealed once the
  * unlock has converted them, at keys that name no recorded account, and each of these roots stores
  * as many rows as the wallet reads from it, so a plaintext twin the conversion left, or a row no key
- * opens, shows as a difference. Every recorded network, and each recorded token and fee payer off
- * `resetChain`, still reads.
+ * opens, shows as a difference. Every recorded network, under {@link nameAfterUpdate}'s name, and
+ * each recorded token and fee payer off `resetChain`, still reads.
  */
 async function expectIdentity(ctx: ExtensionContext, page: Page, expected: Expected, resetChain?: number): Promise<void> {
 	const addresses = expected.accounts.map((row) => row.address.slice(2).toLowerCase())
@@ -384,7 +393,8 @@ async function expectIdentity(ctx: ExtensionContext, page: Page, expected: Expec
 	])
 	const ids = (rows: Row[]) => rows.map((row) => row.id)
 	const kept = (root: "tokens" | "fpcs") => ids(expected.rows(root).filter((row) => row.chainId !== resetChain))
-	expect(ids(networks)).toEqual(expect.arrayContaining(ids(expected.networks)))
+	const named = (rows: NetworkRow[]) => rows.map((network) => ({ id: network.id, name: nameAfterUpdate(network) }))
+	expect(networks.map(({ id, name }) => ({ id, name }))).toEqual(expect.arrayContaining(named(expected.networks)))
 	expect(ids(tokens)).toEqual(expect.arrayContaining(kept("tokens")))
 	expect(ids(fpcs)).toEqual(expect.arrayContaining(kept("fpcs")))
 }
@@ -575,7 +585,10 @@ async function throughTheReset(
 	const { oldChain, before, importedOpens } = reset
 	expect(derived(before)).not.toEqual([])
 	expect(imported(before)).not.toEqual([])
-	const others = await otherNetworks(page, expected, expected.locked)
+	const others = (await otherNetworks(page, expected, expected.locked)).map((chain) => ({
+		...chain,
+		network: chain.network && { ...chain.network, name: nameAfterUpdate(chain.network) },
+	}))
 
 	await ensureUnlocked(page)
 	expect(await takeoverScreen(page)).toBe("network-reset")
@@ -666,6 +679,8 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 			}
 			await page.close()
 			const stored = await readLocalStorage(ctx)
+			// The release's own marker, or, where it kept none, the update's stamp: the minor it came from.
+			expect(stored[WHATS_NEW_SEEN_KEY]).toBe(minorOf(manifestVersion(pair.from)))
 			await expectBackupImports("password", await exportBackupFile(ctx), stored)
 		})
 	})

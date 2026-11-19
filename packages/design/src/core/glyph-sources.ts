@@ -22,6 +22,9 @@ export const glyphSources = {
 	"square-half": "hourglass",
 	"square-cross": "square-x",
 	square: "square",
+	/** Nulo verified, solid; the drawn seal is Aztecscan verified. */
+	"seal-solid": "filled/rosette-discount-check",
+	seal: "rosette-discount-check",
 	warning: "alert-triangle",
 	info: "info-circle",
 	lock: "lock",
@@ -67,4 +70,5 @@ export const glyphSources = {
 	pause: "player-pause",
 	"no-signal": "antenna-bars-off",
 	swap: "arrows-left-right",
+	grip: "grip-vertical",
 } as const satisfies Record<string, string>

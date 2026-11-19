@@ -52,6 +52,11 @@ export type OpenAndAwaitOpts = {
 	kind: string
 	/** `top-right` retries a refused position with the size only; `center` creates once. */
 	placement: "center" | "top-right"
+	/** A window the caller was handed (`handOver`): the URL loads in its tab and the window is
+	 *  brought to the front, instead of a new window being created. `placement` is then unused. */
+	reuseWindowId?: number
+	/** The timeout's log level; `Warn` unless the caller expects its window to time out routinely. */
+	timeoutLogLevel?: LogLevel
 }
 
 export type AwaitedWindow<T> = {
@@ -66,6 +71,7 @@ type Handle<T> = {
 	settled: boolean
 	unsubOnRemoved: Unsubscribe | null
 	timeoutHandle: TimerHandle | null
+	onTimeout: () => void
 }
 
 export class WindowManager {
@@ -82,43 +88,37 @@ export class WindowManager {
 
 		const { promise, resolve, reject } = deferred<T>()
 
-		const handle: Handle<T> = {
-			resolve,
+		const handle: Handle<unknown> = {
+			resolve: resolve as (value: unknown) => void,
 			reject,
-			windowId: undefined,
+			windowId: opts.reuseWindowId,
 			settled: false,
 			unsubOnRemoved: null,
 			timeoutHandle: null,
+			onTimeout: () => {
+				this.logger.log("wallet", opts.timeoutLogLevel ?? LogLevel.Warn, `[${opts.kind}/${handleId}] timed out`)
+				this._settle(handleId, undefined, "Timed out waiting for window")
+			},
 		}
 
-		this.handles.set(handleId, handle as Handle<unknown>)
-		const removedBeforeAdoption = this.watchRemovals(handleId, handle as Handle<unknown>, opts.kind)
+		this.handles.set(handleId, handle)
+		const removedBeforeAdoption = this.watchRemovals(handleId, handle, opts.kind)
+		handle.timeoutHandle = this.clock.setTimeout(handle.onTimeout, opts.timeoutMs)
 
-		const timeoutHandle = this.clock.setTimeout(() => {
-			this.logger.log("wallet", LogLevel.Warn, `[${opts.kind}/${handleId}] timed out`)
-			this._settle(handleId, undefined, "Timed out waiting for window")
-		}, opts.timeoutMs)
-
-		handle.timeoutHandle = timeoutHandle
-
-		this.windows
-			.getLastFocused()
-			.then((anchor) => {
-				// A timeout or cancel during the bounds lookup must prevent creation.
-				if (this.handles.get(handleId) !== handle) return undefined
-				return this.createWindow(opts, anchor, () => this.handles.get(handleId) === handle)
-			})
-			.then((created) => {
-				if (created !== undefined) this.adopt(handleId, handle as Handle<unknown>, created, removedBeforeAdoption, opts.kind)
-			})
-			.catch(() => {
-				// The browser's error is dropped: it can carry the window URL, which holds request ids.
-				if (this.handles.get(handleId) !== handle) return
-				this.logger.log("wallet", LogLevel.Error, `[${opts.kind}/${handleId}] window could not be opened`)
-				this._settle(handleId, undefined, "Failed to open window.")
-			})
+		if (opts.reuseWindowId === undefined) this.openWindow(handleId, handle, opts, removedBeforeAdoption)
+		else this.reuseWindow(handleId, handle, opts, opts.reuseWindowId)
 
 		return { handleId, promise }
+	}
+
+	/** Restart a live handle's timeout at `timeoutMs` from now. `false` when the handle is settled
+	 *  or detached, which leaves no timeout to move. */
+	public retime(handleId: string, timeoutMs: number): boolean {
+		const handle = this.handles.get(handleId)
+		if (!handle || handle.settled || handle.timeoutHandle === null) return false
+		this.clock.clearTimeout(handle.timeoutHandle)
+		handle.timeoutHandle = this.clock.setTimeout(handle.onTimeout, timeoutMs)
+		return true
 	}
 
 	public settle<T>(handleId: string, value: T): void {
@@ -170,6 +170,39 @@ export class WindowManager {
 		this.stopWatching(handle)
 		handle.resolve(value(handle.windowId))
 		return true
+	}
+
+	private openWindow(handleId: string, handle: Handle<unknown>, opts: OpenAndAwaitOpts, removedBeforeAdoption: Set<number>): void {
+		this.windows
+			.getLastFocused()
+			.then((anchor) => {
+				// A timeout or cancel during the bounds lookup must prevent creation.
+				if (this.handles.get(handleId) !== handle) return undefined
+				return this.createWindow(opts, anchor, () => this.handles.get(handleId) === handle)
+			})
+			.then((created) => {
+				if (created !== undefined) this.adopt(handleId, handle, created, removedBeforeAdoption, opts.kind)
+			})
+			.catch(() => this.failedToOpen(handleId, handle, opts.kind))
+	}
+
+	/** The window was handed over live, so its id is known before anything awaits and a person's
+	 *  close from here on settles the handle. A window closed before the navigate lands fails it. */
+	private reuseWindow(handleId: string, handle: Handle<unknown>, opts: OpenAndAwaitOpts, windowId: number): void {
+		this.windows
+			.navigate(windowId, opts.url)
+			.then(() => {
+				// The window can lie under another one: a created window comes to the front by itself.
+				if (this.handles.get(handleId) === handle) void this.focus(handleId)
+			})
+			.catch(() => this.failedToOpen(handleId, handle, opts.kind))
+	}
+
+	/** The browser's error is dropped: it can carry the window URL, which holds request ids. */
+	private failedToOpen(handleId: string, handle: Handle<unknown>, kind: string): void {
+		if (this.handles.get(handleId) !== handle) return
+		this.logger.log("wallet", LogLevel.Error, `[${kind}/${handleId}] window could not be opened`)
+		this._settle(handleId, undefined, "Failed to open window.")
 	}
 
 	/** Subscribed before the window is created: the browser can deliver a person's close before

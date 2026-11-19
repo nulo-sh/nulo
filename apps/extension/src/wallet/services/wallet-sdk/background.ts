@@ -55,7 +55,7 @@ import { describeExternalId, DiscoveryQueue, type INetworkReader, WalletSdkDispa
 import type { ClockPort, WindowPort } from "@nulo/wallet-core/ports"
 import type { KeyedLock } from "@nulo/wallet-core/utils"
 import { VerifyAdmissionGate } from "./verify-admission"
-import { type DiscoveryDeps, handleDiscovery, type PendingWindow } from "./discovery-flow"
+import { type DiscoveryDeps, fitUnlockWindow, handleDiscovery, type PendingWindow } from "./discovery-flow"
 import { handleSessionEstablished } from "./session-established"
 import { wireSessionTeardown } from "./session-revocation"
 import { wireTabLifecycle } from "./tab-lifecycle"
@@ -66,6 +66,7 @@ import { MAX_PENDING_PER_SESSION, wireVerificationHold } from "./verification-ho
 import { type MessagePipelineDeps, onWalletMessage } from "./wallet-message"
 import { SessionHolders } from "./session-holders"
 import type { ILogger } from "@/wallet/logger"
+import type { RequestLog } from "@/wallet/logger/request-log"
 import { LogLevel } from "@/wallet/logger"
 
 declare const __VERSION__: string
@@ -79,9 +80,9 @@ declare const __VERSION__: string
 export function initWalletSdkHandler(
 	services: ServiceCollection,
 	logger: ILogger,
-	ports: { windows: TrackedWindowPort; clock: ClockPort },
+	ports: { windows: TrackedWindowPort; clock: ClockPort; requests?: RequestLog },
 ): BackgroundConnectionHandler {
-	const deps = resolveSdkDeps(services, logger)
+	const deps = { ...resolveSdkDeps(services, logger), requests: ports.requests }
 	const state = createSdkHandlerState(ports)
 
 	const handler = new BackgroundConnectionHandler(
@@ -147,7 +148,12 @@ export function initWalletSdkHandler(
 	// lives in `tab-lifecycle.ts`; it MUST stay registered before
 	// `handler.initialize()`. Handler methods are arrow-wrapped to keep `this`.
 	wireTabLifecycle({
-		onTabTeardown: (tabId) => tearDownTabAttempts(state, tabId),
+		onTabTeardown: (tabId) => {
+			tearDownTabAttempts(state, tabId)
+			// The SDK dropped the tab's discoveries first: a site left with none loses its unlock window.
+			const unlockDeps = discoveryDeps(deps, state)
+			for (const origin of deps.dappInteractionService.unlockWindows.origins()) fitUnlockWindow(origin, false, unlockDeps)
+		},
 		terminateForTab: (tabId) => handler.terminateForTab(tabId),
 		terminateSession: endSession,
 		getActiveSessions: () => handler.getActiveSessions(),
@@ -173,6 +179,7 @@ type SdkDeps = {
 	resetRun: ResetRunGate
 	dispatcher: WalletSdkDispatcher
 	logger: ILogger
+	requests?: RequestLog
 }
 
 /** The dispatcher's one network read. A quarantined chain resolves to no network, so every dApp
@@ -385,7 +392,11 @@ async function drainQueuedDiscovery(discovery: PendingDiscovery, deps: SdkDeps, 
 		return false
 	}
 	logger.log("wallet-sdk", LogLevel.Info, `Processing queued discovery: request ${describeExternalId(discovery.requestId)}`)
-	await handleDiscovery(discovery, discoveryDeps(deps, state))
+	const flowDeps = discoveryDeps(deps, state)
+	await handleDiscovery(discovery, flowDeps)
+	// A connect window or notice took the site's window over. Otherwise it stays while another of the
+	// site's discoveries lives: one queued behind a later lock, or already in a later unlock's drain.
+	fitUnlockWindow(discovery.origin, false, flowDeps)
 	logger.log("wallet-sdk", LogLevel.Info, `Queued discovery processed: request ${describeExternalId(discovery.requestId)}`)
 	return true
 }
@@ -426,5 +437,6 @@ function messagePipelineDeps(deps: SdkDeps, state: SdkHandlerState): MessagePipe
 		legal: deps.legal,
 		resetRun: deps.resetRun,
 		logger: deps.logger,
+		requests: deps.requests,
 	}
 }

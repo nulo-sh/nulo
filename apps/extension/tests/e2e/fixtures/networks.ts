@@ -21,7 +21,7 @@ export type StoredNetwork = {
 	kind?: string
 	chainId: number
 	primaryEndpointId: string
-	endpoints: { id: string; rpcUrl: string }[]
+	endpoints: { id: string; rpcUrl: string; label?: string }[]
 }
 
 /** The active profile's active network, as the network service reads it. */

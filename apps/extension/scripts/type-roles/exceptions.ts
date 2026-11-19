@@ -32,12 +32,6 @@ const APP = "apps/extension/src/popup/app.vue"
 const BRUTALIST = "packages/design/src/ui/BrutalistTitle.vue"
 const BALANCE = "apps/extension/src/popup/components/modules/general/BalanceView.vue"
 const BUTTON = "packages/design/src/ui/Button.vue"
-const TX_CARD = "apps/extension/src/popup/components/modules/activity/TransactionCard.vue"
-const TWO_CHIPS = ".chips > .chip, .app_slot > .app_chip"
-const TWO_CHIP_SCOPE =
-	'[data-testid="activity-direction-chip"]:has(+ span > [data-testid="activity-app-chip"]), [data-testid="activity-direction-chip"] + span > [data-testid="activity-app-chip"]'
-const PUBLISH_STRIP = "apps/extension/src/components/composite/send/PublishStrip.vue"
-const PUBLISH_FACTS = '[data-testid="send-publish-strip"] [data-cell]'
 const ROLELESS = ".wrapper:is(.secondary, .ghost, .text)"
 const ROLELESS_WHY = "the icon-only variants carry no role and keep their size step"
 const CONTACT_ROW = "apps/extension/src/popup/components/modules/settings/contacts/ContactRow.vue"
@@ -110,13 +104,6 @@ export const CARVE_OUTS: CarveOut[] = [
 		why: "title-hero's size on Activity and the Settings hub",
 	},
 	{
-		file: "apps/extension/src/components/composite/general/EmojiGrid.vue",
-		rule: "faceless",
-		text: "font-size: 24px",
-		selector: ".cell",
-		why: "the verification emoji's size, a glyph a person compares, which no role carries",
-	},
-	{
 		file: CONTACT_ROW,
 		rule: "faceless",
 		text: "font-size: 10px",
@@ -156,15 +143,6 @@ export const OVERRIDES: Override[] = [
 		why: "a mini field's typed text keeps its 12px",
 	},
 	{
-		file: "apps/extension/src/components/composite/send/SendTypesCard.vue",
-		selector: ".toggle_btn.toggle_active",
-		scope: '[data-testid="send-from-type"] > [data-selected], [data-testid="send-to-type"] > [data-selected]',
-		property: "font-weight",
-		value: "700",
-		role: "segment",
-		why: "the selected side of the send type toggle takes segment's active weight",
-	},
-	{
 		file: "apps/extension/src/onboarding/pages/create.vue",
 		selector: ".tab.tabActive",
 		scope: '[data-testid^="onboarding-method-"][aria-selected="true"]',
@@ -199,59 +177,5 @@ export const OVERRIDES: Override[] = [
 		value: "700",
 		role: "meta",
 		why: "a warned network keeps its bold over meta's 400",
-	},
-	{
-		file: PUBLISH_STRIP,
-		selector: ".strip .cell",
-		scope: PUBLISH_FACTS,
-		property: "font-size",
-		value: "10px",
-		role: "label-section",
-		why: "a publish fact keeps its 10px beside the 10px names",
-	},
-	{
-		file: PUBLISH_STRIP,
-		selector: ".strip .cell",
-		scope: PUBLISH_FACTS,
-		property: "font-weight",
-		value: "600",
-		role: "label-section",
-		why: "a publish fact keeps its semibold, a step under the bold names",
-	},
-	{
-		file: PUBLISH_STRIP,
-		selector: ".strip .cell",
-		scope: PUBLISH_FACTS,
-		property: "letter-spacing",
-		value: "0.08em",
-		role: "label-section",
-		why: "a publish fact keeps the names' tracking",
-	},
-	{
-		file: TX_CARD,
-		selector: TWO_CHIPS,
-		scope: TWO_CHIP_SCOPE,
-		property: "font-size",
-		value: "10px",
-		role: "label-section",
-		why: "a dApp transfer's two chips fit its row only at 10px",
-	},
-	{
-		file: TX_CARD,
-		selector: TWO_CHIPS,
-		scope: TWO_CHIP_SCOPE,
-		property: "font-weight",
-		value: "600",
-		role: "label-section",
-		why: "a dApp transfer's two chips pair semibold with their 10px",
-	},
-	{
-		file: TX_CARD,
-		selector: TWO_CHIPS,
-		scope: TWO_CHIP_SCOPE,
-		property: "letter-spacing",
-		value: "0.08em",
-		role: "label-section",
-		why: "a dApp transfer's two chips pair 0.08em with their 10px",
 	},
 ]

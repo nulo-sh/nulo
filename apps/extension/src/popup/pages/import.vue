@@ -20,10 +20,10 @@ import { awaitProfileActivation } from "@/composables/unlockWait"
 
 /** Utils */
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { OWN_WINDOW_ROUTES, closeOwnWindow, leavePanelFor, releaseOwnWindow } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, closeOwnWindow, leavePanelFor } from "@/utils/own-window"
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { setupWaitsInTab } from "@/wallet/utils/onboarding-tab"
-import { openingFlowLive } from "@/popup/opening-flow"
+import { landOpenedProfile, openingFlowLive } from "@/popup/opening-flow"
 import { resolveFullBackupEnterAction } from "./import-helpers"
 import { retryResultText, withNetworkNames } from "@/components/composite/import/restore-warning"
 
@@ -64,6 +64,7 @@ onBeforeMount(async () => {
 // transient reconnect is indistinguishable from the wedge when it drops.
 const { hydrateKnownProfile } = useProfileBootstrap()
 const flowLive = openingFlowLive()
+const IMPORTED = { kind: "success", label: "Profile imported" }
 let isUnmounted = false
 const completeImport = async (profile) => {
 	await setLastActiveProfileId(profile.id)
@@ -75,15 +76,11 @@ const completeImport = async (profile) => {
 	})
 	// A page that went, or whose flow the shell ended, no longer owns the window: the shell's landing does.
 	if (isUnmounted || !flowLive()) return
-	// A finished restore in its own window shows the wallet there, as the panel would.
-	releaseOwnWindow()
-	if (outcome === "active") {
-		openToast({ kind: "success", label: "Profile imported" })
-		router.push("/popup/general")
-	} else {
-		openToast({ kind: "success", label: "Profile imported. Unlock to continue" })
-		router.push("/popup/auth")
-	}
+	const landing =
+		outcome === "active"
+			? { route: "/popup/general", line: IMPORTED }
+			: { route: "/popup/auth", line: { kind: "success", label: "Profile imported. Unlock to continue" } }
+	landOpenedProfile(router, openToast, { profileId: profile.id, panelLine: IMPORTED, ...landing })
 }
 
 const {

@@ -15,9 +15,15 @@ export interface SendReview {
 /**
  * `isTop`: the sheet holds the top slot of the popup stack. A popup opened over it takes the pointer,
  * and when that popup's trap releases without closing it, the keyboard falls back to the sheet — so a
- * covered sheet must not be able to send.
+ * covered sheet must not be able to send. `rearmOn`: what the sheet discloses; a change while it is
+ * shown and gated starts the wait again, so a press meant for the old disclosure cannot send the new.
  */
-export function useSendReview(opts: { isGated: () => boolean; isOpen: () => boolean; isTop: () => boolean }): SendReview {
+export function useSendReview(opts: {
+	isGated: () => boolean
+	isOpen: () => boolean
+	isTop: () => boolean
+	rearmOn?: () => unknown
+}): SendReview {
 	const ready = ref(false)
 	let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -29,7 +35,7 @@ export function useSendReview(opts: { isGated: () => boolean; isOpen: () => bool
 	// Sync, so no click can land between a send turning gated (or covered) and `ready` dropping. Separate
 	// sources rather than one tuple: a recomputed-but-equal reading must not restart the wait.
 	watch(
-		[opts.isOpen, opts.isTop, opts.isGated],
+		[opts.isOpen, opts.isTop, opts.isGated, opts.rearmOn ?? (() => undefined)],
 		([open, top, gated]) => {
 			disarm()
 			const shown = open && top

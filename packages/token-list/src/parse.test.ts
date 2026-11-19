@@ -151,6 +151,39 @@ describe("payload", () => {
 	})
 })
 
+describe("icon", () => {
+	const picture = (svg: string) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
+	const ICON = picture('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><circle cx="1" cy="1" r="1"/></svg>')
+
+	test("both modes keep an accepted picture, after the price id, and selectEntries keeps it", () => {
+		const value = payload([entry(0, { icon: ICON }), entry(1)])
+		const strict = checkPayload(value, "strict")
+		expect(Object.keys(strict.tokens[0]).at(-1)).toBe("icon")
+		expect(checkPayload(value, "wallet")).toEqual(strict)
+		expect(selectEntries(strict.tokens, { "usd-coin": USD }).map((e) => e.icon)).toEqual([ICON, undefined])
+		expect(checkSource({ tokens: [entry(0, { icon: ICON })] })).toEqual({ tokens: [entry(0, { icon: ICON })] })
+	})
+
+	test.each([
+		["a scripted SVG", picture("<svg><script>x</script></svg>")],
+		["an oversize picture", picture(`<svg><desc>${"a".repeat(3000)}</desc></svg>`)],
+		["a value that is not a string", 7],
+	])("the wallet drops %s and keeps the entry; strict refuses it at the icon", (_, icon) => {
+		const value = payload([entry(0, { icon })])
+		expect(checkPayload(value, "wallet").tokens).toEqual([entry(0)])
+		expect(refusedAt(value, "strict")).toBe("payload.tokens[0].icon")
+		expect(() => checkSource({ tokens: [entry(0, { icon })] })).toThrow("source.tokens[0].icon")
+	})
+
+	test("a signed list whose picture the wallet refuses still verifies and keeps the entry", async () => {
+		const { privateKey, pinned } = await freshKey()
+		const value = payload([entry(0, { icon: picture("<svg><script>x</script></svg>") })], { sequence: SEQUENCE_FLOOR })
+		const bytes = new TextEncoder().encode(JSON.stringify(value))
+		const list = await readTokenList(JSON.stringify(await signEnvelope(bytes, privateKey, pinned.keyId)), [pinned])
+		expect(list.entries).toEqual([entry(0, { priceId: undefined })])
+	})
+})
+
 describe("tokenKey", () => {
 	const DIGITS = "0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
 

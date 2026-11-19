@@ -3,7 +3,7 @@
  *
  * The frozen sequence:
  *   checkCancelled → journal(proving) → checkCancelled → prove → checkCancelled →
- *   assertAuthorization → [offchain hook] → toTx → journal(submitting) →
+ *   assertAuthorization → [offchain hook] → toTx → pick → journal(submitting) →
  *   checkCancelled → assertLive + send → record → journal(succeeded)
  *
  * The cancel-before-send contract ("a cancel during prove drops the
@@ -40,10 +40,20 @@ function makeCoordinator(legal: LegalAdmission = ACCEPTED) {
 	return new ExecutionCoordinator(tasks, new LoggerStore(new ConfigStore()), legal)
 }
 
-/** The part of `Tx.data` a send's expiry is read from. Real kernel outputs need hashing, which
- *  this environment cannot run: `execution-coordinator.real.test.ts` reads those. */
+const ANCHOR_HASH = `0x${"ab".repeat(32)}`
+const PICKED_URL = "https://rpc.picked"
+
+/** The part of `Tx.data` a send's expiry and anchor are read from. Real kernel outputs need hashing,
+ *  which this environment cannot run: `execution-coordinator.real.test.ts` reads those. */
 const txData = (anchor: number) => ({
-	constants: { anchorBlockHeader: BlockHeader.empty({ globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(anchor) }) }) },
+	constants: {
+		anchorBlockHeader: Object.assign(
+			BlockHeader.empty({ globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(anchor) }) }),
+			{
+				hash: async () => ({ toString: () => ANCHOR_HASH }),
+			},
+		),
+	},
 	expirationTimestamp: 1_750_003_600n,
 	getNonEmptyNullifiers: () => [new Fr(2n), new Fr(3n)],
 })
@@ -75,7 +85,10 @@ function makeHarness(overrides: Partial<ProveAndSendContext> = {}) {
 	const scopes = [{ toString: () => "0xscope" }] as unknown as ProveAndSendContext["scopes"]
 	const ctx: ProveAndSendContext = {
 		pxe,
-		node,
+		pickSendEndpoint: vi.fn(async () => {
+			calls.push("pick")
+			return { url: PICKED_URL, node }
+		}),
 		txRequest: { marker: "txRequest" } as unknown as ProveAndSendContext["txRequest"],
 		scopes,
 		parentTask: fakeTask,
@@ -90,7 +103,6 @@ function makeHarness(overrides: Partial<ProveAndSendContext> = {}) {
 		commitSubmitting: vi.fn(async () => {
 			calls.push("journal:submitting")
 		}),
-		submittedEndpointUrl: "https://rpc.submit",
 		recordTransaction: vi.fn(async () => {
 			calls.push("record")
 		}),
@@ -100,7 +112,7 @@ function makeHarness(overrides: Partial<ProveAndSendContext> = {}) {
 }
 
 describe("proveAndSend: frozen sequence", () => {
-	test("ordering: cancel → proving → cancel → prove → cancel → toTx → submitting → cancel → send → record → succeeded", async () => {
+	test("ordering: cancel → proving → cancel → prove → cancel → toTx → pick → submitting → cancel → send → record → succeeded", async () => {
 		const { ctx, calls } = makeHarness()
 		const result = await makeCoordinator().proveAndSend(ctx)
 		expect(calls).toEqual([
@@ -110,6 +122,7 @@ describe("proveAndSend: frozen sequence", () => {
 			"prove",
 			"checkCancelled",
 			"toTx",
+			"pick",
 			"journal:submitting",
 			"checkCancelled",
 			"send",
@@ -180,8 +193,8 @@ describe("proveAndSend: frozen sequence", () => {
 	})
 
 	test("send failure propagates without record or success journal (failure shaping is caller-side)", async () => {
-		const { ctx, calls } = makeHarness()
-		;(ctx.node.sendTx as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("mempool full"))
+		const { ctx, calls, node } = makeHarness()
+		;(node.sendTx as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("mempool full"))
 		await expect(makeCoordinator().proveAndSend(ctx)).rejects.toThrow("mempool full")
 		expect(calls).not.toContain("record")
 		expect(calls).not.toContain("journal:succeeded")
@@ -189,15 +202,34 @@ describe("proveAndSend: frozen sequence", () => {
 })
 
 describe("proveAndSend: the submitting write is the send's precondition", () => {
-	test("submitting is committed with the hash and the context's endpoint, never through markJournal", async () => {
+	test("submitting is committed with the hash and the picked endpoint, never through markJournal", async () => {
 		const { ctx } = makeHarness()
 		await makeCoordinator().proveAndSend(ctx)
 		expect(ctx.commitSubmitting).toHaveBeenCalledWith({
 			txHash: "0xhash",
-			submittedEndpointUrl: "https://rpc.submit",
+			submittedEndpointUrl: PICKED_URL,
 			expiry: undefined,
 		})
 		expect(ctx.markJournal).not.toHaveBeenCalledWith(expect.objectContaining({ stage: "submitting" }))
+	})
+
+	test("the pick takes the tx's hash and anchor; its endpoint is the one recorded, dialed and returned", async () => {
+		const { ctx, node } = makeHarness()
+		const result = await makeCoordinator().proveAndSend(ctx)
+		expect(ctx.pickSendEndpoint).toHaveBeenCalledExactlyOnceWith({ txHash: "0xhash", anchorHash: ANCHOR_HASH })
+		expect(node.sendTx).toHaveBeenCalledOnce()
+		expect(ctx.recordTransaction).toHaveBeenCalledExactlyOnceWith("0xhash", PICKED_URL)
+		expect(result.sentThrough).toEqual({ url: PICKED_URL, node })
+	})
+
+	test("a refused pick records and sends nothing", async () => {
+		const { ctx, node, calls } = makeHarness({
+			pickSendEndpoint: vi.fn(async () => Promise.reject(new Error("No endpoint of this network answered for the transaction"))),
+		})
+		await expect(makeCoordinator().proveAndSend(ctx)).rejects.toThrow(/No endpoint/)
+		expect(ctx.commitSubmitting).not.toHaveBeenCalled()
+		expect(node.sendTx).not.toHaveBeenCalled()
+		expect(calls).not.toContain("record")
 	})
 
 	test("submitting carries the expiry the tx's own data names", async () => {
@@ -206,7 +238,7 @@ describe("proveAndSend: the submitting write is the send's precondition", () => 
 		await makeCoordinator().proveAndSend(ctx)
 		expect(ctx.commitSubmitting).toHaveBeenCalledWith({
 			txHash: "0xhash",
-			submittedEndpointUrl: "https://rpc.submit",
+			submittedEndpointUrl: PICKED_URL,
 			expiry: { timestamp: 1_750_003_600, nullifier: new Fr(2n).toString() },
 		})
 	})
@@ -318,6 +350,7 @@ describe("proveAndSend: the session checks", () => {
 			"assertAuthorization",
 			"offchain",
 			"toTx",
+			"pick",
 			"journal:submitting",
 			"checkCancelled",
 			"assertLive",
@@ -372,12 +405,12 @@ describe("proveAndSend: the session checks", () => {
 	test("a session end while node.sendTx is pending does not undo the send: record and succeeded follow", async () => {
 		let live = true
 		let finishSend: () => void = () => {}
-		const { ctx, calls } = makeHarness({
+		const { ctx, calls, node } = makeHarness({
 			assertLive: vi.fn(() => {
 				if (!live) throw new SessionEndedError()
 			}),
 		})
-		;(ctx.node.sendTx as ReturnType<typeof vi.fn>).mockImplementationOnce(
+		;(node.sendTx as ReturnType<typeof vi.fn>).mockImplementationOnce(
 			() =>
 				new Promise<void>((resolve) => {
 					calls.push("send")
@@ -398,8 +431,8 @@ describe("proveAndSend under a profile switch (real TaskService)", () => {
 	async function sendUnderTasks(sendTx: (switchToProfile: (id: string) => void) => Promise<void>) {
 		const { tasks, switchToProfile } = await startedTaskService("p1")
 		const parentTask = tasks.startNewTask(new StepContent("Transfer"))
-		const { ctx, calls } = makeHarness({ parentTask })
-		;(ctx.node.sendTx as ReturnType<typeof vi.fn>).mockImplementationOnce(() => sendTx(switchToProfile))
+		const { ctx, calls, node } = makeHarness({ parentTask })
+		;(node.sendTx as ReturnType<typeof vi.fn>).mockImplementationOnce(() => sendTx(switchToProfile))
 		const coordinator = new ExecutionCoordinator(tasks, new LoggerStore(new ConfigStore()), ACCEPTED)
 		return { run: coordinator.proveAndSend(ctx), ctx, calls, parentTask }
 	}
@@ -408,7 +441,7 @@ describe("proveAndSend under a profile switch (real TaskService)", () => {
 		const { run, ctx, calls, parentTask } = await sendUnderTasks(async (switchToProfile) => switchToProfile("p2"))
 		await expect(run).resolves.toMatchObject({ txHash: { toString: expect.any(Function) } })
 		expect(calls.slice(-2)).toEqual(["record", "journal:succeeded"])
-		expect(ctx.recordTransaction).toHaveBeenCalledWith("0xhash")
+		expect(ctx.recordTransaction).toHaveBeenCalledWith("0xhash", PICKED_URL)
 		expect(ctx.markJournal).toHaveBeenLastCalledWith({ stage: "succeeded", txHash: "0xhash" })
 		expect(parentTask.exists).toBe(false)
 	})

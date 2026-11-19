@@ -21,11 +21,10 @@ import { ChainStoreWedgedError, openChainStore, WrongStoreKeyError } from "./opf
 const SqliteEncryptionError = RealSqliteEncryptionError as unknown as new (message: string) => Error
 
 const nullLog = { warn: () => {}, info: () => {}, debug: () => {}, error: () => {}, verbose: () => {}, fatal: () => {} } as never
-const ROLLUP = "0x00000000000000000000000000000000000000aa"
 const key = () => new Uint8Array(32)
 const net = (profileId: string, chainId = 1): ChainCoordinates => ({ profileId, chainId })
 
-/** Minimal store satisfying initStoreVersionStamp (fresh → stamps, no clear). */
+/** Minimal store; `_set` records a stamp write, which the open leaves to its caller. */
 function fakeStore() {
 	const set = vi.fn(async () => {})
 	return {
@@ -36,7 +35,7 @@ function fakeStore() {
 	}
 }
 
-const open = (n: ChainCoordinates) => openChainStore({ network: n, rollupAddress: ROLLUP, storeKey: key(), log: nullLog })
+const open = (n: ChainCoordinates) => openChainStore({ network: n, storeKey: key(), log: nullLog })
 const flush = () => vi.advanceTimersByTimeAsync(0)
 
 afterEach(() => {
@@ -132,14 +131,14 @@ describe("openChainStore — abandoned-open quarantine", () => {
 		expect(mockOpen).toHaveBeenCalledTimes(2)
 	})
 
-	test("normal resolution returns the store, never auto-closes it, and stamps the version", async () => {
+	test("normal resolution returns the store, never auto-closes it, and leaves its stamp to the caller", async () => {
 		const n = net("p-ok")
 		const store = fakeStore()
 		mockOpen.mockResolvedValueOnce(store)
 		const result = await open(n)
 		expect(result).toBe(store)
 		expect(store.close).not.toHaveBeenCalled() // owned by the caller, not closed
-		expect(store._set).toHaveBeenCalledTimes(1) // version stamped
+		expect(store._set).not.toHaveBeenCalled()
 
 		// The dir is free afterward → a subsequent open proceeds normally.
 		mockOpen.mockResolvedValueOnce(fakeStore())

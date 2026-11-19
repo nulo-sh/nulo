@@ -2,6 +2,7 @@ import { FpcType } from "@/wallet/services/fpc/client"
 import { FEE_DECIMALS, FEE_JUICE_DECIMALS, FEE_READOUT_UNIT, type FeeDisplay, feeDisplay, formatGasBalance } from "@/utils/fee-estimation"
 import { formatBaseUnits } from "@/utils/amount"
 import type { AppPick } from "@/utils/fee-picks"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 
 export { formatGasBalance }
 
@@ -30,6 +31,8 @@ export interface FeeMethodOption {
 	/** What the method can spend, for the menu's right column: a balance, "— FJ" while
 	 *  balances are unknown, "free" for Nulo's own sponsor, "—" for one added by hand. */
 	spend?: string
+	/** The Fee Juice row's balance in base units, as read; absent while unread or on a failed read. */
+	balance?: string
 	/** The read that answers this row has not landed: it is drawn loading and is never picked. */
 	checking?: boolean
 	/** A sponsor whose funding read for the current transaction is in flight: drawn loading, and it
@@ -295,6 +298,7 @@ function feeJuiceOption(gasBalances?: GasBalances): FeeMethodOption {
 		subtitle: "public",
 		spend: spendOf(gasBalances?.publicFeeJuice),
 	}
+	if (typeof gasBalances?.publicFeeJuice === "string") fj.balance = gasBalances.publicFeeJuice
 	if (publicFeeJuiceZero) {
 		fj.disabled = true
 		fj.disabledReason = "no balance"
@@ -317,6 +321,7 @@ function privateFeeJuiceOption(privateFpc: RegisteredFpc | undefined, gasBalance
 		spend: spendOf(gasBalances?.privateFeeJuice),
 		fpc: privateFpc ?? null,
 	}
+	if (typeof gasBalances?.privateFeeJuice === "string") privateFj.balance = gasBalances.privateFeeJuice
 	if (!privateFpc) {
 		privateFj.disabled = true
 		privateFj.disabledReason = "not available"
@@ -330,13 +335,17 @@ function privateFeeJuiceOption(privateFpc: RegisteredFpc | undefined, gasBalance
 	return privateFj
 }
 
-/**
- * Destination of the "get fee juice" nudge: unleashed's testnet app, on every network (the owner's
- * call; unleashed has no public mainnet bridge). Override at build time with
- * `VITE_FEE_JUICE_BRIDGE_URL`.
- */
-export const FEE_JUICE_BRIDGE_URL: string =
-	(import.meta.env.VITE_FEE_JUICE_BRIDGE_URL as string | undefined) ?? "https://testnet.app.unleashed.systems"
+const SHIELD_FEE_JUICE_URL = "https://shield.human.tech/fee-juice"
+const UNLEASHED_TESTNET_URL = "https://testnet.app.unleashed.systems"
+
+/** Mainnet's fee juice links open human.tech's Shield until Unleashed is deployed on Alpha (the
+ *  owner's decision of 2026-11-18); every other chain opens Unleashed's testnet app. A build's
+ *  `VITE_FEE_JUICE_BRIDGE_URL` replaces both. */
+export function feeJuiceBridgeUrl(chainId: number | undefined): string {
+	const override = import.meta.env.VITE_FEE_JUICE_BRIDGE_URL as string | undefined
+	if (override !== undefined) return override
+	return chainId === CHAIN_IDS.MAINNET ? SHIELD_FEE_JUICE_URL : UNLEASHED_TESTNET_URL
+}
 
 /** The identity a fee card's balance snapshot belongs to. Fields stay in this order everywhere. */
 export interface FeeScope {

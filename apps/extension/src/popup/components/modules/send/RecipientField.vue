@@ -12,9 +12,9 @@
  *   field)
  * - `selectedContact` — the candidate object once they pick one
  *
- * A mouse or pen press that takes the focus from the field holds the typed view (and the
- * suggestions) until the press ends: the card is taller than the field, so swapping at the blur
- * would move whatever the press is on before its click lands.
+ * `choose` names the pick once it may be shown. A mouse or pen press that takes the focus from the
+ * field holds the pick (and the suggestions) until the press ends: the page shows the choice in the
+ * field's place, so showing it at the blur would move whatever the press is on before its click lands.
  */
 import { isComposing } from "@/composables/usePopupEntity"
 import { pluralize } from "@/utils/plural"
@@ -26,11 +26,11 @@ const props = defineProps({
 	candidates: { type: Array, default: () => [] },
 })
 
+const emit = defineEmits(["choose"])
 const searchTerm = defineModel("searchTerm", { type: String, default: "" })
 const selectedContact = defineModel("selectedContact", { default: null })
 
 const isSearchInputFocused = ref(false)
-const justCleared = ref(false)
 /** Escape closed the suggestions; the next input or focus opens them again. */
 const dismissed = ref(false)
 /** The suggestion Down and Up moved to, or null: none until an arrow is pressed. Held by identity,
@@ -40,8 +40,7 @@ const listId = useId()
 const labelId = `${listId}-label`
 const optionId = (i) => `${listId}-${i}`
 const fieldEl = useTemplateRef("fieldEl")
-const cardEl = useTemplateRef("cardEl")
-/** The field shows the typed text while the press that blurred it is still down. */
+/** The field keeps its pick unshown while the press that blurred it is still down. */
 const holdView = ref(false)
 /** The `pointerId` of the primary mouse or pen press now down, or null. */
 let pressId = null
@@ -72,17 +71,11 @@ const normalizeRecipient = (text) => {
 	return bareAztecAddress(kept) ?? kept
 }
 const showInvalidHint = computed(() => !isSearchInputFocused.value && !isValidAztecAddress(searchTerm.value) && searchTerm.value.length > 0)
+const chosen = computed(() => (selectedContact.value && !holdView.value ? selectedContact.value : null))
 
 const handleSelectContact = (contact) => {
 	selectedContact.value = contact
 	searchTerm.value = contact.address
-}
-
-const handleChange = () => {
-	selectedContact.value = null
-	searchTerm.value = ""
-	justCleared.value = true
-	isSearchInputFocused.value = true
 }
 
 const handleSearchBlur = () => {
@@ -91,11 +84,14 @@ const handleSearchBlur = () => {
 		if (contact) handleSelectContact(contact)
 	}
 	clearTimeout(closeTimer)
-	if (pressId !== null) {
-		clearTimeout(releaseTimer)
-		holdView.value = true
-		return
-	}
+	clearTimeout(releaseTimer)
+	holdView.value = true
+	if (pressId !== null) return
+	// A tap's compatibility mousedown blurs the field and its click follows in the same task, so the
+	// match waits that task out: what the tap landed on chooses first.
+	releaseTimer = setTimeout(() => {
+		holdView.value = false
+	}, 0)
 	closeTimer = setTimeout(() => {
 		isSearchInputFocused.value = false
 	}, 250)
@@ -131,15 +127,9 @@ const onPointerUp = (e) => {
 	if (e.pointerId !== pressId) return
 	pressId = null
 	if (!holdView.value) return
-	// A browser dispatches a press's pointerup, mouseup and click in one task: the click lands first.
+	// A browser dispatches a press's pointerup, mouseup and click in one task, so the click's target
+	// chooses first; the held pick is shown only if nothing it pressed chose another.
 	releaseTimer = setTimeout(endHold, 0)
-}
-
-// A native click runs the microtasks between its listeners, so the card renders before the click
-// reaches its target: a menu that measures its trigger on that click sees where the trigger now is.
-const onClickCapture = (e) => {
-	if (!holdView.value || pressId !== null || fieldEl.value?.contains(e.target)) return
-	endHold()
 }
 
 const onPointerCancel = (e) => {
@@ -152,6 +142,10 @@ const onWindowBlur = () => {
 	pressId = null
 	if (holdView.value) endHold()
 }
+
+watch(chosen, (c) => {
+	if (c) emit("choose", c)
+})
 
 watch(
 	() => searchTerm.value,
@@ -189,8 +183,6 @@ const pickHighlighted = (e) => {
 	if (highlightTaken) return
 	handleSelectContact(shownContacts.value[Math.max(activeIndex.value, 0)])
 	e.target.blur()
-	// The card replaces the field, which would leave the keyboard on the page's body.
-	nextTick(() => cardEl.value?.focusChange())
 }
 
 // Marked handled: Chrome closes the toolbar popup on an Escape the page leaves unhandled.
@@ -215,7 +207,6 @@ onMounted(() => {
 	document.addEventListener("pointerdown", onPointerDown, true)
 	document.addEventListener("pointerup", onPointerUp, true)
 	document.addEventListener("pointercancel", onPointerCancel, true)
-	document.addEventListener("click", onClickCapture, true)
 	window.addEventListener("blur", onWindowBlur)
 })
 
@@ -224,7 +215,6 @@ onBeforeUnmount(() => {
 	document.removeEventListener("pointerdown", onPointerDown, true)
 	document.removeEventListener("pointerup", onPointerUp, true)
 	document.removeEventListener("pointercancel", onPointerCancel, true)
-	document.removeEventListener("click", onClickCapture, true)
 	window.removeEventListener("blur", onWindowBlur)
 	clearTimeout(closeTimer)
 	clearTimeout(releaseTimer)
@@ -243,72 +233,61 @@ onBeforeUnmount(() => {
 			</Transition>
 		</Flex>
 		<div ref="fieldEl" data-testid="send-destination-field" :class="$style.recipient_wrap">
-			<RecipientCard
-				v-if="selectedContact && !holdView"
-				ref="cardEl"
-				:name="selectedContact.name"
-				:address="selectedContact.address"
-				@change="handleChange"
+			<AddressInput
+				v-model="searchTerm"
+				:normalize="normalizeRecipient"
+				role="combobox"
+				:ariaLabelledby="labelId"
+				:ariaExpanded="showSuggestions"
+				ariaAutocomplete="list"
+				:ariaActivedescendant="activeId"
+				:ariaControls="showSuggestions ? listId : undefined"
+				@focus="handleSearchFocus"
+				@blur="handleSearchBlur()"
+				placeholder="0x... or contact name"
 			/>
 
-			<template v-else>
-				<AddressInput
-					v-model="searchTerm"
-					:normalize="normalizeRecipient"
-					:autofocus="justCleared"
-					role="combobox"
-					:ariaLabelledby="labelId"
-					:ariaExpanded="showSuggestions"
-					ariaAutocomplete="list"
-					:ariaActivedescendant="activeId"
-					:ariaControls="showSuggestions ? listId : undefined"
-					@focus="handleSearchFocus"
-					@blur="handleSearchBlur()"
-					placeholder="0x... or contact name"
-				/>
-
-				<Transition name="fade">
-					<div v-if="showSuggestions" :class="$style.popover" data-testid="send-destination-popover">
-						<!-- A list that scrolls is a Tab stop unless it opts out; the field keeps the keyboard. -->
+			<Transition name="fade">
+				<div v-if="showSuggestions" :class="$style.popover" data-testid="send-destination-popover">
+					<!-- A list that scrolls is a Tab stop unless it opts out; the field keeps the keyboard. -->
+					<Flex
+						align="center"
+						direction="column"
+						wide
+						:class="$style.contacts_wrapper"
+						:id="listId"
+						role="listbox"
+						tabindex="-1"
+						:aria-labelledby="labelId"
+						data-testid="send-destination-suggestions"
+					>
 						<Flex
+							v-for="(c, i) in shownContacts"
+							:key="rowKey(c)"
+							@click="handleSelectContact(c)"
 							align="center"
-							direction="column"
+							gap="10"
+							:class="[$style.contact, i === activeIndex && $style.active]"
 							wide
-							:class="$style.contacts_wrapper"
-							:id="listId"
-							role="listbox"
-							tabindex="-1"
-							:aria-labelledby="labelId"
-							data-testid="send-destination-suggestions"
+							:id="optionId(i)"
+							role="option"
+							:aria-selected="i === activeIndex"
 						>
-							<Flex
-								v-for="(c, i) in shownContacts"
-								:key="rowKey(c)"
-								@click="handleSelectContact(c)"
-								align="center"
-								gap="10"
-								:class="[$style.contact, i === activeIndex && $style.active]"
-								wide
-								:id="optionId(i)"
-								role="option"
-								:aria-selected="i === activeIndex"
-							>
-								<AccountAvatar :name="c.name" :address="c.address" :size="28" aria-hidden="true" />
+							<AccountAvatar :name="c.name" :address="c.address" :size="28" aria-hidden="true" />
 
-								<Flex direction="column" gap="4" wide>
-									<Text variant="name" color="primary" :class="[$style.title, $style.name_size]">{{ c.name }}</Text>
-									<Text variant="meta" color="tertiary" data-testid="recipient-suggestion-address" :class="$style.description">
-										{{ trimAddress(c.address) }}
-									</Text>
-								</Flex>
+							<Flex direction="column" gap="4" wide>
+								<Text variant="name" color="primary" :class="[$style.title, $style.name_size]">{{ c.name }}</Text>
+								<Text variant="meta" color="tertiary" data-testid="recipient-suggestion-address" :class="$style.description">
+									{{ trimAddress(c.address) }}
+								</Text>
 							</Flex>
 						</Flex>
-						<Text v-if="moreCount" variant="caption" color="tertiary" aria-hidden="true" :class="$style.more" data-testid="send-destination-more">
-							{{ moreSentence }}
-						</Text>
-					</div>
-				</Transition>
-			</template>
+					</Flex>
+					<Text v-if="moreCount" variant="caption" color="tertiary" aria-hidden="true" :class="$style.more" data-testid="send-destination-more">
+						{{ moreSentence }}
+					</Text>
+				</div>
+			</Transition>
 
 			<!-- Mounted with the field: a region created with its text in place may go unannounced. -->
 			<span role="status" aria-live="polite" aria-atomic="true" :class="$style.visually_hidden" data-testid="send-destination-more-live">

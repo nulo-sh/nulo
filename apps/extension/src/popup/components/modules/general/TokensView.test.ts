@@ -8,11 +8,13 @@
 import { deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
-import { effect, nextTick, stop } from "vue"
+import { effect, nextTick, ref, stop } from "vue"
 import { createMemoryHistory, createRouter } from "vue-router"
 import { createAppStoreHarness } from "../../../../../tests/helpers/app-store-harness"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
-import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { TEST_ICONS, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { listKeyOf } from "@/utils/token-flag"
+import { declarationsOf, parseSource } from "../../../../../scripts/type-roles/source-scan"
 
 const H = vi.hoisted(() => {
 	const makeEvent = () => {
@@ -32,6 +34,8 @@ const H = vi.hoisted(() => {
 		getTasks: vi.fn(),
 		getOperations: vi.fn(),
 		getTokenBalances: vi.fn(),
+		parseTokenInterface: vi.fn(),
+		addToken: vi.fn(),
 		balanceConnected: makeEvent(),
 		balanceAdded: makeEvent(),
 		balanceUpdated: makeEvent(),
@@ -47,6 +51,7 @@ const H = vi.hoisted(() => {
 		quotesUpdated: makeEvent(),
 		priceConnected: makeEvent(),
 		quotes: { current: {} as Record<string, unknown> },
+		icons: { current: {} as Record<string, string> },
 		store: { current: null as unknown as ReturnType<typeof createAppStoreHarness> },
 	}
 })
@@ -92,6 +97,11 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 		}
 	}),
 }))
+vi.mock("@/wallet/services/token/client", () => ({
+	TokenServiceClient: vi.fn(function () {
+		return { disconnect: vi.fn(), parseTokenInterface: H.parseTokenInterface, addToken: H.addToken }
+	}),
+}))
 // The view orders rows by price: `usePrices` calls `refreshIfStale()` at construction, so the
 // client must answer. Tests seed `H.quotes` to price a token.
 vi.mock("@/wallet/services/price/client", () => ({
@@ -100,8 +110,12 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: H.quotesUpdated,
 			onConnected: H.priceConnected,
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
-			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: H.quotes.current, pricedTokens: TEST_PRICED_TOKENS })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: H.icons.current })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({
+				quotes: H.quotes.current,
+				pricedTokens: TEST_PRICED_TOKENS,
+				tokenIcons: H.icons.current,
+			})),
 		}
 	}),
 }))
@@ -160,7 +174,95 @@ function resetHarness() {
 	H.getTasks.mockReset().mockResolvedValue([])
 	H.getOperations.mockReset().mockResolvedValue([])
 	H.getTokenBalances.mockReset().mockResolvedValue([balanceRow()])
+	H.parseTokenInterface.mockReset()
+	H.addToken.mockReset()
 }
+
+describe("TokensView — Retry on an import a restart ended", () => {
+	beforeEach(resetHarness)
+
+	const interrupted = (over: Record<string, unknown> = {}) => ({
+		id: "lost",
+		kind: "token_import",
+		origin: "popup",
+		profileId: "p1",
+		accountAddress: "0xacct",
+		networkId: "net-1",
+		contractAddress: "0xlost",
+		createdAt: 1,
+		terminalAt: Date.now(),
+		progress: { stage: "failed" },
+		error: { kind: "interrupted_by_restart", message: "Job declared lost", normalizedRaw: null },
+		...over,
+	})
+	const rows = (wrapper: ReturnType<typeof mount>) =>
+		wrapper.findAllComponents({ name: "TokenImportRow" }).map((c) => [(c.props("op") as { id: string }).id, c.props("retrying")])
+	const pressRetry = async (wrapper: ReturnType<typeof mount>) => {
+		wrapper.getComponent({ name: "TokenImportRow" }).vm.$emit("retry")
+		await nextTick()
+	}
+
+	test("a refused parse adds nothing and returns the row to failed; the next press adds it and its own record replaces the row", async () => {
+		const refused = deferred<unknown>()
+		H.parseTokenInterface.mockReturnValueOnce(refused.promise)
+		H.getOperations.mockResolvedValue([interrupted()])
+		const wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		expect(rows(wrapper)).toEqual([["lost", false]])
+
+		await pressRetry(wrapper)
+		expect(rows(wrapper)).toEqual([["lost", true]])
+		expect(H.parseTokenInterface.mock.calls).toEqual([["net-1", "0xlost"]])
+		refused.reject(new Error("node unreachable"))
+		await flushPromises()
+		expect([rows(wrapper), H.addToken.mock.calls.length]).toEqual([[["lost", false]], 0])
+
+		const tokenInterface = { chainId: 1, contract: "0xlost", isComplete: true }
+		const added = deferred<unknown>()
+		H.parseTokenInterface.mockResolvedValueOnce(tokenInterface)
+		H.addToken.mockReturnValueOnce(added.promise)
+		await pressRetry(wrapper)
+		await flushPromises()
+		expect(H.addToken.mock.calls).toEqual([["p1", "net-1", "0xacct", tokenInterface, { origin: "popup" }]])
+		H.journalAdded.emit(interrupted({ id: "again", createdAt: 2, terminalAt: null, progress: { stage: "pending" }, error: null }))
+		await nextTick()
+		expect(rows(wrapper)).toEqual([["again", false]])
+		added.resolve({ id: 1 })
+		await flushPromises()
+		expect(rows(wrapper)).toEqual([["again", false]])
+	})
+
+	test("a retry refused after the failure's window keeps the row from the refusal on; one that adds no record ends it", async () => {
+		const start = Date.now()
+		const tick = ref(start)
+		vi.stubGlobal("useTicker", () => tick)
+		const refused = deferred<unknown>()
+		H.parseTokenInterface.mockReturnValueOnce(refused.promise)
+		H.getOperations.mockResolvedValue([interrupted({ terminalAt: start - 29_000 })])
+		const wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		await pressRetry(wrapper)
+		tick.value = start + 5_000
+		await nextTick()
+		expect(rows(wrapper)).toEqual([["lost", true]])
+		refused.reject(new Error("node unreachable"))
+		await flushPromises()
+		expect(rows(wrapper)).toEqual([["lost", false]])
+		tick.value = Date.now() + 31_000
+		await nextTick()
+		expect(rows(wrapper)).toEqual([])
+
+		H.getOperations.mockResolvedValue([interrupted({ terminalAt: Date.now() })])
+		tick.value = Date.now()
+		H.parseTokenInterface.mockResolvedValueOnce({ chainId: 1, contract: "0xlost", isComplete: true })
+		H.addToken.mockResolvedValueOnce({ id: 1 })
+		const already = mount(TokensView, { shallow: true })
+		await flushPromises()
+		await pressRetry(already)
+		await flushPromises()
+		expect([rows(already), H.addToken.mock.calls.length]).toEqual([[], 1])
+	})
+})
 
 describe("TokensView — section refresh dot", () => {
 	beforeEach(resetHarness)
@@ -663,6 +765,78 @@ describe("TokensView — loading, placeholders and the empty state", () => {
 		await wrapper.setProps({ seedEntries: [seedEntry()], seedReady: true })
 		expect(ghostRows(wrapper)).toBe(0)
 		expect(seedRows(wrapper)).toEqual([SEED_CONTRACT])
+	})
+
+	test("an anonymous row leads with a 32 px round skeleton where a row's mark stands", async () => {
+		H.getTokenBalances.mockReturnValue(deferred<unknown[]>().promise)
+		wrapper = mount(TokensView, { shallow: true, props: { seedEntries: [], seedReady: false } })
+		await vi.advanceTimersByTimeAsync(300)
+		const MARK = (TokensView as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style.mark_skeleton
+		for (const row of wrapper.findAll('[data-testid="tokens-skeleton-row"]')) {
+			const first = row.find("skeleton-stub")
+			expect([first.attributes("width"), first.attributes("height"), first.classes()]).toEqual(["32", "32", [MARK]])
+		}
+		expect(ghostRows(wrapper)).toBe(2)
+		const source = parseSource("apps/extension/src/popup/components/modules/general/TokensView.vue")
+		expect(declarationsOf(source, ".mark_skeleton")).toEqual({ "border-radius": "50%" })
+	})
+
+	test("a default's placeholder draws the list's picture for its chain and contract; one of the same symbol on another contract none", async () => {
+		H.getTokenBalances.mockResolvedValue([])
+		H.icons.current = { [listKeyOf(1, SEED_CONTRACT)]: TEST_ICONS.USDC }
+		try {
+			wrapper = mount(TokensView, {
+				shallow: true,
+				props: { seedEntries: [seedEntry("seeding"), seedEntry("pending", "0xSeedBBBB")], seedReady: true },
+			})
+			await flushPromises()
+			const icons = wrapper
+				.findAllComponents(TokenSeedRow)
+				.map((c) => [(c.props("entry") as { contract: string }).contract, c.props("icon")])
+			expect(icons).toEqual([
+				[SEED_CONTRACT, TEST_ICONS.USDC],
+				["0xSeedBBBB", undefined],
+			])
+		} finally {
+			H.icons.current = {}
+		}
+	})
+
+	test("an import row draws the list's picture for a contract the list names on its record's network; an unlisted or unstamped one none", async () => {
+		const LISTED = "0xListedCCCC"
+		const importOp = (id: string, contractAddress: string, stamp: { networkId?: string } = { networkId: "net-1" }) => ({
+			id,
+			kind: "token_import",
+			profileId: H.store.current.profile?.id,
+			accountAddress: H.store.current.account?.address,
+			...stamp,
+			contractAddress,
+			terminalAt: null,
+			progress: { stage: "pending" },
+		})
+		H.getTokenBalances.mockResolvedValue([])
+		H.getOperations.mockResolvedValue([
+			importOp("op-default", SEED_CONTRACT.toLowerCase()),
+			importOp("op-listed", LISTED),
+			importOp("op-unlisted", "0xNotListed"),
+			importOp("op-unstamped", LISTED, {}),
+		])
+		H.icons.current = { [listKeyOf(1, SEED_CONTRACT)]: TEST_ICONS.USDC, [listKeyOf(1, LISTED)]: TEST_ICONS.GBPC }
+		try {
+			wrapper = mount(TokensView, { shallow: true, props: { seedEntries: [seedEntry("seeding")], seedReady: true } })
+			await flushPromises()
+			const icons = wrapper
+				.findAllComponents({ name: "TokenImportRow" })
+				.map((c) => [(c.props("op") as { id: string }).id, c.props("icon")])
+			expect(icons).toEqual([
+				["op-listed", TEST_ICONS.GBPC],
+				["op-unlisted", undefined],
+				["op-unstamped", undefined],
+				["op-default", TEST_ICONS.USDC],
+			])
+		} finally {
+			H.icons.current = {}
+		}
 	})
 
 	test("a rejected balances fetch is never an empty list: rows keep waiting, the timed retry recovers", async () => {

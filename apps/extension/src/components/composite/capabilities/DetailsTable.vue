@@ -21,14 +21,21 @@ type Row = {
 	code: boolean
 }
 
-const props = defineProps<{
-	known: readonly Row[]
-	unknown: readonly Row[]
-	classes: readonly Row[]
-	anyContract: Row | null
-	/** "any contract", or the count of listed contracts or, with none, of classes. */
-	label: string
-}>()
+const props = withDefaults(
+	defineProps<{
+		known: readonly Row[]
+		unknown: readonly Row[]
+		classes: readonly Row[]
+		anyContract: Row | null
+		/** "any contract", or the count of listed contracts or, with none, of classes. */
+		label: string
+		/** Drawn open, with no fold and no box. */
+		bare?: boolean
+		/** The footnote on the function names the app listed. */
+		foot?: boolean
+	}>(),
+	{ bare: false, foot: true },
+)
 
 const emit = defineEmits<{ copy: [address: string] }>()
 
@@ -67,12 +74,12 @@ const functions = (names: readonly string[]) => names.map((name) => sanitizeWire
 
 /** A column's glyph is the icon of the permission row it stands for. */
 const COLUMNS = [
-	["simulate", "play", (row: Row) => row.simulate.length > 0],
-	["add", "add", (row: Row) => row.add],
-	["transact", "check", (row: Row) => row.transact.length > 0],
-	["details", "info", (row: Row) => row.details],
-	["events", "mail-lock", (row: Row) => row.events],
-	["code", "code", (row: Row) => row.code],
+	["Simulate", "play", (row: Row) => row.simulate.length > 0],
+	["Add", "add", (row: Row) => row.add],
+	["Transact", "send", (row: Row) => row.transact.length > 0],
+	["Details", "search", (row: Row) => row.details],
+	["Events", "mail-lock", (row: Row) => row.events],
+	["Code", "code", (row: Row) => row.code],
 ] as const
 
 /** A row's target reads "{name}: {columns}", since the head is hidden from screen readers, and an
@@ -80,77 +87,94 @@ const COLUMNS = [
 const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 	const shown = shownAddress(entry.row.address)
 	const name = isNamed(entry) ? entry.row.name : entry.section === "classes" ? `Contract class ${shown}` : `Unknown contract ${shown}`
-	const columns = COLUMNS.filter(([, , has]) => has(entry.row)).map(([column]) => column)
+	const columns = COLUMNS.filter(([, , has]) => has(entry.row)).map(([column]) => column.toLowerCase())
 	return `${name}: ${columns.join(", ")}`
 }
 </script>
 
 <template>
-	<CapabilityDisclosure label="Details" :tag="label" testid="cap-detail-toggle">
-		<div :class="$style.table">
-			<div :class="[$style.grid, $style.head]" aria-hidden="true">
-				<span>Contract</span>
-				<Icon v-for="[column, glyph] in COLUMNS" :key="column" :name="glyph" :size="14" :class="$style.head_glyph" />
-				<span />
-			</div>
+	<component
+		:is="bare ? 'div' : CapabilityDisclosure"
+		v-bind="bare ? {} : { label: 'Details', tag: label, testid: 'cap-detail-toggle' }"
+	>
+		<div :class="$style.frame">
+			<div :class="$style.table">
+				<div :class="[$style.grid, $style.head]" aria-hidden="true">
+					<span>Contract</span>
+					<Icon v-for="[column, glyph] in COLUMNS" :key="column" :name="glyph" :size="14" :class="$style.head_glyph" />
+					<span />
+				</div>
 
-			<template v-for="entry in entries" :key="entry.key">
-				<div v-if="entry.kind === 'sub'" :class="$style.sub">{{ entry.text }}</div>
+				<template v-for="entry in entries" :key="entry.key">
+					<div v-if="entry.kind === 'sub'" :class="$style.sub">{{ entry.text }}</div>
 
-				<template v-else>
-					<div :class="[$style.grid, $style.row, opened.has(entry.key) && $style.open]" @click="toggle(entry.key)">
-						<RowTarget
-							:labelledby="`${uid}-${entry.key}`"
-							:aria-expanded="opened.has(entry.key)"
-							data-testid="cap-details-row"
-							:data-details-key="entry.key"
-						/>
-
-						<span :id="`${uid}-${entry.key}`" hidden>{{ spokenName(entry) }}</span>
-						<span v-if="isNamed(entry)" :class="$style.name">{{ entry.row.name }}</span>
-						<span v-else :class="$style.address">
-							<span :class="$style.address_text" data-testid="capability-address">{{ shownAddress(entry.row.address) }}</span>
-							<RowAction
-								label="Copy address"
-								tabindex="-1"
-								data-testid="cap-details-copy"
+					<template v-else>
+						<div :class="[$style.grid, $style.row, opened.has(entry.key) && $style.open]" @click="toggle(entry.key)">
+							<RowTarget
+								:labelledby="`${uid}-${entry.key}`"
+								:aria-expanded="opened.has(entry.key)"
+								data-testid="cap-details-row"
 								:data-details-key="entry.key"
-								:class="$style.copy"
-								@click="emit('copy', stripWireControl(entry.row.address ?? ''))"
-							>
-								<Icon name="copy" :size="12" :class="$style.copy_glyph" aria-hidden="true" />
-							</RowAction>
-						</span>
+							/>
 
-						<template v-for="[column, , has] in COLUMNS" :key="column">
-							<Icon v-if="has(entry.row)" name="check" :size="15" :class="$style.yes" aria-hidden="true" />
-							<span v-else :class="$style.no" aria-hidden="true" />
-						</template>
+							<span :id="`${uid}-${entry.key}`" hidden>{{ spokenName(entry) }}</span>
+							<span v-if="isNamed(entry)" :class="$style.name">{{ entry.row.name }}</span>
+							<span v-else :class="$style.address">
+								<span :class="$style.address_text" data-testid="capability-address">{{ shownAddress(entry.row.address) }}</span>
+								<RowAction
+									label="Copy address"
+									tabindex="-1"
+									data-testid="cap-details-copy"
+									:data-details-key="entry.key"
+									:class="$style.copy"
+									@click="emit('copy', stripWireControl(entry.row.address ?? ''))"
+								>
+									<Icon name="copy" :size="12" :class="$style.copy_glyph" aria-hidden="true" />
+								</RowAction>
+							</span>
 
-						<Icon name="chevron" :size="14" :class="$style.chevron" aria-hidden="true" />
-					</div>
+							<template v-for="[column, , has] in COLUMNS" :key="column">
+								<Icon v-if="has(entry.row)" name="check" :size="15" :class="$style.yes" aria-hidden="true" />
+								<span v-else :class="$style.no" aria-hidden="true" />
+							</template>
 
-					<div v-if="opened.has(entry.key)" data-testid="cap-details-fns" :class="$style.fns">
-						<div v-if="entry.row.simulate.length" :class="$style.fn">
-							<span :class="$style.fn_label">Simulate</span>
-							<span :class="$style.fn_names">{{ functions(entry.row.simulate) }}</span>
+							<Icon name="chevron" :size="14" :class="$style.chevron" aria-hidden="true" />
 						</div>
-						<div v-if="entry.row.transact.length" :class="$style.fn">
-							<span :class="$style.fn_label">Transact</span>
-							<span :class="$style.fn_names">{{ functions(entry.row.transact) }}</span>
+
+						<div v-if="opened.has(entry.key)" data-testid="cap-details-fns" :class="$style.fns">
+							<div v-if="entry.row.simulate.length" :class="$style.fn">
+								<span :class="$style.fn_label">Simulate</span>
+								<span :class="$style.fn_names">{{ functions(entry.row.simulate) }}</span>
+							</div>
+							<div v-if="entry.row.transact.length" :class="$style.fn">
+								<span :class="$style.fn_label">Transact</span>
+								<span :class="$style.fn_names">{{ functions(entry.row.transact) }}</span>
+							</div>
 						</div>
-					</div>
+					</template>
 				</template>
-			</template>
 
-			<div :class="$style.foot">
-				Function names come from the app. Anything it didn't list is refused instantly; you won't be asked.
+				<!-- Hidden from screen readers: it keys the head's glyphs, which are hidden too, and each row's
+				     target already speaks its columns' words. -->
+				<div data-testid="cap-details-legend" :class="$style.legend" aria-hidden="true">
+					<span v-for="[column, glyph] in COLUMNS" :key="column" :class="$style.legend_item">
+						<Icon :name="glyph" :size="12" />{{ column }}
+					</span>
+				</div>
+
+				<div v-if="foot" :class="$style.foot">
+					Function names come from the app. Anything it didn't list is refused instantly; you won't be asked.
+				</div>
 			</div>
 		</div>
-	</CapabilityDisclosure>
+	</component>
 </template>
 
 <style module>
+.frame {
+	container: details-table / inline-size;
+}
+
 .table {
 	display: flex;
 	flex-direction: column;
@@ -179,11 +203,28 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 	justify-self: center;
 }
 
-/* Below the popup's width a name, and the heading's "Contract", take their own line above the marks,
- * since the six mark columns leave it no room. The head and every row share one grid's columns, so
- * each mark stays under its glyph at the right, and a mark column shrinks to 15 px before the table
- * overflows. */
-@media (width < 359px) {
+/* 22 px mark tracks and 3 px gaps hold the marks and the chevron to 167 px, so the page's 312 px table
+ * keeps the head and each row on one line with 145 px for a name, more than "Sponsored fee payer", the
+ * wallet's longest, takes (131 px), and a longer name wraps inside its cell. */
+@container details-table (290px <= width < 330px) {
+	.grid {
+		grid-template-columns: minmax(0, 1fr) repeat(6, 22px) 14px;
+		column-gap: 3px;
+	}
+
+	.row {
+		padding-block: 4px;
+	}
+
+	.row > .name {
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+}
+
+/* Below 290 px, a margin over the 279 px a shortened address and its copy button (112 px) need beside
+ * those 167 px, names, addresses and the head's "Contract" take their own line over a shared subgrid. */
+@container details-table (width < 290px) {
 	.table {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) repeat(6, minmax(15px, 26px)) 14px;
@@ -328,6 +369,22 @@ const spokenName = (entry: { row: Row; section: SectionKey | "any" }) => {
 .fn_names {
 	overflow-wrap: anywhere;
 	color: var(--txt-tertiary);
+}
+
+.legend {
+	composes: type--caption from global;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+
+	padding-top: 8px;
+	color: var(--nulo-secondary);
+}
+
+.legend_item {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
 }
 
 .foot {

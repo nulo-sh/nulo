@@ -21,6 +21,7 @@ import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
 import type { AuthwitContent } from "@/wallet/services/execution/spec"
 import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { TASK_SERVICE_NAME, TaskStatus } from "@/wallet/services/task/spec"
@@ -32,7 +33,7 @@ import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
 import { GRANT_BLOCK_WAIT_MS } from "./grant-block"
 import { AuthRegistryService, MAX_TRACKED_AUTHWITS_PER_ACCOUNT } from "./service"
-import { type Authwit, authwitStatusRowId } from "./spec"
+import { type Authwit, authwitRowKey, authwitStatusRowId } from "./spec"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 /** One key for every profile; the conversion event stays inert. */
@@ -216,10 +217,18 @@ async function makeHarness(opts: { node?: unknown; grantNode?: unknown; activePr
 		chainId: 1,
 		l1ChainId: 1,
 		name: "N",
-		endpoints: [{ id: "e", rpcUrl: "http://n/1" }],
+		endpoints: [
+			{ id: "e", rpcUrl: "http://n/1" },
+			{ id: "e2", rpcUrl: "http://n/2" },
+		],
 		primaryEndpointId: "e",
 	}
+	// Where each transaction went out, by profile: every send here went through the primary unless a
+	// test records otherwise.
+	const journalOps: Array<{ profileId: string; progress: Record<string, unknown> }> = []
+	const recordedEndpointOf = vi.fn(async (_hash: string, _profileId: string): Promise<string | undefined> => "http://n/1")
 	const nodeForUrl = vi.fn(async (_url: string) => opts.node)
+	const nodeForNetwork = vi.fn(async (_network: unknown) => opts.node)
 	const grantNodeForUrl = vi.fn(async (_url: string) => opts.grantNode ?? receiptNode())
 	const services = new ServiceCollection()
 	const captureExecutionFence = vi.fn(async (): Promise<ExecutionFence> => {
@@ -238,7 +247,9 @@ async function makeHarness(opts: { node?: unknown; grantNode?: unknown; activePr
 	services.add(
 		svc(NETWORK_SERVICE_NAME, {
 			getNetwork,
-			// The node is resolved by the network's OWN endpoint, never the active profile's chain.
+			// Registry reads route over the network's OWN row and receipts stay on its pinned client,
+			// never the active profile's chain.
+			getNodeFor: nodeForNetwork,
 			getNodeForUrl: nodeForUrl,
 			getSingleAttemptNodeForUrl: grantNodeForUrl,
 			getNode: async () => {
@@ -256,7 +267,12 @@ async function makeHarness(opts: { node?: unknown; grantNode?: unknown; activePr
 	const estimateSendTransactionFee = vi.fn(async (..._args: unknown[]) => ({ maxFee: "1" }))
 	const cancelEstimate = vi.fn(async (_token: string) => {})
 	services.add(svc(EXECUTION_SERVICE_NAME, { executeSendTransaction, estimateSendTransactionFee, cancelEstimate }))
-	services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: txUpdated }))
+	services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: txUpdated, recordedEndpointOf }))
+	services.add(
+		svc(OPERATION_JOURNAL_SERVICE_NAME, {
+			getOperations: async (filter?: { profileId?: string }) => journalOps.filter((op) => op.profileId === filter?.profileId),
+		}),
+	)
 	const task = () => ({ complete() {}, completeIfTracked() {}, fail() {}, startSubtask: task })
 	services.add(svc(TASK_SERVICE_NAME, { startNewTask: task }))
 	const service = new AuthRegistryService(new LoggerStore(new ConfigStore()) as never, api)
@@ -268,7 +284,10 @@ async function makeHarness(opts: { node?: unknown; grantNode?: unknown; activePr
 		service,
 		txUpdated,
 		nodeForUrl,
+		nodeForNetwork,
 		grantNodeForUrl,
+		journalOps,
+		recordedEndpointOf,
 		captureExecutionFence,
 		getNetwork,
 		executeSendTransaction,
@@ -289,16 +308,17 @@ describe("AuthRegistryService sends run under the session the user acted in", ()
 		const h = await makeHarness()
 		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		h.executeSendTransaction.mockRejectedValue(new Error("stop after send"))
-		h.captureExecutionFence.mockClear()
-		h.getNetwork.mockClear()
-
-		await expect(h.service.revokeAuthwits("net-1", A, [1], FEE)).rejects.toThrow("stop after send")
-		await expect(h.service.setRegistryEnabled("net-1", A, false, FEE)).rejects.toThrow("stop after send")
-
-		const captures = h.captureExecutionFence.mock
-		for (const i of [0, 1]) {
-			expect(captures.invocationCallOrder[i]).toBeLessThan(h.getNetwork.mock.invocationCallOrder[i] as number)
-			expect(h.executeSendTransaction.mock.calls[i]?.[4]).toBe(await captures.results[i]?.value)
+		const operations = [
+			() => h.service.revokeAuthwits("net-1", A, [1], FEE),
+			() => h.service.setRegistryEnabled("net-1", A, false, FEE),
+		]
+		for (const operation of operations) {
+			h.captureExecutionFence.mockClear()
+			h.getNetwork.mockClear()
+			await expect(operation()).rejects.toThrow("stop after send")
+			const captures = h.captureExecutionFence.mock
+			expect(captures.invocationCallOrder[0]).toBeLessThan(h.getNetwork.mock.invocationCallOrder[0] as number)
+			expect(h.executeSendTransaction.mock.calls.at(-1)?.[4]).toBe(await captures.results[0]?.value)
 		}
 	})
 
@@ -341,7 +361,7 @@ describe("AuthRegistryService names a send's journal record to the caller that k
 		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
 		internals.transactionService.waitForTx = async () => {}
 		internals.nodeFor = async () => ({})
-		internals.waitForTxProven = async () => {}
+		internals.waitForTxCheckpointed = async () => {}
 		internals.verifyRevoked = async () => {}
 		internals.applyStatus = async () => {}
 		return { h, started }
@@ -554,18 +574,18 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		internals.transactionService.waitForTx = async (txHash: string) => {
 			log.push(`waitForTx:${txHash}`)
 		}
-		internals.nodeFor = async () => {
-			log.push("nodeFor")
+		internals.receiptNodeFor = async () => {
+			log.push("receiptNodeFor")
 			return {}
 		}
-		internals.singleAttemptNodeFor = async () => ({
+		internals.grantNodeFor = async () => ({
 			getTxReceipt: async (txHash: { toString: () => string }) => {
 				log.push(`receipt:${txHash.toString()}`)
 				return { status: AztecTxStatus.PROPOSED, blockNumber: 1 }
 			},
 		})
-		internals.waitForTxProven = async (_node: unknown, txHash: string) => {
-			log.push(`proven:${txHash}`)
+		internals.waitForTxCheckpointed = async (_node: unknown, txHash: string) => {
+			log.push(`checkpointed:${txHash}`)
 			return 2
 		}
 		internals.verifyRevoked = async (_network: unknown, _node: unknown, scope: unknown, rows: Authwit[], revokeBlock: number) => {
@@ -632,11 +652,18 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		expect(h.cancelEstimate).toHaveBeenCalledWith("tok-1")
 	})
 
-	test("a revoke settles in order: task, grant receipt, send under the captured fence, tx, proven, verify, complete", async () => {
+	test("a revoke settles in order: task, grant receipt, send under the captured fence, tx, checkpoint, verify, complete", async () => {
 		const h = await makeHarness()
 		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const log = instrument(h)
+		const tasks = (h.service as unknown as { taskService: { startNewTask: (content: unknown) => unknown } }).taskService
+		const started = vi.spyOn(tasks, "startNewTask")
 		await h.service.revokeAuthwits("net-1", A, [1], FEE)
+		// The task names each row by its whole identity, which the Authwits page matches its rows by.
+		expect(started.mock.calls[0]?.[0]).toMatchObject({
+			authwitIds: [1],
+			authwitKeys: [authwitRowKey({ id: 1, ...P1, hash: "0xh1", txHash: TX1 })],
+		})
 		const fence = JSON.stringify(await h.captureExecutionFence.mock.results.at(-1)?.value)
 		const request = {
 			kind: "send_transaction",
@@ -650,11 +677,40 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 			`receipt:${TX1}`,
 			`send:${JSON.stringify(request)}:${JSON.stringify({ type: OriginType.UI })}:undefined:${fence}`,
 			"waitForTx:0xtx",
-			"nodeFor",
-			"proven:0xtx",
+			"receiptNodeFor",
+			"checkpointed:0xtx",
 			`verify:${JSON.stringify(P1)}:1:2`,
 			"complete",
 		])
+	})
+
+	test("a revoke naming a row already gone sends the rest and names only them; naming none that is listed is refused", async () => {
+		const h = await makeHarness()
+		const hash1 = `0x${"c1".repeat(32)}`
+		const hash2 = `0x${"c2".repeat(32)}`
+		const tx2 = `0x${"02".repeat(32)}`
+		await h.service.recordPendingAuthwits(P1, [{ hash: hash1, content }], TX1, LIVE_EPOCH)
+		await h.service.recordPendingAuthwits(P1, [{ hash: hash2, content }], tx2, LIVE_EPOCH)
+		// The grant of #1 is dropped after a popup listed it.
+		await h.service.reconcileAuthwits(P1, TX1, "dropped")
+		instrument(h)
+		const tasks = (h.service as unknown as { taskService: { startNewTask: (content: unknown) => unknown } }).taskService
+		const started = vi.spyOn(tasks, "startNewTask")
+
+		await h.service.estimateRevokeFee("net-1", A, [1, 2], FEE)
+		await h.service.revokeAuthwits("net-1", A, [1, 2], FEE)
+		const actions = [{ kind: "call", contract: getAuthRegistryAddress().toString(), method: "set_authorized", args: [hash2, false] }]
+		expect(h.estimateSendTransactionFee.mock.calls[0]?.[0]).toMatchObject({ actions })
+		expect(h.executeSendTransaction.mock.calls[0]?.[0]).toMatchObject({ actions })
+		expect(started.mock.calls[0]?.[0]).toMatchObject({
+			authwitIds: [2],
+			authwitKeys: [authwitRowKey({ id: 2, ...P1, hash: hash2, txHash: tx2 })],
+		})
+
+		await expect(h.service.revokeAuthwits("net-1", A, [1], FEE)).rejects.toThrow(/^Authwit #1 doesn't exist$/)
+		await expect(h.service.estimateRevokeFee("net-1", A, [1, 99], FEE)).rejects.toThrow(/^Authwit #1, #99 doesn't exist$/)
+		expect(h.executeSendTransaction).toHaveBeenCalledTimes(1)
+		expect(h.estimateSendTransactionFee).toHaveBeenCalledTimes(1)
 	})
 
 	test("a registry toggle settles in the same order with its own action and sync", async () => {
@@ -673,8 +729,8 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 			"task:StepContent",
 			`send:${JSON.stringify(request)}:${JSON.stringify({ type: OriginType.UI })}:undefined:${fence}`,
 			"waitForTx:0xtx",
-			"nodeFor",
-			"proven:0xtx",
+			"receiptNodeFor",
+			"checkpointed:0xtx",
 			`applyStatus:${JSON.stringify(P1)}`,
 			"complete",
 		])
@@ -689,7 +745,7 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
 		internals.taskService = tasks
 		internals.transactionService.waitForTx = async () => {}
-		internals.waitForTxProven = async () => {
+		internals.waitForTxCheckpointed = async () => {
 			if (switches) switchToProfile("p2")
 		}
 		const util = await import("@/wallet/utils/auth-registry")
@@ -723,14 +779,14 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 		vi.restoreAllMocks()
 	})
 
-	/** P1's `pending` row #1, granted in TX1, revoked in a transaction proven in `REVOKE_BLOCK`; every
+	/** P1's `pending` row #1, granted in TX1, revoked in a transaction checkpointed in `REVOKE_BLOCK`; every
 	 *  hash reads unauthorized unless the test says otherwise. */
 	async function revoking(grantNode: unknown = receiptNode(AztecTxStatus.PROPOSED, REVOKE_BLOCK)) {
 		const h = await makeHarness({ node: {}, grantNode })
 		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
 		internals.transactionService.waitForTx = async () => {}
-		internals.waitForTxProven = async () => REVOKE_BLOCK
+		internals.waitForTxCheckpointed = async () => REVOKE_BLOCK
 		const util = await import("@/wallet/utils/auth-registry")
 		const consumable = vi.spyOn(util, "isAuthwitConsumable").mockResolvedValue(false)
 		const revoke = () => h.service.revokeAuthwits("net-1", A, [1], FEE)
@@ -829,6 +885,20 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 		expect(await hashes()).toEqual([])
 	})
 
+	test("a revoke's verify and a toggle's status read the endpoint its checkpoint wait read, never the route", async () => {
+		const { h, consumable, revoke } = await revoking()
+		await h.service.reconcileAuthwits(P1, TX1, "mined")
+		const recorded = { endpoint: "recorded" }
+		h.nodeForUrl.mockResolvedValue(recorded)
+		h.nodeForNetwork.mockResolvedValue({ endpoint: "route" })
+		await revoke()
+		expect(consumable.mock.calls.map(([node]) => node)).toEqual([recorded])
+		const util = await import("@/wallet/utils/auth-registry")
+		const enabled = vi.spyOn(util, "isAuthRegistryEnabled").mockResolvedValue(false)
+		await h.service.setRegistryEnabled("net-1", A, false, FEE)
+		expect(enabled.mock.calls.map(([node]) => node)).toEqual([recorded])
+	})
+
 	test.each([
 		["a block above the revoke's", { status: AztecTxStatus.PROPOSED, blockNumber: REVOKE_BLOCK + 1 }],
 		["dropped", { status: AztecTxStatus.DROPPED }],
@@ -867,7 +937,7 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 		const { h, internals, revoke, hashes } = await revoking()
 		const { tasks, switchToProfile } = await startedTaskService("p1")
 		internals.taskService = tasks
-		internals.waitForTxProven = async () => {
+		internals.waitForTxCheckpointed = async () => {
 			if (switches) switchToProfile("p2")
 			return REVOKE_BLOCK
 		}
@@ -875,6 +945,184 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 		expect(await hashes()).toEqual([])
 		expect((await tasks.getTasks()).map((task) => task.status)).toEqual(switches ? [] : [TaskStatus.Completed])
 		expect(h.executeSendTransaction).toHaveBeenCalledOnce()
+	})
+})
+
+describe("AuthRegistryService reads each receipt on the endpoint its transaction went out through", () => {
+	const FEE = { paymentMethod: { kind: "fj" } } as never
+	const NOT_IN_BLOCK = "Authwit #1's grant is not in a block yet. Revoke it again later."
+
+	async function pendingGrant() {
+		const h = await makeHarness({ node: {}, grantNode: receiptNode(AztecTxStatus.PROPOSED, 1) })
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
+		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
+		internals.transactionService.waitForTx = async () => {}
+		internals.waitForTxCheckpointed = async () => 1
+		const util = await import("@/wallet/utils/auth-registry")
+		vi.spyOn(util, "isAuthwitConsumable").mockResolvedValue(false)
+		return h
+	}
+
+	afterEach(() => vi.restoreAllMocks())
+
+	test("a grant's receipt goes to its journal row's endpoint, else its activity row's, asked in its own profile", async () => {
+		const h = await pendingGrant()
+		h.journalOps.push(
+			{ profileId: "p1", progress: { stage: "failed", from: "submitting", txHash: TX1, submittedEndpointUrl: "http://n/2" } },
+			{ profileId: "p2", progress: { stage: "submitting", txHash: TX1, submittedEndpointUrl: "http://n/1" } },
+		)
+		await h.service.revokeAuthwits("net-1", A, [1], FEE)
+		expect(new Set(h.grantNodeForUrl.mock.calls.map(([url]) => url))).toEqual(new Set(["http://n/2"]))
+		expect(h.recordedEndpointOf).not.toHaveBeenCalledWith(TX1, expect.anything())
+
+		const unjournaled = await pendingGrant()
+		unjournaled.recordedEndpointOf.mockResolvedValue("http://n/2")
+		await unjournaled.service.revokeAuthwits("net-1", A, [1], FEE)
+		expect(unjournaled.recordedEndpointOf).toHaveBeenCalledWith(TX1, "p1")
+		expect(new Set(unjournaled.grantNodeForUrl.mock.calls.map(([url]) => url))).toEqual(new Set(["http://n/2"]))
+	})
+
+	test.each([
+		["no recorded endpoint", undefined],
+		["an endpoint the network no longer lists", "http://gone"],
+	])("a grant whose transaction has %s is refused before any send, asking no endpoint", async (_name, url) => {
+		const h = await pendingGrant()
+		h.recordedEndpointOf.mockResolvedValue(url)
+		await expect(h.service.revokeAuthwits("net-1", A, [1], FEE)).rejects.toThrow(NOT_IN_BLOCK)
+		expect(h.grantNodeForUrl).not.toHaveBeenCalled()
+		expect(h.executeSendTransaction).not.toHaveBeenCalled()
+	})
+
+	test("the revoke's and the toggle's own receipts go to the endpoint each went out through, or fail closed", async () => {
+		const h = await makeHarness({ node: {} })
+		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
+		internals.transactionService.waitForTx = async () => {}
+		const waited: unknown[] = []
+		internals.waitForTxCheckpointed = async (node: unknown) => {
+			waited.push(node)
+			return 1
+		}
+		internals.applyStatus = async () => {}
+		h.recordedEndpointOf.mockImplementation(async (hash) => (hash === "0xtx" ? "http://n/2" : undefined))
+		await h.service.setRegistryEnabled("net-1", A, false, FEE)
+		expect(h.nodeForUrl.mock.calls.map(([url]) => url)).toEqual(["http://n/2"])
+		expect(waited).toHaveLength(1)
+
+		h.recordedEndpointOf.mockResolvedValue(undefined)
+		await expect(h.service.setRegistryEnabled("net-1", A, false, FEE)).rejects.toThrow(/no recorded endpoint/)
+		expect(h.nodeForUrl).toHaveBeenCalledOnce()
+		expect(waited).toHaveLength(1)
+	})
+
+	test.each([
+		{ label: "an endpoint the network gained after the toggle read its row is read", owner: "p1", read: true },
+		{ label: "control: the same URL on a row another profile owns is refused", owner: "p2", read: false },
+	])("$label", async ({ owner, read }) => {
+		const h = await makeHarness({ node: {} })
+		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
+		internals.transactionService.waitForTx = async () => {}
+		internals.waitForTxCheckpointed = async () => 1
+		internals.applyStatus = async () => {}
+		const captured = await h.getNetwork()
+		const added = [...captured.endpoints, { id: "e3", rpcUrl: "http://n/3" }]
+		h.getNetwork.mockResolvedValueOnce(captured).mockResolvedValue({ ...captured, profileId: owner, endpoints: added })
+		h.recordedEndpointOf.mockResolvedValue("http://n/3")
+		const toggle = h.service.setRegistryEnabled("net-1", A, false, FEE)
+		if (read) {
+			await toggle
+			expect(h.nodeForUrl.mock.calls.map(([url]) => url)).toEqual(["http://n/3"])
+		} else {
+			await expect(toggle).rejects.toThrow(/no recorded endpoint/)
+			expect(h.nodeForUrl).not.toHaveBeenCalled()
+		}
+	})
+})
+
+describe("AuthRegistryService revoke and registry toggle report once their block is checkpointed", () => {
+	const FEE = { paymentMethod: { kind: "fj" } } as never
+	type Harness = Awaited<ReturnType<typeof makeHarness>>
+	const REVOKE_TX = `0x${"05".repeat(32)}`
+	afterEach(() => {
+		vi.useRealTimers()
+		vi.restoreAllMocks()
+	})
+
+	/** A node whose receipt names block 5 and whose proven tip stays at 1, as while the block's epoch is
+	 *  open; its checkpointed tip reads each of `checkpointed` in turn, then the last one from then on. */
+	function chainAt(...checkpointed: number[]) {
+		const tips = [...checkpointed]
+		return {
+			getTxReceipt: vi.fn(async () => ({ status: AztecTxStatus.PROPOSED, blockNumber: 5 })),
+			getChainTips: vi.fn(async () => ({
+				proposed: { number: 5 },
+				checkpointed: { block: { number: tips.length > 1 ? tips.shift() : tips[0] } },
+				proven: { block: { number: 1 } },
+				finalized: { block: { number: 1 } },
+			})),
+		}
+	}
+
+	/** P1's confirmed row #1 and its switch, read through `node`, which reads every hash unauthorized and
+	 *  the registry disabled. */
+	async function over(node: ReturnType<typeof chainAt>) {
+		vi.useFakeTimers({ toFake: ["setTimeout", "Date"] })
+		const h = await makeHarness({ node })
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
+		await h.service.reconcileAuthwits(P1, TX1, "mined")
+		h.executeSendTransaction.mockResolvedValue(REVOKE_TX)
+		const internals = h.service as unknown as { transactionService: Record<string, unknown> }
+		internals.transactionService.waitForTx = async () => {}
+		const util = await import("@/wallet/utils/auth-registry")
+		const reads = [
+			vi.spyOn(util, "isAuthwitConsumable").mockResolvedValue(false),
+			vi.spyOn(util, "isAuthRegistryEnabled").mockResolvedValue(false),
+		]
+		return { h, reads }
+	}
+
+	const SENDS = [
+		{
+			name: "a revoke",
+			send: (h: Harness) => h.service.revokeAuthwits("net-1", A, [1], FEE),
+			landed: async (h: Harness) => (await rowsOf(h.service)).length === 0,
+		},
+		{
+			name: "a switch",
+			send: (h: Harness) => h.service.setRegistryEnabled("net-1", A, false, FEE),
+			landed: async (h: Harness) => !(await h.service.getRegistryEnabled(1, A)),
+		},
+	]
+
+	test.each(SENDS)("$name resolves once the checkpointed tip reaches its block, with the proven tip behind", async ({ send, landed }) => {
+		const node = chainAt(4, 4, 5)
+		const { h, reads } = await over(node)
+		let settled = false
+		const run = send(h)
+		const settle = () => {
+			settled = true
+		}
+		void run.then(settle, settle)
+		// The rows open through real WebCrypto, which no fake timer advances.
+		await vi.waitFor(() => expect(node.getChainTips).toHaveBeenCalledTimes(1))
+		await vi.advanceTimersByTimeAsync(1_000)
+		expect(node.getChainTips).toHaveBeenCalledTimes(2)
+		expect(settled).toBe(false)
+		for (const read of reads) expect(read).not.toHaveBeenCalled()
+		await vi.advanceTimersByTimeAsync(1_000)
+		await vi.waitFor(() => expect(settled).toBe(true))
+		await run
+		expect(await landed(h)).toBe(true)
+	})
+
+	test.each(SENDS)("control: $name whose block is never checkpointed fails after 120 s and changes nothing", async ({ send, landed }) => {
+		const node = chainAt(4)
+		const { h, reads } = await over(node)
+		const outcome = expect(send(h)).rejects.toThrow("(block 5) not checkpointed within 120000ms")
+		await vi.waitFor(() => expect(node.getChainTips).toHaveBeenCalledTimes(1))
+		await vi.advanceTimersByTimeAsync(120_000)
+		await outcome
+		expect(await landed(h)).toBe(false)
+		for (const read of reads) expect(read).not.toHaveBeenCalled()
 	})
 })
 
@@ -950,11 +1198,34 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 
 		await h.service.syncRegistry("net-1", A)
 
-		expect(h.nodeForUrl).toHaveBeenCalledWith("http://n/1")
+		expect(h.nodeForNetwork).toHaveBeenCalledWith(expect.objectContaining({ id: "net-1" }))
+		expect(h.nodeForUrl).not.toHaveBeenCalled()
 		expect((await h.service.getAuthwits(1, A)).map((r) => r.hash)).toEqual(["0xpending"])
 		expect((await h.service.getAuthwits(2, A)).map((r) => r.hash)).toEqual(["0xother-chain"])
 		h.setActive({ id: "p2" })
 		expect((await h.service.getAuthwits(1, A)).map((r) => r.hash)).toEqual(["0xother-profile"])
+		vi.restoreAllMocks()
+	})
+
+	test.each([
+		{ label: "two endpoints: kept while the endpoint its grant went out through reads it consumable", endpoints: 2, kept: true },
+		{ label: "one endpoint (control): deleted, with nothing else asked", endpoints: 1, kept: false },
+	])("a confirmed row the route reads unauthorized, on $label", async ({ endpoints, kept }) => {
+		const node = {}
+		const grantNode = {}
+		const h = await makeHarness({ node, grantNode })
+		const row = await h.getNetwork()
+		h.getNetwork.mockResolvedValue({ ...row, endpoints: row.endpoints.slice(0, endpoints) })
+		const util = await import("@/wallet/utils/auth-registry")
+		vi.spyOn(util, "isAuthwitConsumable").mockImplementation(async (read) => read === grantNode)
+		vi.spyOn(util, "isAuthRegistryEnabled").mockResolvedValue(true)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xconfirmed", content }], "0xtxa", LIVE_EPOCH)
+		await h.service.reconcileAuthwits(P1, "0xtxa", "mined")
+
+		await h.service.syncRegistry("net-1", A)
+
+		expect((await h.service.getAuthwits(1, A)).map((r) => r.hash)).toEqual(kept ? ["0xconfirmed"] : [])
+		expect(h.grantNodeForUrl.mock.calls).toEqual(kept ? [["http://n/1"]] : [])
 		vi.restoreAllMocks()
 	})
 
@@ -964,7 +1235,10 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		const util = await import("@/wallet/utils/auth-registry")
 		let release!: () => void
 		const parked = new Promise<void>((r) => (release = r))
+		let reached!: () => void
+		const reading = new Promise<void>((r) => (reached = r))
 		vi.spyOn(util, "isAuthwitConsumable").mockImplementation(async () => {
+			reached()
 			await parked
 			return false
 		})
@@ -975,7 +1249,7 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		const [row] = await h.service.getAuthwits(1, A)
 
 		const sync = h.service.syncRegistry("net-1", A)
-		await new Promise((r) => setTimeout(r, 5))
+		await reading
 		// Purge + restore during the await: the numeric id now holds a p2 row.
 		await h.service.purgeForProfile("p1")
 		await h.api.storage.local.set({
@@ -987,6 +1261,134 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		h.setActive({ id: "p2" })
 		expect((await h.service.getAuthwits(1, A)).map((r) => r.hash)).toEqual(["0xforeign"])
 		vi.restoreAllMocks()
+	})
+})
+
+describe("AuthRegistryService.syncRegistry — the check the Authwits page runs when it opens", () => {
+	const hex = (byte: string) => `0x${byte.repeat(32)}`
+	const ACCOUNT = hex("ab")
+	const SCOPE = { profileId: "p1", chainId: 1, account: ACCOUNT }
+	afterEach(() => vi.restoreAllMocks())
+
+	/** One endpoint, so a row's verdict is its one read; `hashes` become confirmed rows, ids in order. */
+	async function checking(hashes: string[]) {
+		const h = await makeHarness({ node: {} })
+		const row = await h.getNetwork()
+		h.getNetwork.mockResolvedValue({ ...row, endpoints: row.endpoints.slice(0, 1) })
+		const grant = hex("0f")
+		if (hashes.length) {
+			await h.service.recordPendingAuthwits(
+				SCOPE,
+				hashes.map((hash) => ({ hash, content })),
+				grant,
+				LIVE_EPOCH,
+			)
+			await h.service.reconcileAuthwits(SCOPE, grant, "mined")
+		}
+		const util = await import("@/wallet/utils/auth-registry")
+		const consumable = vi.spyOn(util, "isAuthwitConsumable").mockResolvedValue(true)
+		const enabled = vi.spyOn(util, "isAuthRegistryEnabled").mockResolvedValue(true)
+		const events: string[] = []
+		h.service.onAuthwitDeleted.add((a) => void events.push(`deleted:${a.hash}`))
+		h.service.onRegistryEnabled.add((scope) => void events.push(`enabled:${scope.account}`))
+		h.service.onRegistryDisabled.add((scope) => void events.push(`disabled:${scope.account}`))
+		const check = (account = ACCOUNT) => h.service.syncRegistry("net-1", account)
+		const hashesLeft = async () => (await rowsOf(h.service, SCOPE)).map((r) => r.hash)
+		return { h, consumable, enabled, events, check, hashesLeft }
+	}
+
+	test("the chain's switch replaces a stored flag that disagrees, each way, and an agreeing one emits nothing", async () => {
+		const { h, enabled, events, check } = await checking([])
+		enabled.mockResolvedValue(false)
+		await check()
+		expect(await h.service.getRegistryEnabled(1, ACCOUNT)).toBe(false)
+		await check()
+		expect(events).toEqual([`disabled:${ACCOUNT}`])
+
+		enabled.mockResolvedValue(true)
+		await check()
+		await check()
+		expect(await h.service.getRegistryEnabled(1, ACCOUNT)).toBe(true)
+		expect(events).toEqual([`disabled:${ACCOUNT}`, `enabled:${ACCOUNT}`])
+	})
+
+	test("a consumed grant and one revoked elsewhere leave; a live one stays, and a pending one is never read", async () => {
+		const [consumed, revokedElsewhere, live, pending] = [hex("c1"), hex("c2"), hex("c3"), hex("c4")]
+		const { h, consumable, events, check, hashesLeft } = await checking([consumed, revokedElsewhere, live])
+		await h.service.recordPendingAuthwits(SCOPE, [{ hash: pending, content }], hex("0e"), LIVE_EPOCH)
+		consumable.mockImplementation(async (_node, _account, hash) => hash === live)
+
+		await check()
+
+		expect(await hashesLeft()).toEqual([live, pending])
+		expect(events.sort()).toEqual([`deleted:${consumed}`, `deleted:${revokedElsewhere}`])
+		expect(consumable.mock.calls.map((call) => call[2]).sort()).toEqual([consumed, revokedElsewhere, live])
+	})
+
+	test("a failed read changes nothing it read: all failing keep every row and the flag", async () => {
+		const { h, consumable, enabled, events, check, hashesLeft } = await checking([hex("c1"), hex("c2")])
+		consumable.mockRejectedValue(new Error("node down"))
+		enabled.mockRejectedValue(new Error("node down"))
+
+		await expect(check()).rejects.toThrow("node down")
+
+		expect(await hashesLeft()).toEqual([hex("c1"), hex("c2")])
+		expect(await h.service.getRegistryEnabled(1, ACCOUNT)).toBe(true)
+		expect(events).toEqual([])
+	})
+
+	test("one failed read keeps its row, and the other's prune lands before the call rejects", async () => {
+		const [failing, consumed] = [hex("c1"), hex("c2")]
+		const { consumable, events, check, hashesLeft } = await checking([failing, consumed])
+		consumable.mockImplementation(async (_node, _account, hash) => {
+			if (hash === failing) throw new Error("node down")
+			await new Promise((r) => setTimeout(r, 5))
+			return false
+		})
+
+		await expect(check()).rejects.toThrow("node down")
+
+		expect(events).toEqual([`deleted:${consumed}`])
+		expect(await hashesLeft()).toEqual([failing])
+	})
+
+	test("one check per scope at a time: a call while one runs joins it, a later one reads again, another account runs its own", async () => {
+		const other = hex("cd")
+		const { h, consumable, enabled, check } = await checking([hex("c1")])
+		let release!: () => void
+		const held = new Promise<void>((r) => (release = r))
+		consumable.mockImplementation(async () => {
+			await held
+			return true
+		})
+
+		const first = check()
+		const joined = check()
+		const otherAccount = check(other)
+		await vi.waitFor(() => expect(enabled).toHaveBeenCalledTimes(2))
+		release()
+		await Promise.all([first, joined, otherAccount])
+		expect(consumable).toHaveBeenCalledTimes(1)
+		expect(enabled.mock.calls.map((call) => call[1]).sort()).toEqual([ACCOUNT, other].sort())
+
+		await check()
+		expect(consumable).toHaveBeenCalledTimes(2)
+		expect(enabled).toHaveBeenCalledTimes(3)
+		expect(h.nodeForNetwork).toHaveBeenCalledTimes(3)
+	})
+
+	test("reads at most MAX_TRACKED_AUTHWITS_PER_ACCOUNT confirmed rows, the lowest ids, plus the switch", async () => {
+		// Only a restored backup holds more: restore keeps every grant it carries.
+		const hashes = Array.from(
+			{ length: MAX_TRACKED_AUTHWITS_PER_ACCOUNT + 44 },
+			(_, i) => `0x${(i + 1).toString(16).padStart(64, "0")}`,
+		)
+		const { consumable, enabled, check } = await checking(hashes)
+
+		await check()
+
+		expect(consumable.mock.calls.map((call) => call[2]).sort()).toEqual(hashes.slice(0, MAX_TRACKED_AUTHWITS_PER_ACCOUNT).sort())
+		expect(enabled).toHaveBeenCalledTimes(1)
 	})
 })
 

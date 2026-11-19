@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { useProfileNameField } from "@/composables/useProfileNameField"
-import { availableName, defaultProfileName, normalizeProfileName } from "./profile-name"
+import { availableName, defaultProfileName, normalizeProfileName, profileNameTaken } from "./profile-name"
 
 describe("defaultProfileName", () => {
 	test.each([
@@ -67,5 +67,21 @@ describe("normalizeProfileName", () => {
 		field.profileName.value = "Main 1"
 		expect(field.validate({ existingNames: ["Main 1 "] })).toBe(false)
 		expect(field.validate({ existingNames: ["Main 2 "] })).toBe(true)
+	})
+})
+
+describe("profileNameTaken", () => {
+	test.each([
+		["the same name", "Main", true],
+		["another case", "MAIN", true],
+		["outer spaces", "  main ", true],
+		["an NFKC variant", "\uFF2Dain", true],
+		["a different name", "Mainly", false],
+	])("%s against [Main, Work] is taken: %s", (_case, candidate, taken) => {
+		expect(profileNameTaken(candidate, ["Main", "Work"])).toBe(taken)
+	})
+
+	test("nothing is taken in an empty list", () => {
+		expect(profileNameTaken("Main", [])).toBe(false)
 	})
 })

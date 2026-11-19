@@ -4,7 +4,7 @@
 	"main": "src/worker.ts",
 	"compatibility_date": "2026-09-01",
 	"account_id": "0f1688fc6a4b6acf3fa55cf71e1bed26",
-	// The two hosts are Custom Domains attached in the dashboard (the build token has no zone
+	// The two hosts are Custom Domains attached outside this file (the build token has no zone
 	// permission). No workers.dev origin and no preview URL: a preview version sees the secrets.
 	"workers_dev": false,
 	"preview_urls": false,

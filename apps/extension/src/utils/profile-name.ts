@@ -22,8 +22,14 @@ export function defaultProfileName(existing: readonly string[]): string {
 	return `Profile ${n}`
 }
 
-/** The name field's own limit, which an automatic name must meet too. */
-const NAME_MAX_LENGTH = 32
+/** The profile name field's length limit, which an automatic or restored name meets too. */
+export const PROFILE_NAME_MAX = 32
+
+/** Whether `candidate` collides with a name in `existing` under `normalizeProfileName`. */
+export function profileNameTaken(candidate: string, existing: readonly string[]): boolean {
+	const normalized = normalizeProfileName(candidate)
+	return existing.some((name) => normalizeProfileName(name) === normalized)
+}
 
 /**
  * The name a profile restored as `base` takes beside `existing`, as the restore names it: `base`
@@ -37,7 +43,7 @@ export function availableName(base: string, existing: readonly string[]): string
 	for (let n = 1; ; n++) {
 		const suffix = ` ${n}`
 		const head = Array.from(base)
-		while (head.join("").length + suffix.length > NAME_MAX_LENGTH) head.pop()
+		while (head.join("").length + suffix.length > PROFILE_NAME_MAX) head.pop()
 		const candidate = `${head.join("").trimEnd()}${suffix}`
 		if (!taken.has(normalizeProfileName(candidate))) return candidate
 	}

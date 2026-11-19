@@ -20,12 +20,14 @@ vi.mock("./opfs-store", async (importOriginal) => ({
 
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { PxeService, type IProfileReader } from "./service"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 const KEY_B64 = btoa(String.fromCharCode(...new Uint8Array(32)))
 
 function makeSweepService(profiles: IProfileReader): PxeService {
 	const service = new PxeService(profiles, noopLogger, {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async () => {
 			throw new Error("unused")
 		},

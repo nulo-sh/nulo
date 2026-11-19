@@ -30,18 +30,22 @@ export async function downloadEncryptedBackup(page: Page, press: Press = clickBy
  *  characters, typed twice. */
 export const FILE_PASSWORD = "FilePassword123!"
 
-/** A passkey profile's ready backup, protected with a file password of its own and downloaded: the
- *  file holds the recovery phrase, so it never leaves the page unencrypted. Returns the file's text. */
+/** A passkey profile's backup from its file password step: the pair typed first, Create asks the
+ *  passkey and seals the file under that pair, then Download saves it. The file holds the recovery
+ *  phrase, so it never leaves the page unencrypted. `readyMs` bounds the sealed file's arrival.
+ *  Returns the file's text. */
 export async function downloadPasskeyBackup(
 	page: Page,
 	filePassword = FILE_PASSWORD,
 	press: Press = clickByTestId,
 	readyMs = 180_000,
 ): Promise<string> {
-	await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: readyMs })
+	await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 15_000 })
 	await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', filePassword)
 	await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', filePassword)
-	await page.waitForFunction(enabled, { timeout: 10_000, polling: 250 }, "download-backup-btn")
+	await page.waitForFunction(enabled, { timeout: 10_000, polling: 250 }, "create-protected-backup-btn")
+	await press(page, "create-protected-backup-btn")
+	await page.waitForFunction(enabled, { timeout: readyMs, polling: 250 }, "download-backup-btn")
 	await armDownloadCapture(page, { gzip: true, withinMs: SEAL_AND_SAVE_MS })
 	await press(page, "download-backup-btn")
 	return await readCapturedDownload(page)

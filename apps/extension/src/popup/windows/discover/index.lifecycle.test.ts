@@ -40,6 +40,10 @@ vi.mock("@/wallet/services/dapp-interaction/client", async () =>
 		resolveInteraction: resolveInteractionMock,
 	})),
 )
+vi.mock("@/wallet/services/dapp-session/client", async () =>
+	(await import("../../../../tests/helpers/approval-window-harness")).sessionClientModule(() => ({ setEverySite: vi.fn() })),
+)
+vi.mock("@/composables/useConfirm", () => ({ useConfirm: () => ({ askConfirm: vi.fn(async () => false) }) }))
 vi.mock("@/stores/app.store", async () => (await import("../../../../tests/helpers/approval-window-harness")).appStoreModule)
 vi.mock("vue-router", async (importOriginal) => ({
 	...(await importOriginal<typeof import("vue-router")>()),
@@ -101,10 +105,10 @@ const factory = () => mount(Discover, { global: { stubs: STUBS } })
 type DiscoverVm = { reject: (end: "reject") => Promise<void>; closeWindow: (interactionCompleted?: boolean) => void }
 
 describe("discover window — shell lifecycle frozen oracle", () => {
-	test("A1: onMounted eager-connects exactly profile → interaction, in order", async () => {
+	test("A1: onMounted eager-connects exactly profile → interaction → session, in order", async () => {
 		w = factory()
 		await flushPromises()
-		expect(callLog.filter((c) => c.endsWith(".connect"))).toEqual(["profile.connect", "interaction.connect"])
+		expect(callLog.filter((c) => c.endsWith(".connect"))).toEqual(["profile.connect", "interaction.connect", "session.connect"])
 	})
 
 	test("A2: session gate — init and beforeunload wait for isSessionChecked, then the delayed path completes", async () => {
@@ -151,13 +155,13 @@ describe("discover window — shell lifecycle frozen oracle", () => {
 		expect(beforeunloadAdds()).toBe(1)
 	})
 
-	test("A5: unmount disconnect ORDER verbatim — profile, interaction, listener removal LAST", async () => {
+	test("A5: unmount disconnect ORDER verbatim — profile, interaction, session, listener removal LAST", async () => {
 		w = factory()
 		await completeInit()
 		callLog.length = 0
 		w.unmount()
 		w = undefined
-		expect(callLog).toEqual(["profile.disconnect", "interaction.disconnect", "removeEventListener:beforeunload"])
+		expect(callLog).toEqual(["profile.disconnect", "interaction.disconnect", "session.disconnect", "removeEventListener:beforeunload"])
 	})
 
 	test("A6: overlay @dismiss wires to closeWindow() with NO arg — listener stays attached", async () => {

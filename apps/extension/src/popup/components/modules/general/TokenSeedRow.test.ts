@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
+import { TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
 import TokenSeedRow from "./TokenSeedRow.vue"
 
 const STUBS = { Flex: { template: "<div><slot /></div>" } }
@@ -16,7 +17,8 @@ describe("TokenSeedRow", () => {
 			expect(row.attributes("aria-busy")).toBe("true")
 			expect(w.text()).toContain("cUSDC")
 			expect(w.text()).toContain("Clean USDC")
-			expect(w.findAll('[aria-hidden="true"]')).toHaveLength(2)
+			// The mark and the two skeleton bars.
+			expect(w.findAll('[aria-hidden="true"]')).toHaveLength(3)
 			expect(w.find("button").exists()).toBe(false)
 		}
 	})
@@ -42,6 +44,34 @@ describe("TokenSeedRow", () => {
 			expect(w.find("a").exists()).toBe(false)
 			expect(w.html()).not.toContain("href")
 		}
+	})
+
+	test("leads with the list's picture at 32 px, or its initials when the list gives none, working or stopped", () => {
+		for (const status of ["pending", "failed", "rejected"]) {
+			const pictured = mount(TokenSeedRow, { props: { entry: entry(status), icon: TEST_ICONS.USDC }, global: { stubs: STUBS } })
+			const mark = pictured.get('[data-testid="token-mark"]')
+			expect(mark.attributes()).toMatchObject({ "data-kind": "logo", "aria-hidden": "true" })
+			expect(mark.attributes("style")).toContain("width: 32px")
+			expect(mark.get("img").attributes("src")).toBe(TEST_ICONS.USDC)
+			const bare = mountRow(status).get('[data-testid="token-mark"]')
+			expect([bare.attributes("data-kind"), bare.text()]).toEqual(["initials", "CU"])
+		}
+	})
+
+	test("stopped, its picture dims with its symbol and its reason and RETRY stay at full strength; working, nothing dims", () => {
+		const DIMMED = (TokenSeedRow as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style.dimmed
+		const dims = (status: string) => {
+			const w = mount(TokenSeedRow, { props: { entry: entry(status), icon: TEST_ICONS.USDC }, global: { stubs: STUBS } })
+			const dimmed = (testid: string) => {
+				const el = w.find(`[data-testid="${testid}"]`)
+				return el.exists() ? el.classes().includes(DIMMED) : null
+			}
+			const symbol = w.findAll("span").find((s) => s.text() === "cUSDC")
+			return [dimmed("token-mark"), symbol?.classes().includes(DIMMED), dimmed("token-seed-reason"), dimmed("token-seed-retry")]
+		}
+		expect(dims("failed")).toEqual([true, true, false, false])
+		expect(dims("rejected")).toEqual([true, true, false, null])
+		for (const status of ["pending", "seeding", "seeded"]) expect([status, ...dims(status)]).toEqual([status, false, false, null, null])
 	})
 
 	test("renders its strings as text, never as markup", () => {

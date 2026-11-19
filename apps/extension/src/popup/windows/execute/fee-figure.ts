@@ -11,7 +11,7 @@ function setsOwnFee(op: DraftUIOperation): boolean {
 }
 
 /** An app's own payment that claims Fee Juice to the account, which then pays the fee itself. */
-function claimsToAccount(op: DraftUIOperation): boolean {
+export function claimsToAccount(op: DraftUIOperation): boolean {
 	if (op.kind === "send_transaction") return op.fee?.embeddedFeePayment === "fjwc"
 	return op.kind === "aztec_sendTx" && classifyFeePayer(op.exec?.feePayer, op.opts?.from, op.exec?.calls) === "fjwc"
 }
@@ -20,6 +20,13 @@ function claimsToAccount(op: DraftUIOperation): boolean {
  *  Juice. */
 export function paysFromPrivateFeeJuice(op: DraftUIOperation): boolean {
 	return op.kind === "aztec_sendTx" && isPrivateFpc(op.exec?.feePayer)
+}
+
+/** The contract an app's own payment names to pay its fee; none when the account pays, with or
+ *  without a claim, when no payer is named, or for `send_transaction`, whose operation names none. */
+export function payingContract(op: DraftUIOperation): unknown {
+	if (op.kind !== "aztec_sendTx") return undefined
+	return classifyFeePayer(op.exec?.feePayer, op.opts?.from, op.exec?.calls) === "fpc" ? op.exec?.feePayer : undefined
 }
 
 /** An app's own payment the person pays all the same: a claim to the account, or one through the

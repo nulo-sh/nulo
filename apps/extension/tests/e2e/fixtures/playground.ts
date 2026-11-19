@@ -9,7 +9,7 @@
  *   - asserting deterministic absence of an approval popup (no new browser target)
  */
 import type { Page, Target } from "puppeteer"
-import { inject } from "vitest"
+import { expect, inject } from "vitest"
 import { EXTENSION_SCHEME, newPage } from "./browser"
 import { clickByTestId, patchPagePolling, replaceInputValue } from "./dom"
 import type { ExtensionContext } from "./extension"
@@ -135,6 +135,17 @@ export async function snapshotResultSeq(page: Page): Promise<number> {
 }
 
 export type PgResult = { seq: number; method: string; status: "ok" | "error"; resultJson?: unknown; errorJson?: unknown }
+
+/** The JSON-RPC error the wallet answered, as the playground records it. */
+export function errorEnvelopeOf(result: PgResult): unknown {
+	const payload = result.errorJson as string | { message?: string } | undefined
+	return JSON.parse((typeof payload === "string" ? payload : payload?.message) ?? "null")
+}
+
+/** `envelope` as a dApp receives it: its `data` also names the request's 8-hex trace id. */
+export function tracedEnvelope(envelope: { code: number; message: string; data?: Readonly<Record<string, unknown>> }): unknown {
+	return { ...envelope, data: { ...envelope.data, walletTraceId: expect.stringMatching(/^[0-9a-f]{8}$/) } }
+}
 
 /**
  * Wait for the next result row matching `method` to settle (status="ok"|"error").

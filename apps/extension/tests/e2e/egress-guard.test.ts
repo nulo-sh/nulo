@@ -3,6 +3,7 @@ import { type Server, createServer } from "node:http"
 import type { Page } from "puppeteer"
 import { afterAll, beforeAll, describe, expect, inject, test } from "vitest"
 import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { RELAY_RPC_URLS } from "@/wallet/services/network/seeds"
 import { evaluateInBackground, isFirefox, newPage, openScratchPage } from "./fixtures/browser"
 import {
 	EGRESS_CANARY_HOST,
@@ -221,6 +222,8 @@ describe("the launch's egress guard", () => {
 	test.each([
 		["Testnet", TESTNET_RPC_URL],
 		["Mainnet", MAINNET_RPC_URL],
+		["Testnet relay", RELAY_RPC_URLS.testnet],
+		["Mainnet relay", RELAY_RPC_URLS.mainnet],
 	])("the background's call to the %s node gets its stand-in's terminal 400 and never reaches the guard", async (_name, url) => {
 		const host = new URL(url).hostname
 		const node = ctx.egress?.nodes.find((held) => held.host === host)

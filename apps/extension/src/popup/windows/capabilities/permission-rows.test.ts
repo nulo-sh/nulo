@@ -215,7 +215,7 @@ describe("the row list, row by row", () => {
 		expect(reachOf(["not-an-address", A], NAMES)).toBe("2 contracts")
 	})
 
-	test("each row's icon: the drawn ones, and add_circle, info and mail_lock for the three new rows", () => {
+	test("each row's icon", () => {
 		const icons = [
 			accountAddressRow(),
 			simulationRow(sim("*")),
@@ -232,13 +232,13 @@ describe("the row list, row by row", () => {
 			["account-address", "eye"],
 			["simulation", "play"],
 			["contracts", "add"],
-			["contract-details", "info"],
+			["contract-details", "search"],
 			["contract-classes", "code"],
 			["authorizations", "signature"],
 			["address-book", "contacts"],
 			["private-events", "mail-lock"],
 			["unknown", "help"],
-			["transaction", "check"],
+			["transaction", "send"],
 		])
 		expect(icons.map(([key]) => key)).toEqual([...ROW_ORDER])
 	})

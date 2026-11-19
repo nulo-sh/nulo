@@ -23,13 +23,14 @@ import {
 	waitForPgResult,
 } from "../fixtures/playground"
 import { readyAuthwitOwner } from "../fixtures/send"
-import { closeReview, openReviewFromStrip, shotSend } from "../fixtures/send-page"
-import { enterSendForm, setActiveSendType } from "../fixtures/transfers"
+import { chooseRecipient, closeReview, openReview, shotSend } from "../fixtures/send-page"
+import { fillSendForm, setActiveSendType } from "../fixtures/transfers"
 import { readScopeIdentity, seedPendingTrust } from "../helpers/activity-seeds"
 import {
 	approveExecute,
 	openConnectedApp,
 	openExecuteDetails,
+	openExecuteSteps,
 	rejectCapabilities,
 	rejectExecute,
 	waitCapabilitiesReady,
@@ -41,6 +42,7 @@ import { readSealedRows } from "../fixtures/sealed-rows"
 import { serializeInstance } from "../fixtures/selfpay-phase"
 import { trimAddress } from "@/utils/string"
 import {
+	atWidth,
 	coverageOf,
 	expectFitsNarrow,
 	expectLaidOut,
@@ -51,6 +53,7 @@ import {
 	observeIdentifierSites,
 	siteSuite,
 	sweepTypeRoles,
+	waitForReadsSettled,
 } from "../fixtures/type-roles"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -99,8 +102,10 @@ async function waitForStateSites(win: Page, surface: string, state: string): Pro
 	}
 }
 
-/** The faces and roles of the window, then the identifier sites of each state it renders. */
+/** The faces and roles of the window at rest, then the identifier sites of each state it renders. A
+ *  decoded row's sites exist only once its decode lands, so the reads settle before the sites are awaited. */
 async function sweepWindow(win: Page, surface: string, states: readonly string[]): Promise<IdentifierObservation[]> {
+	await waitForReadsSettled(win, surface)
 	for (const state of states) await waitForStateSites(win, surface, state)
 	expectSweepClean(await sweepTypeRoles(win), surface)
 	await expectLaidOut(win, surface)
@@ -120,11 +125,12 @@ async function observeState(win: Page, surface: string, state: string): Promise<
 	return observation
 }
 
-/** Presses every `AddressDisplay` of `states` that shows a name, until each shows its address; whether any did. */
+/** Presses every `AddressDisplay` of `states` that shows a name, until each shows its address; whether any did.
+ *  A chip's name stays: its press opens its card, whose last row is the address. */
 async function revealAddresses(win: Page, surface: string, states: readonly string[]): Promise<boolean> {
 	let pressed = false
 	for (const site of SITES.filter((s) => s.surface === surface && states.includes(s.state) && s.role !== "none" && !s.unreachable)) {
-		const named = `${site.selector}[data-address-shows="name"]`
+		const named = `${site.selector}[data-address-shows="name"]:not([data-testid="contract-chip"] *)`
 		for (let left = await win.$$(named); left.length > 0; left = await win.$$(named)) {
 			await left[0]!.click()
 			await win.waitForFunction(
@@ -171,7 +177,8 @@ test.skipIf(!hasConfig)("the capabilities window holds its roles", { timeout: 18
 	}
 	expect((await waitForPgResult(pg, "requestCapabilities", seq, 30_000)).status).toBe("error")
 
-	// The connected app's page reads back what the dApp was granted: its account and each listed scope.
+	// The connected app's page reads back what the dApp was granted: its account, and its contract and
+	// class in the table, a row open.
 	await setPgInput(pg, "tokenAddress", aztecConfig!.tokenAddress)
 	await setPgInput(pg, "classId", aztecConfig!.tokenClassId)
 	await grantCapBundle(ctx, pg, "contractClasses-listed", async (ids) => [ids[0]!])
@@ -179,14 +186,9 @@ test.skipIf(!hasConfig)("the capabilities window holds its roles", { timeout: 18
 	try {
 		await waitForHash(wallet, "#/popup/general")
 		await openConnectedApp(wallet, new URL(PLAYGROUND_TEST_URL).host, sel("connected-app-account-row"))
-		for (const type of ["contracts", "contractClasses"]) {
-			await clickSelector(wallet, `${sel("granted-capability-toggle")}[data-capability-type="${type}"]`)
-		}
-		await sweepWindow(wallet, "popup-settings-connected-apps-id", [
-			"a connected dApp (network)",
-			"a connected app whose grant holds a contract scope (network)",
-			"a connected app whose grant holds a class scope (network)",
-		])
+		await clickSelector(wallet, `${sel("connected-app-permissions")} ${sel("cap-details-row")}`)
+		await wallet.waitForSelector(sel("cap-details-fns"), { visible: true, timeout: 10_000 })
+		await sweepWindow(wallet, "popup-settings-connected-apps-id", ["a connected dApp (network)"])
 	} finally {
 		await wallet.close()
 	}
@@ -201,8 +203,10 @@ type Request = {
 	states: readonly string[]
 	/** The payload must stay inside the card and every hex string in a mono role. */
 	contained?: true
-	/** A send: its value rows open under the summary before `ready` is awaited. */
+	/** A send: its steps open, each its own press, before `ready` is awaited. */
 	details?: true
+	/** A send: its first step's contract chip pressed open, the press's faces and sites read. */
+	press?: true
 	/** Approved, not rejected: what it registers, the requests after it read. */
 	approve?: true
 	/** Light and dark shots of the window, focused on this testid, when `NULO_E2E_SHOT_DIR` is set. */
@@ -222,12 +226,12 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddre
 			ready: `${sel("execute-op-decoded-param-value")}[data-address-shows="name"]`,
 			states: [
 				"an aztec_sendTx request (network)",
-				"an aztec_sendTx request with all details open (network)",
 				"a decoded call with an address parameter (network)",
 				"a decoded call with a field parameter (network)",
 			],
 			contained: true,
 			details: true,
+			press: true,
 			shot: { name: "execute-fee-card", focus: "fee-settings-card" },
 		},
 		{
@@ -291,13 +295,16 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig, accountAddre
 	]
 }
 
-/** Every element that holds dApp-supplied payload text: the summary's calls, the call or action rows and the argument rows. */
+/** Every element that holds dApp-supplied payload text: the steps, the call or action rows, the
+ *  authorizations' lines and the argument rows. */
 const PAYLOAD_TEXT = [
 	"execute-op-summary-call",
 	"execute-op-payload-row",
 	"execute-op-decoded-param",
 	"execute-op-arg",
 	"execute-op-transfer-nonce",
+	"execute-op-summary-authwit",
+	"execute-discovered-authwit-decoded-param",
 	"execute-grant-decoded-param",
 ].map(sel)
 
@@ -311,7 +318,10 @@ async function payloadPastCard(win: Page): Promise<number> {
 			const text = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT)
 			for (let node = text.nextNode(); node; node = text.nextNode()) nodes.push(node)
 		}
+		// A chip clips its label with an ellipsis, so the chip's own box is what must stay inside.
 		const rights = nodes.flatMap((node) => {
+			const chip = node.parentElement?.closest('[data-testid="contract-chip"]')
+			if (chip) return [chip.getBoundingClientRect().right]
 			const range = document.createRange()
 			range.selectNodeContents(node)
 			return [...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => rect.right)
@@ -331,13 +341,52 @@ async function stretchPayload(win: Page): Promise<void> {
 		const set = (selector: string, text: string) => {
 			for (const el of document.querySelectorAll(selector)) el.textContent = text
 		}
-		set('[data-testid="execute-op-payload-row"] > :first-child', `I${"i".repeat(63)}`)
 		set('[data-testid="execute-op-summary-call-title"]', `I${"i".repeat(63)}`)
-		set('[data-testid="execute-op-call-to"]', "W".repeat(25))
+		// A step's `execute-op-call-to` wraps its address: the write goes into the address itself.
+		set('[data-testid="execute-op-call-to"]:not(:has([data-testid="execute-op-summary-call-to"]))', "W".repeat(25))
 		set('[data-testid="execute-op-summary-call-to"]', "W".repeat(25))
 		set('[data-testid="execute-op-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
 		set('[data-testid="execute-op-decoded-param-value"]', "i".repeat(64))
 		set('[data-testid="execute-grant-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
+	})
+}
+
+/** Each step's contract chip, measured by its own box, which as an inline-flex box never breaks: it
+ *  stays inside its step's row, and a label wider than the row clips inside it. */
+async function callCaptions(win: Page): Promise<{ inRow: boolean; clips: boolean }[]> {
+	return win.evaluate(() =>
+		Array.from(document.querySelectorAll('[data-testid="execute-op-summary-call-head"]'), (head) => {
+			const chip = head.querySelector('[data-testid="execute-op-call-to"] [data-testid="contract-chip"]')
+			const label = chip?.querySelector('[data-testid="execute-op-summary-call-to"]')
+			const row = head.closest('[data-testid="execute-op-summary-call"]')
+			if (!chip || !label || !row) throw new Error("a step's sentence with no contract chip")
+			const rects = Array.from(chip.getClientRects()).filter((rect) => rect.width > 0)
+			const right = row.getBoundingClientRect().right
+			return {
+				inRow: rects.length > 0 && rects.every((rect) => rect.right <= right + 0.5),
+				clips: label.scrollWidth > label.clientWidth,
+			}
+		}),
+	)
+}
+
+async function expectCallCaptionsWhole(win: Page): Promise<void> {
+	const whole = async (label: string) => {
+		const captions = await callCaptions(win)
+		expect(captions.length, `${label}: steps`).toBeGreaterThan(0)
+		expect(captions, label).toEqual(captions.map(() => ({ inRow: true, clips: false })))
+	}
+	await whole("the window's width")
+	await atWidth(win, 360, async () => {
+		await whole("360 px")
+		await win.evaluate(() => {
+			for (const el of document.querySelectorAll('[data-testid="execute-op-summary-call-to"]')) el.textContent = "W".repeat(48)
+		})
+		const capped = await callCaptions(win)
+		expect(capped, "a contract wider than the row clips inside its chip, which stays in the row, at 360 px").toEqual(
+			capped.map(() => ({ inRow: true, clips: true })),
+		)
+		expect(await payloadPastCard(win), "a contract wider than the row, at 360 px").toBeLessThanOrEqual(0)
 	})
 }
 async function grantArguments(
@@ -383,7 +432,7 @@ async function openExecute(ctx: Connected, { button, inputs, ready, details }: R
 		if (details) {
 			await win.waitForSelector(sel("execute-op-summary"), { visible: true, timeout: 60_000 })
 			expect(await win.$(sel("execute-op-details"))).toBeNull()
-			await openExecuteDetails(win)
+			await openExecuteSteps(win)
 		}
 		await win.waitForSelector(ready, { visible: true, timeout: 60_000 })
 		// The fee readout swaps its rows when the estimate lands, which the narrow pass would read as text
@@ -396,11 +445,26 @@ async function openExecute(ctx: Connected, { button, inputs, ready, details }: R
 	return win
 }
 
-/** No fee card, its estimate or its Fee Juice nudge shown, or the page's "Couldn't estimate fee" snack. */
+/** No fee card, its estimate or its Fee Juice nudge shown, the app's own failure under it, or the
+ *  page's "Couldn't estimate fee" snack. */
 function feeSettled(): boolean {
 	const card = document.querySelector('[data-testid="fee-settings-card"]')
 	if (!card || card.querySelector('[data-testid="fee-estimate"], [data-testid="send-fee-nudge"]')) return true
+	if (document.querySelector('[data-testid="execute-op-app-failure"]')) return true
 	return [...document.querySelectorAll('[data-testid="snackbar"]')].some((snack) => /estimate fee/i.test(snack.textContent ?? ""))
+}
+
+const PRESS_STATE = "an aztec_sendTx request, a contract chip's press open (network)"
+
+/** The press is teleported out of the card, so its faces and its short address are read with it open. */
+async function sweepChipPress(win: Page): Promise<void> {
+	await win.click(`${sel("execute-op-summary-call")} ${sel("contract-chip")}`)
+	await win.waitForSelector(sel("contract-chip-panel"), { visible: true, timeout: 10_000 })
+	await waitForStateSites(win, "windows-execute", PRESS_STATE)
+	expectSweepClean(await sweepTypeRoles(win), "windows-execute, a chip's press")
+	await observeState(win, "windows-execute", PRESS_STATE)
+	await win.keyboard.press("Escape")
+	await win.waitForFunction((s: string) => !document.querySelector(s), { timeout: 10_000 }, sel("contract-chip-panel"))
 }
 
 async function runRequest(ctx: Connected, request: Request, shown: Set<string>): Promise<void> {
@@ -411,11 +475,13 @@ async function runRequest(ctx: Connected, request: Request, shown: Set<string>):
 		const observations = await sweepWindow(win, "windows-execute", request.states)
 		if (request.shot) await shotSend(win, request.shot.name, request.shot.focus)
 		if (request.fullArguments) await expectFullArguments(win, request.fullArguments)
+		if (request.press) await sweepChipPress(win)
 		if (request.contained) {
 			expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
 			await stretchPayload(win)
 			expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
 			await expectLaidOut(win, `${request.method}, the longest payload`)
+			if (request.details) await expectCallCaptionsWhole(win)
 			expect(observations.flatMap(({ hexOutsideMono }) => hexOutsideMono)).toEqual([])
 		}
 		const asserted = observations.flatMap(({ sites }) => sites.filter(({ mode }) => mode === "asserted"))
@@ -515,7 +581,7 @@ test.skipIf(!hasConfig)(
 			await win.waitForSelector(sel("execute-discovered-authwit-details"), { visible: true, timeout: 10_000 })
 			await shotSend(win, "authwit-details", "execute-op-discovered-authwits")
 			const [rows, open] = await sweepWindow(win, "windows-execute", [
-				"a send with a discovered authwit, all details open (network)",
+				"a send with a discovered authwit, its authorizations open (network)",
 				"a discovered authwit with its details open (network)",
 			])
 			expect(assertedIn(rows)).toEqual(expect.arrayContaining([sel("execute-discovered-consumer"), sel("execute-discovered-caller")]))
@@ -583,10 +649,13 @@ test.skipIf(!hasConfig)(
 
 			// The account's pull notes: spendable on Send, listed on the notes page.
 			await navigateByHash(wallet, `#/popup/send?tokenId=${(await tokenRowOf(wallet, pull)).id}`, 10_000)
-			await wallet.waitForSelector(sel("send-from-type"), { visible: true, timeout: 10_000 })
+			await wallet.waitForSelector(sel("send-person-step"), { visible: true, timeout: 10_000 })
+			await chooseRecipient(wallet, minter)
 			await setActiveSendType(wallet, "send-from-type", "private")
-			await enterSendForm(wallet, { amount: "1", destination: minter })
-			await openReviewFromStrip(wallet)
+			// The rig mints 10^6 base units of an 18-decimal token, so a whole token is refused; "Review
+			// send" takes a press once an amount within the balance has its estimate.
+			await fillSendForm(wallet, { amount: "0.0000000000001", destination: minter })
+			await openReview(wallet)
 			await sweepWindow(wallet, "popup-send", ["recipient and amount typed, review sheet open (network)"])
 			await closeReview(wallet)
 			await navigateByHash(wallet, "#/popup/settings/developer/account-state/notes", 10_000)
@@ -598,7 +667,9 @@ test.skipIf(!hasConfig)(
 			)
 			await sweepWindow(wallet, "popup-settings-developer-account-state-notes", ["a note (network)", "a note exists (network)"])
 			await navigateByHash(wallet, "#/popup/settings/developer/account-state/contracts", 10_000)
-			await wallet.waitForSelector(sel("address-display"), { visible: true, timeout: 15_000 })
+			await wallet.waitForSelector(sel("contract-row"), { visible: true, timeout: 15_000 })
+			// No explorer covers the local network, so no row links one while the rows show.
+			expect(await wallet.$$eval(sel("contract-row-explorer"), (links) => links.length)).toBe(0)
 			await sweepWindow(wallet, "popup-settings-developer-account-state-contracts", ["a registered contract (network)"])
 		} finally {
 			await wallet.close()
@@ -659,7 +730,7 @@ test.skipIf(!hasConfig)(
 			await win.waitForFunction(feeSettled, { timeout: 60_000, polling: 200 })
 			await sweepWindow(win, "windows-execute", ["a send consuming another account's authwit (network)"])
 			await openExecuteDetails(win)
-			await sweepWindow(win, "windows-execute", ["a send consuming another account's authwit, all details open (network)"])
+			await sweepWindow(win, "windows-execute", ["a send consuming another account's authwit, its authorizations open (network)"])
 		} finally {
 			await dismiss(win, rejectExecute)
 		}
@@ -672,11 +743,13 @@ test.skipIf(!hasConfig)("every identifier site the network suite owns was read i
 	console.log(`[type-roles] identifier sites: ${coverage.live} network-owned live`)
 	expect(coverage.live).toBeGreaterThan(0)
 	expect(coverage.unobserved).toEqual([])
-	// Every AddressDisplay here can be pressed to its address, so none may be read only as a name.
+	// Every AddressDisplay here can be pressed to its address, so none may be read only as a name; a
+	// chip is no AddressDisplay.
 	const forms = new Map<string, Set<string>>()
 	for (const { sites } of observed) {
 		for (const { key, readings } of sites) {
-			for (const { addressShows } of readings) if (addressShows) forms.set(key, (forms.get(key) ?? new Set()).add(addressShows))
+			for (const { addressShows, inChip } of readings)
+				if (addressShows && !inChip) forms.set(key, (forms.get(key) ?? new Set()).add(addressShows))
 		}
 	}
 	expect([...forms].filter(([, shown]) => !shown.has("address")).map(([key]) => key)).toEqual([])

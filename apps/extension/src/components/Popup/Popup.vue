@@ -22,9 +22,10 @@ const props = defineProps({
 		type: Boolean,
 		default: true,
 	},
-	/** What the trap focuses on activation: a selector, or false to leave focus where it was. */
+	/** What the trap focuses on activation: a selector, a function returning the element (undefined
+	 *  for the first control; null throws), or false to leave focus where it was. */
 	initialFocus: {
-		type: [String, Boolean],
+		type: [String, Boolean, Function],
 		default: false,
 	},
 })

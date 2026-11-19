@@ -11,7 +11,8 @@
  *  - `decideUnstick` is the single source of truth for whether to act; this
  *    runner only maps its verdict to side effects, except that it vetoes a
  *    `create` for a stable 1.0.0 or later whose legal documents, read at the
- *    merge commit, still hold a «FILL»: no tag, exit non-zero.
+ *    merge commit, still hold a «FILL», or for a stable whose release notes
+ *    there are missing or cannot ship: no tag, exit non-zero.
  *  - `abort` (tag exists at the WRONG sha) exits non-zero — fail-closed, never
  *    re-points a tag.
  *  - All I/O is injected, so every branch is unit-testable with zero secrets.
@@ -22,6 +23,7 @@ import { $ } from "bun"
 import { LAUNCH_DOCUMENTS, launchBlanks } from "../../packages/legal/src/launch"
 import { AUTORELEASE_PENDING_LABEL, AUTORELEASE_TAGGED_LABEL, type AutoUnstickAction, decideUnstick } from "./auto-unstick"
 import { commitPullsText, parsePulls } from "./gh-pulls"
+import { needsNotes, notesPath, notesRefusal } from "./release-notes"
 import { command } from "./workflow-command"
 
 export interface MergedPrRef {
@@ -60,7 +62,7 @@ export interface RunUnstickOpts {
 }
 
 export interface RunUnstickResult {
-	/** `refused`: a launch whose legal documents still hold a blank; no tag was created. */
+	/** `refused`: a launch whose legal documents still hold a blank, or a stable without notes it can ship; no tag was created. */
 	action: AutoUnstickAction | "refused"
 	reason: string
 	/** true only when the tag was actually created. */
@@ -118,12 +120,9 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 			return { action: "skip", reason: decision.reason, performed: false, continues: true, exitCode: 0 }
 		}
 		case "create": {
-			const documents = await Promise.all(
-				LAUNCH_DOCUMENTS.map(async (path) => ({ path, markdown: await io.readFileAt(decision.tagSha as string, path) })),
-			)
-			const blanks = launchBlanks(opts.version, documents)
-			if (blanks.length > 0) {
-				const reason = `${tag} would launch with blanks in its legal documents:\n${blanks.join("\n")}\nNo tag was created and Release PR #${decision.prNumber} stays '${AUTORELEASE_PENDING_LABEL}'. Fill them on main, then tag the repaired commit by hand (.claude/skills/release/SKILL.md, Troubleshooting).`
+			const refused = await tagRefusal(io, decision.tagSha as string, opts.version)
+			if (refused) {
+				const reason = `${tag} ${refused}\nNo tag was created and Release PR #${decision.prNumber} stays '${AUTORELEASE_PENDING_LABEL}'. Fix it on main, then tag the repaired commit by hand (.claude/skills/release/SKILL.md, Troubleshooting).`
 				io.log(command("error", `auto-unstick: REFUSED — ${reason}`))
 				return { action: "refused", reason, performed: false, continues: false, exitCode: 1 }
 			}
@@ -134,6 +133,18 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 			return { action: "create", reason: decision.reason, performed: true, continues: true, exitCode: 0 }
 		}
 	}
+}
+
+/** Why `version` must not be tagged at `sha`, read there: a blank left in its legal documents, or notes that cannot ship. */
+async function tagRefusal(io: UnstickIO, sha: string, version: string): Promise<string | null> {
+	const documents = await Promise.all(LAUNCH_DOCUMENTS.map(async (path) => ({ path, markdown: await io.readFileAt(sha, path) })))
+	const blanks = launchBlanks(version, documents)
+	if (blanks.length > 0) return `would launch with blanks in its legal documents:\n${blanks.join("\n")}`
+	if (!needsNotes(version)) return null
+	// A file absent at the commit is the refusal this check exists for, not a failed run.
+	const notes = await io.readFileAt(sha, notesPath(version)).catch(() => null)
+	const refused = notesRefusal(version, notes)
+	return refused && `has no release notes it can ship: ${refused}`
 }
 
 export function realUnstickIO(repo: string): UnstickIO {

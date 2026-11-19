@@ -10,6 +10,7 @@ import { describe, expect, test, vi } from "vitest"
 import { SessionEndedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
 import { callsTo } from "../../../../scripts/type-roles/source-code"
 import { REPO_ROOT, sourceFiles, TEST_FILE } from "../../../../scripts/type-roles/source-scan"
+import { StepContent, type WrappedTask } from "@/wallet/services/task/service"
 import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { type LocalTxOrigin, OriginType } from "@/wallet/services/transaction/spec"
 import { ExecutionService } from "./service"
@@ -104,6 +105,25 @@ describe("ExecutionService.executeOperations: a profile switch during dispatch (
 
 	test("control: an operation that broadcasts nothing still fails on its cleared task", async () => {
 		await expect(dispatchUnderSwitch("aztec_simulateTx")).rejects.toThrow("Invalid task id")
+	})
+})
+
+describe("ExecutionService.executeOperations: the dApp request's trace id (real TaskService)", () => {
+	test("a dApp operation's root task carries the hooks' id, and a step its dispatch starts inherits it", async () => {
+		const { facade } = makeFacade()
+		const { tasks } = await startedTaskService("p1")
+		let step: string | undefined
+		const dispatchOperation = vi.fn(async (_op: unknown, _origin: unknown, task: WrappedTask) => {
+			const sub = task.startSubtask(new StepContent("Simulating transaction"))
+			step = sub.task.walletTraceId
+			sub.complete()
+			return "r"
+		})
+		Object.assign(facade, { taskService: tasks, dispatchOperation })
+		const batch = [{ kind: "aztec_simulateTx", networkId: "net-1", accountAddress: "0xacct" }] as never
+		await facade.executeOperations(batch, DAPP, undefined, { walletTraceId: "1a2b3c4d" }, undefined, FENCE)
+		expect((await tasks.getTasks()).map((t) => t.walletTraceId)).toEqual(["1a2b3c4d"])
+		expect(step).toBe("1a2b3c4d")
 	})
 })
 

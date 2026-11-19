@@ -1,12 +1,14 @@
-import { describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import { FpcType } from "@/wallet/services/fpc/client"
 import {
 	buildFeeMethods,
 	buildSettings,
 	defaultSponsor,
-	FEE_JUICE_BRIDGE_URL,
 	type FeeMethodOption,
+	feeJuiceBridgeUrl,
 	feePayerOf,
+	type GasBalances,
 	feeScopeKey,
 	formatGasBalance,
 	isLiveFeeScope,
@@ -245,6 +247,13 @@ describe("fee-helpers/buildFeeMethods — what each row can spend", () => {
 		expect(methods.map(column)).toEqual([...expected, "free", "—"])
 	})
 
+	test("each Fee Juice row keeps its balance as read; none for a leg that failed or before the read", () => {
+		const balances = (gas?: GasBalances) => buildFeeMethods([PRIVATE, NULO_SPONSOR], gas).map((m) => m.balance)
+		expect(balances({ publicFeeJuice: FJ("120"), privateFeeJuice: FJ("42") })).toEqual([FJ("120"), FJ("42"), undefined])
+		expect(balances({ publicFeeJuice: null, privateFeeJuice: FJ("42") })).toEqual([undefined, FJ("42"), undefined])
+		expect(balances(undefined)).toEqual([undefined, undefined, undefined])
+	})
+
 	test("titles: Public Fee Juice, then the FPCs' names, else Private Fee Juice and Sponsored", () => {
 		const unnamed = { id: "s3", type: FpcType.DefaultSponsoredFpc, isProtocol: true }
 		expect(buildFeeMethods([PRIVATE, NULO_SPONSOR, HAND_ADDED]).map((m) => m.title)).toEqual([
@@ -375,9 +384,25 @@ describe("fee-helpers/shortfallFigures", () => {
 	})
 })
 
-describe("fee-helpers/FEE_JUICE_BRIDGE_URL", () => {
-	test("defaults to unleashed's testnet app", () => {
-		expect(FEE_JUICE_BRIDGE_URL).toBe("https://testnet.app.unleashed.systems")
+describe("fee-helpers/feeJuiceBridgeUrl", () => {
+	const SHIELD = "https://shield.human.tech/fee-juice"
+	const UNLEASHED = "https://testnet.app.unleashed.systems"
+	afterEach(() => vi.unstubAllEnvs())
+
+	test.each([
+		{ chain: "Mainnet", chainId: CHAIN_IDS.MAINNET, url: SHIELD },
+		{ chain: "Testnet", chainId: CHAIN_IDS.TESTNET, url: UNLEASHED },
+		{ chain: "the Local Network", chainId: CHAIN_IDS.SANDBOX, url: UNLEASHED },
+		{ chain: "a custom chain", chainId: 424242, url: UNLEASHED },
+		{ chain: "no network yet", chainId: undefined, url: UNLEASHED },
+	])("$chain opens $url", ({ chainId, url }) => {
+		expect(feeJuiceBridgeUrl(chainId)).toBe(url)
+	})
+
+	test("a build's override wins on every chain, Mainnet included", () => {
+		vi.stubEnv("VITE_FEE_JUICE_BRIDGE_URL", "https://bridge.example")
+		expect(feeJuiceBridgeUrl(CHAIN_IDS.MAINNET)).toBe("https://bridge.example")
+		expect(feeJuiceBridgeUrl(CHAIN_IDS.TESTNET)).toBe("https://bridge.example")
 	})
 })
 

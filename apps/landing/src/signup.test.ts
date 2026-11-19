@@ -18,7 +18,7 @@ const busy = (v: SignupView) => v.button.getAttribute("aria-disabled") === "true
 function view() {
 	const form = element()
 	const button = Object.assign(element(), { textContent: "Notify me" as string | null })
-	button.setAttribute("data-label-ok", "On the list")
+	button.setAttribute("data-label-ok", "Check your inbox")
 	button.setAttribute("data-label-retry", "Try again")
 	const field = element()
 	const v = {
@@ -55,22 +55,22 @@ describe("submitSignup", () => {
 		expect(call.disabledInFlight).toBe(true)
 		// A stalled connection ends in the retry error instead of a button held disabled.
 		expect(call.init.signal).toBeInstanceOf(AbortSignal)
-		expect(v.status.textContent).toBe(SIGNUP_MESSAGES.subscribed)
+		expect(v.status.textContent).toBe(SIGNUP_MESSAGES.requested)
 		expect(v.status.dataset.state).toBe("ok")
 	})
 
-	it("answers success in place: the form reads ok, the button says On the list and stays locked, the field keeps the address", async () => {
+	it("answers success in place: the form reads ok, the button says Check your inbox and stays locked, the field keeps the address", async () => {
 		const { v, form, button, attributes } = view()
 		await submitSignup(v, "/api/subscribe", fakeFetch(async () => Response.json({ ok: true }), v).fetchImpl)
 		expect(form.get("data-state")).toBe("ok")
-		expect(button.textContent).toBe("On the list")
+		expect(button.textContent).toBe("Check your inbox")
 		expect(busy(v)).toBe(true)
 		expect(attributes.has("readonly")).toBe(true)
 		// A second press changes nothing: no request, same answer.
 		const { calls, fetchImpl } = fakeFetch(async () => Response.json({ ok: true }), v)
 		await submitSignup(v, "/api/subscribe", fetchImpl)
 		expect(calls).toHaveLength(0)
-		expect(button.textContent).toBe("On the list")
+		expect(button.textContent).toBe("Check your inbox")
 	})
 
 	it("answers a failure in place: the form reads error and the button offers Try again, then reads Notify me again while a retry is in flight", async () => {
@@ -100,7 +100,7 @@ describe("submitSignup", () => {
 
 		await submitSignup(v, "/api/subscribe", fakeFetch(async () => Response.json({ ok: true }), v).fetchImpl)
 		expect(attributes.has("aria-invalid")).toBe(false)
-		expect(v.status.textContent).toBe(SIGNUP_MESSAGES.subscribed)
+		expect(v.status.textContent).toBe(SIGNUP_MESSAGES.requested)
 	})
 
 	it.each([
@@ -108,7 +108,7 @@ describe("submitSignup", () => {
 		["a 429 rate limit", async () => new Response(null, { status: 429 })],
 		["a 403 origin refusal", async () => new Response(null, { status: 403 })],
 		["a network failure", async () => Promise.reject(new TypeError("Failed to fetch"))],
-		// The SPA fallback answering in the Worker's place must never read as subscribed.
+		// The SPA fallback answering in the Worker's place must never read as accepted.
 		["a 200 HTML page", async () => new Response("<!doctype html>", { status: 200, headers: { "content-type": "text/html" } })],
 		["a 200 without ok: true", async () => Response.json({ ok: false })],
 	])("shows the retry error on %s and releases the button", async (_name, answer) => {

@@ -23,9 +23,12 @@ import { endsSelection } from "@/utils/selection"
 import { legalAboutRow } from "@/utils/legal-about"
 import { openLegalDocument, openThirdPartyNotices } from "@/utils/legal-links"
 import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
+import { changelogUrl, releaseCore } from "@/utils/whats-new"
 
 const version = __VERSION__
 const aztecVersion = __AZTEC_VERSION__
+/** A prerelease links the release it leads to. */
+const release = releaseCore(version)
 
 const handleCopy = (target) => {
 	void copyWithToast(target, openToast, "Version is copied")
@@ -91,6 +94,13 @@ onBeforeUnmount(() => legal.dispose())
 					to="https://nulo.sh"
 					title="Nulo Website"
 					external
+				/>
+				<SettingItem
+					v-if="release"
+					:to="changelogUrl(release)"
+					:title="`What's new in ${release}`"
+					external
+					data-testid="about-whats-new"
 				/>
 			</ItemsContainer>
 

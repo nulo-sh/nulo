@@ -1,5 +1,5 @@
 /**
- * An in-memory map of secret-bearing entries that expire `ttlMs` after `capturedAt`.
+ * An in-memory map of entries, secret-bearing or not, that expire `ttlMs` after `capturedAt`.
  *
  * Ownership: the stash owns each entry's buffers until a successful `take` hands them to the
  * caller. `drop`, an expired `take`, `sweep` and a `set` that replaces a different entry wipe, so

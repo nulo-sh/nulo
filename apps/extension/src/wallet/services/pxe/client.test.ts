@@ -19,7 +19,7 @@ vi.mock("@/wallet/utils/offscreen", async (importOriginal) => ({
 import { PxeServiceClient, registerPxeChainGuard, registerPxeGenerationProvider, registerPxeRecoveryGuard } from "./client"
 
 const noopLogger: ILogger = { log: () => {} }
-const net: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://n/1" }
+const net: NetworkInfo = { profileId: "p1", chainId: 31337, l1ChainId: 31337, endpoints: [{ id: "primary", rpcUrl: "http://n/1" }] }
 
 describe("PxeServiceClient recovery-mode admission", () => {
 	let wire: string[]

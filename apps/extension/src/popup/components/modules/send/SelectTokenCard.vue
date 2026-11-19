@@ -2,6 +2,7 @@
 <script setup>
 /** Components */
 import { Skeleton } from "@nulo/design"
+import TokenMark from "@/components/composite/general/TokenMark.vue"
 
 /** Composables */
 import { isRepeatOrComposing } from "@/composables/usePopupEntity"
@@ -30,6 +31,13 @@ const props = defineProps({
 	},
 	/** Called with a token the picker's paste-to-add imported, for the page to pick. */
 	onTokenAdded: Function,
+	/** The signed list flags the token as a scam. */
+	flagged: {
+		type: Boolean,
+		default: false,
+	},
+	/** The signed list's picture for the token. */
+	icon: String,
 })
 
 /** A token handed in is always drawn: the page passes one only once its tokens have loaded. */
@@ -40,10 +48,6 @@ const state = computed(() => {
 	return props.failed ? "failed" : "empty"
 })
 
-const isTokenRestricted = computed(() => {
-	if (!props.token) return
-	return !props.token.hasPrivateTransfers || !props.token.hasPublicTransfers
-})
 const isTokenBlocked = computed(() => {
 	return !props.token.hasPrivateTransfers && !props.token.hasPublicTransfers
 })
@@ -105,10 +109,7 @@ onBeforeUnmount(() => {
 	>
 		<template v-if="token">
 			<Flex align="center" gap="12">
-				<Flex align="center" justify="center" :class="$style.token_icon_box">
-					<span :class="$style.token_initial">{{ dashIfBlank(token.symbol).charAt(0) }}</span>
-					<Icon v-if="isTokenBlocked" name="warning" size="10" color="red" :class="$style.type_icon" />
-				</Flex>
+				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :size="36" :badge="flagged || isTokenBlocked" />
 
 				<Flex direction="column" gap="2">
 					<span :class="$style.token_symbol" data-testid="send-token-symbol">{{ dashIfBlank(token.symbol) }}</span>
@@ -147,9 +148,8 @@ onBeforeUnmount(() => {
 
 	cursor: pointer;
 
-	/* The parent `.section` already pads 14px top/bottom; keep this minimal so the
-	 * two don't stack into the oversized gap the token row had. */
-	padding: 4px 0;
+	/* The row is the whole band between the rules around it, so a hover or a press tints all of it. */
+	padding: 14px 0;
 
 	transition: all 0.2s var(--bezier);
 
@@ -162,12 +162,17 @@ onBeforeUnmount(() => {
 		outline-offset: -2px;
 		background: color-mix(in srgb, var(--nulo-surface-low) 50%, transparent);
 	}
+
+	&:active {
+		background: var(--nulo-surface-low);
+	}
 }
 
 .wrapper_loading {
 	cursor: default;
 
-	&:hover {
+	&:hover,
+	&:active {
 		background: none;
 	}
 }
@@ -175,31 +180,6 @@ onBeforeUnmount(() => {
 /* The token row's height, so the card does not jump when the token arrives. */
 .loading_row {
 	min-height: 36px;
-}
-
-.token_icon_box {
-	position: relative;
-	width: 36px;
-	height: 36px;
-	flex-shrink: 0;
-
-	background: var(--nulo-accent);
-}
-
-.token_initial {
-	composes: type--row-title from global;
-	font-size: 16px;
-	color: var(--txt-inverse);
-}
-
-.type_icon {
-	position: absolute;
-	top: -4px;
-	right: -4px;
-
-	box-sizing: content-box;
-	background: var(--app-bg);
-	padding: 1px;
 }
 
 .token_symbol {

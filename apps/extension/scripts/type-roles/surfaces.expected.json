@@ -217,6 +217,15 @@
 			"suite": "network"
 		},
 		{
+			"id": "windows-unlock",
+			"name": "Unlock window",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/unlock/index.vue",
+			"reach": "#/windows/unlock, opened by a dApp's discovery while the wallet is locked",
+			"states": ["locked", "unlocked, waiting"],
+			"suite": "network"
+		},
+		{
 			"id": "windows-logger",
 			"name": "Logger window",
 			"kind": "route",
@@ -284,6 +293,16 @@
 			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
 		},
 		{
+			"id": "windows-execute-ValueTree",
+			"name": "Routed module popup/windows/execute/ValueTree.vue",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/execute/ValueTree.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
+		},
+		{
 			"id": "windows-execute-DetailsToggle",
 			"name": "Routed module popup/windows/execute/DetailsToggle.vue",
 			"kind": "route",
@@ -298,6 +317,26 @@
 			"name": "Routed module popup/windows/execute/SendTxSummary.vue",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/execute/SendTxSummary.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
+		},
+		{
+			"id": "windows-execute-StepRow",
+			"name": "Routed module popup/windows/execute/StepRow.vue",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/execute/StepRow.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
+		},
+		{
+			"id": "windows-execute-AuthwitDetails",
+			"name": "Routed module popup/windows/execute/AuthwitDetails.vue",
+			"kind": "route",
+			"source": "apps/extension/src/popup/windows/execute/AuthwitDetails.vue",
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -501,7 +540,7 @@
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/send.vue",
 			"reach": "#/popup/send",
-			"states": ["empty", "recipient and amount typed", "fee card open"],
+			"states": ["the person step", "a chosen recipient and an amount typed", "the Fee sheet open"],
 			"suite": "smoke"
 		},
 		{
@@ -647,7 +686,7 @@
 			"name": "Forgot password",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/ForgotPasswordPopup.vue",
-			"reach": "open 'forgot_password' from popup/pages/auth.vue",
+			"reach": "open 'forgot_password' from popup/components/modules/auth/LockScreen.vue",
 			"states": ["default"],
 			"suite": "smoke"
 		},
@@ -683,7 +722,7 @@
 			"name": "Select profile",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/SelectProfilePopup.vue",
-			"reach": "open 'select_profile' from popup/pages/auth.vue",
+			"reach": "open 'select_profile' from popup/components/modules/auth/LockScreen.vue",
 			"states": ["default"],
 			"suite": "smoke"
 		},
@@ -975,6 +1014,16 @@
 			"states": [],
 			"suite": "none",
 			"why": "the frame every popup teleports through: the popup rows read it"
+		},
+		{
+			"id": "overlay:send",
+			"name": "Send's fee card, carried into the Fee sheet",
+			"kind": "overlay",
+			"source": "apps/extension/src/popup/pages/send.vue",
+			"reach": "none",
+			"states": [],
+			"suite": "none",
+			"why": "its one Teleport carries the fee card into the Fee sheet, read there in the popup-send row's Fee sheet state"
 		},
 		{
 			"id": "overlay:PasskeyCeremonyDialog",

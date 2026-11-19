@@ -6,7 +6,6 @@ import { Flex, Skeleton } from "@nulo/design"
 // The real-Dropdown suite below runs without a layout engine: no focus trap, no outside-click wiring.
 vi.mock("focus-trap", () => ({ createFocusTrap: vi.fn(() => ({ activate: vi.fn(), deactivate: vi.fn(), active: false })) }))
 vi.mock("@/composables/outside", () => ({ useOutside: vi.fn(() => () => {}) }))
-import mark from "@/components/composite/send/publish-mark.module.css"
 import DropdownItem from "@/components/ui/Dropdown/DropdownItem.vue"
 import FeeMethodSelector from "./FeeMethodSelector.vue"
 
@@ -133,23 +132,6 @@ describe("FeeMethodSelector", () => {
 		})
 		await w.find('[data-testid="send-fee-method-public"]').trigger("click")
 		expect(w.emitted("update:modelValue")).toBeUndefined()
-	})
-
-	test("no tag until told; the tag carries the shape and the approved words", async () => {
-		const w = factory({ modelValue: baseMethods[0] })
-		const TAG = '[data-testid="send-fee-privacy-notice"]'
-		expect(w.find(TAG).exists()).toBe(false)
-
-		await w.setProps({ payerNoticeShape: "private-public" })
-		expect(w.find(TAG).attributes("data-notice-shape")).toBe("private-public")
-		expect(w.find(TAG).text()).toBe("NAMES YOUR ADDRESS")
-		expect(w.find(TAG).classes()).toContain(mark.exposed)
-		expect(w.find(`${TAG} [data-testid="stub-glyph"]`).attributes("data-name")).toBe("public")
-		expect(w.find(`${TAG} [data-testid="stub-glyph"]`).attributes("aria-hidden")).toBe("true")
-		expect(w.find('[data-testid="send-fee-method-trigger"]').text()).toContain("Public Fee Juice")
-
-		await w.setProps({ payerNoticeShape: null })
-		expect(w.find(TAG).exists()).toBe(false)
 	})
 
 	test("Dropdown onOpen / onClose are forwarded as 'open' / 'close'", () => {

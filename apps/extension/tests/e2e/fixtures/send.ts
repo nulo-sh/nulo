@@ -12,7 +12,7 @@ import {
 	waitForPgResult,
 } from "./playground"
 import { approveExecute, approveVerify, waitForExecuteContent, waitForPopup } from "./popups"
-import type { FeeMethodSubtitle } from "./transfers"
+import type { FeeMethodSubtitle } from "./fee-method"
 
 /**
  * Readies `owner`, the first of two connected accounts, to authorize a send the other makes on its

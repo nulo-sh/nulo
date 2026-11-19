@@ -46,7 +46,7 @@ describe("AppFeeLine", () => {
 		)
 	})
 
-	test("paid from Private Fee Juice: the person pays first, the app's method on its own line, then any priority part", async () => {
+	test("paid from Private Fee Juice: the person pays first, then the app's method in a sentence of its own, then any priority part", async () => {
 		const mountPfj = async (feeEstimate?: Record<string, unknown>) => {
 			const w = mount(AppFeeLine, {
 				props: { feeEstimate: feeEstimate as never, privateFeeJuice: true },
@@ -57,18 +57,42 @@ describe("AppFeeLine", () => {
 			return w
 		}
 		const landed = await mountPfj({ maxFee: "3577823500000000001", gasDetails: GAS })
-		const [first] = landed.get('[data-testid="execute-op-app-fee"]').findAll("span")
-		expect(first.text()).toBe("You pay about ~3.577824 FJ ($0.215) from Private Fee Juice")
-		expect(landed.text()).toBe("You pay about ~3.577824 FJ ($0.215) from Private Fee Juice method set by Swap")
+		expect(landed.get('[data-testid="execute-op-app-fee"]').element.textContent).toBe(
+			"You pay about ~3.577824 FJ ($0.215) from Private Fee Juice. Method set by Swap.",
+		)
 		const priced = await mountPfj({ maxFee: "16000000000000000", priorityFee: "4000000000000000", gasDetails: GAS })
-		expect(priced.text()).toBe(
-			"You pay about ~0.016 FJ (<$0.001) from Private Fee Juice method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
+		expect(priced.get('[data-testid="execute-op-app-fee"]').element.textContent).toBe(
+			"You pay about ~0.016 FJ (<$0.001) from Private Fee Juice. Method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
 		)
 		const waiting = (await mountPfj()).get('[data-testid="execute-op-app-fee-estimating"]')
 		expect(waiting.find('[data-testid="skeleton"]').exists()).toBe(true)
 		expect(waiting.html({ raw: true }).replaceAll("<!--v-if-->", "")).toMatch(
-			/You pay about <i data-testid="skeleton"[^>]*><\/i> from Private Fee Juice<\/span> method set by Swap<\/span>$/,
+			/You pay about <i data-testid="skeleton"[^>]*><\/i> from Private Fee Juice\. Method set by Swap\.<\/span>$/,
 		)
+	})
+
+	test("claimed to the account: the person pays from the claim, no app named, Fee Juice unbroken, then any priority part", async () => {
+		const mountClaimed = async (feeEstimate?: Record<string, unknown>) => {
+			const w = mount(AppFeeLine, {
+				props: { feeEstimate: feeEstimate as never, claimed: true },
+				slots: { default: "Swap" },
+				global: { stubs: STUBS },
+			})
+			await flushPromises()
+			return w
+		}
+		// `textContent`, not `.text()` or `shownText`: the no-break space is the point, and `\s` folds it.
+		const landed = await mountClaimed({ maxFee: "3577823500000000001", gasDetails: GAS })
+		expect(landed.get('[data-testid="execute-op-app-fee"]').element.textContent).toBe(
+			"You pay about ~3.577824 FJ ($0.215) from the Fee Juice this app claims to your account.",
+		)
+		const priced = await mountClaimed({ maxFee: "16000000000000000", priorityFee: "4000000000000000", gasDetails: GAS })
+		expect(priced.text()).toBe(
+			"You pay about ~0.016 FJ (<$0.001) from the Fee Juice this app claims to your account. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
+		)
+		const waiting = (await mountClaimed()).get('[data-testid="execute-op-app-fee-estimating"]')
+		expect(waiting.find('[data-testid="skeleton"]').exists()).toBe(true)
+		expect(waiting.element.textContent).toBe("You pay about  from the Fee Juice this app claims to your account.")
 	})
 
 	test("unmounting closes the price client and drops the quote listener it added", async () => {

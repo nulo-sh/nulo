@@ -1,30 +1,45 @@
 <script setup>
-/**
- * Three-button priority selector ("Normal" / "Fast" / "Urgent") that
- * sits beneath the fee method readouts inside `FeeSettingsCard`.
- * Levels are static so the component owns the list (the parent only
- * needs the v-model'd selection).
- */
+/** A roving tablist: one Tab stop, and ←/→ switch the level and move focus to it. */
+import { nextTick } from "vue"
+
 const PRIORITY_LEVELS = [
 	{ value: "normal", label: "Normal" },
 	{ value: "fast", label: "Fast" },
 	{ value: "urgent", label: "Urgent" },
 ]
 
-defineProps({
+const props = defineProps({
 	modelValue: { type: String, default: "normal" },
 })
 
 const emit = defineEmits(["update:modelValue"])
+
+const labelId = useId()
+const tabs = {}
+
+const onKeydown = (e) => {
+	if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
+	e.preventDefault()
+	const at = PRIORITY_LEVELS.findIndex((level) => level.value === props.modelValue)
+	const step = e.key === "ArrowRight" ? 1 : -1
+	const next = PRIORITY_LEVELS[(at + step + PRIORITY_LEVELS.length) % PRIORITY_LEVELS.length].value
+	emit("update:modelValue", next)
+	nextTick(() => tabs[next]?.focus())
+}
 </script>
 
 <template>
 	<Flex direction="column" gap="8" :class="$style.detail_row">
-		<span :class="$style.fee_label">Priority</span>
-		<div :class="$style.priority_grid">
+		<span :id="labelId" :class="$style.fee_label">Priority</span>
+		<div role="tablist" :aria-labelledby="labelId" :class="$style.priority_grid" @keydown="onKeydown">
 			<button
 				v-for="level in PRIORITY_LEVELS"
 				:key="level.value"
+				:ref="(el) => (tabs[level.value] = el ?? undefined)"
+				type="button"
+				role="tab"
+				:aria-selected="modelValue === level.value"
+				:tabindex="modelValue === level.value ? 0 : -1"
 				@click="emit('update:modelValue', level.value)"
 				:data-testid="`send-fee-priority-${level.value}`"
 				:class="[$style.priority_btn, modelValue === level.value && $style.priority_active]"
@@ -66,6 +81,12 @@ const emit = defineEmits(["update:modelValue"])
 	/* The accent border marks the chosen level alone; a hovered one only tints. */
 	&:hover {
 		background: var(--nulo-surface-low);
+	}
+
+	/* Focus sits on the chosen level, so the ring is what tells a keyboard user they arrived. */
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
 	}
 }
 

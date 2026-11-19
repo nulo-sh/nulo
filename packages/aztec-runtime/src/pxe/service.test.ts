@@ -41,11 +41,12 @@ import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import type { ReadWriteGuard } from "@nulo/wallet-core/utils"
 import { makeFetchWithTimeout, type RetryOptions } from "../utils/fetch"
-import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { ChainRuntime, endpointsKey, type NetworkInfo, type PxeFactory } from "./chain-runtime"
 import { StoreErasedError } from "./lifecycle-coordinator"
 import { PxeService, type IProfileReader } from "./service"
 import { PXE_NOT_SYNCED_DIAGNOSTIC } from "./stale-anchor"
 import { LogLevel } from "@nulo/wallet-core/logger"
+import { NO_ROUTE } from "./pxe-factory.testing"
 
 const noopLogger: ILogger = { log: () => {} }
 
@@ -59,7 +60,12 @@ const noopProfiles: IProfileReader = {
 	getProfiles: async () => [],
 }
 
-const network: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://localhost:8080" }
+const network: NetworkInfo = {
+	profileId: "p1",
+	chainId: 31337,
+	l1ChainId: 31337,
+	endpoints: [{ id: "primary", rpcUrl: "http://localhost:8080" }],
+}
 
 // `AztecAddress.schema` is a wire schema — it accepts hex strings or buffers,
 // not instances. Pass a hex string and let the function-under-test hydrate it.
@@ -74,6 +80,7 @@ function makeFactory(opts: {
 	let nodeCalls = 0
 	let pxeCalls = 0
 	const factory: PxeFactory = {
+		createRoute: NO_ROUTE,
 		createChainRuntime: async (n) => {
 			const pxe = {
 				getContractInstance: async () => {
@@ -89,7 +96,7 @@ function makeFactory(opts: {
 					return undefined
 				},
 			} as unknown as AztecNode
-			return new ChainRuntime(n.chainId, node, pxe, n.rpcUrl)
+			return new ChainRuntime(n.chainId, node as never, pxe, endpointsKey(n.endpoints))
 		},
 	}
 	return {
@@ -436,6 +443,7 @@ describe("PxeService op-failure log classification", () => {
 		// before the SW has (re)provisioned the in-memory store key. Three of
 		// these painted error-level lines on every fresh unlock.
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async () => {
 				throw new Error("PXE_STORE_KEY_MISSING: no store key provisioned for profile p1")
 			},
@@ -448,13 +456,14 @@ describe("PxeService op-failure log classification", () => {
 
 	test("a fresh PXE's not-synced refusal of getSyncedBlockHeader logs at DEBUG: its callers fall back or defer", async () => {
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n) => {
 				const pxe = {
 					getSyncedBlockHeader: async () => {
 						throw new Error(PXE_NOT_SYNCED_DIAGNOSTIC)
 					},
 				} as unknown as PXE
-				return new ChainRuntime(n.chainId, {} as AztecNode, pxe, n.rpcUrl)
+				return new ChainRuntime(n.chainId, {} as never, pxe, endpointsKey(n.endpoints))
 			},
 		}
 		const { service, calls } = makeSpyLoggerService(factory)
@@ -465,6 +474,7 @@ describe("PxeService op-failure log classification", () => {
 
 	test("the not-synced text on any other op still logs at ERROR", async () => {
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async () => {
 				throw new Error(PXE_NOT_SYNCED_DIAGNOSTIC)
 			},
@@ -476,6 +486,7 @@ describe("PxeService op-failure log classification", () => {
 
 	test("a store a purge or an erase ended under the op logs at DEBUG: its caller's context went with it", async () => {
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async () => {
 				throw new StoreErasedError("getContractInstance: chain was purged mid-operation — refusing to re-create its runtime/store")
 			},
@@ -489,6 +500,7 @@ describe("PxeService op-failure log classification", () => {
 	test("any OTHER op failure still logs at ERROR (the downgrade is marker-scoped)", async () => {
 		const exploded = new Error("store exploded")
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async () => {
 				throw exploded
 			},
@@ -512,6 +524,7 @@ describe("PxeService.getLatestBlockNumber", () => {
 	test("serves the node's untagged block number", async () => {
 		const tags: unknown[] = []
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n) => {
 				const node = {
 					getBlockNumber: async (...args: unknown[]) => {
@@ -519,7 +532,7 @@ describe("PxeService.getLatestBlockNumber", () => {
 						return 4242
 					},
 				} as unknown as AztecNode
-				return new ChainRuntime(n.chainId, node, {} as PXE, n.rpcUrl)
+				return new ChainRuntime(n.chainId, node as never, {} as PXE, endpointsKey(n.endpoints))
 			},
 		}
 		await expect(makeService(factory).getLatestBlockNumber(network)).resolves.toBe(4242)
@@ -561,18 +574,19 @@ describe("PxeService teardown against an unreachable node", () => {
 	/** A runtime whose node goes through the production retrying fetch, or answers when told to. */
 	function serviceWithNode(kind: "refusing" | "answering"): PxeService {
 		const factory: PxeFactory = {
+			createRoute: NO_ROUTE,
 			createChainRuntime: async (n, _storeKey, retries?: RetryOptions) => {
 				retryWhile = retries?.retryWhile
 				const fetchBlock = makeFetchWithTimeout(60_000, retries)
 				const node = {
 					getBlockNumber: () =>
 						kind === "refusing"
-							? fetchBlock(n.rpcUrl, {}).then(() => 0)
+							? fetchBlock(n.endpoints[0]?.rpcUrl ?? "", {}).then(() => 0)
 							: new Promise<number>((resolve) => {
 									answer = resolve
 								}),
 				} as unknown as AztecNode
-				return new ChainRuntime(n.chainId, node, {} as PXE, n.rpcUrl)
+				return new ChainRuntime(n.chainId, node as never, {} as PXE, endpointsKey(n.endpoints))
 			},
 		}
 		return makeService(factory)

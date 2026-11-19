@@ -83,10 +83,12 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
   locally not to invoke any e2e config.
 - **Heavy suites run alone on the host.** A concurrent `audit:vue`, a proving run, or a second
   suite starves the sandbox and the browsers; the signature is timeouts across unrelated files.
-  Rerun before triage. Shard for wall-clock (`--shard=N/M` across agents), never overlap.
-- **One browser's whole network suite can outlast an agent's command limit** (about 2 hours on a
-  loaded host; Claude Code stops a background command at 7,200 s, leaving the lock and the run
-  dir): shard it, or `bun run e2e:reap` and run the files it did not reach
+  Rerun before triage. Never overlap. A local gate is the specs the change affects, never a whole
+  suite: the whole suites are CI's sharded required lanes, the gate of record (CLAUDE.md § Quality
+  gates).
+- **A long run can outlast an agent's command limit**: Claude Code stops a background command at
+  7,200 s, leaving the lock and the run dir, and one browser's whole network suite took about 2
+  hours on a loaded host. `bun run e2e:reap`, then run the files it did not reach
   (`implementations-plan/archive/e2e-stores-1/lessons/phase-3.md`).
 - **Offscreen sender shapes (Chrome, verified by probe)**: SW→offscreen `sender = { id, url: <getURL(manifest.background.service_worker)> }` (no `origin`, no `tab`); offscreen→SW `sender = { id, url: <getURL("src/offscreen/index.html")>, origin }`. A Chrome offscreen document has NO `chrome.runtime.getManifest` (fetch `manifest.json` by URL instead). When a sender predicate changes on either listener, probe the real shapes with a 30-second puppeteer script (pattern: `apps/extension/.playwright-mcp/sender-probe.mjs`) BEFORE the smoke run — the suite only shows the symptom (PXE timeouts, a profile reset stuck on its tombstone) three retries later. `MessageType` on the wire is numeric (`Event=1`, `Request=2`, `Response=3`).
 - **Sharding smoke on one host**: both `global-setup-smoke.ts` hooks kill every Chrome loading exactly `EXTENSION_PATH` (`chromePattern` in `sandbox-ownership.ts`: the path as a literal, ending at the argument's end, so `dist/chrome` never matches `dist/chrome-2`) — two `test:e2e --shard` halves need two dist dirs (`dist/chrome` + a copy at `dist/chrome-2`), each half pointed at its own via `EXTENSION_PATH`, and the armed-build env + `NULO_E2E_MIGRATION_FIXTURE=1` on both. One dist shared by two halves still kills the other half mid-run with `ConnectionClosedError` at `openPopup`.
@@ -160,13 +162,14 @@ runtime env var can never arm a build-time flag.
 - Diagnose before theorising: `grep -rl NULO_E2E_PROVERLESS_BUILD_STAMP apps/extension/dist/chrome`
   (or the stamp of the feature in question). A later plain `bun run build` — including the one at
   the end of `bun run audit:vue` — silently disarms the dist.
-- Smoke needs its fixtures armed AND the migration one declared: build with
-  `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1
+- Smoke needs its fixtures armed AND the migration and execute ones declared: build with
+  `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_EXECUTE_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1
   VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome` (the seed pair
   keeps the fresh wallet off the live seed RPC — `_extension-smoke-e2e.yml` says why), run with
-  `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`.
-  `migration.test.ts` skips without the declaration; `backup-migration.test.ts` throws with the
-  remedy.
+  `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_EXECUTE_FIXTURE=1 NULO_E2E_CSP_REPORT=1`.
+  `migration.test.ts` skips without the declaration; `execute-steps.test.ts` without its own
+  asserts a fixture route renders nothing, so a source run missing it fails;
+  `backup-migration.test.ts` throws with the remedy.
 - Journal, transaction, balance, authwit and incoming rows are sealed: read them through
   `fixtures/sealed-rows.ts` (armed by `VITE_NULO_E2E_SEALED_READ=1`, network builds only), never
   `chrome.storage.local`, and find a keyed root's row (transactions, authwit flags, the incoming
@@ -183,10 +186,18 @@ runtime env var can never arm a build-time flag.
   origin, before the close began. A red naming a wallet or spec host means a new outside call: declare it in
   `DECLARED_REFUSALS` with why; a browser's own host goes, by exact name, in its driver's
   `ownHosts`. A held node request means a target the interception does not cover dialed the node:
-  on Chrome rerun with `NULO_E2E_INTERCEPT_LOG=1` and find it; never declare the host or loosen the check.
+  read the run's intercept log (smoke CI sets `NULO_E2E_INTERCEPT_LOG=1`; locally, rerun with it), the arms'
+  attach and redirect lines on Chrome and the guard's `held` / `not held` lines on both browsers, and
+  find it; never declare the host or loosen the check.
   The smoke setup refuses an unarmed dist outside artifact runs; artifact runs are guarded too.
-  Each seeded remote node (Mainnet, the default, and Testnet) is answered by its own loopback
-  stand-in with a terminal 400 (`fixtures/node-stub.ts`); a new profile starts on Mainnet, so a spec
+  Each seeded remote node (Mainnet, the default, and Testnet, each with Nulo's relay second) is
+  answered by its own loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`). With two
+  endpoints a route admits its first with one `[getNodeInfo, getChainTips]` batch before any call,
+  and moves to the relay's stand-in when it fails, so a spec that stubs a seeded node answers both
+  with the network's own identity (`helpers/rpc-stub.ts`'s `nodeInfoResult` and `chainTipsResult`):
+  one unanswered entry blackholes the whole batch, and a `null` fails it as surely. The call the spec
+  waits for then never leaves, or fails fast where it meant to hang.
+  A new profile starts on Mainnet, so a spec
   that needs the list's tokens, prices, the sponsor or Testnet's own accounts (the stale-network seeds
   move them) switches to Testnet first, and one that stages the active node intercepts
   `DEFAULT_NODE_ORIGIN`. The Testnet stand-in is armed in every launch but
@@ -216,6 +227,7 @@ runtime env var can never arm a build-time flag.
 | `E2E_REQUIRE_SETUP=1` | sandbox/deploy failures are fatal (set by `agent.sh`) |
 | `NULO_E2E_PROVERLESS=1` | `agent.sh` arms the proverless build pair |
 | `NULO_E2E_MIGRATION_FIXTURE=1` | runtime declaration that the dist carries the migration fixture |
+| `NULO_E2E_EXECUTE_FIXTURE=1` | runtime declaration that the dist renders the execute window's fixtures (`src/e2e/execute-fixture.ts`, `#/windows/execute?fixture=<name>`); unset, `execute-steps.test.ts` asserts a fixture route renders none |
 | `NULO_E2E_CSP_REPORT=1` | runtime declaration that the dist carries the CSP violation recorder: every launch's `close` fails on a missing record or any entry (README § CSP violations) |
 | `NULO_E2E_SHOT_DIR` | capture mode: `shotSend` writes light and dark PNGs there; CI never sets it. The shot page must be shown: Chrome's `newPage` opens a tab, which hides the tab before it, and a hidden page draws no frame, so `shotSend` refuses it; bring the page to front where the spec acts on it. A wallet whose token arrives untrusted (a backup import) opens the first-receive sheet over Home's middle, so a frame of Home's card comes from a fixture that imports its token through the UI (`tokenReadyExtension`). The approval window decodes its calls after `waitForExecuteContent` returns, so a shot of its summary first waits until no `execute-op-summary-args-pending` shows, or it pictures "Reading arguments…" (`network/tx-sendTx-multicall.test.ts`) |
 | `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): guarded with the node stand-in like a source run, skips the encrypted `backup-roundtrip` spec and the armed-dist check, and provides `liveLeg`, which runs `shipped-token-list.test.ts`, the one launch that reaches the live Testnet node; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
@@ -293,7 +305,8 @@ runtime env var can never arm a build-time flag.
 
 An added scenario pays the [e2e runtime budget](../../../CLAUDE.md#quality-gates--local-and-ci) in
 CLAUDE.md: the distinct failure mode it proves, why a cheaper layer cannot prove it, and its estimated
-then measured runtime, with each browser's suite wall-clock before and after in the PR body.
+then measured runtime, with each browser's suite wall-clock before and after in the PR body, read from
+CI's job envelopes below, never from a local pass.
 
 - **Suite wall-clock** is the CI suite job envelope: GitHub's job timestamps over the `Run / …` jobs
   that ran and passed in a run whose first attempt succeeded (a skipped job carries no real times).
@@ -409,26 +422,32 @@ wrapper splices its own options in at index 1 and your `{}` becomes the page fun
 — `waitForFunction((sel) => !document.querySelector(sel), {}, SEL)` then queries `{}`, matches nothing,
 and an absence-wait passes vacuously while a presence-wait times out. Always write `{ timeout: N }`.
 
+**A list page renders its controls while the list still fetches.** `useEntityCrud` starts loading, so
+`AsyncListStatus`'s `loading-state` shows beside an unconditional button (Senders' `senders-add-btn`).
+Before reading such a page, wait until no `loading-state` is on the page, bounded by the popup RPC's
+`DEFAULT_RPC_TIMEOUT_MS`, as `goAndSweep` in `type-roles.test.ts` does.
+
 **A patched page's `waitForSelector` resolves `null`.** For a CSS selector `patchPagePolling` waits
 through `waitForFunction` and returns `null`, never the `ElementHandle` Puppeteer's type promises, so
 `(await page.waitForSelector(sel))!.evaluate(…)` compiles and throws `Cannot read properties of null`
 on both browsers. Wait, then read with `page.$eval(sel, …)` or `page.evaluate`.
 
-**A Send fee trigger can show a method that is not in effect.** With a saved pick, the card previews
-that pick's row while balances load (`send-fee-method-trigger[data-fee-method]`), and a preview pays
-nothing. To assert the method in effect, wait on something only the effective method produces
-(`send-publish-strip[data-you]`, `send-submit[data-action]`, the `send-fee-privacy-notice` tag, an
-enabled submit — `waitForFee` / `waitForTag` in `fixtures/send-page.ts`), and scope by
-`fee-settings-card[data-origin]` — across an origin flip the trigger attribute alone cannot tell the new
-origin's method from the last one's.
+**Send's payer radios can show a method that is not in effect.** With a saved pick, the card previews
+that pick's row while balances load (`send-fee-payers[data-fee-method]`, and a native radio may stay
+checked), and a preview pays nothing. To assert the method in effect, wait on something only the
+effective method produces (the fee line's `send-fee-line[data-payer]`, `send-publish[data-you]`, the
+form's `send-fee-warning`, an enabled submit — `waitForFee` / `waitForTag` in `fixtures/send-page.ts`),
+and scope by `fee-settings-card[data-origin]` — across an origin flip the radios alone cannot tell the
+new origin's method from the last one's.
 
-**A send names what it expects of the page.** `sendTransfer` takes `expect: "send" | "review"` and
-`submitSend` throws when the page disagrees — a gated send that the button would fire directly, or a
-one-tap send that opens the sheet, is a product bug the helper must not paper over by clicking
-whatever appears. Every read of the page goes through `readSendView` + `assertPublishInvariant`
-(tag ⇔ `data-action="review"` ⇔ `data-you="exposed"`), so a test asserting one surface has
-asserted the other two. The sheet's CTA arms after a delay: wait on `send-review-submit[data-ready]`
-(`waitForReviewReady`), never on a sleep. Closing the sheet goes through `waitForReviewClosed`, which
+**Every send passes the review.** `submitSend` reads the page through `readSendView` +
+`assertPublishInvariant` (public Fee Juice in effect on a private send ⇔ the form's warning ⇔
+`data-you="exposed"`, and a checked radio is the card's payer) and refuses to
+click while they disagree, so a test asserting one surface has asserted the other two; then it opens
+the sheet and presses Send now. The sheet's Send now arms after a delay and is never natively
+disabled (`aria-disabled` announces the refusal; its key and pointer guards enforce it): wait on `send-review-submit[data-ready]`
+(`waitForReviewReady`), never on a sleep or on `disabled`. The review draws its own payee block
+outside the page, so a read of the form's payee scopes to `send-page`. Closing the sheet goes through `waitForReviewClosed`, which
 finishes a stuck leave transition for that popup only (`settleClosedPopup`) — `closeStuckPopup` would
 clear the whole `#popup` layer, including a popup that must stay open beneath. `settleClosedPopup`'s
 `true` means only that the popup was still in the DOM once its leave began
@@ -449,6 +468,11 @@ wallet in a tab, where an unhandled Escape does nothing, but Chrome's toolbar po
 wallet on one. When a test asserts where focus returns, open the popup with `pointerClick`:
 `clickByTestId` fires `el.click()`, which never focuses
 the opener, so there is nothing to return to and the landing assertion proves nothing.
+
+**A Tab walk from the top starts at an anchor.** A `blur()` leaves the browser's sequential focus
+start point on the element last pressed, so the next Tab goes on from there: focus a
+`tabindex="-1"` element prepended to `body`, walk, then remove it (`tabWalk` in
+`execute-steps.test.ts`). Firefox also stops on a scroll area that overflows (`FIREFOX.md`).
 
 **The one sanctioned real click: `pointerClick(page, testid)`** (`helpers/legal-drivers.ts`). The
 helpers above dispatch the click in-page, which reaches an element even when an overlay covers it, so
@@ -487,6 +511,12 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   leaving `<Transition>` is visible while `isOpen` is already false. Gate on `data-dropdown-open`
   (open a menu through `openDropdown`, which clicks only a closed one), `data-toggle-active`,
   `data-restore-stage`, `data-boot-outcome`; add one if it is missing.
+- **A layout shift is a document offset when the page is scrolled.** A row dropped above an element
+  on a page scrolled to its bottom moves the content above it on screen. Scroll clamping keeps the
+  element's own viewport top, so `getBoundingClientRect().top` alone reads no shift. Compare
+  `top + document.scrollingElement.scrollTop` before and after, and prove the check with a mutation
+  that restores the shift (`onboarding-tab.test.ts`'s password create;
+  `implementations-plan/archive/p110-build-1/lessons/phase-6.md`).
 - **Freshness-gated balances.** An imported backup already carries the expected value. Capture
   `captureBalanceBaseline` first and require `updatedAt` newer AND the exact raw value AND the
   token-scoped render (`waitForFreshBalanceRow`, `waitForTokenCardAmount`); body-text scans
@@ -548,7 +578,9 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   ring mid-fade); on Firefox call `prepareKeys` first, since an unfocused page matches no
   `:focus-visible`. A click ends keyboard modality, so a script focus after it draws no ring
   whatever the CSS: prove a no-ring rule after a keyed activation
-  (`implementations-plan/archive/home-onboarding-2/lessons/phase-4.md`). Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
+  (`implementations-plan/archive/home-onboarding-2/lessons/phase-4.md`). Chrome's exception: a
+  click on a control that already holds keyboard focus keeps the modality, so the script focus it
+  starts rings; open by key, then click (`implementations-plan/archive/send-fixes-2/lessons/phase-1.md`). Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
   with `DOM.resolveNode` (Chrome): `page.accessibility.snapshot()` gives no ignored flag and no
   element (`implementations-plan/archive/accessibility-1/lessons/`).
 
@@ -753,6 +785,9 @@ the pattern.
   builds it from the element's other attributes. To stop a theme flip's transitions before a quick shot, `finish()` each of
   `document.getAnimations()`; a looping one throws and is left alone. A popup's `document.body` can
   still be null when `waitForPopup` resolves: observe `document.documentElement`.
+- **History shows only the selected account's records.** `readJournalDetail` on another account's
+  send waits out its timeout on an empty page (`src/popup/pages/journal/journal-detail-scope.ts`):
+  switch to that account first (`switchAccountByAddress`), as `network/tx-sendTx-fields.test.ts` does.
 - **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a
   glyph's middle and about half a pixel right of it, and a drag of one single move leaves a bare
   caret: press a quarter in from a character's outer edge and move in steps
@@ -870,7 +905,10 @@ alarms, opens the dApp page (a content script injects without messaging), closes
 closes Chrome's offscreen document from a scratch page (`closePxeHost`; left open, its clients
 reconnected and woke a successor 50 to 350 ms after the kill, as measured) and closes the scratch
 page, so the click is provably the first wake event; it asserts `backgroundAlive(ext)` is false
-before clicking. Then
+before clicking. The same close is what clears in-flight PXE work: the offscreen document keeps
+running the operations it holds through a background kill, and their node reads land in the window
+where `stopBackground` lets the launch's interceptions go, reaching the egress guard
+(`network-arrival.test.ts`). Then
 gate on the strictly-newer heartbeat from an extension page (§2), and expect the popup's boot path
 (`popup/boot-session.ts`, `auth-guard.ts`): under strict security a restart drops the session, so
 `ensureUnlocked` with a budget sized to the bootstrap (120s on the prover-ON canary) is the
@@ -1057,7 +1095,7 @@ the sanctioned response.
 | 33 | a green canary job that proved nothing: a Firefox canary job listing fewer files than Chrome's, or a canary under `describe.skip` (or deleted) while the job stays green | the lane lists were hand-mirrored, and the job's verdict was its exit code plus a file count — each canary file also carries a setup-contract test that passes on its own, so a skipped or missing canary leaves the file "passed" | `scripts/ci-cd/behavior-gating.test.ts` "canary lanes": every `*-canary.test.ts` on disk runs under a `canary*` label with `proverless` not true, is out of the pool, the pool equals the union of the dedicated lists, every aggregator `needs` is read — over all four lanes; and `Assert canary results` on every `canary*` label reads vitest's json report (`NULO_E2E_RESULTS_FILE`, added by `e2eReporters()`) against `scripts/ci-cd/canary-expectations.json`: every listed file present, nothing skipped, the named title passed (`scripts/ci-cd/assert-canary-results.ts`, fixtures from real runs) | **closed** — the pins and the step ship together (`firefox-arc-closeout`) |
 | 34 | `TimeoutError: Waiting failed: 5000ms exceeded` waiting for what a `pointerClick` should have opened, the pressed control sitting in a popup that had just appeared (`popup-escape-layered`, one Chrome network shard) | popups then entered sliding 40px over 300ms (`.slide-enter-from`; a sheet now fades in where it rests, but a card still moves when the stack changes); `pointerClick` read the centre mid-slide and pressed a round trip later, after the control had settled past it — a 16px control misses on any move over 8px, and the hit test passes at read time, so nothing fails until the menu never opens. A banner the node read adds above the control was the first suspect; a sampler showed the control held still through it | `pointerClick` reads the centre only once three reads 50 ms apart give the same box and no ancestor still carries `*-enter-from` (`waitUntilStill`; after 5 s a still control is pressed where it stands). Under `emulateCPUThrottling(6)`, pressing at once: old helper 4/8 missed, new 0/8 (`implementations-plan/archive/popup-escape-closes/plan.md#still-control`) | fixed, `popup-escape-closes` |
 | 35 | `webdriver-ownership.test.ts` (the unit suite, not e2e): `expected [] to deeply equal [ <pid> ]` (a fresh child missing from its owner's scan) or `expected true to be false` (release took a mid-exec child for gone), on a loaded runner only; then `process <pid> never showed its marker` in 7 ms | Bun's `spawn` returns while the child is still inside execve, and until the kernel has set up the new image `/proc/<pid>/environ` reads EMPTY (1 990 of 2 000 immediate reads on Bun 1.4.2, 0 on Node 24); the unit suite runs on Bun. A child that execs again (`sh -c "… exec sleep"`) reads empty again, so a second read of a fact a wait already saw can land inside that exec | one sighting is the proof: assert on what the wait saw, never re-scan (`spawnMarked`, the setsid case); teardown (`fixtures/browser/ownership.ts`) deletes a profile only after two empty scans a poll apart and signals a process on whichever poll first finds it. Reproduced only with the file pinned to one CPU beside three busy loops: 2 of 10 runs failed before, 0 of 20 after, 0 of 30 unpinned (`implementations-plan/archive/popup-escape-closes/plan.md#spawn-environ`) | fixed, `popup-escape-closes` |
-| 36 | `waitForTarget: no matching target after 10000ms` after the contact row's Ctrl-click in `rows.test.ts`, Firefox on CI only (4 of 6 attempts), with vue-router `pagehide` warnings from the unclosed tabs at teardown | the tab opens, but Firefox's BiDi announces a tab only through its first browsing context, once it has seen that context's document, and sends nothing when the context is discarded first; a link's tab is replaced 9–25 ms after it opens and the replacement is filtered, so `targets()` never lists it. Read in Firefox's source and timed in a probe; the CI trigger is inferred, since no local run lost the race (48 probed clicks, pinned to one busy CPU included) | `waitForNewTab` on the driver: Chrome diffs `targets()`, Firefox diffs the classic handle list and closes by handle from chrome scope (FIREFOX.md). `onboarding-tab.test.ts`'s `tabs.create` wait has the same dependency, no failure seen (`implementations-plan/archive/ux-feedback/plan.md#firefox-new-tab`) | fixed, `ux-feedback` |
+| 36 | `waitForTarget: no matching target after 10000ms` after the contact row's Ctrl-click in `rows.test.ts`, Firefox on CI only (4 of 6 attempts), with vue-router `pagehide` warnings from the unclosed tabs at teardown | the tab opens, but Firefox's BiDi announces a tab only through its first browsing context, once it has seen that context's document, and sends nothing when the context is discarded first; a link's tab is replaced 9–25 ms after it opens and the replacement is filtered, so `targets()` never lists it. Read in Firefox's source and timed in a probe; the CI trigger is inferred, since no local run lost the race (48 probed clicks, pinned to one busy CPU included) | `waitForNewTab` on the driver: Chrome diffs `targets()`, Firefox diffs the classic handle list and closes by handle from chrome scope (FIREFOX.md). `onboarding-tab.test.ts`'s `tabs.create` wait had the same dependency and later failed on CI (row 69) | fixed, `ux-feedback` |
 | 37 | `Waiting failed: 15000ms exceeded` for `select-token-row[data-symbol="ALT"]` after the click on `send-token-trigger` (`send-picker.test.ts:35`), Firefox only (a `dev` nightly, two `ux-feedback` PRs, one local gate); its retries then fail on the rows (`['ALT', 'ALT', 'TST']`) and, at four rows, on the search box | the Send page draws its token trigger before its tokens load, and until then a click opens the import popup, not the picker; the test clicked it once it was visible. A probe reproduced it: a click the moment the trigger was drawn opened the import popup 32 of 32 times, on both browsers, with and without the stack; the token was drawn as little as 3 ms before the test's own clicks, and one of ten on `dev`'s Firefox came before it. No sighting recorded which popup opened. Once an attempt has imported ALT, the file-scoped `tokenReadyExtension` keeps it, so each retry adds another | the test opens Send through `openSend`, which waits for `send-from-type`, drawn only once the token has loaded. Rule: wait for what only the loaded page draws, never for a control both states draw (`implementations-plan/archive/ux-feedback/plan.md#loaded-page-wait`). Retries reuse a file-scoped ALT fixture, so a retried body never deploys or imports a second ALT (`implementations-plan/archive/e2e-reliability-fixes/plan.md#file-scoped-fixture`) | fixed, `ux-feedback` |
 | 38 | `frame got detached` in the launch fixture's liveness wait (`fixtures/extension.ts`), then every in-test retry failing with the test-scoped fixture `undefined` (a PR's Chrome smoke, `onboarding-tab`) | Chrome's scratch page was the popup: on a fresh wallet it redirects to the onboarding tab and calls `window.close()` once the worker answers its first lookup, before the fixture seeds `nulo:onboarding:completed`, and Chrome honours the call. That is the supported hypothesis, not the established cause: a browser disconnect takes the same path. vitest 4.1.10 then keeps a test-scoped fixture marked initialized after its setup threw (`@vitest/runner` `chunk-artifact.js:350-357`), so every retry skips the setup | both drivers open the setup page (`src/setup/index.html#/install`) as the scratch page, which nothing about onboarding state closes. A probe forcing the redirect before the seed lost the popup scratch page 10 of 10 on Chrome, and kept the setup page 10 of 10 on both browsers (`implementations-plan/archive/e2e-reliability-fixes/plan.md#scratch-page`). The runner defect is not worked around: check any vitest bump with a fixture-retry repro | trigger fixed, `e2e-reliability-fixes`; runner defect open upstream (vitest-dev/vitest#11237, fix vitest-dev/vitest#11238) |
 | 39 | `network/backup-restore-integrity`'s import parks on the Continue-gated errors screen with every network "ran out of time", then `importFullBackup`'s 300 s wait for the success route lapses; `backup-migration-roundtrip` imports the same kind of export | the export writes account-state for every network whose node answered, so the funded wallet's backup also carries items for the Testnet and Alpha seeds (9 and 7 contracts in the probe's exports); the import registers them over public RPC (dRPC) on a fixed 30 s budget (`importChainSync.ts:34`), and one stalled call marks every network skipped | both tests keep only the funded chain's account-state items before re-sealing (`keepChainAccountState` in `helpers/backup-export.ts`, which throws unless a kept item lists the funded token's contract). A probe refusing every public origin read 0 hits on the filtered import on both browsers, and a hit within 2 s on a negative control carrying the sandbox item relabelled with a public chain (`implementations-plan/archive/e2e-reliability-fixes/plan.md#account-state-filter`). Whether an import should wait on public networks at all is an open product question | fixed, `e2e-reliability-fixes` |
@@ -1090,6 +1128,8 @@ the sanctioned response.
 | 66 | `TimeoutError: Waiting failed: 15000ms exceeded` at `token-list.test.ts`'s wait for the flagged `SCAM` row in the Send picker (Firefox smoke, 2 of 5 local runs at retry 0) | the spec seeded a token row with transfer functions and no balance functions, and the projector fills a side with no `balanceOf` function with "0" without asking any node, so the Testnet refusal could not hold the seeded balance: a background sync mid-test wrote a read zero, and the picker, which folds empty rows behind "N empty", hid the row | the seed names `balanceOfPublicFn` and `balanceOfPrivateFn`, so a refresh asks the refused node and keeps the seed; 4 of 4 Firefox runs of the file passed after, then both browsers' smoke gate. Rule: a seeded token row whose balance a spec relies on names both balance functions | fixed |
 | 67 | `TimeoutError: Waiting failed: 15000ms exceeded` at `send-picker-add.test.ts`'s wait for the flagged add row (`select-token-add-token-flagged`), both `smoke-against-artifact` jobs, Chrome and Firefox (nightly of 2026-10-29) | deterministic, not a flake: an artifact run holds the published token list, which flags no pair, and the add row's flag has one source, the verified list, so the fixture pair the source run's list flags is never flagged there. Row 44's class: a smoke assertion that holds only for the source run's data | the flag-on-paste check runs in source runs only, in `token-list.test.ts`'s source-run `describe`; the Send picker spec keeps its flow in both modes (#1352). Before, red on both browsers against a release build at retry 0; after, green in both modes on both browsers. Rule: a smoke spec that needs the held list to flag a pair runs in that `describe` (`tests/e2e/README.md`, held list) | fixed, `nightly-smoke-1` |
 | 68 | `PollTimeoutError: the picker's input clicked and cancelled: not within 10000 ms; last: {"type":"file","connected":true,"active":true}` at `toolbar-panel.test.ts`'s contacts card step (Firefox smoke, retry 0, #1222) | headless Firefox answers its native file picker by window focus: an unfocused window's pick is cancelled at once, a focused one's never answered. The step waited on the cancel, `pickFile` on the hold, and the suite controls neither; with the card window focused before its click the base missed 3 of 3 on Firefox 158 | each Firefox launch registers a stand-in for `@mozilla.org/filepicker;1` (`fixtures/browser/firefox-file-picker.ts`): a pick nobody armed is cancelled at once, the one `pickFile` arms for its page is held and answered with the file; Firefox's `prepareClick` renews the page's activation, since a picker consumes the one activation Puppeteer's evaluates share. Forced focus 3 of 3 and normal 10 of 10 green after, then the whole smoke, chaos and network suites on Firefox at retry 0. Rule: no Firefox pick reaches the native picker (`FIREFOX.md`) | fixed, `flake-1` |
+| 69 | `PollTimeoutError: one setup tab: not within 10000 ms; last: 0` at `onboarding-tab.test.ts`'s setup-tab count (Firefox smoke, all three fresh-browser attempts in 3 CI jobs, #1667), while the tab the wallet stored existed and was active | the count read Puppeteer's `page` targets, and Firefox's BiDi can leave a tab or its add-on URL unannounced for good (row 36): a context it never sees ready is dropped, and the shim gives an add-on page its URL only from a commit on a context it saw. Which gap CI hit is unverified: never reproduced locally in 16 runs. With the shim withholding the setup tab's BiDi events, the old count failed with CI's exact message | the spec counts the setup tab through `chrome.tabs.query({})` from its own extension page, which lists an extension's own tab URLs without the `tabs` permission on both browsers; the same withheld events then pass. Rule: count a tab the wallet opens with `tabs.create` through the browser's tab list, not `targets()` | fixed, `e2e-flakes-3` |
+| 70 | `TimeoutError: Waiting failed: 60000ms exceeded` in `submitNewTokenPopup`'s wait for the `Token added` toast (network shard 2/5, Chrome and Firefox, #1590), with two node lines `Failed to process tx …: maxFeesPerGas.feePerL2Gas must be greater…` about 1 s apart after the Import click | not the test: the token's metadata read simulates on the node under `completeFeeOptions`'s default cap, which was the current minimum fee × 1.5, while the node prices the next block, whose fee can sit higher (mid-checkpoint, the fee its first block froze; that this was CI's gap is inferred, since the node's lines are cut before their values). The node refuses the fast arm and the PXE rerun, `addToken` fails, and no toast fires. A green job that logs one such line recovered on the rerun. A loopback proxy serving the wallet a quarter of the current fee reproduced it on both browsers | the default cap is the node's predicted worst minimum × 1.5 (`predictedWorstMinFees`, the committed caps' basis), like upstream `BaseWallet`. Rule: a node refusal line in a failing e2e log is evidence, read it before the fixture's | fixed, `e2e-flakes-3` |
 
 ## 6. Editing the harness
 

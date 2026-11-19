@@ -167,12 +167,14 @@ describe("NewPasswordPair", () => {
 		expect(named.get('[data-testid="np-confirm-native"]').element).toBe(nativeInput(named, CONFIRM))
 	})
 
-	it("hideHint drops the hint row, which shows by default", () => {
+	it("hideHint hides the hint row in place, which shows by default", () => {
 		const shown = mountOwned().w
+		const row = (w: typeof shown) => w.get('[data-testid="np-hint"]').element.parentElement as HTMLElement
 		expect(shown.get('[data-testid="np-hint"]').text()).toBe(NEW_PASSWORD_HINTS.short)
+		expect(row(shown).className).not.toMatch(/hidden_in_place/)
 		const hidden = mountOwned({ hideHint: true }).w
-		expect(hidden.find('[data-testid="np-hint"]').exists()).toBe(false)
-		expect(hidden.text()).not.toContain(NEW_PASSWORD_HINTS.short)
+		expect(hidden.get('[data-testid="np-hint"]').text()).toBe(NEW_PASSWORD_HINTS.short)
+		expect(row(hidden).className).toMatch(/hidden_in_place/)
 	})
 
 	it("the slot follows the repeat field, inside the pair", () => {

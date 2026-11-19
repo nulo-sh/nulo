@@ -20,8 +20,11 @@ import {
 	humanizeErrorKind,
 	journalCallTitle,
 	journalCardAmount,
+	journalCardDirection,
+	journalCardFiat,
 	journalCardOriginLabel,
 	journalCardTitle,
+	journalCardTitleMark,
 	type JournalTerminalDisplay,
 	journalTerminalDisplay,
 	journalTransferAmount,
@@ -248,6 +251,7 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(props?.amountSymbol).toBe("USDC")
 		expect(props?.state).toBe("cancelled")
 		expect(props?.oneLineTitle).toBe(false)
+		expect(props?.titleNamesToken).toBe(true)
 	})
 
 	test("transfer + failed → title=token symbol, state=failed, amount present", () => {
@@ -365,7 +369,7 @@ describe("buildJournalTerminalCardProps", () => {
 			{ tokenById, tokens: [] },
 		)
 		expect(tokenById).not.toHaveBeenCalled()
-		expect(props).toMatchObject({ title: "Swap", amount: null, amountSymbol: null, transferTypeLabel: null })
+		expect(props).toMatchObject({ title: "Swap", amount: null, amountSymbol: null, direction: null, titleNamesToken: false })
 	})
 
 	test("a token whose decimals the wallet does not know shows no amount and no symbol; known, it shows both", () => {
@@ -373,6 +377,12 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(buildJournalTerminalCardProps(transferRecord(), unknown)).toMatchObject({ title: "USDC", amount: null, amountSymbol: null })
 		const known = { tokenById: () => ({ symbol: "USDC", decimals: 6, hasDecimals: true }), tokens: [] }
 		expect(buildJournalTerminalCardProps(transferRecord(), known)).toMatchObject({ amount: "1.5", amountSymbol: "USDC" })
+	})
+
+	test("one send reads the list rule's digits in flight and once ended", () => {
+		const raw = { amountRaw: "28439501" }
+		expect(journalCardAmount(transferRecord({ ...raw, terminalAt: null }), TEST_TOKEN_BY_ID)).toBe("28.43")
+		expect(buildJournalTerminalCardProps(transferRecord(raw), TEST_CTX)?.amount).toBe("28.43")
 	})
 
 	test("an empty amount shows no amount and no symbol", () => {
@@ -402,9 +412,65 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(journalCardTitle(transferRecord(), ctx)).toBe("—")
 	})
 
-	test("the transfer-type chip reads type 0 (private) and is absent without a type", () => {
-		expect(buildJournalTerminalCardProps(transferRecord({ transferType: 0 }), TEST_CTX)?.transferTypeLabel).toBe("Private → Private")
-		expect(buildJournalTerminalCardProps(transferRecord(), TEST_CTX)?.transferTypeLabel).toBeNull()
+	test("the card carries its send's direction: type 0 (private), and none without a type", () => {
+		const send = transferRecord({ transferType: 0, accountAddress: ACCOUNT, recipientAddress: OUTSIDE })
+		expect(buildJournalTerminalCardProps(send, TEST_CTX)?.direction).toEqual({
+			from: "private",
+			to: "private",
+			way: "out",
+			label: "Private → Private",
+		})
+		expect(buildJournalTerminalCardProps(transferRecord(), TEST_CTX)?.direction).toBeNull()
+	})
+})
+
+const ACCOUNT = `0x${"2b".repeat(32)}`
+const OUTSIDE = `0x${"1e".repeat(32)}`
+
+describe("journalCardTitleMark", () => {
+	const TOKEN = { symbol: "cUSDC", chainId: 1, contract: "0xc" }
+	const ctx = { tokenById: (id: number) => (id === 7 ? TOKEN : undefined) }
+	const lookup = { iconFor: vi.fn(() => "data:image/svg+xml;base64,PHN2Zy8+"), isFlagged: vi.fn(() => true) }
+
+	test("a send's title names its token, so it draws that token's mark from the list's reading", () => {
+		expect(journalCardTitleMark(transferRecord({ tokenId: 7 }), ctx, lookup)).toEqual({
+			symbol: "cUSDC",
+			icon: "data:image/svg+xml;base64,PHN2Zy8+",
+			badge: true,
+		})
+		expect(lookup.iconFor).toHaveBeenCalledWith(TOKEN)
+	})
+
+	test("a dApp call, titled by its function, and a send whose token is not the wallet's draw none", () => {
+		expect(journalCardTitleMark(recordWith({ kind: "dapp_execute", tokenId: 7 }), ctx, lookup)).toBeNull()
+		expect(journalCardTitleMark(transferRecord({ tokenId: 8 }), ctx, lookup)).toBeNull()
+	})
+})
+
+describe("journalCardDirection", () => {
+	const way = (over: Partial<OperationRecord>) => journalCardDirection(transferRecord({ transferType: 2, ...over }))?.way
+
+	test("its two addresses decide the way: another account is out, the sender in another hex case a move", () => {
+		expect(journalCardDirection(transferRecord({ transferType: 2, accountAddress: ACCOUNT, recipientAddress: OUTSIDE }))).toEqual({
+			from: "public",
+			to: "public",
+			way: "out",
+			label: "Public → Public",
+		})
+		expect(way({ accountAddress: ACCOUNT, recipientAddress: ACCOUNT.toUpperCase().replace("0X", "0x") })).toBe("self")
+	})
+
+	test("a missing or malformed pair is never a move", () => {
+		expect(way({ accountAddress: undefined, recipientAddress: undefined })).toBe("out")
+		expect(way({ accountAddress: "0xrecipient", recipientAddress: "0xrecipient" })).toBe("out")
+		expect(way({ accountAddress: ACCOUNT, recipientAddress: undefined })).toBe("out")
+	})
+
+	test("no known type, or a dApp record carrying one, has no direction", () => {
+		expect(journalCardDirection(transferRecord({ accountAddress: ACCOUNT, recipientAddress: OUTSIDE }))).toBeNull()
+		expect(journalCardDirection(transferRecord({ transferType: 9 as never }))).toBeNull()
+		const dapp = recordWith({ kind: "dapp_execute", transferType: 0, accountAddress: ACCOUNT, recipientAddress: ACCOUNT })
+		expect(journalCardDirection(dapp)).toBeNull()
 	})
 })
 
@@ -506,9 +572,10 @@ describe("a failed send that may have reached the network reads as its check's a
 			title: "Transfer (public)",
 			activityIcon: "zap",
 			originLabel: "playground.aztec.example",
-			transferTypeLabel: null,
+			direction: null,
 			amount: null,
 			amountSymbol: null,
+			titleNamesToken: false,
 			oneLineTitle: true,
 		})
 	})
@@ -763,6 +830,7 @@ describe("refusals filed before any window: card and detail", () => {
 		["wallet_refused", "Refused before sending", "The wallet refused this request before anything was signed. Nothing was sent."],
 		["scope_refused", "Not allowed", "The app asked for more than you allowed. Nothing was sent."],
 		["registry_refused", "Not allowed", "Apps cannot change your public authorizations. Nothing was sent."],
+		["unattached_refused", "Not allowed", "The app did not include an authorization from another of your accounts. Nothing was sent."],
 	])("%s reads %s on the card and in the detail", (kind, label, context) => {
 		const op = refused(kind)
 		expect(categoricalLabel(op)).toEqual({ label, context })
@@ -949,6 +1017,37 @@ describe("journalCardAmount — an in-flight send's amount, from a sealed row it
 		["a token whose decimals are unknown", "10000000", { ...TST, hasDecimals: false }, null],
 	])("%s", (_, amountRaw, token, shown) => {
 		expect(journalCardAmount(send(amountRaw), () => token)).toBe(shown)
+	})
+})
+
+describe("journalCardFiat — an in-flight send's dollar line, from the price reading its settled row reads", () => {
+	const TST = { symbol: "TST", decimals: 6, hasDecimals: true, chainId: 1, contract: "0xc" }
+	const fiatLabel = vi.fn((token: typeof TST, raw: bigint) => (token.contract === "0xc" ? `≈ $${raw / 1_000_000n}.00` : undefined))
+	const send = (overrides: Partial<OperationRecord> = {}) =>
+		recordWith({
+			kind: "transfer",
+			origin: "popup",
+			tokenId: 1,
+			amountRaw: "12000000",
+			terminalAt: null,
+			progress: { stage: "proving", enteredProveAt: 1 },
+			error: null,
+			...overrides,
+		})
+
+	test("a priced send's line, asked for the record's token and its base units", () => {
+		expect(journalCardFiat(send(), () => TST, fiatLabel)).toBe("≈ $12.00")
+		expect(fiatLabel).toHaveBeenLastCalledWith(TST, 12_000_000n)
+	})
+
+	test.each([
+		["a dApp operation", { kind: "dapp_execute" as const }, TST],
+		["an empty amount, which would read as a fake $0", { amountRaw: "" }, TST],
+		["an amount that is not an integer literal", { amountRaw: "1e5" }, TST],
+		["a token whose decimals are unknown", {}, { ...TST, hasDecimals: false }],
+		["a token the reading cannot price", {}, { ...TST, contract: "0xd" }],
+	])("no line for %s", (_, overrides, token) => {
+		expect(journalCardFiat(send(overrides), () => token, fiatLabel)).toBeNull()
 	})
 })
 

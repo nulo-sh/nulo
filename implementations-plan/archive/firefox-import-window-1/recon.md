@@ -1,0 +1,42 @@
+# firefox-import-window-1: recon
+
+Two Sonnet explorers read `origin/dev` at 002b76fc7 (a reuse sweep over eight capabilities, and a map of the Firefox e2e terrain); the driver read the flow code and verified every citation of #1701 against the tree. Paths are under `apps/extension/` unless they name the repo root.
+
+## Reuse map
+
+| Capability | Existing code | Verdict | Why |
+|---|---|---|---|
+| Close a hand-off window and reopen the panel on a page with a line | `src/utils/own-window.ts` `returnToPanel` → `handBack` (record, `RETURN_TO_PANEL`, `window.close`); `src/wallet/utils/toolbar-popup.ts` `registerPanelReturnMessage` → `returnFromWindow` | adapt | Gated on `isCardWindow()` (`own-window.ts:254`), so only contacts, account import and Restore again reach it (`CARD_FLOWS`, `:33`). The background handler is flow-agnostic: it checks only the sender (the popup page in a popup-type window) and the opener. |
+| Which document hands back | `inPopupWindow` (set by `register` once `windows.getCurrent()` reads `popup`) and `ownFlow` (cleared by `releaseOwnWindow`, which `followOwnRoute` runs on a completed navigation off the flow's page and the lock screen) | adapt | A predicate `inPopupWindow && ownFlow !== undefined` names "an own window still in its flow". `isCardWindow` stays the UI signal: it drives `Header.vue:175` and the three card pages' `showCard`. |
+| The hand-back record's routes | `src/utils/panel-handback.ts` `HANDBACK_ROUTES` (`:12-18`) | adapt | `/popup/general` is in the set; `/popup/settings` is not, and `decodeHandback` would drop that record. No registry, snapshot or session-key test lists the routes (`stored-shapes.scan.test.ts` lists the key prefix only). |
+| The panel's landing | `src/popup/index.ts:52` (`readHandback`, `replaceState` before the router), `:99-105` (`settleLanding`); `src/composables/panelLanding.ts`; `postAuthRoute` (`own-window.ts:167`) | reuse as-is | Route-agnostic. A locked profile: the guard sends `/popup/general` or `/popup/settings` (both `isAuthRequired`) to `/popup/auth`; after the unlock `postAuthRoute` returns `landingRoute()`; `settleLanding` shows the line only with that profile's session open (`panelLanding.ts`). The lock screen preselects the last active profile, which `completeImport` writes first (`import.vue:69`). |
+| Show a line as a toast | `src/utils/snack.ts` `showSnack`, `Snack`, `Outcome` | reuse as-is | Used by the panel landing and the card pages; passes `utils/toast-call-sites.test.ts` (that test scans `openToast(...)` call literals only). |
+| One landing for create and import | none | build new | Searched `router.push("/popup/general")`, `Profile imported`, `openToast({ kind: "success"`, `activateCreatedProfile`, `completeImport`, `land` in `src/popup`, `src/composables`, `src/onboarding`. The two tails are `import.vue:66-87` and `new-profile-helpers.ts:49-76` (`openCreatedProfile`). Home: `src/popup/opening-flow.ts`, which already names exactly these two flows (`OPENING_ROUTES`) and is imported by both pages; no Biome layer rule restricts `src/popup/*.ts` (`biome.json` rules cover `components/**`, `popup/components/modules/**`, `onboarding/**`). |
+| Leave a page for Settings | `src/utils/page-back.ts` `leaveFor` | reuse as-is | Stays the unlock-method page's in-place ending. |
+| Firefox e2e of a hand-back | `tests/e2e/toolbar-panel.test.ts` `watchHandback`, `returnState`, `toOwnWindow`, `panelOn`, `untilInPanel`, `sessionOpened`, `IMPORT_FROM_LOCK_SCREEN`; the contacts hand-back body (`:554-629`) | reuse as-is | The new scenario mirrors the contacts assertions exactly. |
+| A restore driver that ends in a window | `tests/e2e/helpers/import-drivers.ts` `submitEncryptedFullBackup` (`:279-316`) | adapt | Its only caller is `toolbar-panel.test.ts:745`; it polls `page.evaluate` for `#/popup/general` in the window, which throws once the window closes itself. |
+| Picture the toolbar panel | `tests/e2e/FIREFOX.md` § Picturing the toolbar panel (`drawSnapshot` from the privileged scope) | reuse as-is | No committed helper; earlier picture lanes used an uncommitted spec, deleted after the run. |
+
+## How each flow ends today (verified)
+
+- **Import** (`import.vue:66-87`): `completeImport` waits for activation (`completeImportWithRecovery`, `"active" | "needs-unlock"`), returns if the page went or the shell ended the flow, then `releaseOwnWindow()`, a toast ("Profile imported", or "Profile imported. Unlock to continue") and `router.push` to `/popup/general` or `/popup/auth`. Every ending (phrase or backup, each unlock choice, clean restore or Continue after errors) reaches it. In an own window the window stays open on that page.
+- **Create** (`new-profile-helpers.ts:49-76`): `openCreatedProfile` ends with `router.push("/popup/general")`, no toast. From the panel a passkey create runs in the background's passkey window (`useProfileCreateFlow.ts:65`), which closes on `done` (`popup/windows/passkey/index.vue:93`), and the background reopens the panel (`armPopupReturn`). `/popup/profile/new` is not in `OWN_WINDOW_ROUTES`, so the create page never runs as an own window still in its flow; started from an own window's lock screen it runs in a window that left its flow (`followOwnRoute` released it). `handOffCreatedProfile` (the profile did not open) routes and toasts an error with a `sub`.
+- **Change unlock method** (`unlock-method.vue:145-180`): success runs `newPasskey.forget()`, `reset()`, a success toast (`done`) and `leaveFor(router, "/popup/settings")`; in an own window the window stays on Settings. `UnlockMethodChangedError` ("saved, or may have been", `packages/extension-messaging/src/errors.ts:583`) goes to `/popup/auth` with an info toast; in an own window the lock screen is still inside the flow (`followOwnRoute`), so the unlock returns to the page. On success the service reopens the session (`wallet/services/profile/service.ts` `afterUnlockChangeHoldingLock`), except an integrity block, which returns success with the session closed behind the barrier.
+- **Cards**: account import hands back and shows its toast only when the hand-back is refused; Restore again shows its toast in the window and hands it back too; contacts' composable shows it before the page hands back.
+
+## Conventions and test shapes
+
+- `src/utils/own-window.test.ts`: `vi.stubGlobal("chrome", …)` with `windows.getCurrent/create/get/update`, `runtime.sendMessage`, `storage.session` backed by a `Map`; `window.close` spied; a `boot(hash, type)` helper captures and awaits `ownWindowSettled`; assertions on `session.get(HANDBACK_KEY)`, `sendMessage` and the close count.
+- `src/popup/pages/import.test.ts`: mocks `@/utils/own-window` through `importOriginal` with `surface.*` overrides; `completeImportWithRecovery` mocked (default `"active"`); `toast.open`, `nav.push`.
+- `src/popup/pages/profile/new-profile-helpers.test.ts`: does not mock `@/utils/own-window`; jsdom boots no own window, so the real `returnToPanel` answers false.
+- `src/popup/pages/settings/security/unlock-method.test.ts`: mocks `@/utils/own-window` through `importOriginal` (`leavePanelFor`, `moveToOwnWindow`); `stayed()` / `nothingChanged()` helpers.
+- E2E: `freshExtensionPerTest` launches per test; the file is `describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, …)`; selectors by testid only; test 6 is skipped when `CI === "true" && NULO_E2E_ARTIFACT_RUN !== "1"` and runs in the nightly and release artifact smokes and locally.
+- Smoke is not run through `scripts/e2e/agent.sh`, which runs the network config only (`NETWORK_CONFIG`, `agent.sh:16`); smoke claims its geckodriver ports through `reservePort` against the host registry, has no stall watchdog, and defaults to `e2eRetry(2)` (`--retry=0` overrides).
+
+## Collision and dedup risks
+
+- `releaseOwnWindow()` before the hand-back clears `ownFlow`, so the hand-back must be asked first (import releases first today).
+- Restore again flashes its toast in the closing window; a shared landing must not toast when it hands back.
+- `info` cannot ride a hand-back (`decodeSnack` accepts `success | error`), so the unlock-method page's `UnlockMethodChangedError` line cannot travel.
+- Open lanes: `lows-1` arc 2 reorders the unlock-method page's passkey steps (waits on owner asks); `rpc-fallback-1-a1` (#1664) changes the import and unlock-method templates only (`moreBelow`, `data-scroll-section`). This lane edits only `attempt`'s success branch, so a later merge is line-local.
+- Known limits this inherits (closed): #1067, #1068, #1069, #1070.

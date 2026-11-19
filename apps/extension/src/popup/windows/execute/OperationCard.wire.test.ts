@@ -8,15 +8,16 @@
 
 // @ts-expect-error — raw JSON import via vite alias
 import WonderlandTokenJson from "@wonderland-token-artifact"
-import { flushPromises, mount } from "@vue/test-utils"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { TokenBridgeContractArtifact } from "@aztec-labs/noir-contracts.js/TokenBridge"
 import { type ContractArtifact, FunctionSelector, loadContractArtifact } from "@aztec-labs/stdlib/abi"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import AddressDisplay from "@/components/AddressDisplay.vue"
 import { trimAddress } from "@/utils/string"
 import { decodeCallForDisplay } from "@/wallet/services/execution/call-decoder"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { displayCallsOf } from "./display-calls"
+import { openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 import type { DraftUIOperation } from "./types"
 
@@ -105,7 +106,7 @@ const mountCard = async (op: DraftUIOperation, { tokens = [USDC], artifact = TOK
 			components: { AddressDisplay },
 		},
 	})
-	await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
+	await openAllSteps(w)
 	await flushPromises()
 	return w
 }
@@ -113,6 +114,10 @@ const one = (w: Awaited<ReturnType<typeof mountCard>>, testid: string) => w.find
 const intentKind = (w: Awaited<ReturnType<typeof mountCard>>) => one(w, "execute-op-payload-row").attributes("data-intent-kind")
 const decodedNames = (w: Awaited<ReturnType<typeof mountCard>>) =>
 	w.findAll('[data-testid="execute-op-decoded-param"]').map((p) => p.attributes("data-param"))
+const unparsed = (w: Awaited<ReturnType<typeof mountCard>>) => w.findAll('[data-testid="execute-op-summary-unparsed"]').map((l) => l.text())
+
+// A mounted card's chip holds fire after the file ends and log as the worker closes.
+enableAutoUnmount(afterEach)
 
 beforeEach(() => {
 	lookups.accounts.splice(0)
@@ -144,7 +149,7 @@ describe("OperationCard — a call as the wire carries it", () => {
 	])("%s on a registered token reads as the transfer row titled %s, from its explicit sender", async (name, title) => {
 		const w = await mountCard(sendTx(callOf(name, [OWNER, TO, field(5_000_000n), field(0n)])))
 		expect(intentKind(w)).toBe("transfer")
-		expect(one(w, "execute-op-payload-row").text()).toContain(title)
+		expect(one(w, "execute-op-summary-call-head").text()).toContain(title)
 		expect(one(w, "execute-op-transfer-sender").attributes("data-sender-kind")).toBe("explicit")
 		expect(one(w, "execute-op-amount").text()).toContain("5 USDC")
 		expect(one(w, "execute-op-transfer-nonce").exists()).toBe(false)
@@ -222,7 +227,7 @@ describe("OperationCard — a call as the wire carries it", () => {
 		expect(intentKind(await mountCard(sendTx({ ...honest, selector })))).toBe(kind)
 	})
 
-	test("an L1 exit whose recipient field carries bits past an address shows the notice, not that address", async () => {
+	test("an L1 exit whose recipient field carries bits past an address reads as a call Nulo can't parse, not as that address", async () => {
 		const L1 = BigInt("0x7c41d2a90b3e85f61c0d7e4b2a9f13c86d5be9f0")
 		const exit = (recipient: bigint) =>
 			mountCard(
@@ -238,7 +243,8 @@ describe("OperationCard — a call as the wire carries it", () => {
 		const padded = await exit(2n ** 160n + L1)
 		expect(intentKind(padded)).toBe("raw")
 		expect(one(padded, "execute-op-unverified-args").attributes("data-reason")).toBe("arguments")
-		expect(one(padded, "execute-op-unverified-warning").text()).toContain("Can't read the arguments")
+		expect(unparsed(padded)).toEqual(["Nulo can't parse this call."])
+		expect(padded.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(0)
 		expect(decodedNames(padded)).toEqual([])
 	})
 
@@ -270,13 +276,14 @@ describe("OperationCard — a call as the wire carries it", () => {
 				},
 			)
 
-		test("one holding U+202E shows the notice, the advice and its raw fields, never the stripped text", async () => {
+		test("one holding U+202E reads as a call Nulo can't parse, with its raw fields and no advice, never the stripped text", async () => {
 			const w = await memo([0x70, 0x61, 0x79, 0x202e, 0x65, 0x76, 0x69, 0x6c])
 			expect(intentKind(w)).toBe("raw")
-			expect(one(w, "execute-op-summary-unverified-args").attributes("data-reason")).toBe("arguments")
+			expect(one(w, "execute-op-summary-unverified-args").exists()).toBe(false)
 			expect(one(w, "execute-op-unverified-args").attributes("data-reason")).toBe("arguments")
-			expect(one(w, "execute-op-unverified-warning").text()).toBe("Can't read the arguments")
-			expect(one(w, "execute-op-summary-unverified-advice").exists()).toBe(true)
+			expect(unparsed(w)).toEqual(["Nulo can't parse this call."])
+			expect(w.findAll('[data-testid$="-unverified-warning"]')).toHaveLength(0)
+			expect(w.findAll('[data-testid$="-unverified-advice"]')).toHaveLength(0)
 			expect(one(w, "execute-op-raw-toggle").text()).toContain("Show 12 raw values")
 			expect(w.text()).not.toContain("payevil")
 		})

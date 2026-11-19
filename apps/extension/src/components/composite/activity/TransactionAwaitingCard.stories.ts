@@ -28,14 +28,8 @@ export const DappOriginated: Story = {
 	args: { title: "Calling contract", originLabel: "example.dapp.io" },
 }
 
-/**
- * Width-pressure regression scenario: long subtitle ("Generating proof...")
- * + transfer-direction chip ("Private → Public") + amount + cancel button.
- * Before the chip-fit work the chip wrapped onto a 2nd visual line and the
- * subtitle pushed off-grid. Now the subtitle ellipsis-clamps and the chip
- * stays put with the X button sitting outside the card in the page-padding
- * gutter.
- */
+/** A send proving: its pair and way badge as the settled row draws them, a long stage line ellipsis-clamped
+ *  beside the amount, and the cancel button in the page-padding gutter. */
 export const TransferUnderWidthPressure: Story = {
 	args: {
 		title: "USDC",
@@ -43,7 +37,8 @@ export const TransferUnderWidthPressure: Story = {
 		icon: "send",
 		amount: "5.00",
 		amountSymbol: "USDC",
-		transferTypeLabel: "Private → Public",
+		titleNamesToken: true,
+		direction: { from: "private", to: "public", way: "out", label: "Private → Public" },
 		cancellable: true,
 		jobId: "story-1",
 		stage: "proving",

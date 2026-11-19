@@ -7,8 +7,6 @@
  */
 import { DateTime } from "luxon"
 import ActivityRowCard from "./ActivityRowCard.vue"
-import { PriceServiceClient } from "@/wallet/services/price/client"
-import { usePrices } from "@/composables/usePrices"
 
 const props = defineProps({
 	rows: { type: Array, required: true },
@@ -17,6 +15,10 @@ const props = defineProps({
 	tokens: { type: Array, default: () => [] },
 	/** Whether an incoming row's receipt is arriving now; judged when the row renders. */
 	isArriving: { type: Function, default: undefined },
+	/** The page's price reading, which its in-flight cards read too. */
+	fiatLabel: { type: Function, required: true },
+	iconFor: { type: Function, required: true },
+	isFlagged: { type: Function, required: true },
 })
 
 const groupedRows = computed(() => {
@@ -30,13 +32,6 @@ const groupedRows = computed(() => {
 		groups.get(dateKey).push(row)
 	}
 	return Array.from(groups, ([date, rows]) => ({ date, rows }))
-})
-
-const priceService = new PriceServiceClient()
-const prices = usePrices(priceService)
-onBeforeUnmount(() => {
-	prices.dispose()
-	priceService.disconnect()
 })
 
 const tokensById = computed(() => new Map(props.tokens.map((t) => [t.id, t])))
@@ -57,7 +52,9 @@ const tokenById = (id) => tokensById.value.get(id)
 				:row="row"
 				:tokens="tokens"
 				:tokenById="tokenById"
-				:fiatLabel="prices.tokenFiatLabel"
+				:fiatLabel="fiatLabel"
+				:iconFor="iconFor"
+				:isFlagged="isFlagged"
 				:isArriving="isArriving"
 			/>
 		</Flex>

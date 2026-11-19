@@ -9,7 +9,7 @@ import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 
 /** Utils */
 import { isFieldAddress } from "@nulo/wallet-bridge"
-import { ALREADY_EXISTS } from "@/utils/entity-rules"
+import { ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -42,7 +42,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v?.length) return null
-			if (!isFieldAddress(v)) return "Invalid address"
+			if (!isFieldAddress(v)) return INVALID_ADDRESS
 			// Hex is case-insensitive: another spelling of a listed contract is that token.
 			if (tokens.value.some((t) => t.contract.toLowerCase() === v.toLowerCase())) return ALREADY_EXISTS
 			return null
@@ -53,7 +53,7 @@ const form = useFormState({
 const contractTerm = form.fields.contract.value
 
 const isAlreadyExist = computed(() => form.fields.contract.error.value === ALREADY_EXISTS)
-const isInvalidAddress = computed(() => form.fields.contract.error.value === "Invalid address")
+const isInvalidAddress = computed(() => form.fields.contract.error.value === INVALID_ADDRESS)
 const isAvailableToCreateToken = computed(() => {
 	if (!contractTerm.value?.length) return false
 	if (form.fields.contract.error.value) return false
@@ -342,7 +342,7 @@ usePopupEntity(
 					</Flex>
 					<Flex v-else-if="isInvalidAddress" align="center" gap="4" role="alert" data-testid="error-text">
 						<Icon name="square-cross" size="12" color="red" />
-						<Text variant="body" color="primary"> Invalid address </Text>
+						<Text variant="body" color="primary"> {{ INVALID_ADDRESS }} </Text>
 					</Flex>
 				</Transition>
 			</template>

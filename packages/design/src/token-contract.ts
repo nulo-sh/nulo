@@ -74,6 +74,8 @@ export const tokenGroups = {
 		headline: "--font-headline",
 		body: "--font-body",
 		mono: "--font-mono",
+		/** The platform's colour-emoji faces; no `@font-face` declares them. */
+		emoji: "--font-emoji",
 	},
 	easings: {
 		bezier: "--bezier",
@@ -151,6 +153,7 @@ export const typeRoles = {
 	meta: { family: "--font-mono", size: 13, weight: 400, tracking: 0, uppercase: false, tabular: false },
 	value: { family: "--font-body", size: 12, weight: 600, tracking: 0, uppercase: false, tabular: false },
 	input: { family: "--font-body", size: 15, weight: 500, tracking: 0, uppercase: false, tabular: false },
+	emoji: { family: "--font-emoji", size: 24, weight: 400, tracking: 0, uppercase: false, tabular: false },
 } as const satisfies Record<string, TypeRoleSpec>
 
 /** Informal transition-duration scale (literal values, not CSS vars). */

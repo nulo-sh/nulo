@@ -14,13 +14,25 @@ import AuthwitCard from "@/popup/components/modules/settings/authwits/AuthwitCar
 
 /** Services */
 import { AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
+import { TaskServiceClient } from "@/wallet/services/task/client"
+import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
 import { useEntityCrud } from "@/composables/useEntityCrud"
+import { useTokenFlags } from "@/composables/usePrices"
+import { useRevokeTasks } from "@/composables/useRevokeTasks"
 
 /** Helpers */
-import { authwitMatchesSearch, decorateAuthwit, sortAuthwits } from "@/popup/components/modules/settings/authwits/authwit-helpers"
+import { createRunFence } from "@/composables/runFence"
+import {
+	authwitAction,
+	authwitMatchesSearch,
+	decorateAuthwit,
+	sortAuthwits,
+} from "@/popup/components/modules/settings/authwits/authwit-helpers"
+import { contractChipAt } from "@/popup/windows/execute/contract-chips"
 import { stripBidiAndZeroWidth } from "@/utils/string"
 
 const { openToast } = useToast()
@@ -38,12 +50,23 @@ const isFetchingRegistryStatus = ref(false)
 const searchTerm = ref("")
 
 const authwitsService = new AuthRegistryServiceClient()
+const tokenService = new TokenServiceClient()
+const priceService = new PriceServiceClient()
+const marks = useTokenFlags(priceService)
+const tokens = ref([])
+// A revoke runs on in the worker after its popup closes; its task tells each row how it stands.
+const taskService = new TaskServiceClient()
+const revokeTasks = useRevokeTasks({ client: taskService })
+taskService.onTaskCreated.add(revokeTasks.onTaskCreated)
+taskService.onTaskUpdated.add(revokeTasks.onTaskUpdated)
+taskService.onTaskDeleted.add(revokeTasks.onTaskDeleted)
 
 const {
 	entities: authwits,
 	isLoading: isFetchingAuthwits,
 	error,
 	refresh: refreshAuthwits,
+	loaded: listLoaded,
 } = useEntityCrud({
 	fetch: async () => (await authwitsService.getAuthwits(appStore.network.chainId, appStore.account.address)) ?? [],
 	added: authwitsService.onAuthwitAdded,
@@ -66,25 +89,64 @@ const filteredAuthwits = computed(() => {
 
 const isErrorOccurred = computed(() => !!error.value)
 
+// No name book: an unlisted contract reads its short address, never a name the person gave it.
+const chipContext = computed(() => ({
+	reader: marks,
+	chainId: appStore.network?.chainId,
+	tokens: tokens.value,
+	explorerId: appStore.defaultExplorer,
+}))
+const chipOf = (aw) => (authwitAction(aw.content) ? contractChipAt(chipContext.value, aw.content.contract) : null)
+
+// A token list that fails to load only lowers what a chip claims; only the latest read lands.
+let latestTokenRead = 0
+async function fetchTokens() {
+	const read = ++latestTokenRead
+	const { profile, network } = appStore
+	const held = profile && network ? await tokenService.getTokens(profile.id, network.chainId).catch(() => []) : []
+	if (read === latestTokenRead) tokens.value = held ?? []
+}
+
 const isShownScope = (scope) =>
 	scope.profileId === appStore.profile?.id && scope.chainId === appStore.network?.chainId && scope.account === appStore.account?.address
+// A sealed read can capture the flag before an event's write and answer after its event; the event wins.
+let flagEvents = 0
 function onRegistryEnabled(scope) {
-	if (isShownScope(scope)) isRegistryEnabled.value = true
+	if (!isShownScope(scope)) return
+	flagEvents++
+	isRegistryEnabled.value = true
 }
 function onRegistryDisabled(scope) {
-	if (isShownScope(scope)) isRegistryEnabled.value = false
+	if (!isShownScope(scope)) return
+	flagEvents++
+	isRegistryEnabled.value = false
 }
 authwitsService.onRegistryEnabled.add(onRegistryEnabled)
 authwitsService.onRegistryDisabled.add(onRegistryDisabled)
 
 async function fetchRegistryStatus() {
+	const eventsBefore = flagEvents
 	isFetchingRegistryStatus.value = true
 	try {
-		isRegistryEnabled.value = await authwitsService.getRegistryEnabled(appStore.network.chainId, appStore.account.address)
+		const enabled = await authwitsService.getRegistryEnabled(appStore.network.chainId, appStore.account.address)
+		if (flagEvents === eventsBefore) isRegistryEnabled.value = enabled
 	} catch {
 		// surfaced via the entity-crud error ref already
 	} finally {
 		isFetchingRegistryStatus.value = false
+	}
+}
+
+// The check is for the scope the page opened on, once its reads land; a switch or a leave before
+// then drops it.
+const opening = createRunFence()
+async function checkRegistry() {
+	const { network, account } = appStore
+	if (!network || !account) return
+	try {
+		await authwitsService.syncRegistry(network.id, account.address)
+	} catch (error) {
+		console.debug("[authwits] registry check failed", { error })
 	}
 }
 
@@ -114,21 +176,37 @@ const handleOpenAuthwit = (aw) => {
 watch(
 	() => [appStore.profile?.id, appStore.network?.chainId, appStore.account?.address],
 	() => {
+		opening.invalidate()
 		void refreshAuthwits({ clear: true })
 		void fetchRegistryStatus()
+		void fetchTokens()
+		void revokeTasks.snapshot()
 	},
 )
 
 onMounted(async () => {
 	if (appStore.account && appStore.isLogined) {
-		await fetchRegistryStatus()
+		const isOpening = opening.begin()
+		void fetchTokens()
+		void revokeTasks.snapshot()
+		await Promise.all([fetchRegistryStatus(), listLoaded])
+		if (isOpening()) void checkRegistry()
 	}
 })
 
 onBeforeUnmount(() => {
+	opening.invalidate()
 	authwitsService.onRegistryEnabled.remove(onRegistryEnabled)
 	authwitsService.onRegistryDisabled.remove(onRegistryDisabled)
 	authwitsService.disconnect()
+	tokenService.disconnect()
+	priceService.disconnect()
+	marks.dispose()
+	taskService.onTaskCreated.remove(revokeTasks.onTaskCreated)
+	taskService.onTaskUpdated.remove(revokeTasks.onTaskUpdated)
+	taskService.onTaskDeleted.remove(revokeTasks.onTaskDeleted)
+	revokeTasks.dispose()
+	taskService.disconnect()
 })
 </script>
 
@@ -184,6 +262,8 @@ onBeforeUnmount(() => {
 					v-for="aw in filteredAuthwits"
 					:key="aw.id"
 					:authwit="aw"
+					:chip="chipOf(aw)"
+					:revokeState="revokeTasks.stateOf(aw)"
 					@open="handleOpenAuthwit"
 					@revoke="revokeAuthwits"
 				/>

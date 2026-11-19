@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest"
-import { GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
+import { GasFees, GasSettings, ManaUsageEstimate } from "@aztec-labs/stdlib/gas"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { completeFeeOptions, MIN_FEE_PADDING } from "./fee-options"
 
@@ -21,7 +21,7 @@ describe("completeFeeOptions", () => {
 		const node = fakeNode(new GasFees(100n, 200n))
 		const result = await completeFeeOptions({ node, forEstimation: true })
 		expect(result).toBeInstanceOf(GasSettings)
-		// minFees.mul(1.5) = (150, 300)
+		// A node without `getPredictedMinFees` falls back to its current minimum.
 		expect(result.maxFeesPerGas.feePerDaGas).toBe(150n)
 		expect(result.maxFeesPerGas.feePerL2Gas).toBe(300n)
 		expect(result.maxPriorityFeesPerGas.feePerDaGas).toBe(0n)
@@ -108,6 +108,18 @@ describe("completeFeeOptions", () => {
 				forEstimation: true,
 			}),
 		).rejects.toThrow()
+	})
+
+	test("7. a node that predicts fees → the cap pads each fee's worst predicted slot, asked at the Limit estimate", async () => {
+		const node = {
+			...fakeNode(new GasFees(100n, 200n)),
+			getPredictedMinFees: vi.fn(async () => [new GasFees(100n, 500n), new GasFees(160n, 300n)]),
+		}
+		const result = await completeFeeOptions({ node, forEstimation: true })
+		expect(result.maxFeesPerGas.feePerDaGas).toBe(240n)
+		expect(result.maxFeesPerGas.feePerL2Gas).toBe(750n)
+		expect(node.getPredictedMinFees).toHaveBeenCalledWith(ManaUsageEstimate.Limit)
+		expect(node.getCurrentMinFees).not.toHaveBeenCalled()
 	})
 
 	test("MIN_FEE_PADDING matches upstream 0.5 (regression pin)", () => {

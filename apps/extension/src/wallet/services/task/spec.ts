@@ -26,6 +26,8 @@ export type Task = {
 	finishedAt?: number
 	result?: ITaskResult
 	error?: string
+	/** The dApp request this task runs for; a subtask takes its parent's. */
+	walletTraceId?: string
 }
 
 export enum ContentKind {
@@ -92,6 +94,8 @@ export class RevokeAuthwitsContent implements ITaskContent {
 	public readonly label = "Revoke public authwits"
 	constructor(
 		public readonly authwitIds: number[],
+		/** Each revoked row's `authwitRowKey`, which the Authwits page matches its rows by. */
+		public readonly authwitKeys: string[],
 		public readonly estimatedTime?: number,
 	) {}
 }

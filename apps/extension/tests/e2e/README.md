@@ -107,10 +107,19 @@ What an e2e build does instead of each outside host:
 
 - A host the wallet or a spec now tries: add it to `DECLARED_REFUSALS` in `fixtures/egress-guard.ts` with one line of why, in the change that adds the call.
 - A host the browser reaches on its own: first look for a flag or pref that stops it at its source; failing that, add the exact name to that driver's `ownHosts` (`CHROME_OWN_HOSTS` in `fixtures/browser/chrome.ts`, `FIREFOX_OWN_HOSTS` in `fixtures/browser/firefox.ts`) with why. Never a domain suffix: a wallet dependency that calls a new host under a vendor's domain must stay red.
-- `sent <node host>:443 to the guard N time(s) while the launch's stand-in held its origin`: a target the interception does not cover dialed the node. On Chrome, rerun the file with `NULO_E2E_INTERCEPT_LOG=1`, which logs the targets each arm attached and each request it redirected: a caller missing from every arm's attach lines is the miss. Firefox's observer has no target to miss; there, read the file's `stopBackground` and `interceptRpc` calls. Never declare the host or loosen the check. A small count in a file that kills the background or swaps the interception can also be a request issued just before an arm took effect; nothing records which, so it stays unresolved, never a pass.
+- `sent <node host>:443 to the guard N time(s) while the launch's stand-in held its origin`: a target the interception does not cover dialed the node. On Chrome, read the run's `NULO_E2E_INTERCEPT_LOG=1` lines (smoke CI sets it; locally, rerun the file with it), which log the targets each arm attached and each request it redirected, and the guard's `[egress-guard] <host>:<port> held` or `not held` for each request to a node host it watches: a caller missing from every arm's attach lines is the miss. Firefox's observer has no target to miss; there, read the guard's lines and the file's `stopBackground` and `interceptRpc` calls. Never declare the host or loosen the check. A small count in a file that kills the background or swaps the interception can also be a request issued just before an arm took effect; nothing records which, so it stays unresolved, never a pass.
 - `the canary request went direct` or `never reached the guard`: the browser's routing changed (a flag, a pref, a browser bump); the launch proved nothing, so fix the routing, never the check.
 
 Not covered: UDP and WebRTC, which the wallet does not use. The stand-in answers every node call with an error, so no smoke spec but the live one sees a node that answers: a value only a node gives is seeded, or proven in the network suite. A host on a driver's `ownHosts` that the wallet starts calling is refused but does not fail the run; reviewing a new list entry is what catches that.
+
+### Routing between endpoints (the fault relay)
+
+`network/rpc-routing.sandbox.test.ts` proves the routed node (`@nulo/aztec-runtime/routing`) against the run's real sandbox, with no browser: the real node adapter and router, and a server-entrypoint PXE (proverless, LMDB under `~/.cache/nulo-e2e/`), behind two fault relays standing for a network's primary (A) and fallback (B). It skips itself on the Firefox lane, so each PR runs it once.
+
+- **The relay** (`fixtures/rpc-relay.ts`, unit-tested by `scripts/e2e/rpc-relay.test.ts`) forwards each JSON-RPC request to the node unchanged unless a rule matches: `fail({ fault, methods?, times? })` with a status and body (`RELAY_REPLIES`: a 500, a JSON 429, a gateway refusal, a malformed 200), a blackhole, a delay or a kill; `cap(n)` refuses a larger batch; `freeze()` answers `getChainTips` and `getBlockNumber` with the node's values at that moment. `kill()` and `restore()` keep the URL: the port stays claimed in the registry until `close()`. Its counters (`requests()`, `methods()`, `carried(text)`) are what a scenario asserts on, a transaction hash reaching an endpoint included.
+- **Sends** go through `route.pickForSend` and are submitted on the endpoint it returns, as the wallet's send path does; the routed node itself refuses `sendTx`. The sender is the sandbox's third genesis account, which no other network file uses.
+- **The sandbox mines only when a transaction arrives**: a scenario that needs the chain to move (`advance(n)`) sends public mints straight to the node, past both relays.
+- **Two private sends to one recipient**: the first performs the tagging handshake, whose nullifier repeats on every send to that recipient until one is mined, and a constrained delivery reads the nullifier of the recipient's previous message, so a second send while the first is unmined fails in the kernel (`Nullifier read request … unknown nullifier`). A scenario that needs the PXE's sender sync to read a pending transaction simulates the next mint instead of sending it.
 
 ### Home open timing (opt-in)
 
@@ -158,16 +167,18 @@ uncommitted changes a build reads, is refused, so commit before you build it.
   `fixtures/update/release.ts`): whether it stores its rows in plaintext or seals them, whether its
   connect prompt replaces the popup's page or opens its own window, and whether a passkey profile it
   made is one the candidate retires (only Set up again) or one its passkey still unlocks, as the
-  candidate's `profile/profile-row.ts` classifies the row the release wrote, and the hostname alone of
-  the Testnet node it seeds, which the egress guard declares as a refusal. A tag with none is refused
-  before its zip is downloaded.
+  candidate's `profile/profile-row.ts` classifies the row the release wrote, the hostname alone of
+  the Testnet node it seeds, which the egress guard declares as a refusal, and whether it offers the
+  canonical Sponsored fee payer on every chain or only on the chains it lists, which leaves the
+  run's sandbox network none (from v1.2.0). A tag with none is refused before its zip is downloaded.
 - The live scenario populates the release through its own UI: a password profile with a second and
   an imported account and two contacts on Testnet (switched to first, as a release that seeds
   Mainnet opens there), then a network on the run's sandbox with a token it pins, a Send fee pick,
   a public and a private receipt, a connected playground and one send from the wallet whose fee
-  payer it picks. It requires every key family `HELD` names for the release's storage before it
-  updates: the legacy selection key for a plaintext release, the sealed selection row and the
-  seeding record for a sealing one. A sealing release first moves every outside endpoint onto a
+  payer it picks: the sponsor, or, on a release that offers none there, public Fee Juice the run
+  bridges to the account first. It requires every key family `HELD` names for the release's
+  storage before it updates: the legacy selection key for a plaintext release, the sealed
+  selection row and the seeding record for a sealing one. A sealing release first moves every outside endpoint onto a
   loopback node that reports that network's chain, through its own service, since its sealed rows
   cannot be rewritten offline and its recording names no outside endpoint; the scenario refuses to
   record while any moved host is still held. It then ends on its second Testnet account, read back
@@ -228,7 +239,7 @@ source smoke run.
 
 ## Chaos runs
 
-A chaos file runs only when `NULO_E2E_CHAOS=1` arms it. The network lane's chaos job arms `send-chaos.test.ts` alone, for its fixed seeds ([`CI.md`](../../../../CI.md)); no lane arms the profile chaos files.
+A chaos file runs only when `NULO_E2E_CHAOS=1` arms it. The network lane's chaos job arms `send-chaos.test.ts` alone, for its fixed seeds, and the nightly's advisory rpc leg arms `rpc-failover-chaos.test.ts` at one fixed seed ([`CI.md`](../../../../CI.md)); no lane arms the profile chaos files.
 
 ### Profile chaos
 
@@ -488,8 +499,8 @@ Feature helpers, exported through `fixtures/helpers.ts` (all `data-testid`-drive
 | `waitForNameField` / `expectNoNameField` / `expectNameFieldPrefill` (`fixtures/dom.ts`) + `readProfileNames` | The Profile-name rule on the four profile-creating pages (root testids `onboarding-create-page`, `onboarding-import-page`, `register-page`, `import-page`, state in `data-name-field`): a first profile has no field and is named "Main"; a later one shows it prefilled `Profile N`. Wait for the state before typing: the field renders only once the profile list is read. `importSeed(…, { profileName })` types a name only when given and fails when given one on a first profile. |
 | `readSessionRow` / `waitForSessionRow` / `peekSession` / `setSessionTtlMs(page, ms)` | Session state without navigating (a navigation refreshes the session): the persisted row's `profile`/`since`/`lockedAt`, the profile service's own expiry check, and a millisecond auto-lock TTL through the config service. |
 | `readSendRecords` / `waitForSendRecord(page, match)` (`fixtures/journal.ts`) | Every profile's `transfer` and `dapp_execute` journal records with their stage and `enteredProveAt` — the anchor for proof-gate timing. |
-| `sendTransfer(page, { …, expect })` + `fillSendForm(page, { amount, destination })` | Drives a whole send. `expect` (`"send"` \| `"review"`) is the caller's claim about the footer: a send the fee card gates (the account's own Fee Juice under a private origin) goes through the review sheet, anything else at once — the other offer throws. Every call site states it. |
-| `openSend` / `readSendView` / `waitForFee` / `waitForTag` / `submitSend` / `openReviewFromStrip` / `readReview` / `waitForReviewReady` / `shotSend` (`fixtures/send-page.ts`) | The Send page's publish surface: the strip's cells, the fee-source tag and the footer's action read together — `assertPublishInvariant` refuses a page where they disagree — plus the review sheet's rows, the hit-tested clicks on "Review send" / "Send now" / the strip, and both-theme screenshots under `NULO_E2E_SHOT_DIR`, which refuse a page that is not shown (a hidden page draws no frame, and its capture can hang). |
+| `sendTransfer(page, { fromType, toType, amount, destination })` + `fillSendForm(page, { amount, destination })` | Drives a whole send: the person step, both side radios, the amount, then `submitSend`. `fillSendForm` answers the person step when it shows. |
+| `openSend` / `chooseRecipient` / `readSendView` / `waitForFee` / `waitForTag` / `openSendFeeSheet` / `selectSendFeeMethod` / `openReview` / `submitSend` / `readReview` / `waitForReviewReady` / `shotSend` (`fixtures/send-page.ts`) | The Send page from the outside: the person step, then the form's publish surface: the fee card's tag, the form's warning and `send-publish[data-you]` read together (`assertPublishInvariant` refuses a page where they disagree). The fee card stays mounted behind its sheet, so its attributes read without opening it, but a click on it goes through `openSendFeeSheet`. Every send passes the review: a hit-tested "Review send", the arming wait, a hit-tested "Send now". Both-theme screenshots under `NULO_E2E_SHOT_DIR` refuse a page that is not shown (a hidden page draws no frame, and its capture can hang). |
 
 Anti-throttle Chrome flags live in the Chrome driver (`fixtures/browser/chrome.ts`):
 

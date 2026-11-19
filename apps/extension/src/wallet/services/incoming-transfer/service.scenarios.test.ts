@@ -147,8 +147,8 @@ function makeNetworkStub(
 	}[] = [{ id: "n1", chainId: 1, endpoints: [{ id: "e1", rpcUrl: "http://n1" }], primaryEndpointId: "e1" }],
 ) {
 	let purgeSub: ((profileId: string, chainId: number, networkId: string) => Promise<void>) | null = null
-	// getReceiptFee reaches through getNodeForUrl(endpoint).getTxReceipt(txHash) (or getNode(chainId) as a
-	// fallback); tests inject the receipt via setReceiptImpl. Unset → the node throws (unreachable), which
+	// getReceiptFee reaches through getNodeFor(record's network).getTxReceipt(txHash); tests inject the
+	// receipt via setReceiptImpl. Unset → the node throws (unreachable), which
 	// getReceiptFee swallows to null. The receipt's blockHash gates caching (reorg-safety).
 	type FakeReceipt = { transactionFee?: bigint; blockHash?: { toString(): string } }
 	let receiptImpl: ((txHashStr: string) => Promise<FakeReceipt>) | null = null
@@ -162,9 +162,9 @@ function makeNetworkStub(
 		name: "network",
 		dependencies: [],
 		networks,
-		// Real networks carry endpoints; getReceiptFee pins the fetch to the primary endpoint's URL.
+		// Real networks carry endpoints; getReceiptFee reads through the record's own network row.
 		getNode: vi.fn().mockImplementation(async (_chainId: number) => fakeNode),
-		getNodeForUrl: vi.fn().mockImplementation(async (_url: string) => fakeNode),
+		getNodeFor: vi.fn().mockImplementation(async (_network: unknown) => fakeNode),
 		setReceiptImpl(fn: ((txHashStr: string) => Promise<FakeReceipt>) | null) {
 			receiptImpl = fn
 		},
@@ -3807,13 +3807,13 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 		network.setReceiptImpl(async () => ({ transactionFee: 321n, blockHash: hash("0xbh") }))
 
 		expect(await service.getCachedReceiptFee(rec.id)).toBeNull()
-		expect(network.getNodeForUrl).not.toHaveBeenCalled()
+		expect(network.getNodeFor).not.toHaveBeenCalled()
 		expect(network.getNetwork).not.toHaveBeenCalled()
 
 		expect(await service.getReceiptFee(rec.id)).toEqual({ feeJuice: "321" })
-		expect(network.getNodeForUrl).toHaveBeenCalledTimes(1)
+		expect(network.getNodeFor).toHaveBeenCalledTimes(1)
 		expect(await service.getCachedReceiptFee(rec.id)).toEqual({ feeJuice: "321" })
-		expect(network.getNodeForUrl).toHaveBeenCalledTimes(1)
+		expect(network.getNodeFor).toHaveBeenCalledTimes(1)
 
 		await seedPublic({ txHash: txh(0x1010), blockHash: "0xremined" })
 		expect(await service.getCachedReceiptFee(rec.id)).toBeNull()
@@ -3871,7 +3871,7 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 		const rec = await seedPublic({ txHash: txh(0x1006), blockHash: "0xbh" })
 		network.setReceiptImpl(async () => ({ transactionFee: 1n, blockHash: hash("0xbh") }))
 		expect(await service.getReceiptFee(rec.id)).toBeNull()
-		expect(network.getNodeForUrl).not.toHaveBeenCalled()
+		expect(network.getNodeFor).not.toHaveBeenCalled()
 		expect(network.getNode).not.toHaveBeenCalled()
 	})
 

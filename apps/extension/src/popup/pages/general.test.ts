@@ -54,6 +54,7 @@ vi.mock("@/stores/balances.store", async (importOriginal) => ({
 
 import { useAppStore } from "@/stores/app.store"
 import type { BalanceScope } from "@/stores/balances.store"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import { HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 import { type ChromeStorageMock, installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import General from "./general.vue"
@@ -73,6 +74,7 @@ const STUBS = {
 	RecentActivityView: true,
 	RecoveryModeBanner: true,
 	RestoreOutcomeBanner: true,
+	WhatsNewRow: true,
 	Flex: { template: "<div><slot /></div>" },
 	Icon: true,
 	SectionLabel: { template: "<span>{{ label }}</span>", props: ["label"] },
@@ -102,15 +104,15 @@ const PRESTO_KEY = "nulo:ui:getStartedPrestoOpened@p1"
 const wrappers: VueWrapper[] = []
 let storage: ChromeStorageMock
 
-async function mountHome(type: "password" | "passkey" = "password", stored: Record<string, unknown> = {}) {
+async function mountHome(type: "password" | "passkey" = "password", stored: Record<string, unknown> = {}, chainId = HOME_SCOPE.chainId) {
 	storage = installChromeStorage(stored)
 	const pinia = createTestingPinia({ stubActions: false })
 	const appStore = useAppStore(pinia)
 	appStore.isLogined = true
 	appStore.profile = { id: "p1", type } as never
-	appStore.network = { id: "n1", chainId: 1 } as never
+	appStore.network = { id: "n1", chainId } as never
 	appStore.account = { address: "0xacct" } as never
-	if (gas !== undefined) gasByScope.set(activityScopeKey(HOME_SCOPE), gas)
+	if (gas !== undefined) gasByScope.set(activityScopeKey({ ...HOME_SCOPE, chainId }), gas)
 	const wrapper = mount(General, { global: { plugins: [pinia], stubs: STUBS, provide: {} } })
 	wrappers.push(wrapper)
 	await flushPromises()
@@ -314,6 +316,18 @@ describe("Home — what the reminders do", () => {
 		await flushPromises()
 		expect(order).toEqual(["mark", "open"])
 		expect(open).toHaveBeenCalledWith(HOW_AZTEC_WORKS_URL, "_blank", "noopener,noreferrer")
+	})
+
+	test.each([
+		{ chain: "Mainnet", chainId: CHAIN_IDS.MAINNET, url: "https://shield.human.tech/fee-juice" },
+		{ chain: "Testnet", chainId: CHAIN_IDS.TESTNET, url: "https://testnet.app.unleashed.systems" },
+	])("Get Fee Juice on $chain opens $url", async ({ chainId, url }) => {
+		gas = ZERO
+		const w = await mountHome("password", {}, chainId)
+		const open = vi.spyOn(window, "open").mockImplementation(() => null)
+		await w.get('[data-testid="get-started-feeJuice"]').trigger("click")
+		await flushPromises()
+		expect(open).toHaveBeenCalledExactlyOnceWith(url, "_blank", "noopener,noreferrer")
 	})
 
 	test("Make proofs faster opens Proving at once and marks the step once its write lands", async () => {

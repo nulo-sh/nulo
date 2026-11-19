@@ -8,6 +8,7 @@ import { isActivatingOtherThan } from "@/composables/useProfileBootstrap"
 
 /** Utils */
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
+import { entityListReducers } from "@/utils/entity-list"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { stringCompare } from "@/utils/string"
 
@@ -27,12 +28,14 @@ const props = defineProps({
 	show: Boolean,
 })
 
-const profileService = new ProfileServiceClient()
-profileService.onProfileAdded.add(onProfileAddedOrUpdated)
-profileService.onProfileUpdated.add(onProfileAddedOrUpdated)
-profileService.onProfileDeleted.add(onProfileDeleted)
-
 const profiles = ref([])
+const profileList = entityListReducers(profiles)
+
+const profileService = new ProfileServiceClient()
+// An add for a listed profile replaces its row, as an update does, so the chooser lists it once.
+profileService.onProfileAdded.add(profileList.onUpdated)
+profileService.onProfileUpdated.add(profileList.onUpdated)
+profileService.onProfileDeleted.add(profileList.onDeleted)
 
 // Serialize switches — two quick taps on different rows would otherwise
 // both await `commitScopeChange` and race, with whichever's `refreshInFlight`
@@ -79,22 +82,6 @@ const handleImportProfile = () => {
 const handleCreateProfile = () => {
 	popupStore.closeAll()
 	router.push("/popup/profile/new?from=/popup/auth")
-}
-
-function onProfileAddedOrUpdated(profile) {
-	const idx = profiles.value.findIndex((p) => p.id === profile.id)
-	if (idx === -1) {
-		profiles.value.push(profile)
-	} else {
-		profiles.value[idx] = profile
-	}
-}
-
-function onProfileDeleted(profile) {
-	const idx = profiles.value.findIndex((p) => p.id === profile.id)
-	if (idx !== -1) {
-		profiles.value.splice(idx, 1)
-	}
 }
 
 // The chooser belongs to the lock screen; an unlock that lands while it is open, or as it opens, closes it.

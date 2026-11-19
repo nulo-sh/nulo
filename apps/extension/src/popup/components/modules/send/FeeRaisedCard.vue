@@ -19,7 +19,7 @@ import FeeMethodRow from "./FeeMethodRow.vue"
 import { usePrices } from "@/composables/usePrices"
 
 /** Utils */
-import { type FeeDisplay, feeDisplay } from "@/utils/fee-estimation"
+import { type FeeDisplay, feeDisplay, feeFigure, feeText } from "@/utils/fee-estimation"
 
 const props = defineProps<{
 	payer: QueuedFeePayer
@@ -49,6 +49,8 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const was = computed(() => feeDisplay(props.approved, prices.feeJuiceQuote.value?.usd))
 const now = computed(() => feeDisplay(props.fee, prices.feeJuiceQuote.value?.usd))
+/** A strikethrough is not announced, so the drawn row is hidden and spoken as this sentence. */
+const spoken = computed(() => `Fee went up. Was ${feeFigure(was.value)}. Now ${feeText(now.value)}.`)
 
 watch(
 	now,
@@ -66,9 +68,19 @@ onBeforeUnmount(() => {
 
 <template>
 	<Flex direction="column" data-testid="fee-raised-card">
-		<Flex align="center" justify="between" :class="$style.card">
-			<Text variant="label-section" color="primary">Fee</Text>
-			<Text variant="name" color="primary" :class="$style.method_size" data-testid="fee-raised-method">{{ methodTitle }}</Text>
+		<Flex justify="between" gap="12" :class="$style.card" data-testid="fee-raised">
+			<span :class="$style.label" aria-hidden="true">
+				<span :class="$style.dot" />
+				<Text variant="label-section" color="primary">Fee</Text>
+			</span>
+			<Flex direction="column" align="end" gap="4" :class="$style.figures">
+				<span :class="$style.pair" aria-hidden="true">
+					<FeeAmount :display="now" class="type--meta color--primary" :usdClass="$style.fee_usd" data-testid="fee-raised-now" />
+					<s class="type--meta color--secondary" data-testid="fee-raised-was">was {{ feeFigure(was) }}</s>
+				</span>
+				<span :class="$style.visually_hidden">{{ spoken }}</span>
+				<Text variant="meta" color="secondary" data-testid="fee-raised-method">{{ methodTitle }}</Text>
+			</Flex>
 		</Flex>
 		<FeeMethodRow
 			v-if="!hideAvailable"
@@ -77,11 +89,6 @@ onBeforeUnmount(() => {
 			:feeJuiceBalanceFormatted="available"
 			:privateFeeJuiceFormatted="available"
 		/>
-		<Flex direction="column" gap="4" :class="$style.detail_row" data-testid="fee-raised">
-			<Text variant="value" color="primary">Fee went up</Text>
-			<Text variant="meta" color="secondary" data-testid="fee-raised-was">Was <FeeAmount :display="was" /></Text>
-			<Text variant="meta" color="primary" data-testid="fee-raised-now">Now <FeeAmount :display="now" /></Text>
-		</Flex>
 		<Flex v-if="priority" align="center" justify="between" :class="$style.detail_row" data-testid="fee-raised-priority">
 			<Text variant="label-section" color="secondary">Priority</Text>
 			<Text variant="value" color="primary">{{ PRIORITY_LABELS[priority] }}</Text>
@@ -90,12 +97,51 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
+/* Baseline, so the label sits on the first figure's line whatever the two roles' sizes; the label
+ * is inline content, so its baseline is its text's, not the dot's edge. */
 .card {
+	align-items: baseline;
 	padding: 12px;
 }
 
-.method_size {
-	font-size: 13px;
+.label {
+	flex: none;
+}
+
+.dot {
+	display: inline-block;
+	vertical-align: middle;
+	margin-right: 6px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--yellow);
+}
+
+.figures {
+	min-width: 0;
+	text-align: end;
+}
+
+/* The struck figure drops under the new one rather than either being cut; `anywhere` lets a figure
+ * longer than the line break inside itself too. */
+.pair {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	align-items: baseline;
+	gap: 4px 8px;
+	overflow-wrap: anywhere;
+}
+
+.fee_usd {
+	composes: type--fiat from global;
+	font-size: 11px;
+	color: var(--nulo-secondary);
+}
+
+.visually_hidden {
+	composes: visually_hidden from "./fee-shared.module.css";
 }
 
 .detail_row {

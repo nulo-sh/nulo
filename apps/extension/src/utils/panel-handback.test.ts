@@ -48,6 +48,13 @@ describe("reading the hand-back", () => {
 		expect(landingRoute()).toBeUndefined()
 	})
 
+	test("Settings, where a changed unlock method returns, lands with its snack", async () => {
+		const settings = { route: "/popup/settings", snack: { ...SNACK, label: "Now unlocks with your passkey" } }
+		expect(decodeHandback(settings)).toEqual(settings)
+		session.set(HANDBACK_KEY, settings)
+		expect(await readHandback()).toBe("/popup/settings")
+	})
+
 	test("a route outside the closed set drops the record, read once", async () => {
 		for (const route of ["/popup/settings/security/export/full", "https://dapp.example/", undefined]) {
 			session.set(HANDBACK_KEY, { route })

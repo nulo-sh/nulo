@@ -2,11 +2,17 @@
 import type { ConfigProp, IConfig } from "@/wallet/config"
 import { EventHandler, createSerialQueue } from "@nulo/wallet-core/utils"
 import { type ILoggerStore, type Log, LogLevel, CircularBufferIterable, print, trim } from "."
+import { RequestLog } from "./request-log"
+
+const LOGS_KEY = "nulo:logs"
+const REQUEST_LOGS_KEY = "nulo:request-logs"
 
 export class LoggerStore implements ILoggerStore {
 	public readonly onLog = new EventHandler<Log>()
 	/** Fires with the new minimum level each time `debugMode` moves it. */
 	public readonly onLevel = new EventHandler<LogLevel>()
+	/** Each dApp request's capture, recorded while developer mode is on and persisted beside the lines. */
+	public readonly requests: RequestLog
 
 	private logLevel: LogLevel
 	private logs: CircularBufferIterable<Log>
@@ -25,6 +31,8 @@ export class LoggerStore implements ILoggerStore {
 	 */
 	private readonly storageOps = createSerialQueue()
 	private persistEnabled: boolean
+	/** The captures changed since their last write; a line alone never rewrites them. */
+	private requestsDirty = false
 
 	private readonly config: IConfig
 
@@ -37,6 +45,11 @@ export class LoggerStore implements ILoggerStore {
 		// ordering that must not change). So this is the schema default, not the user's choice;
 		// `applyRetentionPolicy()` is what settles it once the real value is known.
 		this.persistEnabled = config.get("developerMode") === true
+		this.requests = new RequestLog(() => config.get("developerMode") === true)
+		this.requests.onChange = () => {
+			this.requestsDirty = true
+			this.scheduleFlush()
+		}
 		config.onUpdate.add(this.onConfigUpdate)
 	}
 
@@ -56,6 +69,7 @@ export class LoggerStore implements ILoggerStore {
 	 */
 	public clear(): Promise<void> {
 		this.logs.clear()
+		this.requests.clear()
 		// Returned with its failure: `clearLogs()` must not acknowledge success while the persisted
 		// copy is still on disk, where a worker restart resurrects it.
 		return this.purgePersisted()
@@ -79,6 +93,7 @@ export class LoggerStore implements ILoggerStore {
 			data: trim(data) as unknown[],
 		}
 		this.logs.add(log)
+		this.requests.take(log)
 		this.scheduleFlush()
 		this.onLog.invoke(log)
 		print(log)
@@ -100,13 +115,15 @@ export class LoggerStore implements ILoggerStore {
 	}
 
 	private async importSaved(): Promise<void> {
-		let saved: Log[] | undefined
+		let stored: Record<string, unknown>
 		try {
-			saved = (await chrome.storage.session.get("nulo:logs"))["nulo:logs"] as Log[] | undefined
+			stored = await chrome.storage.session.get([LOGS_KEY, REQUEST_LOGS_KEY])
 		} catch {
 			// Session storage may not be available (e.g., in tests)
 			return
 		}
+		this.requests.restore(stored[REQUEST_LOGS_KEY])
+		const saved = stored[LOGS_KEY] as Log[] | undefined
 		if (!saved?.length) return
 		// Read after the await: a line logged while the read was in flight is this worker's too.
 		const live = this.logs.items()
@@ -137,7 +154,13 @@ export class LoggerStore implements ILoggerStore {
 			// purge just removed.
 			void this.enqueueStorageOp(async () => {
 				const items = this.logs.items().slice(-2000)
-				await chrome.storage.session.set({ "nulo:logs": items })
+				await chrome.storage.session.set({ [LOGS_KEY]: items })
+			}).catch(() => {})
+			if (!this.requestsDirty) return
+			this.requestsDirty = false
+			// A write of its own, so a failing one cannot take the other down.
+			void this.enqueueStorageOp(async () => {
+				await chrome.storage.session.set({ [REQUEST_LOGS_KEY]: this.requests.snapshot() })
 			}).catch(() => {})
 		}, 2000)
 	}
@@ -170,6 +193,7 @@ export class LoggerStore implements ILoggerStore {
 		this.persistEnabled = this.config.get("developerMode") === true
 		this.logs.resize(ringSize(this.logLevel))
 		if (this.persistEnabled) return
+		this.requests.clear()
 		const kept = this.logs.items().filter((log) => log.id > this.importedThroughId)
 		this.logs.clear()
 		for (const log of kept) this.logs.add(log)
@@ -186,8 +210,9 @@ export class LoggerStore implements ILoggerStore {
 			clearTimeout(this.flushTimer)
 			this.flushTimer = undefined
 		}
+		this.requestsDirty = false
 		return this.enqueueStorageOp(async () => {
-			await chrome.storage.session.remove("nulo:logs")
+			await chrome.storage.session.remove([LOGS_KEY, REQUEST_LOGS_KEY])
 		})
 	}
 
@@ -204,7 +229,10 @@ export class LoggerStore implements ILoggerStore {
 			// Turning retention off must PURGE, not merely stop writing: entries captured while it
 			// was on otherwise survive in session storage and are re-imported by rehydrate() on the
 			// next worker restart, so the setting would appear to do nothing.
-			if (!this.persistEnabled) void this.purgePersisted().catch(() => {})
+			if (!this.persistEnabled) {
+				this.requests.clear()
+				void this.purgePersisted().catch(() => {})
+			}
 		}
 	}
 }

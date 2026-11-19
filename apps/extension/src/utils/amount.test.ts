@@ -3,6 +3,8 @@ import {
 	balanceFormatted,
 	clampDecimals,
 	formatBaseUnits,
+	formatListAmount,
+	formatListSplit,
 	normalizeAmount,
 	parseAmountToBaseUnits,
 	purgeNumber,
@@ -14,6 +16,21 @@ import {
  *  which read from `Number.toLocaleString` at runtime — fine in app context but
  *  flaky in CI. Pass these in to assert byte-exact strings. */
 const PIN = { decimalSep: ".", thousandsSep: "," } as const
+
+const SEPARATORS = { "en-US": [".", ","], "de-DE": [",", "."], "fr-FR": [",", "\u202f"] } as const
+type Locale = keyof typeof SEPARATORS
+
+/** The formatter reads the separators off `(1.1)` and `(1111)`; every other number formats as usual. */
+const useSeparators = (locale: Locale) => {
+	const [decimal, thousands] = SEPARATORS[locale]
+	const original = Number.prototype.toLocaleString
+	vi.spyOn(Number.prototype, "toLocaleString").mockImplementation(function (this: number, ...args: []) {
+		const n = Number(this)
+		if (n === 1.1) return `1${decimal}1`
+		if (n === 1111) return `1${thousands}111`
+		return original.apply(this, args)
+	})
+}
 
 describe("amount/clampDecimals", () => {
 	test("returns input unchanged when there's no dot", () => {
@@ -411,21 +428,6 @@ describe("amount/balanceFormatted", () => {
 })
 
 describe("amount/balanceFormatted — compact", () => {
-	const SEPARATORS = { "en-US": [".", ","], "de-DE": [",", "."], "fr-FR": [",", "\u202f"] } as const
-	type Locale = keyof typeof SEPARATORS
-
-	/** The formatter reads the separators off `(1.1)` and `(1111)`; every other number formats as usual. */
-	const useSeparators = (locale: Locale) => {
-		const [decimal, thousands] = SEPARATORS[locale]
-		const original = Number.prototype.toLocaleString
-		vi.spyOn(Number.prototype, "toLocaleString").mockImplementation(function (this: number, ...args: []) {
-			const n = Number(this)
-			if (n === 1.1) return `1${decimal}1`
-			if (n === 1111) return `1${thousands}111`
-			return original.apply(this, args)
-		})
-	}
-
 	afterEach(() => {
 		vi.restoreAllMocks()
 	})
@@ -493,8 +495,8 @@ describe("amount/balanceFormatted — compact", () => {
 		expect(balanceFormatted(units, decimals, 8).value).toBe(today)
 	})
 
-	/** The other caps, all at 18 decimals: Home's token-row sides (6), its total and the token page's
-	 *  split (10), the token page's hero (20). */
+	/** The other caps, all at 18 decimals: a narrow cut (6), the token rows and the token page's split
+	 *  (10), the token page's hero (20). */
 	const OTHER_WIDTHS: Array<Omit<Row, "locale" | "decimals"> & { length: number }> = [
 		{ length: 6, name: "whole part fits, the trim", units: 12_345_678n * 10n ** 14n, compact: "1,234", today: "1,234." },
 		{ length: 6, name: "whole part fits exactly", units: 99_999n * E18, compact: "99,999", today: "99,999" },
@@ -524,5 +526,187 @@ describe("amount/balanceFormatted — compact", () => {
 		expect(out.value).toBe(compact)
 		expect(out.slashed).toBe(out.value !== balanceFormatted(units, 18).value)
 		expect(balanceFormatted(units, 18, length).value).toBe(today)
+	})
+})
+
+describe("amount/formatListAmount", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	const units = (amount: string, decimals: number) => parseAmountToBaseUnits(amount, decimals)
+
+	/** `at10` is a token row, `at8` an activity row, `full` the snack's uncapped form. */
+	const ROWS: Array<{ name: string; amount: string; decimals: number; at10: string; at8: string; full: string }> = [
+		{ name: "stablecoin cents", amount: "1234.567891", decimals: 6, at10: "1,234.56", at8: "1,234.56", full: "1,234.56" },
+		{
+			name: "four significant digits below 1",
+			amount: "0.00039203438152",
+			decimals: 18,
+			at10: "0.000392",
+			at8: "0.000392",
+			full: "0.000392",
+		},
+		{ name: "the trailing-zero artefact goes", amount: "28.439501", decimals: 6, at10: "28.43", at8: "28.43", full: "28.43" },
+		{ name: "below 1, never rounded up", amount: "0.99996", decimals: 18, at10: "0.9999", at8: "0.9999", full: "0.9999" },
+		{ name: "1 exactly", amount: "1", decimals: 18, at10: "1", at8: "1", full: "1" },
+		{ name: "one whole digit keeps three", amount: "1.23456789", decimals: 18, at10: "1.234", at8: "1.234", full: "1.234" },
+		{ name: "the top of one whole digit", amount: "9.9999", decimals: 18, at10: "9.999", at8: "9.999", full: "9.999" },
+		{ name: "10 exactly", amount: "10", decimals: 18, at10: "10", at8: "10", full: "10" },
+		{
+			name: "three whole digits keep two, never rounded up",
+			amount: "999.999",
+			decimals: 6,
+			at10: "999.99",
+			at8: "999.99",
+			full: "999.99",
+		},
+		{ name: "a round amount pads nothing", amount: "1000", decimals: 18, at10: "1,000", at8: "1,000", full: "1,000" },
+		{
+			name: "the row's width cuts after the rule",
+			amount: "12345.678901",
+			decimals: 6,
+			at10: "12,345.67",
+			at8: "12,345.6",
+			full: "12,345.67",
+		},
+		{
+			name: "the width cut keeps its own zero",
+			amount: "10000.05",
+			decimals: 6,
+			at10: "10,000.05",
+			at8: "10,000.0",
+			full: "10,000.05",
+		},
+		{ name: "stablecoin dimes", amount: "0.1", decimals: 6, at10: "0.1", at8: "0.1", full: "0.1" },
+		{ name: "never more than the token's decimals", amount: "1.5", decimals: 2, at10: "1.5", at8: "1.5", full: "1.5" },
+		{ name: "a token without decimals", amount: "1234", decimals: 0, at10: "1,234", at8: "1,234", full: "1,234" },
+		{ name: "M at 8, whole at 10", amount: "12345678.9", decimals: 18, at10: "12,345,678", at8: "12.34M", full: "12,345,678.9" },
+		{ name: "M at both widths", amount: "123456789", decimals: 18, at10: "123.45M", at8: "123.45M", full: "123,456,789" },
+		{
+			name: "the width cut takes the significant digits",
+			amount: "0.0000001234",
+			decimals: 18,
+			at10: "0.00000012",
+			at8: "<0.000001",
+			full: "0.0000001234",
+		},
+		{
+			name: "one base unit, the floor",
+			amount: "0.000000000000000001",
+			decimals: 18,
+			at10: "<0.00000001",
+			at8: "<0.000001",
+			full: "0.000000000000000001",
+		},
+		{ name: "zero", amount: "0", decimals: 18, at10: "0", at8: "0", full: "0" },
+	]
+
+	test.each(ROWS)("$name: $amount reads $at10 / $at8 / $full", ({ amount, decimals, at10, at8, full }) => {
+		useSeparators("en-US")
+		const u = units(amount, decimals)
+		expect(formatListAmount(u, decimals, 10)).toBe(at10)
+		expect(formatListAmount(u, decimals, 8)).toBe(at8)
+		expect(formatListAmount(u, decimals)).toBe(full)
+	})
+
+	test("past a thousand trillion the row reads >999T and the uncapped form every digit", () => {
+		useSeparators("en-US")
+		expect(formatListAmount(2n ** 128n - 1n, 0, 10)).toBe(">999T")
+		expect(formatListAmount(2n ** 128n - 1n, 0)).toBe("340,282,366,920,938,463,463,374,607,431,768,211,455")
+	})
+
+	test("a stored string reads as its bigint", () => {
+		useSeparators("en-US")
+		expect(formatListAmount("1234567891", 6, 10)).toBe("1,234.56")
+	})
+
+	test.each([null, undefined, ""])("an empty value (%j) reads 0", (empty) => {
+		expect(formatListAmount(empty, 6, 10)).toBe("0")
+	})
+
+	test("a negative stored value reads as balanceFormatted reads it", () => {
+		expect(formatListAmount("-1234567891", 6, 8)).toBe(balanceFormatted("-1234567891", 6, 8, { compact: true }).value)
+	})
+
+	test.each([
+		["de-DE", "1.234,56"],
+		["fr-FR", "1\u202f234,56"],
+	] as const)("%s separators: %s", (locale, expected) => {
+		useSeparators(locale)
+		expect(formatListAmount(units("1234.567891", 6), 6, 10)).toBe(expected)
+	})
+})
+
+describe("amount/formatListSplit", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	const units = (amount: string, decimals: number) => parseAmountToBaseUnits(amount, decimals)
+
+	const ROWS: Array<{ name: string; priv: string; pub: string; decimals: number; total: string; private: string; public: string }> = [
+		{
+			name: "a dust side reads <0.01, never 0",
+			priv: "0.0005",
+			pub: "999.9985",
+			decimals: 6,
+			total: "999.99",
+			private: "<0.01",
+			public: "999.99",
+		},
+		{
+			name: "a round total keeps its dust side",
+			priv: "1000",
+			pub: "0.003",
+			decimals: 6,
+			total: "1,000",
+			private: "1,000",
+			public: "<0.01",
+		},
+		{ name: "a zero side reads 0", priv: "0", pub: "999.999", decimals: 18, total: "999.99", private: "0", public: "999.99" },
+		{ name: "whole sides", priv: "1000", pub: "250", decimals: 6, total: "1,250", private: "1,000", public: "250" },
+		{
+			name: "the floor at the total's three decimals",
+			priv: "1.5",
+			pub: "0.0004",
+			decimals: 18,
+			total: "1.5",
+			private: "1.5",
+			public: "<0.001",
+		},
+		{
+			name: "the floor at a total below 1",
+			priv: "0.00039203438152",
+			pub: "0.000000000001",
+			decimals: 18,
+			total: "0.000392",
+			private: "0.000392",
+			public: "<0.0000001",
+		},
+		{
+			name: "the floor never wider than the row",
+			priv: "0.000001234",
+			pub: "0.000000000001",
+			decimals: 18,
+			total: "0.00000123",
+			private: "0.00000123",
+			public: "<0.00000001",
+		},
+		{ name: "nothing held", priv: "0", pub: "0", decimals: 18, total: "0", private: "0", public: "0" },
+	]
+
+	test.each(ROWS)("$name: $total over $private / $public", ({ priv, pub, decimals, total, private: p, public: q }) => {
+		useSeparators("en-US")
+		expect(formatListSplit(units(priv, decimals), units(pub, decimals), decimals, 10)).toEqual({ total, private: p, public: q })
+	})
+
+	test("the floor takes the locale's separator", () => {
+		useSeparators("de-DE")
+		expect(formatListSplit(units("0.0005", 6), units("999.9985", 6), 6, 10)).toEqual({
+			total: "999,99",
+			private: "<0,01",
+			public: "999,99",
+		})
 	})
 })

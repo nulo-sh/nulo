@@ -3,7 +3,7 @@
 import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { sameStoredName, storedNameKey } from "@/utils/account-name"
-import { ALREADY_EXISTS } from "@/utils/entity-rules"
+import { ALREADY_EXISTS, RPC_URL_MIN_LENGTH } from "@/utils/entity-rules"
 import { managers } from "@/utils/core"
 import { activateNetworkGuarded } from "@/utils/guarded-network-activation"
 import { refusedRpcUrlLine } from "./endpoint-error-text"
@@ -64,8 +64,7 @@ const isAvailableToCreateNetwork = computed(() => {
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isCreating.value) return false
 	if (!storedNameKey(nameTerm.value)) return false
-	if (!urlTerm.value.length) return false
-	if (urlTerm.value.length < 5) return false
+	if (urlTerm.value.length < RPC_URL_MIN_LENGTH) return false
 	if (form.fields.name.error.value || form.fields.url.error.value) return false
 	return true
 })

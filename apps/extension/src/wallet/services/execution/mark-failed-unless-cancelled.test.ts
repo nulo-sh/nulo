@@ -12,10 +12,15 @@ import { describe, expect, test, vi } from "vitest"
 import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
 import {
 	AuthRegistryRefusalError,
+	DefaultEntrypointMultiCallError,
+	DefaultEntrypointNoCallError,
+	DefaultEntrypointPublicCallError,
+	DefaultEntrypointUtilityCallError,
 	DuplicateInitializationError,
 	ScopeViolationError,
 	SessionEndedError,
 	TooManyPendingError,
+	UnattachedAuthorizationRefusalError,
 } from "@nulo/extension-messaging/errors"
 import type { FunctionAbi } from "@aztec-labs/stdlib/abi"
 import type { JournalRetitle } from "@/wallet/services/operation-journal/spec"
@@ -105,6 +110,29 @@ describe("markFailedUnlessCancelled", () => {
 		)
 		await markFailedUnlessCancelled(error, "j1", lane)
 		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "registry_refused"), undefined)
+	})
+
+	test("a request the default entrypoint cannot build records wallet_refused; the same text on a plain error does not", async () => {
+		const lane = fakeLane()
+		for (const error of [
+			new DefaultEntrypointPublicCallError(),
+			new DefaultEntrypointUtilityCallError(),
+			new DefaultEntrypointMultiCallError(),
+			new DefaultEntrypointNoCallError(),
+		]) {
+			await markFailedUnlessCancelled(error, "j1", lane)
+			expect(lane.markJournal).toHaveBeenLastCalledWith("j1", { stage: "failed" }, normalizeError(error, "wallet_refused"), undefined)
+		}
+		const plain = new Error(DefaultEntrypointPublicCallError.MESSAGE)
+		await markFailedUnlessCancelled(plain, "j2", lane)
+		expect(lane.markJournal).toHaveBeenLastCalledWith("j2", { stage: "failed" }, normalizeError(plain, "dapp_execute"), undefined)
+	})
+
+	test("another account's authorization left out of a dApp send records unattached_refused", async () => {
+		const lane = fakeLane()
+		const error = new UnattachedAuthorizationRefusalError()
+		await markFailedUnlessCancelled(error, "j1", lane)
+		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "unattached_refused"), undefined)
 	})
 
 	test("a call-binding refusal retitles the record in its failing write; an inner call or a plain failure never does", async () => {

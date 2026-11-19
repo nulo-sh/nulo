@@ -11,7 +11,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Utils */
-import { balanceFormatted } from "@/utils/amount.js"
+import { formatListSplit } from "@/utils/amount.js"
 import { knownDecimals, parseRawBalance } from "@/utils/token-amount"
 import { aggregateFiat, awaitingFirstPriceAnswer, pricesUnavailable } from "@/utils/token-aggregate"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
@@ -70,14 +70,13 @@ const heroSides = computed(() => {
 	return { publicRaw, privateRaw, decimals }
 })
 
-const privateBalanceFormatted = computed(() => {
+/** The split reads as a token row's does for the same balances. */
+const heroSplit = computed(() => {
 	const sides = heroSides.value
-	return sides ? balanceFormatted(sides.privateRaw, sides.decimals, 10, { compact: true }).value : "—"
+	return sides ? formatListSplit(sides.privateRaw, sides.publicRaw, sides.decimals, 10) : null
 })
-const publicBalanceFormatted = computed(() => {
-	const sides = heroSides.value
-	return sides ? balanceFormatted(sides.publicRaw, sides.decimals, 10, { compact: true }).value : "—"
-})
+const privateBalanceFormatted = computed(() => heroSplit.value?.private ?? "—")
+const publicBalanceFormatted = computed(() => heroSplit.value?.public ?? "—")
 
 /** Live prices. Parent owns the client lifecycle; the composable owns
  *  freshness. Every fiat element below renders ONLY with a usable quote —

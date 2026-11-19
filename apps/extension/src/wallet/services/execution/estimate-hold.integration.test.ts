@@ -12,7 +12,7 @@ import { EstimateCancelRegistry } from "./estimate-cancel-registry"
 import { ESTIMATE_JOB_TTL_MS } from "./spec"
 import { ExecutionService } from "./service"
 
-const net: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://n/1" }
+const net: NetworkInfo = { profileId: "p1", chainId: 31337, l1ChainId: 31337, endpoints: [{ id: "primary", rpcUrl: "http://n/1" }] }
 const SIM_TIMEOUT_MS = 90_000
 const FIRST_FOUR = ["t1", "t2", "t3", "t4"]
 

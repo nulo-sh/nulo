@@ -139,9 +139,23 @@ collapse) is:
 
 ### What other error shapes look like
 
-For other failures (network errors, simulation failures, etc.), the dApp
-receives `err.message` as a plain non-JSON string. The recipe's
-`try { info = JSON.parse(...) } catch { ... }` falls through gracefully.
+Every error is a JSON object, and its `data.walletTraceId` is the 8-hex id the
+wallet minted for that request. A user with developer mode on downloads that
+request's logs as `nulo-request-<walletTraceId>.txt`, so quote the id in an
+issue. A failure the wallet does not classify (a network error, a simulation
+failure) answers one constant envelope:
+
+```jsonc
+{
+  "code": -32603,                                // JSON-RPC internal error
+  "message": "The wallet could not process the request.",
+  "data": { "walletTraceId": "1a2b3c4d" }
+}
+```
+
+A wallet build from before the trace id answered that failure as the bare
+string, which the recipe's `try { info = JSON.parse(...) } catch { ... }`
+still handles.
 
 A request its stored grant does not cover (a contract, call, class, account
 or sender outside the grant, or a flag the grant does not set) is refused
@@ -213,6 +227,20 @@ text:
 }
 ```
 
+A transaction whose own contracts ask for an authorization on behalf of another
+account the session may use, while the request carries no witness for it, is
+refused while the window estimates or previews it: the wallet signs only as the
+sending account. Reject or closing the window answers this envelope, with the
+same code and its own text, naming no account:
+
+```jsonc
+{
+  "code": 4100,
+  "message": "This transaction uses another account's authorization, and the request carries no witness for it. Attach the witness.",
+  "data": { "walletErrorCode": "SCOPE_VIOLATION" }
+}
+```
+
 A call whose arguments the wallet API's schema refuses (a value that is not
 an address or a field, a call without its selector, a missing option, a
 `requestCapabilities` header without its version or metadata, a raw message
@@ -229,6 +257,23 @@ window opens and before anything runs, with one envelope:
 
 The message is a constant: it names no method and no argument value. A stock
 SDK never sends such a call, so it is the dApp's to fix.
+
+A request on a connected session while the wallet is locked (the person locked
+it, or it auto-locked) is refused before any method runs, with one envelope:
+
+```jsonc
+{
+  "code": 4900,                                  // EIP-1193 disconnected
+  "message": "The wallet is locked. Unlock it to continue.",
+  "data": { "walletErrorCode": "WALLET_LOCKED" }
+}
+```
+
+The session stays connected. Show the person an unlock prompt and retry once
+they have unlocked the wallet; nothing opens or queues on the wallet's side,
+so a background poll keeps getting this answer until then. A request already
+running when the lock lands can answer `SESSION_ENDED`, `JOB_CANCELLED` or the
+unclassified envelope instead; the next request answers `WALLET_LOCKED`.
 
 ## getAccounts before requestCapabilities
 

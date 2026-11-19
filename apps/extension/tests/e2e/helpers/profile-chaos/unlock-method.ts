@@ -1,5 +1,6 @@
 /** Settings → Unlock method for the profile chaos drivers: every change the page offers, its
  *  current unlock answered as the step says, and a lock that meets its current passkey's prompt. */
+import type { Page } from "puppeteer"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { waitForLockScreen } from "../../fixtures/auth"
 import { bringToFront } from "../../fixtures/browser"
@@ -45,15 +46,16 @@ const RUN_SHOWS: Signal[] = [
 /** A run that outlived the reset shows its toast in the task the abort ran in. */
 const SHOWS_MS = 2_000
 
-/** The answers a change's page must show, each by the credential it names. */
+/** The answers a change's page must show, each by the credential it names, in the order it asks
+ *  them: a new passkey before the current one. */
 function ceremoniesOf(p: Change, current: CredentialRef | undefined): Ceremony[] {
 	const asked: Ceremony[] = current && p.change !== "passkey" ? [{ kind: "get", credential: current }] : []
 	if (p.current === "other") return [{ kind: "get", credential: p.other as CredentialRef }]
 	if (p.current === "wrong" || p.current === "refuse") return []
-	return p.change === "password" ? asked : [...asked, ...minted(p.credential as CredentialRef)]
+	return p.change === "password" ? asked : [...minted(p.credential as CredentialRef), ...asked]
 }
 
-/** Presses `button` with the current passkey's prompt answered as `p` says, then settles on `signals`. */
+/** Presses `button` with the change's first prompt answered as `p` says, then settles on `signals`. */
 async function pressAnswered(s: RunState, p: Change, button: string, signals: Signal[]): Promise<Driven> {
 	const page = s.anchor
 	const press = async (): Promise<Driven> => {
@@ -75,16 +77,17 @@ async function pressAnswered(s: RunState, p: Change, button: string, signals: Si
 
 const committed = (p: Change): Signal => ({ label: "committed", text: DONE[p.change] })
 
-async function toPassword(s: RunState, p: Change): Promise<Driven> {
-	const page = s.anchor
-	const asked = { label: "committed", testid: "unlock-method-new-password-input" }
-	const checked = await pressAnswered(s, p, "unlock-method-use-password", [asked, ...REFUSALS])
-	if (checked.outcome !== "committed" || !checked.settle.reached) return checked
-	const password = secretFor(s, p.password as never)
+/** Use a password instead, then the new pair; Save asks the current passkey. */
+async function typeNewPassword(page: Page, password: string): Promise<void> {
+	await clickByTestId(page, "unlock-method-use-password")
+	await page.waitForSelector('[data-testid="unlock-method-new-password-input"]', { visible: true, timeout: 10_000 })
 	await replaceInputValue(page, '[data-testid="unlock-method-new-password-input"]', password)
 	await replaceInputValue(page, '[data-testid="unlock-method-new-password-confirm-input"]', password)
-	await clickByTestId(page, "unlock-method-save")
-	return settle(page, [committed(p), ...REFUSALS], OUTCOMES, CHANGE_MS)
+}
+
+async function toPassword(s: RunState, p: Change): Promise<Driven> {
+	await typeNewPassword(s.anchor, secretFor(s, p.password as never))
+	return pressAnswered(s, p, "unlock-method-save", [committed(p), ...REFUSALS])
 }
 
 async function toPasskey(s: RunState, open: ModelProfile, p: Change): Promise<Driven> {
@@ -116,7 +119,7 @@ export async function changeUnlockMethod(s: RunState, open: ModelProfile, p: Cha
 	return driven
 }
 
-/** The current passkey's prompt held while another window locks: the lock takes the page, and the
+/** Save's current-passkey prompt held while another window locks: the lock takes the page, and the
  *  prompt must end with it. A prompt that outlives its page is let through, and reported as the
  *  change going on. */
 export async function raceLockDuringMethodChange(s: RunState): Promise<Driven> {
@@ -124,9 +127,10 @@ export async function raceLockDuringMethodChange(s: RunState): Promise<Driven> {
 	const t0 = Date.now()
 	await openRoute(page, ROUTE)
 	await page.waitForSelector('[data-testid="unlock-method-use-password"]', { visible: true, timeout: 15_000 })
+	await typeNewPassword(page, wrongSecret())
 	const hold = await holdNextGet(page)
 	const aborted = await watchPromptAbort(page)
-	await clickByTestId(page, "unlock-method-use-password")
+	await clickByTestId(page, "unlock-method-save")
 	await hold.reached()
 	await lockFromAnotherWindow(page)
 	await waitForLockScreen(page, LOCK_MS)
@@ -136,7 +140,7 @@ export async function raceLockDuringMethodChange(s: RunState): Promise<Driven> {
 	return timed(t0, CHANGE_MS + LOCK_MS, ended ? "cancelled" : "committed")
 }
 
-/** The current passkey's prompt held on a second page while `compete` runs the anchor's own step:
+/** Save's current-passkey prompt held on a second page while `compete` runs the anchor's own step:
  *  the page must start over, its prompt ended and nothing shown. A prompt that outlives the
  *  competitor is reported as the change going on. The page closes with the prompt still held: on a
  *  page with no authenticator a released one would wait out WebAuthn's own timeout. */
@@ -150,9 +154,10 @@ export async function raceMethodChangeElsewhere(s: RunState, compete: () => Prom
 		await waitForRoute(page, "#/popup/general", 15_000)
 		await openRoute(page, ROUTE)
 		await page.waitForSelector('[data-testid="unlock-method-use-password"]', { visible: true, timeout: 15_000 })
+		await typeNewPassword(page, wrongSecret())
 		const hold = await holdNextGet(page)
 		const aborted = await watchPromptAbort(page)
-		await clickByTestId(page, "unlock-method-use-password")
+		await clickByTestId(page, "unlock-method-save")
 		await hold.reached()
 		// The competitor's prompts ask from a focused document, and the page just opened took focus.
 		await bringToFront(s.anchor)

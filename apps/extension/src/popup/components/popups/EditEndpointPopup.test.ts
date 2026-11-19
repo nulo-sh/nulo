@@ -25,8 +25,9 @@ vi.mock("@/composables/toast", () => ({
 }))
 
 type Row = { id: string; chainId: number; name: string; endpoints: { id: string; rpcUrl: string; label?: string }[] }
-const { app, NETWORKS } = vi.hoisted(() => ({
+const { app, cache, NETWORKS } = vi.hoisted(() => ({
 	app: { store: undefined as unknown as { networks: Row[] } },
+	cache: { store: undefined as unknown as { endpointEditNetworkId: string; endpointEditId: string; endpointRoute: unknown } },
 	NETWORKS: [{ id: "net-1", chainId: 1, name: "Local", endpoints: [{ id: "ep-1", rpcUrl: "https://one.example" }] }] as Row[],
 }))
 vi.mock("@/stores/app.store", async () => {
@@ -34,9 +35,11 @@ vi.mock("@/stores/app.store", async () => {
 	app.store = reactive({ networks: [...NETWORKS] })
 	return { useAppStore: () => app.store }
 })
-vi.mock("@/stores/cache.store", () => ({
-	useCacheStore: () => ({ endpointEditNetworkId: "net-1", endpointEditId: "ep-1" }),
-}))
+vi.mock("@/stores/cache.store", async () => {
+	const { reactive } = await import("vue")
+	cache.store = reactive({ endpointEditNetworkId: "net-1", endpointEditId: "ep-1", endpointRoute: null })
+	return { useCacheStore: () => cache.store }
+})
 vi.mock("@/stores/popup.store", () => ({
 	usePopupStore: () => ({ len: 1, popups: { edit_endpoint: { order: 1 } } }),
 }))
@@ -90,6 +93,7 @@ beforeEach(() => {
 	updateEndpointMock.mockResolvedValue(undefined)
 	getNetworksMock.mockResolvedValue([])
 	app.store.networks = [...NETWORKS]
+	cache.store.endpointRoute = null
 })
 
 afterEach(() => {
@@ -169,5 +173,79 @@ describe("EditEndpointPopup: the RPC URL field's error copy", () => {
 			expect(fieldText(w)).toBe("")
 			expect(w.find('[data-testid="submit"]').attributes("data-loading")).toBe("false")
 		})
+	})
+})
+
+describe("EditEndpointPopup: the endpoint's state, as the list last read the account engine's route", () => {
+	const OPENED_AT = 1_762_480_000_000
+	/** As the wire carries it: the router's state names and failure kinds, epoch ms. */
+	const route = (entry: Record<string, unknown>, networkId = "net-1", activeId: string | null = "ep-1") => ({
+		networkId,
+		readAt: OPENED_AT - 30_000,
+		snapshot: { activeId, endpoints: [{ id: "ep-1", since: OPENED_AT - 90_000, ...entry }] },
+	})
+	const status = (w: VueWrapper) => ({
+		tone: w.get('[data-testid="endpoint-edit-status"]').attributes("data-tone"),
+		word: w.get('[data-testid="endpoint-edit-status-word"]').text(),
+		detail: w.find('[data-testid="endpoint-edit-status-detail"]').exists()
+			? w.get('[data-testid="endpoint-edit-status-detail"]').text()
+			: null,
+	})
+
+	beforeEach(() => {
+		vi.spyOn(Date, "now").mockReturnValue(OPENED_AT)
+	})
+
+	test("a down endpoint: the red dot, its word and the error line, counted from when the sheet opened", async () => {
+		cache.store.endpointRoute = route({ state: "down", failure: "unreachable" })
+		const { w } = await mountEditing()
+		expect(status(w)).toEqual({ tone: "red", word: "Not answering", detail: "No answer since 1 min ago. The connection failed." })
+		expect(w.get('[data-testid="endpoint-edit-status-detail"]').attributes("color")).toBe("txt-danger")
+	})
+
+	test("the error line names each failure kind, and none when the router kept no kind", async () => {
+		const lines = []
+		for (const failure of ["timeout", "server", "malformed", undefined]) {
+			cache.store.endpointRoute = route({ state: "down", failure })
+			const { w } = await mountEditing()
+			lines.push(status(w).detail)
+		}
+		expect(lines).toEqual([
+			"No answer since 1 min ago. It did not answer in time.",
+			"No answer since 1 min ago. It returned a server error.",
+			"No answer since 1 min ago. Its reply could not be read.",
+			"No answer since 1 min ago.",
+		])
+	})
+
+	test("the other states carry their word and no error line", async () => {
+		const seen = []
+		for (const [entry, activeId] of [
+			[{ state: "ready" }, "ep-1"],
+			[{ state: "ready" }, "other"],
+			[{ state: "behind" }, "other"],
+			[{ state: "wrong-chain" }, "other"],
+			[{ state: "unknown" }, "other"],
+		] as const) {
+			cache.store.endpointRoute = route(entry, "net-1", activeId)
+			const { w } = await mountEditing()
+			seen.push(status(w))
+		}
+		expect(seen).toEqual([
+			{ tone: "green", word: "In use", detail: null },
+			{ tone: "green", word: "Answering", detail: null },
+			{ tone: "amber", word: "Behind", detail: null },
+			{ tone: "amber", word: "Wrong network", detail: null },
+			{ tone: "gray", word: "Not asked yet", detail: null },
+		])
+	})
+
+	test("another network's read, or none yet, reads as not asked; a read landing while open shows at once", async () => {
+		cache.store.endpointRoute = route({ state: "down", failure: "unreachable" }, "net-2")
+		const { w } = await mountEditing()
+		expect(status(w)).toEqual({ tone: "gray", word: "Not asked yet", detail: null })
+		cache.store.endpointRoute = route({ state: "ready" })
+		await flushPromises()
+		expect(status(w)).toEqual({ tone: "green", word: "In use", detail: null })
 	})
 })

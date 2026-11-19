@@ -61,8 +61,13 @@ describe("requests", () => {
 		const up = uploadRequest(new Uint8Array([1]), "nulo-firefox-0.27.0.zip")
 		expect(up).toMatchObject({ kind: "multipart", method: "POST", fields: { channel: "listed" } })
 		expect(up.url).toBe("https://addons.mozilla.org/api/v5/addons/upload/")
-		const v = versionRequest(GECKO_ID, "uuid-1", "notes")
-		expect(v).toMatchObject({ kind: "json", method: "POST", body: { upload: "uuid-1", approval_notes: "notes" } })
+		const v = versionRequest(GECKO_ID, "uuid-1", "notes", "What changed.")
+		expect(v).toMatchObject({ kind: "json", method: "POST" })
+		expect(v.kind === "json" && v.body).toEqual({
+			upload: "uuid-1",
+			approval_notes: "notes",
+			release_notes: { "en-US": "What changed." },
+		})
 		expect(v.url).toBe("https://addons.mozilla.org/api/v5/addons/addon/wallet%40nulo.sh/versions/")
 		const s = sourceRequest(GECKO_ID, 42, new Uint8Array([2]), "src.zip")
 		expect(s).toMatchObject({ kind: "multipart", method: "PATCH" })

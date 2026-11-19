@@ -1,6 +1,13 @@
 import { expect, inject } from "vitest"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
-import { callExpectingNoPopup, snapshotResultSeq, waitForPgResult, assertPgOk } from "../fixtures/playground"
+import {
+	callExpectingNoPopup,
+	errorEnvelopeOf,
+	snapshotResultSeq,
+	tracedEnvelope,
+	waitForPgResult,
+	assertPgOk,
+} from "../fixtures/playground"
 import { lockWallet } from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
@@ -8,16 +15,11 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * Test #44 — wallet locked mid-session causes the next silent-path method
- * to error.
- *
- * Note: sendTx (Transactions=5) goes popup-path even when locked,
- * because isConfirmationNeeded checks profile mismatch FIRST and returns
- * true. So we use a SILENT op (getChainInfo) to actually exercise the
- * silentInteraction path's profile-mismatch error at service.ts:201-205.
+ * A connected session's request after a lock is refused at the ingress, before any method runs,
+ * with the `WALLET_LOCKED` envelope, and opens no window: the dApp asks the person to unlock.
  */
 test.skipIf(!hasConfig)(
-	"wallet-locked-mid-session — silent op errors when wallet locks mid-flow",
+	"wallet-locked-mid-session — a request after a lock answers WALLET_LOCKED and opens no window",
 	{ timeout: 90_000 },
 	async ({ dappConnectedExtension }) => {
 		const page = dappConnectedExtension.playgroundPage
@@ -34,11 +36,16 @@ test.skipIf(!hasConfig)(
 		await lockWallet(popupPage)
 		await popupPage.close()
 
-		// Re-fire getChainInfo — silent path errors with "Wallet locked".
-		// callExpectingNoPopup also asserts no popup opened.
 		const result = await callExpectingNoPopup(dappConnectedExtension, page, "getChainInfo", async () => {
 			await clickByTestId(page, "pg-btn-getChainInfo")
 		})
 		expect(result.status).toBe("error")
+		expect(errorEnvelopeOf(result)).toEqual(
+			tracedEnvelope({
+				code: 4900,
+				message: "The wallet is locked. Unlock it to continue.",
+				data: { walletErrorCode: "WALLET_LOCKED" },
+			}),
+		)
 	},
 )

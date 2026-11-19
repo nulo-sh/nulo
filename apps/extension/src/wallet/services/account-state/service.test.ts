@@ -766,3 +766,72 @@ describe("AccountStateService.addSender under a run fence", () => {
 		expect(logError).toHaveBeenCalledTimes(liveAfter ? 1 : 0)
 	})
 })
+
+describe("AccountStateService.getContractRows", () => {
+	const CUSTOM = `0x${"07".repeat(32)}`
+	const PROTOCOL = `0x${"00".repeat(31)}02`
+	const UNNAMED = `0x${"00".repeat(31)}05`
+	const ORPHAN = `0x${"0b".repeat(32)}`
+
+	async function rowsService(pxe: object) {
+		const services = new ServiceCollection()
+		services.add(new FakeNetworkService())
+		services.add(new FakeFenceProfileService())
+		const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
+		services.add(accountStateService)
+		await services.start()
+		const network = { ...makeNetwork("net-a", 7), endpoints: [{ id: "primary", rpcUrl: "https://a.example/" }] }
+		Object.assign(accountStateService, { networkService: { getNetwork: async () => network }, pxeService: pxe })
+		return accountStateService
+	}
+
+	test("each listed contract reads its class from the PXE's store alone; the built-ins are marked, and named where known", async () => {
+		const listed = [PROTOCOL, STANDARD_AUTH_REGISTRY_ADDRESS.toString(), UNNAMED, CUSTOM, ORPHAN].map((a) => ({ toString: () => a }))
+		const pxe = {
+			getContracts: vi.fn(async () => listed),
+			getContractInstance: vi.fn(async (_info: unknown, address: { toString(): string }, _opts?: { pxeOnly?: boolean }) =>
+				address.toString() === ORPHAN
+					? undefined
+					: { originalContractClassId: { toString: () => `class-of-${address.toString()}` } },
+			),
+		}
+		const accountStateService = await rowsService(pxe)
+
+		await expect(accountStateService.getContractRows("net-a")).resolves.toEqual([
+			{ address: PROTOCOL, classId: `class-of-${PROTOCOL}`, builtIn: true, name: "Contract Instance Registry" },
+			{
+				address: STANDARD_AUTH_REGISTRY_ADDRESS.toString(),
+				classId: `class-of-${STANDARD_AUTH_REGISTRY_ADDRESS.toString()}`,
+				builtIn: true,
+				name: "Auth Registry",
+			},
+			{ address: UNNAMED, classId: `class-of-${UNNAMED}`, builtIn: true },
+			{ address: CUSTOM, classId: `class-of-${CUSTOM}`, builtIn: false },
+			{ address: ORPHAN, builtIn: false },
+		])
+		expect(pxe.getContractInstance).toHaveBeenCalledTimes(listed.length)
+		for (const call of pxe.getContractInstance.mock.calls) expect(call[2]).toEqual({ pxeOnly: true })
+		// The backup's own read stays the bare list.
+		await expect(accountStateService.getContracts("net-a")).resolves.toEqual([
+			PROTOCOL,
+			STANDARD_AUTH_REGISTRY_ADDRESS.toString(),
+			UNNAMED,
+			CUSTOM,
+			ORPHAN,
+		])
+	})
+
+	test("a failed instance read fails the whole list with the opaque error, its cause only in the log", async () => {
+		const cause = new Error("store read failed")
+		const pxe = {
+			getContracts: vi.fn(async () => [{ toString: () => CUSTOM }]),
+			getContractInstance: vi.fn(async () => Promise.reject(cause)),
+		}
+		const accountStateService = await rowsService(pxe)
+		const logError = vi.spyOn(accountStateService as unknown as { logError: (...a: unknown[]) => void }, "logError")
+
+		await expect(accountStateService.getContractRows("net-a")).rejects.toThrow("PXE request failed")
+		// The line names no contract; the cause rides as its own argument, where the redactor reaches it.
+		expect(logError.mock.calls).toEqual([["Failed to fetch registered contracts", cause]])
+	})
+})

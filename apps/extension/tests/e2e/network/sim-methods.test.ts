@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { clickByTestId, test } from "../fixtures/extension"
-import { callExpectingNoPopup, type PgResult } from "../fixtures/playground"
+import { callExpectingNoPopup, errorEnvelopeOf } from "../fixtures/playground"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -33,12 +33,6 @@ async function fillInputs(page: Page): Promise<void> {
 	)
 }
 
-/** The JSON-RPC error the wallet answered, as the playground records it. */
-function envelopeOf(result: PgResult): unknown {
-	const payload = result.errorJson as string | { message?: string } | undefined
-	return JSON.parse((typeof payload === "string" ? payload : payload?.message) ?? "null")
-}
-
 test.skipIf(!hasConfig)(
 	"sim-simulateTx (#23) — silent path returns ok or error",
 	{ timeout: 60_000 },
@@ -64,10 +58,10 @@ test.skipIf(!hasConfig)(
 			await clickByTestId(page, "pg-btn-profileTx")
 		})
 		expect(result.status).toBe("error")
-		expect(envelopeOf(result)).toEqual({
+		expect(errorEnvelopeOf(result)).toEqual({
 			code: -32601,
 			message: "Unsupported wallet method: profileTx",
-			data: { walletErrorCode: "UNSUPPORTED_METHOD" },
+			data: { walletErrorCode: "UNSUPPORTED_METHOD", walletTraceId: expect.stringMatching(/^[0-9a-f]{8}$/) },
 		})
 	},
 )
@@ -83,10 +77,10 @@ test.skipIf(!hasConfig)(
 			await clickByTestId(page, "pg-btn-executeUtility-balance")
 		})
 		expect(result.status).toBe("error")
-		expect(envelopeOf(result)).toEqual({
+		expect(errorEnvelopeOf(result)).toEqual({
 			code: -32602,
 			message: "The request's arguments do not match the wallet API.",
-			data: { walletErrorCode: "INVALID_PARAMS" },
+			data: { walletErrorCode: "INVALID_PARAMS", walletTraceId: expect.stringMatching(/^[0-9a-f]{8}$/) },
 		})
 	},
 )

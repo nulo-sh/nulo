@@ -10,10 +10,15 @@
 <script setup>
 /** Components */
 import RowTarget from "@/components/ui/RowTarget.vue"
+import ContractChip from "@/components/composite/ContractChip.vue"
 
 /** Utils */
 import { NoteServiceClient } from "@/wallet/services/note/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
+import { contractChipOf } from "@/components/composite/contract-chip"
+import { readContract } from "@/utils/contract-level"
 import { stringCompare, stripBidiAndZeroWidth, trimAddress } from "@/utils/string"
+import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Brutalist grayscale palette for the per-contract left-border accent.
  *  Replaces the colored 10-shade palette (`getColorFromAddress`) so the
@@ -40,6 +45,7 @@ function noteBorderColor(address) {
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
+import { useTokenFlags } from "@/composables/usePrices"
 const { openToast } = useToast()
 
 /** Store */
@@ -53,6 +59,9 @@ const cacheStore = useCacheStore()
 
 const notes = ref([])
 const noteService = new NoteServiceClient()
+/** The list's network-free read: this page never asks for a price fetch. */
+const priceService = new PriceServiceClient()
+const marks = useTokenFlags(priceService)
 const isFetchingNotes = ref(false)
 
 const error = ref()
@@ -61,16 +70,9 @@ const isErrorOccurred = computed(() => !!error.value)
 const searchTerm = ref("")
 
 /**
- * Each `displayNote` is a flat, plain-object snapshot ready for the template.
- * All helper calls (color, address trim, content shape) run inside this script
- * inside try/catch so a single malformed note becomes a fallback card with
- * `renderError` instead of breaking the entire v-for. Template renders only
- * primitives — no helper calls, no chained ?. lookups.
- *
- * Failure modes covered:
- *   - service-side parse error (already handled by NoteService — note.renderError set)
- *   - missing/odd-shaped fields (this script's per-note try/catch)
- *   - unrelated render exception inside the v-for body (fallback card)
+ * Flat per-note snapshots for the template. Every helper runs here, per note, so a note a helper
+ * cannot read becomes a fallback card with `renderError` instead of breaking the list; a child
+ * component's own render error is not caught here.
  */
 const displayNotes = computed(() => {
 	const items = []
@@ -101,8 +103,9 @@ const filteredDisplayNotes = computed(() => {
 	if (!term) return displayNotes.value
 
 	return displayNotes.value.filter((d) => {
+		// What the card shows: the chip's label where it has one, and never a name the header hides.
 		const haystack = [
-			(d.contractTrim || "").toLowerCase(),
+			(d.chip?.label ?? d.contractTrim ?? "").toLowerCase(),
 			(d.type || "custom note").toLowerCase(),
 			(d.contractName || "").toLowerCase(),
 			(d.location || "").toLowerCase(),
@@ -143,15 +146,31 @@ function buildDisplayNote(note) {
 	return {
 		key: `${contract || "?"}:${note.storageSlot ?? "?"}:${note.txHash ?? "?"}`,
 		type: note.type ?? "Custom Note",
-		contractName: note.contractName ?? "",
 		contractTrim: trimAddress(contract, 4, 4),
+		...contractOf(note, contract),
 		borderColor: noteBorderColor(contract),
-		location: note.location ?? "",
+		location: sanitizeWireString(String(note.location ?? ""), 64),
 		kvEntries,
 		rawLines: Array.isArray(note.rawContent) ? note.rawContent.map((x) => String(x ?? "")) : [],
 		renderError: note.renderError,
 		_raw: note,
 	}
+}
+
+/**
+ * A code-chosen name heads a card only beside `nulo` or `scan` evidence; a known card keeps the
+ * table's name and has the chip only where the reader places the contract.
+ */
+function contractOf(note, contract) {
+	const selfName = note.contractNameFromCode === true ? note.contractName : undefined
+	const tableName = selfName === undefined ? (note.contractName ?? "") : ""
+	if (!contract || note.renderError) return { chip: null, contractName: tableName }
+	const reading = readContract(marks, appStore.network?.chainId, contract)
+	const chip = contractChipOf(reading, contract, { selfName })
+	const vouched = chip.level === "nulo" || chip.level === "scan"
+	if (note.type === undefined) return { chip, contractName: vouched && selfName ? sanitizeWireString(selfName, 64) : "" }
+	const placed = vouched || (reading.level === "none" && reading.flagged)
+	return { chip: placed ? chip : null, contractName: tableName }
 }
 
 function parseNoteContent(note) {
@@ -199,6 +218,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
 	noteService.disconnect()
+	priceService.disconnect()
+	marks.dispose()
 })
 </script>
 
@@ -230,7 +251,9 @@ onBeforeUnmount(() => {
 					<span :id="`${rowIdBase}-${i}`" :class="$style.type">
 						{{ display.type }}<span v-if="display.contractName" :class="$style.contract_name"> · {{ display.contractName }}</span>
 					</span>
-					<span v-if="display.contractTrim" data-testid="note-contract" :class="$style.contract">{{ display.contractTrim }}</span>
+					<!-- Raised above the card's target and kept from its click, so a press opens the chip's card, not the data viewer. -->
+					<span v-if="display.chip" :class="$style.chip_slot" @click.stop><ContractChip :model="display.chip" testid="note-contract" /></span>
+					<span v-else-if="display.contractTrim" data-testid="note-contract" :class="$style.contract">{{ display.contractTrim }}</span>
 				</div>
 
 				<span v-if="display.location" :class="$style.location">{{ display.location }}</span>
@@ -296,9 +319,18 @@ onBeforeUnmount(() => {
 		overflow-wrap: break-word;
 	}
 
-	.header > .contract {
+	.header > .contract,
+	.header > .chip_slot {
 		margin-left: auto;
 	}
+}
+
+.chip_slot {
+	position: relative;
+	z-index: 1;
+	flex-shrink: 0;
+	max-width: 60%;
+	min-width: 0;
 }
 
 .contract {

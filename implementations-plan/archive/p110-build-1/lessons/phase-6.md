@@ -1,0 +1,4 @@
+# Phase 6: #1620 B
+
+- `create.test.ts` pinned the old reading: "no length hint under the empty fields" checked that the text was absent while the wallet is created. Under B the text stays in the DOM, hidden in place. The test now finds the one hint and checks that it sits under the hidden-in-place class. It reds with the old `v-if`, as `NewPasswordPair.test.ts` does.
+- e2e measurement (deviation from step 3's wording): the spec scrolls the create step to its bottom before pressing, so a dropped row moves the content above, not the confirm field on screen. Scroll clamping keeps the field's viewport top fixed, and a mutation run with the old `v-if` stayed green. The check now compares the field's document offset (viewport top plus the scroll). With the old `v-if` it reds, 621 → 597 px on Chrome, the row's 24 px. It is green on Chrome and Firefox.

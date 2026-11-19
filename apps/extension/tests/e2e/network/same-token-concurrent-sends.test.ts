@@ -23,6 +23,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { afterEach, expect } from "vitest"
+import { QUEUED_SPONSORED_COPY } from "@/components/composite/send/publish-facts"
 import { queuedFeeCap } from "@/wallet/services/execution/queued-fee-cap"
 import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
 import { bringToFront, stopBackground } from "../fixtures/browser"
@@ -53,8 +54,9 @@ import {
 	unlockProfile,
 	waitForProfilePurged,
 } from "../fixtures/helpers"
-import { shotSend, waitForReview, waitForReviewReady, waitForSendGone } from "../fixtures/send-page"
+import { openReview, shotSend, waitForReview, waitForReviewReady, waitForSendGone } from "../fixtures/send-page"
 import { pointerClick } from "../helpers/legal-drivers"
+import { settleClosedPopup } from "../fixtures/popup-leave"
 import { readDappExecuteRecords, waitForDappExecuteStagesPresent } from "../fixtures/journal"
 import { holdMining, pendingTxCount, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
 import { assertPgOk, openPlayground, type PgResult, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
@@ -245,9 +247,14 @@ test.skipIf(!hasConfig)(
 		const { page } = burst
 		await startSend(page, b)
 		await expectEstimateQueued(page, 3_000)
-		expect(await page.$eval('[data-testid="send-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
-		await shotSend(page, "send-queued-sponsored", "fee-settings-card")
-		await confirmSend(page)
+		// The form names the wait on its fee line; the review's own button offers the queue.
+		expect(await page.$eval('[data-testid="send-fee-line-note"]', (el) => el.textContent ?? "")).toContain(QUEUED_SPONSORED_COPY)
+		await shotSend(page, "send-queued-sponsored", "send-fee-line")
+		await openReview(page)
+		await waitForReviewReady(page)
+		expect(await page.$eval('[data-testid="send-review-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
+		await pointerClick(page, "send-review-submit")
+		await waitForSendGone(page, 30_000)
 		await expectStageHeld(page, raw(b.amount), "queued", HELD_MS)
 		expect((await readTxStatuses(page, [aHash]))[aHash], "A is still unmined while B waits").toBe(0)
 		await releaseMining()
@@ -646,6 +653,11 @@ baseTest.skipIf(!hasConfig)(
 			await switchToLocalNetwork(page)
 			expect(await getAccountAddress(page)).toBe(account)
 			await waitForHeldProjection(page)
+			// A restore carries no trust rows, so the restored account's first scan asks about TST over
+			// whatever page is open; it is answered, as a user would, before either send.
+			await page.waitForSelector('[data-testid="incoming-trust-allow"]', { visible: true, timeout: 60_000 })
+			await pointerClick(page, "incoming-trust-allow")
+			await settleClosedPopup(page, "incoming-trust-allow")
 
 			const a: BurstSend = {
 				token: "TST",
@@ -712,9 +724,20 @@ async function readReaskSheet(page: Page): Promise<{ line: string; button: strin
 	await waitForReview(page, true)
 	await waitForReviewReady(page)
 	return page.evaluate(() => ({
-		line: document.querySelector('[data-testid="send-review-fee-reask"]')?.textContent?.trim() ?? "",
+		line: document.querySelector('[data-testid="send-review-fee-reask"] > span')?.textContent?.trim() ?? "",
 		button: document.querySelector('[data-testid="send-review-submit"]')?.textContent?.trim() ?? "",
 	}))
+}
+
+/** Waits until the page shows the Sending toast, or until it shows none. Asserted by its text, never clicked by it. */
+async function waitForSendingToast(page: Page, shown: boolean): Promise<void> {
+	await page.waitForFunction(
+		(want) =>
+			Array.from(document.querySelectorAll('[data-testid="snackbar-title"]')).some((t) => t.textContent?.startsWith("Sending")) ===
+			want,
+		{ timeout: 15_000, polling: 100 },
+		shown,
+	)
 }
 
 async function readRecordedFee(page: Page, hash: string): Promise<string | undefined> {
@@ -755,9 +778,8 @@ test.skipIf(!hasConfig)(
 		await startSend(page, b)
 		await expectEstimateQueued(page, 3_000)
 		await page.waitForSelector('[data-testid="fee-estimate-queued-cap-line"]', { timeout: 5_000 })
-		await shotSend(page, "4-send-queued-cap", "fee-settings-card")
-		await pointerClick(page, "send-submit")
-		await waitForReview(page, true)
+		await shotSend(page, "4-send-queued-cap", "send-fee-line")
+		await openReview(page)
 		await waitForReviewReady(page)
 		expect(await page.$eval('[data-testid="send-review-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
 		await shotSend(page, "4-review-queued-cap", "send-review-fee")
@@ -803,13 +825,20 @@ test.skipIf(!hasConfig)(
 				await burst.page.waitForSelector('[data-testid="activity-feed-root"][data-fee-quote="ready"]', { timeout: 30_000 })
 			}
 			expect((await waitForAwaitingCard(burst.page, "queued")).subtitle).toBe("Fee went up. Review")
-			if (asks === 1) await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
+			if (asks === 1) {
+				await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
+				// B's own Sending toast is up on Home, and steps aside while its re-ask is open.
+				await waitForSendingToast(burst.page, true)
+			}
 			await pointerClick(burst.page, "tx-awaiting-card")
 			const sheet = await readReaskSheet(burst.page)
 			const [now, cap] = [pinnedFeeText(asking.reask.fee), pinnedFeeText(asking.reask.cap)]
 			expect(sheet.line).toBe(`Fee is now ${now}, above the ${cap} you accepted.`)
 			expect(sheet.button).toBe("Send")
-			if (asks === 1) await shotSend(burst.page, "4-reask-sheet", "send-review-fee")
+			if (asks === 1) {
+				await waitForSendingToast(burst.page, false)
+				await shotSend(burst.page, "4-reask-sheet", "send-review-fee")
+			}
 			await pointerClick(burst.page, "send-review-submit")
 			accepted = asking.reask.fee
 		}

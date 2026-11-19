@@ -6,6 +6,7 @@ import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { captureWindowDocument } from "@/utils/window-document"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
+import type { ListReader } from "@/utils/contract-level"
 
 // ── The request as the dApp's wire carried it: 32-byte hex fields, a CAIP account. ──
 
@@ -64,7 +65,7 @@ const tokenUpdated = {
 const decodeGrantsMock = vi.fn(async (_interactionId: string): Promise<unknown[]> => [])
 /** Set, the request's account read waits on it, so the operation stays unresolved. */
 let accountReadGate: Promise<void> | undefined
-const appStoreMock = reactive({ isSessionChecked: true, isLogined: true, pageAwaitingAuth: "" })
+const appStoreMock = reactive({ isSessionChecked: true, isLogined: true, pageAwaitingAuth: "", defaultExplorer: "aztecscan", accounts: [] })
 
 vi.mock("@/composables/useDappInteractionPayload", () => ({
 	useDappInteractionPayload: vi.fn(() => ({
@@ -150,7 +151,7 @@ const STUBS = {
 	},
 	// The card's own rendering is pinned in its tests; here it shows which request it read and its fee slot.
 	OperationCard: {
-		props: ["op", "approvedAuthwits", "decodedAuthwits", "decodedGrants", "tokens"],
+		props: ["op", "approvedAuthwits", "decodedAuthwits", "decodedGrants", "tokens", "marks", "explorerId"],
 		template: `<div data-testid="execute-op-item" :data-op-kind="op.kind" :data-account="op.accountAddress"
 			:data-authwits="(approvedAuthwits ?? []).map((a) => a.messageHash).join(',')"
 			:data-decoded="[...(decodedAuthwits?.keys() ?? [])].join(',')"
@@ -210,54 +211,106 @@ describe("the fee question window", () => {
 		await opened()
 		expect(byId("execute-op-item").attributes()).toMatchObject({ "data-op-kind": "aztec_sendTx", "data-account": OWNER })
 		expect(byId("fee-raised-method").text()).toBe("Private Fee Juice")
-		expect(byId("fee-raised-was").text()).toBe("Was ~0.016 FJ")
-		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ")
+		expect(byId("fee-raised-was").text()).toBe("was ~0.016 FJ")
+		expect(byId("fee-raised-now").text()).toBe("~0.021 FJ")
 		expect(byId("fee-raised-card").text()).toContain("1.25 FJ")
 		expect(byId("fee-raised-priority").text()).toContain("Normal")
 		expect(getGasBalancesMock).toHaveBeenCalledExactlyOnceWith("n1", OWNER, true)
 		expect(confirm().text()).toBe("Send for ~0.021 FJ")
-		expect(byId("dapp-approval-confirm-detail").exists()).toBe(false)
+		expect(byId("dapp-approval-confirm-detail").text()).toBe("for ~0.021 FJ")
 		expect(confirm().attributes("disabled")).toBeUndefined()
 	})
 
-	test("with a quote the card prices both figures; Confirm repeats the new one's dollars on its second line", async () => {
+	test("with a quote the card prices the new figure; Confirm's second line repeats it with its dollars", async () => {
 		priceFake.reset(2)
 		await opened()
-		expect(byId("fee-raised-now").text()).toBe("Now ~0.021 FJ ($0.042)")
+		expect(byId("fee-raised-now").text()).toBe("~0.021 FJ ($0.042)")
 		expect(confirm().text()).toBe("Send for ~0.021 FJ ($0.042)")
-		expect(byId("dapp-approval-confirm-detail").text()).toBe("($0.042)")
-		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
+		expect(byId("dapp-approval-confirm-detail").text()).toBe("for ~0.021 FJ ($0.042)")
+		// The card's quote and the summary's marks. The counts leave out the real client's read on its
+		// first Ready: this fake fires onConnected only through reconnect().
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
 		priceFake.reconnect()
 		await flushPromises()
-		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([4, 0])
 	})
 
-	test("while the request's operation resolves, Confirm already names the new fee, off and with no price read", async () => {
+	test("while the request's operation resolves, Confirm already names the new fee, off, and only the list is read", async () => {
 		priceFake.reset(2)
 		accountReadGate = new Promise(() => {})
 		await opened()
 		expect(byId("fee-raised-card").exists()).toBe(false)
 		expect(confirm().text()).toBe("Send for ~0.021 FJ")
-		expect(byId("dapp-approval-confirm-detail").exists()).toBe(false)
+		expect(byId("dapp-approval-confirm-detail").text()).toBe("for ~0.021 FJ")
 		expect(confirm().attributes("disabled")).toBeDefined()
-		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
 	})
 
 	test.each([
-		["still checking its session", { isSessionChecked: false, isLogined: true }],
-		["locked", { isSessionChecked: true, isLogined: false }],
-	])("a window %s reads no price; one signed in reads the cache once, from its fee card", async (_case, session) => {
-		priceFake.reset(2)
-		Object.assign(appStoreMock, session)
-		await opened()
-		expect(byId("fee-raised-card").exists()).toBe(false)
-		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
+		["~0.021 FJ at $2", "21000000000000000", 2, "~0.021 FJ ($0.042)"],
+		["~1.314209 FJ at $2", "1314209000000000000", 2, "~1.314209 FJ ($2.628)"],
+		["~12.345678 FJ at $2", "12345678000000000000", 2, "~12.345678 FJ ($24.691)"],
+		["~0.021 FJ unpriced", "21000000000000000", undefined, "~0.021 FJ"],
+	])("%s: the row and Confirm print the whole fee, Confirm as Send over it", async (_, fee, usd, shown) => {
+		priceFake.reset(usd)
+		await opened(question({ fee }))
+		expect(byId("fee-raised-now").text()).toBe(shown)
+		expect(byId("dapp-approval-confirm-detail").text()).toBe(`for ${shown}`)
+		expect(confirm().element.textContent).toBe(`Send for ${shown}`)
+	})
 
-		w!.unmount()
-		Object.assign(appStoreMock, { isSessionChecked: true, isLogined: true })
+	test("before its question loads Confirm reads Send alone, on one line", async () => {
+		await opened(null)
+		expect(confirm().element.textContent).toBe("Send")
+		expect(byId("dapp-approval-confirm-detail").exists()).toBe(false)
+	})
+
+	test.each([
+		["still checking its session", { isSessionChecked: false, isLogined: true }, { id: "p1" }],
+		["locked", { isSessionChecked: true, isLogined: false }, undefined],
+	])(
+		"a window %s reads no price; one signed in reads the cache twice, its fee card's quote and the list's marks",
+		async (_case, session, workerProfile) => {
+			priceFake.reset(2)
+			Object.assign(appStoreMock, session)
+			activeProfile = workerProfile
+			await opened()
+			expect(byId("fee-raised-card").exists()).toBe(false)
+			expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
+
+			w!.unmount()
+			Object.assign(appStoreMock, { isSessionChecked: true, isLogined: true })
+			activeProfile = { id: "p1" }
+			await opened()
+			expect(byId("fee-raised-card").exists()).toBe(true)
+			expect([priceFake.reads(), priceFake.refreshes()]).toEqual([2, 0])
+		},
+	)
+
+	test("the summary's marks and chip levels read the signed list on the request's chain, the badge included, and a closed window's reader hears nothing more", async () => {
+		priceFake.icons = { [`1:${TOKEN}`]: "data:image/svg+xml;base64,PHN2Zy8+" }
+		priceFake.flagged = [`1:${TOKEN}`]
+		priceFake.listed = { [`1:${TOKEN}`]: { symbol: "TST", name: "Test Token" } }
 		await opened()
-		expect(byId("fee-raised-card").exists()).toBe(true)
-		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([1, 0])
+		const card = w!.findComponent(STUBS.OperationCard)
+		const { iconFor, isFlagged, listedAt } = card.props("marks") as ListReader
+		expect([iconFor({ chainId: 1, contract: TOKEN }), isFlagged({ chainId: 1, contract: TOKEN })]).toEqual([
+			priceFake.icons[`1:${TOKEN}`],
+			true,
+		])
+		expect([iconFor({ chainId: 2, contract: TOKEN }), isFlagged({ chainId: 2, contract: TOKEN })]).toEqual([undefined, false])
+		expect([listedAt({ chainId: 1, contract: TOKEN }), listedAt({ chainId: 2, contract: TOKEN })]).toEqual([
+			{ symbol: "TST", name: "Test Token" },
+			undefined,
+		])
+		expect(card.props("explorerId"), "a chip's press links the explorer the person picked").toBe("aztecscan")
+		const reads = priceFake.reads()
+		w!.unmount()
+		w = undefined
+		priceFake.reconnect()
+		priceFake.broadcast()
+		await flushPromises()
+		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([reads, 0])
 	})
 
 	test("the authorizations the approval window listed are listed again, each decoded on its consumer", async () => {

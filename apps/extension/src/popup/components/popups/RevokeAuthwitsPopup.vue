@@ -5,19 +5,13 @@ import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue
 
 /** Utils */
 import { AuthRegistryServiceClient, MAX_REVOKES_PER_TX } from "@/wallet/services/auth-registry/client"
-import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
-import { getRandomHex } from "@/wallet/utils"
-import { classifyCancellableRejection } from "@/popup/utils/cancellable-rejection"
 
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
-import { useToast } from "@/composables/toast"
 import { useAuthRegistryStatus } from "@/composables/useAuthRegistryStatus"
 import { refuseRepeatEnter, usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
-import { useSendStageLine } from "@/composables/useSendStageLine"
 import { useWalletTxEstimates } from "@/composables/useWalletTxEstimates"
-const { openToast } = useToast()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -40,14 +34,19 @@ const registry = useAuthRegistryStatus(authwitsService, () =>
 		: undefined,
 )
 const { isRegistryEnabled, isLoading, error } = registry
-const journalService = new OperationJournalServiceClient()
-const stage = useSendStageLine({ sendStarted: authwitsService.onSendStarted, journal: journalService })
-const stageLine = stage.line
 
 const authwits = ref([])
 const chunkedAuthwits = ref([])
 const chunksCount = computed(() => chunkedAuthwits.value.length)
 const isErrorOccurred = computed(() => !!error.value)
+/** Set by Revoke until the next show: the popup hands one revoke to the worker. */
+const handedOff = ref(false)
+/** A request on a connected client is on the port before its call returns; one made while the port
+ *  reopens (after a worker restart) waits for Ready, and a window closed meanwhile loses it. */
+const connected = ref(authwitsService.isConnected)
+const readConnection = () => (connected.value = authwitsService.isConnected)
+authwitsService.onConnected.add(readConnection)
+authwitsService.onDisconnected.add(readConnection)
 
 const estimates = useWalletTxEstimates({
 	estimate: (p, token, flowKey) => authwitsService.estimateRevokeFee(p.networkId, p.account, p.ids, p.feeSettings, token, flowKey),
@@ -82,62 +81,39 @@ function chunkAuthwits() {
 			content: ch.map((c) => c.content),
 			count: ch.length,
 			feeSetting: null,
-			status: "prepare",
 		}))
 }
 
 const isAllowedToExecute = computed(() => chunkedAuthwits.value.every((ch) => ch.feeSettings) && estimates.landed() && !estimates.short())
+/** Revoke requests not yet settled: until the last one settles, a hide leaves the client connected. */
+let outstanding = 0
 
-async function handleRevokeAuthwits() {
-	// Full-lifetime submit latch, handler-owned: every route (click, any future caller) self-checks
-	// here; the button's :disabled is defense-in-depth, not the guard.
-	if (isLoading.value) return
+/**
+ * Posts every chunk at once, on a connected client, and closes: each request is on the port before
+ * the close, and the worker runs it to its end whatever the person closes next. Its revoke task and
+ * Activity report it, so the popup reports nothing.
+ */
+function handleRevokeAuthwits() {
+	// Handler-owned latch: every route self-checks here; the button's :disabled is defense-in-depth.
+	if (isLoading.value || handedOff.value || !authwitsService.isConnected) return
 	if (!isAllowedToExecute.value) return
 
-	isLoading.value = true
-	try {
-		await revokeChunks()
-	} finally {
-		stage.stop()
-		isLoading.value = false
+	handedOff.value = true
+	const networkId = appStore.network.id
+	const account = appStore.account.address
+	for (const ch of chunkedAuthwits.value) {
+		outstanding++
+		authwitsService
+			.revokeAuthwits(networkId, account, ch.ids, ch.feeSettings)
+			.catch((error) => console.debug("[revoke] a chunk ended unrevoked", { error }))
+			.finally(onRevokeSettled)
 	}
-
-	const errors = chunkedAuthwits.value.filter((ch) => ch.status === "error").map((ch) => ch.error)
-	const cancelled = chunkedAuthwits.value.some((ch) => ch.status === "cancelled")
-	if (cancelled) {
-		// User cancelled at least one chunk — suppress both success and
-		// failure summary toasts. The terminal card communicates the state.
-		emit("onClose")
-	} else if (errors.length) {
-		openToast({ kind: "error", label: `Failed to revoke ${errors.length === chunksCount.value ? "" : "some "}authwit(s)` })
-		error.value = errors.join(", ")
-	} else {
-		openToast({ kind: "success", label: "Authwit(s) successfully revoked" })
-		emit("onClose")
-	}
+	emit("onClose")
 }
 
-async function revokeChunks() {
-	for (const ch of chunkedAuthwits.value) {
-		try {
-			ch.status = "progress"
-			const correlation = getRandomHex(16)
-			stage.follow(correlation)
-			await authwitsService.revokeAuthwits(appStore.network.id, appStore.account.address, ch.ids, ch.feeSettings, correlation)
-			ch.status = "success"
-		} catch (err) {
-			if (classifyCancellableRejection(err) === "silent") {
-				// User cancelled this chunk's tx mid-prove. Mark cancelled so
-				// the summary branch below doesn't read it as a success or a
-				// failure. The terminal card in RecentActivityView shows the
-				// per-chunk cancellation already.
-				ch.status = "cancelled"
-			} else {
-				ch.status = "error"
-				ch.error = err
-			}
-		}
-	}
+function onRevokeSettled() {
+	outstanding--
+	if (outstanding === 0 && !props.show) authwitsService.disconnect()
 }
 
 function showChunkContent(chunk) {
@@ -147,7 +123,9 @@ function showChunkContent(chunk) {
 
 usePopupEntity(() => props.show, {
 	onShow: async () => {
+		handedOff.value = false
 		await registry.fetch()
+		readConnection()
 
 		authwits.value = cacheStore.preselectedAuthwits
 		chunkAuthwits()
@@ -157,18 +135,17 @@ usePopupEntity(() => props.show, {
 		authwits.value = []
 		chunkedAuthwits.value = []
 		registry.reset()
-		stage.stop()
 
-		authwitsService.disconnect()
-		journalService.disconnect()
+		// A disconnect would reject a revoke request still waiting for the port, unsent.
+		if (outstanding === 0) authwitsService.disconnect()
 	},
 })
 
 onBeforeUnmount(() => {
+	authwitsService.onConnected.remove(readConnection)
+	authwitsService.onDisconnected.remove(readConnection)
 	registry.dispose()
-	stage.dispose()
 	estimates.dispose()
-	journalService.disconnect()
 })
 </script>
 
@@ -250,30 +227,8 @@ onBeforeUnmount(() => {
 							@retryEstimate="estimates.refresh(i)"
 						/>
 
-						<div v-if="ch.status === 'progress'" :class="[$style.status_line, $style.runner]" />
-						<div
-							v-else
-							:class="[
-								$style.status_line,
-								(!ch?.status || ch.status === 'prepare') && $style.waiting,
-								ch.status === 'success' && $style.success,
-								ch.status === 'error' && $style.error,
-								ch.status === 'cancelled' && $style.cancelled,
-							]"
-						/>
+						<div :class="$style.status_line" />
 					</Flex>
-
-					<Tooltip v-if="ch.error && chunksCount > 1" side="top">
-						<Flex align="center" gap="6" style="margin-top: -8px;">
-							<Icon name="info" size="12" color="red" />
-							<Text variant="body" color="secondary">
-								Finished with an error
-							</Text>
-						</Flex>
-
-						<template #content> {{ ch.error }} </template>
-					</Tooltip>
-
 				</template>
 
 				<Flex v-snack-footer align="center" direction="column" gap="12">
@@ -286,13 +241,13 @@ onBeforeUnmount(() => {
 						size="medium"
 						wide
 						:loading="isLoading"
-						:disabled="!isAllowedToExecute || isErrorOccurred || isLoading"
+						:disabled="!isAllowedToExecute || isErrorOccurred || isLoading || handedOff || !connected"
 					>
 						Revoke
 					</Button>
 
-					<div role="status" aria-live="polite" data-testid="authwit-stage-line">
-						<Text v-if="stageLine" variant="body" color="secondary">{{ stageLine }}</Text>
+					<div data-testid="revoke-authwits-continues">
+						<Text variant="body" color="secondary">Revoking continues if you close this. Its progress shows in Activity.</Text>
 					</div>
 
 					<Tooltip v-if="isErrorOccurred" side="top" wide>
@@ -339,48 +294,7 @@ onBeforeUnmount(() => {
 
 	opacity: 1;
 	height: 1px;
-}
 
-.waiting {
 	background: linear-gradient(90deg, rgba(10, 222, 113, 0%) 0%, var(--txt-support), rgba(10, 222, 113, 0%) 100%);
-}
-
-.success {
-	background: linear-gradient(90deg, rgba(10, 222, 113, 0%) 0%, var(--green), rgba(10, 222, 113, 0%) 100%);
-}
-
-.error {
-	background: linear-gradient(90deg, rgba(10, 222, 113, 0%) 0%, var(--red), rgba(10, 222, 113, 0%) 100%);
-}
-
-/* User cancelled this chunk's tx mid-prove. Neutral gray — same tone as
- * the cancelled terminal card in RecentActivityView. Visually distinct
- * from `error` (red) and `success` (green). */
-.cancelled {
-	background: linear-gradient(90deg, rgba(10, 222, 113, 0%) 0%, var(--nulo-secondary), rgba(10, 222, 113, 0%) 100%);
-}
-
-.runner {
-	width: 100%;
-	height: 2px;
-
-	background: linear-gradient(90deg, rgba(7, 106, 205, 0%), var(--blue), rgba(7, 106, 205, 0%));
-
-	animation: runner 2s ease infinite;
-	filter: blur(1px);
-}
-
-@keyframes runner {
-	0% {
-		transform: translateX(-200px);
-	}
-
-	50% {
-		transform: translateX(200px);
-	}
-
-	100% {
-		transform: translateX(-200px);
-	}
 }
 </style>

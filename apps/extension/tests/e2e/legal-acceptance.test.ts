@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
-import { extensionUrl, reloadExtensionPage, waitForTarget } from "./fixtures/browser"
+import { extensionUrl, reloadExtensionPage, setViewport, waitForTarget } from "./fixtures/browser"
 import {
 	clickByTestId,
 	expectNoNameField,
@@ -22,7 +22,16 @@ import {
 	waitForHash,
 	waitForServiceReady,
 } from "./fixtures/extension"
-import { ensureUnlocked, lockWallet, navigateByHash, readRecoveryWords, waitForLockScreen, waitForToast } from "./fixtures/helpers"
+import {
+	ensureUnlocked,
+	getAccountAddress,
+	lockWallet,
+	navigateByHash,
+	readRecoveryWords,
+	waitForLockScreen,
+	waitForToast,
+} from "./fixtures/helpers"
+import { chooseRecipient } from "./fixtures/send-page"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import { exportAccountBody, FIRST_ACCOUNT_NAME } from "./helpers/account-io"
 import { downloadEncryptedBackup, downloadPasskeyBackup, FILE_PASSWORD, openEncryptedBackup } from "./helpers/backup-export"
@@ -42,6 +51,7 @@ import {
 	waitForToastLayer,
 } from "./helpers/legal-drivers"
 import { expectFitsNarrow } from "./fixtures/type-roles"
+import { activeTestId, coveredAt } from "./helpers/pointer-probes"
 import { LEGAL_ACCEPTANCE_KEY, legalSeedValue } from "./fixtures/legal"
 
 const CURRENT_TERMS = LEGAL_MANIFEST.terms.at(-1)?.version
@@ -117,7 +127,43 @@ describe("onboarding: the Terms gate", () => {
 		expect(extension.pageErrors).toEqual([])
 		await page.close()
 	}, 90_000)
+
+	test("S13 at 1280 x 720 one press on the more-below button shows Continue and the hint whole, and the button leaves", async ({
+		freshExtensionPerTest: extension,
+	}) => {
+		const page = await openOnboarding(extension, { legal: "missing" })
+		await setViewport(page, { width: 1280, height: 720 })
+		await clickByTestId(page, "onboarding-welcome-create")
+		await waitForTermsGate(page, "create")
+		await page.waitForSelector('[data-testid="onboarding-scroll-more"]', { visible: true, timeout: 5_000 })
+		const whole = (testids: string[]) =>
+			page.evaluate(
+				(ids: string[]) =>
+					ids.every((id) => {
+						const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
+						return !!box && box.top >= 0 && box.bottom <= document.documentElement.clientHeight
+					}),
+				testids,
+			)
+		expect(await whole(["legal-continue"])).toBe(false)
+
+		const more = await centreOf(page, "onboarding-scroll-more")
+		await page.mouse.click(more.x, more.y)
+		await page.waitForFunction(() => !document.querySelector('[data-testid="onboarding-scroll-more"]'), { timeout: 5_000 })
+		expect(await whole(["legal-continue", "legal-consent-hint"])).toBe(true)
+		expect(await coveredAt(page, "legal-consent-hint")).toBeNull()
+		expect(extension.pageErrors).toEqual([])
+		await page.close()
+	}, 60_000)
 })
+
+/** A control's centre, for a real pointer press. */
+async function centreOf(page: Page, testid: string): Promise<{ x: number; y: number }> {
+	return page.$eval(`[data-testid="${testid}"]`, (el) => {
+		const box = el.getBoundingClientRect()
+		return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+	})
+}
 
 /** The step's title top with the page at its top and its fonts loaded, read once `stepTestid` shows. */
 async function titleTop(page: Page, stepTestid: string): Promise<number> {
@@ -155,9 +201,9 @@ async function revealSeedPhrase(page: Page): Promise<string> {
 
 /**
  * Assemble a full backup through the page flow and download it, encrypted. A password profile
- * unlocks first; a passkey profile's agreement starts its WebAuthn ceremony in the page itself,
- * which is exactly what an overlay would break, and its file takes a password of its own. Returns
- * the file's content.
+ * unlocks first; a passkey profile's file takes a password of its own, and the press after it
+ * starts the WebAuthn ceremony in the page itself, which is exactly what an overlay would break.
+ * Returns the file's content.
  */
 async function downloadFullBackup(page: Page, password?: string): Promise<Record<string, unknown>> {
 	await navigateByHash(page, "#/popup/settings/security/export", 15_000)
@@ -194,6 +240,9 @@ describe("popup: declining never locks a person out", () => {
 			await navigateByHash(page, "#/popup/send", 15_000)
 			await page.waitForSelector('[data-testid="send-legal-banner"]', { visible: true, timeout: 15_000 })
 			expect(await isSheetPresent(page)).toBe(false)
+			// The banner stands over the person step and the form alike; the form's button stays off.
+			await chooseRecipient(page, await getAccountAddress(page))
+			expect(await page.$('[data-testid="send-legal-banner"]')).not.toBeNull()
 			expect(await page.$eval('[data-testid="send-submit"]', (el) => (el as HTMLButtonElement).disabled)).toBe(true)
 
 			// Review on the banner brings the sheet back, over Send.
@@ -277,7 +326,7 @@ describe("popup: declining never locks a person out", () => {
 		expect(record?.history).toHaveLength(2)
 
 		await navigateByHash(page, "#/popup/send", 15_000)
-		await page.waitForSelector('[data-testid="send-submit"]', { visible: true, timeout: 15_000 })
+		await page.waitForSelector('[data-testid="send-person-step"]', { visible: true, timeout: 15_000 })
 		expect(await page.$('[data-testid="send-legal-banner"]')).toBeNull()
 
 		// The stale reload is the control: told the acceptance is current, the answer must refuse.
@@ -311,6 +360,42 @@ describe("popup: declining never locks a person out", () => {
 		await page.waitForFunction(() => !document.querySelector('[data-testid="legal-sheet"]'), { timeout: 10_000 })
 		expect(await readLegalRecord(page)).toMatchObject({ termsVersion: CURRENT_TERMS, surface: "popup" })
 		await waitForToastLayer(page, "auto")
+		await page.close()
+	}, 120_000)
+
+	test("S12 the sheet's more-below press scrolls to the end with focus left on the consent box, unticked, and the hint whole and uncovered", async ({
+		registeredExtensionPerTest: extension,
+	}) => {
+		const page = await openPopup(extension)
+		await waitForHash(page, "#/popup/general", 30_000)
+		await reloadWithLegalState(page, "missing")
+		await waitForSheet(page, "review")
+		await page.waitForSelector('[data-testid="legal-sheet-scroll-more"]', { visible: true, timeout: 5_000 })
+		const atEnd = () =>
+			page.$eval('[data-testid="legal-sheet-body"]', (body) => {
+				const hint = document.querySelector('[data-testid="legal-consent-hint"]')?.getBoundingClientRect()
+				const top = body.getBoundingClientRect().top
+				const end = body.scrollHeight - body.clientHeight - body.scrollTop <= 1
+				return end && !!hint && hint.top >= top && hint.bottom <= top + body.clientHeight
+			})
+		expect(await atEnd()).toBe(false)
+		await page.$eval('[data-testid="legal-consent-checkbox"]', (el) => (el as HTMLElement).focus({ preventScroll: true }))
+		expect(await activeTestId(page)).toBe("legal-consent-checkbox")
+
+		const more = await centreOf(page, "legal-sheet-scroll-more")
+		await page.mouse.click(more.x, more.y)
+		await page.waitForFunction(() => !document.querySelector('[data-testid="legal-sheet-scroll-more"]'), { timeout: 5_000 })
+		await page.waitForFunction(
+			() => {
+				const body = document.querySelector('[data-testid="legal-sheet-body"]')
+				return !!body && body.scrollHeight - body.clientHeight - body.scrollTop <= 1
+			},
+			{ timeout: 5_000 },
+		)
+		expect(await atEnd()).toBe(true)
+		expect(await activeTestId(page)).toBe("legal-consent-checkbox")
+		expect(await page.$eval('[data-testid="legal-consent-checkbox"]', (el) => el.getAttribute("aria-checked"))).toBe("false")
+		expect(await coveredAt(page, "legal-consent-hint")).toBeNull()
 		await page.close()
 	}, 120_000)
 

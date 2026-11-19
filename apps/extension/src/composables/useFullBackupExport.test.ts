@@ -6,6 +6,9 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises } from "@vue/test-utils"
 import { setActivePinia } from "pinia"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { watch } from "vue"
+import { useAppStore } from "@/stores/app.store"
+import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
 import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 import { type UseFullBackupExportOptions, useFullBackupExport } from "./useFullBackupExport"
 
@@ -143,13 +146,14 @@ const CEREMONY_ANSWER = {
 	prf: Buffer.from(new Uint8Array(32).fill(6)).toString("base64"),
 	prfSalt: SALT,
 } as PasskeyCredentialData
+const FILE_PASSWORD = "file-pass-1"
 
-/** Values no backup run writes (it writes "" or "finished", releases the latch, sets the warnings
- *  from the material above, raises the wrong-password flag, drops the agreement), so any write a
- *  superseded run makes shows against them. */
+/** Values no backup run writes (its statuses stop short of "downloaded"; it releases the latch, sets
+ *  the warnings from the material above, raises the wrong-password flag, drops the agreement), so
+ *  any write a superseded run makes shows against them. */
 const SENTINELS = {
 	isAgreed: true,
-	backupStatus: "encrypting",
+	backupStatus: "downloaded",
 	isBusy: true,
 	isDownloading: true,
 	isWrongPassword: false,
@@ -173,7 +177,11 @@ function setup(type: ProfileType) {
 	setActivePinia(
 		createTestingPinia({
 			initialState: {
-				app: { profile: { id: "p1", type, name: "Test Profile", recoveryMode: true }, network: { id: "net1", chainId: 7 } },
+				app: {
+					isLogined: true,
+					profile: { id: "p1", type, name: "Test Profile", recoveryMode: true },
+					network: { id: "net1", chainId: 7 },
+				},
 			},
 			stubActions: false,
 		}),
@@ -184,7 +192,9 @@ function setup(type: ProfileType) {
 	}
 	const api = useFullBackupExport(opts)
 	api.isAgreed.value = true
-	api.password.value = "pw"
+	// A password profile's field holds its password; a passkey profile's pair, the file's.
+	api.password.value = type === "passkey" ? FILE_PASSWORD : "pw"
+	if (type === "passkey") api.repeatedPassword.value = FILE_PASSWORD
 	return { api, opts }
 }
 
@@ -297,6 +307,12 @@ const HOLDS: Hold[] = [
 		types: ["password", "passkey"],
 		hold: (d, reached) => m.assertRunFence.mockImplementationOnce(parkAt(d, reached)),
 		value: () => undefined,
+	},
+	{
+		at: "the seal",
+		types: ["passkey"],
+		hold: (d, reached) => m.seal.mockImplementationOnce(parkAt(d, reached)),
+		value: () => "SEALED",
 	},
 ]
 
@@ -576,9 +592,32 @@ describe("useFullBackupExport — a current run", () => {
 	})
 
 	// The file holds the recovery phrase, so a passkey profile's leaves only under a password typed
-	// for it, which meets the new-password rule.
-	it("passkey profile: one prompt at the row's input, the password body, and the file leaves only under a valid file password", async () => {
+	// for it, which meets the new-password rule, and typed before the passkey is asked.
+	it("passkey profile: no prompt before a valid file password; one press asks the row's passkey and seals under the pair read at it", async () => {
 		const { api, opts } = setup("passkey")
+		for (const [password, repeated] of [
+			["", ""],
+			["1234567", "1234567"],
+			["12345678", "12345679"],
+		]) {
+			api.password.value = password
+			api.repeatedPassword.value = repeated
+			expect(api.canEncrypt.value).toBe(false)
+			await api.handleBackup()
+		}
+		expect(m.captureRunFence).not.toHaveBeenCalled()
+		expect(opts.runCeremony).not.toHaveBeenCalled()
+
+		api.password.value = "12345678"
+		api.repeatedPassword.value = "12345678"
+		expect(api.canEncrypt.value).toBe(true)
+		const statuses: string[] = []
+		watch(api.backupStatus, (status) => void statuses.push(status), { flush: "sync" })
+		opts.runCeremony.mockImplementationOnce(async () => {
+			api.password.value = "edited-meanwhile"
+			api.repeatedPassword.value = "edited-meanwhile"
+			return CEREMONY_ANSWER
+		})
 		await api.handleBackup()
 		expect(opts.runCeremony).toHaveBeenCalledExactlyOnceWith({
 			mode: "get",
@@ -588,34 +627,58 @@ describe("useFullBackupExport — a current run", () => {
 			profileName: "Test Profile",
 		})
 		expect(h.state.exportFullBackupKeys).toHaveBeenCalledExactlyOnceWith(FENCE, undefined, CEREMONY_ANSWER)
-		expect(api.backupStatus.value).toBe("finished")
-
-		for (const [password, repeated] of [
-			["", ""],
-			["1234567", "1234567"],
-			["12345678", "12345679"],
-		]) {
-			api.password.value = password
-			api.repeatedPassword.value = repeated
-			expect(api.canEncrypt.value).toBe(false)
-			await api.protectAndDownload()
-		}
-		expect(m.seal).not.toHaveBeenCalled()
-		expect(m.downloadFile).not.toHaveBeenCalled()
-
-		api.password.value = "12345678"
-		api.repeatedPassword.value = "12345678"
-		expect(api.canEncrypt.value).toBe(true)
-		await api.protectAndDownload()
 		const [plaintext, filePassword] = m.seal.mock.calls[0]
 		expect(filePassword).toBe("12345678")
 		const body = JSON.parse(plaintext as string)
 		expect(body).toMatchObject({ "master-key": "mk", entropy: "ent", "imported-keys-dek": "ik" })
 		expect(body).not.toHaveProperty("backup-mac")
 		expect(body).not.toHaveProperty("imported-keys-dek-sealed")
+		// Never "finished", the stage that publishes the plaintext for a later seal.
+		expect(statuses).toEqual(["progress", "encrypting", "encrypted"])
+		expect(readState(api)).toMatchObject({ isBusy: false, password: null, repeatedPassword: null })
+		expect(m.downloadFile).not.toHaveBeenCalled()
+
+		// No plaintext was kept: a seal at the next press would have nothing to read.
+		const quiet = vi.spyOn(console, "error").mockImplementation(() => {})
+		m.seal.mockRejectedValueOnce(new Error("probe"))
+		api.backupStatus.value = "finished"
+		await api.protectAndDownload()
+		quiet.mockRestore()
+		expect(m.seal.mock.calls[1][0]).toBeNull()
+
+		api.backupStatus.value = "encrypted"
+		await api.protectAndDownload()
 		expect(m.downloadFile).toHaveBeenCalledExactlyOnceWith(
 			expect.objectContaining({ data: "SEALED", filename: expect.stringMatching(/^nulo-backup-\d{4}-\d{2}-\d{2}\.txt$/) }),
 		)
+	})
+
+	it.each([
+		["a seal that fails", () => m.seal.mockRejectedValueOnce(new Error("seal broke")), "Failed to encrypt the backup"],
+		[
+			"a sealed file too large",
+			() => m.seal.mockResolvedValueOnce("x".repeat(MAX_BACKUP_FILE_BYTES + 1)),
+			"Backup is too large to create",
+		],
+	])("passkey profile: %s returns to the typed pair, and the next press asks the passkey again", async (_, fail, label) => {
+		vi.spyOn(console, "error").mockImplementation(() => {})
+		const { api, opts } = setup("passkey")
+		fail()
+		await api.handleBackup()
+		expect(readState(api)).toMatchObject({ backupStatus: "", isAgreed: true, isBusy: false, password: FILE_PASSWORD })
+		expect(m.openToast).toHaveBeenLastCalledWith({ kind: "error", label })
+		await api.handleBackup()
+		expect(opts.runCeremony).toHaveBeenCalledTimes(2)
+		expect(api.backupStatus.value).toBe("encrypted")
+	})
+
+	it("passkey profile: a press made while the wallet is locked asks nothing", async () => {
+		const { api, opts } = setup("passkey")
+		useAppStore().isLogined = false
+		await api.handleBackup()
+		expect(m.captureRunFence).not.toHaveBeenCalled()
+		expect(opts.runCeremony).not.toHaveBeenCalled()
+		expect(api.backupStatus.value).toBe("")
 	})
 
 	it("an accepted sealed download ends the run: done, with nothing left to download or seal", async () => {
@@ -678,6 +741,6 @@ describe("useFullBackupExport — a current run", () => {
 			readFileSync(resolve(__dirname, file), "utf8")
 				.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
 				.match(/\bawait\b/g)?.length
-		expect((awaits("useFullBackupExport.ts") ?? 0) + (awaits("../utils/profile-passkey.ts") ?? 0)).toBe(18)
+		expect((awaits("useFullBackupExport.ts") ?? 0) + (awaits("../utils/profile-passkey.ts") ?? 0)).toBe(21)
 	})
 })

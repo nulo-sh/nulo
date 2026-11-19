@@ -32,6 +32,8 @@ import {
 	DAPP_REGISTRATIONS_STORAGE_ROOT,
 	DAPP_SESSION_STORAGE_ROOT,
 	DappSessionSchema,
+	DISCOVERY_POLICY_STORAGE_ROOT,
+	DiscoveryPolicyRowSchema,
 	RegistrationCountsRowSchema,
 } from "@/wallet/services/dapp-session/spec"
 import { FPC_STORAGE_ROOT, StoredFpcSchema } from "@/wallet/services/fpc/spec"
@@ -188,6 +190,7 @@ export const STORES = {
 	contacts: sealedCodec(CONTACT_STORAGE_ROOT, ContactSchema),
 	dappSessions: sealedCodec(DAPP_SESSION_STORAGE_ROOT, DappSessionSchema),
 	dappRegistrations: sealedCodec(DAPP_REGISTRATIONS_STORAGE_ROOT, RegistrationCountsRowSchema, PROFILE_ROW_LAYOUT),
+	discoveryPolicy: sealedCodec(DISCOVERY_POLICY_STORAGE_ROOT, DiscoveryPolicyRowSchema, PROFILE_ROW_LAYOUT),
 	fpcs: sealedCodec(FPC_STORAGE_ROOT, StoredFpcSchema),
 	journal: sealedCodec(OPERATION_JOURNAL_STORAGE_ROOT, OperationRecordSchema),
 	networks: sealedCodec(NETWORK_STORAGE_ROOT, NetworkRowSchema),

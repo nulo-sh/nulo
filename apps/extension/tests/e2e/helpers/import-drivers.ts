@@ -18,6 +18,7 @@ import {
 	clickByTestId,
 	expectNameFieldPrefill,
 	expectNoNameField,
+	isTargetDetachError,
 	pickFileByTestId,
 	replaceInputValue,
 	waitForHash,
@@ -272,17 +273,42 @@ export async function restoreFullBackupWithPasskey(page: Page, filePath: string,
 	await waitForHash(page, shell.successHash, 120_000)
 }
 
+interface RestoreEnding {
+	home: boolean
+	refusal: string | null
+	closed: boolean
+}
+
+const CLOSED: RestoreEnding = { home: false, refusal: null, closed: true }
+
+/** A window that closes itself can reject a read before Puppeteer marks its page closed, so a
+ *  detach reads as closed too. */
+const readRestoreEnding = (page: Page): Promise<RestoreEnding> =>
+	page.isClosed()
+		? Promise.resolve(CLOSED)
+		: page
+				.evaluate(() => ({
+					home: window.location.hash === "#/popup/general",
+					refusal: document.querySelector('[data-testid="import-full-backup-error"]')?.textContent?.trim() ?? null,
+					closed: false,
+				}))
+				.catch((err: unknown) => {
+					if (isTargetDetachError(err)) return CLOSED
+					throw err
+				})
+
 /** Restore an ENCRYPTED backup from the full-backup form already on screen: the file opens with
  *  `filePassword`, and the restored profile takes {@link TEST_PASSWORD}, or with `unlock: "passkey"`
- *  a new passkey, which must be the method the form opened on. Lands on Home; a refusal fails at
- *  once with the error box's text. */
+ *  a new passkey, which must be the method the form opened on. Resolves with the ending the page
+ *  showed: Home, or the page closing itself, which proves nothing alone, so the caller checks where
+ *  the ending went. A refusal fails at once with the error box's text. */
 export async function submitEncryptedFullBackup(
 	page: Page,
 	filePath: string,
 	filePassword: string,
 	timeoutMs = 30_000,
 	unlock: "password" | "passkey" = "password",
-): Promise<void> {
+): Promise<"home" | "closed"> {
 	await page.waitForSelector('[data-testid="import-full-backup-pick-file"]', { visible: true, timeout: 10_000 })
 	await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
 	await page.waitForSelector('[data-testid="import-full-backup-decrypt-password-input"] input', { visible: true, timeout: 10_000 })
@@ -303,16 +329,13 @@ export async function submitEncryptedFullBackup(
 		})
 	}
 	await submitWhenEnabled(page, "import-full-backup-submit-btn")
-	const { refusal } = await pollUntil(
-		() =>
-			page.evaluate(() => ({
-				home: window.location.hash === "#/popup/general",
-				refusal: document.querySelector('[data-testid="import-full-backup-error"]')?.textContent?.trim() ?? null,
-			})),
-		({ home, refusal }) => home || refusal !== null,
-		{ label: "the restore landing on Home or refusing the backup", timeoutMs, intervalMs: 250 },
+	const { closed, refusal } = await pollUntil(
+		() => readRestoreEnding(page),
+		({ home, refusal, closed }) => home || closed || refusal !== null,
+		{ label: "the restore landing on Home, closing its window or refusing the backup", timeoutMs, intervalMs: 250 },
 	)
 	if (refusal !== null) throw new Error(`the restore refused the backup: ${refusal}`)
+	return closed ? "closed" : "home"
 }
 
 /** Drive the full-backup import. Lands on the shell's success hash, or — when

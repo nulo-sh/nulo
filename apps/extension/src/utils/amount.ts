@@ -136,6 +136,50 @@ export const balanceFormatted = (
 	return { value: fullValue, slashed: false }
 }
 
+const listDecimals = (units: bigint, decimals: number): number => {
+	const whole = units / 10n ** BigInt(decimals)
+	const places = whole > 0n ? Math.max(2, 4 - whole.toString().length) : decimals - units.toString().length + 4
+	return Math.min(places, decimals)
+}
+
+/** A positive amount truncated to `places` decimals, then cut as `balanceFormatted` compacts. One
+ *  that truncates to nothing reads `<0.0…1` at `places`, never wider than the hint `length` allows. */
+const cutTo = (units: bigint, decimals: number, places: number, length?: number): string => {
+	const truncated = units - (units % 10n ** BigInt(decimals - places))
+	if (truncated === 0n) {
+		const shown = length ? Math.min(places, length - 2) : places
+		return `<0${getDecimalSeparator()}${"0".repeat(shown - 1)}1`
+	}
+	return balanceFormatted(truncated, decimals, length, { compact: true }).value
+}
+
+/**
+ * A list amount: truncated, never rounded up, to max(2, 4 − whole digits) decimals at 1 and above or
+ * four significant digits below 1, never more than `decimals`; then cut to `length` as
+ * `balanceFormatted` compacts. Zero, an empty value and a negative one read as `balanceFormatted`
+ * reads them.
+ */
+export const formatListAmount = (units: bigint | string | null | undefined, decimals: number, length?: number): string => {
+	const u = units == null || units === "" ? 0n : BigInt(units)
+	return u > 0n ? cutTo(u, decimals, listDecimals(u, decimals), length) : balanceFormatted(u, decimals, length, { compact: true }).value
+}
+
+/**
+ * A token's total by `formatListAmount`, and each side truncated to the decimals the rule gives the
+ * total; a non-zero side that truncates to nothing reads `<0.0…1` at them, never `0`.
+ */
+export const formatListSplit = (
+	privateUnits: bigint,
+	publicUnits: bigint,
+	decimals: number,
+	length: number,
+): { total: string; private: string; public: string } => {
+	const total = privateUnits + publicUnits
+	const places = total > 0n ? listDecimals(total, decimals) : decimals
+	const side = (units: bigint) => (units > 0n ? cutTo(units, decimals, places, length) : formatListAmount(units, decimals, length))
+	return { total: formatListAmount(total, decimals, length), private: side(privateUnits), public: side(publicUnits) }
+}
+
 /**
  * Truncate a typed-input string to at most `maxDecimals` digits after the
  * decimal point. Pure string operation — no BN, no float, no rounding.

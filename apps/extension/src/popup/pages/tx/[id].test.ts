@@ -6,6 +6,7 @@ import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { OriginType, TransferType, TxStatus } from "@/wallet/services/transaction/spec"
 import TxDetail from "./[id].vue"
+import { declarationsOf, parseSource } from "../../../../scripts/type-roles/source-scan"
 
 const mocks = vi.hoisted(() => ({
 	getTokens: vi.fn(),
@@ -108,6 +109,8 @@ async function mountPage(tx: unknown, tokens: Promise<unknown[]>, stubs: Record<
 }
 
 const amountBlock = (w: Awaited<ReturnType<typeof mountPage>>) => w.find("[class*='amount_value']")
+/** The design `Text`, which unit tests resolve to nothing: its slot in a span that keeps its attributes. */
+const TEXT = { template: "<span><slot /></span>" }
 
 describe("the transaction page's time", () => {
 	test("the hero line reads when the send was made, not its last status change", async () => {
@@ -201,13 +204,94 @@ describe("the transaction page's fee", () => {
 			args: [field(1n), field(2n)],
 			classId: field(0xfc1n),
 		}
-		const embedded = await mountPage(dappSend(appFpc), Promise.resolve([listed]))
-		expect(embedded.text()).toContain("Set by example.dapp.io")
+		const method = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="tx-detail-fee-method"]').element.textContent
+		const setter = (w: Awaited<ReturnType<typeof mountPage>>) => w.find('[data-testid="tx-detail-fee-setter"]')
+		const embedded = await mountPage(dappSend(appFpc), Promise.resolve([listed]), { Text: TEXT })
+		expect(method(embedded)).toBe("Set by example.dapp.io")
+		expect(setter(embedded).exists()).toBe(false)
 		expect(embedded.text()).not.toContain("Private Fee Juice")
 		const privateFpc = { contract: PRIVATE_FPC_ADDRESS, method: "pay_fee", args: [], classId: field(0xfc2n) }
-		const picked = await mountPage(dappSend(privateFpc), Promise.resolve([listed]))
-		expect(picked.text()).toContain("Private Fee Juice")
+		const picked = await mountPage(dappSend(privateFpc), Promise.resolve([listed]), { Text: TEXT })
+		expect(method(picked)).toBe("Private Fee Juice")
+		expect(setter(picked).exists()).toBe(false)
 		expect(picked.text()).not.toContain("Set by")
+
+		const chosen = await mountPage({ ...dappSend(privateFpc), feeChoice: "app" }, Promise.resolve([listed]), { Text: TEXT })
+		expect(method(chosen)).toBe("Private Fee Juice")
+		expect(setter(chosen).element.textContent).toBe("Set by example.dapp.io")
+		const row = chosen.get('[data-testid="tx-detail-fee-method"]').element.parentElement?.parentElement as HTMLElement
+		expect([row.getAttribute("align"), row.getAttribute("gap")]).toEqual(["start", "16"])
+		expect(row.firstElementChild?.className).toContain("app_key")
+	})
+})
+
+describe("the transaction page's contract for a call", () => {
+	const FEE_JUICE = field(3n)
+	const OTHER = `0x${"0b".repeat(32)}`
+	const claim = settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [
+		{ contract: FEE_JUICE, method: "claim", args: [ACCOUNT, field(10n ** 21n), field(0x5ecn), field(1187n)] },
+		{ contract: OTHER, method: "checkpoint", args: [field(7n)] },
+	])
+	const chipStub = {
+		props: ["model", "testid"],
+		template: "<button data-testid='contract-chip'><span :data-testid='testid'>{{ model.label }}</span></button>",
+	}
+
+	test("a Fee Juice claim names its contract as the protocol chip; any other call keeps its short address, copied on a click", async () => {
+		const w = await mountPage(claim, Promise.resolve([listed]), { ContractChip: chipStub })
+		const rows = w.findAll("[data-testid='tx-call-method']").map((m) => m.element.parentElement as HTMLElement)
+		expect(rows.map((row) => row.querySelector("[data-testid='tx-call-method']")?.textContent)).toEqual([
+			"Claim Fee Juice",
+			"Checkpoint",
+		])
+		expect(rows[0].querySelector("[data-testid='tx-call-contract'] [data-testid='tx-call-contract-name']")?.textContent).toBe(
+			"Fee Juice",
+		)
+		expect(w.getComponent(chipStub).props("model")).toMatchObject({
+			label: "Fee Juice",
+			level: "nulo",
+			mark: null,
+			title: "Fee Juice",
+			lines: [
+				"Nulo knows this contract. Knowing it isn't a promise that it's safe.",
+				"It's part of the Aztec protocol, at the same address on every network.",
+			],
+			address: FEE_JUICE,
+		})
+		expect(w.findAllComponents(chipStub)).toHaveLength(1)
+		const other = rows[1].querySelector("[data-testid='tx-call-contract']") as HTMLElement
+		expect(other.textContent?.trim()).toBe("0x0b0b..0b0b")
+		other.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+		expect(mocks.copy).toHaveBeenCalledExactlyOnceWith(OTHER, expect.any(Function), "Successfully copied")
+	})
+
+	test('each call reads as one sentence, "{title} on {contract}": "on" held to the protocol chip or the short address in one box the chip clips in, the title\'s direction controls kept to the title', async () => {
+		const STYLE = (TxDetail as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style
+		const source = parseSource("apps/extension/src/popup/pages/tx/[id].vue")
+		expect([".call_tail", ".call_chip", ".call_chip_box"].map((rule) => declarationsOf(source, rule))).toEqual([
+			{ display: "inline-flex", "align-items": "baseline", "max-width": "100%" },
+			{ "min-width": "0" },
+			{ display: "inline-flex", "vertical-align": "middle", "max-width": "100%" },
+		])
+		expect(declarationsOf(source, ".call_method")).toMatchObject({ "unicode-bidi": "isolate" })
+		const w = await mountPage(claim, Promise.resolve([listed]), { ContractChip: chipStub })
+		const sentences = w.findAll("[data-testid='tx-call-method']").map((method) => {
+			const line = method.element.parentElement as HTMLElement
+			const contract = line.querySelector("[data-testid='tx-call-contract']")
+			return {
+				line: line.className,
+				reads: line.textContent,
+				tail: contract?.parentElement?.className,
+				held: contract?.previousSibling?.textContent,
+				box: contract?.firstElementChild?.className,
+				inBox: contract?.firstElementChild?.firstElementChild?.getAttribute("data-testid"),
+			}
+		})
+		const sentence = { line: STYLE.call_line, tail: STYLE.call_tail, held: "on\u00a0" }
+		expect(sentences).toEqual([
+			{ ...sentence, reads: "Claim Fee Juice on\u00a0Fee Juice", box: STYLE.call_chip_box, inBox: "contract-chip" },
+			{ ...sentence, reads: "Checkpoint on\u00a00x0b0b..0b0b", box: undefined, inBox: undefined },
+		])
 	})
 })
 

@@ -23,6 +23,7 @@ import { PRICE_REFRESH_ALARM_NAME, PriceService } from "./services/price/service
 import { TOKEN_LIST_REFRESH_ALARM_NAME, TokenListService } from "./services/token-list/service"
 import { isClientDisconnectRejection, isReceiverGoneRejection } from "@nulo/extension-messaging/errors"
 import { openOrFocusOnboardingTab } from "./utils/onboarding-tab"
+import { stampWhatsNewSeen } from "./utils/whats-new-stamp"
 import { armPopupReturn, registerPanelReturnMessage, registerToolbarPopupMessage } from "./utils/toolbar-popup"
 import { registerToolbarSidebar } from "./utils/toolbar-sidebar"
 import { restrictToTrustedContexts } from "./utils/storage-access"
@@ -30,13 +31,14 @@ import { recordCspViolationsInBackground } from "@/e2e/csp-report"
 
 if (import.meta.env.VITE_NULO_E2E_CSP_REPORT === "1") recordCspViolationsInBackground()
 
-// MV3: onInstalled fires once, synchronously, when the SW boots after install.
+// MV3: onInstalled fires once, synchronously, when the SW boots after an install or update.
 // Late addListener calls miss the historic event. Register at top level BEFORE
 // any awaited startup work. Use a STATIC import (above) — a dynamic
 // import("./utils/onboarding-tab") trips vite's preload runtime which calls
 // window.dispatchEvent on preload-error, but SW has no `window`.
-chrome.runtime.onInstalled.addListener(({ reason }) => {
-	if (reason !== "install") return
+chrome.runtime.onInstalled.addListener((details) => {
+	void stampWhatsNewSeen(details, __VERSION__)
+	if (details.reason !== "install") return
 	void openOrFocusOnboardingTab()
 })
 

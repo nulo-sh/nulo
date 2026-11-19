@@ -1,17 +1,14 @@
 /**
- * Component tests for RevokeAuthwitsPopup's keyboard contract. No document-level Enter revokes: a key
- * on the header's ×, the fee card, a teleported menu item, a popup layered over this one or nothing
- * focused does only its own thing. The focused Revoke button is the one keyboard path, and a repeat or
- * composing Enter that first lands on it idle revokes nothing.
+ * Component tests for RevokeAuthwitsPopup: its keyboard contract (no document-level Enter revokes; the
+ * focused Revoke button is the one keyboard path, and a repeat or composing Enter that first lands on
+ * it idle revokes nothing), its fee gating, and its hand-off: Revoke posts every chunk to the worker
+ * and closes, reporting nothing itself.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
-import { nextTick } from "vue"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import type { SendStarted } from "@/wallet/services/auth-registry/spec"
 import { type ToastOptions, useToast } from "@/composables/toast"
-import { heldJobSubscription, LIVE_STAGES, record } from "../../../../tests/helpers/held-job-subscription"
 import { pressOn } from "../../../../tests/helpers/press-key"
 import { describeSendPopupKeyboard } from "../../../../tests/helpers/send-popup-keyboard"
 
@@ -23,10 +20,10 @@ const authwitsServiceMock = {
 	disconnect: vi.fn(),
 	onRegistryEnabled: { add: vi.fn(), remove: vi.fn() },
 	onRegistryDisabled: { add: vi.fn(), remove: vi.fn() },
-	onSendStarted: new EventHandler<SendStarted>(),
+	isConnected: true,
+	onConnected: new EventHandler<void>(),
+	onDisconnected: new EventHandler<void>(),
 }
-
-const journalMock = { subscribeJob: vi.fn(), disconnect: vi.fn() }
 
 const ESTIMATE = { maxFee: "1000", gasDetails: {} }
 /** The popup debounces each estimate by 500 ms. */
@@ -45,16 +42,6 @@ vi.mock("@/wallet/services/auth-registry/client", () => ({
 		return authwitsServiceMock
 	}),
 	MAX_REVOKES_PER_TX: 8,
-}))
-
-vi.mock("@/wallet/services/operation-journal/client", () => ({
-	OperationJournalServiceClient: vi.fn(function () {
-		return journalMock
-	}),
-}))
-
-vi.mock("@/popup/utils/cancellable-rejection", () => ({
-	classifyCancellableRejection: () => "fail",
 }))
 
 vi.mock("@/stores/app.store", () => ({
@@ -163,7 +150,7 @@ beforeEach(() => {
 	authwitsServiceMock.cancelFeeEstimate.mockReset().mockResolvedValue(undefined)
 	vi.useFakeTimers()
 	authwitsServiceMock.disconnect.mockReset()
-	journalMock.subscribeJob.mockReset()
+	authwitsServiceMock.isConnected = true
 	openToastMock.mockReset()
 	popupOpenMock.mockReset()
 	feeControlClick.mockReset()
@@ -249,62 +236,6 @@ describe("RevokeAuthwitsPopup — what keeps the Revoke button off", () => {
 	})
 })
 
-describe("RevokeAuthwitsPopup — the send's stage line", () => {
-	const stageLine = (w: ReturnType<typeof mount>) => w.get('[data-testid="authwit-stage-line"]').text()
-
-	/** Starts a send that stays in flight and returns the key it carried. */
-	async function startSend() {
-		authwitsServiceMock.revokeAuthwits.mockReturnValueOnce(new Promise(() => {}))
-		const w = await mountAndOpen()
-		await setAllFees(w)
-		await w.get('[data-testid="revoke-authwits-submit"]').trigger("click")
-		await flushPromises()
-		const correlation = authwitsServiceMock.revokeAuthwits.mock.calls[0]?.[4] as string
-		return { w, correlation }
-	}
-
-	test("follows this popup's revoke through each live stage and clears when it ends", async () => {
-		const job = heldJobSubscription(journalMock.subscribeJob)
-		const { w, correlation } = await startSend()
-		expect(correlation).toMatch(/^[0-9a-f]{16}$/)
-		authwitsServiceMock.onSendStarted.invoke({ correlation, journalId: "j1" })
-		expect(journalMock.subscribeJob).toHaveBeenCalledWith("j1", expect.any(Function))
-		for (const [progress, line] of LIVE_STAGES) {
-			job.show(record(progress))
-			await nextTick()
-			expect(stageLine(w)).toBe(line)
-		}
-		job.show(record({ stage: "succeeded" }, 9))
-		await nextTick()
-		expect(stageLine(w)).toBe("")
-	})
-
-	test("another popup's send is ignored", async () => {
-		const { w } = await startSend()
-		authwitsServiceMock.onSendStarted.invoke({ correlation: "0xsomeone-else", journalId: "j2" })
-		await nextTick()
-		expect(journalMock.subscribeJob).not.toHaveBeenCalled()
-		expect(stageLine(w)).toBe("")
-	})
-
-	test("hidden before the record's snapshot lands: the subscription is released and nothing renders", async () => {
-		const job = heldJobSubscription(journalMock.subscribeJob)
-		const { w, correlation } = await startSend()
-		authwitsServiceMock.onSendStarted.invoke({ correlation, journalId: "j1" })
-		await w.setProps({ show: false })
-		await flushPromises()
-		job.land()
-		await flushPromises()
-		expect(job.release).toHaveBeenCalledTimes(1)
-		authwitsServiceMock.getRegistryEnabled.mockResolvedValueOnce(true)
-		await w.setProps({ show: true })
-		await flushPromises()
-		job.show(record({ stage: "simulating" }))
-		await nextTick()
-		expect(stageLine(w)).toBe("")
-	})
-})
-
 describe("RevokeAuthwitsPopup — the fee check before proving", () => {
 	// MAX_REVOKES_PER_TX is mocked to 8.
 	const TWO_CHUNKS = Array.from({ length: 10 }, (_, i) => ({ id: `aw-${i}`, content: `c${i}` }))
@@ -379,5 +310,121 @@ describe("RevokeAuthwitsPopup — the fee check before proving", () => {
 		await w.setProps({ show: false })
 		await flushPromises()
 		expect(authwitsServiceMock.cancelFeeEstimate).toHaveBeenCalledWith(token)
+	})
+})
+
+describe("RevokeAuthwitsPopup — Revoke hands the revoke to the worker", () => {
+	// MAX_REVOKES_PER_TX is mocked to 8: nine rows are two chunks.
+	const NINE = Array.from({ length: 9 }, (_, i) => ({ id: `aw-${i}`, content: `c${i}` }))
+	const closes = (w: ReturnType<typeof mount>) => w.emitted("onClose")?.length ?? 0
+	const revoke = async (w: ReturnType<typeof mount>) => {
+		await w.get('[data-testid="revoke-authwits-submit"]').trigger("click")
+		await flushPromises()
+	}
+	/** Holds every send until the test settles it, oldest first. */
+	function holdSends() {
+		const held: (() => void)[] = []
+		authwitsServiceMock.revokeAuthwits.mockImplementation(() => new Promise<void>((resolve) => held.push(resolve)))
+		return {
+			settleOne: async () => {
+				held.shift()?.()
+				await flushPromises()
+			},
+		}
+	}
+
+	test("the line under Revoke says the revoke goes on after a close, before any press", async () => {
+		const w = await mountAndOpen(NINE)
+		expect(w.get('[data-testid="revoke-authwits-continues"]').text()).toBe(
+			"Revoking continues if you close this. Its progress shows in Activity.",
+		)
+	})
+
+	test("posts every chunk at once, before any settles, with the network and account read at the press; then closes once", async () => {
+		holdSends()
+		const w = await mountAndOpen(NINE)
+		await setAllFees(w)
+		await revoke(w)
+		expect(authwitsServiceMock.revokeAuthwits.mock.calls.map((c) => [c[0], c[1], (c[2] as string[]).length, c[3]])).toEqual([
+			["net-1", "0xacct", 8, { gasLimit: 100 }],
+			["net-1", "0xacct", 1, { gasLimit: 100 }],
+		])
+		expect(authwitsServiceMock.revokeAuthwits.mock.calls.every((c) => c.length === 4)).toBe(true)
+		expect(closes(w)).toBe(1)
+	})
+
+	test("a revoke that lands or fails toasts nothing and raises no error line", async () => {
+		authwitsServiceMock.revokeAuthwits
+			.mockResolvedValueOnce(undefined)
+			.mockRejectedValueOnce(new Error("Authwit #8 is still authorized"))
+		const w = await mountAndOpen(NINE)
+		await setAllFees(w)
+		await revoke(w)
+		expect(openToastMock).not.toHaveBeenCalled()
+		expect(w.text()).not.toContain("An error occurred")
+		expect(closes(w)).toBe(1)
+	})
+
+	test("hidden while its requests are out, the client stays connected until the last one settles", async () => {
+		const sends = holdSends()
+		const w = await mountAndOpen(NINE)
+		await setAllFees(w)
+		await revoke(w)
+		await w.setProps({ show: false })
+		await flushPromises()
+		expect(authwitsServiceMock.disconnect).not.toHaveBeenCalled()
+		await sends.settleOne()
+		expect(authwitsServiceMock.disconnect).not.toHaveBeenCalled()
+		await sends.settleOne()
+		expect(authwitsServiceMock.disconnect).toHaveBeenCalledTimes(1)
+	})
+
+	test("while the port reopens after a worker restart, Revoke stays off and posts nothing; once Ready, it posts", async () => {
+		const w = await mountAndOpen(NINE)
+		await setAllFees(w)
+		authwitsServiceMock.isConnected = false
+		authwitsServiceMock.onDisconnected.invoke()
+		await flushPromises()
+		expect(submitButton(w).hasAttribute("disabled")).toBe(true)
+		pressOn(submitButton(w), "Enter")
+		await flushPromises()
+		expect(authwitsServiceMock.revokeAuthwits).not.toHaveBeenCalled()
+		expect(closes(w)).toBe(0)
+
+		authwitsServiceMock.isConnected = true
+		authwitsServiceMock.onConnected.invoke()
+		await flushPromises()
+		await revoke(w)
+		expect(authwitsServiceMock.revokeAuthwits).toHaveBeenCalledTimes(2)
+		expect(closes(w)).toBe(1)
+	})
+
+	test("control: hidden with nothing out, the client disconnects at once", async () => {
+		const w = await mountAndOpen(NINE)
+		await w.setProps({ show: false })
+		await flushPromises()
+		expect(authwitsServiceMock.disconnect).toHaveBeenCalledTimes(1)
+	})
+
+	test("shown again while a request is out: Revoke posts the new rows, and the client waits for both", async () => {
+		const sends = holdSends()
+		const w = await mountAndOpen([{ id: "aw-1", content: "c1" }])
+		await setAllFees(w)
+		await revoke(w)
+		await w.setProps({ show: false })
+		await flushPromises()
+		preselected.preselectedAuthwits = [{ id: "aw-2", content: "c2" }]
+		authwitsServiceMock.getRegistryEnabled.mockResolvedValueOnce(true)
+		await w.setProps({ show: true })
+		await flushPromises()
+		await setAllFees(w)
+		await revoke(w)
+		expect(authwitsServiceMock.revokeAuthwits.mock.calls.map((c) => c[2])).toEqual([["aw-1"], ["aw-2"]])
+		await w.setProps({ show: false })
+		await flushPromises()
+		await sends.settleOne()
+		expect(authwitsServiceMock.disconnect).not.toHaveBeenCalled()
+		await sends.settleOne()
+		expect(authwitsServiceMock.disconnect).toHaveBeenCalledTimes(1)
 	})
 })

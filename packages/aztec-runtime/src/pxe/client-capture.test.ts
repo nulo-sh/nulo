@@ -13,7 +13,7 @@ import { PXE_STORE_KEY_MISSING, type NetworkInfo } from "./chain-runtime"
 import { PxeServiceClientBase } from "./client"
 
 const noopLogger: ILogger = { log: () => {} }
-const net: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://n/1" }
+const net: NetworkInfo = { profileId: "p1", chainId: 31337, l1ChainId: 31337, endpoints: [{ id: "primary", rpcUrl: "http://n/1" }] }
 const KEY = new Uint8Array(32).fill(7)
 
 describe("PxeServiceClientBase generation capture", () => {

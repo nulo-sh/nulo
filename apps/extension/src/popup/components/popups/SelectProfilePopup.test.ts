@@ -232,3 +232,16 @@ describe("SelectProfilePopup — the list under a held read", () => {
 		w.unmount()
 	})
 })
+
+describe("SelectProfilePopup — events for a listed profile", () => {
+	test("an add for a listed id replaces its row: one row, with the new name", async () => {
+		const w = await mountOpen()
+		const client = H.client as { onProfileAdded: ReturnType<typeof liveBus> }
+		const rows = () => (w.vm as unknown as { profiles: { id: string; name: string }[] }).profiles
+		client.onProfileAdded.invoke({ id: "p1", name: "Alpha renamed" })
+		await flushPromises()
+		expect(rows().filter((p) => p.id === "p1")).toEqual([{ id: "p1", name: "Alpha renamed" }])
+		expect(rows()).toHaveLength(2)
+		w.unmount()
+	})
+})

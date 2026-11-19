@@ -12,8 +12,9 @@ import type {
 	OperationRequest,
 } from "@nulo/wallet-bridge"
 import type { QueuedFeePayer } from "@nulo/wallet-core/jobs"
-import type { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import type { DefaultEntrypointRefusal, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import type { WindowEnd } from "./window-end"
+import type { KnownContract } from "./known-contracts"
 
 /** Protocol-shape types (`ExecutionParams`, `ExecutionResult`,
  *  `CapabilityParams`, `CapabilityResult`, all `OperationRequest`
@@ -102,8 +103,12 @@ export type DappInteraction = {
 	hooks?: ExecutionHooks
 	/** The first refusal an estimate or preview of this request met. The request can no longer be
 	 *  approved, and the window's own end of it (Reject, unload, close) answers this refusal. */
-	refusal?: ScopeViolationError
+	refusal?: RecordedRefusal
 }
+
+/** A refusal the request itself carries, met before anything was signed: a scope refusal, or a
+ *  no-account request the default entrypoint can never build. */
+export type RecordedRefusal = ScopeViolationError | DefaultEntrypointRefusal
 
 export type ExecutionPayload = {
 	params: ExecutionParams
@@ -181,6 +186,8 @@ export type Methods = {
 	/** Bring the approval popup of the live interaction for `journalId` to the
 	 *  front. `false` when there is none, or it belongs to another profile. */
 	focusInteractionWindow(journalId: string): boolean
+	/** The contracts Nulo names on the chain of `sessionId`; refused for an app of another profile. */
+	getKnownContracts(sessionId: string): KnownContract[]
 }
 
 export type Events = {

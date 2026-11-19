@@ -231,15 +231,16 @@ Then Branch A's delivery gates.
   which surfaces as a page that never loads and a test that times out far from the cause.
 - **Don't edit fixtures while a suite is running.** Vitest workers load them per-worker, so a
   mid-run edit yields a mix of old and new code and results you must throw away.
-- **Match the local run to CI's topology.** CI runs the network pool proverless in shards and
-  only a 3-file canary lane prover-ON. Running all ~70 files prover-ON locally is ~2.5h for no
-  extra signal; run prover-ON for the canaries + fee/tx-send paths and proverless for the rest.
-  Two files carry `@requires-proverless` and the runner hard-fails if they're in a prover-ON set.
-  And SHARD the proverless pass locally, one shard per checkout (CI runs 5): never two `e2e:agent`
-  runs in one worktree, since each rebuilds and owns that worktree's `dist` and `.e2e-state/`, and
-  its global setup `pkill`s every Chrome loaded from that `dist` (e2e-testing skill, § Hazards).
-  Shards from separate checkouts cut it from ~25min to under 10. Prover-ON is the exception: every
-  shard would queue on the single presto-server at the hardcoded port 59833.
+- **Match the local run to CI's topology, and keep it to the affected specs.** CI runs the
+  network pool proverless in shards and only its canary lane prover-ON, and the labelled PR's
+  required lanes are the gate of record: no local full-suite run (CLAUDE.md § Quality gates).
+  Run prover-ON for the canaries + fee/tx-send paths and proverless for the other affected specs;
+  the runner refuses a file marked `@requires-proverless` in a prover-ON selection. Never two
+  `e2e:agent` runs in one worktree, since each rebuilds and owns that worktree's `dist` and
+  `.e2e-state/`, and its global setup `pkill`s every Chrome loaded from that `dist` (e2e-testing
+  skill, § Hazards). To chase a red CI shard, run the files its log lists
+  (`apps/extension/tests/e2e/README.md` § CI sharding). Two prover-ON runs on one host queue on the
+  single presto-server at the hardcoded port 59833.
 - **`BB_BINARY_PATH` is a footgun**: Presto's `find_bb` honours the seed before the versioned
   cache, so a version-mismatched seed proves everything with the wrong bb while the log shows a
   download of the right one. Run the server unseeded.

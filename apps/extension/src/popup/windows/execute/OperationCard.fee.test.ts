@@ -6,13 +6,20 @@
 import { config, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import { Skeleton } from "@nulo/design"
+import { CLAIM_AND_END_SETUP, CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { appChipOf } from "@/components/composite/contract-chip"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { GLOSSARY } from "@/utils/glossary"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { shownText } from "../../../../tests/helpers/shown-text"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
+import { SPONSORED_FPC_ADDRESS } from "@/wallet/services/fpc/sponsored-fpc-address"
+import type { ListReader } from "@/utils/contract-level"
+import { listKeyOf } from "@/utils/token-flag"
+import { ref } from "vue"
 import { captureWindowDocument } from "@/utils/window-document"
+import { openAllSteps } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 
 const mocks = vi.hoisted(() => ({
@@ -202,7 +209,7 @@ describe("OperationCard — who pays a wire-shaped transaction's fee", () => {
 		expect(fee(w).text()).toContain("—")
 		expect(fee(w).text()).not.toContain("Nothing")
 		expect(fee(w).text()).not.toContain("3.577824")
-		expect(spokenText(fee(w).element)).toContain("Nulo can't tell what this fee contract charges you.")
+		expect(spokenText(fee(w).element)).toContain("Nulo can't tell what this FPC charges you.")
 	})
 })
 
@@ -215,6 +222,44 @@ describe("OperationCard — a wire-shaped transaction whose estimate failed", ()
 		expect(w.emitted("retryEstimate")).toEqual([[2]])
 		await w.setProps({ estimateFailed: false })
 		expect(w.find('[data-testid="fee-estimate-failed"]').exists()).toBe(false)
+	})
+
+	test("the app's own failure: one line under the fee card, its text isolated, in a polite region mounted with the card", async () => {
+		const w = await mountCard(sendTx(), undefined, { feeEstimate: undefined, estimateFailed: true })
+		const live = w.get('[data-testid="execute-op-app-failure-live"]')
+		expect(live.attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+		expect(live.find('[data-testid="execute-op-app-failure"]').exists()).toBe(false)
+		await w.setProps({ appFailure: "Balance too low" })
+		const line = live.get('[data-testid="execute-op-app-failure"]')
+		expect(line.text()).toBe("The app's transaction cannot run right now: Balance too low. Fee estimation needs it to run.")
+		expect(line.get("bdi").text()).toBe("Balance too low")
+		expect(line.classes()).toContain("color--txt-danger")
+		expect(fee(w).element.compareDocumentPosition(line.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+	})
+
+	test.each([
+		[
+			"a fee the app pays",
+			{ ...sendTx({ feePayer: `0x${"2f".repeat(32)}` }), feeSettings: { paymentMethod: { kind: "embedded" } } },
+			{},
+		],
+		["a window that draws its own fee block", sendTx(), { fee: '<div data-testid="own-fee-block" />' }],
+	])("%s: no fee card, so no line", async (_case, op, slots) => {
+		const w = mount(OperationCard, {
+			props: {
+				op: op as never,
+				index: 0,
+				profile: { id: "p1", name: "Main" } as never,
+				estimateFailed: true,
+				appFailure: "Balance too low",
+			},
+			slots,
+			global: { stubs },
+		})
+		mounted = w
+		await flushPromises()
+		expect(w.find('[data-testid="execute-op-app-failure-live"]').exists()).toBe(false)
+		expect(w.text()).not.toContain("Balance too low")
 	})
 })
 
@@ -301,14 +346,55 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		maxFeesPerGas: { feePerDaGas: "1200000000", feePerL2Gas: "1200000000" },
 		maxPriorityFeesPerGas: { feePerDaGas: "300000000", feePerL2Gas: "300000000" },
 	}
+	/** The signed list as the window reads it once answered, naming `listed` on the request's chain. */
+	const listing = (...listed: string[]): ListReader => {
+		const keys = new Set(listed.map((a) => listKeyOf(11155111, a)))
+		return {
+			mapped: ref(true),
+			isFlagged: () => false,
+			iconFor: () => undefined,
+			listedAt: (t) =>
+				typeof t?.chainId === "number" && t.contract && keys.has(listKeyOf(t.chainId, t.contract))
+					? { symbol: "PAY", name: "Payer" }
+					: undefined,
+		}
+	}
 	const appPaid = () => ({
 		...sendTx({ feePayer: APP_FPC }),
 		opts: { from: OWNER, fee: { gasSettings: GAS_SETTINGS } },
 		feeSettings: { paymentMethod: { kind: "embedded" } },
 	})
+	const CLAIM = {
+		name: CLAIM_AND_END_SETUP,
+		to: FEE_JUICE_CONTRACT,
+		selector: CLAIM_AND_END_SETUP_SELECTOR,
+		type: "private",
+		isStatic: false,
+		hideMsgSender: false,
+		args: [OWNER, field(1_000_000_000_000_000_000_000n), field(0x5a17n), field(41n)],
+	}
+	const claimLed = (feePayer: string) => ({ ...appPaid(), exec: { calls: [CLAIM, ...appPaid().exec.calls], feePayer } })
+	const claimed = () => claimLed(OWNER)
+	const claimedSend = () => ({
+		kind: "send_transaction" as const,
+		networkId: "net-1",
+		accountAddress: OWNER,
+		account: sendTx().account,
+		network: sendTx().network,
+		actions: [{ kind: "call", contract: TOKEN, method: "transfer_in_public", args: [OWNER, RECIPIENT, field(25_000_000n), field(0n)] }],
+		fee: { embeddedFeePayment: "fjwc" },
+		feeSettings: { paymentMethod: { kind: "embedded" } },
+	})
 	const mountWith = async (
 		feeEstimate: unknown,
-		state: { isEstimating?: boolean; estimateFailed?: boolean; op?: unknown; isPreviewing?: boolean; dapp?: { name?: string } } = {},
+		state: {
+			isEstimating?: boolean
+			estimateFailed?: boolean
+			op?: unknown
+			isPreviewing?: boolean
+			dapp?: { name?: string }
+			marks?: ListReader
+		} = {},
 	) => {
 		const w = mount(OperationCard, {
 			props: {
@@ -320,6 +406,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 				estimateFailed: state.estimateFailed ?? false,
 				isPreviewing: state.isPreviewing ?? false,
 				dapp: state.dapp ?? { name: "Swap" },
+				marks: state.marks ?? listing(),
 			},
 			// The real term, so the test reads its markup: the key, the Tab stop, the hidden definition.
 			global: { stubs, components: { DottedTerm, Skeleton } },
@@ -367,6 +454,24 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		expect([priceFake.reads(), priceFake.refreshes()]).toEqual([0, 0])
 	})
 
+	test.each([
+		["an aztec_sendTx that leads with the claim", claimed],
+		["a send_transaction the wallet routed as one", claimedSend],
+	])("a claim to the account, %s: one sentence says the person pays, names no app and draws no seal", async (_, op) => {
+		const w = await mountWith(ESTIMATE, { op: op() })
+		expect(shownText(figure(w).element)).toBe("You pay about ~3.577824 FJ ($0.215) from the Fee Juice this app claims to your account.")
+		expect(row(w).find('[data-testid="execute-op-app-name"]').exists()).toBe(false)
+		expect(row(w).find('[data-testid="execute-op-fee-seal"]').exists()).toBe(false)
+		const estimating = await mountWith(undefined, { op: op(), isEstimating: true })
+		expect(shownText(waiting(estimating).element)).toBe("You pay about from the Fee Juice this app claims to your account.")
+		expect(waiting(estimating).findComponent(Skeleton).exists()).toBe(true)
+	})
+
+	test("the same claim with the app's own contract as payer: the app pays, so the line keeps its words", async () => {
+		const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { op: claimLed(APP_FPC) })
+		expect(figure(w).text()).toBe("About ~3.577824 FJ ($0.215); payment method set by Swap.")
+	})
+
 	describe("after a failed estimate: the fee card's failed state, whoever pays", () => {
 		const sponsored = () => ({ ...appPaid(), opts: { from: OWNER } })
 		const privatePaid = () => ({ ...appPaid(), exec: { ...appPaid().exec, feePayer: PRIVATE_FPC_ADDRESS } })
@@ -381,11 +486,13 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 				"FeePrivate Fee Juice · set by SwapYou payCouldn't estimate fee.Try again",
 			],
 			["a sponsor and no cap of its own", sponsored, "FeeSet by SwapSwap paysCouldn't estimate fee.Try again"],
+			["a claim to the account, which the person pays", claimed, "FeeSet by SwapYou payCouldn't estimate fee.Try again"],
+			["a claim to the account on a send_transaction", claimedSend, "FeeSet by SwapYou payCouldn't estimate fee.Try again"],
 		])("an app paying through %s: the method over the failed readout, and Try again asks the estimate again", async (_, op, text) => {
 			const w = await mountWith(undefined, { op: op(), estimateFailed: true })
 			expect(failedBlock(w).text()).toBe(text)
 			expect([legend(w).exists(), figure(w).exists(), waiting(w).exists()]).toEqual([false, false, false])
-			expect(row(w).find('[name="square-check"]').exists()).toBe(false)
+			expect(row(w).find('[data-testid="execute-op-fee-seal"]').exists(), "the failed row draws no glyph").toBe(false)
 			expect(row(w).attributes("aria-busy")).toBeUndefined()
 
 			await retry(w).trigger("click")
@@ -466,55 +573,120 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		expect(legend(await mountWith(undefined, { dapp: { name: "\u0000\u0007" } })).text()).toBe("Fee payment method set by the app")
 	})
 
+	describe("an app whose declared name carries emoji: the set-by lines read it as its chip does", () => {
+		const DECLARED = "Playground \u2705\u{1F680}"
+		const noFrom = () => ({ ...appPaid(), executionMode: "default_entrypoint" })
+
+		test.each([
+			[
+				"the estimate",
+				() => mountWith({ ...ESTIMATE, appPayerFunding: covered }, { dapp: { name: DECLARED } }),
+				"execute-op-fee-set-badge",
+				"About ~3.577824 FJ ($0.215); payment method set by Playground.",
+			],
+			[
+				"the legend",
+				() => mountWith(undefined, { op: noFrom(), isPreviewing: true, dapp: { name: DECLARED } }),
+				"execute-op-fee-set-badge",
+				"Fee payment method set by Playground",
+			],
+			[
+				"the failed row, its method line and its payer label",
+				() => mountWith(undefined, { estimateFailed: true, dapp: { name: DECLARED } }),
+				"execute-op-app-fee-failed",
+				"FeeSet by PlaygroundPlayground paysCouldn't estimate fee.Try again",
+			],
+		])("%s", async (_, open, testid, text) => {
+			const w = await open()
+			expect(w.get(`[data-testid="${testid}"]`).text()).toBe(text)
+		})
+
+		test.each(["\u2705\u{1F680}", "  "])(
+			"a name the filter empties (%j) is named the app, in the sentence, the legend and the failed row",
+			async (name) => {
+				expect(figure(await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { dapp: { name } })).text()).toBe(
+					"About ~3.577824 FJ ($0.215); payment method set by the app.",
+				)
+				mounted?.unmount()
+				expect(legend(await mountWith(undefined, { dapp: { name } })).text()).toBe("Fee payment method set by the app")
+				mounted?.unmount()
+				const failed = await mountWith(undefined, { estimateFailed: true, dapp: { name } })
+				expect(failed.get('[data-testid="execute-op-app-fee-failed"]').text()).toBe(
+					"FeeSet by the appthe app paysCouldn't estimate fee.Try again",
+				)
+			},
+		)
+
+		test("one name: the sentence reads the chip's label while the chip's press quotes the name whole", async () => {
+			const chip = appChipOf(DECLARED, "https://playground.example")
+			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { dapp: { name: DECLARED } })
+			expect(w.get('[data-testid="execute-op-app-name"]').text()).toBe(chip?.label)
+			expect(chip?.lines[1]).toBe("The name Playground \u2705\u{1F680} comes from the site. Nulo hasn't checked it.")
+		})
+	})
+
 	test.each([true, false])(
 		"the app's fee contract reads short (proven: %s): the figure stays and the hedged notice shows under the row",
 		async (provenShort) => {
 			const w = await mountWith({ ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: false, provenShort } })
 			expect(figure(w).text()).toBe("About ~3.577824 FJ ($0.215); payment method set by Swap.")
 			expect(region(w).text()).toBe("This app's fee contract may not cover this fee right now.")
-			expect(row(w).find('[name="square-check"]').exists()).toBe(true)
+			expect(row(w).find('[name="square-check"]').exists()).toBe(false)
 		},
 	)
 
-	describe("paid through the PrivateFPC", () => {
+	describe("the seal on the row stands for the contract that pays, only when Nulo verifies it", () => {
 		const privatePaid = () => ({ ...appPaid(), exec: { ...appPaid().exec, feePayer: PRIVATE_FPC_ADDRESS } })
-		const notice = (w: VueWrapper) => w.find('[data-testid="execute-op-private-fee-notice"]')
-		const NOTICE = "Your Private Fee Juice must cover this fee."
-		const check = (w: VueWrapper) => row(w).find('[name="square-check"]')
+		const sponsorPaid = () => ({ ...appPaid(), exec: { ...appPaid().exec, feePayer: SPONSORED_FPC_ADDRESS } })
+		const seal = (w: VueWrapper) => row(w).find('[data-testid="execute-op-fee-seal"]')
 
-		test("the estimate lands: no check, the person pays first, the app's method under it, and the neutral notice", async () => {
+		test.each([
+			["the PrivateFPC", privatePaid],
+			["Nulo's sponsor", sponsorPaid],
+		])("an app naming %s: the solid seal leads the row, named for a screen reader, and no green check", async (_, op) => {
+			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { op: op() })
+			expect(seal(w).attributes()).toMatchObject({ role: "img", "aria-label": "Nulo verified" })
+			expect(seal(w).find('[name="seal-solid"]').exists()).toBe(true)
+			expect(row(w).find('[name="square-check"]').exists()).toBe(false)
+		})
+
+		test("an unknown fee contract and a token the signed list names draw no glyph", async () => {
+			const unknown = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
+			expect([seal(unknown).exists(), row(unknown).find('[name="square-check"]').exists()]).toEqual([false, false])
+			unknown.unmount()
+			const token = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { marks: listing(APP_FPC) })
+			expect(seal(token).exists(), "a listed token is no fee contract Nulo pins").toBe(false)
+			token.unmount()
+			const feeJuice = field(3n)
+			const protocol = await mountWith(
+				{ ...ESTIMATE, appPayerFunding: { ...covered, address: feeJuice } },
+				{ op: { ...appPaid(), exec: { ...appPaid().exec, feePayer: feeJuice } } },
+			)
+			expect(seal(protocol).exists(), "a protocol contract is no fee contract Nulo pins").toBe(false)
+		})
+
+		test("the PrivateFPC's seal needs no list: it shows before the list answers", async () => {
+			const w = await mountWith(undefined, { op: privatePaid(), isEstimating: true, marks: { ...listing(), mapped: ref(false) } })
+			expect(seal(w).exists()).toBe(true)
+		})
+
+		test("Private Fee Juice: the person pays, then the app's method in its own sentence, and nothing about the balance", async () => {
 			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered }, { op: privatePaid() })
-			expect(check(w).exists()).toBe(false)
-			expect(shownText(figure(w).element)).toBe("You pay about ~3.577824 FJ ($0.215) from Private Fee Juice method set by Swap")
-			expect(notice(w).text()).toBe(NOTICE)
-			expect(notice(w).find('[name="info"]').attributes("aria-hidden")).toBe("true")
-		})
-
-		test("estimating and after a failed estimate: the notice in both, the loading bar or the failed readout, and no check", async () => {
+			expect(shownText(figure(w).element)).toBe("You pay about ~3.577824 FJ ($0.215) from Private Fee Juice. Method set by Swap.")
+			expect(w.find('[data-testid="execute-op-private-fee-notice"]').exists()).toBe(false)
+			expect(w.text()).not.toContain("must cover")
 			const estimating = await mountWith(undefined, { op: privatePaid(), isEstimating: true })
-			expect(waiting(estimating).findComponent(Skeleton).exists()).toBe(true)
-			expect(shownText(waiting(estimating).element)).toBe("You pay about from Private Fee Juice method set by Swap")
-			expect([check(estimating).exists(), notice(estimating).text()]).toEqual([false, NOTICE])
-			estimating.unmount()
-
-			const failed = await mountWith(undefined, { op: privatePaid(), estimateFailed: true })
-			expect(failed.get('[data-testid="execute-op-app-fee-failed"]').text()).toContain("You payCouldn't estimate fee.")
-			expect([check(failed).exists(), notice(failed).text()]).toEqual([false, NOTICE])
+			expect(shownText(waiting(estimating).element)).toBe("You pay about from Private Fee Juice. Method set by Swap.")
+			expect(seal(estimating).exists()).toBe(true)
 		})
 
-		test.each([true, false])("its pool reads short (proven: %s): no fee-contract line, the notice stays", async (provenShort) => {
+		test.each([true, false])("its pool reads short (proven: %s): no fee-contract line", async (provenShort) => {
 			const w = await mountWith(
 				{ ...ESTIMATE, appPayerFunding: { address: PRIVATE_FPC_ADDRESS, funded: false, provenShort } },
 				{ op: privatePaid() },
 			)
 			expect(region(w).text()).toBe("")
 			expect(w.find('[data-testid="execute-op-app-payer-short"]').exists()).toBe(false)
-			expect(notice(w).text()).toBe(NOTICE)
-		})
-
-		test("another app fee contract keeps today's card: the check, no notice", async () => {
-			const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
-			expect([check(w).exists(), notice(w).exists()]).toEqual([true, false])
 		})
 
 		test("an app's priority fee follows the method's line", async () => {
@@ -523,7 +695,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 				{ op: privatePaid() },
 			)
 			expect(shownText(figure(w).element)).toBe(
-				"You pay about ~0.016 FJ (<$0.001) from Private Fee Juice method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
+				"You pay about ~0.016 FJ (<$0.001) from Private Fee Juice. Method set by Swap. Includes a ~0.004 FJ (<$0.001) priority fee the app asked for.",
 			)
 		})
 	})
@@ -549,7 +721,7 @@ describe("OperationCard — a window that only reads the request draws its own f
 		expect(w.find('[data-testid="own-fee-block"]').exists()).toBe(true)
 		expect(fee(w).exists()).toBe(false)
 		expect(w.find('[data-testid="execute-op-fee-set-badge"]').exists()).toBe(false)
-		await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
+		await openAllSteps(w)
 		expect(w.findAll('[data-testid="execute-op-payload-row"]')).toHaveLength(1)
 		expect(mocks.getGasBalances).not.toHaveBeenCalled()
 	})

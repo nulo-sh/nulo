@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { fonts, MIN_MONO_PX, MIN_TEXT_PX, type TypeRole, typeRoleNames, typeRoles } from "@nulo/design/tokens"
+import { DEFAULT_RPC_TIMEOUT_MS } from "@nulo/extension-messaging/background"
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { OVERRIDES } from "../../../scripts/type-roles/exceptions"
@@ -21,6 +22,8 @@ type RoleSpec = (typeof typeRoles)[TypeRole]
 type Vars = Record<string, string>
 
 const FONT_TOKENS: readonly FontToken[] = Object.values(fonts)
+/** The faces the wallet ships; `--font-emoji` names the platform's, which no `@font-face` declares. */
+const BUNDLED_FONT_TOKENS: readonly FontToken[] = FONT_TOKENS.filter((token) => token !== fonts.emoji)
 const MONO_ROLES: readonly TypeRole[] = typeRoleNames.filter((role) => typeRoles[role].family === fonts.mono)
 
 /** Elements a size floor does not hold, by the testid they sit under. */
@@ -63,6 +66,8 @@ export type TypeReading = {
 	ellipsizedBy: string | null
 	/** An `AddressDisplay`'s `data-address-shows`: `name` while it shows a contact or account name. */
 	addressShows: string | null
+	/** Inside a contract chip, whose label may read by a name its press does not swap for the address. */
+	inChip: boolean
 	/** The `OVERRIDES` scopes the element matches. */
 	scopes: string[]
 }
@@ -74,7 +79,7 @@ export type TypeReading = {
  */
 export type ReadScope = { kind: "roles" } | { kind: "own-text" } | { kind: "laid-out" } | { kind: "at"; selector: string; native?: boolean }
 
-/** One read of a document: the three face variables as its root resolves them, and the elements. */
+/** One read of a document: the font variables as its root resolves them, and the elements. */
 export type PageTypography = { vars: Vars; readings: TypeReading[] }
 
 export type SweepFailure = { testid: string | null; text: string; role: string; property: string; expected: string; actual: string }
@@ -236,6 +241,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 			visible: isVisible(el),
 			...cutBy(el, span),
 			addressShows: el.getAttribute("data-address-shows"),
+			inChip: el.closest('[data-testid="contract-chip"]') !== null,
 			scopes: scopes.filter((selector) => el.matches(selector)),
 		}
 	}
@@ -451,10 +457,10 @@ export const judgeTypography = ({ vars, readings }: PageTypography): SweepFailur
 // ── Faces ───────────────────────────────────────────────────────────────
 
 /**
- * Every face a role names has loaded and none failed. Waits for the document's font loads to
+ * Every bundled face a role names has loaded and none failed. Waits for the document's font loads to
  * settle first; a family never requested stays `unloaded`, so only `required` must reach `loaded`.
  */
-export async function checkFontFaces(page: Page, required: readonly FontToken[] = FONT_TOKENS): Promise<FontCheck> {
+export async function checkFontFaces(page: Page, required: readonly FontToken[] = BUNDLED_FONT_TOKENS): Promise<FontCheck> {
 	const { vars } = await readPageTypography(page, NO_ELEMENTS)
 	const names = (tokens: readonly FontToken[]) => tokens.map((token) => firstFamily(vars[token] ?? ""))
 	await page
@@ -480,7 +486,7 @@ export async function checkFontFaces(page: Page, required: readonly FontToken[] 
 		})
 		return seen
 	})
-	const faces = FONT_TOKENS.map((token) => {
+	const faces = BUNDLED_FONT_TOKENS.map((token) => {
 		const face = firstFamily(vars[token] ?? "")
 		return { token, face, statuses: statuses.filter((entry) => entry.family === face).map((entry) => entry.status) }
 	})
@@ -500,7 +506,7 @@ function faceFailures({ token, face, statuses }: FontCheck["faces"][number], req
 export async function sweepTypeRoles(page: Page, options: SweepOptions = {}): Promise<SweepResult> {
 	const typography = await readPageTypography(page, { kind: "roles" })
 	const used = new Set(typography.readings.flatMap((reading) => reading.roles.filter(isRole).map((role) => typeRoles[role].family)))
-	const fontCheck = await checkFontFaces(page, options.requireFaces ?? FONT_TOKENS.filter((token) => used.has(token)))
+	const fontCheck = await checkFontFaces(page, options.requireFaces ?? BUNDLED_FONT_TOKENS.filter((token) => used.has(token)))
 	return { fonts: fontCheck, readings: typography.readings, failures: judgeTypography(typography) }
 }
 
@@ -604,10 +610,17 @@ export const NARROW_ACCEPTED: readonly { testid: string; why: string }[] = [
 	{ testid: "account-address-text", why: "leaves with the account's name, as above; Receive shows and copies the whole address" },
 	{
 		testid: "activity-title-sep",
-		why: "a row's chips wrapped under its title leave their separator left of the row's clip, as wrapTrailing rows do",
+		why: "a row's chips wrapped under its title below 359 px leave their separator left of the row's clip",
 	},
-	{ testid: "tx-incoming-kind-sep", why: "a receipt's kind chip wrapped under its title leaves its separator left of the row's clip" },
 	{ testid: "identity-sep", why: "a dApp window's network goes under its account below 359 px, with no separator between them" },
+	{
+		testid: "token-name",
+		why: "an unpriced token's contract-supplied name keeps its row's ellipsis where the mark and balance leave too little room; the symbol stays above it, and Show metadata names it whole",
+	},
+	{
+		testid: "contract-row-name",
+		why: "a contract's name wider than the room beside the Contracts row's action ends in the chip's ellipsis, as every chip's label does; the chip's press names it whole",
+	},
 ]
 
 export type TextFate = { fate: "cut" | "gone" | "split"; testid: string | null; text: string }
@@ -716,6 +729,29 @@ export async function textFates(page: Page, mode: "record" | "compare"): Promise
 			return fate ? [{ fate, testid: before.testid, text: before.text }] : []
 		})
 	}, mode === "record")
+}
+
+/** Named one by one, since `aria-busy` also marks surfaces that can stay busy long (a token row's
+ *  first sync, holdings' prices). */
+const READS_IN_FLIGHT = [
+	'[data-testid="loading-state"]',
+	'[data-testid$="-args-pending"]',
+	'[data-testid="execute-op-authwits-pending"]',
+	'[data-testid="register-token-details"][aria-busy="true"]',
+	'[data-testid^="contract-chip-held-"]',
+].join(", ")
+
+/**
+ * Waits up to a popup RPC's own bound for `page` to draw no read in flight, then fails naming what is
+ * still drawn. An authorization preview can outlast it (its bound is 15 min) and then fails the wait;
+ * a discovered authorization's summary line draws no mark while it decodes, so it is not waited for.
+ */
+export async function waitForReadsSettled(page: Page, label: string): Promise<void> {
+	await withTimeoutMessage(
+		page.waitForFunction((s) => !document.querySelector(s), { timeout: DEFAULT_RPC_TIMEOUT_MS, polling: 100 }, READS_IN_FLIGHT),
+		async () =>
+			`${label}: still reading after ${DEFAULT_RPC_TIMEOUT_MS / 1000} s: ${await page.evaluate((s) => [...document.querySelectorAll(s)].map((el) => el.getAttribute("data-testid")).join(", "), READS_IN_FLIGHT)}`,
+	)
 }
 
 /** The narrowest width a page is laid out for: Firefox's sidebar opens at 240 px. */

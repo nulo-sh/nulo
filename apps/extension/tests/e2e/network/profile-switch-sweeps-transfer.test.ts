@@ -61,7 +61,6 @@ test.skipIf(!hasConfig)(
 			toType: "public",
 			amount: "1",
 			destination: config.minterAddress,
-			expect: "send",
 		}).then(
 			() => true,
 			() => false,

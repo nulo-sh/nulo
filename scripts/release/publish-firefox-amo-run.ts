@@ -1,6 +1,7 @@
 /**
  * The I/O runner around publish-firefox-amo.ts. Reads its inputs from the environment, checks the
- * zip, the source archive and the reviewer notes, then drives upload → poll → version → source, or
+ * zip, the source archive, the reviewer notes and the version's release notes (read from the tag's
+ * checkout, `release-notes/<VERSION>.md`), then drives upload → poll → version → source, or
  * in `check` mode one author-scoped list that proves the key pair. Every side effect is injected so
  * each branch is unit-testable with no network and no secret.
  *
@@ -35,6 +36,7 @@ import {
 	uploadStatusRequest,
 	versionRequest,
 } from "./publish-firefox-amo"
+import { notesPath, notesProblems } from "./release-notes"
 import { type ApiResponse, readApiResponse, requestFailure, unreadableAnswer } from "./store-http"
 import { command, plain } from "./workflow-command"
 
@@ -135,6 +137,7 @@ interface Inputs {
 	zipPath: string
 	sourcePath: string
 	notes: string
+	releaseNotes: string
 }
 
 async function runPublish(env: Record<string, string | undefined>, io: RunIO): Promise<RunResult> {
@@ -143,12 +146,12 @@ async function runPublish(env: Record<string, string | undefined>, io: RunIO): P
 		return fail(io, `DRY_RUN must be "true" or "false" (got ${JSON.stringify(dryRun ?? null)})`)
 	const inputs = readInputs(env, io)
 	if (!inputs.ok) return fail(io, inputs.reason)
-	const { version, storeVersion, zipPath, sourcePath, notes } = inputs.value
+	const { version, storeVersion, zipPath, sourcePath, notes, releaseNotes } = inputs.value
 	say(
 		io,
 		`zip ok: ${zipPath} — manifest version ${storeVersion} (version_name ${version}), gecko id ${GECKO_ID}, settled data declaration`,
 	)
-	say(io, `source ok: ${sourcePath}; reviewer notes: ${amoChars(notes)} chars`)
+	say(io, `source ok: ${sourcePath}; reviewer notes: ${amoChars(notes)} chars; release notes: ${amoChars(releaseNotes)} chars`)
 
 	if (dryRun === "true") {
 		say(
@@ -171,7 +174,7 @@ async function runPublish(env: Record<string, string | undefined>, io: RunIO): P
 	// From here on a failure may leave a version behind, whatever throws: the recovery always follows.
 	let created: Awaited<ReturnType<typeof createVersion>>
 	try {
-		created = await createVersion(io, auth, uploaded.value, notes, storeVersion)
+		created = await createVersion(io, auth, uploaded.value, notes, releaseNotes, storeVersion)
 	} catch (e) {
 		return fail(io, `create version: unexpected failure (${errorName(e)}); ${RECOVERY}`)
 	}
@@ -231,7 +234,29 @@ function readInputs(env: Record<string, string | undefined>, io: RunIO): Checked
 	const notes = reviewerNotes(io.files.text(listingPath))
 	if (!notes.ok) return notes
 
-	return { ok: true, value: { version, storeVersion: facts.value.storeVersion, zipPath, sourcePath, notes: notes.value } }
+	const releaseNotes = readReleaseNotes(io, version)
+	if (!releaseNotes.ok) return releaseNotes
+
+	return {
+		ok: true,
+		value: {
+			version,
+			storeVersion: facts.value.storeVersion,
+			zipPath,
+			sourcePath,
+			notes: notes.value,
+			releaseNotes: releaseNotes.value,
+		},
+	}
+}
+
+/** The version's user-facing notes from the tag's checkout, sent as `release_notes`. */
+function readReleaseNotes(io: RunIO, version: string): Checked<string> {
+	const path = notesPath(version)
+	if (!io.files.exists(path)) return { ok: false, reason: `${path} does not exist` }
+	const text = io.files.text(path).trim()
+	const problems = notesProblems(text)
+	return problems.length ? { ok: false, reason: `${path}: ${problems.join("; ")}` } : { ok: true, value: text }
 }
 
 /** Upload, then poll until AMO has validated; the uuid is only usable once `valid`. */
@@ -257,8 +282,8 @@ async function upload(io: RunIO, auth: Auth, zip: Uint8Array, filename: string):
 }
 
 /** From the moment this request is sent, a failure may have left a version behind, unless AMO answered 400. */
-async function createVersion(io: RunIO, auth: Auth, uuid: string, notes: string, storeVersion: string) {
-	const res = await call(io, auth, versionRequest(GECKO_ID, uuid, notes), "create version", UPLOAD_TIMEOUT_MS)
+async function createVersion(io: RunIO, auth: Auth, uuid: string, notes: string, releaseNotes: string, storeVersion: string) {
+	const res = await call(io, auth, versionRequest(GECKO_ID, uuid, notes, releaseNotes), "create version", UPLOAD_TIMEOUT_MS)
 	if (!res.ok) return { ...res, rejected: res.status === 400 }
 	return interpretVersion(res.json, storeVersion)
 }

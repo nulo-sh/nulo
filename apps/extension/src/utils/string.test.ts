@@ -1,7 +1,17 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { describe, expect, test } from "vitest"
 import { getNameDescriptor } from "@/wallet/services/token/functions/descriptors"
-import { addressEnds, dashIfBlank, getInitials, isBlank, stripBidiAndZeroWidth, trimAddress } from "./string"
+import {
+	addressEnds,
+	addressHalves,
+	dashIfBlank,
+	getInitials,
+	isBlank,
+	stripBidiAndZeroWidth,
+	stripPictographs,
+	tokenInitials,
+	trimAddress,
+} from "./string"
 
 describe("trimAddress", () => {
 	const ADDR = "0x1234567890abcdef1234567890abcdef12345678"
@@ -73,6 +83,26 @@ const NBSP = String.fromCodePoint(0xa0)
 const IDEOGRAPHIC_SPACE = String.fromCodePoint(0x3000)
 const blankFields = () => ["", "   ", "\t\n", ZWSP, `${NBSP}${IDEOGRAPHIC_SPACE}`].map(fromField)
 
+describe("tokenInitials", () => {
+	test("one letter under 24 px, two from 24 px, upper case", () => {
+		expect(tokenInitials("usdc", 16)).toBe("U")
+		expect(tokenInitials("usdc", 20)).toBe("U")
+		expect(tokenInitials("usdc", 24)).toBe("US")
+		expect(tokenInitials("usdc", 36)).toBe("US")
+	})
+
+	test("only letters and digits count, by code point", () => {
+		expect(tokenInitials("$1INCH", 32)).toBe("1I")
+		expect(tokenInitials("\u202Ee\u{1F600}th", 32)).toBe("ET")
+		expect(tokenInitials("\u{1D400}\u{1D401}", 32)).toBe("\u{1D400}\u{1D401}")
+	})
+
+	test("a symbol with no letter or digit draws the empty value", () => {
+		expect(tokenInitials("", 32)).toBe("—")
+		expect(tokenInitials("$_-\u{1F600}", 16)).toBe("—")
+	})
+})
+
 describe("isBlank", () => {
 	test("holds for a value that is absent, or empty or whitespace once the sanitizer strips it", () => {
 		for (const value of blankFields()) expect(isBlank(value), JSON.stringify(value)).toBe(true)
@@ -141,5 +171,59 @@ describe("addressEnds", () => {
 
 	test("an address too short to cut is all head", () => {
 		expect(addressEnds("0x12")).toEqual({ head: "0x12", middle: "", tail: "" })
+	})
+})
+
+describe("addressHalves", () => {
+	const ADDRESS = "0x13c29548b3340707017c5d1a457c23d8b6c29548b3340706e39bf608a5aab172"
+
+	test("splits a whole address into two lines of 33 that rejoin to it", () => {
+		const halves = addressHalves(ADDRESS)
+		expect(halves?.map((h) => h.length)).toEqual([33, 33])
+		expect(halves?.join("")).toBe(ADDRESS)
+		expect(halves?.[0].startsWith("0x13c29548")).toBe(true)
+		expect(halves?.[1].endsWith("a5aab172")).toBe(true)
+	})
+
+	test("refuses one character short or long", () => {
+		expect(addressHalves(ADDRESS.slice(0, 65))).toBeNull()
+		expect(addressHalves(`${ADDRESS}0`)).toBeNull()
+	})
+})
+
+describe("stripPictographs", () => {
+	test("an emoji after, before or inside a name goes, and the spaces it leaves close", () => {
+		expect(stripPictographs("Playground \u2705")).toBe("Playground")
+		expect(stripPictographs("\u2714\uFE0F Swap")).toBe("Swap")
+		expect(stripPictographs("Play\u{1F3AE}ground")).toBe("Playground")
+		expect(stripPictographs("Cool \u{1F680} App")).toBe("Cool App")
+	})
+
+	test("a check mark that is no emoji still goes: it reads as a seal", () => {
+		expect(["Playground \u2713", "Playground \u{1F5F8}", "\u{1F5F9} Playground"].map(stripPictographs)).toEqual([
+			"Playground",
+			"Playground",
+			"Playground",
+		])
+	})
+
+	test("sequences go whole: a flag, a joined family, a skin tone, a subdivision flag, a keycap", () => {
+		expect(stripPictographs("\u{1F1E6}\u{1F1F7} Tango")).toBe("Tango")
+		expect(stripPictographs("\u{1F468}\u200D\u{1F469}\u200D\u{1F467} Family")).toBe("Family")
+		expect(stripPictographs("\u{1F44D}\u{1F3FD} ok")).toBe("ok")
+		expect(stripPictographs("\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F} Club")).toBe("Club")
+		expect(stripPictographs("Room 1\uFE0F\u20E3")).toBe("Room")
+	})
+
+	test("a name of emoji or keycaps only leaves nothing", () => {
+		expect(stripPictographs("\u{1F680}\u{1F680}")).toBe("")
+		expect(stripPictographs("1\uFE0F\u20E3 #\uFE0F\u20E3")).toBe("")
+	})
+
+	test("letters, digits and punctuation in every script stay, a pictographic punctuation mark included", () => {
+		expect(stripPictographs("\u00DCn\u00EFc\u00F6d\u00E9 \u4E2D\u6587 \u0627\u0644\u0639\u0631\u0628\u064A\u0629 123")).toBe(
+			"\u00DCn\u00EFc\u00F6d\u00E9 \u4E2D\u6587 \u0627\u0644\u0639\u0631\u0628\u064A\u0629 123",
+		)
+		expect(stripPictographs("Wow\u203C Room 42 #1, (beta).")).toBe("Wow\u203C Room 42 #1, (beta).")
 	})
 })

@@ -174,7 +174,7 @@ function mountPage(profileName = "Test Profile", type: "password" | "passkey" = 
 			plugins: [
 				createTestingPinia({
 					initialState: {
-						app: { profile: { id: "p1", type, name: profileName }, network: { id: "net1", chainId: 7 } },
+						app: { isLogined: true, profile: { id: "p1", type, name: profileName }, network: { id: "net1", chainId: 7 } },
 					},
 					stubActions: false,
 				}),
@@ -363,21 +363,16 @@ describe("export/full.vue — what each step shows", () => {
 		expect(sectionLabels(wrapper)).toEqual(["Backup"])
 	})
 
-	it("a passkey profile's backup asks for the file password and its repeat, under one Download protected backup button", async () => {
+	it("a passkey profile's backup asks for the file password and its repeat first, under one Create protected backup button", async () => {
 		const wrapper = mountPage("Test Profile", "passkey")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
-		await vi.waitFor(() => expect(wrapper.findComponent(PasskeyCeremonyDialog).exists()).toBe(true))
-		wrapper.findComponent(PasskeyCeremonyDialog).vm.$emit("resolve", {
-			id: Buffer.from("cred").toString("base64"),
-			prf: Buffer.from(new Uint8Array(32).fill(6)).toString("base64"),
-			prfSalt: "c2FsdA==",
-		})
-		await vi.waitFor(() => expect(wrapper.find("[data-testid='backup-encrypt-password-input']").exists()).toBe(true))
+		await flushPromises()
+		expect(wrapper.findComponent(PasskeyCeremonyDialog).exists()).toBe(false)
 		expect(sectionLabels(wrapper)).toEqual(["File password", "Repeat password"])
-		expect(wrapper.text()).not.toContain("Backup is ready")
-		expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(false)
-		expect(downloadButton(wrapper).text()).toBe("Download protected backup")
-		expect(downloadButton(wrapper).attributes("disabled")).toBeDefined()
+		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
+		const create = wrapper.get("[data-testid='create-protected-backup-btn']")
+		expect(create.text()).toBe("Create protected backup")
+		expect(create.attributes("disabled")).toBeDefined()
 	})
 })
 
@@ -891,13 +886,15 @@ describe("export/full.vue — the done state after a passkey profile's encrypted
 		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt: async () => new Uint8Array(29) } as never)
 		const wrapper = mountPage("Test Profile", "passkey")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
-		await vi.waitFor(() => expect(wrapper.findComponent(PasskeyCeremonyDialog).exists()).toBe(true))
-		wrapper.findComponent(PasskeyCeremonyDialog).vm.$emit("resolve", CEREMONY_ANSWER)
-		await vi.waitFor(() => expect(wrapper.find("[data-testid='backup-encrypt-password-input']").exists()).toBe(true))
+		await flushPromises()
 		for (const id of ["backup-encrypt-password-input", "backup-encrypt-password-confirm-input"]) {
 			;(wrapper.findComponent(`[data-testid='${id}']`) as VueWrapper).vm.$emit("update:modelValue", "pass1234")
 		}
 		await flushPromises()
+		await wrapper.get("[data-testid='create-protected-backup-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.findComponent(PasskeyCeremonyDialog).exists()).toBe(true))
+		wrapper.findComponent(PasskeyCeremonyDialog).vm.$emit("resolve", CEREMONY_ANSWER)
+		await vi.waitFor(() => expect(downloadButton(wrapper).text()).toBe("Download protected backup"))
 		await downloadButton(wrapper).trigger("click")
 		await vi.waitFor(() => expect(wrapper.find("[data-testid='backup-close-btn']").exists()).toBe(true))
 		await flushPromises()

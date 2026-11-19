@@ -29,6 +29,8 @@ interface Script {
 	/** What origin holds under the tag before the run. */
 	origin?: RemoteTag | null
 	commitExists?: boolean
+	/** The commit's `release-notes/` file; absent when null. */
+	notes?: string | null
 	failPut?: "open" | "close"
 	/** `lost`: origin takes the tag but the client sees a failure; `elsewhere`: origin got the name at another commit first. */
 	push?: "ok" | "refused" | "lost" | "elsewhere"
@@ -74,6 +76,10 @@ function fakeIO(script: Script = {}) {
 			calls.push("commitExists")
 			return script.commitExists ?? true
 		},
+		async fileAt(_, path) {
+			calls.push(`fileAt ${path}`)
+			return script.notes === undefined ? "What changed for you.\n\n- One change.\n" : script.notes
+		},
 		async createLocalTag() {
 			calls.push("tag")
 		},
@@ -102,6 +108,15 @@ describe("tagByHand", () => {
 		expect(await tagByHand("1.0.0", SHA, io)).toBe(0)
 		expect(puts).toEqual([[RELEASE_APP, OWNER], [RELEASE_APP]])
 		expect(calls.slice(-7)).toEqual(["callerId", "put", "tag", "push", "put", "readRuleset", "remoteTag"])
+	})
+
+	test("a stable reads its release notes at the commit; an rc needs none", async () => {
+		const stable = fakeIO()
+		expect(await tagByHand("1.0.0", SHA, stable.io)).toBe(0)
+		expect(stable.calls).toContain("fileAt release-notes/1.0.0.md")
+		const rc = fakeIO({ notes: null })
+		expect(await tagByHand("1.0.0-rc.0", SHA, rc.io)).toBe(0)
+		expect(rc.calls.some((c) => c.startsWith("fileAt"))).toBe(false)
 	})
 
 	test("a refused push still closes, drops the tag it made, and exits 2 so the runbook does not relabel", async () => {
@@ -156,6 +171,8 @@ describe("tagByHand", () => {
 		["a nightly version", "1.0.0-nightly.26292", SHA, {}],
 		["a short commit", "1.0.0", "08856c26", {}],
 		["a commit this clone lacks", "1.0.0", SHA, { commitExists: false }],
+		["a stable whose commit lacks its release notes", "1.0.0", SHA, { notes: null }],
+		["a stable whose release notes cannot ship", "1.0.0", SHA, { notes: "## Heading\n" }],
 		["a tag origin already has", "1.0.0", SHA, { origin: { object: "3b1d32e5", commit: SHA } }],
 		["a ruleset already open to someone", "1.0.0", SHA, { ruleset: { ...APPLIED, bypassActors: [RELEASE_APP, OWNER] } }],
 		["a disabled ruleset", "1.0.0", SHA, { ruleset: { ...APPLIED, enforcement: "disabled" } }],
@@ -199,6 +216,7 @@ esac
 `
 	const git = `#!/usr/bin/env bash
 echo "git $*" >> '${log}'
+case "$*" in "show "*":release-notes/"*) printf 'What changed.\\n\\n- One change.\\n' ;; esac
 `
 	for (const [name, text] of [
 		["gh", gh],

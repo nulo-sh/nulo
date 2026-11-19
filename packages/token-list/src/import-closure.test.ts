@@ -49,6 +49,7 @@ describe("signing import closure", () => {
 		expect([...closure("sign-cli.ts")].sort()).toEqual([
 			"class-ids.ts",
 			"envelope.ts",
+			"icon.ts",
 			"keys.ts",
 			"parse.ts",
 			"price-feeds.ts",

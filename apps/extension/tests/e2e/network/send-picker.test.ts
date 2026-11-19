@@ -10,7 +10,7 @@ import { expect, inject } from "vitest"
 import { test as base, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
 import { extraTokensFixture } from "../fixtures/extra-tokens"
 import { selectSendToken, setActiveSendType, submitNewTokenPopup, waitForNewTokenAddress } from "../fixtures/helpers"
-import { openSend, readSendInputs, readSendView, shotSend } from "../fixtures/send-page"
+import { chooseRecipient, openSend, readSendInputs, readSendView, shotSend } from "../fixtures/send-page"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { waitForFocus } from "../helpers/pointer-probes"
 
@@ -30,8 +30,10 @@ test.skipIf(!hasConfig)(
 		const page = await openPopup(tokenReadyExtension)
 		await waitForHash(page, "#/popup/general")
 
-		// The trigger is inert until the page's tokens load; openSend waits for the token itself.
+		// The trigger is inert until the page's tokens load; the side choices draw once the token has.
 		await openSend(page)
+		await chooseRecipient(page, tokenReadyExtension.accountAddress)
+		await page.waitForSelector('[data-testid="send-from-type"]', { timeout: 30_000 })
 
 		await clickByTestId(page, "send-token-trigger")
 		await page.waitForSelector('[data-testid="select-token-row"][data-symbol="ALT"]', { visible: true, timeout: 15_000 })
@@ -79,12 +81,12 @@ test.skipIf(!hasConfig)(
 		const page = await openPopup(tokenReadyExtension)
 		await waitForHash(page, "#/popup/general")
 		await openSend(page)
+		await chooseRecipient(page, config.minterAddress)
 
 		// The fixture mints public tokens only: the amount field takes text on the funded side.
 		await setActiveSendType(page, "send-from-type", "public")
 		await setActiveSendType(page, "send-to-type", "public")
-		await page.waitForSelector(sel("send-amount-balance"), { visible: true, timeout: 30_000 })
-		await replaceInputValue(page, `${sel("send-destination-field")} input`, config.minterAddress)
+		await page.waitForSelector(sel("send-from-balance-public"), { visible: true, timeout: 30_000 })
 		await page.type(sel("send-amount-input"), "1")
 
 		// From the focused card, so the closes after the import have a control to hand focus back to.
@@ -102,14 +104,16 @@ test.skipIf(!hasConfig)(
 		await page.waitForFunction((s: string) => document.querySelector(s) === null, { timeout: 5_000 }, sel("select-token-search"))
 		expect(await readSendInputs(page)).toEqual({ amount: "1", destination: config.minterAddress })
 		const view = await readSendView(page)
-		expect([view.origin, view.strip?.to]).toEqual(["public", "public"])
-		await page.waitForFunction(textOf("send-amount-balance", "7 PICK"), { timeout: 30_000 })
-		await page.waitForSelector(sel("fee-estimate"), { visible: true, timeout: 120_000 })
+		const arrival = await page.$eval(sel("send-to-type"), (el) => el.getAttribute("data-side"))
+		expect([view.origin, arrival]).toEqual(["public", "public"])
+		await page.waitForFunction(textOf("send-from-balance-public", "7 PICK"), { timeout: 30_000 })
+		// The card stays mounted, unshown, while its sheet is closed: the estimate lands in it all the same.
+		await page.waitForSelector(sel("fee-estimate"), { timeout: 120_000 })
 
 		// The private side, which the mint never funded.
 		await setActiveSendType(page, "send-from-type", "private")
-		await page.waitForFunction(textOf("send-amount-balance", "0 PICK"), { timeout: 30_000 })
-		await shotSend(page, "send-amount-zero", "send-amount-row")
+		await page.waitForFunction(textOf("send-from-balance-private", "0 PICK"), { timeout: 30_000 })
+		await shotSend(page, "send-amount-zero", "send-from-type")
 
 		expect(tokenReadyExtension.consoleErrors).toEqual([])
 		expect(tokenReadyExtension.pageErrors).toEqual([])

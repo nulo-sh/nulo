@@ -47,8 +47,9 @@ function handleBack() {
 		:leading-icon-color="leadingIconColor"
 		@back="handleBack"
 	>
-		<!-- Forward slots only when provided so the base's title default (icon + title prop) still fires. -->
+		<!-- Forward slots only when provided so the base's defaults (the title, the leading icon) still fire. -->
 		<template v-if="$slots.title" #title><slot name="title" /></template>
 		<template v-if="$slots.trailing" #trailing><slot name="trailing" /></template>
+		<template v-if="$slots.leading" #leading><slot name="leading" /></template>
 	</SubPageHeaderBase>
 </template>

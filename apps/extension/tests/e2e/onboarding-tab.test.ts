@@ -168,12 +168,45 @@ describe("onboarding tab", () => {
 		})
 		expect(scrolled).toBeGreaterThan(0)
 
+		// The hint row hides in place while the wallet is created: the confirm field keeps its place in the
+		// document (read with the scroll, which clamps at the bottom and would hide a shift on screen). The
+		// observer reads it when the button first says so, before the key derivation can finish.
+		const confirmTop = await page.$eval(
+			'[data-testid="onboarding-password-confirm"]',
+			(el) => el.getBoundingClientRect().top + (document.scrollingElement?.scrollTop ?? 0),
+		)
+		await page.evaluate(() => {
+			const button = document.querySelector('[data-testid="onboarding-submit-create"]')
+			const field = document.querySelector('[data-testid="onboarding-password-confirm"]')
+			const atCreating = new Promise<number>((resolve, reject) => {
+				setTimeout(() => reject(new Error("the create button never read Creating...")), 15_000)
+				new MutationObserver((_, observer) => {
+					if (!button?.textContent?.includes("Creating...") || !field) return
+					observer.disconnect()
+					resolve(field.getBoundingClientRect().top + (document.scrollingElement?.scrollTop ?? 0))
+				}).observe(document.body, { childList: true, subtree: true, characterData: true })
+			})
+			Object.assign(window, { __confirmTopAtCreating: atCreating })
+		})
 		await clickByTestId(page, "onboarding-submit-create")
+		expect(await page.evaluate(() => (window as unknown as { __confirmTopAtCreating: Promise<number> }).__confirmTopAtCreating)).toBe(
+			confirmTop,
+		)
 
 		// A password wallet sees its words before Ready, from the top of the step.
 		await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 30_000 })
 		expect(await page.evaluate(() => document.scrollingElement?.scrollTop)).toBe(0)
+		// The step runs past the fold at both sizes; at 720 px wide the room right of the column cannot hold
+		// the more-below button, so only the wide window draws it.
+		await page.waitForSelector('[data-testid="onboarding-scroll-more"]', { visible: true, timeout: 5_000 })
 		await setViewport(page, viewport)
+		expect(
+			await page.evaluate(() => {
+				const root = document.documentElement
+				return root.scrollHeight - root.clientHeight - root.scrollTop
+			}),
+		).toBeGreaterThan(64)
+		await page.waitForFunction(() => !document.querySelector('[data-testid="onboarding-scroll-more"]'), { timeout: 5_000 })
 		expect(await readProfileNames(page)).toEqual(["Main"])
 		const words = await readRecoveryWords(page, "onboarding-phrase")
 		expect(words).toHaveLength(24)
@@ -369,11 +402,14 @@ describe("onboarding tab", () => {
 				const id = (await chrome.storage.session.get("nulo:onboarding:tab-id"))["nulo:onboarding:tab-id"]
 				return typeof id === "number" ? { id, active: (await chrome.tabs.get(id)).active } : null
 			})
-		// Over BiDi a tab's URL arrives after the tab, so the count is polled.
+		// The browser's own tab list: Firefox's BiDi can leave a tab, or its URL, unannounced for good.
 		const oneSetupTab = () =>
 			pollUntil(
-				async () =>
-					extension.browser.targets().filter((t) => t.type() === "page" && t.url().includes("src/onboarding/index.html")).length,
+				() =>
+					control.evaluate(async () => {
+						const setupDocument = chrome.runtime.getURL("src/onboarding/index.html")
+						return (await chrome.tabs.query({})).filter((tab) => tab.url?.startsWith(setupDocument)).length
+					}),
 				(count) => count === 1,
 				{ label: "one setup tab", timeoutMs: 10_000, intervalMs: 100 },
 			)

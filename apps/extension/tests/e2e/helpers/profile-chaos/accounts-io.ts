@@ -58,52 +58,51 @@ async function exportRowName(s: RunState, open: ModelProfile, which: ParamsMap["
 	return row.name
 }
 
-const APPROVED: Signal = { label: "approved", testid: "account-file-password-input" }
-
-/** Past the agree gate, Confirm with passkey answered as `p` says: the page asks the file password
- *  once the answer opened the profile. */
-async function confirmPasskey(s: RunState, page: Page, p: Pick<ParamsMap["exportAccountFile"], "variant" | "other">): Promise<Driven> {
-	await clickByTestId(page, "agree-continue-btn")
-	await page.waitForSelector('[data-testid="account-file-confirm-passkey-btn"]', { visible: true, timeout: 15_000 })
-	const press = async (): Promise<Driven> => {
-		await clickByTestId(page, "account-file-confirm-passkey-btn")
-		return settle(
-			page,
-			[APPROVED, ...PASSKEY_REFUSAL],
-			{ approved: "committed", cancelled: "cancelled", refused: "refused" },
-			ACCOUNT_MS,
-		)
-	}
-	if (p.variant === "refuse") {
-		if (!s.auth) throw new Error("a refused passkey needs the run's authenticator")
-		const allow = await s.auth.refuseNextStep(page)
-		try {
-			return await press()
-		} finally {
-			await allow()
-		}
-	}
-	if (p.variant === "other") await answerWithCredential(page, credentialId(s, p.other))
-	return press()
-}
-
 const FILE_FORM = { field: "account-file-password", button: "account-file-save-btn" } as const
 
 const SAVED: Signal[] = [
 	{ label: "saved", testid: "account-file-protected-banner" },
 	{ label: "refused", text: "Failed to create the file" },
+	...PASSKEY_REFUSAL,
 ]
 
-/** Save seals the file and downloads it unasked, so the capture is armed before the press. */
-async function saveFile(page: Page, button: string, password: string): Promise<{ body: string; password: string } | Driven> {
+/** Save asks the passkey, seals the file and downloads it unasked, so the capture is armed before the
+ *  press; the passkey's prompt is answered as `p` says. */
+async function saveFile(
+	s: RunState,
+	page: Page,
+	password: string,
+	p: Pick<ParamsMap["exportAccountFile"], "variant" | "other">,
+): Promise<{ body: string; password: string } | Driven> {
 	await armDownloadCapture(page, { gzip: false })
-	await clickByTestId(page, button)
-	const saved = await settle(page, SAVED, { saved: "committed", refused: "refused" }, ACCOUNT_MS)
+	const press = async (): Promise<Driven> => {
+		await clickByTestId(page, FILE_FORM.button)
+		return settle(page, SAVED, { saved: "committed", cancelled: "cancelled", refused: "refused" }, ACCOUNT_MS)
+	}
+	let saved: Driven
+	if (p.variant === "refuse") {
+		if (!s.auth) throw new Error("a refused passkey needs the run's authenticator")
+		const allow = await s.auth.refuseNextStep(page)
+		try {
+			saved = await press()
+		} finally {
+			await allow()
+		}
+	} else {
+		if (p.variant === "other") await answerWithCredential(page, credentialId(s, p.other))
+		saved = await press()
+	}
 	if (saved.outcome !== "committed" || !saved.settle.reached) return saved
 	return { body: await readCapturedDownload(page), password }
 }
 
-/** A passkey profile's file: its passkey, then the file password; the body, or how the page refused. */
+/** Past the agree gate, at the file's own password: no passkey is asked before Save. */
+async function toFilePassword(page: Page): Promise<void> {
+	await clickByTestId(page, "agree-continue-btn")
+	await page.waitForSelector(`[data-testid="${FILE_FORM.field}-input"]`, { visible: true, timeout: 15_000 })
+}
+
+/** A passkey profile's file: the file password, then Save's passkey; the body, or how the page refused. */
 async function passkeyFile(
 	s: RunState,
 	name: string,
@@ -111,18 +110,16 @@ async function passkeyFile(
 ): Promise<{ body: string; password: string } | Driven> {
 	const t0 = Date.now()
 	await openAccountExport(s.anchor, name)
-	const confirmed = await confirmPasskey(s, s.anchor, p)
-	if (confirmed.outcome !== "committed" || !confirmed.settle.reached) return confirmed
-	const form = FILE_FORM
+	await toFilePassword(s.anchor)
 	if (p.variant === "short") {
 		const short = shortFilePassword(s, p.password)
 		// An enabled Save is pressed, as a person would, so a file the rule let through is seen.
-		if (await refusesShortPassword(s.anchor, short, form)) return timed(t0, ACCOUNT_MS, "refused")
-		return saveFile(s.anchor, form.button, short)
+		if (await refusesShortPassword(s.anchor, short, FILE_FORM)) return timed(t0, ACCOUNT_MS, "refused")
+		return saveFile(s, s.anchor, short, p)
 	}
 	const password = secretFor(s, p.password)
 	await typeFilePassword(s.anchor, password)
-	return saveFile(s.anchor, form.button, password)
+	return saveFile(s, s.anchor, password, p)
 }
 
 async function typeFilePassword(page: Page, password: string): Promise<void> {
@@ -133,8 +130,8 @@ async function typeFilePassword(page: Page, password: string): Promise<void> {
 /** How long a change of unlock may take to reach another page's account file page. */
 const RESET_MS = 15_000
 
-/** The anchor's change of unlock must drop the approval the page holds: only the picker coming back
- *  is a start-over, since Save also leaves a page whose profile is no longer a passkey one. */
+/** The anchor's change of unlock must drop the pair the page holds: only the picker coming back is a
+ *  start-over, since Save also leaves a page whose profile is no longer a passkey one. */
 export async function exportDuringChange(
 	s: RunState,
 	open: ModelProfile,
@@ -150,10 +147,7 @@ export async function exportDuringChange(
 		// A new page lands on Home once its bootstrap ends, over any route set before that.
 		await waitForRoute(page, "#/popup/general", 15_000)
 		await openAccountExport(page, name)
-		const approved = await confirmPasskey(s, page, {})
-		if (approved.outcome !== "committed" || !approved.settle.reached)
-			throw new Error(`the passkey did not approve: ${approved.outcome}`)
-		await answeredCredentials(s, page, [{ kind: "get", credential: open.credential as CredentialRef }])
+		await toFilePassword(page)
 		await typeFilePassword(page, secretFor(s, p.password))
 		// The competitor's prompts ask from a focused document, and this page holds focus.
 		await bringToFront(s.anchor)
@@ -163,7 +157,7 @@ export async function exportDuringChange(
 		const picker = await firstSignal(page, [{ label: "reset", testid: "export-account-row" }], RESET_MS)
 		if (picker.label) return timed(t0, 2 * ACCOUNT_MS, "cancelled")
 		if (!(await page.$(save))) return timed(t0, 2 * ACCOUNT_MS, "refused")
-		const saved = await saveFile(page, FILE_FORM.button, secretFor(s, p.password))
+		const saved = await saveFile(s, page, secretFor(s, p.password), {})
 		return "body" in saved ? timed(t0, 2 * ACCOUNT_MS, "committed") : saved
 	} finally {
 		await drainPrf(s, page)
@@ -193,7 +187,7 @@ export async function exportAccount(s: RunState, open: ModelProfile, p: ParamsMa
 }
 
 /** The signing key the open profile exports now for the account it imported from `file`: a passkey
- *  profile approves with its own passkey and protects the file under `file`'s own password. */
+ *  profile protects the file under `file`'s own password, and Save asks its own passkey. */
 export async function reexportImported(s: RunState, owner: ModelProfile, file: ModelFile): Promise<string> {
 	const name = importedName(file.ref)
 	if (owner.method === "password") {

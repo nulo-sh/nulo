@@ -9,6 +9,7 @@
 import { randomBytes } from "node:crypto"
 import { type Server, type Socket, createServer } from "node:net"
 import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { RELAY_RPC_URLS } from "@/wallet/services/network/seeds"
 import { TOKEN_LIST_URL } from "@/wallet/services/token-list/spec"
 import { HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 import { reservePort } from "../../../scripts/e2e/resolve-ports"
@@ -72,6 +73,9 @@ export const MALFORMED = "<malformed>"
 export const LIVE_NODE_HOST = new URL(TESTNET_RPC_URL).hostname
 /** The default Mainnet node's host, which no launch sends direct. */
 export const MAINNET_NODE_HOST = new URL(MAINNET_RPC_URL).hostname
+/** Nulo's relay hosts, the seeded second endpoint of Alpha and Testnet, which no launch sends
+ *  direct: no e2e run reaches the relay. */
+export const RELAY_NODE_HOSTS: readonly string[] = Object.values(RELAY_RPC_URLS).map((url) => new URL(url).hostname)
 /** The published token list's host, which the live launch also sends direct. */
 export const LIVE_LIST_HOST = new URL(TOKEN_LIST_URL).hostname
 
@@ -104,12 +108,16 @@ export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 		"the seeded Testnet node: the background reads the active network's status at popup start, the offscreen PXE on Home, and a full backup or contacts export reads every network's. The launch's stand-in answers it once settled; a request from before that, from a background kill or while a spec's own interception has the origin is refused here, and one that arrives while the stand-in holds the origin, before the close begins, fails the close",
 	],
 	[MAINNET_NODE_HOST, "the seeded Mainnet node, the default: read as the Testnet node is, and held by its own stand-in the same way"],
+	...RELAY_NODE_HOSTS.map((host): [string, string] => [
+		host,
+		"Nulo's relay, the seeded second endpoint of Alpha and Testnet: probed once the stand-in before it refuses a route's admission, and held by its own stand-in the same way",
+	]),
 	["api.coingecko.com", "the price fetch on profile create, unlock, popup open with an incomplete cache, and every 3 min"],
 	[
 		LIVE_LIST_HOST,
 		"the signed token list, fetched by a release build when the worker boots with the Terms accepted (a background restart) and on its scheduled alarm",
 	],
-	[new URL(HOW_AZTEC_WORKS_URL).hostname, "Home's How Aztec works row, which a spec opens in a tab"],
+	[new URL(HOW_AZTEC_WORKS_URL).hostname, "Home's How Aztec works and What's new rows, which specs open in a tab"],
 	[EGRESS_CANARY_HOST, "the per-launch canary, fired from an extension page"],
 	[EGRESS_PROBE_HOST, "the control spec's background probe"],
 	[EGRESS_LINK_LOCAL_HOST, "the control spec's link-local probe"],
@@ -228,14 +236,25 @@ async function shutDown(server: Server, sockets: Map<Socket, () => void>): Promi
 }
 
 export async function startEgressGuard(): Promise<EgressGuard> {
+	const interceptLog = process.env.NULO_E2E_INTERCEPT_LOG === "1"
 	const record = new Map<string, EgressAttempt>()
 	const watched = new Map<string, () => boolean>()
 	let overflow = false
 	/** Each open socket and the call that classifies it if the guard stops first. */
 	const sockets = new Map<Socket, () => void>()
 
+	/** Under the intercept log, each request for a watched host is logged, which places it among the
+	 *  arms' attach and redirect lines when a failed run is read. */
+	const heldNow = (host: string, port: number): boolean => {
+		const holding = watched.get(host)
+		if (!holding) return false
+		const held = holding() === true
+		if (interceptLog) console.log(`[egress-guard] ${host}:${port} ${held ? "held" : "not held"}`)
+		return held
+	}
+
 	const note = (host: string, port: number) => {
-		const held = watched.get(host)?.() === true
+		const held = heldNow(host, port)
 		const entry = record.get(`${host}:${port}`)
 		if (entry) {
 			entry.count++

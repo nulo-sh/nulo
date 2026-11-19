@@ -2,7 +2,8 @@
  * Send's token card: while the page's tokens load it is an inert, busy row that a tap or a key
  * cannot open, with a skeleton only after a noticeable wait; loaded, it opens the token picker, or
  * the import popup when there is no token, from a tap, Enter or Space; after a failed load it
- * offers a Retry instead.
+ * offers a Retry instead. The token's mark is the list's picture or its initials, with one badge
+ * when the list flags it, when it allows no transfer, or both.
  */
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
@@ -11,6 +12,7 @@ import { mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 
 import { usePopupStore } from "@/stores/popup.store"
+import { TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
 import SelectTokenCard from "./SelectTokenCard.vue"
 
 const TOKEN = { id: 7, symbol: "TST", name: "TestToken", hasPrivateTransfers: true, hasPublicTransfers: true }
@@ -38,15 +40,33 @@ afterEach(() => {
 })
 
 describe("send/SelectTokenCard", () => {
-	test("a blank symbol and name read as the empty-value dash in the initial, the symbol and the name", () => {
+	test("a blank symbol and name read as the empty-value dash in the mark, the symbol and the name", () => {
 		const read = (token: Record<string, unknown>) => {
 			const { w } = mountCard({ token })
-			return [w.get("[class*='token_initial']"), w.get('[data-testid="send-token-symbol"]'), w.get("[class*='token_name']")].map(
+			return [w.get('[data-testid="token-mark"]'), w.get('[data-testid="send-token-symbol"]'), w.get("[class*='token_name']")].map(
 				(el) => el.text(),
 			)
 		}
 		expect(read({ ...TOKEN, symbol: "   ", name: "" })).toEqual(["—", "—", "—"])
-		expect(read(TOKEN)).toEqual(["T", "TST", "TestToken"])
+		expect(read(TOKEN)).toEqual(["TS", "TST", "TestToken"])
+	})
+
+	test("the mark is the list's picture at 36 px for a listed token, the initials for another", () => {
+		const listed = mountCard({ token: TOKEN, icon: TEST_ICONS.USDC }).w.get('[data-testid="token-mark"]')
+		expect(listed.attributes("data-kind")).toBe("logo")
+		expect(listed.attributes("style")).toContain("width: 36px")
+		expect(listed.get("img").attributes("src")).toBe(TEST_ICONS.USDC)
+		expect(mountCard({ token: TOKEN }).w.get('[data-testid="token-mark"]').attributes("data-kind")).toBe("initials")
+	})
+
+	test("one badge on the mark when the list flags the token, when it allows no transfer, or both; none otherwise", () => {
+		const blocked = { ...TOKEN, hasPrivateTransfers: false, hasPublicTransfers: false }
+		const badges = (props: Record<string, unknown>) => mountCard(props).w.findAll('[data-testid="token-mark"] i').length
+		expect(badges({ token: TOKEN, flagged: true })).toBe(1)
+		expect(badges({ token: blocked })).toBe(1)
+		expect(badges({ token: blocked, flagged: true, icon: TEST_ICONS.USDC })).toBe(1)
+		expect(badges({ token: TOKEN })).toBe(0)
+		expect(badges({ token: { ...TOKEN, hasPublicTransfers: false } })).toBe(0)
 	})
 
 	test("loading: a tap, Enter and Space open nothing, and the row is busy and out of the Tab path", async () => {

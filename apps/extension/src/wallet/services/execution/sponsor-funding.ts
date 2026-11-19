@@ -60,6 +60,58 @@ export async function probeOwnFeeJuice(
 	return { maxFee: coverage.limit.toString(), balance: coverage.balance.toString() }
 }
 
+/** What a shortfall's recheck reads: the reader's last balance, one fresh reader read and one more probe. */
+export interface ShortfallRecheck {
+	/** The balance reader's last figure for the payer, never a fetch; null when unread. */
+	peek(): string | null
+	/** One fresh read through the balance reader, which the card's next read is served from. */
+	reread(): Promise<string | null>
+	/** One more read of the payer's slot; undefined when it fails. */
+	reprobe(): Promise<bigint | undefined>
+}
+
+/**
+ * A probe that reads short while the reader's last balance covers the fee is two reads of one
+ * balance that disagree. Both are read once more, concurrently. A covering second probe clears the
+ * shortfall: it reads the slot the node's fee-payer check reads. Otherwise a covering fresh reader
+ * figure marks it unconfirmed, and anything else confirms it. One recheck per estimate, never a
+ * loop. A read that fails counts as no read: a failed probe keeps the first probe's figure.
+ */
+export async function recheckShortfall(short: FeeJuiceShortfall, recheck: ShortfallRecheck): Promise<FeeJuiceShortfall | undefined> {
+	const limit = BigInt(short.maxFee)
+	const cached = recheck.peek()
+	if (cached === null || BigInt(cached) < limit) return short
+	const [fresh, probed] = await Promise.all([recheck.reread().catch(() => null), recheck.reprobe()])
+	const balance = probed ?? BigInt(short.balance)
+	if (balance >= limit) return undefined
+	const confirmed = { maxFee: short.maxFee, balance: balance.toString() }
+	return fresh !== null && BigInt(fresh) >= limit ? { ...confirmed, lastRead: fresh } : confirmed
+}
+
+/** What {@link ownFeeJuiceShortfall} reads through: the probe's bounded read and the balance reader. */
+export interface OwnFeeJuiceReads {
+	readonly readPublicStorageOnce: PublicStorageReader
+	peekPublicFeeJuice(networkId: string, account: string): string | null
+	rereadPublicFeeJuice(networkId: string, account: string): Promise<string | null>
+}
+
+export async function ownFeeJuiceShortfall(
+	built: FeeEstimate,
+	reads: OwnFeeJuiceReads,
+	log: ProbeLog,
+): Promise<FeeJuiceShortfall | undefined> {
+	const short = await probeOwnFeeJuice(built, reads.readPublicStorageOnce, log)
+	if (!short) return undefined
+	const networkId = built.network.id
+	const payer = built.account.address.toString()
+	return recheckShortfall(short, {
+		peek: () => reads.peekPublicFeeJuice(networkId, payer),
+		reread: () => reads.rereadPublicFeeJuice(networkId, payer),
+		reprobe: async () =>
+			(await readCoverage(built, built.account.address, reads.readPublicStorageOnce, log, "own fee juice recheck"))?.balance,
+	})
+}
+
 /** The verdict on `built`'s sponsor, or `undefined` when no sponsor pays or the read fails. */
 export async function probeSponsorFunding(
 	built: FeeEstimate,

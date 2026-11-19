@@ -1,0 +1,6 @@
+# Phase 0: planning consults
+
+- 2026-11-12, recon: two read-only Explore sweeps (sonnet): the reuse sweep (ten capabilities) and the window and e2e mapper. Findings folded into `recon.md`; no claim taken without a re-read of the cited file.
+- 2026-11-12, Codex plan audit (session `01a1d09c`, gpt-6.1-sol, high): reject. Blocking: unsigned copy and four extra windows; K1's evidence; I1 infeasible (`launchExtension` takes no custom list); `mapped` is a ref; E2's forward Tab contradicts `Popover`; the smoke gate lacked the armed build, `NULO_E2E_RETRY=0` and Storybook. All blocking points taken but shipping no drafts (the lane brief's mechanism) and dropping the L3 ten-case floor (CLAUDE.md).
+- 2026-11-12, Opus plan audit (Plan agent, opus): conditional approve. Same core points plus the flagged press (A12), the app press's first line, A11 for caller and recipient chips, the existing smoke and network tests to rewrite. Taken but an owner ask for the Tab-stop count (delegated to the panel, D7).
+- 2026-11-12, Codex final fresh pass (session `01a1d0b1`, gpt-6.1-sol, high): conditional approve (K1's full text before phase 4; a press with no link; the ten-call, five-unreadable capture). Folded; resumed for verification: approve.

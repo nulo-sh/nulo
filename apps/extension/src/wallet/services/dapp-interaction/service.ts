@@ -3,8 +3,10 @@ import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
+import { type RequestLog, traceTag } from "@/wallet/logger/request-log"
 import { ProfileService } from "@/wallet/services/profile/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
+import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService } from "@/wallet/services/network/service"
 import { AccountService } from "@/wallet/services/account/service"
 import { FpcService } from "@/wallet/services/fpc/service"
@@ -20,12 +22,7 @@ import {
 	type OperationKind,
 } from "@/wallet/services/execution/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import {
-	JobCancelledError,
-	type ScopeViolationError,
-	TermsAcceptanceRequiredError,
-	UserRejectedError,
-} from "@nulo/extension-messaging/errors"
+import { JobCancelledError, TermsAcceptanceRequiredError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/service"
 import { randomIdNotIn } from "@/wallet/services/id-allocators"
 import { Lock } from "@/wallet/utils"
@@ -43,7 +40,8 @@ import {
 } from "@nulo/wallet-bridge"
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
 import { isWindowEnd, WindowEndedError } from "./window-end"
-import { knownContracts } from "./known-contracts"
+import { type KnownContract, knownContracts } from "./known-contracts"
+import { UnlockWindows } from "./unlock-windows"
 import { applyFeeSelection, isShownTokenMetadata, type OperationApprovalDelta } from "./approval-delta"
 import {
 	DAPP_INTERACTION_SERVICE_NAME,
@@ -68,6 +66,7 @@ import {
 	type Methods,
 	type Events,
 	type DappInteraction,
+	type RecordedRefusal,
 	INTERACTION_TIMEOUT_MS,
 } from "./spec"
 
@@ -139,6 +138,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		"rejectInteraction",
 		"isInteractionCancelled",
 		"focusInteractionWindow",
+		"getKnownContracts",
 	)
 	public static name = DAPP_INTERACTION_SERVICE_NAME
 
@@ -149,6 +149,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	 *  with: what a held send's question shows. Never in `storage`, so it is never approvable again. */
 	private readonly approved = new Map<string, { payload: ExecutionPayload; deltas: OperationApprovalDelta[] }>()
 	private readonly lock = new Lock()
+	/** The window each locked discovery's site waits in; worker-internal, not an RPC method. */
+	public readonly unlockWindows: UnlockWindows
 
 	private profileService: ProfileService = null!
 	private networkService: NetworkService = null!
@@ -162,8 +164,11 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	public constructor(
 		logger: ILogger,
 		private readonly windowManager: WindowManager,
+		/** Each dApp request's capture; absent, nothing is recorded. */
+		private readonly requests?: RequestLog,
 	) {
 		super(DAPP_INTERACTION_SERVICE_NAME, logger)
+		this.unlockWindows = new UnlockWindows(windowManager, (hash) => chrome.runtime.getURL(`src/popup/index.html${hash}`))
 	}
 
 	/** An unknown speed level is refused before the method runs; fee math never reads one. */
@@ -344,12 +349,12 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	}
 
 	/** Keeps the first refusal an estimate or preview of a still-pending request met. */
-	public recordRefusal(id: string, refusal: ScopeViolationError): void {
+	public recordRefusal(id: string, refusal: RecordedRefusal): void {
 		const interaction = this.storage.get(id)
 		if (interaction && !interaction.refusal) interaction.refusal = refusal
 	}
 
-	public refusalOf(id: string): ScopeViolationError | undefined {
+	public refusalOf(id: string): RecordedRefusal | undefined {
 		return this.storage.get(id)?.refusal
 	}
 
@@ -451,7 +456,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 			this.logInfo(`executeAndResolve: resolved [${kinds}]`)
 			this.windowManager.settle(interaction.handleId, result)
 		} catch (error) {
-			this.windowManager.cancel(interaction.handleId, this.describeApprovalFailure(kinds, error))
+			this.windowManager.cancel(interaction.handleId, this.describeApprovalFailure(kinds, error, interaction.hooks?.walletTraceId))
 		} finally {
 			this.approved.delete(interaction.id)
 			releasePreviews()
@@ -488,16 +493,17 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	 * their class, so the ingress answers with the typed envelope and the record reads as either, and
 	 * log at `debug`: both are expected.
 	 */
-	private describeApprovalFailure(kinds: string, error: unknown): string | Error {
+	private describeApprovalFailure(kinds: string, error: unknown, walletTraceId: string | undefined): string | Error {
+		const tag = traceTag(walletTraceId)
 		if (error instanceof TermsAcceptanceRequiredError) {
-			this.logDebug(`executeAndResolve: refused [${kinds}]: terms not accepted`)
+			this.logDebug(`executeAndResolve: refused [${kinds}]: terms not accepted`, ...tag)
 			return error
 		}
 		if (error instanceof WindowEndedError) {
-			this.logDebug(`executeAndResolve: ended [${kinds}]: the app was disconnected`)
+			this.logDebug(`executeAndResolve: ended [${kinds}]: the app was disconnected`, ...tag)
 			return error
 		}
-		this.logError(`executeAndResolve: failed [${kinds}]`, error)
+		this.logError(`executeAndResolve: failed [${kinds}]`, error, ...tag)
 		return error instanceof Error ? error.message : "Execution failed"
 	}
 
@@ -612,13 +618,25 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	public async requestCapabilities(params: CapabilityParams, cancellationToken?: string): Promise<CapabilityResult> {
 		await this.ensureInitialized()
 		const session = await this.dappSessionService.getDappSession(params.sessionId)
+		const payload: CapabilityPayload = { params: { ...params, knownContracts: await this.knownContractsOf(session) }, session }
+		return (await this.interaction("capabilities", payload, cancellationToken)) as CapabilityResult
+	}
+
+	public async getKnownContracts(sessionId: string): Promise<KnownContract[]> {
+		if (typeof sessionId !== "string") throw new Error("Invalid id")
+		await this.ensureInitialized()
+		const session = await this.dappSessionService.getDappSession(sessionId)
+		const active = await requireActiveProfile(this.profileService)
+		if (session.profileId !== active.id) throw new Error("Invalid id")
+		return await this.knownContractsOf(session)
+	}
+
+	private async knownContractsOf(session: DappSession): Promise<KnownContract[]> {
 		const chainId = Number(session.chainId)
-		const known = knownContracts(
+		return knownContracts(
 			await this.fpcService.getOrComputeProtocolAddresses(chainId),
 			await this.tokenService.getVerifiedDefaults(session.profileId, chainId),
 		)
-		const payload: CapabilityPayload = { params: { ...params, knownContracts: known }, session }
-		return (await this.interaction("capabilities", payload, cancellationToken)) as CapabilityResult
 	}
 
 	public async discover(params: DiscoveryParams, cancellationToken?: string): Promise<DiscoveryResult> {
@@ -662,6 +680,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				timeoutMs,
 				kind: type,
 				placement: "top-right",
+				reuseWindowId: this.takeUnlockWindow(payload),
 			})
 
 			const interaction: DappInteraction = {
@@ -677,6 +696,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 
 			this.storage.set(id, interaction)
 			registeredId = id
+			if (hooks?.walletTraceId) this.requests?.alias(hooks.walletTraceId, { interactionId: id })
 
 			pending = handle.promise
 				.catch((error: unknown) => {
@@ -692,6 +712,13 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		if (hooks?.queuedJournalId) void this.reconcileCancelledJournal(hooks.queuedJournalId)
 		if ("session" in payload) void this.reconcileRevokedSession(registeredId, payload.session)
 		return pending
+	}
+
+	/** A connect window or notice opens in its site's unlock window, when one is open. */
+	private takeUnlockWindow(payload: InteractionPayload): number | undefined {
+		if (!isDiscoveryPayload(payload) && !isNoticePayload(payload)) return undefined
+		const origin = payload.params.dappMetadata.url
+		return origin === undefined ? undefined : this.unlockWindows.take(origin)
 	}
 
 	private async silentInteraction(payload: ExecutionPayload, hooks?: ExecutionHooks): Promise<ExecutionResult> {

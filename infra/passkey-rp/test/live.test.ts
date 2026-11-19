@@ -89,8 +89,9 @@ describe.skipIf(process.env.RP_HOST_LIVE !== "1")("the deployed RP host", () => 
 	test(
 		"Cloudflare's own /cdn-cgi/ surface is script-free",
 		async () => {
-			// /cdn-cgi/* never reaches the Worker: the trace is text, and any other sampled path is the
-			// edge's static 404 page. Neither may ever carry script or a mitigation.
+			// /cdn-cgi/* never reaches the Worker: the trace is text, and any other sampled path is an edge
+			// refusal, the static 404 page or the challenge endpoint's 400 on a query it cannot parse; a
+			// mitigation's 403, 429 or 503 is neither. None may ever carry script or a mitigation.
 			const trace = await get("/cdn-cgi/trace")
 			expect(trace.status).toBe(200)
 			expect(trace.headers.get("content-type")).toMatch(/^text\/plain/)
@@ -101,7 +102,7 @@ describe.skipIf(process.env.RP_HOST_LIVE !== "1")("the deployed RP host", () => 
 				"/cdn-cgi/challenge-platform/h/b/orchestrate/jsch/v1",
 			]) {
 				const res = await get(path)
-				expect(res.status).toBe(404)
+				expect([400, 404]).toContain(res.status)
 				expect(res.headers.get("cf-mitigated")).toBeNull()
 				expect(await res.text()).not.toMatch(INERT_HTML)
 			}

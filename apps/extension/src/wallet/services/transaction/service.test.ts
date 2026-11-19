@@ -107,6 +107,25 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 			networkId,
 		})
 
+	test("the endpoint a transaction went out through is read from its own profile's row only", async () => {
+		await service.addTransaction({
+			origin: { type: 0 } as never,
+			chainId: 1,
+			account: ACCOUNT,
+			calls: [],
+			nonce: "0",
+			feePaymentMethod: 0 as never,
+			hash: "0xsent",
+			submittedEndpointUrl: "https://rpc.sent",
+			estimatedFee: undefined,
+			gasDetails: undefined,
+			fence: { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 },
+		})
+		expect(await service.recordedEndpointOf("0xsent", "p1")).toBe("https://rpc.sent")
+		expect(await service.recordedEndpointOf("0xsent", "p2")).toBeUndefined()
+		expect(await service.recordedEndpointOf("0xother", "p1")).toBeUndefined()
+	})
+
 	test("deleting one profile's transactions spares another profile sharing the address", async () => {
 		// Two profiles built from one mnemonic own the same address. An
 		// address-only purge would take both profiles' history.

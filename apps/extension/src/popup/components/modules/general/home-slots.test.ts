@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { orderTokenRows } from "@/utils/token-order"
 import type { SeedStatus } from "@/wallet/services/token/spec"
-import { type SlotImportOp, capHomeSlots, homeSlots } from "./home-slots"
+import { type SlotImportOp, capHomeSlots, homeSlots, supersededImports } from "./home-slots"
 
 const CHAIN = 7
 const seed = (symbol: string, chainId = CHAIN, status: SeedStatus = "pending") => ({
@@ -58,6 +58,19 @@ describe("homeSlots", () => {
 		const { slots, userImports } = slotsOf([], own)
 		expect(userImports.map((o) => o.id)).toEqual(["other", "blank"])
 		expect(slots.map((s) => s.kind)).toEqual(["seed", "seed", "seed", "seed"])
+	})
+
+	test("a failed import is followed by a later import of its contract in any stage; another contract's is not", () => {
+		const record = (id: string, contractAddress: string, createdAt: number, stage: "failed" | "pending" | "succeeded") => ({
+			id,
+			contractAddress,
+			createdAt,
+			progress: { stage },
+		})
+		const superseded = (later: "failed" | "pending" | "succeeded") =>
+			supersededImports([record("old", "0xAbC", 1, "failed"), record("new", "0xabc", 2, later), record("lone", "0xdef", 1, "failed")])
+		for (const later of ["failed", "pending", "succeeded"] as const) expect([later, [...superseded(later)]]).toEqual([later, ["old"]])
+		expect([...supersededImports([record("running", "0xabc", 1, "pending"), record("failed", "0xabc", 2, "failed")])]).toEqual([])
 	})
 
 	test("adding the four defaults never changes the three rows Home shows or the count", () => {

@@ -285,7 +285,7 @@ describe("a Send card on hold, co-mounted with the gas card", () => {
 
 		// Private gas came back unread (null) on a healthy store: the card holds.
 		expect((fee.emitted<unknown[]>("update:modelValue") ?? []).filter((e) => e[0] != null)).toEqual([])
-		expect(fee.find('[data-testid="fee-init-degraded"]').text()).toContain("Couldn't check your private gas")
+		expect(fee.find('[data-testid="fee-init-degraded"]').text()).toContain("Couldn't check your private Fee Juice")
 		const readsAfterMount = mocks.getGasBalances.mock.calls.length
 
 		await vi.advanceTimersByTimeAsync(10 * 60_000)

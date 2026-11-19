@@ -1,16 +1,12 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import { Dropdown } from "@/components/ui/Dropdown"
-import mark from "@/components/composite/send/publish-mark.module.css"
 import { menuOrder } from "./fee-helpers"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 const props = defineProps({
 	modelValue: { type: Object, default: null },
 	methods: { type: Array, required: true },
-	/** "private-private" | "private-public" while this send's fee names the account, else null. The
-	 *  page decides; this only draws the tag. */
-	payerNoticeShape: { type: String, default: null },
 	/** The card is still reading what can pay. */
 	pending: { type: Boolean, default: false },
 })
@@ -31,18 +27,7 @@ const onRowClick = (method, event) => {
 
 <template>
 	<Flex direction="column" gap="4" :class="$style.card">
-		<Flex align="center" justify="between">
-			<span :class="$style.fee_label">Fee</span>
-			<span
-				v-if="payerNoticeShape"
-				:class="[$style.tag, mark.exposed]"
-				data-testid="send-fee-privacy-notice"
-				:data-notice-shape="payerNoticeShape"
-			>
-				<Icon name="public" size="10" aria-hidden="true" />
-				NAMES YOUR ADDRESS
-			</span>
-		</Flex>
+		<span :class="$style.fee_label">Fee</span>
 		<Dropdown @onOpen="emit('open')" @onClose="emit('close')">
 			<template #trigger>
 				<!-- A retry below hands focus here mid-keypress: its held Enter must not open the menu. -->
@@ -156,13 +141,5 @@ const onRowClick = (method, event) => {
 
 .visually_hidden {
 	composes: visually_hidden from "./fee-shared.module.css";
-}
-
-.tag {
-	composes: type--label-section from global;
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	white-space: nowrap;
 }
 </style>

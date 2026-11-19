@@ -9,5 +9,6 @@ src/generated/changelog-pages.json
 /terms/
 /privacy/
 /website-privacy/
-# Written by scripts/build-changelog.ts from release-notes/*.md and content/changelog/*.toml
+# Written by scripts/build-changelog.ts from release-notes/*.md and content/changelog/*.{toml,og.png}
 /changelog/
+/public/changelog/

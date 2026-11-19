@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { Skeleton } from "@nulo/design"
 import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY } from "@/components/composite/send/publish-facts"
+import { drawsFeeWhole } from "../../../../../tests/helpers/fee-whole"
 import FeeCostReadout from "./FeeCostReadout.vue"
 
 const STUBS = {
@@ -34,9 +35,16 @@ const drawn = (w: VueWrapper) => without(w, '[class*="visually_hidden"]')
 const ESTIMATE = { amount: "3.577824", usd: "$0.215" }
 
 describe("FeeCostReadout", () => {
-	test("idle (no estimate, not estimating) shows the simulation hint", () => {
-		const w = factory()
-		expect(w.text()).toContain("Fee estimated after simulation")
+	test("idle, Send names what the fee waits for: an amount, or one within the balance; elsewhere the generic caption", () => {
+		expect(factory({ waitsFor: "amount" }).text()).toBe("Enter an amount to see the fee.")
+		expect(factory({ waitsFor: "amountInBalance" }).text()).toBe("Enter an amount within your balance to see the fee.")
+		expect(factory().text()).toBe("Fee estimated after simulation")
+	})
+
+	test("what the fee waits for never replaces a running, landed or failed estimate", () => {
+		expect(factory({ waitsFor: "amount", isEstimating: true }).text()).toBe("You pay")
+		expect(drawn(factory({ waitsFor: "amount", estimate: ESTIMATE }))).toBe("You pay ~3.577824 FJ ($0.215)")
+		expect(factory({ waitsFor: "amountInBalance", failed: true }).find('[data-testid="fee-estimate-failed"]').exists()).toBe(true)
 	})
 
 	test("estimating without a result shows the label + skeleton", () => {
@@ -74,10 +82,10 @@ describe("FeeCostReadout", () => {
 		expect(w.get('[data-testid="fee-estimate-failed"]').text()).toBe("Swap paysCouldn't estimate fee.Try again")
 	})
 
-	test("pending with no amount typed, the row reads the hint, whatever estimate or queue is still on the props", async () => {
+	test("pending with no amount typed, the row asks for one, whatever estimate or queue is still on the props", async () => {
 		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
-		const stale = factory({ pending: true, estimate: ESTIMATE, isEstimating: true, isQueued: true, queuedCap })
-		expect(stale.text()).toBe("Fee estimated after simulation")
+		const stale = factory({ pending: true, waitsFor: "amount", estimate: ESTIMATE, isEstimating: true, isQueued: true, queuedCap })
+		expect(stale.text()).toBe("Enter an amount to see the fee.")
 		expect(stale.findComponent(Skeleton).exists()).toBe(false)
 		await stale.setProps({ amountTyped: true })
 		expect(stale.text()).toBe("You pay")
@@ -182,11 +190,24 @@ describe("FeeCostReadout · Nulo's sponsor", () => {
 	})
 })
 
+describe("FeeCostReadout · a fee after other words stays whole", () => {
+	test("the struck sponsored fee and both queued figures never wrap inside themselves", () => {
+		expect(drawsFeeWhole("FeeCostReadout.vue", "whole")).toBe(true)
+		const wholes = (w: VueWrapper) => w.findAll('[class*="whole"]').map((el) => el.text())
+		expect(wholes(factory({ estimate: ESTIMATE, payer: "sponsor" }))).toEqual(["~3.577824 FJ ($0.215)"])
+		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
+		expect(wholes(factory({ isEstimating: true, isQueued: true, queuedCap }))).toEqual([
+			"~3.577824 FJ ($0.215)",
+			"~4.47228 FJ ($0.269)",
+		])
+	})
+})
+
 describe("FeeCostReadout · a sponsor added by hand", () => {
 	test("a dash, spoken as what Nulo can't tell; no amount and no Nothing", () => {
 		const w = factory({ estimate: ESTIMATE, payer: "unvouched" })
 		expect(drawn(w)).toBe("You pay —")
-		expect(spoken(w)).toBe("You pay Nulo can't tell what this fee contract charges you.")
+		expect(spoken(w)).toBe("You pay Nulo can't tell what this FPC charges you.")
 		expect(w.text()).not.toContain("Nothing")
 		expect(w.text()).not.toContain("3.577824")
 		expect(w.find('[data-testid="fee-estimate-usd"]').exists()).toBe(false)
