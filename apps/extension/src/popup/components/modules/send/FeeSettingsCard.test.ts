@@ -1249,8 +1249,8 @@ describe("FeeSettingsCard — the default and the identity guard", () => {
 		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: { type: "private_fpc" } }
 		const gasA = deferred<{ publicFeeJuice: string; privateFeeJuice: string | null }>()
 		mocks.getGasBalances.mockReturnValueOnce(gasA.promise)
-		// The switched-to identity (B) resolves normally.
-		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: "1000000000000000000" })
+		// The switched-to identity (B) resolves normally, with no private Fee Juice, so its default differs from A's pick.
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: "0" })
 		mocks.getFpcs.mockResolvedValue([
 			{ id: "p1", type: 2, name: "Private FPC", isProtocol: true },
 			{ id: "s1", type: 1, name: "Sponsor", isProtocol: true },
