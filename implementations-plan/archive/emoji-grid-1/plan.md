@@ -114,7 +114,7 @@ The PR waits for the owner's approval of the captures. Merging is the orchestrat
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `846f26379`, bounded work. Plan-specific values:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `846f26379`, bounded work. Plan-specific values:
 - Step 1 is absent (`code_review: off`).
 - Step 2 is one Codex pass after Phase 1's gates 1–5: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`. It reads the plan and `origin/dev...HEAD`, with the standard's two verbatim rules and the lane's two asks: can any symbol still draw from a text face in Chrome or Firefox, and can the grapheme split or U+FE0F change what the person compares? A second round runs only on a finding. Gates 6–8 then run on the final head.
 - Step 3: `gh pr create`, then `gh pr checks <n> --watch` once.

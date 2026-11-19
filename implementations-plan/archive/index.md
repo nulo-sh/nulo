@@ -593,3 +593,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [toast-hide-1](toast-hide-1/plan.md) — completed — an earlier send's Sending toast steps aside while a review sheet is open and comes back with the same words, built at the toast's owner (P190-01 = H, #1796)
 - [sweep-settle-1](sweep-settle-1/plan.md) — completed — the type-roles window sweep waits until no read in flight is drawn before it measures (#1794)
 - [authwits-2](authwits-2/plan.md) — completed — a landed revoke or switch reports success and a closed popup reports nothing (#1829, #1830); Revoke hands off to Activity and rows name their action (P166-01 = B, P166-02 = N1); the page checks the registry on open (P166-03 = S)
+- [emoji-grid-1](emoji-grid-1/plan.md) — completed — the connection check draws every symbol in a colour-emoji role, with U+FE0F on the 21 symbols a text face can claim, as the app it is compared with does
