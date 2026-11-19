@@ -6,3 +6,4 @@
 - 2026-11-19: final fresh Codex pass: conditional approve, condition applied, resumed verdict `approve`. Plan at the approval gate.
 - 2026-11-19: page 196 answered (A1 a, A2 a, A3 Shield's published file under a raised cap and the raven on its disc, A4 all three permissions, A5 b, A6 a); rebased onto `dev` 93877b8b1; plan amended (D13 to D15), Codex conditional approve, corrections applied.
 - 2026-11-19: arc 1 built; gate green (token-list and host tests, tree check, `test:all`, lint, typecheck); 1.3.0 compatibility proof logged.
+- 2026-11-19: arc 1 Codex loop converged (round 2 clean).

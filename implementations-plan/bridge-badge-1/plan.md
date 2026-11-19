@@ -201,6 +201,8 @@ Also accepted: reuse `tokenIconFor`; the forward-compatibility proof compares ag
 
 **Amendment, Codex** (`gpt-6.1-sol`, high, on the `bridgeIcon` cap after A3): `conditional approve` ("retain 16,384; correct the cost claims and strengthen the large-image validation gates"). Accepted: the cost figures corrected (Shield's strings 26,476 plus 48 bytes of syntax; the largest accepted URL 16,382, leaving 1,858; verification runs per download and per boot, now benchmarked); the tree and summary tests use a bridge picture above 3,072 beside an `icon` that still fails; Phase 3 decodes Shield's real file in both browsers. Found no CSP, transport or regex obstacle (`img-src 'self' data: blob:` in both manifests).
 
+**Arc 1, Codex** (`gpt-6.1-sol`, high): round 1, one P3 (FORMAT.md and the cap's comment stated a publishing policy that omits D15's approved alteration): fixed in a docs commit. It loaded the `v1.3.0` reader on its own and found the same equal results. Round 2 (resumed): "Clean … No regressions or new comment findings."
+
 ## Post-implementation
 
 The steps are `implementations-plan/README.md` § Post-implementation standard at revision `46dc91c3f`. Plan-specific values:
