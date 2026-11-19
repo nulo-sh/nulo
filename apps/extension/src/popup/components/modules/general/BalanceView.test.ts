@@ -1,9 +1,9 @@
 /**
  * BalanceView renders two heroes: the account aggregate on Home (over the active chain's rows
  * only — the balance service returns a shared address's rows from every chain) and a per-token
- * hero when the token page passes `tokenBalance`. Mounted because the aggregate's partial flag and
- * the kill-switch slot are computed-driven and the network suites never exercise a foreign-chain
- * row on a shared address.
+ * hero when the token page passes `tokenBalance`. Mounted because the aggregate and the kill-switch
+ * slot are computed-driven and the network suites never exercise a foreign-chain row on a shared
+ * address.
  */
 
 import { flushPromises, mount } from "@vue/test-utils"
@@ -258,31 +258,14 @@ describe("BalanceView — Home aggregate", () => {
 		expect(wrapper.find('[data-testid="stub-tooltip"]').exists()).toBe(false)
 	})
 
-	test("renders the real aggregate over priced tokens with the partial caption", async () => {
+	test("an unpriced holding beside a priced one: the total is the priced sum, with no caption under it", async () => {
 		mockQuotes = FRESH()
 		const { wrapper } = await mountView()
 
-		// Only tok-1 is priced → aggregate = its fiat value, flagged partial.
+		// Only tok-1 is priced; tok-2 is held and unmapped.
 		expect(wrapper.find('[data-testid="balance-amount"]').text()).toContain("$1,249.82")
-		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(true)
-	})
-
-	test("a priced holding + an unpriced ZERO row is NOT partial — zero rows are not holdings", async () => {
-		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
-		seedRows = [
-			SEED[0],
-			{
-				id: "b9",
-				account: "0xacct",
-				token: { id: "tok-9", symbol: "ZZZ", decimals: 18, hasDecimals: true, chainId: CHAIN_IDS.TESTNET, contract: "0xunmapped9" },
-				publicBalance: "0",
-				privateBalance: "0",
-			},
-		]
-		const { wrapper } = await mountView()
-
-		expect(wrapper.find('[data-testid="balance-amount"]').text()).toContain("$1,250.00")
-		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(false)
+		expect(wrapper.find('[data-testid="balance-prices-unavailable"]').exists()).toBe(false)
+		expect(wrapper.text()).not.toContain("priced assets only")
 	})
 
 	test("fiat OFF → the number slot is GONE (space reclaimed)", async () => {
@@ -353,7 +336,7 @@ describe("BalanceView — Home aggregate", () => {
 		expect(wrapper.find('[data-testid="balance-amount"]').text()).not.toContain("1,249")
 	})
 
-	test("while the snapshot is in flight the figure and caption are hidden, not shown as $0.00", async () => {
+	test("while the snapshot is in flight the figure is hidden, not shown as $0.00", async () => {
 		mockQuotes = FRESH()
 		let resolveFetch: ((rows: typeof SEED) => void) | undefined
 		fetchRows = () =>
@@ -362,12 +345,10 @@ describe("BalanceView — Home aggregate", () => {
 			})
 		const { wrapper } = await mountView()
 		expect(wrapper.find('[data-testid="balance-amount"]').text()).toBe("")
-		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(false)
 
 		resolveFetch?.(SEED)
 		await flushPromises()
 		expect(wrapper.find('[data-testid="balance-amount"]').text()).toContain("$1,249.82")
-		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(true)
 	})
 
 	test("a live add that lands during the fetch outranks the older snapshot: it is refetched, not overwritten", async () => {
@@ -524,7 +505,6 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 		await vi.advanceTimersByTimeAsync(CAP_MS)
 		expect(rejected.wrapper.find('[data-testid="balance-hero-unknown"]').text()).toBe("—")
 		expect(amount(rejected.wrapper).text()).not.toContain("$")
-		expect(rejected.wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(false)
 		rejected.wrapper.unmount()
 
 		fetchRows = () => new Promise(() => {})
@@ -594,7 +574,6 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 		const { wrapper } = await mountView()
 		expect(amount(wrapper).text()).toBe("")
 		expect(isSkeleton(wrapper)).toBe(true)
-		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(false)
 
 		answer(FRESH())
 		await flushPromises()
@@ -615,7 +594,6 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 		await flushPromises()
 		expect(amount(wrapper).text()).toBe("—")
 		expect(wrapper.find('[data-testid="balance-prices-unavailable"]').exists()).toBe(true)
-		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(false)
 	})
 
 	test("an empty wallet and an unpriced-only wallet never wait for prices", async () => {
@@ -625,14 +603,12 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 			seedRows = rows as typeof SEED
 			const empty = await mountView()
 			expect(amount(empty.wrapper).text()).toContain("$0.00")
-			expect(empty.wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(false)
 			empty.wrapper.unmount()
 		}
 
 		seedRows = [SEED[1]] as typeof SEED
 		const unpriced = await mountView()
 		expect(amount(unpriced.wrapper).text()).toContain("$0.00")
-		expect(unpriced.wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(true)
 	})
 
 	test("the 12 s cap ends a price wait that never answers in '—' and 'Prices unavailable'", async () => {
@@ -643,7 +619,6 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 		await vi.advanceTimersByTimeAsync(1)
 		expect(amount(wrapper).text()).toBe("—")
 		expect(wrapper.find('[data-testid="balance-prices-unavailable"]').exists()).toBe(true)
-		expect(wrapper.find('[data-testid="balance-fiat-partial"]').exists()).toBe(false)
 	})
 })
 
@@ -651,7 +626,6 @@ describe("BalanceView — Home hero when no priced holding has a price", () => {
 	type Wrapper = Awaited<ReturnType<typeof mountView>>["wrapper"]
 	const amount = (w: Wrapper) => w.find('[data-testid="balance-amount"]')
 	const unavailableCaption = (w: Wrapper) => w.find('[data-testid="balance-prices-unavailable"]')
-	const partialCaption = (w: Wrapper) => w.find('[data-testid="balance-fiat-partial"]')
 	// Price-mapped (tether) and never quoted here.
 	const USDT_ROW = { ...SEED[0], id: "b3", token: { ...SEED[0].token, id: "tok-3", symbol: "CCC", contract: TEST_TOKENS.USDT } }
 
@@ -660,30 +634,26 @@ describe("BalanceView — Home hero when no priced holding has a price", () => {
 		expect(amount(wrapper).text()).toBe("—")
 		expect(amount(wrapper).find('[aria-hidden="true"]').text()).toBe("—")
 		expect(unavailableCaption(wrapper).text()).toBe("Prices unavailable")
-		expect(partialCaption(wrapper).exists()).toBe(false)
 	})
 
-	test("one usable quote shows the amount, with 'priced assets only' beside an unquoted holding", async () => {
+	test("one usable quote shows the amount beside an unquoted holding, not 'Prices unavailable'", async () => {
 		mockQuotes = FRESH()
 		seedRows = [SEED[0], USDT_ROW] as typeof SEED
 		const { wrapper } = await mountView()
 		expect(amount(wrapper).text()).toContain("$1,249.82")
-		expect(partialCaption(wrapper).exists()).toBe(true)
 		expect(unavailableCaption(wrapper).exists()).toBe(false)
 	})
 
-	test("an empty wallet still reads $0.00, and one holding only unpriced tokens keeps 'priced assets only'", async () => {
+	test("an empty wallet and one holding only unpriced tokens both read $0.00, never 'Prices unavailable'", async () => {
 		seedRows = [{ ...SEED[0], publicBalance: "0", privateBalance: "0" }] as typeof SEED
 		const empty = await mountView()
 		expect(amount(empty.wrapper).text()).toContain("$0.00")
 		expect(unavailableCaption(empty.wrapper).exists()).toBe(false)
-		expect(partialCaption(empty.wrapper).exists()).toBe(false)
 		empty.wrapper.unmount()
 
 		seedRows = [SEED[1]] as typeof SEED
 		const { wrapper } = await mountView()
 		expect(amount(wrapper).text()).toContain("$0.00")
-		expect(partialCaption(wrapper).exists()).toBe(true)
 		expect(unavailableCaption(wrapper).exists()).toBe(false)
 	})
 
