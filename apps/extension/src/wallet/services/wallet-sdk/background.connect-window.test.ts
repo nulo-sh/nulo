@@ -196,6 +196,7 @@ function fakeWindows() {
 		closeTab: async () => {},
 		isPopup: async () => true,
 		update: async () => {},
+		navigate: async () => {},
 		getLastFocused: async () => {
 			const held = nextAnchor
 			nextAnchor = undefined

@@ -419,6 +419,7 @@ const {
 		tokenFlags.dispose()
 	},
 	init: () => init(),
+	getActiveProfile: () => profileService.getActiveProfile(),
 	reject: (end) => reject(requestEnd(end, isWrongProfile.value, profile.value)),
 })
 

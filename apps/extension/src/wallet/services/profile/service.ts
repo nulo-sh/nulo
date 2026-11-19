@@ -708,7 +708,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// Phase 2 — crypto UNLOCKED. Caller pays ~1s PBKDF2 but the rest of
 		// the RPC surface stays responsive.
 		// A wrong password and a corrupted slot both fail to open, but GUARD catches a wrong password
-		// first in practice. Auth UI matches on InvalidPasswordError (popup/pages/auth.vue).
+		// first in practice. Auth UI matches on InvalidPasswordError (popup/components/modules/auth/LockScreen.vue).
 		let dek: ImportedKeysDek | null = null
 		try {
 			return await this.codec.withOpenedSlots(snapshot, { password }, invalidPassword, async (opened) => {
