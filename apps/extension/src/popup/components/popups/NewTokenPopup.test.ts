@@ -1,5 +1,5 @@
 /**
- * Component tests for NewTokenPopup. Mocks all three service clients,
+ * Component tests for NewTokenPopup. Mocks the service clients,
  * stores, toast composable, and FormPopup/Input so we can drive the
  * phase machine deterministically and assert close + toast behavior
  * across success / error / timeout / abort outcomes.
@@ -779,5 +779,23 @@ describe("NewTokenPopup — the signed list's flag", () => {
 		priceServiceMock.onQuotesUpdated.invoke(await flaggedList())
 		await flushPromises()
 		expect(flagLine(w).exists()).toBe(true)
+	})
+
+	test("a read an earlier showing left out never reaches the current one", async () => {
+		const answers: ((list: unknown) => void)[] = []
+		answerList = () => new Promise((resolve) => answers.push(resolve))
+		const w = await mountAndOpen()
+		await w.setProps({ show: false })
+		await flushPromises()
+		tokenServiceMock.getTokens.mockResolvedValueOnce([])
+		await w.setProps({ show: true })
+		await flushPromises()
+		await typeAddress(w, FLAGGED)
+
+		answers[1](await LIST())
+		answers[0](await flaggedList())
+		await flushPromises()
+		expect(answers).toHaveLength(2)
+		expect(flagLine(w).exists()).toBe(false)
 	})
 })
