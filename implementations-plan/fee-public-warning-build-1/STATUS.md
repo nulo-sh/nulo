@@ -1,0 +1,2 @@
+- 2026-11-20: plan written (light, bounded); D1-D7 recorded; Ask 1 (the walk) and Ask 2 (fresh reads, OA-1) open.
+- 2026-11-20: build and tests in; 8 new tests red on the base source; lint and typecheck green.
