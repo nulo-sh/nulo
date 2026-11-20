@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
-import { prepareKeys, reloadExtensionPage, waitForNewTab } from "./fixtures/browser"
+import { bringToFront, prepareKeys, reloadExtensionPage, waitForNewTab } from "./fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { navigateByHash, readRecoveryWords } from "./fixtures/helpers"
 import { createAndActivateProfile } from "./fixtures/profiles"
@@ -110,7 +110,7 @@ test("Home's steps are checked as they are done: How Aztec works opens its page,
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 30_000)
 
-test("after a minor update Home shows What's new above Get started: nulo.sh is reached only on its tap, Tab goes on to Dismiss, and Dismiss keeps it gone; About links the release", async ({
+test("after a minor update Home shows What's new above Get started: nulo.sh is reached only on its tap, the tap and Dismiss each close it for good, and Tab goes on to Dismiss; About links the release", async ({
 	registeredExtension,
 }) => {
 	const page = await openPopup(registeredExtension)
@@ -148,20 +148,31 @@ test("after a minor update Home shows What's new above Get started: nulo.sh is r
 		await waitForFocus(page, "whats-new-dismiss")
 		await shotSend(page, "whats-new-dismiss-focus", "whats-new-row")
 
+		// Enter is the one trusted press this spec sends; the browser turns it into the target's click.
 		// Where the tab lands is the component test's: the guard keeps hosts, and Firefox names the tab about:blank.
-		const tab = await waitForNewTab(registeredExtension.browser, () => clickByTestId(page, "whats-new-open"), 10_000)
+		await page.focus(`${sel("whats-new-open")} [data-row-target]`)
+		const tab = await waitForNewTab(registeredExtension.browser, () => page.keyboard.press("Enter"), 10_000)
+		// Read with no wait: the marker is stored before the tab opens, or the closing popup drops it.
+		expect(await readSeen(page)).toBe(minorOf(version))
+		expect(await page.$(sel("whats-new-row"))).toBeNull()
 		// Closed only once its request arrived: a tab closed first may never send it.
 		await expect.poll(siteAttempts, { timeout: 10_000 }).toBeGreaterThan(before)
 		await tab.close()
-		expect(await page.$(sel("whats-new-row"))).not.toBeNull()
-
-		await clickByTestId(page, "whats-new-dismiss")
-		await page.waitForSelector(sel("whats-new-row"), { hidden: true, timeout: 5_000 })
-		await expect.poll(() => readSeen(page), { timeout: 5_000 }).toBe(minorOf(version))
 		await reloadExtensionPage(page)
 		await waitForHash(page, "#/popup/general")
 		await waitForHomeReminders(page)
 		expect(await page.$(sel("whats-new-row"))).toBeNull()
+		await bringToFront(page)
+		await shotSend(page, "whats-new-home-after-tap", "get-started")
+
+		await writeSeen(page, "0.0")
+		await reloadExtensionPage(page)
+		await waitForHash(page, "#/popup/general")
+		await waitForHomeReminders(page)
+		await page.waitForSelector(sel("whats-new-row"), { visible: true, timeout: 10_000 })
+		await clickByTestId(page, "whats-new-dismiss")
+		await page.waitForSelector(sel("whats-new-row"), { hidden: true, timeout: 5_000 })
+		await expect.poll(() => readSeen(page), { timeout: 5_000 }).toBe(minorOf(version))
 	}
 
 	await navigateByHash(page, "#/popup/settings/about")
