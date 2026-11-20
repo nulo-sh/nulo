@@ -209,7 +209,6 @@ export async function answerUpdatedTerms(page: Page, entries: Record<string, unk
 	await page.waitForSelector(sel("legal-sheet"), { hidden: true, timeout: 15_000 })
 }
 
-/** A press is aimed once, and once more after a miss its target's own move explains. */
 const MAX_PRESSES = 2
 
 /**
@@ -240,7 +239,6 @@ export async function pointerClick(page: Page, testid: string, opts: { last?: bo
 	}
 }
 
-/** The element's centre and what sits on top of it there. */
 function aimAt(page: Page, selector: string, last: boolean) {
 	return page.evaluate(
 		(s, lastMatch) => {
@@ -286,11 +284,12 @@ function armPress(page: Page, selector: string, last: boolean, point: { x: numbe
 				const r = t.getBoundingClientRect()
 				return px >= r.left && px < r.right && py >= r.top && py < r.bottom
 			}
-			// Window capture hears each event before any handler can stop, move or remove its target. Every
-			// click of the press counts, a label's forwarded click included: they all run in the pointerup's task.
+			// Window capture hears each event before the target's own handlers can stop, move or remove it.
+			// Every trusted click of the press counts, a label's forwarded one included: all run in the
+			// pointerup's task. A scripted click is no press.
 			const hear = (type: string) => (e: Event) => {
 				const p = w.__nuloPress
-				if (!p?.armed || !(e.target instanceof Element)) return
+				if (!p?.armed || !e.isTrusted || !(e.target instanceof Element)) return
 				const on = covers(p.el, p.x, p.y)
 				p.heard.push({ type, at: name(e.target), inside: p.el.contains(e.target), under: e.target.contains(p.el), on })
 				if (type === "pointerup") setTimeout(() => (p.armed = false), 0)
@@ -305,12 +304,9 @@ function armPress(page: Page, selector: string, last: boolean, point: { x: numbe
 	)
 }
 
-/**
- * What the armed press met. `reached`: a click landed inside the element. `displaced`: no
- * click did, the element had left the aimed point by the pointerup, and every event landed on the
- * element or on what holds it, so the miss pressed nothing else. A press that replaced the document
- * is taken as reached: a miss on the element's own ground runs nothing that could replace it.
- */
+/** What the armed press met. `reached`: a click landed inside the element. `displaced`: none did, the
+ *  element had left the aimed point by the pointerup, and every event landed on the element or on one
+ *  of its ancestors. A record gone with its document proves nothing, so it throws. */
 async function readPress(page: Page): Promise<{ reached: boolean; displaced: boolean; account: string }> {
 	await withTimeoutMessage(
 		// biome-ignore lint/suspicious/noExplicitAny: the press record is page state no type declares
@@ -320,7 +316,7 @@ async function readPress(page: Page): Promise<{ reached: boolean; displaced: boo
 	return page.evaluate(() => {
 		// biome-ignore lint/suspicious/noExplicitAny: the press record is page state no type declares
 		const p = (window as any).__nuloPress
-		if (!p) return { reached: true, displaced: false, account: "the document was replaced" }
+		if (!p) return { reached: false, displaced: false, account: "the document was replaced before the press could be read" }
 		type Heard = { type: string; at: string; inside: boolean; under: boolean; on: boolean }
 		const heard: Heard[] = p.heard
 		const up = heard.filter((h) => h.type === "pointerup").pop()
