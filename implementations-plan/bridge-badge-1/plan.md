@@ -207,7 +207,7 @@ Also accepted: reuse `tokenIconFor`; the forward-compatibility proof compares ag
 
 **Arc 3, Codex** (`gpt-6.1-sol`, high): round 1, "Clean — no findings (high confidence)." It decoded all three pictures to their rows' SHA-256, matched both Shield copies to the published file and the raven's paths to the published wordmark, found only the three keys added and the source canonical, reproduced 55,294 envelope bytes, found no active or external content in either SVG, and showed the e2e fixture throws if cUSDC loses its picture.
 
-**Cross-arc, Codex** (fresh session, `gpt-6.1-sol`, high, `git diff 93877b8b1..HEAD`): round 1, one P3: the e2e fixture read cUSDC's bridge picture at import, so withdrawing it would fail every smoke file importing the fixtures, not only the spec that draws it; now read on call (`e2eBridgeIcon()`). Its cost caveat (the bridge map rides every price snapshot to every open row's client) is recorded under The cost, not changed: the snapshot already carries every `icon` the same way.
+**Cross-arc, Codex** (fresh session, `gpt-6.1-sol`, high, `git diff 93877b8b1..HEAD`): round 1, one P3: the e2e fixture read cUSDC's bridge picture at import, so withdrawing it would fail every smoke file importing the fixtures, not only the spec that draws it; now read on call (`e2eBridgeIcon()`). Its cost caveat (the bridge map rides every price snapshot to every open row's client) is recorded under The cost, not changed: the snapshot already carries every `icon` the same way. Round 2 (resumed): "Clean — no findings (high confidence)."
 
 ## Post-implementation
 
