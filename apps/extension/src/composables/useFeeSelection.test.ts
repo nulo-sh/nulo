@@ -315,8 +315,14 @@ describe("the app windows' rule book", () => {
 		["private Fee Juice can pay: it, before Nulo's sponsor", [PRIVATE_FPC, SPONSOR], CAN, ["private_fpc", "p1"]],
 		["private Fee Juice can pay, no sponsor offered: it", [PRIVATE_FPC], CAN, ["private_fpc", "p1"]],
 		["private read as zero: Nulo's sponsor", [PRIVATE_FPC, SPONSOR], ZERO, ["fpc", "s1"]],
-		["private read as zero, no sponsor: nothing", [PRIVATE_FPC], ZERO, [undefined, undefined]],
-		["private read failed: nothing", [PRIVATE_FPC], UNREAD, [undefined, undefined]],
+		["private read as zero, no sponsor offered: public Fee Juice", [PRIVATE_FPC], ZERO, ["fj", undefined]],
+		[
+			"private and public read as zero, no sponsor offered: nothing",
+			[PRIVATE_FPC],
+			{ ...ZERO, publicFeeJuice: "0" },
+			[undefined, undefined],
+		],
+		["private read failed, no sponsor offered: nothing", [PRIVATE_FPC], UNREAD, [undefined, undefined]],
 		["every read failed: nothing", [PRIVATE_FPC], undefined, [undefined, undefined]],
 		["a PrivateFPC not the protocol's: nothing", [CUSTOM_PRIVATE], CAN, [undefined, undefined]],
 	] as const)("with nothing remembered, the default is %s, and it saves nothing", async (_case, fpcs, gas, shows) => {

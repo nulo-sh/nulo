@@ -10,6 +10,7 @@ import {
 import {
 	isEligible,
 	previewForPick,
+	privateReadAsEmpty,
 	recordOf,
 	resolveSendSelection,
 	type SendSelection,
@@ -17,6 +18,7 @@ import {
 } from "@/popup/components/modules/send/fee-privacy"
 import type { AppPick, FeePickUpdate, SendSlots } from "@/utils/fee-picks"
 import type { BalanceScope } from "@/stores/balances.store"
+import { offersSponsoredFpc } from "@/wallet/services/fpc/sponsored-fpc-chains"
 import type { FeePicks } from "@/wallet/services/ui-preference/spec"
 import type { FeeSnapshot, SnapshotSelection } from "./useFeeSnapshot"
 import type { SponsorVerdicts } from "./useSponsorVerdicts"
@@ -184,12 +186,20 @@ async function persistSelection(c: AppCtx, method: FeeMethodOption) {
 }
 
 /** What a card picks unasked: the account's private Fee Juice on a balance read that can pay, then
- *  Nulo's sponsor, else nothing. Eligibility reads the committed balances, not the rows: on a first
- *  load `methods` is built before the gate opens, without them. */
+ *  Nulo's sponsor. Where the network offers no sponsor, the step a private send takes next: public
+ *  Fee Juice that can pay, only on a private balance read as empty, since a window cannot tell whether
+ *  the app's calls are public; an unread or failed private read picks nothing, as Send holds.
+ *  Eligibility reads the committed balances, not the rows: on a first load `methods` is built before
+ *  the gate opens, without them. */
 function appDefault(c: AppCtx) {
 	const privateFj = c.methods.value.find((m) => m.type === "private_fpc")
 	const know = { fpcs: c.knownFpcs.value, balances: c.snapshot.gasBalances.value }
-	return privateFj && isEligible(privateFj, know) ? privateFj : defaultSponsor(c.methods.value)
+	if (privateFj && isEligible(privateFj, know)) return privateFj
+	const sponsor = defaultSponsor(c.methods.value)
+	const chainId = c.props.network?.chainId
+	if (sponsor || chainId === undefined || offersSponsoredFpc(chainId)) return sponsor
+	const fj = c.methods.value.find((m) => m.type === "fj")
+	return fj && privateReadAsEmpty(privateFj, know) && isEligible(fj, know) ? fj : undefined
 }
 
 /** The saved pick, resolved against fresh `methods` by semantic key (never the stored `fpc.name`);

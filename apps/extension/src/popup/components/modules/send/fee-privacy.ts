@@ -40,6 +40,11 @@ export function isEligible(method: FeeMethodOption, know: FeeKnowledge): boolean
 	}
 }
 
+/** The PrivateFPC row exists and its balance was positively read as empty: the one state in which a
+ *  default may name the account through public Fee Juice where it could otherwise stay hidden. */
+export const privateReadAsEmpty = (privateFj: FeeMethodOption | undefined, know: FeeKnowledge): boolean =>
+	Boolean(privateFj?.fpc) && know.balances?.privateFeeJuice === "0"
+
 interface Payers {
 	fj: FeeMethodOption | undefined
 	privateFj: FeeMethodOption | undefined
@@ -68,8 +73,7 @@ function walkPrivateOrigin(payers: Payers, know: FeeKnowledge): SendSelection {
 	if (privateFj) return selected(privateFj)
 
 	const sponsor = eligibleOrUndefined(payers.sponsor, know)
-	const privateReadAsZero = Boolean(payers.privateFj?.fpc) && know.balances?.privateFeeJuice === "0"
-	if (!privateReadAsZero) return sponsor ? selected(sponsor) : { kind: "hold" }
+	if (!privateReadAsEmpty(payers.privateFj, know)) return sponsor ? selected(sponsor) : { kind: "hold" }
 
 	const fj = eligibleOrUndefined(payers.fj, know)
 	if (fj) return selected(fj)
