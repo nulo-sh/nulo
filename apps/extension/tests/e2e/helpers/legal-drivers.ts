@@ -236,6 +236,7 @@ export async function pointerClick(page: Page, testid: string, opts: { last?: bo
 		if (!met.displaced || press === MAX_PRESSES) {
 			throw new Error(`${testid} took no click from press ${press} at ${Math.round(point.x)},${Math.round(point.y)}: ${met.account}`)
 		}
+		console.log(`[pointerClick] ${testid} moved off press ${press}; aiming again (${met.account})`)
 	}
 }
 
