@@ -1,7 +1,7 @@
 ---
 plan: picker-band-1
 tier: light
-status: in progress
+status: delivered as a ready PR against dev; the orchestrator merges
 issues: "#1884 (the follow-up the owner asked for; this PR closes it)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 6cfb89e57
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-20.
+- **Status:** delivered as a ready PR against `dev`; the orchestrator merges, and the merge closes #1884.
+- **Owner sign-off:** "H1: Ok. Land 1898 and do the small follow-up." (2026-11-19); the band is H1's (P193-01). The selected bar's new place (A1, D3) is the orchestrator's call; the PR shows both placements.
+- **Shipped:** the sheet body declares its gutter as `--page-gutter`; Send's picker rows take the token row's band, so fill, ring and selected bar reach the sheet's edges and the sticky search bar bleeds with them. E2E pin in `token-list.test.ts`; the band helpers moved to `tests/e2e/helpers/row-bands.ts`.
+- **Known limits:** none.
+- **Open items:** none. The other row lists whose band differs are listed below for the owner, not filed: changing one is a UI decision.
+- **Lessons:** none promoted (`lessons.md` is at its budget); the capture-page notes are in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # picker-band-1: Send's token picker rows take H1's band
 

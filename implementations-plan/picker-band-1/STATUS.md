@@ -1,2 +1,0 @@
-- 2026-11-20: planned and built; captures today/after taken; lint and typecheck green.
-- 2026-11-20: smoke e2e green on Chrome and Firefox (13/13 each); red proof 12 px short on base CSS; Codex pass: no regression, R1-R3 accepted; test and test:all green.
