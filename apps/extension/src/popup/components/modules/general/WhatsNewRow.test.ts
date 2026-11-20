@@ -44,18 +44,28 @@ describe("general/WhatsNewRow", () => {
 		expect(stops).toEqual([row.get("[data-row-target]").element, dismiss.element])
 	})
 
-	test("a tap stores the running minor, hides the row, and only then opens the changelog in a new tab", async () => {
+	test("a tap hides the row and opens the changelog in a new tab only once the running minor is stored", async () => {
+		const open = vi.spyOn(window, "open").mockReturnValue(null)
 		const { w, storage } = await mountRow({ [WHATS_NEW_SEEN_KEY]: "0.0" })
-		const storedAtOpen: unknown[] = []
-		const open = vi.spyOn(window, "open").mockImplementation(() => {
-			storedAtOpen.push(storage.data[WHATS_NEW_SEEN_KEY])
-			return null
-		})
+		let land = () => {}
+		storage.set.mockImplementationOnce(
+			(items: Record<string, unknown>) =>
+				new Promise<void>((resolve) => {
+					land = () => {
+						Object.assign(storage.data, items)
+						resolve()
+					}
+				}),
+		)
 		await w.get("[data-row-target]").trigger("click")
 		await flushPromises()
-		expect(open).toHaveBeenCalledWith(changelogUrl(VERSION), "_blank", "noopener,noreferrer")
-		expect(storedAtOpen).toEqual([minorOf(VERSION)])
+		expect(storage.set).toHaveBeenCalledOnce()
 		expect(w.find('[data-testid="whats-new-row"]').exists()).toBe(false)
+		expect(open).not.toHaveBeenCalled()
+		land()
+		await flushPromises()
+		expect(storage.data[WHATS_NEW_SEEN_KEY]).toBe(minorOf(VERSION))
+		expect(open).toHaveBeenCalledWith(changelogUrl(VERSION), "_blank", "noopener,noreferrer")
 	})
 
 	test("a tap whose write is refused still opens the changelog", async () => {

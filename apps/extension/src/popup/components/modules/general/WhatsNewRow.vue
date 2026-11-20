@@ -21,8 +21,8 @@ async function dismiss() {
 }
 
 /** The wallet reaches nulo.sh only on this tap, never by itself. The marker is stored first, since
- *  the new tab closes the toolbar popup and any write still in flight; Firefox opens the tab only
- *  inside the click's transient activation, which one storage round trip stays within. */
+ *  the new tab closes the toolbar popup and any write still in flight. Firefox opens the tab only
+ *  within the click's transient activation (about 5 s), so nothing but that write may precede it. */
 async function openChangelog() {
 	await dismiss()
 	window.open(changelogUrl(props.version), "_blank", "noopener,noreferrer")
