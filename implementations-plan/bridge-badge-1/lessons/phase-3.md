@@ -7,3 +7,4 @@
 - 2026-11-20, arc 3 Codex loop: round 1 clean. Converged.
 - 2026-11-20, cross-arc Codex pass (fresh session over `93877b8b1..HEAD`): round 1 one P3, fixed in `93166552a` (token-list e2e green on Chrome and Firefox after it); the snapshot cost recorded in the plan; round 2 clean.
 - 2026-11-20, rebased onto `dev` `0040cb946` before delivery: one conflict (`holdings.test.ts`, dev's new list mock lacked the bridge map); gates green again. Token-list scenario on the new base: Chrome 9.4 s, Firefox 13.8 s.
+- 2026-11-20, dev moved again (#1898, the edge-to-edge row band: CSS only in four files the stack touches); rebased onto `6cfb89e57` without conflict; `audit:vue`, `test:all`, the tree check and the four smoke specs green again on Chrome and Firefox (25 passed, 2 skipped each); token-list scenario Chrome 9.3 s, Firefox 13.0 s; frames recaptured, plus a flagged rUSDC frame against `bb-scam-a`.
