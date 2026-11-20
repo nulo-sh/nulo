@@ -11,6 +11,28 @@ base: dev at 6cfb89e57 (rebased from 46dc91c3f before arc 1, and from 93877b8b1 
 trunk: dev
 ---
 
+## Outcome
+
+- **Date:** 2026-11-20.
+- **Status:** delivered as stack #1907. The PRs are #1904 (the format), #1905 (the wallet), #1906 (the entries) and the close-out on top. They merge on the orchestrator's word. Merging #1906 starts `publish-token-list.yml`, whose sign gate the orchestrator approves after reading the run's summary, on the owner's delegation.
+- **Owner sign-off:**
+  - Page 194: P194-03 = b, with "Also, do the same for cWETH"; P194-04 = a.
+  - Page 196: A1 = a, A2 = a, A3 (Shield's published file under a raised cap; Raven House = b), A4 (all three permissions, recorded 2026-11-19), A5 = b, A6 = a.
+  - The owner's chat lines: "Raise the cap. Or try to compress via a library. But it doesn't sound plausible. So raise the cap.", "We got Circle's approval. Move on." and, on the list-size cost, "I accept the cost." (`OWNER-ASKS.md` § Answers, D13).
+- **Shipped:**
+  - `nulo-token-list/1` entries take an optional, signed `bridgeIcon` under the token picture rule with its own 16,384-character budget (`isBridgeIcon`, `bridgeIconBytes`). `wallet` mode drops a bad one; `strict` refuses it. The publisher's check requires its README § Pictures row, the summary shows it, and FORMAT.md gains a Revisions list. The 1.3.0 reader returns equal results with and without the field.
+  - `TokenMark` draws it as a half-size badge over the top right, with a page-colour outline that follows the picture's shape. The warning wins over it. It is threaded from the price snapshot to every mark host.
+  - Shield's published icon on cUSDC and cWETH and the raven on its white disc on rUSDC, each with its README row. The signed envelope grows from 16,491 to 55,294 bytes. The token-list e2e decodes Shield's real file on Chrome and Firefox.
+- **Dispositions:**
+  - D11 did not apply (A4 answered before the build).
+  - D1's rejected table form is not reopened; the envelope keeps 10,242 bytes of headroom.
+  - svgo was measured for the record and not used: lossless saves 0.2 %, and the default preset alters the mark.
+  - Every Codex finding was fixed: arc 1 one P3, arc 2 two P3s, arc 3 clean, cross-arc one P3. The cross-arc cost caveat became #1908.
+- **Known limits:** #1908 (the price snapshot carries the list's picture maps to every open row's client). The list-side limits this plan leans on stand unchanged: #385, #386, #1610, #1786.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` holds 8,148 of 8,192 bytes and none of its entries is superseded. The candidates stay in [lessons/phase-1.md](lessons/phase-1.md) (a bare predicate passed to `every` binds the index to a defaulted second parameter) and [lessons/phase-3.md](lessons/phase-3.md) (an e2e fixture constant read at import fails every file importing it; the Home scroller's bottom sits under the navigation).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are a record; never run them.
+
 # bridge-badge-1: each bridge's mark as a badge on its token's picture
 
 The owner picked P194-03 = b on page 194 (2026-11-19 22:13Z): "Shield's app icon on cUSDC and Raven House's raven on rUSDC, over the mark's top right at half size, 16 px in a row and 8 px on a chip", with "Also, do the same for cWETH". P194-04 = a keeps Circle's marks on the list as they are. This plan gives a list entry an optional bridge picture (arc 1), makes the wallet draw it over the token's unaltered picture (arc 2), and, only after the written permissions, puts the three badges on the list (arc 3). Recon: [`recon.md`](recon.md). Owner asks and the permission letters: [`OWNER-ASKS.md`](OWNER-ASKS.md).
@@ -220,7 +242,7 @@ The steps are `implementations-plan/README.md` § Post-implementation standard a
 - **Approval boundaries**: nothing merges before the orchestrator's word; no sign run, list publish or release from this plan; a fix that grows the design stops for approval.
 - **Teardown** after the close-out merges: `agent-worktree done bridge-badge-1 --merged` (trunk `dev` is origin's default).
 
-## Seeds (draft until the approval gate)
+## Seeds (retired)
 
 ```
 /goal Phases 1 and 2 of implementations-plan/bridge-badge-1/plan.md marked ✓, each backed by its validation gate passing in the transcript; LESSONS_FILE printed per phase; the Codex loop converged on each arc and on the cross-arc pass, each convergence quoted; phase 3 run only if OWNER-ASKS.md A4 is recorded as granted, else filed per D11; the stack's PRs exist on GitHub (gh stack view in the transcript), opened only after the loops, with the close-out archiving the plan; bun run test:all and bun run lint exit 0.
