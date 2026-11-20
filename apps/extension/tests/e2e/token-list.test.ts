@@ -34,6 +34,7 @@ import {
 import { readScopeIdentity, seedTokenRow } from "./helpers/activity-seeds"
 import { refuseTestnet } from "./helpers/contacts"
 import { createProfileAcceptingTerms } from "./helpers/legal-drivers"
+import { expectEdgeToEdge, readBands } from "./helpers/row-bands"
 
 const SEED_ROW = '[data-testid="token-seed-row"]'
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -180,7 +181,7 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 		}
 	})
 
-	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner; a pasted flagged address carries it on the picker's add row and in the New token popup", {
+	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner; a pasted flagged address carries it on the picker's add row and in the New token popup; the picker's rows and search bar span both popup edges", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ listedExtensionPerTest: ctx }) => {
@@ -214,6 +215,11 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 
 			await clickByTestId(page, "send-token-trigger")
 			await page.waitForSelector(`${sel("select-token-row")}[data-symbol="SCAM"] ${sel("select-token-flagged")}`, VISIBLE)
+			// The sheet's rows take the pages' band over its own gutter, the selected one too; its sticky
+			// search bar, narrower, would leave the band's ends showing as a row scrolls under it.
+			expect(await page.$(`${sel("select-token-row")}[data-selected="true"]`), "the sent token's row is selected").not.toBeNull()
+			expectEdgeToEdge(await readBands(page, sel("select-token-row")), "the Send picker's rows")
+			expectEdgeToEdge(await readBands(page, sel("select-token-search-bar")), "the Send picker's search bar")
 			await shotSend(page, "flagged-send-picker", "select-token-flagged")
 
 			const [, unheld] = E2E_LIST_FLAGGED

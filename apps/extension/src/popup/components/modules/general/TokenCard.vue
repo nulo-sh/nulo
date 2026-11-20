@@ -183,12 +183,8 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	}
 }
 
-/* A picker's option spans the sheet: the fill and bar reach past the text on both sides. After
-   `.link`, so its own margin and padding win. */
+/* A column flex container stretches this button across `.link`'s negative margins, so it needs no width. */
 .pick {
-	width: calc(100% + 16px);
-	margin: 0 -8px;
-	padding: 8px;
 	background: transparent;
 	color: inherit;
 	text-align: left;
