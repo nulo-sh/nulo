@@ -1,7 +1,7 @@
 ---
 plan: fee-fresh-read-1
 tier: light
-status: delivered (one PR against dev, opened ready; it lands on the orchestrator's word)
+status: completed
 issues: "#1914"
 driver: claude-code
 claude_model: opus
@@ -85,7 +85,7 @@ None but the wait the pick names: on a network with no sponsor an app window's f
 
 ## Post-implementation
 
-Contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `f7b78cc5e`. Step 1 absent (`code_review: off`). Step 2, bounded: ONE Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and `git diff origin/dev...HEAD`, both verbatim rules and the brief's adversarial list (a fee settling on the cached value first; a failed or slow read leaving Confirm on a stale default; two reads racing a payer switch; a sponsor network that starts reading fresh; Revoke chunks sharing one read); then targeted verification of material fixes. Approval boundary (stop): a stored key, new copy, a new loading state, or a fresh read on a sponsor network without a lock.
+Contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `f7b78cc5e`. Step 1 absent (`code_review: off`). Step 2, bounded: ONE Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and `git diff origin/dev...HEAD`, both verbatim rules and the brief's adversarial list (a fee settling on the cached value first; a failed or slow read leaving Confirm on a stale default; two reads racing a payer switch; a sponsor network that starts reading fresh; Revoke chunks sharing one read); then targeted verification of material fixes. Approval boundary (stop): a stored key, new copy, a new loading state, or a fresh read on a sponsor network without a lock.
 
 ## Delivery
 
