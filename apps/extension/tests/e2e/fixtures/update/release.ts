@@ -27,6 +27,10 @@ export const RELEASE_DIGESTS: Readonly<Record<string, Readonly<Record<BrowserKin
 		chrome: "559bc2200fe9da8e33fca93e617c4d18069ea4c55fa6f4cda6ffc009dff4a2f0",
 		firefox: "a107680a13421d2d7d30641bca3aa71e3633e0f13583f07ef188c9e8fc2b4f70",
 	},
+	"v1.3.0": {
+		chrome: "5ba54bb3895ca6882fa5b05a71dccbcf2ce20f3175b070edb06b8af57ab336a3",
+		firefox: "e678479fc2542188f7c67bfb7f0b61cf721d70bca281cf74056b57986fe2ca40",
+	},
 }
 
 /**
@@ -41,6 +45,8 @@ export const RELEASE_DIGESTS: Readonly<Record<string, Readonly<Record<BrowserKin
  * egress guard refuses; the hostname alone, since the seeded URL may carry a provider's key.
  * `sponsor`: whether it offers the canonical Sponsored fee payer on every chain, a custom network
  * included, or only on the chains it lists, which leaves the run's sandbox network none.
+ * `send`: whether its Send opens on one form whose fee card holds a payer menu, or asks first who
+ * is paid and picks the payer in a sheet.
  */
 export type ReleaseTraits = {
 	storage: "plaintext" | "sealed"
@@ -48,6 +54,7 @@ export type ReleaseTraits = {
 	passkey: "retired" | "unlocks"
 	testnetHost: string
 	sponsor: "every-chain" | "listed-chains"
+	send: "one-form" | "person-first"
 }
 
 export const RELEASE_TRAITS: Readonly<Record<string, ReleaseTraits>> = {
@@ -57,15 +64,39 @@ export const RELEASE_TRAITS: Readonly<Record<string, ReleaseTraits>> = {
 		passkey: "retired",
 		testnetHost: "lb.drpc.live",
 		sponsor: "every-chain",
+		send: "one-form",
 	},
-	"v1.0.0": { storage: "sealed", connect: "own-window", passkey: "retired", testnetHost: "lb.drpc.live", sponsor: "every-chain" },
-	"v1.1.0": { storage: "sealed", connect: "own-window", passkey: "unlocks", testnetHost: "lb.drpc.live", sponsor: "every-chain" },
+	"v1.0.0": {
+		storage: "sealed",
+		connect: "own-window",
+		passkey: "retired",
+		testnetHost: "lb.drpc.live",
+		sponsor: "every-chain",
+		send: "one-form",
+	},
+	"v1.1.0": {
+		storage: "sealed",
+		connect: "own-window",
+		passkey: "unlocks",
+		testnetHost: "lb.drpc.live",
+		sponsor: "every-chain",
+		send: "one-form",
+	},
 	"v1.2.0": {
 		storage: "sealed",
 		connect: "own-window",
 		passkey: "unlocks",
 		testnetHost: "aztec-testnet.drpc.org",
 		sponsor: "listed-chains",
+		send: "one-form",
+	},
+	"v1.3.0": {
+		storage: "sealed",
+		connect: "own-window",
+		passkey: "unlocks",
+		testnetHost: "aztec-testnet.drpc.org",
+		sponsor: "listed-chains",
+		send: "person-first",
 	},
 }
 
