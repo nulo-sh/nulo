@@ -172,6 +172,31 @@ describe("balances store — raw-request reuse (timeout survivors)", () => {
 		expect(mocks.getGasBalances).toHaveBeenCalledTimes(2)
 	})
 
+	it("an outranked forced ensure settles on the run that outranked it, never on the entry it left", async () => {
+		// Two cards' forced mount reads on one key: F2 outranks F1, so F1 commits nothing, and F1's
+		// caller would otherwise copy a `verified` no read of its own produced.
+		vi.useFakeTimers()
+		const store = useBalancesStore()
+		const FRESH = { publicFeeJuice: "1000", privateFeeJuice: "55" }
+		let resolveR1!: (v: unknown) => void
+		let resolveR2!: (v: unknown) => void
+		mocks.getGasBalances
+			.mockImplementationOnce(() => new Promise((r) => (resolveR1 = r)))
+			.mockImplementationOnce(() => new Promise((r) => (resolveR2 = r)))
+		let firstSettled = false
+		const first = store.ensure(SCOPE_A, { legs: ["gas"], forceRefresh: true }).finally(() => (firstSettled = true))
+		await vi.advanceTimersByTimeAsync(0)
+		const second = store.ensure(SCOPE_A, { legs: ["gas"], forceRefresh: true })
+		await vi.advanceTimersByTimeAsync(0)
+		resolveR1(BAL)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(mocks.getGasBalances).toHaveBeenCalledTimes(2)
+		expect(firstSettled).toBe(false)
+		resolveR2(FRESH)
+		expect((await first).gas.verified).toEqual(FRESH)
+		expect((await second).gas.verified).toEqual(FRESH)
+	})
+
 	// An earlier analysis claimed a slow pre-trigger ensure could clobber a
 	// settled forced refresh once forcedGasPending clears. It CANNOT: the forced
 	// run waits out the pre-trigger raw flight with the SAME INIT_FETCH_TIMEOUT_MS
