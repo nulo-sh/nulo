@@ -1,5 +1,5 @@
 /**
- * Component tests for NewTokenPopup. Mocks all three service clients,
+ * Component tests for NewTokenPopup. Mocks the service clients,
  * stores, toast composable, and FormPopup/Input so we can drive the
  * phase machine deterministically and assert close + toast behavior
  * across success / error / timeout / abort outcomes.
@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
 import { ChainNotSupportedError, ContractNotFoundError, WalletError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import { listKeyOf } from "@/utils/token-flag"
 import { ABOVE_MODULUS, BELOW_MODULUS, DIGITS_63, MODULUS } from "../../../../tests/helpers/field-modulus"
 
 // ── Mocks ────────────────────────────────────────────────────────────
@@ -50,6 +52,16 @@ const taskServiceMock = {
 
 const openToastMock = vi.fn()
 
+/** The signed list as the worker's network-free read answers it; a case that parks it knows no flag yet. */
+const LIST = async () => ({ quotes: {}, pricedTokens: {}, tokenIcons: {}, listedTokens: {}, flaggedTokens: [] as string[] })
+let answerList: () => Promise<unknown> = LIST
+const priceServiceMock = {
+	getQuotes: vi.fn(() => answerList()),
+	disconnect: vi.fn(),
+	onQuotesUpdated: new EventHandler<unknown>(),
+	onConnected: new EventHandler<unknown>(),
+}
+
 // Vitest 4 requires `function` expressions (not arrow functions) for mocks
 // instantiated with `new`. Arrow factories error: "() => ... is not a constructor".
 vi.mock("@/wallet/services/token/client", () => ({
@@ -60,6 +72,11 @@ vi.mock("@/wallet/services/token/client", () => ({
 vi.mock("@/wallet/services/token-balance/client", () => ({
 	TokenBalanceServiceClient: vi.fn(function () {
 		return tokenBalanceServiceMock
+	}),
+}))
+vi.mock("@/wallet/services/price/client", () => ({
+	PriceServiceClient: vi.fn(function () {
+		return priceServiceMock
 	}),
 }))
 vi.mock("@/wallet/services/task/client", () => ({
@@ -100,7 +117,7 @@ vi.mock("@/composables/toast", () => ({
 
 const STUBS = {
 	FormPopup: {
-		props: ["show", "submitLabel", "submitDisabled", "submitLoading", "title", "displaceIdx", "submitTestId"],
+		props: ["show", "submitLabel", "submitDisabled", "submitLoading", "title", "displaceIdx", "submitTestId", "submitDescribedby"],
 		emits: ["onClose", "submit"],
 		template: `
 			<div
@@ -113,6 +130,7 @@ const STUBS = {
 				<slot name="belowSubmit" />
 				<button
 					data-testid="form-submit"
+					:aria-describedby="submitDescribedby"
 					:disabled="submitDisabled"
 					@click="$emit('submit')"
 				>{{ submitLabel }}</button>
@@ -121,7 +139,7 @@ const STUBS = {
 		`,
 	},
 	Input: {
-		props: ["modelValue", "disabled"],
+		props: ["modelValue", "disabled", "ariaDescribedby"],
 		emits: ["update:modelValue"],
 		template: `
 			<div>
@@ -129,10 +147,12 @@ const STUBS = {
 					data-testid="token-address-input"
 					:value="modelValue"
 					:disabled="disabled"
+					:aria-describedby="ariaDescribedby"
 					@input="$emit('update:modelValue', $event.target.value)"
 				/>
 				<slot name="suffix" />
 				<slot name="right" />
+				<slot name="bottom" />
 			</div>
 		`,
 	},
@@ -231,6 +251,9 @@ beforeEach(() => {
 	taskServiceMock.connect.mockReset().mockResolvedValue(undefined)
 	taskServiceMock.disconnect.mockReset()
 	openToastMock.mockReset()
+	answerList = LIST
+	priceServiceMock.getQuotes.mockClear()
+	priceServiceMock.disconnect.mockClear()
 	payloads.clear()
 	seen.splice(0)
 	appState.scopeEpoch = 0
@@ -695,5 +718,89 @@ describe("NewTokenPopup — the field modulus", () => {
 		pressEnterOnInput()
 		await flushPromises()
 		expect(tokenServiceMock.parseTokenInterface).toHaveBeenCalledTimes(reads)
+	})
+})
+
+describe("NewTokenPopup — the signed list's flag", () => {
+	const FLAGGED = `0x1${"b".repeat(63)}`
+	const flaggedList = async () => ({ ...(await LIST()), flaggedTokens: [listKeyOf(1, FLAGGED)] })
+	const flagLine = (w: ReturnType<typeof mount>) => w.find('[data-testid="new-token-flagged"]')
+	const check = (w: ReturnType<typeof mount>) => w.find('[data-icon="square-check"]').exists()
+	const nativeField = (w: ReturnType<typeof mount>) =>
+		w.findAll('[data-testid="token-address-input"]').find((el) => el.element.tagName === "INPUT")
+
+	test("a flagged address shows the line under the field, which the field and Import name, and no check; another shows the check and no line", async () => {
+		answerList = flaggedList
+		const w = await mountAndOpen()
+		await typeAddress(w, validHex)
+		expect(flagLine(w).exists()).toBe(false)
+		expect(check(w)).toBe(true)
+		expect(nativeField(w)?.attributes("aria-describedby")).toBeUndefined()
+		expect(submitBtn(w).attributes("aria-describedby")).toBeUndefined()
+
+		await typeAddress(w, FLAGGED)
+		const line = flagLine(w)
+		expect(line.text()).toBe("Flagged as a scam")
+		expect(line.attributes("role")).toBe("alert")
+		expect(nativeField(w)?.attributes("aria-describedby")).toBe(line.attributes("id"))
+		expect(submitBtn(w).attributes("aria-describedby")).toBe(line.attributes("id"))
+		expect(submitBtn(w).attributes("disabled")).toBeUndefined()
+		expect(check(w)).toBe(false)
+	})
+
+	test("a list read that lands after the popup opened adds the line to the address it holds and takes its check away", async () => {
+		let answer!: (list: unknown) => void
+		answerList = () => new Promise((resolve) => (answer = resolve))
+		payloads.set("new_token", { address: FLAGGED })
+		const w = await mountAndOpen()
+		expect((nativeField(w)?.element as HTMLInputElement | undefined)?.value).toBe(FLAGGED)
+		expect(flagLine(w).exists()).toBe(false)
+		expect(check(w)).toBe(true)
+
+		answer(await flaggedList())
+		await flushPromises()
+		expect(flagLine(w).exists()).toBe(true)
+		expect(check(w)).toBe(false)
+	})
+
+	test("a hide releases the reader and its port; the next showing reads afresh and follows a list published meanwhile", async () => {
+		answerList = flaggedList
+		const w = await mountAndOpen()
+		await typeAddress(w, FLAGGED)
+		expect(flagLine(w).exists()).toBe(true)
+
+		await w.setProps({ show: false })
+		await flushPromises()
+		expect(priceServiceMock.disconnect).toHaveBeenCalledTimes(1)
+
+		answerList = LIST
+		tokenServiceMock.getTokens.mockResolvedValueOnce([])
+		await w.setProps({ show: true })
+		await flushPromises()
+		await typeAddress(w, FLAGGED)
+		expect(priceServiceMock.getQuotes).toHaveBeenCalledTimes(2)
+		expect(flagLine(w).exists()).toBe(false)
+
+		priceServiceMock.onQuotesUpdated.invoke(await flaggedList())
+		await flushPromises()
+		expect(flagLine(w).exists()).toBe(true)
+	})
+
+	test("a read an earlier showing left out never reaches the current one", async () => {
+		const answers: ((list: unknown) => void)[] = []
+		answerList = () => new Promise((resolve) => answers.push(resolve))
+		const w = await mountAndOpen()
+		await w.setProps({ show: false })
+		await flushPromises()
+		tokenServiceMock.getTokens.mockResolvedValueOnce([])
+		await w.setProps({ show: true })
+		await flushPromises()
+		await typeAddress(w, FLAGGED)
+
+		answers[1](await LIST())
+		answers[0](await flaggedList())
+		await flushPromises()
+		expect(answers).toHaveLength(2)
+		expect(flagLine(w).exists()).toBe(false)
 	})
 })

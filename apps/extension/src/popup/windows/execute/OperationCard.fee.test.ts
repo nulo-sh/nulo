@@ -13,6 +13,7 @@ import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { GLOSSARY } from "@/utils/glossary"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { shownText } from "../../../../tests/helpers/shown-text"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { SPONSORED_FPC_ADDRESS } from "@/wallet/services/fpc/sponsored-fpc-address"
 import type { ListReader } from "@/utils/contract-level"
@@ -277,6 +278,48 @@ describe("OperationCard — the sponsor a wire-shaped transaction defaults to", 
 		const w = await mountCard(sendTx(exec), dapp)
 		expect(lastSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		expect(mocks.saveFeePick).not.toHaveBeenCalled()
+	})
+})
+
+describe("OperationCard — the payer a wire-shaped Mainnet transaction opens on, with no pick saved", () => {
+	/** What discovery stores on a chain that offers no sponsor: the PrivateFPC alone. */
+	const PRIVATE_ROW = {
+		id: "5c1e9a07",
+		profileId: "p1",
+		chainId: CHAIN_IDS.MAINNET,
+		type: 2,
+		address: PRIVATE_FPC_ADDRESS,
+		name: "Private Fee Juice",
+		isProtocol: true,
+	}
+	const onMainnet = () => {
+		const op = sendTx()
+		return {
+			...op,
+			account: { ...op.account, chainId: CHAIN_IDS.MAINNET },
+			network: { ...op.network, chainId: CHAIN_IDS.MAINNET, name: "Alpha Mainnet" },
+		}
+	}
+	const trigger = (w: VueWrapper) => w.get('[data-testid="send-fee-method-trigger"]')
+
+	test("private Fee Juice can pay: the window opens on it, hands it on, and saves nothing", async () => {
+		mocks.getFpcs.mockResolvedValue([PRIVATE_ROW])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "5000000000000000000", privateFeeJuice: "2000000000000000000" })
+		const w = await mountCard(onMainnet())
+		expect(trigger(w).text()).toContain("Private Fee Juice")
+		expect(lastSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: PRIVATE_ROW.id } })
+		expect(mocks.saveFeePick).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		["read as zero", "0"],
+		["unread", null],
+	])("private Fee Juice %s, public Fee Juice held: nothing is chosen for the person", async (_case, privateFeeJuice) => {
+		mocks.getFpcs.mockResolvedValue([PRIVATE_ROW])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "5000000000000000000", privateFeeJuice })
+		const w = await mountCard(onMainnet())
+		expect(trigger(w).text()).toContain("Select method")
+		expect(lastSettings(w)).toBeUndefined()
 	})
 })
 

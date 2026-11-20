@@ -17,6 +17,8 @@ defineProps({
 	submitDisabled: { type: Boolean, default: false },
 	submitLoading: { type: Boolean, default: false },
 	submitTestId: { type: String, default: undefined },
+	/** Ids of what the person should hear before submitting, as the submit button's description. */
+	submitDescribedby: { type: String, default: undefined },
 	submitVariant: { type: String, default: "primary" },
 	/** Body wrapper gap. Most popups use 24; a few (denser) use 16. */
 	bodyGap: { type: String, default: "24" },
@@ -51,6 +53,7 @@ defineProps({
 						:disabled="submitDisabled"
 						:loading="submitLoading"
 						:data-testid="submitTestId"
+						:aria-describedby="submitDescribedby"
 					>
 						{{ submitLabel }}
 					</Button>

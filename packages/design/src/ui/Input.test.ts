@@ -96,6 +96,11 @@ describe("Input", () => {
 		for (const name of Object.keys(attributes)) expect(bare[name], name).toBeUndefined()
 	})
 
+	test("ariaDescribedby names the field's message on the native <input>, and none is set when not given", () => {
+		expect(mountInput({ ariaDescribedby: "note-1" }).get("input").attributes("aria-describedby")).toBe("note-1")
+		expect(mountInput().get("input").attributes("aria-describedby")).toBeUndefined()
+	})
+
 	test.each([
 		[undefined, "type--input"],
 		["input-data", "type--input-data"],

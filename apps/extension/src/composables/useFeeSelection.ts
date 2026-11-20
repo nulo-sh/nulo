@@ -8,6 +8,7 @@ import {
 	savedSelectionOf,
 } from "@/popup/components/modules/send/fee-helpers"
 import {
+	isEligible,
 	previewForPick,
 	recordOf,
 	resolveSendSelection,
@@ -182,14 +183,23 @@ async function persistSelection(c: AppCtx, method: FeeMethodOption) {
 	await c.saveFeePick(c.props.profile!.id, update)
 }
 
+/** What a card picks unasked: the account's private Fee Juice on a balance read that can pay, then
+ *  Nulo's sponsor, else nothing. Eligibility reads the committed balances, not the rows: on a first
+ *  load `methods` is built before the gate opens, without them. */
+function appDefault(c: AppCtx) {
+	const privateFj = c.methods.value.find((m) => m.type === "private_fpc")
+	const know = { fpcs: c.knownFpcs.value, balances: c.snapshot.gasBalances.value }
+	return privateFj && isEligible(privateFj, know) ? privateFj : defaultSponsor(c.methods.value)
+}
+
 /** The saved pick, resolved against fresh `methods` by semantic key (never the stored `fpc.name`);
- *  one that no longer resolves falls back to Nulo's sponsor, else nothing. Never prune a dangling
- *  pick here: a whole-map write would race `persistSelection` or another mounted card and could
- *  clobber a newer pick. */
+ *  one that no longer resolves falls back to the default. Never prune a dangling pick here: a
+ *  whole-map write would race `persistSelection` or another mounted card and could clobber a newer
+ *  pick. */
 function settledSelection(c: AppCtx, savedRecord: AppPick | undefined) {
 	const resolved = resolveSavedSelection(savedRecord, c.methods.value)
 	if (resolved) return resolved
-	const preferred = defaultSponsor(c.methods.value)
+	const preferred = appDefault(c)
 	return preferred ? { ...preferred } : undefined
 }
 

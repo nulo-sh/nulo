@@ -1249,8 +1249,8 @@ describe("FeeSettingsCard — the default and the identity guard", () => {
 		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: { type: "private_fpc" } }
 		const gasA = deferred<{ publicFeeJuice: string; privateFeeJuice: string | null }>()
 		mocks.getGasBalances.mockReturnValueOnce(gasA.promise)
-		// The switched-to identity (B) resolves normally.
-		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: "1000000000000000000" })
+		// The switched-to identity (B) resolves normally, with no private Fee Juice, so its default differs from A's pick.
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: "0" })
 		mocks.getFpcs.mockResolvedValue([
 			{ id: "p1", type: 2, name: "Private FPC", isProtocol: true },
 			{ id: "s1", type: 1, name: "Sponsor", isProtocol: true },
@@ -1259,14 +1259,18 @@ describe("FeeSettingsCard — the default and the identity guard", () => {
 		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises() // A's init started, awaiting gasA
 
-		// Switch account (and network) BEFORE A resolves.
+		// Switch account (and network) BEFORE A resolves; B commits its sponsor default.
 		await w.setProps({ account: { id: "a2", address: "0xB" }, network: { id: "n1", chainId: 424242 } })
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		const seen = w.emitted("update:modelValue")?.length ?? 0
 
-		// A's stale result lands now — the identity guard must discard it.
+		// A's stale result lands now — the identity guard must discard it: no emission names A's pick.
 		gasA.resolve({ publicFeeJuice: "1000000000000000000", privateFeeJuice: "1000000000000000000" })
 		await flushPromises()
 
-		// Final state reflects B (Sponsored FPC s1), NOT A's saved pick (Private FPC p1).
+		const later = (w.emitted<unknown[]>("update:modelValue") ?? []).slice(seen).map((e) => e[0])
+		expect(later).not.toContainEqual({ paymentMethod: { kind: "fpc", fpcId: "p1" } })
 		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 	})
 })

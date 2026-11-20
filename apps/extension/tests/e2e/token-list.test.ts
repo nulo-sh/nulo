@@ -165,7 +165,7 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 		}
 	})
 
-	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner; a pasted flagged address carries it on the picker's add row", {
+	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner; a pasted flagged address carries it on the picker's add row and in the New token popup", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ listedExtensionPerTest: ctx }) => {
@@ -214,6 +214,12 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 				sel("select-token-add-token-flagged"),
 			)
 			expect(await page.$(sel("select-token-add-token"))).not.toBeNull()
+			// The popup reads the list through its own port, so its line proves that read.
+			await replaceInputValue(page, sel("select-token-search"), unheld.address.toUpperCase().replace("0X", "0x"))
+			await page.waitForSelector(sel("select-token-add-token-flagged"), VISIBLE)
+			await clickByTestId(page, "select-token-add-token")
+			await page.waitForSelector(sel("new-token-flagged"), VISIBLE)
+			await shotSend(page, "new-token-flagged", "new-token-flagged")
 		} finally {
 			await refusal.stop()
 		}

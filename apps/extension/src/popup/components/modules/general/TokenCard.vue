@@ -8,6 +8,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Composables */
 import { usePrices } from "@/composables/usePrices"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Utils */
 import { formatListSplit } from "@/utils/amount.js"
@@ -93,9 +94,11 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 		<component
 			:is="pickPrefix ? 'button' : 'a'"
 			v-bind="pickPrefix ? pickAttrs : { href, 'data-testid': 'tokens-card' }"
+			:data-token-id="token.id"
 			:class="[$style.row, $style.link, pickPrefix && $style.pick, selected && $style.selected]"
 			@click="pickPrefix ? emit('pick', token.id) : navigate($event)"
 			@keydown.space="pickPrefix || navigate($event)"
+			@keydown.enter="refuseRepeatEnter"
 		>
 			<Flex align="center" gap="12" :class="$style.lead">
 				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :size="32" :badge="isFlagged" />
