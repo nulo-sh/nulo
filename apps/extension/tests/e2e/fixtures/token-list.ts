@@ -65,12 +65,13 @@ const fixtureToken = (byte: string, symbol: string, priceId: string): TokenListE
 /** The source run's list: two Testnet tokens with their pictures, the first priced as USDC. */
 export const E2E_LIST_TOKENS: readonly TokenListEntry[] = [fixtureToken("a1", "USDC", "usd-coin"), fixtureToken("a2", "USDT", "tether")]
 
-/** The bridge picture the committed source gives cUSDC, Shield's published file, the largest the list carries. */
-export const E2E_BRIDGE_ICON = (() => {
+/** The bridge picture the committed source gives cUSDC, Shield's published file, the largest the list carries.
+ *  Read on call, so a withdrawn picture fails the one spec that draws it, not every file importing the fixtures. */
+export function e2eBridgeIcon(): string {
 	const icon = sourceTokens().find((t) => t.symbol === "cUSDC")?.bridgeIcon
 	if (icon === undefined) throw new Error("infra/token-list/list.source.json gives cUSDC no bridge picture")
 	return icon
-})()
+}
 
 /** The feeds of the source run's price ids, at today's Testnet stable bands. */
 export const E2E_PRICE_FEEDS: PriceFeeds = {
