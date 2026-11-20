@@ -48,7 +48,7 @@ CSS geometry only: no data, storage, message or permission change. UI integrity:
 5. The selected bar is an inset shadow on the row's own box (`TokenCard.vue:196-199`), so it moves with the band: from 12 px to the sheet's edge.
 6. In Chrome, a `.pick` button with `width: auto` spans 0 to 360 px under `.link`'s margins (probe on the capture page).
 7. No picker geometry pin existed. #1898 measured `.pick` live (its lessons) and pinned nothing; jsdom has no layout, so no component test pins it. The brief's "update the picker's geometry pin in `rows.test.ts`" did not hold.
-8. `token-list.test.ts`'s flagged scenario opens the sheet from Send with one row, the sent token's, selected; it runs in every source and artifact smoke run but the live leg.
+8. `token-list.test.ts`'s flagged scenario opens the sheet from Send with one row, the sent token's, selected. Its `describe` skips when `liveLeg` is set, which every artifact run sets (`global-setup-smoke.ts:60`), so it runs in source smoke runs only, as #1898's pins in `rows.test.ts` partly do.
 9. The popup draws no scrollbar (`packages/design/src/base.css`, `* { scrollbar-width: none }`), so the card's content width is its box's.
 
 **Inferences**
@@ -59,7 +59,7 @@ CSS geometry only: no data, storage, message or permission change. UI integrity:
 
 ## Decisions
 
-- D1. `--page-gutter` lives in the shared sheet body (above). Every sheet becomes a gutter host, so a token or activity row placed in any sheet later bleeds exactly to its edges.
+- D1. `--page-gutter` lives in the shared sheet body (above). Every sheet becomes a gutter host: a token or activity row placed in a sheet later reaches its edges as long as nothing between the body and the row adds a side inset, the constraint `TokenCard.vue` already states.
 - D2. `.pick` takes `.link`'s band instead of its own copy. Its fallback becomes `.link`'s (0: a picker in a host with no gutter stays in its column); the only host sets one.
 - D3. The bar stays where its rule puts it, the band's leading edge, as today it marks the row box's edge. Kept at 12 px it would float inside the fill, 8 px from the icon, a relation no other row has.
 - D4. The ring stays inset on the row's own box, which now ends at the card's padding edge, inside its `overflow` clip, so all four sides stay whole. Accessibility call under the owner's 2026-10-19 delegation.
@@ -96,7 +96,10 @@ The real `SelectTokenPopup` in a 360 × 600 frame on a scratch Storybook page, f
 
 ## Review verdicts
 
-(Filled after the Codex pass.)
+Codex (`gpt-6.1-sol`, high), one pass over this plan and the diff at `59f7ea108`: no demonstrated regression. It checked the picker's wrappers for a side inset, `.link:hover` / `:focus-visible` against `.pick` and `.selected`, the ring inside the card's clip, the 13 other sheets, the moved helpers and the selected-row assertion. Three local findings, all verified and accepted:
+- R1: F8 said the pin runs in artifact smoke; every artifact run sets `liveLeg`, which skips the `describe`. F8 corrected.
+- R2: D1 promised that any later row in a sheet reaches its edges; that holds only with no side inset between the body and the row. D1 qualified.
+- R3: `.pick`'s comment restated the template; it now says why the button needs no width.
 
 ## Post-implementation
 
