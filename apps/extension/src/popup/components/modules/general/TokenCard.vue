@@ -182,7 +182,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	}
 }
 
-/* A picker's option is a button; its band is `.link`'s. */
+/* A column flex container stretches this button across `.link`'s negative margins, so it needs no width. */
 .pick {
 	background: transparent;
 	color: inherit;
