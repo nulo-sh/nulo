@@ -2,7 +2,7 @@
  * When Home's What's new row shows. The device keeps the last minor it was told about; the row
  * shows on a stable build whose minor is above it. A fresh install and a prerelease never prompt,
  * a patch never raises a new notice, and an undismissed one stays due across a patch. The worker
- * writes the marker on install and update, the row's Dismiss after that.
+ * writes the marker on install and update, the row's tap or Dismiss after that.
  */
 
 /** Device-wide: outside every profile-deletion prefix, and in no backup slice. */

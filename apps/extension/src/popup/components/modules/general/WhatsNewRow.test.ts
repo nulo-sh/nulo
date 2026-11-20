@@ -44,13 +44,38 @@ describe("general/WhatsNewRow", () => {
 		expect(stops).toEqual([row.get("[data-row-target]").element, dismiss.element])
 	})
 
-	test("a tap opens the running version's changelog in a new tab and leaves the row and the marker", async () => {
+	test("a tap hides the row and opens the changelog in a new tab only once the running minor is stored", async () => {
 		const open = vi.spyOn(window, "open").mockReturnValue(null)
 		const { w, storage } = await mountRow({ [WHATS_NEW_SEEN_KEY]: "0.0" })
+		let land = () => {}
+		storage.set.mockImplementationOnce(
+			(items: Record<string, unknown>) =>
+				new Promise<void>((resolve) => {
+					land = () => {
+						Object.assign(storage.data, items)
+						resolve()
+					}
+				}),
+		)
 		await w.get("[data-row-target]").trigger("click")
+		await flushPromises()
+		expect(storage.set).toHaveBeenCalledOnce()
+		expect(w.find('[data-testid="whats-new-row"]').exists()).toBe(false)
+		expect(open).not.toHaveBeenCalled()
+		land()
+		await flushPromises()
+		expect(storage.data[WHATS_NEW_SEEN_KEY]).toBe(minorOf(VERSION))
 		expect(open).toHaveBeenCalledWith(changelogUrl(VERSION), "_blank", "noopener,noreferrer")
-		expect(w.find('[data-testid="whats-new-row"]').exists()).toBe(true)
-		expect(storage.set).not.toHaveBeenCalled()
+	})
+
+	test("a tap whose write is refused still opens the changelog", async () => {
+		const open = vi.spyOn(window, "open").mockReturnValue(null)
+		const { w, storage } = await mountRow({ [WHATS_NEW_SEEN_KEY]: "0.0" })
+		storage.set.mockRejectedValueOnce(new Error("QUOTA_BYTES quota exceeded"))
+		await w.get("[data-row-target]").trigger("click")
+		await flushPromises()
+		expect(storage.set).toHaveBeenCalledOnce()
+		expect(open).toHaveBeenCalledWith(changelogUrl(VERSION), "_blank", "noopener,noreferrer")
 	})
 
 	test("Dismiss hides the row and records the running minor, without opening the page", async () => {

@@ -9,11 +9,6 @@ const props = defineProps({
 
 const due = ref(false)
 
-/** The wallet reaches nulo.sh only on this tap, never by itself. */
-function openChangelog() {
-	window.open(changelogUrl(props.version), "_blank", "noopener,noreferrer")
-}
-
 async function dismiss() {
 	due.value = false
 	const seen = minorOf(props.version)
@@ -23,6 +18,14 @@ async function dismiss() {
 	} catch (error) {
 		console.debug("whats-new dismissal not stored", { error })
 	}
+}
+
+/** The wallet reaches nulo.sh only on this tap, never by itself. The marker is stored first, since
+ *  the new tab closes the toolbar popup and any write still in flight. Firefox opens the tab only
+ *  within the click's transient activation (about 5 s), so nothing but that write may precede it. */
+async function openChangelog() {
+	await dismiss()
+	window.open(changelogUrl(props.version), "_blank", "noopener,noreferrer")
 }
 
 onMounted(async () => {
