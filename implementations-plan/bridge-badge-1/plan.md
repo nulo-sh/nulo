@@ -203,6 +203,8 @@ Also accepted: reuse `tokenIconFor`; the forward-compatibility proof compares ag
 
 **Arc 1, Codex** (`gpt-6.1-sol`, high): round 1, one P3 (FORMAT.md and the cap's comment stated a publishing policy that omits D15's approved alteration): fixed in a docs commit. It loaded the `v1.3.0` reader on its own and found the same equal results. Round 2 (resumed): "Clean … No regressions or new comment findings."
 
+**Arc 2, Codex** (`gpt-6.1-sol`, high): round 1, two P3s: the e2e's plain-row check could pass with the row gone (now asserts the row's mark first), and two `TokenMark` comments (an arithmetic restatement; "as published" against D15). Fixed. It found every surface threaded, the JS SFCs included, and the warning path and snapshot replacement correct. Round 2 (resumed): "Clean … No regressions or new findings in the fix diff."
+
 ## Post-implementation
 
 The steps are `implementations-plan/README.md` § Post-implementation standard at revision `46dc91c3f`. Plan-specific values:
