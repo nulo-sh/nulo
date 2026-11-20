@@ -1,7 +1,7 @@
 ---
 plan: fee-public-warning-build-1
 tier: light
-status: in progress
+status: delivered (one PR against dev, opened ready; it lands on the orchestrator's word after the owner looks at the two app-set frames)
 issues: "#1890"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 033dfcd9c
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-20.
+- **Status:** delivered as one PR against `dev`, opened ready, carrying the change and this close-out. It lands on the orchestrator's word, after the owner looks at the two never-drawn app-set frames (P198-03).
+- **Shipped:** `appDefault` opens a window on Public Fee Juice where the network offers no sponsor, private Fee Juice is read as `"0"` and public can pay (D1, D2). Every app window's card shows Send's box and short sentence whenever its submitted settings pay from public Fee Juice (D3, D4), with Send's fix lines; there is no switch on a payer the app set (D5). Change and Revoke get it by construction (D7). Tests: the default by class, the box by each way the payer is chosen, the chain gate. Closes #1890.
+- **Dispositions:** Ask 1 kept the private-origin predicate (Codex agreed). Codex F1 and F2 (minor) were taken.
+- **Known limits:** none new. #1889 (closed) carries a comment: on Mainnet its cached zero now opens on Public Fee Juice with the warning.
+- **Open items:** #1914 (OA-1: should Mainnet app windows read fresh, as Send does? The owner's call). The Revoke popup's button below the fold with the box (frame `fpwb-4r-revoke`) is in the PR's match statement for the owner's look, not open work.
+- **Lessons:** none promoted. The gotchas belong to this card (`lessons/phase-1.md`), and `lessons.md` sits at its budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # fee-public-warning-build-1: Mainnet app windows open on Public Fee Juice, with Send's short warning
 

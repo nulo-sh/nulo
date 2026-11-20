@@ -13,3 +13,5 @@
 - **B. Read fresh on Mainnet windows**, as Send does. The default always rests on a current balance; every Mainnet app window waits for a fresh read of both balances before its fee settles (Send's wait), and each Revoke chunk's card asks for its own.
 
 **Recommendation.** B, for Mainnet only: it is the rule Send already follows for the same decision, and the wait is Send's. A one-line change (`forceRefresh` in `useFeeSelection.ts`), with a test.
+
+**Filed** as #1914 (`owner-decision`).

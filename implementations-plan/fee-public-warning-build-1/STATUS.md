@@ -1,4 +1,0 @@
-- 2026-11-20: plan written (light, bounded); D1-D7 recorded; Ask 1 (the walk) and Ask 2 (fresh reads, OA-1) open.
-- 2026-11-20: build and tests in; 8 new tests red on the base source; lint and typecheck green.
-- 2026-11-20: Codex bounded pass: 0 material, 2 minor, both taken (`7e84f8ca2`).
-- 2026-11-20: gates green; e2e selfPay + default 3/3 on Chrome and Firefox; frames 7 of 7, four pixel-identical to page 198.
