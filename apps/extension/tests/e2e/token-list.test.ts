@@ -19,10 +19,10 @@ import {
 } from "./fixtures/helpers"
 import { chooseRecipient, shotSend } from "./fixtures/send-page"
 import {
-	E2E_BRIDGE_ICON,
 	E2E_LIST_FLAGGED,
 	E2E_LIST_TOKENS,
 	type ListHost,
+	e2eBridgeIcon,
 	e2eSigner,
 	heldListEntries,
 	requestListRefresh,
@@ -112,7 +112,7 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 		const host = await serveTokenList()
 		try {
 			const [badged, plain] = E2E_LIST_TOKENS
-			const first = await signTestList({ tokens: [{ ...badged, bridgeIcon: E2E_BRIDGE_ICON }, plain] })
+			const first = await signTestList({ tokens: [{ ...badged, bridgeIcon: e2eBridgeIcon() }, plain] })
 			host.serve(first)
 			await storeHostCookie(ctx, host)
 			const control = await openScratchPage(ctx.browser, ctx.extensionId)

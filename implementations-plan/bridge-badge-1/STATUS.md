@@ -8,3 +8,7 @@
 - 2026-11-19: arc 1 built; gate green (token-list and host tests, tree check, `test:all`, lint, typecheck); 1.3.0 compatibility proof logged.
 - 2026-11-19: arc 1 Codex loop converged (round 2 clean).
 - 2026-11-20: arc 2 built; gates green (audit:vue, test:all, smoke Chrome and Firefox); frames captured; Codex loop converged (round 2 clean).
+- 2026-11-20: arc 3 built (three `bridgeIcon` values, two README rows, the e2e on Shield's real file); gates green; frames captured; Codex round 1 clean.
+- 2026-11-20: cross-arc Codex pass: round 1 one P3 (the e2e fixture read the bridge picture at import), fixed; round 2 clean. Converged.
+- 2026-11-20: rebased onto `dev` 0040cb946; gates green; delivering the stack.
+- 2026-11-20: rebased onto `dev` 6cfb89e57 (#1898); gates green; frames recaptured.
