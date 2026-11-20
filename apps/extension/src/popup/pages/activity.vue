@@ -341,7 +341,8 @@ onBeforeUnmount(() => {
 }
 
 .content {
-	padding: 0 24px;
+	--page-gutter: 24px;
+	padding: 0 var(--page-gutter);
 }
 
 .filter_chip {

@@ -347,7 +347,8 @@ onBeforeUnmount(() => {
 }
 
 .content {
-	padding: 24px 24px var(--nav-clearance) 24px;
+	--page-gutter: 24px;
+	padding: 24px var(--page-gutter) var(--nav-clearance);
 }
 
 .icon_btn {

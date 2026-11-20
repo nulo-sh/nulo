@@ -161,7 +161,12 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	text-decoration: none;
 }
 
+/* The fill and ring span the host's `--page-gutter` to the popup's edges, so nothing between the
+   host and the row may add a side inset. A host that declares no gutter keeps the row inside its column. */
 .link {
+	margin-inline: calc(-1 * var(--page-gutter, 0px));
+	padding-inline: var(--page-gutter, 0px);
+
 	user-select: none;
 	cursor: pointer;
 	transition: background 0.2s var(--bezier);
@@ -177,7 +182,8 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	}
 }
 
-/* A picker's option spans the sheet: the fill and bar reach past the text on both sides. */
+/* A picker's option spans the sheet: the fill and bar reach past the text on both sides. After
+   `.link`, so its own margin and padding win. */
 .pick {
 	width: calc(100% + 16px);
 	margin: 0 -8px;
