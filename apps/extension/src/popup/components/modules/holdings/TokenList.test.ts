@@ -188,6 +188,34 @@ describe("TokenList — fold", () => {
 		expect(w.findAll('[data-malformed="true"]')).toHaveLength(2)
 	})
 
+	test("a host that keeps the searched row shows it, empty or dust, while the query is its whole address; a partial or cleared query folds it", async () => {
+		const EMPTY_AT = "0x0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
+		const DUST_AT = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
+		const w = mountList({
+			rows: [
+				row(1, "HELD", { privateBalance: ONE }),
+				row(2, "E", { contract: EMPTY_AT }),
+				row(3, "DUST", { contract: DUST_AT, privateBalance: "1000" }),
+			],
+			fiatOf: fiatBy({ HELD: 2_000_000n, DUST: 1n }),
+			usdRateOf: rateBy({ HELD: 2, DUST: 2 }),
+			dustThresholdUsd: 1,
+			keepSearchedRow: true,
+		})
+		await setQuery(w, EMPTY_AT.toUpperCase().replace("0X", "0x"))
+		expect(symbols(w)).toEqual(["E"])
+		expect(w.find('[data-testid="holdings-fold"]').exists()).toBe(false)
+		await setQuery(w, DUST_AT)
+		expect(symbols(w)).toEqual(["DUST"])
+
+		await setQuery(w, EMPTY_AT.slice(0, 20))
+		expect(symbols(w)).toEqual([])
+		expect(w.find('[data-testid="holdings-fold"]').text()).toContain("1 hidden")
+		await setQuery(w, "")
+		expect(symbols(w)).toEqual(["HELD"])
+		expect(w.find('[data-testid="holdings-fold"]').text()).toContain("2 hidden")
+	})
+
 	test("no rows at all renders no fold, no rule and no results line", async () => {
 		const w = mountList({ rows: [] })
 		await flushPromises()
@@ -289,6 +317,58 @@ describe("TokenList — add a pasted address", () => {
 		await setQuery(w, LISTED)
 		expect(w.find('[data-testid="holdings-add-token"]').exists()).toBe(false)
 		expect(w.find('[data-testid="holdings-fold"]').text()).toContain("1 empty")
+	})
+})
+
+describe("TokenList — an add from the host", () => {
+	const UNLISTED = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
+	const OTHER = "0x0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
+	const arrived = (over: Partial<Row> = {}) => row(9, "NEW", { contract: UNLISTED, ...over })
+	const attached = (props: Record<string, unknown>) =>
+		mount(TokenList, { attachTo: document.body, props: { fiatOf: fiatBy({}), ...props } as never, global: { stubs: STUBS } })
+
+	test("while its add runs the Add row stays, busy, over the token's arriving row; once it ends the row shows", async () => {
+		const w = mountList({ rows: [], adding: UNLISTED })
+		await setQuery(w, UNLISTED)
+		await w.setProps({ rows: [arrived({ updatedAt: 0 })] })
+		// Unresolved here, `Button` renders natively and shows its props as attributes.
+		expect(w.get('[data-testid="holdings-add-token"]').attributes("loading")).toBe("true")
+		expect(symbols(w)).toEqual([])
+
+		await w.setProps({ adding: "" })
+		expect(w.find('[data-testid="holdings-add-token"]').exists()).toBe(false)
+		expect(symbols(w)).toEqual(["NEW"])
+	})
+
+	test("a refusal shows under the Add row only for the address it judged, as an alert the button names", async () => {
+		const w = mountList({ rows: [], addRefusal: { address: UNLISTED, message: "There is no token at this address on this network." } })
+		await setQuery(w, UNLISTED)
+		const refusal = w.get('[data-testid="holdings-add-token-error"]')
+		expect(refusal.element.textContent).toBe("There is no token at this address on this network.")
+		expect(refusal.attributes("role")).toBe("alert")
+		expect(w.get('[data-testid="holdings-add-token"]').attributes("aria-describedby")).toBe(refusal.attributes("id"))
+
+		await setQuery(w, OTHER)
+		expect(w.find('[data-testid="holdings-add-token"]').exists()).toBe(true)
+		expect(w.find('[data-testid="holdings-add-token-error"]').exists()).toBe(false)
+	})
+
+	test("focusToken takes a focus the Add row left on nothing to the row", async () => {
+		const w = attached({ rows: [arrived({ privateBalance: ONE })] })
+		await setQuery(w, UNLISTED)
+		;(w.vm as unknown as { focusToken: (id: number) => void }).focusToken(9)
+		expect(document.activeElement?.getAttribute("data-token-id")).toBe("9")
+		w.unmount()
+	})
+
+	test("focusToken leaves alone a control the person moved to", async () => {
+		const w = attached({ rows: [arrived({ privateBalance: ONE })] })
+		await setQuery(w, UNLISTED)
+		const sort = w.get('[data-testid="holdings-sort"]').element as HTMLElement
+		sort.focus()
+		;(w.vm as unknown as { focusToken: (id: number) => void }).focusToken(9)
+		expect(document.activeElement).toBe(sort)
+		w.unmount()
 	})
 })
 

@@ -28,10 +28,10 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 			onTokenBalanceUpdated: balanceEvents.updated,
 			onTokenBalanceDeleted: balanceEvents.deleted,
 			onConnected: balanceEvents.connected,
-			getTokenBalances: vi.fn().mockImplementation(async () => {
+			getTokenBalances: vi.fn().mockImplementation(async (tokenId?: unknown) => {
 				if (readGate) await readGate
 				if (fetchError) throw fetchError
-				return seedRows
+				return tokenId === undefined ? seedRows : seedRows.filter((tb) => (tb as { token: { id: unknown } }).token.id === tokenId)
 			}),
 		}
 	}),
@@ -39,13 +39,26 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 let mockQuotes: Record<string, unknown> = {}
 const ANSWER = async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: {} })
 let answerQuotes: () => Promise<unknown> = ANSWER
+/** The signed list's read; a case that parks it leaves no flag known. */
+const LIST = async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: {}, flaggedTokens: [] as string[] })
+let answerList: () => Promise<unknown> = LIST
+const tokenCalls = {
+	getTokens: vi.fn(async (): Promise<{ contract: string }[]> => []),
+	parseTokenInterface: vi.fn(async (): Promise<unknown> => ({ isComplete: true })),
+	addToken: vi.fn(),
+}
+vi.mock("@/wallet/services/token/client", () => ({
+	TokenServiceClient: vi.fn(function () {
+		return { ...tokenCalls, disconnect: vi.fn() }
+	}),
+}))
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: {} })),
+			getQuotes: vi.fn(() => answerList()),
 			refreshIfStale: vi.fn().mockImplementation(() => answerQuotes()),
 		}
 	}),
@@ -100,7 +113,9 @@ vi.mock("@/utils/hero-ruler", () => ({
 	rulerWidth: (el: Element, scale: number) => standInWidth(el.textContent ?? "") * scale,
 }))
 
+import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { listKeyOf } from "@/utils/token-flag"
 import { ContentKind } from "@/wallet/services/task/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { useAppStore } from "@/stores/app.store"
@@ -131,14 +146,14 @@ const row = (id: string, symbol: string, chainId: number, contract = `0x${symbol
 	updatedAt: 1,
 })
 
-async function mountPage() {
+async function mountPage(attachTo?: HTMLElement) {
 	const pinia = createTestingPinia({ stubActions: false })
 	const appStore = useAppStore(pinia)
 	appStore.isLogined = true
 	appStore.profile = { id: "p1" } as never
 	appStore.network = { id: "n1", chainId: CHAIN_IDS.TESTNET } as never
 	appStore.account = { address: "0xacct" } as never
-	const wrapper = mount(Holdings, { global: { plugins: [pinia], stubs: STUBS } })
+	const wrapper = mount(Holdings, { attachTo, global: { plugins: [pinia], stubs: STUBS } })
 	await flushPromises()
 	return wrapper
 }
@@ -156,6 +171,10 @@ afterEach(() => {
 	seedTasks = []
 	mockQuotes = {}
 	answerQuotes = ANSWER
+	answerList = LIST
+	tokenCalls.getTokens.mockImplementation(async () => [])
+	tokenCalls.parseTokenInterface.mockImplementation(async () => ({ isComplete: true }))
+	tokenCalls.addToken.mockReset()
 	configValues = { showFiatValues: true, incomingDustUsdThreshold: 0 }
 	answerConfig = async (_key, stored) => stored
 	vi.clearAllMocks()
@@ -325,19 +344,6 @@ describe("holdings page", () => {
 		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(false)
 		expect(w.findAll('[data-testid="token-symbol"]')).toHaveLength(1)
 		expect(w.get('[data-testid="holdings-meta"]').text()).toMatch(/^1 token( · |$)/)
-	})
-
-	test("the add row opens the New token popup with the pasted address handed over", async () => {
-		installChromeStorage()
-		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
-		const w = await mountPage()
-		const address = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
-
-		await w.find('[data-testid="holdings-search"]').setValue(address)
-		await w.find('[data-testid="holdings-add-token"]').trigger("click")
-
-		expect(usePopupStore().isOpened("new_token")).toBe(true)
-		expect(usePopupStore().getPayload("new_token")).toEqual({ address })
 	})
 
 	test("live events: a delete from any chain removes its row, an add replaces a listed row, an update for an unseen row waits for the next read", async () => {
@@ -713,5 +719,150 @@ describe("holdings page — the total fits beside its meta line", () => {
 		} finally {
 			vi.unstubAllGlobals()
 		}
+	})
+})
+
+describe("holdings page — Add imports in one press", () => {
+	const PASTED = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
+	const added = row("b9", "NEW", CHAIN_IDS.TESTNET, PASTED)
+
+	/** The page with a pasted address and its Add row focused, as a press leaves it. */
+	async function pasteAndFocusAdd() {
+		installChromeStorage()
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+		const w = await mountPage(document.body)
+		await w.find('[data-testid="holdings-search"]').setValue(PASTED)
+		const add = w.get('[data-testid="holdings-add-token"]')
+		;(add.element as HTMLElement).focus()
+		return { w, add }
+	}
+
+	test("one press imports once, opens no popup, and the token's row takes the focus", async () => {
+		// The worker stores the token, then its first balance row reaches the page.
+		tokenCalls.addToken.mockImplementation(async () => {
+			seedRows = [...seedRows, added]
+			balanceEvents.added.invoke(added as never)
+			return added.token
+		})
+		const { w, add } = await pasteAndFocusAdd()
+
+		await add.trigger("click")
+		await add.trigger("click")
+		await flushPromises()
+		await flushPromises()
+
+		expect(tokenCalls.parseTokenInterface).toHaveBeenCalledTimes(1)
+		expect(tokenCalls.addToken).toHaveBeenCalledTimes(1)
+		expect(usePopupStore().isOpened("new_token")).toBe(false)
+		expect(w.find('[data-testid="holdings-add-token"]').exists()).toBe(false)
+		expect(document.activeElement?.querySelector('[data-testid="token-symbol"]')?.getAttribute("data-symbol")).toBe("NEW")
+		w.unmount()
+	})
+
+	test("an added token whose balance lands empty stays in view under its searched address, and keeps the focus", async () => {
+		const unsynced = { ...added, publicBalance: "0", privateBalance: "0", updatedAt: 0 }
+		tokenCalls.addToken.mockImplementation(async () => {
+			seedRows = [...seedRows, unsynced]
+			balanceEvents.added.invoke(unsynced as never)
+			return unsynced.token
+		})
+		const { w, add } = await pasteAndFocusAdd()
+		await add.trigger("click")
+		await flushPromises()
+		// The worker finishes the balance task, then sends the balance it read.
+		taskEvents.updated.invoke({ id: "t1", content: { kind: ContentKind.BalanceUpdate, tbId: "b9", account: "0xacct" }, finishedAt: 1 })
+		await flushPromises()
+		const focusedSymbol = () => document.activeElement?.querySelector('[data-testid="token-symbol"]')?.getAttribute("data-symbol")
+		expect(focusedSymbol()).toBe("NEW")
+
+		balanceEvents.updated.invoke({ ...unsynced, updatedAt: 2 } as never)
+		await flushPromises()
+		expect(w.find('[data-testid="holdings-fold"]').exists()).toBe(false)
+		expect(focusedSymbol()).toBe("NEW")
+		w.unmount()
+	})
+
+	test("a scope change mid-add ends its wait: no refusal, no focus, and Add is free in the new scope", async () => {
+		let parsed!: (v: unknown) => void
+		tokenCalls.parseTokenInterface.mockImplementationOnce(() => new Promise((resolve) => (parsed = resolve)))
+		const { w, add } = await pasteAndFocusAdd()
+		await add.trigger("click")
+		await flushPromises()
+
+		useAppStore().account = { address: "0xother" } as never
+		await flushPromises()
+		parsed({ isComplete: false })
+		await flushPromises()
+
+		await w.find('[data-testid="holdings-search"]').setValue(PASTED)
+		expect(w.find('[data-testid="holdings-add-token-error"]').exists()).toBe(false)
+		expect(w.get('[data-testid="holdings-add-token"]').attributes("loading")).toBe("false")
+		w.unmount()
+	})
+
+	test("an add the page outlives sends nothing after its unmount", async () => {
+		let parsed!: (v: unknown) => void
+		tokenCalls.parseTokenInterface.mockImplementationOnce(() => new Promise((resolve) => (parsed = resolve)))
+		const { w, add } = await pasteAndFocusAdd()
+		await add.trigger("click")
+		await flushPromises()
+		w.unmount()
+		parsed({ isComplete: true })
+		await flushPromises()
+		expect(tokenCalls.addToken).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		["a flagged address", async () => ({ ...(await LIST()), flaggedTokens: [listKeyOf(CHAIN_IDS.TESTNET, PASTED)] })],
+		["an address pasted before the signed list is read", () => new Promise<never>(() => {})],
+	])("%s opens the New token popup with the address, as before", async (_, list) => {
+		// A read and a refresh both carry the list.
+		answerList = list
+		answerQuotes = list
+		const { w, add } = await pasteAndFocusAdd()
+		await add.trigger("click")
+		await flushPromises()
+
+		expect(usePopupStore().isOpened("new_token")).toBe(true)
+		expect(usePopupStore().getPayload("new_token")).toEqual({ address: PASTED })
+		expect(tokenCalls.getTokens).not.toHaveBeenCalled()
+		w.unmount()
+	})
+
+	test.each([
+		[
+			"a listed token with no row here",
+			() => tokenCalls.getTokens.mockResolvedValue([{ contract: PASTED.toUpperCase().replace("0X", "0x") }]),
+			"Already exists",
+		],
+		[
+			"an interface no standard matches",
+			() => tokenCalls.parseTokenInterface.mockResolvedValue({ isComplete: false }),
+			"Couldn't auto-detect this token's interface. Try a contract whose ABI matches a known standard.",
+		],
+		[
+			"no contract at the address",
+			() => tokenCalls.parseTokenInterface.mockRejectedValue(new ContractNotFoundError()),
+			"There is no token at this address on this network.",
+		],
+		[
+			"any other failure",
+			() => tokenCalls.parseTokenInterface.mockRejectedValue(new Error("pxe down")),
+			"Something went wrong. Try again.",
+		],
+	])("%s is refused on Holdings in the popup's words, announced, with focus left on Add", async (_, arrange, message) => {
+		arrange()
+		const { w, add } = await pasteAndFocusAdd()
+		await add.trigger("click")
+		await flushPromises()
+
+		const refusal = w.get('[data-testid="holdings-add-token-error"]')
+		expect(refusal.element.textContent).toBe(message)
+		expect(refusal.attributes("role")).toBe("alert")
+		expect(add.attributes("aria-describedby")?.split(" ")).toContain(refusal.attributes("id"))
+		expect(document.activeElement).toBe(add.element)
+		expect(tokenCalls.addToken).not.toHaveBeenCalled()
+		expect(usePopupStore().isOpened("new_token")).toBe(false)
+		w.unmount()
 	})
 })
