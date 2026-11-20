@@ -30,7 +30,7 @@
  *
  * Runtime: estimated 6 min on Chrome, 9 min on Firefox; measured 102 to 162 s and 182 to 186 s, the
  * release's real proof of the account's deployment included; from a release that pays from bridged
- * Fee Juice, 133 s and 184 s.
+ * Fee Juice, 128 to 133 s and 181 to 184 s.
  */
 import type { Page } from "puppeteer"
 import { afterEach, expect, inject } from "vitest"
@@ -77,6 +77,7 @@ import {
 	waitForFreshBalanceRow,
 	waitForShownAccount,
 	waitForToast,
+	waitForToastGone,
 } from "../fixtures/helpers"
 import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
 import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
@@ -91,7 +92,7 @@ import { recordingProblems, writeRecording } from "../fixtures/update/recording"
 import { type ReleaseTraits, releaseTraits } from "../fixtures/update/release"
 import { readRelease } from "../fixtures/update/read-release"
 import { isLoopbackUrl, loopbackOrigins, namedHostCount, type ReleasePreferences } from "../fixtures/update/release-reads"
-import { approveReleaseConnect, openReleaseSend, selectReleaseSendFee } from "../fixtures/update/release-ui"
+import { approveReleaseConnect, pickReleaseSendFee } from "../fixtures/update/release-ui"
 import { storedRows } from "../fixtures/update/stored-rows"
 import { BARRIERS, missingFamilies, shownOverlays, unofferedSponsorIds, updateProblems } from "../fixtures/update/verify"
 import {
@@ -276,7 +277,7 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 		timeoutMs: 180_000,
 	})
 	const incoming = await incomingCards(page, 2)
-	await pickPreferences(page, release)
+	await pickPreferences(page, release, { recipient: cfg.minterAddress, account })
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)
@@ -329,15 +330,19 @@ async function endOnSecondAccount(ctx: ExtensionContext): Promise<{
 	return { selection: reads.selection, preferences: reads.preferences, fpcs: reads.rows.fpcs, dials: loopbackOrigins({ reads, stored }) }
 }
 
-/** Pins the sandbox token and picks Send's fee payer for a private send, each through the release's
- *  own UI, which saves both maps; the app window's pick is the send's below. */
-async function pickPreferences(page: Page, release: ReleaseTraits): Promise<void> {
+/** Pins the sandbox token and picks Send's fee payer for `account`'s send to `recipient`, each
+ *  through the release's own UI, which saves both maps (a `person-first` release's Send pick through
+ *  its own service: {@link pickReleaseSendFee}); the app window's pick is the send's below. */
+async function pickPreferences(page: Page, release: ReleaseTraits, send: { recipient: string; account: string }): Promise<void> {
 	await navigateByHash(page, "#/popup/general", 15_000)
 	await navigateToTokenDetail(page)
 	await pinFromTokenPage(page)
+	// The pin's toast shows once its write lands, then for 2 s over the foot of the popup, where the
+	// Fee sheet's Done sits.
+	await waitForToast(page, "Pinned to Home")
+	await waitForToastGone(page, "Pinned to Home")
 	await navigateByHash(page, "#/popup/general", 15_000)
-	await openReleaseSend(page)
-	await selectReleaseSendFee(page, sandboxFeeMethod(release))
+	await pickReleaseSendFee(page, release, { recipient: send.recipient, method: sandboxFeeMethod(release), saveFor: send.account })
 	await navigateByHash(page, "#/popup/general", 15_000)
 }
 
@@ -504,8 +509,7 @@ async function populatePending(
 	})
 	// The release keeps an account's gas balances for minutes and reads them again on a Send mount,
 	// so the app window's fee row sees the funding only after one.
-	await openReleaseSend(page)
-	await selectReleaseSendFee(page, sandboxFeeMethod(release))
+	await pickReleaseSendFee(page, release, { recipient: cfg.minterAddress, method: sandboxFeeMethod(release) })
 	await page.close()
 
 	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)
