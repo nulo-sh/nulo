@@ -110,7 +110,7 @@ One arc, one PR, no stack: `worktree-deps-ci-3` → `dev`, `gh pr create`, ready
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `033dfcd9c`, as bounded work: one Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and the diff from `033dfcd9c`, then targeted verification of material fixes. Close-out ships in the same PR: Outcome, the known-limit issue named, `STATUS.md` deleted, `git mv` into `archive/`. Never merge; teardown after the orchestrator's merge, slug `deps-ci-3`, trunk `dev`.
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `033dfcd9c`, as bounded work: one Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and the diff from `033dfcd9c`, then targeted verification of material fixes. Close-out ships in the same PR: Outcome, the known-limit issue named, `STATUS.md` deleted, `git mv` into `archive/`. Never merge; teardown after the orchestrator's merge, slug `deps-ci-3`, trunk `dev`.
 
 ## Seeds
 
