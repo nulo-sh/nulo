@@ -2095,7 +2095,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 	})
 
 	describe("the fresh read", () => {
-		test("every Send mount forces the balance read, whatever its origin; a null origin does not", async () => {
+		test("every Send mount forces the balance read, whatever its origin; an app card where a sponsor is offered does not", async () => {
 			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
 			mountSend()
 			await flushPromises()
@@ -2110,7 +2110,10 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			await flushPromises()
 			expect(mocks.getGasBalances.mock.calls.length).toBe(reads)
 
-			mount(FeeSettingsCard, { props: baseProps({ account: { id: "a3", address: "0xacctC" } }), global: { stubs: STUBS } })
+			mount(FeeSettingsCard, {
+				props: baseProps({ account: { id: "a3", address: "0xacctC" }, network: { id: "n1", chainId: CHAIN_IDS.TESTNET } }),
+				global: { stubs: STUBS },
+			})
 			await flushPromises()
 			expect(mocks.getGasBalances.mock.calls.at(-1)?.[2]).toBeFalsy()
 		})
@@ -3181,6 +3184,66 @@ describe("FeeSettingsCard — Public Fee Juice in an app window: Send's warning"
 		expect(fix(w).exists()).toBe(false)
 		expect(bridge(w).exists()).toBe(link)
 		w.unmount()
+	})
+})
+
+describe("FeeSettingsCard — an app window's balance read, by network", () => {
+	const HELD = "5000000000000000000"
+	const PRIVATE_FPC = { id: "p1", type: 2, name: "Private FPC", isProtocol: true }
+	const SPONSOR = { id: "s1", type: 1, name: "Sponsor", isProtocol: true }
+	const PRIVATE_PAYS = { paymentMethod: { kind: "fpc", fpcId: "p1" } }
+	const CREDITED = { publicFeeJuice: HELD, privateFeeJuice: HELD }
+	/** The reader as the card meets it after private Fee Juice was credited outside the wallet: its
+	 *  cached zero, unless the read is forced past it. */
+	const readerAfterCredit = (_networkId: string, _account: string, force?: boolean) =>
+		Promise.resolve(force ? CREDITED : { publicFeeJuice: HELD, privateFeeJuice: "0" })
+	const mountApp = (chainId: number) =>
+		mount(FeeSettingsCard, {
+			props: baseProps({ network: { id: "n1", chainId }, fallsBack: true }),
+			global: { stubs: STUBS },
+		})
+
+	test("no sponsor offered: the window reads fresh and opens on the private Fee Juice credited after a cached zero", async () => {
+		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
+		mocks.getGasBalances.mockImplementation(readerAfterCredit)
+		const w = mountApp(CHAIN_IDS.MAINNET)
+		await flushPromises()
+		expect(mocks.getGasBalances.mock.calls).toEqual([["n1", account.address, true]])
+		expect(lastEmittedSettings(w)).toEqual(PRIVATE_PAYS)
+		w.unmount()
+	})
+
+	test("a network that offers a sponsor keeps the reader's cached figure, and its sponsor pays", async () => {
+		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, SPONSOR])
+		mocks.getGasBalances.mockImplementation(readerAfterCredit)
+		const w = mountApp(CHAIN_IDS.TESTNET)
+		await flushPromises()
+		expect(mocks.getGasBalances).toHaveBeenCalledTimes(1)
+		expect(mocks.getGasBalances.mock.calls[0][2]).toBeFalsy()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		w.unmount()
+	})
+
+	test("Revoke's chunks, no sponsor offered: each card reads fresh on its own, and none settles before its read lands", async () => {
+		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
+		const reads: { force?: boolean; gas: Deferred<typeof CREDITED> }[] = []
+		mocks.getGasBalances.mockImplementation((_networkId: string, _account: string, force?: boolean) => {
+			const gas = deferred<typeof CREDITED>()
+			reads.push({ force, gas })
+			return gas.promise
+		})
+		const chunks = [mountApp(CHAIN_IDS.MAINNET), mountApp(CHAIN_IDS.MAINNET)]
+		await flushPromises()
+		// The second card's forced read waits out the first's before it asks.
+		expect(reads.map((r) => r.force)).toEqual([true])
+		reads[0].gas.resolve(CREDITED)
+		await flushPromises()
+		expect(reads.map((r) => r.force)).toEqual([true, true])
+		expect(chunks.map(lastEmittedSettings)).toEqual([undefined, undefined])
+		reads[1].gas.resolve(CREDITED)
+		await flushPromises()
+		expect(chunks.map(lastEmittedSettings)).toEqual([PRIVATE_PAYS, PRIVATE_PAYS])
+		for (const w of chunks) w.unmount()
 	})
 })
 

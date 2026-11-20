@@ -52,11 +52,7 @@ interface SnapshotCtx<L> {
 const CONTEXT = Symbol("fee-snapshot")
 
 /** This card's capabilities: both legs, backoff retry while mounted, no
- *  tx-settle refresh and no peek.
- *  `txRefresh` must stay off for every subscriber sharing this key while the card is mounted: a
- *  settle-triggered forced read can outrank the mount's forced read, which then returns without
- *  committing, and `commitFromEntry` copies `gas.verified` without reading `entry.stale` — so Send
- *  could resolve on the pre-refresh figure. Turning it on needs a wake on the newer run's commit. */
+ *  tx-settle refresh and no peek. */
 const CARD_CAPS: SubscribeCaps = { legs: ["gas", "fpc"], retry: true, txRefresh: false, peek: false }
 
 const scopeIsLiveIdentity = (props: LiveFeeIdentity, scope: FeeScope | null) => Boolean(scope) && isLiveFeeScope(props, scope as FeeScope)
