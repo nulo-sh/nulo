@@ -93,7 +93,7 @@ Sign-off: page 198, P198-01 = 1, P198-02 = 1, P198-03 approved (the owner, 2026-
 
 ## Post-implementation
 
-Contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `033dfcd9c`. Step 1 absent (`code_review: off`). Step 2, bounded: ONE Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and `git diff origin/dev...HEAD`, both verbatim rules, the brief's adversarial list; then targeted verification of material fixes. Approval boundary (stop): a stored key, a forced read, new copy, or a default on a sponsor network.
+Contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `033dfcd9c`. Step 1 absent (`code_review: off`). Step 2, bounded: ONE Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and `git diff origin/dev...HEAD`, both verbatim rules, the brief's adversarial list; then targeted verification of material fixes. Approval boundary (stop): a stored key, a forced read, new copy, or a default on a sponsor network.
 
 ## Delivery
 
