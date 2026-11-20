@@ -119,6 +119,20 @@ describe("the host tree", () => {
 		expect(await treeFindings(root, [pinned])).toEqual([`${SOURCE}: token list payload refused at source.tokens[0].icon`])
 	})
 
+	test("a bridge picture needs its own row, and is checked under its own budget", () => {
+		const tokens = JSON.parse(readFileSync(join(HOST_ROOT, SOURCE), "utf8")).tokens
+		const readme = readFileSync(join(HOST_ROOT, README), "utf8")
+		const svg = `<svg><desc>${"a".repeat(6000)}</desc></svg>`
+		const bridgeIcon = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
+		const badged = { ...tokens[0], bridgeIcon }
+		expect(pictureFindings([badged], readme)).toEqual([`${SOURCE}: tokens[0].bridgeIcon has no row in ${README} § Pictures`])
+		const row = `| Bridge mark | badge on ${tokens[0].symbol} | a bridge | a page | its terms | \`${sha256Hex(Buffer.from(svg))}\` |`
+		const table = readme.split("\n").find((line) => line === "|---|---|---|---|---|---|") as string
+		expect(pictureFindings([badged], readme.replace(table, `${table}\n${row}`))).toEqual([])
+		const scripted = { ...tokens[0], bridgeIcon: `data:image/svg+xml;base64,${Buffer.from("<svg><script/></svg>").toString("base64")}` }
+		expect(pictureFindings([scripted], readme)).toEqual([`${SOURCE}: tokens[0].bridgeIcon fails ${FORMAT} § Pictures`])
+	})
+
 	test("refuses a floor below 1, above the committed list, or not in canonical form", () => {
 		expect(floorFindings(floorText(1792014908), 1792014908)).toEqual([])
 		expect(floorFindings(floorText(1792014908), undefined)).toEqual([])

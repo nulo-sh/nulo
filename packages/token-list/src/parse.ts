@@ -3,7 +3,7 @@
  * signs under `bun --no-install`, with the same rules the wallet applies.
  *
  * Two modes. `wallet` reads a list a later format revision may have extended: it ignores unknown
- * keys, drops an entry's picture it cannot accept, and drops a price feed record it cannot accept,
+ * keys, drops an entry's picture or bridge picture it cannot accept, and drops a price feed record it cannot accept,
  * so `selectEntries` leaves that record's entries unpriced and the rest of the list, flags included,
  * still reads; a feed map that is not an object or holds over `MAX_PRICE_FEEDS` keys refuses the
  * list, as an over-long `tokens` does. `strict` is what the signer and the tree tests demand: known
@@ -15,7 +15,7 @@
 
 import { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
 import { PAYLOAD_FORMAT } from "./envelope"
-import { isTokenIcon } from "./icon"
+import { isBridgeIcon, isTokenIcon } from "./icon"
 import {
 	FEE_JUICE_PRICE_ID,
 	FEED_ID,
@@ -41,7 +41,7 @@ const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/
 /** Control, format (bidi overrides, zero-width joiners) and line/paragraph separators. */
 const UNSAFE_TEXT = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
 
-const ENTRY_KEYS = ["chainId", "address", "classId", "symbol", "decimals", "name", "priceId", "icon"] as const
+const ENTRY_KEYS = ["chainId", "address", "classId", "symbol", "decimals", "name", "priceId", "bridgeIcon", "icon"] as const
 const PAYLOAD_KEYS = ["format", "sequence", "issuedAt", "tokens", "flagged", "priceFeeds"] as const
 const PAIR_KEYS = ["chainId", "address"] as const
 const FEED_KEYS = ["min", "max", "ticker"] as const
@@ -57,6 +57,9 @@ export type TokenListEntry = {
 	decimals: number
 	name: string
 	priceId?: string
+	/** The bridge that carries the token, as a picture under `MAX_BRIDGE_ICON_CHARS`: the publisher's
+	 *  statement, proving no affiliation. Draw it only as an `<img>`, only as a badge on this entry. */
+	bridgeIcon?: string
 	/** A `data:` SVG that passed `isTokenIcon`; draw it only as an `<img>`. */
 	icon?: string
 }
@@ -174,8 +177,8 @@ function checkPair(f: Fields, path: string): TokenListPair {
 	return { chainId: f.chainId as number, address: f.address as string }
 }
 
-function checkIcon(value: unknown, path: string, mode: ParseMode): string | undefined {
-	if (value === undefined || isTokenIcon(value)) return value
+function checkIcon(value: unknown, path: string, mode: ParseMode, accepts: (value: unknown) => value is string): string | undefined {
+	if (value === undefined || accepts(value)) return value
 	ensure(mode === "wallet", path)
 	return undefined
 }
@@ -189,7 +192,8 @@ function checkEntry(value: unknown, path: string, mode: ParseMode): TokenListEnt
 	ensure(isIntIn(f.decimals, 0, 18), `${path}.decimals`)
 	ensure(isText(f.name, 80), `${path}.name`)
 	const priceId = checkPriceId(f.priceId, `${path}.priceId`)
-	const icon = checkIcon(f.icon, `${path}.icon`, mode)
+	const bridgeIcon = checkIcon(f.bridgeIcon, `${path}.bridgeIcon`, mode, isBridgeIcon)
+	const icon = checkIcon(f.icon, `${path}.icon`, mode, isTokenIcon)
 	const entry: TokenListEntry = {
 		chainId,
 		address,
@@ -199,6 +203,7 @@ function checkEntry(value: unknown, path: string, mode: ParseMode): TokenListEnt
 		name: f.name as string,
 	}
 	if (priceId !== undefined) entry.priceId = priceId
+	if (bridgeIcon !== undefined) entry.bridgeIcon = bridgeIcon
 	if (icon !== undefined) entry.icon = icon
 	return entry
 }
