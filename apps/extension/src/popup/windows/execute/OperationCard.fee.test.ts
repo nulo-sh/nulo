@@ -311,15 +311,26 @@ describe("OperationCard — the payer a wire-shaped Mainnet transaction opens on
 		expect(mocks.saveFeePick).not.toHaveBeenCalled()
 	})
 
-	test.each([
-		["read as zero", "0"],
-		["unread", null],
-	])("private Fee Juice %s, public Fee Juice held: nothing is chosen for the person", async (_case, privateFeeJuice) => {
+	test("private Fee Juice read as zero, public Fee Juice held: the window opens on Public Fee Juice under Send's warning, and saves nothing", async () => {
 		mocks.getFpcs.mockResolvedValue([PRIVATE_ROW])
-		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "5000000000000000000", privateFeeJuice })
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "5000000000000000000", privateFeeJuice: "0" })
+		const w = await mountCard(onMainnet())
+		expect(trigger(w).text()).toContain("Public Fee Juice")
+		expect(lastSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		expect(fee(w).text()).toContain("~3.577824 FJ")
+		const warning = w.get('[data-testid="app-fee-warning"]')
+		expect(warning.text()).toBe("Paying the fee from public Fee Juice shows your address.Get private Fee Juice")
+		expect(warning.get('[data-testid="app-fee-warning-bridge"]').attributes("href")).toBe("https://shield.human.tech/fee-juice")
+		expect(mocks.saveFeePick).not.toHaveBeenCalled()
+	})
+
+	test("private Fee Juice unread, public Fee Juice held: nothing is chosen for the person, and nothing warns", async () => {
+		mocks.getFpcs.mockResolvedValue([PRIVATE_ROW])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "5000000000000000000", privateFeeJuice: null })
 		const w = await mountCard(onMainnet())
 		expect(trigger(w).text()).toContain("Select method")
 		expect(lastSettings(w)).toBeUndefined()
+		expect(w.find('[data-testid="app-fee-warning"]').exists()).toBe(false)
 	})
 })
 

@@ -397,6 +397,8 @@ describe("FeeSettingsCard — a method the dApp locked", () => {
 		const truthy = (w.emitted<unknown[]>("update:modelValue") ?? []).filter((ev) => ev[0] !== undefined && ev[0] !== null)
 		expect(truthy).toEqual([])
 		expect(w.find('[data-testid="send-fee-nudge"]').exists()).toBe(true)
+		// The warning speaks for settings that pay from public Fee Juice, and none do.
+		expect(w.find('[data-testid="app-fee-warning"]').exists()).toBe(false)
 	})
 })
 
@@ -3018,6 +3020,8 @@ describe("FeeSettingsCard — a card that falls back on a short sponsor", () => 
 		await flushPromises()
 		expect((lastEmittedSettings(w) as { paymentMethod?: { kind: string } } | undefined)?.paymentMethod?.kind).toBe(kind)
 		expect(w.get('[data-testid="fee-sponsor-short"]').text()).toBe(text)
+		// The fallback is a way Public Fee Juice comes to pay, so Send's warning comes with it.
+		expect(w.find('[data-testid="app-fee-warning"]').exists()).toBe(kind === "fj")
 		expect(mocks.saveFeePick).not.toHaveBeenCalled()
 		w.unmount()
 	})
@@ -3061,6 +3065,121 @@ describe("FeeSettingsCard — the fee-juice nudge outside Send", () => {
 		await flushPromises()
 		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
 		expect(nudge(w).exists()).toBe(false)
+		w.unmount()
+	})
+})
+
+describe("FeeSettingsCard — Public Fee Juice in an app window: Send's warning", () => {
+	const HELD = "5000000000000000000"
+	const PRIVATE_FPC = { id: "p1", type: 2, name: "Private FPC", isProtocol: true }
+	const SPONSOR = { id: "s1", type: 1, name: "Sponsor", isProtocol: true }
+	const HAND_ADDED = { id: "s2", type: 1, name: "Mine", isProtocol: false }
+	const SHORT = "Paying the fee from public Fee Juice shows your address."
+	type Card = ReturnType<typeof mount>
+	const box = (w: Card) => w.find('[data-testid="app-fee-warning"]')
+	const fix = (w: Card) => w.find('[data-testid="app-fee-warning-fix"]')
+	const bridge = (w: Card) => w.find('[data-testid="app-fee-warning-bridge"]')
+	const order = (w: Card) => [...w.get('[data-testid="fee-settings-card"]').element.children].map((el) => el.getAttribute("data-testid"))
+
+	async function mountWindow(gas: { publicFeeJuice: string; privateFeeJuice: string | null }, fpcs: unknown[], over = {}, stubs = STUBS) {
+		mocks.getFpcs.mockResolvedValue(fpcs)
+		mocks.getGasBalances.mockResolvedValue(gas)
+		const props = baseProps({
+			network: { id: "n1", chainId: CHAIN_IDS.MAINNET },
+			feeEstimate: { maxFee: "3577823500000000001", gasDetails: {} },
+			...over,
+		})
+		const w = mount(FeeSettingsCard, { props, global: { stubs } })
+		await flushPromises()
+		return w
+	}
+
+	test.each([
+		{ surface: "the execute window", over: { embedded: true } },
+		{ surface: "the Change and Revoke popups", over: { fallsBack: true } },
+	])("no sponsor offered, private read as empty: $surface opens on Public Fee Juice under Send's box", async ({ over }) => {
+		const w = await mountWindow({ publicFeeJuice: HELD, privateFeeJuice: "0" }, [PRIVATE_FPC], over)
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		expect(order(w).slice(0, 2)).toEqual(["fee-method-selector", "app-fee-warning-live"])
+		expect(w.get('[data-testid="app-fee-warning-live"]').attributes()).toMatchObject({
+			role: "status",
+			"aria-live": "polite",
+			"aria-atomic": "true",
+		})
+		expect(box(w).get("span > span").text()).toBe(SHORT)
+		expect(box(w).find('i[class*="warning_mark"]').exists(), "the page's glyph rule").toBe(true)
+		expect(fix(w).exists()).toBe(false)
+		expect(bridge(w).text()).toBe("Get private Fee Juice")
+		expect(bridge(w).attributes()).toMatchObject({ href: SHIELD_URL, target: "_blank", rel: "noopener noreferrer" })
+		expect(mocks.saveFeePick).not.toHaveBeenCalled()
+		w.unmount()
+	})
+
+	test.each([
+		{ sponsor: "listed: it pays", fpcs: [PRIVATE_FPC, SPONSOR], settings: { paymentMethod: { kind: "fpc", fpcId: "s1" } } },
+		{ sponsor: "unlisted: nothing is chosen", fpcs: [PRIVATE_FPC], settings: undefined },
+	])("a network that offers a sponsor keeps today's default, its sponsor $sponsor, and no box", async ({ fpcs, settings }) => {
+		const w = await mountWindow({ publicFeeJuice: HELD, privateFeeJuice: "0" }, fpcs, {
+			network: { id: "n1", chainId: CHAIN_IDS.TESTNET },
+		})
+		expect(lastEmittedSettings(w)).toEqual(settings)
+		expect(box(w).exists()).toBe(false)
+		w.unmount()
+	})
+
+	test("private Fee Juice that can pay keeps private, and no box", async () => {
+		const w = await mountWindow({ publicFeeJuice: HELD, privateFeeJuice: HELD }, [PRIVATE_FPC])
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "p1" } })
+		expect(box(w).exists()).toBe(false)
+		w.unmount()
+	})
+
+	test("the box leaves on another pick and comes back with Public Fee Juice, in the region mounted with the card", async () => {
+		const w = await mountWindow({ publicFeeJuice: HELD, privateFeeJuice: "0" }, [PRIVATE_FPC, HAND_ADDED])
+		const live = w.get('[data-testid="app-fee-warning-live"]').element
+		expect(box(w).exists()).toBe(true)
+
+		await w.get('[data-testid="pick-fpc"][data-fpc-id="s2"]').trigger("click")
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
+		expect(live.children).toHaveLength(0)
+
+		await w.get('[data-testid="pick-fj"]').trigger("click")
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		expect(w.get('[data-testid="app-fee-warning-live"]').element).toBe(live)
+		expect(box(w).exists()).toBe(true)
+		w.unmount()
+	})
+
+	test("a remembered Public Fee Juice pick: the box offers private Fee Juice, which the switch picks and saves, then focuses the trigger", async () => {
+		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: { type: "fj", title: "Public Fee Juice", subtitle: "public" } }
+		const focus = vi.fn()
+		const stubs = { ...STUBS, FeeMethodSelector: { ...STUBS.FeeMethodSelector, methods: { focus } } }
+		const w = await mountWindow({ publicFeeJuice: HELD, privateFeeJuice: "12000000000000000000" }, [PRIVATE_FPC], {}, stubs)
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		expect(box(w).get("span > span").text()).toBe(SHORT)
+		expect(bridge(w).exists()).toBe(false)
+
+		await fix(w).trigger("click")
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "p1" } })
+		expect((storageBacking[FEE_METHOD_LS_KEY] as Record<string, { type: string }>)[account.address].type).toBe("private_fpc")
+		expect(box(w).exists()).toBe(false)
+		expect(focus).toHaveBeenCalledOnce()
+		w.unmount()
+	})
+
+	test.each([
+		{ case: "private cannot cover the fee: the bridge alone", privateFeeJuice: "0", link: true },
+		{ case: "private can cover it: neither switch nor bridge", privateFeeJuice: "12000000000000000000", link: false },
+	])("a payer the app set: the box under its locked row, $case", async ({ privateFeeJuice, link }) => {
+		const w = await mountWindow({ publicFeeJuice: HELD, privateFeeJuice }, [PRIVATE_FPC], { lockedMethod: "fj", embedded: true })
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		expect(order(w).slice(0, 2)).toEqual(["send-fee-locked", "app-fee-warning-live"])
+		expect(box(w).get("span > span").text()).toBe(SHORT)
+		expect(fix(w).exists()).toBe(false)
+		expect(bridge(w).exists()).toBe(link)
 		w.unmount()
 	})
 })

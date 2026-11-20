@@ -32,6 +32,7 @@ import {
 	shortfallFigures,
 } from "./fee-helpers"
 import { feeDisplay, feeText } from "@/utils/fee-estimation"
+import { feeWarningShort, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
 import { applyFpcEdits } from "./fee-privacy"
 import { usePrices } from "@/composables/usePrices"
 import { useSponsorVerdicts, watchSponsorVerdicts } from "@/composables/useSponsorVerdicts"
@@ -297,6 +298,13 @@ const derivedSettings = computed(() => {
 	return settingsForMethod(m, selectedPriority.value, gasBalances.value)
 })
 
+/** An app window cannot tell whether the app's calls are public, so it gives Send's warning for a
+ *  private send, read off the same settings it submits: never absent while they pay from public Fee
+ *  Juice. */
+const appWarning = computed(() =>
+	onSend ? null : feeWarningShort(publishFacts("private", "private", payerKindOf(derivedSettings.value, null))),
+)
+
 watch(
 	feeJuiceMissing,
 	(v) => {
@@ -361,10 +369,11 @@ const privateCoversFee = computed(() => {
 /** Only the PrivateFPC the wallet derives. Never a sponsor: Nulo's exists on some networks only, and
  *  a hand-added one may publish anything. Read from the rows at the press too, so a row that changed
  *  since is never picked. */
-const remedyMethod = computed(() => {
-	if (props.originPrivacy !== "private" || effectiveMethod.value?.type !== "fj" || !privateCoversFee.value) return null
+const privateTakeover = computed(() => {
+	if (effectiveMethod.value?.type !== "fj" || !privateCoversFee.value) return null
 	return methods.value.find((m) => m.type === "private_fpc" && m.fpc?.isProtocol === true && !m.disabled && !m.checking) ?? null
 })
+const remedyMethod = computed(() => (props.originPrivacy === "private" || (!onSend && !props.lockedMethod) ? privateTakeover.value : null))
 watch(
 	remedyMethod,
 	(m) => {
@@ -378,7 +387,7 @@ function applyRemedy() {
 }
 defineExpose({ applyRemedy, payerFocusTarget: () => methodSelector.value?.target?.() })
 
-/** The pressed fix leaves with the warning, so the keyboard goes to the radio it picked. */
+/** The pressed fix leaves with the warning, so the keyboard goes to the payer control. */
 async function onWarningFix() {
 	applyRemedy()
 	await nextTick()
@@ -528,6 +537,17 @@ onBeforeUnmount(() => {
 			@open="isMethodsDropdownOpen = true"
 			@close="isMethodsDropdownOpen = false"
 		/>
+		<!-- Mounted with the card: a warning raised by a later pick is announced. -->
+		<div v-if="!onSend" role="status" aria-live="polite" aria-atomic="true" :class="$style.app_warning_live" data-testid="app-fee-warning-live">
+			<div v-if="appWarning" :class="mark.warning_box" data-testid="app-fee-warning">
+				<Icon name="warning" size="14" aria-hidden="true" :class="mark.warning_mark" />
+				<span :class="mark.warning_body">
+					<span>{{ appWarning }}</span>
+					<button v-if="remedyMethod" type="button" :class="mark.warning_fix" data-testid="app-fee-warning-fix" @click="onWarningFix">Pay it from private Fee Juice</button>
+					<a v-else-if="!privateTakeover" :href="feeJuiceUrl" target="_blank" rel="noopener noreferrer" :class="mark.warning_fix" data-testid="app-fee-warning-bridge">Get private Fee Juice</a>
+				</span>
+			</div>
+		</div>
 
 		<!-- Mounted empty with the card, so a notice that lands in it is announced. -->
 		<div role="status" aria-live="polite" aria-atomic="true" data-testid="fee-init-degraded-live">
@@ -684,6 +704,11 @@ onBeforeUnmount(() => {
    live region a screen reader never saw empty may not announce what lands in it. */
 .warning_live:not(:empty) {
 	padding-bottom: 12px;
+}
+
+/* Inside the card's 12 px gutter, under the payer control's own padding. */
+.app_warning_live:not(:empty) {
+	padding: 0 12px 12px;
 }
 
 .get_fee_juice {

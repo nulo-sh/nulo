@@ -1,0 +1,8 @@
+# fee-public-warning-build-1, phase 1
+
+- **Consult, Codex, bounded pass** (gpt-6.1-sol, high, read-only, session `01a1f943`): 0 material, 2 minor, both taken (the fallback test now checks the box; two comments fixed). Verdict and dispositions in the plan's audit verdicts.
+- **The box keys on the submitted settings, not the selected row.** A locked `fj` with public Fee Juice read as `"0"` selects the row but yields no settings (`settingsForMethod`); keyed on the row, the box would stand beside the "no Fee Juice" nudge. The nudge test pins its absence.
+- **A sponsor-offering chain is a policy fact, not a row fact.** `defaultSponsor` is empty on Testnet whenever the sponsor row is unlisted, set aside, checking or disabled; gating the public default on that row would open Testnet windows on Public Fee Juice. The gate reads `offersSponsoredFpc(chainId)`; a mutation to the row gate reds "its sponsor unlisted".
+- **The component suite's default network is chain 11155111**, which offers no sponsor by `offersSponsoredFpc`; only rows with a private balance read as `"0"`, public able to pay and no eligible protocol sponsor see the new default, and none of the existing tests had that shape.
+- **Captures.** The drawing lane's kit ran unchanged minus its two source swaps; the matched frames came out pixel-identical, which confirms the sketch swap was the build. The kit needs a Revoke fake (`estimateRevokeFee`, `isConnected`, `onConnected`, `onDisconnected`) and `cacheStore.preselectedAuthwits` set before opening.
+- **A commit hung on signing** once; `env -u SSH_AUTH_SOCK git commit` signed it (`G`).
