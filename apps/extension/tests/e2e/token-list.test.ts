@@ -147,6 +147,7 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 				{ timeout: 15_000 },
 				bridgeOf(badged.symbol),
 			)
+			expect(await popup.$(`${SEED_ROW}[data-symbol="${plain.symbol}"] ${sel("token-mark")}`)).not.toBeNull()
 			expect(await popup.$(bridgeOf(plain.symbol))).toBeNull()
 			await shotSend(popup, "bridge-badge-seed-row", "token-mark-bridge")
 

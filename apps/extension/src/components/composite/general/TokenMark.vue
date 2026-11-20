@@ -21,7 +21,6 @@ const kind = computed(() => (props.icon && !failed.value ? "logo" : "initials"))
 const initials = computed(() => tokenInitials(props.symbol, props.size))
 const INITIALS_CLASS = { 16: "initials_10", 20: "initials_10", 32: "initials_12", 36: "initials_13" } as const
 const showBridge = computed(() => Boolean(props.bridgeIcon) && !props.badge && !bridgeFailed.value)
-/** Half the mark, 12 % past its top right corner. */
 const bridgeStyle = computed(() => {
 	const offset = `${-Math.round(props.size * 0.12)}px`
 	return { width: `${props.size / 2}px`, height: `${props.size / 2}px`, top: offset, right: offset }
@@ -116,7 +115,7 @@ watch(
 	color: var(--txt-primary);
 }
 
-/* The bridge's file as published; the page-colour outline follows its own shape. */
+/* The page-colour outline follows the picture's own shape. */
 .bridge {
 	position: absolute;
 	display: block;
