@@ -22,6 +22,9 @@
  *   single-flight would re-stack uncancellable pre-connect RPCs.
  * - FORCED refreshes (tx-settle) never join a raw flight that predates the
  *   trigger: they wait the live flight out, then re-enter fresh.
+ * - A forced fetch settles only once no newer gas run for its key is in flight:
+ *   an outranked forced run commits nothing, so its caller takes the newest run's
+ *   commit, never the entry as it stood.
  * - The gas slice separates `display` (last-known, SWR) from `verified`
  *   (cleared by any failed refresh) — display can keep painting while gating
  *   correctly sees unknown. Peek commits are version-guarded.
@@ -441,12 +444,13 @@ class BalancesCore {
 	}
 
 	private async fetchGas(key: string, scope: BalanceScope, epoch: number, opts: FetchOpts): Promise<void> {
-		const inFlight = this.legFlights.get(`${key}|gas|${epoch}`)
+		const flightKey = `${key}|gas|${epoch}`
+		const inFlight = this.legFlights.get(flightKey)
 		if (inFlight && opts.cause !== "forced") return inFlight
 		// An async method runs synchronously to its first await exactly like the
 		// former IIFE, so the single-flight registration below keeps its position.
 		const run = this.runGasFetch(key, scope, epoch, opts)
-		this.legFlights.set(`${key}|gas|${epoch}`, run)
+		this.legFlights.set(flightKey, run)
 		try {
 			await run
 		} finally {
@@ -458,8 +462,12 @@ class BalancesCore {
 				if (left <= 0) this.forcedGasPending.delete(key)
 				else this.forcedGasPending.set(key, left)
 			}
-			if (this.legFlights.get(`${key}|gas|${epoch}`) === run) this.legFlights.delete(`${key}|gas|${epoch}`)
+			if (this.legFlights.get(flightKey) === run) this.legFlights.delete(flightKey)
 		}
+		// An outranked forced run commits nothing, so its caller waits out every newer run: a forced
+		// ensure never settles on an entry no read after its own trigger wrote.
+		if (opts.cause !== "forced") return
+		for (let newer = this.legFlights.get(flightKey); newer; newer = this.legFlights.get(flightKey)) await newer
 	}
 
 	/** Register a forced run BEFORE any await: count it live and take the next

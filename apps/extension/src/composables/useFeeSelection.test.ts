@@ -10,6 +10,7 @@ import {
 import type { FeePickUpdate } from "@/utils/fee-picks"
 import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import type { BalanceScope } from "@/stores/balances.store"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import { type FeeSelection, type SelectionLoad, useAppFeeSelection, useSendFeeSelection } from "./useFeeSelection"
 import { useSponsorVerdicts } from "./useSponsorVerdicts"
 import { readFeePicks } from "../../tests/helpers/ui-preference-fake"
@@ -434,14 +435,20 @@ describe("the app windows' rule book", () => {
 		t.stop()
 	})
 
-	test("a locked mount reads fresh; an unlocked one may use the reader's snapshot", () => {
-		const locked = setup({ lockedMethod: "fj" })
-		const unlocked = setup({})
-		expect(locked.rules.forceRefresh()).toBe(true)
-		expect(unlocked.rules.forceRefresh()).toBe(false)
-		expect(unlocked.rules.held.value).toBe(false)
-		expect(unlocked.rules.previewMethod.value).toBeUndefined()
-		locked.stop()
-		unlocked.stop()
-	})
+	test.each([
+		{ lock: "fj", chain: "Mainnet", chainId: CHAIN_IDS.MAINNET, fresh: true },
+		{ lock: "fj", chain: "Testnet", chainId: CHAIN_IDS.TESTNET, fresh: true },
+		{ lock: null, chain: "Mainnet", chainId: CHAIN_IDS.MAINNET, fresh: true },
+		{ lock: null, chain: "Testnet", chainId: CHAIN_IDS.TESTNET, fresh: false },
+	])(
+		"a mount reads fresh when the app locks the payer or the network offers no sponsor: lock $lock on $chain",
+		({ lock, chainId, fresh }) => {
+			const t = setup(lock ? { lockedMethod: lock } : {})
+			t.props.network.chainId = chainId
+			expect(t.rules.forceRefresh()).toBe(fresh)
+			expect(t.rules.held.value).toBe(false)
+			expect(t.rules.previewMethod.value).toBeUndefined()
+			t.stop()
+		},
+	)
 })

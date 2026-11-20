@@ -11,6 +11,7 @@ import { createPinia } from "pinia"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import FeeSettingsCard from "./send/FeeSettingsCard.vue"
 import GasBalanceCard from "./general/GasBalanceCard.vue"
 
@@ -72,18 +73,21 @@ vi.mock("@/wallet/services/price/client", () => ({
 		}
 	}),
 }))
+// A network that offers a sponsor, as the listed one implies: there the fee card reads unforced and
+// so joins the gas card's flights.
 vi.mock("@/stores/app.store", async () => {
 	const { reactive } = await import("vue")
+	const { CHAIN_IDS } = await import("@/utils/chain-ids")
 	const fake = reactive({
 		profile: { id: "p1" },
 		account: { address: "0xacct" },
-		network: { id: "n1", chainId: 11155111 },
+		network: { id: "n1", chainId: CHAIN_IDS.TESTNET },
 	})
 	return { useAppStore: () => fake }
 })
 
 const profile = { id: "p1", name: "Profile 1" }
-const network = { id: "n1", chainId: 11155111 }
+const network = { id: "n1", chainId: CHAIN_IDS.TESTNET }
 const account = { id: "a1", address: "0xacct" }
 
 const STUBS = {

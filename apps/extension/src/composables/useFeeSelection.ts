@@ -185,6 +185,12 @@ async function persistSelection(c: AppCtx, method: FeeMethodOption) {
 	await c.saveFeePick(c.props.profile!.id, update)
 }
 
+/** An unknown chain counts as offering one, so it never reaches the public default. */
+function offersNoSponsor(c: AppCtx) {
+	const chainId = c.props.network?.chainId
+	return chainId !== undefined && !offersSponsoredFpc(chainId)
+}
+
 /** What a card picks unasked: the account's private Fee Juice on a balance read that can pay, then
  *  Nulo's sponsor. Where the network offers no sponsor, the step a private send takes next: public
  *  Fee Juice that can pay, only on a private balance read as empty, since a window cannot tell whether
@@ -196,8 +202,7 @@ function appDefault(c: AppCtx) {
 	const know = { fpcs: c.knownFpcs.value, balances: c.snapshot.gasBalances.value }
 	if (privateFj && isEligible(privateFj, know)) return privateFj
 	const sponsor = defaultSponsor(c.methods.value)
-	const chainId = c.props.network?.chainId
-	if (sponsor || chainId === undefined || offersSponsoredFpc(chainId)) return sponsor
+	if (sponsor || !offersNoSponsor(c)) return sponsor
 	const fj = c.methods.value.find((m) => m.type === "fj")
 	return fj && privateReadAsEmpty(privateFj, know) && isEligible(fj, know) ? fj : undefined
 }
@@ -355,8 +360,9 @@ export function useAppFeeSelection(
 		onShort: (fpcId) => dropShort(c, fpcId),
 		// A dApp locks the method precisely when the balance just moved (a claim made for this
 		// account): a snapshot inside the reader's TTL would show the old figure and hold Confirm
-		// off, so a locked mount reads fresh.
-		forceRefresh: () => Boolean(c.lockedMethod()),
+		// off. Where no sponsor is offered, a private zero from that TTL may predate a credit and
+		// default to public Fee Juice, as on Send. Either mount reads fresh.
+		forceRefresh: () => Boolean(c.lockedMethod()) || offersNoSponsor(c),
 		load: (scope, isCurrent) => loadApp(c, scope, isCurrent),
 		reload: (scope) => reloadApp(c, scope),
 		reconcile: ({ saved, baseline }, scope) => reconcileSelection(c, saved[scope.accountAddress], baseline!),
