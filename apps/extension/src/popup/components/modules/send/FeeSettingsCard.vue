@@ -373,7 +373,6 @@ const privateTakeover = computed(() => {
 	if (effectiveMethod.value?.type !== "fj" || !privateCoversFee.value) return null
 	return methods.value.find((m) => m.type === "private_fpc" && m.fpc?.isProtocol === true && !m.disabled && !m.checking) ?? null
 })
-/** The warning's switch, on Send's private origin and in an app window; never over a payer the app set. */
 const remedyMethod = computed(() => (props.originPrivacy === "private" || (!onSend && !props.lockedMethod) ? privateTakeover.value : null))
 watch(
 	remedyMethod,
@@ -388,7 +387,7 @@ function applyRemedy() {
 }
 defineExpose({ applyRemedy, payerFocusTarget: () => methodSelector.value?.target?.() })
 
-/** The pressed fix leaves with the warning, so the keyboard goes to the radio it picked. */
+/** The pressed fix leaves with the warning, so the keyboard goes to the payer control. */
 async function onWarningFix() {
 	applyRemedy()
 	await nextTick()

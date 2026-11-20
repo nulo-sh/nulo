@@ -3020,6 +3020,8 @@ describe("FeeSettingsCard — a card that falls back on a short sponsor", () => 
 		await flushPromises()
 		expect((lastEmittedSettings(w) as { paymentMethod?: { kind: string } } | undefined)?.paymentMethod?.kind).toBe(kind)
 		expect(w.get('[data-testid="fee-sponsor-short"]').text()).toBe(text)
+		// The fallback is a way Public Fee Juice comes to pay, so Send's warning comes with it.
+		expect(w.find('[data-testid="app-fee-warning"]').exists()).toBe(kind === "fj")
 		expect(mocks.saveFeePick).not.toHaveBeenCalled()
 		w.unmount()
 	})
