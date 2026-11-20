@@ -37,10 +37,10 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 	}),
 }))
 let mockQuotes: Record<string, unknown> = {}
-const ANSWER = async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: {} })
+const ANSWER = async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: {}, bridgeIcons: {} })
 let answerQuotes: () => Promise<unknown> = ANSWER
 /** The signed list's read; a case that parks it leaves no flag known. */
-const LIST = async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: {}, flaggedTokens: [] as string[] })
+const LIST = async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: {}, bridgeIcons: {}, flaggedTokens: [] as string[] })
 let answerList: () => Promise<unknown> = LIST
 const tokenCalls = {
 	getTokens: vi.fn(async (): Promise<{ contract: string }[]> => []),

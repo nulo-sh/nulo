@@ -18,6 +18,7 @@ const props = defineProps({
 	/** The page's price reading, which its in-flight cards read too. */
 	fiatLabel: { type: Function, required: true },
 	iconFor: { type: Function, required: true },
+	bridgeIconFor: { type: Function, required: true },
 	isFlagged: { type: Function, required: true },
 })
 
@@ -54,6 +55,7 @@ const tokenById = (id) => tokensById.value.get(id)
 				:tokenById="tokenById"
 				:fiatLabel="fiatLabel"
 				:iconFor="iconFor"
+				:bridgeIconFor="bridgeIconFor"
 				:isFlagged="isFlagged"
 				:isArriving="isArriving"
 			/>

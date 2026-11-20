@@ -128,7 +128,14 @@ function hasActionsContent() {
 
 			<Flex direction="column" gap="4" :class="$style.text" data-testid="activity-text">
 				<Flex align="center" gap="6" :class="$style.title_row" data-testid="activity-title-row">
-					<TokenMark v-if="titleMark" :symbol="titleMark.symbol" :icon="titleMark.icon" :size="16" :badge="titleMark.badge" />
+					<TokenMark
+						v-if="titleMark"
+						:symbol="titleMark.symbol"
+						:icon="titleMark.icon"
+						:bridgeIcon="titleMark.bridgeIcon"
+						:size="16"
+						:badge="titleMark.badge"
+					/>
 					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
 					<span v-if="$slots['title-trailing']" :class="$style.trailing_inline"><slot name="title-trailing" /></span>
 				</Flex>

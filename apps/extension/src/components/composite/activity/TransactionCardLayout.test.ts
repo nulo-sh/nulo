@@ -254,6 +254,7 @@ describe("composite/TransactionCardLayout — a row's direction", () => {
 describe("composite/TransactionCardLayout — the title's token mark", () => {
 	const SEND = { from: "public", to: "private", way: "out", label: "Public → Private" } as const
 	const ICON = "data:image/svg+xml;base64,PHN2Zy8+"
+	const BRIDGE = "data:image/svg+xml;base64,PHN2Zz48Zy8+PC9zdmc+"
 	const titleRow = (w: ReturnType<typeof mountLayout>) =>
 		[...w.get("[data-testid='activity-title-row']").element.children].map((el) => el.getAttribute("data-testid"))
 	const box = (w: ReturnType<typeof mountLayout>) =>
@@ -261,13 +262,14 @@ describe("composite/TransactionCardLayout — the title's token mark", () => {
 
 	test("the mark goes before the title at 16 px, and the 40 px box keeps its pair, way badge and status badge", () => {
 		const w = mountLayout(
-			{ title: "USDC", icon: "send", direction: SEND, titleMark: { symbol: "USDC", icon: ICON, badge: false } },
+			{ title: "USDC", icon: "send", direction: SEND, titleMark: { symbol: "USDC", icon: ICON, bridgeIcon: BRIDGE, badge: false } },
 			{ badge: "<span data-testid='status'>✓</span>" },
 		)
 		expect(titleRow(w)).toEqual(["token-mark", "activity-title"])
 		const mark = w.get("[data-testid='token-mark']")
 		expect(mark.attributes()).toMatchObject({ "data-kind": "logo", "aria-hidden": "true", style: "width: 16px; height: 16px;" })
 		expect(mark.get("[data-testid='token-mark-logo']").attributes("src")).toBe(ICON)
+		expect(mark.get("[data-testid='token-mark-bridge']").attributes("src")).toBe(BRIDGE)
 		expect(box(w)).toEqual(
 			box(mountLayout({ title: "USDC", icon: "send", direction: SEND }, { badge: "<span data-testid='status'>✓</span>" })),
 		)
@@ -275,7 +277,7 @@ describe("composite/TransactionCardLayout — the title's token mark", () => {
 	})
 
 	test("a flagged token's mark carries the corner badge; a token with no picture draws its initials", () => {
-		const w = mountLayout({ title: "USDC", titleMark: { symbol: "USDC", badge: true } })
+		const w = mountLayout({ title: "USDC", titleMark: { symbol: "USDC", bridgeIcon: undefined, badge: true } })
 		const mark = w.get("[data-testid='token-mark']")
 		expect(mark.attributes("data-kind")).toBe("initials")
 		expect(mark.text()).toBe("U")

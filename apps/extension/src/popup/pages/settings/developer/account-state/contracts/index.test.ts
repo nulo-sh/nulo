@@ -56,6 +56,7 @@ vi.mock("@/composables/usePrices", () => ({
 		mapped: ref(true),
 		isFlagged: () => false,
 		iconFor: () => undefined,
+		bridgeIconFor: () => undefined,
 		listedAt: (t: { contract?: string } | undefined) => (t?.contract === TOKEN ? { symbol: "USDC", name: "Test USDC" } : undefined),
 		dispose: vi.fn(),
 	}),

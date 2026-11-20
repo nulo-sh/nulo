@@ -67,12 +67,14 @@ vi.mock("@/wallet/services/price/client", () => ({
 				pricedTokens: TEST_PRICED_TOKENS,
 				flaggedTokens: flaggedKeysOf([TEST_FLAGGED, ...H.flagged.current]),
 				tokenIcons: {},
+				bridgeIcons: {},
 			})),
 			refreshIfStale: vi.fn().mockImplementation(async () => ({
 				quotes: H.quotes.current,
 				pricedTokens: TEST_PRICED_TOKENS,
 				flaggedTokens: flaggedKeysOf([TEST_FLAGGED, ...H.flagged.current]),
 				tokenIcons: {},
+				bridgeIcons: {},
 			})),
 		}
 	}),
@@ -230,7 +232,13 @@ describe("SelectTokenPopup", () => {
 			await flushPromises()
 			expect(asked()).toEqual([2, 0])
 			const quote = { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null }
-			H.quotesUpdated.emit({ quotes: { "usd-coin": quote }, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: [], tokenIcons: {} })
+			H.quotesUpdated.emit({
+				quotes: { "usd-coin": quote },
+				pricedTokens: TEST_PRICED_TOKENS,
+				flaggedTokens: [],
+				tokenIcons: {},
+				bridgeIcons: {},
+			})
 			await hidden.setProps({ show: true })
 			await flushPromises()
 			expect(rowSymbols(hidden)).toEqual(["PRICED", "ALPHA"])

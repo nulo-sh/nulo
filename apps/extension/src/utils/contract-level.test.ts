@@ -4,7 +4,7 @@ import { type TokenListEntry, type TokenListPair, BUNDLED_TOKEN_CLASS_IDS } from
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { SPONSORED_FPC_ADDRESS } from "@/wallet/services/fpc/sponsored-fpc-address"
 import { flaggedKeysOf, isFlaggedToken, listKeyOf } from "./token-flag"
-import { listedTokensOf, tokenIconFor, tokenIconsOf } from "./token-icon"
+import { bridgeIconsOf, listedTokensOf, tokenIconFor, tokenIconsOf } from "./token-icon"
 import { type ListReader, readContract, readProtocolContract } from "./contract-level"
 
 const CHAIN = 1674512022
@@ -26,12 +26,14 @@ const entry = (chainId: number, address: string): TokenListEntry => ({
 /** A reader over a list as the worker would send it; `mapped: false` stands for a list not yet answered. */
 const readerOf = (entries: readonly TokenListEntry[], flagged: readonly TokenListPair[] = [], mapped = true): ListReader => {
 	const icons = tokenIconsOf(entries)
+	const bridgeIcons = bridgeIconsOf(entries)
 	const listed = listedTokensOf(entries)
 	const flags = new Set(flaggedKeysOf(flagged))
 	return {
 		mapped: ref(mapped),
 		isFlagged: (t) => mapped && isFlaggedToken(flags, t),
 		iconFor: (t) => (mapped ? tokenIconFor(icons, t) : undefined),
+		bridgeIconFor: (t) => (mapped ? tokenIconFor(bridgeIcons, t) : undefined),
 		listedAt: (t) => {
 			if (!mapped || typeof t?.chainId !== "number" || typeof t.contract !== "string") return undefined
 			const key = listKeyOf(t.chainId, t.contract)
@@ -49,6 +51,13 @@ describe("readContract", () => {
 			name: "Test Token",
 			icon: ICON,
 		})
+	})
+
+	test("a listed contract's reading carries the list's bridge picture; an entry without one carries none", () => {
+		const BRIDGE = "data:image/svg+xml;base64,PHN2Zz48Zy8+PC9zdmc+"
+		const reader = readerOf([{ ...entry(CHAIN, LISTED), bridgeIcon: BRIDGE }, entry(CHAIN, UNKNOWN)])
+		expect(readContract(reader, CHAIN, LISTED)).toMatchObject({ level: "nulo", source: "token", bridgeIcon: BRIDGE })
+		expect(readContract(reader, CHAIN, UNKNOWN)).not.toHaveProperty("bridgeIcon")
 	})
 
 	test("the same address listed on another chain is unverified", () => {

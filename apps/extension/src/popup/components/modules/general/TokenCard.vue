@@ -64,6 +64,7 @@ const prices = usePrices(priceService)
 const fiatLabel = computed(() => (isMalformed.value ? undefined : prices.tokenFiatLabel(token.value, privateRaw.value + publicRaw.value)))
 const isFlagged = computed(() => prices.isFlagged(token.value))
 const icon = computed(() => prices.iconFor(token.value))
+const bridgeIcon = computed(() => prices.bridgeIconFor(token.value))
 onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
@@ -101,7 +102,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 			@keydown.enter="refuseRepeatEnter"
 		>
 			<Flex align="center" gap="12" :class="$style.lead">
-				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :size="32" :badge="isFlagged" />
+				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :bridgeIcon="bridgeIcon" :size="32" :badge="isFlagged" />
 				<Flex direction="column" gap="2" :class="$style.lead">
 					<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
 						{{ dashIfBlank(token.symbol) }}

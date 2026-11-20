@@ -51,6 +51,9 @@ const disc = (fill: string) =>
 /** Pictures as the list carries them (`isTokenIcon` accepts each), told apart by their fill. */
 export const TEST_ICONS = { USDC: disc("#2775ca"), GBPC: disc("#a8480c") } as const
 
+/** A bridge picture as the list carries it (`isBridgeIcon` accepts it). */
+export const TEST_BRIDGE_ICON = disc("#81133b")
+
 /** The entries with USDC's and GBPC's pictures; USDT and EURC carry none. */
 export const TEST_LIST_ENTRIES_WITH_ICONS: readonly TokenListEntry[] = TEST_LIST_ENTRIES.map((e) =>
 	Object.hasOwn(TEST_ICONS, e.symbol) ? { ...e, icon: TEST_ICONS[e.symbol as keyof typeof TEST_ICONS] } : e,

@@ -65,7 +65,13 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 }))
 vi.mock("@/wallet/services/price/client", async () => {
 	const { EventHandler } = await import("@nulo/wallet-core/utils")
-	const snapshot = async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: H.flagged.current, tokenIcons: H.icons.current })
+	const snapshot = async () => ({
+		quotes: {},
+		pricedTokens: {},
+		flaggedTokens: H.flagged.current,
+		tokenIcons: H.icons.current,
+		bridgeIcons: {},
+	})
 	return {
 		PriceServiceClient: vi.fn(function () {
 			return {
