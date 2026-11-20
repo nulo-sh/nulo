@@ -10,6 +10,17 @@ eli5_mode: skipped (orchestrator-owned)
 base: dev at f7b78cc5e
 ---
 
+## Outcome
+
+- **Date:** 2026-11-20.
+- **Status:** completed; delivered in #1920, whose merge closes the plan.
+- **Shipped:** #1920. A tap on Home's What's new row, by pointer or keyboard, hides it and stores the running minor through the storage facade, awaited, before `window.open` opens the changelog; Dismiss and Settings → About are unchanged. The component test holds the write pending and checks nothing opens before it lands; the smoke flip runs on Chrome and Firefox.
+- **Dropped or rejected:** an unawaited write before a synchronous open (D2); a facade bypass or a worker RPC (D3); `chrome.tabs.create` in place of `window.open` (D8).
+- **Known limits:** #1919.
+- **Open items:** none.
+- **Lessons:** none promoted to `lessons.md`, which is at its budget and already holds the toolbar-popup order; the e2e-testing skill now says both harnesses turn popup blocking off (§ Harness behaviours that look like product bugs).
+- **Seeds retired:** no `/goal` or `/loop` seed of this plan is live.
+
 # whats-new-close-1: tapping Home's What's new row also closes it
 
 A tap on Home's What's new row (`whats-new-open`), by pointer or by keyboard, opens the version's changelog as today and also dismisses the row as Dismiss does: it hides, and the running minor is written to `nulo:ui:whatsNewSeen`.

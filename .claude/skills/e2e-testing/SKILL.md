@@ -781,6 +781,12 @@ the pattern.
 
 ### Harness behaviours that look like product bugs
 
+- **Popup blocking is off in both harnesses** (Puppeteer's Chrome `--disable-popup-blocking`,
+  Firefox's Remote Agent pref `dom.disable_open_during_load: false`), and `clickByTestId` is a
+  scripted click, so a green spec cannot show that a `window.open` keeps the click's user
+  activation. A probe with the blocker back on can: on 2026-11-20 Firefox 158 refused an extension
+  page's open about 5 s after the click, and Chrome 155 allowed an extension page's at any delay
+  (`implementations-plan/archive/whats-new-close-1/plan.md`, Facts 3 and 4).
 - **The extension pages' CSP refuses `page.addStyleTag`** (`style-src-elem`; the CSP record then
   fails the launch), and so a `<style>` element a spec appends itself: its rule never applies, so a
   scratch control built on it stays green. Test CSS goes through CSSOM: `new CSSStyleSheet()`,
