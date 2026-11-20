@@ -205,6 +205,8 @@ Also accepted: reuse `tokenIconFor`; the forward-compatibility proof compares ag
 
 **Arc 2, Codex** (`gpt-6.1-sol`, high): round 1, two P3s: the e2e's plain-row check could pass with the row gone (now asserts the row's mark first), and two `TokenMark` comments (an arithmetic restatement; "as published" against D15). Fixed. It found every surface threaded, the JS SFCs included, and the warning path and snapshot replacement correct. Round 2 (resumed): "Clean … No regressions or new findings in the fix diff."
 
+**Arc 3, Codex** (`gpt-6.1-sol`, high): round 1, "Clean — no findings (high confidence)." It decoded all three pictures to their rows' SHA-256, matched both Shield copies to the published file and the raven's paths to the published wordmark, found only the three keys added and the source canonical, reproduced 55,294 envelope bytes, found no active or external content in either SVG, and showed the e2e fixture throws if cUSDC loses its picture.
+
 ## Post-implementation
 
 The steps are `implementations-plan/README.md` § Post-implementation standard at revision `46dc91c3f`. Plan-specific values:
