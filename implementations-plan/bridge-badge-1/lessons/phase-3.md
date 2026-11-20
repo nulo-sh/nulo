@@ -6,3 +6,4 @@
 - 2026-11-20, look: the capture page over the committed source (no injection), resting, a row hovered, a chip hovered, both themes, Chrome and Firefox 158.0: every badge decoded, no visible difference from arc 2's frames. The Home frame needed the last row scrolled to the centre: the Home scroller's bottom sits under the bottom navigation, so `scrollIntoView({ block: "end" })` parks the third row behind it.
 - 2026-11-20, arc 3 Codex loop: round 1 clean. Converged.
 - 2026-11-20, cross-arc Codex pass (fresh session over `93877b8b1..HEAD`): round 1 one P3, fixed in `93166552a` (token-list e2e green on Chrome and Firefox after it); the snapshot cost recorded in the plan; round 2 clean.
+- 2026-11-20, rebased onto `dev` `0040cb946` before delivery: one conflict (`holdings.test.ts`, dev's new list mock lacked the bridge map); gates green again. Token-list scenario on the new base: Chrome 9.4 s, Firefox 13.8 s.

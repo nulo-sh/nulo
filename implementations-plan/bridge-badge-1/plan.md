@@ -7,7 +7,7 @@ codex_model: sol
 code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
-base: dev at 93877b8b1 (rebased from 46dc91c3f before arc 1)
+base: dev at 0040cb946 (rebased from 46dc91c3f before arc 1, and from 93877b8b1 after the cross-arc review)
 trunk: dev
 ---
 
@@ -207,7 +207,7 @@ Also accepted: reuse `tokenIconFor`; the forward-compatibility proof compares ag
 
 **Arc 3, Codex** (`gpt-6.1-sol`, high): round 1, "Clean — no findings (high confidence)." It decoded all three pictures to their rows' SHA-256, matched both Shield copies to the published file and the raven's paths to the published wordmark, found only the three keys added and the source canonical, reproduced 55,294 envelope bytes, found no active or external content in either SVG, and showed the e2e fixture throws if cUSDC loses its picture.
 
-**Cross-arc, Codex** (fresh session, `gpt-6.1-sol`, high, `git diff 93877b8b1..HEAD`): round 1, one P3: the e2e fixture read cUSDC's bridge picture at import, so withdrawing it would fail every smoke file importing the fixtures, not only the spec that draws it; now read on call (`e2eBridgeIcon()`). Its cost caveat (the bridge map rides every price snapshot to every open row's client) is recorded under The cost, not changed: the snapshot already carries every `icon` the same way. Round 2 (resumed): "Clean — no findings (high confidence)."
+**Cross-arc, Codex** (fresh session, `gpt-6.1-sol`, high, `git diff 93877b8b1..HEAD`): round 1, one P3: the e2e fixture read cUSDC's bridge picture at import, so withdrawing it would fail every smoke file importing the fixtures, not only the spec that draws it; now read on call (`e2eBridgeIcon()`). Its cost caveat (the bridge map rides every price snapshot to every open row's client) is recorded under The cost, not changed: the snapshot already carries every `icon` the same way. Round 2 (resumed): "Clean — no findings (high confidence)." The stack was then rebased onto `dev` at `0040cb946` (three commits, one conflict: a `holdings.test.ts` price mock, resolved by adding the empty bridge map); `audit:vue`, `test:all`, the tree check and the smoke specs `token-list`, `rows`, `send-picker-add` and `execute-steps` with `--retry=0` were green again on Chrome and Firefox (25 passed, 2 skipped each).
 
 ## Post-implementation
 
