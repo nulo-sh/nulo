@@ -1,7 +1,7 @@
 ---
 plan: fee-fresh-read-1
 tier: light
-status: building
+status: delivered (one PR against dev, opened ready; it lands on the orchestrator's word)
 issues: "#1914"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at f7b78cc5e
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-20.
+- **Status:** delivered as one PR against `dev`, opened ready, carrying the change and this close-out; it lands on the orchestrator's word.
+- **Shipped:** an app window's card reads both balances fresh wherever the network offers no sponsor, through the predicate that gates the public default (D1); an outranked forced store read waits out every newer run for its key, so each Revoke chunk's card, and each card of a window with several, settles on a fresh read of its own (D2). A failed or slow read is handled as Send handles it (D3); nothing visible changes but the wait (D4). Closes #1914.
+- **Dispositions:** Ask 1 and Ask 2 kept as assumed. Codex F1 and F2 (minor) taken.
+- **Known limits:** none new. #1889 (closed) is the orchestrator's to update after landing.
+- **Open items:** none.
+- **Lessons:** none promoted; the gotcha is fixed in the store and listed among its invariants.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # fee-fresh-read-1: Mainnet app windows read both Fee Juice balances fresh, as Send does
 
@@ -39,7 +50,7 @@ Closed limits searched (`known-limit fee juice cache fresh`): #1889, the five-mi
 |---|---|---|---|
 | D1 | `forceRefresh: () => Boolean(c.lockedMethod()) \|\| sponsorless(c)`, with `sponsorless(c)` (chain id known and `!offersSponsoredFpc`) also gating `appDefault`'s public step | reading `chainId` inline in both places | one predicate: the read is fresh exactly where the default can fall to Public Fee Juice on a private balance read as empty, and the two cannot drift; an unknown chain id stays "offers a sponsor", as in `appDefault` today |
 | D2 | `fetchGas`: a forced run, after its own run, waits out every newer gas run registered for its key and epoch (`legFlights`) before it returns, so an outranked forced `ensure` settles on the newest run's commit | each card sharing one forced read (a forced fetch joining a forced flight in progress); a watcher in the card that waits for a later commit; leaving chunks 2..N on the cache | the owner's words: each chunk reads its own; the cause is in the store, where outranking lives; a promise that awaits a run already in flight adds no state, timer or lifecycle; the trigger-recency invariant stays as pinned |
-| D3 | A failed or slow fresh read: unchanged, Send's handling. The commit waits for both legs (bounded by `INIT_FETCH_TIMEOUT_MS`); a failed gas read commits `verified` undefined, the store arms its backoff retry (forced, `balances.store.ts:648-655`), and the recovery re-derives an unpicked default (`reconcileSelection`). Until then `appDefault` picks nothing on a network with no sponsor, so Confirm has no settings | a fallback to the cached figure | Send holds on an unread balance for the same reason; a cached zero is what this change exists to avoid |
+| D3 | A failed or slow fresh read: unchanged, Send's handling. The commit waits for both legs; each run is bounded by two `INIT_FETCH_TIMEOUT_MS` (wait-out, then fetch), and a forced caller follows newer runs only while mounts, settles or the retry's timer keep starting them. A read that rejects or times out commits `verified` undefined, the store arms its backoff retry (forced, `balances.store.ts:648-655`) and the recovery re-derives an unpicked default (`reconcileSelection`). A private leg the reader could not read twice comes back `null` inside a successful read (`gas-balance-reader.ts:192-216`): no retry, and the default stays empty until the person picks or the window reopens. Either way `appDefault` picks nothing on a network with no sponsor, so Confirm has no settings | a fallback to the cached figure | Send holds on an unread private balance the same way; a cached zero is what this change exists to avoid |
 | D4 | No new loading state: the app windows keep their own loading look while the snapshot reads (`readPending` is Send-only, `FeeSettingsCard.vue:243`) | | the brief: nothing visible changes but the wait |
 
 ## Assumptions
@@ -65,6 +76,12 @@ None but the wait the pick names: on a network with no sponsor an app window's f
 2. Build D1 and D2; the store's invariant list gains D2's line.
 3. Gates: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`; `bun run check:plans` after staging.
 4. E2E, no new scenario (Mainnet is out of reach; the layers above prove it). The sandbox offers a sponsor, so unlocked windows there keep the cache; the specs reach the lock's forced read, the Revoke and Change cards and Send's forced read through the store: one `e2e:agent` run of `network/authwit-lifecycle`, `network/tx-sendTx-selfPay` and `network/fee-methods`, and smoke `send-fee-privacy`, on Chrome. No window handling changes, so no Firefox run.
+
+**Results** (head `6ad272f99` for the code; the review's comment fix after it changes no behaviour): 4 new tests red on the base source, green after (the `forceRefresh` table's Mainnet row, the card's credited-after-zero case, the two chunk cards, the outranked store `ensure`); the Testnet control green on both. Lint, typecheck:all, `test` (1,050 files, 18,842 tests) and `test:all` (18 workspaces) green; `check:plans` 0 findings. E2E on Chrome: `network/authwit-lifecycle`, `network/tx-sendTx-selfPay` and `network/fee-methods` in one `e2e:agent` run, 10/10 (617 s); smoke `send-fee-privacy` 1/1 (19 s).
+
+## Audit verdicts
+
+- **Codex, the one bounded pass** (gpt-6.1-sol, high, read-only, session `01a1f9a3`, plan and diff at `6ad272f99`): `findings: 0 material, 2 minor`. F1 (minor, demonstrated): D3 promised a recovery for every failed read, but a private leg the reader cannot read twice returns `null` inside a successful read, with no retry; and per-run bounds do not bound a caller that follows newer runs. Taken: D3 rewritten; runtime unchanged (Send holds the same way). F2 (minor, comments): the `CARD_CAPS` comment in `useFeeSnapshot.ts` described the outranking hazard D2 removes; taken, the obsolete half deleted. Checked sound: forced on Mainnet and cached on sponsor networks, unknown chain unchanged; no settings before the commit, saved-pick pre-fill included; picks during the read and identity switches; epoch-keyed flights and the counter cleanup; each Revoke card's own read, with no wait cycle; forced-run authority, signals and retry-debt order; a dApp's network or lock cannot skip the fresh read. Targeted verification: `useFeeSnapshot.test.ts` and `useFeeSelection.test.ts` green, lint green.
 
 ## Post-implementation
 
