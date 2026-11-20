@@ -19,6 +19,7 @@ import {
 } from "./fixtures/helpers"
 import { chooseRecipient, shotSend } from "./fixtures/send-page"
 import {
+	E2E_BRIDGE_ICON,
 	E2E_LIST_FLAGGED,
 	E2E_LIST_TOKENS,
 	type ListHost,
@@ -110,7 +111,8 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 	}, async ({ freshExtensionPerTest: ctx }) => {
 		const host = await serveTokenList()
 		try {
-			const first = await signTestList()
+			const [badged, plain] = E2E_LIST_TOKENS
+			const first = await signTestList({ tokens: [{ ...badged, bridgeIcon: E2E_BRIDGE_ICON }, plain] })
 			host.serve(first)
 			await storeHostCookie(ctx, host)
 			const control = await openScratchPage(ctx.browser, ctx.extensionId)
@@ -135,6 +137,19 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 				shown.every((symbol) => listed.has(symbol)),
 				`seed rows ${shown.join(", ")}`,
 			).toBe(true)
+			// The bridge picture crosses the worker → popup channel and decodes under the extension's CSP.
+			const bridgeOf = (symbol: string) => `${SEED_ROW}[data-symbol="${symbol}"] ${sel("token-mark-bridge")}`
+			await popup.waitForFunction(
+				(s: string) => {
+					const img = document.querySelector<HTMLImageElement>(s)
+					return img?.complete === true && img.naturalWidth > 0
+				},
+				{ timeout: 15_000 },
+				bridgeOf(badged.symbol),
+			)
+			expect(await popup.$(`${SEED_ROW}[data-symbol="${plain.symbol}"] ${sel("token-mark")}`)).not.toBeNull()
+			expect(await popup.$(bridgeOf(plain.symbol))).toBeNull()
+			await shotSend(popup, "bridge-badge-seed-row", "token-mark-bridge")
 
 			host.serve(await signForgedList())
 			await requestListRefresh(control)

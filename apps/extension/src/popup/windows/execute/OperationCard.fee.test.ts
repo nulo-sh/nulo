@@ -396,6 +396,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			mapped: ref(true),
 			isFlagged: () => false,
 			iconFor: () => undefined,
+			bridgeIconFor: () => undefined,
 			listedAt: (t) =>
 				typeof t?.chainId === "number" && t.contract && keys.has(listKeyOf(t.chainId, t.contract))
 					? { symbol: "PAY", name: "Payer" }

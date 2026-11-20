@@ -149,6 +149,7 @@ declare global {
   const balanceFormatted: typeof import('../utils/amount').balanceFormatted
   const bareAztecAddress: typeof import('../utils/aztec-address').bareAztecAddress
   const boundedString: typeof import('../utils/bounded-string').boundedString
+  const bridgeIconsOf: typeof import('../utils/token-icon').bridgeIconsOf
   const browser: typeof import('webextension-polyfill')
   const buildActivityRows: typeof import('../utils/activity-rows').buildActivityRows
   const buildIncomingCardProps: typeof import('../utils/received-display').buildIncomingCardProps
@@ -1152,6 +1153,7 @@ declare module 'vue' {
     readonly balanceFormatted: UnwrapRef<typeof import('../utils/amount')['balanceFormatted']>
     readonly bareAztecAddress: UnwrapRef<typeof import('../utils/aztec-address')['bareAztecAddress']>
     readonly boundedString: UnwrapRef<typeof import('../utils/bounded-string')['boundedString']>
+    readonly bridgeIconsOf: UnwrapRef<typeof import('../utils/token-icon')['bridgeIconsOf']>
     readonly browser: UnwrapRef<typeof import('webextension-polyfill')>
     readonly buildActivityRows: UnwrapRef<typeof import('../utils/activity-rows')['buildActivityRows']>
     readonly buildIncomingCardProps: UnwrapRef<typeof import('../utils/received-display')['buildIncomingCardProps']>

@@ -39,6 +39,7 @@ vi.mock("@/wallet/services/price/client", () => ({
 			pricedTokens: LIST.pricedTokens,
 			flaggedTokens: [],
 			tokenIcons: LIST.tokenIcons,
+			bridgeIcons: {},
 		})
 		return {
 			disconnect: vi.fn(),
@@ -149,6 +150,7 @@ const mountSettled = (req: ReturnType<typeof send>, prices: Reading, token = TOK
 			tx: settledTx(req, token),
 			fiatLabel: prices.tokenFiatLabel,
 			iconFor: prices.iconFor,
+			bridgeIconFor: prices.bridgeIconFor,
 			isFlagged: prices.isFlagged,
 		} as never,
 		global: { stubs: STUBS, components: { RowAction } },

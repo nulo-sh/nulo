@@ -148,7 +148,7 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: H.makeEvent(),
 			onConnected: H.makeEvent(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: [], tokenIcons: H.tokenIcons })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: [], tokenIcons: H.tokenIcons, bridgeIcons: {} })),
 			refreshIfStale: H.refreshPrices,
 		}
 	}),
@@ -259,7 +259,7 @@ beforeEach(() => {
 	H.tokenIcons = {}
 	H.refreshPrices
 		.mockReset()
-		.mockImplementation(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: [], tokenIcons: H.tokenIcons }))
+		.mockImplementation(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: [], tokenIcons: H.tokenIcons, bridgeIcons: {} }))
 	for (const ev of [
 		H.journalAdded,
 		H.journalUpdated,
@@ -1417,6 +1417,7 @@ describe("RecentActivityView — a queued send that asks again", () => {
 			pricedTokens: {},
 			flaggedTokens: [],
 			tokenIcons: {},
+			bridgeIcons: {},
 		})
 		H.getTokens.mockResolvedValue([{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true }])
 		H.getOperations.mockResolvedValue([asking()])

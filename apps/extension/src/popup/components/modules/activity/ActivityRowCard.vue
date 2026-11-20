@@ -14,8 +14,9 @@ const props = defineProps({
 	tokens: { type: Array, default: () => [] },
 	tokenById: { type: Function, required: true },
 	fiatLabel: { type: Function, required: true },
-	/** The signed list's picture and flag of a token, for the mark before a title that names it. */
+	/** The signed list's picture, bridge picture and flag of a token, for the mark before a title that names it. */
 	iconFor: { type: Function, required: true },
+	bridgeIconFor: { type: Function, required: true },
 	isFlagged: { type: Function, required: true },
 	/** Whether an incoming row's receipt is arriving now; judged when the row renders. */
 	isArriving: { type: Function, default: undefined },
@@ -36,11 +37,12 @@ const terminalProps = computed(() => {
 		:to="activityRowRoute(row)"
 		:fiatLabel="fiatLabel"
 		:iconFor="iconFor"
+		:bridgeIconFor="bridgeIconFor"
 		:isFlagged="isFlagged"
 	/>
 	<TransactionIncomingCard
 		v-else-if="row.type === 'incoming'"
-		v-bind="buildIncomingCardProps(row.inc, tokens, fiatLabel, { iconFor, isFlagged })"
+		v-bind="buildIncomingCardProps(row.inc, tokens, fiatLabel, { iconFor, bridgeIconFor, isFlagged })"
 		:to="activityRowRoute(row)"
 		:arriving="isArriving?.(row.inc) ?? false"
 	/>

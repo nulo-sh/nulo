@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { mount } from "@vue/test-utils"
-import { TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
+import { TEST_BRIDGE_ICON, TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
 import TokenMark from "./TokenMark.vue"
 
 const STUBS = {
@@ -10,12 +10,13 @@ const STUBS = {
 	},
 }
 
-type Props = { symbol: string; icon?: string; size: 16 | 20 | 32 | 36; badge: boolean }
+type Props = { symbol: string; icon?: string; bridgeIcon?: string; size: 16 | 20 | 32 | 36; badge: boolean }
 const mountMark = (props: Partial<Props> = {}) =>
 	mount(TokenMark, { props: { symbol: "USDC", size: 32, badge: false, ...props }, global: { stubs: STUBS } })
 const root = (w: ReturnType<typeof mountMark>) => w.get('[data-testid="token-mark"]')
 /** CSS module classes are hashed (`_disc_3f2a1b`); this reads the authored name. */
 const hasClass = (el: { classes(): string[] }, name: string) => el.classes().some((c) => c === name || c.startsWith(`_${name}_`))
+const bridge = (w: ReturnType<typeof mountMark>) => w.find('[data-testid="token-mark-bridge"]')
 
 describe("composite/TokenMark", () => {
 	test("a picture draws as an image of that data URL, decorative and not draggable", () => {
@@ -106,8 +107,59 @@ describe("composite/TokenMark", () => {
 		expect(root(w).attributes("data-kind")).toBe("initials")
 	})
 
+	test.each([
+		[16, "8px", "-2px", "outline_1"],
+		[20, "10px", "-2px", "outline_1"],
+		[32, "16px", "-4px", "outline_1_5"],
+		[36, "18px", "-4px", "outline_1_5"],
+	] as const)(
+		"at %i px a bridge picture draws after the logo, %s square and %s past the top right, with %s",
+		(size, side, offset, outline) => {
+			const w = mountMark({ icon: TEST_ICONS.USDC, bridgeIcon: TEST_BRIDGE_ICON, size })
+			const [logo, badge] = w.findAll("img")
+			expect(logo.attributes("data-testid")).toBe("token-mark-logo")
+			expect(badge.attributes()).toMatchObject({
+				"data-testid": "token-mark-bridge",
+				src: TEST_BRIDGE_ICON,
+				alt: "",
+				draggable: "false",
+			})
+			expect(badge.attributes("style")).toBe(`width: ${side}; height: ${side}; top: ${offset}; right: ${offset};`)
+			expect(hasClass(badge, outline)).toBe(true)
+			expect(root(w).attributes("style")).toContain(`width: ${size}px; height: ${size}px`)
+		},
+	)
+
+	test("a bridge picture draws over initials as over a logo, and none without one", () => {
+		const initials = mountMark({ bridgeIcon: TEST_BRIDGE_ICON })
+		expect(root(initials).attributes("data-kind")).toBe("initials")
+		expect(bridge(initials).attributes("src")).toBe(TEST_BRIDGE_ICON)
+		expect(bridge(mountMark({ icon: TEST_ICONS.USDC })).exists()).toBe(false)
+	})
+
+	test("the warning takes the corner: a flagged mark draws no bridge picture, an unflagged one does", () => {
+		const flagged = mountMark({ icon: TEST_ICONS.USDC, bridgeIcon: TEST_BRIDGE_ICON, badge: true })
+		expect(bridge(flagged).exists()).toBe(false)
+		expect(flagged.findAll('[data-testid="icon"]')).toHaveLength(1)
+		expect(bridge(mountMark({ icon: TEST_ICONS.USDC, bridgeIcon: TEST_BRIDGE_ICON })).exists()).toBe(true)
+	})
+
+	test("a bridge picture that fails to decode hides alone, and a new one is tried", async () => {
+		const w = mountMark({ icon: TEST_ICONS.USDC, bridgeIcon: TEST_BRIDGE_ICON })
+		await bridge(w).trigger("error")
+		expect(bridge(w).exists()).toBe(false)
+		expect(w.get('[data-testid="token-mark-logo"]').attributes("src")).toBe(TEST_ICONS.USDC)
+
+		await w.setProps({ bridgeIcon: TEST_ICONS.GBPC })
+		expect(bridge(w).attributes("src")).toBe(TEST_ICONS.GBPC)
+	})
+
 	test("the mark is hidden from assistive tech and is no tab stop", () => {
-		for (const w of [mountMark(), mountMark({ icon: TEST_ICONS.USDC, badge: true })]) {
+		for (const w of [
+			mountMark(),
+			mountMark({ icon: TEST_ICONS.USDC, badge: true }),
+			mountMark({ icon: TEST_ICONS.USDC, bridgeIcon: TEST_BRIDGE_ICON }),
+		]) {
 			expect(root(w).attributes("aria-hidden")).toBe("true")
 			expect(w.find("[tabindex]").exists()).toBe(false)
 		}

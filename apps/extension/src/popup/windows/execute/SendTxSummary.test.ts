@@ -17,7 +17,7 @@ import AddressDisplay from "@/components/AddressDisplay.vue"
 import type { ListReader } from "@/utils/contract-level"
 import { trimAddress } from "@/utils/string"
 import { flaggedKeysOf, isFlaggedToken, listKeyOf } from "@/utils/token-flag"
-import { listedTokensOf, tokenIconFor, tokenIconsOf } from "@/utils/token-icon"
+import { bridgeIconsOf, listedTokensOf, tokenIconFor, tokenIconsOf } from "@/utils/token-icon"
 import { TEST_ICONS } from "@/wallet/services/token-list/list.fixture"
 import { shownText } from "../../../../tests/helpers/shown-text"
 import {
@@ -67,6 +67,7 @@ const usdcListedOn = (chainId: number): TokenListEntry => ({
 /** The list's reader as `useTokenFlags` gives it once the list has answered. */
 const readerOf = (entries: readonly TokenListEntry[], flagged: readonly TokenListPair[] = []): { marks: ListReader } => {
 	const icons = tokenIconsOf(entries)
+	const bridgeIcons = bridgeIconsOf(entries)
 	const listed = listedTokensOf(entries)
 	const flags = new Set(flaggedKeysOf(flagged))
 	return {
@@ -74,6 +75,7 @@ const readerOf = (entries: readonly TokenListEntry[], flagged: readonly TokenLis
 			mapped: ref(true),
 			isFlagged: (t) => isFlaggedToken(flags, t),
 			iconFor: (t) => tokenIconFor(icons, t),
+			bridgeIconFor: (t) => tokenIconFor(bridgeIcons, t),
 			listedAt: (t) => {
 				if (typeof t?.chainId !== "number" || typeof t.contract !== "string") return undefined
 				const key = listKeyOf(t.chainId, t.contract)

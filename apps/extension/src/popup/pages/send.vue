@@ -1094,6 +1094,7 @@ onBeforeUnmount(() => {
 						:token="activeToken"
 						:flagged="prices.isFlagged(activeToken)"
 						:icon="prices.iconFor(activeToken)"
+						:bridgeIcon="prices.bridgeIconFor(activeToken)"
 						:loading="tokensLoading"
 						:failed="tokensFailed"
 						:onTokenAdded="pickAddedToken"

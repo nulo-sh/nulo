@@ -64,6 +64,9 @@ const fixtureToken = (byte: string, symbol: string, priceId: string): TokenListE
 /** The source run's list: two Testnet tokens with their pictures, the first priced as USDC. */
 export const E2E_LIST_TOKENS: readonly TokenListEntry[] = [fixtureToken("a1", "USDC", "usd-coin"), fixtureToken("a2", "USDT", "tether")]
 
+/** A bridge picture as the publisher signs one: the source's GBPC letter mark, a Nulo-drawn file. */
+export const E2E_BRIDGE_ICON = sourceIcon("GBPC")
+
 /** The feeds of the source run's price ids, at today's Testnet stable bands. */
 export const E2E_PRICE_FEEDS: PriceFeeds = {
 	"usd-coin": { min: 0.2, max: 5, ticker: "USDC" },

@@ -31,12 +31,14 @@ vi.mock("@/wallet/services/price/client", () => ({
 				pricedTokens: TEST_PRICED_TOKENS,
 				flaggedTokens: mockFlagged,
 				tokenIcons: mockIcons,
+				bridgeIcons: {},
 			})),
 			refreshIfStale: vi.fn().mockImplementation(async () => ({
 				quotes: mockQuotes,
 				pricedTokens: TEST_PRICED_TOKENS,
 				flaggedTokens: mockFlagged,
 				tokenIcons: mockIcons,
+				bridgeIcons: {},
 			})),
 		}
 	}),

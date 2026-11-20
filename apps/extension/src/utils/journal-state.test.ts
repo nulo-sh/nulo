@@ -430,12 +430,17 @@ const OUTSIDE = `0x${"1e".repeat(32)}`
 describe("journalCardTitleMark", () => {
 	const TOKEN = { symbol: "cUSDC", chainId: 1, contract: "0xc" }
 	const ctx = { tokenById: (id: number) => (id === 7 ? TOKEN : undefined) }
-	const lookup = { iconFor: vi.fn(() => "data:image/svg+xml;base64,PHN2Zy8+"), isFlagged: vi.fn(() => true) }
+	const lookup = {
+		iconFor: vi.fn(() => "data:image/svg+xml;base64,PHN2Zy8+"),
+		bridgeIconFor: vi.fn(() => undefined),
+		isFlagged: vi.fn(() => true),
+	}
 
 	test("a send's title names its token, so it draws that token's mark from the list's reading", () => {
 		expect(journalCardTitleMark(transferRecord({ tokenId: 7 }), ctx, lookup)).toEqual({
 			symbol: "cUSDC",
 			icon: "data:image/svg+xml;base64,PHN2Zy8+",
+			bridgeIcon: undefined,
 			badge: true,
 		})
 		expect(lookup.iconFor).toHaveBeenCalledWith(TOKEN)

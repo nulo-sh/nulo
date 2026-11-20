@@ -21,6 +21,7 @@ import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profil
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { flaggedKeysOf, listKeyOf } from "@/utils/token-flag"
 import {
+	TEST_BRIDGE_ICON,
 	TEST_FLAGGED,
 	TEST_LIST_ENTRIES,
 	TEST_LIST_ENTRIES_WITH_ICONS,
@@ -28,7 +29,7 @@ import {
 	TEST_PRICED_TOKENS,
 	TEST_TOKENS,
 } from "@/wallet/services/token-list/list.fixture"
-import { listedTokensOf, tokenIconsOf } from "@/utils/token-icon"
+import { bridgeIconsOf, listedTokensOf, tokenIconsOf } from "@/utils/token-icon"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
 import {
 	freshQuotes,
@@ -420,6 +421,7 @@ describe("PriceService — refresh pipeline", () => {
 				pricedTokens: TEST_PRICED_TOKENS,
 				flaggedTokens: flaggedKeysOf([TEST_FLAGGED]),
 				tokenIcons: {},
+				bridgeIcons: {},
 				listedTokens: listedTokensOf(TEST_LIST_ENTRIES),
 			},
 		])
@@ -476,17 +478,20 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 		expect(state.fetchCalls).toHaveLength(0)
 	})
 
-	test("the list's pictures, symbols and names ride every snapshot with fiat off, and a list without pictures empties them", async () => {
+	test("the list's pictures, bridge pictures, symbols and names ride every snapshot with fiat off, and a list without pictures empties them", async () => {
 		const { service, state, fakeTokenList } = await harness({ enabled: false })
+		const entries = TEST_LIST_ENTRIES_WITH_ICONS.map((e) => (e.symbol === "USDC" ? { ...e, bridgeIcon: TEST_BRIDGE_ICON } : e))
 		state.list = {
 			sequence: 2,
 			keyId: "nulo-ci-1",
-			entries: TEST_LIST_ENTRIES_WITH_ICONS,
+			entries,
 			flagged: [TEST_FLAGGED],
 			priceFeeds: TEST_PRICE_FEEDS,
 		}
 		const read = await service.getQuotes()
 		expect(read.tokenIcons).toEqual(tokenIconsOf(TEST_LIST_ENTRIES_WITH_ICONS))
+		expect(read.bridgeIcons).toEqual({ [listKeyOf(CHAIN_IDS.TESTNET, TEST_TOKENS.USDC)]: TEST_BRIDGE_ICON })
+		expect(bridgeIconsOf(entries)).toEqual(read.bridgeIcons)
 		expect(Object.keys(read.tokenIcons)).toHaveLength(2)
 		expect(Object.keys(read.tokenIcons)).not.toContain(flaggedKeysOf([TEST_FLAGGED])[0])
 		expect(read.listedTokens[listKeyOf(CHAIN_IDS.TESTNET, TEST_TOKENS.USDT)]).toEqual({ symbol: "USDT", name: "Test USDT" })
@@ -499,6 +504,7 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 		fakeTokenList.onListChanged.invoke(state.list)
 		await vi.waitFor(() => expect(seen).toHaveLength(1))
 		expect(seen[0].tokenIcons).toEqual({})
+		expect(seen[0].bridgeIcons).toEqual({})
 		expect(state.fetchCalls).toHaveLength(0)
 	})
 
