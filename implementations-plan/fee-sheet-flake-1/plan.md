@@ -1,7 +1,7 @@
 ---
 plan: fee-sheet-flake-1
 tier: light
-status: implementing
+status: delivered (one PR against dev, merge pending)
 issues: "#1899"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 93877b8b1
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-20.
+- **Status:** delivered. The fix and this close-out are one PR against `dev`, which merges on the orchestrator's word.
+- **Shipped:** `pointerClick` records each press on a window capture listener. It returns only once a trusted click reached the aimed element. It aims once more only when that element moved off the point and only it or its ancestors took the press, and it logs that re-aim. Any other miss throws, naming what took the press. `openSendFeeSheet` names which half of its shared 10 s budget ran out. The new smoke spec `pointer-click.test.ts` has five cases. The e2e README row, the e2e-testing skill's passage and its ledger row 71 are updated. Closes #1899.
+- **Dispositions:** the issue's guess (Change not yet taking presses) did not hold, and the payers never came late. The CI cause is plausible but unverified: no artifact recorded a miss. Waiting for the estimate (C) and pressing by keyboard (D) were rejected; see Alternatives.
+- **Known limits:** #1912.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` is at its budget (8,148 of 8,192 bytes). The zsh `$VAR:path` pitfall is in [lessons/phase-1.md](lessons/phase-1.md), and the flake's root cause is the e2e-testing skill's ledger row 71, its owner.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # fee-sheet-flake-1: a press that missed its moving control is aimed again, never waited out
 
@@ -95,6 +106,8 @@ Test code only, run against local sandboxes. No credential, permission, network 
 3. Firefox, `same-token-concurrent-sends` and `send-chaos` (seed 1960252198), two more runs pinned to 4 cores, making three with step 2.
 
 **Validation gate:** every run green at retry 0. A red gets its cause read: one rerun for a known unrelated flake, a fix for real breakage. Layers: e2e, e2e-live-network (local sandbox).
+
+**Result** (heads `b201589f4`/`fda4d1fa5`, all at retry 0, green): smoke Chrome 11 files (89 tests) and Firefox 12 files (91 tests). Network Firefox 21 files (66 tests) in 2,926 s and Chrome 21 files (66 tests) in 2,342 s. `store-captures` and `stale-network-a10-capture` skip by their own opt-in guards, as on CI. Firefox `same-token-concurrent-sends` + `send-chaos`: 736 s + 183 s in the full run, then 682 s + 166 s and 729 s + 176 s on 4 pinned cores. After the `origin/dev` merge: lint, typecheck:all, and `rows`, `send-keyboard` and `pointer-click` on both browsers, green.
 
 ## Post-implementation
 
