@@ -24,8 +24,10 @@
 	}
 }
 
+/* A row that bleeds to the sheet's edges (a token row) reads the gutter from `--page-gutter`. */
 .body {
-	padding: 0 20px 24px 20px;
+	--page-gutter: 20px;
+	padding: 0 var(--page-gutter) 24px;
 }
 
 .title {

@@ -39,6 +39,7 @@ import { expectFitsNarrow } from "./fixtures/type-roles"
 import { readActivityScope, seedJournalRecord, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { createProfileAcceptingTerms, pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, pressEscape, SPACE, tabAround, waitForFocus } from "./helpers/pointer-probes"
+import { expectEdgeToEdge, readBands } from "./helpers/row-bands"
 import { startStub } from "./helpers/rpc-stub"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -534,37 +535,6 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 	expect(listedExtension.consoleErrors).toEqual([])
 	expect(listedExtension.pageErrors).toEqual([])
 }, 90_000)
-
-/** Each `selector` row's box against the viewport, and every clipping ancestor of the first that
- *  scrolls sideways (or the document). */
-function readBands(page: Page, selector: string) {
-	return page.evaluate((rowSel: string) => {
-		const rows = [...document.querySelectorAll(rowSel)]
-		const overflowing: string[] = []
-		let el: Element | null = rows[0] ?? null
-		while (el && el !== document.body) {
-			const clips = getComputedStyle(el).overflowX !== "visible"
-			if (clips && el.scrollWidth > el.clientWidth)
-				overflowing.push(`${el.getAttribute("data-testid") ?? el.tagName} ${el.scrollWidth}>${el.clientWidth}`)
-			el = el.parentElement
-		}
-		if (document.documentElement.scrollWidth > window.innerWidth) overflowing.push("html")
-		const edges = rows.map((row) => {
-			const box = row.getBoundingClientRect()
-			return { left: box.left, right: box.right }
-		})
-		return { overflowing, edges, width: window.innerWidth }
-	}, selector)
-}
-
-function expectEdgeToEdge(bands: Awaited<ReturnType<typeof readBands>>, label: string): void {
-	expect(bands.overflowing, `${label}: sideways scroll`).toEqual([])
-	expect(bands.edges.length, `${label}: rows`).toBeGreaterThan(0)
-	for (const { left, right } of bands.edges) {
-		expect(left, `${label}: left edge`).toBeCloseTo(0, 0)
-		expect(right, `${label}: right edge`).toBeCloseTo(bands.width, 0)
-	}
-}
 
 test("an activity row's band spans the gutter to both popup edges on Home and History, and nothing scrolls sideways", async ({
 	listedExtension,
