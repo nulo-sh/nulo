@@ -604,3 +604,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [holdings-add-1](holdings-add-1/plan.md) — completed — Holdings' Add imports a token in one press with the New token popup's checks; a flagged or unread-list address keeps the popup (#1881)
 - [fee-default-1](fee-default-1/plan.md) — completed — with nothing remembered, the app windows open on private Fee Juice when it can pay, then Nulo's sponsor, else nothing (#1879)
 - [send-again-build-1](send-again-build-1/plan.md) — completed — Send's "Same as last time" leaves for the visit once used or skipped, and the form opens on the amount (P193-03 = S0′, #1880)
+- [picker-band-1](picker-band-1/plan.md) — completed — Send's token picker rows take H1's edge-to-edge band; the sheet body declares its gutter (#1884)
