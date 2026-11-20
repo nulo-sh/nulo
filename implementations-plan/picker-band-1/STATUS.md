@@ -1,0 +1,1 @@
+- 2026-11-20: planned and built; captures today/after taken; lint and typecheck green.
