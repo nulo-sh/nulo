@@ -142,7 +142,7 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 			await popup.waitForFunction(
 				(s: string) => {
 					const img = document.querySelector<HTMLImageElement>(s)
-					return img !== null && img.complete && img.naturalWidth > 0
+					return img?.complete === true && img.naturalWidth > 0
 				},
 				{ timeout: 15_000 },
 				bridgeOf(badged.symbol),
