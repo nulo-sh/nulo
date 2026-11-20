@@ -87,6 +87,7 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 ## Audit verdicts
 
 - **Codex r1** (gpt-6.1-sol, high, over the plan and the diff at `4b0da4a94`): `findings`, three; agrees with D1 over D2. #1 (medium, plausible but unverified): a storage stall past Firefox's activation hides the row and blocks the tab; proposed `chrome.tabs.create` → not taken (D8), filed and closed as known limit #1919 after measuring the window (Fact 3); the comment's unbounded "one round trip" claim rewritten to the measured bound. #2 (low, demonstrated): the order case could not see a `set` left unawaited, since the mock stores at call time → the case now holds the `set` pending and checks no open before it lands. #3 (low, demonstrated): the plan overstated which cases fail on D2, and Fact 6 the overlay's reach → both corrected.
+- **Codex r1, resumed** (targeted verification of `7ea89af14`): `clean` ("No new material findings or regressions.").
 
 ## Seeds
 
