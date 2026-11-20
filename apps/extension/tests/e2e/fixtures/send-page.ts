@@ -165,14 +165,28 @@ export async function waitForTag(page: Page, shape: string | null, timeout = 30_
 	return assertPublishInvariant(await readSendView(page))
 }
 
-/** Opens the Fee sheet from the line's Change; the card shows inside it. */
+/** Opens the Fee sheet from the line's Change; the card shows inside it. Change's click opens the sheet
+ *  in its own task and the card moves into it a render later, so both share one budget, each named. */
 export async function openSendFeeSheet(page: Page): Promise<void> {
 	await pointerClick(page, "send-fee-change")
-	await page.waitForFunction(
-		() =>
-			document.querySelector('[data-testid="send-fee-change"]')?.getAttribute("aria-expanded") === "true" &&
-			Boolean(document.querySelector('[data-testid="send-fee-sheet"] [data-testid="send-fee-payers"]')),
-		{ timeout: 10_000, polling: 100 },
+	const deadline = Date.now() + 10_000
+	const left = () => Math.max(1, deadline - Date.now())
+	const shows = async () => JSON.stringify(await readSendView(page))
+	await withTimeoutMessage(
+		page.waitForFunction(() => document.querySelector('[data-testid="send-fee-change"]')?.getAttribute("aria-expanded") === "true", {
+			timeout: left(),
+			polling: 100,
+		}),
+		async () => `openSendFeeSheet: Change took the click, but the sheet is not open: ${await shows()}`,
+	)
+	await withTimeoutMessage(
+		page.waitForFunction(
+			() =>
+				document.querySelector('[data-testid="send-fee-change"]')?.getAttribute("aria-expanded") === "true" &&
+				Boolean(document.querySelector('[data-testid="send-fee-sheet"] [data-testid="send-fee-payers"]')),
+			{ timeout: left(), polling: 100 },
+		),
+		async () => `openSendFeeSheet: the sheet opened, but the payers never showed in it: ${await shows()}`,
 	)
 }
 

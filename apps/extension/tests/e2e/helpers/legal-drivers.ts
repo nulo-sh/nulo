@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { type BackgroundOwner, evaluateInBackground, reloadExtensionPage } from "../fixtures/browser"
 import { TEST_PASSWORD } from "../fixtures/constants"
-import { clickByTestId, replaceInputValue, waitForHash } from "../fixtures/dom"
+import { clickByTestId, replaceInputValue, waitForHash, withTimeoutMessage } from "../fixtures/dom"
 import type { ExtensionContext } from "../fixtures/extension"
 import { openOnboarding, seedLegalAcceptance } from "../fixtures/wallet-pages"
 import { PollTimeoutError, pollUntil } from "../fixtures/poll"
@@ -209,20 +209,42 @@ export async function answerUpdatedTerms(page: Page, entries: Record<string, unk
 	await page.waitForSelector(sel("legal-sheet"), { hidden: true, timeout: 15_000 })
 }
 
+const MAX_PRESSES = 2
+
 /**
  * A REAL pointer click at the element's centre, after proving nothing sits on top of it there. A
  * DOM-dispatched click reaches an element under an overlay; this is the proof that no overlay is.
  * `last` picks the last match of the testid — the control of the popup on top of a stack. The centre
  * is read only once the element holds still: a sheet's card moves 15px as a sheet opens over it or
  * closes above it, and a centre read mid-move is clicked a round trip later, after it has moved off it.
+ * A still element can still move in that round trip (Send's fee line grows a row when a note lands),
+ * so it returns only once the browser's click reached the element: a press that met only the
+ * element's own ground because the element moved off the point is aimed again, any other miss throws.
  */
 export async function pointerClick(page: Page, testid: string, opts: { last?: boolean } = {}): Promise<void> {
-	await page.waitForSelector(sel(testid), { visible: true, timeout: 15_000 })
-	await waitUntilStill(page, sel(testid), opts.last === true)
-	const point = await page.evaluate(
-		(s, last) => {
+	for (let press = 1; ; press++) {
+		await page.waitForSelector(sel(testid), { visible: true, timeout: 15_000 })
+		await waitUntilStill(page, sel(testid), opts.last === true)
+		const point = await aimAt(page, sel(testid), opts.last === true)
+		if (!point.reachable) {
+			throw new Error(`${testid} is covered at its centre by ${point.covering} (${point.where}): "${point.says}"`)
+		}
+		await armPress(page, sel(testid), opts.last === true, point, press > 1)
+		await page.mouse.click(point.x, point.y)
+		const met = await readPress(page)
+		if (met.reached) return
+		if (!met.displaced || press === MAX_PRESSES) {
+			throw new Error(`${testid} took no click from press ${press} at ${Math.round(point.x)},${Math.round(point.y)}: ${met.account}`)
+		}
+		console.log(`[pointerClick] ${testid} moved off press ${press}; aiming again (${met.account})`)
+	}
+}
+
+function aimAt(page: Page, selector: string, last: boolean) {
+	return page.evaluate(
+		(s, lastMatch) => {
 			const all = document.querySelectorAll(s)
-			const el = last ? all[all.length - 1] : all[0]
+			const el = lastMatch ? all[all.length - 1] : all[0]
 			if (!el) throw new Error(`${s} not found`)
 			el.scrollIntoView({ block: "center" })
 			const box = el.getBoundingClientRect()
@@ -239,13 +261,71 @@ export async function pointerClick(page: Page, testid: string, opts: { last?: bo
 				says: top?.textContent?.replace(/\s+/g, " ").trim().slice(0, 80),
 			}
 		},
-		sel(testid),
-		opts.last === true,
+		selector,
+		last,
 	)
-	if (!point.reachable) {
-		throw new Error(`${testid} is covered at its centre by ${point.covering} (${point.where}): "${point.says}"`)
-	}
-	await page.mouse.click(point.x, point.y)
+}
+
+/** Arms the page's record of the press about to land at the point. A press after a miss must find the
+ *  element it missed: a match that replaced it may be another popup's. */
+function armPress(page: Page, selector: string, last: boolean, point: { x: number; y: number }, again: boolean) {
+	return page.evaluate(
+		(s, lastMatch, x, y, retry) => {
+			const all = document.querySelectorAll(s)
+			const el = lastMatch ? all[all.length - 1] : all[0]
+			// biome-ignore lint/suspicious/noExplicitAny: the press record is page state no type declares
+			const w = window as any
+			if (!el) throw new Error(`${s} left before the press`)
+			if (retry && w.__nuloPress?.el !== el) throw new Error(`${s} was replaced after a press that missed it`)
+			w.__nuloPress = { el, x, y, heard: [], armed: true }
+			if (w.__nuloPressHeard) return
+			w.__nuloPressHeard = true
+			const name = (t: Element) => t.closest("[data-testid]")?.getAttribute("data-testid") ?? t.tagName
+			const covers = (t: Element, px: number, py: number) => {
+				const r = t.getBoundingClientRect()
+				return px >= r.left && px < r.right && py >= r.top && py < r.bottom
+			}
+			// Window capture hears each event before the target's own handlers can stop, move or remove it.
+			// Every trusted click of the press counts, a label's forwarded one included: all run in the
+			// pointerup's task. A scripted click is no press.
+			const hear = (type: string) => (e: Event) => {
+				const p = w.__nuloPress
+				if (!p?.armed || !e.isTrusted || !(e.target instanceof Element)) return
+				const on = covers(p.el, p.x, p.y)
+				p.heard.push({ type, at: name(e.target), inside: p.el.contains(e.target), under: e.target.contains(p.el), on })
+				if (type === "pointerup") setTimeout(() => (p.armed = false), 0)
+			}
+			for (const type of ["pointerdown", "pointerup", "click"]) addEventListener(type, hear(type), true)
+		},
+		selector,
+		last,
+		point.x,
+		point.y,
+		again,
+	)
+}
+
+/** What the armed press met. `reached`: a click landed inside the element. `displaced`: none did, the
+ *  element had left the aimed point by the pointerup, and every event landed on the element or on one
+ *  of its ancestors. A record gone with its document proves nothing, so it throws. */
+async function readPress(page: Page): Promise<{ reached: boolean; displaced: boolean; account: string }> {
+	await withTimeoutMessage(
+		// biome-ignore lint/suspicious/noExplicitAny: the press record is page state no type declares
+		page.waitForFunction(() => (window as any).__nuloPress?.armed !== true, { timeout: 5_000, polling: 20 }),
+		"the browser dispatched the press, but the page heard no pointerup",
+	)
+	return page.evaluate(() => {
+		// biome-ignore lint/suspicious/noExplicitAny: the press record is page state no type declares
+		const p = (window as any).__nuloPress
+		if (!p) return { reached: false, displaced: false, account: "the document was replaced before the press could be read" }
+		type Heard = { type: string; at: string; inside: boolean; under: boolean; on: boolean }
+		const heard: Heard[] = p.heard
+		const up = heard.filter((h) => h.type === "pointerup").pop()
+		const reached = heard.some((h) => h.type === "click" && h.inside)
+		const displaced = !reached && p.el.isConnected && up?.on === false && heard.every((h) => h.inside || h.under)
+		const account = heard.map((h) => `${h.type} on ${h.at} (target ${h.on ? "on" : "off"} the point)`).join(", ") || "no event"
+		return { reached, displaced, account }
+	})
 }
 
 /** Returns once three reads 50 ms apart give the element the same box and no enter transition above it
