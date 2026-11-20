@@ -110,11 +110,12 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: H.quotesUpdated,
 			onConnected: H.priceConnected,
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: H.icons.current })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, tokenIcons: H.icons.current, bridgeIcons: {} })),
 			refreshIfStale: vi.fn().mockImplementation(async () => ({
 				quotes: H.quotes.current,
 				pricedTokens: TEST_PRICED_TOKENS,
 				tokenIcons: H.icons.current,
+				bridgeIcons: {},
 			})),
 		}
 	}),

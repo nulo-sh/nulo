@@ -22,6 +22,8 @@ const props = defineProps({
 	},
 	/** The signed list's picture for this import's chain and contract, when the list names them. */
 	icon: String,
+	/** The signed list's picture of that contract's bridge, matched the same way. */
+	bridgeIcon: String,
 	retrying: Boolean,
 })
 
@@ -58,7 +60,7 @@ const subtitle = computed(() => {
 <template>
 	<Flex align="center" justify="between" :class="$style.row" data-testid="token-import-row">
 		<Flex align="center" gap="12" :class="$style.lead">
-			<TokenMark :symbol="markSymbol" :icon="icon" :size="32" :badge="false" :class="isFailed && $style.failed" />
+			<TokenMark :symbol="markSymbol" :icon="icon" :bridgeIcon="bridgeIcon" :size="32" :badge="false" :class="isFailed && $style.failed" />
 			<Flex direction="column" gap="2" :class="$style.lead">
 				<span
 					:class="[$style.title, titleIsAddress ? $style.address : $style.symbol, isFailed && $style.failed]"

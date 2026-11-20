@@ -421,6 +421,7 @@
     "balanceFormatted": true,
     "bareAztecAddress": true,
     "boundedString": true,
+    "bridgeIconsOf": true,
     "browser": true,
     "buildActivityRows": true,
     "buildIncomingCardProps": true,

@@ -275,6 +275,7 @@ onBeforeUnmount(() => {
 				:isArriving="arrivals?.isArriving"
 				:fiatLabel="prices.tokenFiatLabel"
 				:iconFor="prices.iconFor"
+				:bridgeIconFor="prices.bridgeIconFor"
 				:isFlagged="prices.isFlagged"
 			/>
 

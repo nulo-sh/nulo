@@ -88,6 +88,7 @@ vi.mock("@/composables/usePrices", () => ({
 		mapped: ref(true),
 		isFlagged: () => false,
 		iconFor: () => undefined,
+		bridgeIconFor: () => undefined,
 		listedAt: (t: { chainId?: number; contract?: string } | undefined) =>
 			t?.chainId === 1 && t.contract === TOKEN ? { symbol: "TST", name: "Test Token" } : undefined,
 		dispose: vi.fn(),

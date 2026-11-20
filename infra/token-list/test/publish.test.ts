@@ -438,7 +438,17 @@ describe("the prepare summary", () => {
 		expect(rendered).toContain(`| was | 1 |`)
 		expect(rendered).toContain(`svg 15 B \`${prefix("<svg><g/></svg>")}\` |`)
 		expect(rendered).toContain(`svg 18 B \`${prefix("<svg><path/></svg>")}\` |`)
-		expect(rendered).toMatch(/\| \+ \| 1 \| .* \| none \|$/m)
+		expect(rendered).toMatch(/\| \+ \| 1 \| .* \| none \| none \|$/m)
+	})
+
+	test("shows a bridge picture over the token picture's budget in its own column, and a changed one as a was/now pair", () => {
+		const large = `<svg><desc>${"a".repeat(6000)}</desc></svg>`
+		const picture = (svg: string) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
+		const prefix = createHash("sha256").update(large).digest("hex").slice(0, 16)
+		const rendered = renderDiff(tokenDiff([token(1)], [token(1, { bridgeIcon: picture(large) })]))
+		expect(rendered).toContain("| picture | bridge picture |")
+		expect(rendered).toMatch(/^\| was \| 1 \| .* \| none \| none \|$/m)
+		expect(rendered).toMatch(new RegExp(`^\\| now \\| 1 \\| .* \\| none \\| svg 6024 B \`${prefix}\` \\|$`, "m"))
 	})
 
 	test("shows the signed text verbatim, with no markup the approver cannot see", () => {

@@ -63,7 +63,7 @@ function verifiedToken(reading: Extract<ContractReading, { source: "token" }>, a
 	const symbol = sanitizeWireString(reading.symbol, 16)
 	const name = sanitizeWireString(reading.name, 64)
 	return chip(symbol, false, "nulo", {
-		mark: { symbol, icon: reading.icon, badge: false },
+		mark: { symbol, icon: reading.icon, bridgeIcon: reading.bridgeIcon, badge: false },
 		title: name && name !== symbol ? `${symbol} · ${name}` : symbol,
 		lines: [KNOWN, "Nulo names it from its token list."],
 		address,

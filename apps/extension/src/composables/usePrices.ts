@@ -21,7 +21,7 @@ export type PricedToken = { chainId?: number; contract?: string; decimals?: numb
 type PricedRow = { token?: PricedToken; publicBalance?: string; privateBalance?: string }
 
 /** The signed list's half of every snapshot: which token each id prices, which pairs it flags and
- *  each entry's picture, symbol and name. */
+ *  each entry's picture, bridge picture, symbol and name. */
 function listState() {
 	/** Which token each id prices. It comes from the signed list, through the worker, with the quotes. */
 	const pricedTokens = ref<PricedTokens>({})
@@ -29,6 +29,8 @@ function listState() {
 	const flaggedTokens = ref<ReadonlySet<string>>(new Set())
 	/** Each entry's picture, as `tokenIconsOf` keys it. A list without pictures empties it. */
 	const tokenIcons = ref<Readonly<Record<string, string>>>({})
+	/** Each entry's bridge picture, keyed the same way; a list without one drops the badge. */
+	const bridgeIcons = ref<Readonly<Record<string, string>>>({})
 	/** Each entry's symbol and name, as `listedTokensOf` keys them. */
 	const listedTokens = ref<Readonly<Record<string, ListedToken>>>({})
 	/** The mapping has arrived. Until then no surface can tell a priced token from an unpriced one. */
@@ -40,6 +42,7 @@ function listState() {
 		pricedTokens.value = snapshot.pricedTokens
 		flaggedTokens.value = new Set(snapshot.flaggedTokens)
 		tokenIcons.value = snapshot.tokenIcons
+		bridgeIcons.value = snapshot.bridgeIcons
 		listedTokens.value = snapshot.listedTokens
 		mapped.value = true
 	}
@@ -49,6 +52,8 @@ function listState() {
 		mapped,
 		/** The signed list's picture for this token, on its chain and contract; undefined until `mapped`. */
 		iconFor: (token: PricedToken | undefined): string | undefined => tokenIconFor(tokenIcons.value, token),
+		/** The signed list's bridge picture for this token, matched as `iconFor` matches. */
+		bridgeIconFor: (token: PricedToken | undefined): string | undefined => tokenIconFor(bridgeIcons.value, token),
 		/** The entry the signed list holds for this contract, on its chain; undefined until `mapped`. */
 		listedAt: (token: PricedToken | undefined): ListedToken | undefined => {
 			if (typeof token?.chainId !== "number" || typeof token.contract !== "string") return undefined
@@ -192,6 +197,7 @@ export function usePrices(priceService: PriceServiceClient) {
 		isPriced,
 		isFlagged,
 		iconFor: list.iconFor,
+		bridgeIconFor: list.bridgeIconFor,
 		priceEntryFor,
 		quoteFor,
 		feeJuiceQuote,
@@ -219,6 +225,7 @@ export function useTokenFlags(priceService: PriceServiceClient) {
 		/** The signed list flags this token as a scam, on its chain and contract. False until `mapped`. */
 		isFlagged: (token: PricedToken | undefined): boolean => isFlaggedToken(list.flaggedTokens.value, token),
 		iconFor: list.iconFor,
+		bridgeIconFor: list.bridgeIconFor,
 		listedAt: list.listedAt,
 		dispose: () => {
 			priceService.onQuotesUpdated.remove(list.adoptFull)

@@ -184,6 +184,40 @@ describe("icon", () => {
 	})
 })
 
+describe("bridgeIcon", () => {
+	const picture = (svg: string) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
+	const ICON = picture('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><circle cx="1" cy="1" r="1"/></svg>')
+	/** Over `icon`'s budget, under `bridgeIcon`'s. */
+	const LARGE = picture(`<svg><desc>${"a".repeat(6000)}</desc></svg>`)
+
+	test("both modes keep an accepted bridge picture, between the price id and the icon, and readTokenList keeps it", async () => {
+		const value = payload([entry(0, { bridgeIcon: LARGE, icon: ICON }), entry(1)], { sequence: SEQUENCE_FLOOR })
+		const strict = checkPayload(value, "strict")
+		expect(Object.keys(strict.tokens[0]).slice(-3)).toEqual(["priceId", "bridgeIcon", "icon"])
+		expect(checkPayload(value, "wallet")).toEqual(strict)
+		expect(checkSource({ tokens: [entry(0, { bridgeIcon: LARGE })] })).toEqual({ tokens: [entry(0, { bridgeIcon: LARGE })] })
+		const { privateKey, pinned } = await freshKey()
+		const bytes = new TextEncoder().encode(JSON.stringify(value))
+		const list = await readTokenList(JSON.stringify(await signEnvelope(bytes, privateKey, pinned.keyId)), [pinned])
+		expect(list.entries.map((e) => e.bridgeIcon)).toEqual([LARGE, undefined])
+	})
+
+	test.each([
+		["a scripted SVG", picture("<svg><script>x</script></svg>")],
+		["a picture over its own budget", picture(`<svg><desc>${"a".repeat(12_300)}</desc></svg>`)],
+		["a value that is not a string", 7],
+	])("the wallet drops %s and keeps the entry and its icon; strict refuses it at the bridge picture", (_, bridgeIcon) => {
+		const value = payload([entry(0, { bridgeIcon, icon: ICON })])
+		expect(checkPayload(value, "wallet").tokens).toEqual([entry(0, { icon: ICON })])
+		expect(refusedAt(value, "strict")).toBe("payload.tokens[0].bridgeIcon")
+		expect(() => checkSource({ tokens: [entry(0, { bridgeIcon })] })).toThrow("source.tokens[0].bridgeIcon")
+	})
+
+	test("an icon keeps its own budget: a picture the bridge budget accepts is refused as an icon", () => {
+		expect(refusedAt(payload([entry(0, { icon: LARGE })]), "strict")).toBe("payload.tokens[0].icon")
+	})
+})
+
 describe("tokenKey", () => {
 	const DIGITS = "0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
 

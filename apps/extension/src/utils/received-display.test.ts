@@ -135,9 +135,14 @@ describe("tokenForReceipt + buildIncomingCardProps", () => {
 
 	test("a known token's receipt draws its mark from the list's reading; with no token there is none", () => {
 		const ICON = "data:image/svg+xml;base64,PHN2Zy8+"
-		const marks = { iconFor: vi.fn(() => ICON), isFlagged: vi.fn(() => true) }
+		const marks = { iconFor: vi.fn(() => ICON), bridgeIconFor: vi.fn(() => undefined), isFlagged: vi.fn(() => true) }
 		const known = token({ decimals: 6 })
-		expect(buildIncomingCardProps(noteRec(), [known], fiatLabel, marks).titleMark).toEqual({ symbol: "TST", icon: ICON, badge: true })
+		expect(buildIncomingCardProps(noteRec(), [known], fiatLabel, marks).titleMark).toEqual({
+			symbol: "TST",
+			icon: ICON,
+			bridgeIcon: undefined,
+			badge: true,
+		})
 		expect(marks.iconFor).toHaveBeenCalledWith(known)
 		expect(buildIncomingCardProps(noteRec(), [token({ id: 2, contract: "0xother" })], fiatLabel, marks).titleMark).toBeNull()
 	})

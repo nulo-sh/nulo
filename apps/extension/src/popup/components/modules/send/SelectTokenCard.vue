@@ -40,6 +40,8 @@ const props = defineProps({
 	},
 	/** The signed list's picture for the token. */
 	icon: String,
+	/** The signed list's picture of the token's bridge. */
+	bridgeIcon: String,
 })
 
 /** A token handed in is always drawn: the page passes one only once its tokens have loaded. */
@@ -111,7 +113,7 @@ onBeforeUnmount(() => {
 	>
 		<template v-if="token">
 			<Flex align="center" gap="12">
-				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :size="36" :badge="flagged || isTokenBlocked" />
+				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :bridgeIcon="bridgeIcon" :size="36" :badge="flagged || isTokenBlocked" />
 
 				<Flex direction="column" gap="2">
 					<span :class="$style.token_symbol" data-testid="send-token-symbol">{{ dashIfBlank(token.symbol) }}</span>
