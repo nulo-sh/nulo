@@ -1,7 +1,7 @@
 ---
 plan: deps-ci-3
 tier: light
-status: active
+status: completed
 issues: "#1896"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at 033dfcd9c
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-20. Planned and delivered as one arc.
+- **Status:** completed. The arc and this close-out ship as one PR into `dev`; its merge archives this plan and closes #1896. Dependabot closes alerts 53 to 57 on its rescan.
+- **Shipped:** setup-aztec's CLI lockfile moves `node-forge` 1.4.2 → 1.4.3 and `fast-xml-parser` 5.11.2 → 5.12.1 in place, with the two floors 5.12.1 declares (`is-unsafe` 2.0.3, `fast-xml-builder` 1.3.2); no override and no other file.
+- **Review:** Codex r1 `findings (2)`, the Opus lens `findings (3)`, Codex r2 (verify) `findings (3)` in the PR and issue drafts; all fixed (Audit verdicts).
+- **Gates:** G1 to G4 green at `a3fcca233` and on the close-out head; the PR's required checks on its head certify the rest, the two network lanes installing the new tree cold.
+- **Dropped:** the `@libp2p/crypto` move (D3); the floor test (D4); the local Docker runner (D5).
+- **Known limits:** #1916 (alert 58).
+- **Open items:** none. Dismissing alert 58 under #1278 is the owner's action; #1916 records it.
+- **Lessons:** none promoted: `lessons.md` sits at its budget, and the in-place recipe already lives in the `aztec-update` skill.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 # deps-ci-3: setup-aztec's CLI lockfile past Dependabot alerts 53 to 57
 
@@ -85,10 +98,11 @@ Validation gate (scratch under `~/.cache/nulo-backlog/deps-ci-3/`):
 
 - **Codex r1** (gpt-6.1-sol, high, the plan and the diff from `033dfcd9c`): `findings (2)`, both accepted. The proposed title named `@libp2p/crypto`, which does not move (demonstrated): the title now names what moved. D3's reopening condition left out an in-range backport and new evidence about the locked code (plausible): both added. Confirmed: four keys, npm registry only, integrities match the tarballs, gate on, F4 holds, D2, D4 and D6 sound.
 - **Opus lens** beside it (general-purpose, same inputs): `findings (3)`. The title (as Codex r1). Phase 1 never filed the known-limit issue the Delivery names: step 3 added. D3's case was miscounted ("seven callers"; twelve dependents) and understated ("untested"): the override breaks at load, verified against both tarballs and added to F4. Its point that the owner declined an override in #1456 does not carry here: that override would have installed; this one cannot load, so there is no option to put to the owner. Its claim that the older parsers bound DER lengths was read, not tested, and is left out: F4 keeps "unknown".
+- **Codex r2** (resumed, verify only): every accepted fix verified; the load break confirmed on 5.1.22 and 5.2.0 as well. `findings (3)`, all in the PR and issue drafts and all fixed there: the body denied the existing `systeminformation` override, called 5.1.22 the only fixed release rather than the first, and the issue lacked its failure hypothesis. No further round: the fixes are wording, checked against the tree.
 
 ## Implementation record
 
-- Phase 1: steps 1 and 2 as written; G1 to G3 green on the probes above. G4 below.
+- Phase 1 (`a3fcca233`): steps 1 to 3 as written; G1 to G4 green (`test:ci-gating` 755 pass, `check:plans` 0 findings). Alert 58's known limit is #1916, closed as not planned; #1896 carries a comment with the reason.
 
 ## Delivery
 

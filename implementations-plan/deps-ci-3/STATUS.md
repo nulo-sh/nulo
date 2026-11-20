@@ -1,2 +1,0 @@
-- 2026-11-20 plan: in-place update probed; 4 lock keys move; alert 58 a known limit (D3); install.sh green in scratch
-- 2026-11-20 review: Codex r1 findings (2) and Opus lens findings (3) applied to the plan; lockfile unchanged

@@ -10,3 +10,4 @@
 
 - Codex r1 (gpt-6.1-sol, high, plan and diff): `findings (2)`, both accepted. The proposed title named `@libp2p/crypto`, which does not move (demonstrated); D3's reopening condition left out an in-range backport and new evidence about the locked code (plausible).
 - Opus lens beside it: `findings (3)`, accepted with one part left out. The title (as Codex). The known-limit issue had no step: added. The override case was miscounted and understated; reading `@aztec-labs/p2p` 6.0.0's `@libp2p/crypto/keys` imports against the 5.1.21 tarball shows it breaks at load. Its unverified claim about the older parsers' bounds stays out.
+- Codex r2 (resumed, verify only): every accepted fix verified, and the 5.x load break confirmed on 5.1.22 and 5.2.0 too. `findings (3)` in the PR and issue drafts, all accepted: the PR body denied the existing `systeminformation` override, called 5.1.22 the only fixed release rather than the first, and the issue lacked its failure hypothesis.
