@@ -44,6 +44,7 @@ const props = defineProps({
 	 *  paint the row without its fiat until its first answer, as the send lands. */
 	fiatLabel: { type: Function as PropType<(token: PricedToken, raw: bigint) => string | undefined>, required: true },
 	iconFor: { type: Function as PropType<TokenMarkLookup["iconFor"]>, required: true },
+	bridgeIconFor: { type: Function as PropType<TokenMarkLookup["bridgeIconFor"]>, required: true },
 	isFlagged: { type: Function as PropType<TokenMarkLookup["isFlagged"]>, required: true },
 })
 

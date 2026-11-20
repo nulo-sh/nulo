@@ -59,6 +59,7 @@ vi.mock("@/wallet/services/price/client", () => ({
 				quotes: {},
 				pricedTokens: {},
 				tokenIcons: {},
+				bridgeIcons: {},
 				flaggedTokens: [listKeyOf(CHAIN, FLAGGED)],
 				listedTokens: {
 					[listKeyOf(CHAIN, LISTED_USDC)]: { symbol: "USDC", name: "Test USDC" },

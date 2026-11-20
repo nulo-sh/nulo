@@ -5,7 +5,7 @@ import { join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 import { PINNED_KEYS, PLACEHOLDER_PUBLIC_KEY, type PinnedKey, type TokenListEntry } from "@nulo/token-list"
 import { decodeBase64Url, verifyEnvelope } from "@nulo/token-list/envelope"
-import { iconBytes } from "@nulo/token-list/icon"
+import { bridgeIconBytes, iconBytes } from "@nulo/token-list/icon"
 import { checkSource, parsePayload } from "@nulo/token-list/parse"
 import { publishedSequence } from "@nulo/token-list/sign"
 import { FLOOR_PATH, floorText } from "./floor"
@@ -27,18 +27,24 @@ export const sha256Hex = (bytes: Uint8Array): string => createHash("sha256").upd
 const PICTURE_ROW = /^\|(?: [^\s|][^|\n]* \|){5} `([0-9a-f]{64})` \|$/gm
 
 /**
- * Publishing requires every entry to carry a picture whose digest has a row in the README's
- * provenance table, so swapping a picture changes a reviewed line.
+ * Publishing requires every entry to carry a picture, and every picture or bridge picture it carries
+ * to have its digest in a row of the README's provenance table, so swapping one changes a reviewed line.
  */
 export function pictureFindings(tokens: readonly TokenListEntry[], readme: string): string[] {
 	const start = readme.indexOf("\n## Pictures\n")
 	const end = start === -1 ? -1 : readme.indexOf("\n## ", start + 1)
 	const table = start === -1 ? "" : readme.slice(start, end === -1 ? undefined : end)
 	const recorded = new Set(Array.from(table.matchAll(PICTURE_ROW), (match) => match[1]))
+	const unrecorded = (bytes: Uint8Array, field: string) =>
+		recorded.has(sha256Hex(bytes)) ? [] : [`${SOURCE}: ${field} has no row in ${README} § Pictures`]
 	return tokens.flatMap((token, i) => {
 		const bytes = iconBytes(token.icon)
 		if (!bytes) return [`${SOURCE}: tokens[${i}] has no icon`]
-		return recorded.has(sha256Hex(bytes)) ? [] : [`${SOURCE}: tokens[${i}].icon has no row in ${README} § Pictures`]
+		const findings = unrecorded(bytes, `tokens[${i}].icon`)
+		if (token.bridgeIcon === undefined) return findings
+		const bridge = bridgeIconBytes(token.bridgeIcon)
+		if (!bridge) return [...findings, `${SOURCE}: tokens[${i}].bridgeIcon fails ${FORMAT} § Pictures`]
+		return [...findings, ...unrecorded(bridge, `tokens[${i}].bridgeIcon`)]
 	})
 }
 

@@ -22,6 +22,7 @@ import {
 	E2E_LIST_FLAGGED,
 	E2E_LIST_TOKENS,
 	type ListHost,
+	e2eBridgeIcon,
 	e2eSigner,
 	heldListEntries,
 	requestListRefresh,
@@ -33,6 +34,7 @@ import {
 import { readScopeIdentity, seedTokenRow } from "./helpers/activity-seeds"
 import { refuseTestnet } from "./helpers/contacts"
 import { createProfileAcceptingTerms } from "./helpers/legal-drivers"
+import { expectEdgeToEdge, readBands } from "./helpers/row-bands"
 
 const SEED_ROW = '[data-testid="token-seed-row"]'
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -110,7 +112,8 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 	}, async ({ freshExtensionPerTest: ctx }) => {
 		const host = await serveTokenList()
 		try {
-			const first = await signTestList()
+			const [badged, plain] = E2E_LIST_TOKENS
+			const first = await signTestList({ tokens: [{ ...badged, bridgeIcon: e2eBridgeIcon() }, plain] })
 			host.serve(first)
 			await storeHostCookie(ctx, host)
 			const control = await openScratchPage(ctx.browser, ctx.extensionId)
@@ -135,6 +138,19 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 				shown.every((symbol) => listed.has(symbol)),
 				`seed rows ${shown.join(", ")}`,
 			).toBe(true)
+			// The bridge picture crosses the worker → popup channel and decodes under the extension's CSP.
+			const bridgeOf = (symbol: string) => `${SEED_ROW}[data-symbol="${symbol}"] ${sel("token-mark-bridge")}`
+			await popup.waitForFunction(
+				(s: string) => {
+					const img = document.querySelector<HTMLImageElement>(s)
+					return img?.complete === true && img.naturalWidth > 0
+				},
+				{ timeout: 15_000 },
+				bridgeOf(badged.symbol),
+			)
+			expect(await popup.$(`${SEED_ROW}[data-symbol="${plain.symbol}"] ${sel("token-mark")}`)).not.toBeNull()
+			expect(await popup.$(bridgeOf(plain.symbol))).toBeNull()
+			await shotSend(popup, "bridge-badge-seed-row", "token-mark-bridge")
 
 			host.serve(await signForgedList())
 			await requestListRefresh(control)
@@ -165,7 +181,7 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 		}
 	})
 
-	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner; a pasted flagged address carries it on the picker's add row", {
+	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner; a pasted flagged address carries it on the picker's add row and in the New token popup; the picker's rows and search bar span both popup edges", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ listedExtensionPerTest: ctx }) => {
@@ -199,6 +215,11 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 
 			await clickByTestId(page, "send-token-trigger")
 			await page.waitForSelector(`${sel("select-token-row")}[data-symbol="SCAM"] ${sel("select-token-flagged")}`, VISIBLE)
+			// The sheet's rows take the pages' band over its own gutter, the selected one too; its sticky
+			// search bar, narrower, would leave the band's ends showing as a row scrolls under it.
+			expect(await page.$(`${sel("select-token-row")}[data-selected="true"]`), "the sent token's row is selected").not.toBeNull()
+			expectEdgeToEdge(await readBands(page, sel("select-token-row")), "the Send picker's rows")
+			expectEdgeToEdge(await readBands(page, sel("select-token-search-bar")), "the Send picker's search bar")
 			await shotSend(page, "flagged-send-picker", "select-token-flagged")
 
 			const [, unheld] = E2E_LIST_FLAGGED
@@ -214,6 +235,12 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 				sel("select-token-add-token-flagged"),
 			)
 			expect(await page.$(sel("select-token-add-token"))).not.toBeNull()
+			// The popup reads the list through its own port, so its line proves that read.
+			await replaceInputValue(page, sel("select-token-search"), unheld.address.toUpperCase().replace("0X", "0x"))
+			await page.waitForSelector(sel("select-token-add-token-flagged"), VISIBLE)
+			await clickByTestId(page, "select-token-add-token")
+			await page.waitForSelector(sel("new-token-flagged"), VISIBLE)
+			await shotSend(page, "new-token-flagged", "new-token-flagged")
 		} finally {
 			await refusal.stop()
 		}

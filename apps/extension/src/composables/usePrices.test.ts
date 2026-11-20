@@ -14,8 +14,9 @@ import type { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices, useTokenFlags } from "./usePrices"
 import { captureWindowDocument } from "@/utils/window-document"
 import { flaggedKeysOf } from "@/utils/token-flag"
-import { listedTokensOf, tokenIconsOf } from "@/utils/token-icon"
+import { bridgeIconsOf, listedTokensOf, tokenIconsOf } from "@/utils/token-icon"
 import {
+	TEST_BRIDGE_ICON,
 	TEST_FLAGGED,
 	TEST_ICONS,
 	TEST_LIST_ENTRIES,
@@ -27,11 +28,13 @@ import {
 const TEST_USDC = TEST_TOKENS.USDC
 
 const ICONS = tokenIconsOf(TEST_LIST_ENTRIES_WITH_ICONS)
-const snap = (quotes: PriceState, { flagged = [TEST_FLAGGED], icons = ICONS } = {}): PriceSnapshot => ({
+const BRIDGES = bridgeIconsOf(TEST_LIST_ENTRIES.map((e) => (e.symbol === "USDC" ? { ...e, bridgeIcon: TEST_BRIDGE_ICON } : e)))
+const snap = (quotes: PriceState, { flagged = [TEST_FLAGGED], icons = ICONS, bridges = BRIDGES } = {}): PriceSnapshot => ({
 	quotes,
 	pricedTokens: TEST_PRICED_TOKENS,
 	flaggedTokens: flaggedKeysOf(flagged),
 	tokenIcons: icons,
+	bridgeIcons: bridges,
 	listedTokens: listedTokensOf(TEST_LIST_ENTRIES),
 })
 /** A row as a restored backup may store it: upper-case hex. */
@@ -185,6 +188,19 @@ describe("composables/usePrices", () => {
 
 		client.onQuotesUpdated.invoke(snap({}, { icons: {} }))
 		expect(api.iconFor({ chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC })).toBeUndefined()
+	})
+
+	test("a bridge picture is the list's for that chain and contract only, and a later list without one takes it away", async () => {
+		const client = fakeClient()
+		client.refreshIfStale.mockReturnValue(new Promise(() => {}))
+		const { api } = await withPrices(client)
+		expect(api.bridgeIconFor({ chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC })).toBe(TEST_BRIDGE_ICON)
+		expect(api.bridgeIconFor({ chainId: CHAIN_IDS.MAINNET, contract: TEST_USDC })).toBeUndefined()
+		expect(api.bridgeIconFor({ chainId: CHAIN_IDS.TESTNET, contract: TEST_TOKENS.GBPC })).toBeUndefined()
+
+		client.onQuotesUpdated.invoke(snap({}, { bridges: {} }))
+		expect(api.bridgeIconFor({ chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC })).toBeUndefined()
+		expect(api.iconFor({ chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC })).toBe(TEST_ICONS.USDC)
 	})
 
 	test("a reconnect reads the list again without waiting on the refresh; a read older than a broadcast is dropped", async () => {
@@ -409,6 +425,17 @@ describe("composables/useTokenFlags", () => {
 		await flushPromises()
 		expect(flags.isFlagged(FLAGGED_ROW)).toBe(false)
 		expect(client.getQuotes).toHaveBeenCalledTimes(2)
+		expect(client.refreshIfStale).not.toHaveBeenCalled()
+	})
+
+	test("a bridge picture rides the quote-less snapshot of fiat off, and a later list without one takes it away", async () => {
+		const client = fakeClient()
+		const flags = useTokenFlags(client as unknown as PriceServiceClient)
+		await flushPromises()
+		expect(flags.bridgeIconFor({ chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC })).toBe(TEST_BRIDGE_ICON)
+
+		client.onQuotesUpdated.invoke(snap({}, { bridges: {} }))
+		expect(flags.bridgeIconFor({ chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC })).toBeUndefined()
 		expect(client.refreshIfStale).not.toHaveBeenCalled()
 	})
 

@@ -29,6 +29,7 @@ export const answeredList = (): ListReader => ({
 	mapped: ref(true),
 	isFlagged: () => false,
 	iconFor: () => undefined,
+	bridgeIconFor: () => undefined,
 	listedAt: () => undefined,
 })
 

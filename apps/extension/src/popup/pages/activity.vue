@@ -275,6 +275,7 @@ onBeforeUnmount(() => {
 				:isArriving="arrivals?.isArriving"
 				:fiatLabel="prices.tokenFiatLabel"
 				:iconFor="prices.iconFor"
+				:bridgeIconFor="prices.bridgeIconFor"
 				:isFlagged="prices.isFlagged"
 			/>
 
@@ -341,7 +342,8 @@ onBeforeUnmount(() => {
 }
 
 .content {
-	padding: 0 24px;
+	--page-gutter: 24px;
+	padding: 0 var(--page-gutter);
 }
 
 .filter_chip {

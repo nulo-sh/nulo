@@ -8,6 +8,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Composables */
 import { usePrices } from "@/composables/usePrices"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Utils */
 import { formatListSplit } from "@/utils/amount.js"
@@ -63,6 +64,7 @@ const prices = usePrices(priceService)
 const fiatLabel = computed(() => (isMalformed.value ? undefined : prices.tokenFiatLabel(token.value, privateRaw.value + publicRaw.value)))
 const isFlagged = computed(() => prices.isFlagged(token.value))
 const icon = computed(() => prices.iconFor(token.value))
+const bridgeIcon = computed(() => prices.bridgeIconFor(token.value))
 onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
@@ -93,12 +95,14 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 		<component
 			:is="pickPrefix ? 'button' : 'a'"
 			v-bind="pickPrefix ? pickAttrs : { href, 'data-testid': 'tokens-card' }"
+			:data-token-id="token.id"
 			:class="[$style.row, $style.link, pickPrefix && $style.pick, selected && $style.selected]"
 			@click="pickPrefix ? emit('pick', token.id) : navigate($event)"
 			@keydown.space="pickPrefix || navigate($event)"
+			@keydown.enter="refuseRepeatEnter"
 		>
 			<Flex align="center" gap="12" :class="$style.lead">
-				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :size="32" :badge="isFlagged" />
+				<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :bridgeIcon="bridgeIcon" :size="32" :badge="isFlagged" />
 				<Flex direction="column" gap="2" :class="$style.lead">
 					<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
 						{{ dashIfBlank(token.symbol) }}
@@ -158,7 +162,12 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	text-decoration: none;
 }
 
+/* The fill and ring span the host's `--page-gutter` to the popup's edges, so nothing between the
+   host and the row may add a side inset. A host that declares no gutter keeps the row inside its column. */
 .link {
+	margin-inline: calc(-1 * var(--page-gutter, 0px));
+	padding-inline: var(--page-gutter, 0px);
+
 	user-select: none;
 	cursor: pointer;
 	transition: background 0.2s var(--bezier);
@@ -174,11 +183,8 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	}
 }
 
-/* A picker's option spans the sheet: the fill and bar reach past the text on both sides. */
+/* A column flex container stretches this button across `.link`'s negative margins, so it needs no width. */
 .pick {
-	width: calc(100% + 16px);
-	margin: 0 -8px;
-	padding: 8px;
 	background: transparent;
 	color: inherit;
 	text-align: left;

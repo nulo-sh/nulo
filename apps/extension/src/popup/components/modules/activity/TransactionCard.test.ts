@@ -24,7 +24,11 @@ vi.mock("@/stores/app.store", () => ({
 
 // Controllable price feed for the fiat case; the list's flags and pictures ride every answer.
 let mockQuotes: Record<string, unknown> = {}
-let mockList: { flaggedTokens: string[]; tokenIcons: Record<string, string> } = { flaggedTokens: [], tokenIcons: {} }
+let mockList: { flaggedTokens: string[]; tokenIcons: Record<string, string>; bridgeIcons: Record<string, string> } = {
+	flaggedTokens: [],
+	tokenIcons: {},
+	bridgeIcons: {},
+}
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
 		return {
@@ -46,7 +50,7 @@ import TransactionCard from "./TransactionCard.vue"
 function surface() {
 	const prices = effectScope().run(() => usePrices(new PriceServiceClient()))
 	if (!prices) throw new Error("no reading")
-	return { fiatLabel: prices.tokenFiatLabel, iconFor: prices.iconFor, isFlagged: prices.isFlagged }
+	return { fiatLabel: prices.tokenFiatLabel, iconFor: prices.iconFor, bridgeIconFor: prices.bridgeIconFor, isFlagged: prices.isFlagged }
 }
 
 const STUBS = {
@@ -417,6 +421,7 @@ describe("TransactionCard's title mark", () => {
 		mockList = {
 			flaggedTokens: flaggedKeysOf([{ chainId: CHAIN_IDS.TESTNET, address: FLAGGED }]),
 			tokenIcons: tokenIconsOf(TEST_LIST_ENTRIES_WITH_ICONS),
+			bridgeIcons: {},
 		}
 		const w = mountCard(tx, { tokens })
 		await flushPromises()

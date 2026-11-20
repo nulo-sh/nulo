@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { ICON_PREFIX, iconBytes, isTokenIcon, MAX_ICON_CHARS } from "./icon"
+import { bridgeIconBytes, ICON_PREFIX, iconBytes, isBridgeIcon, isTokenIcon, MAX_BRIDGE_ICON_CHARS, MAX_ICON_CHARS } from "./icon"
 
 const dataUrl = (svg: string | Uint8Array) => ICON_PREFIX + Buffer.from(svg).toString("base64")
 const svg = (body: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">${body}</svg>`
@@ -54,11 +54,23 @@ describe("isTokenIcon", () => {
 		expect(new TextDecoder().decode(iconBytes(dataUrl(text)))).toBe(text)
 	})
 
-	test("the budget bounds the whole data URL", () => {
-		const largest = sized(MAX_ICON_CHARS - ((MAX_ICON_CHARS - ICON_PREFIX.length) % 4))
-		expect(largest.length).toBeLessThanOrEqual(MAX_ICON_CHARS)
-		expect(isTokenIcon(largest)).toBe(true)
-		expect(isTokenIcon(sized(largest.length + 4))).toBe(false)
+	test.each([
+		["a token picture", MAX_ICON_CHARS, isTokenIcon, iconBytes],
+		["a bridge picture", MAX_BRIDGE_ICON_CHARS, isBridgeIcon, bridgeIconBytes],
+	])("the budget of %s bounds the whole data URL", (_, budget, accepts, bytesOf) => {
+		const largest = sized(budget - ((budget - ICON_PREFIX.length) % 4))
+		expect(largest.length).toBeLessThanOrEqual(budget)
+		expect(accepts(largest)).toBe(true)
+		expect(bytesOf(largest)).toBeDefined()
+		expect(accepts(sized(largest.length + 4))).toBe(false)
+		expect(bytesOf(sized(largest.length + 4))).toBeUndefined()
+	})
+
+	test("the bridge budget changes the size check only", () => {
+		expect(isTokenIcon(sized(MAX_ICON_CHARS + 2))).toBe(false)
+		expect(isBridgeIcon(sized(MAX_ICON_CHARS + 2))).toBe(true)
+		expect(isBridgeIcon(dataUrl(svg(`<script>x</script><desc>${"a".repeat(4000)}</desc>`)))).toBe(false)
+		expect([sized(MAX_ICON_CHARS + 2)].every(isBridgeIcon)).toBe(true)
 	})
 
 	test.each([

@@ -126,12 +126,14 @@ vi.mock("@/wallet/services/price/client", () => ({
 				pricedTokens: {},
 				flaggedTokens: mocks.flagged.current,
 				tokenIcons: mocks.icons.current,
+				bridgeIcons: {},
 			})),
 			refreshIfStale: vi.fn(async () => ({
 				quotes: {},
 				pricedTokens: {},
 				flaggedTokens: mocks.flagged.current,
 				tokenIcons: mocks.icons.current,
+				bridgeIcons: {},
 			})),
 		}
 	}),
@@ -1557,6 +1559,7 @@ describe("send page — a token the picker imported", () => {
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
 			pricedTokens: TEST_PRICED_TOKENS,
 			tokenIcons: {},
+			bridgeIcons: {},
 		})
 		await nextTick()
 		await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
@@ -2322,6 +2325,7 @@ describe("send page — Refresh quote by keyboard", () => {
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
 			pricedTokens: TEST_PRICED_TOKENS,
 			tokenIcons: {},
+			bridgeIcons: {},
 		})
 		const notice = () => w.get('[data-testid="send-fiat-requote"]').element.parentElement?.textContent ?? ""
 
@@ -2351,6 +2355,7 @@ describe("send page — Refresh quote by keyboard", () => {
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
 			pricedTokens: TEST_PRICED_TOKENS,
 			tokenIcons: {},
+			bridgeIcons: {},
 		})
 
 		price.onQuotesUpdated.invoke(quote(1))
@@ -2389,6 +2394,7 @@ describe("send page — Refresh quote by keyboard", () => {
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
 			pricedTokens: TEST_PRICED_TOKENS,
 			tokenIcons: {},
+			bridgeIcons: {},
 		})
 		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-fiat-label"]').text()).toBe("≈ $4.32"))
 		expect(reviewFiat()).toBe("≈ $4.32")

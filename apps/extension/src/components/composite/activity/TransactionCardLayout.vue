@@ -128,7 +128,14 @@ function hasActionsContent() {
 
 			<Flex direction="column" gap="4" :class="$style.text" data-testid="activity-text">
 				<Flex align="center" gap="6" :class="$style.title_row" data-testid="activity-title-row">
-					<TokenMark v-if="titleMark" :symbol="titleMark.symbol" :icon="titleMark.icon" :size="16" :badge="titleMark.badge" />
+					<TokenMark
+						v-if="titleMark"
+						:symbol="titleMark.symbol"
+						:icon="titleMark.icon"
+						:bridgeIcon="titleMark.bridgeIcon"
+						:size="16"
+						:badge="titleMark.badge"
+					/>
 					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
 					<span v-if="$slots['title-trailing']" :class="$style.trailing_inline"><slot name="title-trailing" /></span>
 				</Flex>
@@ -160,10 +167,14 @@ function hasActionsContent() {
 </template>
 
 <style module>
+/* The fill and ring span the host's `--page-gutter` to the popup's edges, so nothing between the
+   host and the row may add a side inset. A host that declares no gutter gets an 8px bleed. */
 .wrapper {
+	--row-inset: var(--page-gutter, 8px);
+
 	position: relative;
-	margin: 0 -8px;
-	padding: 6px 8px;
+	margin: 0 calc(-1 * var(--row-inset));
+	padding: 6px var(--row-inset);
 }
 
 .interactive {
@@ -186,19 +197,19 @@ function hasActionsContent() {
 	}
 }
 
-/* One 24px action plus 4px of air, inside the 8px side padding. */
+/* One 24px action plus 4px of air, inside the side padding. */
 .wrapper_has_actions {
-	padding-right: 36px;
+	padding-right: calc(var(--row-inset) + 28px);
 }
 
 .wrapper_two_actions {
-	padding-right: 60px;
+	padding-right: calc(var(--row-inset) + 52px);
 }
 
 .actions {
 	position: absolute;
 	top: 6px;
-	right: 8px;
+	right: var(--row-inset);
 	z-index: 1;
 	display: flex;
 	align-items: center;
@@ -286,7 +297,7 @@ function hasActionsContent() {
 
 	.wrapper_has_actions,
 	.wrapper_two_actions {
-		padding-right: 8px;
+		padding-right: var(--row-inset);
 	}
 
 	.left_content {

@@ -52,6 +52,7 @@ The payload is a UTF-8 JSON object:
 			"decimals": 6,
 			"name": "Test USDC",
 			"priceId": "usd-coin",
+			"bridgeIcon": "data:image/svg+xml;base64,PHN2Zy…",
 			"icon": "data:image/svg+xml;base64,PHN2Zy…"
 		}
 	],
@@ -77,6 +78,7 @@ The payload is a UTF-8 JSON object:
 | `name` | 1 to 80 characters. |
 | `decimals` | Integer, 0 to 18. |
 | `priceId` | Optional CoinGecko id: 1 to 64 characters of `a-z`, `0-9` and `-`, starting with a letter or digit. Absent means unpriced. |
+| `bridgeIcon` | Optional picture of the bridge that carries the token, under [Pictures](#pictures). It is the publisher's statement, like `name`, and proves no affiliation. |
 | `icon` | Optional picture of the token, under [Pictures](#pictures). The Nulo publisher signs no entry without one. |
 | `flagged` | Optional array of `{chainId, address}` pairs, under the rules above: tokens the publisher flags as scams. Absent means none. |
 | `priceFeeds` | Optional object, at most 32 keys: CoinGecko id → `{min, max, ticker}`, under [Price feeds](#price-feeds). Absent means every entry is unpriced. |
@@ -92,8 +94,9 @@ paragraph separator characters. Each (`chainId`, `address`) pair appears once ac
   an artifact for, and checks the class, symbol and decimals against the chain before it adds a row.
 - Leave an entry unpriced when the list carries no feed for its `priceId` that you accept.
 - Use at most the first 16 entries per `chainId`. The publisher never signs more than 16.
-- Drop an `icon` you cannot accept and keep the entry. Draw an accepted one only as an image
-  (`<img src>`), never as markup.
+- Drop an `icon` or a `bridgeIcon` you cannot accept and keep the entry. Draw an accepted one only
+  as an image (`<img src>`), never as markup, and a `bridgeIcon` only as a badge on its own entry's
+  picture.
 - Warn wherever a flagged token shows, whoever added it, and never treat a flagged pair as listed.
 
 ### Price feeds
@@ -119,8 +122,9 @@ the key and keeps its own table.
 
 ### Pictures
 
-`icon` is `data:image/svg+xml;base64,` followed by the SVG file in standard base64 with padding and
-no whitespace, at most 3,072 characters in all. The file is a static drawing whose literal text is
+`icon` and `bridgeIcon` are each `data:image/svg+xml;base64,` followed by the SVG file in standard
+base64 with padding and no whitespace, at most 3,072 characters in all for `icon` and 16,384 for
+`bridgeIcon`. The file is a static drawing whose literal text is
 what a parser reads:
 
 - valid UTF-8, starting with `<svg`, with no `&`, `\`, `<!` or `<?` anywhere;
@@ -137,6 +141,14 @@ A list is a suggestion of which contracts to show, not a statement that a token 
 anything. The class, symbol and decimals are checked against the chain. The name is a label: Nulo
 shows it before the chain answers and where it names a known contract, and a token row takes the
 chain's name. The chain is the source of truth for balances.
+
+## Revisions
+
+Each revision is additive: a reader that predates it ignores the new key and reads the rest as before.
+
+- Price feeds, `priceFeeds` and an entry's `priceId` ([#1612](https://github.com/nulo-sh/nulo/pull/1612)).
+- Pictures, an entry's `icon` ([#1778](https://github.com/nulo-sh/nulo/pull/1778)).
+- Bridge pictures, an entry's `bridgeIcon`.
 
 ## Verify by hand
 

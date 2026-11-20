@@ -15,7 +15,7 @@ export type ContractLevel = "nulo" | "scan" | "none"
 export type ContractReading =
 	| { level: "pending" }
 	| { level: "none"; flagged: boolean }
-	| { level: "nulo"; source: "token"; symbol: string; name: string; icon?: string }
+	| { level: "nulo"; source: "token"; symbol: string; name: string; icon?: string; bridgeIcon?: string }
 	| { level: "nulo"; source: "fpc" | "sponsor" }
 	| { level: "nulo"; source: "protocol"; name: string }
 	| { level: "scan"; name: string }
@@ -51,5 +51,13 @@ export function readContract(reader: ListReader, chainId: number | undefined, ad
 	const listed = reader.listedAt(token)
 	if (!listed) return { level: "none", flagged: false }
 	const icon = reader.iconFor(token)
-	return { level: "nulo", source: "token", symbol: listed.symbol, name: listed.name, ...(icon ? { icon } : {}) }
+	const bridgeIcon = reader.bridgeIconFor(token)
+	return {
+		level: "nulo",
+		source: "token",
+		symbol: listed.symbol,
+		name: listed.name,
+		...(icon ? { icon } : {}),
+		...(bridgeIcon ? { bridgeIcon } : {}),
+	}
 }

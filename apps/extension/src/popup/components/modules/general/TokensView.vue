@@ -101,10 +101,10 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const fiatOf = prices.fiatOfRow
 /** A record with no network stamp shows on every network, so only one stamped with the active network
- *  takes its chain for the list's picture. */
-const importIcon = (op) =>
+ *  takes its chain for the list's pictures. */
+const importAt = (op) =>
 	op.networkId !== undefined && op.networkId === appStore.network?.id
-		? prices.iconFor({ chainId: appStore.network.chainId, contract: op.contractAddress })
+		? { chainId: appStore.network.chainId, contract: op.contractAddress }
 		: undefined
 
 const pins = usePinnedTokens({
@@ -378,7 +378,8 @@ onBeforeUnmount(() => {
 				v-for="op in userImports"
 				:key="op.id"
 				:op="op"
-				:icon="importIcon(op)"
+				:icon="prices.iconFor(importAt(op))"
+				:bridgeIcon="prices.bridgeIconFor(importAt(op))"
 				:retrying="importRetries.get(op.id) === 'running'"
 				@retry="retryImport(op)"
 			/>
@@ -387,11 +388,18 @@ onBeforeUnmount(() => {
 				<TokenImportRow
 					v-else-if="row.kind === 'import'"
 					:op="row.op"
-					:icon="importIcon(row.op)"
+					:icon="prices.iconFor(importAt(row.op))"
+					:bridgeIcon="prices.bridgeIconFor(importAt(row.op))"
 					:retrying="importRetries.get(row.op.id) === 'running'"
 					@retry="retryImport(row.op)"
 				/>
-				<TokenSeedRow v-else :entry="row.entry" :icon="prices.iconFor(row.entry)" @retry="retryDefault(row.entry)" />
+				<TokenSeedRow
+					v-else
+					:entry="row.entry"
+					:icon="prices.iconFor(row.entry)"
+					:bridgeIcon="prices.bridgeIconFor(row.entry)"
+					@retry="retryDefault(row.entry)"
+				/>
 			</template>
 			<template v-if="showGhostRows">
 				<div v-for="n in GHOST_ROWS" :key="n" data-testid="tokens-skeleton-row" aria-hidden="true" :class="$style.ghost_row">

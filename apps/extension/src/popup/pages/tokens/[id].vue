@@ -75,6 +75,7 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const isFlagged = computed(() => prices.isFlagged(token.value))
 const icon = computed(() => prices.iconFor(token.value))
+const bridgeIcon = computed(() => prices.bridgeIconFor(token.value))
 
 /** Read the currently-cached balance for this (token, account). Fast path
  *  for first paint — the actual refresh is fired separately via `scheduleRefresh()`. */
@@ -230,7 +231,7 @@ onBeforeUnmount(() => {
 				leadingIcon="holdings"
 			>
 				<template v-if="token" #leading>
-					<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :size="20" :badge="isFlagged" />
+					<TokenMark :symbol="token.symbol ?? ''" :icon="icon" :bridgeIcon="bridgeIcon" :size="20" :badge="isFlagged" />
 				</template>
 				<template #trailing>
 					<Tooltip position="end" :disabled="isRefreshingBalance || !tokenBalance?.updatedAt">
@@ -347,7 +348,8 @@ onBeforeUnmount(() => {
 }
 
 .content {
-	padding: 24px 24px var(--nav-clearance) 24px;
+	--page-gutter: 24px;
+	padding: 24px var(--page-gutter) var(--nav-clearance);
 }
 
 .icon_btn {

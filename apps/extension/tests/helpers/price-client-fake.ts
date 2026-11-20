@@ -21,6 +21,7 @@ export function feeJuiceSnapshot(
 		pricedTokens: {},
 		flaggedTokens: [...flaggedTokens],
 		tokenIcons: { ...tokenIcons },
+		bridgeIcons: {},
 		listedTokens: { ...listedTokens },
 	}
 }

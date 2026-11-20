@@ -26,6 +26,7 @@ vi.mock("@/wallet/services/price/client", () => ({
 			pricedTokens: {},
 			flaggedTokens: flaggedKeysOf([{ chainId: CHAIN_IDS.TESTNET, address: FLAGGED }]),
 			tokenIcons: tokenIconsOf(TEST_LIST_ENTRIES_WITH_ICONS),
+			bridgeIcons: {},
 		})
 		return {
 			disconnect: vi.fn(),
@@ -40,7 +41,7 @@ vi.mock("@/wallet/services/price/client", () => ({
 function surface() {
 	const prices = effectScope().run(() => usePrices(new PriceServiceClient()))
 	if (!prices) throw new Error("no reading")
-	return { fiatLabel: prices.tokenFiatLabel, iconFor: prices.iconFor, isFlagged: prices.isFlagged }
+	return { fiatLabel: prices.tokenFiatLabel, iconFor: prices.iconFor, bridgeIconFor: prices.bridgeIconFor, isFlagged: prices.isFlagged }
 }
 
 const cardStub = (name: string) => ({

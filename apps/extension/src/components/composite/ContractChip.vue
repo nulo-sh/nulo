@@ -76,7 +76,14 @@ onBeforeUnmount(stopHold)
 			@click="open = !open"
 			@keydown.enter="refuseRepeatEnter"
 		>
-			<TokenMark v-if="model.mark" :symbol="model.mark.symbol" :icon="model.mark.icon" :size="16" :badge="model.mark.badge" />
+			<TokenMark
+				v-if="model.mark"
+				:symbol="model.mark.symbol"
+				:icon="model.mark.icon"
+				:bridgeIcon="model.mark.bridgeIcon"
+				:size="16"
+				:badge="model.mark.badge"
+			/>
 			<span
 				:data-testid="testid"
 				:data-address-shows="model.ownName ? 'name' : undefined"

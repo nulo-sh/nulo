@@ -136,8 +136,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, tokenIcons: {} })),
-			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, tokenIcons: {} })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, tokenIcons: {}, bridgeIcons: {} })),
+			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, tokenIcons: {}, bridgeIcons: {} })),
 		}
 	}),
 }))
@@ -959,6 +959,7 @@ describe("send page with the real fee card — the review sheet's fee", () => {
 				quotes: { aztec: { coingeckoId: "aztec", usd: 0.01 * (i + 1), fetchedAt: Date.now(), providerUpdatedAt: null } },
 				pricedTokens: {},
 				tokenIcons: {},
+				bridgeIcons: {},
 			})
 		})
 		await flushPromises()
@@ -1047,6 +1048,7 @@ describe("send page — an estimate queued behind an earlier send", () => {
 				quotes: { aztec: { coingeckoId: "aztec", usd: 0.01 * (i + 1), fetchedAt: Date.now(), providerUpdatedAt: null } },
 				pricedTokens: {},
 				tokenIcons: {},
+				bridgeIcons: {},
 			})
 		})
 		await flushPromises()
@@ -1484,6 +1486,7 @@ describe("send page — Same as last time, over the real amount card", () => {
 					quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
 					pricedTokens: TEST_PRICED_TOKENS,
 					tokenIcons: {},
+					bridgeIcons: {},
 				})
 			}
 			await payRecent(mounted.w)

@@ -1367,15 +1367,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const network = (await this.networkService.getNetworksRaw(profileId, token.chainId).catch(() => []))[0]
 		if (!network) return
 
-		// Every TokenService.addToken call is a user-explicit add path —
-		// either the in-popup "Add custom token" form or a dApp's
-		// register_token approved through the dapp-interaction modal. Both
-		// already require the user to confirm the contract address, so the
-		// first-receive trust popup that fires moments later is redundant
-		// friction. Flip trust→trusted BEFORE the rebuild kicks scans, so the
-		// first per-note CS reads trusted and persists records visible from the
-		// start (instead of hidden+pending). Idempotent: skip when already trusted. The token's arrival
-		// floor moves in the same section, so the history those scans commit is already under it.
+		// Every addToken is an explicit import (a pasted address, or a dApp's approved register_token),
+		// so it grants incoming-transfer trust in place of the first-receive prompt. Trust and the
+		// arrival floor commit before the rebuild kicks scans, so their first records are trusted and
+		// under that floor.
 		const epochAtTip = this.serviceEpoch
 		const tip = await this.readTip(network.id)
 		await this.withServiceLock(async (isCurrent) => {

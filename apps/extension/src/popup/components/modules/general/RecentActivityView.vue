@@ -688,6 +688,7 @@ onBeforeUnmount(() => {
 				:tokenById="tokenById"
 				:fiatLabel="incomingPrices.tokenFiatLabel"
 				:iconFor="incomingPrices.iconFor"
+				:bridgeIconFor="incomingPrices.bridgeIconFor"
 				:isFlagged="incomingPrices.isFlagged"
 				:isArriving="token ? undefined : arrivals?.isArriving"
 			/>

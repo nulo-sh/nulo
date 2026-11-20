@@ -208,7 +208,8 @@ onBeforeUnmount(() => {
 }
 
 .content {
-	padding: 16px 24px var(--nav-clearance) 24px;
+	--page-gutter: 24px;
+	padding: 16px var(--page-gutter) var(--nav-clearance);
 }
 
 /* A narrow window cannot spare the hero's height: the whole page scrolls, the hero with it. The

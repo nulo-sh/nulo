@@ -22,6 +22,7 @@ import {
 	contactRow,
 	navigateByHash,
 	navigateToSettings,
+	openHoldings,
 	openNetworkDetail,
 	seedUsdQuoteAndReload,
 	setDeveloperMode,
@@ -38,6 +39,7 @@ import { expectFitsNarrow } from "./fixtures/type-roles"
 import { readActivityScope, seedJournalRecord, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { createProfileAcceptingTerms, pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, pressEscape, SPACE, tabAround, waitForFocus } from "./helpers/pointer-probes"
+import { expectEdgeToEdge, readBands } from "./helpers/row-bands"
 import { startStub } from "./helpers/rpc-stub"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -534,31 +536,16 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 	expect(listedExtension.pageErrors).toEqual([])
 }, 90_000)
 
-test("History's list keeps the −8px row box inside the page: nothing scrolls sideways", async ({ listedExtension }) => {
+test("an activity row's band spans the gutter to both popup edges on Home and History, and nothing scrolls sideways", async ({
+	listedExtension,
+}) => {
 	const page = await openHomeWithRow(listedExtension, { priced: false })
+	expectEdgeToEdge(await readBands(page, sel("tx-card")), "Home's activity rows")
+
 	await clickNavTab(page, "activity")
 	await waitForHash(page, "#/popup/activity")
 	await page.waitForSelector(`${sel("activity-feed-root")} ${sel("tx-card")}`, { visible: true, timeout: 15_000 })
-
-	// The row's box bleeds 8px into the page padding by design; what must not happen is a scroll
-	// container or the document gaining width, or the row leaving the viewport.
-	const layout = await page.evaluate(() => {
-		const overflowing: string[] = []
-		const row = document.querySelector('[data-testid="tx-card"]')
-		let el: Element | null = row
-		while (el && el !== document.body) {
-			const clips = getComputedStyle(el).overflowX !== "visible"
-			if (clips && el.scrollWidth > el.clientWidth)
-				overflowing.push(`${el.getAttribute("data-testid") ?? el.tagName} ${el.scrollWidth}>${el.clientWidth}`)
-			el = el.parentElement
-		}
-		if (document.documentElement.scrollWidth > window.innerWidth) overflowing.push("html")
-		const box = row?.getBoundingClientRect()
-		return { overflowing, left: box?.left ?? -1, right: box?.right ?? -1, width: window.innerWidth }
-	})
-	expect(layout.overflowing).toEqual([])
-	expect(layout.left).toBeGreaterThanOrEqual(0)
-	expect(layout.right).toBeLessThanOrEqual(layout.width)
+	expectEdgeToEdge(await readBands(page, `${sel("activity-feed-root")} ${sel("tx-card")}`), "History's rows")
 
 	expect(listedExtension.consoleErrors).toEqual([])
 	expect(listedExtension.pageErrors).toEqual([])
@@ -1213,7 +1200,7 @@ test("a dApp's long function name and host never widen Home or History, named or
 const rowHeight = (page: Page, selector: string) => page.$eval(selector, (row) => row.getBoundingClientRect().height)
 
 test.skipIf(inject("liveLeg") === true)(
-	"a default token's placeholder row, still working, stands as tall as a loaded token row",
+	"a default token's placeholder row, still working, stands as tall as a loaded token row, whose band spans both popup edges on Home and Holdings, as Holdings' sticky search bar does",
 	{ timeout: 120_000 },
 	async ({ freshExtensionPerTest: ctx }) => {
 		const host = await serveTokenList()
@@ -1263,6 +1250,12 @@ test.skipIf(inject("liveLeg") === true)(
 			await unlockAfterBackgroundDeath(page)
 			await page.waitForSelector(`${sel("tokens-card")} ${sel("token-amount")}`, { visible: true, timeout: 30_000 })
 			expect(await rowHeight(page, sel("tokens-card"))).toBeCloseTo(loading, 1)
+			expectEdgeToEdge(await readBands(page, sel("tokens-card")), "Home's token rows")
+			// The search bar is sticky over the rows: narrower than their band, it would leave its ends showing.
+			await openHoldings(page)
+			await page.waitForSelector(`${sel("holdings-page")} ${sel("tokens-card")}`, { visible: true, timeout: 15_000 })
+			expectEdgeToEdge(await readBands(page, `${sel("holdings-page")} ${sel("tokens-card")}`), "Holdings' token rows")
+			expectEdgeToEdge(await readBands(page, sel("holdings-search-bar")), "Holdings' search bar")
 			await shotSend(page, "home-token-rows-loaded", "tokens-list")
 		} finally {
 			await held.stop()
@@ -1337,7 +1330,7 @@ function scrimCovers(page: Page, kind: PinnedPage): Promise<{ hero: boolean; nav
 	})
 }
 
-test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the middle still covers it; the shadow shows only once the middle has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; at 240px the hero scrolls away with the page; PageDown on a row scrolls the middle", async ({
+test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the middle still covers it; the shadow shows only once the middle has scrolled and lets a press through to the row under it; a tall panel keeps the nav at its bottom; at 240px the hero scrolls away with the page; PageDown on a row scrolls the middle; a token page's rows span both popup edges", async ({
 	listedExtensionPerTest,
 	skip,
 }) => {
@@ -1447,6 +1440,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 	await navigateByHash(page, `#/popup/tokens/${TOKEN_PAGE_ID}`)
 	await page.waitForSelector(sel("token-scroller"), { visible: true, timeout: 15_000 })
 	await settledRows(page, HOME_ROWS.length)
+	expectEdgeToEdge(await readBands(page, `${sel("token-scroller")} ${sel("tx-card")}`), "a token page's activity rows")
 	const tokenTop = await scrollPinned(page, "token", 0, "0")
 	expect(tokenTop.maxScroll, `the activity must overflow at 360 × 600: ${JSON.stringify(tokenTop)}`).toBeGreaterThan(0)
 	expect(await scrimCovers(page, "token")).toEqual({ hero: true, nav: true })

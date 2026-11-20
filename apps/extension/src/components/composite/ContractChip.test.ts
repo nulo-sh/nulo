@@ -1,7 +1,9 @@
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { ref } from "vue"
 import { Flex, Icon, Popover, Skeleton, Text } from "@nulo/design"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { type ListReader, readContract } from "@/utils/contract-level"
 import { explorerDisplayName, getContractExplorerUrl } from "@/wallet/constants/explorers"
 import { sendEvent } from "../../../tests/helpers/send-event"
 import { appChipOf, type ChipModel, contractChipOf } from "./contract-chip"
@@ -80,6 +82,21 @@ describe("composite/ContractChip", () => {
 		expect(unknown.get('[data-testid="label"]').text()).toBe("0x2d8fb6..ff50")
 		expect(unknown.get('[data-testid="label"]').classes()).toContain("type--meta")
 		expect(unknown.find('[data-testid="token-mark"]').exists()).toBe(false)
+	})
+
+	test("a listed token's bridge picture reaches the chip's mark from the list's reading; the plain listing draws none", () => {
+		const BRIDGE = "data:image/svg+xml;base64,PHN2Zz48Zy8+PC9zdmc+"
+		const at = (t?: { chainId?: number; contract?: string }) => t?.chainId === 1 && t.contract === TOKEN
+		const reader: ListReader = {
+			mapped: ref(true),
+			isFlagged: () => false,
+			iconFor: (t) => (at(t) ? ICON : undefined),
+			bridgeIconFor: (t) => (at(t) ? BRIDGE : undefined),
+			listedAt: (t) => (at(t) ? { symbol: "TST", name: "Test Token" } : undefined),
+		}
+		const badged = mountChip(contractChipOf(readContract(reader, 1, TOKEN), TOKEN))
+		expect(badged.get('[data-testid="token-mark-bridge"]').attributes("src")).toBe(BRIDGE)
+		expect(mountChip(LISTED).find('[data-testid="token-mark-bridge"]').exists()).toBe(false)
 	})
 
 	test("a press opens its card, and the chip names it while open", async () => {
@@ -213,7 +230,9 @@ describe("composite/ContractChip", () => {
 	})
 
 	test("a flagged token keeps the person's mark with its badge, never a seal, and its card says Nulo flagged it", async () => {
-		const w = mountChip(contractChipOf({ level: "none", flagged: true }, OTHER, { held: { symbol: "SCAM", badge: false } }))
+		const w = mountChip(
+			contractChipOf({ level: "none", flagged: true }, OTHER, { held: { symbol: "SCAM", bridgeIcon: undefined, badge: false } }),
+		)
 		expect(w.get('[data-testid="token-mark"]').find("svg.color--red").exists(), "the red badge").toBe(true)
 		expect(w.find('[data-testid="contract-chip-seal"]').exists()).toBe(false)
 		expect(w.get('[data-testid="label"]').text()).toBe("0x2d8fb6..ff50")

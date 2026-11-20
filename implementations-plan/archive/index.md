@@ -546,6 +546,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [popup-dedupe-1](popup-dedupe-1/plan.md) — completed — one helper for Send's side rule (#1470) and the entity forms' shared rules (#1449), no behaviour change (#1674)
 - [e2e-flakes-3](e2e-flakes-3/plan.md) — completed — the onboarding spec counts the setup tab through `chrome.tabs`; a simulation's default fee cap pads the predicted worst minimum (#1667, #1590)
 - [update-from-1.2.0](update-from-1.2.0/plan.md) — completed — the update scenarios run from v1.2.0: its pins, a `sponsor` trait that pays its sandbox send from bridged Fee Juice, and its Chrome recording; all five runs green (closes #1680)
+- [update-from-1.3.0](update-from-1.3.0/plan.md) — completed — the update scenarios run from v1.3.0: its pins, a `send` trait that drives its person-first Send and writes its Send pick through its own service, and its Chrome recording; all five runs green (closes #1901)
 - [release-notes-1](release-notes-1/plan.md) — completed — per-version release notes atop the GitHub Release and on AMO, composed and checked in CI (#1668)
 - [network-rename-1](network-rename-1/plan.md) — completed — a seeded default row still named "Alpha V6" or "Mainnet" takes "Alpha" at unlock (closes #1364)
 - [double-optin-1](double-optin-1/plan.md) — completed — the mailing list confirms each signup by email before it counts (#1236)
@@ -599,4 +600,9 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [table-legend-1](table-legend-1/plan.md) — completed — a legend line under the Details table names its six icons (P186-01 = E2)
 - [authwits-2](authwits-2/plan.md) — completed — a landed revoke or switch reports success and a closed popup reports nothing (#1829, #1830); Revoke hands off to Activity and rows name their action (P166-01 = B, P166-02 = N1); the page checks the registry on open (P166-03 = S)
 - [emoji-grid-1](emoji-grid-1/plan.md) — completed — the connection check draws every symbol in a colour-emoji role, with U+FE0F on the 21 symbols a text face can claim, as the app it is compared with does
+- [hover-band-1](hover-band-1/plan.md) — completed — the row hover band runs from edge to edge on Home, Holdings, History and a token page (P193-01 = H1, #1884; draft PR held for the owner's smoke test)
+- [holdings-add-1](holdings-add-1/plan.md) — completed — Holdings' Add imports a token in one press with the New token popup's checks; a flagged or unread-list address keeps the popup (#1881)
+- [fee-default-1](fee-default-1/plan.md) — completed — with nothing remembered, the app windows open on private Fee Juice when it can pay, then Nulo's sponsor, else nothing (#1879)
 - [send-again-build-1](send-again-build-1/plan.md) — completed — Send's "Same as last time" leaves for the visit once used or skipped, and the form opens on the amount (P193-03 = S0′, #1880)
+- [picker-band-1](picker-band-1/plan.md) — completed — Send's token picker rows take H1's edge-to-edge band; the sheet body declares its gutter (#1884)
+- [bridge-badge-1](bridge-badge-1/plan.md) — completed — each bridge's picture as a badge on its token's mark: an entry's signed `bridgeIcon` (16,384-character budget), the wallet's badge, Shield's file on cUSDC and cWETH and the raven on rUSDC (P194-03 = b, page 196; stack #1907)
