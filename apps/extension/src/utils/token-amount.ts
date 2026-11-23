@@ -35,7 +35,7 @@ export function parseRawBalance(tb: BalanceLike): bigint | undefined {
 	return pub + priv
 }
 
-/** A row whose numbers cannot be trusted: a malformed side or a `decimals` outside 0..77. */
+/** A row whose numbers cannot be trusted: a malformed side or a `decimals` outside 0..`DECIMALS_MAX`. */
 export function isUnknownRow(tb: BalanceLike & TokenLike): boolean {
 	return isUnknownParsedRow(parseRawBalance(tb), tb)
 }

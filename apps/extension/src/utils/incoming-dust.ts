@@ -19,7 +19,7 @@ export function usdThresholdToMicro(threshold: number): bigint {
  * Whether an amount is AT OR ABOVE the dust threshold (i.e. SHOWN). Returns `true` (shown) when
  * the filter is off (`thresholdMicro <= 0`), the token has no fresh USD rate (`usdRate ===
  * undefined` — no CoinGecko mapping OR only a stale quote), the amount is unparseable/negative, or
- * `decimals` is not an integer in 0..77 (the exponent is never computed for those). Otherwise
+ * `decimals` is not an integer in 0..`DECIMALS_MAX` (the exponent is never computed for those). Otherwise
  * SHOWN iff `amountRaw × rateMicro >= thresholdMicro × 10^decimals`.
  */
 export function isAmountAboveDustThreshold(params: {
