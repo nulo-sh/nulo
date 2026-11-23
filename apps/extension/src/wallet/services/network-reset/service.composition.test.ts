@@ -506,7 +506,7 @@ describe("a stale network reset through the real service graph", () => {
 		const named = await readImportedAccounts(
 			{
 				getNetworks: () => h.network.getNetworks(),
-				getAccounts: (profileId, chainId, all) => h.account.getAccounts(profileId, chainId, all),
+				getImportedAccounts: (profileId) => h.account.getImportedAccounts(profileId),
 				getPendingReset: () => h.reset.getPendingReset(),
 				getStaleNetwork: (networkId) => h.reset.getStaleNetwork(networkId),
 			},
@@ -514,8 +514,8 @@ describe("a stale network reset through the real service graph", () => {
 		)
 		expect(named).toEqual({
 			accounts: [
-				{ name: "Imported 1", address: IMPORTED, chainId: NEW },
-				{ name: "Cold", address: IMPORTED, chainId: LOCAL },
+				{ name: "Imported 1", address: IMPORTED, chainId: NEW, networked: true },
+				{ name: "Cold", address: IMPORTED, chainId: LOCAL, networked: true },
 			],
 			resetPending: true,
 		})

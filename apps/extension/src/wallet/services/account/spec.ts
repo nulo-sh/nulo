@@ -220,6 +220,13 @@ export type Methods = {
 	getAccounts(profileId: string, chainId: number, all?: boolean): Account[]
 
 	/**
+	 * Every imported account of `profileId` on every chain, hidden ones included, whether or not the
+	 * chain has a network row: the accounts deleting the profile erases that no recovery phrase
+	 * derives. Ordered by chain, then index.
+	 */
+	getImportedAccounts(profileId: string): Account[]
+
+	/**
 	 * Returns an account with the specified address, or undefined if it doesn't exist.
 	 * @param profileId Profile, determining accounts scope (each profile + chain has its own set of accounts).
 	 * @param chainId Chain, determining accounts scope (each profile + chain has its own set of accounts).
@@ -337,6 +344,7 @@ const PasskeyCredentialDataSchema = z.object({ id: z.string(), prf: z.string(), 
  */
 export const AccountMethodSchemas = {
 	getAccounts: z.tuple([z.string(), z.number(), z.boolean().optional()]),
+	getImportedAccounts: z.tuple([z.string()]),
 	getAccount: z.tuple([z.string(), z.number(), z.string()]),
 	createAccount: z.tuple([z.string(), z.number(), z.enum(AccountType), z.string()]),
 	ensureDefaultAccount: z.tuple([z.string(), z.number(), z.enum(AccountType), z.string()]),

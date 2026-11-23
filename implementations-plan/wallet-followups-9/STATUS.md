@@ -1,0 +1,1 @@
+- 2026-11-23: arc 1 (#1925) built; red at the base, green after (unit, component, service).

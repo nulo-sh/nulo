@@ -263,7 +263,7 @@ describe("AccountService restore writers — deletion fence", () => {
 })
 
 describe("AccountService.restore — a chain the profile has no network for", () => {
-	test("holds an imported row unchecked; refuses a derived row there and every row of a network that fails its validation", async () => {
+	async function harness() {
 		const api = new FakeBrowserApi()
 		api.reset()
 		const services = new ServiceCollection()
@@ -288,8 +288,13 @@ describe("AccountService.restore — a chain the profile has no network for", ()
 		const service = new AccountService(new LoggerStore(new ConfigStore()), api)
 		services.add(service)
 		await services.start()
-		const imported = (address: string, chainId: number) => mkAccount(address, { chainId, type: 1, l1ChainId: 5 })
+		return { api, service }
+	}
+	const imported = (address: string, chainId: number, over: Record<string, unknown> = {}) =>
+		mkAccount(address, { chainId, type: 1, l1ChainId: 5, ...over })
 
+	test("holds an imported row unchecked; refuses a derived row there and every row of a network that fails its validation", async () => {
+		const { api, service } = await harness()
 		const results = await service.restore([
 			imported("0xheld", 1337),
 			mkAccount("0xderived", { chainId: 1337 }),
@@ -310,6 +315,24 @@ describe("AccountService.restore — a chain the profile has no network for", ()
 		expect((await service.getAccountsRaw("p1")).map(accountRowIdOf).sort()).toEqual(
 			[accountRowId("p1", 1337, "0xheld"), accountRowId("p1", 1, "0xok")].sort(),
 		)
+	})
+
+	test("the imported accounts read names a held import, as the profile purge erases it", async () => {
+		const { service } = await harness()
+		await service.restore([
+			imported("0xheld", 1337),
+			imported("0xhidden", 1, { visible: false, l1ChainId: 1 }),
+			imported("0xother", 1, { profileId: "p2", l1ChainId: 1 }),
+			mkAccount("0xok"),
+		])
+		expect((await service.getImportedAccounts("p1")).map(accountRowIdOf)).toEqual([
+			accountRowId("p1", 1, "0xhidden"),
+			accountRowId("p1", 1337, "0xheld"),
+		])
+
+		await service.purgeForProfile("p1")
+		expect(await service.getImportedAccounts("p1")).toEqual([])
+		expect((await service.getImportedAccounts("p2")).map(accountRowIdOf)).toEqual([accountRowId("p2", 1, "0xother")])
 	})
 })
 
