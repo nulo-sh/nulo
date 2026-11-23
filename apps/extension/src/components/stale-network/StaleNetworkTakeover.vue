@@ -14,7 +14,7 @@ import { exportsHeld, neverOpened, STALE_NETWORK_KEY } from "@/composables/useSt
 /** Utils */
 import { managers } from "@/utils/core"
 import type { TakeoverAction as Action, TakeoverContent as Content, TakeoverLine as BoxLine } from "@/components/composite/takeover"
-import { type TakeoverScreen, takeoverScreen } from "@/popup/stale-takeover"
+import { type TakeoverScreen, takeoverScreen } from "./stale-takeover"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 import * as copy from "./copy"
 

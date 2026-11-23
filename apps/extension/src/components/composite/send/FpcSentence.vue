@@ -5,7 +5,7 @@
  */
 import { computed } from "vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
-import { UNVOUCHED_FEE_SENTENCE, UNVOUCHED_PUBLISH_SENTENCE } from "./publish-facts"
+import { UNVOUCHED_FEE_SENTENCE, UNVOUCHED_PUBLISH_SENTENCE } from "@/utils/fee/publish-facts"
 
 const props = defineProps<{ text: string }>()
 

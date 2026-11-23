@@ -15,6 +15,7 @@ declare global {
   const ALREADY_EXISTS: typeof import('../utils/entity-rules').ALREADY_EXISTS
   const ARRIVALS_KEY: typeof import('../composables/useArrivals').ARRIVALS_KEY
   const ARRIVAL_WINDOW_MS: typeof import('../composables/useArrivals').ARRIVAL_WINDOW_MS
+  const AUTH_ENTRY_ROUTES: typeof import('../utils/should-advance-to-general').AUTH_ENTRY_ROUTES
   const AccessLevel: typeof import('../utils/confirmation-policies').AccessLevel
   const AccountFileNotBackupError: typeof import('../utils/full-backup-helpers').AccountFileNotBackupError
   const ActivationSupersededError: typeof import('../composables/unlockWait').ActivationSupersededError
@@ -68,6 +69,7 @@ declare global {
   const LEGAL_DECLINED_PATH: typeof import('../utils/legal-sheet').LEGAL_DECLINED_PATH
   const LEGAL_DISMISSED_KEY: typeof import('../utils/legal-sheet').LEGAL_DISMISSED_KEY
   const LOCAL_L1_CHAIN_ID: typeof import('../utils/chain-ids').LOCAL_L1_CHAIN_ID
+  const LOOKUP_DEADLINE_MS: typeof import('../utils/auth-guard').LOOKUP_DEADLINE_MS
   const MAINNET_L1_CHAIN_ID: typeof import('../utils/chain-ids').MAINNET_L1_CHAIN_ID
   const MAINNET_ROLLUP_VERSION: typeof import('../utils/chain-ids').MAINNET_ROLLUP_VERSION
   const MAX_BACKUP_FILE_BYTES: typeof import('../utils/full-backup-helpers').MAX_BACKUP_FILE_BYTES
@@ -141,6 +143,7 @@ declare global {
   const arrivalChipLabel: typeof import('../composables/useArrivals').arrivalChipLabel
   const askProfilePasskey: typeof import('../utils/profile-passkey').askProfilePasskey
   const assembleFullBackup: typeof import('../utils/full-backup-helpers').assembleFullBackup
+  const authRequiredGate: typeof import('../utils/auth-guard').authRequiredGate
   const availableName: typeof import('../utils/profile-name').availableName
   const awaitLivenessAdvance: typeof import('../utils/background-liveness').awaitLivenessAdvance
   const awaitProfileActivation: typeof import('../composables/unlockWait').awaitProfileActivation
@@ -152,6 +155,8 @@ declare global {
   const bridgeIconsOf: typeof import('../utils/token-icon').bridgeIconsOf
   const browser: typeof import('webextension-polyfill')
   const buildActivityRows: typeof import('../utils/activity-rows').buildActivityRows
+  const buildCancelHandler: typeof import('../utils/recent-activity-handlers').buildCancelHandler
+  const buildFocusHandler: typeof import('../utils/recent-activity-handlers').buildFocusHandler
   const buildIncomingCardProps: typeof import('../utils/received-display').buildIncomingCardProps
   const buildJournalTerminalCardProps: typeof import('../utils/journal-state').buildJournalTerminalCardProps
   const buildRestoreSecret: typeof import('../composables/full-backup-restore').buildRestoreSecret
@@ -306,7 +311,9 @@ declare global {
   const isHiddenHolding: typeof import('../utils/token-fold').isHiddenHolding
   const isInFlightActivityOp: typeof import('../utils/journal-state').isInFlightActivityOp
   const isInFlightSend: typeof import('../utils/in-flight-send').isInFlightSend
+  const isMatchingTask: typeof import('../utils/recent-activity-handlers').isMatchingTask
   const isNewPasswordValid: typeof import('../utils/password').isNewPasswordValid
+  const isOwnTerminalRecord: typeof import('../utils/recent-activity-handlers').isOwnTerminalRecord
   const isPasskeyCancel: typeof import('../utils/passkey-copy').isPasskeyCancel
   const isPitchKind: typeof import('../utils/presto-ui-state').isPitchKind
   const isPopupSubmitKey: typeof import('../composables/usePopupEntity').isPopupSubmitKey
@@ -359,6 +366,7 @@ declare global {
   const listOwnAccountRow: typeof import('../utils/account-rows').listOwnAccountRow
   const listedTokensOf: typeof import('../utils/token-icon').listedTokensOf
   const logCredentialFailure: typeof import('../utils/credential-refusal').logCredentialFailure
+  const lookupActiveProfileWithBackoff: typeof import('../utils/auth-guard').lookupActiveProfileWithBackoff
   const managers: typeof import('../utils/core').managers
   const markGetStarted: typeof import('../utils/get-started').markGetStarted
   const markRaw: typeof import('vue').markRaw
@@ -535,6 +543,7 @@ declare global {
   const shallowReactive: typeof import('vue').shallowReactive
   const shallowReadonly: typeof import('vue').shallowReadonly
   const shallowRef: typeof import('vue').shallowRef
+  const shouldAdvanceToGeneral: typeof import('../utils/should-advance-to-general').shouldAdvanceToGeneral
   const shouldShowLegalSheet: typeof import('../utils/legal-sheet').shouldShowLegalSheet
   const showSnack: typeof import('../utils/snack').showSnack
   const showsDecryptCta: typeof import('../utils/full-backup-ctas').showsDecryptCta
@@ -877,6 +886,9 @@ declare global {
   export type { AmountRead, FormatBaseUnitsOpts } from '../utils/amount'
   import('../utils/amount')
   // @ts-ignore
+  export type { AuthRequiredGate, ActiveProfileLookup } from '../utils/auth-guard'
+  import('../utils/auth-guard')
+  // @ts-ignore
   export type { CopyToastSpec } from '../utils/clipboard'
   import('../utils/clipboard')
   // @ts-ignore
@@ -967,6 +979,9 @@ declare global {
   export type { ReceivedType, FromDisplay } from '../utils/received-display'
   import('../utils/received-display')
   // @ts-ignore
+  export type { CancelExecutor, FocusExecutor } from '../utils/recent-activity-handlers'
+  import('../utils/recent-activity-handlers')
+  // @ts-ignore
   export type { PhraseVerdict } from '../utils/recovery-phrase'
   import('../utils/recovery-phrase')
   // @ts-ignore
@@ -1019,6 +1034,7 @@ declare module 'vue' {
     readonly ALREADY_EXISTS: UnwrapRef<typeof import('../utils/entity-rules')['ALREADY_EXISTS']>
     readonly ARRIVALS_KEY: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVALS_KEY']>
     readonly ARRIVAL_WINDOW_MS: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVAL_WINDOW_MS']>
+    readonly AUTH_ENTRY_ROUTES: UnwrapRef<typeof import('../utils/should-advance-to-general')['AUTH_ENTRY_ROUTES']>
     readonly AccessLevel: UnwrapRef<typeof import('../utils/confirmation-policies')['AccessLevel']>
     readonly AccountFileNotBackupError: UnwrapRef<typeof import('../utils/full-backup-helpers')['AccountFileNotBackupError']>
     readonly ActivationSupersededError: UnwrapRef<typeof import('../composables/unlockWait')['ActivationSupersededError']>
@@ -1072,6 +1088,7 @@ declare module 'vue' {
     readonly LEGAL_DECLINED_PATH: UnwrapRef<typeof import('../utils/legal-sheet')['LEGAL_DECLINED_PATH']>
     readonly LEGAL_DISMISSED_KEY: UnwrapRef<typeof import('../utils/legal-sheet')['LEGAL_DISMISSED_KEY']>
     readonly LOCAL_L1_CHAIN_ID: UnwrapRef<typeof import('../utils/chain-ids')['LOCAL_L1_CHAIN_ID']>
+    readonly LOOKUP_DEADLINE_MS: UnwrapRef<typeof import('../utils/auth-guard')['LOOKUP_DEADLINE_MS']>
     readonly MAINNET_L1_CHAIN_ID: UnwrapRef<typeof import('../utils/chain-ids')['MAINNET_L1_CHAIN_ID']>
     readonly MAINNET_ROLLUP_VERSION: UnwrapRef<typeof import('../utils/chain-ids')['MAINNET_ROLLUP_VERSION']>
     readonly MAX_BACKUP_FILE_BYTES: UnwrapRef<typeof import('../utils/full-backup-helpers')['MAX_BACKUP_FILE_BYTES']>
@@ -1145,6 +1162,7 @@ declare module 'vue' {
     readonly arrivalChipLabel: UnwrapRef<typeof import('../composables/useArrivals')['arrivalChipLabel']>
     readonly askProfilePasskey: UnwrapRef<typeof import('../utils/profile-passkey')['askProfilePasskey']>
     readonly assembleFullBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['assembleFullBackup']>
+    readonly authRequiredGate: UnwrapRef<typeof import('../utils/auth-guard')['authRequiredGate']>
     readonly availableName: UnwrapRef<typeof import('../utils/profile-name')['availableName']>
     readonly awaitLivenessAdvance: UnwrapRef<typeof import('../utils/background-liveness')['awaitLivenessAdvance']>
     readonly awaitProfileActivation: UnwrapRef<typeof import('../composables/unlockWait')['awaitProfileActivation']>
@@ -1156,6 +1174,8 @@ declare module 'vue' {
     readonly bridgeIconsOf: UnwrapRef<typeof import('../utils/token-icon')['bridgeIconsOf']>
     readonly browser: UnwrapRef<typeof import('webextension-polyfill')>
     readonly buildActivityRows: UnwrapRef<typeof import('../utils/activity-rows')['buildActivityRows']>
+    readonly buildCancelHandler: UnwrapRef<typeof import('../utils/recent-activity-handlers')['buildCancelHandler']>
+    readonly buildFocusHandler: UnwrapRef<typeof import('../utils/recent-activity-handlers')['buildFocusHandler']>
     readonly buildIncomingCardProps: UnwrapRef<typeof import('../utils/received-display')['buildIncomingCardProps']>
     readonly buildJournalTerminalCardProps: UnwrapRef<typeof import('../utils/journal-state')['buildJournalTerminalCardProps']>
     readonly buildRestoreSecret: UnwrapRef<typeof import('../composables/full-backup-restore')['buildRestoreSecret']>
@@ -1310,7 +1330,9 @@ declare module 'vue' {
     readonly isHiddenHolding: UnwrapRef<typeof import('../utils/token-fold')['isHiddenHolding']>
     readonly isInFlightActivityOp: UnwrapRef<typeof import('../utils/journal-state')['isInFlightActivityOp']>
     readonly isInFlightSend: UnwrapRef<typeof import('../utils/in-flight-send')['isInFlightSend']>
+    readonly isMatchingTask: UnwrapRef<typeof import('../utils/recent-activity-handlers')['isMatchingTask']>
     readonly isNewPasswordValid: UnwrapRef<typeof import('../utils/password')['isNewPasswordValid']>
+    readonly isOwnTerminalRecord: UnwrapRef<typeof import('../utils/recent-activity-handlers')['isOwnTerminalRecord']>
     readonly isPasskeyCancel: UnwrapRef<typeof import('../utils/passkey-copy')['isPasskeyCancel']>
     readonly isPitchKind: UnwrapRef<typeof import('../utils/presto-ui-state')['isPitchKind']>
     readonly isPopupSubmitKey: UnwrapRef<typeof import('../composables/usePopupEntity')['isPopupSubmitKey']>
@@ -1363,6 +1385,7 @@ declare module 'vue' {
     readonly listOwnAccountRow: UnwrapRef<typeof import('../utils/account-rows')['listOwnAccountRow']>
     readonly listedTokensOf: UnwrapRef<typeof import('../utils/token-icon')['listedTokensOf']>
     readonly logCredentialFailure: UnwrapRef<typeof import('../utils/credential-refusal')['logCredentialFailure']>
+    readonly lookupActiveProfileWithBackoff: UnwrapRef<typeof import('../utils/auth-guard')['lookupActiveProfileWithBackoff']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
     readonly markGetStarted: UnwrapRef<typeof import('../utils/get-started')['markGetStarted']>
     readonly markRaw: UnwrapRef<typeof import('vue')['markRaw']>
@@ -1539,6 +1562,7 @@ declare module 'vue' {
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
     readonly shallowReadonly: UnwrapRef<typeof import('vue')['shallowReadonly']>
     readonly shallowRef: UnwrapRef<typeof import('vue')['shallowRef']>
+    readonly shouldAdvanceToGeneral: UnwrapRef<typeof import('../utils/should-advance-to-general')['shouldAdvanceToGeneral']>
     readonly shouldShowLegalSheet: UnwrapRef<typeof import('../utils/legal-sheet')['shouldShowLegalSheet']>
     readonly showSnack: UnwrapRef<typeof import('../utils/snack')['showSnack']>
     readonly showsDecryptCta: UnwrapRef<typeof import('../utils/full-backup-ctas')['showsDecryptCta']>

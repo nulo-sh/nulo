@@ -16,7 +16,7 @@ import {
 	publishFacts,
 	UNVOUCHED_FEE_SENTENCE,
 	UNVOUCHED_PUBLISH_SENTENCE,
-} from "@/components/composite/send/publish-facts"
+} from "@/utils/fee/publish-facts"
 import { snackAside } from "@/composables/snackInset"
 import type { FeeLineState, FeeWords } from "./fee-line-words"
 import SendFeeLine from "./SendFeeLine.vue"

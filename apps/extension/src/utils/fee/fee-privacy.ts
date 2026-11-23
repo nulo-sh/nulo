@@ -1,4 +1,4 @@
-import type { TransferSide } from "@/components/composite/send/publish-facts"
+import type { TransferSide } from "./publish-facts"
 import type { AppPick, SendPick } from "@/utils/fee-picks"
 import { buildFeeMethods, defaultSponsor, type FeeMethodOption, type GasBalances, type RegisteredFpc } from "./fee-helpers"
 

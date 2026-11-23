@@ -28,7 +28,7 @@ vi.mock("@/wallet/services/transaction/client", () => ({
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ profile: undefined }) }))
 
 import { INIT_RETRY_BACKOFF_MS, useBalancesStore } from "@/stores/balances.store"
-import type { FeeScope } from "@/popup/components/modules/send/fee-helpers"
+import type { FeeScope } from "@/utils/fee/fee-helpers"
 import { type SnapshotSelection, useFeeSnapshot, watchFeeSnapshot } from "./useFeeSnapshot"
 
 const GAS = { publicFeeJuice: "5", privateFeeJuice: null }

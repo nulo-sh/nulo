@@ -1,6 +1,6 @@
 import { computed, type Ref, ref, watch } from "vue"
 import { useSendReview } from "@/composables/useSendReview"
-import { type ReaskReview, reaskReview } from "@/popup/components/modules/general/reask-review"
+import { type ReaskReview, reaskReview } from "@/utils/fee/reask-review"
 import { usePopupStore } from "@/stores/popup.store"
 import { isQueuedTransfer } from "@/utils/journal-state"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"

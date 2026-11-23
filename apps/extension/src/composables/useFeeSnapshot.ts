@@ -7,7 +7,7 @@ import {
 	type LiveFeeIdentity,
 	liveFeeScope,
 	type RegisteredFpc,
-} from "@/popup/components/modules/send/fee-helpers"
+} from "@/utils/fee/fee-helpers"
 import { type BalanceScope, EnsureSuperseded, type SubscribeCaps, type useBalancesStore } from "@/stores/balances.store"
 
 type BalancesStore = Pick<ReturnType<typeof useBalancesStore>, "subscribe" | "ensure" | "entry">
