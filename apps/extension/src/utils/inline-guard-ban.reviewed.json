@@ -41,12 +41,6 @@
 			"why": "pending: same set as isObjectLike"
 		}
 	],
-	"apps/extension/src/utils/restore-outcome.ts": [
-		{
-			"text": "/^[0-9a-f]{64}$/",
-			"why": "a backup checksum: 64 lower-case digits, no prefix"
-		}
-	],
 	"apps/extension/src/wallet/config/store.ts": [
 		{
 			"text": "storedConfig && typeof storedConfig === \"object\"",
@@ -145,12 +139,6 @@
 		{
 			"text": "!stored || typeof stored !== \"object\" || Array.isArray(stored)",
 			"why": "pending: same set as isRecord"
-		}
-	],
-	"apps/extension/src/wallet/services/dapp-session/service.ts": [
-		{
-			"text": "/^[0-9a-f]{64}$/",
-			"why": "an HMAC-SHA-256 hash: 64 lower-case digits, no prefix"
 		}
 	],
 	"apps/extension/src/wallet/services/dapp-session/spec.ts": [
@@ -316,7 +304,7 @@
 		},
 		{
 			"text": "typeof value === \"object\" && value !== null && [Object.prototype, null].includes(Object.getPrototypeOf(value))",
-			"why": "pending: same set as isObjectLike"
+			"why": "pending: same set as isPlainObject"
 		}
 	],
 	"apps/extension/src/wallet/storage/stores.ts": [

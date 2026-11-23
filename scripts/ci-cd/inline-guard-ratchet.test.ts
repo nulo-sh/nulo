@@ -4,37 +4,55 @@ import { ratchetBase, readAtBase } from "./ratchet-base"
 
 // `inline-guard-ban.test.ts` holds the tree to its reviewed baseline; this holds the baseline to its
 // base, so a pull request cannot add an inline guard and its entry together. Every shape the ban
-// finds has a helper form, so new code never needs an entry.
+// finds has a helper form, so new code never needs an entry; a kept site, whose contract no helper
+// has, may still move to another file.
 
 const BASELINE = "apps/extension/src/utils/inline-guard-ban.reviewed.json"
 
 type Reviewed = Record<string, { text: string; why: string }[]>
 
-/** Entries `head` holds more times than `base` does, by file and text; a reworded reason is no entry. */
+const isKept = (why: string) => !why.startsWith("pending")
+
+/** Takes one `key` from the multiset, if it holds one. */
+function take(counts: Map<string, number>, key: string): boolean {
+	const count = counts.get(key) ?? 0
+	if (count > 0) counts.set(key, count - 1)
+	return count > 0
+}
+
+/** Entries `head` holds more times than `base` does, by file and text; a reworded reason is no entry.
+ *  A kept entry its base file no longer holds may reappear, with the same text, in another file. */
 function grown(base: Reviewed, head: Reviewed): string[] {
 	const left = new Map<string, number>()
 	for (const [file, entries] of Object.entries(base)) {
 		for (const { text } of entries) left.set(`${file}  ${text}`, (left.get(`${file}  ${text}`) ?? 0) + 1)
 	}
-	return Object.entries(head).flatMap(([file, entries]) =>
-		entries.flatMap(({ text }) => {
-			const key = `${file}  ${text}`
-			const count = left.get(key) ?? 0
-			left.set(key, count - 1)
-			return count > 0 ? [] : [key]
-		}),
+	const added = Object.entries(head).flatMap(([file, entries]) =>
+		entries.filter(({ text }) => !take(left, `${file}  ${text}`)).map((entry) => ({ file, ...entry })),
 	)
+	const moved = new Map<string, number>()
+	for (const [file, entries] of Object.entries(base)) {
+		for (const { text, why } of entries) {
+			if (isKept(why) && take(left, `${file}  ${text}`)) moved.set(text, (moved.get(text) ?? 0) + 1)
+		}
+	}
+	return added.filter(({ text, why }) => !(isKept(why) && take(moved, text))).map(({ file, text }) => `${file}  ${text}`)
 }
 
 describe("inline guard baseline ratchet", () => {
 	const entry = { text: 'typeof x === "object" && x !== null', why: "pending" }
+	const kept = { ...entry, why: "kept" }
 
 	test.each<[string, Reviewed, Reviewed, number]>([
 		["a removed entry", { "a.ts": [entry, entry] }, { "a.ts": [entry] }, 0],
-		["a reworded reason", { "a.ts": [entry] }, { "a.ts": [{ ...entry, why: "kept" }] }, 0],
+		["a reworded reason", { "a.ts": [entry] }, { "a.ts": [kept] }, 0],
 		["an added entry", { "a.ts": [entry] }, { "a.ts": [entry], "b.ts": [entry] }, 1],
 		["a duplicated entry", { "a.ts": [entry] }, { "a.ts": [entry, entry] }, 1],
 		["an edited expression", { "a.ts": [entry] }, { "a.ts": [{ ...entry, text: `${entry.text} && y` }] }, 1],
+		["a kept entry moved", { "a.ts": [kept] }, { "b.ts": [kept] }, 0],
+		["a pending entry moved", { "a.ts": [entry] }, { "b.ts": [entry] }, 1],
+		["a kept entry copied", { "a.ts": [kept] }, { "a.ts": [kept], "b.ts": [kept] }, 1],
+		["a pending entry moved as kept", { "a.ts": [entry] }, { "b.ts": [kept] }, 1],
 	])("%s", (_case, base, head, count) => {
 		expect(grown(base, head)).toHaveLength(count)
 	})

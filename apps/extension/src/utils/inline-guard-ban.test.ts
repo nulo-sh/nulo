@@ -19,8 +19,8 @@ import {
  * "object" or "32-byte hex" means at a trust boundary is one edit.
  *
  * A finding is a `typeof E` test for "object" beside a null exclusion of the same `E` in one run of
- * `&&` (`E !== null`, `E != null` or `E`) or, negated, of `||` (`E === null`, `E == null` or `!E`);
- * or a regex literal whose hex character class is quantified `{64}`. Findings match
+ * `&&` (`E !== null`, `E != null`, `E` or `!!E`) or, negated, of `||` (`E === null`, `E == null` or
+ * `!E`); or a regex literal whose hex character class follows `0x` and is quantified `{64}`. Findings match
  * `inline-guard-ban.reviewed.json` by file and the run's text as a multiset, so a moved line needs no
  * edit and an edited expression needs a fresh review; `scripts/ci-cd/inline-guard-ratchet.test.ts`
  * refuses a new entry on a pull request.
@@ -89,9 +89,13 @@ function runOf(node: ts.Node, operator: ts.SyntaxKind): ts.BinaryExpression | un
 	return root
 }
 
-/** In an `&&` run, `E !== null`, `E != null` or `E`; in an `||` run, `E === null`, `E == null` or `!E`. */
+/** In an `&&` run, `E !== null`, `E != null`, `E` or `!!E`; in an `||` run, `E === null`, `E == null` or `!E`. */
 function excludesNull(node: ts.Expression, operand: string, positive: boolean): boolean {
 	if (positive && textOf(node) === operand) return true
+	if (positive && isNot(node)) {
+		const inner = unwrap(node.operand)
+		return isNot(inner) && textOf(unwrap(inner.operand)) === operand
+	}
 	if (!positive && isNot(node)) return textOf(unwrap(node.operand)) === operand
 	if (!ts.isBinaryExpression(node) || !(positive ? UNEQUAL : EQUAL).has(node.operatorToken.kind)) return false
 	const [left, right] = [unwrap(node.left), unwrap(node.right)]
@@ -118,14 +122,16 @@ function objectHit(node: ts.Node): Omit<Hit, "file" | "line"> | undefined {
 	return { text: textOf(root), hint: `${positive ? "" : "!"}${helper}(${operand})` }
 }
 
-/** A character class holding a hex range, quantified exactly `{64}`. Plain string scanning: no
- *  pattern of its own for a ReDoS query to judge. */
+/** A character class holding a hex range, right after `0x` and quantified exactly `{64}`: the field
+ *  shape `isHex32` names (a bare 64-digit digest has no helper). Plain string scanning: no pattern of
+ *  its own for a ReDoS query to judge. */
 function hasHexClass64(pattern: string): boolean {
 	for (let open = pattern.indexOf("["); open !== -1; open = pattern.indexOf("[", open + 1)) {
 		const close = pattern.indexOf("]", open)
 		if (close === -1) return false
 		const range = pattern.slice(open + 1, close)
-		if ((range.includes("a-f") || range.includes("A-F")) && pattern.startsWith("{64}", close + 1)) return true
+		const prefixed = pattern.slice(Math.max(0, open - 2), open).toLowerCase() === "0x"
+		if (prefixed && (range.includes("a-f") || range.includes("A-F")) && pattern.startsWith("{64}", close + 1)) return true
 	}
 	return false
 }
@@ -136,7 +142,7 @@ function hexHit(node: ts.Node): Omit<Hit, "file" | "line"> | undefined {
 }
 
 function scanScript(file: string, code: string, firstLine: number, out: Hit[]): void {
-	if (!code.includes("object") && !code.includes("{64}")) return
+	if (!code.includes("typeof") && !code.includes("{64}")) return
 	const tree = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
 	const visit = (node: ts.Node): void => {
 		const hit = objectHit(node) ?? hexHit(node)
@@ -220,8 +226,10 @@ describe("inline guard ban (static)", () => {
 			'const a = typeof o.b === "object" && o.b !== null && "c" in o.b',
 			["isObjectLike(o.b)"],
 		],
+		["an escaped type name", "x.ts", 'const a = typeof x === "\\x6fbject" && x !== null', ["isObjectLike(x)"]],
 		["a script block", "x.vue", '<script setup>\nconst a = typeof x === "object" && x !== null\n</script>', ["isObjectLike(x)"]],
 		["a 64-hex regex", "x.ts", "const R = /^0x[0-9a-f]{64}$/i", ["isHex32 or HEX_32"]],
+		["a double negation", "x.ts", 'const a = typeof x === "object" && !!x', ["isObjectLike(x)"]],
 		["a bare typeof test", "x.ts", 'const a = typeof x === "object"', []],
 		["a mixed-polarity form", "x.ts", 'const a = typeof x === "object" || x === null', []],
 		["a null test on another operand", "x.ts", 'const a = typeof x === "object" && y !== null', []],
@@ -230,6 +238,7 @@ describe("inline guard ban (static)", () => {
 		["a selector regex", "x.ts", "const R = /^0x[0-9a-f]{8}$/", []],
 		["an open-ended hex run", "x.ts", "const R = /0x[0-9a-f]{64,}/g", []],
 		["a non-hex class", "x.ts", "const R = /^[z]{64}$/", []],
+		["a digest with no 0x prefix", "x.ts", "const R = /^[0-9a-f]{64}$/", []],
 	])("%s", (_case, file, source, hints) => {
 		expect(scan(file, source).map(({ hint }) => hint)).toEqual(hints)
 	})

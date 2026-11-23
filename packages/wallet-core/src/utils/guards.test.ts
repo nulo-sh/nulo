@@ -32,7 +32,7 @@ describe("isRecord and isObjectLike", () => {
 	])("%s: isRecord %s, isObjectLike %s", (_label, value, record, objectLike) => {
 		expect(isRecord(value)).toBe(record)
 		expect(isObjectLike(value)).toBe(objectLike)
-		// The inline forms call sites replace, each with exactly its helper's set.
+		// Each inline form a site replaced has exactly its helper's set.
 		expect(typeof value === "object" && value !== null).toBe(objectLike)
 		expect(!value || typeof value !== "object").toBe(!objectLike)
 		expect(typeof value === "object" && value !== null && !Array.isArray(value)).toBe(record)
