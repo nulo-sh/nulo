@@ -1,7 +1,8 @@
 import { mkdirSync } from "node:fs"
-import { LOCAL_NETWORK_RPC_URL } from "@/wallet/services/network/seeds"
+import { LOCAL_NETWORK_RPC_URL, PRIMARY_SEED } from "@/wallet/services/network/seeds"
 import type { Page } from "puppeteer"
 import type { ExtensionContext } from "../../fixtures/extension"
+import type { HeldNode } from "../../fixtures/egress-guard"
 import { holdNodeStub } from "../../fixtures/node-stub"
 import { type PasskeyAuthSetup, setupPasskeyVirtualAuth } from "../../fixtures/passkey"
 import { callService } from "../../fixtures/session"
@@ -9,6 +10,13 @@ import { loadPopup, openPopup, waitForServiceReady } from "../../fixtures/wallet
 import { ErrorCollector } from "./collect"
 import type { Caps } from "./model"
 import { type NetworkRun, newRunState, type RunState } from "./state"
+
+/** Whether every endpoint of the network a new profile starts on goes to one of `held`. */
+function startsOnStandIn(held: readonly HeldNode[]): boolean {
+	const hosts = new Set(held.map((node) => node.host))
+	const endpoints = PRIMARY_SEED ? [PRIMARY_SEED.rpcUrl, ...(PRIMARY_SEED.relay ? [PRIMARY_SEED.relay.rpcUrl] : [])] : []
+	return endpoints.length > 0 && endpoints.every((url) => hosts.has(new URL(url).hostname))
+}
 
 /** A run's state on a fresh launch: the anchor open on the popup with a PRF-capable authenticator
  *  added on it, and the error collector watching every extension page from now on. `held` is a
@@ -38,7 +46,8 @@ export async function startRun(
 	// wallet drops at the source.
 	await callService(anchor, "config", "setValue", ["debugMode", true])
 	const auth = held ? held.auth : await setupPasskeyVirtualAuth(ctx.browser, anchor)
-	const state = newRunState({ ctx, caps, anchor, auth, errors, dir, network })
+	const standIns = [...(ctx.egress?.nodes ?? []), ...(local ? [local] : [])]
+	const state = newRunState({ ctx, caps, anchor, auth, errors, dir, network, startsOnStandIn: startsOnStandIn(standIns) })
 	return Object.assign(state, {
 		async stop() {
 			errors.stop()

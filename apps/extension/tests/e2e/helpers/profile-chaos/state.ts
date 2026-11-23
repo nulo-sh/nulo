@@ -79,6 +79,13 @@ export interface RunState {
 	afterUpdate: Map<ProfileRef, FirstOpen>
 	/** Present on a run with a node. */
 	network?: NetworkRun
+	/** The launch holds a stand-in for every endpoint of the network a new profile starts on. */
+	startsOnStandIn: boolean
+	/** Profiles the run moved to the node's network; every other one sits where it started. */
+	placed: Set<ProfileRef>
+	/** When the run's stand-in window closes: `STAND_IN_TAIL` past the drain of the last step that
+	 *  served a stand-in network. */
+	standInCloses?: number
 }
 
 export type Drive = (s: RunState, params: unknown, step: PlannedStep, before: World) => Promise<Driven>
@@ -117,6 +124,7 @@ type Derived =
 	| "salts"
 	| "legacyPlain"
 	| "afterUpdate"
+	| "placed"
 
 export function newRunState(init: Omit<RunState, Derived>): RunState {
 	return {
@@ -136,6 +144,7 @@ export function newRunState(init: Omit<RunState, Derived>): RunState {
 		salts: new Map(),
 		legacyPlain: {},
 		afterUpdate: new Map(),
+		placed: new Set(),
 	}
 }
 

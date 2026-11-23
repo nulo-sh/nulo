@@ -12,6 +12,7 @@ import { isPrestoProbeNoise } from "../../fixtures/wallet-pages"
 import { readFace } from "./page-face"
 import {
 	type ErrorEntry,
+	inStandInWindow,
 	type LeakHit,
 	MIN_NEEDLE,
 	type Needle,
@@ -224,6 +225,8 @@ export async function readProfiles(page: Page): Promise<ProfileReading> {
 
 export interface DrainedLog {
 	id: number
+	/** When the background logged it, by the host's clock. */
+	at: number
 	level: LogLevel
 	source: string
 	context?: string
@@ -235,25 +238,31 @@ export async function drainLogs(page: Page, fromId: number): Promise<DrainedLog[
 	const out: DrainedLog[] = []
 	let last = fromId
 	for (;;) {
-		const batch = await callService<{ id: number; level: LogLevel; source: string; context?: string; data: unknown[] }[]>(
-			page,
-			"log-viewer",
-			"getLogs",
-			[1000, last],
-		)
+		const batch = await callService<
+			{ id: number; timestamp: number; level: LogLevel; source: string; context?: string; data: unknown[] }[]
+		>(page, "log-viewer", "getLogs", [1000, last])
 		if (!batch.length) return out
 		for (const log of batch)
-			out.push({ id: log.id, level: log.level, source: log.source, context: log.context, text: JSON.stringify(log.data) })
+			out.push({
+				id: log.id,
+				at: log.timestamp,
+				level: log.level,
+				source: log.source,
+				context: log.context,
+				text: JSON.stringify(log.data),
+			})
 		last = batch[batch.length - 1].id
 	}
 }
 
-/** The drained lines O4 reads: warn and error levels. */
-export function logErrors(logs: readonly DrainedLog[]): ErrorEntry[] {
+/** The drained lines O4 reads: warn and error levels, each marked when it was logged inside the
+ *  run's stand-in window, which closes at `standInCloses`. */
+export function logErrors(logs: readonly DrainedLog[], standInCloses?: number): ErrorEntry[] {
 	return logs.flatMap((l): ErrorEntry[] => {
-		if (l.level === LogLevel.Warn) return [{ kind: "log", level: "warn", source: l.source, context: l.context, text: l.text }]
-		if (l.level === LogLevel.Error) return [{ kind: "log", level: "error", source: l.source, context: l.context, text: l.text }]
-		return []
+		const level = l.level === LogLevel.Warn ? "warn" : l.level === LogLevel.Error ? "error" : undefined
+		if (!level) return []
+		const standIn = inStandInWindow(l.at, standInCloses) ? { standIn: true as const } : {}
+		return [{ kind: "log", level, source: l.source, context: l.context, text: l.text, ...standIn }]
 	})
 }
 

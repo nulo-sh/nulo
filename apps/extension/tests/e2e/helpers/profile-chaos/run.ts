@@ -34,6 +34,8 @@ import {
 	type LeakHit,
 	type Needle,
 	RESTART_LOG_GAP,
+	STAND_IN_TAIL,
+	servesStandIn,
 	type StoredEntry,
 	type StructureReading,
 	type Violation,
@@ -252,14 +254,17 @@ export interface StepEvidence {
 
 /** Drains the logs since the last read and checks them with the page errors since the last mark:
  *  O4 over what `ends` allows, the continuity of the ids, and every needle in every line, the lines
- *  read before included for a needle learnt since. */
+ *  read before included for a needle learnt since. A step that `servedStandIn` keeps the run's
+ *  stand-in window open until `STAND_IN_TAIL` past this drain. */
 export async function checkStepLogs(
 	s: RunState,
 	ends: readonly StepEnd[],
 	restarted: boolean,
 	needles: readonly Needle[],
+	servedStandIn: boolean,
 ): Promise<StepEvidence & { hits: LeakHit[] }> {
 	const drained = await drainLogs(s.anchor, s.logs.lastId)
+	if (servedStandIn) s.standInCloses = Date.now() + STAND_IN_TAIL.ms
 	const incomplete: string[] = []
 	if (restarted) incomplete.push(RESTART_LOG_GAP)
 	else {
@@ -282,7 +287,7 @@ export async function checkStepLogs(
 	]
 	s.logs.seen.push(...logs.map(({ id, text }) => ({ id, text })))
 	for (const n of needles) s.logs.searched.add(n.name)
-	const errors = checkErrors([...pageErrors, ...logErrors(logs)], ends)
+	const errors = checkErrors([...pageErrors, ...logErrors(logs, s.standInCloses)], ends)
 	add(s.warns, errors.warns)
 	add(s.allowed, errors.allowed)
 	return { violations: errors.violations, incomplete, hits }
@@ -377,6 +382,7 @@ async function checkStep(
 	census: StoredEntry[],
 	driven: Driven,
 	restarted: boolean,
+	servedStandIn: boolean,
 ): Promise<StepEvidence> {
 	const next = step.expect.next
 	const out: Violation[] = []
@@ -390,7 +396,7 @@ async function checkStep(
 	const opened = await openNewFiles(s, next)
 	const needles = await needlesOf(s)
 	out.push(...(await checkState(s, step, before, census)))
-	const logs = await checkStepLogs(s, endsOf(step, before), restarted, needles)
+	const logs = await checkStepLogs(s, endsOf(step, before), restarted, needles, servedStandIn)
 	const storage = await scanStorage(s.anchor, needles, s.legacyPlain)
 	const fileHits = scanFiles(s, needles)
 	const structure = { ...storage.structure, prfSalt: [...storage.structure.prfSalt, ...opened.prfSalt], exports: opened.exports }
@@ -481,7 +487,10 @@ async function drive(s: RunState, step: PlannedStep, before: World): Promise<Dri
 	const driven = await run(s, step.params, step, before)
 	const next = step.expect.next.session
 	const opened = next.kind === "open" && !live(before).some((p) => p.ref === next.ref)
-	if (s.network && opened && driven.outcome === "committed") await s.network.placeOpened(s)
+	if (s.network && opened && driven.outcome === "committed") {
+		await s.network.placeOpened(s)
+		s.placed.add(next.ref)
+	}
 	return driven
 }
 
@@ -509,6 +518,8 @@ async function runOne(s: RunState, step: PlannedStep, before: World): Promise<St
 	const t0 = Date.now()
 	// A restart during the last step's checks or since loses lines the drain can never read.
 	if (s.origin !== undefined && origin !== s.origin) return recordOf(step, t0, { incomplete: [UNPLANNED_RESTART] })
+	// Read before the driver: a profile the step places sat where it started until then.
+	const servedStandIn = servesStandIn(before, step.expect, s.placed, s.startsOnStandIn)
 	let driven: Driven
 	try {
 		driven = await drive(s, step, before)
@@ -523,7 +534,7 @@ async function runOne(s: RunState, step: PlannedStep, before: World): Promise<St
 	if (!restarted && served !== origin) return recordOf(step, t0, { outcome: driven.outcome, incomplete: [UNPLANNED_RESTART] })
 	if (restarted) s.logs.lastId = 0
 	try {
-		const evidence = await checkStep(s, step, before, census, driven, restarted)
+		const evidence = await checkStep(s, step, before, census, driven, restarted, servedStandIn)
 		s.origin = await backgroundOrigin(s.ctx)
 		// A restart during the checks loses lines a later drain cannot tell apart from none.
 		const lost = s.origin === served ? [] : [UNPLANNED_RESTART]
