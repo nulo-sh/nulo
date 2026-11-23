@@ -90,8 +90,6 @@ const readImported = async () => {
 }
 managers.networkReset.onStaleNetworkChanged.add(readImported)
 const importedAccounts = computed(() => (appStore.isLogined ? (imported.value?.accounts ?? []) : []))
-/** A chain with no network row has no name of its own here, so the row names it as the wallet's other
- *  account rows do. */
 const importedRowDescription = (account) => {
 	const address = trimAddress(account.address, 6, 4, "…")
 	return account.networked ? address : `${getChainName(account.chainId).toUpperCase()} · ${address}`

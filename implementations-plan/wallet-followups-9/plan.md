@@ -30,7 +30,7 @@ Closed known limits searched (`delete profile imported`, `decimals`): #807, #809
 ## Outcome & Quality Bar
 
 - **For whom:** a person deleting a profile after a restore; a person adding a token by pasting its address.
-- **Excellent:** the Delete profile warning names exactly the imported accounts the deletion erases, in the order it names them today, and "Export first" leads somewhere that exports them. A token whose decimals the wallet cannot handle is refused at import with words the form already uses, and a row stored before the change breaks no screen.
+- **Excellent:** the Delete profile warning names every readable imported account the deletion erases, in the order it names them today, and "Export first" leads somewhere that exports them. A token whose decimals the wallet cannot handle is refused at import with words the form already uses, and a row stored before the change breaks no screen.
 - **Good enough:** no new chain-naming scheme for the rows that have a network; no change to the paused-reset exports (known limits #807, #809).
 
 ## Architecture & Implementation
@@ -47,7 +47,7 @@ Closed known limits searched (`delete profile imported`, `decimals`): #807, #809
 
 ## Security & Adversarial Considerations
 
-- **#1925:** the new read returns what `getAccounts` already returns, per profile, from the same sealed rows; it answers no more while locked than `getAccounts` does, and the page discards an answer the lock overtook. Paused reset: "Export first" goes to the account export page, which lists only the active chain's rows, so an account on a chain with no network row cannot be exported there; the full backup refuses while a reset is pending. Same class as #807; left as a known limit (filed at close-out). Out of scope: an orphan key row (a crashed import's key with no account), which the deletion also erases and nothing lists anywhere.
+- **#1925:** the new read returns what `getAccounts` already returns, per profile, from the same sealed rows; it answers no more while locked than `getAccounts` does, and the page discards an answer the lock overtook. Left out, each recorded (D3-D6): an unreadable account row (#1940), a reset running in another window (#1938), a passkey profile's hidden Export first (#1939), a paused reset's export of an account on a chain with no network row (#1941). Out of scope: an orphan key row (a crashed import's key with no account), which the deletion also erases and nothing lists anywhere.
 - **#1926:** attacker: a token contract, or the node answering a public simulation, choosing the decimals value. Boundary: the import, the dApp `registerToken` preview (now refused before the person sees it), the metadata refresh (contained; the row keeps its stored value), a backup file (refused at restore). No log line, permission or dependency changes.
 
 ## Assumptions
@@ -55,7 +55,7 @@ Closed known limits searched (`delete profile imported`, `decimals`): #807, #809
 **Facts** (at `c0eb5d072`)
 1. `purgeForProfile` erases every live account row and every `importedKeys.forProfile` row of the profile, chain-agnostic (`account/service.ts`).
 2. `AccountService.restore` holds an imported row on a chain with no network row; a derived row there is refused (`account/service.test.ts`, "holds an imported row unchecked…").
-3. The full backup exports every account row and imported key of the profile, with no network filter, and refuses while a reset is pending (`account/service.ts` `exportFullBackupKeys`, `rowsOfProfile`); its page already warns about imported accounts on added networks (`export/full.vue`).
+3. The full backup exports every readable account row and imported key of the profile, with no network filter, and refuses while a reset is pending (`account/service.ts` `exportFullBackupKeys`, `rowsOfProfile`); its page already warns about imported accounts on added networks (`export/full.vue`).
 4. `getChainName` falls back to `` `Aztec:${chainId}` ``, printed upper-cased on Connected apps' account rows (`components/ui/utils.ts`; `settings/connected-apps/[id].vue`).
 5. `DECIMALS_MAX = 18` (`token/seeder.ts`), the token list's 0..18, and `MAX_DECIMALS = 77` (`utils/token-amount.ts`) are the three decimals bounds in the tree.
 6. An unclassified `WalletError` reaches a dApp as the constant envelope (`wallet-sdk/error-envelope.ts`).
@@ -74,7 +74,18 @@ Closed known limits searched (`delete profile imported`, `decimals`): #807, #809
 
 ## Decision ledger
 
-(filled as the panel decides)
+| # | Decision | Rejected | Why |
+|---|---|---|---|
+| D1 | A dedicated read, `getImportedAccounts(profileId)` | `getAccounts` with an optional chain; `backupImportedKeys` | one new method keeps every `getAccounts` caller's contract; the key read has no names and refuses during a reset |
+| D2 | The list reads networks, the pending reset and the imported rows in one `Promise.all` | the account read after the network read, as before | no per-network read is left to wait for; a read the lock overtakes is still dropped (`fetchImported`), and none starts after the lock |
+| D3 | The scope is the profile's readable imported accounts | failing the read on any unreadable owned row | an unreadable row needs damaged storage no wallet path writes (Codex F2): known limit #1940 |
+| D4 | Codex F1 (a reset running in another window hides its journal-held imports) left out, filed as #1938 | refusing Delete while a reset runs, in this PR | pre-existing, another cause than #1925, and the fix is a refusal a person sees: the owner's call |
+| D5 | Codex F3 (`exportFirstTo` hides Export first for a passkey profile, though the account page now exports held rows) left out, filed as #1939 | showing the button here | pre-existing, and a button appearing is a UI change |
+| D6 | During a paused reset, an account on a chain with no network row cannot be exported from Export first's page | a chain picker on the account export page | known limit #1941, same class as #807; the account is still named |
+
+## Audit verdicts
+
+**Arc 1, Codex (`gpt-6.1-sol`, high, read-only; session `01a209a9`).** F1 material, pre-existing: D4, #1938. F2 material, pre-existing, damaged storage only: D3, #1940; Fact 3 qualified to readable rows. F3 minor, pre-existing: D5, #1939. F4 nit, two comments: accepted (the row label's comment removed, the list's doc cut to its invariant). Verdict: "#1925's fix is sound"; no profile-isolation, keyboard or focus regression found.
 
 ## Post-implementation
 

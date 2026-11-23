@@ -844,7 +844,7 @@
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/security/reset.vue",
-			"expression": "trimAddress(account.address, 6, 4, '…')",
+			"expression": "importedRowDescription(account)",
 			"branch": "importedAccounts.length",
 			"ordinal": 0,
 			"role": "meta",

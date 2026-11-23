@@ -20,12 +20,11 @@ export type ImportedAccountsRead = { accounts: ImportedAccount[]; resetPending: 
 export const importedKey = (account: { chainId: number; address: string }): string => `${account.chainId}:${account.address.toLowerCase()}`
 
 /**
- * Every imported account of `profileId`, hidden ones included, on every chain the profile holds one:
- * the scope the profile's deletion erases. Chains with a network row come first, in network order, each
- * with a paused reset's journal-held imports under their network once its purge has removed their live
- * rows (before it, those rows are the accounts, at the address they had); chains with none follow. A
- * held import is keyed on the network's chain, which the reset rewrites before it recreates any row, so
- * a recreated one is named once.
+ * Every readable imported account of `profileId` on every chain, network row or not, as the profile's
+ * deletion erases them. A paused reset's journal-held imports count once its purge has removed their
+ * live rows (before it, those rows are the accounts, at the address they had); a held import is keyed
+ * on the network's chain, which the reset rewrites before it recreates any row, so a recreated one is
+ * named once.
  */
 export async function readImportedAccounts(reads: ImportedAccountReads, profileId: string): Promise<ImportedAccountsRead> {
 	const [networks, pending, imported] = await Promise.all([
