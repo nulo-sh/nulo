@@ -1,7 +1,7 @@
 ---
 plan: service-imports-1
 tier: light
-status: phase 1
+status: completed
 issues: "#1937"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,19 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-11-23. Planned and delivered as one arc.
+- **Status:** completed. The arc and this close-out ship as one PR into `dev`; its merge archives this plan and closes #1937.
+- **Shipped:** every non-test module under `wallet/services` names a sibling service by its spec constant and types it through `import type`; values a sibling's `spec.ts` defines come from it; the dropped-send cadence constants live in `transaction/inclusion.ts` and the integrity coordinator's name in `account-integrity/types.ts`; the task module's cycle is gone and `bun run lint`'s cycle step covers all of `wallet/services`.
+- **Review:** Codex r1 `clean` (Audit verdicts); nothing to verify.
+- **Gates:** G1 to G3 green at `5f5ca9c67` and again after merging `origin/dev` (`4d62d8c92`); the PR's five required checks certify the e2e layer.
+- **Dropped:** the brief's move of `primaryEndpointUrl` (it already lives in `network/spec.ts`, F5); a permanent pairing test (D7).
+- **Known limits:** none.
+- **Open items:** none. The `wallet/logger` import cycle the scan saw lies outside this lint and has no traced consequence.
+- **Lessons:** none promoted: `lessons.md` sits at its budget, and the cycle rule's semantics are already in `apps/extension/tests/e2e/README.md`.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
+
 # service-imports-1: sibling services are named by their spec constant, not their implementation
 
 A service module value-imports its siblings' `service.ts` to read `<X>Service.name`, an enum or a helper the sibling's `spec.ts` already exports, so loading one service loads its siblings and their collaborators, and the cycle lint covers two directories only (#1937). This plan makes the spec constant plus `import type` the one idiom #1442 began, moves the three exports that live in an implementation module to leaves, and widens the cycle lint to every service. UI impact: none.
@@ -27,11 +40,11 @@ A service module value-imports its siblings' `service.ts` to read `<X>Service.na
 
 ## Assumptions
 
-Facts checked at `7a766e676` with `bun ~/.cache/nulo-backlog/service-imports-1/tables.ts` (a TypeScript-checker scan; scratch, output quoted in the PR body).
+Facts checked at `7a766e676` with a TypeScript-checker scan (a scratch script, not committed; its tables are in the PR body).
 
 - **Facts**:
   - F1: 149 `<X>Service.name` / `<X>Coordinator.name` reads in 26 non-test files under `wallet/services` (the brief said 142, the issue 141; the scan also counts `task/test-task-service.ts`). Every service's `spec.ts` exports `<X>_SERVICE_NAME`, which its class's `static name` holds.
-  - F2: 110 `services.get` calls, 12 real `dependencies` arrays. The scan pairs each call's name with the class whose `static name` holds it and checks that class is assignable to the instantiated type and that type to the field: all pair at base but one, `execution/service.ts` `interactionOperations()`, a structural view already read by constant and untouched here.
+  - F2: 110 `services.get` calls, 12 real `dependencies` arrays. The scan pairs each call's name with the class whose `static name` holds it and checks that class is assignable to the instantiated type and that type to the field: all pair at base but one, `execution/service.ts` `interactionOperations()`, already read by constant and untouched here: its view type adds `start(): Promise<void>` only to satisfy `IService`, which the real `start(services)` does not match, and nothing calls `start` on it.
   - F3: 276 cross-directory value edges inside `wallet/services`; 122 of them reach a sibling's `service.ts` / `coordinator.ts`.
   - F4: biome's `noImportCycles` (2.5.13) ignores `import type` but counts `import { type A }` as a value edge. Widened to all of `wallet/services` it reports one cycle only: `task/service.ts` ↔ `task/wrapped-task.ts`, import-only (`EmptyResult`, `TaskStatus` taken from `./service`, which re-exports `./spec`). Lint wall-clock at base: 3.8 s for the current paths, 3.2 s widened (load1 ≈ 130).
   - F5: `networkInfoFrom`, `findPrimaryEndpoint` and `primaryEndpointUrl` already live in `network/spec.ts`; the brief's "`primaryEndpointUrl` moves to a leaf" did not hold, so it only changes importers. `isSeedEndpointUrl` lives in `network/seeds.ts`. `OriginType`, `TxStatus`, `AccessLevel`, `AccountType`, `FpcType` and the task content classes live in their service's `spec.ts`, re-exported by `export * from "./spec"`.
@@ -80,6 +93,10 @@ Validation gate (one at a time; none above load1 150):
 | D5 | Widen the lint to all of `wallet/services` | yes | one import-only cycle at base (F4), fixed here |
 | D6 | Which cycle comments go | token's second sentence only | it records a module cycle with `execution/service.ts`, which now imports `TokenService` as a type; profile's and incoming-transfer's record startup-order constraints (`topologicalPhases`) that still hold |
 | D7 | A permanent test pairing name and type | no | the pairing needs the type checker; a typed `ServiceCollection.get` is a wallet-core contract change beyond this lane; the scan is the proof here |
+
+## Audit verdicts
+
+- **Codex r1** (gpt-6.1-sol, high, the plan and the diff from `7a766e676`): `clean`. It compared the 46 changed service files independently (executable code equivalent after the imports, the 149 substitutions and the three moves), confirmed the 110 lookups and the dependency arrays, found no stale consumer of a moved export in popup, Vue, test, package or script code, ran its own graph scan over 908 source files (no service cycle, no dynamic import in services), and judged D1 to D7 and the comment edits sound.
 
 ## Implementation record
 
