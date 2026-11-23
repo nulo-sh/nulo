@@ -172,6 +172,14 @@ describe("rehydrateOptimizablePrefix", () => {
 		expect(result?.optimizableCalls[0].isPublicStatic()).toBe(true)
 	})
 
+	test("a call that hides its sender ends the prefix, so it is simulated with its sender hidden", () => {
+		const hidden = rpcShapedPublicStaticCall({ hideMsgSender: true })
+		expect(rehydrateOptimizablePrefix([hidden, rpcShapedPublicStaticCall()])).toBeNull()
+		const afterOne = rehydrateOptimizablePrefix([rpcShapedPublicStaticCall(), hidden])
+		expect(afterOne?.optimizableCalls).toHaveLength(1)
+		expect(afterOne?.remainingRaw).toEqual([hidden])
+	})
+
 	test("8. mixed: [public-static, private] → prefix=[1], remainder=[1]", () => {
 		const priv = rpcShapedPublicStaticCall({ type: FunctionType.PRIVATE })
 		const result = rehydrateOptimizablePrefix([rpcShapedPublicStaticCall(), priv])
