@@ -111,7 +111,7 @@ One arc, one PR, no stack: `worktree-ci-path-filter-1` → `dev`, ready for revi
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `c0eb5d072`, as bounded work: one Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and the diff from `c0eb5d072`, an Opus lens beside it, then targeted verification of material fixes. After the opening head's checks finish, the close-out ships in the same PR: the fixture and its test retired in their own commit, the Outcome, `STATUS.md` deleted, `git mv` into `archive/`. Never merge; teardown after the orchestrator's merge, slug `ci-path-filter-1`, trunk `dev`.
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `c0eb5d072`, as bounded work: one Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and the diff from `c0eb5d072`, an Opus lens beside it, then targeted verification of material fixes. After the opening head's checks finish, the close-out ships in the same PR: the fixture and its test retired in their own commit, the Outcome, `STATUS.md` deleted, `git mv` into `archive/`. Never merge; teardown after the orchestrator's merge, slug `ci-path-filter-1`, trunk `dev`.
 
 ## Seeds
 
