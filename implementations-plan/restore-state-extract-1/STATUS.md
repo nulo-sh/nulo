@@ -1,0 +1,1 @@
+- 2026-11-23: plan drafted, extraction implemented; profile unit + integration suites green (341 tests).
