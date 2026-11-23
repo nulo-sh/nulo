@@ -2,5 +2,6 @@
 
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
+- [dapp-estimation-extract-1](dapp-estimation-extract-1/plan.md) — plan approved, arc 1 of 1 next — the dApp estimate and preview subsystem leaves `DappSendExecutor` for its own class
 - [harden-security-fixes-5](harden-security-fixes-5/plan.md) — arc 2 of 2, owner asks open — discovery ids bound to their first tab, category-only log lines, paced discovery, bounded finished tasks
 - [shared-guards-1](shared-guards-1/plan.md) — arc 1 of 3 — wallet-core guards replace their inline restatements, and a source scan stops the regrowth
