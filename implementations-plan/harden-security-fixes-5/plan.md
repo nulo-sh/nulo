@@ -189,6 +189,12 @@ The execution contract is this plan plus [`implementations-plan/README.md` § Po
 - **Opus r1** (diff review): accepted the drifted profile-chaos citation, I3 corrected (an unclassified failure reaches a dApp only as the constant envelope; D4 rests on the logging policy and stands), a locked-wallet pending-row test, `heldDiscoveryId` and three stale comments. Two points left unchanged and routed to the owner with their reasons.
 - **Codex r2** (resumed with the fix diff): no new points; **approve**. Details: [lessons/phase-1.md](lessons/phase-1.md).
 
+## Arc 2 review
+
+- **Codex r1** (`gpt-6.1-sol`, high): approve with fixes; three comment and commit-wording nits accepted, no runtime point.
+- **Codex r2** (resumed with the fix diff): approve, no new material point.
+- **Opus diff review**: approve with fixes; wording, comment and stale-plan-line points accepted, no code point; the `finishedAt` ordering under a clock set back left as is (nothing reads a task after its finish). Details: [lessons/phase-2.md](lessons/phase-2.md).
+
 ## Seeds
 
 Not run: the orchestrator drives each arc.
