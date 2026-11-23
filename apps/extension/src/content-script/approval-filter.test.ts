@@ -52,6 +52,10 @@ describe("createApprovalFilter", () => {
 		expect(filter.admits(approval("r1"))).toBe(false)
 	})
 
+	test("an array carrying an approval's fields is screened like any approval", () => {
+		expect(createApprovalFilter().admits(Object.assign([], approval("unseen")))).toBe(false)
+	})
+
 	test("every other background message passes untouched (control)", () => {
 		const filter = createApprovalFilter()
 		for (const type of ["key-exchange-response", "secure-response", "session-disconnected", "pong"]) {

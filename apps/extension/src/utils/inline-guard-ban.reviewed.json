@@ -11,56 +11,16 @@
 			"why": "content script: its bundle carries no workspace code, so it keeps a local isObjectLike"
 		}
 	],
-	"apps/extension/src/e2e/chrome-storage-incoming-poll-gate.ts": [
-		{
-			"text": "!raw || typeof raw !== \"object\"",
-			"why": "pending: same set as isObjectLike"
-		}
-	],
-	"apps/extension/src/e2e/chrome-storage-token-list.ts": [
-		{
-			"text": "!raw || typeof raw !== \"object\"",
-			"why": "pending: same set as isObjectLike"
-		}
-	],
 	"apps/extension/src/e2e/chrome-storage-token-seeds.ts": [
 		{
 			"text": "/^0x[0-9a-f]{64}$/",
 			"why": "lower case only: e2e seeds as the suite writes them"
-		},
-		{
-			"text": "!entry || typeof entry !== \"object\"",
-			"why": "pending: same set as isObjectLike"
-		}
-	],
-	"apps/extension/src/e2e/csp-report.ts": [
-		{
-			"text": "typeof value !== \"object\" || value === null",
-			"why": "pending: same set as isObjectLike"
-		}
-	],
-	"apps/extension/src/e2e/sealed-read.ts": [
-		{
-			"text": "typeof message !== \"object\" || message === null",
-			"why": "pending: same set as isObjectLike"
 		}
 	],
 	"apps/extension/src/popup/pages/send-submit.ts": [
 		{
 			"text": "/^0x[0-9a-f]{64}$/i",
 			"why": "either case, and an 0X prefix: View is offered for any spelling of the hash"
-		}
-	],
-	"apps/extension/src/utils/contacts-export-format.ts": [
-		{
-			"text": "parsed !== null && typeof parsed === \"object\" && (parsed as { version?: unknown }).version === 2 && Array.isArray((parsed as { contacts?: unknown }).contacts)",
-			"why": "pending: same set as isObjectLike"
-		}
-	],
-	"apps/extension/src/utils/estimate-when-clear.ts": [
-		{
-			"text": "typeof answer === \"object\" && answer !== null && (answer as Partial<Queued>).queued === true",
-			"why": "pending: same set as isObjectLike"
 		}
 	],
 	"apps/extension/src/utils/full-backup-helpers.ts": [
@@ -81,33 +41,7 @@
 			"why": "pending: same set as isObjectLike"
 		}
 	],
-	"apps/extension/src/utils/panel-handback.ts": [
-		{
-			"text": "typeof raw !== \"object\" || raw === null || Array.isArray(raw)",
-			"why": "pending: same set as isRecord"
-		},
-		{
-			"text": "typeof raw !== \"object\" || raw === null",
-			"why": "pending: same set as isObjectLike"
-		}
-	],
-	"apps/extension/src/utils/pinned-tokens.ts": [
-		{
-			"text": "/^0x[0-9a-f]{64}$/",
-			"why": "pending: same set as isHex32"
-		}
-	],
-	"apps/extension/src/utils/primary-method.ts": [
-		{
-			"text": "typeof call === \"object\" && call !== null",
-			"why": "pending: same set as isObjectLike"
-		}
-	],
 	"apps/extension/src/utils/restore-outcome.ts": [
-		{
-			"text": "typeof raw !== \"object\" || raw === null || Array.isArray(raw)",
-			"why": "pending: same set as isRecord"
-		},
 		{
 			"text": "/^[0-9a-f]{64}$/",
 			"why": "a backup checksum: 64 lower-case digits, no prefix"
@@ -120,40 +54,6 @@
 		},
 		{
 			"text": "!stored || typeof stored !== \"object\"",
-			"why": "pending: same set as isObjectLike"
-		}
-	],
-	"apps/extension/src/wallet/logger/format.ts": [
-		{
-			"text": "typeof arg === \"object\" && arg !== null",
-			"why": "pending: same set as isObjectLike"
-		},
-		{
-			"text": "typeof value === \"object\" && value !== null",
-			"why": "pending: same set as isObjectLike"
-		}
-	],
-	"apps/extension/src/wallet/logger/request-log.ts": [
-		{
-			"text": "typeof item !== \"object\" || item === null || Array.isArray(item) || !Object.hasOwn(item, \"walletTraceId\")",
-			"why": "pending: same set as isRecord"
-		}
-	],
-	"apps/extension/src/wallet/logger/utils.ts": [
-		{
-			"text": "value && typeof value === \"object\"",
-			"why": "pending: same set as isObjectLike"
-		},
-		{
-			"text": "content && typeof content === \"object\"",
-			"why": "pending: same set as isObjectLike"
-		},
-		{
-			"text": "value && typeof value === \"object\"",
-			"why": "pending: same set as isObjectLike"
-		},
-		{
-			"text": "value === null || typeof value !== \"object\"",
 			"why": "pending: same set as isObjectLike"
 		}
 	],

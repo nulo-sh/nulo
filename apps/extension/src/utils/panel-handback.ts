@@ -4,6 +4,7 @@
  * panel reads the record before its router exists and removes it on its first arrival there, so the
  * next panel the person opens lands there once.
  */
+import { isObjectLike, isRecord } from "@nulo/wallet-core/utils"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import type { Snack } from "@/utils/snack"
 
@@ -35,16 +36,16 @@ export interface Handback {
 /** The decoded record, a closed set of routes and a short text: a malformed snack is dropped and
  *  the route kept, a malformed route drops the record. */
 export function decodeHandback(raw: unknown): Handback | undefined {
-	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined
-	const { route, snack } = raw as Record<string, unknown>
+	if (!isRecord(raw)) return undefined
+	const { route, snack } = raw
 	if (!HANDBACK_ROUTES.includes(route as HandbackRoute)) return undefined
 	const decoded = decodeSnack(snack)
 	return decoded ? { route: route as HandbackRoute, snack: decoded } : { route: route as HandbackRoute }
 }
 
 function decodeSnack(raw: unknown): HandbackSnack | undefined {
-	if (typeof raw !== "object" || raw === null) return undefined
-	const { kind, label, profileId } = raw as Record<string, unknown>
+	if (!isObjectLike(raw)) return undefined
+	const { kind, label, profileId } = raw
 	if (kind !== "success" && kind !== "error") return undefined
 	if (typeof label !== "string" || label.length === 0 || label.length > MAX_LABEL_LENGTH) return undefined
 	if (typeof profileId !== "string" || profileId.length === 0 || profileId.length > MAX_PROFILE_ID_LENGTH) return undefined

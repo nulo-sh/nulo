@@ -29,18 +29,18 @@ export function createApprovalFilter(): ApprovalFilter {
 			if (requested.length > REMEMBERED_REQUESTS) requested.shift()
 		},
 		admits(message) {
-			if (!isRecord(message) || message.type !== DISCOVERY_APPROVED) return true
+			if (!isObjectLike(message) || message.type !== DISCOVERY_APPROVED) return true
 			return typeof message.sessionId === "string" && requested.includes(message.sessionId)
 		},
 	}
 }
 
 function discoveryRequestId(message: unknown): string | undefined {
-	if (!isRecord(message) || message.type !== DISCOVERY_REQUEST || !isRecord(message.content)) return undefined
+	if (!isObjectLike(message) || message.type !== DISCOVERY_REQUEST || !isObjectLike(message.content)) return undefined
 	const { requestId } = message.content
 	return typeof requestId === "string" ? requestId : undefined
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isObjectLike(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null
 }
