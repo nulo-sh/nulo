@@ -113,7 +113,7 @@ awaits, as at the base; the ticket's identity compares are what tolerate it.
   failed finalize; a key reference kept or returned; identity turned into equality; a call newly
   reachable outside the lock. Crypto, supply chain, permissions: untouched.
 
-## Phase 1 — extract (single arc)
+## Phase 1 — extract (single arc) ✓
 
 1. Add `pending-restore-state.ts` and `pending-restore-state.test.ts`.
 2. Replace the ten sites in `service.ts`; drop `ExpiringStash`'s import there.
@@ -142,6 +142,16 @@ E2E, Chrome then Firefox:
   finalize"). The `account-state` hold runs after finalize.
   The list (8 steps) is validated offline with `planFromList` on both browsers' caps.
 No scenario is added.
+
+**Results.** At `7382e169c` (after merging dev): lint, `typecheck:all`, `test:all` (18/18
+workspaces), `audit:vue`, `test:ci-gating`, `check:plans` green. At `459bce81f` (same diff, before
+the merge): smoke 4 files / 9 tests green on Chrome (141 s) and Firefox (203 s); network Chrome
+`backup-restore-sw-restart` green (Firefox skips it by design). The chaos list goes red at step 0
+on dev itself: the routed node's no-endpoint error hides the stand-in's refusal from its allowlist
+(#1954, reproduced at `65182f8d1` with this change reverted). With a local, uncommitted
+known-finding entry for #1954, every one of the 8 steps ran complete with no other violation on
+both browsers, the two held restores included (`committed-then-locked`, `cancelled`); the seed
+then fails only on "filed findings this seed met: [1954]".
 
 ## Delivery
 

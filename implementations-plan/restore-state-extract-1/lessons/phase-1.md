@@ -20,3 +20,8 @@
   across the two. Rerun `scripts/e2e/profile-chaos-model.test.ts` after every `service.ts` edit.
 - The same run timed out `src/e2e/config.test.ts` (5 s) under `audit:vue`'s parallel typecheck and
   lint; it passed alone and in both `test:all` runs. Rerun once, as a load flake.
+- The network chaos file is red at step 0 on dev (#1954): a new profile's default network is the
+  guarded stand-in, the routed node admits no endpoint and logs `No endpoint of this network can
+  take the call`, which `GUARDED_NODE_REFUSAL` cannot match. Reproduced at the base with this
+  change reverted. A local, uncommitted `KNOWN_FINDINGS` entry for #1954 let the list run through
+  as a diagnostic on both browsers; the entry was removed after each run.
