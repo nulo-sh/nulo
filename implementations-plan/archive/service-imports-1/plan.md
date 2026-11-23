@@ -108,7 +108,7 @@ Validation gate (one at a time; none above load1 150):
 
 ## Delivery
 
-One arc, one PR, no stack: `worktree-service-imports-1` → `dev`, `gh pr create`, ready for review, after the Codex pass and its verification. Title (85 characters): `refactor(services): name sibling services by spec constant, not by implementation`. Body: what changed and why; the generated tables (names and order, pairings, edge counts) base against head; the value import kept and why; the lint's wall-clock before and after; the five import-only test edits and the two re-pinned content pins; each gate with its outcome; "No visible change."; `Closes #1937`. No label: the diff trips every extension lane, and those five required checks are the e2e evidence.
+One arc, one PR, no stack: `worktree-service-imports-1` → `dev`, `gh pr create`, ready for review, after the Codex pass and its verification. Title (81 characters): `refactor(services): name sibling services by spec constant, not by implementation`. Body: what changed and why; the generated tables (names and order, pairings, edge counts) base against head; the value import kept and why; the lint's wall-clock before and after; the five import-only test edits and the two re-pinned content pins; each gate with its outcome; "No visible change."; `Closes #1937`. No label: the diff trips every extension lane, and those five required checks are the e2e evidence.
 
 ## Post-implementation
 
