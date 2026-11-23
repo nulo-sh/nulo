@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { type PayerDescriptor, payerKindOf } from "./publish-facts"
-import { FpcType } from "@/wallet/services/fpc/client"
+import { FpcType } from "@/wallet/services/fpc/spec"
 import { buildFeeMethods, type FeeMethodOption, type GasBalances, type RegisteredFpc, settingsForMethod } from "./fee-helpers"
 import {
 	applyFpcEdits,

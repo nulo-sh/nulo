@@ -17,3 +17,7 @@ Lint probes (temporary files, deleted): a composite production file refuses popu
 Verdict: approve, no functional regression, confidence high. It confirmed the homes, the route merge (string, symbol and nullish names match as before), purity, every guard's coverage, zero old paths outside this plan, and that the Biome split keeps every old restriction.
 
 - Two low findings on comments inherited by moved files (a misplaced doc block, a stale "spec is JS" suppression reason, narration and history). Rejected for this change: a move edits import lines only, the comments predate it, no consequence follows.
+
+## Consult 3: Codex verify, resumed (D6)
+
+The lead found that `publish-facts.ts` left the UI-primitives Biome override with its move, and that the moved `utils/` tests fell outside every group they had. Codex picked K1 (`utils/fee/**` joins that override) over a separate override or a recorded narrowing, and noted the test side. Applied to tests too; probes on the D6 head: `utils/fee/` files and tests refuse popup, store, client and wallet-clocks imports; `utils/` and `stores/` tests refuse popup and wallet-clocks; composable and component tests are unchanged.

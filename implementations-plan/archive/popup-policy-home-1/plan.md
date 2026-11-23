@@ -21,12 +21,12 @@ Closes #1935. Consults: [lessons/phase-1.md](lessons/phase-1.md). UI impact: non
 
 - **Date:** 2026-11-23. One arc, one PR into `dev`; its merge archives this plan and closes #1935.
 - **Status:** completed.
-- **Shipped:** seven popup policy modules and `publish-facts` moved under their lowest consumers (homes table below), only import lines changed (plus `FpcType` from `fpc/spec`, D3); the takeover and the integrity barrier read `AUTH_ENTRY_ROUTES` (D4); Biome refuses `@/popup` from production files under `composables/`, `utils/`, `stores/`, `components/**` and all of `onboarding/` (D5); CLAUDE.md states the rule.
-- **Proof:** at `db014b10d`, `audit:vue`, `test:all` and `test:ci-gating` exit 0 at retry 0; the build leaves `src/types/` unchanged; renames R96-R100; lint probes per D5. No local e2e for a pure move: the PR's five required checks are the e2e evidence.
-- **Review:** Codex over the plan `approve` (one low finding adopted); Codex over the diff `approve` (two low comment findings rejected, below).
+- **Shipped:** seven popup policy modules and `publish-facts` moved under their lowest consumers (homes table below), only import lines changed (plus `FpcType` from `fpc/spec`, D3); the takeover and the integrity barrier read `AUTH_ENTRY_ROUTES` (D4); Biome refuses `@/popup` from all of `utils/`, `stores/` and `onboarding/` and from production files under `composables/` and `components/**`, and `utils/fee/` keeps the L2/L3 bans `publish-facts` had (D5, D6); CLAUDE.md states the rule.
+- **Proof:** `audit:vue`, `test:all` and `test:ci-gating` exit 0 at retry 0 at `db014b10d`, and `audit:vue` again on the D6 head; the build leaves `src/types/` unchanged; renames R96-R100; lint probes per D5 and D6. No local e2e for a pure move: the PR's five required checks are the e2e evidence.
+- **Review:** Codex over the plan `approve` (one low finding adopted); Codex over the diff `approve` (two low comment findings rejected, below); a resumed Codex verify chose D6 for a narrowing the lead found.
 - **Rejected:** Codex's diff findings on inherited comments in moved files (`fee-helpers.ts:91`, `:126`, `:221`; `recent-activity-handlers.ts:21`, `:42`; `auth-guard.ts:37`; `stale-takeover.ts:61`): a move changes import lines only, the comments predate it, and no consequence follows. The `PROFILE_FREE_ROUTES` copy in `route-guard.ts:79` stays: it is inside `popup/` and outside #1935's lists.
 - **Lessons:** none promoted: `lessons.md` holds 8,148 of 8,192 bytes; F2's auto-import fact is in CLAUDE.md, F3's override fact in this record.
-- **Left open:** test files under the banned folders (four compose with a popup consumer on purpose); `wallet/**`, `pages/`, `core/` and other folders #1935 does not name.
+- **Left open:** tests under `composables/` and `components/**` (four compose with a popup consumer on purpose); `wallet/**`, `pages/`, `core/` and other folders #1935 does not name.
 - **Known limits:** none.
 - **Open items:** none.
 - **Seeds retired:** the `/goal` and `/loop` seeds below.
@@ -35,9 +35,9 @@ Closes #1935. Consults: [lessons/phase-1.md](lessons/phase-1.md). UI impact: non
 
 **For whom.** The maintainer who reorganises `popup/` and must not break `composables/`, and the reviewer who must trust that a refactor changed no behaviour.
 
-- Each moved module sits above everything it imports and below everything that imports it; Biome refuses a new `@/popup/**` import from `composables/`, `utils/`, `stores/` and `components/**` production files.
+- Each moved module sits above everything it imports and below everything that imports it; Biome refuses a new `@/popup/**` import from `composables/`, `utils/`, `stores/` and `components/**`.
 - `git diff -M` shows every move as a rename; the few files that are not pure renames are listed with their one change; no test expectation changes.
-- Good enough: test files stay outside the ban (four compose a lower unit with its popup consumer on purpose), and so do layers the issue does not name.
+- Good enough: tests under `composables/` and `components/**` stay outside the ban (four compose a lower unit with its popup consumer on purpose), and so do layers the issue does not name.
 
 ## Assumptions
 
@@ -75,9 +75,9 @@ Each moved file changes only its import lines. One extra import-line change: `fe
 
 **Route lists** (D4): `stale-takeover.ts` and `AccountIntegrityBarrier.vue` read `AUTH_ENTRY_ROUTES`; `PRE_SESSION` and the inline pair go. Its doc comment widens to the shared question in two lines, so the cited line 3 stays line 3. Separate commit after the moves.
 
-**Lint** (D5), in `biome.json`, test files excluded:
-- new override after the `apps/extension/src/**` one: `composables/**`, `utils/**`, `stores/**`, `components/**` → wallet-clocks group (restated, F3) + `@/popup` group.
-- the `components/{core,ui,composite}/**` override splits: production files get its list + the `@/popup` group; its test files keep the list unchanged (no gate weakens).
+**Lint** (D5, D6), in `biome.json`:
+- new override after the `apps/extension/src/**` one: `composables/**`, `utils/**`, `stores/**`, `components/**`, minus tests under `composables/` and `components/` → wallet-clocks group (restated, F3) + `@/popup` group.
+- the `components/{core,ui,composite}/**` override splits: production files and all of `utils/fee/**` get its list + the `@/popup` group; its test files keep the list unchanged (no gate weakens).
 - onboarding: add an `@/popup` group after its three, so the config enforces the ban CLAUDE.md § component model states (config was wrong, F1).
 - the group: `["@/popup", "@/popup/**", "**/popup", "**/popup/**"]` (catches relative escapes; probe shows `Popup/` is not matched).
 
@@ -108,6 +108,7 @@ Codex planning pass (`gpt-6.1-sol`, `high`): approve, confidence high. Codex dif
 - D3 `FpcType` from `spec`. Codex: worthwhile, inside the bound; same enum, no client module loaded.
 - D4 merge the three lists into `AUTH_ENTRY_ROUTES`. Codex: safe; `===`, `Set.has` and `includes` agree on string members and refuse non-strings; keep the evaluation order and do not coerce names.
 - D5 lint shape. Codex: sound; adopted its one finding: the probes also prove the split keeps every old group (a composite production file and a composite test still refuse a store, a service client and the wallet clocks; only production refuses `@/popup`).
+- D6 (after the diff pass) every moved file keeps the Biome groups it had. Found by the lead: `publish-facts` (and its test) left the UI-primitives override, and the moved `utils/` tests fell outside every group (the L4 tests had the wallet-clocks and pages/windows groups). Options: K1 add `utils/fee/**` to the UI-primitives production override; K2 a separate fee override (duplicated, can drift); D record the narrowing (breaks the invariant). Codex (resumed): K1, and the test side too. Done: `utils/fee/**` with its tests joins that override (messages now say "UI primitives and fee policy"; the two fee tests take `FpcType` from `spec`), and `utils/` and `stores/` tests join the popup override, since none imports `@/popup` or the clocks.
 
 ## Post-implementation
 
