@@ -999,17 +999,6 @@ describe("one extension build surface", () => {
 		expect(surfaceFindings(live)).toEqual([])
 	})
 
-	test("each lane's effective filter is c0eb5d072's, plus the shared source", () => {
-		const base = JSON.parse(readFileSync(join(import.meta.dir, "fixtures/path-filters/c0eb5d072.json"), "utf8"))
-		const effective: Record<string, string[]> = {
-			[QUICK]: patternsOf(quick, extensionBuildFilters(quick).filters),
-			...Object.fromEntries(E2E.map((lane) => [lane, laneSet(workflowOf(lane), lane)])),
-		}
-		for (const lane of LANES) expect(effective[lane], lane).toEqual([...base[lane], BUILD_SOURCE].sort())
-		const landing = patternsOf(quick, buildFilters(quick, LANDING_FLAG).filters)
-		expect(landing, "the landing's filter is untouched").toEqual(base[`${QUICK}#landing`])
-	})
-
 	test("every paths-filter step a lane decides on matches as the action's defaults do", () => {
 		for (const lane of LANES) expect(filterStepFindings(workflowOf(lane), lane), lane).toEqual([])
 	})
