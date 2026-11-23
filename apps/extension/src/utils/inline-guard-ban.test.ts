@@ -131,17 +131,15 @@ function follows0x(pattern: string, end: number): boolean {
 	}
 }
 
-/** A character class holding a hex range, after `0x` and quantified exactly `{64}`, group brackets
- *  aside: the field shape `isHex32` names (a bare 64-digit digest has no helper). Plain string
+/** A character class holding a hex range, after `0x` (group brackets aside) and quantified exactly
+ *  `{64}`: the field shape `isHex32` names (a bare 64-digit digest has no helper). Plain string
  *  scanning: no pattern of its own for a ReDoS query to judge. */
 function hasHexClass64(pattern: string): boolean {
 	for (let open = pattern.indexOf("["); open !== -1; open = pattern.indexOf("[", open + 1)) {
 		const close = pattern.indexOf("]", open)
 		if (close === -1) return false
 		const range = pattern.slice(open + 1, close)
-		let after = close + 1
-		while (pattern[after] === ")") after++
-		if (follows0x(pattern, open) && (range.includes("a-f") || range.includes("A-F")) && pattern.startsWith("{64}", after)) {
+		if (follows0x(pattern, open) && (range.includes("a-f") || range.includes("A-F")) && pattern.startsWith("{64}", close + 1)) {
 			return true
 		}
 	}
@@ -253,7 +251,7 @@ describe("inline guard ban (static)", () => {
 		["a digest with no 0x prefix", "x.ts", "const R = /^[0-9a-f]{64}$/", []],
 		["a grouped prefix", "x.ts", "const R = /^(?:0x)[0-9a-fA-F]{64}$/", ["isHex32 or HEX_32"]],
 		["a grouped class", "x.ts", "const R = /^0x(?:[0-9a-fA-F]{64})$/", ["isHex32 or HEX_32"]],
-		["a quantified group", "x.ts", "const R = /^0x([0-9a-f]){64}$/", ["isHex32 or HEX_32"]],
+		["a repeated prefix", "x.ts", "const R = /^(0x[0-9a-f]){64}$/", []],
 	])("%s", (_case, file, source, hints) => {
 		expect(scan(file, source).map(({ hint }) => hint)).toEqual(hints)
 	})
