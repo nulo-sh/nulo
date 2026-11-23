@@ -595,6 +595,7 @@ describe.each(E2E_LANES.map(({ file }) => laneAggregator(file)))("$file aggregat
 const LABEL_HIT = "steps.live.outputs.label-hit"
 const BASE = "steps.live.outputs.base"
 const surfaceOf = (surface: string): string => `steps.override.outputs.full || steps.filter.outputs.${surface}`
+const BUILD_INPUTS = "steps.override.outputs.full || steps.build.outputs.extension-build"
 
 /** Runs a lane's gate step in `changes`: its exit code, and what it wrote to `$GITHUB_OUTPUT`. */
 function decide(file: string, world: World): { code: number; output: string } {
@@ -618,6 +619,7 @@ function decided(file: string, world: World): string {
 const prWorld = (surface: string, over: World = {}): World => ({
 	"github.event_name": "pull_request",
 	[BASE]: "dev",
+	[BUILD_INPUTS]: "false",
 	[surfaceOf(surface)]: "false",
 	[LABEL_HIT]: "false",
 	...over,
@@ -628,7 +630,8 @@ const prWorld = (surface: string, over: World = {}): World => ({
 test.each(E2E_LANES)("$file decides from the live label and base, and refuses a malformed one", ({ file, surface }) => {
 	expect(decided(file, prWorld(surface, { [LABEL_HIT]: "true" }))).toBe("run=true")
 	expect(decided(file, prWorld(surface))).toBe("run=false")
-	expect(decided(file, prWorld(surface, { [surfaceOf(surface)]: "true" })), "the paths filter runs it").toBe("run=true")
+	expect(decided(file, prWorld(surface, { [surfaceOf(surface)]: "true" })), "the lane's own filter runs it").toBe("run=true")
+	expect(decided(file, prWorld(surface, { [BUILD_INPUTS]: "true" })), "the shared build inputs run it").toBe("run=true")
 	for (const value of ["", "yes", "True"]) expect(decide(file, prWorld(surface, { [LABEL_HIT]: value })).code, `'${value}'`).not.toBe(0)
 	expect(decided(file, prWorld(surface, { [BASE]: "main" })), "a promote takes the filter like any other base").toBe("run=false")
 	expect(decide(file, prWorld(surface, { [BASE]: "" })).code, "an empty base").not.toBe(0)

@@ -1,0 +1,45 @@
+# The extension's build inputs: every PR lane that builds or tests the extension loads this file
+# as a `dorny/paths-filter` source and reads its one filter, `extension-build`. Each lane keeps the
+# entries only it needs (the CI files it runs, the dApp it drives) in its own workflow.
+#
+# Derived from the workspace graph: the built target whole-package; each `@nulo/*` library it is
+# built from, transitively, by consumed `src/**` + `package.json`; plus the build inputs no graph
+# names. scripts/ci-cd/behavior-gating.test.ts derives the same set and fails on any difference.
+#
+# NO `!` negations: the action matches a file against ANY pattern (`predicate-quantifier: some`),
+# so a bare `!x` matches every file that is not x and the filter fires on every PR.
+extension-build:
+  - 'apps/extension/**'
+  - 'packages/aztec-runtime/src/**'
+  - 'packages/aztec-runtime/package.json'
+  - 'packages/design/src/**'
+  - 'packages/design/package.json'
+  - 'packages/extension-messaging/src/**'
+  - 'packages/extension-messaging/package.json'
+  - 'packages/legal/src/**'
+  - 'packages/legal/package.json'
+  - 'packages/resolve-asset/src/**'
+  - 'packages/resolve-asset/package.json'
+  - 'packages/third-party-notices/src/**'
+  - 'packages/third-party-notices/package.json'
+  - 'packages/token-list/src/**'
+  - 'packages/token-list/package.json'
+  - 'packages/wallet-bridge/src/**'
+  - 'packages/wallet-bridge/package.json'
+  - 'packages/wallet-core/src/**'
+  - 'packages/wallet-core/package.json'
+  - 'packages/wallet-crypto/src/**'
+  - 'packages/wallet-crypto/package.json'
+  - 'packages/wallet-sdk-schema-patch/src/**'
+  - 'packages/wallet-sdk-schema-patch/package.json'
+  # The licence texts every extension build reads.
+  - 'packages/third-party-notices/texts/**'
+  # Repo-wide build inputs.
+  - 'package.json'
+  - 'bun.lock'
+  - 'bunfig.toml'
+  - 'tsconfig.json'
+  - 'tsconfig.base.json'
+  - 'patches/**'
+  # This file, so an edit to it runs every lane that reads it.
+  - '.github/path-filters/extension-build.yml'

@@ -261,13 +261,14 @@ runtime env var can never arm a build-time flag.
 
 ### CI topology
 
-- **Smoke** — `pr-extension-smoke-e2e.yml` → `_extension-smoke-e2e.yml`. Runs when the diff trips the `smoke-surface`
-  paths filter, when the PR targets `main`, on the `e2e:extension-smoke` label, or on dispatch; 3 vitest shards
+- **Smoke** — `pr-extension-smoke-e2e.yml` → `_extension-smoke-e2e.yml`. Runs when the diff trips its paths filters
+  (the extension's build inputs or its own `smoke-surface`, a PR into `main` included), on the `e2e:extension-smoke`
+  label, or on dispatch; 3 vitest shards
   (`--shard=N/3`), each a 30-minute job with its own in-job armed build; nightly/release run an artifact
   (`artifact_name` / `extension_path`) whole, in one 45-minute job.
   Required check `extension-smoke-e2e-status` on both branches.
 - **Network** — `pr-extension-network-e2e.yml` → `_extension-network-e2e-lane.yml` → `_extension-network-e2e.yml`.
-  Filter `extension-network`, label `e2e:extension-network`. The lane file is the partition every caller runs (both
+  Filters: the extension's build inputs and its own `extension-network`; label `e2e:extension-network`. The lane file is the partition every caller runs (both
   PR lanes, the nightly, release's opt-in run); a file moves between the pool and a dedicated job there alone. Lanes: 5 vitest shards (`--shard=N/5`, split by the timings record, proverless, retry 0,
   the 12 dedicated files excluded); three heavy lanes (`fee-methods` + `selfpay-phase`,
   `concurrent-sendtx-confirm` + `same-token-concurrent-sends`, and `snack-placement` + `failed-send-check`,
