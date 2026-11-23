@@ -100,6 +100,10 @@ export function initWalletSdkHandler(
 		buildContentTransport(logger, {
 			sessionKnown: (sessionId, tabId) => sessionKnownTo(state.late.handler, sessionId, tabId),
 			discoveryCredit: (sessionId) => state.late.handler?.getPendingDiscovery(sessionId),
+			idHeld: (id) => {
+				const held = state.late.handler
+				return held !== undefined && (held.getSession(id) !== undefined || held.getPendingDiscovery(id) !== undefined)
+			},
 		}),
 		buildHandlerCallbacks(deps, state, ports.windows),
 	)

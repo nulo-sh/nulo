@@ -4,6 +4,7 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { type ContractArtifact, FunctionSelector, FunctionCall, getFunctionReturnType } from "@aztec-labs/stdlib/abi"
 import type { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { SimulationError } from "@aztec-labs/stdlib/errors"
 import z from "zod"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
 import type { Network } from "@/wallet/services/network/spec"
@@ -30,6 +31,7 @@ import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { TaskService, type WrappedTask, ExecuteOperationContent } from "@/wallet/services/task/service"
 import type { ILogger } from "@/wallet/logger"
+import { errorName } from "@/wallet/logger/utils"
 import { type RequestLog, traceTag } from "@/wallet/logger/request-log"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
@@ -1001,7 +1003,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 				results.push({ status: "ok", result })
 			} catch (error) {
 				const classified = classifyOperationCatch(error, operationTask, getErrorMessage)
-				this.logOperationOutcome(traceId, operation.kind, classified, tag)
+				this.logOperationOutcome(traceId, operation.kind, classified, error, tag)
 				results.push(classified)
 			}
 		}
@@ -1009,8 +1011,15 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 	}
 
 	/** Level by reach: a Terms, scope, argument, capacity or unsupported-method refusal is expected,
-	 *  and a connected dApp can repeat any of them, so at `error` they would fill every user's log buffer. */
-	private logOperationOutcome(traceId: string, kind: Operation["kind"], classified: CancelOrFailResult, tag: unknown[]): void {
+	 *  and a connected dApp can repeat any of them, so at `error` they would fill every user's log buffer.
+	 *  A failure logs its error's class only: a contract chooses the text, which stays on the failed task. */
+	private logOperationOutcome(
+		traceId: string,
+		kind: Operation["kind"],
+		classified: CancelOrFailResult,
+		error: unknown,
+		tag: unknown[],
+	): void {
 		if (classified.status === "cancelled") {
 			this.logInfo(`[${traceId}] executeOperations: ${kind} cancelled by user`, ...tag)
 		} else if (classified.code === TermsAcceptanceRequiredError.CODE) {
@@ -1024,7 +1033,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		} else if (classified.code === UnsupportedMethodError.CODE) {
 			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: unsupported method`, ...tag)
 		} else {
-			this.logError(`[${traceId}] executeOperations: ${kind} failed:`, classified.error, ...tag)
+			this.logError(`[${traceId}] executeOperations: ${kind} failed`, { errorName: failureName(error) }, ...tag)
 		}
 	}
 
@@ -1258,4 +1267,9 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		}
 		return strategy.buildAndEstimate(ctx)
 	}
+}
+
+/** A contract revert keeps `Error`'s name, and the minifier mangles class names, so it is named here. */
+function failureName(error: unknown): string {
+	return error instanceof SimulationError ? "SimulationError" : errorName(error)
 }

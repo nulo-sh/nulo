@@ -6,7 +6,7 @@ import { Note } from "@aztec-labs/stdlib/note"
 import { NoteAndSlot } from "@aztec-labs/stdlib/tx"
 import fc from "fast-check"
 import { describe, expect, test } from "vitest"
-import { scrubHex32, trim } from "./utils"
+import { errorName, scrubHex32, trim } from "./utils"
 
 /**
  * `trim()` is the only redaction between a log call and the log store, and until now it had no
@@ -408,5 +408,14 @@ describe("scrubHex32", () => {
 	test("passes a shorter hex value, plain text and non-strings unchanged (control)", () => {
 		const value = { selector: "0x12345678", l1: `0x${"ef".repeat(20)}`, text: "ready", block: 12, ok: true, none: null }
 		expect(scrubHex32(value)).toEqual(value)
+	})
+})
+
+describe("errorName", () => {
+	test("names an error's class and never carries its text", () => {
+		const text = `Assertion failed: 0x${"ab".repeat(32)} cannot spend`
+		expect(errorName(new TypeError(text))).toBe("TypeError")
+		expect(errorName(text)).toBe("string")
+		expect(errorName(undefined)).toBe("undefined")
 	})
 })

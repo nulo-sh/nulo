@@ -1,5 +1,6 @@
 import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { ILogger } from "@/wallet/logger"
+import { errorName } from "@/wallet/logger/utils"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { ChainNotSupportedError } from "@nulo/extension-messaging/errors"
@@ -673,7 +674,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			return { feeJuice }
 		} catch (err) {
 			// The node's message can echo the transaction hash, so only the error's class is logged.
-			this.logDebug("receipt fee lookup failed", { errorName: err instanceof Error ? err.name : typeof err })
+			this.logDebug("receipt fee lookup failed", { errorName: errorName(err) })
 			return null
 		}
 	}
