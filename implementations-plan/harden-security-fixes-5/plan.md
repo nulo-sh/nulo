@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-5
 tier: mid
-status: approved, arc 1 next
+status: arc 1 implemented and reviewed; arc 2 waits
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -16,7 +16,7 @@ post_implementation_hardening: not scheduled
 
 # harden-security-fixes-5: four boundary invariants at the dApp edge and the worker
 
-Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Live log: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md), [lessons/phase-1.md](lessons/phase-1.md). Live log: [STATUS.md](STATUS.md).
 
 This plan carries the lane's code changes. Two owner decisions outside both arcs are in OWNER-ASKS.md; nothing here builds them. Two arcs, one PR each against `dev`, no stack.
 
@@ -51,7 +51,7 @@ This plan carries the lane's code changes. Two owner decisions outside both arcs
 **Inferences** (challenge these):
 - I1. No standard client sends a discovery whose id names a session or a discovery the wallet already holds: the SDK mints a fresh `randomUUID()` per `discoverWallets` call, and no wallet-side path re-delivers a discovery through the content listener after the handler exists.
 - I2. Nothing reads a finished root task created for a dApp after its operation returns (recon.md, "Registry readers").
-- I3. A fixed category and the error's class name are an accepted trade-off: an exported log loses the failure's text, while the dApp still receives it in its error reply with the request's `walletTraceId`, and the request capture (Developer Mode) records the send's error.
+- I3. A fixed category and the error's class name are an accepted trade-off: an exported log loses the failure's text. The dApp never received it (an unclassified failure reaches it as the constant envelope, `error-envelope.ts`); the text stays on the failed task, and Developer Mode's request capture records it for a dApp request.
 
 **Asks** (working assumption in brackets; the orchestrator may overrule):
 - A1. Discovery pacing [per tab a burst of 8 and one more each second]. Measured: one discovery per connect action (recon.md); the reconnect bucket after it passes 3 per 20 s plus a queue of 4 per origin, so a burst of 8 refuses nothing those gates admit. Past it a dApp sees what any refused discovery shows today: no answer, so its `discoverWallets` returns no wallet when its timeout ends (60 s by default); a retry a second later passes. Each tab has its own bucket, so restoring many tabs of one dApp is not affected. Revisit on a report of a dApp that cannot find the wallet.
@@ -110,13 +110,13 @@ This plan carries the lane's code changes. Two owner decisions outside both arcs
 
 ## Phases
 
-### Phase 1 — a discovery never reuses a held id (arc 1)
+### Phase 1 — a discovery never reuses a held id (arc 1) ✓
 1. In `background.transport.test.ts`, with ports that report the verify window closed: tab 7 holds `s1`; a discovery for `s1` from tab 9, then its key exchange; the session stays tab 7's, tab 9 receives nothing, the SDK listener never sees the discovery. Same for an id whose discovery tab 7 has had approved but not yet key-exchanged (tab 7's own key exchange then opens the session, control), and for the approved row upstream restores when it ends a session (tab 7's key exchange is still forwarded to upstream, control). A duplicate discovery from tab 7 itself is dropped too. Control: a fresh id from tab 9 is approved and opens its own usable session.
 2. Add `idHeld` to the wrapper's dependencies, wire it in `background.ts`, add the check and a comment stating the invariant.
 
 **Validation gate.** From `apps/extension`: `bun --bun vitest run src/wallet/services/wallet-sdk/`; from the root: `bun run lint` and `bun run typecheck:all`. Pass: exit 0, and every new refusal case fails against the base copy of `content-admission.ts` while the controls pass on both. Layers: lint, typecheck, unit, composition.
 
-### Phase 2 — three log lines carry categories (arc 1)
+### Phase 2 — three log lines carry categories (arc 1) ✓
 1. `token-balance/service.test.ts`: a row create that fails; no argument of `logWarn` holds the account address; the call carries `{ tokenId, errorName }`.
 2. `claim-helper.test.ts`: a refile across accounts and networks; no logged string holds either address or network id; the line names "account and network". Control: the refile still happens.
 3. `service.composition.test.ts`: update the unclassified-failure case: an error whose message holds an address; no argument of any log call holds it; the `error` line carries `{ errorName: "Error" }`.
@@ -167,6 +167,12 @@ The execution contract is this plan plus [`implementations-plan/README.md` § Po
 - **Codex r1** (`gpt-6.1-sol`, high, plan and outline B): conditional approve. Accepted: the quality bar names the numbers as trade-offs; A3 is a limit on the dApp-facing surface; P2 logs an error's class name, never its text, at any level; the claim helper names profile changes too; no bucket across tabs or origins; P4 emits before it drops and orders drops by `finishedAt`, with a multi-leg dispatch test; P1's controls (restored row, original tab's retry, same-tab duplicate); OA-2's option B restated with its lag cost, A recommended; OA-1's options classify each reading outcome. Rejected: a per-origin burst of 4 (the gates after it already pass up to 7 per origin).
 - **Opus r1** (Plan agent): conditional approve. Accepted: P3 keyed per tab and asked at the content admission (D7: a page can move its tab across origins without a gesture; the unlock drain would pay twice); every call sweeps full entries; recon's batch fact corrected (`BatchCall` sends wire batches), A3's basis restated; A2 counted per tree; D8; facts trimmed to the mechanism each change needs, base numbers kept out of the plan; two drifted steps fixed. It found no bypass of P1 and no awaited task P4 can drop (I1, I2 hold).
 - **Final Codex pass** (fresh `gpt-6.1-sol` session, high): conditional approve, then **approve** once four points were applied: the restored-row control asserts only that tab 7's key exchange is forwarded (establishing needs a verify-window slot it no longer holds; a fresh id is the usable-session control); three public texts trimmed to the change; I3 restated as an accepted trade-off; Phase 4 asserts drops before any read. It confirmed D7 (per tab, at admission, after P1) and the burst of 8. `audit:vue` stays as the repository's command name.
+
+## Arc 1 review
+
+- **Codex r1** (`gpt-6.1-sol`, high): approve with fixes. Accepted: a contract revert named in the failure line (`SimulationError` sets no `name`); the admission comment states the synchronous invariant; the claim-helper comment trimmed to the legacy-profile wildcard.
+- **Opus r1** (diff review): accepted the drifted profile-chaos citation, I3 corrected (an unclassified failure reaches a dApp only as the constant envelope; D4 rests on the logging policy and stands), a locked-wallet pending-row test, `heldDiscoveryId` and three stale comments. Two points left unchanged and routed to the owner with their reasons.
+- **Codex r2** (resumed with the fix diff): no new points; **approve**. Details: [lessons/phase-1.md](lessons/phase-1.md).
 
 ## Seeds
 
