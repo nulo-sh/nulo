@@ -44,7 +44,7 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
-		// A silent restore emits nothing, so start pulls the profile; an emission during the pull wins.
+		// A silent restore emits nothing, so start pulls the profile; a profile emitted during the pull wins.
 		const active = await this.profileService.getActiveProfile()
 		this.profile ??= active?.id
 	}
