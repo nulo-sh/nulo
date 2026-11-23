@@ -9,7 +9,7 @@ import { type BalanceUpdateContent, ContentKind, type Task } from "@/wallet/serv
 import type { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 import type { TokenServiceClient } from "@/wallet/services/token/client"
-import type { TokenInfo } from "@/wallet/services/token/spec"
+import { DECIMALS_MAX, type TokenInfo } from "@/wallet/services/token/spec"
 
 /** Why `value` cannot be imported beside `tokens`, or `null`; an empty value has no verdict yet. */
 export function contractVerdict(value: string | undefined, tokens: readonly { contract: string }[]): string | null {
@@ -48,12 +48,13 @@ const WAIT_TOASTS = {
 	error: "Token added. Couldn't load balance. We'll retry automatically.",
 } as const
 const NO_INTERFACE = "Couldn't auto-detect this token's interface. Try a contract whose ABI matches a known standard."
+const TOO_MANY_DECIMALS = `This token has more than ${DECIMALS_MAX} decimals. Nulo supports up to ${DECIMALS_MAX}.`
 
 /** A lookup the node answered empty, and a token past the wallet's decimals, have copy of their own; any
  *  other refusal's text is a developer's, for the log. */
 const refusalOf = (err: unknown) => {
 	if (err instanceof ContractNotFoundError) return "There is no token at this address on this network."
-	if (err instanceof TokenDecimalsOutOfRangeError) return NO_INTERFACE
+	if (err instanceof TokenDecimalsOutOfRangeError) return TOO_MANY_DECIMALS
 	return "Something went wrong. Try again."
 }
 

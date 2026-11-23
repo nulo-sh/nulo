@@ -128,12 +128,12 @@ describe("useTokenImport", () => {
 		expect(importer.phase.value).toBe("idle")
 	})
 
-	test("a token past the decimals bound is refused with the interface sentence, and no toast", async () => {
+	test("a token past the decimals bound is refused with its own sentence, and no toast", async () => {
 		const { importer, tokenService } = setup()
 		tokenService.addToken.mockRejectedValueOnce(new TokenDecimalsOutOfRangeError())
 		expect(await importer.importToken(CONTRACT)).toEqual({
 			kind: "refused",
-			message: "Couldn't auto-detect this token's interface. Try a contract whose ABI matches a known standard.",
+			message: "This token has more than 18 decimals. Nulo supports up to 18.",
 			inScope: true,
 		})
 		expect(openToast).not.toHaveBeenCalled()

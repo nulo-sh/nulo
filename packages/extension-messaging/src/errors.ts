@@ -427,8 +427,8 @@ export class ContractNotFoundError extends WalletError {
 	}
 }
 
-/** A token whose contract reports more decimals than the wallet supports: added, every amount it
- *  shows or sends would be padded and exponentiated by that count. Constant message, no details. */
+/** A token's decimals, read from its contract or a backup row, past what the wallet supports.
+ *  Constant message, no details. */
 export class TokenDecimalsOutOfRangeError extends WalletError {
 	public static readonly CODE = "TOKEN_DECIMALS_OUT_OF_RANGE"
 	public static readonly MESSAGE = "token decimals outside the supported range"

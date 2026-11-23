@@ -259,7 +259,7 @@ const candidateFor = (address) => recipientCandidates.value.find((c) => c.addres
 const tokenById = (id) => tokens.value.find((t) => t.id === id)
 function sendText(send) {
 	const token = tokenById(send.tokenId)
-	if (!token) return ""
+	if (!token || !isValidDecimals(token.decimals)) return ""
 	// Every digit the press fills, so the words never round what it sends.
 	const amount = formatBaseUnits(send.amountRaw, token.decimals, { maxDecimals: token.decimals, thousandsSep: ",", decimalSep: "." })
 	return sendWords(amount, token.symbol, send.arrival)

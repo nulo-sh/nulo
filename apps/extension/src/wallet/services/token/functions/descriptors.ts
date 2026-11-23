@@ -11,8 +11,8 @@ import type { TokenFnDescriptor, TokenFnKind } from "./types"
  * `points()` scoring, `getDefault` names, `buildArgs`, and `unpackResult` VERBATIM — pinned
  * by `token-functions.characterization.test.ts`.
  *
- * ONE deliberate divergence from the verbatim pin: struct-path matching is crate-prefix
- * tolerant (`matchesStructPath`). Noir namespaces ABI struct paths by the artifact's import
+ * Two deliberate divergences from the verbatim pin: the decimals decode refuses a value past
+ * `DECIMALS_MAX`, and struct-path matching is crate-prefix tolerant (`matchesStructPath`). Noir namespaces ABI struct paths by the artifact's import
  * chain, so the same AztecAddress param arrives as `aztec::protocol_types::...::AztecAddress`
  * from one compile and `authorization_contract::aztec::protocol_types::...::AztecAddress`
  * from another (observed in `@aztec-foundation/aztec-standards@5.0.1`). Exact matching made
