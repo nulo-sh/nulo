@@ -1,6 +1,6 @@
 # Owner asks: harden-security-fixes-4
 
-Neither arc changes what a person sees. One question outside both arcs needs the owner; nothing waits on it.
+Neither arc changes what a person sees. One question outside both arcs went to the owner; nothing waited on it.
 
 ## OA-1: what a full-backup export does when its contract part is larger than an import accepts
 
@@ -13,3 +13,4 @@ Neither arc changes what a person sees. One question outside both arcs needs the
 - **Option D, later and its own plan, no visible change: leave out code the wallet ships.** The export already leaves out the contracts every wallet start registers by itself. It could also leave out a token's contract whose code ships with the wallet (the standard token contract): a restored token registers its contract again from the network and the wallet's own copy of the code, and the part keeps its shape. Tokens would stop counting toward the limit. As first drafted it does not hold: a contract of a shipped kind that an app registered with no token beside it (an NFT, a fee contract) would lose its registration, and a restore on a wallet build that ships different code finds no copy to fall back on. It needs a rule naming exactly which entries may go (only those a restored token row brings back) and an answer for restores across builds, so it is a plan of its own.
 - **Recommendation:** C now, and D after it as its own plan. B leaves a person with no backup at all; A tells them only at restore, when it is too late to act. C reuses a banner the screen already has and keeps its warning about undiscovered notes; its words are a draft for the owner's edit. D would then keep most token holders below the limit with nothing on screen.
 - **Frames:** light and dark, at the popup's size, for today, B and C (listed in the orchestrator's report). D shows nothing.
+- **Answer (2026-11-23, with the frames):** none of the options. The owner: "It doesn't feel like any of this options provides a good UX solution for them? Would for example saving the contract's address but fetching their artifacts from say... Aztecscan make sense? Or... I am not sure. Seems like this are lazy solutions." The design continues as a plan of its own, on what a full backup keeps of a registered contract, now being written.

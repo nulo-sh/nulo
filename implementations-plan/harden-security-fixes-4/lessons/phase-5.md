@@ -1,0 +1,8 @@
+# Phase 5: arc 2
+
+- Reproducers: the first new test and the race test fail against `fe2a12524`'s `service.ts`, beside a lock-and-unlock control that passes on both. A mutation check, the pull assigned unconditionally, fails the race test alone.
+- The race test's stub emits the newer profile inside its own `getActiveProfile` call. That places the emission after the pull's read and before its answer with no held promise, which would only hang, not fail, against a base that never pulls.
+- The shared stub (`startedTaskService`) answers no profile at start, so its five consumers keep their meaning: each switches to its profile after start, as before.
+- E2E read: the specs that stop the background (`sw-resilience`, `token-list`, `rows`, the network restart specs) and the one that switches profile with a task in flight (`network/profile-switch-sweeps-transfer`). Strict mode is on by default and drops the session at every background death, so on every default path the start's pull finds no profile and the registry behaves as before. Only the opt-in chaos suites model a restore with strict mode off, and they read no tasks. `network/profile-switch-sweeps-transfer` ran as the no-regression check of the switch's clear, proverless, at retry 0: green on Chrome and on Firefox.
+- Codex round 1: clean, one comment nit. Opus diff review: clean, two nits, one applied and one answered (start phase 1 is unreachable from the popup before `Ready`). Codex round 2: clean. Converged in two rounds.
+- Fresh cross-arc pass: one material point on arc 1's merged commit wording, outside this PR and sent to the orchestrator; one nit on A1's wording, applied.

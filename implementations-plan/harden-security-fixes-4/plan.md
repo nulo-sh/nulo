@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-4
 tier: mid
-status: approved, arc 1 next
+status: completed
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,9 +14,20 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-11-23
+- **Status:** completed; two PRs against `dev`, no stack. Arc 1 (#1924, Phases 1-4) merged as `fe2a12524` on the standing policy for changes no person sees. Arc 2 (Phase 5) carries this close-out, and its merge closes the plan.
+- **Shipped:** #1924: the NO_FROM send logs scope counts, never scope addresses, and `trim()` blanks `additionalScopes`; a call that hides its sender ends the node-simulated prefix, so it is simulated with its sender hidden; a disconnect request ends a session only from the tab holding it; the sender-fields note says what both browsers set. Arc 2: the task registry declares its dependency on the profile service and pulls the active profile at start, so after a silent restore a switch to another profile clears the restored profile's tasks, as after an unlock; a profile emitted while the pull is in flight is kept. Nothing visible changed in either arc.
+- **Dropped:** none of the plan's phases. The alternatives not taken are in the decision ledger.
+- **Known limits:** none new.
+- **Open items:** OA-1 (what a full-backup export does when its contract data passes the import's limit): the owner chose none of its options and asked for a better design ([OWNER-ASKS.md](OWNER-ASKS.md)); that design continues as a plan of its own, on what a full backup keeps of a registered contract, now being written.
+- **Lessons:** none promoted (`lessons.md` is at its budget). The fact P5 rests on, that the silent restore emits no profile change, is stated in `ARCHITECTURE.md`'s session model and at the restore in `apps/extension/src/wallet/services/profile/service.ts`; the wire-shaped reproducers of P1 and P2 are an instance of the existing lesson on stubbing only what production returns.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; they are no live instructions.
+
 # harden-security-fixes-4: four boundary invariants, made to hold
 
-Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Live log: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md), [lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-5.md](lessons/phase-5.md).
 
 This plan carries the lane's code changes. Items settled without a code change are settled outside it. Two arcs, one PR each against `dev`, no stack.
 
@@ -52,7 +63,7 @@ This plan carries the lane's code changes. Items settled without a code change a
 - I3. Moving `TaskService` one start phase later (behind `ProfileService`) delays nothing: no phase-0 service calls it during `init`, and its methods do not wait for its own start.
 
 **Asks** (working assumption in brackets; the orchestrator may overrule):
-- A1. [No screen, copy or layout changes, so each PR says "No visible change." and carries no frames. Two behaviours a dApp or a profile can observe change, and each PR names them: a sender-hiding call's simulation runs on the PXE (P2); a profile no longer receives tasks of the profile restored before it (P5).]
+- A1. [No screen, copy or layout changes, so each PR says "No visible change." and carries no frames. Two behaviours a dApp or a profile can observe change, and each PR names them: a sender-hiding call's simulation runs on the PXE (P2); after a silent restore, a switch to another profile clears the restored profile's tasks (P5).]
 - A2. [No new e2e scenario; arc 1 reruns `network/session-explicitDisconnect.test.ts` on Chrome and Firefox.]
 
 ## Architecture & Implementation
@@ -129,11 +140,13 @@ This plan carries the lane's code changes. Items settled without a code change a
 2. `bun run test:all` from the root. Pass: exit 0.
 3. With load1 under 150, from the root: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/session-explicitDisconnect.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`. Pass: green at retry 0 on both. This checks that a dApp's own disconnect still works end to end; it cannot prove P3, whose cross-tab case Phase 3's composition test proves. Layers: network e2e.
 
-### Phase 5 — the task registry knows its profile from start (arc 2)
+### Phase 5 — the task registry knows its profile from start (arc 2) ✓
 1. Add to `task/service.test.ts`: a stub whose `getActiveProfile` answers A and which emits nothing; create a task; emit B; `getTasks()` returns `[]`. Control: emit `undefined` (lock), then A; the task stays. Race: hold the pull, emit B, let the pull answer A, create a task, emit A; the task is cleared.
 2. Declare the dependency; pull in `init` after subscribing; give both stubs `getActiveProfile`.
 
 **Validation gate.** From `apps/extension`: `bun --bun vitest run src/wallet/services/task/ src/wallet/request-captures.reach.test.ts src/wallet/services/auth-registry/service.test.ts src/wallet/services/execution/execution-coordinator.test.ts src/wallet/services/execution/service.fence-entry.test.ts src/wallet/services/execution/transfer-executor.test.ts`; then from the root: `bun run lint`, `bun run typecheck:all`, `bun run audit:vue` and `bun run test:all`. Pass: exit 0, and the first new test and the race test fail on base. Layers: lint, typecheck, unit, build.
+
+**Gate result** (2026-11-23, at the arc's first commit): the named files green, 7 files and 286 tests. Against `fe2a12524`'s `service.ts` the first new test and the race test fail and the control passes; with the pull assigned unconditionally only the race test fails. `bun run lint`, `bun run typecheck:all` (18 workspaces), `bun run audit:vue` and `bun run test:all` green. A no-regression e2e check: `network/profile-switch-sweeps-transfer.test.ts`, proverless, green at retry 0 on Chrome and on Firefox. No spec in the suite reaches the silent-restore branch: strict mode, the default, drops the session at every background death, so the start's pull finds no profile; the opt-in chaos suites model a restore with strict mode off but read no tasks ([lessons/phase-5.md](lessons/phase-5.md)).
 
 ## Delivery
 
@@ -165,6 +178,13 @@ The execution contract is this plan plus [`implementations-plan/README.md` § Po
 - **Codex round 1** (`gpt-6.1-sol`, high, over `8ae2c06a4..` of `apps/`): clean, two comment nits, both applied (the url-only control's name and note; the fast-path prefix note cut to its one constraint).
 - **Opus diff review** (beside round 1): the code clean; P3 refuses no flow the SDK sends (it disconnects only after the key exchange, from the holding tab); P2 keeps payload order. Material: two committed texts read as describing the problem, not the change; the plan sentence was deleted and the branch's commit messages rewritten before its first push. Nits applied: the sender-fields note no longer reads as if Firefox 153 introduced `sender.origin`; `view-executor.ts`'s fast-path note names the new boundary.
 - **Codex round 2** (resumed): clean, one nit applied (the stale "Mirrors `BaseWallet.simulateTx`"). Loop converged.
+
+### Arc 2 review
+
+- **Codex round 1** (`gpt-6.1-sol`, high, over `fe2a12524..` of `apps/`): clean, one nit applied (the start comment names a profile emission, since a lock's `undefined` is ignored).
+- **Opus diff review** (beside round 1): clean. It found no deadlock (the pull holds the facade lock briefly and no phase-0 service calls the registry in its own start), a rejected pull fails the start as `PriceService.init`'s does one phase later, and `??=` keeps the newer profile in every interleaving; it reran the base and the unconditional-assignment copies. Two nits: the test stub's note trimmed (applied); the registry's listener now attaches in start phase 1 (answered: popup requests wait for `Ready`, which the background announces after every phase has started, so no task can be made in that window).
+- **Codex round 2** (resumed): clean; it verified both fixes and the `Ready` answer. Loop converged.
+- **Fresh cross-arc pass** (new `gpt-6.1-sol` session, high, over `8ae2c06a4..` of `apps/`): one material point on the wording of arc 1's merged commit message, outside this PR (`dev`'s history is not rewritten), sent to the orchestrator; one nit applied (A1's P5 line now says what a switch clears).
 
 ## Seeds
 
