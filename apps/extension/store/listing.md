@@ -191,10 +191,13 @@ turned into a bold line. Build it from the release tag that carries the new vers
 
 ```
 git show vX.Y.Z:legal/privacy.md | tail -n +3 \
-  | sed -E -e 's#]\(terms\.md\)#](https://nulo.sh/terms)#g' -e 's/^#{2,3} (.*)$/**\1**/'
+  | sed -E -e 's#]\(terms\.md\)#](https://nulo.sh/terms)#g' \
+      -e 's#]\(website-privacy\.md\)#](https://nulo.sh/website-privacy)#g' \
+      -e 's/^#{2,3} (.*)$/**\1**/'
 ```
 
-That drops the `# Privacy Policy` title, makes the `terms.md` links absolute, and keeps every word.
+That drops the `# Privacy Policy` title, makes the `terms.md` and `website-privacy.md` links
+absolute, and keeps every word. A relative link left in the text would point at AMO.
 The box is under Manage Authors & License, in the same form as the authors and the license. To
 check the result, read `https://addons.mozilla.org/api/v5/addons/addon/3077967/eula_policy/` with
 a cache-busting query, because that endpoint is cached for six minutes.
