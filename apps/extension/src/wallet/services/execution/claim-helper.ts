@@ -194,8 +194,7 @@ async function refuseEndedSession(deps: ClaimHelperDeps, journalId: string): Pro
 
 type ScopePart = "profile" | "account" | "network"
 
-/** The parts of the queued row's scope that differ from the executing one. An undefined profileId on either
- *  side is a wildcard (legacy rows). */
+/** An undefined profileId on either side is a wildcard (legacy rows). */
 function scopeChanges(record: JournalRecord, input: ClaimHelperInput): ScopePart[] {
 	const moved: ScopePart[] = []
 	if (record.profileId !== undefined && input.profileId !== undefined && record.profileId !== input.profileId) moved.push("profile")

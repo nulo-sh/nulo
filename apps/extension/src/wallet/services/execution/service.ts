@@ -4,6 +4,7 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { type ContractArtifact, FunctionSelector, FunctionCall, getFunctionReturnType } from "@aztec-labs/stdlib/abi"
 import type { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { SimulationError } from "@aztec-labs/stdlib/errors"
 import z from "zod"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
 import type { Network } from "@/wallet/services/network/spec"
@@ -1032,7 +1033,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		} else if (classified.code === UnsupportedMethodError.CODE) {
 			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: unsupported method`, ...tag)
 		} else {
-			this.logError(`[${traceId}] executeOperations: ${kind} failed`, { errorName: errorName(error) }, ...tag)
+			this.logError(`[${traceId}] executeOperations: ${kind} failed`, { errorName: failureName(error) }, ...tag)
 		}
 	}
 
@@ -1266,4 +1267,9 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		}
 		return strategy.buildAndEstimate(ctx)
 	}
+}
+
+/** A contract revert keeps `Error`'s name, and the minifier mangles class names, so it is named here. */
+function failureName(error: unknown): string {
+	return error instanceof SimulationError ? "SimulationError" : errorName(error)
 }

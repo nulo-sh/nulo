@@ -54,9 +54,9 @@ export function buildContentTransport(
 }
 
 /**
- * The checks every content-script message passes before the SDK handler sees it, in this order:
- * top frame, envelope schema, a key exchange from its discovery's document, a discovery under an id
- * not yet held, then a session this background knows.
+ * The checks every content-script message passes before the SDK handler sees it. They read the
+ * handler's state, so nothing may await between them and the handler recording a discovery: two
+ * discoveries under one id would both pass.
  */
 function admitContentMessage(
 	listener: Parameters<BackgroundTransport["addContentListener"]>[0],
