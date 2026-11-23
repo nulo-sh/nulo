@@ -1,5 +1,5 @@
 <script setup>
-import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
+import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "@/utils/fee/publish-facts"
 import FeeAmount from "@/components/composite/FeeAmount.vue"
 
 const props = defineProps({

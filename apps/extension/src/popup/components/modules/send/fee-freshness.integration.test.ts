@@ -47,8 +47,8 @@ vi.mock("@/stores/app.store", async () => {
 
 import { INIT_RETRY_BACKOFF_MS, useBalancesStore } from "@/stores/balances.store"
 import { GasBalanceReader } from "@/wallet/services/execution/gas-balance-reader"
-import type { RegisteredFpc } from "./fee-helpers"
-import { resolveSendSelection } from "./fee-privacy"
+import type { RegisteredFpc } from "@/utils/fee/fee-helpers"
+import { resolveSendSelection } from "@/utils/fee/fee-privacy"
 
 const PRIVATE_FPC = {
 	id: "p1",

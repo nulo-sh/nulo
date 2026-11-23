@@ -1,6 +1,6 @@
 import { computed, type Ref, ref } from "vue"
 import { createRunFence } from "@/composables/runFence"
-import { isOwnTerminalRecord } from "@/popup/components/modules/general/recent-activity-handlers"
+import { isOwnTerminalRecord } from "@/utils/recent-activity-handlers"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import type { TaskServiceClient } from "@/wallet/services/task/client"
 import { type Task, TaskStatus } from "@/wallet/services/task/spec"

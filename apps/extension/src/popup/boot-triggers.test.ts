@@ -6,7 +6,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
-import { LOOKUP_DEADLINE_MS } from "./auth-guard"
+import { LOOKUP_DEADLINE_MS } from "@/utils/auth-guard"
 import { resolveBootSession } from "./boot-session"
 import { createBootTriggers } from "./boot-triggers"
 import { emitPortDisconnect, portRegistry } from "../../tests/vitest.setup"

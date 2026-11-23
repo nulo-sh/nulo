@@ -8,7 +8,7 @@ import type { RouteLocationNormalized } from "vue-router"
 
 const gateMock = vi.fn()
 const lastActiveMock = vi.fn()
-vi.mock("./auth-guard", () => ({ authRequiredGate: (...args: unknown[]) => gateMock(...args) }))
+vi.mock("@/utils/auth-guard", () => ({ authRequiredGate: (...args: unknown[]) => gateMock(...args) }))
 vi.mock("@/utils/lastActiveProfile", () => ({ getLastActiveProfileId: () => lastActiveMock() }))
 
 import { createPopupGuard, earlyDecision, lateDecision } from "./route-guard"

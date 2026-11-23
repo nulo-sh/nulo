@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
-import { NO_FACTS, type PayerKind, publishFacts, type TransferSide, UNVOUCHED_PUBLISH_SENTENCE } from "./publish-facts"
+import { NO_FACTS, type PayerKind, publishFacts, type TransferSide, UNVOUCHED_PUBLISH_SENTENCE } from "@/utils/fee/publish-facts"
 import PublishLine from "./PublishLine.vue"
 
 const BRIDGE = "https://bridge.example"

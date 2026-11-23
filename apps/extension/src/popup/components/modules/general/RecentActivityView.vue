@@ -47,7 +47,7 @@ import {
 } from "@/utils/journal-state"
 import { tokenMarkOf } from "@/utils/token-icon"
 import { callTitle, transferDirection } from "@/utils/tx-enrichment"
-import { buildCancelHandler, buildFocusHandler, isMatchingTask } from "./recent-activity-handlers"
+import { buildCancelHandler, buildFocusHandler, isMatchingTask } from "@/utils/recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
 
 /** Composables */

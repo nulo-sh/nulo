@@ -8,7 +8,7 @@
  * run, and a run that awaited past a newer one must commit nothing (`superseded`).
  */
 
-import { lookupActiveProfileWithBackoff } from "./auth-guard"
+import { lookupActiveProfileWithBackoff } from "@/utils/auth-guard"
 import { type LockScreenCandidate, lockScreenProfile } from "./lock-screen-profile"
 
 export interface BootSessionDeps<P extends LockScreenCandidate> {

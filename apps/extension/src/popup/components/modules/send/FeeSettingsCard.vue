@@ -30,10 +30,10 @@ import {
 	liveFeeScope,
 	settingsForMethod,
 	shortfallFigures,
-} from "./fee-helpers"
+} from "@/utils/fee/fee-helpers"
 import { feeDisplay, feeText } from "@/utils/fee-estimation"
-import { feeWarningShort, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
-import { applyFpcEdits } from "./fee-privacy"
+import { feeWarningShort, payerKindOf, publishFacts } from "@/utils/fee/publish-facts"
+import { applyFpcEdits } from "@/utils/fee/fee-privacy"
 import { usePrices } from "@/composables/usePrices"
 import { useSponsorVerdicts, watchSponsorVerdicts } from "@/composables/useSponsorVerdicts"
 import { useFeeSnapshot, watchFeeSnapshot } from "@/composables/useFeeSnapshot"

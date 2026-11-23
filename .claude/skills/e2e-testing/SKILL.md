@@ -921,7 +921,7 @@ running the operations it holds through a background kill, and their node reads 
 where `stopBackground` lets the launch's interceptions go, reaching the egress guard
 (`network-arrival.test.ts`). Then
 gate on the strictly-newer heartbeat from an extension page (§2), and expect the popup's boot path
-(`popup/boot-session.ts`, `auth-guard.ts`): under strict security a restart drops the session, so
+(`popup/boot-session.ts`, `utils/auth-guard.ts`): under strict security a restart drops the session, so
 `ensureUnlocked` with a budget sized to the bootstrap (120s on the prover-ON canary) is the
 recovery, not a route wait.
 

@@ -6,7 +6,7 @@
 import { computed } from "vue"
 import FpcSentence from "./FpcSentence.vue"
 import mark from "./publish-mark.module.css"
-import { feeWarningShort, type PayerKind, type PublishFacts, publishSentence } from "./publish-facts"
+import { feeWarningShort, type PayerKind, type PublishFacts, publishSentence } from "@/utils/fee/publish-facts"
 
 const props = defineProps<{
 	facts: PublishFacts

@@ -102,7 +102,7 @@ const LOCKED_ROUTES = [
 export const shownWhileLocked = (route: string): boolean => LOCKED_ROUTES.some((r) => route === r || route.startsWith(`${r}/`))
 
 /** The routes the popup leaves for Home once a profile is active; an import, legal or onboarding
- *  page is left where it stands (`code:apps/extension/src/popup/should-advance-to-general.ts:3`). */
+ *  page is left where it stands (`code:apps/extension/src/utils/should-advance-to-general.ts:3`). */
 export const ADVANCES_ON_OPEN = ["/popup/auth", "/popup/register"] as const
 
 function checkOpenSession(w: World & { session: { kind: "open" } }, r: SessionReading, b: Bindings): Violation[] {
