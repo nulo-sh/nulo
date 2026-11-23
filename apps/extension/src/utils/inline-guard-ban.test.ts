@@ -192,7 +192,7 @@ function review(hits: readonly Hit[], reviewed: Reviewed): { open: Hit[]; stale:
 		if (left > 0) pending.set(keyOf(hit.file, hit.text), left - 1)
 		return left === 0
 	})
-	const stale = [...pending].flatMap(([key, left]) => Array.from({ length: left }, () => key.replace("\n", "  ")))
+	const stale = [...pending].flatMap(([key, left]) => Array.from({ length: left }, () => key.replaceAll("\n", "  ")))
 	return { open, stale }
 }
 

@@ -4,7 +4,9 @@
  * panel reads the record before its router exists and removes it on its first arrival there, so the
  * next panel the person opens lands there once.
  */
-import { isObjectLike, isRecord } from "@nulo/wallet-core/utils"
+// The leaf entry, not the barrel: in the Storybook build, a story that reaches this file but no
+// service would pull the barrel into its own chunk, on a static import cycle with the shared one.
+import { isObjectLike, isRecord } from "@nulo/wallet-core/guards"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import type { Snack } from "@/utils/snack"
 
