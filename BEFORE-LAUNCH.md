@@ -214,9 +214,9 @@ until then it reads `«FILL: effective date»`:
 
 - [x] `legal/privacy.md` — the version line and the 1.2.8 history row, dated the day it is published (5 November 2026)
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.8 (5 November 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.8/` show no DRAFT banner, and
+- [x] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.8/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.8 text (`apps/extension/store/listing.md`
-      § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
+      § Privacy policy text) (verified 2026-11-23: no DRAFT banner on any page this box names; AMO's field carries the 1.3.2 text, which replaces this version's)
 
 **Due at the release that publishes privacy 1.2.9:** §§ 5.11 and 6 say the token list is downloaded
 about every six hours, retried within minutes then less often after a failure, and on request in
@@ -227,9 +227,9 @@ place; its effective date is the day the promote publishes it, so until then it 
 
 - [x] `legal/privacy.md` — the version line and the 1.2.9 history row, dated the day it is published (5 November 2026)
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.9 (5 November 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.9/` show no DRAFT banner, and
+- [x] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.9/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.9 text (`apps/extension/store/listing.md`
-      § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
+      § Privacy policy text) (verified 2026-11-23: no DRAFT banner on any page this box names; AMO's field carries the 1.3.2 text, which replaces this version's)
 - [ ] The Chrome Web Store's `alarms` justification is re-pasted from `apps/extension/store/listing.md`
       § Permissions, which now says the token list refreshes about every six hours
 
@@ -243,9 +243,9 @@ place; their effective dates are the day the promote publishes them, so until th
 - [x] `legal/privacy.md` and `legal/terms.md` — the version lines and the 1.2.10 and 1.2.2 history
       rows, dated the day they are published (19 November 2026)
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.10 and `terms` 1.2.2 (19 November 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.2.10/`, `nulo.sh/terms` and
+- [x] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.2.10/`, `nulo.sh/terms` and
       `nulo.sh/terms/v1.2.2/` show no DRAFT banner, and AMO's Privacy policy field carries the
-      1.2.10 text (`apps/extension/store/listing.md` § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
+      1.2.10 text (`apps/extension/store/listing.md` § Privacy policy text) (verified 2026-11-23: no DRAFT banner on any page this box names; AMO's field carries the 1.3.2 text, which replaces this version's)
 
 **Due at the release that publishes privacy 1.2.11:** § 5.7 says that with Let every site see that
 Nulo is installed on, any site you open, and the scripts it runs, learns that Nulo is installed and
@@ -255,9 +255,9 @@ it, so until then it reads `«FILL: effective date»`:
 
 - [x] `legal/privacy.md` — the version line and the 1.2.11 history row, dated the day it is published (19 November 2026)
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.11 (19 November 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.11/` show no DRAFT banner, and
+- [x] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.11/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.11 text (`apps/extension/store/listing.md`
-      § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
+      § Privacy policy text) (verified 2026-11-23: no DRAFT banner on any page this box names; AMO's field carries the 1.3.2 text, which replaces this version's)
 
 **Due at the release that publishes privacy 1.3 and Terms 1.2.3:** privacy § 5.12, with a line in
 §§ 1, 2, 5.1, 5.5 and 12, and Terms § 7.1 describe Nulo's relay, the second default endpoint of
@@ -269,9 +269,9 @@ dates are the day the promote publishes them, so until then they read `«FILL: e
       rows, dated the day they are published (19 November 2026)
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3 and `terms` 1.2.3
       (19 November 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.3/`, `nulo.sh/terms` and
+- [x] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.3/`, `nulo.sh/terms` and
       `nulo.sh/terms/v1.2.3/` show no DRAFT banner, and AMO's Privacy policy field carries the 1.3
-      text (`apps/extension/store/listing.md` § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
+      text (`apps/extension/store/listing.md` § Privacy policy text) (verified 2026-11-23: no DRAFT banner on any page this box names; AMO's field carries the 1.3.2 text, which replaces this version's)
 - [ ] The Chrome Web Store's Privacy tab and the Firefox data-collection declaration are re-read
       against the relay, which `apps/extension/store/listing.md` § Data inventory now names as a
       destination of the node's requests
@@ -290,9 +290,9 @@ since they were archived before their dates were known:
       rows, dated the day they are published (19 November 2026)
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3.1 and `terms` 1.2.4
       (19 November 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.3.1/`, `nulo.sh/terms` and
+- [x] After the deploy, `nulo.sh/privacy`, `nulo.sh/privacy/v1.3.1/`, `nulo.sh/terms` and
       `nulo.sh/terms/v1.2.4/` show no DRAFT banner, and AMO's Privacy policy field carries the 1.3.1
-      text (`apps/extension/store/listing.md` § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
+      text (`apps/extension/store/listing.md` § Privacy policy text) (verified 2026-11-23: no DRAFT banner on any page this box names; AMO's field carries the 1.3.2 text, which replaces this version's)
 
 **Due at the release that publishes privacy 1.3.2:** § 5.10 says that on Alpha the "Get Fee Juice"
 and "Get private Fee Juice" links open Shield, which human.tech, a third party, operates, and on
@@ -305,9 +305,9 @@ publishes it, so until then it reads `«FILL: effective date»`. A promote that 
 - [x] `legal/privacy.md` — the version line and the 1.3.2 history row, dated the day it is
       published (19 November 2026)
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.3.2 (19 November 2026), same date
-- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.3.2/` show no DRAFT banner, and
+- [x] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.3.2/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.3.2 text (`apps/extension/store/listing.md`
-      § Privacy policy text) (2026-11-19: no DRAFT banner on any page this box names; AMO's field still carries the 1.2.7 text, so the box waits on the 1.3.2 paste, which settles it)
+      § Privacy policy text) (verified 2026-11-23: no DRAFT banner on any page this box names; AMO's field carries the 1.3.2 text)
 
 **Due at the release that publishes website notice 1.1:** the notice drops the email at store
 launch and says replies reach hello@nulo.sh. It is dated for the promote that publishes it, 5
