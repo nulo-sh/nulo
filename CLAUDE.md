@@ -246,6 +246,8 @@ Six layers, low → high. A layer can import only from layers below it. Enforced
 
 Service-bound visual components (Header, AddressDisplay, GlobalLoader, NotificationManager, Popup, PopupCard, JsonViewer, LogsViewer, PasskeyCeremonyDialog in `components/passkey/`) live flat in `src/components/` or in their own subdir, NOT in `core/`, `ui/`, or `composite/`. Cross-shell ones (e.g. `PasskeyCeremonyDialog`, consumed by both the popup and onboarding shells) MUST live under `src/components/`, never `src/popup/**`, so onboarding can import them without crossing the `@/popup/**` layer ban.
 
+**Nothing below the popup imports from it.** Production files under `src/composables/`, `src/utils/`, `src/stores/` and `src/components/**`, and all of `src/onboarding/`, never import `@/popup/**`; Biome refuses it (tests may compose with a popup consumer). Pure policy that a lower layer shares lives in `src/utils/` (fee and publish policy in `src/utils/fee/`, which the auto-import does not scan); anything else lives in its lowest consumer's folder.
+
 ## Composables (C0 / C1)
 
 ```
