@@ -1468,6 +1468,18 @@ describe("send page — Same as last time, over the real amount card", () => {
 		w.unmount()
 	})
 
+	test("a last send of a token whose decimals the wallet cannot use offers nothing", async () => {
+		const BIG = { ...OTHER, decimals: 19 }
+		mocks.getTokens.mockResolvedValue([TOKEN, BIG])
+		mocks.getTokenBalances.mockResolvedValue([BALANCE, { ...BALANCE, id: "b8", token: BIG, privateBalance: "500000000" }])
+		mocks.getOperations.mockResolvedValue([sent({ tokenId: BIG.id, amountRaw: "123456750" })])
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		await payRecent(w)
+		expect(w.get('[data-testid="send-payee-address"]').text()).toBe(ANA)
+		expect(again(w).exists()).toBe(false)
+		w.unmount()
+	})
+
 	describe("in USD mode", () => {
 		const PRICED = { ...TOKEN, chainId: CHAIN_IDS.TESTNET, contract: TEST_TOKENS.USDC, symbol: "USDC" }
 		const PLAIN = { ...OTHER, chainId: CHAIN_IDS.TESTNET }

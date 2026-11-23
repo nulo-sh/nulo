@@ -362,6 +362,28 @@ describe("TokenService.restore — per-row allocation", () => {
 		expect(raw[TOKEN_ID_HIGH_WATER_KEY]).toBe(Number.MAX_SAFE_INTEGER - 1)
 	})
 
+	test("a backup row past the decimals bound is refused; one at the bound is stored", async () => {
+		const { tokenService } = await makeHarness()
+		const mk = (contract: string, decimals: number) => ({
+			id: 0,
+			profileId: "p1",
+			chainId: 1,
+			contract,
+			name: "T",
+			symbol: "T",
+			decimals,
+		})
+
+		const restored = await tokenService.restore([mk("0xaaa", 19), mk("0xbbb", 1_000_000_000), mk("0xccc", 18)])
+
+		expect(restored.map((r) => r.restoreError)).toEqual([
+			"token decimals outside the supported range",
+			"token decimals outside the supported range",
+			undefined,
+		])
+		expect((await tokenService.getTokensRaw("p1")).map((t) => t.contract)).toEqual(["0xccc"])
+	})
+
 	test("a backup row's name and symbol are stored clean", async () => {
 		const { tokenService } = await makeHarness()
 		const row = {

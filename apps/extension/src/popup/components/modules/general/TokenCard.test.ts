@@ -310,9 +310,9 @@ describe("TokenCard — hostile rows", () => {
 		expect(w.find('[data-testid="token-fiat"]').exists()).toBe(false)
 	})
 
-	test("an absurd decimals value is treated the same way (no exponent is ever computed)", async () => {
+	test.each([19, 500])("decimals past the bound (%i) are treated the same way (no exponent is ever computed)", async (decimals) => {
 		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
-		const w = factory({ updatedAt: 1, publicBalance: "1" }, { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 500 })
+		const w = factory({ updatedAt: 1, publicBalance: "1" }, { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals })
 		await flushPromises()
 		expect(w.find('[data-malformed="true"]').text()).toBe("—")
 		expect(w.find('[data-testid="token-fiat"]').exists()).toBe(false)

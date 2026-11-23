@@ -427,6 +427,17 @@ export class ContractNotFoundError extends WalletError {
 	}
 }
 
+/** A token whose contract reports more decimals than the wallet supports: added, every amount it
+ *  shows or sends would be padded and exponentiated by that count. Constant message, no details. */
+export class TokenDecimalsOutOfRangeError extends WalletError {
+	public static readonly CODE = "TOKEN_DECIMALS_OUT_OF_RANGE"
+	public static readonly MESSAGE = "token decimals outside the supported range"
+
+	public constructor() {
+		super(TokenDecimalsOutOfRangeError.CODE, TokenDecimalsOutOfRangeError.MESSAGE, undefined, "TokenDecimalsOutOfRangeError")
+	}
+}
+
 /** A no-account request whose one call is a public function. */
 export class DefaultEntrypointPublicCallError extends WalletError {
 	public static readonly CODE = "DEFAULT_ENTRYPOINT_PUBLIC_CALL"
@@ -805,6 +816,7 @@ const REBUILT_AS = [
 	DefaultEntrypointNoCallError,
 	ContractNotRegisteredError,
 	ContractNotFoundError,
+	TokenDecimalsOutOfRangeError,
 	ChainNotSupportedError,
 	PxeStoreKeyMissingError,
 	PxeScopeUnregisteredError,

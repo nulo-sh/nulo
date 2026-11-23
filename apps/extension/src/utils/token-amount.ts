@@ -5,15 +5,12 @@
  * aggregation, the row itself) reads through these helpers.
  */
 
-/** Largest `decimals` that keeps `10n ** BigInt(decimals)` cheap; anything above is rejected. */
-export const MAX_DECIMALS = 77
+import { isValidDecimals } from "@/wallet/services/token/spec"
+
+export { isValidDecimals }
 
 type BalanceLike = { publicBalance?: string; privateBalance?: string }
 type TokenLike = { token?: { decimals?: unknown } }
-
-export function isValidDecimals(d: unknown): d is number {
-	return typeof d === "number" && Number.isInteger(d) && d >= 0 && d <= MAX_DECIMALS
-}
 
 /**
  * A token's decimals when the wallet knows them, else null. A token without a decimals getter is

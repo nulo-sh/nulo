@@ -1,4 +1,4 @@
-import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
+import { ContractNotFoundError, TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 import { ContentKind } from "@/wallet/services/task/spec"
@@ -124,6 +124,18 @@ describe("useTokenImport", () => {
 		tokenService.parseTokenInterface.mockImplementationOnce(parse as never)
 		expect(await importer.importToken(CONTRACT)).toEqual({ kind: "refused", message, inScope: true })
 		expect(tokenService.addToken).not.toHaveBeenCalled()
+		expect(openToast).not.toHaveBeenCalled()
+		expect(importer.phase.value).toBe("idle")
+	})
+
+	test("a token past the decimals bound is refused with the interface sentence, and no toast", async () => {
+		const { importer, tokenService } = setup()
+		tokenService.addToken.mockRejectedValueOnce(new TokenDecimalsOutOfRangeError())
+		expect(await importer.importToken(CONTRACT)).toEqual({
+			kind: "refused",
+			message: "Couldn't auto-detect this token's interface. Try a contract whose ABI matches a known standard.",
+			inScope: true,
+		})
 		expect(openToast).not.toHaveBeenCalled()
 		expect(importer.phase.value).toBe("idle")
 	})

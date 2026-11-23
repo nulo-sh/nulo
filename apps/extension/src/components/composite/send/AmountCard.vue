@@ -10,6 +10,7 @@ import { sideBalanceText } from "./send-sides"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, inputRoom, rulerWidth } from "@/utils/hero-ruler"
 import { isBlank } from "@/utils/string"
+import { isValidDecimals } from "@/utils/token-amount"
 import { usdToTokenAmount, tokenAmountToUsdMicro, formatUsdMicro, usdMicroToPlainString } from "@/wallet/services/price/convert"
 import { caretAfter, nextAmountText, restingAmount } from "./amount-field"
 
@@ -75,7 +76,8 @@ const amountRow = useTemplateRef("amountRow")
 const conversionEl = useTemplateRef("conversionEl")
 const derivedRuler = useTemplateRef("derivedRuler")
 
-const tokenDecimals = computed(() => (typeof props.token?.decimals === "number" ? props.token.decimals : undefined))
+/** Undefined while the token loads, and for decimals the wallet cannot use: no amount is then derived. */
+const tokenDecimals = computed(() => (isValidDecimals(props.token?.decimals) ? props.token.decimals : undefined))
 const symbolBlank = computed(() => isBlank(props.token?.symbol))
 
 /** True when the user typed more decimal places than the token supports

@@ -10,6 +10,7 @@ import { fakeBrowser } from "@webext-core/fake-browser"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
+import { TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
 import { PinMismatchError, SEED_ATTEMPT_CAP, TokenSeeder, type SeedPreview, type TokenSeederDeps } from "./seeder"
 import {
 	CHAIN_ID,
@@ -149,6 +150,16 @@ describe("TokenSeeder — trust boundary (hard skips)", () => {
 		await seeder.run()
 		expect(deps.persist).not.toHaveBeenCalled()
 		expect((await readMarker())[KEY]?.outcome).toBeUndefined()
+	})
+
+	test("decimals the metadata read refuses: hard skip like a pin mismatch, attempt counted, NO retry same version", async () => {
+		const preview = vi.fn(async (): Promise<SeedPreview> => {
+			throw new TokenDecimalsOutOfRangeError()
+		})
+		const { seeder, deps } = makeSeeder({ preview })
+		await seeder.run()
+		expect(deps.persist).not.toHaveBeenCalled()
+		expect((await readMarker())[KEY]).toMatchObject({ attempts: 1, rejectedAtVersion: expect.any(String) })
 	})
 
 	test("metadata bounds: out-of-range decimals and empty name are rejected", async () => {

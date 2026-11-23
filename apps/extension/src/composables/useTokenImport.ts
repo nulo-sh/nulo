@@ -1,4 +1,4 @@
-import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
+import { ContractNotFoundError, TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
 import { isFieldAddress } from "@nulo/wallet-bridge"
 import { ref } from "vue"
 import { useToast } from "@/composables/toast"
@@ -49,9 +49,13 @@ const WAIT_TOASTS = {
 } as const
 const NO_INTERFACE = "Couldn't auto-detect this token's interface. Try a contract whose ABI matches a known standard."
 
-/** Only a lookup the node answered empty has copy of its own; any other refusal's text is a developer's, for the log. */
-const refusalOf = (err: unknown) =>
-	err instanceof ContractNotFoundError ? "There is no token at this address on this network." : "Something went wrong. Try again."
+/** A lookup the node answered empty, and a token past the wallet's decimals, have copy of their own; any
+ *  other refusal's text is a developer's, for the log. */
+const refusalOf = (err: unknown) => {
+	if (err instanceof ContractNotFoundError) return "There is no token at this address on this network."
+	if (err instanceof TokenDecimalsOutOfRangeError) return NO_INTERFACE
+	return "Something went wrong. Try again."
+}
 
 type WaitOutcome = keyof typeof WAIT_TOASTS | "aborted"
 type BalanceWait = ReturnType<typeof createBalanceWait>

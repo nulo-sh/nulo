@@ -17,6 +17,7 @@ import {
 	DefaultEntrypointUtilityCallError,
 	ContractNotRegisteredError,
 	ContractNotFoundError,
+	TokenDecimalsOutOfRangeError,
 	DuplicateInitializationError,
 	InvalidPasswordError,
 	InvalidWalletArgumentsError,
@@ -292,6 +293,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			name: "ContractNotFoundError",
 			code: "CONTRACT_NOT_FOUND",
 			rebuild: { kind: "constant", message: "contract instance not found" },
+		},
+		{
+			ctor: TokenDecimalsOutOfRangeError,
+			make: () => new TokenDecimalsOutOfRangeError(),
+			name: "TokenDecimalsOutOfRangeError",
+			code: "TOKEN_DECIMALS_OUT_OF_RANGE",
+			rebuild: { kind: "constant", message: "token decimals outside the supported range" },
 		},
 		{
 			ctor: ChainNotSupportedError,

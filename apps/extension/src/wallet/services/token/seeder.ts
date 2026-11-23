@@ -1,11 +1,12 @@
 import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { tokenKey } from "@nulo/token-list"
+import { TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import { createSerialQueue } from "@nulo/wallet-core/utils"
 import type { ILogger } from "@/wallet/logger"
 import type { DefaultTokenSeed } from "./default-tokens"
 import type { SeedScope, SeedStatus, SeedStatusEntry, SeedStatusSnapshot, TokenInterface } from "./spec"
-import { TOKEN_SERVICE_NAME } from "./spec"
+import { DECIMALS_MAX, TOKEN_SERVICE_NAME } from "./spec"
 
 const LOG_SOURCE = TOKEN_SERVICE_NAME
 
@@ -34,7 +35,6 @@ const MIN_CONTINUATION_DELAY_MS = 1_000
  *  and import title is cut to the same two. */
 export const NAME_MAX_LENGTH = 80
 export const SYMBOL_MAX_LENGTH = 32
-const DECIMALS_MAX = 18
 
 export type SeedMarkerEntry = {
 	attempts: number
@@ -655,6 +655,10 @@ export class TokenSeeder {
 		} catch (err) {
 			if (err instanceof PinMismatchError) {
 				this.log(LogLevel.Warn, "seed rejected", { seedKey: key, category: "pin-mismatch" })
+				return undefined
+			}
+			if (err instanceof TokenDecimalsOutOfRangeError) {
+				this.log(LogLevel.Warn, "seed rejected", { seedKey: key, category: "metadata-bounds" })
 				return undefined
 			}
 			throw err

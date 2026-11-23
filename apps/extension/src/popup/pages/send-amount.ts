@@ -2,6 +2,7 @@
  *  and the balance covers, or the reason it cannot send. */
 
 import { parseAmountToBaseUnits, readAmountText } from "@/utils/amount"
+import { isValidDecimals } from "@/utils/token-amount"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 
 export type ValidateSendAmountReason =
@@ -20,7 +21,8 @@ export interface ValidateSendAmountInput {
 	input: string | undefined | null
 	/** The text the field last wrote at rest, whose commas are its own grouping; null otherwise. */
 	rested?: string | null
-	/** Token's `decimals` field. `undefined` means token list still loading. */
+	/** Token's `decimals` field: `undefined` while the token list loads; outside the supported range, a
+	 *  token the wallet cannot send. */
 	tokenDecimals: number | undefined
 	/** Account's available balance in base units (raw bigint or string). `undefined`
 	 *  means balance not loaded yet — caller should not enable submission. */
@@ -50,7 +52,7 @@ export function validateSendAmount(opts: ValidateSendAmountInput): ValidateSendA
 		return { valid: false, reason: "empty" }
 	}
 
-	if (tokenDecimals === undefined || tokenDecimals === null) {
+	if (!isValidDecimals(tokenDecimals)) {
 		return { valid: false, reason: "decimalsUnknown" }
 	}
 

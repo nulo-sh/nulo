@@ -177,6 +177,23 @@ describe("composite/AmountCard", () => {
 		expect(field.getAttribute("aria-labelledby")).toBe(max.parentElement?.querySelector("span")?.id)
 	})
 
+	test.each([19, 1_000_000_000])(
+		"a stored token with %i decimals derives no amount: no rate, no USD mode, Max fills nothing, and nothing throws",
+		async (decimals) => {
+			const w = mountCard({
+				token: { symbol: "BIG", decimals },
+				liveQuote: { usd: 1, fetchedAt: Date.now() },
+				balanceRawByType: "1",
+				modelValue: "1.5",
+				"onUpdate:modelValue": () => {},
+			})
+			await w.get("[data-testid='send-amount-max']").trigger("click")
+			expect(w.find("[data-testid='send-amount-fiat-label']").exists()).toBe(false)
+			expect(w.find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(false)
+			expect(w.emitted("update:modelValue")).toBeUndefined()
+		},
+	)
+
 	test("quoteless: no fiat line at all — no fake $0.00, no warning noise", () => {
 		const w = mountCard()
 		expect(w.text()).not.toContain("Price unavailable")

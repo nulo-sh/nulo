@@ -7,6 +7,7 @@
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionType } from "@aztec-labs/stdlib/abi"
+import { TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import type { EncodedCallAction } from "@nulo/wallet-bridge"
@@ -177,6 +178,16 @@ describe("TokenService metadata read", () => {
 		const fetch = await makeFetch()
 
 		await expect(fetch("p1", NETWORK.id, ACCOUNT.address, ti(PUBLIC))).rejects.toThrow("token metadata read returned no value")
+	})
+
+	test("decimals past the bound fail the read before anything uses them; the bound itself is read", async () => {
+		const fetch = await makeFetch()
+		for (const decimals of [19n, 1_000_000_000n, 2n ** 60n]) {
+			batched.mockResolvedValueOnce({ encoded: [compressed("Big"), compressed("BIG"), [new Fr(decimals)]], decoded: [] })
+			await expect(fetch("p1", NETWORK.id, ACCOUNT.address, ti(PUBLIC))).rejects.toBeInstanceOf(TokenDecimalsOutOfRangeError)
+		}
+		batched.mockResolvedValueOnce({ encoded: [compressed("Big"), compressed("BIG"), [new Fr(18n)]], decoded: [] })
+		expect(await fetch("p1", NETWORK.id, ACCOUNT.address, ti(PUBLIC))).toEqual(["Big", "BIG", 18])
 	})
 
 	test("a failed read propagates — no partial metadata", async () => {
