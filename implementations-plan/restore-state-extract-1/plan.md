@@ -1,7 +1,7 @@
 ---
 plan: restore-state-extract-1
 tier: light
-status: implementing
+status: delivered (PR #1955, merge pending)
 issues: "#1933"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 65182f8d1
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-23.
+- **Status:** delivered as PR #1955 against `dev`, with this close-out as its final commits; it merges on the orchestrator's word.
+- **Shipped:** `PendingRestoreState` owns the rewrap-context and admission stashes, their TTL and finalize's identity compare; the facade calls it at the same ten sites, in the same order and lock. Its unit test, the reach-in path edits, the chaos model's 26 remapped citations and one ARCHITECTURE.md parenthetical. Closes #1933.
+- **Dispositions:** D1 (the ownership flag after the admission set) accepted by both reviews; Codex C1-C3 and Opus O1, O2, O4 fixed, O3 needs no fix. The chaos hand list is not committed: it is a local replay input.
+- **Known limits:** none.
+- **Open items:** #1954 (the network chaos file is red at step 0 on dev; found here, pre-existing).
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget; the citation-drift finding is in [lessons/phase-1.md](lessons/phase-1.md).
+- **Size:** over the light target: the site table, the lifetime proof and both review verdicts the lane brief requires.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # restore-state-extract-1: the restore workflow's pending state moves into its own class
 

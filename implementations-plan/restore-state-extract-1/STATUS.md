@@ -1,4 +1,0 @@
-- 2026-11-23: plan drafted, extraction implemented; profile unit + integration suites green (341 tests).
-- 2026-11-23: Codex pass (gpt-6.1-sol high): no material finding; 3 minor accepted (C1-C3). test:all red on the chaos model's line citations; remapped.
-- 2026-11-23: Opus diff review: behaviour-preserving; O1 test gap fixed, nits applied. test:all and test:ci-gating green at 82911e17a.
-- 2026-11-23: gates green at 7382e169c (dev merged); e2e at 459bce81f: smoke green both browsers, sw-restart green, chaos blocked by pre-existing #1954 (diagnostic run clean).
