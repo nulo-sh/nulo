@@ -15,6 +15,8 @@
  * length. Everything else kept here is correlation metadata: ids, arities, presence booleans.
  */
 
+import { isObjectLike } from "@nulo/wallet-core/utils"
+
 /** Caller-supplied predicate confirming a string is a registered name, not attacker text. */
 export type NameVouch = (value: string) => boolean
 
@@ -32,15 +34,15 @@ function describeString(value: unknown, vouch?: NameVouch): string {
  */
 function describeArity(params: unknown): number | string {
 	if (Array.isArray(params)) return params.length
-	if (typeof params === "object" && params !== null) {
-		const n = (params as { n?: unknown }).n
+	if (isObjectLike(params)) {
+		const n = params.n
 		if (typeof n === "number" && Number.isInteger(n) && n >= 0) return n
 	}
 	return `[${typeof params}]`
 }
 
 function summarizeContentUnsafe(content: unknown, vouch?: NameVouch): Record<string, unknown> {
-	if (typeof content !== "object" || content === null) {
+	if (!isObjectLike(content)) {
 		return { contentShape: content === null ? "null" : typeof content }
 	}
 	const c = content as Record<string, unknown>
@@ -62,7 +64,7 @@ function summarizeContentUnsafe(content: unknown, vouch?: NameVouch): Record<str
 }
 
 function summarizeMessageUnsafe(message: unknown, vouch?: NameVouch): Record<string, unknown> {
-	if (typeof message !== "object" || message === null) {
+	if (!isObjectLike(message)) {
 		return { messageShape: message === null ? "null" : typeof message }
 	}
 	const m = message as Record<string, unknown>

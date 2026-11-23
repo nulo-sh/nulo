@@ -18,6 +18,8 @@
  * popup boundary rather than silently dropping data downstream.
  */
 
+import { isObjectLike } from "@nulo/wallet-core/utils"
+
 export type ImportedContactV1 = {
 	name?: unknown
 	address?: unknown
@@ -53,13 +55,8 @@ export function parseContactsExport(raw: string): ParsedExport {
 	let result: ParsedExport | null = null
 	if (Array.isArray(parsed)) {
 		result = { version: 1, contacts: parsed as ImportedContactV2[] }
-	} else if (
-		parsed !== null &&
-		typeof parsed === "object" &&
-		(parsed as { version?: unknown }).version === 2 &&
-		Array.isArray((parsed as { contacts?: unknown }).contacts)
-	) {
-		result = { version: 2, contacts: (parsed as { contacts: ImportedContactV2[] }).contacts }
+	} else if (isObjectLike(parsed) && parsed.version === 2 && Array.isArray(parsed.contacts)) {
+		result = { version: 2, contacts: parsed.contacts as ImportedContactV2[] }
 	}
 	if (!result) throw new Error("Unrecognized contacts export format")
 	if (result.contacts.length > MAX_CONTACT_IMPORT_ROWS) {

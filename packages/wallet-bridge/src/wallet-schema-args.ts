@@ -4,7 +4,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { ContractInstanceWithAddressSchema } from "@aztec-labs/stdlib/contract"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { applyNuloSchemaPatch } from "@nulo/wallet-sdk-schema-patch/apply"
-import { isRecord } from "@nulo/wallet-core/utils"
+import { isObjectLike, isRecord } from "@nulo/wallet-core/utils"
 import { projectRequestedCapabilities } from "./capability-negotiation"
 import type { MethodName } from "./method-descriptors"
 
@@ -77,7 +77,7 @@ function assertCanonicalAddresses(parsed: unknown, wire: unknown): void {
 }
 
 function isTraversable(value: unknown): value is object {
-	return typeof value === "object" && value !== null && !ArrayBuffer.isView(value) && !(value instanceof Map) && !(value instanceof Set)
+	return isObjectLike(value) && !ArrayBuffer.isView(value) && !(value instanceof Map) && !(value instanceof Set)
 }
 
 /** Wire args come from `JSON.parse`, so an own `toString` is data, never a function, and makes
@@ -87,7 +87,7 @@ function assertNoOwnToString(root: unknown): void {
 	const pending: unknown[] = [root]
 	while (pending.length > 0) {
 		const value = pending.pop()
-		if (typeof value !== "object" || value === null) continue
+		if (!isObjectLike(value)) continue
 		if (Object.hasOwn(value, "toString")) throw new Error("an argument with an own toString")
 		for (const child of Object.values(value)) pending.push(child)
 	}

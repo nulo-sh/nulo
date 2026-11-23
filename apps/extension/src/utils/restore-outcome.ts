@@ -4,6 +4,7 @@
  * it. Every write runs under one Web Lock per profile, so pages never interleave a read and a write;
  * the worker's own removals (a row commit, a profile deletion) take no part in it.
  */
+import { isRecord } from "@nulo/wallet-core/utils"
 import { storageLocalGet, storageLocalRemove, storageLocalSet } from "@/utils/storage"
 import { restoreOutcomeKey } from "@/utils/profile-ui-keys"
 
@@ -23,12 +24,13 @@ export const RESTORE_OUTCOME_LEASE_MS = 60_000
 
 const MAX_NETWORK_IDS = 64
 const MAX_NETWORK_ID_LENGTH = 64
+const LOWER_CASE_BACKUP_CHECKSUM = /^[0-9a-f]{64}$/
 
 function decode(raw: unknown): RestoreOutcome | undefined {
-	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined
-	const { run, backup, networkIds, leaseUntil } = raw as Record<string, unknown>
+	if (!isRecord(raw)) return undefined
+	const { run, backup, networkIds, leaseUntil } = raw
 	if (typeof run !== "string" || !/^[0-9a-f]{32}$/.test(run)) return undefined
-	if (typeof backup !== "string" || !/^[0-9a-f]{64}$/.test(backup)) return undefined
+	if (typeof backup !== "string" || !LOWER_CASE_BACKUP_CHECKSUM.test(backup)) return undefined
 	if (!Array.isArray(networkIds) || networkIds.length === 0 || networkIds.length > MAX_NETWORK_IDS) return undefined
 	if (!networkIds.every((id) => typeof id === "string" && id.length > 0 && id.length <= MAX_NETWORK_ID_LENGTH)) return undefined
 	if (typeof leaseUntil !== "number" || !Number.isFinite(leaseUntil)) return undefined

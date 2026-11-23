@@ -1,4 +1,5 @@
 import { MemoryStorageArea, type MinimalStorageArea } from "@nulo/wallet-core/storage"
+import { isObjectLike } from "@nulo/wallet-core/utils"
 import type { RowKeysSource } from "@/wallet/storage/sealed-entity-storage"
 import { type SealedStoreName, sealedEntityStorage, STORES } from "@/wallet/storage/stores"
 import { SEALED_READ_MESSAGE, type SealedReadRequest, type SealedReadRow } from "./sealed-read-message"
@@ -25,8 +26,8 @@ export interface SealedReadDeps {
 }
 
 function isRequest(message: unknown): message is SealedReadRequest {
-	if (typeof message !== "object" || message === null) return false
-	const { type, root } = message as { type?: unknown; root?: unknown }
+	if (!isObjectLike(message)) return false
+	const { type, root } = message
 	return (
 		type === SEALED_READ_MESSAGE &&
 		typeof root === "string" &&
