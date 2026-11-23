@@ -5,7 +5,8 @@ import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import type { ILogger } from "@/wallet/logger"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { assertRestoreEpoch, captureRestoreEpochs, restoreRowProfileId } from "@/wallet/services/restore-fence"
@@ -42,7 +43,7 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 	public static name = CONTACT_SERVICE_NAME
 
 	/** Declared startup deps — ensures ProfileService is fully started before we touch it. */
-	public readonly dependencies = [ProfileService.name] as const
+	public readonly dependencies = [PROFILE_SERVICE_NAME] as const
 
 	public readonly onContactAdded = new EventHandler<Contact>()
 	public readonly onContactUpdated = new EventHandler<Contact>()
@@ -63,7 +64,7 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.profileService = services.get(ProfileService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		sealOnRowKeysReady(
 			this.profileService,

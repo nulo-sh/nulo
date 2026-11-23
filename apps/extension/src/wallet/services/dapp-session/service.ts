@@ -5,7 +5,8 @@ import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { CapabilityNotGrantedError, SessionEndedError, ValidationError } from "@nulo/extension-messaging/errors"
 import { coversAnyContract, projectStoredGrants, readConsent } from "@nulo/wallet-bridge"
 import type { ILogger } from "@/wallet/logger"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { commitFencedCreate } from "@/wallet/services/create-fence"
 import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
@@ -129,7 +130,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.profileService = services.get(ProfileService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		sealOnRowKeysReady(
 			this.profileService,

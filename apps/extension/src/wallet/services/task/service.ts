@@ -2,7 +2,8 @@
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
-import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
+import type { ProfileService, ProfileInfo } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import type { TxOrigin } from "@/wallet/services/transaction/service"
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { randomIdNotIn } from "@/wallet/services/id-allocators"
@@ -28,7 +29,7 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("getTask", "getTasks")
 	public static name = TASK_SERVICE_NAME
 
-	public readonly dependencies = [ProfileService.name] as const
+	public readonly dependencies = [PROFILE_SERVICE_NAME] as const
 
 	public readonly onTaskCreated = new EventHandler<Task>()
 	public readonly onTaskUpdated = new EventHandler<Task>()
@@ -44,7 +45,7 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.profileService = services.get(ProfileService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
 		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
 		// A silent restore emits nothing, so start pulls the profile; a profile emitted during the pull wins.
 		const active = await this.profileService.getActiveProfile()

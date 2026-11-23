@@ -11,7 +11,7 @@ import type { SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { MockClock } from "@nulo/wallet-core/testing"
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
-import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS } from "@/wallet/services/transaction/service"
+import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS } from "@/wallet/services/transaction/inclusion"
 import { SEND_CHECK_TICK_MS, SendCheck } from "./send-check"
 import { type OperationFilter, type OperationRecord, type SendCheckState, isSendCheckMove } from "./service"
 

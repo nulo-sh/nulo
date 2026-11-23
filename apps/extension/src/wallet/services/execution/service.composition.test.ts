@@ -36,7 +36,8 @@ import { buildJournalTerminalCardProps, sendOutcome } from "@/utils/journal-stat
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
-import { DROPPED_RESURRECTION_WINDOW_MS, TransferType } from "@/wallet/services/transaction/service"
+import { TransferType } from "@/wallet/services/transaction/service"
+import { DROPPED_RESURRECTION_WINDOW_MS } from "@/wallet/services/transaction/inclusion"
 import { OriginType } from "@/wallet/services/transaction/spec"
 import {
 	InvalidWalletArgumentsError,

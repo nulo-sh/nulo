@@ -2,9 +2,12 @@ import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
-import { ConfigService } from "@/wallet/services/config/service"
-import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
-import { TokenListService } from "@/wallet/services/token-list/service"
+import type { ConfigService } from "@/wallet/services/config/service"
+import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
+import type { ProfileService, ProfileInfo } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
+import type { TokenListService } from "@/wallet/services/token-list/service"
+import { TOKEN_LIST_SERVICE_NAME } from "@/wallet/services/token-list/spec"
 import type { ValueStorage } from "@/wallet/storage"
 import { valueStorage } from "@/wallet/storage/stores"
 import { flaggedKeysOf } from "@/utils/token-flag"
@@ -110,7 +113,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("getQuotes", "refreshIfStale")
 	public static name = PRICE_SERVICE_NAME
 
-	public readonly dependencies = [ConfigService.name, ProfileService.name, TokenListService.name] as const
+	public readonly dependencies = [CONFIG_SERVICE_NAME, PROFILE_SERVICE_NAME, TOKEN_LIST_SERVICE_NAME] as const
 
 	public readonly onQuotesUpdated = new EventHandler<PriceSnapshot>()
 
@@ -158,9 +161,9 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	}
 
 	protected async init(services: ServiceCollection): Promise<void> {
-		this.configService = services.get(ConfigService.name)
-		this.profileService = services.get(ProfileService.name)
-		this.tokenList = services.get(TokenListService.name)
+		this.configService = services.get(CONFIG_SERVICE_NAME)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
+		this.tokenList = services.get(TOKEN_LIST_SERVICE_NAME)
 
 		this.configService.onUpdate.add(this.onConfigUpdated)
 		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
