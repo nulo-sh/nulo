@@ -122,16 +122,28 @@ function objectHit(node: ts.Node): Omit<Hit, "file" | "line"> | undefined {
 	return { text: textOf(root), hint: `${positive ? "" : "!"}${helper}(${operand})` }
 }
 
-/** A character class holding a hex range, right after `0x` and quantified exactly `{64}`: the field
- *  shape `isHex32` names (a bare 64-digit digest has no helper). Plain string scanning: no pattern of
- *  its own for a ReDoS query to judge. */
+/** Whether `0x` ends at `end`, past any group brackets between them. */
+function follows0x(pattern: string, end: number): boolean {
+	for (;;) {
+		if (end >= 3 && pattern.startsWith("(?:", end - 3)) end -= 3
+		else if (end > 0 && "()".includes(pattern[end - 1])) end -= 1
+		else return end >= 2 && pattern.slice(end - 2, end).toLowerCase() === "0x"
+	}
+}
+
+/** A character class holding a hex range, after `0x` and quantified exactly `{64}`, group brackets
+ *  aside: the field shape `isHex32` names (a bare 64-digit digest has no helper). Plain string
+ *  scanning: no pattern of its own for a ReDoS query to judge. */
 function hasHexClass64(pattern: string): boolean {
 	for (let open = pattern.indexOf("["); open !== -1; open = pattern.indexOf("[", open + 1)) {
 		const close = pattern.indexOf("]", open)
 		if (close === -1) return false
 		const range = pattern.slice(open + 1, close)
-		const prefixed = pattern.slice(Math.max(0, open - 2), open).toLowerCase() === "0x"
-		if (prefixed && (range.includes("a-f") || range.includes("A-F")) && pattern.startsWith("{64}", close + 1)) return true
+		let after = close + 1
+		while (pattern[after] === ")") after++
+		if (follows0x(pattern, open) && (range.includes("a-f") || range.includes("A-F")) && pattern.startsWith("{64}", after)) {
+			return true
+		}
 	}
 	return false
 }
@@ -239,6 +251,9 @@ describe("inline guard ban (static)", () => {
 		["an open-ended hex run", "x.ts", "const R = /0x[0-9a-f]{64,}/g", []],
 		["a non-hex class", "x.ts", "const R = /^[z]{64}$/", []],
 		["a digest with no 0x prefix", "x.ts", "const R = /^[0-9a-f]{64}$/", []],
+		["a grouped prefix", "x.ts", "const R = /^(?:0x)[0-9a-fA-F]{64}$/", ["isHex32 or HEX_32"]],
+		["a grouped class", "x.ts", "const R = /^0x(?:[0-9a-fA-F]{64})$/", ["isHex32 or HEX_32"]],
+		["a quantified group", "x.ts", "const R = /^0x([0-9a-f]){64}$/", ["isHex32 or HEX_32"]],
 	])("%s", (_case, file, source, hints) => {
 		expect(scan(file, source).map(({ hint }) => hint)).toEqual(hints)
 	})
