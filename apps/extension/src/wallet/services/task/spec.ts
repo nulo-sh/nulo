@@ -6,6 +6,10 @@ export const TASK_SERVICE_NAME = "task"
 
 export const TASK_RETENTION_PERIOD_MS = 60 * 60 * 1000 // 60 minutes in milliseconds
 
+/** Finished root tasks created for a dApp that the registry keeps, the latest by `finishedAt`, so a
+ *  dApp's calls cannot grow it without bound inside the retention period. */
+export const FINISHED_DAPP_ROOTS_KEPT = 256
+
 export enum TaskStatus {
 	Pending,
 	Processing,
