@@ -11,6 +11,7 @@
  *
  * A session another tab holds is answered exactly like an absent one: a page that names ids it
  * never owned learns nothing about which are live, and the tab that owns one is never written to.
+ * A disconnect request ends the session it names, so it ends one only from the tab that holds it.
  */
 import { type BackgroundMessage, MessageOrigin } from "@aztec-labs/wallet-sdk/extension/handlers"
 import type { ContentScriptMessageEnvelope } from "./content-script-validator"
@@ -19,7 +20,7 @@ import type { ContentScriptMessageEnvelope } from "./content-script-validator"
 export const SESSION_DISCONNECTED = "session-disconnected"
 
 /** The content-script types that exist only for an established session. */
-const SESSION_BOUND_TYPES: ReadonlySet<ContentScriptMessageEnvelope["type"]> = new Set(["ping", "secure-message"])
+const SESSION_BOUND_TYPES: ReadonlySet<ContentScriptMessageEnvelope["type"]> = new Set(["ping", "secure-message", "disconnect-request"])
 
 export type StaleSessionVerdict = "forward" | { disconnectTab: number; sessionId: string }
 
