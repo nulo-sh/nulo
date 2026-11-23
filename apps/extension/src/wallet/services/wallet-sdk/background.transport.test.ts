@@ -41,6 +41,7 @@ const disconnect = (sessionId: string) => ({ origin: "background", type: SESSION
 const disconnectsSent = () => sendMessage.mock.calls.filter(([, message]) => (message as { type?: string }).type === SESSION_DISCONNECTED)
 const sentTo = (tab: number) => sendMessage.mock.calls.filter(([to]) => to === tab).map(([, message]) => message)
 const ping = (sessionId: string) => ({ origin: "content-script", type: "ping", sessionId })
+const disconnectRequest = (sessionId: string) => ({ origin: "content-script", type: "disconnect-request", sessionId })
 const secure = (sessionId: string) => ({ origin: "content-script", type: "secure-message", sessionId, content: { iv: "", ciphertext: "" } })
 const discovery = (requestId: string) => ({
 	origin: "content-script",
@@ -257,13 +258,35 @@ describe("a live session, established through the real key exchange", () => {
 		expect(sentTo(TAB)).toEqual([{ origin: "background", type: "pong", sessionId: "s1" }])
 	})
 
+	test("its disconnect request from another tab is answered in that tab only and leaves the session live", async () => {
+		const { handler, deliver } = boot()
+		await establish(deliver, "s1")
+		deliver(disconnectRequest("s1"), sender(OTHER_TAB))
+		await flush()
+		expect(sdkListener).not.toHaveBeenCalled()
+		expect(sentTo(OTHER_TAB)).toEqual([disconnect("s1")])
+		expect(sentTo(TAB)).toEqual([])
+		expect(handler.getSession("s1")?.tabId).toBe(TAB)
+	})
+
+	test("its disconnect request from its own tab ends it (control)", async () => {
+		const { handler, deliver } = boot()
+		await establish(deliver, "s1")
+		deliver(disconnectRequest("s1"))
+		await flush()
+		expect(handler.getSession("s1")).toBeUndefined()
+		expect(sentTo(TAB)).toEqual([disconnect("s1")])
+	})
+
 	test("another tab's live id and an absent id are indistinguishable to the sender — no liveness oracle", async () => {
 		const { deliver } = boot()
 		await establish(deliver, "s1")
 		deliver(ping("s1"), sender(OTHER_TAB))
 		deliver(ping("never-issued"), sender(OTHER_TAB))
+		deliver(disconnectRequest("s1"), sender(OTHER_TAB))
+		deliver(disconnectRequest("never-issued"), sender(OTHER_TAB))
 		await flush()
-		expect(sentTo(OTHER_TAB)).toEqual([disconnect("s1"), disconnect("never-issued")])
+		expect(sentTo(OTHER_TAB)).toEqual([disconnect("s1"), disconnect("never-issued"), disconnect("s1"), disconnect("never-issued")])
 		expect(sdkListener).not.toHaveBeenCalled()
 	})
 
@@ -325,10 +348,10 @@ describe("a key exchange, admitted only from its discovery's tab and document or
 		await expectKeyExchangeRefused(handler, deliver, "k7", elsewhere)
 	})
 
-	test("from a sender with only a url (as Firefox reports one), its url's origin decides (control)", async () => {
+	test("from a sender with only a url, its url's origin decides (control)", async () => {
 		const { handler, deliver } = boot()
-		const firefox = { tab: { id: TAB, url: `${FAKE_DAPP_ORIGIN}/` }, frameId: 0, url: `${FAKE_DAPP_ORIGIN}/app` } as MessageSender
-		await establish(deliver, "k4", TAB, firefox)
+		const urlOnlySender = { tab: { id: TAB, url: `${FAKE_DAPP_ORIGIN}/` }, frameId: 0, url: `${FAKE_DAPP_ORIGIN}/app` } as MessageSender
+		await establish(deliver, "k4", TAB, urlOnlySender)
 		expect(handler.getSession("k4")).toBeDefined()
 	})
 

@@ -12,6 +12,7 @@ describe("staleSessionVerdict", () => {
 	test.each([
 		["ping", "ping"],
 		["secure-message", "secure-message"],
+		["disconnect-request", "disconnect-request"],
 	] as const)("a session the sender's tab does not hold, named by a %s, is disconnected in that tab", (_label, type) => {
 		expect(staleSessionVerdict(envelope({ type }), 7, unknown)).toEqual({ disconnectTab: 7, sessionId: "s1" })
 	})
@@ -31,7 +32,7 @@ describe("staleSessionVerdict", () => {
 		expect(asked).toEqual([["s1", 7]])
 	})
 
-	test.each(["discovery-request", "key-exchange-request", "disconnect-request"] as const)(
+	test.each(["discovery-request", "key-exchange-request"] as const)(
 		"a %s is forwarded whether or not its session is known — none of them presupposes one",
 		(type) => {
 			expect(staleSessionVerdict(envelope({ type }), 7, unknown)).toBe("forward")

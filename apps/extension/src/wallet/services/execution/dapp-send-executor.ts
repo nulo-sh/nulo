@@ -1219,9 +1219,6 @@ export class DappSendExecutor {
 		fence: ExecutionFence,
 		approval?: OperationApprovalEnvelope,
 	): Promise<Submitted> {
-		this.deps.logDebug(
-			`executeNoFromSendTx: starting, accountAddress=${op.accountAddress}, calls=${op.exec?.calls?.length}, additionalScopes=${JSON.stringify(op.opts?.additionalScopes)}`,
-		)
 		if (op.feeSettings?.paymentMethod?.kind && op.feeSettings.paymentMethod.kind !== "embedded") {
 			throw new Error("DefaultEntrypoint transactions must use embedded fee payment")
 		}

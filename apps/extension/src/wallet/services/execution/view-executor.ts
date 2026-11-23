@@ -258,10 +258,10 @@ export class ViewExecutor {
 		}
 
 		// Mixed-payload fast path. The public-static *prefix* of
-		// `op.exec.calls` runs directly against the node via
+		// `op.exec.calls`, up to the first sender-hiding call, runs directly against the node via
 		// `simulateViaNode`; the remainder goes through PXE in parallel;
 		// upstream's `buildMergedSimulationResult` stitches them back in
-		// payload order. Mirrors `BaseWallet.simulateTx`.
+		// payload order.
 		//
 		// First-tx multicall init exception: when the user's account
 		// hasn't sent its first tx yet, `nulo-account.buildTxExecutionRequest`

@@ -66,10 +66,9 @@ import { getBlockHeaderAnchor } from "./helpers/block-header-anchor"
 const NULO_ENTRYPOINT_APP_OFFSET = 1
 
 /**
- * Scans `calls` for the boundary at the first non-public-static call,
- * rehydrates ONLY the prefix into real `FunctionCall` instances.
- * Returns `null` when there's no optimizable prefix at all (calls is
- * empty / not an array / fully private / starts with public-non-static).
+ * Rehydrates ONLY the leading run of public-static calls into real `FunctionCall`
+ * instances; `null` when there is none. `simulateViaNode` fixes `msg_sender` to the
+ * account, so a sender-hiding call ends the run and stays on the standard path.
  *
  * Why the boundary scan first: rehydrating a fully-private payload only
  * to throw it away would force the standard path to re-parse via
@@ -95,8 +94,8 @@ export function rehydrateOptimizablePrefix(
 	let boundary = 0
 	for (const c of calls) {
 		if (typeof c !== "object" || c === null) break
-		const obj = c as { type?: unknown; isStatic?: unknown }
-		if (obj.type !== FunctionType.PUBLIC || obj.isStatic !== true) break
+		const obj = c as { type?: unknown; isStatic?: unknown; hideMsgSender?: unknown }
+		if (obj.type !== FunctionType.PUBLIC || obj.isStatic !== true || obj.hideMsgSender === true) break
 		boundary++
 	}
 	if (boundary === 0) return null // No optimizable prefix; caller falls through to standard.

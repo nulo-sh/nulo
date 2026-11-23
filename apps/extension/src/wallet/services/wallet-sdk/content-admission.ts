@@ -137,8 +137,8 @@ function keyExchangeFromItsDiscovery(
 	return sender.tab?.id === credit.tabId && credit.origin !== "unknown" && senderDocumentOrigin(sender) === credit.origin
 }
 
-/** The sending document's own origin: Chrome sets `sender.origin` (an opaque document's is `"null"`),
- *  Firefox only `sender.url`. */
+/** The sending document's own origin: Chrome sets `sender.origin` on a content script's message, and so
+ *  does Firefox 153, the manifest minimum (an opaque document's is `"null"`); `sender.url` covers a sender without one. */
 function senderDocumentOrigin(sender: chrome.runtime.MessageSender): string | undefined {
 	if (sender.origin !== undefined) return sender.origin
 	if (sender.url === undefined) return undefined
