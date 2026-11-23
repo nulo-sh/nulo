@@ -18,6 +18,18 @@ describe("errorMessageFromUnknown (canonical, = former jobs/error.extractMessage
 	test("return type is string", () => {
 		expectTypeOf(errorMessageFromUnknown(undefined as unknown)).toEqualTypeOf<string>()
 	})
+
+	test.each<[string, unknown]>([
+		["an Error", new Error("boom")],
+		["a string", "s"],
+		["null", null],
+		["undefined", undefined],
+		["a number", 42],
+		["an object with a message", { message: "x" }],
+		["a symbol", Symbol("s")],
+	])("equals the inline `instanceof Error ? message : String` it replaces, for %s", (_kind, raw) => {
+		expect(errorMessageFromUnknown(raw)).toBe(raw instanceof Error ? raw.message : String(raw))
+	})
 })
 
 describe("getErrorMessage (lenient wire/popup variant) — PRESERVED VERBATIM", () => {
