@@ -173,7 +173,7 @@ lessons, `git mv` to `archive/`, index line) as the PR's final commits, after me
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard)
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard)
 at `65182f8d1`, bounded work: one Codex pass (`gpt-6.1-sol`, `high`, read-only) over this plan
 and the completed diff, then one Opus 5.5 diff review, then targeted verification of material
 fixes. The lane brief folds the light tier's plan audit into that one Codex pass.
