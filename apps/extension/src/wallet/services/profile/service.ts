@@ -2192,8 +2192,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 			this.emit("onProfileAdded", this.getProfileInfo(newProfile))
 
-			// The stash takes OWNERSHIP of both buffers (restoreImportedKeys consumes; finalizeRestore/TTL
-			// sweep zeroize leftovers).
+			// The flag flips right after the stash owns both buffers, with nothing that can throw between:
+			// the caller's `finally` zeroizes them while it is unset.
 			this.pendingRestore.stash(id, { sourceDek: material.transferKey, destinationDek })
 			scratch.storedContext = true
 
@@ -2247,9 +2247,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		password: string | undefined,
 		credentialData: PasskeyCredentialData | undefined,
 	): Promise<ProfileInfo> {
-		// Every path wipes the rewrap context it did not take: a leftover one is the empty-slice case
-		// (nothing consumed it). The ticket spares what a later restore stashed after the lock's hold
-		// watchdog released this call.
+		// Every exit wipes a rewrap context nothing consumed (the empty-slice case), sparing one a same-id
+		// restore stashed after the lock's hold watchdog released this call.
 		const ticket = this.pendingRestore.beginFinalize(id)
 		try {
 			this.pendingRestore.sweep(id)

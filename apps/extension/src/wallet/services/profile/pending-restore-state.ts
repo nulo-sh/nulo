@@ -17,7 +17,7 @@ export type FinalizeTicket = Readonly<{ id: string; rewrap: unknown; admission: 
  * The memory-only state of restores committed and not yet finalized, gone with the worker:
  * - each restore's rewrap context. `restore()` runs BEFORE the imported-keys slice arrives, so the
  *   SOURCE DEK cannot be consumed inside restore itself: `take` hands both buffers to
- *   `AccountService.restoreImportedKeys`. Finalize wipes a LEFTOVER context (the empty-slice case)
+ *   the imported-keys slice's restore. Finalize wipes a LEFTOVER context (the empty-slice case)
  *   and the TTL sweep an abandoned one. An expired or missing context with rows present fails
  *   those rows into the orphan taxonomy — never silently-kept undecryptable rows.
  * - each restore's admission, which lets its finalize open the profile its commit wrote, taken

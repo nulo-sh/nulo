@@ -169,6 +169,17 @@ regression; Facts 1, 2, 4, 5 confirmed; D1 accepted. Three minor findings, all a
   reference" is not provable by a test. Fixed: a later cleanup follows each path; the test title
   and this plan's lifetime paragraph say what the test proves.
 
+**Opus 5.5 diff review at `82911e17a`:** behaviour-preserving (order, clock reads, wipes, identity,
+lock reach, surfaces, test expectation counts and all 26 citations checked against the base).
+- O1 (minor, demonstrated): the unreplaced-ticket unit test asserted only after a `forgetAll`, so
+  a no-op `spendAdmission` or `endFinalize` passed, and no facade test catches a no-op
+  `spendAdmission` (a repeat finalize returns at `isActive`). Fixed: each call is asserted on its
+  own; both no-op mutants now fail.
+- O2 (nit): the TTL take asserted its wipe only after a `forgetAll`. Fixed.
+- O3 (nit): D1 matters only if `Map.set` throws; no fix, as D1 says.
+- O4 (nit, comments): the commit site now states the flag's one rule; finalize's comment and the
+  class doc no longer restate other docs or name a caller.
+
 **Gate finding:** `test:all` failed at `7eaf9c1dd` on the chaos model's citation test (25 moved
 lines of `service.ts`). Fixed by the remap above.
 
