@@ -23,7 +23,7 @@ const at = (now: number) => vi.spyOn(Date, "now").mockReturnValue(now)
 afterEach(() => vi.restoreAllMocks())
 
 describe("PendingRestoreState", () => {
-	test("take hands both buffers over once, wiping neither, and keeps no reference to them", () => {
+	test("take hands both buffers over once, and later cleanup leaves them untouched", () => {
 		at(T0)
 		const state = new PendingRestoreState()
 		const entry = stashed(state, "p", 1)
@@ -47,6 +47,8 @@ describe("PendingRestoreState", () => {
 		state.sweep()
 		expect([state.admits(ticket), entry.wipes()]).toEqual([false, [1, 1]])
 		expect(allZero(entry.source.buffer) && allZero(entry.destination.buffer)).toBe(true)
+		state.forgetAll()
+		expect(entry.wipes()).toEqual([1, 1])
 	})
 
 	test("a sweep sparing an id keeps its rewrap context but not its admission", () => {
@@ -58,6 +60,7 @@ describe("PendingRestoreState", () => {
 		state.sweep("p")
 		expect([state.admits(ticket), entry.wipes()]).toEqual([false, [0, 0]])
 		expect(state.take("p")).toBeUndefined()
+		state.forgetAll()
 		expect(entry.wipes()).toEqual([1, 1])
 	})
 
@@ -74,6 +77,8 @@ describe("PendingRestoreState", () => {
 			[0, 0],
 		])
 		expect(state.take("q")?.sourceDek).toBe(kept.source.buffer)
+		state.forgetAll()
+		expect(forgotten.wipes()).toEqual([1, 1])
 	})
 
 	test("forgetAll wipes every fresh context once and takes back every admission", () => {

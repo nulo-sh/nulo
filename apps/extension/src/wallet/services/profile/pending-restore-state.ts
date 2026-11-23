@@ -23,8 +23,9 @@ export type FinalizeTicket = Readonly<{ id: string; rewrap: unknown; admission: 
  * - each restore's admission, which lets its finalize open the profile its commit wrote, taken
  *   back by an explicit lock, a deletion or the TTL. Secret-free: the page holds the credential.
  *
- * Every method is synchronous. The profile facade calls them only under its lock, so no sweep
- * zeroizes an entry another op holds a live reference to.
+ * Every method is synchronous and runs inside the facade's locked callbacks. The lock's hold
+ * watchdog can admit a successor while a finalize awaits, so finalize compares what it saw by
+ * identity.
  */
 export class PendingRestoreState {
 	private readonly rewraps = new ExpiringStash<RewrapContext & { capturedAt: number }>(PENDING_RESTORE_TTL_MS, (entry) => {

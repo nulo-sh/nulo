@@ -1,1 +1,2 @@
 - 2026-11-23: plan drafted, extraction implemented; profile unit + integration suites green (341 tests).
+- 2026-11-23: Codex pass (gpt-6.1-sol high): no material finding; 3 minor accepted (C1-C3). test:all red on the chaos model's line citations; remapped.

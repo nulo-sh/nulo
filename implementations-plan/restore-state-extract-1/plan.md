@@ -26,12 +26,10 @@ Nothing stored changes. Consults: [lessons/phase-1.md](lessons/phase-1.md).
 
 ## The issue, checked (#1933)
 
-A structural finding (Large Class), not a defect: no failure path. Its claims at the base:
-- Holds: the stashes, TTL, sweep, consume, lock, delete, commit admission and finalize compare all
-  live in `service.ts`; `consumeDekRewrapContext` has one production caller
-  (`account/service.ts:1245`); two test files reach the privates (integration, passkey-unlock).
-- Line numbers are from `8ae2c06a4`; anchors were found by name. The `restorePending` marker
-  stays in the facade, as #1439 drew the boundary.
+A structural finding (Large Class) with no failure path. Its claims hold at the base, found by
+name (its lines are from `8ae2c06a4`): every site lives in `service.ts`, `consumeDekRewrapContext`
+has one production caller (`account/service.ts:1245`), two test files reach the privates. The
+`restorePending` marker stays in the facade, where #1439 drew the boundary.
 
 ## Outcome & Quality Bar
 
@@ -61,25 +59,15 @@ A structural finding (Large Class), not a defect: no failure path. Its claims at
 
 ## Architecture & Implementation
 
-`PendingRestoreState` owns both stashes (`private readonly rewraps`, `admissions`) and
-`PENDING_RESTORE_TTL_MS` (exported; 30 min). Methods, all synchronous:
-
-| Method | Body (the inline code it replaces, in order) |
-|---|---|
-| `sweep(exceptId?)` | `rewraps.sweep(Date.now(), exceptId)`; `admissions.sweep(same now)` |
-| `stash(id, {sourceDek, destinationDek})` | sweep(`Date.now()`, id); `rewraps.set(id, {…, capturedAt: Date.now()})`; `admissions.set(id, {capturedAt: Date.now()})` |
-| `take(id)` | `now = Date.now()`; sweep(now, id); `rewraps.take(id, now)`; return the two buffers or `undefined` |
-| `forget(id)` | `rewraps.drop(id)`; `admissions.drop(id)` |
-| `forgetAll()` | sweep(`+∞`) |
-| `beginFinalize(id)` | `{ id, rewrap: rewraps.get(id), admission: admissions.get(id) }` (opaque `FinalizeTicket`) |
-| `admits(t)` | `t.admission !== undefined && admissions.get(t.id) === t.admission` |
-| `spendAdmission(t)` | `if (admissions.get(t.id) === t.admission) admissions.drop(t.id)` |
-| `endFinalize(t)` | `if (rewraps.get(t.id) === t.rewrap) rewraps.drop(t.id)` |
-
-The facade holds one `private readonly pendingRestore`; `consumeDekRewrapContext` keeps its
-signature text. `ExpiringStash` is reused as is. Alternative not taken: methods taking `now`
-(pure, like `ExpiringStash`) would merge the commit's three clock reads into one; the class reads
-the clock where the inline code did instead.
+`PendingRestoreState` owns both stashes (`private readonly rewraps`, `admissions`) and the
+exported `PENDING_RESTORE_TTL_MS` (30 min). Its nine synchronous methods (`sweep`, `stash`,
+`take`, `forget`, `forgetAll`, `beginFinalize`, `admits`, `spendAdmission`, `endFinalize`) each run
+the inline code of the site below, in order, with the same `Date.now()` reads; `sweep` spares only
+`exceptId`'s rewrap context, `forgetAll` sweeps at `+∞`, and the opaque `FinalizeTicket` carries
+the two entries `beginFinalize` read for the `===` compares. The facade holds one
+`private readonly pendingRestore`; `consumeDekRewrapContext` keeps its signature text;
+`ExpiringStash` is reused as is. Alternative not taken: methods taking `now` (pure, like
+`ExpiringStash`) would merge the commit's three clock reads into one.
 
 ### Site table (each call sits exactly where its inline code ran)
 
@@ -99,18 +87,23 @@ the clock where the inline code did instead.
 **D1 — the one reorder.** `scratch.storedContext = true` now runs after the admission set rather
 than before it. Nothing awaits between them, and the admission set is `Map.get`, `Map.set` and a
 no-op wipe, which throws on no input. So the flag reads the same at the post-lock `finally`, its
-only reader. A `stashRewrap` + `admit` pair would keep the exact order but splits one commit step
+only reader; the same holds for the third `Date.now()` read, which a test's clock stub can
+make throw only by fault injection. A `stashRewrap` + `admit` pair would keep the exact order but splits one commit step
 into two calls the facade must pair; rejected.
 
 **Key-material lifetime.** Same wipe, same stash class, same TTL, same triggers (replace on set,
 sweep, expired take, drop). The class keeps each buffer only in its `rewraps` entry; `stash`
 copies the two references out of the caller's literal. `take` removes the entry before returning.
 The ticket holds the entry reference typed `unknown`, a local of finalize's frame as `seenRewrap`
-was. Checked by the unit test's per-buffer wipe count (`fill` spy) on every path, including "a
-`forgetAll` after `take` wipes nothing", and by the unchanged integration pins.
+was. Checked by reading both versions side by side, by the unit test's per-buffer wipe count
+(`fill` spy) on the replace, TTL sweep, take-at-TTL, forget, forgetAll and finalize paths, each
+followed by a later cleanup that must wipe nothing more, and by the unchanged integration pins.
+No test can prove the absence of an unused reference; that rests on the code reading.
 
 **Lock discipline.** The instance is a private field; its only callers are the ten sites above,
-each inside the callback it was in. No method awaits, so none can interleave another.
+each inside the callback it was in. No method awaits, so none can interleave another. The lock's
+hold watchdog can admit a successor (a lock's `forgetAll`, a same-id commit) while a finalize
+awaits, as at the base; the ticket's identity compares are what tolerate it.
 
 ## Security & Adversarial Considerations
 
@@ -130,6 +123,8 @@ each inside the callback it was in. No method awaits, so none can interleave ano
 **Test edits** (expectations unchanged): integration "an explicit lock wipes…", "deleteProfile
 drops…", the SECRET-LIFETIME pin and the "the restore stash" block read `pendingRestore.rewraps`
 / `.admissions` and the exported TTL; passkey-unlock's `admissions` accessor and TTL likewise.
+The chaos model's 26 `cite(SERVICE, <line>, …)` entries (`tests/e2e/helpers/profile-chaos/model.ts`)
+move to the lines their unchanged fragments now sit on, mapped through the diff, not by search.
 
 **Validation gate** (one at a time, retry 0): `bun run lint`, `bun run typecheck:all`,
 `bun run test:all`, `bun run audit:vue`, `bun run test:ci-gating`, `bun run check:plans`.
@@ -140,7 +135,11 @@ E2E, Chrome then Firefox:
 - Network, one `e2e:agent` run per browser, proverless: `backup-restore-sw-restart` (Chrome only:
   pre-finalize crash, rollback delete) and `profile-chaos` armed with a hand list
   (`NULO_E2E_CHAOS=1`, `NULO_E2E_CHAOS_ACTIONS=<file>`): a restore held at `service-restore` that a
-  lock meets (finalize refused, profile kept), then one held at `account-state` that a delete meets.
+  lock meets (the profile kept, locked), then one held at `account-state` that a delete meets.
+  This proves interruption and convergence in a real browser, not the refusal itself: the driver
+  locks after the release, so a finalize that wrongly opened would still end locked. The refusal
+  is pinned by `service.passkey-unlock.test.ts` ("a lock after a … restore's commit refuses
+  finalize"). The `account-state` hold runs after finalize.
   The list (8 steps) is validated offline with `planFromList` on both browsers' caps.
 No scenario is added.
 
@@ -159,7 +158,19 @@ fixes. The lane brief folds the light tier's plan audit into that one Codex pass
 
 ## Audit verdicts
 
-(pending)
+**Codex (`gpt-6.1-sol`, high), plan + diff at `7eaf9c1dd`:** no material behaviour or key-lifetime
+regression; Facts 1, 2, 4, 5 confirmed; D1 accepted. Three minor findings, all accepted:
+- C1 (plan): the chaos run does not prove "finalize refused". Fixed: the gate says what it proves
+  and cites the unit-level pin.
+- C2 (comment): "no sweep zeroizes an entry another op holds a live reference to" is false under
+  the lock's watchdog (true at the base too). Fixed: the class doc states the watchdog and why the
+  ticket compares by identity.
+- C3 (tests): the wipe-once claim exceeded the asserts on the TTL and forget paths, and "keeps no
+  reference" is not provable by a test. Fixed: a later cleanup follows each path; the test title
+  and this plan's lifetime paragraph say what the test proves.
+
+**Gate finding:** `test:all` failed at `7eaf9c1dd` on the chaos model's citation test (25 moved
+lines of `service.ts`). Fixed by the remap above.
 
 ## Seeds
 
