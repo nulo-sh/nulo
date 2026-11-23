@@ -395,7 +395,7 @@ onBeforeUnmount(() => {
 
 .detail_value_mono {
 	composes: type--meta from global;
-	composes: detail_value_mono from "../../components/modules/tx/detail-shared.module.css";
+	color: var(--txt-primary);
 }
 
 .fee_method {
@@ -418,7 +418,7 @@ onBeforeUnmount(() => {
 
 .detail_value_aux {
 	composes: type--meta from global;
-	composes: detail_value_aux from "../../components/modules/tx/detail-shared.module.css";
+	color: var(--nulo-secondary);
 }
 
 .detail_link {
@@ -479,7 +479,7 @@ onBeforeUnmount(() => {
 
 .call_contract {
 	composes: type--meta from global;
-	composes: detail_value_aux from "../../components/modules/tx/detail-shared.module.css";
+	color: var(--nulo-secondary);
 }
 
 .empty_headline {

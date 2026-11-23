@@ -46,7 +46,7 @@ const emit = defineEmits(["copy"])
 
 .detail_value_mono {
 	composes: type--meta from global;
-	composes: detail_value_mono from "./detail-shared.module.css";
+	color: var(--txt-primary);
 }
 
 .detail_link {

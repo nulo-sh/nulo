@@ -82,12 +82,10 @@ const priced = (raw) => feeDisplay(raw, props.usdPerFeeJuice)
 
 <style module>
 .detail_key {
-	composes: type--label-section from global;
 	composes: detail_key from "./detail-shared.module.css";
 }
 
 .detail_value_mono {
-	composes: type--meta from global;
 	composes: detail_value_mono from "./detail-shared.module.css";
 }
 
@@ -97,7 +95,6 @@ const priced = (raw) => feeDisplay(raw, props.usdPerFeeJuice)
 }
 
 .detail_value_aux {
-	composes: type--fiat from global;
 	composes: amount_fiat from "./detail-shared.module.css";
 }
 
@@ -122,7 +119,6 @@ const priced = (raw) => feeDisplay(raw, props.usdPerFeeJuice)
 }
 
 .fee_grid_key {
-	composes: type--label-section from global;
 	composes: detail_key from "./detail-shared.module.css";
 }
 
