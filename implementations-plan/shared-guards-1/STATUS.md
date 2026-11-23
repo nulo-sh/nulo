@@ -2,3 +2,4 @@
 - 2026-11-23 21:30Z plan audit: Codex r1 reject (7 findings, all verified and accepted: K9, polarity-aware content key, ratchet D8, distinguishing pins, errors.ts to arc 3, complexity inventory, token encode kept K8); Opus running
 - 2026-11-23 21:43Z plan audit: Opus r1 conditional approve (K2 claim did not hold: converted; zeroize-sites pin; F8 restated; staged-bytes compare; falsy rows); final fresh Codex pass next
 - 2026-11-23 21:49Z plan audit: final Codex pass conditional approve, conditions applied, resumed: approve. Gate passed (auto-continue); arc 1 next
+- 2026-11-23 21:56Z arc 1 phase 1 gate green: guard test 20/20 (119 entries; delete and stray checks fail as designed), test:ci-gating 774 pass (ratchet: origin/dev predates the JSON), lint, typecheck:all
