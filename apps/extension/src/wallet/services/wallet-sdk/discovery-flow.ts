@@ -261,6 +261,12 @@ function rejectIfExpired(discovery: PendingDiscovery, deps: DiscoveryDeps): bool
 	return false
 }
 
+/** Approves `discovery` only while the handler still holds that very row: its id, freed when its tab
+ *  closed, may since name another tab's discovery, which this decision was never about. */
+function approveHeld(handler: BackgroundConnectionHandler, discovery: PendingDiscovery): boolean {
+	return handler.getPendingDiscovery(discovery.requestId) === discovery && handler.approveDiscovery(discovery.requestId)
+}
+
 /** Approve an admitted handshake, or give its window slot back when the approval cannot land. */
 function approveAdmitted(
 	discovery: PendingDiscovery,
@@ -273,7 +279,7 @@ function approveAdmitted(
 		reservation.releaseIfUnstarted()
 		return
 	}
-	if (!deps.handler.approveDiscovery(discovery.requestId)) {
+	if (!approveHeld(deps.handler, discovery)) {
 		reservation.releaseIfUnstarted()
 		deps.logger.log(
 			"wallet-sdk",
@@ -654,7 +660,7 @@ async function persistAndApprove(
 			approverProfileId: newSession.profileId,
 			attemptOpen: () => !reservation.abandoned,
 			rowAwaited: () => (deps.dedupeWaiters.get(dedupeKeyOf(discovery.origin, chainId)) ?? 0) > 0,
-			approveDiscovery: (id) => handler.approveDiscovery(id),
+			approveDiscovery: () => approveHeld(handler, discovery),
 			rejectDiscovery: (id) => handler.rejectDiscovery(id),
 			deleteSession,
 			pendingVerification: deps.pendingVerification,
