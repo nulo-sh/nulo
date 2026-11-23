@@ -93,8 +93,9 @@ export async function claimOrCreateDappExecuteJournal(deps: ClaimHelperDeps, inp
 	// changing scope in between. Reusing a row whose scope does not match would
 	// file the operation under one account while sending from another, and put its
 	// cancel card somewhere the user is not looking.
-	if (!executingScopeMatches(record, input)) {
-		const refiled = await refileToExecutingScope(deps, input, record)
+	const moved = scopeChanges(record, input)
+	if (moved.length > 0) {
+		const refiled = await refileToExecutingScope(deps, input, record, moved)
 		if (refiled.kind === "result") return refiled.result
 		// Fall through to the normal claim: the row (same id, new scope) is still
 		// queued/pending, the pre-acquire controller is still registered under it,
@@ -191,14 +192,16 @@ async function refuseEndedSession(deps: ClaimHelperDeps, journalId: string): Pro
 	throw error
 }
 
-/** True when the queued row's scope matches the scope execution resolved. An
- *  undefined profileId on either side is treated as a wildcard (legacy rows). */
-function executingScopeMatches(record: JournalRecord, input: ClaimHelperInput): boolean {
-	return (
-		record.networkId === input.networkId &&
-		record.accountAddress === input.accountAddress &&
-		(record.profileId === undefined || input.profileId === undefined || record.profileId === input.profileId)
-	)
+type ScopePart = "profile" | "account" | "network"
+
+/** The parts of the queued row's scope that differ from the executing one. An undefined profileId on either
+ *  side is a wildcard (legacy rows). */
+function scopeChanges(record: JournalRecord, input: ClaimHelperInput): ScopePart[] {
+	const moved: ScopePart[] = []
+	if (record.profileId !== undefined && input.profileId !== undefined && record.profileId !== input.profileId) moved.push("profile")
+	if (record.accountAddress !== input.accountAddress) moved.push("account")
+	if (record.networkId !== input.networkId) moved.push("network")
+	return moved
 }
 
 type RefileOutcome = { kind: "record"; record: JournalRecord } | { kind: "result"; result: ClaimHelperResult }
@@ -212,7 +215,12 @@ type RefileOutcome = { kind: "record"; record: JournalRecord } | { kind: "result
  *  that window. Every other outcome returns the record for the caller's
  *  normal claim (queued rows re-arbitrate via the journal lock; a pending row
  *  WITH reuseController has been registered since before the mutex acquire). */
-async function refileToExecutingScope(deps: ClaimHelperDeps, input: ClaimHelperInput, record: JournalRecord): Promise<RefileOutcome> {
+async function refileToExecutingScope(
+	deps: ClaimHelperDeps,
+	input: ClaimHelperInput,
+	record: JournalRecord,
+	moved: readonly ScopePart[],
+): Promise<RefileOutcome> {
 	const { operationJournal, logger } = deps
 	const { networkId, accountAddress, reuseController } = input
 	const queuedJournalId = input.queuedJournalId as string
@@ -231,8 +239,7 @@ async function refileToExecutingScope(deps: ClaimHelperDeps, input: ClaimHelperI
 	}
 
 	logger?.info(
-		`Queued record ${queuedJournalId} was filed under ${record.accountAddress}/${record.networkId} but execution resolved ` +
-			`${accountAddress}/${networkId}; re-filing under the executing scope`,
+		`Queued record ${queuedJournalId} moved scope (${moved.join(", ")}) between arrival and execution; re-filing under the executing scope`,
 	)
 	// Re-file IN PLACE — same journal id — never delete+recreate. The id is
 	// the cancellation identity: `cancelJob` addresses the row (and the

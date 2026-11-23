@@ -30,6 +30,7 @@ import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { TaskService, type WrappedTask, ExecuteOperationContent } from "@/wallet/services/task/service"
 import type { ILogger } from "@/wallet/logger"
+import { errorName } from "@/wallet/logger/utils"
 import { type RequestLog, traceTag } from "@/wallet/logger/request-log"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
@@ -1001,7 +1002,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 				results.push({ status: "ok", result })
 			} catch (error) {
 				const classified = classifyOperationCatch(error, operationTask, getErrorMessage)
-				this.logOperationOutcome(traceId, operation.kind, classified, tag)
+				this.logOperationOutcome(traceId, operation.kind, classified, error, tag)
 				results.push(classified)
 			}
 		}
@@ -1009,8 +1010,15 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 	}
 
 	/** Level by reach: a Terms, scope, argument, capacity or unsupported-method refusal is expected,
-	 *  and a connected dApp can repeat any of them, so at `error` they would fill every user's log buffer. */
-	private logOperationOutcome(traceId: string, kind: Operation["kind"], classified: CancelOrFailResult, tag: unknown[]): void {
+	 *  and a connected dApp can repeat any of them, so at `error` they would fill every user's log buffer.
+	 *  A failure logs its error's class only: a contract chooses the text, and the dApp gets it in its reply. */
+	private logOperationOutcome(
+		traceId: string,
+		kind: Operation["kind"],
+		classified: CancelOrFailResult,
+		error: unknown,
+		tag: unknown[],
+	): void {
 		if (classified.status === "cancelled") {
 			this.logInfo(`[${traceId}] executeOperations: ${kind} cancelled by user`, ...tag)
 		} else if (classified.code === TermsAcceptanceRequiredError.CODE) {
@@ -1024,7 +1032,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		} else if (classified.code === UnsupportedMethodError.CODE) {
 			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: unsupported method`, ...tag)
 		} else {
-			this.logError(`[${traceId}] executeOperations: ${kind} failed:`, classified.error, ...tag)
+			this.logError(`[${traceId}] executeOperations: ${kind} failed`, { errorName: errorName(error) }, ...tag)
 		}
 	}
 

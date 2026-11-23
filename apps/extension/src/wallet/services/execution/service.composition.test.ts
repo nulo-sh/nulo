@@ -1205,6 +1205,8 @@ describe("ExecutionService composition — nothing is broadcast without a curren
 })
 
 describe("ExecutionService composition — a refused operation logs at the level its reach allows", () => {
+	/** A failure's text is the contract's to choose; an address in it stands for anything it may hold. */
+	const FAILURE_ADDRESS = "0x0a1b2c0000000000000000000000000000000000000000000000000000009c2d"
 	const bindingRefusal = () => {
 		try {
 			assertSelectorBinding({ name: "transfer" } as never, { name: "balance_of_public" }, CALL_BINDING)
@@ -1220,7 +1222,7 @@ describe("ExecutionService composition — a refused operation logs at the level
 		["an argument refusal", () => InvalidWalletArgumentsError.forMethod("executeUtility"), "refused: invalid arguments"],
 		["a capacity refusal", () => new TooManyPendingError(), "refused: too many pending"],
 		["an unsupported-method refusal", () => UnsupportedMethodError.forMethod("profileTx"), "refused: unsupported method"],
-		["an unclassified failure", () => new Error("boom"), undefined],
+		["an unclassified failure", () => new Error(`Assertion failed: ${FAILURE_ADDRESS} cannot spend`), undefined],
 	])("%s", async (_label, makeError, debugReason) => {
 		const h = await makeHarness()
 		const service = h.service as unknown as {
@@ -1239,7 +1241,10 @@ describe("ExecutionService composition — a refused operation logs at the level
 			spy.mock.calls.map(([line]) => String(line)).filter((line) => / register_contract (refused|failed)/.test(line))
 		if (debugReason === undefined) {
 			expect(outcomeLines(logDebug)).toEqual([])
-			expect(logError).toHaveBeenCalledWith(expect.stringMatching(/executeOperations: register_contract failed:$/), "boom")
+			expect(logError).toHaveBeenCalledWith(expect.stringMatching(/executeOperations: register_contract failed$/), {
+				errorName: "Error",
+			})
+			expect(JSON.stringify([...logDebug.mock.calls, ...logError.mock.calls])).not.toContain(FAILURE_ADDRESS.slice(2))
 		} else {
 			expect(outcomeLines(logDebug)).toEqual([
 				expect.stringMatching(new RegExp(`executeOperations: register_contract ${debugReason}$`)),

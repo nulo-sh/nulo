@@ -1142,3 +1142,25 @@ describe("TokenBalanceService.onTokenUpdated — a balance carries its token's c
 		expect(enqueue).not.toHaveBeenCalled()
 	})
 })
+
+describe("TokenBalanceService — a failed row create logs a category", () => {
+	const ACCOUNT = "0x0a1b2c0000000000000000000000000000000000000000000000000000009c2d"
+	const tokenRaw = (id: number) =>
+		({ id, profileId: "A", chainId: 1, name: `T${id}`, symbol: `T${id}`, decimals: 18, contract: `0xtok${id}` }) as never
+
+	test("the warning names the token and the error's class, never the account", async () => {
+		const { service, bus, start } = await world({
+			getAccounts: async () => [{ address: ACCOUNT, chainId: 1 }],
+			tokens: [tokenRaw(100)],
+		})
+		const internals = service as never as { repo: BalanceRepository; logWarn: (...args: unknown[]) => void }
+		vi.spyOn(internals.repo, "prepare").mockRejectedValue(new Error("write refused"))
+		const logWarn = vi.spyOn(internals, "logWarn")
+		await start()
+		await bus.onAccountAdded.dispatch({ address: ACCOUNT, chainId: 1 } as never)
+
+		const ensureLines = logWarn.mock.calls.filter(([line]) => String(line).startsWith("balance ensure"))
+		expect(ensureLines).toEqual([["balance ensure: a row create failed", { tokenId: 100, errorName: "Error" }]])
+		expect(JSON.stringify(logWarn.mock.calls)).not.toContain(ACCOUNT.slice(2))
+	})
+})
