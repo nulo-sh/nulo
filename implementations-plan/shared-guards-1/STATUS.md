@@ -8,3 +8,4 @@
 - 2026-11-23 22:38Z arc 1 phase 4 gate green: lint, typecheck:all, test:all, audit:vue, test:ci-gating, check:plans, rescore (trim 43), content script byte-identical, smoke 3 specs and network 3 specs at retry 0 on Chrome; baseline 66; commit 2ecbe62a8
 - 2026-11-23 22:50Z arc 1 review r1: Codex conditional approve (2 of 3 accepted), Opus conditional approve (5 of 6 accepted); baseline 64
 - 2026-11-23 23:05Z arc 1 review: Codex r2 conditional approve (2 accepted), r3 conditional approve (1 accepted, verified); loop stopped at three rounds, converged
+- 2026-11-23 23:20Z arc 1 final gates green on merged head 9c528cf5e (origin/dev 633cf2ac9 merged): lint, typecheck:all, test:all, test:ci-gating, check:plans; PR next
