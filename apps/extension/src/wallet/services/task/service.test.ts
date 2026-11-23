@@ -22,7 +22,7 @@ class TestResult implements ITaskResult {
 	constructor(public readonly testData: string) {}
 }
 
-/** `getActiveProfile` answers what a SW restart's silent restore left active; that restore emits nothing. */
+/** `getActiveProfile` answers what a SW restart's silent restore left active. */
 const buildTestSetup = (getActiveProfile: () => Promise<ProfileInfo | undefined> = async () => undefined) => {
 	const profileServiceMock = {
 		name: ProfileService.name,
