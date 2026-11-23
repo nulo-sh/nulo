@@ -71,13 +71,40 @@ type Deliver = (message: unknown, from?: MessageSender) => void
 /** The SDK's own listener, wrapped so forwarding is observed rather than inferred from silence. */
 let sdkListener: ReturnType<typeof vi.fn<Listener>> | undefined
 
-function boot(): { handler: BackgroundConnectionHandler; deliver: Deliver } {
+function boot(
+	ports = fakeSdkPorts(),
+	services: Parameters<typeof fakeSdkServices>[0] = { remembered: true },
+): { handler: BackgroundConnectionHandler; deliver: Deliver } {
 	attached = undefined
-	const handler = initWalletSdkHandler(fakeSdkServices({ remembered: true }).services, noopLogger, fakeSdkPorts())
+	const handler = initWalletSdkHandler(fakeSdkServices(services).services, noopLogger, ports)
 	// `initWalletSdkHandler` assigned it through the mock; the control-flow analysis cannot see that.
 	const wrapper = attached as Listener | undefined
 	if (!wrapper) throw new Error("the wrapper was not attached to the relay")
 	return { handler, deliver: (message, from = sender(TAB)) => wrapper(message, from) }
+}
+
+/** Window ports whose `closeAll` reports every window opened so far as closed, as the browser does. */
+function closableWindows(): { ports: ReturnType<typeof fakeSdkPorts>; closeAll: () => void } {
+	const listeners: Array<(windowId: number) => void> = []
+	const open: number[] = []
+	let next = 1
+	const ports = fakeSdkPorts({
+		create: async () => {
+			const id = next++
+			open.push(id)
+			return { id }
+		},
+		onRemoved: (listener) => {
+			listeners.push(listener)
+			return () => {}
+		},
+	})
+	return {
+		ports,
+		closeAll: () => {
+			for (const id of open.splice(0)) for (const listener of listeners) listener(id)
+		},
+	}
 }
 
 /**
@@ -372,6 +399,88 @@ describe("a key exchange, admitted only from its discovery's tab and document or
 		await flush()
 		expect(handler.getSession("k5")).toBeUndefined()
 		expect(sentTo(TAB)).toEqual([])
+	})
+})
+
+describe("a discovery under an id the wallet already holds", () => {
+	/** A live session `s1` in TAB whose verify window has closed, so no slot is held for its id. */
+	async function liveSession() {
+		const windows = closableWindows()
+		const booted = boot(windows.ports)
+		await establish(booted.deliver, "s1")
+		windows.closeAll()
+		await flush()
+		return booted
+	}
+
+	test("a live session's id from another tab is dropped, and a key exchange after it leaves the session with its tab", async () => {
+		const { handler, deliver } = await liveSession()
+		deliver(discovery("s1"), sender(OTHER_TAB))
+		await flush()
+		expect(sdkListener).not.toHaveBeenCalled()
+		const exchange = vi.spyOn(BackgroundConnectionHandler.prototype, "handleKeyExchangeRequest")
+		deliver(await keyExchange("s1"), sender(OTHER_TAB))
+		expect(exchange).toHaveBeenCalledTimes(1)
+		await exchange.mock.results[0]?.value
+		expect(handler.getSession("s1")?.tabId).toBe(TAB)
+		expect(sentTo(OTHER_TAB)).toEqual([])
+	})
+
+	test("an approved discovery's id from another tab is dropped, and its own tab's key exchange opens the session (control)", async () => {
+		const { handler, deliver } = boot()
+		await approve(deliver, "p1", sender(TAB))
+		sdkListener?.mockClear()
+		deliver(discovery("p1"), sender(OTHER_TAB))
+		await flush()
+		expect(sdkListener).not.toHaveBeenCalled()
+		expect(handler.getPendingDiscovery("p1")?.tabId).toBe(TAB)
+		deliver(await keyExchange("p1"))
+		await vi.waitFor(() => expect(keyExchangeResponses("p1")).toHaveLength(1))
+		expect(handler.getSession("p1")?.tabId).toBe(TAB)
+	})
+
+	test("the row upstream restores when a session ends keeps its tab: another tab's discovery is dropped, its own tab's key exchange is forwarded (control)", async () => {
+		const { handler, deliver } = await liveSession()
+		handler.terminateSession("s1")
+		await flush()
+		sdkListener?.mockClear()
+		deliver(discovery("s1"), sender(OTHER_TAB))
+		await flush()
+		expect(sdkListener).not.toHaveBeenCalled()
+		expect(handler.getPendingDiscovery("s1")?.tabId).toBe(TAB)
+		deliver(await keyExchange("s1"))
+		await flush()
+		expect(sdkListener).toHaveBeenCalledTimes(1)
+	})
+
+	test("a discovery still waiting on a locked wallet keeps its tab: another tab's discovery under its id is dropped", async () => {
+		const { handler, deliver } = boot(fakeSdkPorts(), { remembered: true, activeProfile: async () => undefined })
+		deliver(discovery("p3"))
+		await flush()
+		sdkListener?.mockClear()
+		deliver(discovery("p3"), sender(OTHER_TAB))
+		await flush()
+		expect(sdkListener).not.toHaveBeenCalled()
+		expect(handler.getPendingDiscovery("p3")).toMatchObject({ tabId: TAB, status: "pending" })
+	})
+
+	test("a second discovery under the same id from its own tab is dropped, and the first one's handshake completes", async () => {
+		const { handler, deliver } = boot()
+		await approve(deliver, "p2", sender(TAB))
+		sdkListener?.mockClear()
+		deliver(discovery("p2"))
+		await flush()
+		expect(sdkListener).not.toHaveBeenCalled()
+		deliver(await keyExchange("p2"))
+		await vi.waitFor(() => expect(keyExchangeResponses("p2")).toHaveLength(1))
+		expect(handler.getSession("p2")?.tabId).toBe(TAB)
+	})
+
+	test("a fresh id from another tab is approved and opens its own session beside the first (control)", async () => {
+		const { handler, deliver } = await liveSession()
+		await establish(deliver, "s2", OTHER_TAB)
+		expect(handler.getSession("s2")?.tabId).toBe(OTHER_TAB)
+		expect(handler.getSession("s1")?.tabId).toBe(TAB)
 	})
 })
 

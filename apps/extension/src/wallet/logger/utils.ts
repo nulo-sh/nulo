@@ -199,6 +199,9 @@ function projectError(error: Error): Record<string, unknown> {
 	}
 }
 
+/** A caught value's class name, or its `typeof` when it is no error, for a line that must not carry its text. */
+export const errorName = (error: unknown): string => (error instanceof Error ? error.name : typeof error)
+
 /** A pre-flattened string is opaque to the key-name walker; scrub endpoint URLs at least. */
 const scrubPrimitive = (value: unknown): unknown => (typeof value === "string" ? scrubUrls(value) : value)
 

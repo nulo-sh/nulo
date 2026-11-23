@@ -34,8 +34,9 @@ const GLOBAL_CAP = 32
 const PER_ORIGIN_CAP = 4
 
 interface QueuedDiscovery {
-	/** The SDK's row for this receipt. The SDK replaces a row with a fresh object whenever a page
-	 *  reuses its id, so the entry may act only while the SDK still holds this very object. */
+	/** The SDK's row for this receipt. Once the row is gone (its tab closed, or it was answered) a
+	 *  fresh one may be recorded under its id, so the entry may act only while the SDK still holds
+	 *  this very object. */
 	discovery: PendingDiscovery
 	chainId: string
 }

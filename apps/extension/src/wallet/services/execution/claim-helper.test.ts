@@ -178,6 +178,26 @@ describe("claimOrCreateDappExecuteJournal", () => {
 		)
 	})
 
+	test("the re-file line names the parts of the scope that moved, never an address or a network id", async () => {
+		const ACCOUNT = "0x0a1b2c0000000000000000000000000000000000000000000000000000009c2d"
+		const FILED_UNDER = "0x1b5c090000000000000000000000000000000000000000000000000000083d4e"
+		const { deps, journal } = makeDeps()
+		journal.getOperation.mockResolvedValueOnce({ networkId: "net-OTHER", accountAddress: FILED_UNDER, progress: { stage: "queued" } })
+
+		const res = await claimOrCreateDappExecuteJournal(deps, {
+			...INPUT_NO_QUEUED,
+			accountAddress: ACCOUNT,
+			queuedJournalId: "queued-id",
+		})
+
+		expect(res.journalId).toBe("queued-id")
+		const lines = vi.mocked(deps.logger?.info ?? vi.fn()).mock.calls.map(([line]) => line)
+		expect(lines).toEqual([
+			"Queued record queued-id moved scope (account, network) between arrival and execution; re-filing under the executing scope",
+		])
+		for (const value of [ACCOUNT, FILED_UNDER, "net-OTHER", "net1"]) expect(lines.join("\n")).not.toContain(value)
+	})
+
 	test("a cancel that wins the journal lock during re-file is honored, not erased", async () => {
 		// The mismatch branch's stage/abort checks run on a snapshot. cancelJob can
 		// win the journal lock between them and the refile: the row goes terminal

@@ -28,6 +28,7 @@ import { BlockHash } from "@aztec-labs/stdlib/block"
 import { Gas } from "@aztec-labs/stdlib/gas"
 import { BlockHeader, GlobalVariables } from "@aztec-labs/stdlib/tx"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { SimulationError } from "@aztec-labs/stdlib/errors"
 import { JobCancelledError, JournaledRejection, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { MockClock } from "@nulo/wallet-core/testing"
@@ -1205,6 +1206,8 @@ describe("ExecutionService composition — nothing is broadcast without a curren
 })
 
 describe("ExecutionService composition — a refused operation logs at the level its reach allows", () => {
+	/** A failure's text is the contract's to choose; an address in it stands for anything it may hold. */
+	const FAILURE_ADDRESS = "0x0a1b2c0000000000000000000000000000000000000000000000000000009c2d"
 	const bindingRefusal = () => {
 		try {
 			assertSelectorBinding({ name: "transfer" } as never, { name: "balance_of_public" }, CALL_BINDING)
@@ -1220,8 +1223,13 @@ describe("ExecutionService composition — a refused operation logs at the level
 		["an argument refusal", () => InvalidWalletArgumentsError.forMethod("executeUtility"), "refused: invalid arguments"],
 		["a capacity refusal", () => new TooManyPendingError(), "refused: too many pending"],
 		["an unsupported-method refusal", () => UnsupportedMethodError.forMethod("profileTx"), "refused: unsupported method"],
-		["an unclassified failure", () => new Error("boom"), undefined],
-	])("%s", async (_label, makeError, debugReason) => {
+		["an unclassified failure", () => new Error(`Assertion failed: ${FAILURE_ADDRESS} cannot spend`), { failed: "Error" }],
+		[
+			"a contract revert",
+			() => new SimulationError(`Assertion failed: ${FAILURE_ADDRESS} cannot spend`, []),
+			{ failed: "SimulationError" },
+		],
+	])("%s", async (_label, makeError, outcome) => {
 		const h = await makeHarness()
 		const service = h.service as unknown as {
 			dispatchOperation: () => Promise<unknown>
@@ -1237,13 +1245,14 @@ describe("ExecutionService composition — a refused operation logs at the level
 		expect(result.status).toBe("failed")
 		const outcomeLines = (spy: typeof logDebug) =>
 			spy.mock.calls.map(([line]) => String(line)).filter((line) => / register_contract (refused|failed)/.test(line))
-		if (debugReason === undefined) {
+		if (typeof outcome === "object") {
 			expect(outcomeLines(logDebug)).toEqual([])
-			expect(logError).toHaveBeenCalledWith(expect.stringMatching(/executeOperations: register_contract failed:$/), "boom")
+			expect(logError).toHaveBeenCalledWith(expect.stringMatching(/executeOperations: register_contract failed$/), {
+				errorName: outcome.failed,
+			})
+			expect(JSON.stringify([...logDebug.mock.calls, ...logError.mock.calls])).not.toContain(FAILURE_ADDRESS.slice(2))
 		} else {
-			expect(outcomeLines(logDebug)).toEqual([
-				expect.stringMatching(new RegExp(`executeOperations: register_contract ${debugReason}$`)),
-			])
+			expect(outcomeLines(logDebug)).toEqual([expect.stringMatching(new RegExp(`executeOperations: register_contract ${outcome}$`))])
 			expect(outcomeLines(logError)).toEqual([])
 		}
 	})
