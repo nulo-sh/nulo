@@ -4,3 +4,6 @@
 - 2026-11-23 21:49Z plan audit: final Codex pass conditional approve, conditions applied, resumed: approve. Gate passed (auto-continue); arc 1 next
 - 2026-11-23 21:56Z arc 1 phase 1 gate green: guard test 20/20 (119 entries; delete and stray checks fail as designed), test:ci-gating 774 pass (ratchet: origin/dev predates the JSON), lint, typecheck:all
 - 2026-11-23 21:59Z arc 1 phase 2 gate green: wallet-core test 358+ pass, lint, typecheck:all
+- 2026-11-23 22:20Z arc 1 phase 3 gate green: lint, typecheck:all, test:all, test:release (7 zip tests fail: no zip on this host), staged wallet-crypto byte-identical; commit 516822810
+- 2026-11-23 22:38Z arc 1 phase 4 gate green: lint, typecheck:all, test:all, audit:vue, test:ci-gating, check:plans, rescore (trim 43), content script byte-identical, smoke 3 specs and network 3 specs at retry 0 on Chrome; baseline 66; commit 2ecbe62a8
+- 2026-11-23 22:50Z arc 1 review r1: Codex conditional approve (2 of 3 accepted), Opus conditional approve (5 of 6 accepted); baseline 64

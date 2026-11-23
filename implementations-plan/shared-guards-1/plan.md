@@ -1,7 +1,7 @@
 ---
 plan: shared-guards-1
 tier: mid
-status: plan approved by the final Codex pass; arc 1 next
+status: arc 1 in review
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -61,18 +61,18 @@ Issue #1928 (and the hex part of closed #1452). Three arcs, one PR each against 
 
 **The guard.** `apps/extension/src/utils/inline-guard-ban.test.ts` with `inline-guard-ban.reviewed.json` beside it, in the shape of `copy-dash-ban.test.ts` and `type-role-ban.test.ts`, reading files through `apps/extension/scripts/type-roles/source-scan.ts`.
 - Roots: `src` of every workspace under `apps/` and `packages/` whose `package.json` names `@nulo/wallet-core`, plus wallet-core itself, so a new dependent is read the day it adds the dependency. Extensions `ts`, `js`, `vue` (script blocks). Skipped: tests, stories, declarations, `wallet-core/src/utils/guards.ts` and `field.ts`.
-- Object finding, polarity-aware: in one run of `&&` (through parentheses), `typeof E === "object"` (or `==`) beside `E !== null`, `E != null` or `E` itself; or in one run of `||`, `typeof E !== "object"` (or `!=`) beside `E === null`, `E == null` or `!E` (either side of each comparison). `!Array.isArray(E)` in the `&&` run, or `Array.isArray(E)` in the `||` run, marks it `isRecord`-shaped. A mixed form (`typeof E === "object" || E === null`) is no finding.
+- Object finding, polarity-aware: in one run of `&&` (through parentheses), `typeof E === "object"` (or `==`) beside `E !== null`, `E != null`, `E` itself or `!!E`; or in one run of `||`, `typeof E !== "object"` (or `!=`) beside `E === null`, `E == null` or `!E` (either side of each comparison). `!Array.isArray(E)` in the `&&` run, or `Array.isArray(E)` in the `||` run, marks it `isRecord`-shaped. A mixed form (`typeof E === "object" || E === null`) is no finding.
 - Its text, the content key, is the whole run's source with whitespace collapsed, so any edit to an approved expression needs a fresh review; the failure message names the helper it restates as a hint.
-- Hex finding: a regex literal with a character class that holds a hex range (`a-f` or `A-F`) quantified exactly `{64}` (`/[z]{64}/` is no finding). Its text is the literal as written.
+- Hex finding: a regex literal with a character class that holds a hex range (`a-f` or `A-F`), right after `0x`, quantified exactly `{64}` (`/[z]{64}/` and a bare digest, `/^[0-9a-f]{64}$/`, are no finding: no helper has a digest's contract). Its text is the literal as written.
 - Review: findings and entries match as a multiset on file and text, so a moved line needs no edit. Fails on an open finding (the message prints a ready entry), on a stale entry, on an empty `why`, and on files out of order. Snippet cases pin each form and the non-findings (`typeof x === "object"` alone, a mixed-polarity form, a null test on another operand, `{1,64}`, `{8}`, `{64,}`, `[z]{64}`) and a `.vue` script block.
-- Shrink only (D8): `scripts/ci-cd/inline-guard-ratchet.test.ts` (in `test:ci-gating`) reads the reviewed JSON at the PR's base the way `complexity-baseline.test.ts` reads its manifest, and fails when the head holds an entry the base does not (multiset). The base-reading code moves out of `complexity-baseline.test.ts` into `scripts/ci-cd/ratchet-base.ts`, which both tests import. A base with no JSON (arc 1's own PR) has nothing to compare.
+- Shrink only (D8): `scripts/ci-cd/inline-guard-ratchet.test.ts` (in `test:ci-gating`) reads the reviewed JSON at the PR's base the way `complexity-baseline.test.ts` reads its manifest, and fails when the head holds an entry the base does not (multiset); a kept entry (its reason not `pending`) that its base file no longer holds may reappear with the same text in another file, so a kept site can move. The base-reading code moves out of `complexity-baseline.test.ts` into `scripts/ci-cd/ratchet-base.ts`, which both tests import. A base with no JSON (arc 1's own PR) has nothing to compare.
 - Header limits: a guard split across statements, a template expression, `new RegExp`, an alias of the operand.
 
 **Helpers.** `field.ts` exports `HEX_32` (D3). Arc 2 adds `isPlainObject` to `guards.ts`: a non-null object whose prototype is `Object.prototype` or `null`, `emit.ts`'s body (D2). No other wallet-core change.
 
 **Mapping proofs** (rule 3). `guards.test.ts` gains the falsy rows `0`, `""`, `false`, `NaN`, `0n` (they tell a truthiness test from a null test), and the table also asserts, per value, that `typeof v === "object" && v !== null`, `!!v && typeof v === "object"` equal `isObjectLike(v)` and that the `!Array.isArray` form equals `isRecord(v)`; arc 2 adds `isPlainObject` and its prototype form to the table. `errors.test.ts`: `x instanceof Error ? x.message : String(x)` equals `errorMessageFromUnknown(x)` over the same kinds plus an `Error` and a `{ message }` object. `toBase64` and `HEX_32` need none (F4, F5); nor does `sleep`, whose inline body is `sleep.ts:2` verbatim.
 
-**Kept sites** (differ, or cannot import). Each keeps its behaviour, takes a name that states its contract and a baseline entry with its reason, and its difference is pinned by a test.
+**Kept sites** (differ, or cannot import). Each keeps its behaviour, takes a name that states its contract and, where the ban finds it, a baseline entry with its reason, and its difference is pinned by a test.
 
 | Id | Site | Contract | Name | Pin |
 |---|---|---|---|---|
@@ -80,8 +80,8 @@ Issue #1928 (and the hex part of closed #1452). Three arcs, one PR each against 
 | K3 | `e2e/chrome-storage-token-seeds.ts:26` | lower-case only: seeds as the suite writes them | `LOWER_CASE_FIELD` | new case, arc 1: `0x` with upper-case digits is refused |
 | K4 | `dapp-interaction/approval-delta.ts:36` | lower-case only: the class id as the wallet read it | `LOWER_CASE_CLASS_ID` | new case, arc 2: `0x` with upper-case digits is refused |
 | K5 | `popup/pages/send-submit.ts:9` | either case, `0X` allowed | `TX_HASH_ANY_CASE` | new case, arc 3: a `0X` hash is offered |
-| K6 | `utils/restore-outcome.ts:31` | a backup checksum: 64 lower-case digits, no prefix | `LOWER_CASE_BACKUP_CHECKSUM` (was inline) | `restore-outcome.test.ts:72` (existing: an upper-case checksum is refused) |
-| K7 | `dapp-session/service.ts:65` | an HMAC-SHA-256 hash: 64 lower-case digits, no prefix | `VERIFICATION_HASH` (unchanged) | not a 32-byte field shape |
+| K6 | `utils/restore-outcome.ts:31` | a backup checksum: 64 lower-case digits, no prefix; no finding | `LOWER_CASE_BACKUP_CHECKSUM` (was inline) | `restore-outcome.test.ts:72` (existing: an upper-case checksum is refused) |
+| K7 | `dapp-session/service.ts:65` | an HMAC-SHA-256 hash: 64 lower-case digits, no prefix; no finding | `VERIFICATION_HASH` (unchanged) | not a 32-byte field shape |
 
 | K8 | `wallet-crypto/src/session-secret-box.ts:92-96` | the bearer token is encoded from a `Buffer` copy that is wiped; `toBase64` would leave an unwipeable latin1 string of the raw token | unchanged, one comment line | none: output is identical (F4) |
 | K9 | `backup/row-map-migration.ts:193-194` | prototype-only: a top-level transform map that is a function with a null prototype passes, which `isPlainObject` refuses | unchanged (no finding: no `typeof`) | none: migration maps are authored in source, never read from a file |
@@ -158,7 +158,7 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 | `popup/pages/send-submit.ts` | 9 | K5 | kept |
 | `extension-messaging/src/errors.ts` (held by PR #1945) | 90; 368; 372, 379 | `errorMessageFromUnknown`; `isHex32`; `isObjectLike` | same; PXE wire details |
 
-**Counts.** Same set and converted: 110 object guards, 3 hex literals, 3 message extractors, 1 delay, 2 base64 encodes, 1 stand-alone prototype check. Same set but kept inline: 1 (K1). Differs and kept: 7 (K3-K9). Differs and asked: 0. Baseline: 66 entries after arc 1 (60 pending; K1, K3-K7), 33 after arc 2, 6 after arc 3.
+**Counts.** Same set and converted: 110 object guards, 3 hex literals, 3 message extractors, 1 delay, 2 base64 encodes, 1 stand-alone prototype check. Same set but kept inline: 1 (K1). Differs and kept: 7 (K3-K9). Differs and asked: 0. Baseline: 64 entries after arc 1 (60 pending; K1, K3-K5), 31 after arc 2, 4 after arc 3.
 
 **Trade-offs** are in the decision ledger.
 
@@ -210,19 +210,19 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 1. Convert every arc-1 extension row; rename K1-K3; delete their pending entries; run `bun run baseline:rescore`, lower `trim`'s stamp to the observed score, then `bun run baseline:complexity`.
 2. Add K1's tagged-array case to `approval-filter.test.ts` and K3's `0x`-with-upper-case-digits case.
 
-**Validation gate** (the arc gate). From the root: `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run audit:vue`, `bun run test:ci-gating`, `bun run test:release`, `bun run check:plans`. Then `cmp` the built content script with the copy from phase 3. Then, at retry 0 on Chrome: from `apps/extension`, `NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 bun run test:e2e -- tests/e2e/account-import-export.test.ts --retry=0`; from the root, one run: `NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/tx-sendTx-feePayer.test.ts tests/e2e/network/tx-sendTx-fields.test.ts tests/e2e/network/scope-refusal.test.ts` (the network config retries twice unless `NULO_E2E_RETRY` says otherwise). Pass: every command exits 0, `cmp` reports no difference, the guard's baseline holds 66 entries. Layers: lint, typecheck, unit, build, publish staging, smoke and network e2e.
+**Validation gate** (the arc gate). From the root: `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run audit:vue`, `bun run test:ci-gating`, `bun run test:release`, `bun run check:plans`. Then `cmp` the built content script with the copy from phase 3. Then, at retry 0 on Chrome: from `apps/extension`, `NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 bun run test:e2e -- tests/e2e/account-import-export.test.ts --retry=0`; from the root, one run: `NULO_E2E_BROWSER=chrome NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/tx-sendTx-feePayer.test.ts tests/e2e/network/tx-sendTx-fields.test.ts tests/e2e/network/scope-refusal.test.ts` (the network config retries twice unless `NULO_E2E_RETRY` says otherwise). Pass: every command exits 0, `cmp` reports no difference, the guard's baseline holds 64 entries. Layers: lint, typecheck, unit, build, publish staging, smoke and network e2e.
 
 ### Phase 5 — extension, arc 2 files (arc 2)
 1. Add `isPlainObject` and its rows to `guards.test.ts`; add K4's upper-case case to `approval-delta.test.ts`.
 2. Convert every arc-2 row; delete their entries; lower `encodeValue`'s stamp as in phase 4.
 
-**Validation gate.** As phase 4's, without the content-script `cmp` and `test:release`; the network run, with the same two variables, is `tx-sendTx-default.test.ts register-token.test.ts session-reconnect.test.ts`. Pass: exit 0, `stored-shapes/snapshot.test.ts` among them (no stored shape changes); the baseline holds 33 entries. Layers: lint, typecheck, unit, build, network e2e.
+**Validation gate.** As phase 4's, without the content-script `cmp` and `test:release`; the network run, with the same two variables, is `tx-sendTx-default.test.ts register-token.test.ts session-reconnect.test.ts`. Pass: exit 0, `stored-shapes/snapshot.test.ts` among them (no stored shape changes); the baseline holds 31 entries. Layers: lint, typecheck, unit, build, network e2e.
 
 ### Phase 6 — the held files (arc 3)
 1. Rerun the inventory at the new base; add any new site to this arc's table.
 2. Convert every arc-3 row; add K5's `0X` case to `send-submit.test.ts`; move `applyRowTransform`'s stamp to the observed score as in phase 4.
 
-**Validation gate.** As phase 5's; the network run, with the same two variables, is `backup-restore-integrity.test.ts backup-migration-roundtrip.test.ts connect-dapp.test.ts`. Pass: exit 0; the baseline holds K1 and K3-K7 only. Layers: lint, typecheck, unit, build, network e2e.
+**Validation gate.** As phase 5's; the network run, with the same two variables, is `backup-restore-integrity.test.ts backup-migration-roundtrip.test.ts connect-dapp.test.ts`. Pass: exit 0; the baseline holds K1 and K3-K5 only. Layers: lint, typecheck, unit, build, network e2e.
 
 ## Delivery
 
@@ -249,6 +249,11 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 - **Codex r1** (`gpt-6.1-sol`, high, plan and outline B): reject, seven findings, all verified and accepted. K9: `row-map-migration.ts:193` is prototype-only and `canonicalizeTransformMap` hands `cloneJsonObject` a top-level map, so a function with a null prototype passes there and `isPlainObject` would refuse it (demonstrated); it stays. The content key is the run's text, and the matcher is polarity-aware (a mixed `||` form is no finding; `/[z]{64}/` is no finding). D8, the ratchet: without it a guard and its entry can land together. Pins must tell `0x` with upper-case digits from `0X`. `extension-messaging/src/errors.ts` is held by PR #1945, so it moves to arc 3 although the lines differ. F8 named `cloneJsonValue`; the site is in `applyRowTransform`. D5: the bearer token keeps its wiped `Buffer` copy (K8). It preferred outline A after the fixes.
 - **Opus r1** (Plan agent): conditional approve. Accepted: K2's claim did not hold (`pinned-tokens.ts` folds before it tests, so `isHex32` keeps its set; converted); `zeroize-sites.test.ts` pins the `Buffer` copies of `wrapPair`, so it asserts the one token copy; F8 restated (`complexity-rescore.test.ts` requires the stamp to equal the score); the published bytes are compared before and after staging; falsy rows in the mapping table; the label marks, the site table proves; `sleep`'s proof is its identical body; `HEX_32` is never frozen; arc 1's PR body warns the holders of baselined files. Superseded: a cap on `pending` entries (D8 is stronger). It confirmed every site's set, I1 by typechecking the two riskiest narrowings, and A over B.
 - **Final Codex pass** (fresh `gpt-6.1-sol` session, high): conditional approve; four conditions applied: every e2e command sets `NULO_E2E_RETRY=0` and Chrome explicitly; K1's pin is a tagged array that an `isRecord` guard would admit; K6 is named `LOWER_CASE_BACKUP_CHECKSUM` and cites its existing pin; recon marks its superseded statements. It found no set mismatch left and confirmed D8's fail-closed shape and A over B. Resumed with the applied conditions: **approve**.
+
+## Arc reviews
+
+- **Arc 1, Codex r1** (`gpt-6.1-sol`, high, diff `65182f8d1..2ecbe62a8`): conditional approve. Accepted: the scan's prefilter looked for `object`, so `typeof x === "\x6fbject"` escaped it (now `typeof`, with the case); `emit.ts`'s prototype check is `pending: same set as isPlainObject`. Reworded rather than deleted: the mapping-proof comment in `guards.test.ts`.
+- **Arc 1, Opus diff review** (general-purpose, opus): conditional approve; no set mismatch at any converted site. Accepted: a bare 64-digit digest has no helper, so the hex finding now needs `0x` before the class (K6 and K7 leave the baseline, 66 → 64); a kept entry may move files under the ratchet, which otherwise left a moved kept site no way through; `!!E` counts as a null exclusion; the ratchet's header claim. Rejected: failing closed on `predates` (reachable only by a PR that edits the gate's own path constants, and arc 1's own state).
 
 ## Seeds
 
