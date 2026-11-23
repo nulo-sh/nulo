@@ -21,8 +21,9 @@ const POLICY: SourcePolicy = { roots: SCAN_ROOTS, exts: ["vue", "css", "scss"], 
 const SRC = "apps/extension/src"
 const PAGES = `${SRC}/popup/pages/`
 const SHARED_SHEET = `${SRC}/popup/components/modules/tx/detail-shared.module.css`
-/** The extension's Vite aliases that reach `src`; each SFC it bundles, `@nulo/design`'s included, resolves through them. */
-const ALIASES = ["@/", "~/", "src/"]
+/** The extension's Vite aliases for `src` and its root-relative path: every SFC it bundles,
+ *  `@nulo/design`'s included, resolves through them. */
+const ALIASES = ["@/", "~/", "src/", "/src/"]
 
 type Composition = { file: string; target: string }
 
@@ -33,7 +34,6 @@ function resolveSheet(file: string, spec: string): string | undefined {
 	return alias === undefined ? undefined : posix.join(SRC, spec.slice(alias.length))
 }
 
-/** Every `composes … from "<sheet>"` in `source`; `from global` names no sheet. */
 function compositions(file: string, source: string): Composition[] {
 	return parseSource(file, source).styles.flatMap(({ root }) => {
 		const found: Composition[] = []
@@ -83,6 +83,7 @@ describe("no stylesheet below the pages composes from a page's sheet", () => {
 		],
 		["a page from a page's sheet", `${PAGES}tx/[id].vue`, style('composes: x from "../empty-state.module.css";'), 0],
 		["a sibling sheet", MODULE, style('composes: x from "./detail-shared.module.css";'), 0],
+		["the root-relative path", MODULE, style('composes: x from "/src/popup/pages/x.module.css";'), 1],
 		["global", MODULE, style("composes: type--meta from global;"), 0],
 	])("%s", (_case, file, source, count) => {
 		expect(compositions(file, source).filter(upward)).toHaveLength(count)
