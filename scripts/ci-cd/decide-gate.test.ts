@@ -20,15 +20,25 @@ import { join } from "node:path"
 
 const ROOT = join(import.meta.dir, "..", "..")
 
-/** Run the gate with the given env: its exit code, and what it wrote to `$GITHUB_OUTPUT`. */
-function runGate(over: Record<string, string>): { code: number | null; output: string } {
+/** Run the gate with the given env, less `unset`: its exit code, and what it wrote to `$GITHUB_OUTPUT`. */
+function runGate(over: Record<string, string>, unset: string[] = []): { code: number | null; output: string } {
 	const dir = mkdtempSync(join(tmpdir(), "decide-gate-"))
 	try {
 		const out = join(dir, "output")
-		const env = { PATH: process.env.PATH ?? "/usr/bin:/bin", EVENT: "pull_request", BASE: "dev", LABEL_HIT: "false", SURFACE: "false" }
+		const defaults = {
+			PATH: process.env.PATH ?? "/usr/bin:/bin",
+			EVENT: "pull_request",
+			BASE: "dev",
+			LABEL_HIT: "false",
+			BUILD: "false",
+			SURFACE: "false",
+		}
+		const env = Object.fromEntries(
+			Object.entries({ ...defaults, ...over, GITHUB_OUTPUT: out }).filter(([name]) => !unset.includes(name)),
+		)
 		const r = spawnSync("bash", ["scripts/ci-cd/e2e-decide.sh"], {
 			cwd: ROOT,
-			env: { ...env, ...over, GITHUB_OUTPUT: out },
+			env,
 			encoding: "utf8",
 		})
 		return { code: r.status, output: r.status === 0 ? readFileSync(out, "utf8").trim() : "" }
@@ -51,6 +61,11 @@ describe("the e2e Decide gate", () => {
 
 	test("a relevant diff runs the suite on dev", () => {
 		expect(decided({ SURFACE: "true" })).toBe("run=true")
+	})
+
+	test("a diff that touches only the extension's build inputs runs the suite", () => {
+		expect(decided({ BUILD: "true" })).toBe("run=true")
+		expect(decided({ BASE: "log-safety/03-call-sites", BUILD: "true" })).toBe("run=true")
 	})
 
 	test("an irrelevant diff still skips — the filter is what decides", () => {
@@ -78,8 +93,15 @@ describe("the e2e Decide gate", () => {
 	})
 
 	// A filter output that never arrived would otherwise read as an untouched surface and skip.
-	test.each(["", "yes"])("refuses a paths-filter verdict of %j", (value) => {
-		expect(runGate({ SURFACE: value }).code).not.toBe(0)
+	test.each(["BUILD", "SURFACE"].flatMap((name) => ["", "yes"].map((value) => [name, value])))(
+		"refuses a %s verdict of %j",
+		(name, value) => {
+			expect(runGate({ [name]: value }).code).not.toBe(0)
+		},
+	)
+
+	test("refuses a lane that never passes the build-input verdict, even on a surface hit", () => {
+		expect(runGate({ SURFACE: "true" }, ["BUILD"]).code).not.toBe(0)
 	})
 
 	test("refuses a pull request with no base", () => {
