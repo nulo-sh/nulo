@@ -1,7 +1,7 @@
 ---
 plan: ci-path-filter-1
 tier: light
-status: in progress
+status: completed
 issues: "#1932"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at c0eb5d072
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-23. Planned and delivered as one arc, PR #1944 into `dev`; its merge archives this plan and closes #1932.
+- **Status:** completed.
+- **Shipped:** the extension's build inputs live once, in `.github/path-filters/extension-build.yml`, which pr-quick and the four e2e lanes load in a `build` step beside their own entries; `e2e-decide.sh` and pr-quick's compute step take both verdicts and refuse a malformed one; `behavior-gating.test.ts` derives the set from the package graph and holds the source and every lane to it exactly, pins each filter step's shape and the landing's root coverage. pr-quick's unread per-package groups and outputs went, and its notices group was renamed (D7, D8).
+- **Proof:** on the opening head `5a5b8a530` every lane's `changes` job computed both verdicts `true` with exactly the matches this diff should give, every required check passed (54 pass, 4 skipped by design), and its `quality-status` ran the fixture test comparing every lane's effective set with `c0eb5d072`'s. The close-out retired the fixture (D3).
+- **Review:** Codex r1 over the plan `approve with changes` (three fixes); Codex over the diff `clean` (two comment nits); the Opus lens `findings (2)`; Codex verify `clean` (Audit verdicts).
+- **Gates:** G1 to G4 green at `5a5b8a530` and after the close-out; `test:release` fails locally only on the host's missing `zip` (lessons/phase-1.md).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` sits at its budget, and the one gotcha (a filter step reads one source; two verdicts combine in the shell, since `'false'` is truthy in an expression) now lives in `CI.md` § CI gating and the guard.
+- **Seeds retired:** the `/goal` below is a record, not an instruction.
 
 # ci-path-filter-1: one source for the extension lanes' build-input path filter
 
