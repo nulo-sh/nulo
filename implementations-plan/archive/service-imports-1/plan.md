@@ -112,7 +112,7 @@ One arc, one PR, no stack: `worktree-service-imports-1` → `dev`, `gh pr create
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `7a766e676`, as bounded work: one Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and the diff from `7a766e676`, then targeted verification of material fixes. Close-out ships in the same PR: Outcome, `STATUS.md` deleted, `git mv` into `archive/`. Never merge; teardown after the orchestrator's merge, slug `service-imports-1`, trunk `dev`.
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `7a766e676`, as bounded work: one Codex pass (`run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`) over this plan and the diff from `7a766e676`, then targeted verification of material fixes. Close-out ships in the same PR: Outcome, `STATUS.md` deleted, `git mv` into `archive/`. Never merge; teardown after the orchestrator's merge, slug `service-imports-1`, trunk `dev`.
 
 ## Seeds
 
