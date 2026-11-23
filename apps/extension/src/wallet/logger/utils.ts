@@ -71,7 +71,8 @@ const MAX_LOG_DATA_DEPTH = 6
 const MAX_ERROR_MESSAGE_CHARS = 200
 
 /**
- * Keys whose value is a secret, or the ciphertext of one, and is never diagnostically useful.
+ * Keys whose value never belongs in a log: a secret, the ciphertext of one, or a set of addresses
+ * whose count is the whole diagnostic.
  *
  * Both casings appear: the in-memory/RPC layer is camelCase, exported backup JSON is kebab-case,
  * and a backup blob walked by a logger would otherwise slip through under the other spelling.
@@ -134,6 +135,8 @@ export const REDACTED_KEYS: ReadonlySet<string> = new Set([
 	// Aztec-side secrets that reach us through the bridge/runtime types.
 	"claimSecret",
 	"claim-secret",
+	// A dApp's viewing scopes: whose private state it may read. In no stored shape, so camelCase only.
+	"additionalScopes",
 ])
 
 /**

@@ -920,6 +920,23 @@ describe("DappSendExecutor.executeNoFromSendTx (via default_entrypoint)", () => 
 		expect(proveCtx.scopes).toEqual([built.account.address, scopeADup, scopeB])
 	})
 
+	test("its debug lines carry how many scopes the app named, never the scope addresses", async () => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		// As the dispatch parse hands them over: address instances, which serialize to their hex.
+		const scopes = [AztecAddress.fromNumberUnsafe(0x5c5c), AztecAddress.fromNumberUnsafe(0x5d5d)]
+		const { executor, deps } = makeHarness()
+		await executor.executeAztecSendTx(
+			makeNoFromOp({ opts: { from: addr("0xacct"), additionalScopes: scopes, wait: "NO_WAIT" } }),
+			ORIGIN,
+			undefined,
+			undefined,
+			FENCE,
+		)
+		const lines = vi.mocked(deps.logDebug).mock.calls.flatMap((call) => call.filter((arg): arg is string => typeof arg === "string"))
+		expect(lines.filter((line) => scopes.some((scope) => line.includes(scope.toString().slice(2))))).toEqual([])
+		expect(lines).toContainEqual(expect.stringContaining("additionalScopes=2"))
+	})
+
 	const authEffect = (tag: string) => ({ data: [tag], contractAddress: addr("0xconsumer") })
 
 	test("chain identity rebind: with effects, the live pair is fetched once and a matching pair signs", async () => {
@@ -3045,9 +3062,9 @@ describe("DappSendExecutor: the journal title thunk and the offchain output", ()
 	})
 
 	test.each([
-		["standard", false, 0],
-		["NO_FROM", true, 1],
-	])("%s: the call list is read for the title only after acquireSlot", async (_label, noFrom, readsBeforeSlot) => {
+		["standard", false],
+		["NO_FROM", true],
+	])("%s: the call list is read for the title only after acquireSlot", async (_label, noFrom) => {
 		collectOffchainEffectsMock.mockReturnValue([])
 		const trace: string[] = []
 		const { executor, deps } = makeHarness()
@@ -3065,8 +3082,7 @@ describe("DappSendExecutor: the journal title thunk and the offchain output", ()
 			},
 		})
 		await executor.executeAztecSendTx(noFrom ? NO_FROM({ exec }) : makeAztecOp({ exec }), ORIGIN, undefined, undefined, FENCE)
-		// NO_FROM's opening debug line counts the calls once before it enqueues.
-		expect(trace.indexOf("acquireSlot")).toBe(readsBeforeSlot)
+		expect(trace.indexOf("acquireSlot")).toBe(0)
 	})
 
 	test.each([

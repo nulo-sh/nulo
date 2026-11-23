@@ -72,6 +72,14 @@ describe("trim — secret key names", () => {
 		expect(out.secretKey).toBe("[secretKey]")
 	})
 
+	test("blanks a dApp's viewing scopes, whose count is the whole diagnostic", () => {
+		const out = trim({ additionalScopes: [SECRET, SECRET], keepMe: "visible" }) as Record<string, unknown>
+
+		expect(JSON.stringify(out)).not.toContain(SECRET)
+		expect(out.additionalScopes).toBe("[additionalScopes]")
+		expect(out.keepMe).toBe("visible")
+	})
+
 	test("blanks the whole *SecretKey family by suffix", () => {
 		const out = trim({
 			masterNullifierSecretKey: SECRET,
