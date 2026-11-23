@@ -16,6 +16,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { MOVE_APPROVED_LABEL } from "../complexity-baseline/scan"
 import { runStep } from "./gh-step-harness"
+import { RENAMES } from "./required-checks"
 
 const ROOT = join(import.meta.dir, "..", "..")
 // apps/ vs packages/ split (FLAT layout): deployable leaves live under apps/, libs under packages/.
@@ -164,8 +165,7 @@ describe("CI aggregator check names", () => {
 		}
 	})
 
-	test("the protection runbook renames onto exactly these names", async () => {
-		const { RENAMES } = await import("./required-checks")
+	test("the protection runbook renames onto exactly these names", () => {
 		for (const target of Object.values(RENAMES)) {
 			expect(Object.values(AGGREGATOR_CHECKS), `rename target '${target}' must be a produced check`).toContain(target)
 		}
