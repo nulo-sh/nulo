@@ -12,6 +12,7 @@
 import { exportPublicKey, generateKeyPair } from "@aztec-labs/wallet-sdk/crypto"
 import { BackgroundConnectionHandler, type BackgroundTransport, type MessageSender } from "@aztec-labs/wallet-sdk/extension/handlers"
 import { RECEIVER_GONE_MESSAGE } from "@nulo/extension-messaging/errors"
+import { type Deferred, deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 type Listener = (message: unknown, sender: MessageSender) => void
@@ -26,6 +27,7 @@ vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
 import { initWalletSdkHandler } from "./background"
 import { MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS } from "./content-script-validator"
+import { DISCOVERY_BURST, DISCOVERY_REFILL_MS } from "./discovery-pacing"
 import { SESSION_DISCONNECTED } from "./stale-session"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN, fakeSdkServices } from "./test-services"
@@ -84,7 +86,7 @@ function boot(
 }
 
 /** Window ports whose `closeAll` reports every window opened so far as closed, as the browser does. */
-function closableWindows(): { ports: ReturnType<typeof fakeSdkPorts>; closeAll: () => void } {
+function closableWindows(): { ports: ReturnType<typeof fakeSdkPorts>; closeAll: () => void; openCount: () => number } {
 	const listeners: Array<(windowId: number) => void> = []
 	const open: number[] = []
 	let next = 1
@@ -104,6 +106,7 @@ function closableWindows(): { ports: ReturnType<typeof fakeSdkPorts>; closeAll: 
 		closeAll: () => {
 			for (const id of open.splice(0)) for (const listener of listeners) listener(id)
 		},
+		openCount: () => open.length,
 	}
 }
 
@@ -165,6 +168,7 @@ beforeEach(() => {
 	vi.stubGlobal("__VERSION__", "test")
 })
 afterEach(() => {
+	vi.useRealTimers()
 	vi.restoreAllMocks()
 	vi.unstubAllGlobals()
 	vi.unstubAllEnvs()
@@ -481,6 +485,107 @@ describe("a discovery under an id the wallet already holds", () => {
 		await establish(deliver, "s2", OTHER_TAB)
 		expect(handler.getSession("s2")?.tabId).toBe(OTHER_TAB)
 		expect(handler.getSession("s1")?.tabId).toBe(TAB)
+	})
+})
+
+describe("an approval decided for a discovery whose tab has since closed", () => {
+	const OTHER_SITE = "https://other.example"
+	const otherSite = (tab: number) =>
+		({ tab: { id: tab, url: `${OTHER_SITE}/` }, frameId: 0, origin: OTHER_SITE, url: `${OTHER_SITE}/` }) as MessageSender
+	const approvedIn = (tab: number) => sentTo(tab).filter((message) => (message as { type?: string }).type === "discovery-approved")
+	/** Connect windows, each answered when the test resolves its entry, in the order they opened. */
+	function connectWindows() {
+		const answers: Array<Deferred<{ approved: boolean }>> = []
+		const popup = () => {
+			const answer = deferred<{ approved: boolean }>()
+			answers.push(answer)
+			return answer.promise
+		}
+		return { popup, answers }
+	}
+
+	test("the Allow given in its connect window does not approve another tab's discovery under the freed id", async () => {
+		const windows = connectWindows()
+		let rolledBack = false
+		const { handler, deliver } = boot(fakeSdkPorts(), {
+			popup: windows.popup,
+			beforeDelete: async () => {
+				rolledBack = true
+			},
+		})
+		deliver(discovery("p"))
+		await vi.waitFor(() => expect(windows.answers).toHaveLength(1))
+		handler.terminateForTab(TAB)
+		deliver(discovery("p"), otherSite(OTHER_TAB))
+		await vi.waitFor(() => expect(windows.answers).toHaveLength(2))
+
+		windows.answers[0]?.resolve({ approved: true })
+		await vi.waitFor(() => expect(rolledBack || approvedIn(OTHER_TAB).length > 0).toBe(true))
+
+		expect(approvedIn(OTHER_TAB)).toEqual([])
+		expect(handler.getPendingDiscovery("p")).toMatchObject({ tabId: OTHER_TAB, status: "pending" })
+	})
+
+	test("the Allow approves its own discovery while its tab is open (control)", async () => {
+		const windows = connectWindows()
+		const { handler, deliver } = boot(fakeSdkPorts(), { popup: windows.popup })
+		deliver(discovery("p"))
+		await vi.waitFor(() => expect(windows.answers).toHaveLength(1))
+
+		windows.answers[0]?.resolve({ approved: true })
+
+		await vi.waitFor(() => expect(approvedIn(TAB)).toHaveLength(1))
+		expect(handler.getPendingDiscovery("p")).toMatchObject({ tabId: TAB, status: "approved" })
+	})
+
+	test("a handshake waiting for a verify window does not approve another tab's discovery under the freed id", async () => {
+		const verify = closableWindows()
+		const { handler, deliver } = boot(verify.ports, { remembered: true, popup: connectWindows().popup })
+		await establish(deliver, "s1")
+		await establish(deliver, "s2")
+		await vi.waitFor(() => expect(verify.openCount()).toBe(2))
+		deliver(discovery("q"), sender(5))
+		await flush()
+		expect(approvedIn(5)).toEqual([])
+		handler.terminateForTab(5)
+		deliver(discovery("q"), otherSite(OTHER_TAB))
+		await flush()
+
+		verify.closeAll()
+		await flush()
+
+		expect(approvedIn(OTHER_TAB)).toEqual([])
+		expect(handler.getPendingDiscovery("q")).toMatchObject({ tabId: OTHER_TAB, status: "pending" })
+	})
+
+	test("a handshake waiting for a verify window is approved once one closes, its tab still open (control)", async () => {
+		const verify = closableWindows()
+		const { handler, deliver } = boot(verify.ports)
+		await establish(deliver, "s1")
+		await establish(deliver, "s2")
+		await vi.waitFor(() => expect(verify.openCount()).toBe(2))
+		deliver(discovery("q"), sender(5))
+		await flush()
+		expect(approvedIn(5)).toEqual([])
+
+		verify.closeAll()
+
+		await vi.waitFor(() => expect(approvedIn(5)).toHaveLength(1))
+		expect(handler.getPendingDiscovery("q")).toMatchObject({ tabId: 5, status: "approved" })
+	})
+})
+
+describe("a tab's discoveries, paced before the handler records them", () => {
+	test("of 200 discoveries from one tab only a burst reaches the handler, and one more after a refill (control)", async () => {
+		vi.useFakeTimers()
+		const { deliver } = boot()
+		for (let i = 0; i < 200; i++) deliver(discovery(`d${i}`))
+		await flush()
+		expect(sdkListener).toHaveBeenCalledTimes(DISCOVERY_BURST)
+		vi.setSystemTime(Date.now() + DISCOVERY_REFILL_MS)
+		deliver(discovery("after-refill"))
+		expect(sdkListener).toHaveBeenCalledTimes(DISCOVERY_BURST + 1)
+		expect(sdkListener).toHaveBeenLastCalledWith(discovery("after-refill"), sender(TAB))
 	})
 })
 

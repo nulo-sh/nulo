@@ -5,6 +5,7 @@ import type { ILogger } from "@/wallet/logger"
 import type { ProfileService, ProfileInfo } from "@/wallet/services/profile/service"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import type { TxOrigin } from "@/wallet/services/transaction/service"
+import { OriginType } from "@/wallet/services/transaction/spec"
 import { randomIdNotIn } from "@/wallet/services/id-allocators"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import {
@@ -17,6 +18,7 @@ import {
 	type Methods,
 	type Events,
 	TASK_RETENTION_PERIOD_MS,
+	FINISHED_DAPP_ROOTS_KEPT,
 } from "./spec"
 import { WrappedTask } from "./wrapped-task"
 
@@ -63,6 +65,7 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 		if (parent?.finishedAt) {
 			throw new Error(`Cannot add task to finished parent ${parentId}`)
 		}
+		this.cleanupStaleTasks()
 
 		const newTask: Task = {
 			id: taskId,
@@ -147,6 +150,7 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 		task.result = result
 		task.status = TaskStatus.Completed
 		this.emit("onTaskUpdated", task)
+		this.boundFinishedDappRoots(task)
 	}
 
 	/**
@@ -163,6 +167,7 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 		task.finishedAt = Date.now()
 		task.status = TaskStatus.Failed
 		this.emit("onTaskUpdated", task)
+		this.boundFinishedDappRoots(task)
 	}
 
 	/**
@@ -176,6 +181,7 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 		task.finishedAt = Date.now()
 		task.status = TaskStatus.Cancelled
 		this.emit("onTaskUpdated", task)
+		this.boundFinishedDappRoots(task)
 	}
 
 	public startTask(taskId: string): void {
@@ -238,6 +244,16 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 		for (const root of staleRoots) {
 			this.deleteTaskTree(root.id)
 		}
+	}
+
+	/** Runs after a finish is emitted, so its listeners read the task before any drop. */
+	private boundFinishedDappRoots(finished: Task): void {
+		if (finished.parentId !== undefined || finished.origin?.type !== OriginType.DAPP) return
+		const roots = this.getRootTasks().filter((t) => t.finishedAt !== undefined && t.origin?.type === OriginType.DAPP)
+		if (roots.length <= FINISHED_DAPP_ROOTS_KEPT) return
+		// A stable sort: roots finished in the same millisecond keep their insertion order.
+		roots.sort((a, b) => (a.finishedAt ?? 0) - (b.finishedAt ?? 0))
+		for (const root of roots.slice(0, roots.length - FINISHED_DAPP_ROOTS_KEPT)) this.deleteTaskTree(root.id)
 	}
 
 	private deleteTaskTree(taskId: string): void {
