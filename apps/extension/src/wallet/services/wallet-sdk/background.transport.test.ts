@@ -26,6 +26,7 @@ vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
 import { initWalletSdkHandler } from "./background"
 import { MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS } from "./content-script-validator"
+import { DISCOVERY_BURST, DISCOVERY_REFILL_MS } from "./discovery-pacing"
 import { SESSION_DISCONNECTED } from "./stale-session"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN, fakeSdkServices } from "./test-services"
@@ -165,6 +166,7 @@ beforeEach(() => {
 	vi.stubGlobal("__VERSION__", "test")
 })
 afterEach(() => {
+	vi.useRealTimers()
 	vi.restoreAllMocks()
 	vi.unstubAllGlobals()
 	vi.unstubAllEnvs()
@@ -481,6 +483,20 @@ describe("a discovery under an id the wallet already holds", () => {
 		await establish(deliver, "s2", OTHER_TAB)
 		expect(handler.getSession("s2")?.tabId).toBe(OTHER_TAB)
 		expect(handler.getSession("s1")?.tabId).toBe(TAB)
+	})
+})
+
+describe("a tab's discoveries, paced before the handler records them", () => {
+	test("of 200 discoveries from one tab only a burst reaches the handler, and one more after a refill (control)", async () => {
+		vi.useFakeTimers()
+		const { deliver } = boot()
+		for (let i = 0; i < 200; i++) deliver(discovery(`d${i}`))
+		await flush()
+		expect(sdkListener).toHaveBeenCalledTimes(DISCOVERY_BURST)
+		vi.setSystemTime(Date.now() + DISCOVERY_REFILL_MS)
+		deliver(discovery("after-refill"))
+		expect(sdkListener).toHaveBeenCalledTimes(DISCOVERY_BURST + 1)
+		expect(sdkListener).toHaveBeenLastCalledWith(discovery("after-refill"), sender(TAB))
 	})
 })
 
