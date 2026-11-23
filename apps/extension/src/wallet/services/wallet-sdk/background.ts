@@ -64,6 +64,7 @@ import { describeExternalId, DiscoveryQueue, type INetworkReader, WalletSdkDispa
 import type { ClockPort, WindowPort } from "@nulo/wallet-core/ports"
 import type { KeyedLock } from "@nulo/wallet-core/utils"
 import { VerifyAdmissionGate } from "./verify-admission"
+import { DiscoveryPacing } from "./discovery-pacing"
 import { type DiscoveryDeps, fitUnlockWindow, handleDiscovery, type PendingWindow } from "./discovery-flow"
 import { handleSessionEstablished } from "./session-established"
 import { wireSessionTeardown } from "./session-revocation"
@@ -113,6 +114,7 @@ export function initWalletSdkHandler(
 				const held = state.late.handler
 				return held !== undefined && (held.getSession(id) !== undefined || held.getPendingDiscovery(id) !== undefined)
 			},
+			discoveryPaced: (tabId) => state.discoveryPacing.admit(tabId),
 		}),
 		buildHandlerCallbacks(deps, state, ports.windows),
 	)
@@ -274,6 +276,8 @@ type SdkHandlerState = {
 	pendingDiscoveryPromises: Map<string, PendingWindow>
 	/** Per-origin reconnect throttle and verify-window budget (see `verify-admission.ts`). */
 	admission: VerifyAdmissionGate
+	/** Per-tab rate of discoveries admitted from content scripts (see `discovery-pacing.ts`). */
+	discoveryPacing: DiscoveryPacing
 	/** Handshakes currently waiting on another popup for the same `(origin, chainId)`, bounded. */
 	dedupeWaiters: Map<string, number>
 	/**
@@ -293,6 +297,7 @@ export function createSdkHandlerState(ports: { windows: WindowPort; clock: Clock
 			// A marker still waiting when its slot is given back is tombstoned: that id can no longer establish.
 			released: (id) => cancelPendingVerification(pendingVerification, id),
 		}),
+		discoveryPacing: new DiscoveryPacing(ports.clock),
 		dedupeWaiters: new Map(),
 		late: {},
 	}

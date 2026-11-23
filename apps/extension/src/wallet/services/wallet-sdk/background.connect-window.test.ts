@@ -39,8 +39,19 @@ let nextResponse: Promise<void> | undefined
 
 vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 	BackgroundConnectionHandler: class {
+		/** An id's row is the object last handed to `onPendingDiscovery`; rows are never removed. */
+		readonly rows = new Map<string, unknown>()
 		constructor(_meta: unknown, _transport: unknown, callbacks: Callbacks) {
-			captured = callbacks
+			captured = {
+				...callbacks,
+				onPendingDiscovery: (d) => {
+					this.rows.set((d as { requestId: string }).requestId, d)
+					callbacks.onPendingDiscovery(d)
+				},
+			}
+		}
+		getPendingDiscovery(id: string) {
+			return this.rows.get(id)
 		}
 		handleEncryptedMessage(sessionId: string, encrypted: unknown) {
 			return decryptHook(sessionId, encrypted)

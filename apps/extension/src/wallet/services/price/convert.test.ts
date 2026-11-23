@@ -1,5 +1,15 @@
 import { describe, expect, test } from "vitest"
-import { formatUsdMicro, parseUsdToMicro, rateToMicroUsd, tokenAmountToUsdMicro, usdMicroToTokenAmount, usdToTokenAmount } from "./convert"
+import { MIN_FEED_USD } from "@nulo/token-list"
+import {
+	formatUsdMicro,
+	parseUsdToMicro,
+	rateToMicroUsd,
+	rateToMicroUsdCeil,
+	tokenAmountToUsdMicro,
+	usdMicroToPlainString,
+	usdMicroToTokenAmount,
+	usdToTokenAmount,
+} from "./convert"
 
 describe("rateToMicroUsd", () => {
 	test("snaps a provider rate to micro-USD", () => {
@@ -130,9 +140,7 @@ describe("usdMicroToTokenAmount / usdToTokenAmount (C3 inverse, round-DOWN)", ()
 })
 
 describe("the lowest band a list feed may name", () => {
-	test("at $0.0001 the snapped rate is within 0.5% of the quote for display and 1% for dollar entry", async () => {
-		const { rateToMicroUsdCeil } = await import("./convert")
-		const { MIN_FEED_USD } = await import("@nulo/token-list")
+	test("at $0.0001 the snapped rate is within 0.5% of the quote for display and 1% for dollar entry", () => {
 		for (const usd of [MIN_FEED_USD, 0.000_149_99, 0.000_150_01, 0.000_199_9]) {
 			const micro = usd * 1_000_000
 			expect(Math.abs(Number(rateToMicroUsd(usd)) - micro) / micro).toBeLessThanOrEqual(0.005)
@@ -142,8 +150,7 @@ describe("the lowest band a list feed may name", () => {
 })
 
 describe("ceil rate + machine formatting", () => {
-	test("the C3 inverse uses a CEILED rate: sub-micro rates never yield extra tokens", async () => {
-		const { rateToMicroUsdCeil, usdMicroToTokenAmount } = await import("./convert")
+	test("the C3 inverse uses a CEILED rate: sub-micro rates never yield extra tokens", () => {
 		// 0.0000014 above the micro grid: round would floor the rate (more tokens), ceil must not.
 		expect(rateToMicroUsdCeil(1.0000014)).toBe(1_000_002n)
 		expect(rateToMicroUsd(1.0000014)).toBe(1_000_001n)
@@ -152,8 +159,7 @@ describe("ceil rate + machine formatting", () => {
 		expect(viaCeil * 1_000_002n <= 1_000_000n * 10n ** 6n).toBe(true)
 	})
 
-	test("usdMicroToPlainString is locale-proof machine format", async () => {
-		const { usdMicroToPlainString } = await import("./convert")
+	test("usdMicroToPlainString is locale-proof machine format", () => {
 		expect(usdMicroToPlainString(1_250_000_000n)).toBe("1250")
 		expect(usdMicroToPlainString(1_250_500_000n)).toBe("1250.5")
 		expect(usdMicroToPlainString(4_999n)).toBe("0.004999")

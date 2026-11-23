@@ -8,6 +8,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import {
 	TaskService,
 	TASK_RETENTION_PERIOD_MS,
+	FINISHED_DAPP_ROOTS_KEPT,
 	StepContent,
 	TaskStatus,
 	ContentKind,
@@ -15,6 +16,7 @@ import {
 	type ITaskResult,
 	ResultKind,
 	type Events,
+	type WrappedTask,
 } from "./service"
 
 class TestResult implements ITaskResult {
@@ -456,5 +458,62 @@ describe("Task Tree Implementation", () => {
 			switchToProfile({ id: "A", name: "A", type: "password" })
 			expect((await service.getTasks()).length).toBe(2)
 		})
+	})
+})
+
+describe("finished dApp roots kept", () => {
+	const DAPP: TxOrigin = { type: OriginType.DAPP, name: "https://dapp.example" }
+	const finishers = [(t: WrappedTask) => t.complete(), (t: WrappedTask) => t.fail(new Error("reverted")), (t: WrappedTask) => t.cancel()]
+
+	test("past the bound the earliest-finished dApp roots go, each tree right after the finish that pushes it out", async () => {
+		const { service } = await createTestSetup()
+		const log: string[] = []
+		service.onTaskUpdated.add((t) => {
+			if (t.finishedAt !== undefined && !t.parentId) log.push(`finished ${t.id}`)
+		})
+		service.onTaskDeleted.add((t) => log.push(`deleted ${t.id}`))
+		const open = service.startNewTask(new StepContent("open"), undefined, DAPP)
+		const ui = service.startNewTask(new StepContent("ui"), undefined, { type: OriginType.UI })
+		ui.complete()
+		const trees = Array.from({ length: FINISHED_DAPP_ROOTS_KEPT + 50 }, (_, i) => {
+			const root = service.startNewTask(new StepContent(`r${i}`), undefined, DAPP)
+			const leaf = root.startSubtask(new StepContent(`s${i}`))
+			leaf.complete()
+			return { root, leaf }
+		})
+
+		// Finished in reverse creation order, a millisecond apart, so the order dropped is the order finished.
+		const finishOrder = [...trees].reverse()
+		const start = Date.now()
+		finishOrder.forEach(({ root }, i) => {
+			vi.setSystemTime(start + i + 1)
+			finishers[i % finishers.length]?.(root)
+		})
+
+		const dropped = finishOrder.slice(0, 50)
+		const kept = finishOrder.slice(50)
+		expect(dropped.filter(({ root, leaf }) => service.hasTask(root.id) || service.hasTask(leaf.id))).toEqual([])
+		expect(kept.filter(({ root, leaf }) => !service.hasTask(root.id) || !service.hasTask(leaf.id))).toEqual([])
+		expect([service.hasTask(open.id), service.hasTask(ui.id)]).toEqual([true, true])
+		expect(log.filter((entry) => entry.startsWith("deleted"))).toHaveLength(100)
+		dropped.forEach(({ root, leaf }, j) => {
+			const pushedOut = `finished ${finishOrder[FINISHED_DAPP_ROOTS_KEPT + j]?.root.id}`
+			const at = log.indexOf(pushedOut)
+			expect(log.slice(at, at + 3)).toEqual([pushedOut, `deleted ${leaf.id}`, `deleted ${root.id}`])
+		})
+	})
+
+	test("creating a task drops a root finished past the retention period, with no read in between", async () => {
+		const { service } = await createTestSetup()
+		const old = service.startNewTask(new StepContent("old"), undefined, DAPP)
+		old.complete()
+		vi.setSystemTime(Date.now() + TASK_RETENTION_PERIOD_MS + 1000)
+		const deleted = vi.fn()
+		service.onTaskDeleted.add(deleted)
+
+		service.startNewTask(new StepContent("new"))
+
+		expect(service.hasTask(old.id)).toBe(false)
+		expect(deleted).toHaveBeenCalledWith(expect.objectContaining({ id: old.id }))
 	})
 })
