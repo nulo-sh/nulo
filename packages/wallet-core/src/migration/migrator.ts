@@ -48,6 +48,7 @@
 import type { Migration, MigrationContext, MigrationResult, MinimalStorageArea, StorageRef } from "./types"
 import { StagingArea } from "./staging"
 import { errorMessageFromUnknown } from "../utils/errors"
+import { isObjectLike, isRecord } from "../utils/guards"
 import { raceTimeout } from "../utils/race"
 
 /** The engine's own durable keys. The whole `nulo:schema:` prefix is reserved:
@@ -101,7 +102,7 @@ type BackupPayload = { version: number; refs: StorageRef[]; entries: Record<stri
 type AttemptRecord = { version: number; phase: "up" | "restore"; count: number }
 
 function isValidRef(r: unknown): r is StorageRef {
-	if (typeof r !== "object" || r === null) return false
+	if (!isObjectLike(r)) return false
 	const ref = r as { kind?: unknown; root?: unknown; key?: unknown }
 	if (ref.kind === "root") return typeof ref.root === "string" && ref.root.length > 0
 	if (ref.kind === "value") return typeof ref.key === "string" && ref.key.length > 0
@@ -111,16 +112,9 @@ function isValidRef(r: unknown): r is StorageRef {
 /** Full shape validation: `restore()` trusts these refs to tombstone live keys,
  *  so a malformed ref array from hostile persisted state must never reach it. */
 function isValidBackup(v: unknown): v is BackupPayload {
-	if (typeof v !== "object" || v === null) return false
+	if (!isObjectLike(v)) return false
 	const b = v as Partial<BackupPayload>
-	return (
-		Number.isInteger(b.version) &&
-		Array.isArray(b.refs) &&
-		b.refs.every(isValidRef) &&
-		typeof b.entries === "object" &&
-		b.entries !== null &&
-		!Array.isArray(b.entries)
-	)
+	return Number.isInteger(b.version) && Array.isArray(b.refs) && b.refs.every(isValidRef) && isRecord(b.entries)
 }
 
 /** One text for every journal resume will not trust: the reason reaches the recovery screen

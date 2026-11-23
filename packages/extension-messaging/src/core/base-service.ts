@@ -1,6 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
-import { deferred, getErrorMessage, jsonSanitize, jsonStringify } from "@nulo/wallet-core/utils"
+import { deferred, getErrorMessage, isObjectLike, jsonSanitize, jsonStringify } from "@nulo/wallet-core/utils"
 import type { EventsMap, EventsSpec, IService, MethodsMap, ServiceCollection } from "@nulo/wallet-core/base"
 import { buildErrorResponseContent } from "./error-response"
 import { awaitInitialized } from "./initialization"
@@ -106,14 +106,14 @@ export abstract class BaseService<TRequests extends MethodsMap, TEvents extends 
 			this.logWarn("Invalid request received", summarizeContent(content, this.isRegisteredName))
 			return
 		}
-		if (typeof wrappedParams !== "object" || wrappedParams === null) {
+		if (!isObjectLike(wrappedParams)) {
 			// Valid requestId + method but malformed params. Reply with a clean
 			// error so the client rejects immediately instead of hanging.
 			this.logWarn("Invalid request params", summarizeContent(content, this.isRegisteredName))
 			await this.sendResponse({ requestId, ...buildErrorResponseContent(new ValidationError("Invalid request params")) }, ctx)
 			return
 		}
-		const params = unwrapParams(wrappedParams)
+		const params = unwrapParams<unknown>(wrappedParams)
 		this.logDebug("Request received", requestId, method)
 
 		const endKeepalive = this.beforeInvoke(methodName)
