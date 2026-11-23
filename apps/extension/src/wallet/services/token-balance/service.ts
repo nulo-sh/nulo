@@ -10,18 +10,24 @@ import { getTokenInfo } from "@/wallet/services/token/utils"
 import { EventHandler, Lock } from "@nulo/wallet-core/utils"
 import { reconcilePlan } from "./reconcile-pairs"
 import { isLegacyBalanceRow, rowMatchesItsToken, rowMatchesToken } from "./balance-identity"
-import { AccountService, type Account } from "@/wallet/services/account/service"
-import { type AccountScope, accountScopeMatcher } from "@/wallet/services/account/spec"
-import { NetworkService } from "@/wallet/services/network/service"
-import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
+import type { AccountService, Account } from "@/wallet/services/account/service"
+import { type AccountScope, accountScopeMatcher, ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
+import type { ProfileService, ProfileInfo } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { canonicalNumericStorageId } from "@/wallet/services/purge-rows"
 import type { NumericIdBatch } from "@/wallet/services/id-allocators"
-import { TokenService, type Token, type TokenDeleted, type TokenInfo, type TokenUpdated } from "@/wallet/services/token/service"
-import { ExecutionService } from "@/wallet/services/execution/service"
+import type { TokenService, Token, TokenDeleted, TokenInfo, TokenUpdated } from "@/wallet/services/token/service"
+import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
+import type { ExecutionService } from "@/wallet/services/execution/service"
+import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
-import { TaskService } from "@/wallet/services/task/service"
-import { OriginType, TransactionService, type Tx, TxStatus } from "@/wallet/services/transaction/service"
+import type { TaskService } from "@/wallet/services/task/service"
+import { TASK_SERVICE_NAME } from "@/wallet/services/task/spec"
+import type { TransactionService, Tx } from "@/wallet/services/transaction/service"
+import { TRANSACTION_SERVICE_NAME, OriginType, TxStatus } from "@/wallet/services/transaction/spec"
 import { SystemClock } from "@/core/adapters/system-clock"
 import { ClockTickerAdapter } from "@/core/adapters/clock-ticker-adapter"
 import type { BackgroundTickerPort, BrowserApi } from "@nulo/wallet-core/ports"
@@ -49,7 +55,7 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	/** init() awaits all three, so topological start must have them running before
 	 *  this service starts — otherwise each call falls back to an
 	 *  `ensureInitialized` poll. */
-	public readonly dependencies = [ProfileService.name, TokenService.name, AccountService.name] as const
+	public readonly dependencies = [PROFILE_SERVICE_NAME, TOKEN_SERVICE_NAME, ACCOUNT_SERVICE_NAME] as const
 
 	public readonly onTokenBalanceAdded = new EventHandler<TokenBalanceInfo>()
 	public readonly onTokenBalanceUpdated = new EventHandler<TokenBalanceInfo>()
@@ -122,13 +128,13 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.profileService = services.get(ProfileService.name)
-		this.networkService = services.get(NetworkService.name)
-		this.accountService = services.get(AccountService.name)
-		this.tokenService = services.get(TokenService.name)
-		this.transactionService = services.get(TransactionService.name)
-		this.executionService = services.get(ExecutionService.name)
-		this.taskService = services.get(TaskService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
+		this.networkService = services.get(NETWORK_SERVICE_NAME)
+		this.accountService = services.get(ACCOUNT_SERVICE_NAME)
+		this.tokenService = services.get(TOKEN_SERVICE_NAME)
+		this.transactionService = services.get(TRANSACTION_SERVICE_NAME)
+		this.executionService = services.get(EXECUTION_SERVICE_NAME)
+		this.taskService = services.get(TASK_SERVICE_NAME)
 
 		const projector = new BalanceProjector(
 			this.executionService,

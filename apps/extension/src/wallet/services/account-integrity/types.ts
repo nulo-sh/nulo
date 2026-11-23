@@ -1,6 +1,8 @@
 import type { MasterSecretBytes } from "@nulo/wallet-crypto"
 import { z } from "zod"
 
+export const ACCOUNT_INTEGRITY_COORDINATOR_NAME = "account-integrity-coordinator"
+
 export const ACCOUNT_INTEGRITY_BLOCKED_ROOT = "nulo:core:account-integrity-blocked"
 export const ACCOUNT_INTEGRITY_VERIFIED_ROOT = "nulo:core:account-integrity-verified"
 

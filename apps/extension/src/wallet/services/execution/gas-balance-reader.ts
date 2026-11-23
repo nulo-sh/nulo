@@ -20,7 +20,8 @@
  */
 
 import { sleep } from "@nulo/wallet-core/utils"
-import { FpcType, type FpcInfo } from "@/wallet/services/fpc/service"
+import type { FpcInfo } from "@/wallet/services/fpc/service"
+import { FpcType } from "@/wallet/services/fpc/spec"
 import { feeJuiceAddress } from "@/wallet/utils/fee-juice"
 import { batchedViewSimulation, type BatchedViewSimulationDeps } from "./helpers/batched-view-simulation"
 import type { GasBalances } from "./spec"

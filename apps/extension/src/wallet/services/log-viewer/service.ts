@@ -5,7 +5,8 @@ import { validateParams } from "@nulo/extension-messaging/zod"
 import { DummyLogger, type ILoggerStore, type Log } from "@/wallet/logger"
 import type { RequestLog, RequestRef } from "@/wallet/logger/request-log"
 import { browserOf, buildRequestReport, requestReportFileName } from "@/wallet/logger/request-report"
-import { NetworkService } from "@/wallet/services/network/service"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { type Events, LOG_VIEWER_SERVICE_NAME, LogViewerMethodSchemas, type Methods, type RequestReport } from "./spec"
 
@@ -33,7 +34,7 @@ export class LogViewerService extends Service<Methods, Events> implements Servic
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.networkService = services.get(NetworkService.name)
+		this.networkService = services.get(NETWORK_SERVICE_NAME)
 	}
 
 	public async getLogs(count: number, fromId?: number): Promise<Log[]> {
