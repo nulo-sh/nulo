@@ -26,6 +26,8 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("getTask", "getTasks")
 	public static name = TASK_SERVICE_NAME
 
+	public readonly dependencies = [ProfileService.name] as const
+
 	public readonly onTaskCreated = new EventHandler<Task>()
 	public readonly onTaskUpdated = new EventHandler<Task>()
 	public readonly onTaskDeleted = new EventHandler<Task>()
@@ -42,6 +44,9 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
+		// A silent restore emits nothing, so start pulls the profile; an emission during the pull wins.
+		const active = await this.profileService.getActiveProfile()
+		this.profile ??= active?.id
 	}
 
 	private createTask(
