@@ -45,7 +45,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      extension: ${{ steps.override.outputs.full || steps.filter.outputs.extension }}
       playground: ${{ steps.override.outputs.full || steps.filter.outputs.playground }}
       landing: ${{ steps.override.outputs.full || steps.filter.outputs.landing }}
       workflows: ${{ steps.override.outputs.full || steps.filter.outputs.workflows }}
@@ -66,7 +65,6 @@ jobs:
         id: build
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
-          # The extension's build inputs, shared by every lane that builds it.
           filters: .github/path-filters/extension-build.yml
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
@@ -75,7 +73,7 @@ jobs:
           filters: |
             # Built targets by whole package, dependency libraries by consumed src + manifest
             # (CI.md "CI gating"). Pinned by scripts/ci-cd/behavior-gating.test.ts.
-            extension:
+            notices-check:
               # Read only by the post-build notices check, which on a pull request only these builds run.
               - 'packages/third-party-notices/bin/**'
               - 'packages/third-party-notices/expected-minimum.txt'
@@ -138,13 +136,13 @@ jobs:
         id: compute
         env:
           BUILD: ${{ steps.override.outputs.full || steps.build.outputs.extension-build }}
-          EXTENSION: ${{ steps.override.outputs.full || steps.filter.outputs.extension }}
+          NOTICES: ${{ steps.override.outputs.full || steps.filter.outputs.notices-check }}
           LANDING: ${{ steps.override.outputs.full || steps.filter.outputs.landing }}
           WORKFLOWS: ${{ steps.override.outputs.full || steps.filter.outputs.workflows }}
           ROOT: ${{ steps.override.outputs.full || steps.filter.outputs.root-config }}
         run: |
           # An output that never arrived would read as an untouched surface and skip a build.
-          for input in BUILD EXTENSION LANDING WORKFLOWS ROOT; do
+          for input in BUILD NOTICES LANDING WORKFLOWS ROOT; do
             case "${!input}" in
             true | false) ;;
             *)
@@ -153,7 +151,7 @@ jobs:
               ;;
             esac
           done
-          if [ "$BUILD" = "true" ] || [ "$EXTENSION" = "true" ] || [ "$WORKFLOWS" = "true" ] || [ "$ROOT" = "true" ]; then
+          if [ "$BUILD" = "true" ] || [ "$NOTICES" = "true" ] || [ "$WORKFLOWS" = "true" ] || [ "$ROOT" = "true" ]; then
             echo "needs-extension-build=true" >> "$GITHUB_OUTPUT"
           else
             echo "needs-extension-build=false" >> "$GITHUB_OUTPUT"
@@ -380,9 +378,8 @@ jobs:
       - name: Refuse a stable release without its release notes
         run: bun scripts/release/release-notes-run.ts check
 
-  # Extension smoke e2e lives in its own pr-extension-smoke-e2e.yml workflow:
-  # auto-runs on PRs to main, on changes within the `smoke-surface`
-  # filter, or via the `e2e:extension-smoke` label. Mirrors pr-extension-network-e2e.yml.
+  # Extension smoke e2e lives in its own pr-extension-smoke-e2e.yml workflow: it runs when its
+  # paths filters trip, or via the `e2e:extension-smoke` label. Mirrors pr-extension-network-e2e.yml.
 
   status:
     name: quality-status

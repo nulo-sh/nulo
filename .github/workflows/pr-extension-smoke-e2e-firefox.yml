@@ -45,7 +45,6 @@ jobs:
         id: build
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
-          # The extension's build inputs, shared by every lane that builds it.
           filters: .github/path-filters/extension-build.yml
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter

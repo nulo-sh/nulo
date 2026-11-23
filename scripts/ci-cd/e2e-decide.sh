@@ -30,7 +30,7 @@ if [ "$EVENT" = pull_request ] && [ -z "$BASE" ]; then
 	echo "::error::live.outputs.base is empty"
 	exit 1
 fi
-# The paths filter already answers "does this diff touch the surface?" — gating it on the base
+# The paths filters already answer "does this diff touch the surface?" — gating them on the base
 # branch as well only creates a hole, because a stacked PR's `github.base_ref` is the branch below
 # it. Only the bottom arc of a stack targets `dev`; every arc above it could reach this suite by
 # LABEL alone, and a gate miss reports success-on-skip. `workflow_dispatch` still force-runs. A

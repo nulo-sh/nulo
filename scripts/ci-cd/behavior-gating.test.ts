@@ -71,7 +71,6 @@ function stepFilters(step: GateStep): Record<string, string[]> {
 	return Object.fromEntries(Object.entries(doc).map(([name, patterns]) => [name, [patterns].flat(Infinity) as string[]]))
 }
 
-/** The paths-filter steps of a workflow's `changes` job, by step id. */
 function filterSteps(wf: GateWorkflow): Record<string, GateStep> {
 	const steps = wf.jobs.changes?.steps ?? []
 	return Object.fromEntries(steps.filter((step) => step.uses?.includes(PATHS_FILTER)).map((step) => [step.id ?? "", step]))
@@ -87,7 +86,6 @@ function gateFilter(wf: GateWorkflow, value: string): string | undefined {
 	return step && name in stepFilters(step) ? `${id}.${name}` : undefined
 }
 
-/** The patterns behind `<step>.<filter>` names, deduplicated and sorted. */
 function patternsOf(wf: GateWorkflow, names: string[]): string[] {
 	const steps = filterSteps(wf)
 	const patterns = names.flatMap((qualified) => {
@@ -97,7 +95,6 @@ function patternsOf(wf: GateWorkflow, names: string[]): string[] {
 	return [...new Set(patterns)].sort()
 }
 
-/** The two verdicts an e2e lane's Decide step passes `e2e-decide.sh`: the shared build inputs, then the lane's own. */
 const DECIDE_INPUTS = ["BUILD", "SURFACE"]
 
 /** An e2e lane's effective filter: every pattern behind the verdicts its Decide step reads. */
@@ -936,7 +933,7 @@ function surfaceFindings(surfaces: Record<string, string[]>, exceptions = SURFAC
 	})
 }
 
-/** The one ref every paths-filter step compares: the PR's head, else the dispatched ref. */
+/** Every paths-filter step's `ref`; on `pull_request` the action ignores it and lists the PR's files. */
 const FILTER_REF = "${{ github.event.pull_request.head.sha || github.ref }}"
 
 /**
@@ -991,7 +988,7 @@ describe("one extension build surface", () => {
 
 	test("pr-quick builds the extension on exactly the filters its compute step reads", () => {
 		expect(extensionBuildFilters(quick)).toEqual({
-			filters: [`build.${BUILD_FILTER}`, "filter.extension", "filter.workflows", "filter.root-config"],
+			filters: [`build.${BUILD_FILTER}`, "filter.notices-check", "filter.workflows", "filter.root-config"],
 			findings: [],
 		})
 	})
@@ -1050,7 +1047,7 @@ describe("one extension build surface", () => {
 		const copy = computeCopy((step) => {
 			step.run = step.run?.replace(extensionClause, "$1")
 		})
-		expect(extensionBuildFilters(copy).filters).toEqual([`build.${BUILD_FILTER}`, "filter.extension", "filter.workflows"])
+		expect(extensionBuildFilters(copy).filters).toEqual([`build.${BUILD_FILTER}`, "filter.notices-check", "filter.workflows"])
 		expect(surfaceFindings(buildSurfaces(copy))).toContain(`biome.json: held by no lane; expected ${QUICK}`)
 	})
 
@@ -1155,7 +1152,6 @@ function ciScripts(run: unknown, at: string): string[] {
 	})
 }
 
-/** The file a paths-filter step loads its filters from, when it loads one. */
 function filterSources(step: WalkStep): string[] {
 	const source = step.uses?.includes(PATHS_FILTER) ? sourcePath(step.with?.filters) : undefined
 	return source ? [source] : []
