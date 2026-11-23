@@ -113,17 +113,17 @@ const formatTimestamp = (timestamp) => {
 
 .detail_key {
 	composes: type--label-section from global;
-	color: var(--nulo-secondary);
+	composes: detail_key from "./detail-shared.module.css";
 }
 
 .detail_value_mono {
 	composes: type--meta from global;
-	color: var(--txt-primary);
+	composes: detail_value_mono from "./detail-shared.module.css";
 }
 
 .detail_value_aux {
 	composes: type--meta from global;
-	color: var(--nulo-secondary);
+	composes: detail_value_aux from "./detail-shared.module.css";
 }
 
 .raw_call_item {
@@ -133,12 +133,12 @@ const formatTimestamp = (timestamp) => {
 
 .raw_call_method {
 	composes: type--meta from global;
-	color: var(--txt-primary);
+	composes: detail_value_mono from "./detail-shared.module.css";
 }
 
 .raw_call_aux {
 	composes: type--meta from global;
-	color: var(--nulo-secondary);
+	composes: detail_value_aux from "./detail-shared.module.css";
 }
 
 .error_key {

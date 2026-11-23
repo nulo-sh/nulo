@@ -20,8 +20,8 @@ function rules(path: string): Map<string, string> {
 describe("the detail pages share one look", () => {
 	test.each(PAGES)("%s: its scroller and its content are the shared ones, with no spacing of their own", (page) => {
 		const r = rules(page)
-		expect(r.get(".wrapper")).toBe('composes: wrapper from "../detail-page.module.css";')
-		expect(r.get(".content")).toBe('composes: content from "../detail-page.module.css";')
+		expect(r.get(".wrapper")).toBe('composes: wrapper from "../../components/modules/tx/detail-shared.module.css";')
+		expect(r.get(".content")).toBe('composes: content from "../../components/modules/tx/detail-shared.module.css";')
 	})
 
 	test.each([...PAGES, "../components/modules/tx/TxHashRow.vue"])(
@@ -34,7 +34,7 @@ describe("the detail pages share one look", () => {
 	)
 
 	test("a Details link underlines on hover only, so the dark accent is never its sole cue", () => {
-		const shared = readFileSync(resolve(__dirname, "detail-page.module.css"), "utf8")
+		const shared = readFileSync(resolve(__dirname, "../components/modules/tx/detail-shared.module.css"), "utf8")
 			.replace(/\/\*[\s\S]*?\*\//g, "")
 			.replace(/\s+/g, " ")
 		expect(shared).toContain(
@@ -46,14 +46,14 @@ describe("the detail pages share one look", () => {
 		"%s: its App row's label and value are the shared ones, with no rule of their own",
 		(page) => {
 			const r = rules(page)
-			expect(r.get(".app_key")).toBe('composes: app_key from "../detail-page.module.css";')
-			expect(r.get(".app_value")).toBe('composes: app_value from "../detail-page.module.css";')
+			expect(r.get(".app_key")).toBe('composes: app_key from "../../components/modules/tx/detail-shared.module.css";')
+			expect(r.get(".app_value")).toBe('composes: app_value from "../../components/modules/tx/detail-shared.module.css";')
 		},
 	)
 
 	test("journal: the To link draws as the shared mono value, as the Tx hash link does", () => {
 		expect(rules("journal/[id].vue").get(".recipient_link")).toBe(
-			'composes: detail_value_mono from "../detail-page.module.css"; composes: detail_link from "../detail-page.module.css";',
+			'composes: detail_value_mono from "../../components/modules/tx/detail-shared.module.css"; composes: detail_link from "../../components/modules/tx/detail-shared.module.css";',
 		)
 	})
 
@@ -61,15 +61,15 @@ describe("the detail pages share one look", () => {
 		const source = readFileSync(resolve(__dirname, "../components/modules/tx/DetailAddressCard.vue"), "utf8")
 			.replace(/\/\*[\s\S]*?\*\//g, "")
 			.replace(/\s+/g, " ")
-		expect(source).toContain('.card { composes: address_card from "../../../pages/detail-page.module.css"; }')
+		expect(source).toContain('.card { composes: address_card from "./detail-shared.module.css"; }')
 		expect(source).toContain(".card.card_static { cursor: default; &:hover { background: transparent; } }")
-		expect(source).toContain('.label { composes: caption from "../../../pages/detail-page.module.css"; }')
+		expect(source).toContain('.label { composes: caption from "./detail-shared.module.css"; }')
 	})
 
 	test("the hero line's classes are the shared ones, with no rule of their own", () => {
 		const r = rules("../components/modules/tx/DetailHeroMeta.vue")
 		const names = ["hero_meta", "tx_time", "meta_sep", "hero_link"]
 		expect([...r.keys()]).toEqual(names.map((name) => `.${name}`))
-		for (const name of names) expect(r.get(`.${name}`)).toBe(`composes: ${name} from "../../../pages/detail-page.module.css";`)
+		for (const name of names) expect(r.get(`.${name}`)).toBe(`composes: ${name} from "./detail-shared.module.css";`)
 	})
 })

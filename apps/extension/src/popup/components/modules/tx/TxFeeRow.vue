@@ -83,22 +83,22 @@ const priced = (raw) => feeDisplay(raw, props.usdPerFeeJuice)
 <style module>
 .detail_key {
 	composes: type--label-section from global;
-	color: var(--nulo-secondary);
+	composes: detail_key from "./detail-shared.module.css";
 }
 
 .detail_value_mono {
 	composes: type--meta from global;
-	color: var(--txt-primary);
+	composes: detail_value_mono from "./detail-shared.module.css";
 }
 
-.detail_value_est {
+/* Outranks the shared mono colour, which any chunk carrying the shared sheet may emit after this rule. */
+.detail_value_mono.detail_value_est {
 	color: var(--nulo-secondary);
 }
 
 .detail_value_aux {
 	composes: type--fiat from global;
-	font-size: 11px;
-	color: var(--nulo-secondary);
+	composes: amount_fiat from "./detail-shared.module.css";
 }
 
 .fee_row_toggle {
@@ -123,7 +123,7 @@ const priced = (raw) => feeDisplay(raw, props.usdPerFeeJuice)
 
 .fee_grid_key {
 	composes: type--label-section from global;
-	color: var(--nulo-secondary);
+	composes: detail_key from "./detail-shared.module.css";
 }
 
 .fee_grid_num {

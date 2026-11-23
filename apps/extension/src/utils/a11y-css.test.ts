@@ -92,7 +92,7 @@ describe("a settings search's row outline holds with no fade under reduced motio
 })
 
 describe("the detail pages' links draw the focus ring on :focus-visible, never on plain :focus", () => {
-	const shared = read("popup/pages/detail-page.module.css")
+	const shared = read("popup/components/modules/tx/detail-shared.module.css")
 		.replace(/\/\*[\s\S]*?\*\//g, "")
 		.replace(/\s+/g, " ")
 
@@ -121,7 +121,7 @@ describe("the detail pages' links draw the focus ring on :focus-visible, never o
 			const ringed = (tag: string) =>
 				[...tag.matchAll(/\$style\.(\w+)/g)].some(([, local]) =>
 					new RegExp(
-						`\\.${local} \\{[^}]*composes: (hero_link|detail_link) from "(\\.\\./)+(pages/)?detail-page\\.module\\.css";`,
+						`\\.${local} \\{[^}]*composes: (hero_link|detail_link) from "(\\.\\.?/)+(components/modules/tx/)?detail-shared\\.module\\.css";`,
 					).test(source),
 				)
 			const misses = anchors.filter((tag) => !ringed(tag))
@@ -172,7 +172,10 @@ describe("meta text reads in --nulo-secondary; --nulo-outline is for borders and
 			}),
 		)
 		expect(stylesheets).toEqual(
-			expect.arrayContaining(["packages/design/src/ui/Input.vue", "apps/extension/src/popup/pages/detail-page.module.css"]),
+			expect.arrayContaining([
+				"packages/design/src/ui/Input.vue",
+				"apps/extension/src/popup/components/modules/tx/detail-shared.module.css",
+			]),
 		)
 		expect(found).toEqual([
 			"apps/extension/src/components/composite/capabilities/DetailsTable.vue .address .copy .copy_glyph",

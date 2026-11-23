@@ -304,7 +304,7 @@ watch(
 	outline-offset: 2px;
 }
 .contract_link {
-	composes: hero_link from "../../pages/detail-page.module.css";
+	composes: hero_link from "../modules/tx/detail-shared.module.css";
 	align-self: flex-start;
 }
 .warning {
