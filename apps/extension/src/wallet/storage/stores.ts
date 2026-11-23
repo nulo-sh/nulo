@@ -59,6 +59,7 @@ import { TOKEN_LIST_STORAGE_KEY } from "@/wallet/services/token-list/spec"
 import { TRANSACTION_STORAGE_ROOT, TxSchema } from "@/wallet/services/transaction/spec"
 import { PreferenceRowSchema, SELECTED_ACCOUNT_ROOT, SelectedAccountRowSchema } from "@/wallet/services/ui-preference/spec"
 import { type RowKeysSource, SealedEntityStorage, type SealedRootOptions } from "./sealed-entity-storage"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 
 export type KeyIdentityOptions = { requireKeyIdentityMatch: true; keyIdentityMode?: "numeric" }
 
@@ -110,8 +111,8 @@ function incomingScope(id: string, kinded: boolean, tailLength?: number): Incomi
 /** A record or trust row names its scope; one naming another than its key's belongs to no
  *  profile, so no lookup serves it and no profile's keys seal or open it. */
 function bodyOwner(row: unknown, scope: IncomingScope): string | undefined {
-	if (typeof row !== "object" || row === null) return undefined
-	const { profileId, networkId } = row as { profileId?: unknown; networkId?: unknown }
+	if (!isObjectLike(row)) return undefined
+	const { profileId, networkId } = row
 	return profileId === scope.profileId && networkId === scope.networkId ? scope.profileId : undefined
 }
 

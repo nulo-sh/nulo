@@ -2,7 +2,7 @@
 import { valueStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { ValueDecodeError } from "@nulo/wallet-core/storage"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { EventHandler, isObjectLike } from "@nulo/wallet-core/utils"
 import { type Config, type ConfigKey, type ConfigProp, ConfigSchema, defaultConfig } from "./config"
 import type { IConfigStore } from "."
 
@@ -28,7 +28,7 @@ export class ConfigStore implements IConfigStore {
 			console.error("ConfigStore.load: undecodable config, booting on defaults", { error })
 			return
 		}
-		if (storedConfig && typeof storedConfig === "object") {
+		if (isObjectLike(storedConfig)) {
 			// Assign before the write-back: these values came from storage, and a failed write-back
 			// must not leave memory (and log retention, which reads `developerMode`) on the defaults.
 			await this.apply(storedConfig, "after-assign")
@@ -124,8 +124,8 @@ function configChanges(current: Config, src: Record<string, unknown>): ConfigPro
  *  default for every other. */
 export function decodeStoredConfig(stored: unknown): Config {
 	const config = defaultConfig()
-	if (!stored || typeof stored !== "object") return config
-	for (const change of configChanges(config, stored as Record<string, unknown>)) {
+	if (!isObjectLike(stored)) return config
+	for (const change of configChanges(config, stored)) {
 		;(config as Record<string, unknown>)[change.key] = change.value
 	}
 	return config

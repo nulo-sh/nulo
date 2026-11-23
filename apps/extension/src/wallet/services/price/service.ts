@@ -12,7 +12,7 @@ import type { ValueStorage } from "@/wallet/storage"
 import { valueStorage } from "@/wallet/storage/stores"
 import { flaggedKeysOf } from "@/utils/token-flag"
 import { bridgeIconsOf, listedTokensOf, tokenIconsOf } from "@/utils/token-icon"
-import { AlarmDispatcher, EventHandler, createSerialQueue, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
+import { AlarmDispatcher, EventHandler, createSerialQueue, isObjectLike, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
 import { isFeedId } from "@nulo/token-list"
 import { inBand, type PriceTable, priceIdsOf, priceTableOf, pricedTokensOf } from "./price-map"
 import {
@@ -56,7 +56,7 @@ export function priceRequestUrl(ids: readonly string[]): string {
 
 /** A quote's own checks, with no band: what a stored row must pass to be read at all. */
 export function isWellFormedQuote(id: string, quote: unknown, now: number): quote is PriceQuote {
-	if (!isFeedId(id) || !quote || typeof quote !== "object") return false
+	if (!isFeedId(id) || !isObjectLike(quote)) return false
 	const q = quote as Partial<PriceQuote>
 	if (q.coingeckoId !== id) return false
 	if (typeof q.usd !== "number" || !Number.isFinite(q.usd) || q.usd <= 0) return false
@@ -76,7 +76,7 @@ export function isValidQuote(id: string, quote: unknown, now: number, table: Pri
 /** The quotes of a stored cache that are well-formed and fresh at `now`; anything else reads as absent.
  *  No band: which band applies depends on the list held when the quote is used (`withinTable`). */
 export function freshQuotes(stored: unknown, now: number): PriceState {
-	if (!stored || typeof stored !== "object") return {}
+	if (!isObjectLike(stored)) return {}
 	const fresh: PriceState = {}
 	for (const [id, quote] of Object.entries(stored)) {
 		if (!isWellFormedQuote(id, quote, now)) continue
@@ -463,11 +463,11 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	/** Validate the provider response per-id; invalid entries are dropped, never stored. */
 	private parseResponse(body: unknown, fetchedAt: number, table: PriceTable): PriceState {
 		const out: PriceState = {}
-		if (!body || typeof body !== "object") return out
+		if (!isObjectLike(body)) return out
 		for (const id of priceIdsOf(table)) {
 			if (!Object.hasOwn(body, id)) continue
 			const row = (body as Record<string, unknown>)[id]
-			if (!row || typeof row !== "object") continue
+			if (!isObjectLike(row)) continue
 			const usd = (row as Record<string, unknown>).usd
 			const lastUpdated = (row as Record<string, unknown>).last_updated_at
 			const providerUpdatedAt = typeof lastUpdated === "number" && Number.isFinite(lastUpdated) ? lastUpdated * 1000 : null

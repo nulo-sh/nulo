@@ -1,6 +1,7 @@
 import { canonicalNumericStorageId } from "@/wallet/services/purge-rows"
 import type { Token } from "@/wallet/services/token/spec"
 import type { TokenBalanceRaw } from "./spec"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 
 /**
  * The row↔token identity invariant: the row's FK and its stamped identity triple both
@@ -38,8 +39,8 @@ export function isLegacyBalanceRow(raw: Record<string, unknown>, storageId: stri
 	if (raw.publicBalance !== undefined && typeof raw.publicBalance !== "string") return false
 	if (raw.privateBalance !== undefined && typeof raw.privateBalance !== "string") return false
 	if (raw.syncFailure !== undefined) {
-		const sf = raw.syncFailure as { at?: unknown; message?: unknown } | null
-		if (typeof sf !== "object" || sf === null || typeof sf.at !== "number" || typeof sf.message !== "string") return false
+		const sf = raw.syncFailure
+		if (!isObjectLike(sf) || typeof sf.at !== "number" || typeof sf.message !== "string") return false
 	}
 	return canonicalNumericStorageId(storageId) === raw.id
 }
