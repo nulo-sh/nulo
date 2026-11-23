@@ -1,5 +1,0 @@
-- 2026-11-23: arc 1 (#1925) built; red at the base, green after (unit, component, service).
-- 2026-11-23: arc 1 Codex pass: sound; F1-F3 pre-existing (#1938, #1939, #1940), F4 comments fixed; #1941 known limit.
-- 2026-11-23: PR #1942 opened (arc 1), ready; frames in its body.
-- 2026-11-23: arc 2 (#1926) built on wallet-followups-9-decimals.
-- 2026-11-23: arc 2 Codex pass: F1 fixed (Recent caption guard), F2 OA-2 built as new words, F3 comments fixed.

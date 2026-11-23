@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-9
 tier: light
-status: building (arc 1 built, arc 2 next)
+status: completed (arc 1 #1942 and arc 2 open against dev, unmerged; arc 2 carries this close-out)
 issues: "#1925, #1926"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at c0eb5d072
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-23.
+- **Status:** closed. Both arcs built and opened as a stack against `dev`, unmerged: arc 1 (#1942, #1925), arc 2 with this close-out (#1926). Both wait for the owner's sign-off on their frames; the merge that lands arc 2 closes the plan.
+- **Shipped:**
+  - Arc 1 (#1925): Delete profile names every readable imported account of the profile, on every chain; one on a chain with no network row reads `AZTEC:<chain id> · <address>` after the networks' own rows, and brings the section and Export first with it. New account read `getImportedAccounts(profileId)`.
+  - Arc 2 (#1926): one bound on a token's decimals, 0..18 (`DECIMALS_MAX`, `isValidDecimals` in `wallet/services/token/spec.ts`), held where metadata is read (`TokenDecimalsOutOfRangeError`), at restore, by the seeder and the seed preflight, and by every screen that derives a number from decimals. New token refuses past it with its own sentence; a stored row past it reads "—" and Send derives no amount from it. Stored shape unchanged.
+- **Known limits:** #1940 (D3, an unreadable account row), #1941 (D6, a paused reset's export of an account on a chain with no network row).
+- **Open items:** #1938 (D4, a reset running in another window hides its held imports); #1939 (D5, a passkey profile's hidden Export first). The three wordings are the owner's call: OA-1 to OA-3 in [OWNER-ASKS.md](OWNER-ASKS.md), each built as option A.
+- **Dropped:** none. **Lessons:** none promoted; the one general gotcha (a moved line re-pins the profile-chaos model's citations and the type-roles identifier inventory) is what those two tests already say when they fail, and `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds in Delivery.
 
 # wallet-followups-9: Delete profile names every imported account; one bound on a token's decimals
 
@@ -66,7 +78,7 @@ Closed known limits searched (`delete profile imported`, `decimals`): #807, #809
 
 ## Phases
 
-**Phase 1 (arc 1, #1925).** Build as above. Gate: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/pages/settings/security src/wallet/services/account src/wallet/services/network-reset`; `bun run audit:vue`; `bun run test:all`; smoke e2e `settings-crud.test.ts` and `type-roles.test.ts` (they read `reset-*` testids) at `--retry=0`. Pass: all exit 0.
+**Phase 1 (arc 1, #1925).** Build as above. Gate: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/pages/settings/security src/wallet/services/account src/wallet/services/network-reset`; `bun run audit:vue`; `bun run test:all`; smoke e2e `type-roles.test.ts` and `security.test.ts` (they read `reset-*` testids) at `--retry=0`. Pass: all exit 0.
 
 **Phase 2 (arc 2, #1926).** First the red tests at the base (descriptor decode at 10^9, `validateSendAmount` at 24, AmountCard at 10^9), then the build. Gate: lint, typecheck, the token, send, execute and utils tests, `stored-shapes/snapshot.test.ts` green with no stamp, `audit:vue`, `test:all`; smoke `fixtures/tokens.ts` users, network `holdings.test.ts`. Pass: all exit 0.
 
