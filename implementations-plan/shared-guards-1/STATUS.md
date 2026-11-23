@@ -9,3 +9,5 @@
 - 2026-11-23 22:50Z arc 1 review r1: Codex conditional approve (2 of 3 accepted), Opus conditional approve (5 of 6 accepted); baseline 64
 - 2026-11-23 23:05Z arc 1 review: Codex r2 conditional approve (2 accepted), r3 conditional approve (1 accepted, verified); loop stopped at three rounds, converged
 - 2026-11-23 23:20Z arc 1 final gates green on merged head 9c528cf5e (origin/dev 633cf2ac9 merged): lint, typecheck:all, test:all, test:ci-gating, check:plans; PR next
+- 2026-11-23 23:55Z PR #1956 CI: Build Storybook (chunk cycle from panel-handback's barrel import) and CodeQL (single replace) fixed; local storybook build, audit:vue, lint, typecheck green
+- 2026-11-24 00:05Z Codex verified the CI fix: approve; final gates on the head, then the last push

@@ -1,7 +1,7 @@
 ---
 plan: shared-guards-1
 tier: mid
-status: arc 1 review converged; PR next
+status: arc 1 in PR #1956
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -256,6 +256,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 - **Arc 1, Opus diff review** (general-purpose, opus): conditional approve; no set mismatch at any converted site. Accepted: a bare 64-digit digest has no helper, so the hex finding now needs `0x` before the class (K6 and K7 leave the baseline, 66 → 64); a kept entry may move files under the ratchet, which otherwise left a moved kept site no way through; `!!E` counts as a null exclusion; the ratchet's header claim. Rejected: failing closed on `predates` (reachable only by a PR that edits the gate's own path constants, and arc 1's own state).
 - **Arc 1, Codex r2** (resumed): conditional approve, two findings, both accepted. Promoting a pending entry to kept in place, then moving it in a second PR, made a pending exception transferable: an entry's identity now includes its kind. `/^(?:0x)[0-9a-fA-F]{64}$/` and `/^0x(?:[0-9a-fA-F]{64})$/` slipped the adjacency test: the prefix check now looks past group brackets.
 - **Arc 1, Codex r3** (resumed): conditional approve, one low finding, accepted: skipping `)` after the class, added unasked in r2, flagged `/^(0x[0-9a-f]){64}$/`, which repeats the prefix; the skip is gone and that literal is a non-finding case. Verified by its snippet case; the loop stops at three rounds with no material finding open.
+- **Arc 1, CI** (PR #1956): Build Storybook failed on a static chunk cycle: `utils/panel-handback.ts` importing the wallet-core barrel gave the barrel a chunk of its own in Storybook's build, which re-exports from the shared story chunk that imports it. Found by restoring `origin/dev`'s copy of each changed file in halves. Fix, a deviation from "no other wallet-core change": wallet-core exports `./guards`, a leaf like `./chain-id`, and the hand-back imports it. CodeQL flagged a single `replace` of the key separator in the scan's stale-entry message; now `replaceAll`. Codex, resumed for targeted verification of the fix: **approve**.
 
 ## Seeds
 
