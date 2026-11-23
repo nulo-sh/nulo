@@ -21,12 +21,14 @@ type ContentWrapperDeps = {
 	sessionKnown: (sessionId: string, tabId: number) => boolean
 	/** The tab and origin the pending discovery under this id is credited to, if one is pending. */
 	discoveryCredit: (sessionId: string) => DiscoveryCredit | undefined
+	/** Whether the handler that exists right now holds this id, as a live session or a pending discovery. */
+	idHeld: (id: string) => boolean
 	sendToTab: BackgroundTransport["sendToTab"]
 }
 
 export function buildContentTransport(
 	logger: ILogger,
-	{ sessionKnown, discoveryCredit }: Pick<ContentWrapperDeps, "sessionKnown" | "discoveryCredit">,
+	{ sessionKnown, discoveryCredit, idHeld }: Pick<ContentWrapperDeps, "sessionKnown" | "discoveryCredit" | "idHeld">,
 ): BackgroundTransport {
 	// The handler's `sendToTab` returns void, so the send's rejection is nobody's to observe. A
 	// tab that navigated away (or lost its content script) has nowhere to deliver to; every
@@ -46,15 +48,15 @@ export function buildContentTransport(
 			// duplicate secure-message double-journals a sendTx. Attach to the
 			// relay instead; buffered cold-wake messages flush through this same
 			// validated wrapper.
-			attachContentListener(admitContentMessage(listener, { logger, sessionKnown, discoveryCredit, sendToTab }))
+			attachContentListener(admitContentMessage(listener, { logger, sessionKnown, discoveryCredit, idHeld, sendToTab }))
 		},
 	}
 }
 
 /**
  * The checks every content-script message passes before the SDK handler sees it, in this order:
- * top frame, envelope schema, a key exchange from its discovery's document, then a session this
- * background knows.
+ * top frame, envelope schema, a key exchange from its discovery's document, a discovery under an id
+ * not yet held, then a session this background knows.
  */
 function admitContentMessage(
 	listener: Parameters<BackgroundTransport["addContentListener"]>[0],
@@ -116,6 +118,13 @@ function admitContentMessage(
 			logger.log("wallet-sdk", LogLevel.Debug, "Dropping a key exchange from outside its discovery's document")
 			return undefined
 		}
+		const heldId = verdict.kind === "valid" ? discoveryIdHeld(verdict.message, deps.idHeld) : undefined
+		if (heldId !== undefined) {
+			logger.log("wallet-sdk", LogLevel.Debug, "Dropping a discovery under an id already in use", {
+				request: describeExternalId(heldId),
+			})
+			return undefined
+		}
 		if (verdict.kind === "valid" && replyIfStale(verdict.message, sender.tab?.id, deps)) return undefined
 		listener(message, sender)
 		return undefined
@@ -135,6 +144,16 @@ function keyExchangeFromItsDiscovery(
 	const credit = discoveryCredit(envelope.sessionId)
 	if (credit === undefined) return true
 	return sender.tab?.id === credit.tabId && credit.origin !== "unknown" && senderDocumentOrigin(sender) === credit.origin
+}
+
+/**
+ * An id stays bound to the tab it was first credited to while the handler holds it: upstream keys a
+ * discovery and the session its key exchange opens by the page's request id, so a second discovery
+ * under it is never recorded. It is dropped with no reply, as any refused discovery is.
+ */
+function discoveryIdHeld(envelope: ContentScriptMessageEnvelope, idHeld: ContentWrapperDeps["idHeld"]): string | undefined {
+	if (envelope.type !== "discovery-request") return undefined
+	return idHeld(envelope.content.requestId) ? envelope.content.requestId : undefined
 }
 
 /** The sending document's own origin: Chrome sets `sender.origin` on a content script's message, and so
