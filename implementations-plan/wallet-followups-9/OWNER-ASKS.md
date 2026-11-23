@@ -21,3 +21,13 @@ Each ask ships with the recommendation built, so the frames show it; the PR wait
 | **A (recommended, built)** | "Couldn't auto-detect this token's interface. Try a contract whose ABI matches a known standard." | The form's existing refusal for a contract it cannot add; no new words. Reads as "not a standard token", which is true of a token past 18 decimals. |
 | B | "Something went wrong. Try again." | The form's other existing refusal; wrong advice, since a retry fails the same way. |
 | C | "This token uses more than 18 decimals. Nulo supports up to 18." | New words; exact. |
+
+## OA-3: does Send say why it refuses a stored token past the bound (#1926)
+
+**Surface:** Send, with a token picked whose stored decimals are past 18 (only a row added before this change can hold one; no seed or list entry can).
+
+| Option | What the person sees | Note |
+|---|---|---|
+| **A (recommended, built)** | The token row reads "—" in the picker, as on Home; Send takes no amount (no USD rate, no conversion, Max fills nothing) and Review stays disabled, with no new words. | The wallet's existing treatment of a token whose decimals it does not know. |
+| B | As A, plus a line under the amount: "Nulo can't send this token." | New words. |
+| C | The picker leaves such a token out. | A row disappears from one list but not from Home. |
