@@ -22,10 +22,12 @@ class TestResult implements ITaskResult {
 	constructor(public readonly testData: string) {}
 }
 
-const createTestSetup = async () => {
+/** `getActiveProfile` answers what a SW restart's silent restore left active. */
+const buildTestSetup = (getActiveProfile: () => Promise<ProfileInfo | undefined> = async () => undefined) => {
 	const profileServiceMock = {
 		name: ProfileService.name,
 		onActiveProfileChanged: new EventHandler<ProfileInfo>(),
+		getActiveProfile,
 		start: vi.fn(),
 	} as unknown as ProfileService
 
@@ -40,7 +42,6 @@ const createTestSetup = async () => {
 	const services = new ServiceCollection()
 	services.add(profileServiceMock)
 	services.add(taskService)
-	await services.start()
 
 	const rootStepContent = new StepContent("Root Task")
 	const stepOne = new StepContent("Step One", 1000)
@@ -73,8 +74,17 @@ const createTestSetup = async () => {
 		stepTwo,
 		expectEvent,
 		switchToProfile,
+		start: () => services.start(),
 	}
 }
+
+const createTestSetup = async (getActiveProfile?: () => Promise<ProfileInfo | undefined>) => {
+	const setup = buildTestSetup(getActiveProfile)
+	await setup.start()
+	return setup
+}
+
+const profile = (id: string): ProfileInfo => ({ id, name: id, type: "password" })
 
 describe("Task Tree Implementation", () => {
 	describe("Task Creation and Structure", () => {
@@ -402,6 +412,36 @@ describe("Task Tree Implementation", () => {
 			parent.completeIfTracked()
 			expect(parent.status).toBe(TaskStatus.Completed)
 			expectEvent("onTaskUpdated", parent.task)
+		})
+
+		test("after a silent restore, a switch to another profile clears the restored profile's tasks", async () => {
+			const { service, switchToProfile } = await createTestSetup(async () => profile("A"))
+			service.createNewTask(new StepContent("T1"))
+
+			switchToProfile(profile("B"))
+			expect(await service.getTasks()).toEqual([])
+		})
+
+		test("after a silent restore, a lock and an unlock to the same profile keep its tasks (control)", async () => {
+			const { service, switchToProfile } = await createTestSetup(async () => profile("A"))
+			service.createNewTask(new StepContent("T1"))
+
+			switchToProfile(undefined)
+			switchToProfile(profile("A"))
+			expect(await service.getTasks()).toHaveLength(1)
+		})
+
+		test("a profile set while the start's pull is in flight is never replaced by the pull's answer", async () => {
+			const { service, switchToProfile, start } = buildTestSetup(async () => {
+				// B's unlock lands after the pull read A and before its answer arrives.
+				switchToProfile(profile("B"))
+				return profile("A")
+			})
+			await start()
+			service.createNewTask(new StepContent("T1"))
+
+			switchToProfile(profile("A"))
+			expect(await service.getTasks()).toEqual([])
 		})
 
 		test("keeps tasks when switching to the same profile", async () => {

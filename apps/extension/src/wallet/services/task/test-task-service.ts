@@ -9,7 +9,12 @@ import { TaskService } from "./service"
 export async function startedTaskService(profileId = "p1") {
 	const onActiveProfileChanged = new EventHandler<ProfileInfo>()
 	const services = new ServiceCollection()
-	services.add({ name: ProfileService.name, onActiveProfileChanged, start: async () => {} } as unknown as ProfileService)
+	services.add({
+		name: ProfileService.name,
+		onActiveProfileChanged,
+		getActiveProfile: async () => undefined,
+		start: async () => {},
+	} as unknown as ProfileService)
 	const tasks = new TaskService(new DummyLogger())
 	services.add(tasks)
 	await services.start()
