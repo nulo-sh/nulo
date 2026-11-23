@@ -43,11 +43,9 @@ export function buildContentTransport(
 		addContentListener: (listener) => {
 			// The chrome.runtime.onMessage registration lives in the module-scope
 			// content-message-relay (cold-wake fix): registering a SECOND chrome
-			// listener here would double-deliver — a duplicate discovery's
-			// coalesce→reject path deletes the entry its twin queued, and a
-			// duplicate secure-message double-journals a sendTx. Attach to the
-			// relay instead; buffered cold-wake messages flush through this same
-			// validated wrapper.
+			// listener here would double-deliver, and a duplicate secure-message
+			// double-journals a sendTx. Attach to the relay instead; buffered
+			// cold-wake messages flush through this same validated wrapper.
 			attachContentListener(admitContentMessage(listener, { logger, sessionKnown, discoveryCredit, idHeld, sendToTab }))
 		},
 	}
@@ -118,7 +116,7 @@ function admitContentMessage(
 			logger.log("wallet-sdk", LogLevel.Debug, "Dropping a key exchange from outside its discovery's document")
 			return undefined
 		}
-		const heldId = verdict.kind === "valid" ? discoveryIdHeld(verdict.message, deps.idHeld) : undefined
+		const heldId = verdict.kind === "valid" ? heldDiscoveryId(verdict.message, deps.idHeld) : undefined
 		if (heldId !== undefined) {
 			logger.log("wallet-sdk", LogLevel.Debug, "Dropping a discovery under an id already in use", {
 				request: describeExternalId(heldId),
@@ -147,11 +145,11 @@ function keyExchangeFromItsDiscovery(
 }
 
 /**
- * An id stays bound to the tab it was first credited to while the handler holds it: upstream keys a
- * discovery and the session its key exchange opens by the page's request id, so a second discovery
- * under it is never recorded. It is dropped with no reply, as any refused discovery is.
+ * A discovery's id when the handler already holds it. Upstream records a discovery by overwriting
+ * whatever row holds its id, which would re-credit the id, and the session its key exchange opens,
+ * to the sender's tab; the caller drops it, unanswered like any refused discovery.
  */
-function discoveryIdHeld(envelope: ContentScriptMessageEnvelope, idHeld: ContentWrapperDeps["idHeld"]): string | undefined {
+function heldDiscoveryId(envelope: ContentScriptMessageEnvelope, idHeld: ContentWrapperDeps["idHeld"]): string | undefined {
 	if (envelope.type !== "discovery-request") return undefined
 	return idHeld(envelope.content.requestId) ? envelope.content.requestId : undefined
 }

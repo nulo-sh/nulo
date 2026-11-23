@@ -15,10 +15,9 @@ import { isSubframeSender, validateContentScriptMessage } from "./content-script
  * FIFO through the SAME validated path live messages take.
  *
  * Single-listener ownership is load-bearing: a second listener alongside the
- * SDK-attached one would double-deliver, and a duplicate discovery's
- * coalesce→reject path DELETES the entry its twin legitimately queued, while a
- * duplicate secure-message would double-journal a sendTx. The transport must
- * therefore attach here instead of registering its own chrome listener.
+ * SDK-attached one would double-deliver, and a duplicate secure-message would
+ * double-journal a sendTx. The transport must therefore attach here instead of
+ * registering its own chrome listener.
  *
  * Drain is keyed on ATTACH, never on `runtime.start()`'s promise — even under
  * the single-flight memo (which settles only when the boot genuinely finishes

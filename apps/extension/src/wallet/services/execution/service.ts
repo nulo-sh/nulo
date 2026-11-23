@@ -1012,7 +1012,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 
 	/** Level by reach: a Terms, scope, argument, capacity or unsupported-method refusal is expected,
 	 *  and a connected dApp can repeat any of them, so at `error` they would fill every user's log buffer.
-	 *  A failure logs its error's class only: a contract chooses the text, and the dApp gets it in its reply. */
+	 *  A failure logs its error's class only: a contract chooses the text, which stays on the failed task. */
 	private logOperationOutcome(
 		traceId: string,
 		kind: Operation["kind"],

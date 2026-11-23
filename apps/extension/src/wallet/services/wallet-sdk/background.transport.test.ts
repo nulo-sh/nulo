@@ -71,9 +71,12 @@ type Deliver = (message: unknown, from?: MessageSender) => void
 /** The SDK's own listener, wrapped so forwarding is observed rather than inferred from silence. */
 let sdkListener: ReturnType<typeof vi.fn<Listener>> | undefined
 
-function boot(ports = fakeSdkPorts()): { handler: BackgroundConnectionHandler; deliver: Deliver } {
+function boot(
+	ports = fakeSdkPorts(),
+	services: Parameters<typeof fakeSdkServices>[0] = { remembered: true },
+): { handler: BackgroundConnectionHandler; deliver: Deliver } {
 	attached = undefined
-	const handler = initWalletSdkHandler(fakeSdkServices({ remembered: true }).services, noopLogger, ports)
+	const handler = initWalletSdkHandler(fakeSdkServices(services).services, noopLogger, ports)
 	// `initWalletSdkHandler` assigned it through the mock; the control-flow analysis cannot see that.
 	const wrapper = attached as Listener | undefined
 	if (!wrapper) throw new Error("the wrapper was not attached to the relay")
@@ -448,6 +451,17 @@ describe("a discovery under an id the wallet already holds", () => {
 		deliver(await keyExchange("s1"))
 		await flush()
 		expect(sdkListener).toHaveBeenCalledTimes(1)
+	})
+
+	test("a discovery still waiting on a locked wallet keeps its tab: another tab's discovery under its id is dropped", async () => {
+		const { handler, deliver } = boot(fakeSdkPorts(), { remembered: true, activeProfile: async () => undefined })
+		deliver(discovery("p3"))
+		await flush()
+		sdkListener?.mockClear()
+		deliver(discovery("p3"), sender(OTHER_TAB))
+		await flush()
+		expect(sdkListener).not.toHaveBeenCalled()
+		expect(handler.getPendingDiscovery("p3")).toMatchObject({ tabId: TAB, status: "pending" })
 	})
 
 	test("a second discovery under the same id from its own tab is dropped, and the first one's handshake completes", async () => {
