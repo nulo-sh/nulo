@@ -1,7 +1,7 @@
 ---
 plan: popup-policy-home-1
 tier: light
-status: planned
+status: completed
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -15,7 +15,21 @@ post_implementation_hardening: not scheduled
 
 # popup-policy-home-1: pure policy leaves `popup/**`, and lint closes the edge
 
-Closes #1935. Live log: [STATUS.md](STATUS.md). Consults: [lessons/phase-1.md](lessons/phase-1.md). UI impact: none.
+Closes #1935. Consults: [lessons/phase-1.md](lessons/phase-1.md). UI impact: none.
+
+## Outcome
+
+- **Date:** 2026-11-23. One arc, one PR into `dev`; its merge archives this plan and closes #1935.
+- **Status:** completed.
+- **Shipped:** seven popup policy modules and `publish-facts` moved under their lowest consumers (homes table below), only import lines changed (plus `FpcType` from `fpc/spec`, D3); the takeover and the integrity barrier read `AUTH_ENTRY_ROUTES` (D4); Biome refuses `@/popup` from production files under `composables/`, `utils/`, `stores/`, `components/**` and all of `onboarding/` (D5); CLAUDE.md states the rule.
+- **Proof:** at `db014b10d`, `audit:vue`, `test:all` and `test:ci-gating` exit 0 at retry 0; the build leaves `src/types/` unchanged; renames R96-R100; lint probes per D5. No local e2e for a pure move: the PR's five required checks are the e2e evidence.
+- **Review:** Codex over the plan `approve` (one low finding adopted); Codex over the diff `approve` (two low comment findings rejected, below).
+- **Rejected:** Codex's diff findings on inherited comments in moved files (`fee-helpers.ts:91`, `:126`, `:221`; `recent-activity-handlers.ts:21`, `:42`; `auth-guard.ts:37`; `stale-takeover.ts:61`): a move changes import lines only, the comments predate it, and no consequence follows. The `PROFILE_FREE_ROUTES` copy in `route-guard.ts:79` stays: it is inside `popup/` and outside #1935's lists.
+- **Lessons:** none promoted: `lessons.md` holds 8,148 of 8,192 bytes; F2's auto-import fact is in CLAUDE.md, F3's override fact in this record.
+- **Left open:** test files under the banned folders (four compose with a popup consumer on purpose); `wallet/**`, `pages/`, `core/` and other folders #1935 does not name.
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 ## Outcome & Quality Bar
 
@@ -87,7 +101,7 @@ No trust boundary moves: no wallet, storage, messaging or dApp path changes. The
 
 ## Decision ledger
 
-Codex planning pass (`gpt-6.1-sol`, `high`): approve, confidence high ([lessons/phase-1.md](lessons/phase-1.md)).
+Codex planning pass (`gpt-6.1-sol`, `high`): approve, confidence high. Codex diff pass: approve, no functional finding ([lessons/phase-1.md](lessons/phase-1.md)).
 
 - D1 homes (table above). Codex: `publish-facts` in `utils/fee/` is right; "fee" is a little narrow for its visibility facts, not worth a folder.
 - D2 stale-takeover beside its component. Codex: agreed; cutting the two helpers out is needless work.
