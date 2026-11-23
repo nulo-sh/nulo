@@ -6,9 +6,11 @@ import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import type { ILogger } from "@/wallet/logger"
 import { applyFeePickUpdate, type FeePickUpdate, parseFeePickUpdate, readAppPicks, readSendPicks } from "@/utils/fee-picks"
 import { type PinMap, sanitizePinMap } from "@/utils/pinned-tokens"
-import { AccountService } from "@/wallet/services/account/service"
+import type { AccountService } from "@/wallet/services/account/service"
+import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import {
 	commitLegacyTogether,
@@ -56,7 +58,7 @@ export class UiPreferenceService extends Service<Methods, Events> implements Ser
 	)
 	public static name = UI_PREFERENCE_SERVICE_NAME
 
-	public readonly dependencies = [ProfileService.name, AccountService.name] as const
+	public readonly dependencies = [PROFILE_SERVICE_NAME, ACCOUNT_SERVICE_NAME] as const
 
 	private readonly area: StorageArea
 	private readonly pins: SealedEntityStorage<unknown>
@@ -79,8 +81,8 @@ export class UiPreferenceService extends Service<Methods, Events> implements Ser
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.profiles = services.get(ProfileService.name)
-		this.accounts = services.get(AccountService.name)
+		this.profiles = services.get(PROFILE_SERVICE_NAME)
+		this.accounts = services.get(ACCOUNT_SERVICE_NAME)
 		this.profiles.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
 	}
 

@@ -7,8 +7,10 @@ import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { Lock, EventHandler } from "@nulo/wallet-core/utils"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import type { ILogger } from "@/wallet/logger"
-import { NetworkService } from "@/wallet/services/network/service"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
@@ -160,7 +162,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// register NetworkService, and the journal still works as a standalone
 		// storage primitive in those contexts.
 		try {
-			this.networkService = services.get(NetworkService.name) as NetworkService
+			this.networkService = services.get(NETWORK_SERVICE_NAME) as NetworkService
 			this.networkService.registerChainPurgeSubscriber(async (_profileId, _chainId, networkId) => this.clearChainState(networkId))
 		} catch {
 			// NetworkService not registered in this collection — skip cascade wiring.
@@ -169,7 +171,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// Absent ProfileService means no profile-existence fence and no row keys,
 		// so every write refuses and only plaintext rows read.
 		try {
-			this.profileService = services.get(ProfileService.name) as ProfileService
+			this.profileService = services.get(PROFILE_SERVICE_NAME) as ProfileService
 		} catch {
 			this.profileService = null
 		}

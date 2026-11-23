@@ -4,26 +4,35 @@ import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
 import { type RequestLog, traceTag } from "@/wallet/logger/request-log"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
-import { NetworkService } from "@/wallet/services/network/service"
-import { AccountService } from "@/wallet/services/account/service"
-import { FpcService } from "@/wallet/services/fpc/service"
-import { TokenService } from "@/wallet/services/token/service"
-import { DappSessionService, AccessLevel, type DappSession } from "@/wallet/services/dapp-session/service"
-import {
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
+import type { AccountService } from "@/wallet/services/account/service"
+import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
+import type { FpcService } from "@/wallet/services/fpc/service"
+import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
+import type { TokenService } from "@/wallet/services/token/service"
+import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
+import type { DappSessionService, DappSession } from "@/wallet/services/dapp-session/service"
+import { DAPP_SESSION_SERVICE_NAME, AccessLevel } from "@/wallet/services/dapp-session/spec"
+import type {
 	ExecutionService,
-	type FeeQuestion,
-	type FeeSettings,
-	type InteractionOperationSource,
-	type Operation,
-	type OperationApprovalEnvelope,
-	type OperationKind,
+	FeeQuestion,
+	FeeSettings,
+	InteractionOperationSource,
+	Operation,
+	OperationApprovalEnvelope,
+	OperationKind,
 } from "@/wallet/services/execution/service"
-import { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
+import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
 import { JobCancelledError, TermsAcceptanceRequiredError, UserRejectedError } from "@nulo/extension-messaging/errors"
-import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/service"
+import type { LocalTxOrigin } from "@/wallet/services/transaction/service"
+import { OriginType } from "@/wallet/services/transaction/spec"
 import { randomIdNotIn } from "@/wallet/services/id-allocators"
 import { Lock } from "@/wallet/utils"
 import { WINDOW_CLOSED_BY_USER, type WindowManager } from "@/wallet/services/window-manager/window-manager"
@@ -178,14 +187,14 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.profileService = services.get(ProfileService.name)
-		this.networkService = services.get(NetworkService.name)
-		this.accountService = services.get(AccountService.name)
-		this.dappSessionService = services.get(DappSessionService.name)
-		this.executionService = services.get(ExecutionService.name)
-		this.operationJournal = services.get(OperationJournalService.name)
-		this.fpcService = services.get(FpcService.name)
-		this.tokenService = services.get(TokenService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
+		this.networkService = services.get(NETWORK_SERVICE_NAME)
+		this.accountService = services.get(ACCOUNT_SERVICE_NAME)
+		this.dappSessionService = services.get(DAPP_SESSION_SERVICE_NAME)
+		this.executionService = services.get(EXECUTION_SERVICE_NAME)
+		this.operationJournal = services.get(OPERATION_JOURNAL_SERVICE_NAME)
+		this.fpcService = services.get(FPC_SERVICE_NAME)
+		this.tokenService = services.get(TOKEN_SERVICE_NAME)
 		// A feed cancel lands in the journal only (`cancelJob` → queued → cancelled);
 		// the open approval popup and the dApp's pending promise learn of it here.
 		this.operationJournal.onOperationUpdated.add((record) => {

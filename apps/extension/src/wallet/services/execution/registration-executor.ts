@@ -16,7 +16,8 @@ import {
 import { ContractNotRegisteredError, InvalidWalletArgumentsError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { assertArtifactClassId, assertInstanceArtifactClassId } from "@nulo/aztec-runtime/pxe"
 import type { DappSessionService } from "@/wallet/services/dapp-session/service"
-import { type NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { networkInfoFrom } from "@/wallet/services/network/spec"
 import type { Network } from "@/wallet/services/network/spec"
 import type { OperationContext } from "@/wallet/services/operation-journal/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
@@ -24,7 +25,8 @@ import type { ProfileService } from "@/wallet/services/profile/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { TokenService } from "@/wallet/services/token/service"
-import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/service"
+import type { LocalTxOrigin } from "@/wallet/services/transaction/service"
+import { OriginType } from "@/wallet/services/transaction/spec"
 import type {
 	AztecRegisterContractOperation,
 	AztecRegisterSenderOperation,

@@ -1,7 +1,8 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { TxOrigin } from "@/wallet/services/transaction/spec"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
-import { type TaskService, type ITaskContent, type ITaskResult, EmptyResult, TaskStatus, type Task } from "./service"
+import type { TaskService } from "./service"
+import { type ITaskContent, type ITaskResult, EmptyResult, TaskStatus, type Task } from "./spec"
 
 export class WrappedTask {
 	constructor(

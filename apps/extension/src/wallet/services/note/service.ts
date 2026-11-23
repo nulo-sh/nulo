@@ -8,7 +8,8 @@ import { canonicalSlotHex, type NoteFieldType, type NoteSchema } from "@nulo/azt
 import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
-import { NetworkService, networkInfoFrom, type Network } from "@/wallet/services/network/service"
+import type { NetworkService, Network } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME, networkInfoFrom } from "@/wallet/services/network/spec"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { type Methods, type Note, type NoteReadStatus, type RawNote, type SyncedBlock, NOTE_SERVICE_NAME } from "./spec"
@@ -68,7 +69,7 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 
 	protected async init(services: ServiceCollection) {
 		this.pxeService = new PxeServiceClient(this.logger)
-		this.networkService = services.get(NetworkService.name)
+		this.networkService = services.get(NETWORK_SERVICE_NAME)
 	}
 
 	public async getNotes(networkId: string, account: string, contract?: string): Promise<Note[]> {

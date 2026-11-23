@@ -8,15 +8,18 @@ import { sentenceName } from "@/utils/string"
 import { NOOP_RESTORE_GATE, type RestoreGate } from "@/e2e/restore-gate"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import type { ILogger } from "@/wallet/logger"
-import { ACCOUNT_INTEGRITY_COORDINATOR_NAME, type AccountIntegrityCoordinator } from "@/wallet/services/account-integrity/coordinator"
-import { type Account, AccountService, AccountType } from "@/wallet/services/account/service"
-import { DEFAULT_IMPORTED_ACCOUNT_NAME } from "@/wallet/services/account/spec"
-import { DappSessionService } from "@/wallet/services/dapp-session/service"
-import { seedForKind, type DefaultSeed } from "@/wallet/services/network/seeds"
-import { IDENTITY_PROBE_MS } from "@/wallet/services/network/spec"
-import { findPrimaryEndpoint, isSeedEndpointUrl, type Network, NetworkService } from "@/wallet/services/network/service"
+import type { AccountIntegrityCoordinator } from "@/wallet/services/account-integrity/coordinator"
+import { ACCOUNT_INTEGRITY_COORDINATOR_NAME } from "@/wallet/services/account-integrity/types"
+import type { Account, AccountService } from "@/wallet/services/account/service"
+import { DEFAULT_IMPORTED_ACCOUNT_NAME, ACCOUNT_SERVICE_NAME, AccountType } from "@/wallet/services/account/spec"
+import type { DappSessionService } from "@/wallet/services/dapp-session/service"
+import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
+import { seedForKind, type DefaultSeed, isSeedEndpointUrl } from "@/wallet/services/network/seeds"
+import { IDENTITY_PROBE_MS, NETWORK_SERVICE_NAME, findPrimaryEndpoint } from "@/wallet/services/network/spec"
+import type { Network, NetworkService } from "@/wallet/services/network/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import type { RunFence } from "@/wallet/services/profile/spec"
 import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
 import { decodeStaleRecord, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
@@ -32,8 +35,10 @@ import {
 	STALE_NETWORKS_ROOT,
 	type StaleNetworksRecord,
 } from "@/wallet/services/stale-network/types"
-import { TokenService } from "@/wallet/services/token/service"
-import { TransactionService } from "@/wallet/services/transaction/service"
+import type { TokenService } from "@/wallet/services/token/service"
+import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
+import type { TransactionService } from "@/wallet/services/transaction/service"
+import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import {
 	type Events,
 	type Methods,
@@ -185,12 +190,12 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 	)
 	public static name = NETWORK_RESET_SERVICE_NAME
 	public readonly dependencies = [
-		ProfileService.name,
-		AccountService.name,
-		NetworkService.name,
-		TransactionService.name,
-		TokenService.name,
-		DappSessionService.name,
+		PROFILE_SERVICE_NAME,
+		ACCOUNT_SERVICE_NAME,
+		NETWORK_SERVICE_NAME,
+		TRANSACTION_SERVICE_NAME,
+		TOKEN_SERVICE_NAME,
+		DAPP_SESSION_SERVICE_NAME,
 		ACCOUNT_INTEGRITY_COORDINATOR_NAME,
 	] as const
 
@@ -219,12 +224,12 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 	}
 
 	protected async init(services: ServiceCollection): Promise<void> {
-		this.profiles = services.get(ProfileService.name)
-		this.accounts = services.get(AccountService.name)
-		this.networks = services.get(NetworkService.name)
-		this.transactions = services.get(TransactionService.name)
-		this.dappSessions = services.get(DappSessionService.name)
-		this.tokens = services.get(TokenService.name)
+		this.profiles = services.get(PROFILE_SERVICE_NAME)
+		this.accounts = services.get(ACCOUNT_SERVICE_NAME)
+		this.networks = services.get(NETWORK_SERVICE_NAME)
+		this.transactions = services.get(TRANSACTION_SERVICE_NAME)
+		this.dappSessions = services.get(DAPP_SESSION_SERVICE_NAME)
+		this.tokens = services.get(TOKEN_SERVICE_NAME)
 		this.integrity = services.get<AccountIntegrityCoordinator>(ACCOUNT_INTEGRITY_COORDINATOR_NAME)
 		this.networks.setResetRunProbe((networkId) => this.flight?.networkId === networkId)
 		this.browserApi.storage.local.onChange(this.onStorageChange)
