@@ -14,3 +14,9 @@
   `scripts/e2e/profile-chaos-model.test.ts`). Any edit that moves lines in `service.ts` must remap
   them; the remap here went through a `difflib` line map of the base and new file, asserting each
   fragment on its mapped line, so a fragment that also appears elsewhere cannot bind to the wrong line.
+- `audit:vue` at `10e0beb63` caught a second drift: the review round's one-line-shorter finalize
+  comment moved `RETIRED_FINALIZE`'s cited line. The remap now runs from the base `model.ts`
+  through a fresh map of base → current `service.ts`, and asserts each cited line is byte-equal
+  across the two. Rerun `scripts/e2e/profile-chaos-model.test.ts` after every `service.ts` edit.
+- The same run timed out `src/e2e/config.test.ts` (5 s) under `audit:vue`'s parallel typecheck and
+  lint; it passed alone and in both `test:all` runs. Rerun once, as a load flake.
