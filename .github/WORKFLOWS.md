@@ -9,8 +9,8 @@ These `status` aggregators are what branch protection on `main` / `dev` requires
 | Workflow | Required check-run | Required on | Runs when | What it checks |
 |---|---|---|---|---|
 | `pr-quick.yml` | `quality-status` | dev + main | every PR to `main` / `dev` | commitlint, lint, typecheck, units, chrome+firefox build, landing build, Storybook build, launch legal check (PRs into `main`) |
-| `pr-extension-smoke-e2e.yml` | `extension-smoke-e2e-status` | dev + main | `e2e:extension-smoke` label, OR `smoke-surface` paths-filter (on `dev` and `main` alike) | chrome build + puppeteer smoke, 3 shards |
-| `pr-extension-network-e2e.yml` | `extension-network-e2e-status` | dev + main | `e2e:extension-network` label, OR `extension-network` paths-filter (on `dev` and `main` alike); `workflow_dispatch` runs the whole lane at retry 0 on any ref | full network e2e (anvil + Aztec sandbox + playground), plus two fixed send-chaos seeds |
+| `pr-extension-smoke-e2e.yml` | `extension-smoke-e2e-status` | dev + main | `e2e:extension-smoke` label, OR the extension's build inputs ([`path-filters/extension-build.yml`](path-filters/extension-build.yml)) or the lane's own `smoke-surface` paths filter (on `dev` and `main` alike) | chrome build + puppeteer smoke, 3 shards |
+| `pr-extension-network-e2e.yml` | `extension-network-e2e-status` | dev + main | `e2e:extension-network` label, OR the extension's build inputs or the lane's own `extension-network` paths filter (on `dev` and `main` alike); `workflow_dispatch` runs the whole lane at retry 0 on any ref | full network e2e (anvil + Aztec sandbox + playground), plus two fixed send-chaos seeds |
 | `pr-extension-smoke-e2e-firefox.yml` | `extension-smoke-e2e-firefox-status` | dev + main | same gate as the Chrome twin (its own file + `setup-geckodriver` in the filter), drafts included | firefox build + the smoke suite over geckodriver + Puppeteer BiDi, the same 3 shards |
 | `pr-extension-network-e2e-firefox.yml` | `extension-network-e2e-firefox-status` | dev + main | same gate as the Chrome twin, drafts included; `workflow_dispatch` likewise | the network suite on Firefox: the same lane as on Chrome (5 proverless shards + 3 heavy jobs + the real-proving canary + the two chaos seeds) |
 | `pr-supersede.yml` | — | — | a push to an open same-repository PR (`synchronize`) | cancels the PR workflows' runs on heads the PR has moved past; one job with `actions: write`, no action, no checkout |
@@ -58,7 +58,7 @@ Composite actions live in `.github/actions/` and are shared step fragments used 
 ## Triggers cheat-sheet
 
 - Push a commit on a feature branch → no CI runs; local pre-commit hook handles biome + commitlint.
-- Open a PR to `dev` → `pr-quick` runs. `pr-extension-smoke-e2e` and `pr-extension-network-e2e` run only if their paths-filter trips OR their respective label is on the PR.
+- Open a PR to `dev` → `pr-quick` runs. `pr-extension-smoke-e2e` and `pr-extension-network-e2e` run only if their paths filters trip OR their respective label is on the PR.
 - Open a PR to `main` → `pr-quick` runs; each e2e lane runs when its filter trips on the promote's whole diff or its label is set, as on `dev`.
 - Push to an open PR → each workflow starts a run for the new head in its own queue, and `pr-supersede.yml` cancels the runs still going on older heads of that PR. Another event of the same head (a label, `ready_for_review`, `reopened`) or a re-run queues behind that head's run in flight, and replaces any run already waiting (see [`CI.md`](../CI.md#concurrency)).
 - Change an open PR's base → `pr-retarget.yml` re-runs the four e2e lanes' latest runs of its head, which read the new base (a run in flight is cancelled first); `pr-quick` is not re-run, and a title or body edit runs nothing (see [`CI.md`](../CI.md#concurrency)).
@@ -70,8 +70,8 @@ Composite actions live in `.github/actions/` and are shared step fragments used 
 
 | Label | Effect |
 |---|---|
-| `e2e:extension-smoke` | Force the smoke e2e suite to run on this PR (auto-runs when `smoke-surface` filter trips). |
-| `e2e:extension-network` | Force the network e2e suite to run on this PR (auto-runs when `extension-network` filter trips). |
+| `e2e:extension-smoke` | Force the smoke e2e suite to run on this PR (auto-runs when its paths filters trip). |
+| `e2e:extension-network` | Force the network e2e suite to run on this PR (auto-runs when its paths filters trip). |
 
 ## Branches
 

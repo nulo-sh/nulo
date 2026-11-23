@@ -261,8 +261,9 @@ runtime env var can never arm a build-time flag.
 
 ### CI topology
 
-- **Smoke** — `pr-extension-smoke-e2e.yml` → `_extension-smoke-e2e.yml`. Runs when the diff trips the `smoke-surface`
-  paths filter, when the PR targets `main`, on the `e2e:extension-smoke` label, or on dispatch; 3 vitest shards
+- **Smoke** — `pr-extension-smoke-e2e.yml` → `_extension-smoke-e2e.yml`. Runs when the diff trips its paths filters
+  (the extension's build inputs or its own `smoke-surface`, a PR into `main` included), on the `e2e:extension-smoke`
+  label, or on dispatch; 3 vitest shards
   (`--shard=N/3`), each a 30-minute job with its own in-job armed build; nightly/release run an artifact
   (`artifact_name` / `extension_path`) whole, in one 45-minute job.
   Required check `extension-smoke-e2e-status` on both branches.

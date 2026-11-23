@@ -42,41 +42,17 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/ci-cd/live-labels.sh e2e:extension-smoke e2e:smoke
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: build
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          # The extension's build inputs, shared by every lane that builds it.
+          filters: .github/path-filters/extension-build.yml
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           filters: |
             smoke-surface:
-              - 'apps/extension/**'
-              - 'packages/aztec-runtime/src/**'
-              - 'packages/aztec-runtime/package.json'
-              - 'packages/design/src/**'
-              - 'packages/design/package.json'
-              - 'packages/extension-messaging/src/**'
-              - 'packages/extension-messaging/package.json'
-              - 'packages/legal/src/**'
-              - 'packages/legal/package.json'
-              - 'packages/resolve-asset/src/**'
-              - 'packages/resolve-asset/package.json'
-              - 'packages/third-party-notices/src/**'
-              - 'packages/third-party-notices/package.json'
-              - 'packages/token-list/src/**'
-              - 'packages/token-list/package.json'
-              - 'packages/third-party-notices/texts/**'
-              - 'packages/wallet-bridge/src/**'
-              - 'packages/wallet-bridge/package.json'
-              - 'packages/wallet-core/src/**'
-              - 'packages/wallet-core/package.json'
-              - 'packages/wallet-crypto/src/**'
-              - 'packages/wallet-crypto/package.json'
-              - 'packages/wallet-sdk-schema-patch/src/**'
-              - 'packages/wallet-sdk-schema-patch/package.json'
-              - 'package.json'
-              - 'bun.lock'
-              - 'bunfig.toml'
-              - 'tsconfig.json'
-              - 'tsconfig.base.json'
-              - 'patches/**'
               - '.github/workflows/_extension-smoke-e2e.yml'
               - '.github/workflows/pr-extension-smoke-e2e-firefox.yml'
               - 'scripts/ci-cd/e2e-decide.sh'
@@ -96,6 +72,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE: ${{ steps.live.outputs.base }}
           LABEL_HIT: ${{ steps.live.outputs.label-hit }}
+          BUILD: ${{ steps.override.outputs.full || steps.build.outputs.extension-build }}
           SURFACE: ${{ steps.override.outputs.full || steps.filter.outputs.smoke-surface }}
         run: bash scripts/ci-cd/e2e-decide.sh
 

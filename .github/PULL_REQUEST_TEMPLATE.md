@@ -14,7 +14,7 @@
 
 - [ ] Unit / component tests added or updated where behavior changed.
 - [ ] `bun run audit:vue` (typecheck + tests + lint + build) green locally.
-- [ ] For UI changes: smoke e2e (`bun run test:e2e`) green locally — or rely on the `smoke-surface` filter / `e2e:extension-smoke` label to trigger it in CI.
+- [ ] For UI changes: smoke e2e (`bun run test:e2e`) green locally — or rely on the smoke lane's paths filters / `e2e:extension-smoke` label to trigger it in CI.
 - [ ] For network / dApp / PXE changes: network e2e (`bun run e2e:agent`) green locally — or rely on the `extension-network` filter / `e2e:extension-network` label.
 - [ ] Screenshots / screen recordings attached for visible UI changes.
 - [ ] No new milestone tags in code comments (see CLAUDE.md).

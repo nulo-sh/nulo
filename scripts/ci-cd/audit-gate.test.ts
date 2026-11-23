@@ -288,7 +288,7 @@ describe("the audit mode's wiring", () => {
 
 	test("pr-quick's deps filter watches the files the mode reads", () => {
 		const changes = load()["pr-quick.yml"].jobs.changes
-		const filter = changes.steps.find((step: Workflows) => String(step.uses).includes("dorny/paths-filter"))
+		const filter = changes.steps.find((step: Workflows) => step.id === "filter" && String(step.uses).includes("dorny/paths-filter"))
 		expect((Bun.YAML.parse(filter.with.filters) as Record<string, string[]>).deps).toEqual(
 			DEPENDENCY_PATHSPECS.map((spec) => spec.replace(":(glob)", "")),
 		)
