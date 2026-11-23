@@ -41,16 +41,25 @@ import {
 } from "./profile-switch-teardown"
 
 import type { IService, ServiceCollection } from "@/wallet/base"
-import { NetworkService } from "@/wallet/services/network/service"
-import { AccountService } from "@/wallet/services/account/service"
-import { ExecutionService } from "@/wallet/services/execution/service"
-import { ProfileService } from "@/wallet/services/profile/service"
-import { DappInteractionService } from "@/wallet/services/dapp-interaction/service"
-import { TokenService } from "@/wallet/services/token/service"
-import { LegalAcceptanceService, type LegalAdmission } from "@/wallet/services/legal/service"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
+import type { AccountService } from "@/wallet/services/account/service"
+import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
+import type { ExecutionService } from "@/wallet/services/execution/service"
+import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
+import type { DappInteractionService } from "@/wallet/services/dapp-interaction/service"
+import { DAPP_INTERACTION_SERVICE_NAME } from "@/wallet/services/dapp-interaction/spec"
+import type { TokenService } from "@/wallet/services/token/service"
+import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
+import type { LegalAcceptanceService, LegalAdmission } from "@/wallet/services/legal/service"
+import { LEGAL_ACCEPTANCE_SERVICE_NAME } from "@/wallet/services/legal/spec"
 import { NETWORK_RESET_SERVICE_NAME, type ResetRunGate } from "@/wallet/services/network-reset/spec"
-import { DappSessionService } from "@/wallet/services/dapp-session/service"
-import { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import type { DappSessionService } from "@/wallet/services/dapp-session/service"
+import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
+import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
 import { describeExternalId, DiscoveryQueue, type INetworkReader, WalletSdkDispatcher } from "@nulo/wallet-bridge"
 import type { ClockPort, WindowPort } from "@nulo/wallet-core/ports"
 import type { KeyedLock } from "@nulo/wallet-core/utils"
@@ -198,15 +207,15 @@ export function dispatcherNetworks(networkService: Pick<NetworkService, "getNetw
 }
 
 function resolveSdkDeps(services: ServiceCollection, logger: ILogger): SdkDeps {
-	const networkService: NetworkService = services.get(NetworkService.name)
-	const accountService: AccountService = services.get(AccountService.name)
-	const executionService: ExecutionService = services.get(ExecutionService.name)
-	const profileService: ProfileService = services.get(ProfileService.name)
-	const dappInteractionService: DappInteractionService = services.get(DappInteractionService.name)
-	const dappSessionService: DappSessionService = services.get(DappSessionService.name)
-	const operationJournal: OperationJournalService = services.get(OperationJournalService.name)
-	const tokenService: TokenService = services.get(TokenService.name)
-	const legal: LegalAcceptanceService = services.get(LegalAcceptanceService.name)
+	const networkService: NetworkService = services.get(NETWORK_SERVICE_NAME)
+	const accountService: AccountService = services.get(ACCOUNT_SERVICE_NAME)
+	const executionService: ExecutionService = services.get(EXECUTION_SERVICE_NAME)
+	const profileService: ProfileService = services.get(PROFILE_SERVICE_NAME)
+	const dappInteractionService: DappInteractionService = services.get(DAPP_INTERACTION_SERVICE_NAME)
+	const dappSessionService: DappSessionService = services.get(DAPP_SESSION_SERVICE_NAME)
+	const operationJournal: OperationJournalService = services.get(OPERATION_JOURNAL_SERVICE_NAME)
+	const tokenService: TokenService = services.get(TOKEN_SERVICE_NAME)
+	const legal: LegalAcceptanceService = services.get(LEGAL_ACCEPTANCE_SERVICE_NAME)
 	const resetRun = services.get<IService & ResetRunGate>(NETWORK_RESET_SERVICE_NAME)
 
 	const dispatcher = new WalletSdkDispatcher(

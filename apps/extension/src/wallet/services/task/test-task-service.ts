@@ -2,7 +2,8 @@
  *  and see the registry cleared as it is in the wallet. */
 import { ServiceCollection } from "@/wallet/base"
 import { DummyLogger } from "@/wallet/logger"
-import { type ProfileInfo, ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileInfo, ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { TaskService } from "./service"
 
@@ -10,7 +11,7 @@ export async function startedTaskService(profileId = "p1") {
 	const onActiveProfileChanged = new EventHandler<ProfileInfo>()
 	const services = new ServiceCollection()
 	services.add({
-		name: ProfileService.name,
+		name: PROFILE_SERVICE_NAME,
 		onActiveProfileChanged,
 		getActiveProfile: async () => undefined,
 		start: async () => {},

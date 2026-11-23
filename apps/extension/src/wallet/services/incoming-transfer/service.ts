@@ -7,18 +7,29 @@ import { ChainNotSupportedError } from "@nulo/extension-messaging/errors"
 import { EventHandler, Lock } from "@nulo/wallet-core/utils"
 import { isTerminal } from "@nulo/wallet-core/jobs"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
-import { NetworkService, networkInfoFrom, primaryEndpointUrl, type Network } from "@/wallet/services/network/service"
-import { AccountService } from "@/wallet/services/account/service"
-import { TokenService, type Token, type TokenAdded, type TokenDeleted } from "@/wallet/services/token/service"
-import { TransactionService, type Tx } from "@/wallet/services/transaction/service"
-import { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import { NoteService, type RawNote } from "@/wallet/services/note/service"
-import { ConfigService } from "@/wallet/services/config/service"
-import { TokenBalanceService } from "@/wallet/services/token-balance/service"
-import { TaskService } from "@/wallet/services/task/service"
-import { PriceService, type PriceSnapshot } from "@/wallet/services/price/service"
+import type { NetworkService, Network } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME, networkInfoFrom, primaryEndpointUrl } from "@/wallet/services/network/spec"
+import type { AccountService } from "@/wallet/services/account/service"
+import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
+import type { TokenService, Token, TokenAdded, TokenDeleted } from "@/wallet/services/token/service"
+import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
+import type { TransactionService, Tx } from "@/wallet/services/transaction/service"
+import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
+import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
+import type { NoteService, RawNote } from "@/wallet/services/note/service"
+import { NOTE_SERVICE_NAME } from "@/wallet/services/note/spec"
+import type { ConfigService } from "@/wallet/services/config/service"
+import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
+import type { TokenBalanceService } from "@/wallet/services/token-balance/service"
+import { TOKEN_BALANCE_SERVICE_NAME } from "@/wallet/services/token-balance/spec"
+import type { TaskService } from "@/wallet/services/task/service"
+import { TASK_SERVICE_NAME } from "@/wallet/services/task/spec"
+import type { PriceService, PriceSnapshot } from "@/wallet/services/price/service"
+import { PRICE_SERVICE_NAME } from "@/wallet/services/price/spec"
 import { getPriceMapEntry } from "@/wallet/services/price/price-map"
 import { isAmountAboveDustThreshold, usdThresholdToMicro } from "@/utils/incoming-dust"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -218,21 +229,21 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	public static name = INCOMING_TRANSFER_SERVICE_NAME
 
 	public readonly dependencies: readonly string[] = [
-		ProfileService.name,
-		NetworkService.name,
-		AccountService.name,
-		TokenService.name,
-		TransactionService.name,
-		OperationJournalService.name,
-		NoteService.name,
-		ConfigService.name,
+		PROFILE_SERVICE_NAME,
+		NETWORK_SERVICE_NAME,
+		ACCOUNT_SERVICE_NAME,
+		TOKEN_SERVICE_NAME,
+		TRANSACTION_SERVICE_NAME,
+		OPERATION_JOURNAL_SERVICE_NAME,
+		NOTE_SERVICE_NAME,
+		CONFIG_SERVICE_NAME,
 		// Balance wiring: TokenBalanceService supplies the causal-ack refresh request; TaskService
 		// supplies the anchored task's terminal state. Declaring both also starts TokenBalance first
 		// (verified acyclic — TokenBalance does not depend on incoming-transfer).
-		TokenBalanceService.name,
-		TaskService.name,
+		TOKEN_BALANCE_SERVICE_NAME,
+		TASK_SERVICE_NAME,
 		// Dust filter: PriceService supplies fresh USD quotes for the read-time filter.
-		PriceService.name,
+		PRICE_SERVICE_NAME,
 	]
 
 	public readonly onIncomingTransferAdded = new EventHandler<IncomingTransferRecord>()
@@ -381,21 +392,21 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	protected async init(services: ServiceCollection): Promise<void> {
-		this.profileService = services.get(ProfileService.name)
-		this.networkService = services.get(NetworkService.name)
-		this.accountService = services.get(AccountService.name)
-		this.tokenService = services.get(TokenService.name)
-		this.transactionService = services.get(TransactionService.name)
-		this.operationJournalService = services.get(OperationJournalService.name)
-		this.noteService = services.get(NoteService.name)
-		this.configService = services.get(ConfigService.name)
-		this.priceService = services.get(PriceService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
+		this.networkService = services.get(NETWORK_SERVICE_NAME)
+		this.accountService = services.get(ACCOUNT_SERVICE_NAME)
+		this.tokenService = services.get(TOKEN_SERVICE_NAME)
+		this.transactionService = services.get(TRANSACTION_SERVICE_NAME)
+		this.operationJournalService = services.get(OPERATION_JOURNAL_SERVICE_NAME)
+		this.noteService = services.get(NOTE_SERVICE_NAME)
+		this.configService = services.get(CONFIG_SERVICE_NAME)
+		this.priceService = services.get(PRICE_SERVICE_NAME)
 		this.outbox = new BalanceRefreshOutbox({
 			repo: this.repo,
 			activeProfile: () => this.profileService.getActiveProfile(),
 			withLock: (fn) => this.withServiceLock(fn),
-			tokenBalances: services.get<TokenBalanceService>(TokenBalanceService.name),
-			tasks: services.get<TaskService>(TaskService.name),
+			tokenBalances: services.get<TokenBalanceService>(TOKEN_BALANCE_SERVICE_NAME),
+			tasks: services.get<TaskService>(TASK_SERVICE_NAME),
 			warn: (...data) => this.logWarn(...data),
 		})
 		sealOnRowKeysReady(

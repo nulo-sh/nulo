@@ -5,7 +5,8 @@ import { ValueDecodeError } from "@nulo/wallet-core/storage"
 import { AlarmDispatcher, EventHandler, ResponseTooLargeError, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { type ILogger, LogLevel } from "@/wallet/logger"
-import { LegalAcceptanceService, type LegalStatus } from "@/wallet/services/legal/service"
+import type { LegalAcceptanceService, LegalStatus } from "@/wallet/services/legal/service"
+import { LEGAL_ACCEPTANCE_SERVICE_NAME } from "@/wallet/services/legal/spec"
 import type { ValueStorage } from "@/wallet/storage"
 import { valueStorage } from "@/wallet/storage/stores"
 import {
@@ -86,7 +87,7 @@ class DownloadError extends Error {
 export class TokenListService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("refresh")
 	public static readonly name = TOKEN_LIST_SERVICE_NAME
-	public readonly dependencies = [LegalAcceptanceService.name] as const
+	public readonly dependencies = [LEGAL_ACCEPTANCE_SERVICE_NAME] as const
 
 	public readonly onListChanged = new EventHandler<TokenListSnapshot>()
 
@@ -117,7 +118,7 @@ export class TokenListService extends Service<Methods, Events> implements Servic
 	}
 
 	protected async init(services: ServiceCollection): Promise<void> {
-		this.legal = services.get(LegalAcceptanceService.name)
+		this.legal = services.get(LEGAL_ACCEPTANCE_SERVICE_NAME)
 		this.legal.onAcceptanceChanged.add(this.onAcceptanceChanged)
 		this.snapshot = await this.loadStored()
 		this.booted = this.refreshIfDue().catch((error) => this.log(LogLevel.Warn, "token list boot failed", { error }))

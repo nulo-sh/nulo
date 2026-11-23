@@ -12,6 +12,12 @@ export type InclusionNode = Pick<AztecNode, "getBlockData" | "findLeavesIndexes"
  *  minutes or more, so a faster read only costs the endpoint. */
 export const FINALITY_READ_INTERVAL_MS = 60_000
 
+/** After a tx IS marked Dropped, keep re-checking it at a slow cadence for this
+ *  long — a late mine (the receipt turning up mined after all) resurrects the
+ *  row instead of leaving a confirmed tx labeled failed forever. */
+export const DROPPED_RESURRECTION_WINDOW_MS = 30 * 60_000
+export const DROPPED_RECHECK_INTERVAL_MS = 15_000
+
 /**
  * What the finalized chain proves about the block a send was read in. `final`: that chain holds
  * the block's hash at its number. Once the chain is past the block without it, the block was

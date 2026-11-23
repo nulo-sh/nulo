@@ -6,13 +6,16 @@ import { restoreRows } from "@/wallet/services/restore-rows"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
-import { AccountService, type Account } from "@/wallet/services/account/service"
-import { accountScopeKey } from "@/wallet/services/account/spec"
-import { NetworkService } from "@/wallet/services/network/service"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { AccountService, Account } from "@/wallet/services/account/service"
+import { accountScopeKey, ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import type { ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
-import { StepContent, type WrappedTask } from "@/wallet/services/task/service"
+import type { WrappedTask } from "@/wallet/services/task/service"
+import { StepContent } from "@/wallet/services/task/spec"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import type { Located, SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
@@ -34,7 +37,7 @@ import {
 	TxSchema,
 	TxConfirmationTimeoutError,
 } from "./spec"
-import { FINALITY_READ_INTERVAL_MS, proveFinal } from "./inclusion"
+import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS, FINALITY_READ_INTERVAL_MS, proveFinal } from "./inclusion"
 import { MINED_STATUSES, executionResultFromReceipt, txStatusFromReceipt } from "./receipt-status"
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 
@@ -55,11 +58,6 @@ export * from "./spec"
  */
 export const DROPPED_GRACE_MS = 60_000
 export const DROPPED_CONFIRMATIONS = 3
-/** After a tx IS marked Dropped, keep re-checking it at a slow cadence for this
- *  long — a late mine (the receipt turning up mined after all) resurrects the
- *  row instead of leaving a confirmed tx labeled failed forever. */
-export const DROPPED_RESURRECTION_WINDOW_MS = 30 * 60_000
-export const DROPPED_RECHECK_INTERVAL_MS = 15_000
 
 /** One activity row as an execution records it after the send. */
 export type AddTransactionInput = {
@@ -136,9 +134,9 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.profileService = services.get(ProfileService.name)
-		this.accountService = services.get(AccountService.name)
-		this.networkService = services.get(NetworkService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
+		this.accountService = services.get(ACCOUNT_SERVICE_NAME)
+		this.networkService = services.get(NETWORK_SERVICE_NAME)
 		// The SHARED deletion state — addTransaction asserts an execution's captured
 		// epoch is still current before writing (D13).
 		this.deletionState = this.profileService.getDeletionState()

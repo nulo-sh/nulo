@@ -14,19 +14,22 @@ import type {
 	TransferFeeEstimate,
 } from "@/wallet/services/execution/service"
 import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
-import { NetworkService } from "@/wallet/services/network/service"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
 import type { Network } from "@/wallet/services/network/spec"
-import { AccountService } from "@/wallet/services/account/service"
-import { type AccountScope, accountScopeMatcher } from "@/wallet/services/account/spec"
+import type { AccountService } from "@/wallet/services/account/service"
+import { type AccountScope, accountScopeMatcher, ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import type { WrappedTask } from "@/wallet/services/task/wrapped-task"
-import { TaskService, RevokeAuthwitsContent, StepContent } from "@/wallet/services/task/service"
-import { TransactionService, OriginType } from "@/wallet/services/transaction/service"
-import { type Tx, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
+import type { TaskService } from "@/wallet/services/task/service"
+import { TASK_SERVICE_NAME, RevokeAuthwitsContent, StepContent } from "@/wallet/services/task/spec"
+import type { TransactionService } from "@/wallet/services/transaction/service"
+import { type Tx, TxExecutionResult, TxStatus, TRANSACTION_SERVICE_NAME, OriginType } from "@/wallet/services/transaction/spec"
 import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { array_max, Lock, sleep } from "@/wallet/utils"
@@ -145,13 +148,13 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.profileService = services.get(ProfileService.name)
-		this.networkService = services.get(NetworkService.name)
-		this.accountService = services.get(AccountService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
+		this.networkService = services.get(NETWORK_SERVICE_NAME)
+		this.accountService = services.get(ACCOUNT_SERVICE_NAME)
 		this.executionService = services.get(EXECUTION_SERVICE_NAME)
-		this.transactionService = services.get(TransactionService.name)
+		this.transactionService = services.get(TRANSACTION_SERVICE_NAME)
 		this.operationJournal = services.get(OPERATION_JOURNAL_SERVICE_NAME)
-		this.taskService = services.get(TaskService.name)
+		this.taskService = services.get(TASK_SERVICE_NAME)
 
 		// Authwit rows + registry-enabled flags are scoped by (profileId, chainId, account). Two
 		// awaited purge subscribers, NOT the address-only onAccountDeleted listener (which could

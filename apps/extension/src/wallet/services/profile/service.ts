@@ -44,8 +44,8 @@ import {
 	sealPasskeySlots,
 	zeroize,
 } from "@nulo/wallet-crypto"
-import { PasskeyService } from "@/wallet/services/passkey/service"
-import { newCreateInput } from "@/wallet/services/passkey/spec"
+import type { PasskeyService } from "@/wallet/services/passkey/service"
+import { newCreateInput, PASSKEY_SERVICE_NAME } from "@/wallet/services/passkey/spec"
 import { PasskeyRecoveryCoordinator, type PasskeyAnswer } from "./passkey-recovery-coordinator"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { SessionManager } from "./session-manager"
@@ -495,7 +495,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.passkeys = services.get(PasskeyService.name)
+		this.passkeys = services.get(PASSKEY_SERVICE_NAME)
 		this.passkeyCoordinator = new PasskeyRecoveryCoordinator(this.passkeys)
 
 		// Seed the reserved-id set from the durable tombstone RAW keys BEFORE the
