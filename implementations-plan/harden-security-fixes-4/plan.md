@@ -42,7 +42,7 @@ This plan carries the lane's code changes. Items settled without a code change a
 - F1. `executeNoFromSendTx`'s opening `logDebug` interpolates `JSON.stringify(op.opts?.additionalScopes)` (`execution/dapp-send-executor.ts:1222-1224`); `prepareNoFrom` logs the same set as counts a moment later, with the reason (`:1317-1327`). `additionalScopes` is in no stored shape or backup (recon sweep).
 - F2. `rehydrateOptimizablePrefix` scans `type` and `isStatic` only (`execution/fast-path.ts:95-101`); `partitionFastPrefix` also stops at `hideMsgSender === true` (`helpers/batched-view-simulation.ts:314`). These are the only two callers of `simulateViaNode`, which sets each call's `msg_sender` to the account (recon).
 - F3. `SESSION_BOUND_TYPES` holds `ping` and `secure-message` (`wallet-sdk/stale-session.ts:24`); `stale-session.test.ts:34` pins `disconnect-request` among the types forwarded without the tab check.
-- F4. Firefox 153, the manifest's minimum (`manifest/manifest.firefox.config.ts:40`), sets `sender.origin` on a content script's message from the document principal (`ExtensionParent.sys.mjs` `getSender`, read in the pinned 153.0.4's `omni.ja`); Chrome sets it too. The note above `senderDocumentOrigin` says Firefox sets only `sender.url` (`wallet-sdk/content-admission.ts:140-141`).
+- F4. Firefox 153, the manifest's minimum (`manifest/manifest.firefox.config.ts:40`), sets `sender.origin` on a content script's message from the document principal (`ExtensionParent.sys.mjs` `getSender`, read in Firefox 153.0.4's `omni.ja`); Chrome sets it too. The note above `senderDocumentOrigin` says Firefox sets only `sender.url` (`wallet-sdk/content-admission.ts:140-141`).
 - F5. `TaskService` never pulls the active profile, and the silent restore emits no `onActiveProfileChanged` (`task/service.ts:42-45,246-254`; `profile/service.ts:514-516`). Two stub profile services lack `getActiveProfile`: `startedTaskService`'s (used by five test files) and `task/service.test.ts`'s `createTestSetup`.
 - F6. Each phase's new test fails at `8ae2c06a4` and passes with the change; each control passes on both (scratch runs, kept as patches outside the tree).
 
@@ -124,7 +124,7 @@ This plan carries the lane's code changes. Items settled without a code change a
 
 **Validation gate.** From the root: `bun run lint`. Pass: exit 0. Layers: lint.
 
-### Arc 1 gate
+### Arc 1 gate ✓
 1. `bun run audit:vue` from the root (typecheck, test and lint, then build). Pass: exit 0.
 2. `bun run test:all` from the root. Pass: exit 0.
 3. With load1 under 150, from the root: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/session-explicitDisconnect.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`. Pass: green at retry 0 on both. This checks that a dApp's own disconnect still works end to end; it cannot prove P3, whose cross-tab case Phase 3's composition test proves. Layers: network e2e.
@@ -137,7 +137,7 @@ This plan carries the lane's code changes. Items settled without a code change a
 
 ## Delivery
 
-- Arc 1: branch `harden-security-fixes-4-a1` off `origin/dev`, its first commit this plan's commit cherry-picked from `worktree-harden-security-fixes-4`. PR `fix(dapp): disconnects from the holding tab only, sender-hiding sims on the pxe` (78 characters).
+- Arc 1: branch `harden-security-fixes-4-a1` off `origin/dev`, its first commit this plan's commit cherry-picked from `worktree-harden-security-fixes-4`. PR `fix(dapp): scope counts in logs, sender-hiding sims on the pxe, tab-bound disconnects` (85 characters).
 - Arc 2: branch `harden-security-fixes-4-a2` off `origin/dev` once arc 1 has merged. PR `fix(tasks): the task registry learns the active profile at start` (64).
 - Both against `dev`, opened ready only after their arc's review loop converges, with no label at creation and no `Closes` line. The body describes each change and its invariant, the validation run with outcomes, the two observable behaviours (A1), and "No visible change."
 - Parallelism: disjoint files, but the lane runs one arc at a time by the orchestrator's pacing; no lanes.
