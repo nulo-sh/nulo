@@ -6,12 +6,13 @@
  * sends it) and decodes through the real encoder, decoder and Token artifact.
  */
 
+import { Skeleton } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { beforeAll, describe, expect, test } from "vitest"
 import type { DecodedGrant, UndecodedReason } from "@/wallet/services/execution/client"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { shownText } from "../../../../tests/helpers/shown-text"
-import { GRANT, HUB, MAIN, RECIPIENT, USDC, USDC_TOKEN, decodeGrantFixture, stubTokenSelectors } from "./execute.fixture"
+import { GRANT, HUB, MAIN, RECIPIENT, USDC, USDC_TOKEN, decodeGrantFixture, field, stubTokenSelectors } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 
 const grantOp = (content: unknown = GRANT) => ({
@@ -43,6 +44,10 @@ const LINES: Record<UndecodedReason, string> = {
 	arguments: "The arguments don't fit the interface.",
 	unavailable: "Nulo couldn't read the arguments right now.",
 }
+
+/** The grant as the wire carries it: every argument a `0x`-prefixed 64-digit field. */
+const WIRE_GRANT = { ...GRANT, args: [MAIN, RECIPIENT, field(25_000_000n), field(0n)] }
+const WORDS = "Reading arguments…"
 
 let decoded: DecodedGrant
 beforeAll(async () => {
@@ -120,9 +125,43 @@ describe("OperationCard: a public grant", () => {
 		expect(w.findAll('[data-testid="execute-grant-unverified-advice"]')).toHaveLength(0)
 	})
 
-	test("while the wallet decodes, its arguments read as pending", () => {
-		const w = mountGrant({ decodedGrants: undefined, tokens: [USDC_TOKEN] })
-		expect(byTestid(w, "execute-grant-args-pending").text()).toBe("Reading arguments…")
+	test.each([
+		[0, 0],
+		[2, 2],
+		[4, 4],
+		[6, 4],
+	])("while the wallet reads a grant of %i fields, %i placeholder pairs stand for them and the words are said once", (count, pairs) => {
+		const args = Array.from({ length: count }, (_, i) => WIRE_GRANT.args[i % WIRE_GRANT.args.length])
+		const w = mountGrant({ decodedGrants: undefined, tokens: [USDC_TOKEN] }, grantOp({ ...WIRE_GRANT, args }))
+		const pending = byTestid(w, "execute-grant-args-pending")
+		expect([pending.attributes("role"), pending.attributes("aria-busy"), pending.attributes("aria-hidden"), pending.text()]).toEqual([
+			"status",
+			"true",
+			undefined,
+			WORDS,
+		])
+		expect(pending.findAllComponents(Skeleton)).toHaveLength(pairs * 2)
+		expect(w.text().split(WORDS)).toHaveLength(2)
+	})
+
+	test.each([
+		["decoded", "execute-grant-structured-args"],
+		["unknown-contract", "execute-grant-unverified-args"],
+		["unavailable", "execute-grant-unverified-args"],
+	])("a wire-shaped grant's %s reading replaces its placeholder pairs", async (outcome, block) => {
+		const read = await decodeGrantFixture(WIRE_GRANT)
+		expect(read.kind === "decoded" && read.call.selector).toMatch(/^0x[0-9a-f]{8}$/)
+		const w = mountGrant({ decodedGrants: undefined, tokens: [USDC_TOKEN] }, grantOp(WIRE_GRANT))
+		expect(w.findAllComponents(Skeleton)).toHaveLength(8)
+		await w.setProps({ decodedGrants: [outcome === "decoded" ? read : { kind: "undecoded", reason: outcome as UndecodedReason }] })
+		expect([byTestid(w, block).exists(), byTestid(w, "execute-grant-args-pending").exists()]).toEqual([true, false])
+		expect([w.findAllComponents(Skeleton).length, w.text().includes(WORDS)]).toEqual([0, false])
+	})
+
+	test("a grant that names no call has no arguments to count: while it is read it keeps the words", () => {
+		const content = { kind: "encoded_call", caller: HUB, to: USDC, selector: "0xc47adea0", args: WIRE_GRANT.args }
+		const w = mountGrant({ decodedGrants: undefined }, grantOp(content))
+		expect([byTestid(w, "execute-grant-args-pending").text(), w.findAllComponents(Skeleton).length]).toEqual([WORDS, 0])
 	})
 
 	test.each(["unknown-contract", "unknown-function", "arguments", "unavailable"] satisfies UndecodedReason[])(
