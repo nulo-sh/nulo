@@ -1,7 +1,7 @@
 ---
 plan: quality-lows-b
 tier: light
-status: in progress
+status: completed
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -13,6 +13,20 @@ base: origin/dev at 9c913679b
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-24. One PR into `dev` from `quality-lows-b-a1`, one commit per issue; its merge archives this plan and closes #1977, #1978 and #1979.
+- **Status:** completed.
+- **Shipped:** `utils/pending-send.ts` (the refusal label and its toast helper, nine sites); `settleResolveError` and `dismissWrongProfile` in `useDappApprovalWindow`, whose options take the window's `requestId`; `createReconnectCheck` in `composables/reconnectRead.ts`, used by `createReconnectRead` and the three snapshot composables. New pins: each composable's answer to a read refused before the first connect, and the fee and execute windows' non-cancel refusal.
+- **Review:** one Codex pass, no material finding, one comment nit applied (§ Review).
+- **Gates:** lint, typecheck:all, audit:vue, test:all, build-storybook and check:plans green at retry 0; the touched smoke and network e2e specs green on Chrome and Firefox at retry 0 (§ Validation). A first audit:vue run hit three 5 s static-scan timeouts at a host load average near 300; they passed alone and on the rerun.
+- **Deviations:** the fifth consumer of the shell, `network-unavailable`, passes its `requestId` (D2); two citations in the profile-chaos model moved one line with the file they cite.
+- **Dispositions:** adopting `createReconnectRead` in the three composables, declined: it would add a first-connect re-read none of them makes today (D4).
+- **Known limits:** none.
+- **Open items:** #1985 (the health composable never re-reads a health read refused before its first connect; plausible but unverified).
+- **Lessons:** none promoted; `lessons.md` sits at 8,148 of 8,192 bytes and nothing here generalizes past its own tests.
+- **Seeds retired:** the `/goal` and `/loop` seeds in § Seeds were never run; the orchestrator drives delivery.
 
 # quality-lows-b: approval endings, the pending-send toast and the reconnect rule get a home
 
@@ -64,7 +78,9 @@ Window teardown, `onBeforeUnmount`/`onUnmounted` bodies, reject guards, template
 
 ## Validation
 
-`bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`, `bun run audit:vue`, `bun run --cwd apps/extension build-storybook` (imports move in `src/utils` and `src/composables`), `bun run check:plans`. E2E: the specs that drive the four windows' cancel, wrong-profile and reject endings and the switch refusals (`git grep` under `apps/extension/tests/e2e`), smoke from `apps/extension`, network in one `e2e:agent` run, each on Chrome and Firefox (window handling), retry 0.
+Outcomes: audit:vue 1,057 files and 18,988 tests green; test:all green (extension 18,995 tests); smoke `accounts`, `settings-crud`, `auth-flows`, `popup-stack`: Chrome 24/24, Firefox 24/24; network `tx-sendTx-default`, `tx-sendTx-reject`, `cap-window`, `connect-deny`, `connect-every-site`, `connect-unserved-chain`, `in-flight-send-guard` (proverless): Chrome 13/13, Firefox 12/12 plus one Chrome-only case skipped.
+
+Commands: `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`, `bun run audit:vue`, `bun run --cwd apps/extension build-storybook` (imports move in `src/utils` and `src/composables`), `bun run check:plans`. E2E: the specs that drive the four windows' cancel, wrong-profile and reject endings and the switch refusals (`git grep` under `apps/extension/tests/e2e`), smoke from `apps/extension`, network in one `e2e:agent` run, each on Chrome and Firefox (window handling), retry 0.
 
 ## Review
 
