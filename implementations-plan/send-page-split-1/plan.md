@@ -168,7 +168,7 @@ None. No template, style, copy, testid, Tab stop or Enter rule changes; no toast
 
 ## Phases
 
-### Phase 1 (arc 1): `useSendData`
+### Phase 1 (arc 1): `useSendData` ✓
 1. Read `send.vue` at the base. Add `useSendData.ts` with `fetchIdentity` at module level and the interfaces above.
 2. In `send.vue`, keep the client constructions in class order; call the hook after the snapshot and the contact client; subscribe its handlers; add `function onIdentityLoaded(list)` (a declaration: the hook call above it passes it) with the five lines; point mount, W8, `retryTokens`, `pickAddedToken` and the unmount slot at the hook.
 3. Add `useSendData.test.ts`, at least ten cases: barrier (nothing lands until all four reads answer), commit before `onLoaded`, latest run wins, no identity clears, pre-read clear keeps contacts, an event during load re-reads tokens, a refused read and a refused balance read mark failed, a superseded refusal marks nothing, an event after a refusal retries, `reloadTokens` superseded by a fetch, `dispose` ends a fetch in flight, contact events update in place.
@@ -216,6 +216,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Opus 5.5 (Plan) | conditional approve | I1's condition and the first-subscription example; D11 marked not required; D8 cites the lesson and KL-1; a tenth fiat case; the subscriptions row; `onIdentityLoaded` a declaration; six resets; `onReadFailed` returned, not exported; a fallback cut for `useSendEstimate` | the budget numbers: Opus counted closers by hand (80); Biome, which is the gate, skips bracket-only lines and measures 64 (shown on a scratch probe) |
 | final 1 | Codex, gpt-6.1-sol, fresh (session 01a20eeb) | conditional approve | `NULO_E2E_RETRY=0` on every e2e invocation (the network config retries twice by default), Firefox spelled out; two equivalent mutants replaced (W6 after W7, W7 before W4: both subscribe through `activeToken`, so first-subscription order is unchanged) by an `await` before `onLoaded` and a dropped `clearEstimateFailure` | none |
 | final 2 | Codex, resumed | **approve** | the fixes verified; KL-2 (found while checking: the unmount's cancel reopens the execution port) traced correct and its known-limit disposition proportionate | none |
+| arc 1 r1 | Codex, gpt-6.1-sol (session 01a20f0c) | findings: 2 | the `onLoaded` comment promised order over every watcher, false for a sync watcher (probe): now "before queued pre watchers flush"; a narrating test comment cut | none |
+| arc 1 r2 | Codex, resumed | **clean** | the fixes verified | none |
+| arc 1 | Opus 5.5 (general-purpose) | findings: 3 | `dispose`'s doc overclaimed (the balance read is fenced by the snapshot's own `dispose()`); the no-identity case pins the resets before the guard and both skipped reads; the refused-balance half asserts the reset before awaiting; `onLoaded`, `readPastSends` and the page's snapshot comment state their contracts | none |
+| arc 1 r3 | Codex, resumed | **clean** | the Opus fixes verified; no regression | none |
 
 ## Seeds (not run; orchestrator-owned)
 
