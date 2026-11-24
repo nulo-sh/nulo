@@ -1,7 +1,7 @@
 ---
 plan: css-recipes-home-1
 tier: mid
-status: approved (final Codex pass)
+status: completed
 issues: "#1931"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,27 @@ base: origin/dev at e4f9011f8
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-24. Planned as two arcs; both delivered.
+- **Status:** completed. Arc 1 merged as #1973. Arc 2 and this close-out ship as one PR into `dev`, whose merge archives this plan and closes #1931.
+- **Shipped:**
+  - Arc 1: the accent text action (`components/text-action.module.css` `.accent`), the muted link (`popup/components/modules/general/section-link.module.css` `.section_link`) and visually hidden (`components/a11y.module.css` `.visually_hidden`) each get one home. `utils/sheet-compose-ban.test.ts` refuses a feature sheet composed from outside its folder; today's cross-feature triples sit on a list that only shrinks.
+  - Arc 2: form sections (`components/composite/form-section.module.css` `.section`, `.label`) and the filled auth-tab skin (`components/composite/auth-method-choice.module.css`) get one home each. `import-shared.module.css` is deleted and its four composers re-pointed. Change password, reset, new profile and its two modules compose the form-section home. `UnlockMethodChoice` and onboarding's create compose the tab skin and keep their focus rules. The two type-role overrides for the selected tab's weight are one.
+- **Review:** arc 1: Codex round 1 one finding, fixed; round 2 clean; the Opus review's four findings fixed. Arc 2: Codex round 1 clean; the Opus review's B1 fixed (9f0e7bb17), B2 and B3 rejected with reasons; round 2 clean (Audit verdicts).
+- **Gates:**
+  - Arc 2's proof, base 9c913679b against head 9f0e7bb17: 29 smoke states, 272 captures per browser. Computed styles, hover and focus are identical in every capture; every differing pixel is matched by a same-build pair.
+  - Affected e2e at retry 0 at 9f0e7bb17, both browsers. Smoke: Chrome 32 passed with 1 Firefox-only skip, Firefox 33 passed. Network `restore-again`: 2/2 on each.
+  - After merging `origin/dev` at b7ea94ccc: lint, typecheck:all, test:all, audit:vue, test:ci-gating, check:plans and build-storybook green. The built CSS differs from dev's in 6 of 129 files, with a rule diff identical to the proof's, in both browsers.
+- **Dropped:**
+  - B2 and B3, rejected (Arc 2 review).
+  - Arc 2's network proof run: every state is reached in smoke (Arc 2, Phase 4).
+  - `FeeMethodSelector`'s trigger "Checking": no screen renders it (Arc 1 review).
+- **Known limits:** #2007.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` sits at 8,148 of 8,192 bytes, and nothing in it is superseded here. The Tab-walk anchor this lane learned again is already a rule of the `e2e-testing` skill. The scoped-hash renames and the same-build pixel pairs stay in `lessons/phase-1.md` and `lessons/phase-3.md`.
+- **Seeds retired:** none were run; the orchestrator drove this lane.
 
 # css-recipes-home-1: cross-feature CSS recipes get a lower-layer home, and the copies compose them
 
@@ -201,6 +222,12 @@ No trust boundary, data, permission, dependency or wire format changes: styleshe
 1. Seed and open, per Phase 2's method: the popup's import page (seed, file, full backup, each unlock method); `restore-again` with a backup chosen and its unlock-method step; onboarding's import; change password; reset; new profile (both methods); onboarding create (both tabs, the passkey note).
 2. Run the affected e2e at retry 0 on both browsers: smoke `backup-roundtrip`, `security`, `registration`, `onboarding-tab`, `type-roles`; network `restore-again`.
 
+As run ([lessons/phase-3.md](lessons/phase-3.md) says how each state is reached):
+- Every state is reached in smoke, so no network proof run: Restore again reads its reminder from storage, seeded as a partial restore leaves it; a pick only reads the file, so a plain file reaches the unlock-method step and a sealed one the decrypt step. Restore again's own form asks no new password, so its unlock-method step is the import page's, read on both import pages.
+- The cross comment on `export_section_last` renames every class of `CollapsingHeroLayout.vue`, so D8 also opens its five other screens: accounts import, the three exports, unlock method.
+- Onboarding is read at 720 px too, its tab's width.
+- Each tab is read unselected, hovered, selected, selected and hovered, and focused. An unselected tab never holds focus: Tab skips it and an arrow selects the tab it focuses. A disabled tablist (`importing`, `isCreating`) matches no rule the enabled states do not, plus `AuthMethodTabs`' own `.disabled`, which this arc leaves alone.
+
 **Validation gate.** As Phase 2.
 
 ## Audit verdicts
@@ -235,6 +262,18 @@ Codex loop (`gpt-6.1-sol` high, read-only) over `4d18591bd..HEAD` and this plan,
 
 Round 1: **findings** (A1; A2-A5 are Opus's). Round 2, resumed over `cef64b7cd`: **clean**. It also confirmed, high confidence, that `FeeMethodSelector`'s trigger "Checking" renders on no screen: its only consumer passes `pending` as `onSend && …` and mounts it only off Send. That branch is dead code, not an unreached state, so step 6 does not stop the arc.
 
+### Arc 2 review
+
+Codex loop (`gpt-6.1-sol` high, read-only) over `9c913679b..HEAD` and this plan, and one Opus diff review. Detail in [lessons/phase-3.md](lessons/phase-3.md).
+
+| # | Finding | Label | Disposition |
+|---|---|---|---|
+| B1 | The tab skin's comment named `.tab_active:hover` after `.tab:hover`, not `.tab_active` after `.tab`, the same tie | demonstrated | accepted: one comment covers both pairs; the head proof reran on the renamed classes |
+| B2 | `popup/pages/import.vue .section_label` is identical to the home's `.label` | demonstrated | rejected: it labels `.name_section` (gap 8px, bottom padding only), not a form section; the Site table's O stands |
+| B3 | `ImportMethodPicker` and `NewProfileCredentials` now hash to the same scoped tokens | demonstrated | rejected: neither token carries a declaration |
+
+Round 1: **clean**. The Opus review: B1-B3. Round 2, resumed over B1's fix and the two rejections: **clean**.
+
 ## Decision ledger
 
 | # | Question | Codex | Opus | Decided, and why |
@@ -259,7 +298,7 @@ Fresh final Codex pass (`gpt-6.1-sol` high, new session) over the consolidated p
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at e4f9011f8, per arc, at the arc boundary:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at e4f9011f8, per arc, at the arc boundary:
 1. No diff review (`code_review: off`).
 2. The Codex loop (`gpt-6.1-sol`, `high`, read-only) over the arc's diff, this plan and the arc map ("arc N of 2; arc 2 adds the form-section and tab homes"), with the two verbatim rules and the adversarial ask: a `composes` that changes which of two equal-specificity rules wins; a "copy" that differed by a declaration; a class removed that a test, a spec or another `composes` still names; a specificity change from a rewritten selector; a doubled role token; a build whose chunk order differs from the one measured; a screen that carries a changed rule and was not opened. Until clean, hard stop at three rounds. Then one Opus diff review (`general-purpose`, same asks). Any style change reruns Phase 2 or 4 for what it touches.
 3. Delivery as above; `gh pr checks <n> --watch`.

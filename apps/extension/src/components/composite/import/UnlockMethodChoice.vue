@@ -36,30 +36,15 @@ const method = defineModel({ type: String, default: "passkey" })
 
 <style module>
 .section_label {
-	composes: section_label from "./import-shared.module.css";
+	composes: label from "@/components/composite/form-section.module.css";
 }
 
 .tabs {
-	display: flex;
-	border: 1px solid var(--nulo-outline);
-	background: var(--nulo-surface);
-	width: fit-content;
+	composes: tabs from "@/components/composite/auth-method-choice.module.css";
 }
 
 .tab {
-	composes: type--segment from global;
-	background: transparent;
-	border: none;
-	color: var(--txt-secondary);
-	padding: 10px 20px;
-	cursor: pointer;
-	transition:
-		background 0.15s var(--bezier),
-		color 0.15s var(--bezier);
-}
-
-.tab:hover {
-	color: var(--txt-primary);
+	composes: tab from "@/components/composite/auth-method-choice.module.css";
 }
 
 .tab:focus-visible {
@@ -68,16 +53,7 @@ const method = defineModel({ type: String, default: "passkey" })
 }
 
 .tabActive {
-	background: var(--nulo-accent);
-	color: var(--app-bg);
-}
-
-.tab.tabActive {
-	font-weight: 700;
-}
-
-.tabActive:hover {
-	color: var(--app-bg);
+	composes: tab_active from "@/components/composite/auth-method-choice.module.css";
 }
 
 .tabActive:focus-visible {
@@ -86,8 +62,6 @@ const method = defineModel({ type: String, default: "passkey" })
 }
 
 .passkeyInfo {
-	padding: 16px;
-	background: var(--nulo-surface);
-	border: 1px solid var(--nulo-border);
+	composes: passkey_info from "@/components/composite/auth-method-choice.module.css";
 }
 </style>

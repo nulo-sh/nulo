@@ -28,15 +28,11 @@ const type = defineModel("type", { type: String, default: "passkey" })
  * section-level divider on top of the tabs underline created the
  * "double-line" look across the password flow. */
 .section {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	padding: 20px 0;
+	composes: section from "@/components/composite/form-section.module.css";
 }
 
 .section_label {
-	composes: type--label-section from global;
-	color: var(--nulo-secondary);
+	composes: label from "@/components/composite/form-section.module.css";
 }
 
 .tabs {
