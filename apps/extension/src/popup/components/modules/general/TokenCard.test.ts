@@ -402,6 +402,14 @@ describe("TokenCard — R5 layout (subtitle left, private/public split right)", 
 		expect(splitSides(w)).toEqual(["0", "999.99"])
 	})
 
+	test("a token with 24 decimals reads its total and its side as the list rule reads any token", async () => {
+		mockQuotes = {}
+		const w = factory({ updatedAt: 1, privateBalance: (12_345n * 10n ** 23n).toString() }, { decimals: 24 })
+		await flushPromises()
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("1,234.5")
+		expect(splitSides(w)).toEqual(["1,234.5", "0"])
+	})
+
 	test("each side reads at the total's decimals: a dust side under 999.999 reads <0.01, never 0", async () => {
 		mockQuotes = {}
 		const w = factory({

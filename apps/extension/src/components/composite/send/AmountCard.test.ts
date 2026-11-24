@@ -178,7 +178,7 @@ describe("composite/AmountCard", () => {
 	})
 
 	test.each([78, 1_000_000_000])(
-		"a stored token with %i decimals derives no amount: no rate, no USD mode, Max fills nothing, and nothing throws",
+		"a stored token with %i decimals derives no amount: no rate, no USD mode, Max fills nothing, the line says why, and nothing throws",
 		async (decimals) => {
 			const w = mountCard({
 				token: { symbol: "BIG", decimals },
@@ -191,6 +191,7 @@ describe("composite/AmountCard", () => {
 			expect(w.find("[data-testid='send-amount-fiat-label']").exists()).toBe(false)
 			expect(w.find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(false)
 			expect(w.emitted("update:modelValue")).toBeUndefined()
+			expect(w.get("[data-testid='send-amount-unsendable']").text()).toBe("Nulo can't send this token.")
 		},
 	)
 

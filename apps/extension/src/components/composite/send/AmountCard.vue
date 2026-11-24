@@ -90,9 +90,11 @@ const wasClamped = ref(false)
  *  whose text reads, when the text empties, and when the field is left with text that reads. */
 const readHint = ref(null)
 
-/** The one refusal the line under the field shows in place of its figure: over the balance first,
- *  then a text the field could not read, then the decimals it cut, which still leaves an amount to send. */
+/** The one refusal the line under the field shows in place of its figure: a loaded token whose decimals
+ *  the wallet cannot use first, then over the balance, then a text the field could not read, then the
+ *  decimals it cut, which still leaves an amount to send. */
 const refusal = computed(() => {
+	if (props.token && tokenDecimals.value === undefined) return { testid: "send-amount-unsendable", text: "Nulo can't send this token." }
 	if (props.exceedsBalance) return { testid: "send-amount-over-balance", text: "More than your balance" }
 	if (readHint.value === "unreadable") return { testid: "send-amount-unreadable-hint", text: "Not an amount. Type it like 1234.56" }
 	if (readHint.value === "ambiguous") return { testid: "send-amount-ambiguous-hint", text: "Type it without the comma." }

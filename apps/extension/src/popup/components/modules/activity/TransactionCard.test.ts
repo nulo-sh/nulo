@@ -261,6 +261,11 @@ describe("modules/activity/TransactionCard (settled)", () => {
 			origin: { type: OriginType.DAPP, name: "example.dapp.io" },
 		})
 
+		test("of a listed 24-decimal token reads 1", () => {
+			const w = mountCard(mintTx(10n ** 24n), { tokens: [{ ...tokens[0], decimals: 24 }] })
+			expect(w.find(".amount").text()).toBe("1")
+		})
+
 		test("of a listed 18-decimal token reads 1 and its symbol, which its kind's title does not name", () => {
 			const w = mountCard(mintTx(10n ** 18n), { tokens })
 			expect(w.find(".amount").text()).toBe("1")
