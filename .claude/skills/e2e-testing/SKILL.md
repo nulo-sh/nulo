@@ -1036,8 +1036,9 @@ worker that refused to die.
 - `gh run view --log` echoes the step's SOURCE script with near-identical timestamps before runtime
   output; grepping for `exit 86` or `retrying` matches the source and fabricates an event (such a
   misread has confirmed a boot retry that never happened). Use
-  `gh api --allow-escape-sequences repos/{owner}/{repo}/actions/jobs/<id>/logs` (gh 2.103 refuses a
-  log holding the reporter's colour codes without the flag), match on timestamps advancing, count real
+  `gh api --allow-escape-sequences repos/{owner}/{repo}/actions/jobs/<id>/logs | cat -v` (gh 2.103 refuses
+  a log holding escape codes without the flag; a test can print any, so `cat -v` keeps them inert),
+  match on timestamps advancing, count real
   invocation markers, and mine at attempt level for reruns that cleared a first-attempt red.
 - `[aztec-node] Address already in use (os error 98)` at boot is cosmetic (the wrapper's inner anvil
   loses a bind the setup already holds). The fatal boot signature is

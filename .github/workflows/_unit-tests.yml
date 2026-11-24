@@ -38,7 +38,7 @@ jobs:
         run: bun run --filter '@nulo/*' --filter '!@nulo/extension' --if-present test
 
       # The staged-package tests import every published export under Node 24 ESM as well as Bun, and
-      # the CI-gating tests spawn Node. After the workspace suites, which run on the runner's Node.
+      # the CI-gating tests spawn Node; workspace suites that use Node keep the runner's.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24

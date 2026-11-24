@@ -48,7 +48,7 @@ Network pool shard 2/5 runs 300–700 s longer than its siblings on every one of
 
 ## Measure (Phase 3)
 
-After: the PR's own runs, CI's job envelopes, at least two green first-attempt runs per lane at the final head (a `workflow_dispatch` of a lane on the branch counts), n stated. Per lane: run wall, slowest job, every shard's duration and the spread. A shard more than 2 minutes off its siblings sends the record or the split back for another look. A lane no faster than its before is left out and goes to `OWNER_ASKS:`; faster but short of the forecast is kept and the gap stated. A red is diagnosed, never re-rolled; the cold-shard note in the e2e README is the first place to look for a file red only where the new split puts it.
+After: the PR's own runs, CI's job envelopes, at least two green first-attempt runs per lane at the final head, n and event stated. A `workflow_dispatch` sample is reported apart where its job set differs from a PR run's (pr-quick's dispatch forces every build and skips commitlint). Per lane: run wall, slowest job, every shard's duration and the spread. A shard more than 2 minutes off its siblings sends the record or the split back for another look. A lane no faster than its before is left out and goes to `OWNER_ASKS:`; faster but short of the forecast is kept and the gap stated. A red is diagnosed, never re-rolled; the cold-shard note in the e2e README is the first place to look for a file red only where the new split puts it.
 
 ## Security & Adversarial Considerations
 
@@ -59,7 +59,7 @@ After: the PR's own runs, CI's job envelopes, at least two green first-attempt r
 ## Assumptions
 
 - **Facts**: F1 vitest 4.1.12 `BaseSequencer.shard` hashes `resolve(root, moduleId).slice(root.length)` (a truncation, not a relative path, for the `../../packages` files) and slices `calculateShardRange` (`coverage.DM_a_rWm.js:35-88`): a partition of one list whatever the keys, and CI's legs share one root and one SHA. Codex ran it on the selection: 1,062 files, 354 per leg, disjoint, unchanged by reversed order or a moved checkout. F2 `bun run --filter '!@nulo/extension'` excludes it (run locally: 17 workspaces, exit 0). F3 `bun run --filter` starts a workspace's script after its dependencies' (the CI log: the extension started at 11:56:07, one second after `aztec-runtime` ended); the split drops that ~58 s wait.
-- **Inferences**: I1 the hash split stays near-balanced: on today's log, modelling a file as its reported test time plus 1.1 s, the three legs carry 663 / 673 / 545 worker-seconds against 627 for a time-based split, so at most ~25 s of wall. Phase 3 measures it. I2 the forecasts (network ~14 / ~16, smoke Firefox ~13.5, quick ~6 min) add ~85 s of fixed cost per shard to the record's file time.
+- **Inferences**: I1 the hash split stays near-balanced: on today's log, modelling a file as its reported test time plus 1.1 s, the three legs carry 663 / 673 / 545 worker-seconds against 627 for a time-based split, an estimated ~25 s of wall, not a bound. Phase 3 measures it. I2 the forecasts (network ~14 / ~16, smoke Firefox ~13.5, quick ~6 min) add ~85 s of fixed cost per shard to the record's file time.
 - **Asks** (working assumption): A1 the unit legs are named `Vitest (shard i/3)`, matching the network suite's `(shard i/n)`.
 
 ## UI impact
@@ -95,6 +95,12 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - C4 (low) `verify-cert-run.sh`'s Quality and smoke names were hand-kept: now derived from the workflows and pinned.
 - C5 (medium) compare statuses as well as ids, and scope "once" per suite invocation: adopted.
 - C6 (low) comments: the unit job states why it stays unconditional; the rewritten step comments are cut to their guard. Its trims of untouched files (`shard-sequencer.ts`, `aggregators.test.ts`' header) are out of this change.
+
+**Diff pass, Codex (resumed, high): four findings, all verified and fixed; no finding on partition (it ran both sequencers: 74 smoke files once over four shards, 131 pool files once over seven, both browsers, 12 dedicated files excluded), unit wiring, aggregators, stale counts, callers or permissions.**
+- R1 (medium, demonstrated by in-memory mutation) the unit pin matched the script steps by `includes()`, so `# bun run test:release` then `true` passed, and so did Node 26: the pin now holds both guarded bodies whole and `node-version: 24`; both mutations red.
+- R2 (medium) the skill's log command, with `--allow-escape-sequences`, would print a test's control sequences to a terminal: now piped through `cat -v`. `e2e-timings.ts` itself never prints the log.
+- R3 (low) a `workflow_dispatch` sample runs a different job set than a PR run: reported apart; I1 says estimate, not bound.
+- R4 (low) two comments said the workspace suites run on Node (most run on Bun): reworded; `shardCount`'s narrating doc-comment deleted.
 
 ## Seeds (drafts, not run: the orchestrator owns execution)
 

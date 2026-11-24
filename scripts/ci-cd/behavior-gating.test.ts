@@ -1492,13 +1492,22 @@ describe("shard matrices", () => {
 		const extension = JSON.parse(readFileSync(join(ROOT, "apps/extension/package.json"), "utf8")).name
 		const others = rootScripts["test:all"].replace("--filter '@nulo/*'", `--filter '@nulo/*' --filter '!${extension}'`)
 		expect(others, "test:all selects the workspaces by one filter").not.toBe(rootScripts["test:all"])
-		type Step = { uses?: string; run?: string; id?: string; if?: string; "continue-on-error"?: unknown }
+		type Step = { uses?: string; with?: unknown; run?: string; id?: string; if?: string; "continue-on-error"?: unknown }
+		const guarded = (dir: string, script: string): string =>
+			[
+				`if [ -d ${dir} ]; then`,
+				`  bun run ${script}`,
+				"else",
+				`  echo "${dir}/ not present on this ref — skipping."`,
+				"fi",
+				"",
+			].join("\n")
 		const kinds: [string, (step: Step) => boolean][] = [
 			["extension", (step) => step.run === "bun run --cwd apps/extension test -- --shard=${{ matrix.shard }}"],
 			["others", (step) => step.run === others],
-			["release", (step) => Boolean(step.run?.includes("bun run test:release"))],
+			["release", (step) => step.run === guarded("scripts/release", "test:release")],
 			["live", (step) => step.id === "live"],
-			["ci-gating", (step) => Boolean(step.run?.includes("bun run test:ci-gating"))],
+			["ci-gating", (step) => step.run === guarded("scripts/ci-cd", "test:ci-gating")],
 		]
 		const kind = (step: Step): string => step.uses?.split("@")[0] ?? kinds.find(([, is]) => is(step))?.[0] ?? `unknown: ${step.run}`
 		const steps: Step[] = job.steps
@@ -1507,12 +1516,13 @@ describe("shard matrices", () => {
 			["./.github/actions/setup-bun", undefined, undefined],
 			["extension", undefined, undefined],
 			["others", "matrix.shard == '1/3'", undefined],
-			// Node 24 after the workspace suites, which keep the runner's Node, and before both script suites.
+			// Workspace suites that use Node keep the runner's; both script suites get Node 24.
 			["actions/setup-node", undefined, undefined],
 			["release", "matrix.shard == '2/3'", undefined],
 			["live", "matrix.shard == '3/3' && github.event_name == 'pull_request'", undefined],
 			["ci-gating", "matrix.shard == '3/3'", undefined],
 		])
+		expect(steps.find((step) => step.uses?.startsWith("actions/setup-node@"))?.with).toEqual({ "node-version": 24 })
 	})
 })
 

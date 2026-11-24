@@ -34,7 +34,6 @@ function pool(files: string[]): string[] {
 	return files.filter((file) => !dedicated.has(file))
 }
 
-/** The shard count a lane's matrix runs (`{ id: "i/N", … }` rows), so the proof below follows the workflow. */
 function shardCount(workflow: string): number {
 	const rows = [...readFileSync(path.join(WORKFLOWS, workflow), "utf8").matchAll(/^\s*- \{ id: "\d+\/(\d+)", label:/gm)]
 	if (rows.length === 0 || rows.some((row) => Number(row[1]) !== rows.length)) throw new Error(`${workflow}: no i/N matrix of N rows`)
