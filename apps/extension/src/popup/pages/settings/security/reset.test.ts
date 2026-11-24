@@ -449,6 +449,21 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
 	})
 
+	test("an account on a retired chain is named by its network and version; one on an unknown chain by its id", async () => {
+		const TRADING = `0x0f63${"0".repeat(56)}51e8`
+		reads.getNetworks.mockResolvedValue([{ id: "tn", chainId: TESTNET }])
+		reads.getImportedAccounts.mockResolvedValue([
+			row(2904119610, TRADING, "Trading", AccountType.Imported),
+			row(677692, COLD, "Cold", AccountType.Imported),
+		])
+		const { w } = await mountReady({ isLogined: true })
+		await flushPromises()
+		expect(listed(w)).toEqual([
+			["Trading", "TESTNET V6-RC.1 · 0x0f63…51e8"],
+			["Cold", "AZTEC:677692 · 0x1d7a…4d19"],
+		])
+	})
+
 	test("with no imported account there is no section, and Delete goes", async () => {
 		const { w } = await mountReady({ isLogined: true })
 		await flushPromises()
