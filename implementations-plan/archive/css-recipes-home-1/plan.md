@@ -298,7 +298,7 @@ Fresh final Codex pass (`gpt-6.1-sol` high, new session) over the consolidated p
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at e4f9011f8, per arc, at the arc boundary:
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at e4f9011f8, per arc, at the arc boundary:
 1. No diff review (`code_review: off`).
 2. The Codex loop (`gpt-6.1-sol`, `high`, read-only) over the arc's diff, this plan and the arc map ("arc N of 2; arc 2 adds the form-section and tab homes"), with the two verbatim rules and the adversarial ask: a `composes` that changes which of two equal-specificity rules wins; a "copy" that differed by a declaration; a class removed that a test, a spec or another `composes` still names; a specificity change from a rewritten selector; a doubled role token; a build whose chunk order differs from the one measured; a screen that carries a changed rule and was not opened. Until clean, hard stop at three rounds. Then one Opus diff review (`general-purpose`, same asks). Any style change reruns Phase 2 or 4 for what it touches.
 3. Delivery as above; `gh pr checks <n> --watch`.
