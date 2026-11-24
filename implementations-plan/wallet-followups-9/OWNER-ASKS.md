@@ -1,6 +1,6 @@
 # wallet-followups-9: owner asks
 
-Each ask ships with the recommendation built, so the frames show it; the PR waits for the owner's word.
+Each ask shipped with the recommendation built, so the frames showed it. **Answered** on decision page 203 (signed 2026-11-24): OA-1 A; OA-2 A, with the bound at 77 ("This token has more than 77 decimals. Nulo supports up to 77."); OA-3 B. The plan's § The owner's decisions quotes them; the tables below are the asks as put, at the first build's 18.
 
 ## OA-1: how Delete profile names a chain with no network row (#1925)
 
