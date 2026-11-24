@@ -9,3 +9,8 @@
 - `bun run --cwd apps/extension build-storybook` failed on a chunk cycle (`FormPopup.stories` with an `errors` chunk) once `extension-messaging/src/errors.ts`, which imported nothing, imported the `utils` barrel. wallet-core now exports `./field` and `./errors` as leaves (D10) and the build passes. Of the other converted files, only that one is in the Storybook bundle (searched for a string literal of each in `storybook-static`), so the two backup files that already imported the barrel extend it, as D9 says.
 - `K5`'s first comment claimed the tx route reads any spelling; it matches the stored hash exactly (`popup/pages/tx/[id].vue:66`), so the comment states only the case rule.
 - `applyRowTransform` scored 38 after its site converted: stamp edited, `baseline:complexity` rewritten, `baseline:rescore` OK.
+
+## Review loop
+
+- Codex r1 (`gpt-6.1-sol`, high, fresh session, read-only): approve, no finding. Its one remark, that a structured clone keeps an array's named properties, was checked against the content-script path: upstream's content script builds each envelope as an object literal, and the page-supplied `content` meets `z.object` after the pipe, so no site receives such an array. The proofs' wording now says what inputs it covers.
+- Opus diff review (general-purpose, opus): approve, five nits. Verified `dappWaitOpts` spreads `asked` (`dapp-send-executor.ts:1097`) and that the bridge's parse of `SendOptionsSchema` refuses an array `wait`; recon gained #1945's stacking. Inlining the aliases left by removed casts was rejected as churn.
