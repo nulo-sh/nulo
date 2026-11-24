@@ -28,7 +28,6 @@ function setup() {
 	return { tokenService, contactService, balances, tokenBalances, balancesState, live, readPastSends, onLoaded, data }
 }
 
-/** Every read answers at once with these lists. */
 function answer(h: ReturnType<typeof setup>, tokens = [token(1)], contacts = [contact(1)], ops = [op("o1")]) {
 	h.tokenService.getTokens.mockResolvedValue(tokens)
 	h.contactService.getContacts.mockResolvedValue(contacts)

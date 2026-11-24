@@ -23,7 +23,7 @@ interface SendDataDeps {
 	live: SendIdentity
 	/** This account's succeeded transfers; it opens and closes its own client. */
 	readPastSends: (profileId: string, accountAddress: string) => Promise<OperationRecord[]>
-	/** Runs in the task that commits a current fetch, before any watcher sees the new lists. */
+	/** Runs in the task that commits a current fetch, before queued pre watchers flush. */
 	onLoaded: (tokens: TokenInfo[]) => void
 }
 
