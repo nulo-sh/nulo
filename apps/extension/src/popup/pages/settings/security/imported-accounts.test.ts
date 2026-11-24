@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { type Account, AccountType } from "@/wallet/services/account/client"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
-import { type ImportedAccountReads, readImportedAccounts } from "./imported-accounts"
+import { type ImportedAccountReads, readImportedAccounts, ResetRunningError } from "./imported-accounts"
 
 const TESTNET = 11155111
 const LOCAL = 31337
@@ -100,10 +100,21 @@ describe("the imported accounts Delete Profile names", () => {
 		])
 	})
 
-	test("a running reset's journal is not read, and the reset still counts as pending", async () => {
+	test("a running reset fails the list with its own error, and its journal is not read", async () => {
 		const r = reads([], { getPendingReset: vi.fn(async () => ({ networkId: "tn", running: true })) })
-		expect(await readImportedAccounts(r, "p1")).toEqual({ accounts: [], resetPending: true })
+		await expect(readImportedAccounts(r, "p1")).rejects.toBeInstanceOf(ResetRunningError)
 		expect(r.getStaleNetwork).not.toHaveBeenCalled()
+	})
+
+	test("the pending reset is read once the accounts have answered", async () => {
+		let answer: (rows: Account[]) => void = () => {}
+		const r = reads([], { getImportedAccounts: vi.fn(() => new Promise<Account[]>((resolve) => (answer = resolve))) })
+		const read = readImportedAccounts(r, "p1")
+		await Promise.resolve()
+		expect(r.getPendingReset).not.toHaveBeenCalled()
+		answer([])
+		expect(await read).toEqual({ accounts: [], resetPending: false })
+		expect(r.getPendingReset).toHaveBeenCalledOnce()
 	})
 
 	test.each([
