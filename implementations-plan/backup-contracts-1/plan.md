@@ -1,7 +1,7 @@
 ---
 plan: backup-contracts-1
 tier: mid
-status: arc 1 building (owner decision page 201: OA-1 A, OA-2 A, OA-3 A)
+status: delivered (one PR against dev, merge pending; owner decision page 201: OA-1 A, OA-2 A, OA-3 A)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,9 +14,23 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-11-24.
+- **Status:** delivered as the single PR against `dev`, with this close-out as its final commits; it closes no issue and merges on the orchestrator's word.
+- **Shipped:** arc 1. A full backup's `account-state` part is format 2, `{ format: 2, classes, items }`: each contract class's artifact is stored once per file, without debug info (`withoutDebugInfo`, `packages/aztec-runtime/src/pxe/artifact-debug-info.ts`), and each contract finds it by its instance's class id. The decoder reads format 1 and format 2, and only the classes a contract references. Restore hashes each artifact object once, registers the wallet's own copy of a class when it holds one, and returns results without code. Each per-network call and a Retry send `restorePayload`, which is never larger than the part it was read from. An older build restores everything else and lists one `(slice)` record for the part, with no Restore again reminder. Measured on real exports: 6,364,903 code units for a file that format 1 writes as 14,093,012; 32 tokens 1,876,547. No visible change.
+- **Review:** plan audits as § Plan review records. Arc review: Codex `gpt-6.1-sol` high, three rounds (four findings accepted, then approve), and one Opus 5.5 diff review (approve, four comment and scope points accepted).
+- **Gates:** `bun run lint`, `typecheck:all`, `test:all`, `audit:vue`, `test:ci-gating` and the Storybook build green on the arc; `lint`, `typecheck:all` and `test:all` again after the last `dev` merge, and `test:ci-gating` (with `check:plans`) on the close-out. E2E: network Chrome 37/37, Firefox 34 passed and 3 skipped; the smoke backup specs 11/11 on each browser. Evidence rows E1-E8 in [lessons/phase-3.md](lessons/phase-3.md#evidence-e1-e8-2026-11-24).
+- **Deviations:** the stalled-network spec carries 32 instances of one class, so its Retry proves the payload stays under the cap. KL1's thresholds are re-measured at about 22 MultiToken, 41 Vault or 279 Escrow classes, since the export also strips the account and sponsored-FPC classes. E3's two networks sharing a class are proven by unit tests and the stalled spec only, as one run owns one sandbox. The final fresh Codex pass over the net diff is r1 itself: there is one arc.
+- **Dispositions:** D1-D10 as the ledger records. Arc 2 (step 2) not built, OA-1 = A. Step 3 not built, OA-2 = A.
+- **Known limits:** #2003 (a backup's contract part past about 22 large app classes), #2004 (at most 32 contracts restored per network); both closed as not planned.
+- **Open items:** none.
+- **Lessons:** none promoted; `lessons.md` stands at 8,148 of 8,192 bytes and nothing here supersedes an entry.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
+
 # backup-contracts-1: a full backup that stores each contract's code once per class
 
-Recon and measurements: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Live log: [STATUS.md](STATUS.md).
+Recon and measurements: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Build log: [lessons/phase-2.md](lessons/phase-2.md), [lessons/phase-3.md](lessons/phase-3.md) (with the evidence rows E1-E8), [lessons/phase-4.md](lessons/phase-4.md).
 
 The owner (2026-11-23, page 200) rejected three message-only answers to the backup's contract limit: "Seems like this are lazy solutions." This plan removes the cause: the `account-state` part stores one artifact per **registered contract**, so its size grows with the count of contracts. It plans the three steps the lane names, recommends one, and builds nothing until approval.
 
