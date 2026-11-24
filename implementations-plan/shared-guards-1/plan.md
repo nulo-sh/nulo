@@ -1,7 +1,7 @@
 ---
 plan: shared-guards-1
 tier: mid
-status: arcs 1 and 2 merged (#1956, #1963); arc 3 in PR
+status: completed
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -13,6 +13,24 @@ base: origin/dev at 4a333b343
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-24. Three arcs, one PR each into `dev`: #1956, #1963, and arc 3's, which carries this close-out; its merge archives this plan and closes #1928.
+- **Status:** completed.
+- **Shipped:**
+  - Every restatement the inventory found calls the wallet-core primitive with exactly its acceptance set (§ Counts): `isObjectLike`, `isRecord`, the new `isPlainObject`, `isHex32` and the newly exported `HEX_32`, `errorMessageFromUnknown`, `sleep`, `toBase64`.
+  - Kept sites under names that state their contract, each that differs pinned against the wrong guard: K1, K3-K5 on the baseline; K6-K9 outside it (§ Kept sites).
+  - `apps/extension/src/utils/inline-guard-ban.test.ts` and its reviewed baseline, now K1 and K3-K5 alone, and the shrink-only ratchet `scripts/ci-cd/inline-guard-ratchet.test.ts`. Arc 3 made the ban read a hex class quantified as a group's only member, and lets a kept entry move only with its file.
+  - wallet-core leaf entries `./guards`, `./field` and `./errors` (D9, D10); stamps lowered to their observed scores: `trim` 45 to 43, `encodeValue` 25 to 24, `applyRowTransform` 39 to 38.
+- **Review:** each arc's loop converged (§ Arc reviews); after arc 3, the cross-arc Codex pass found two gaps in the ban and the ratchet, fixed and verified.
+- **Gates, arc 3:** lint, typecheck:all, test:all, audit:vue, test:ci-gating, check:plans, baseline:rescore and build-storybook green at retry 0; test:release green but for its 7 zip tests, which need a `zip` binary this host lacks (CI has it). Network e2e on Chrome at retry 0, one `e2e:agent` run: the plan's three specs, plus `tx-sendTx-default`, `default-token-seeding` and `snack-placement`, which drive the dApp `wait`, stored seed markers and PXE assertion frames: 13 of 13 pass at `2db89e67f`.
+- **Deviations:** arc 3 ran beside the open #1942 and #1945 on the orchestrator's call (arc table, recon § Collisions); D10's two leaf entries, a wallet-core change the plan had not foreseen.
+- **Dispositions:** `onWalletMessage` admits a decrypted array, as it always did, and the pipeline answers or refuses it like any malformed call: no failure, so no issue; its row pins the behaviour. Inlining the aliases the removed casts left: rejected as churn.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` sits at 8,148 of 8,192 bytes and nothing in it is superseded here; the leaf-entry rule lives beside the code, in `packages/wallet-core/README.md`.
+- **Seeds retired:** the `/goal` and `/loop` seeds in § Seeds were never run; the orchestrator drove each arc.
 
 # shared-guards-1: inline restatements of the wallet-core primitives call the primitive, and a guard stops the regrowth
 
