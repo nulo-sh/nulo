@@ -103,17 +103,23 @@ export interface ClassifiedImportRow {
 	savedAddress: string | null
 }
 
+const keepsSavedName = (kind: ImportRowKind): boolean => kind === "unchanged" || kind === "address-change"
+
+/** The name judged is the one the row would write: a row matched by name writes the saved spelling,
+ *  which can read as an address where the file's spelling of the same key does not. */
 function judgeRow(row: StagedRow, index: SavedContactIndex): ContactMatch | { kind: "invalid" | "name"; target: null } {
 	if (!isValidAztecAddress(row.address)) return { kind: "invalid", target: null }
 	if (isAddressShapedName(row.name)) return { kind: "name", target: null }
-	return matchSavedContacts(row, index)
+	const match = matchSavedContacts(row, index)
+	if (match.target && keepsSavedName(match.kind) && isAddressShapedName(sanitizeContactName(match.target.name)))
+		return { kind: "name", target: null }
+	return match
 }
 
 export function classifyImportRow(row: StagedRow, index: SavedContactIndex): ClassifiedImportRow {
 	const { kind, target } = judgeRow(row, index)
-	const matchedByName = kind === "unchanged" || kind === "address-change"
 	return {
-		name: target && matchedByName ? sanitizeContactName(target.name) : row.name,
+		name: target && keepsSavedName(kind) ? sanitizeContactName(target.name) : row.name,
 		kind,
 		importable: kind !== "invalid" && kind !== "conflict" && kind !== "name",
 		selected: kind === "new",

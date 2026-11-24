@@ -117,6 +117,18 @@ describe("matchSavedContacts / classifyImportRow", () => {
 		expect(classify("Priya", ADDR.priya, saved)).toMatchObject({ kind: "name-change", importable: true, targetId: "c4" })
 	})
 
+	test("a row matched by name is judged on the saved spelling it would write, which the file's spelling of that key may not share", () => {
+		// Lunate sigma reads as c; final sigma, which its key folds to, does not.
+		const saved = [...SAVED, { id: "c4", name: "0x0\u03F22b", address: ADDR.priya }]
+		expect(classify("0x0\u03C32b", ADDR.fresh, saved)).toMatchObject({
+			kind: "name",
+			importable: false,
+			selected: false,
+			targetId: null,
+		})
+		expect(classify("0x0\u03C32b", ADDR.fresh)).toMatchObject({ kind: "new", importable: true })
+	})
+
 	test.each([
 		["case", "ALICE", "aLiCe", "c1", ADDR.alice],
 		["spacing", "Tom   Becker", "  Tom Becker\t", "c3", ADDR.tom],

@@ -13,7 +13,7 @@ import { ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 defineProps({
 	/** Show "Already exists" on the name field. */
 	nameExists: Boolean,
-	/** The name reads as an address: the field is refused, with `ADDRESS_LIKE_NAME` under it. */
+	/** Show `ADDRESS_LIKE_NAME` under the name field. */
 	nameLooksLikeAddress: Boolean,
 	/** Address parses as hex; when false (and non-empty) shows `INVALID_ADDRESS`. */
 	addressValid: Boolean,

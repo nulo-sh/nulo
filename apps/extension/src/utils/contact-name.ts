@@ -93,7 +93,7 @@ function foldToHexForm(name: string): string {
  * Whether a stored name reads as an address: once look-alike letters, compatibility forms and marks
  * are folded, it holds `0x` and four hex digits, or two hex runs joined by two or more dots, a run
  * being three hex digits or `0x` and one to three. Such a name is never stored from a person or a
- * file, and one already stored is never printed in place of its address. Fixed-width runs keep the
+ * contacts file, and one already stored is never printed in place of its address. Fixed-width runs keep the
  * match linear on any input.
  */
 export function isAddressShapedName(name: string): boolean {

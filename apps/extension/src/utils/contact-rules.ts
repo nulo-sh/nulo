@@ -2,7 +2,6 @@ import { isValidAztecAddress } from "@/utils/aztec-address"
 import { isAddressShapedName, isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
 import { ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
 
-/** The name field's refusal of a name that reads as an address. */
 export const ADDRESS_LIKE_NAME = "A name can't look like an address. Use a word, like Ana."
 
 // `c` and `v` keep the validators' own names, so a native error on a malformed row reads the same.
