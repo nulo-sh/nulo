@@ -75,7 +75,7 @@ describe("OperationCard — discovered authorizations", () => {
 		expect([placeholder.attributes("aria-hidden"), placeholder.attributes("role"), placeholder.text()]).toEqual(["true", undefined, ""])
 		const listed = w.findAll('[data-testid="execute-op-summary-authwit"]')
 		expect(listed.map((li) => li.text().split("Reading arguments…").length - 1)).toEqual([1, 1])
-		expect(listed.map((li) => li.find('[data-testid="execute-op-summary-authwit-pending"]').text())).toEqual([
+		expect(listed.map((li) => li.find('[data-testid="execute-op-summary-authwit-args-pending"]').text())).toEqual([
 			"Reading arguments…",
 			"Reading arguments…",
 		])

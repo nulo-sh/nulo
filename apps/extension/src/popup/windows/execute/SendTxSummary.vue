@@ -275,7 +275,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 							<Text v-if="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf" variant="body" color="secondary" height="130">
 								Already authorized by <AddressDisplay :address="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf-account" />.
 							</Text>
-							<ArgsPlaceholder v-if="surface.kind === 'pending'" data-testid="execute-op-summary-authwit-pending" />
+							<ArgsPlaceholder v-if="surface.kind === 'pending'" data-testid="execute-op-summary-authwit-args-pending" />
 							<Flex v-if="surface.kind === 'raw'" data-testid="execute-op-summary-authwit-unverified-args" :data-reason="surface.reason" direction="column" gap="4">
 								<Text data-testid="execute-op-summary-authwit-unparsed" variant="body" color="tertiary" height="130">{{ UNPARSED_AUTHWIT }}</Text>
 							</Flex>

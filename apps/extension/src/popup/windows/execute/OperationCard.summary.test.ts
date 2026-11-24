@@ -394,7 +394,9 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		await openAllSteps(w)
 		const bar = (el: DOMWrapper<Element>) => [el.findAll('[aria-hidden="true"]').length, el.text()]
 		expect(w.findAll('[data-testid="execute-op-summary-args-pending"]').map(bar)).toEqual(Array(3).fill([1, "Reading arguments…"]))
-		expect(w.findAll('[data-testid="execute-op-summary-authwit-pending"]').map(bar)).toEqual(Array(2).fill([1, "Reading arguments…"]))
+		expect(w.findAll('[data-testid="execute-op-summary-authwit-args-pending"]').map(bar)).toEqual(
+			Array(2).fill([1, "Reading arguments…"]),
+		)
 		const details = w.findAll('[data-testid="execute-discovered-authwit-args-pending"]')
 		expect(
 			details.map((d) => [d.findAll("span > span[aria-hidden='true']").length / 2, d.attributes("aria-hidden"), d.text()]),
@@ -404,7 +406,7 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		])
 
 		await w.setProps(await decodeFixture())
-		expect(w.findAll('[data-testid$="-args-pending"], [data-testid="execute-op-summary-authwit-pending"]')).toHaveLength(0)
+		expect(w.findAll('[data-testid$="-args-pending"]')).toHaveLength(0)
 	})
 
 	test("a transfer the wallet does not read as one keeps the function's own name in its step, its decoded values under it", async () => {
