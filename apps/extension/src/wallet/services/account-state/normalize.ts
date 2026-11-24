@@ -6,23 +6,39 @@
  * (non-storage pass-through), so every bound lives here: item/network/child
  * caps, duplicate-network merging, and malformed-entry collapse into
  * fixed-size violation records (never one record per hostile entry).
+ *
+ * Two formats decode into the same items: format 1, an array whose contracts each carry their own
+ * artifact, and format 2, `{format: 2, classes, items}`, where a contract finds its artifact in the
+ * class table by its instance's `currentContractClassId`. The part carries its own format: it is no
+ * stored key, so the storage migrator never reads it.
  */
 
-import { isObjectLike } from "@nulo/wallet-core/guards"
-import type { Restored } from "@/wallet/base"
+import type { ContractArtifact } from "@aztec-labs/stdlib/abi"
+import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
+import { isHex32 } from "@nulo/wallet-core/field"
+import { isObjectLike, isRecord } from "@nulo/wallet-core/guards"
 import { isPxeProvidedContract } from "./pxe-provided"
-import type { BackupAccountState, BackupContract, BackupSender } from "./spec"
+import {
+	type AccountStateRestoreRecord,
+	type AccountStateSliceV2,
+	type BackupContract,
+	type BackupSender,
+	isAccountStateV2,
+	type RestoredContract,
+} from "./spec"
+
+export { isAccountStateV2 }
 
 export const ACCOUNT_STATE_CAPS = {
 	maxNetworks: 8,
 	maxInputItems: 16,
 	maxSendersPerNetwork: 64,
 	maxContractsPerNetwork: 32,
-	// UTF-16 code units of the serialized slice (not bytes: a cheap, still-hard bound). The slice
-	// stores a full contract artifact per network, so a contract registered on several networks is
-	// repeated once per network. The export leaves out the contracts every PXE boot registers by
-	// itself, but a backup made before it did still carries them: a 3-network one measured 33.8M,
-	// so this bound cannot come down without refusing it. Raising it breaks two constraints:
+	// UTF-16 code units of the slice as written (not bytes: a cheap, still-hard bound), class table
+	// included. Format 2 stores each class's artifact once, so the part grows with distinct classes;
+	// a format-1 backup stores one per contract and per network, and a 3-network one made before the
+	// export left out what every PXE boot registers measured 33.8M, so this bound cannot come down
+	// without refusing it. Raising it breaks two constraints:
 	//   - It must stay well under MAX_BACKUP_FILE_BYTES (64MiB) and under the ~48MiB of plaintext
 	//     a base64-sealed encrypted backup can carry, or the whole-file cap always trips first and
 	//     this stops being a bound at all.
@@ -37,18 +53,28 @@ export const ACCOUNT_STATE_SKIP_UNREACHABLE = "Skipped: couldn't reach the netwo
 export const ACCOUNT_STATE_SKIP_WRONG_NETWORK = "Skipped: this endpoint serves a different network"
 export const ACCOUNT_STATE_SKIP_DEADLINE = "Skipped: ran out of time reaching the network"
 
+/** The copy for a part this build cannot read, the same whatever its shape. */
+const UNREADABLE_SLICE = "malformed account-state slice (not an array)"
+
+/** A contract as the restore registers it. `artifact` is absent when a format-2 part's class table
+ *  holds no usable entry for its class; within one decoded part, every contract of a class shares
+ *  one artifact object. */
+export interface NormalizedContract {
+	address: string
+	instance: ContractInstanceWithAddress
+	artifact?: ContractArtifact
+}
+
 export interface NormalizedAccountStateItem {
 	networkId: string
 	senders: BackupSender[]
-	contracts: BackupContract[]
+	contracts: NormalizedContract[]
 }
 
 /** Top-level error record in the exact result shape `collectRestoreErrors`
  *  consumes — empty child arrays, the error at item level. */
-export interface AccountStateViolationRecord {
-	networkId: string
-	senders: BackupSender[]
-	contracts: BackupContract[]
+export interface AccountStateViolationRecord extends AccountStateRestoreRecord {
+	contracts: RestoredContract[]
 	restoreError: string
 }
 
@@ -65,12 +91,31 @@ function isValidSender(entry: unknown): entry is BackupSender {
 	return isObjectLike(entry) && typeof entry.address === "string" && entry.address.length > 0 && entry.address.length <= 200
 }
 
-function isValidContract(entry: unknown): entry is BackupContract {
+function isValidContractEntry(entry: unknown): entry is Omit<BackupContract, "artifact"> {
 	if (!isObjectLike(entry)) return false
 	const c = entry
 	// Deep instance/artifact validation stays PXE's job (it re-validates on
 	// registration); presence + address shape is the boundary's concern.
-	return typeof c.address === "string" && c.address.length > 0 && c.address.length <= 200 && !!c.instance && !!c.artifact
+	return typeof c.address === "string" && c.address.length > 0 && c.address.length <= 200 && !!c.instance
+}
+
+type ContractReader = (entry: unknown) => NormalizedContract | undefined
+
+const readContractV1: ContractReader = (entry) =>
+	isValidContractEntry(entry) && !!(entry as Record<string, unknown>).artifact
+		? { address: entry.address, instance: entry.instance, artifact: (entry as BackupContract).artifact }
+		: undefined
+
+/** A format-2 entry's own `artifact` key is never read: its code comes from the class table only. */
+const readContractV2: ContractReader = (entry) =>
+	isValidContractEntry(entry) ? { address: entry.address, instance: entry.instance } : undefined
+
+/** The instance's current class id in the form `Fr.toString()` writes, which is what the JSON wire
+ *  carries; the export holds the `Fr` itself. Any other form names no class. */
+function instanceClassId(instance: unknown): string | undefined {
+	const raw = isObjectLike(instance) ? instance.currentContractClassId : undefined
+	const id = typeof raw === "string" ? raw : isRecord(raw) && typeof raw.toString === "function" ? raw.toString() : undefined
+	return typeof id === "string" && isHex32(id) && id === id.toLowerCase() ? id : undefined
 }
 
 export function truncateErrorMessage(message: string): string {
@@ -85,10 +130,10 @@ export function truncateErrorMessage(message: string): string {
  * collapse malformed/excess content into bounded violation records.
  */
 export function normalizeAccountStateSlice(raw: unknown): NormalizedAccountState {
-	if (!Array.isArray(raw)) {
-		return { items: [], violations: [violation("(slice)", "malformed account-state slice (not an array)")] }
-	}
-	if (raw.length === 0) return { items: [], violations: [] }
+	const v2 = isAccountStateV2(raw)
+	const rawItems = v2 ? raw.items : raw
+	if (!Array.isArray(rawItems)) return { items: [], violations: [violation("(slice)", UNREADABLE_SLICE)] }
+	if (rawItems.length === 0) return { items: [], violations: [] }
 
 	let sliceCodeUnits: number
 	try {
@@ -102,20 +147,83 @@ export function normalizeAccountStateSlice(raw: unknown): NormalizedAccountState
 
 	const violations: AccountStateViolationRecord[] = []
 
-	const inputItems = raw.slice(0, ACCOUNT_STATE_CAPS.maxInputItems)
-	if (raw.length > ACCOUNT_STATE_CAPS.maxInputItems) {
+	const inputItems = rawItems.slice(0, ACCOUNT_STATE_CAPS.maxInputItems)
+	if (rawItems.length > ACCOUNT_STATE_CAPS.maxInputItems) {
 		violations.push(
-			violation("(slice)", `${raw.length - ACCOUNT_STATE_CAPS.maxInputItems} account-state item(s) over the cap were dropped`),
+			violation("(slice)", `${rawItems.length - ACCOUNT_STATE_CAPS.maxInputItems} account-state item(s) over the cap were dropped`),
 		)
 	}
 
-	const byNetwork = mergeSliceItems(inputItems, violations)
-	return { items: applyNetworkCaps(byNetwork, violations), violations }
+	const byNetwork = mergeSliceItems(inputItems, violations, v2 ? readContractV2 : readContractV1)
+	const items = applyNetworkCaps(byNetwork, violations)
+	if (v2) attachClassArtifacts(items, raw.classes)
+	return { items, violations }
+}
+
+/**
+ * Gives each format-2 contract its class's artifact. Runs after the caps, over the class ids the
+ * kept contracts reference, so an unreferenced table entry costs one key lookup and is never read
+ * further. The first entry with an object artifact wins for its class id. A class with no usable
+ * entry leaves its contracts without an artifact, for the restore to resolve or refuse one by one.
+ */
+function attachClassArtifacts(items: NormalizedAccountStateItem[], rawClasses: unknown): void {
+	const contracts = items.flatMap((item) => item.contracts)
+	const table = readClassTable(rawClasses, new Set(contracts.flatMap((c) => instanceClassId(c.instance) ?? [])))
+	for (const c of contracts) {
+		const artifact = table.get(instanceClassId(c.instance) ?? "")
+		if (artifact) c.artifact = artifact
+	}
+}
+
+function readClassTable(rawClasses: unknown, referenced: ReadonlySet<string>): Map<string, ContractArtifact> {
+	const table = new Map<string, ContractArtifact>()
+	for (const entry of Array.isArray(rawClasses) ? rawClasses : []) {
+		const classId = isRecord(entry) ? entry.classId : undefined
+		if (typeof classId !== "string" || !referenced.has(classId) || table.has(classId)) continue
+		const artifact = (entry as Record<string, unknown>).artifact
+		if (isRecord(artifact)) table.set(classId, artifact as unknown as ContractArtifact)
+	}
+	return table
+}
+
+/** What `encodeAccountState` reads: an export's items or a decoded part's. */
+type EncodableItem = { networkId: string; chainId?: number; senders: BackupSender[]; contracts: NormalizedContract[] }
+
+/**
+ * Encodes items as a format-2 part: each class's artifact once, contracts without code. When any
+ * class maps to more than one distinct artifact object anywhere in `items`, or a contract carrying
+ * an artifact names no class id, it returns `items` whole as format 1, so every copy travels with
+ * its own contract and is checked on its own. Items a format-2 part decoded into share one object
+ * per class and stay compact.
+ */
+export function encodeAccountState<T extends EncodableItem>(items: readonly T[]): AccountStateSliceV2 | T[] {
+	const table = new Map<string, ContractArtifact>()
+	for (const item of items) {
+		for (const c of item.contracts) {
+			if (!c.artifact) continue
+			const classId = instanceClassId(c.instance)
+			const known = classId === undefined ? undefined : table.get(classId)
+			if (classId === undefined || (known !== undefined && known !== c.artifact)) return [...items]
+			table.set(classId, c.artifact)
+		}
+	}
+	return {
+		format: 2,
+		classes: [...table].map(([classId, artifact]) => ({ classId, artifact })),
+		items: items.map(({ contracts, ...rest }) => ({
+			...rest,
+			contracts: contracts.map(({ address, instance }) => ({ address, instance })),
+		})),
+	}
 }
 
 /** Duplicate-networkId merge over the capped input, collapsing malformed
  *  items/children into bounded counter violations (appended in place). */
-function mergeSliceItems(inputItems: unknown[], violations: AccountStateViolationRecord[]): Map<string, NormalizedAccountStateItem> {
+function mergeSliceItems(
+	inputItems: unknown[],
+	violations: AccountStateViolationRecord[],
+	readContract: ContractReader,
+): Map<string, NormalizedAccountStateItem> {
 	let malformedItems = 0
 	let malformedChildren = 0
 	const byNetwork = new Map<string, NormalizedAccountStateItem>()
@@ -126,7 +234,7 @@ function mergeSliceItems(inputItems: unknown[], violations: AccountStateViolatio
 			continue
 		}
 		const merged = byNetwork.get(networkId) ?? { networkId, senders: [], contracts: [] }
-		malformedChildren += mergeItemChildren(item as Record<string, unknown>, merged, violations)
+		malformedChildren += mergeItemChildren(item as Record<string, unknown>, merged, violations, readContract)
 		byNetwork.set(networkId, merged)
 	}
 	if (malformedItems > 0) violations.push(violation("(slice)", `${malformedItems} malformed account-state item(s) dropped`))
@@ -141,6 +249,7 @@ function mergeItemChildren(
 	item: Record<string, unknown>,
 	merged: NormalizedAccountStateItem,
 	violations: AccountStateViolationRecord[],
+	readContract: ContractReader,
 ): number {
 	let malformedChildren = 0
 	const rawSenders = item.senders
@@ -155,7 +264,8 @@ function mergeItemChildren(
 		else malformedChildren++
 	}
 	for (const c of Array.isArray(rawContracts) ? rawContracts : []) {
-		if (isValidContract(c)) merged.contracts.push({ address: c.address, instance: c.instance, artifact: c.artifact })
+		const contract = readContract(c)
+		if (contract) merged.contracts.push(contract)
 		else malformedChildren++
 	}
 	return malformedChildren
@@ -213,6 +323,6 @@ export function isConnectivityErrorMessage(message: string): boolean {
 }
 
 /** The full account-state result shape for a wholly-skipped network. */
-export function skippedNetworkRecord(networkId: string, message: string): Restored<BackupAccountState> {
+export function skippedNetworkRecord(networkId: string, message: string): AccountStateRestoreRecord {
 	return { networkId, senders: [], contracts: [], restoreError: message }
 }

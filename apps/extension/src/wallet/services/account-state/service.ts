@@ -1,12 +1,14 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { assertWireArtifactClassId } from "@nulo/aztec-runtime/pxe"
+import type { ContractArtifact } from "@aztec-labs/stdlib/abi"
+import { ContractInstanceWithAddressSchema } from "@aztec-labs/stdlib/contract"
+import { assertWireArtifactClassId, wireArtifactClassId, withoutDebugInfo } from "@nulo/aztec-runtime/pxe"
 import { type RestoreGate, NOOP_RESTORE_GATE } from "@/e2e/restore-gate"
 import { toRestoreError } from "@/utils/restore-error"
 import type { ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
-import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { ContractNotRegisteredError, RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import type { NetworkService } from "@/wallet/services/network/service"
 import type { Network, NetworkInfo } from "@/wallet/services/network/spec"
@@ -17,18 +19,24 @@ import type { RunFence } from "@/wallet/services/profile/spec"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import {
 	ACCOUNT_STATE_SERVICE_NAME,
+	type AccountStateRestoreRecord,
+	type AccountStateSlice,
 	type BackupAccountState,
 	type BackupContract,
 	type BackupSender,
 	type ContractRow,
 	type Events,
 	type Methods,
+	type RestoredContract,
 } from "./spec"
 import {
 	ACCOUNT_STATE_CAPS,
 	ACCOUNT_STATE_SKIP_DEADLINE,
 	ACCOUNT_STATE_SKIP_UNREACHABLE,
+	encodeAccountState,
+	isAccountStateV2,
 	isConnectivityErrorMessage,
+	type NormalizedContract,
 	normalizeAccountStateSlice,
 	truncateErrorMessage,
 } from "./normalize"
@@ -211,8 +219,9 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	/** One Active network's PXE recovery material. `undefined` in recovery mode: the store key
 	 *  cannot be derived, so the network's contract/sender state is OMITTED the way a non-Active
 	 *  network's is — the export still completes and the popup names the loss. Any other failure
-	 *  aborts the export as before. */
-	private async backupNetworkState(n: Network): Promise<BackupAccountState | undefined> {
+	 *  aborts the export as before. `artifacts` holds each class's artifact, debug info left out,
+	 *  once for the whole export: every instance of a class on any network shares the one object. */
+	private async backupNetworkState(n: Network, artifacts: Map<string, ContractArtifact>): Promise<BackupAccountState | undefined> {
 		try {
 			const senders = await this.getSenders(n.id)
 			const contracts = await this.getContracts(n.id)
@@ -224,22 +233,13 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 				// would only weigh against the import's slice cap.
 				if (isPxeProvidedContract(c)) continue
 				const instance = await this.pxeService.getContractInstance(nInfo, AztecAddress.fromStringUnsafe(c))
-				if (!instance?.currentContractClassId) {
+				const artifact =
+					instance?.currentContractClassId && (await this.classArtifact(nInfo, instance.currentContractClassId, artifacts))
+				if (!instance || !artifact) {
 					skipped++
 					continue
 				}
-
-				const artifact = await this.pxeService.getContractArtifact(nInfo, instance.currentContractClassId)
-				if (!artifact) {
-					skipped++
-					continue
-				}
-
-				contractsFull.push({
-					address: c,
-					instance,
-					artifact,
-				})
+				contractsFull.push({ address: c, instance, artifact })
 			}
 			if (skipped > 0) {
 				this.logWarn(
@@ -262,13 +262,31 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		}
 	}
 
-	public async backup(): Promise<BackupAccountState[] | undefined> {
+	/** The class's artifact for the export, fetched once per class id. A miss is not remembered: the
+	 *  next network's PXE may hold the class. */
+	private async classArtifact(
+		info: NetworkInfo,
+		classId: BackupContract["instance"]["currentContractClassId"],
+		artifacts: Map<string, ContractArtifact>,
+	): Promise<ContractArtifact | undefined> {
+		const key = classId.toString()
+		const known = artifacts.get(key)
+		if (known) return known
+		const fetched = await this.pxeService.getContractArtifact(info, classId)
+		if (!fetched) return undefined
+		const stripped = withoutDebugInfo(fetched)
+		artifacts.set(key, stripped)
+		return stripped
+	}
+
+	public async backup(): Promise<AccountStateSlice | undefined> {
 		const networks = await this.networkService.getNetworks()
 		if (!networks.length) {
 			return undefined
 		}
 
 		const result: BackupAccountState[] = []
+		const artifacts = new Map<string, ContractArtifact>()
 
 		const seenChainIds = new Set<number>()
 		const uniqueNetworks = networks.filter((n) => {
@@ -286,35 +304,40 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 				)
 				continue
 			}
-			const item = await this.backupNetworkState(n)
+			const item = await this.backupNetworkState(n, artifacts)
 			if (item) result.push(item)
 		}
 
-		// The slice is mostly contract ARTIFACTS, and the restore side rejects it wholesale past
-		// `maxSliceCodeUnits` — an export that silently crosses the cap only fails much later, on
-		// someone else's import. Report the size while the user can still act on it.
-		const sliceCodeUnits = JSON.stringify(result).length
-		if (sliceCodeUnits > ACCOUNT_STATE_CAPS.maxSliceCodeUnits * 0.8) {
-			// Artifact NAMES, never addresses. This line is pre-formatted, so it reaches the
-			// persisted + CSV-exportable log verbatim — the logger's `trim()` only collapses object
-			// arguments, and cannot reach inside a string. Which contracts a wallet has registered
-			// is a privacy signal; names carry the diagnosis without it, and are exactly what
-			// `trim()` itself keeps when it collapses a ContractArtifact.
-			const biggest = result
-				.flatMap((r) =>
-					r.contracts.map((c) => ({ name: c.artifact?.name ?? "(unnamed)", units: JSON.stringify(c.artifact ?? {}).length })),
-				)
-				.sort((a, b) => b.units - a.units)
-				.slice(0, 5)
-				.map((c) => `${c.name}=${c.units}`)
-				.join(", ")
-			this.logWarn(
-				`backup: account-state slice is ${sliceCodeUnits} code units of ${ACCOUNT_STATE_CAPS.maxSliceCodeUnits} ` +
-					`(${result.reduce((n2, r) => n2 + r.contracts.length, 0)} contract(s)); largest artifacts: ${biggest}`,
-			)
-		}
+		const slice = encodeAccountState(result)
+		this.warnNearSliceCap(slice)
+		return slice
+	}
 
-		return result
+	/** The slice is mostly contract ARTIFACTS, and the restore side rejects it wholesale past
+	 *  `maxSliceCodeUnits` — an export that silently crosses the cap only fails much later, on
+	 *  someone else's import. Report the size while the user can still act on it. */
+	private warnNearSliceCap(slice: AccountStateSlice): void {
+		const sliceCodeUnits = JSON.stringify(slice).length
+		if (sliceCodeUnits <= ACCOUNT_STATE_CAPS.maxSliceCodeUnits * 0.8) return
+		const artifacts = isAccountStateV2(slice)
+			? slice.classes.map((c) => c.artifact)
+			: slice.flatMap((item) => item.contracts.map((c) => c.artifact))
+		const contracts = (isAccountStateV2(slice) ? slice.items : slice).reduce((n, item) => n + item.contracts.length, 0)
+		// Artifact NAMES, never addresses. This line is pre-formatted, so it reaches the
+		// persisted + CSV-exportable log verbatim — the logger's `trim()` only collapses object
+		// arguments, and cannot reach inside a string. Which contracts a wallet has registered
+		// is a privacy signal; names carry the diagnosis without it, and are exactly what
+		// `trim()` itself keeps when it collapses a ContractArtifact.
+		const biggest = artifacts
+			.map((a) => ({ name: a?.name ?? "(unnamed)", units: JSON.stringify(a ?? {}).length }))
+			.sort((a, b) => b.units - a.units)
+			.slice(0, 5)
+			.map((c) => `${c.name}=${c.units}`)
+			.join(", ")
+		this.logWarn(
+			`backup: account-state slice is ${sliceCodeUnits} code units of ${ACCOUNT_STATE_CAPS.maxSliceCodeUnits} ` +
+				`(${contracts} contract(s)); largest artifacts: ${biggest}`,
+		)
 	}
 
 	/**
@@ -339,13 +362,18 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	 * call carries the profile incarnation read while the fence was live, and none starts once the
 	 * fence has died, so a page holding stale rows never registers into a same-id successor. A
 	 * registration already started when the fence dies finishes in its own profile.
+	 *
+	 * Every contract is checked on its own (schema, current = original class, class id); only an
+	 * artifact object's hash is shared, so the instances of one format-2 class cost one hash. On each
+	 * network only the first successful registration of an artifact object carries it; the PXE then
+	 * holds the class. The result records never carry code.
 	 */
 	public async restore(
-		backupAccountState: BackupAccountState[],
+		slice: AccountStateSlice,
 		networks: Network[],
 		fence: RunFence,
 		deadlineMs?: number,
-	): Promise<Restored<BackupAccountState>[]> {
+	): Promise<AccountStateRestoreRecord[]> {
 		// E2e hold point: "account-state" parks a POST-finalize import RPC here
 		// (this service restores only after finalizeRestore), so a crash test can
 		// kill the worker at a known post-finalize phase. Production resolves
@@ -360,8 +388,9 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		const expired = () => deadlineAt !== undefined && Date.now() >= deadlineAt
 		const run = await this.openFencedRun(fence)
 
-		const { items, violations } = normalizeAccountStateSlice(backupAccountState)
-		const result: Restored<BackupAccountState>[] = [...violations]
+		const { items, violations } = normalizeAccountStateSlice(slice)
+		const result: AccountStateRestoreRecord[] = [...violations]
+		const classIdOf = artifactClassIdMemo()
 
 		// The networks argument crosses the same trust boundary as the slice:
 		// require an array, cap the scan, keep only schema-valid rows of the fence's profile — any
@@ -375,9 +404,15 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 			// Cross-loop registration state: a connectivity-class sender failure
 			// fail-fasts the remaining CONTRACT registrations too; deadline skips
 			// accumulate across both kinds for the tail record.
-			const reg: RestoreRegistrationState = { unreachable: false, skippedByDeadline: 0 }
+			const reg: RestoreRegistrationState = {
+				unreachable: false,
+				skippedByDeadline: 0,
+				classIdOf,
+				carried: new Set(),
+				resolved: new Map(),
+			}
 			const senders: Restored<BackupSender>[] = []
-			const contracts: Restored<BackupContract>[] = []
+			const contracts: RestoredContract[] = []
 
 			// `launch` is the only await: a skipped operation or an empty item awaits nothing.
 			const target = network && run.target(network)
@@ -425,12 +460,12 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	/** Yields one prepared registration per sender, then per contract. Lazily: each preparation
 	 *  samples its guards (unreachable, expired) only after the previous operation settled. */
 	private *iterateRegistrations(
-		item: { networkId: string; senders: BackupSender[]; contracts: BackupContract[] },
+		item: { networkId: string; senders: BackupSender[]; contracts: NormalizedContract[] },
 		network: RegistrationTarget | undefined,
 		expired: () => boolean,
 		reg: RestoreRegistrationState,
 		senders: Restored<BackupSender>[],
-		contracts: Restored<BackupContract>[],
+		contracts: RestoredContract[],
 	): Generator<PreparedRegistration | undefined> {
 		for (const sender of item.senders) yield this.prepareSenderRegistration(item.networkId, sender, network, expired, reg, senders)
 		for (const contract of item.contracts)
@@ -468,14 +503,15 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 
 	private prepareContractRegistration(
 		networkId: string,
-		contract: BackupContract,
+		contract: NormalizedContract,
 		network: RegistrationTarget | undefined,
 		expired: () => boolean,
 		reg: RestoreRegistrationState,
-		contracts: Restored<BackupContract>[],
+		contracts: RestoredContract[],
 	): PreparedRegistration | undefined {
+		const { address } = contract
 		if (reg.unreachable) {
-			contracts.push({ ...contract, restoreError: ACCOUNT_STATE_SKIP_UNREACHABLE })
+			contracts.push({ address, restoreError: ACCOUNT_STATE_SKIP_UNREACHABLE })
 			return undefined
 		}
 		const precheck = precheckContractAddress(contract, network?.network)
@@ -491,17 +527,39 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		return {
 			launch: async () => {
 				if (!network) throw new Error("Network not found")
+				const { instance } = contract
+				const artifact = contract.artifact ?? (await this.ownClassArtifact(network, instance, reg))
 				// Upstream registration never checks the class id, so a backup could otherwise pair a
 				// contract's instance with an artifact of another class.
-				await assertWireArtifactClassId(contract.instance, contract.artifact)
-				return this.pxeService.registerContract(network.info(), {
-					instance: contract.instance,
-					artifact: contract.artifact,
-				})
+				await assertWireArtifactClassId(instance, artifact, reg.classIdOf)
+				const carry = !reg.carried.has(artifact)
+				await this.pxeService.registerContract(network.info(), carry ? { instance, artifact } : { instance })
+				reg.carried.add(artifact)
 			},
-			recordSuccess: () => contracts.push(contract),
-			recordFailure: (err) => contracts.push({ ...contract, restoreError: this.classifyRestoreFailure(networkId, err, reg) }),
+			recordSuccess: () => contracts.push({ address }),
+			recordFailure: (err) => contracts.push({ address, restoreError: this.classifyRestoreFailure(networkId, err, reg) }),
 		}
+	}
+
+	/** The wallet's own copy of the class of an entry the file left without code: the compiled-in
+	 *  catalog, else a copy the PXE store already holds, each class-id checked by the lookup. Looked up
+	 *  once per class per network, so its instances share one object. */
+	private async ownClassArtifact(
+		target: RegistrationTarget,
+		instance: unknown,
+		reg: RestoreRegistrationState,
+	): Promise<ContractArtifact> {
+		const parsed = await ContractInstanceWithAddressSchema.safeParseAsync(instance)
+		if (!parsed.success) throw new ContractNotRegisteredError(ARTIFACT_NOT_FOUND)
+		const classId = parsed.data.originalContractClassId
+		let lookup = reg.resolved.get(classId.toString())
+		if (!lookup) {
+			lookup = this.pxeService.getContractArtifact(target.info(), classId)
+			reg.resolved.set(classId.toString(), lookup)
+		}
+		const artifact = await lookup
+		if (!artifact) throw new ContractNotRegisteredError(ARTIFACT_NOT_FOUND)
+		return artifact
 	}
 
 	/** The per-item tail: the expired-budget warn line (an expired budget gates
@@ -510,9 +568,9 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	private finalizeRestoreItem(
 		networkId: string,
 		senders: Restored<BackupSender>[],
-		contracts: Restored<BackupContract>[],
+		contracts: RestoredContract[],
 		reg: RestoreRegistrationState,
-	): Restored<BackupAccountState> {
+	): AccountStateRestoreRecord {
 		if (reg.skippedByDeadline > 0) {
 			this.logWarn(
 				`restore: budget expired on ${networkId} — ${reg.skippedByDeadline} registration(s) not attempted ` +
@@ -552,21 +610,41 @@ interface PreparedRegistration {
  *  registered from the slice: a dApp's utility read of one looks it up without registering it and
  *  fails unless the PXE already holds it, and nothing guarantees an earlier registration. */
 function precheckContractAddress(
-	contract: BackupContract,
+	contract: NormalizedContract,
 	network: Network | undefined,
-): "register" | "pxe-provided" | Restored<BackupContract> {
+): "register" | "pxe-provided" | RestoredContract {
 	let addressNum: bigint
 	try {
 		if (!network) throw new Error("Network not found")
 		addressNum = AztecAddress.fromStringUnsafe(contract.address).toBigInt()
 	} catch (err) {
-		return { ...contract, restoreError: truncateErrorMessage(toRestoreError(err)) }
+		return { address: contract.address, restoreError: truncateErrorMessage(toRestoreError(err)) }
 	}
 	return isPxeProvidedAddress(addressNum) ? "pxe-provided" : "register"
+}
+
+const ARTIFACT_NOT_FOUND = "Contract artifact not found"
+
+/** Each artifact's class id, hashed once per restore call per artifact object (a format-1 entry's own
+ *  copy is its own object, so it is hashed on its own). A failed hash stays failed for that object. */
+function artifactClassIdMemo(): (artifact: unknown) => Promise<string> {
+	const memo = new Map<unknown, Promise<string>>()
+	return (artifact) => {
+		const known = memo.get(artifact)
+		if (known) return known
+		const computed = wireArtifactClassId(artifact)
+		memo.set(artifact, computed)
+		return computed
+	}
 }
 
 /** Per-item registration state shared by the sender + contract loops. */
 interface RestoreRegistrationState {
 	unreachable: boolean
 	skippedByDeadline: number
+	classIdOf: (artifact: unknown) => Promise<string>
+	/** Artifact objects a registration on this network already carried, so the PXE holds their class. */
+	carried: Set<unknown>
+	/** This network's lookups of the wallet's own copy of a class, by class id. */
+	resolved: Map<string, Promise<ContractArtifact | undefined>>
 }

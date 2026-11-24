@@ -82,18 +82,75 @@ describe("AccountStateService.backup", () => {
 		const custom = `0x${"07".repeat(32)}`
 		vi.spyOn(accountStateService, "getSenders").mockResolvedValue([])
 		vi.spyOn(accountStateService, "getContracts").mockResolvedValue([protocol, STANDARD_AUTH_REGISTRY_ADDRESS.toString(), custom])
-		const instance = { currentContractClassId: { toString: () => "0xclass" } }
+		const classId = `0x${"0c".repeat(32)}`
+		const instance = { currentContractClassId: { toString: () => classId } }
 		const pxe = {
 			getContractInstance: vi.fn(async () => instance),
-			getContractArtifact: vi.fn(async () => ({ name: "Custom" })),
+			getContractArtifact: vi.fn(async () => ({ name: "Custom", functions: [], fileMap: {} })),
 		}
 		;(accountStateService as unknown as { pxeService: typeof pxe }).pxeService = pxe
 
-		const items = await accountStateService.backup()
+		const slice = await accountStateService.backup()
 
-		expect(items?.[0].contracts).toEqual([{ address: custom, instance, artifact: { name: "Custom" } }])
+		expect(slice).toEqual({
+			format: 2,
+			classes: [{ classId, artifact: { name: "Custom", functions: [], fileMap: {} } }],
+			items: [{ networkId: "net-a", chainId: 7, senders: [], contracts: [{ address: custom, instance }] }],
+		})
 		expect(pxe.getContractInstance).toHaveBeenCalledTimes(1)
 		expect(pxe.getContractArtifact).toHaveBeenCalledTimes(1)
+	})
+
+	test("each class's artifact is fetched once for the whole export and stored once, with no debug info", async () => {
+		const networkService = new FakeNetworkService()
+		const services = new ServiceCollection()
+		services.add(networkService)
+		services.add(new FakeFenceProfileService())
+		const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
+		services.add(accountStateService)
+		await services.start()
+		const live = (id: string, chainId: number) =>
+			({ ...makeNetwork(id, chainId), endpoints: [{ id: "primary", rpcUrl: `https://${id}.example/` }] }) as Network
+		networkService.networks = [live("net-a", 7), live("net-b", 9)]
+		networkService.statuses.set("net-a", NodeStatus.Active)
+		networkService.statuses.set("net-b", NodeStatus.Active)
+		const [classA, classB] = [`0x${"0a".repeat(32)}`, `0x${"0b".repeat(32)}`]
+		const address = (byte: string) => `0x${byte.repeat(32)}`
+		const classOf: Record<string, string> = { "11": classA, "12": classA, "13": classA, "14": classB, "21": classA }
+		vi.spyOn(accountStateService, "getSenders").mockResolvedValue([])
+		vi.spyOn(accountStateService, "getContracts").mockImplementation(async (id) =>
+			(id === "net-a" ? ["11", "12", "13", "14"] : ["21"]).map(address),
+		)
+		const compiled = (name: string) => ({
+			name,
+			functions: [{ name: "f", debugSymbols: "opcode locations", debug: { debugSymbols: {}, files: {} } }],
+			fileMap: { 1: { source: "fn f() {}", path: "main.nr" } },
+		})
+		const pxe = {
+			getContractInstance: vi.fn(async (_info: unknown, a: { toString(): string }) => ({
+				currentContractClassId: { toString: () => classOf[a.toString().slice(2, 4)] },
+			})),
+			getContractArtifact: vi.fn(async (_info: unknown, id: { toString(): string }) =>
+				compiled(id.toString() === classA ? "A" : "B"),
+			),
+		}
+		;(accountStateService as unknown as { pxeService: typeof pxe }).pxeService = pxe
+
+		const slice = (await accountStateService.backup()) as unknown as {
+			classes: { classId: string; artifact: ReturnType<typeof compiled> }[]
+			items: { contracts: unknown[] }[]
+		}
+
+		expect(slice.classes.map((c) => [c.classId, c.artifact.name])).toEqual([
+			[classA, "A"],
+			[classB, "B"],
+		])
+		expect(slice.items.map((i) => i.contracts.length)).toEqual([4, 1])
+		expect(pxe.getContractArtifact).toHaveBeenCalledTimes(2)
+		for (const { artifact } of slice.classes) {
+			expect(artifact.fileMap).toEqual({})
+			expect(artifact.functions).toEqual([{ name: "f", debugSymbols: "" }])
+		}
 	})
 
 	test("each item names its chain beside the network id — the import rebinds by chain, never by the exported id", async () => {
@@ -111,9 +168,13 @@ describe("AccountStateService.backup", () => {
 		vi.spyOn(accountStateService, "getSenders").mockResolvedValue(["0xalice"])
 		vi.spyOn(accountStateService, "getContracts").mockResolvedValue([])
 
-		const items = await accountStateService.backup()
+		const slice = await accountStateService.backup()
 
-		expect(items).toEqual([{ networkId: "net-a", chainId: 7, senders: [{ address: "0xalice" }], contracts: [] }])
+		expect(slice).toEqual({
+			format: 2,
+			classes: [],
+			items: [{ networkId: "net-a", chainId: 7, senders: [{ address: "0xalice" }], contracts: [] }],
+		})
 	})
 
 	test("recovery mode OMITS the network's PXE state (injected at the PXE client, through the real viaPxe wrapper); any other PXE failure still aborts", async () => {
@@ -142,8 +203,12 @@ describe("AccountStateService.backup", () => {
 		}
 		;(accountStateService as unknown as { pxeService: typeof pxe }).pxeService = pxe
 
-		const items = await accountStateService.backup()
-		expect(items).toEqual([{ networkId: "net-b", chainId: 9, senders: [{ address: "0xbob" }], contracts: [] }])
+		const slice = await accountStateService.backup()
+		expect(slice).toEqual({
+			format: 2,
+			classes: [],
+			items: [{ networkId: "net-b", chainId: 9, senders: [{ address: "0xbob" }], contracts: [] }],
+		})
 
 		// An unrelated failure is NOT swallowed — the export aborts with the opaque wrapper error.
 		pxe.getContracts.mockRejectedValueOnce(new Error("boom"))
@@ -183,9 +248,13 @@ describe("AccountStateService.backup over the network service's own status check
 		const pxe = { getSenders: vi.fn(async () => [{ toString: () => "0xbob" }]), getContracts: vi.fn(async () => []) }
 		Object.assign(accountStateService, { networkService, pxeService: pxe })
 
-		const items = await accountStateService.backup()
+		const slice = await accountStateService.backup()
 
-		expect(items).toEqual([{ networkId: "loc", chainId: 0, senders: [{ address: "0xbob" }], contracts: [] }])
+		expect(slice).toEqual({
+			format: 2,
+			classes: [],
+			items: [{ networkId: "loc", chainId: 0, senders: [{ address: "0xbob" }], contracts: [] }],
+		})
 	})
 })
 
@@ -200,7 +269,11 @@ async function backupSizedTo(units: number) {
 	await services.start()
 	networkService.networks = [{ ...makeNetwork("net-a", 7), endpoints: [{ id: "primary", rpcUrl: "https://a.example/" }] } as Network]
 	networkService.statuses.set("net-a", NodeStatus.Active)
-	const frame = JSON.stringify([{ networkId: "net-a", chainId: 7, senders: [{ address: "" }], contracts: [] }]).length
+	const frame = JSON.stringify({
+		format: 2,
+		classes: [],
+		items: [{ networkId: "net-a", chainId: 7, senders: [{ address: "" }], contracts: [] }],
+	}).length
 	vi.spyOn(accountStateService, "getSenders").mockResolvedValue(["a".repeat(units - frame)])
 	vi.spyOn(accountStateService, "getContracts").mockResolvedValue([])
 	const warn = vi.spyOn(accountStateService as unknown as { logWarn: (...a: unknown[]) => void }, "logWarn")
@@ -595,12 +668,12 @@ describe("AccountStateService.restore (bounded)", () => {
 			LIVE_FENCE,
 		)
 		expect(vi.mocked(assertWireArtifactClassId).mock.calls).toStrictEqual([
-			[crafted.instance, crafted.artifact],
-			[genuine.instance, genuine.artifact],
+			[crafted.instance, crafted.artifact, expect.any(Function)],
+			[genuine.instance, genuine.artifact, expect.any(Function)],
 		])
 		expect(pxe.registerContract).toHaveBeenCalledTimes(1)
 		expect(pxe.registerContract).toHaveBeenCalledWith(expect.anything(), { instance: genuine.instance, artifact: genuine.artifact })
-		expect(result[0].contracts).toStrictEqual([{ ...crafted, restoreError: MISMATCH }, genuine])
+		expect(result[0].contracts).toStrictEqual([{ address: crafted.address, restoreError: MISMATCH }, { address: genuine.address }])
 	})
 
 	test("unknown network: per-child 'Network not found' errors, no dial, no fail-fast misclassification", async () => {
@@ -654,7 +727,7 @@ describe("AccountStateService.restore (run fence)", () => {
 			[NET],
 			LIVE_FENCE,
 		)
-		expect(result[0]).toEqual({ networkId: "net-a", senders: [sender(1)], contracts: [contract] })
+		expect(result[0]).toEqual({ networkId: "net-a", senders: [sender(1)], contracts: [{ address: contract.address }] })
 		expect(pxe.registerSender.mock.calls[0][0]).toMatchObject({ profileId: "p1", chainId: 1, pxeGeneration: "gen-1" })
 		expect(pxe.registerContract.mock.calls[0][0]).toMatchObject({ profileId: "p1", pxeGeneration: "gen-1" })
 	})

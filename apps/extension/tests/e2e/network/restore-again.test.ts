@@ -27,7 +27,7 @@ import {
 } from "../fixtures/extension"
 import { getAccountAddress, navigateByHash, waitForToast } from "../fixtures/helpers"
 import { pollUntil } from "../fixtures/poll"
-import { accountChainId, exportBackupContent } from "../helpers/backup-export"
+import { accountChainId, accountStateItems, exportBackupContent, setAccountStateItems } from "../helpers/backup-export"
 import { sealPlainBackup } from "../helpers/backup-seal"
 import { readStage } from "../helpers/crash-truth"
 import {
@@ -45,8 +45,6 @@ const hasConfig = aztecConfig !== undefined
 const SENDERS_HASH = "#/popup/settings/developer/account-state/senders"
 const BANNER_SENTENCE = "Local Network didn't finish restoring. Restore the backup again to bring it back."
 
-type AccountStateItem = { networkId?: string; chainId?: number; senders?: Array<{ address: string }>; contracts?: unknown[] }
-
 /** The wallet's export with only its own chain's account state, plus `sender` there. */
 async function backupWithSender(ctx: ExtensionContext, sender: string): Promise<string> {
 	const page = await openPopup(ctx)
@@ -55,10 +53,10 @@ async function backupWithSender(ctx: ExtensionContext, sender: string): Promise<
 	await page.close()
 	const backup = await exportBackupContent(ctx)
 	const chainId = accountChainId(backup, address)
-	const items = ((backup.data["account-state"] ?? []) as AccountStateItem[]).filter((item) => item.chainId === chainId)
+	const items = accountStateItems(backup.data).filter((item) => item.chainId === chainId)
 	const local = items[0] ?? { networkId: "local", chainId, senders: [], contracts: [] }
 	local.senders = [...(local.senders ?? []), { address: sender }]
-	backup.data["account-state"] = [local]
+	setAccountStateItems(backup.data, [local])
 	return writeBackupToTemp(sealPlainBackup(backup), "restore-again.json")
 }
 

@@ -1,0 +1,4 @@
+# Phase 2: export
+
+- 2026-11-24 debug-trace consumers (I1). No wallet code reads `debugSymbols`, `debug` or `fileMap` (searched `apps/extension/src` and `packages/*/src`). Upstream reads them in two places only: `@aztec-labs/pxe` `error_enriching.js:65-73` attaches a resolved Noir call stack to a public simulation error, and `@aztec-labs/simulator` `acvm.js:61` resolves opcode locations for a private one. Both skip the step when the artifact has no debug info. The assertion message comes from the ABI's error types, which the class id does not bind and the strip keeps. So a stripped app contract's simulation error keeps its message and loses only its source call stack, as the shipped token's already does. I1 holds.
+- 2026-11-24 the export's fixture artifact needs `functions`: `withoutDebugInfo` maps them, and a PXE always returns them; two service tests' stub artifacts gained `functions: []`.

@@ -27,6 +27,7 @@ import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
 import {
+	encodeAccountState,
 	type NormalizedAccountStateItem,
 	normalizeAccountStateSlice,
 	registrableNetworkIds,
@@ -887,7 +888,8 @@ export async function retryAccountStateStage(
 		if (!(await runFenceLive(profileService, ctx.restoreRun.fence))) return { restored: [] }
 		const admitted = await admitReminder(ctx.restoreRun)
 		const retryable = await runImportChainSync({
-			slice: ctx.retryable,
+			// Encoded, so the items' shared artifacts travel once per class instead of once per contract.
+			slice: encodeAccountState(ctx.retryable),
 			deadlineAt: Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS,
 			...chainSyncClients(accountStateService, networkService, ctx.networks, ctx.restoreRun.fence),
 			// Items the normalizer already bounded yield no violations: only outcomes arrive.
@@ -919,8 +921,8 @@ function chainSyncClients(
 ) {
 	return {
 		createdNetworkIds: networks.map((n) => n.id),
-		restore: (items: unknown[], deadlineMs: number) =>
-			accountStateService.restore(items as never, networks as never, fence, deadlineMs) as Promise<unknown>,
+		restore: (slice: unknown, deadlineMs: number) =>
+			accountStateService.restore(slice as never, networks as never, fence, deadlineMs) as Promise<unknown>,
 		probe: (networkId: string, timeoutMs: number) => networkService.probeNodeStatus(networkId, timeoutMs) as never,
 	}
 }

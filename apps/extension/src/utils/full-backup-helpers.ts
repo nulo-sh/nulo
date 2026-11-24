@@ -10,6 +10,7 @@ import { fromBase64 } from "@/wallet/utils"
 import { scrubUrls } from "@/utils/scrub-urls"
 import { CONFIG_SERVICE_NAME, type ConfigKey, RESTORABLE_CONFIG_KEYS } from "@/wallet/services/config/spec"
 import { ACCOUNT_SERVICE_NAME, IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/spec"
+import { isAccountStateV2 } from "@/wallet/services/account-state/spec"
 import { AUTH_REGISTRY_SERVICE_NAME } from "@/wallet/services/auth-registry/spec"
 import { CONTACT_SERVICE_NAME } from "@/wallet/services/contact/spec"
 import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
@@ -555,7 +556,8 @@ function seededIdFor(byChain: ReadonlyMap<number, string>, row: unknown): string
  * `networkId` — the exported id is never consulted, so a backup can choose among the seeded
  * networks but cannot define one. A row whose chain is missing, non-numeric or unseeded is
  * removed from its slice; only its ORDINAL is returned (the row is attacker-authored payload
- * and must not reach the error log).
+ * and must not reach the error log). A format-2 account-state part has its `items` remapped into
+ * a new part object, its class table kept; ordinals then index `items`.
  */
 export function remapNetworkIdByChain(
 	data: Record<string, unknown>,
@@ -566,7 +568,9 @@ export function remapNetworkIdByChain(
 	for (const n of seeded) if (!byChain.has(n.chainId)) byChain.set(n.chainId, n.id)
 	const dropped: Record<string, number[]> = {}
 	for (const key of slices) {
-		const rows = data[key]
+		const slice = data[key]
+		const v2 = isAccountStateV2(slice)
+		const rows = v2 ? slice.items : slice
 		if (!Array.isArray(rows)) continue
 		const kept: unknown[] = []
 		const droppedHere: number[] = []
@@ -576,7 +580,7 @@ export function remapNetworkIdByChain(
 			else kept.push({ ...(row as Record<string, unknown>), networkId: id })
 		})
 		if (droppedHere.length) dropped[key] = droppedHere
-		data[key] = kept
+		data[key] = v2 ? { ...slice, items: kept } : kept
 	}
 	return dropped
 }

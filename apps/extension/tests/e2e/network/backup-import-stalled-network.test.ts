@@ -36,7 +36,13 @@ import {
 } from "../fixtures/extension"
 import { captureBalanceBaseline, navigateByHash, switchToLocalNetwork, waitForFreshBalanceRow } from "../fixtures/helpers"
 import { settleClosedPopup } from "../fixtures/popup-leave"
-import { accountChainId, exportBackupContent, keepChainAccountState } from "../helpers/backup-export"
+import {
+	accountChainId,
+	accountStateItems,
+	exportBackupContent,
+	keepChainAccountState,
+	setAccountStateItems,
+} from "../helpers/backup-export"
 import { type PlainBackup, sealPlainBackup } from "../helpers/backup-seal"
 import { readStage } from "../helpers/crash-truth"
 import { gotoPopupImport, POPUP_IMPORT_SHELL, submitFullBackupImport, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
@@ -52,16 +58,15 @@ const PUBLIC_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
 const SENDERS_HASH = "#/popup/settings/developer/account-state/senders"
 const FUNDED_PUBLIC_RAW = (1000n * 10n ** 18n).toString()
 
-type AccountStateItem = { networkId?: string; chainId?: number; senders?: Array<{ address: string }> }
 type ErrorRow = { networkId?: unknown; restoreError?: unknown }
 
 /** The funded chain's item with `sender` added, preceded by its copy relabelled to Testnet. */
 function stalledTestnetBackup(backup: PlainBackup, funded: string, tokenAddress: string, sender: string): string {
 	keepChainAccountState(backup.data, accountChainId(backup, funded), tokenAddress)
-	const [local, ...rest] = backup.data["account-state"] as AccountStateItem[]
+	const [local, ...rest] = accountStateItems(backup.data)
 	expect(rest, "one account-state item on the funded chain").toEqual([])
 	local.senders = [...(local.senders ?? []), { address: sender }]
-	backup.data["account-state"] = [{ ...structuredClone(local), networkId: "testnet", chainId: CHAIN_IDS.TESTNET }, local]
+	setAccountStateItems(backup.data, [{ ...structuredClone(local), networkId: "testnet", chainId: CHAIN_IDS.TESTNET }, local])
 	backup["active-chain-id"] = CHAIN_IDS.TESTNET
 	return writeBackupToTemp(sealPlainBackup(backup))
 }

@@ -107,7 +107,7 @@ describe("restore() exact-branch pins", () => {
 			LIVE_FENCE,
 		)
 		expect(pxe.registerContract).toHaveBeenCalledTimes(1)
-		expect(result[0].contracts).toEqual([{ address: realAddr, instance: { i: 2 }, artifact: { a: 2 } }])
+		expect(result[0].contracts).toEqual([{ address: realAddr }])
 		expect(result[0].restoreError).toBeUndefined()
 	})
 

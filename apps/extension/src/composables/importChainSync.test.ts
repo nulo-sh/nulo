@@ -7,6 +7,7 @@ import {
 	ACCOUNT_STATE_SKIP_DEADLINE,
 	ACCOUNT_STATE_SKIP_UNREACHABLE,
 	ACCOUNT_STATE_SKIP_WRONG_NETWORK,
+	isAccountStateV2,
 	skippedNetworkRecord,
 } from "@/wallet/services/account-state/normalize"
 import { NodeStatus } from "@/wallet/services/network/spec"
@@ -18,7 +19,7 @@ const contract = (address: string) => ({ address, instance: { i: 1 }, artifact: 
 interface Harness {
 	records: unknown[][]
 	kinds: unknown[]
-	restoreCalls: Array<{ items: unknown[]; deadlineMs: number; at: number }>
+	restoreCalls: Array<{ slice: unknown; deadlineMs: number; at: number }>
 	probeCalls: string[]
 }
 
@@ -26,7 +27,7 @@ function makeDeps(overrides: {
 	slice: unknown
 	createdNetworkIds?: string[]
 	probeStatus?: NodeStatus | ((id: string) => NodeStatus | Promise<NodeStatus>)
-	restoreImpl?: (items: unknown[], deadlineMs: number) => Promise<unknown>
+	restoreImpl?: (slice: unknown, deadlineMs: number) => Promise<unknown>
 	deadlineAt?: number
 }) {
 	const harness: Harness = { records: [], kinds: [], restoreCalls: [], probeCalls: [] }
@@ -34,9 +35,9 @@ function makeDeps(overrides: {
 		slice: overrides.slice,
 		deadlineAt: overrides.deadlineAt ?? Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS,
 		createdNetworkIds: overrides.createdNetworkIds ?? ["n1"],
-		restore: (items: unknown[], deadlineMs: number) => {
-			harness.restoreCalls.push({ items, deadlineMs, at: Date.now() })
-			return overrides.restoreImpl ? overrides.restoreImpl(items, deadlineMs) : Promise.resolve([])
+		restore: (slice: unknown, deadlineMs: number) => {
+			harness.restoreCalls.push({ slice, deadlineMs, at: Date.now() })
+			return overrides.restoreImpl ? overrides.restoreImpl(slice, deadlineMs) : Promise.resolve([])
 		},
 		probe: async (id: string) => {
 			harness.probeCalls.push(id)
@@ -56,8 +57,9 @@ async function run<T>(promise: Promise<T>): Promise<T> {
 	return await promise
 }
 
-const idsOf = (items: unknown) => (items as Array<{ networkId: string }> | undefined)?.map((i) => i.networkId)
-const callFor = (harness: Harness, networkId: string) => harness.restoreCalls.find((c) => idsOf(c.items)?.includes(networkId))
+const itemsOf = (slice: unknown) => (isAccountStateV2(slice) ? slice.items : slice) as Array<{ networkId: string }> | undefined
+const idsOf = (slice: unknown) => itemsOf(slice)?.map((i) => i.networkId)
+const callFor = (harness: Harness, networkId: string) => harness.restoreCalls.find((c) => idsOf(c.slice)?.includes(networkId))
 const hangs = () => new Promise<never>(() => {})
 const twoNetworks = [
 	{ networkId: "n1", senders: [sender()], contracts: [] },
@@ -177,7 +179,7 @@ describe("runImportChainSync", () => {
 		await run(runImportChainSync(deps))
 		expect(harness.records[0]).toEqual([{ networkId: "n2", senders: [], contracts: [], restoreError: ACCOUNT_STATE_SKIP_UNREACHABLE }])
 		expect(harness.restoreCalls).toHaveLength(1)
-		const restoredIds = (harness.restoreCalls[0].items as Array<{ networkId: string }>).map((i) => i.networkId)
+		const restoredIds = idsOf(harness.restoreCalls[0].slice)
 		expect(restoredIds).toEqual(["n1"])
 	})
 
@@ -223,7 +225,7 @@ describe("runImportChainSync", () => {
 		const { deps, harness } = makeDeps({
 			slice: twoNetworks,
 			createdNetworkIds: ["n1", "n2"],
-			restoreImpl: (items) => (idsOf(items)?.includes("n1") ? Promise.reject(new Error("<script>0xdeadbeef")) : Promise.resolve([])),
+			restoreImpl: (slice) => (idsOf(slice)?.includes("n1") ? Promise.reject(new Error("<script>0xdeadbeef")) : Promise.resolve([])),
 		})
 		await run(runImportChainSync(deps))
 		expect(harness.records).toEqual([[skippedNetworkRecord("n1", ACCOUNT_STATE_SKIP_DEADLINE)]])
@@ -251,7 +253,7 @@ describe("runImportChainSync", () => {
 		const { deps } = makeDeps({
 			slice: ["n1", "n2", "n3"].map((networkId) => ({ networkId, senders: [sender()], contracts: [] })),
 			createdNetworkIds: ["n1", "n2", "n3"],
-			restoreImpl: (items) => Promise.resolve(results[idsOf(items)?.[0] ?? ""]),
+			restoreImpl: (slice) => Promise.resolve(results[idsOf(slice)?.[0] ?? ""]),
 		})
 		const retryable = await run(runImportChainSync(deps))
 		expect(idsOf(retryable)).toEqual(["n1", "n3"])
@@ -273,7 +275,7 @@ describe("runImportChainSync", () => {
 		const { deps, harness } = makeDeps({
 			slice: twoNetworks,
 			createdNetworkIds: ["n1", "n2"],
-			restoreImpl: (items) => (idsOf(items)?.includes("n2") ? hangs() : Promise.resolve(n1Result)),
+			restoreImpl: (slice) => (idsOf(slice)?.includes("n2") ? hangs() : Promise.resolve(n1Result)),
 		})
 		await run(runImportChainSync(deps))
 		expect(harness.records).toEqual([[...n1Result, skippedNetworkRecord("n2", ACCOUNT_STATE_SKIP_DEADLINE)]])
@@ -350,9 +352,61 @@ describe("runImportChainSync", () => {
 			slice: ["n1", "n2", "n3", "n4", "ghost"].map((networkId) => ({ networkId, senders: [sender()], contracts: [] })),
 			createdNetworkIds: ["n1", "n2", "n3", "n4"],
 			probeStatus: (id) => verdicts[id] ?? NodeStatus.Active,
-			restoreImpl: (items) => (idsOf(items)?.includes("n2") ? Promise.reject(new Error("SW gone")) : hangs()),
+			restoreImpl: (slice) => (idsOf(slice)?.includes("n2") ? Promise.reject(new Error("SW gone")) : hangs()),
 		})
 		const retryable = await run(runImportChainSync(deps))
 		expect(idsOf(retryable)).toEqual(["n1", "n2", "n3"])
+	})
+})
+
+describe("runImportChainSync, contract code in the per-network payload", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	const CLASS_A = `0x${"0a".repeat(32)}`
+	const CLASS_B = `0x${"0b".repeat(32)}`
+	const address = (n: number) => `0x${(n + 16).toString(16).repeat(32)}`
+	const entry = (n: number, classId: string) => ({ address: address(n), instance: { currentContractClassId: classId } })
+	const classesOf = (slice: unknown) => (slice as { classes: Array<{ classId: string; artifact: unknown }> }).classes
+
+	test("each network's call is a part holding its item and only the classes it uses; a shared class goes to each", async () => {
+		const [artifactA, artifactB] = [{ name: "A" }, { name: "B" }]
+		const { deps, harness } = makeDeps({
+			slice: {
+				format: 2,
+				classes: [
+					{ classId: CLASS_A, artifact: artifactA },
+					{ classId: CLASS_B, artifact: artifactB },
+				],
+				items: [
+					{ networkId: "n1", senders: [], contracts: [entry(1, CLASS_A), entry(2, CLASS_A)] },
+					{ networkId: "n2", senders: [], contracts: [entry(3, CLASS_A), entry(4, CLASS_B)] },
+				],
+			},
+			createdNetworkIds: ["n1", "n2"],
+		})
+		await run(runImportChainSync(deps))
+		const n1 = callFor(harness, "n1")?.slice
+		const n2 = callFor(harness, "n2")?.slice
+		expect(classesOf(n1)).toEqual([{ classId: CLASS_A, artifact: artifactA }])
+		expect(classesOf(n2)).toEqual([
+			{ classId: CLASS_A, artifact: artifactA },
+			{ classId: CLASS_B, artifact: artifactB },
+		])
+		expect(itemsOf(n1)).toEqual([{ networkId: "n1", senders: [], contracts: [entry(1, CLASS_A), entry(2, CLASS_A)] }])
+	})
+
+	test.each([
+		["valid first", ["genuine", "other"]],
+		["invalid first", ["other", "genuine"]],
+	])("a format-1 file with two different artifacts under one class sends each with its own contract (%s)", async (_label, names) => {
+		const contracts = names.map((name, i) => ({ ...entry(i + 1, CLASS_A), artifact: { name } }))
+		const { deps, harness } = makeDeps({ slice: [{ networkId: "n1", senders: [], contracts }] })
+		await run(runImportChainSync(deps))
+		expect(harness.restoreCalls[0].slice).toEqual([{ networkId: "n1", senders: [], contracts }])
 	})
 })

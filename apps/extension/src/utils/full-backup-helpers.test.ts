@@ -693,6 +693,29 @@ describe("remapNetworkIdByChain — rows bind to the seeded network of their cha
 		expect(records).toHaveLength(201)
 		expect(records[200]).toEqual({ restoreError: "79800 further error(s) not recorded" })
 	})
+	it("remaps a format-2 part's items into a new part, keeping its class table; ordinals index the items", () => {
+		const classes = [{ classId: `0x${"0a".repeat(32)}`, artifact: { name: "A" } }]
+		const part = {
+			format: 2,
+			classes,
+			items: [
+				{ networkId: "evil", chainId: 99, senders: [] },
+				{ networkId: "evil", chainId: 0, senders: [] },
+			],
+		}
+		const data: Record<string, unknown> = { "account-state": part }
+		const dropped = remapNetworkIdByChain(data, seeded, ["account-state"])
+		expect(dropped).toEqual({ "account-state": [0] })
+		expect(data["account-state"]).toEqual({ format: 2, classes, items: [{ networkId: "local", chainId: 0, senders: [] }] })
+		expect((data["account-state"] as { classes: unknown }).classes).toBe(classes)
+		expect(part.items).toHaveLength(2)
+	})
+	it("leaves an account-state object of any other format as it is, for the normalizer to refuse", () => {
+		const part = { format: 3, items: [{ networkId: "x", chainId: 0 }] }
+		const data: Record<string, unknown> = { "account-state": part }
+		expect(remapNetworkIdByChain(data, seeded, ["account-state"])).toEqual({})
+		expect(data["account-state"]).toBe(part)
+	})
 	it("leaves slices it was not asked about, and non-array slices, untouched", () => {
 		const data: Record<string, unknown> = { token: [{ chainId: 0, networkId: "keep" }], transaction: "nope" }
 		expect(remapNetworkIdByChain(data, seeded, ["transaction"])).toEqual({})

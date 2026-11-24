@@ -17,6 +17,7 @@ import {
 	ACCOUNT_STATE_SKIP_DEADLINE,
 	ACCOUNT_STATE_SKIP_UNREACHABLE,
 	ACCOUNT_STATE_SKIP_WRONG_NETWORK,
+	encodeAccountState,
 	isConnectivityErrorMessage,
 	type NormalizedAccountStateItem,
 	normalizeAccountStateSlice,
@@ -42,8 +43,9 @@ export interface ImportChainSyncDeps {
 	deadlineAt: number
 	/** Ids of the networks THIS restore created (probe-able). */
 	createdNetworkIds: string[]
-	/** `AccountStateServiceClient.restore`-shaped call, deadline included; one network per call. */
-	restore: (items: unknown[], deadlineMs: number) => Promise<unknown>
+	/** `AccountStateServiceClient.restore`-shaped call, deadline included; one network per call, as a
+	 *  part holding only that network's item and the classes it uses. */
+	restore: (slice: unknown, deadlineMs: number) => Promise<unknown>
 	/** `NetworkServiceClient.probeNodeStatus`-shaped probe. */
 	probe: (networkId: string, timeoutMs: number) => Promise<NodeStatus>
 	/** `recordRestoreErrors(ACCOUNT_STATE_SERVICE_NAME, ...)`-shaped sink. The kind keeps the two
@@ -117,7 +119,7 @@ async function registerOneNetwork(
 	// Raced at the EXACT remainder: the deadline is absolute (the service enforces its own copy per
 	// launch, so nothing useful runs past it). A rejection's message never reaches a record.
 	const result = await raceTimeout(
-		deps.restore([item], remaining).catch(() => undefined),
+		deps.restore(encodeAccountState([item]), remaining).catch(() => undefined),
 		remaining,
 		() => undefined,
 	)
