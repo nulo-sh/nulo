@@ -1,7 +1,7 @@
 ---
 plan: contact-names-build-1
 tier: light
-status: built (arc 1, draft PR)
+status: closed (lands with its PR)
 issues: none
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,16 @@ base: origin/dev at 0aabc016d
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-24.
+- **Status:** closed. One arc, one PR against `dev`, opened as a draft for the owner's sign-off on its frames; the merge that lands it closes the plan.
+- **Shipped:** `isAddressShapedName` (`utils/contact-name.ts`), one rule on a name's stored form; the New and Edit forms refuse such a name with "A name can't look like an address. Use a word, like Ana." and keep Add contact and Save off; a contacts-file row is listed under Can't be imported with "Name looks like an address", judged on the name it would write (D9); `addContact` and `updateContact` refuse it, the kept name of an address-only update included; a full backup restores its rows as they are. A stored name that breaks the rule names nothing in `nameBookOf`, `AddressDisplay` or Send. Send matches a term written like an address only by whole address, prints the short address under every Recent name, and counts only own accounts and past sends as known. The windows are unchanged (pick 2).
+- **Known limits:** none.
+- **Open items:** none. OA-1 (the address book's aliases) is an owner question with no work until it is answered ([OWNER-ASKS.md](OWNER-ASKS.md)).
+- **Dropped:** none. **Lessons:** none promoted (`lessons.md` is at its budget); the build's gotchas are in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # contact-names-build-1: a contact's name can't read as an address; Send matches a typed address whole
 
