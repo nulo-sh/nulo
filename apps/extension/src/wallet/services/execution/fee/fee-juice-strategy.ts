@@ -32,7 +32,7 @@ export class FeeJuiceStrategy implements FeeStrategy {
 	public constructor(private readonly deps: FeeStrategyDeps) {}
 
 	public async buildAndEstimate(ctx: FeeStrategyContext): Promise<FeeEstimate> {
-		const task = startEstimateTask(this.deps.tasks, ctx.parentTask)
+		const task = startEstimateTask(this.deps.tasks, ctx)
 		try {
 			let built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)
 			suggestGasLimits(built.txRequest, ctx.op.fee)

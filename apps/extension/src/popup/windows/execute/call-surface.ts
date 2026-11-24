@@ -65,6 +65,9 @@ const rawRow = (arg: unknown): RawRow => {
 	return { kind: "opaque" }
 }
 
+/** How many fields a call carries on the wire, known before its decode lands. */
+export const fieldCount = (args: unknown): number => (Array.isArray(args) ? args.length : 0)
+
 export const rawRows = (args: unknown, maxRows = MAX_ARG_ROWS): RawRows => {
 	const list = Array.isArray(args) ? args : []
 	return { rows: list.slice(0, maxRows).map(rawRow), hidden: Math.max(0, list.length - maxRows) }

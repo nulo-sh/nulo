@@ -99,6 +99,7 @@ declare global {
   const RECOVERY_PHRASE_WARNINGS: typeof import('../utils/recovery-phrase-warnings').RECOVERY_PHRASE_WARNINGS
   const RESTORE_OUTCOME_LEASE_MS: typeof import('../utils/restore-outcome').RESTORE_OUTCOME_LEASE_MS
   const RESTORE_OUTCOME_ROOT: typeof import('../utils/profile-ui-keys').RESTORE_OUTCOME_ROOT
+  const RETIRED_CHAINS: typeof import('../utils/chain-ids').RETIRED_CHAINS
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
   const ROW_AMOUNT_LENGTH: typeof import('../utils/snack-amount').ROW_AMOUNT_LENGTH
   const RPC_URL_MIN_LENGTH: typeof import('../utils/entity-rules').RPC_URL_MIN_LENGTH
@@ -894,6 +895,9 @@ declare global {
   export type { AuthRequiredGate, ActiveProfileLookup } from '../utils/auth-guard'
   import('../utils/auth-guard')
   // @ts-ignore
+  export type { RetiredChain } from '../utils/chain-ids'
+  import('../utils/chain-ids')
+  // @ts-ignore
   export type { CopyToastSpec } from '../utils/clipboard'
   import('../utils/clipboard')
   // @ts-ignore
@@ -1123,6 +1127,7 @@ declare module 'vue' {
     readonly RECOVERY_PHRASE_WARNINGS: UnwrapRef<typeof import('../utils/recovery-phrase-warnings')['RECOVERY_PHRASE_WARNINGS']>
     readonly RESTORE_OUTCOME_LEASE_MS: UnwrapRef<typeof import('../utils/restore-outcome')['RESTORE_OUTCOME_LEASE_MS']>
     readonly RESTORE_OUTCOME_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['RESTORE_OUTCOME_ROOT']>
+    readonly RETIRED_CHAINS: UnwrapRef<typeof import('../utils/chain-ids')['RETIRED_CHAINS']>
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
     readonly ROW_AMOUNT_LENGTH: UnwrapRef<typeof import('../utils/snack-amount')['ROW_AMOUNT_LENGTH']>
     readonly RPC_URL_MIN_LENGTH: UnwrapRef<typeof import('../utils/entity-rules')['RPC_URL_MIN_LENGTH']>

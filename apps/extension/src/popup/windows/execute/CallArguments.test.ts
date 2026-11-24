@@ -177,3 +177,38 @@ describe("raw values under a readable call", () => {
 		expect(w.find('[data-testid="t-unverified-warning"]').exists()).toBe(true)
 	})
 })
+
+describe("while the wallet reads the arguments", () => {
+	const ARGS = [MAIN, POOL_A, field(25_000_000n), field(7n)]
+	const pending: CallSurface = { kind: "pending" }
+	const ARGS_STYLE = (CallArguments as unknown as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style
+	const block = (w: VueWrapper) => w.find('[data-testid="t-args-pending"]')
+	/** Two bars per pair, each a span inside its pair's span. */
+	const barsIn = (w: VueWrapper) => block(w).findAll("span > span[aria-hidden='true']").length
+
+	test("a host that gives the field count gets a busy status region of placeholder pairs, whose only text is hidden words", () => {
+		const w = mountArgs({ surface: pending, fields: ARGS.length })
+		const region = block(w)
+		expect([region.attributes("role"), region.attributes("aria-busy"), region.text()]).toEqual(["status", "true", "Reading arguments…"])
+		expect(barsIn(w)).toBe(8)
+		expect(region.classes()).not.toContain(ARGS_STYLE.toggle_room)
+	})
+
+	test("under a host that states the reading itself, the pairs say nothing and keep the raw toggle's line open", () => {
+		const w = mountArgs({ surface: pending, fields: ARGS.length, notice: false, raw: rawRows(ARGS) })
+		const region = block(w)
+		expect([region.attributes("aria-hidden"), region.attributes("role"), region.text()]).toEqual(["true", undefined, ""])
+		expect(region.classes()).toContain(ARGS_STYLE.toggle_room)
+		expect(barsIn(w)).toBe(8)
+	})
+
+	test("control: without a field count the words read as before, or nothing under a host that states them", () => {
+		const words = block(mountArgs({ surface: pending }))
+		expect([words.text(), words.attributes("role"), words.find("[aria-hidden]").exists()]).toEqual([
+			"Reading arguments…",
+			undefined,
+			false,
+		])
+		expect(block(mountArgs({ surface: pending, notice: false })).exists()).toBe(false)
+	})
+})

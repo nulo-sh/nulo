@@ -377,6 +377,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [wallet-followups-6](wallet-followups-6/plan.md) — completed — a secure message bounded to `{iv, ciphertext}` within 16 MiB (#345), one address spelling at the parse (#331), a typed refusal for a non-string method (#332), both e2e error arrays (#336); #262 and #355 known limits
 - [wallet-followups-7](wallet-followups-7/plan.md) — completed — one token contract spelling at the parse (#329); a bound of 32 pending calls on every dApp session at decrypt and dispatch (#354); #371 and #372 known limits
 - [wallet-followups-8](wallet-followups-8/plan.md) — completed — node retries stop while a profile or chain is torn down (#277); a dead profile RPC goes (#464); the no-token line, a field purpose and the unlock toast (#339, #465, #466)
+- [wallet-followups-9](wallet-followups-9/plan.md) — completed — Delete profile names imported accounts on every chain (#1925) and waits for a running reset, with Export first for passkeys (#1938, #1939); one bound of 77 on a token's decimals (#1926)
 - [wallet-safety-fixes](wallet-safety-fixes/plan.md) — completed — four small safety and privacy fixes
 - [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
 - [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set
@@ -623,3 +624,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [quality-lows-b](quality-lows-b/plan.md) — completed — the approval windows' raced-cancel and wrong-profile endings move into their shell, the pending-send refusal toast and the first-connect rule get one home each (#1977, #1978, #1979)
 - [quality-lows-a](quality-lows-a/plan.md) — completed — the baseline scripts' Biome reader, the landing's subscribe client, the network endpoint edits and the proving backends each get one home; the route-snapshot half of #1976 left out (#1981, #1982, #1975)
 - [contact-names-build-1](contact-names-build-1/plan.md) — completed — a contact name written like an address is refused at entry, edit and contacts-file import and never printed for an address; Send matches a typed address only whole, shows the short address under each Recent name, and the not-paid line for a contact never paid
+- [task-owner-1](task-owner-1/plan.md) — completed — every root task names its profile, and the task registry inserts only its own profile's; a scan pins the creators

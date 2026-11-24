@@ -146,8 +146,8 @@ export class BalanceJobQueue {
 		// An external refresh supersedes a delayed retry: one attempt, not two.
 		this.retryDue.delete(balance.id)
 		if (!this.pendingTasks.has(balance.id)) {
-			const task = this.tasks.createNewTask(new BalanceUpdateContent(balance.id, balance.account))
-			this.pendingTasks.set(balance.id, task.id)
+			const task = this.tasks.createNewTask(balance.profileId, new BalanceUpdateContent(balance.id, balance.account))
+			if (task.exists) this.pendingTasks.set(balance.id, task.id)
 		}
 		this.queue.priorityPass(balance)
 	}
@@ -279,7 +279,9 @@ export class BalanceJobQueue {
 			// `pendingTasks` entry, permanently jamming every future enqueue for
 			// this id. A genuine not-pending invariant error still propagates.
 			if (!taskId || !this.tasks.hasTask(taskId)) {
-				const task = this.tasks.startNewTask(new BalanceUpdateContent(tb.id, tb.account))
+				const task = this.tasks.startNewTask(tb.profileId, new BalanceUpdateContent(tb.id, tb.account))
+				// A row of another profile gets no task, so the batch applies nothing for it.
+				if (!task.exists) continue
 				this.pendingTasks.set(tb.id, task.id)
 				owned.set(tb.id, task.id)
 			} else {

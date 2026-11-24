@@ -135,7 +135,7 @@ async function world(opts: WorldOptions = {}) {
 	)
 	services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: bus.onTransactionUpdated }))
 	services.add(svc(EXECUTION_SERVICE_NAME, {}))
-	services.add(svc(TASK_SERVICE_NAME, opts.task ?? { createNewTask: () => ({ id: "t1" }) }))
+	services.add(svc(TASK_SERVICE_NAME, opts.task ?? { createNewTask: () => ({ id: "t1", exists: true }) }))
 	const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
 	const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, { ticker: noopTicker })
 	services.add(service)

@@ -207,7 +207,7 @@ export class TransferExecutor {
 		const { networkId, accountAddress, tokenId, transferType, recipientAddress, amount } = req
 		const origin: LocalTxOrigin = { type: OriginType.UI }
 		const transferContent = new TransferContent(tokenId, transferType, accountAddress, recipientAddress, amount, networkId)
-		const transferTask = this.deps.tasks.startNewTask(transferContent, undefined, origin)
+		const transferTask = this.deps.tasks.startNewTask(fence.profileId, transferContent, origin)
 
 		// Hoisted so catch (mark failed) + finally (controller cleanup) see them even when the
 		// journal-create refusal below throws before they are assigned.
