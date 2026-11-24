@@ -1,7 +1,7 @@
 ---
 plan: css-recipes-home-1
 tier: mid
-status: approved (final Codex pass)
+status: completed
 issues: "#1931"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,27 @@ base: origin/dev at e4f9011f8
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-24. Planned as two arcs; both delivered.
+- **Status:** completed. Arc 1 merged as #1973. Arc 2 and this close-out ship as one PR into `dev`, whose merge archives this plan and closes #1931.
+- **Shipped:**
+  - Arc 1: the accent text action (`components/text-action.module.css` `.accent`), the muted link (`popup/components/modules/general/section-link.module.css` `.section_link`) and visually hidden (`components/a11y.module.css` `.visually_hidden`) each get one home. `utils/sheet-compose-ban.test.ts` refuses a feature sheet composed from outside its folder; today's cross-feature triples sit on a list that only shrinks.
+  - Arc 2: form sections (`components/composite/form-section.module.css` `.section`, `.label`) and the filled auth-tab skin (`components/composite/auth-method-choice.module.css`) get one home each. `import-shared.module.css` is deleted and its four composers re-pointed. Change password, reset, new profile and its two modules compose the form-section home. `UnlockMethodChoice` and onboarding's create compose the tab skin and keep their focus rules. The two type-role overrides for the selected tab's weight are one.
+- **Review:** arc 1: Codex round 1 one finding, fixed; round 2 clean; the Opus review's four findings fixed. Arc 2: Codex round 1 clean; the Opus review's B1 fixed (9f0e7bb17), B2 and B3 rejected with reasons; round 2 clean (Audit verdicts).
+- **Gates:**
+  - Arc 2's proof, base 9c913679b against head 9f0e7bb17: 29 smoke states, 272 captures per browser. Computed styles, hover and focus are identical in every capture; every differing pixel is matched by a same-build pair.
+  - Affected e2e at retry 0 at 9f0e7bb17, both browsers. Smoke: Chrome 32 passed with 1 Firefox-only skip, Firefox 33 passed. Network `restore-again`: 2/2 on each.
+  - After merging `origin/dev` at b7ea94ccc: lint, typecheck:all, test:all, audit:vue, test:ci-gating, check:plans and build-storybook green. The built CSS differs from dev's in 6 of 129 files, with a rule diff identical to the proof's, in both browsers.
+- **Dropped:**
+  - B2 and B3, rejected (Arc 2 review).
+  - Arc 2's network proof run: every state is reached in smoke (Arc 2, Phase 4).
+  - `FeeMethodSelector`'s trigger "Checking": no screen renders it (Arc 1 review).
+- **Known limits:** #2007.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` sits at 8,148 of 8,192 bytes, and nothing in it is superseded here. The Tab-walk anchor this lane learned again is already a rule of the `e2e-testing` skill. The scoped-hash renames and the same-build pixel pairs stay in `lessons/phase-1.md` and `lessons/phase-3.md`.
+- **Seeds retired:** none were run; the orchestrator drove this lane.
 
 # css-recipes-home-1: cross-feature CSS recipes get a lower-layer home, and the copies compose them
 
