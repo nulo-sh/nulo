@@ -34,7 +34,7 @@ post_implementation_hardening: not scheduled
 
 # shared-guards-1: inline restatements of the wallet-core primitives call the primitive, and a guard stops the regrowth
 
-Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md). Live log: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults and phase logs: [lessons/phase-0.md](lessons/phase-0.md), [phase-1](lessons/phase-1.md), [phase-5](lessons/phase-5.md), [phase-6](lessons/phase-6.md).
 
 Issue #1928 (and the hex part of closed #1452). Three arcs, one PR each against `dev`, no stack. The site table is this plan's body: every site, its inline form, the helper it becomes, and whether the two accept the same values.
 
