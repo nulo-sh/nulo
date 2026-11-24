@@ -103,6 +103,7 @@ import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
 import { TransferExecutor, type TransferExecutorDeps, type TransferSequence } from "./transfer-executor"
 import { DappSendExecutor } from "./dapp-send-executor"
+import { DappSendEstimation, type DappSendEstimationDeps } from "./dapp-send-estimation"
 import { DiscoveryAwareEstimator, type DiscoveryProbe } from "./discovery-aware-estimator"
 import { ViewExecutor } from "./view-executor"
 import { RegistrationExecutor } from "./registration-executor"
@@ -285,6 +286,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		logDebug: (msg) => this.logDebug(msg),
 	})
 	private dappSendExecutor: DappSendExecutor = null!
+	private dappSendEstimation: Pick<DappSendEstimation, "estimateOperationFee" | "previewOperationAuthwits"> = null!
 	private viewExecutor: ViewExecutor = null!
 	private registration: RegistrationExecutor = null!
 	private lane: ExecutionLane = null!
@@ -542,20 +544,47 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 				return { txRequest, node, pxe, account, scopes, network }
 			},
 		})
+		const buildAndEstimateValidated: DappSendEstimationDeps["buildAndEstimateValidated"] = (
+			op,
+			feeSettings,
+			fence,
+			parentTask,
+			signal,
+			onBuilt,
+			observer,
+		) => this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt, observer)
+		// No spread of `shared`: the estimation gets the reads it names, never a send's.
+		const estimation = new DappSendEstimation({
+			getActiveProfile: shared.getActiveProfile,
+			captureExecutionFence: shared.captureExecutionFence,
+			getNetwork: shared.getNetwork,
+			getPendingForAccount: shared.getPendingForAccount,
+			readPublicStorageOnce: shared.readPublicStorageOnce,
+			peekPublicFeeJuice: shared.peekPublicFeeJuice,
+			rereadPublicFeeJuice: shared.rereadPublicFeeJuice,
+			planner: this.planner,
+			txBuilder: this.txBuilder,
+			estimateWithDiscovery,
+			buildAndEstimateValidated,
+			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
+			chainTip: this.chainTipGate,
+			operationEstimateReuse: this.operationEstimateReuse,
+			previewSnapshots: this.previewSnapshots,
+			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
+		})
+		this.dappSendEstimation = estimation
 		this.dappSendExecutor = new DappSendExecutor({
 			...shared,
 			planner: this.planner,
-			txBuilder: this.txBuilder,
 			coordinator: this.coordinator,
 			estimateWithDiscovery,
+			estimation,
 			operationEstimateReuse: this.operationEstimateReuse,
 			previewSnapshots: this.previewSnapshots,
-			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			lane: this.lane,
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt, observer) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt, observer),
+			buildAndEstimateValidated,
 			protocolSponsorAddress: async (chainId) => (await this.fpcService.getOrComputeProtocolAddresses(chainId)).sponsored,
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
@@ -793,7 +822,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 	): Promise<TransferFeeEstimate> {
 		await this.ensureInitialized()
 		return this.withEstimateAdmission(estimateToken, flowKey ?? "wallet", (signal) =>
-			this.dappSendExecutor.estimateOperationFee(operation, operation.feeSettings, signal),
+			this.dappSendEstimation.estimateOperationFee(operation, operation.feeSettings, signal),
 		)
 	}
 
@@ -807,7 +836,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		await this.ensureInitialized()
 		return this.refusalBound(interactionId, "fee estimate", () =>
 			this.withStoredRequestSlot(interactionId, index, feeSettings, estimateToken, flowKey ?? "op", (operation, signal) =>
-				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
+				this.dappSendEstimation.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
 			),
 		)
 	}
@@ -821,7 +850,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		await this.ensureInitialized()
 		return this.refusalBound(interactionId, "authwit preview", () =>
 			this.withStoredRequestSlot(interactionId, index, undefined, estimateToken, flowKey ?? "op", (operation, signal) =>
-				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
+				this.dappSendEstimation.previewOperationAuthwits(operation, { interactionId, index }, signal),
 			),
 		)
 	}

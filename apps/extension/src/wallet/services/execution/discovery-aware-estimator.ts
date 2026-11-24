@@ -1,6 +1,6 @@
 /**
  * `DiscoveryAwareEstimator` — the ONE owner of "discover authwits, then
- * estimate" for the dApp send paths. Owned and invoked exclusively by
+ * estimate" for the dApp send paths. Invoked only by `DappSendEstimation` and
  * `DappSendExecutor`; the Send-page transfer flow and `executeSendTransaction`
  * use the probe-free validated pipeline and can never reach this class (the
  * split, distinctly-typed deps are the fence).
