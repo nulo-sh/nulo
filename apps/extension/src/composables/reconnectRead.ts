@@ -2,6 +2,15 @@ import type { IEventHandler } from "@nulo/wallet-core/utils"
 import { createRunFence } from "./runFence"
 
 /**
+ * Tells a reconnect from the first connect, which belongs to the open the first request made: call
+ * the returned check once per `onConnected`; it answers `true` from the second call on.
+ */
+export function createReconnectCheck(): () => boolean {
+	let connections = 0
+	return () => ++connections > 1
+}
+
+/**
  * A page's read that survives a worker restart. A dropped port rejects the read in flight and
  * replays no event sent while it was down, so every open of the port after the first reads again,
  * and so does the first when the newest read failed before it: a port that drops between Ready and
@@ -18,12 +27,11 @@ export function createReconnectRead(
 	run: (isCurrent: () => boolean) => Promise<boolean>,
 ): { read: () => Promise<void>; dispose: () => void } {
 	const fence = createRunFence()
-	let connections = 0
+	const isReconnect = createReconnectCheck()
 	let newestReadFailed = false
 
 	const onConnected = () => {
-		connections++
-		if (connections > 1 || newestReadFailed) void read()
+		if (isReconnect() || newestReadFailed) void read()
 	}
 
 	async function read(): Promise<void> {

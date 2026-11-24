@@ -15,7 +15,6 @@
 
 /** Vendor */
 import { onMounted, onUnmounted, shallowRef } from "vue"
-import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 
 /** Components */
@@ -120,11 +119,14 @@ const {
 	closeWindow,
 	endAndClose,
 	onActiveProfileChanged,
+	dismissWrongProfile,
+	settleResolveError,
 	stripStatus,
 	processingError,
 	setError,
 } = useDappApprovalWindow({
 	profile,
+	requestId,
 	isInteractionCancelled,
 	isLoading,
 	connectServices: () => {
@@ -226,8 +228,7 @@ const accept = async () => {
 		await interactionService.resolveInteraction(requestId.value, { accepted: true })
 		closeWindow(true)
 	} catch (error) {
-		if (error instanceof JobCancelledError) isInteractionCancelled.value = true
-		else setError("Processing error.", getErrorMessage(error))
+		settleResolveError(error, () => setError("Processing error.", getErrorMessage(error)))
 	} finally {
 		isLoading.value = false
 	}
@@ -244,11 +245,6 @@ const signerNetworks = computed(() => (operation.value ? uniqueSignerNetworks([o
 const showJson = () => {
 	if (requestId.value) openJsonWindow(requestId.value)
 }
-
-// The notice's OK ends another profile's request as the lock or switch that made it, with the same
-// wait as Reject, so the window's close cannot reach the request first.
-const dismissWrongProfile = () =>
-	requestId.value && !isInteractionCancelled.value ? reject(requestEnd("close", true, profile.value)) : closeWindow()
 
 profileService.onActiveProfileChanged.add(onActiveProfileChanged)
 
