@@ -275,8 +275,13 @@ describe("useIncomingSyncHealth", () => {
 		await health.refresh()
 		answer(HEALTHY)
 		await health.refresh() // schedules the hide
+		let release: (value: IncomingSyncHealth) => void = () => {}
+		client.getIncomingSyncHealth.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
+		const inFlight = health.refresh()
 
 		health.dispose()
+		release(HEALTHY)
+		await inFlight
 		vi.advanceTimersByTime(STALLED_MIN_DISPLAY_MS * 2)
 		client.onIncomingSyncHealthChanged.invoke({ profileId: "p1", networkId: "n1" })
 		client.onConnected.invoke()
@@ -285,7 +290,7 @@ describe("useIncomingSyncHealth", () => {
 		await flushPromises()
 
 		expect(health.stalled.value).toBe(true)
-		expect(client.getIncomingSyncHealth).toHaveBeenCalledTimes(2)
+		expect(client.getIncomingSyncHealth).toHaveBeenCalledTimes(3)
 	})
 })
 
