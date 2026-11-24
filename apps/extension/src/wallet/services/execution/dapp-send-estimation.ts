@@ -1,3 +1,4 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 /**
  * `DappSendEstimation` — a dApp send's fee estimate and authorization preview, and the only writer
  * of what they leave for its confirm: the reuse entry and the preview snapshot. Its deps name no
@@ -117,7 +118,6 @@ export class DappSendEstimation {
 		throwIfAborted(signal)
 		const fence = await this.deps.captureExecutionFence()
 
-		// Build actions array — clone to prevent mutation side effects
 		let actions: Action[]
 		let detectedFee: FeeOptions | undefined
 		if (operation.kind === "aztec_sendTx") {

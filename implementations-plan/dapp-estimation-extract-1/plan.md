@@ -339,6 +339,10 @@ compare misses a changed space inside a string literal. Accepted: exact compare 
 indentation. D5, T2's path through `holding`, the bare-prototype pin and the mutant map confirmed.
 Resumed on the fix: **approve**.
 
+**Arc 1, Codex fix loop round 1 (`gpt-6.1-sol`, high): approve**, two low findings. The fee-race
+stub's `[]` (pre-existing; the open item above, confirmed by a probe). A comment narrating two
+array copies in `estimateOperationFee`: deleted. The lead added the Azguard notice to the new file.
+
 ## Seeds
 
 ```
