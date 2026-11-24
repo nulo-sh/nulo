@@ -38,7 +38,7 @@ import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { entityListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
-import { feeJuiceBridgeUrl, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
+import { feeJuiceBridgeUrl, feePayerOf } from "@/utils/fee/fee-helpers"
 import { formatBaseUnits } from "@/utils/amount"
 import { goBack } from "@/utils/page-back"
 import { sentenceName } from "@/utils/string"
@@ -49,7 +49,7 @@ import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { canSwitchReceiver, canSwitchSender, forcedSide, openingSendSide, sideBalanceText } from "@/components/composite/send/send-sides"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
-import { feeWarning, NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
+import { feeWarning, NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/utils/fee/publish-facts"
 import { isValidatedTokenClass } from "@/utils/token-class"
 import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
@@ -1338,20 +1338,7 @@ onBeforeUnmount(() => {
 }
 
 .requote_action {
-	composes: type--label-section from global;
-	line-height: inherit;
-	background: none;
-	color: var(--nulo-accent);
-	cursor: pointer;
-
-	&:hover {
-		text-decoration: underline;
-	}
-
-	&:focus-visible {
-		outline: 2px solid var(--nulo-accent);
-		outline-offset: 2px;
-	}
+	composes: accent from "@/components/text-action.module.css";
 }
 
 .sheet_title {

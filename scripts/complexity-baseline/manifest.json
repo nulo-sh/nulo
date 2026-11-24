@@ -1,6 +1,6 @@
 {
 	"biomeVersion": "2.5.13",
-	"generated": "2026-10-21",
+	"generated": "2026-11-24",
 	"rules": {
 		"noExcessiveCognitiveComplexity": {
 			"apps/extension/src/popup/components/modules/send/FeeSettingsCard.test.ts": 1,
@@ -39,7 +39,7 @@
 			"file": "apps/extension/src/wallet/logger/utils.ts",
 			"rule": "noExcessiveCognitiveComplexity",
 			"anchor": "export const trim = (value: unknown, depth: number = 0): unknown => {",
-			"accepted": 45,
+			"accepted": 43,
 			"sentence": "the ordered recursive shape walker IS the redaction policy; extraction would scatter security precedence"
 		},
 		{
@@ -53,7 +53,7 @@
 			"file": "apps/extension/src/wallet/services/backup/row-map-migration.ts",
 			"rule": "noExcessiveCognitiveComplexity",
 			"anchor": "export function applyRowTransform(row: unknown, t: RowMapTransform): Record<string, unknown> {",
-			"accepted": 39,
+			"accepted": 38,
 			"sentence": "clause order and presence guards ARE the row-transform DSL interpreter semantics"
 		},
 		{
@@ -81,7 +81,7 @@
 			"file": "apps/extension/src/wallet/services/execution/operation-fingerprint.ts",
 			"rule": "noExcessiveCognitiveComplexity",
 			"anchor": "function encodeValue(value: unknown, depth: number): string | null {",
-			"accepted": 25,
+			"accepted": 24,
 			"sentence": "recursive type-tagged encoding must reject unsupported shapes while canonicalizing arrays and objects"
 		},
 		{

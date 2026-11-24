@@ -134,6 +134,7 @@ import type { IPXE } from "@nulo/aztec-runtime/pxe"
 import { liveChainInfo, type SelectedNetworkChainInfo } from "@nulo/aztec-runtime/utils"
 import type { CallAction, EncodedCallAction } from "@nulo/wallet-bridge"
 import { type ILogger, LogLevel } from "@/wallet/logger"
+import { errorName } from "@/wallet/logger/utils"
 import { type ContractResolver, findFunctionByName, findFunctionBySelector, requireArtifact } from "../contract-resolver"
 import { getBlockHeaderAnchor } from "./block-header-anchor"
 import { EXECUTION_SERVICE_NAME } from "../spec"
@@ -406,11 +407,12 @@ function settleFastArm(
 	const fastContract = firstFast ? firstFast.functionCall.to.toString() : "<empty>"
 	const fastSelector = firstFast ? firstFast.functionCall.selector.toString() : "<empty>"
 	const chainIdLog = chainInfo ? chainInfo.chainId.toString() : "<unknown>"
+	// A node or a contract chooses the rejection's text, so the line names its class only.
 	logger?.log(
 		LOG_SOURCE,
 		LogLevel.Warn,
-		`fast arm rejected (non-SimulationError); rerunning through standard path. chainId=${chainIdLog} firstContract=${fastContract} firstSelector=${fastSelector} reason=`,
-		fastSettled.reason,
+		`fast arm rejected (non-SimulationError); rerunning through standard path. chainId=${chainIdLog} firstContract=${fastContract} firstSelector=${fastSelector}`,
+		{ errorName: errorName(fastSettled.reason) },
 	)
 	return null
 }

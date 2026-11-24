@@ -28,7 +28,12 @@ function makeExecutor(): DappSendExecutor {
 	return new DappSendExecutor({
 		planner: { processAztecJsPayload: unreachable } as never,
 		estimateWithDiscovery: { estimate: unreachable } as never,
-		txBuilder: { buildStandard: unreachable, buildNoFrom: unreachable } as never,
+		estimation: {
+			reuseSnapshot: unreachable,
+			restash: unreachable,
+			prepareNoFrom: unreachable,
+			discoverNoFromAuthwits: unreachable,
+		} as never,
 		coordinator: { proveAndSend: unreachable, simulateTxTask: unreachable } as never,
 		lane: {
 			deleteController: unreachable,
@@ -66,7 +71,6 @@ function makeExecutor(): DappSendExecutor {
 		getPXE: unreachable as never,
 		getAccountContract: unreachable as never,
 		getPendingForAccount: unreachable as never,
-		sequenceEpoch: unreachable as never,
 		buildAndEstimateValidated: unreachable as never,
 		addTransaction: unreachable as never,
 		protocolSponsorAddress: unreachable as never,

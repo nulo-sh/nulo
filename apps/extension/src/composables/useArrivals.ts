@@ -1,7 +1,7 @@
 import { type InjectionKey, onScopeDispose, type Ref, ref, type ShallowRef, shallowRef, watch } from "vue"
 import type { EventHandler } from "@nulo/wallet-core/utils"
 import type { ToastOptions } from "@/composables/toast"
-import { AUTH_ENTRY_ROUTES } from "@/popup/should-advance-to-general"
+import { AUTH_ENTRY_ROUTES } from "@/utils/should-advance-to-general"
 import { ADDED_COALESCE, coalesce } from "@/utils/coalesce"
 import { formatSnackAmount } from "@/utils/snack-amount"
 import { knownDecimals } from "@/utils/token-amount"

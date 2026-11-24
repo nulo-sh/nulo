@@ -455,6 +455,7 @@ describe("DSL define-time validation rejects ambiguous or non-idempotent transfo
 	test("interpreter fail-closed: rename collision and non-object rows throw", () => {
 		expect(() => applyRowTransform({ a: 1, b: 2 }, { rename: { a: "b" } })).toThrow()
 		expect(() => applyRowTransform("not-a-row", { drop: ["a"] })).toThrow()
+		expect(() => applyRowTransform([], { drop: ["a"] })).toThrow("row is not an object")
 		expect(() => applyRowTransform({ f: {} }, { retype: { f: "number" } })).toThrow()
 	})
 

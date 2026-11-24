@@ -4,6 +4,7 @@
  * adds the MV3 offscreen-document bootstrap via `onReady`.
  */
 import { ensureOffscreenRunning, isOffscreenDocumentSender, markOffscreenUnanswered, offscreenAnswer } from "@/wallet/utils/offscreen"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { ChainNotSupportedError, PxeScopeUnregisteredError, RecoveryModeError } from "@nulo/extension-messaging/errors"
 import type { TerminalRecord } from "@nulo/extension-messaging/offscreen"
@@ -59,7 +60,7 @@ export function registerPxeChainGuard(guard: (profileId: string, chainId: number
  *  cleanup calls (`clearChainState`, `clearProfileState`) and the provision take a bare profileId
  *  first and stay admitted — a profile in recovery mode must still be purgeable. */
 function isProfileBound(arg: unknown): arg is { profileId: string } {
-	return typeof arg === "object" && arg !== null && typeof (arg as { profileId?: unknown }).profileId === "string" && "chainId" in arg
+	return isObjectLike(arg) && typeof arg.profileId === "string" && "chainId" in arg
 }
 
 /** The offscreen answer token current at the send, beside the base client's own tag. */

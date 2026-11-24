@@ -26,7 +26,7 @@ import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useRouter } from "vue-router"
 import { useAppStore } from "@/stores/app.store"
 import { closeCurrentWindow } from "@/utils/close-current-window"
-import { authRequiredGate } from "@/popup/auth-guard"
+import { authRequiredGate } from "@/utils/auth-guard"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import type { WindowEnd } from "@/wallet/services/dapp-interaction/client"
 

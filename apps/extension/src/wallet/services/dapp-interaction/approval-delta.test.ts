@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { applyFeeSelection } from "./approval-delta"
+import { applyFeeSelection, isShownTokenMetadata } from "./approval-delta"
 
 const OWNER = "0xowner"
 const fee = (op: unknown) => (op as { feeSettings?: unknown }).feeSettings
@@ -37,5 +37,14 @@ describe("applyFeeSelection", () => {
 		const out = applyFeeSelection(op, { paymentMethod: { kind: "fj" } })
 		expect(out).toBe(op)
 		expect("feeSettings" in out).toBe(false)
+	})
+})
+
+describe("isShownTokenMetadata", () => {
+	const shown = { name: "Token", symbol: "TKN", decimals: 18, classId: `0x${"ab".repeat(32)}` }
+
+	test("takes the class id only in the lower case the wallet read it in", () => {
+		expect(isShownTokenMetadata(shown)).toBe(true)
+		expect(isShownTokenMetadata({ ...shown, classId: `0x${"AB".repeat(32)}` })).toBe(false)
 	})
 })

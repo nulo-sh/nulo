@@ -1,3 +1,4 @@
+import { isObjectLike } from "@nulo/wallet-core/utils"
 import type { TokenListSource } from "@/wallet/services/token-list/spec"
 
 /**
@@ -27,7 +28,7 @@ export class ChromeStorageTokenListSource {
 		} catch {
 			return undefined
 		}
-		if (!raw || typeof raw !== "object") return undefined
+		if (!isObjectLike(raw)) return undefined
 		const { url, publicKey } = raw as { url?: unknown; publicKey?: unknown }
 		if (typeof url !== "string" || !LOCALHOST_URL.test(url)) return undefined
 		if (typeof publicKey !== "string" || !ED25519_PUBLIC_KEY.test(publicKey)) return undefined

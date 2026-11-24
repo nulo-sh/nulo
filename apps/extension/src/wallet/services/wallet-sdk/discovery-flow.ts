@@ -10,7 +10,8 @@ import type { DappInteractionService } from "@/wallet/services/dapp-interaction/
 import type { LegalAdmission } from "@/wallet/services/legal/service"
 import type { ResetRunGate } from "@/wallet/services/network-reset/spec"
 import type { DiscoveryParams } from "@/wallet/services/dapp-interaction/spec"
-import { AccessLevel, type DappMetadata, type DappSession, type DappSessionService } from "@/wallet/services/dapp-session/service"
+import type { DappMetadata, DappSession, DappSessionService } from "@/wallet/services/dapp-session/service"
+import { AccessLevel } from "@/wallet/services/dapp-session/spec"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 import { describeExternalId, DISCOVERY_STALE_MS, type DiscoveryQueue, isDiscoveryExpired } from "@nulo/wallet-bridge"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
@@ -261,6 +262,12 @@ function rejectIfExpired(discovery: PendingDiscovery, deps: DiscoveryDeps): bool
 	return false
 }
 
+/** Approves `discovery` only while the handler still holds that very row: its id, freed when its tab
+ *  closed, may since name another tab's discovery, which this decision was never about. */
+function approveHeld(handler: BackgroundConnectionHandler, discovery: PendingDiscovery): boolean {
+	return handler.getPendingDiscovery(discovery.requestId) === discovery && handler.approveDiscovery(discovery.requestId)
+}
+
 /** Approve an admitted handshake, or give its window slot back when the approval cannot land. */
 function approveAdmitted(
 	discovery: PendingDiscovery,
@@ -273,7 +280,7 @@ function approveAdmitted(
 		reservation.releaseIfUnstarted()
 		return
 	}
-	if (!deps.handler.approveDiscovery(discovery.requestId)) {
+	if (!approveHeld(deps.handler, discovery)) {
 		reservation.releaseIfUnstarted()
 		deps.logger.log(
 			"wallet-sdk",
@@ -654,7 +661,7 @@ async function persistAndApprove(
 			approverProfileId: newSession.profileId,
 			attemptOpen: () => !reservation.abandoned,
 			rowAwaited: () => (deps.dedupeWaiters.get(dedupeKeyOf(discovery.origin, chainId)) ?? 0) > 0,
-			approveDiscovery: (id) => handler.approveDiscovery(id),
+			approveDiscovery: () => approveHeld(handler, discovery),
 			rejectDiscovery: (id) => handler.rejectDiscovery(id),
 			deleteSession,
 			pendingVerification: deps.pendingVerification,

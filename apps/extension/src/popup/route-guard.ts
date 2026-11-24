@@ -15,7 +15,7 @@ import type { useAppStore } from "@/stores/app.store"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { postAuthRoute } from "@/utils/own-window"
-import { authRequiredGate } from "./auth-guard"
+import { authRequiredGate } from "@/utils/auth-guard"
 import { lockScreenProfile } from "./lock-screen-profile"
 import type { StartGrace } from "./start-grace"
 

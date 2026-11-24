@@ -6,30 +6,40 @@ import type { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { SimulationError } from "@aztec-labs/stdlib/errors"
 import z from "zod"
-import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME, networkInfoFrom } from "@/wallet/services/network/spec"
 import type { Network } from "@/wallet/services/network/spec"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { offscreenEpoch, onOffscreenRetired } from "@/wallet/utils/offscreen"
-import { AccountService } from "@/wallet/services/account/service"
-import { ContactService } from "@/wallet/services/contact/service"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { AccountService } from "@/wallet/services/account/service"
+import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
+import type { ContactService } from "@/wallet/services/contact/service"
+import { CONTACT_SERVICE_NAME } from "@/wallet/services/contact/spec"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { AUTH_REGISTRY_SERVICE_NAME } from "@/wallet/services/auth-registry/spec"
-import { TokenService } from "@/wallet/services/token/service"
-import { FpcService, FpcType } from "@/wallet/services/fpc/service"
+import type { TokenService } from "@/wallet/services/token/service"
+import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
+import type { FpcService } from "@/wallet/services/fpc/service"
+import { FPC_SERVICE_NAME, FpcType } from "@/wallet/services/fpc/spec"
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
-import { TransactionService, OriginType, type TransferType, type LocalTxOrigin, TxStatus } from "@/wallet/services/transaction/service"
-import { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import { LegalAcceptanceService } from "@/wallet/services/legal/service"
+import type { TransactionService, TransferType, LocalTxOrigin } from "@/wallet/services/transaction/service"
+import { TRANSACTION_SERVICE_NAME, OriginType, TxStatus } from "@/wallet/services/transaction/spec"
+import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
+import type { LegalAcceptanceService } from "@/wallet/services/legal/service"
+import { LEGAL_ACCEPTANCE_SERVICE_NAME } from "@/wallet/services/legal/spec"
 import { isApprovedSendInFlight } from "@/utils/in-flight-send"
 import { abortableSleep } from "@/utils/abortable-sleep"
 import { DAPP_INTERACTION_SERVICE_NAME, type ExecutionHooks, type RecordedRefusal } from "@/wallet/services/dapp-interaction/spec"
 import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
-import { TaskService, type WrappedTask, ExecuteOperationContent } from "@/wallet/services/task/service"
+import type { TaskService, WrappedTask } from "@/wallet/services/task/service"
+import { TASK_SERVICE_NAME, ExecuteOperationContent } from "@/wallet/services/task/spec"
 import type { ILogger } from "@/wallet/logger"
 import { errorName } from "@/wallet/logger/utils"
 import { type RequestLog, traceTag } from "@/wallet/logger/request-log"
@@ -93,6 +103,7 @@ import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
 import { TransferExecutor, type TransferExecutorDeps, type TransferSequence } from "./transfer-executor"
 import { DappSendExecutor } from "./dapp-send-executor"
+import { DappSendEstimation, type DappSendEstimationDeps } from "./dapp-send-estimation"
 import { DiscoveryAwareEstimator, type DiscoveryProbe } from "./discovery-aware-estimator"
 import { ViewExecutor } from "./view-executor"
 import { RegistrationExecutor } from "./registration-executor"
@@ -275,6 +286,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		logDebug: (msg) => this.logDebug(msg),
 	})
 	private dappSendExecutor: DappSendExecutor = null!
+	private dappSendEstimation: Pick<DappSendEstimation, "estimateOperationFee" | "previewOperationAuthwits"> = null!
 	private viewExecutor: ViewExecutor = null!
 	private registration: RegistrationExecutor = null!
 	private lane: ExecutionLane = null!
@@ -305,17 +317,17 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 	protected async init(services: ServiceCollection) {
 		this.services = services
 		this.pxeService = this.pxeClientFactory(this.logger)
-		this.profileService = services.get(ProfileService.name)
-		this.networkService = services.get(NetworkService.name)
-		this.accountService = services.get(AccountService.name)
-		this.contactService = services.get(ContactService.name)
-		this.tokenService = services.get(TokenService.name)
-		this.fpcService = services.get(FpcService.name)
-		this.transactionService = services.get(TransactionService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
+		this.networkService = services.get(NETWORK_SERVICE_NAME)
+		this.accountService = services.get(ACCOUNT_SERVICE_NAME)
+		this.contactService = services.get(CONTACT_SERVICE_NAME)
+		this.tokenService = services.get(TOKEN_SERVICE_NAME)
+		this.fpcService = services.get(FPC_SERVICE_NAME)
+		this.transactionService = services.get(TRANSACTION_SERVICE_NAME)
 		this.authRegistryService = services.get<AuthRegistryService>(AUTH_REGISTRY_SERVICE_NAME)
-		this.taskService = services.get(TaskService.name)
-		this.operationJournal = services.get(OperationJournalService.name)
-		this.legal = services.get(LegalAcceptanceService.name)
+		this.taskService = services.get(TASK_SERVICE_NAME)
+		this.operationJournal = services.get(OPERATION_JOURNAL_SERVICE_NAME)
+		this.legal = services.get(LEGAL_ACCEPTANCE_SERVICE_NAME)
 		this.dappSessionService = services.get(DAPP_SESSION_SERVICE_NAME)
 		this.planner = new OperationPlanner(this.profileService, this.tokenService)
 		this.resolver = new ContractResolver(this.logger)
@@ -532,20 +544,47 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 				return { txRequest, node, pxe, account, scopes, network }
 			},
 		})
+		const buildAndEstimateValidated: DappSendEstimationDeps["buildAndEstimateValidated"] = (
+			op,
+			feeSettings,
+			fence,
+			parentTask,
+			signal,
+			onBuilt,
+			observer,
+		) => this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt, observer)
+		// No spread of `shared`: the estimation gets the reads it names, never a send's.
+		const estimation = new DappSendEstimation({
+			getActiveProfile: shared.getActiveProfile,
+			captureExecutionFence: shared.captureExecutionFence,
+			getNetwork: shared.getNetwork,
+			getPendingForAccount: shared.getPendingForAccount,
+			readPublicStorageOnce: shared.readPublicStorageOnce,
+			peekPublicFeeJuice: shared.peekPublicFeeJuice,
+			rereadPublicFeeJuice: shared.rereadPublicFeeJuice,
+			planner: this.planner,
+			txBuilder: this.txBuilder,
+			estimateWithDiscovery,
+			buildAndEstimateValidated,
+			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
+			chainTip: this.chainTipGate,
+			operationEstimateReuse: this.operationEstimateReuse,
+			previewSnapshots: this.previewSnapshots,
+			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
+		})
+		this.dappSendEstimation = estimation
 		this.dappSendExecutor = new DappSendExecutor({
 			...shared,
 			planner: this.planner,
-			txBuilder: this.txBuilder,
 			coordinator: this.coordinator,
 			estimateWithDiscovery,
+			estimation,
 			operationEstimateReuse: this.operationEstimateReuse,
 			previewSnapshots: this.previewSnapshots,
-			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			lane: this.lane,
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt, observer) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt, observer),
+			buildAndEstimateValidated,
 			protocolSponsorAddress: async (chainId) => (await this.fpcService.getOrComputeProtocolAddresses(chainId)).sponsored,
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
@@ -783,7 +822,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 	): Promise<TransferFeeEstimate> {
 		await this.ensureInitialized()
 		return this.withEstimateAdmission(estimateToken, flowKey ?? "wallet", (signal) =>
-			this.dappSendExecutor.estimateOperationFee(operation, operation.feeSettings, signal),
+			this.dappSendEstimation.estimateOperationFee(operation, operation.feeSettings, signal),
 		)
 	}
 
@@ -797,7 +836,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		await this.ensureInitialized()
 		return this.refusalBound(interactionId, "fee estimate", () =>
 			this.withStoredRequestSlot(interactionId, index, feeSettings, estimateToken, flowKey ?? "op", (operation, signal) =>
-				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
+				this.dappSendEstimation.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
 			),
 		)
 	}
@@ -811,7 +850,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		await this.ensureInitialized()
 		return this.refusalBound(interactionId, "authwit preview", () =>
 			this.withStoredRequestSlot(interactionId, index, undefined, estimateToken, flowKey ?? "op", (operation, signal) =>
-				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
+				this.dappSendEstimation.previewOperationAuthwits(operation, { interactionId, index }, signal),
 			),
 		)
 	}

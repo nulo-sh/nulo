@@ -1,6 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { ILogger } from "@nulo/wallet-core/logger"
 import type { EventsMap, MethodsMap } from "@nulo/wallet-core/base"
+import { isObjectLike } from "@nulo/wallet-core/utils"
 import { BaseService } from "../core/base-service"
 import { isBackgroundSender } from "../core/sender-auth"
 import { summarizeMessage } from "../core/envelope-summary"
@@ -37,7 +38,7 @@ export abstract class Service<TRequests extends MethodsMap, TEvents extends Even
 	}
 
 	private readonly onMessageListener = (message: RequestMessage<TRequests>, sender: chrome.runtime.MessageSender): boolean => {
-		if (typeof message === "object" && message !== null && message.to === this.name) {
+		if (isObjectLike(message) && message.to === this.name) {
 			void this.admit(message, sender)
 		}
 		return false

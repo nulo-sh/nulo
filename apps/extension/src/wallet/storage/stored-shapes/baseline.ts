@@ -39,6 +39,7 @@ import {
 	valueStorage,
 } from "../stores"
 import { canonical, canonicalText, emitSchema, type Json } from "./emit"
+import { isObjectLike, isRecord } from "@nulo/wallet-core/guards"
 
 /** One stored row as a build wrote it. `value` is the stored value; a json shape stores its
  *  `JSON.stringify`. `stamp` is the index of the stamp whose build wrote it. `sealed`: authored as
@@ -247,7 +248,7 @@ async function macGoldens(goldens: readonly Golden[]): Promise<Golden[]> {
 function sealedOwnerOf(name: SealedStoreName, row: Json, naturalId: string): string | undefined {
 	const ownerOf = (STORES[name] as { sealedRoot?: SealedRootOptions }).sealedRoot?.ownerOf
 	if (ownerOf) return ownerOf(row, naturalId)
-	const profileId = row !== null && typeof row === "object" && !Array.isArray(row) ? row.profileId : undefined
+	const profileId = isRecord(row) ? row.profileId : undefined
 	return typeof profileId === "string" ? profileId : undefined
 }
 
@@ -497,8 +498,8 @@ export function justify(prev: Stamp, cur: Stamp, migrations: readonly Migration[
 
 /** Every JSON path of `before` that `after` lacks or holds differently. */
 export function lostPaths(before: Json, after: Json, path = ""): string[] {
-	if (before === null || typeof before !== "object") return canonicalText(before) === canonicalText(after) ? [] : [path || "/"]
-	if (after === null || typeof after !== "object" || Array.isArray(before) !== Array.isArray(after)) return [path || "/"]
+	if (!isObjectLike(before)) return canonicalText(before) === canonicalText(after) ? [] : [path || "/"]
+	if (!isObjectLike(after) || Array.isArray(before) !== Array.isArray(after)) return [path || "/"]
 	const lost: string[] = []
 	for (const [key, value] of Object.entries(before)) {
 		const next = (after as Record<string, Json>)[key]

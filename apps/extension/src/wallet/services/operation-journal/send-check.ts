@@ -9,9 +9,14 @@ import type { NetworkService } from "@/wallet/services/network/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import type { TokenBalanceService } from "@/wallet/services/token-balance/service"
-import { FINALITY_READ_INTERVAL_MS, proveExpired, proveFinal } from "@/wallet/services/transaction/inclusion"
+import {
+	DROPPED_RECHECK_INTERVAL_MS,
+	DROPPED_RESURRECTION_WINDOW_MS,
+	FINALITY_READ_INTERVAL_MS,
+	proveExpired,
+	proveFinal,
+} from "@/wallet/services/transaction/inclusion"
 import { MINED_STATUSES, executionResultFromReceipt, txStatusFromReceipt } from "@/wallet/services/transaction/receipt-status"
-import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS } from "@/wallet/services/transaction/service"
 import { TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import { isFinalRefusal } from "./final-refusal"
 import { isSendCheckable, type OperationJournalService, type OperationRecord, type SendCheckState } from "./service"

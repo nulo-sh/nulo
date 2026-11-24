@@ -2,20 +2,33 @@ import type { StorageArea } from "@nulo/wallet-core/ports"
 import { profileUiKeys } from "@/utils/profile-ui-keys"
 import type { ILogger } from "@/wallet/logger"
 import type { IService, ServiceCollection } from "@/wallet/base"
-import { AccountService } from "@/wallet/services/account/service"
-import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
-import { ContactService } from "@/wallet/services/contact/service"
-import { DappSessionService } from "@/wallet/services/dapp-session/service"
-import { FpcService } from "@/wallet/services/fpc/service"
-import { IncomingTransferService } from "@/wallet/services/incoming-transfer/service"
-import { NetworkService } from "@/wallet/services/network/service"
-import { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { AccountService } from "@/wallet/services/account/service"
+import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
+import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
+import { AUTH_REGISTRY_SERVICE_NAME } from "@/wallet/services/auth-registry/spec"
+import type { ContactService } from "@/wallet/services/contact/service"
+import { CONTACT_SERVICE_NAME } from "@/wallet/services/contact/spec"
+import type { DappSessionService } from "@/wallet/services/dapp-session/service"
+import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
+import type { FpcService } from "@/wallet/services/fpc/service"
+import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
+import type { IncomingTransferService } from "@/wallet/services/incoming-transfer/service"
+import { INCOMING_TRANSFER_SERVICE_NAME } from "@/wallet/services/incoming-transfer/spec"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
+import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
-import { TokenBalanceService } from "@/wallet/services/token-balance/service"
-import { TokenService } from "@/wallet/services/token/service"
-import { TransactionService } from "@/wallet/services/transaction/service"
-import { UiPreferenceService } from "@/wallet/services/ui-preference/service"
+import type { TokenBalanceService } from "@/wallet/services/token-balance/service"
+import { TOKEN_BALANCE_SERVICE_NAME } from "@/wallet/services/token-balance/spec"
+import type { TokenService } from "@/wallet/services/token/service"
+import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
+import type { TransactionService } from "@/wallet/services/transaction/service"
+import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
+import type { UiPreferenceService } from "@/wallet/services/ui-preference/service"
+import { UI_PREFERENCE_SERVICE_NAME } from "@/wallet/services/ui-preference/spec"
 import { purgeSealedRowsOf } from "@/wallet/storage/sealed-roots"
 import type { ProfileDeletionDelegate, ProfileDeletionRows, ProfileDeletionSnapshot } from "./types"
 
@@ -33,19 +46,19 @@ export class ProfileDeletionCoordinator implements IService, ProfileDeletionDele
 	public static readonly name = PROFILE_DELETION_COORDINATOR_NAME
 	public readonly name = PROFILE_DELETION_COORDINATOR_NAME
 	public readonly dependencies = [
-		ProfileService.name,
-		AccountService.name,
-		TokenService.name,
-		NetworkService.name,
-		TransactionService.name,
-		AuthRegistryService.name,
-		TokenBalanceService.name,
-		IncomingTransferService.name,
-		ContactService.name,
-		DappSessionService.name,
-		FpcService.name,
-		OperationJournalService.name,
-		UiPreferenceService.name,
+		PROFILE_SERVICE_NAME,
+		ACCOUNT_SERVICE_NAME,
+		TOKEN_SERVICE_NAME,
+		NETWORK_SERVICE_NAME,
+		TRANSACTION_SERVICE_NAME,
+		AUTH_REGISTRY_SERVICE_NAME,
+		TOKEN_BALANCE_SERVICE_NAME,
+		INCOMING_TRANSFER_SERVICE_NAME,
+		CONTACT_SERVICE_NAME,
+		DAPP_SESSION_SERVICE_NAME,
+		FPC_SERVICE_NAME,
+		OPERATION_JOURNAL_SERVICE_NAME,
+		UI_PREFERENCE_SERVICE_NAME,
 	] as const
 
 	private profiles!: ProfileService
@@ -73,19 +86,19 @@ export class ProfileDeletionCoordinator implements IService, ProfileDeletionDele
 	}
 
 	public async start(services: ServiceCollection): Promise<void> {
-		this.profiles = services.get(ProfileService.name)
-		this.accounts = services.get(AccountService.name)
-		this.tokens = services.get(TokenService.name)
-		this.networks = services.get(NetworkService.name)
-		this.txs = services.get(TransactionService.name)
-		this.auth = services.get(AuthRegistryService.name)
-		this.balances = services.get(TokenBalanceService.name)
-		this.incoming = services.get(IncomingTransferService.name)
-		this.contacts = services.get(ContactService.name)
-		this.sessions = services.get(DappSessionService.name)
-		this.fpcs = services.get(FpcService.name)
-		this.journal = services.get(OperationJournalService.name)
-		this.preferences = services.get(UiPreferenceService.name)
+		this.profiles = services.get(PROFILE_SERVICE_NAME)
+		this.accounts = services.get(ACCOUNT_SERVICE_NAME)
+		this.tokens = services.get(TOKEN_SERVICE_NAME)
+		this.networks = services.get(NETWORK_SERVICE_NAME)
+		this.txs = services.get(TRANSACTION_SERVICE_NAME)
+		this.auth = services.get(AUTH_REGISTRY_SERVICE_NAME)
+		this.balances = services.get(TOKEN_BALANCE_SERVICE_NAME)
+		this.incoming = services.get(INCOMING_TRANSFER_SERVICE_NAME)
+		this.contacts = services.get(CONTACT_SERVICE_NAME)
+		this.sessions = services.get(DAPP_SESSION_SERVICE_NAME)
+		this.fpcs = services.get(FPC_SERVICE_NAME)
+		this.journal = services.get(OPERATION_JOURNAL_SERVICE_NAME)
+		this.preferences = services.get(UI_PREFERENCE_SERVICE_NAME)
 		this.profiles.setDeletionDelegate(this)
 	}
 

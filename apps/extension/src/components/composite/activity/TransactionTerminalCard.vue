@@ -101,7 +101,7 @@ defineProps({
 }
 
 .direction {
-	composes: visually_hidden from "./activity-card.module.css";
+	composes: visually_hidden from "@/components/a11y.module.css";
 }
 
 .app_chip {

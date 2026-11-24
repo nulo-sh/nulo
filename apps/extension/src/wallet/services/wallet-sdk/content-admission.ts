@@ -23,12 +23,19 @@ type ContentWrapperDeps = {
 	discoveryCredit: (sessionId: string) => DiscoveryCredit | undefined
 	/** Whether the handler that exists right now holds this id, as a live session or a pending discovery. */
 	idHeld: (id: string) => boolean
+	/** Spends one of the tab's discovery tokens (see `discovery-pacing.ts`); `false` when it has none left. */
+	discoveryPaced: (tabId: number) => boolean
 	sendToTab: BackgroundTransport["sendToTab"]
 }
 
 export function buildContentTransport(
 	logger: ILogger,
-	{ sessionKnown, discoveryCredit, idHeld }: Pick<ContentWrapperDeps, "sessionKnown" | "discoveryCredit" | "idHeld">,
+	{
+		sessionKnown,
+		discoveryCredit,
+		idHeld,
+		discoveryPaced,
+	}: Pick<ContentWrapperDeps, "sessionKnown" | "discoveryCredit" | "idHeld" | "discoveryPaced">,
 ): BackgroundTransport {
 	// The handler's `sendToTab` returns void, so the send's rejection is nobody's to observe. A
 	// tab that navigated away (or lost its content script) has nowhere to deliver to; every
@@ -46,7 +53,9 @@ export function buildContentTransport(
 			// listener here would double-deliver, and a duplicate secure-message
 			// double-journals a sendTx. Attach to the relay instead; buffered
 			// cold-wake messages flush through this same validated wrapper.
-			attachContentListener(admitContentMessage(listener, { logger, sessionKnown, discoveryCredit, idHeld, sendToTab }))
+			attachContentListener(
+				admitContentMessage(listener, { logger, sessionKnown, discoveryCredit, idHeld, discoveryPaced, sendToTab }),
+			)
 		},
 	}
 }
@@ -65,7 +74,8 @@ function admitContentMessage(
 	// could try to flip by storage poisoning or popup compromise. Vite inlines the literal here as at
 	// module scope; it is read when the wrapper is built, so a test can set it without re-evaluating
 	// this module. Even on, a key exchange completes only from a frame of the origin its session is
-	// credited to, the top frame's: a cross-origin subframe cannot connect.
+	// credited to, the top frame's: a cross-origin subframe cannot connect, though its discoveries
+	// spend its tab's pacing tokens.
 	const allowIframeDapps = import.meta.env?.VITE_NULO_ALLOW_IFRAME_DAPPS === "1"
 	return (message, sender) => {
 		// Subframe rejection. Upstream `BackgroundConnectionHandler`
@@ -112,21 +122,30 @@ function admitContentMessage(
 			logger.log("wallet-sdk", LogLevel.Debug, "Dropping malformed content-script envelope", verdict.reason)
 			return undefined
 		}
-		if (verdict.kind === "valid" && !keyExchangeFromItsDiscovery(verdict.message, sender, deps.discoveryCredit)) {
-			logger.log("wallet-sdk", LogLevel.Debug, "Dropping a key exchange from outside its discovery's document")
-			return undefined
-		}
-		const heldId = verdict.kind === "valid" ? heldDiscoveryId(verdict.message, deps.idHeld) : undefined
-		if (heldId !== undefined) {
-			logger.log("wallet-sdk", LogLevel.Debug, "Dropping a discovery under an id already in use", {
-				request: describeExternalId(heldId),
-			})
-			return undefined
-		}
-		if (verdict.kind === "valid" && replyIfStale(verdict.message, sender.tab?.id, deps)) return undefined
+		if (verdict.kind === "valid" && !admitEnvelope(verdict.message, sender, deps)) return undefined
 		listener(message, sender)
 		return undefined
 	}
+}
+
+function admitEnvelope(envelope: ContentScriptMessageEnvelope, sender: chrome.runtime.MessageSender, deps: ContentWrapperDeps): boolean {
+	const { logger } = deps
+	if (!keyExchangeFromItsDiscovery(envelope, sender, deps.discoveryCredit)) {
+		logger.log("wallet-sdk", LogLevel.Debug, "Dropping a key exchange from outside its discovery's document")
+		return false
+	}
+	const heldId = heldDiscoveryId(envelope, deps.idHeld)
+	if (heldId !== undefined) {
+		logger.log("wallet-sdk", LogLevel.Debug, "Dropping a discovery under an id already in use", {
+			request: describeExternalId(heldId),
+		})
+		return false
+	}
+	if (!discoveryWithinPace(envelope, sender.tab?.id, deps.discoveryPaced)) {
+		logger.log("wallet-sdk", LogLevel.Debug, "Dropping a discovery past its tab's pace", { tabId: sender.tab?.id })
+		return false
+	}
+	return !replyIfStale(envelope, sender.tab?.id, deps)
 }
 
 /**
@@ -152,6 +171,15 @@ function keyExchangeFromItsDiscovery(
 function heldDiscoveryId(envelope: ContentScriptMessageEnvelope, idHeld: ContentWrapperDeps["idHeld"]): string | undefined {
 	if (envelope.type !== "discovery-request") return undefined
 	return idHeld(envelope.content.requestId) ? envelope.content.requestId : undefined
+}
+
+/** Upstream drops a message from a sender with no tab, so only a tab's discovery spends a token. */
+function discoveryWithinPace(
+	envelope: ContentScriptMessageEnvelope,
+	tabId: number | undefined,
+	discoveryPaced: ContentWrapperDeps["discoveryPaced"],
+): boolean {
+	return envelope.type !== "discovery-request" || tabId === undefined || discoveryPaced(tabId)
 }
 
 /** The sending document's own origin: Chrome sets `sender.origin` on a content script's message, and so

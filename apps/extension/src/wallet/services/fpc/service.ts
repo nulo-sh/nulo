@@ -5,11 +5,13 @@ import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { commitFencedCreate } from "@/wallet/services/create-fence"
 import type { ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
-import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME, networkInfoFrom } from "@/wallet/services/network/spec"
 import type { UiPreferenceService } from "@/wallet/services/ui-preference/service"
 import { UI_PREFERENCE_SERVICE_NAME } from "@/wallet/services/ui-preference/spec"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -86,8 +88,8 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 
 	protected async init(services: ServiceCollection) {
 		this.pxeService = new PxeServiceClient(this.logger)
-		this.profileService = services.get(ProfileService.name)
-		this.networkService = services.get(NetworkService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
+		this.networkService = services.get(NETWORK_SERVICE_NAME)
 		this.uiPreference = services.get(UI_PREFERENCE_SERVICE_NAME)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networkService.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))

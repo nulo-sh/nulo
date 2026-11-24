@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import { sendEvent } from "../../../../../tests/helpers/send-event"
-import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
+import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "@/utils/fee/publish-facts"
 import SendFeeLine from "./SendFeeLine.vue"
 
 const PRICED = { amount: "0.00214", usd: "$0.027" }

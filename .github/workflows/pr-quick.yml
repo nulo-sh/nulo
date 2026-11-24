@@ -45,10 +45,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      core-foundation: ${{ steps.override.outputs.full || steps.filter.outputs.core-foundation }}
-      aztec-runtime: ${{ steps.override.outputs.full || steps.filter.outputs.aztec-runtime }}
-      wallet-bridge: ${{ steps.override.outputs.full || steps.filter.outputs.wallet-bridge }}
-      extension: ${{ steps.override.outputs.full || steps.filter.outputs.extension }}
       playground: ${{ steps.override.outputs.full || steps.filter.outputs.playground }}
       landing: ${{ steps.override.outputs.full || steps.filter.outputs.landing }}
       workflows: ${{ steps.override.outputs.full || steps.filter.outputs.workflows }}
@@ -66,43 +62,19 @@ jobs:
           # long-running branches ~100+ commits from the base).
           fetch-depth: 0
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: build
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          filters: .github/path-filters/extension-build.yml
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           filters: |
-            # Graph-derived (see CI.md "CI gating"): dependency libraries by consumed
-            # src + manifest; built targets by whole package. NO `!` negations (the dorny
-            # `some`-quantifier footgun). Pinned by scripts/ci-cd/behavior-gating.test.ts.
-            core-foundation:
-              - 'packages/wallet-core/src/**'
-              - 'packages/wallet-core/package.json'
-              - 'packages/wallet-crypto/src/**'
-              - 'packages/wallet-crypto/package.json'
-              - 'packages/extension-messaging/src/**'
-              - 'packages/extension-messaging/package.json'
-              - 'packages/wallet-sdk-schema-patch/src/**'
-              - 'packages/wallet-sdk-schema-patch/package.json'
-            aztec-runtime:
-              - 'packages/aztec-runtime/src/**'
-              - 'packages/aztec-runtime/package.json'
-            wallet-bridge:
-              - 'packages/wallet-bridge/src/**'
-              - 'packages/wallet-bridge/package.json'
-            extension:
-              # Built target — whole package; its dep libs outside the filters above — src + manifest.
-              - 'apps/extension/**'
-              - 'packages/legal/src/**'
-              - 'packages/legal/package.json'
-              - 'packages/design/src/**'
-              - 'packages/design/package.json'
-              - 'packages/resolve-asset/src/**'
-              - 'packages/resolve-asset/package.json'
-              # The licence texts and the expected-minimum list are build inputs too.
-              - 'packages/third-party-notices/src/**'
-              - 'packages/third-party-notices/package.json'
-              - 'packages/token-list/src/**'
-              - 'packages/token-list/package.json'
-              - 'packages/third-party-notices/texts/**'
+            # Built targets by whole package, dependency libraries by consumed src + manifest
+            # (CI.md "CI gating"). Pinned by scripts/ci-cd/behavior-gating.test.ts.
+            notices-check:
+              # Read only by the post-build notices check, which on a pull request only these builds run.
               - 'packages/third-party-notices/bin/**'
               - 'packages/third-party-notices/expected-minimum.txt'
             playground:
@@ -163,16 +135,23 @@ jobs:
       - name: Compute downstream flags
         id: compute
         env:
-          CORE: ${{ steps.override.outputs.full || steps.filter.outputs.core-foundation }}
-          RUNTIME: ${{ steps.override.outputs.full || steps.filter.outputs.aztec-runtime }}
-          BRIDGE: ${{ steps.override.outputs.full || steps.filter.outputs.wallet-bridge }}
-          EXTENSION: ${{ steps.override.outputs.full || steps.filter.outputs.extension }}
+          BUILD: ${{ steps.override.outputs.full || steps.build.outputs.extension-build }}
+          NOTICES: ${{ steps.override.outputs.full || steps.filter.outputs.notices-check }}
           LANDING: ${{ steps.override.outputs.full || steps.filter.outputs.landing }}
           WORKFLOWS: ${{ steps.override.outputs.full || steps.filter.outputs.workflows }}
           ROOT: ${{ steps.override.outputs.full || steps.filter.outputs.root-config }}
         run: |
-          if [ "$CORE" = "true" ] || [ "$RUNTIME" = "true" ] || [ "$BRIDGE" = "true" ] \
-             || [ "$EXTENSION" = "true" ] || [ "$WORKFLOWS" = "true" ] || [ "$ROOT" = "true" ]; then
+          # An output that never arrived would read as an untouched surface and skip a build.
+          for input in BUILD NOTICES LANDING WORKFLOWS ROOT; do
+            case "${!input}" in
+            true | false) ;;
+            *)
+              echo "::error::the $input filter verdict is not true/false: '${!input}'"
+              exit 1
+              ;;
+            esac
+          done
+          if [ "$BUILD" = "true" ] || [ "$NOTICES" = "true" ] || [ "$WORKFLOWS" = "true" ] || [ "$ROOT" = "true" ]; then
             echo "needs-extension-build=true" >> "$GITHUB_OUTPUT"
           else
             echo "needs-extension-build=false" >> "$GITHUB_OUTPUT"
@@ -399,9 +378,8 @@ jobs:
       - name: Refuse a stable release without its release notes
         run: bun scripts/release/release-notes-run.ts check
 
-  # Extension smoke e2e lives in its own pr-extension-smoke-e2e.yml workflow:
-  # auto-runs on PRs to main, on changes within the `smoke-surface`
-  # filter, or via the `e2e:extension-smoke` label. Mirrors pr-extension-network-e2e.yml.
+  # Extension smoke e2e lives in its own pr-extension-smoke-e2e.yml workflow: it runs when its
+  # paths filters trip, or via the `e2e:extension-smoke` label. Mirrors pr-extension-network-e2e.yml.
 
   status:
     name: quality-status

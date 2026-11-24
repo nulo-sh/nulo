@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { isObjectLike, isPlainObject } from "@nulo/wallet-core/guards"
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 
@@ -51,9 +52,9 @@ const UNLABELLED = "x-unlabelled:"
 
 /** The first node still carrying an {@link UNLABELLED} flag, as its path and markers. */
 function findUnlabelled(node: unknown, path = ""): { path: string; markers: unknown } | undefined {
-	if (typeof node !== "object" || node === null) return undefined
+	if (!isObjectLike(node)) return undefined
 	const flag = Object.keys(node).find((key) => key.startsWith(UNLABELLED))
-	if (flag) return { path: path || "/", markers: (node as Record<string, unknown>)[flag] }
+	if (flag) return { path: path || "/", markers: node[flag] }
 	for (const [key, child] of Object.entries(node)) {
 		const found = findUnlabelled(child, `${path}/${key}`)
 		if (found) return found
@@ -104,9 +105,6 @@ export function emitSchema(shape: string, schema: z.ZodType): Json {
 	}
 	return canonical(emitted as Json, { schema: true })
 }
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-	typeof value === "object" && value !== null && [Object.prototype, null].includes(Object.getPrototypeOf(value))
 
 /** Each key is defined, never assigned: an own `__proto__` key (JSON.parse makes one) is data that
  *  assignment would hand to the inherited setter and drop from every hash. */

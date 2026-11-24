@@ -16,7 +16,7 @@ import {
 	type PublishFacts,
 	publishGlyph,
 	rowSentence,
-} from "@/components/composite/send/publish-facts"
+} from "@/utils/fee/publish-facts"
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { fitHero, HERO_MIN_SCALE } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
@@ -437,7 +437,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .retry {
-	composes: retry from "./fee-shared.module.css";
+	composes: accent from "@/components/text-action.module.css";
 }
 
 .whole {

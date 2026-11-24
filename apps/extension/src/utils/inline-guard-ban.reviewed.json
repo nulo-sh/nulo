@@ -1,0 +1,26 @@
+{
+	"apps/extension/src/content-script/approval-filter.ts": [
+		{
+			"text": "typeof value === \"object\" && value !== null",
+			"why": "content script: its bundle carries no workspace code, so it keeps a local isObjectLike"
+		}
+	],
+	"apps/extension/src/e2e/chrome-storage-token-seeds.ts": [
+		{
+			"text": "/^0x[0-9a-f]{64}$/",
+			"why": "lower case only: e2e seeds as the suite writes them"
+		}
+	],
+	"apps/extension/src/popup/pages/send-submit.ts": [
+		{
+			"text": "/^0x[0-9a-f]{64}$/i",
+			"why": "either case, and an 0X prefix: View is offered for any spelling of the hash"
+		}
+	],
+	"apps/extension/src/wallet/services/dapp-interaction/approval-delta.ts": [
+		{
+			"text": "/^0x[0-9a-f]{64}$/",
+			"why": "lower case only: a class id as the wallet read it"
+		}
+	]
+}

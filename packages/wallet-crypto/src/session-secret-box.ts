@@ -21,6 +21,7 @@
  * lost anyway; the storage.local-reader threat model this design targets never sees it.
  */
 
+import { toBase64 } from "@nulo/wallet-core/utils"
 import { asImportedKeysDek, asMasterSecretBytes, type ImportedKeysDek, type MasterSecretBytes } from "./secret-types"
 import { zeroize } from "./zeroize"
 
@@ -88,14 +89,15 @@ export class SessionSecretBox {
 			const packed = new Uint8Array(iv.length + ct.length)
 			packed.set(iv, 0)
 			packed.set(ct, iv.length)
-			// `Buffer.from(view)` copies; the copy is a second live bearer token until wiped.
+			// Not `toBase64`, which builds an unwipeable string of the raw token; this copy is a second
+			// live bearer token until wiped.
 			const tokenCopy = Buffer.from(token)
 			try {
 				return {
 					v: 2,
 					token: tokenCopy.toString("base64"),
-					salt: Buffer.from(salt).toString("base64"),
-					wrappedSecret: Buffer.from(packed).toString("base64"),
+					salt: toBase64(salt),
+					wrappedSecret: toBase64(packed),
 				}
 			} finally {
 				zeroize(tokenCopy)

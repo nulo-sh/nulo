@@ -22,6 +22,7 @@ import { type JobError, type JobProgress, type JobStage, NORMALIZED_RAW_MAX_CHAR
 import { type AuthwitContent, isFieldAddress } from "@nulo/wallet-bridge"
 import { z } from "zod"
 import { isFeeAmount } from "@nulo/wallet-core/jobs"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 import { boundedString } from "@/utils/bounded-string"
 import { MAX_TRACKED_AUTHWITS_PER_ACCOUNT } from "@/wallet/services/auth-registry/spec"
 import { TransferType } from "@/wallet/services/transaction/spec"
@@ -147,9 +148,7 @@ export const JournalAuthwitsSchema: z.ZodType<JournalAuthwits> = z.object({
 		.array(
 			z.object({
 				hash: z.string().refine(isFieldAddress).describe("0x-hex below the field modulus"),
-				content: z
-					.custom<AuthwitContent>((v) => typeof v === "object" && v !== null)
-					.describe("any non-null object, kept as stored"),
+				content: z.custom<AuthwitContent>(isObjectLike).describe("any non-null object, kept as stored"),
 			}),
 		)
 		.min(1)

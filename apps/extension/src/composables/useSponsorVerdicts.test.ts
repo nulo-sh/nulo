@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest"
 import { computed, effectScope, nextTick, ref, type Ref } from "vue"
-import type { FeeMethodOption } from "@/popup/components/modules/send/fee-helpers"
+import type { FeeMethodOption } from "@/utils/fee/fee-helpers"
 import { type SponsorFundingVerdict, useSponsorVerdicts, watchSponsorVerdicts } from "./useSponsorVerdicts"
 
 const AT = `0x${"0a".repeat(32)}`

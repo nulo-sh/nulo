@@ -35,7 +35,7 @@ const AccessScopesSchema = z.array(AztecAddress.schema)
 import type { ServiceSpec } from "@nulo/wallet-core/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/offscreen"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import { EventHandler, ReadWriteGuard, array_equals, errorMessageFromUnknown, fromBase64 } from "@nulo/wallet-core/utils"
+import { EventHandler, HEX_32, ReadWriteGuard, array_equals, errorMessageFromUnknown, fromBase64 } from "@nulo/wallet-core/utils"
 import type { ChainRuntime, NetworkInfo, ProvePhaseEvent } from "./chain-runtime"
 import { ChainRuntimeRegistry, PXE_STORE_KEY_MISSING, type PxeFactory } from "./chain-runtime"
 import { PXE_DATA_DIR_ROOT, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
@@ -99,7 +99,7 @@ export interface IProfileReader {
 	getProfiles(): Promise<Array<{ id: string }>>
 }
 
-const HASH32 = z.string().regex(/^0x[0-9a-fA-F]{64}$/)
+const HASH32 = z.string().regex(HEX_32)
 const SendPickSchema = z.object({ txHash: HASH32, anchorHash: HASH32 }).strict()
 
 export class PxeService extends Service<Methods, PxeEvents> implements ServiceSpec<Methods, PxeEvents> {

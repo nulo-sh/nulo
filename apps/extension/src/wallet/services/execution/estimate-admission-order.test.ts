@@ -40,7 +40,7 @@ function harness(entry: (typeof ENTRIES)[number]) {
 		pxeService: { offscreenSettled: () => undefined },
 		emit: () => {},
 		estimateCancel: registry,
-		dappSendExecutor: { estimateOperationFee: executor, previewOperationAuthwits: executor },
+		dappSendEstimation: { estimateOperationFee: executor, previewOperationAuthwits: executor },
 		logDebug: () => {},
 	}) as ExecutionService
 	/** The estimate's outcome: "ok" or the error it rejected with. */

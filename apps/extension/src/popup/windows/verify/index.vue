@@ -277,6 +277,6 @@ onUnmounted(() => {
 }
 
 .visually_hidden {
-	composes: visually_hidden from "../../components/modules/send/fee-shared.module.css";
+	composes: visually_hidden from "@/components/a11y.module.css";
 }
 </style>

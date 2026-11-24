@@ -2,6 +2,7 @@
 import { isPriorityLevel, type LocalTxOrigin, type PriorityLevel } from "@nulo/wallet-bridge"
 import { z } from "zod"
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 
 /** `OriginType`, `TxOrigin`, and `LocalTxOrigin` live in
  *  `@nulo/wallet-bridge`. Re-exported here so extension call sites can
@@ -183,15 +184,13 @@ export type Tx = {
  *  amount, …) is never stripped, and a reader that branches on one compares it exactly. */
 const TxCallRowSchema = z
 	.custom<TxCall>((v) => {
+		if (!isObjectLike(v)) return false
 		const c = v as TxCall
-		if (typeof c !== "object" || c === null) return false
 		if (typeof c.contract !== "string" || typeof c.method !== "string" || !Array.isArray(c.args)) return false
 		if (c.transfers === undefined) return true
 		return Array.isArray(c.transfers) && c.transfers.every((t) => typeof t?.from === "string" && typeof t?.to === "string")
 	})
 	.describe("an object with string contract and method, an args array, and transfers, if present, each with string from and to")
-
-const tolerantObject = (v: unknown) => typeof v === "object" && v !== null
 
 /** Storage codec row schema — exact on the flat/branched fields; tolerant
  *  (object-shaped, passed through verbatim) on the deep display payloads
@@ -216,7 +215,7 @@ export const TxSchema: z.ZodType<Tx> = z.object({
 	block: z.object({ hash: z.string(), number: z.number() }).optional(),
 	fee: z.string().optional(),
 	estimatedFee: z.string().optional(),
-	gasDetails: z.custom<TxGasDetails>(tolerantObject).describe("any non-null object, kept as stored").optional(),
+	gasDetails: z.custom<TxGasDetails>(isObjectLike).describe("any non-null object, kept as stored").optional(),
 	feeSpender: z.string().optional(),
 	// An unknown speed reads as none rather than hiding the row: it only ever withholds a basis.
 	priorityLevel: z
@@ -230,7 +229,7 @@ export const TxSchema: z.ZodType<Tx> = z.object({
 	error: z.string().optional(),
 	awaitingFinality: z.boolean().optional(),
 	submittedEndpointUrl: z.string().optional(),
-	origin: z.custom<LocalTxOrigin>(tolerantObject).describe("any non-null object, kept as stored"),
+	origin: z.custom<LocalTxOrigin>(isObjectLike).describe("any non-null object, kept as stored"),
 	calls: z.array(TxCallRowSchema),
 })
 

@@ -6,7 +6,7 @@ import {
 	type RegisteredFpc,
 	resolveSavedSelection,
 	savedSelectionOf,
-} from "@/popup/components/modules/send/fee-helpers"
+} from "@/utils/fee/fee-helpers"
 import {
 	isEligible,
 	previewForPick,
@@ -15,7 +15,7 @@ import {
 	resolveSendSelection,
 	type SendSelection,
 	type TransferSide,
-} from "@/popup/components/modules/send/fee-privacy"
+} from "@/utils/fee/fee-privacy"
 import type { AppPick, FeePickUpdate, SendSlots } from "@/utils/fee-picks"
 import type { BalanceScope } from "@/stores/balances.store"
 import { offersSponsoredFpc } from "@/wallet/services/fpc/sponsored-fpc-chains"

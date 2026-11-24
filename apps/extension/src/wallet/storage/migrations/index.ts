@@ -17,6 +17,7 @@ import type { Migration } from "@nulo/wallet-core/migration"
 import { E2E_MIGRATION_FIXTURE } from "@/e2e/config"
 import { backupMigrationFixture } from "@/e2e/backup-migration-fixture"
 import { migrationFixture } from "@/e2e/migration-fixture"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 
 /** The current on-disk shape. Fresh installs stamp this and run nothing. */
 export const BASELINE_VERSION = 1
@@ -99,7 +100,7 @@ export function decodeBlockedStatus(
 	currentExtensionVersion: string,
 	now: number,
 ): { kind: "absent" } | { kind: "invalidated" } | { kind: "blocked"; status: MigrationBlockedStatus } {
-	if (typeof raw !== "object" || raw === null) return { kind: "absent" }
+	if (!isObjectLike(raw)) return { kind: "absent" }
 	const b = raw as Partial<MigrationBlockedStatus>
 	if (typeof b.terminal !== "boolean") return { kind: "absent" }
 	if (typeof b.atExtensionVersion !== "string" || b.atExtensionVersion.length === 0 || b.atExtensionVersion !== currentExtensionVersion) {
@@ -137,7 +138,7 @@ function decodeRunCount(v: unknown): number | undefined {
 /** The retry request is a gesture token, not data — any object with a finite
  *  numeric `requestedAt` counts; anything else is ignored (and consumed). */
 export function isValidRetryRequest(raw: unknown): boolean {
-	return typeof raw === "object" && raw !== null && Number.isFinite((raw as { requestedAt?: unknown }).requestedAt as number)
+	return isObjectLike(raw) && Number.isFinite(raw.requestedAt as number)
 }
 
 /** Shape persisted under `SCHEMA_DEGRADED_KEY` (additive migration failed;

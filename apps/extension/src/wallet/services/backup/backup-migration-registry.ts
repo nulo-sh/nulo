@@ -18,6 +18,7 @@
  * and rejects when it no longer matches the row's storage key — a migration
  * that mutates an id/anchor field is caught at this seam, fail-closed.
  */
+import { isRecord } from "@nulo/wallet-core/guards"
 import type { StorageRef } from "@nulo/wallet-core/migration"
 import { SCHEMA_RESERVED_PREFIX } from "@nulo/wallet-core/migration"
 import type { Account } from "@/wallet/services/account/spec"
@@ -172,10 +173,10 @@ function configSliceToStored(slice: readonly unknown[]): { ok: true; stored: Rec
 	// it AND defeating the duplicate-key guard (`Object.hasOwn` never sees it).
 	const stored: Record<string, unknown> = Object.create(null)
 	for (const el of slice) {
-		if (typeof el !== "object" || el === null || Array.isArray(el)) {
+		if (!isRecord(el)) {
 			return { ok: false, reason: "config slice element is not an object" }
 		}
-		const prop = el as Record<string, unknown>
+		const prop = el
 		const key = prop.key
 		if (typeof key !== "string" || key.length === 0) return { ok: false, reason: "config slice element has a missing or malformed key" }
 		if (!("value" in prop)) return { ok: false, reason: `config slice element "${key}" has no value` }
@@ -188,7 +189,7 @@ function configSliceToStored(slice: readonly unknown[]): { ok: true; stored: Rec
 }
 
 function configStoredToSlice(stored: unknown): { ok: true; slice: unknown[] } | { ok: false; reason: string } {
-	if (typeof stored !== "object" || stored === null || Array.isArray(stored)) {
+	if (!isRecord(stored)) {
 		return { ok: false, reason: "stored config value is not an object" }
 	}
 	return { ok: true, slice: Object.entries(stored).map(([key, value]) => ({ key, value })) }
@@ -255,7 +256,7 @@ export interface NormalizedBackupData {
 export type NormalizeResult = { ok: true; normalized: NormalizedBackupData } | { ok: false; reason: string }
 
 export function normalizeBackupData(data: unknown): NormalizeResult {
-	if (typeof data !== "object" || data === null || Array.isArray(data)) {
+	if (!isRecord(data)) {
 		return { ok: false, reason: "backup data is not an object" }
 	}
 	const record = data as Record<string, unknown>
@@ -336,7 +337,7 @@ function normalizeRootSlice(
 	}
 	for (let i = 0; i < slice.length; i++) {
 		const row = slice[i]
-		if (typeof row !== "object" || row === null || Array.isArray(row)) {
+		if (!isRecord(row)) {
 			return `slice "${name}" row ${i} is not an object`
 		}
 		const id = desc.idOf(row as Record<string, unknown>)
@@ -406,7 +407,7 @@ function classifyScratchEntry(
 		return undefined
 	}
 	if (owner.desc.kind !== "root") return `scratch key "${key}" maps to a non-migratable slice`
-	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+	if (!isRecord(parsed)) {
 		return `scratch row "${key}" is not an object`
 	}
 	// Row-identity check at the seam: a migration must never mutate the

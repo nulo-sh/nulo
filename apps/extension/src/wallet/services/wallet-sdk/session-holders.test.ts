@@ -41,6 +41,7 @@ const NOT_SESSION_OWNED: Record<string, string> = {
 	pendingDiscoveryPromises: "keyed by (origin, chainId)",
 	dedupeWaiters: "keyed by (origin, chainId)",
 	admission: "keyed by request id; a session's end reaches it through its own onSessionGone",
+	discoveryPacing: "keyed by tab id; an entry leaves once its bucket refills",
 	late: "handler-lifetime references",
 }
 

@@ -1,3 +1,4 @@
+import { errorMessageFromUnknown, isObjectLike } from "@nulo/wallet-core/utils"
 import { scrubUrls } from "@/utils/scrub-urls"
 
 /**
@@ -70,8 +71,8 @@ export function toViolation(event: SecurityPolicyViolationEvent, context: string
 }
 
 function parseViolation(value: unknown): CspViolation | undefined {
-	if (typeof value !== "object" || value === null) return undefined
-	const { context, directive, blocked, source } = value as Record<string, unknown>
+	if (!isObjectLike(value)) return undefined
+	const { context, directive, blocked, source } = value
 	const fields = [context, directive, blocked, source]
 	if (!fields.every((field) => typeof field === "string")) return undefined
 	return {
@@ -99,7 +100,7 @@ export function installBackgroundRecorder(deps: BackgroundRecorderDeps): void {
 	let lost: string | undefined
 	const enqueue = (step: () => Promise<void>) => {
 		chain = chain.then(step).catch((err) => {
-			lost ??= err instanceof Error ? err.message : String(err)
+			lost ??= errorMessageFromUnknown(err)
 			console.warn("[e2e-csp] recording a violation failed", { error: err })
 		})
 	}
