@@ -380,6 +380,15 @@ describe("network suite job names", () => {
 	})
 })
 
+/** gh 2.103 and later refuse every coloured job log without the flag, so certification never passes. */
+describe("verify-cert-run.sh job logs", () => {
+	test("the log fetch passes --allow-escape-sequences when this gh's help lists it", () => {
+		const script = readFileSync(join(ROOT, "scripts/ci-cd/verify-cert-run.sh"), "utf8")
+		expect(script).toContain('case "$(gh api --help 2>&1)" in\n\t*--allow-escape-sequences*) LOG_ESCAPES=--allow-escape-sequences ;;')
+		expect(script).toContain('gh api ${LOG_ESCAPES:+"$LOG_ESCAPES"} "repos/$REPO/actions/jobs/$JOB_ID/logs" >"$L"')
+	})
+})
+
 describe("commitlint", () => {
 	const step = workflowOf("pr-quick.yml").jobs.commitlint.steps.find((s: { name?: string }) => s.name === "Lint PR commits")
 	// A failing lint, so a PR that reaches it goes red and one that skips it stays green.
