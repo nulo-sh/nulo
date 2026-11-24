@@ -1,6 +1,6 @@
 # Owner asks: harden-security-fixes-5
 
-Neither arc changes what a person sees. Three questions outside both arcs need the owner; nothing in the plan waits on them. Each entry ships nothing until the owner picks.
+No arc changes what a person sees. The owner answered the three questions below on decision page 202 (2026-11-24); none of them builds anything in this plan (plan.md, D11-D13).
 
 ## OA-1: the approval window while an authorization's arguments are read
 
@@ -12,6 +12,7 @@ Neither arc changes what a person sees. Three questions outside both arcs need t
 - **Option C, Confirm waits, and only a failed read refuses:** as B while waiting, and for a call with no interface or with arguments that do not fit. A read that failed (the worker did not answer) shows the error row a public grant shows when it cannot be read ("Can't read the arguments") and Confirm stays off; the person rejects and the app can ask again.
 - **Recommendation:** B. It applies the public grant's waiting rule, adds no copy, and keeps the raw fields as the way through for a call the wallet cannot name. C adds a dead end that a retry fixes.
 - **Frames:** light and dark, at the approval window's size: today, B waiting, B failed, C failed (C waiting is B waiting); listed in the orchestrator's report.
+- **The owner's answer:** none of the three. "The problem is that the user needs to read "Reading arguments..." there is no "easy visual way" of just understanding "something is loading" unless he reads. Like the skeleton loaders we use on other places." The question continues outside this plan.
 
 ## OA-2: a network's incoming history when the person replaces its endpoint
 
@@ -23,6 +24,7 @@ Neither arc changes what a person sees. Three questions outside both arcs need t
 - **Option C, keep today's behaviour,** recorded as a known limit beside #440, to reopen on a report of missing incoming transfers or silent arrivals after an endpoint change, or once the wallet reads chain tips from a second source.
 - **Recommendation:** A. It gives "replace the endpoint" one meaning, stop relying on what the earlier endpoint said, and its cost falls only on that deliberate act. B fires on ordinary lag and covers only scan positions. C is the choice if a rescan on every endpoint change is not worth it.
 - **Frames:** none. No option changes a layout or a word; A changes which rows show for a while, as a first scan does.
+- **The owner's pick:** C, "Keep today's behaviour, recorded as a known limit beside #440, to reopen on a report of missing incoming transfers or silent arrivals after an endpoint change, or once the wallet reads chain tips from a second source." Recorded as #1974.
 
 ## OA-3: a log buffer that keeps no 32-byte values
 
@@ -33,3 +35,4 @@ Neither arc changes what a person sees. Three questions outside both arcs need t
 - **Option B, scrub the whole buffer as the PXE frame does:** every 32-byte value in every line reads `[32 bytes]`. A bug report could no longer say which contract or class failed.
 - **Option C, scrub only lines at `info` and above:** debug lines, captured only with debug logging on, keep their values.
 - **Recommendation:** A. Account addresses stay out of reach-wide lines by the rule the guard and the review already apply; a blanket scrub costs the diagnosis that makes a report useful.
+- **The owner's pick:** A, "Keep today's behaviour."

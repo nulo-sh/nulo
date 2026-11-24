@@ -262,6 +262,8 @@ const batchRefusal = (name: string) => ({
 	threw: Error,
 	message: `Method "${name}" cannot be used inside batch — it requires a confirmation popup`,
 })
+const batchInvalid = { threw: InvalidWalletArgumentsError, message: "Invalid arguments for wallet method: batch" }
+const chainLegs = (count: number) => Array.from({ length: count }, () => CHAIN_LEG)
 
 async function runBatch(legs: unknown, grants: unknown[] = []) {
 	const h = harness(grants)
@@ -293,10 +295,14 @@ describe("batch refusal", () => {
 	})
 
 	test("a malformed envelope is refused by batch's own guard first", async () => {
-		expect((await runBatch([{ name: "sendTx", args: "x" }])).result).toEqual({
-			threw: InvalidWalletArgumentsError,
-			message: "Invalid arguments for wallet method: batch",
-		})
+		expect((await runBatch([{ name: "sendTx", args: "x" }])).result).toEqual(batchInvalid)
+	})
+
+	test("a batch of 1,024 calls runs every call, and one of 1,025 is refused before any call runs", async () => {
+		const taken = await runBatch(chainLegs(1_024))
+		expect(taken.ran).toEqual(chainLegs(1_024).map(() => "aztec_getChainInfo"))
+		expect(taken.result).toEqual({ ok: chainLegs(1_024).map(() => ({ name: "getChainInfo", result: "0xran" })) })
+		expect(await runBatch(chainLegs(1_025))).toEqual({ result: batchInvalid, ran: [], sent: [] })
 	})
 
 	test.each(["__proto__", "constructor", "hasOwnProperty", "toString", "SendTx"])(
@@ -309,9 +315,11 @@ describe("batch refusal", () => {
 		},
 	)
 
-	test("a nested batch is scanned only when it runs, after the outer legs before it", async () => {
-		const nested = { name: "batch", args: [[SEND_LEG]] }
-		expect(await runBatch([CHAIN_LEG, nested])).toEqual({ result: batchRefusal("sendTx"), ran: ["aztec_getChainInfo"], sent: [] })
+	test.each([
+		["one level down", [CHAIN_LEG, { name: "batch", args: [[SEND_LEG]] }]],
+		["two levels down", [CHAIN_LEG, { name: "batch", args: [[CHAIN_LEG, { name: "batch", args: [[CHAIN_LEG]] }]] }]],
+	])("a batch inside a batch, %s, is refused before any call runs", async (_label, legs) => {
+		expect(await runBatch(legs)).toEqual({ result: batchInvalid, ran: [], sent: [] })
 	})
 
 	test("runnable legs run in order and an empty batch answers empty (success controls)", async () => {
@@ -329,7 +337,21 @@ describe("batch refusal", () => {
 		expect((await runBatch([])).result).toEqual({ ok: [] })
 	})
 
-	test("over every registry method, exactly grantPublicAuthwit, registerToken and sendTx are refused as batch legs", async () => {
+	test("a batch shaped as the stock client sends it, utility calls then one simulation, runs every call (success control)", async () => {
+		const grants = [{ type: "simulation", utilities: { scope: "*" }, transactions: { scope: "*" } }]
+		const legs = [
+			{ name: "executeUtility", args: [wireCall(TOKEN, "balance_of_private", [1n]), { scopes: [ACC1] }] },
+			{ name: "executeUtility", args: [wireCall(TOKEN, "balance_of_public", [1n]), { scopes: [ACC1] }] },
+			{ name: "simulateTx", args: [wirePayload([wireCall(TOKEN, "transfer", [2n])]), { from: ACC1 }] },
+		]
+		expect(await runBatch(legs, grants)).toEqual({
+			result: { ok: legs.map(({ name }) => ({ name, result: "0xran" })) },
+			ran: ["aztec_executeUtility", "aztec_executeUtility", "aztec_simulateTx"],
+			sent: [],
+		})
+	})
+
+	test("over every registry method, exactly grantPublicAuthwit, registerToken and sendTx get the popup-leg refusal as batch legs", async () => {
 		const names = Object.keys(METHOD_REGISTRY)
 		expect(names.length).toBeGreaterThan(0)
 		const refusedNames: string[] = []
