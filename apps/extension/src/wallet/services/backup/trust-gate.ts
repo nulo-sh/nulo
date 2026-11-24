@@ -1,3 +1,4 @@
+import { isRecord } from "@nulo/wallet-core/guards"
 import { EncryptionKey } from "@nulo/wallet-crypto"
 import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, isSupportedCompatEpoch } from "./backup-migration-registry"
 import { maxBackupSchemaVersion, migrateBackupData } from "./backup-migrator"
@@ -79,8 +80,8 @@ function isEarlierPasskeyBody(fullBackup: FullBackupEnvelope, profile: BackupPro
 /** The restore reads `type` and `name` as the wallet wrote them; `id` is replaced by the service
  *  whenever the wallet would not have generated it. */
 function isBackupProfile(profile: unknown): profile is BackupProfile {
-	if (typeof profile !== "object" || profile === null || Array.isArray(profile)) return false
-	const { type, name } = profile as Record<string, unknown>
+	if (!isRecord(profile)) return false
+	const { type, name } = profile
 	return (type === "password" || type === "passkey") && typeof name === "string"
 }
 
@@ -154,7 +155,7 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
  *  selection is published, so the refusal shows before any other control; the restore validates
  *  again before it writes. */
 export async function refusedAsEarlierPasskey(backup: unknown): Promise<boolean> {
-	if (typeof backup !== "object" || backup === null || Array.isArray(backup)) return false
+	if (!isRecord(backup)) return false
 	try {
 		return (await validateAndMigrateBackup(backup as FullBackupEnvelope)) === EARLIER_PASSKEY_BACKUP
 	} catch {

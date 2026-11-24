@@ -345,7 +345,7 @@ const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 766, "publ
 const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 838, "This account is already in your wallet")
 const ACCOUNT_HELD = cite("src/popup/pages/settings/accounts/import.vue", 310, 'data-testid="import-account-held"')
 const BACKUP_UNREADABLE = cite(SELECTION, 96, "DECRYPTION_FAILED.title, DECRYPTION_FAILED.message")
-const BACKUP_INTEGRITY = cite(GATE, 106, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
+const BACKUP_INTEGRITY = cite(GATE, 107, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
 const BACKUP_UNPARSED = cite(SELECTION, 57, "title: parseError.title, message: parseError.tooltip")
 const RESTORE_ASKS_PASSWORD = cite(
 	"src/components/composite/import/ImportFullBackupForm.vue",
@@ -380,7 +380,7 @@ const ONBOARDING_SAVED = cite(ONBOARDING, 174, "if (isMounted()) leavePhrase()")
 const ONBOARDING_LATER = cite(ONBOARDING, 194, '@later="leavePhrase"')
 const EARLIER_AT_PICK = cite(SELECTION, 55, "refusal: EARLIER_PASSKEY_BACKUP")
 const EARLIER_AT_DECRYPT = cite(SELECTION, 89, "refuse(selected, banner, EARLIER_PASSKEY_BACKUP")
-const EARLIER_SHAPE = cite(GATE, 75, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
+const EARLIER_SHAPE = cite(GATE, 76, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
 const IMPORT_FLOW = "src/composables/useProfileImportFlow.ts"
 const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 195, 'await deps.unlockFor(admitted, { step: "import", profileName: name }, existing)')
 const RESTORE_CARD = cite(IMPORT, 280, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
@@ -423,7 +423,7 @@ const BOOTSTRAP_CLEARS_NETWORK = cite("src/composables/useProfileBootstrap.ts", 
 const EXPORT_CHECK_REFUSES = cite(SERVICE, 1181, "await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {")
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
 export const EARLIER_TITLE = "Backup from an earlier version"
-const EARLIER_TITLE_SOURCE = cite(GATE, 63, `title: "${EARLIER_TITLE}"`)
+const EARLIER_TITLE_SOURCE = cite(GATE, 64, `title: "${EARLIER_TITLE}"`)
 
 /** The names a release gives the two profiles a `pre-update` start makes on it. */
 export const PRE_UPDATE_NAMES = { password: "Main", passkey: "Chaos 1" } as const

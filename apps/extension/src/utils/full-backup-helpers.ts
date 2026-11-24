@@ -5,7 +5,7 @@
  */
 
 import { ACCOUNT_EXPORT_AAD_LABEL, EncryptionKey, zeroize } from "@nulo/wallet-crypto"
-import { toBase64 } from "@nulo/wallet-core/utils"
+import { isObjectLike, toBase64 } from "@nulo/wallet-core/utils"
 import { fromBase64 } from "@/wallet/utils"
 import { scrubUrls } from "@/utils/scrub-urls"
 import { CONFIG_SERVICE_NAME, type ConfigKey, RESTORABLE_CONFIG_KEYS } from "@/wallet/services/config/spec"
@@ -460,7 +460,7 @@ function collectAccountStateErrors(data: unknown[]): unknown[] | null {
 	for (const item of data as Array<AccountStateRestoreItem & { restoreError?: unknown }>) {
 		// A non-object result entry (hostile/degenerate restore output) must
 		// not throw post-finalize — collapse into ONE constant record below.
-		if (typeof item !== "object" || item === null) {
+		if (!isObjectLike(item)) {
 			malformedItems++
 			continue
 		}
@@ -501,9 +501,7 @@ export function normalizeAllIds(data: Record<string, unknown>, idKey: string, ne
 	for (const key of Object.keys(data)) {
 		const value = data[key]
 		if (!Array.isArray(value)) continue
-		data[key] = value.map((item) =>
-			item && typeof item === "object" && idKey in item ? { ...(item as Record<string, unknown>), [idKey]: newId } : item,
-		)
+		data[key] = value.map((item) => (isObjectLike(item) && idKey in item ? { ...item, [idKey]: newId } : item))
 	}
 }
 
@@ -521,10 +519,10 @@ export function remapByMap(data: Record<string, unknown>, idKey: string, oldToNe
 		const value = data[key]
 		if (!Array.isArray(value)) continue
 		data[key] = value.map((item) => {
-			if (item && typeof item === "object" && idKey in item) {
-				const cur = (item as Record<string, unknown>)[idKey]
+			if (isObjectLike(item) && idKey in item) {
+				const cur = item[idKey]
 				const next = typeof cur === "string" ? oldToNew.get(cur) : undefined
-				if (next !== undefined) return { ...(item as Record<string, unknown>), [idKey]: next }
+				if (next !== undefined) return { ...item, [idKey]: next }
 			}
 			return item
 		})
@@ -547,8 +545,8 @@ export function resolveRestoredActiveNetworkIdByChain(
 type SeededNetwork = { id: string; chainId: number }
 
 function seededIdFor(byChain: ReadonlyMap<number, string>, row: unknown): string | undefined {
-	if (!row || typeof row !== "object") return undefined
-	const chainId = (row as { chainId?: unknown }).chainId
+	if (!isObjectLike(row)) return undefined
+	const chainId = row.chainId
 	return typeof chainId === "number" && Number.isInteger(chainId) ? byChain.get(chainId) : undefined
 }
 

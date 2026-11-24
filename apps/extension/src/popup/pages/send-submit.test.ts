@@ -183,6 +183,16 @@ describe("send-submit", () => {
 		expect(snack(deps)?.sub).toBe(`123,456,789 ${"A".repeat(32)}… to 0x8c02…41fa`)
 	})
 
+	test("a hash in upper case after `0X` gets View, which an `isHex32` check would withhold", async () => {
+		const { deps, settle } = harness()
+		const hash = `0X${"F".repeat(64)}`
+		submitTransfer(deps, SNAP)
+		settle().resolve(hash)
+		await flush()
+		snack(deps)?.action?.onSelect()
+		expect(deps.viewTransaction).toHaveBeenCalledWith(hash)
+	})
+
 	test("a malformed hash gets no View", async () => {
 		const { deps, settle } = harness()
 		submitTransfer(deps, SNAP)

@@ -20,6 +20,7 @@
  * cannot transform deterministically (fail-closed → the engine reports
  * `failed` → the import is rejected).
  */
+import { isObjectLike, isRecord } from "@nulo/wallet-core/guards"
 import { defineMigration, type Migration, type StorageRef } from "@nulo/wallet-core/migration"
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
@@ -295,12 +296,12 @@ function validateAddDefaultOverlap(target: string, t: RowMapTransform): void {
  *  ONLY inputs are one row and the frozen transform data. Throws on anything
  *  it cannot transform unambiguously (hostile-input rule: presence-guard
  *  every access, fail closed). Exported for the metamorphic guardrail tests. */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 39 — clause order and presence guards ARE the row-transform DSL interpreter semantics
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 38 — clause order and presence guards ARE the row-transform DSL interpreter semantics
 export function applyRowTransform(row: unknown, t: RowMapTransform): Record<string, unknown> {
-	if (typeof row !== "object" || row === null || Array.isArray(row)) {
+	if (!isRecord(row)) {
 		throw new Error("row is not an object")
 	}
-	const out: Record<string, unknown> = { ...(row as Record<string, unknown>) }
+	const out: Record<string, unknown> = { ...row }
 
 	if (t.rename) {
 		for (const [oldName, newName] of Object.entries(t.rename)) {
@@ -363,7 +364,7 @@ function retypeValue(field: string, v: unknown, kind: "string" | "number" | "boo
 }
 
 function deepFreeze(value: unknown): void {
-	if ((typeof value !== "object" || value === null) && typeof value !== "function") return
+	if (!isObjectLike(value) && typeof value !== "function") return
 	if (Object.isFrozen(value)) return
 	Object.freeze(value)
 	for (const key of Reflect.ownKeys(value as object)) {
