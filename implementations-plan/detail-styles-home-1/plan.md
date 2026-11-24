@@ -1,7 +1,7 @@
 ---
 plan: detail-styles-home-1
 tier: light
-status: implemented; proof green; in review
+status: completed
 issues: "#1929"
 driver: claude-code
 claude_model: opus
@@ -15,9 +15,28 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-11-24. Planned and delivered as one arc.
+- **Status:** completed. The arc and this close-out ship as one PR into `dev` (#1966); its merge archives this plan and closes #1929.
+- **Shipped:** the detail family's shared sheet moved byte-identical to `popup/components/modules/tx/detail-shared.module.css`, the lowest layer that consumes it, so every class it owns keeps its name. Nine role-less copies compose it: `TxDebugPanel`'s three, `TxFeeRow`'s four and the received page's two. The estimated fee is now `.detail_value_mono.detail_value_est`, so it wins in any chunk order. `utils/page-sheet-compose-ban.test.ts` refuses any sheet outside `popup/pages/` composing one under it.
+- **Review:** the Codex diff pass found P1 and P2, both fixed in 750f695ef. E1 came from smoke and was fixed in 1d0f330ff. Codex then verified all three fixes with no new finding (Audit verdicts).
+- **Gates:**
+  - Phase 2 green at 1d0f330ff. The Chrome glyph-fringe pixels are the one recorded deviation.
+  - `audit:vue` and `test:all` green at e60d73eb9, and `audit:vue` green again after merging `origin/dev` at 2e2604c76.
+  - Smoke and network e2e green on both browsers at retry 0.
+- **Dropped:**
+  - The `.detail_value_aux` → `.meta_sep` merge: two copies now compose `detail_value_aux`, so the issue's condition fails.
+  - Composing `TxDebugPanel` `.details_box`: it would import the shared narrow-width `column-gap`.
+  - Composing the copies that render an identifier: the static role scan needs the role in their own rule, and the e2e sweep refuses it twice (D2).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` sits at its budget (8,148 of 8,192 bytes) and nothing in it is superseded here. The doubled role token stays in `lessons/phase-1.md`.
+- **Seeds retired:** none were written; the orchestrator drove this lane.
+
 # detail-styles-home-1: the detail rows' shared styles move below their consumers
 
-One arc, one PR against `dev`. Paths are under `apps/extension/src/` unless they say otherwise. Consults: [lessons/phase-1.md](lessons/phase-1.md). Live log: [STATUS.md](STATUS.md). `#1929` carries the `enhancement` label; the orchestrator's lane brief is the recorded decision that brought it in.
+One arc, one PR against `dev`. Paths are under `apps/extension/src/` unless they say otherwise. Consults: [lessons/phase-1.md](lessons/phase-1.md). `#1929` carries the `enhancement` label; the orchestrator's lane brief is the recorded decision that brought it in.
 
 **UI impact: none (computed styles and pixels identical; proof in the PR).**
 
