@@ -108,7 +108,7 @@ The opener runs inside `withLock` in today's order; probes stay before it. The t
 
 ## Post-implementation
 
-Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `9c913679b`. Plan-specific parts:
+Execution contract: this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `9c913679b`. Plan-specific parts:
 
 - Step 1 is absent (`code_review: off`). Step 2 is the bounded form: per arc, one Codex pass (`gpt-6.1-sol`, `high`) over this plan and the arc's diff, with the README's two verbatim rules and the adversarial asks: a behaviour the shared code changed for one caller, an eviction or emit reordered, an import that crosses a layer, a stored shape that reads differently. Then targeted verification of each material fix. Consults are logged in `lessons/phase-N.md`.
 - Delivery: `gh pr create` per arc, ready for review, no labels. Arc 1: `refactor(tooling): one biome report reader for the baseline scripts, one subscribe client`, `Closes #1981`, `Closes #1982`. Arc 2: `refactor(wallet): endpoint edits share one opener and commit; prove backends get one list`, `Closes #1975`, `Refs #1976`. Bodies state the proofs and "No visible change."
