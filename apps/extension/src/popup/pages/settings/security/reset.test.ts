@@ -515,7 +515,7 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		expect(w.find('[data-testid="reset-imported"]').exists()).toBe(false)
 	})
 
-	test("while a reset is pending, Export first goes to the account export page, which a passkey profile cannot use", async () => {
+	test("while a reset is pending, Export first goes to the account export page, for a passkey profile too", async () => {
 		reads.getNetworks.mockResolvedValue([{ id: "tn", chainId: TESTNET }])
 		reads.getPendingReset.mockResolvedValue({ networkId: "tn", running: false })
 		reads.getStaleNetwork.mockResolvedValue({
@@ -529,7 +529,52 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		const passkey = await mountReady({ isLogined: true, profile: { ...main, type: "passkey" } })
 		await flushPromises()
 		expect(listed(passkey.w)).toHaveLength(1)
-		expect(passkey.w.find('[data-testid="reset-export-first"]').exists()).toBe(false)
+		expect(passkey.w.get('[data-testid="reset-export-first"]').attributes("data-link")).toBe("/popup/settings/security/export/account")
+	})
+
+	const RUNNING = '[data-testid="reset-network-reset-running"]'
+	const resetEnds = async () => {
+		reads.getPendingReset.mockResolvedValue(null)
+		const changed = reads.onStaleNetworkChanged.add.mock.calls.at(-1)?.[0] as (e: unknown) => void
+		changed({ profileId: "p1", networkId: "tn", running: false, completed: { addressesMoved: false } })
+		await flushPromises()
+	}
+
+	test("while a reset runs the page says so and refuses Delete; when it ends the list is read again and Delete goes", async () => {
+		reads.getNetworks.mockResolvedValue([{ id: "tn", chainId: TESTNET }])
+		reads.getImportedAccounts.mockResolvedValue([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
+		reads.getPendingReset.mockResolvedValue({ networkId: "tn", running: true })
+		const { w } = await mountReady({ isLogined: true })
+		await flushPromises()
+		expect(w.get(RUNNING).element.textContent?.trim()).toBe("A network reset is running. Wait for it to finish.")
+		expect(w.find('[data-testid="reset-imported"]').exists()).toBe(false)
+		await deleteButton(w).trigger("click")
+		await flushPromises()
+		expect(client.deleteProfile).not.toHaveBeenCalled()
+		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't delete profile. Try again" })
+		expect(w.find(RUNNING).exists()).toBe(true)
+
+		await resetEnds()
+		expect(w.find(RUNNING).exists()).toBe(false)
+		expect(listed(w)).toEqual([["Savings", "0x04c0…03b4"]])
+		await deleteButton(w).trigger("click")
+		await flushPromises()
+		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
+	})
+
+	test("a reset begun after the page read refuses the press, and the page then says why", async () => {
+		reads.getNetworks.mockResolvedValue([{ id: "tn", chainId: TESTNET }])
+		reads.getImportedAccounts.mockResolvedValue([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
+		const { w } = await mountReady({ isLogined: true })
+		await flushPromises()
+		expect(w.find(RUNNING).exists()).toBe(false)
+		reads.getPendingReset.mockResolvedValue({ networkId: "tn", running: true })
+		reads.getImportedAccounts.mockResolvedValue([])
+		await deleteButton(w).trigger("click")
+		await flushPromises()
+		expect(client.deleteProfile).not.toHaveBeenCalled()
+		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't delete profile. Try again" })
+		expect(w.find(RUNNING).exists()).toBe(true)
 	})
 
 	test("Delete waits for the list: held while it reads, refused and read again after a failure, then it goes", async () => {
