@@ -218,7 +218,7 @@ None. No surface changes in arc 1 or arc 2. A restore of an edited file can show
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) as read at `8ae2c06a4`. Plan-specific values:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) as read at `8ae2c06a4`. Plan-specific values:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2, per arc at its boundary: Codex `gpt-6.1-sol` at `high` (`~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`), resumed with each fix diff, hard stop at three rounds. Each prompt carries the arc map ("arc N of 2; arc 2 leaves shipped classes out of `classes`") and the standard's two rules verbatim. One Opus 5.5 diff review (`Agent`, `general-purpose`, `model: opus`) runs beside round 1. Log every round in `lessons/phase-N.md` and under Plan review. After the last arc, one fresh Codex session over the net diff from `8ae2c06a4` asks for cross-arc issues.
