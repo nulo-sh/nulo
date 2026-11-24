@@ -19,10 +19,7 @@ import {
 	stopsRun,
 	UNPLANNED_RESTART,
 	GUARDED_NODE_REFUSAL,
-	inStandInWindow,
 	ROUTED_STAND_IN_REFUSAL,
-	servesStandIn,
-	STAND_IN_TAIL,
 	checkLeaks,
 	checkLogContinuity,
 	checkOutcome,
@@ -71,7 +68,6 @@ import {
 	type PlannedStep,
 	plan,
 	planFromList,
-	type ProfileRef,
 	type StartState,
 	startWorld,
 	type World,
@@ -1529,19 +1525,13 @@ describe("O4, errors", () => {
 		})
 	})
 
-	describe("the routed refusal of a stand-in route", () => {
+	describe("the routed refusal of a route of stand-ins", () => {
 		const NO_ENDPOINT = "No endpoint of this network can take the call"
-		const routed = (text: string, standIn = true): ErrorEntry => ({
-			kind: "log",
-			level: "error",
-			source: "pxe",
-			text,
-			...(standIn ? { standIn: true as const } : {}),
-		})
+		const routed = (text: string): ErrorEntry => ({ kind: "log", level: "error", source: "pxe", text })
 		const refused = `["[READ] getLatestBlockNumber failed after 206ms",{"error":{"name":"Error","message":"${NO_ENDPOINT}"}}]`
 		const discovery = `["Failed to discover FPC 0x05",{"name":"Error","message":"${NO_ENDPOINT}"}]`
 
-		test("passes inside the stand-in window, and counts what it let through", () => {
+		test("passes at any step, and counts what it let through", () => {
 			expect(checkErrors([routed(refused), routed(discovery)], [])).toEqual({
 				violations: [],
 				warns: {},
@@ -1550,7 +1540,14 @@ describe("O4, errors", () => {
 		})
 
 		test.each([
-			["outside the stand-in window, as a real network's outage logs it", [routed(refused, false)]],
+			[
+				"for Local Network's own failure when its lone node is down",
+				[routed('["[READ] getLatestBlockNumber failed after 9ms",{"error":{"name":"TypeError","message":"Failed to fetch"}}]')],
+			],
+			[
+				"for the transaction twin, which a lone route throws",
+				[routed('["send failed",{"error":{"message":"No endpoint of this network can take the transaction"}}]')],
+			],
 			[
 				"for an entry that also carries another error",
 				[routed(`["Failed to sync",{"message":"${NO_ENDPOINT}"},"TypeError: bad state"]`)],
@@ -1561,39 +1558,6 @@ describe("O4, errors", () => {
 		] as const)("fails %s", (label, entries) => {
 			const verdict = checkErrors(entries as unknown as ErrorEntry[], [])
 			expect(shown(`O4 the routed refusal ${label}`, verdict.violations).length).toBeGreaterThan(0)
-		})
-
-		const [[made, empty], [locked, open], [verified, closed]] = withBefore(
-			planFromList(
-				[
-					{ action: "createPassword", params: { ref: "P1", name: "Chaos 1", password: "S1", double: false } },
-					{ action: "lock", params: {} },
-					{ action: "verifyAll", params: {} },
-				] as ListedStep[],
-				"empty",
-				NETWORK,
-			),
-		)
-
-		test("a step serves a stand-in route while a profile it opens, closes or names sits where it started", () => {
-			const none = new Set<ProfileRef>()
-			expect(servesStandIn(empty, made.expect, none, true)).toBe(true)
-			expect(servesStandIn(open, locked.expect, none, true)).toBe(true)
-			expect(servesStandIn(closed, verified.expect, none, true)).toBe(true)
-		})
-
-		test("a profile on the node's network, or a launch that holds no stand-in for the start network, serves none", () => {
-			const placed = new Set<ProfileRef>(["P1"])
-			expect(servesStandIn(open, locked.expect, placed, true)).toBe(false)
-			expect(servesStandIn(closed, verified.expect, placed, true)).toBe(false)
-			expect(servesStandIn(empty, made.expect, new Set(), false)).toBe(false)
-		})
-
-		test("the window takes a line up to its close, and none after it or before any step served a stand-in", () => {
-			expect(inStandInWindow(1_000, 1_000)).toBe(true)
-			expect(inStandInWindow(1_001, 1_000)).toBe(false)
-			expect(inStandInWindow(0, undefined)).toBe(false)
-			expect(STAND_IN_TAIL.ms).toBe(13_500)
 		})
 	})
 

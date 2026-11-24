@@ -572,15 +572,7 @@ export function checkWrites(ctx: WriteContext): Violation[] {
 export type ErrorEntry =
 	| { kind: "page-error"; page: string; text: string }
 	| { kind: "console-error"; page: string; text: string }
-	| {
-			kind: "log"
-			level: "warn" | "error"
-			source: string
-			context?: string
-			text: string
-			/** Logged inside the run's stand-in window (`inStandInWindow`). */
-			standIn?: true
-	  }
+	| { kind: "log"; level: "warn" | "error"; source: string; context?: string; text: string }
 
 /** An error the run accepts, with where it comes from and why it is not the wallet failing. */
 export interface AllowedError {
@@ -595,8 +587,6 @@ export interface AllowedError {
 	everyMessage?: true
 	/** Entries this one never covers, whatever they carry. */
 	except?: RegExp
-	/** Only a log line logged inside the run's stand-in window. */
-	onStandIn?: true
 }
 
 /** An unhandled rejection is a defect whatever it carries, and a failed restore is the user's. */
@@ -614,49 +604,19 @@ export const GUARDED_NODE_REFUSAL: AllowedError = {
 	reason: "the stand-in refuses every node call, and the wallet logs each refused node call as an error",
 }
 
-/** A route whose every endpoint is a stand-in admits none, and the routed node then throws its own
- *  text, which carries none of the stand-in's. A real network's outage throws the same text, so the
- *  entry holds only inside the run's stand-in window. */
+/** A route of more than one endpoint that admits none throws its own text, which carries none of
+ *  the stand-in's. A lone route never throws it: it surfaces its endpoint's own failure, so a run
+ *  whose every seeded route of more than one endpoint is all stand-ins (`startRun` checks) can meet
+ *  this text from a stand-in only. Its transaction twin a lone route does throw, so it stays out. */
 export const ROUTED_STAND_IN_REFUSAL: AllowedError = {
-	pattern: /^No endpoint of this network can take the (?:call|transaction)$/,
+	pattern: /^No endpoint of this network can take the call$/,
 	kinds: ["log"],
 	during: "any step",
-	onStandIn: true,
 	everyMessage: true,
 	except: NO_REFUSAL,
 	source: cite("packages/aztec-runtime/src/routing/routed-node.ts", 193, "const noEndpoint = (what: string) =>"),
 	reason: "a route of stand-ins admits no endpoint, and the wallet logs each node call it refuses as an error",
 }
-
-/** How long a read begun on a network may still log once its profile has left that network: a
- *  network switch evicts nothing, so the gas-balance reader's failed-leg retry still runs, and
- *  each of its two reads may take one routed call's pauses. */
-export const STAND_IN_TAIL = {
-	ms: 1_500 + 2 * (1_000 + 2_000 + 3_000),
-	sources: [
-		cite("src/wallet/services/execution/gas-balance-reader.ts", 34, "GAS_BALANCE_FAILED_LEG_RETRY_DELAY_MS = 1_500"),
-		cite("src/wallet/services/execution/service.ts", 596, "onActiveProfileChanged.add(() => this.gasBalances.evictAll())"),
-		cite("packages/aztec-runtime/src/routing/endpoint-health.ts", 19, "backoffMs: [1_000, 2_000, 3_000],"),
-	],
-}
-
-/** Whether a step may serve a profile on a network whose every endpoint is the launch's stand-in:
- *  one open at its start or end, or one its contract names, that the run has not placed on the
- *  node's network, when the launch holds every endpoint of the network a new profile starts on. */
-export function servesStandIn(
-	before: World,
-	expect: Pick<Expectation, "next" | "writes">,
-	placed: ReadonlySet<ProfileRef>,
-	startsOnStandIn: boolean,
-): boolean {
-	const open = [before.session, expect.next.session].flatMap((x) => (x.kind === "open" ? [x.ref] : []))
-	const named = expect.writes.flatMap((w) => (w.kind === "device" ? [] : [w.ref]))
-	return startsOnStandIn && [...open, ...named].some((ref) => !placed.has(ref))
-}
-
-/** Whether a line logged at `at` falls inside the run's stand-in window, which closes at `closes`
- *  (`STAND_IN_TAIL` past the drain of the last step that served a stand-in network). */
-export const inStandInWindow = (at: number, closes: number | undefined): boolean => closes !== undefined && at <= closes
 
 /** The reviewed allowlist. */
 export const ALLOWED_ERRORS: readonly AllowedError[] = [
@@ -774,7 +734,6 @@ export interface ErrorVerdict {
 const allows = (a: AllowedError, e: ErrorEntry, ends: readonly StepEnd[]): boolean =>
 	a.kinds.includes(e.kind) &&
 	(a.during === "any step" || a.during.some((d) => ends.includes(d))) &&
-	(!a.onStandIn || (e.kind === "log" && e.standIn === true)) &&
 	!a.except?.test(e.text) &&
 	(a.everyMessage ? everyCarried(e.text, a.pattern) : a.pattern.test(e.text))
 

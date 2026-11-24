@@ -740,8 +740,7 @@ class Session {
 			restarted = true
 		}
 		if (restarted) s.logs.lastId = 0
-		// A session places no profile, so each sits on the network it started on.
-		const logs = await checkStepLogs(s, ends, restarted, needles, s.startsOnStandIn)
+		const logs = await checkStepLogs(s, ends, restarted, needles)
 		for (const why of logs.incomplete) incomplete(why)
 		const active = await callService<{ id: string } | undefined>(s.anchor, "profile", "getActiveProfile")
 		const session = await readSession(s.anchor, this.pages.runPages(), active === undefined)
