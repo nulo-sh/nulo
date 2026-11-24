@@ -20,7 +20,7 @@ post_implementation_hardening: not scheduled
 - **Date:** 2026-11-24. Three PRs into `dev`: #1942 (arc 1) and #1945 (arc 2), merged, and arc 3's, which carries this close-out; its merge closes #1938 and #1939, as the first two closed #1925 and #1926.
 - **Status:** completed.
 - **Shipped:**
-  - #1925: Delete profile names every imported account the deletion erases, on every chain, through `getImportedAccounts(profileId)`; one on a chain with no network row reads `AZTEC:<chain id> · <address>` (decision 1).
+  - #1925: Delete profile names every imported account the deletion erases, on every chain, through `getImportedAccounts(profileId)`; one on a chain with no network row reads `AZTEC:<chain id> · <address>` (decision 1), or, for a retired chain since #1991, its network and version.
   - #1926: one bound on a token's decimals, `MAX_DECIMALS = 77` in `utils/token-amount.ts`, read at the decimals decode, at restore, in the seeder, the seed preflight and Send; New token's refusal and Send's line "Nulo can't send this token." (decisions 4 to 6). A 24-decimal proof per screen, each red at 18; no stored-shape stamp.
   - #1938: a running reset makes Delete profile's list unreadable: the line "A network reset is running. Wait for it to finish.", a press refused with "Couldn't delete profile. Try again", and the list read again when the reset ends (decision 2). Reproduced first, at `4bbfe03f6` (§ The issues, checked).
   - #1939: during a paused reset Export first shows for every profile and leads to the account export page (decision 3).
