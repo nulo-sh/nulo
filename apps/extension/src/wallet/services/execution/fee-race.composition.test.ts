@@ -273,6 +273,20 @@ describe("a PrivateFPC send beside another that holds the contract's notes", () 
 	)
 })
 
+describe("an estimate held past the wallet's estimate TTL", () => {
+	// The next admission reaps an estimate admitted longer ago than the TTL; O2 does not hold the
+	// wallet to a result for it.
+	test(
+		"is reaped, so the step that lands it fails it; one held under the TTL lands",
+		async () => {
+			const reaped = await green([openSend("fee_juice"), PAST_WINDOW, PAST_WINDOW, openWindow("sponsor"), LAND, askAgain("op1")])
+			const kept = await green([openSend("fee_juice"), PAST_WINDOW, openWindow("sponsor"), LAND, askAgain("op1")])
+			expect([outcomeAt(reaped, 5), outcomeAt(kept, 4)]).toEqual(["failed", "landed"])
+		},
+		RUN_MS,
+	)
+})
+
 describe("each oracle can fail — break fixtures", () => {
 	test(
 		"O1: the window's rule reads an estimate in flight as settled",
@@ -313,6 +327,12 @@ describe("each oracle can fail — break fixtures", () => {
 				"O2",
 				/failed in the popup while the worker answered it queued/,
 			),
+		RUN_MS,
+	)
+
+	test(
+		"O2: the worker fails a default-entrypoint preview a step landed",
+		() => redOn([openWindow("no_from"), LAND], { landedRunFails: true }, "O2", /op1's estimate failed after a step landed it/),
 		RUN_MS,
 	)
 
@@ -382,6 +402,7 @@ describe("coverage", () => {
 		)
 		expect(seen((p) => p.timing)).toEqual(new Set(["now", "first-offer"]))
 		expect(seen((p) => p.estimate)).toEqual(new Set(["landed", "failed", "queued"]))
+		expect([...seen((p) => `${p.method}:${p.estimate}`)]).toContain("no_from:landed")
 		expect(seen((p) => (p.ahead > 0 ? "behind" : "first"))).toEqual(new Set(["behind", "first"]))
 		expect(seen((p) => p.end ?? "open")).toEqual(new Set(["sent", "rebuild", "ended"]))
 	})

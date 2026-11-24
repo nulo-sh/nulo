@@ -45,6 +45,7 @@ import { TimeoutError } from "@aztec-labs/foundation/error"
 import type { FunctionCall } from "@aztec-labs/stdlib/abi"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { TxHash, TxProvingResult } from "@aztec-labs/stdlib/tx"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 import { type JobProgress, JobCancelledSentinel, type QueuedFeeReask } from "@nulo/wallet-core/jobs"
 import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 import { pickPrimaryIndex, pickPrimaryWireCall } from "@/utils/primary-method"
@@ -1088,7 +1089,7 @@ const WAIT_INTERVAL_BOUNDS_S = { min: 1, max: 60 } as const
 /** Upstream's wait options from the dApp's raw `wait`, which the bridge checks only for types; `null`
  *  reads as omitted, and `initialDelay` defaults to the interval, as upstream's does. */
 export function dappWaitOpts(wait: unknown): WaitOpts {
-	const asked: WaitOpts = typeof wait === "object" && wait !== null ? wait : {}
+	const asked: WaitOpts = isObjectLike(wait) ? wait : {}
 	const interval = Math.min(
 		Math.max(asked.interval ?? DefaultWaitOpts.interval ?? 1, WAIT_INTERVAL_BOUNDS_S.min),
 		WAIT_INTERVAL_BOUNDS_S.max,

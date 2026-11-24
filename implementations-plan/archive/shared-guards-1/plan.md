@@ -1,7 +1,7 @@
 ---
 plan: shared-guards-1
 tier: mid
-status: arc 1 merged (#1956); arc 2 in PR
+status: completed
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,9 +14,27 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-11-24. Three arcs, one PR each into `dev`: #1956, #1963, and arc 3's, which carries this close-out; its merge archives this plan and closes #1928.
+- **Status:** completed.
+- **Shipped:**
+  - Every restatement the inventory found calls the wallet-core primitive with exactly its acceptance set (§ Counts): `isObjectLike`, `isRecord`, the new `isPlainObject`, `isHex32` and the newly exported `HEX_32`, `errorMessageFromUnknown`, `sleep`, `toBase64`.
+  - Kept sites under names that state their contract, each that differs pinned against the wrong guard: K1, K3-K5 on the baseline; K6-K9 outside it (§ Kept sites).
+  - `apps/extension/src/utils/inline-guard-ban.test.ts` and its reviewed baseline, now K1 and K3-K5 alone, and the shrink-only ratchet `scripts/ci-cd/inline-guard-ratchet.test.ts`. Arc 3 made the ban read a hex class quantified as a group's only member, and lets a kept entry move only with its file.
+  - wallet-core leaf entries `./guards`, `./field` and `./errors` (D9, D10); stamps lowered to their observed scores: `trim` 45 to 43, `encodeValue` 25 to 24, `applyRowTransform` 39 to 38.
+- **Review:** each arc's loop converged (§ Arc reviews); after arc 3, the cross-arc Codex pass found two gaps in the ban and the ratchet, fixed and verified.
+- **Gates, arc 3:** lint, typecheck:all, test:all, audit:vue, test:ci-gating, check:plans, baseline:rescore and build-storybook green at retry 0; test:release green but for its 7 zip tests, which need a `zip` binary this host lacks (CI has it). Network e2e on Chrome at retry 0, one `e2e:agent` run: the plan's three specs, plus `tx-sendTx-default`, `default-token-seeding` and `snack-placement`, which drive the dApp `wait`, stored seed markers and PXE assertion frames: 13 of 13 pass at `2db89e67f`.
+- **Deviations:** arc 3 ran beside the open #1942 and #1945 on the orchestrator's call (arc table, recon § Collisions); D10's two leaf entries, a wallet-core change the plan had not foreseen.
+- **Dispositions:** `onWalletMessage` admits a decrypted array, as it always did, and the pipeline answers or refuses it like any malformed call: no failure, so no issue; its row pins the behaviour. Inlining the aliases the removed casts left: rejected as churn.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` sits at 8,148 of 8,192 bytes and nothing in it is superseded here; the leaf-entry rule lives beside the code, in `packages/wallet-core/README.md`.
+- **Seeds retired:** the `/goal` and `/loop` seeds in § Seeds were never run; the orchestrator drove each arc.
+
 # shared-guards-1: inline restatements of the wallet-core primitives call the primitive, and a guard stops the regrowth
 
-Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md). Live log: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults and phase logs: [lessons/phase-0.md](lessons/phase-0.md), [phase-1](lessons/phase-1.md), [phase-5](lessons/phase-5.md), [phase-6](lessons/phase-6.md).
 
 Issue #1928 (and the hex part of closed #1452). Three arcs, one PR each against `dev`, no stack. The site table is this plan's body: every site, its inline form, the helper it becomes, and whether the two accept the same values.
 
@@ -24,7 +42,7 @@ Issue #1928 (and the hex part of closed #1452). Three arcs, one PR each against 
 |---|---|---|---|
 | 1 | 1-4 | the guard and its baseline; the five packages; extension `content-script`, `e2e`, `utils`, `wallet/logger` | nothing |
 | 2 | 5 | extension `wallet/config`, `wallet/storage`, the free `wallet/services` files; `isPlainObject` | arc 1 merged |
-| 3 | 6 | the files other changes hold today (recon § Collisions), `execution/dapp-send-executor.ts` and its siblings included; closes #1928 | arc 2 merged and every holder in recon § Collisions merged or closed |
+| 3 | 6 | the files other changes held at planning (recon § Collisions), `execution/dapp-send-executor.ts` included; closes #1928 | arc 2 merged. PRs #1942 and #1945 still hold four of its files and wait for the owner with no date; it runs beside them on the orchestrator's call (2026-11-24), every edit at least one unchanged line from theirs (recon § Collisions) |
 
 ## Outcome & Quality Bar
 
@@ -145,7 +163,7 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 | `wallet/storage/stored-shapes/baseline.ts` | 250; 500, 501 | `isRecord`; `isObjectLike` | same |
 | `wallet/storage/stored-shapes/emit.ts` | 54; 108-109 | `!isObjectLike`; local `isPlainObject` removed for the guards one | same |
 
-*Arc 3: files held elsewhere today.* At its base, rerun the inventory; a site added since joins this arc.
+*Arc 3: files held elsewhere at planning.* Lines at `e4f9011f8`, arc 3's base. The inventory rerun there found no new site: the guard passed on the arc 2 baseline, and the extractor, delay and base64 searches found only the test-support copies recon names.
 
 | File | Lines | Becomes | Set |
 |---|---|---|---|
@@ -154,10 +172,15 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 | `backup/backup-migration-registry.ts`, `backup/trust-gate.ts` | 175, 191, 258, 339, 409; 82, 157 | `!isRecord` | same; backup file |
 | `backup/row-map-migration.ts` | 300 (`applyRowTransform`, stamp to the observed score); 366 | `!isRecord`; `!isObjectLike(value) && typeof value !== "function"`; 193-194 stays (K9) | same |
 | `token/seeder.ts`, `token/service.ts` | 119, 144; 937 | `!isRecord`; `!isObjectLike` | same; stored rows |
-| `execution/dapp-send-executor.ts` (moved from arc 2: lane `dapp-estimation-extract-1`, #1934, is splitting it and holds `execution/service.ts`, `transfer-executor.ts`, `estimate-reuse-shared.ts` and any new file beside them) | 1432 | `isObjectLike` | same |
+| `execution/dapp-send-executor.ts` (moved from arc 2 while #1934's lane split it; the split, #1965, left the site here) | 1091 | `isObjectLike` | same |
 | `wallet-sdk/content-script-validator.ts`, `wallet-sdk/wallet-message.ts` | 75, 157; 75 | `isObjectLike` | same; dApp ingress |
 | `popup/pages/send-submit.ts` | 9 | K5 | kept |
-| `extension-messaging/src/errors.ts` (held by PR #1945) | 90; 368; 372, 379 | `errorMessageFromUnknown`; `isHex32`; `isObjectLike` | same; PXE wire details |
+| `extension-messaging/src/errors.ts` (PR #1945 edits it near 429 and 807) | 90; 368; 372, 379 | `errorMessageFromUnknown`; `isHex32`; `isObjectLike`, each from its wallet-core leaf (D10) | same; PXE wire details |
+
+**Arc 3 site proofs.** An array is the value that tells `isObjectLike` from `isRecord`, so each site was swapped to the other helper's set and the tests that reach it were run (a mutation pass at `25d9f128a`).
+- Already held by a test: `normalizeBackupData`'s data and scratch-row checks (`backup-migration-core.pins.test.ts`) and `deepFreeze` (`footprint-coverage.test.ts`).
+- Held by a row this arc adds, each failing under the other helper: the config slice element, the stored config value and the root-slice row (`backup-migration-core.pins.test.ts`); `applyRowTransform` (`footprint-coverage.test.ts`); `decodeSeedMarkers` (`seeder.test.ts`, read through storage); `collectAccountStateErrors` (`full-backup-helpers.test.ts`: an array entry carries no error); `onWalletMessage` (`wallet-message.trace.test.ts`: an array is captured, and `null`, a string and a number are dropped before capture, which no test held).
+- The same under either helper on every input these sites receive, each decoded from JSON or rebuilt by wallet code: the rest read only named fields such an array lacks (a structured clone keeps an array's named properties, but none reaches them; Codex r1) (`scopeOfRow`, `seededIdFor`, `isValidSender`, `isValidContract`, `mergeSliceItems`, `isBackupProfile`, `parseMarkerEntry`, `rawTokenIdsForProfile`, `validateContentScriptMessage`, `frameOf`, `boundedAssertion`), test a fixed key with `in` (`normalizeAllIds`, `remapByMap`), key the restore's collision check on fields an array lacks (`AccountService`), or meet a refusal that comes first (`refusedAsEarlierPasskey`: no `checksum`; `dappWaitOpts`, which spreads what it reads: the bridge's dispatch-time parse refuses an array `wait`, upstream's `WaitOptsSchema` being a `z.object` (Opus); `onlyOwnKeys`: the object schema after the pipe, whose drop logs the same constant, so its new array row pins the refusal only).
 
 **Counts.** Same set and converted: 110 object guards, 3 hex literals, 3 message extractors, 1 delay, 2 base64 encodes, 1 stand-alone prototype check. Same set but kept inline: 1 (K1). Differs and kept: 7 (K3-K9). Differs and asked: 0. Baseline: 64 entries after arc 1 (60 pending; K1, K3-K5), 32 after arc 2 (28 pending), 4 after arc 3.
 
@@ -186,6 +209,7 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 | D6 | Three arcs: collision first, then size (arc 1 is about 39 files) | one arc for every free file (about 62); arc 1 only the guard | the lane brief asks for a split past about 40 files; a guard-only arc ships a baseline of every site with nothing removed |
 | D7 | Sites inside accepted complexity functions are converted and their stamps lowered to the observed score | leave them on the baseline | the skill's procedure allows a lowered stamp; a baseline entry whose only reason is "inside an accepted function" states no contract |
 | D9 | From arc 2, a file that does not already import the `@nulo/wallet-core/utils` barrel takes its guards from the `./guards` leaf; one that does extends that import | the barrel everywhere, as arc 1 did | a barrel import is a new edge into a module Storybook can split into its own chunk, which is how arc 1's CI met a chunk cycle; a leaf with no imports adds no such edge, and extending an existing barrel import adds none either |
+| D10 | wallet-core exports `./field` and `./errors` as leaves, like `./guards`, and `extension-messaging/src/errors.ts` takes all three helpers from them | import the `utils` barrel there; keep its regex and extractor inline, on the baseline | that module imported nothing and every story's graph holds it: the barrel import put its chunk on a static cycle with a story's (arc 3's local Storybook build); both files import nothing, so a leaf adds no edge, and a copy kept for a build reason is the restatement the issue names |
 
 ## Phases
 
@@ -230,14 +254,14 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 
 - Arc 1: branch `shared-guards-1-a1` off `origin/dev` after `git fetch`, its first commit this plan's commit cherry-picked. PR `refactor: wallet-core guards replace their inline restatements, and a guard stops regrowth` (89 characters). Body: `Part of #1928`, what is left on the baseline and why, and a note for open changes in held files: editing a baselined expression, or moving its file, now needs that site converted, since the ratchet refuses a new entry.
 - Arc 2: branch `shared-guards-1-a2` off `origin/dev` once arc 1 merged. PR `refactor(wallet): services and storage call the wallet-core guards` (66). `Part of #1928`.
-- Arc 3: branch `shared-guards-1-a3` once arc 2 and every holder have landed. PR `refactor(wallet): backup, sdk and token sites call the wallet-core guards` (73). `Closes #1928`; the close-out commits ride on it.
+- Arc 3: branch `shared-guards-1-a3` once arc 2 merged, beside #1942 and #1945 (arc table). PR `refactor(wallet): backup, sdk and token sites call the wallet-core guards` (73). `Closes #1928`; the close-out commits ride on it.
 - Each PR against `dev`, opened ready after its loop converges, no label at creation; a label later only where a path filter would skip a suite. The body states "No visible change", the validation runs and their results. Nothing is committed after a PR's last push.
 - Close-out (arc 3's final commits): merge `origin/dev`, read `index.md` and `lessons.md`; Outcome block; lessons pass; `git mv` into `archive/` in its own commit; index line moved.
 - Parallelism: arcs 2 and 3 touch disjoint files but share the baseline JSON; serial is the plan (each arc is under an hour of work).
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) as read at `4a333b343`. Plan-specific values:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) as read at `4a333b343`. Plan-specific values:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2, per arc at its boundary: Codex `gpt-6.1-sol` at `high` (`~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`), resumed with each fix diff, hard stop at three rounds. Each prompt carries the arc map, the standard's two rules verbatim, and the adversarial ask on rule 1: a site moved to a helper with another set, a name hiding `isObjectLike`, a changed refusal message, a published entry that gained an import, a baseline reason that is false. One Opus 5.5 diff review (`Agent`, `general-purpose`, `model: opus`) with the same ask beside round 1. After arc 3, one fresh Codex session over the net diff from `4a333b343` asks for cross-arc issues. Log every round in `lessons/phase-N.md` and below.
@@ -263,6 +287,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 - **Arc 2, Codex r2** (resumed on `41bf3e5c6`): **approve**, no new finding.
 - **Arc 2, Opus diff review** (general-purpose, opus): approve; no set mismatch at any of the 32 sites, `isPlainObject` equal to both checks it replaced, no published entry reached (it bundled `wallet-crypto`'s entry: no `guards.ts`), `encodeValue` scores 24. One nit, accepted: four casts in `price/service.ts` and `token-list/service.ts` that the narrowing had made redundant.
 - **Arc 2, Codex r3** (resumed, targeted verification of the cast removal): **approve**; both files emit the same JavaScript before and after. The loop stops with no material finding open.
+- **Arc 3, Codex r1** (`gpt-6.1-sol`, high, diff `e4f9011f8..fab840823`): **approve**, no finding. It re-ran each array pin's mutation in memory (all seven and K5's fail under the other guard), simulated both holders' merges (no conflict arc 3 adds) and endorsed D10 (private import paths only; no published surface widens). It noted that a structured clone keeps an array's named properties; none reaches these sites, so the proofs' wording now names the inputs they receive. Converged.
+- **Arc 3, Opus diff review** (general-purpose, opus): **approve**, no correctness finding; it traced all 28 sites and each new row under the other helper. Accepted: `dappWaitOpts` spreads what it reads, so its proof is the bridge's `WaitOptsSchema` parse, not named fields; recon notes that #1945 stacks on #1942's branch. Rejected: inlining the aliases (`const e = raw`) the removed casts left, churn with no behaviour change. Noted, no action: `onWalletMessage` lets a decrypted array through, as it did; its row pins that.
+- **Cross-arc Codex pass** (fresh `gpt-6.1-sol` session, high, net diff `4a333b343..ff4d46a21`): conditional approve, three findings, all demonstrated and accepted. `/^0x(?:[0-9a-fA-F]){64}$/` slipped the ban, which read `{64}` only right after the class: it now reads it past a group holding the class alone, and `(0x[0-9a-f]){64}` stays no finding. A kept entry could leave a file that still exists and reappear in another, so converting a kept site freed its exception for other code: it now moves only when its base file is gone at head (a rename), the smaller fix than git rename detection. The wallet-core README's leaf guidance now states D9's exception. It found no set mismatch across arcs, and its in-memory builds of the four published entries were byte-identical to the base's.
+- **Cross-arc Codex r2** (resumed on `f758ebc37`): **approve**, no finding. The loop stops with nothing open.
 
 ## Seeds
 

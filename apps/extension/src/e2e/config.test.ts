@@ -1,5 +1,6 @@
-// Loaded during collection, so each case's re-import only re-evaluates it.
+// Loaded during collection, so each case's re-import only re-evaluates them.
 import "./config"
+import "./execute-fixture-gate"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 /**

@@ -731,6 +731,10 @@ describe("collectRestoreErrors — account-state top-level records (skip/violati
 		])
 	})
 
+	it("reads an array entry as an object that carries no error: nothing is collected, and no malformed record", () => {
+		expect(collectRestoreErrors("account-state", [[]])).toBeNull()
+	})
+
 	it("guards malformed child arrays instead of throwing (post-finalize path)", () => {
 		const result = collectRestoreErrors("account-state", [
 			{ networkId: "n1", senders: null, contracts: undefined, restoreError: "malformed account-state item" },

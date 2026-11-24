@@ -45,4 +45,11 @@ Base: `origin/dev` at `4a333b343`. Sources: an AST inventory (TypeScript compile
 | PR #1948 | no file with a site |
 | lane `dapp-estimation-extract-1` (#1934), added 2026-11-24 at arc 2 | `execution/dapp-send-executor.ts`, `execution/service.ts`, `execution/transfer-executor.ts`, `execution/estimate-reuse-shared.ts` and any new file beside them; only the first holds a site, which moved to arc 3 |
 
+**At arc 3, 2026-11-24.** #1949 and #1934's split (#1965) have landed. PRs #1942 and #1945 are open and wait for the owner with no date; `backup-contracts-1` has no branch and starts from whatever `dev` holds. The plan gated arc 3 on every holder above merging or closing; on the orchestrator's call the gate is now that no arc-3 edit sits within one unchanged line of theirs, so each merges without a hand edit:
+- #1942 edits `account/service.ts` at 130-138 and 285-297; arc 3 edits its import at 20 and the guard at 1080.
+- #1945 edits `token/seeder.ts` at 3 (an inserted import), 8, 37 and 659; `token/service.ts` at 6, 49 and 1078; `extension-messaging/src/errors.ts` near 429 and 807; and `token/seeder.test.ts` at 13 and 152. Arc 3 edits `seeder.ts` at 4, 119 and 144, `service.ts` at 35 and 937, `errors.ts` with three imports after line 15 and at 90 and 368-379, and adds its seeder test after line 371.
+- #1945 stacks on #1942's branch, so it restacks onto `dev` once #1942 lands; arc 3 changes nothing in that.
+- Arc 3's import in `backup/trust-gate.ts` moves three of its lines that `tests/e2e/helpers/profile-chaos/model.ts` cites by number (63, 75, 106 become 64, 76, 107); those three lines merge outside both conflict hunks the PRs already meet in that file, which are #1942's own citations.
+- Checked with `git merge-tree` against each PR's head: the only conflict either meets, `tests/e2e/helpers/profile-chaos/model.ts` (and `implementations-plan/index.md` for #1942), it meets against `dev` already.
+
 Closed `known-limit` issues searched ("guard", "isRecord", "hex", "duplicate", "inline"): none concerns an object guard; #372 (a token row stored in another hex spelling) concerns token-row keys, which no site here reads.

@@ -5,8 +5,8 @@ import { transferFailureLogLevel, transferFailureSnack } from "@/popup/utils/tra
 import { sendSummary } from "@/utils/send-summary"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 
-/** View opens `/popup/tx/<hash>`, so the hash is offered only once it is a 32-byte hex string. */
-const TX_HASH = /^0x[0-9a-f]{64}$/i
+/** View opens `/popup/tx/<hash>`, so it is offered only for a 32-byte hex hash: either case, after `0x` or `0X`. */
+const TX_HASH_ANY_CASE = /^0x[0-9a-f]{64}$/i
 /** Details opens `/popup/journal/<id>`, so only a journal id of 16 hex characters is offered. */
 const JOURNAL_ID = /^[0-9a-f]{16}$/
 
@@ -111,7 +111,7 @@ export function submitTransfer(deps: SubmitDeps, snap: TransferSnapshot): string
 }
 
 function viewAction(deps: SubmitDeps, hash: string): ToastAction | undefined {
-	if (!TX_HASH.test(hash)) return undefined
+	if (!TX_HASH_ANY_CASE.test(hash)) return undefined
 	return { label: "View", onSelect: () => deps.viewTransaction(hash) }
 }
 

@@ -17,7 +17,7 @@ import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { isSealedText, type SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { array_max, fromBase64Lenient, hasIntersectionByKeys, KeyedLock, Lock } from "@/wallet/utils"
-import { EventHandler, toBase64 } from "@nulo/wallet-core/utils"
+import { EventHandler, isObjectLike, toBase64 } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { RunFence } from "@/wallet/services/profile/spec"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
@@ -1077,7 +1077,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			// excluded HERE only (the key extraction would throw on a hostile null,
 			// aborting the slice); they still flow to restoreRows, which records
 			// each as its own restoreError.
-			const collidable = accounts.filter((a): a is Account => typeof a === "object" && a !== null)
+			const collidable = accounts.filter((a): a is Account => isObjectLike(a))
 			const collides = hasIntersectionByKeys(await this.liveRows(), collidable, ["profileId", "chainId", "address"])
 			if (collides) throw new Error("Duplicate account")
 
