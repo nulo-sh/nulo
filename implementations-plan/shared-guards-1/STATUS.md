@@ -15,3 +15,5 @@
 - 2026-11-24 00:55Z arc 2 gates green: lint, typecheck:all, test:all, audit:vue (one rerun, cold-import timeout outside the arc), test:ci-gating, check:plans, rescore, build-storybook, network e2e 3 specs at retry 0 on Chrome; Codex r1 approve (1 low accepted), r2 approve
 - 2026-11-24 01:10Z arc 2 review converged: Codex r1 approve (1 low accepted), r2 approve, Opus approve (1 nit accepted), Codex r3 approve on the fix; final gates and PR next
 - 2026-11-24 01:35Z final gates on 189e67e5b green: lint, typecheck:all, test:ci-gating, test:all (one rerun: #1961 at load ~175); PR next
+- 2026-11-24 02:00Z arc 3 on `shared-guards-1-a3` off origin/dev e4f9011f8, beside #1942 and #1945 on the orchestrator's call; inventory rerun: no new site
+- 2026-11-24 02:40Z arc 3 implemented: 28 sites converted, baseline 32 → 4, K5 renamed and pinned (fails under `isHex32`), `applyRowTransform` 39 → 38; mutation pass: 8 array rows added; `./field` and `./errors` leaves after Storybook met a chunk cycle (D10); lint, typecheck:all, rescore, build-storybook green; review next

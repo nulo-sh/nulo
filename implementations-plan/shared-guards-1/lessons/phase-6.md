@@ -1,0 +1,11 @@
+# Phase 6: arc 3 implementation and review
+
+## Implementation
+
+- Base `e4f9011f8`. The guard passed on the arc 2 baseline there, so no object or hex site was added since; the extractor, delay and base64 searches found only recon's test-support copies. `dapp-send-executor.ts`'s site moved from 1432 to 1091 with #1965's split and stayed in that file.
+- Entry condition changed on the orchestrator's call: #1942 and #1945 are open, waiting for the owner. Every arc-3 edit keeps at least one unchanged line from theirs (recon § Collisions). `git merge-tree` against both heads found one new conflict, `seeder.test.ts`: extending its `./seeder` import touched the line under #1945's inserted import. The pin moved to a storage-level test with no import change; after that neither PR meets a conflict arc 3 causes.
+- Per-site proof by mutation: each site swapped to the other helper's set (`isObjectLike(x) && !Array.isArray(x)`, or `isRecord(x) || Array.isArray(x)`), then the test files that reach it run. 3 of 27 died at first; 8 rows were added, and 7 of them kill their mutant. The eighth, `onlyOwnKeys`, is equivalent (the object schema after the pipe refuses the array, and the drop logs one constant), so its row pins the refusal only. Plan § Site table, arc 3 site proofs, lists each site's disposition.
+- `wallet-message.trace.test.ts`'s array row first asserted after `await h.done`, so the wrong guard failed by the 5 s test timeout; the capture is synchronous, so the assertion now comes first and the mutant fails in 9 ms.
+- `bun run --cwd apps/extension build-storybook` failed on a chunk cycle (`FormPopup.stories` with an `errors` chunk) once `extension-messaging/src/errors.ts`, which imported nothing, imported the `utils` barrel. wallet-core now exports `./field` and `./errors` as leaves (D10) and the build passes. Of the other converted files, only that one is in the Storybook bundle (searched for a string literal of each in `storybook-static`), so the two backup files that already imported the barrel extend it, as D9 says.
+- `K5`'s first comment claimed the tx route reads any spelling; it matches the stored hash exactly (`popup/pages/tx/[id].vue:66`), so the comment states only the case rule.
+- `applyRowTransform` scored 38 after its site converted: stamp edited, `baseline:complexity` rewritten, `baseline:rescore` OK.
