@@ -1,0 +1,2 @@
+- 2026-11-23: arc 1 (#1925) built; red at the base, green after (unit, component, service).
+- 2026-11-23: arc 1 Codex pass: sound; F1-F3 pre-existing (#1938, #1939, #1940), F4 comments fixed; #1941 known limit.
