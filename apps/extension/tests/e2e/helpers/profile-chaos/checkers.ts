@@ -15,6 +15,7 @@ import {
 	type ModelFile,
 	type ModelProfile,
 	type Outcome,
+	type ParamsMap,
 	type ProfileRef,
 	type StepEnd,
 	type World,
@@ -280,6 +281,15 @@ function answeredBy(b: Bindings, want: Ceremony, got: Answer): boolean | string 
 	if ([...b.credentials.values()].includes(got.id)) return "a create answered with a credential already bound"
 	b.credentials.set(want.credential, got.id)
 	return true
+}
+
+/** The passkey a passkey profile's account file asks at Save: its own, or the other one the step
+ *  answers with; none the authenticator refused, and none when the page refused the file password,
+ *  since Save never asked. */
+export function accountFileCeremonies(open: ModelProfile, p: ParamsMap["exportAccountFile"], beforeSave: boolean): Ceremony[] {
+	if (beforeSave || p.variant === "refuse") return []
+	const credential = p.variant === "other" ? p.other : open.credential
+	return [{ kind: "get", credential: credential as CredentialRef }]
 }
 
 // ── O3: what each action wrote ──────────────────────────────────────────
