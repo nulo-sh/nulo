@@ -44,7 +44,8 @@ to live in the service worker while the PXE lives in the offscreen document.
 `dispatch()` runs, in order, for every call and again for every batch leg:
 
 1. the dApp session read, once per call (each batch leg reads it again);
-2. the method check, then the arity check (`args` is an array, and the method's `argSchema`);
+2. the method check, then the arity check (`args` is an array, and the method's `argSchema`; a
+   `batch` carries at most 1,024 calls, none of them a `batch`);
 3. for a `batch`, the popup-leg refusal (`refusedInBatch`), before any leg runs;
 4. the capability check;
 5. the schema parse (`wallet-schema-args.ts`). It runs after the capability check, so an origin with

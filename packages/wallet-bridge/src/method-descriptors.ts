@@ -102,11 +102,15 @@ export interface MethodDescriptor {
 
 // ── Arg guards ─────────────────────────────────────────────────────────
 
-/** Each leg is checked by its own method's guard and parse when it re-enters dispatch. */
+/** The most calls one `batch` may carry. */
+const MAX_BATCH_CALLS = 1_024
+
+/** Each leg is checked by its own method's guard and parse when it re-enters dispatch. A `batch`
+ *  leg is refused here, so one batch runs at most {@link MAX_BATCH_CALLS} calls at any depth. */
 export function argsBatch(args: readonly unknown[]): boolean {
 	const legs = args[0]
-	if (!Array.isArray(legs)) return false
-	return legs.every((leg) => isRecord(leg) && typeof leg.name === "string" && Array.isArray(leg.args))
+	if (!Array.isArray(legs) || legs.length > MAX_BATCH_CALLS) return false
+	return legs.every((leg) => isRecord(leg) && typeof leg.name === "string" && leg.name !== "batch" && Array.isArray(leg.args))
 }
 
 export function argsCreateAuthWit(args: readonly unknown[]): boolean {
