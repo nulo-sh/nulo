@@ -3,7 +3,7 @@
  * the facts as Send drew them for its payer, and the new fee against the one the person accepted.
  */
 import type { QueuedFeeReask } from "@nulo/wallet-core/jobs"
-import { type PayerKind, payerKindOf, type PublishFacts, publishFacts, type TransferSide } from "@/components/composite/send/publish-facts"
+import { type PayerKind, payerKindOf, type PublishFacts, publishFacts, type TransferSide } from "./publish-facts"
 import { feeDisplay, feeText } from "@/utils/fee-estimation"
 import { TransferType } from "@/wallet/services/transaction/spec"
 

@@ -19,7 +19,7 @@ import type { Logger } from "@aztec-labs/foundation/log"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { type AztecNode, AztecNodeApiSchema, createAztecNodeClient } from "@aztec-labs/stdlib/interfaces/client"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
-import { rpcTransportVerdict } from "@nulo/wallet-core/utils"
+import { rpcTransportVerdict, sleep } from "@nulo/wallet-core/utils"
 import type { NodeFactory, RoutedNodeOptions } from "../ports/node-factory-port"
 import { type RouteLogEvent, type RouteSpec, type RoutedNode, realTimer, routeNode } from "../routing/routed-node"
 import { makeFetchWithTimeout, makeSingleAttemptFetch, type RetryOptions } from "../utils/fetch"
@@ -115,7 +115,7 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 			{ ...spec, endpoints },
 			{
 				now: Date.now,
-				sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+				sleep,
 				timer: realTimer,
 				log: logRouteEvent,
 				changed: options.onChange,

@@ -4,7 +4,7 @@
  * other one, and every route the takeover yields to, keeps it waiting.
  */
 import type { Network } from "@/wallet/services/network/client"
-import { isUncovered, type TakeoverRoute, yieldsTo } from "./stale-takeover"
+import { isUncovered, type TakeoverRoute, yieldsTo } from "@/components/stale-network/stale-takeover"
 
 export interface NetworkArrivalInput {
 	logined: boolean

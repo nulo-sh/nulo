@@ -1,4 +1,5 @@
 import { GasFees, ManaUsageEstimate } from "@aztec-labs/stdlib/gas"
+import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 
 /** Minimal node shape for fee prediction (avoids a hard dep on the full node client type). */
 export type MinFeeNode = {
@@ -42,7 +43,7 @@ export async function predictedWorstMinFees(node: MinFeeNode): Promise<GasFees> 
 		// `cause`, or "Method not found"); a transient error such as "block not found" must
 		// propagate, or the cap is silently under-priced.
 		const code = (e as { cause?: { code?: number } } | null | undefined)?.cause?.code
-		const msg = e instanceof Error ? e.message : String(e)
+		const msg = errorMessageFromUnknown(e)
 		if (code === -32601 || /method not found/i.test(msg)) return currentMinFees(node)
 		throw e
 	}

@@ -1,5 +1,5 @@
 <script setup>
-import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
+import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY, UNVOUCHED_FEE_SENTENCE } from "@/utils/fee/publish-facts"
 import FeeAmount from "@/components/composite/FeeAmount.vue"
 
 const props = defineProps({
@@ -151,7 +151,7 @@ const sponsoredSentence = computed(() => {
 }
 
 .visually_hidden {
-	composes: visually_hidden from "./fee-shared.module.css";
+	composes: visually_hidden from "@/components/a11y.module.css";
 }
 
 .failed {
@@ -159,7 +159,7 @@ const sponsoredSentence = computed(() => {
 }
 
 .retry {
-	composes: retry from "./fee-shared.module.css";
+	composes: accent from "@/components/text-action.module.css";
 }
 
 </style>

@@ -41,7 +41,7 @@ const emit = defineEmits(["copy"])
 
 <style module>
 .detail_key {
-	composes: detail_key from "../../../pages/detail-page.module.css";
+	composes: detail_key from "./detail-shared.module.css";
 }
 
 .detail_value_mono {
@@ -50,6 +50,6 @@ const emit = defineEmits(["copy"])
 }
 
 .detail_link {
-	composes: detail_link from "../../../pages/detail-page.module.css";
+	composes: detail_link from "./detail-shared.module.css";
 }
 </style>

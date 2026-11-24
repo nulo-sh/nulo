@@ -1,12 +1,10 @@
-import { isRecord } from "@nulo/wallet-core/utils"
+import { isHex32, isRecord } from "@nulo/wallet-core/utils"
 import { HOME_TOKEN_ROWS } from "@/utils/token-order"
 
 /** Pins fill Home's row budget, never more. */
 export const PINNED_TOKENS_MAX = HOME_TOKEN_ROWS
 /** Chains a profile can hold pins for; other chains are evicted in key iteration order past it. */
 export const PINNED_TOKENS_MAX_CHAINS = 32
-
-const CONTRACT_RE = /^0x[0-9a-f]{64}$/
 
 /** Chain id (as a string) → lowercase contracts, at most `PINNED_TOKENS_MAX` each. */
 export type PinMap = Record<string, string[]>
@@ -24,7 +22,7 @@ function sanitizeContracts(value: unknown): string[] {
 		if (contracts.length >= PINNED_TOKENS_MAX) break
 		if (typeof entry !== "string") continue
 		const c = entry.toLowerCase()
-		if (CONTRACT_RE.test(c) && !contracts.includes(c)) contracts.push(c)
+		if (isHex32(c) && !contracts.includes(c)) contracts.push(c)
 	}
 	return contracts
 }

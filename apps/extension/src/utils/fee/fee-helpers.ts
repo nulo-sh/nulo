@@ -1,4 +1,4 @@
-import { FpcType } from "@/wallet/services/fpc/client"
+import { FpcType } from "@/wallet/services/fpc/spec"
 import { FEE_DECIMALS, FEE_JUICE_DECIMALS, FEE_READOUT_UNIT, type FeeDisplay, feeDisplay, formatGasBalance } from "@/utils/fee-estimation"
 import { formatBaseUnits } from "@/utils/amount"
 import type { AppPick } from "@/utils/fee-picks"

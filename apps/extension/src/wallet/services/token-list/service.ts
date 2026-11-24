@@ -2,10 +2,18 @@ import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { EnvelopeError, MAX_ENVELOPE_BYTES, PINNED_KEYS, readTokenList, type VerifiedTokenList } from "@nulo/token-list"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { ValueDecodeError } from "@nulo/wallet-core/storage"
-import { AlarmDispatcher, EventHandler, ResponseTooLargeError, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
+import {
+	AlarmDispatcher,
+	EventHandler,
+	ResponseTooLargeError,
+	isObjectLike,
+	privateFetchInit,
+	readBodyCapped,
+} from "@nulo/wallet-core/utils"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { type ILogger, LogLevel } from "@/wallet/logger"
-import { LegalAcceptanceService, type LegalStatus } from "@/wallet/services/legal/service"
+import type { LegalAcceptanceService, LegalStatus } from "@/wallet/services/legal/service"
+import { LEGAL_ACCEPTANCE_SERVICE_NAME } from "@/wallet/services/legal/spec"
 import type { ValueStorage } from "@/wallet/storage"
 import { valueStorage } from "@/wallet/storage/stores"
 import {
@@ -43,8 +51,8 @@ type StoredState = TokenListStoredState
 /** Storage is writable by every extension page: a malformed field reads as absent, and a deadline
  *  past {@link DEADLINE_CEILING_MS} reads as due, so a planted value cannot stop refreshes. */
 export function decodeTokenListState(raw: unknown, now: number): TokenListStoredState {
-	if (!raw || typeof raw !== "object") return { failures: 0 }
-	const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw as Record<string, unknown>
+	if (!isObjectLike(raw)) return { failures: 0 }
+	const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw
 	const latest = now + DEADLINE_CEILING_MS
 	return {
 		envelope: typeof envelope === "string" ? envelope : undefined,
@@ -86,7 +94,7 @@ class DownloadError extends Error {
 export class TokenListService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("refresh")
 	public static readonly name = TOKEN_LIST_SERVICE_NAME
-	public readonly dependencies = [LegalAcceptanceService.name] as const
+	public readonly dependencies = [LEGAL_ACCEPTANCE_SERVICE_NAME] as const
 
 	public readonly onListChanged = new EventHandler<TokenListSnapshot>()
 
@@ -117,7 +125,7 @@ export class TokenListService extends Service<Methods, Events> implements Servic
 	}
 
 	protected async init(services: ServiceCollection): Promise<void> {
-		this.legal = services.get(LegalAcceptanceService.name)
+		this.legal = services.get(LEGAL_ACCEPTANCE_SERVICE_NAME)
 		this.legal.onAcceptanceChanged.add(this.onAcceptanceChanged)
 		this.snapshot = await this.loadStored()
 		this.booted = this.refreshIfDue().catch((error) => this.log(LogLevel.Warn, "token list boot failed", { error }))

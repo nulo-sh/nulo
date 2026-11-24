@@ -8,7 +8,7 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test } from "vitest"
 import { GLOSSARY } from "@/utils/glossary"
 import { FpcType } from "@/wallet/services/fpc/client"
-import { buildFeeMethods, type FeeMethodOption, type GasBalances } from "./fee-helpers"
+import { buildFeeMethods, type FeeMethodOption, type GasBalances } from "@/utils/fee/fee-helpers"
 import FeeMethodRadios from "./FeeMethodRadios.vue"
 
 /** As the FPC store and the gas read hand them over: wire addresses, raw 18-decimal balances. */

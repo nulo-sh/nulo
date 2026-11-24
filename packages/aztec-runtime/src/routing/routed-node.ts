@@ -18,7 +18,7 @@
 import { BlockHash } from "@aztec-labs/stdlib/block"
 import { type AztecNode, AztecNodeApiSchema } from "@aztec-labs/stdlib/interfaces/client"
 import { PendingTxReceipt, type TxReceipt } from "@aztec-labs/stdlib/tx"
-import { isLoopbackHost } from "@nulo/wallet-core/utils"
+import { isLoopbackHost, isObjectLike } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity } from "../utils/chain-identity"
 import { isReservedRpcCode, type TransportFailure, transportFailureOf, withTransportFailure } from "../utils/fetch"
 import {
@@ -144,17 +144,17 @@ export type ConnectEndpoint = (rpcUrl: string, timeoutMs: number) => AztecNode
 export function callFailureOf(error: unknown): TransportFailure | undefined {
 	const kind = transportFailureOf(error)
 	if (kind !== undefined) return kind
-	const cause = typeof error === "object" && error !== null ? (error as { cause?: { code?: unknown } }).cause : undefined
-	const code = typeof cause === "object" && cause !== null ? cause.code : undefined
+	const cause = isObjectLike(error) ? error.cause : undefined
+	const code = isObjectLike(cause) ? cause.code : undefined
 	return typeof code === "number" && !isReservedRpcCode(code) ? "refused" : undefined
 }
 
 /** The fetch error a failed call shares with the other callers of its batch. */
 function sharedCause(error: unknown): object {
-	const cause = typeof error === "object" && error !== null ? (error as { cause?: { data?: unknown } }).cause : undefined
-	const data = typeof cause === "object" && cause !== null ? cause.data : undefined
-	if (typeof data === "object" && data !== null) return data
-	return typeof error === "object" && error !== null ? error : {}
+	const cause = isObjectLike(error) ? error.cause : undefined
+	const data = isObjectLike(cause) ? cause.data : undefined
+	if (isObjectLike(data)) return data
+	return isObjectLike(error) ? error : {}
 }
 
 function isLoopbackRpcUrl(rpcUrl: string): boolean {
@@ -172,12 +172,12 @@ function isSyncRead(method: string, args: readonly unknown[]): boolean {
 	if (method !== "getBlock") return false
 	const query = args[0]
 	if (typeof query === "number") return true
-	return typeof query === "object" && query !== null && Object.keys(query).length === 1 && "number" in query
+	return isObjectLike(query) && Object.keys(query).length === 1 && "number" in query
 }
 
 function servedProposedTip(method: string, args: readonly unknown[], value: unknown): number | undefined {
 	if (method === "getBlockNumber" && args[0] === undefined && typeof value === "number") return value
-	if (method !== "getChainTips" || typeof value !== "object" || value === null) return undefined
+	if (method !== "getChainTips" || !isObjectLike(value)) return undefined
 	const proposed = (value as { proposed?: { number?: unknown } }).proposed?.number
 	return typeof proposed === "number" ? proposed : undefined
 }

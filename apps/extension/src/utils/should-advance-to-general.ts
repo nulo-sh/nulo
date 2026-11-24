@@ -1,5 +1,5 @@
-/** Pre-auth entry routes — the only screens `loadProfile` may auto-advance to
- *  `/popup/general` FROM once a profile is active. */
+/** The pre-session screens: `loadProfile` leaves them for `/popup/general` once a profile is
+ *  active, and the stale-network takeover, the integrity barrier and arrival notices spare them. */
 export const AUTH_ENTRY_ROUTES = ["popup-register", "popup-auth"] as const
 
 /**

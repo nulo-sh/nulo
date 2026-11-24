@@ -9,6 +9,7 @@
 
 import type { DraftOperation, FeeSettings, Operation } from "@nulo/wallet-bridge"
 import { assertExecutableOperation, carriesFeeSettings, isSelfPay, requiresFeeSelection } from "@nulo/wallet-bridge"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 
 export type OperationApprovalDelta = {
 	/** The user's fee choice. Read only for send-likes that need one. */
@@ -33,11 +34,12 @@ export type ShownTokenMetadata = {
 
 /** Far above any shown name or symbol: a chain read decodes each from one field of at most 32 bytes. */
 const SHOWN_TEXT_MAX_LENGTH = 256
-const CLASS_ID = /^0x[0-9a-f]{64}$/
+/** Lower case only: the class id as the wallet's own preview read it. */
+const LOWER_CASE_CLASS_ID = /^0x[0-9a-f]{64}$/
 
 export function isShownTokenMetadata(value: unknown): value is ShownTokenMetadata {
-	if (typeof value !== "object" || value === null) return false
-	const { name, symbol, decimals, classId } = value as Record<string, unknown>
+	if (!isObjectLike(value)) return false
+	const { name, symbol, decimals, classId } = value
 	return (
 		typeof name === "string" &&
 		name.length <= SHOWN_TEXT_MAX_LENGTH &&
@@ -46,7 +48,7 @@ export function isShownTokenMetadata(value: unknown): value is ShownTokenMetadat
 		Number.isSafeInteger(decimals) &&
 		(decimals as number) >= 0 &&
 		typeof classId === "string" &&
-		CLASS_ID.test(classId)
+		LOWER_CASE_CLASS_ID.test(classId)
 	)
 }
 

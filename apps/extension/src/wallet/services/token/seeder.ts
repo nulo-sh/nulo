@@ -2,7 +2,7 @@ import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage
 import { tokenKey } from "@nulo/token-list"
 import { TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
 import { LogLevel } from "@nulo/wallet-core/logger"
-import { createSerialQueue } from "@nulo/wallet-core/utils"
+import { createSerialQueue, isRecord } from "@nulo/wallet-core/utils"
 import type { ILogger } from "@/wallet/logger"
 import type { DefaultTokenSeed } from "./default-tokens"
 import type { SeedScope, SeedStatus, SeedStatusEntry, SeedStatusSnapshot, TokenInterface } from "./spec"
@@ -116,8 +116,8 @@ const isOptionalString = (v: unknown): v is string | undefined => v === undefine
 /** One hostile marker entry → a clean one, or `undefined` to drop it. A valid
  *  tombstone survives any other corrupt field: losing it resurrects a token. */
 function parseMarkerEntry(raw: unknown, now: number): SeedMarkerEntry | undefined {
-	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
-	const e = raw as Record<string, unknown>
+	if (!isRecord(raw)) return undefined
+	const e = raw
 	if (e.outcome === "deleted") return { attempts: 0, outcome: "deleted" }
 	if (typeof e.attempts !== "number" || !Number.isInteger(e.attempts) || e.attempts < 0) return undefined
 	if (e.outcome !== undefined && e.outcome !== "seeded") return undefined
@@ -141,7 +141,7 @@ function parseMarkerEntry(raw: unknown, now: number): SeedMarkerEntry | undefine
 
 /** A stored marker blob → its clean entries: a non-object blob reads as empty, a corrupt entry is dropped. */
 export function decodeSeedMarkers(stored: unknown, now: number): SeedMarkerState {
-	if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {}
+	if (!isRecord(stored)) return {}
 	const state: SeedMarkerState = {}
 	for (const [key, raw] of Object.entries(stored)) {
 		const entry = parseMarkerEntry(raw, now)

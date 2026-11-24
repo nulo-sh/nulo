@@ -1,5 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { type ILogger, type Log, LogLevel } from "."
+import { isObjectLike } from "@nulo/wallet-core/utils"
 import { scrubUrls } from "@/utils/scrub-urls"
 import { stripWireControl } from "@/wallet/services/dapp-session/capability-meta"
 
@@ -205,7 +206,7 @@ export const errorName = (error: unknown): string => (error instanceof Error ? e
 /** A pre-flattened string is opaque to the key-name walker; scrub endpoint URLs at least. */
 const scrubPrimitive = (value: unknown): unknown => (typeof value === "string" ? scrubUrls(value) : value)
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 45 — the ordered recursive shape walker IS the redaction policy; extraction would scatter security precedence
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 43 — the ordered recursive shape walker IS the redaction policy; extraction would scatter security precedence
 export const trim = (value: unknown, depth: number = 0): unknown => {
 	if (Array.isArray(value)) {
 		if (depth === MAX_LOG_DATA_DEPTH) {
@@ -213,7 +214,7 @@ export const trim = (value: unknown, depth: number = 0): unknown => {
 		}
 		return value.map((x) => trim(x, depth + 1))
 	}
-	if (value && typeof value === "object") {
+	if (isObjectLike(value)) {
 		if (depth === MAX_LOG_DATA_DEPTH) {
 			return "[Object]"
 		}
@@ -221,7 +222,7 @@ export const trim = (value: unknown, depth: number = 0): unknown => {
 		// Non-plain objects first — the generic walk below mishandles every one of them. Typed
 		// arrays are the dangerous case: `Object.entries` yields one entry PER BYTE, so a raw
 		// 32-byte key would be EXPANDED into a 32-field object rather than hidden.
-		if (ERROR_TAGS.has(Object.prototype.toString.call(value))) return projectError(value as Error)
+		if (ERROR_TAGS.has(Object.prototype.toString.call(value))) return projectError(value as unknown as Error)
 		if (ArrayBuffer.isView(value)) return `[${value.constructor.name}(${value.byteLength})]`
 		if (value instanceof ArrayBuffer) return `[ArrayBuffer(${value.byteLength})]`
 		if (value instanceof Map) return `[Map(${value.size})]`
@@ -265,7 +266,7 @@ export const trim = (value: unknown, depth: number = 0): unknown => {
 				contract: obj.contract,
 				storageSlot: obj.storageSlot,
 				rawContentLen: Array.isArray(rawContent) ? rawContent.length : 0,
-				contentKeys: content && typeof content === "object" ? Object.keys(content).length : 0,
+				contentKeys: isObjectLike(content) ? Object.keys(content).length : 0,
 			}
 		}
 		if ("secret" in value && "profile" in value && "session" in value) {
@@ -304,7 +305,7 @@ export const scrubHex32 = (value: unknown): unknown => {
 	if (typeof value === "bigint") return value >= FIELD_SIZED ? "[32 bytes]" : value
 	if (typeof value === "string") return value.replace(HEX32, "[32 bytes]")
 	if (Array.isArray(value)) return value.map(scrubHex32)
-	if (value && typeof value === "object") {
+	if (isObjectLike(value)) {
 		return Object.fromEntries(Object.entries(value).map(([key, entry]) => [scrubHex32(key), scrubHex32(entry)]))
 	}
 	return value
@@ -348,7 +349,7 @@ const MAX_REPORT_DATA_DEPTH = 8
 export function scrubReportData(value: unknown, depth = 0): unknown {
 	if (typeof value === "string") return scrubReportText(value)
 	if (typeof value === "bigint") return value >= FIELD_SIZED ? "[32 bytes]" : value.toString()
-	if (value === null || typeof value !== "object") return value
+	if (!isObjectLike(value)) return value
 	if (depth >= MAX_REPORT_DATA_DEPTH) return "[depth]"
 	if (Array.isArray(value)) return value.map((entry) => scrubReportData(entry, depth + 1))
 	return Object.fromEntries(Object.entries(value).map(([key, entry]) => [scrubReportText(key), scrubReportData(entry, depth + 1)]))

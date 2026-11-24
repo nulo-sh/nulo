@@ -358,52 +358,52 @@ onBeforeUnmount(() => {
 
 <style module>
 .wrapper {
-	composes: wrapper from "../detail-page.module.css";
+	composes: wrapper from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .content {
-	composes: content from "../detail-page.module.css";
+	composes: content from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .amount_value {
-	composes: amount_value from "../detail-page.module.css";
+	composes: amount_value from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .amount_symbol {
-	composes: amount_symbol from "../detail-page.module.css";
+	composes: amount_symbol from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .amount_fiat {
-	composes: amount_fiat from "../detail-page.module.css";
+	composes: amount_fiat from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .category_chip {
-	composes: type_chip from "../detail-page.module.css";
+	composes: type_chip from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .details_box {
-	composes: details_box from "../detail-page.module.css";
+	composes: details_box from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .detail_key {
-	composes: detail_key from "../detail-page.module.css";
+	composes: detail_key from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .detail_value_mono {
-	composes: detail_value_mono from "../detail-page.module.css";
+	composes: detail_value_mono from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .app_key {
-	composes: app_key from "../detail-page.module.css";
+	composes: app_key from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .app_value {
-	composes: app_value from "../detail-page.module.css";
+	composes: app_value from "../../components/modules/tx/detail-shared.module.css";
 }
 
 /* A function name wraps at its spaces and breaks inside a word only when the word outruns the line. */
 .method_value {
-	composes: detail_value_mono from "../detail-page.module.css";
+	composes: detail_value_mono from "../../components/modules/tx/detail-shared.module.css";
 	min-width: 0;
 	text-align: right;
 	overflow-wrap: anywhere;
@@ -412,8 +412,8 @@ onBeforeUnmount(() => {
 
 /* TxHashRow's link, so both linked values in Details read alike. */
 .recipient_link {
-	composes: detail_value_mono from "../detail-page.module.css";
-	composes: detail_link from "../detail-page.module.css";
+	composes: detail_value_mono from "../../components/modules/tx/detail-shared.module.css";
+	composes: detail_link from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .detail_context {
@@ -423,7 +423,7 @@ onBeforeUnmount(() => {
 }
 
 .dev_box {
-	composes: details_box from "../detail-page.module.css";
+	composes: details_box from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .code_block {
@@ -438,10 +438,10 @@ onBeforeUnmount(() => {
 }
 
 .empty_headline {
-	composes: empty_headline from "../detail-page.module.css";
+	composes: empty_headline from "../../components/modules/tx/detail-shared.module.css";
 }
 
 .empty_sub {
-	composes: empty_sub from "../detail-page.module.css";
+	composes: empty_sub from "../../components/modules/tx/detail-shared.module.css";
 }
 </style>

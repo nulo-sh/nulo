@@ -27,6 +27,7 @@
  */
 
 import { WalletMessageType } from "@aztec-labs/wallet-sdk/types"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 import { z } from "zod"
 import { boundedString } from "@/utils/bounded-string"
 
@@ -72,7 +73,7 @@ const CHAIN_INFO_KEYS: ReadonlySet<string> = new Set(["chainId", "version"])
 const onlyOwnKeys =
 	(keys: ReadonlySet<string>) =>
 	(value: unknown): boolean =>
-		typeof value === "object" && value !== null && Object.keys(value).every((key) => keys.has(key))
+		isObjectLike(value) && Object.keys(value).every((key) => keys.has(key))
 
 /** A discovery's request id becomes its session id. */
 const MAX_REQUEST_ID_CHARS = 128
@@ -154,10 +155,10 @@ export function isSubframeSender(sender: { tab?: unknown; frameId?: number }): b
 }
 
 export function validateContentScriptMessage(message: unknown): ValidationResult {
-	if (typeof message !== "object" || message === null) {
+	if (!isObjectLike(message)) {
 		return { kind: "passthrough" }
 	}
-	const origin = (message as { origin?: unknown }).origin
+	const origin = message.origin
 	if (origin !== "content-script") {
 		return { kind: "passthrough" }
 	}

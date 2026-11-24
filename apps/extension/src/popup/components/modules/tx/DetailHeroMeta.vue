@@ -45,18 +45,18 @@ const emit = defineEmits(["copy"])
 
 <style module>
 .hero_meta {
-	composes: hero_meta from "../../../pages/detail-page.module.css";
+	composes: hero_meta from "./detail-shared.module.css";
 }
 
 .tx_time {
-	composes: tx_time from "../../../pages/detail-page.module.css";
+	composes: tx_time from "./detail-shared.module.css";
 }
 
 .meta_sep {
-	composes: meta_sep from "../../../pages/detail-page.module.css";
+	composes: meta_sep from "./detail-shared.module.css";
 }
 
 .hero_link {
-	composes: hero_link from "../../../pages/detail-page.module.css";
+	composes: hero_link from "./detail-shared.module.css";
 }
 </style>

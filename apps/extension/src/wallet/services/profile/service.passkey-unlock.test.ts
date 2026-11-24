@@ -28,6 +28,7 @@ import type { ConfigProp, IConfig } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { PASSKEY_SERVICE_NAME } from "@/wallet/services/passkey/spec"
 import { svc } from "../composition-harness"
+import { PENDING_RESTORE_TTL_MS } from "./pending-restore-state"
 import { RESTORE_PENDING_ROOT } from "./restore-pending-repository"
 import { ProfileService } from "./service"
 import type { SessionManager } from "./session-manager"
@@ -172,7 +173,7 @@ describe("a phrase import and a backup restore choose their unlock", () => {
 
 describe("a restore opens only on the admission its commit set", () => {
 	type Admissions = Map<string, { capturedAt: number }>
-	const admissions = (env: Env) => (env.service as unknown as { restoreAdmissions: Admissions }).restoreAdmissions
+	const admissions = (env: Env) => (env.service as unknown as { pendingRestore: { admissions: Admissions } }).pendingRestore.admissions
 	const marker = async (env: Env, id: string) =>
 		(await env.api.storage.local.get(`${RESTORE_PENDING_ROOT}@${id}`))[`${RESTORE_PENDING_ROOT}@${id}`]
 
@@ -274,10 +275,9 @@ describe("a restore opens only on the admission its commit set", () => {
 		"a finalize %s",
 		async (_, offset, opens) => {
 			const env = await boot()
-			const ttl = (ProfileService as unknown as { PENDING_RESTORE_TTL_MS: number }).PENDING_RESTORE_TTL_MS
 			const now = vi.spyOn(Date, "now").mockReturnValue(Date.now())
 			const { id, answer } = await restoredPasskey(env, 0x55)
-			now.mockReturnValue(Date.now() + ttl + offset)
+			now.mockReturnValue(Date.now() + PENDING_RESTORE_TTL_MS + offset)
 			const finalized = env.service.finalizeRestore(id, undefined, answer)
 			if (opens) expect((await finalized).profile.id).toBe(id)
 			else await expect(finalized).rejects.toThrow(SessionEndedError)

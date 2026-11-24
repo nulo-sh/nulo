@@ -56,7 +56,7 @@ function harness() {
 		pxeService: pxe,
 		estimateCancel: registry,
 		emit: () => {},
-		dappSendExecutor: {
+		dappSendEstimation: {
 			estimateOperationFee: async () => {
 				await pxe.simulateTx(net, {} as never, {} as never)
 				return { maxFee: "1" }

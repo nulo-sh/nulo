@@ -1,4 +1,4 @@
-import type { FeePayer } from "@/popup/components/modules/send/fee-helpers"
+import type { FeePayer } from "@/utils/fee/fee-helpers"
 import type { TransferFeeEstimate, TransferFeeQueued } from "@/wallet/services/execution/client"
 import { refusesShortfall } from "@nulo/wallet-bridge"
 

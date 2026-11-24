@@ -407,9 +407,100 @@
 		},
 		{
 			"includes": [
+				"apps/extension/src/composables/**",
+				"apps/extension/src/utils/**",
+				"apps/extension/src/stores/**",
+				"apps/extension/src/components/**",
+				"!apps/extension/src/composables/**/*.test.ts",
+				"!apps/extension/src/components/**/*.test.ts"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"patterns": [
+									{
+										"group": [
+											"@/e2e/wallet-clocks",
+											"@/e2e/wallet-clocks.*",
+											"**/wallet-clocks",
+											"**/wallet-clocks.*",
+											"./wallet-clocks",
+											"./wallet-clocks.*"
+										],
+										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
+									},
+									{
+										"group": ["@/popup", "@/popup/**", "**/popup", "**/popup/**"],
+										"message": "composables, utils, stores and src/components sit below popup/**: move shared code down, pure policy to @/utils, the rest to its lowest consumer's folder"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": [
 				"apps/extension/src/components/core/**",
 				"apps/extension/src/components/ui/**",
-				"apps/extension/src/components/composite/**"
+				"apps/extension/src/components/composite/**",
+				"apps/extension/src/utils/fee/**",
+				"!apps/extension/src/components/**/*.test.ts"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"paths": {
+									"@/utils/core": "UI primitives and fee policy cannot use the managers/core utilities (service clients hide here)",
+									"@/stores/app.store": "UI primitives and fee policy cannot import stores",
+									"@/stores/popup.store": "UI primitives and fee policy cannot import stores",
+									"@/stores/cache.store": "UI primitives and fee policy cannot import stores",
+									"@/stores/notification.store": "UI primitives and fee policy cannot import stores"
+								},
+								"patterns": [
+									{
+										"group": [
+											"@/e2e/wallet-clocks",
+											"@/e2e/wallet-clocks.*",
+											"**/wallet-clocks",
+											"**/wallet-clocks.*",
+											"./wallet-clocks",
+											"./wallet-clocks.*"
+										],
+										"message": "only src/e2e/config.ts reads the e2e wallet clocks; their release-gate stamp travels with its flag"
+									},
+									{
+										"group": ["@/wallet/services/*/client"],
+										"message": "UI primitives and fee policy cannot import any *Service client"
+									},
+									{
+										"group": ["@/wallet/services/*/service"],
+										"message": "UI primitives and fee policy cannot import service implementations"
+									},
+									{ "group": ["@/stores/*"], "message": "UI primitives and fee policy cannot import any Pinia store" },
+									{
+										"group": ["@/popup", "@/popup/**", "**/popup", "**/popup/**"],
+										"message": "composables, utils, stores and src/components sit below popup/**: move shared code down, pure policy to @/utils, the rest to its lowest consumer's folder"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"apps/extension/src/components/core/**/*.test.ts",
+				"apps/extension/src/components/ui/**/*.test.ts",
+				"apps/extension/src/components/composite/**/*.test.ts"
 			],
 			"linter": {
 				"rules": {
@@ -518,6 +609,10 @@
 									{
 										"group": ["@/popup/components/modules/*", "@/popup/components/modules/**"],
 										"message": "onboarding cannot import popup L4 modules — promote shared modules to @/components/composite (L3)"
+									},
+									{
+										"group": ["@/popup", "@/popup/**", "**/popup", "**/popup/**"],
+										"message": "onboarding is a peer of popup and imports nothing from popup/**; promote shared code to @/components, @/composables or @/utils"
 									}
 								]
 							}

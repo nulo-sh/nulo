@@ -664,8 +664,9 @@ describe("batchedViewSimulation — fast arm (PUBLIC+isStatic leading prefix)", 
 		await expect(batchedViewSimulation([publicStaticCall()], deps)).rejects.toBe(simErr)
 	})
 
-	test("simulateViaNode throws generic Error → WARN log + full rerun via standard simulateTx", async () => {
-		simulateViaNodeMock.mockRejectedValueOnce(new Error("node blip"))
+	test("simulateViaNode throws generic Error → WARN log naming its class, never its text + full rerun via standard simulateTx", async () => {
+		const failure = new Error("node blip")
+		simulateViaNodeMock.mockRejectedValueOnce(failure)
 		const logSpy = vi.fn()
 		const deps = makeDeps({
 			functions: {
@@ -683,9 +684,10 @@ describe("batchedViewSimulation — fast arm (PUBLIC+isStatic leading prefix)", 
 		// the rerun with combined payload. The combined rerun's values land in
 		// encoded[].
 		expect(deps.pxe.simulateTx).toHaveBeenCalledTimes(2)
-		expect(logSpy).toHaveBeenCalled()
-		const warnCall = logSpy.mock.calls.find((c) => c[1] === LogLevel.Warn)
-		expect(warnCall).toBeTruthy()
+		const warnCalls = logSpy.mock.calls.filter((c) => c[1] === LogLevel.Warn)
+		expect(warnCalls).toHaveLength(1)
+		expect(warnCalls[0]?.slice(3)).toEqual([{ errorName: "Error" }])
+		expect(logSpy.mock.calls.flat().some((arg) => arg === failure || String(arg).includes(failure.message))).toBe(false)
 		expect(result.encoded[0]?.[0]?.toBigInt()).toBe(33n)
 		expect(result.encoded[1]?.[0]?.toBigInt()).toBe(77n)
 	})

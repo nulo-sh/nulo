@@ -840,6 +840,16 @@ describe("pickForSend", () => {
 		await expect(mixed.node.route.pickForSend(TX.toString(), ANCHOR)).rejects.toThrow(/No endpoint/)
 	})
 
+	test("a lone endpoint's failure reaches the caller as its own, routed or bounded, never as no endpoint", async () => {
+		const h = new Harness([A])
+		h.endpoint(A).fail = () => transport("unreachable")
+		for (let i = 0; i < 2; i++) {
+			await expect(call(h)).rejects.toThrow("fetch unreachable")
+			await expect(h.node.route.singleAttempt(probeTimeoutMs).getContract(undefined as never)).rejects.toThrow("fetch unreachable")
+		}
+		expect(h.node.route.snapshot()[0]?.state).toBe("down")
+	})
+
 	test("a lone endpoint is picked with no request, down or not", async () => {
 		const h = new Harness([A])
 		h.endpoint(A).fail = () => transport("timeout")

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h } from "vue"
 import { GLOSSARY } from "@/utils/glossary"
 import FpcSentence from "./FpcSentence.vue"
-import { UNVOUCHED_FEE_SENTENCE, UNVOUCHED_PUBLISH_SENTENCE } from "./publish-facts"
+import { UNVOUCHED_FEE_SENTENCE, UNVOUCHED_PUBLISH_SENTENCE } from "@/utils/fee/publish-facts"
 
 enableAutoUnmount(afterEach)
 

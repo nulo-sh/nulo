@@ -1,6 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { z } from "zod"
 import type { FeeSettings, AuthwitContent, TransferFeeEstimate } from "@/wallet/services/execution/spec"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 
 export const AUTH_REGISTRY_SERVICE_NAME = "auth-registry"
 
@@ -59,7 +60,7 @@ export const AuthwitSchema: z.ZodType<Authwit> = z.object({
 	chainId: z.number(),
 	account: z.string(),
 	hash: z.string(),
-	content: z.custom<AuthwitContent>((v) => typeof v === "object" && v !== null).describe("any non-null object, kept as stored"),
+	content: z.custom<AuthwitContent>(isObjectLike).describe("any non-null object, kept as stored"),
 	pending: z.boolean().optional(),
 	txHash: z.string().optional(),
 })

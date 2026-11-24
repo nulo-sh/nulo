@@ -102,19 +102,23 @@ async function toFilePassword(page: Page): Promise<void> {
 	await page.waitForSelector(`[data-testid="${FILE_FORM.field}-input"]`, { visible: true, timeout: 15_000 })
 }
 
+/** An account file export as the driver saw it: `beforeSave` once the page refused the file
+ *  password, which ends the step before Save asks the passkey. */
+export type FileExportDriven = Driven & { beforeSave?: true }
+
 /** A passkey profile's file: the file password, then Save's passkey; the body, or how the page refused. */
 async function passkeyFile(
 	s: RunState,
 	name: string,
 	p: Pick<ParamsMap["exportAccountFile"], "variant" | "other"> & { password: SecretRef },
-): Promise<{ body: string; password: string } | Driven> {
+): Promise<{ body: string; password: string } | FileExportDriven> {
 	const t0 = Date.now()
 	await openAccountExport(s.anchor, name)
 	await toFilePassword(s.anchor)
 	if (p.variant === "short") {
 		const short = shortFilePassword(s, p.password)
 		// An enabled Save is pressed, as a person would, so a file the rule let through is seen.
-		if (await refusesShortPassword(s.anchor, short, FILE_FORM)) return timed(t0, ACCOUNT_MS, "refused")
+		if (await refusesShortPassword(s.anchor, short, FILE_FORM)) return { ...timed(t0, ACCOUNT_MS, "refused"), beforeSave: true }
 		return saveFile(s, s.anchor, short, p)
 	}
 	const password = secretFor(s, p.password)
@@ -167,7 +171,7 @@ export async function exportDuringChange(
 
 /** A password profile's file opens with its password; a passkey profile's with the file password
  *  its export asked for. */
-export async function exportAccount(s: RunState, open: ModelProfile, p: ParamsMap["exportAccountFile"]): Promise<Driven> {
+export async function exportAccount(s: RunState, open: ModelProfile, p: ParamsMap["exportAccountFile"]): Promise<FileExportDriven> {
 	const t0 = Date.now()
 	const name = await exportRowName(s, open, p.which)
 	let made: { body: string; password: string }

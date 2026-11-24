@@ -1,6 +1,7 @@
 <script setup>
 /** Utils */
 import { ACCOUNT_INTEGRITY_BLOCKED_ROOT, AccountIntegrityBlockedSchema } from "@/wallet/services/account-integrity/types"
+import { AUTH_ENTRY_ROUTES } from "@/utils/should-advance-to-general"
 
 /** Store + route (router-aware: `route.name` normalizes trailing slashes + query params that a
  *  raw-hash substring/equality test would get wrong). */
@@ -14,7 +15,7 @@ const route = useRoute()
 const blockedRecords = ref([])
 
 // The auth + register screens are pre-session heal/retry vectors — never overlay them.
-const isPreAuthRoute = computed(() => route.name === "popup-auth" || route.name === "popup-register")
+const isPreAuthRoute = computed(() => AUTH_ENTRY_ROUTES.includes(route.name))
 // GROUND TRUTH for "which profile is on screen" — the app store, not the `lastActiveProfile`
 // storage pointer (which can be stale/missing while the app presents a fallback profile).
 const presentedProfileId = computed(() => appStore.profile?.id ?? null)

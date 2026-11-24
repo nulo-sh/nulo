@@ -8,6 +8,7 @@
  * fixed-size violation records (never one record per hostile entry).
  */
 
+import { isObjectLike } from "@nulo/wallet-core/guards"
 import type { Restored } from "@/wallet/base"
 import { isPxeProvidedContract } from "./pxe-provided"
 import type { BackupAccountState, BackupContract, BackupSender } from "./spec"
@@ -61,18 +62,12 @@ function violation(networkId: string, message: string): AccountStateViolationRec
 }
 
 function isValidSender(entry: unknown): entry is BackupSender {
-	return (
-		typeof entry === "object" &&
-		entry !== null &&
-		typeof (entry as { address?: unknown }).address === "string" &&
-		(entry as { address: string }).address.length > 0 &&
-		(entry as { address: string }).address.length <= 200
-	)
+	return isObjectLike(entry) && typeof entry.address === "string" && entry.address.length > 0 && entry.address.length <= 200
 }
 
 function isValidContract(entry: unknown): entry is BackupContract {
-	if (typeof entry !== "object" || entry === null) return false
-	const c = entry as { address?: unknown; instance?: unknown; artifact?: unknown }
+	if (!isObjectLike(entry)) return false
+	const c = entry
 	// Deep instance/artifact validation stays PXE's job (it re-validates on
 	// registration); presence + address shape is the boundary's concern.
 	return typeof c.address === "string" && c.address.length > 0 && c.address.length <= 200 && !!c.instance && !!c.artifact
@@ -125,7 +120,7 @@ function mergeSliceItems(inputItems: unknown[], violations: AccountStateViolatio
 	let malformedChildren = 0
 	const byNetwork = new Map<string, NormalizedAccountStateItem>()
 	for (const item of inputItems) {
-		const networkId = typeof item === "object" && item !== null ? (item as { networkId?: unknown }).networkId : undefined
+		const networkId = isObjectLike(item) ? item.networkId : undefined
 		if (typeof networkId !== "string" || networkId.length === 0 || networkId.length > 100) {
 			malformedItems++
 			continue

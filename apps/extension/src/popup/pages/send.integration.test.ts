@@ -172,7 +172,7 @@ vi.mock("vue-router", () => ({
 	RouterLink: { template: "<a><slot /></a>" },
 }))
 
-import type { PayerKind, TransferSide, Visibility } from "@/components/composite/send/publish-facts"
+import type { PayerKind, TransferSide, Visibility } from "@/utils/fee/publish-facts"
 import { REVIEW_ARM_MS } from "@/composables/useSendReview"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { sendFeePicksKey } from "@/utils/profile-ui-keys"

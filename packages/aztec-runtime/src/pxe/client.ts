@@ -23,7 +23,7 @@ import type { PrivateEventFilter } from "@aztec-labs/aztec.js/wallet"
 import type { PackedPrivateEvent } from "@aztec-labs/pxe/client/bundle"
 import z from "zod"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import { toBase64 } from "@nulo/wallet-core/utils"
+import { isObjectLike, toBase64 } from "@nulo/wallet-core/utils"
 import type { ServiceSpec } from "@nulo/wallet-core/base"
 import { type RequestErrorMeta, type ResponseContentLike, ServiceClient, type TerminalRecord } from "@nulo/extension-messaging/offscreen"
 import type { NetworkInfo } from "./chain-runtime"
@@ -178,7 +178,7 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 	 *  still run offscreen; undefined when this client tracks no such simulation. */
 	public offscreenSettled(error: unknown): Promise<void> | undefined {
 		let current: unknown = error
-		for (let depth = 0; depth < 8 && typeof current === "object" && current !== null; depth++) {
+		for (let depth = 0; depth < 8 && isObjectLike(current); depth++) {
 			const requestId = this.simulationTimeouts.get(current)
 			if (requestId !== undefined) return this.abandoned.get(requestId)?.done
 			current = (current as { cause?: unknown }).cause
@@ -198,7 +198,7 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 
 	protected override makeTimeoutError(meta: RequestErrorMeta): unknown {
 		const error = super.makeTimeoutError(meta)
-		if (meta.methodName === "simulateTx" && typeof error === "object" && error !== null) {
+		if (meta.methodName === "simulateTx" && isObjectLike(error)) {
 			this.simulationTimeouts.set(error, meta.requestId)
 		}
 		return error

@@ -91,6 +91,7 @@ describe("ChromeStorageTokenSeeds", () => {
 			[null],
 			[{ ...valid, contract: "0xdeadbeef" }],
 			[{ ...valid, contract: CONTRACT.toUpperCase() }],
+			[{ ...valid, contract: `0x${CONTRACT.slice(2).toUpperCase()}` }],
 			[{ ...valid, expectedClassId: "not-hex" }],
 			[{ chainId: 0, contract: CONTRACT }],
 		]) {

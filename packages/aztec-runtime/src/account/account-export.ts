@@ -19,7 +19,7 @@
  * requires explicit confirmation; "tampered export fails closed" holds for the ENCRYPTED variant
  * (AES-GCM authenticates under the password) and for non-self-consistent plaintext mutations.
  */
-import { bytesToHex, fromBase64, toBase64 } from "@nulo/wallet-core/utils"
+import { bytesToHex, fromBase64, isObjectLike, toBase64 } from "@nulo/wallet-core/utils"
 import { ACCOUNT_EXPORT_AAD_LABEL, EncryptionKey, zeroize } from "@nulo/wallet-crypto"
 import { Fq } from "@aztec-labs/foundation/curves/bn254"
 import { sha256 } from "@aztec-labs/foundation/crypto/sha256"
@@ -130,7 +130,7 @@ export function parseAccountExport(json: string): { signingKey: Fq; l1ChainId: n
 	} catch {
 		throw new Error("Account export is not valid JSON")
 	}
-	if (!raw || typeof raw !== "object") throw new Error("Account export is not an object")
+	if (!isObjectLike(raw)) throw new Error("Account export is not an object")
 	const v = raw as Record<string, unknown>
 	assertExportEnvelope(v)
 	if (typeof v.l1ChainId !== "number" || !Number.isSafeInteger(v.l1ChainId) || v.l1ChainId < 0 || v.l1ChainId > 0xffffffff) {

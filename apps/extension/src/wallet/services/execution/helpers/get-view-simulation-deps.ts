@@ -8,7 +8,7 @@
 
 import type { AccountService } from "@/wallet/services/account/service"
 import type { NetworkService } from "@/wallet/services/network/service"
-import { networkInfoFrom } from "@/wallet/services/network/service"
+import { networkInfoFrom } from "@/wallet/services/network/spec"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"

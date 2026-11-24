@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs"
-import { LOCAL_NETWORK_RPC_URL } from "@/wallet/services/network/seeds"
+import { DEFAULT_SEEDS, LOCAL_NETWORK_RPC_URL } from "@/wallet/services/network/seeds"
 import type { Page } from "puppeteer"
+import type { HeldNode } from "../../fixtures/egress-guard"
 import type { ExtensionContext } from "../../fixtures/extension"
 import { holdNodeStub } from "../../fixtures/node-stub"
 import { type PasskeyAuthSetup, setupPasskeyVirtualAuth } from "../../fixtures/passkey"
@@ -9,6 +10,16 @@ import { loadPopup, openPopup, waitForServiceReady } from "../../fixtures/wallet
 import { ErrorCollector } from "./collect"
 import type { Caps } from "./model"
 import { type NetworkRun, newRunState, type RunState } from "./state"
+
+/** `ROUTED_STAND_IN_REFUSAL` reads the routed refusal as a stand-in's, which holds only while every
+ *  seeded route of more than one endpoint, the only kind that throws it, sends each to `held`. */
+function assertRoutesOnStandIns(held: readonly HeldNode[]): void {
+	const hosts = new Set(held.map((node) => node.host))
+	const open = DEFAULT_SEEDS.filter(
+		(seed) => seed.relay && ![seed.rpcUrl, seed.relay.rpcUrl].every((url) => hosts.has(new URL(url).hostname)),
+	)
+	if (open.length) throw new Error(`the launch holds no stand-in for every endpoint of ${open.map((seed) => seed.name).join(", ")}`)
+}
 
 /** A run's state on a fresh launch: the anchor open on the popup with a PRF-capable authenticator
  *  added on it, and the error collector watching every extension page from now on. `held` is a
@@ -25,6 +36,7 @@ export async function startRun(
 	held?: { page: Page; auth: PasskeyAuthSetup },
 ): Promise<RunState & { stop(): Promise<string[]> }> {
 	mkdirSync(dir, { recursive: true })
+	assertRoutesOnStandIns(ctx.egress?.nodes ?? [])
 	const local = caps.network ? undefined : await holdNodeStub(ctx.browser, ctx.extensionId, LOCAL_NETWORK_RPC_URL)
 	const errors = new ErrorCollector(ctx.browser)
 	await errors.start()

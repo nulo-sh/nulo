@@ -2,9 +2,12 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { IService, ServiceCollection } from "@/wallet/base"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
-import { type Account, AccountService, AccountType } from "@/wallet/services/account/service"
-import { NetworkService } from "@/wallet/services/network/service"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { Account, AccountService } from "@/wallet/services/account/service"
+import { ACCOUNT_SERVICE_NAME, AccountType } from "@/wallet/services/account/spec"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import { type ClassifiedAccount, classifyChains, type UnclassifiableMismatch } from "@/wallet/services/stale-network/classify"
 import { StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
@@ -14,13 +17,11 @@ import { NuloAccount, V6_REGIME } from "@nulo/aztec-runtime/account"
 import { deriveAccountSeed, keyedSegment, type MasterSecretBytes } from "@nulo/wallet-crypto"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "./blocked-repository"
-import { accountSetDigest } from "./types"
+import { ACCOUNT_INTEGRITY_COORDINATOR_NAME, accountSetDigest } from "./types"
 import type { AccountIntegrityBlocked, AccountIntegrityDelegate, AccountRuntimeMismatchDelegate } from "./types"
 
 declare const __VERSION__: string
 const walletVersion = (): string => (typeof __VERSION__ === "undefined" ? "unknown" : __VERSION__)
-
-export const ACCOUNT_INTEGRITY_COORDINATOR_NAME = "account-integrity-coordinator"
 
 /** Injectable for unit tests (jsdom cannot run bb.js poseidon); production always uses the REAL
  *  frozen path — the SHARED `deriveAccountSeed` formula and `NuloAccount.new`, never a local
@@ -57,7 +58,7 @@ export const ERR_ACCOUNTS_CHANGED = "ERR_ACCOUNTS_CHANGED"
 export class AccountIntegrityCoordinator implements IService, AccountIntegrityDelegate, AccountRuntimeMismatchDelegate {
 	public static readonly name = ACCOUNT_INTEGRITY_COORDINATOR_NAME
 	public readonly name = ACCOUNT_INTEGRITY_COORDINATOR_NAME
-	public readonly dependencies = [ProfileService.name, AccountService.name, NetworkService.name] as const
+	public readonly dependencies = [PROFILE_SERVICE_NAME, ACCOUNT_SERVICE_NAME, NETWORK_SERVICE_NAME] as const
 
 	private profiles!: ProfileService
 	private accounts!: AccountService
@@ -83,9 +84,9 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 	}
 
 	public async start(services: ServiceCollection): Promise<void> {
-		this.profiles = services.get(ProfileService.name)
-		this.accounts = services.get(AccountService.name)
-		this.networks = services.get(NetworkService.name)
+		this.profiles = services.get(PROFILE_SERVICE_NAME)
+		this.accounts = services.get(ACCOUNT_SERVICE_NAME)
+		this.networks = services.get(NETWORK_SERVICE_NAME)
 		this.profiles.setIntegrityDelegate(this)
 		this.accounts.setRuntimeMismatchDelegate(this)
 		// The stamp is keyed by (walletVersion, accountSetDigest) — the digest is recomputed from
