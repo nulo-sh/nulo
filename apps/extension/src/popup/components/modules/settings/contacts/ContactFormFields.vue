@@ -46,9 +46,7 @@ const refusalId = useId()
 			</Flex>
 		</template>
 		<template v-if="nameLooksLikeAddress" #bottom>
-			<Text :id="refusalId" variant="body" color="txt-danger" height="150" role="alert" data-testid="contact-name-address-like" :class="$style.refusal">
-				{{ ADDRESS_LIKE_NAME }}
-			</Text>
+			<span :id="refusalId" role="alert" data-testid="contact-name-address-like" :class="$style.refusal">{{ ADDRESS_LIKE_NAME }}</span>
 		</template>
 	</Input>
 
@@ -76,7 +74,9 @@ const refusalId = useId()
 
 <style module>
 .refusal {
+	composes: type--body from global;
 	display: block;
 	margin-top: 6px;
+	color: var(--txt-danger);
 }
 </style>

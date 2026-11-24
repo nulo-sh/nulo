@@ -73,8 +73,12 @@ const STUBS = {
 }
 
 // Lazy import after vi.mock calls hoist
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { Input, Text } from "@nulo/design"
 import NewContactPopup from "./NewContactPopup.vue"
+
+const FIELDS_SOURCE = readFileSync(resolve(__dirname, "../modules/settings/contacts/ContactFormFields.vue"), "utf8")
 
 const VALID_ADDRESS = `0x2${"a".repeat(63)}`
 
@@ -215,7 +219,7 @@ describe("NewContactPopup — decoupled from sender registration", () => {
 
 		const sentence = w.get('[data-testid="contact-name-address-like"]')
 		expect(sentence.element.textContent?.trim()).toBe("A name can't look like an address. Use a word, like Ana.")
-		expect(sentence.classes()).toContain("color--txt-danger")
+		expect(FIELDS_SOURCE).toMatch(/\.refusal \{\s*composes: type--body from global;[^}]*color: var\(--txt-danger\);/)
 		expect(name.attributes()).toMatchObject({ "aria-invalid": "true", "aria-describedby": sentence.attributes("id") })
 		expect(w.get('[data-testid="form-submit"]').attributes("disabled")).toBeDefined()
 		await w.get('[data-testid="form-submit"]').trigger("click")
