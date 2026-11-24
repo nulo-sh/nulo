@@ -201,6 +201,12 @@ No trust boundary, data, permission, dependency or wire format changes: styleshe
 1. Seed and open, per Phase 2's method: the popup's import page (seed, file, full backup, each unlock method); `restore-again` with a backup chosen and its unlock-method step; onboarding's import; change password; reset; new profile (both methods); onboarding create (both tabs, the passkey note).
 2. Run the affected e2e at retry 0 on both browsers: smoke `backup-roundtrip`, `security`, `registration`, `onboarding-tab`, `type-roles`; network `restore-again`.
 
+As run ([lessons/phase-3.md](lessons/phase-3.md) says how each state is reached):
+- Every state is reached in smoke, so no network proof run: Restore again reads its reminder from storage, seeded as a partial restore leaves it; a pick only reads the file, so a plain file reaches the unlock-method step and a sealed one the decrypt step. Restore again's own form asks no new password, so its unlock-method step is the import page's, read on both import pages.
+- The cross comment on `export_section_last` renames every class of `CollapsingHeroLayout.vue`, so D8 also opens its five other screens: accounts import, the three exports, unlock method.
+- Onboarding is read at 720 px too, its tab's width.
+- Each tab is read unselected, hovered, selected, selected and hovered, and focused. An unselected tab never holds focus: Tab skips it and an arrow selects the tab it focuses. A disabled tablist (`importing`, `isCreating`) matches no rule the enabled states do not, plus `AuthMethodTabs`' own `.disabled`, which this arc leaves alone.
+
 **Validation gate.** As Phase 2.
 
 ## Audit verdicts
@@ -234,6 +240,18 @@ Codex loop (`gpt-6.1-sol` high, read-only) over `4d18591bd..HEAD` and this plan,
 | A5 | The scan read a `composes` value as one clause; postcss-modules splits it on commas | demonstrated | accepted: per-clause parse by that grammar, with a case that reds without the split |
 
 Round 1: **findings** (A1; A2-A5 are Opus's). Round 2, resumed over `cef64b7cd`: **clean**. It also confirmed, high confidence, that `FeeMethodSelector`'s trigger "Checking" renders on no screen: its only consumer passes `pending` as `onSend && …` and mounts it only off Send. That branch is dead code, not an unreached state, so step 6 does not stop the arc.
+
+### Arc 2 review
+
+Codex loop (`gpt-6.1-sol` high, read-only) over `9c913679b..HEAD` and this plan, and one Opus diff review. Detail in [lessons/phase-3.md](lessons/phase-3.md).
+
+| # | Finding | Label | Disposition |
+|---|---|---|---|
+| B1 | The tab skin's comment named `.tab_active:hover` after `.tab:hover`, not `.tab_active` after `.tab`, the same tie | demonstrated | accepted: one comment covers both pairs; the head proof reran on the renamed classes |
+| B2 | `popup/pages/import.vue .section_label` is identical to the home's `.label` | demonstrated | rejected: it labels `.name_section` (gap 8px, bottom padding only), not a form section; the Site table's O stands |
+| B3 | `ImportMethodPicker` and `NewProfileCredentials` now hash to the same scoped tokens | demonstrated | rejected: neither token carries a declaration |
+
+Round 1: **clean**. The Opus review: B1-B3. Round 2, resumed over B1's fix and the two rejections: **clean**.
 
 ## Decision ledger
 
