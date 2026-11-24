@@ -81,7 +81,7 @@
 			"file": "apps/extension/src/wallet/services/execution/operation-fingerprint.ts",
 			"rule": "noExcessiveCognitiveComplexity",
 			"anchor": "function encodeValue(value: unknown, depth: number): string | null {",
-			"accepted": 25,
+			"accepted": 24,
 			"sentence": "recursive type-tagged encoding must reject unsupported shapes while canonicalizing arrays and objects"
 		},
 		{

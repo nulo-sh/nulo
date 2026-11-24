@@ -26,6 +26,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AuthwitContent, DecodedCall, DecodedGrant, DecodedValue, DisplayCallInput } from "@nulo/wallet-bridge"
 import { encodeAuthwitCall } from "./authwit-discoverer"
 import { findFunctionByName, findFunctionBySelector } from "./contract-resolver"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 
 export type ArtifactLookup = (contractAddress: string) => Promise<ContractArtifact | undefined>
 
@@ -174,7 +175,7 @@ function projectStruct(value: AbiDecoded, type: Extract<AbiType, { kind: "struct
 	if (isFunctionSelectorStruct(type)) return { kind: "selector", value: String(value) }
 	if (isWrappedFieldStruct(type)) return { kind: "field", value: fieldString(value) }
 	if (isOptionStruct(type)) return project(value, type.fields[1].type)
-	const record = (typeof value === "object" && value !== null ? value : {}) as Record<string, AbiDecoded>
+	const record = (isObjectLike(value) ? value : {}) as Record<string, AbiDecoded>
 	return { kind: "struct", fields: type.fields.map((f) => ({ name: f.name, value: project(record[f.name], f.type) })) }
 }
 
