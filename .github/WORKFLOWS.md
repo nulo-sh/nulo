@@ -34,7 +34,7 @@ Reusables live as `.github/workflows/_*.yml` and are called from top-level workf
 | Reusable | Callers |
 |---|---|
 | `_lint-and-typecheck.yml` | `pr-quick`, `release`, `nightly` |
-| `_unit-tests.yml` | `pr-quick`, `release`, `nightly`: three legs, each a third of the extension's suite (`--shard`) and one of the other workspaces, `test:release` or `test:ci-gating` |
+| `_unit-tests.yml` | `pr-quick`, `release`, `nightly`: three legs, each a third of the extension's suite (`--shard`); leg 2 adds `test:release`, leg 3 the other workspaces and `test:ci-gating` |
 | `_build-extension.yml` | `pr-quick`, `release`, `nightly`, `source-rebuild` |
 | `_release-pr-lockfile.yml` | `release`, `release-prerelease` |
 | `_extension-smoke-e2e.yml` | `pr-extension-smoke-e2e`, `pr-extension-smoke-e2e-firefox`, `release`, `nightly` |

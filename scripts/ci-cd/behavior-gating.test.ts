@@ -1515,7 +1515,7 @@ describe("shard matrices", () => {
 			["actions/checkout", undefined, undefined],
 			["./.github/actions/setup-bun", undefined, undefined],
 			["extension", undefined, undefined],
-			["others", "matrix.shard == '1/3'", undefined],
+			["others", "matrix.shard == '3/3'", undefined],
 			// Workspace suites that use Node keep the runner's; both script suites get Node 24.
 			["actions/setup-node", undefined, undefined],
 			["release", "matrix.shard == '2/3'", undefined],
