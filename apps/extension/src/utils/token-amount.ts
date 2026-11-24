@@ -5,7 +5,9 @@
  * aggregation, the row itself) reads through these helpers.
  */
 
-/** Largest `decimals` that keeps `10n ** BigInt(decimals)` cheap; anything above is rejected. */
+/** The most decimals a token may have, wherever a token arrives or a number is derived from it:
+ *  `10n ** BigInt(decimals)` and every pad stay cheap under it. A token past it is one the wallet
+ *  cannot use. */
 export const MAX_DECIMALS = 77
 
 type BalanceLike = { publicBalance?: string; privateBalance?: string }
@@ -38,7 +40,7 @@ export function parseRawBalance(tb: BalanceLike): bigint | undefined {
 	return pub + priv
 }
 
-/** A row whose numbers cannot be trusted: a malformed side or a `decimals` outside 0..77. */
+/** A row whose numbers cannot be trusted: a malformed side or a `decimals` outside 0..`MAX_DECIMALS`. */
 export function isUnknownRow(tb: BalanceLike & TokenLike): boolean {
 	return isUnknownParsedRow(parseRawBalance(tb), tb)
 }

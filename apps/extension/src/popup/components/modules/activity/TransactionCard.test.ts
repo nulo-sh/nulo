@@ -261,6 +261,11 @@ describe("modules/activity/TransactionCard (settled)", () => {
 			origin: { type: OriginType.DAPP, name: "example.dapp.io" },
 		})
 
+		test("of a listed 24-decimal token reads 1", () => {
+			const w = mountCard(mintTx(10n ** 24n), { tokens: [{ ...tokens[0], decimals: 24 }] })
+			expect(w.find(".amount").text()).toBe("1")
+		})
+
 		test("of a listed 18-decimal token reads 1 and its symbol, which its kind's title does not name", () => {
 			const w = mountCard(mintTx(10n ** 18n), { tokens })
 			expect(w.find(".amount").text()).toBe("1")
@@ -375,11 +380,12 @@ describe("TransactionCard fiat (D2 activity rows)", () => {
 	})
 
 	test.each([
-		["unknown decimals: no figure and no fiat", false, { amount: "", fiat: false }],
-		["known decimals (control): the figure and its fiat", true, { amount: "125", fiat: true }],
-	])("a priced transfer of a listed token with %s; the title keeps the symbol", async (_label, hasDecimals, want) => {
+		["unknown decimals: no figure and no fiat", 0, false, { amount: "", fiat: false }],
+		["decimals past the bound: no figure and no fiat", 78, true, { amount: "", fiat: false }],
+		["known decimals (control): the figure and its fiat", 6, true, { amount: "125", fiat: true }],
+	])("a priced transfer of a listed token with %s; the title keeps the symbol", async (_label, decimals, hasDecimals, want) => {
 		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
-		const tokens = [{ contract: TEST_USDC, symbol: "cUSD", decimals: hasDecimals ? 6 : 0, hasDecimals }]
+		const tokens = [{ contract: TEST_USDC, symbol: "cUSD", decimals, hasDecimals }]
 		const w = mount(TransactionCard, {
 			props: { ...surface(), tx: mkTransferTx(TEST_USDC), tokens } as never,
 			global: { stubs: STUBS },

@@ -10,6 +10,7 @@ import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { DecodedCall, DecodedGrant, DecodedParam, DecodedValue, UndecodedReason } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { formatBaseUnits } from "@/utils/amount"
+import { isValidDecimals } from "@/utils/token-amount"
 import { trimAddress } from "@/utils/string"
 import {
 	abiNameFitsRole,
@@ -178,8 +179,8 @@ export const authwitLine = (surface: CallSurface, fn: string): AuthwitLine =>
 export type AmountLabel = { text: string; symbol?: string }
 
 /** An amount in the token's own units when the wallet knows the token at `contract`; the raw integer
- *  otherwise — including a token whose symbol sanitizes to nothing, where a scaled number under a
- *  "base units" label would be a lie. */
+ *  otherwise — including a token whose symbol sanitizes to nothing or whose decimals the wallet cannot
+ *  use, where a scaled number under a "base units" label would be a lie. */
 export const amountLabel = (
 	tokens: readonly TokenInfo[] | undefined,
 	chainId: number | undefined,
@@ -188,7 +189,7 @@ export const amountLabel = (
 ): AmountLabel => {
 	const token = tokenAt(tokens, chainId, contract)
 	const symbol = token ? safeWire(token.symbol, 16) : ""
-	if (!token || !symbol) return { text: amount }
+	if (!token || !symbol || !isValidDecimals(token.decimals)) return { text: amount }
 	return { text: formatBaseUnits(BigInt(amount), token.decimals), symbol }
 }
 
