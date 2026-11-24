@@ -589,6 +589,9 @@ export interface AllowedError {
 	except?: RegExp
 }
 
+/** An unhandled rejection is a defect whatever it carries, and a failed restore is the user's. */
+const NO_REFUSAL = /^\["(?:unhandled rejection|\[full-backup\] restore failed)/
+
 /** Every guarded launch, a sandbox run's included, holds a stand-in for each seeded remote node.
  *  The entry needs the stand-in's own refusal text, so an error from anything else still fails. */
 export const GUARDED_NODE_REFUSAL: AllowedError = {
@@ -596,10 +599,23 @@ export const GUARDED_NODE_REFUSAL: AllowedError = {
 	kinds: ["log"],
 	during: "any step",
 	everyMessage: true,
-	// An unhandled rejection is a defect whatever it carries, and a failed restore is the user's.
-	except: /^\["(?:unhandled rejection|\[full-backup\] restore failed)/,
+	except: NO_REFUSAL,
 	source: cite("apps/extension/tests/e2e/fixtures/node-stub.ts", 12, "const REFUSAL = JSON.stringify("),
 	reason: "the stand-in refuses every node call, and the wallet logs each refused node call as an error",
+}
+
+/** A route of more than one endpoint that admits none throws its own text, which carries none of
+ *  the stand-in's. A lone route given any time surfaces its endpoint's own failure instead, so a run
+ *  whose every seeded route of more than one endpoint is all stand-ins (`startRun` checks) can meet
+ *  this text from a stand-in only. Its transaction twin a lone route does throw, so it stays out. */
+export const ROUTED_STAND_IN_REFUSAL: AllowedError = {
+	pattern: /^No endpoint of this network can take the call$/,
+	kinds: ["log"],
+	during: "any step",
+	everyMessage: true,
+	except: NO_REFUSAL,
+	source: cite("packages/aztec-runtime/src/routing/routed-node.ts", 193, "const noEndpoint = (what: string) =>"),
+	reason: "a route of stand-ins admits no endpoint, and the wallet logs each node call it refuses as an error",
 }
 
 /** The reviewed allowlist. */
@@ -612,6 +628,7 @@ export const ALLOWED_ERRORS: readonly AllowedError[] = [
 		reason: "the popup prevents every disconnect rejection and logs it at debug, but neither browser's capture sees the prevention; a disconnect the wallet logs at error still fails the run",
 	},
 	GUARDED_NODE_REFUSAL,
+	ROUTED_STAND_IN_REFUSAL,
 	{
 		pattern: /^\["\[full-backup\] restore failed:",\{"error":\{"name":"Error","message":"Client disconnected"\}\}\]$/,
 		kinds: ["log"],

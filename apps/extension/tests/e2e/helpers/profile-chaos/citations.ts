@@ -1,7 +1,7 @@
 /**
  * Every `code:` source a clause of the harness cites, with a fragment its line must hold, so a line
  * that moves fails the citation test instead of vouching for whatever now sits there. A path is
- * relative to `apps/extension/` unless it starts with `apps/`.
+ * relative to `apps/extension/` unless it starts with `apps/` or `packages/`.
  *
  * Imports nothing, so the pure modules and their unit test share one table.
  */
