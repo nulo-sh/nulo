@@ -137,7 +137,7 @@ const OTHER_ACCOUNT = `0x${"b".repeat(64)}`
 const row = (
 	id: number,
 	symbol: string,
-	over: Partial<{ chainId: number; contract: string; publicBalance: string; account: string }> = {},
+	over: Partial<{ chainId: number; contract: string; publicBalance: string; account: string; decimals: number }> = {},
 ) => ({
 	id: id + 100,
 	account: over.account ?? ACCOUNT,
@@ -147,7 +147,7 @@ const row = (
 		contract: over.contract ?? `0x${symbol.toLowerCase()}`,
 		name: `${symbol} Token`,
 		symbol,
-		decimals: 18,
+		decimals: over.decimals ?? 18,
 		hasDecimals: true,
 	},
 	publicBalance: over.publicBalance ?? "1",
@@ -208,6 +208,16 @@ describe("SelectTokenPopup", () => {
 		await wrapper.get('[data-testid="select-token-fold"]').trigger("click")
 		expect(rowSymbols(wrapper)).toEqual(["PRICED", "ALPHA", "ZED", "EMPTY"])
 		expect(H.getTokenBalances).toHaveBeenCalledWith(undefined, ACCOUNT)
+	})
+
+	test("a priced token with 24 decimals reads its balance and its dollar value", async () => {
+		H.quotes.current = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+		const wrapper = await mountOpen([
+			row(1, "BIG", { contract: TEST_USDC, publicBalance: (15n * 10n ** 23n).toString(), decimals: 24 }),
+		])
+		const big = wrapper.get('[data-testid="select-token-row"][data-symbol="BIG"]')
+		expect(big.get('[data-testid="token-amount"]').text()).toBe("1.5")
+		expect(big.get('[data-testid="token-fiat"]').text()).toBe("≈ $1.50")
 	})
 
 	// The shell mounts the picker, hidden, in every unlocked document, a dApp window's included.

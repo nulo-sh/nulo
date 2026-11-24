@@ -1,6 +1,6 @@
 # wallet-followups-9: owner asks
 
-Each ask ships with the recommendation built, so the frames show it; the PR waits for the owner's word.
+Each ask shipped with the recommendation built, so the frames showed it. **Answered** on decision page 203 (signed 2026-11-24): OA-1 A; OA-2 A, with the bound at 77 ("This token has more than 77 decimals. Nulo supports up to 77."); OA-3 B. The plan's § The owner's decisions quotes them; the tables below are the asks as put, at the first build's 18.
 
 ## OA-1: how Delete profile names a chain with no network row (#1925)
 
@@ -14,10 +14,20 @@ Each ask ships with the recommendation built, so the frames show it; the PR wait
 
 ## OA-2: the words when New token refuses a token with more than 18 decimals (#1926)
 
-**Surface:** the New token popup and the Holdings paste field, under the address.
+**Surface:** the New token popup and the Holdings paste field, under the address. No existing sentence fits: the form's interface refusal says it could not detect the token's interface, which is false for a standard token configured with more than 18 decimals (the review of arc 2), and its other refusal invites a retry that fails the same way. So the built option is new words.
 
 | Option | Text | Note |
 |---|---|---|
-| **A (recommended, built)** | "Couldn't auto-detect this token's interface. Try a contract whose ABI matches a known standard." | The form's existing refusal for a contract it cannot add; no new words. Reads as "not a standard token", which is true of a token past 18 decimals. |
-| B | "Something went wrong. Try again." | The form's other existing refusal; wrong advice, since a retry fails the same way. |
-| C | "This token uses more than 18 decimals. Nulo supports up to 18." | New words; exact. |
+| **A (recommended, built)** | "This token has more than 18 decimals. Nulo supports up to 18." | New words; exact; the number comes from the one bound. |
+| B | "Couldn't auto-detect this token's interface. Try a contract whose ABI matches a known standard." | Existing words; false for a standard token past 18 decimals. |
+| C | "Something went wrong. Try again." | Existing words; wrong advice, since a retry fails the same way. |
+
+## OA-3: does Send say why it refuses a stored token past the bound (#1926)
+
+**Surface:** Send, with a token picked whose stored decimals are past 18 (only a row added before this change can hold one; no seed or list entry can).
+
+| Option | What the person sees | Note |
+|---|---|---|
+| **A (recommended, built)** | The token row reads "—" in the picker, as on Home; Send takes no amount (no USD rate, no conversion, Max fills nothing) and Review stays disabled, with no new words. | The wallet's existing treatment of a token whose decimals it does not know. |
+| B | As A, plus a line under the amount: "Nulo can't send this token." | New words. |
+| C | The picker leaves such a token out. | A row disappears from one list but not from Home. |
