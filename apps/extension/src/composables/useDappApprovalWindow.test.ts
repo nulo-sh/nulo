@@ -5,12 +5,14 @@
  * prove the shell composes correctly inside each window; this suite pins the
  * shell's own contract in isolation — start/dispose ordering, the closeWindow
  * completion semantics, the listener identity pairing, the profile-change guard,
- * the named ends and the wait for the wallet to take one, and the strip/error state.
+ * the named ends and the wait for the wallet to take one, the wrong-profile and
+ * raced-cancel endings, and the strip/error state.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises } from "@vue/test-utils"
 import { reactive, ref, type Ref } from "vue"
+import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 
 const routerPushMock = vi.fn()
@@ -87,6 +89,7 @@ afterEach(() => {
 
 const makeShell = (overrides: Partial<Parameters<typeof useDappApprovalWindow>[0]> = {}) => {
 	const profile: Ref<ProfileInfo | undefined> = ref(undefined)
+	const requestId = ref<string | undefined>("req-1")
 	const isInteractionCancelled = ref(false)
 	const isLoading = ref(false)
 	const connectServices = vi.fn(() => callLog.push("connect"))
@@ -108,6 +111,7 @@ const makeShell = (overrides: Partial<Parameters<typeof useDappApprovalWindow>[0
 		getActiveProfile,
 		reject,
 		profile,
+		requestId,
 		isInteractionCancelled,
 		isLoading,
 		...overrides,
@@ -116,6 +120,7 @@ const makeShell = (overrides: Partial<Parameters<typeof useDappApprovalWindow>[0
 	return {
 		shell,
 		profile,
+		requestId,
 		isInteractionCancelled,
 		isLoading,
 		connectServices,
@@ -271,6 +276,50 @@ describe("useDappApprovalWindow", () => {
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+
+	test("dismissWrongProfile ends a live request through the window's reject, as the close, and leaves the closing to it", async () => {
+		const { shell, resolveInit, reject } = makeShell()
+		void shell.start()
+		resolveInit()
+		await flushPromises()
+		shell.dismissWrongProfile()
+		expect(reject).toHaveBeenCalledExactlyOnceWith("close")
+		expect(windowsRemoveMock).not.toHaveBeenCalled()
+		expect(beforeunloadRemoves()).toBe(0)
+	})
+
+	test.each([
+		["the app cancelled the request", { cancelled: true, requestId: "req-1" }],
+		["the window holds no request id", { cancelled: false, requestId: undefined }],
+	])("dismissWrongProfile when %s rejects nothing and closes the window, keeping the unload listener", async (_case, at) => {
+		const { shell, resolveInit, reject, isInteractionCancelled, requestId } = makeShell()
+		void shell.start()
+		resolveInit()
+		await flushPromises()
+		isInteractionCancelled.value = at.cancelled
+		requestId.value = at.requestId
+		shell.dismissWrongProfile()
+		expect(reject).not.toHaveBeenCalled()
+		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
+		expect(beforeunloadRemoves()).toBe(0)
+	})
+
+	test("settleResolveError: a JobCancelledError is the cancelled state, and the window's own branch never runs", () => {
+		const { shell, isInteractionCancelled } = makeShell()
+		const onOther = vi.fn()
+		shell.settleResolveError(new JobCancelledError(), onOther)
+		expect(isInteractionCancelled.value).toBe(true)
+		expect(onOther).not.toHaveBeenCalled()
+		expect(shell.processingError.value).toBeUndefined()
+	})
+
+	test("settleResolveError: any other refusal runs the window's own branch and leaves the request live", () => {
+		const { shell, isInteractionCancelled } = makeShell()
+		const onOther = vi.fn()
+		shell.settleResolveError(new Error("port closed"), onOther)
+		expect(onOther).toHaveBeenCalledTimes(1)
+		expect(isInteractionCancelled.value).toBe(false)
 	})
 
 	test("stripStatus precedence — cancelled over loading over ready", () => {

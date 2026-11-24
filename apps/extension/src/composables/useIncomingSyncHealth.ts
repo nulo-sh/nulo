@@ -1,4 +1,5 @@
 import type { EventHandler } from "@nulo/wallet-core/utils"
+import { createReconnectCheck } from "@/composables/reconnectRead"
 import { createRunFence } from "@/composables/runFence"
 import { type Ref, ref } from "vue"
 import type { IncomingSyncHealth, IncomingSyncHealthChanged } from "@/wallet/services/incoming-transfer/spec"
@@ -53,8 +54,7 @@ export function useIncomingSyncHealth(deps: UseIncomingSyncHealthDeps): UseIncom
 	let shownScope = ""
 	let shownAt = 0
 	let hideTimer: ReturnType<typeof setTimeout> | undefined
-	// The first connect is the one the first request opened; only later ones are reconnects.
-	let connectsSeen = 0
+	const isReconnect = createReconnectCheck()
 
 	const cancelHide = () => {
 		if (hideTimer !== undefined) clearTimeout(hideTimer)
@@ -106,8 +106,7 @@ export function useIncomingSyncHealth(deps: UseIncomingSyncHealthDeps): UseIncom
 	}
 
 	const onConnected = () => {
-		connectsSeen += 1
-		if (connectsSeen > 1) void refresh()
+		if (isReconnect()) void refresh()
 	}
 
 	const retry = async () => {
