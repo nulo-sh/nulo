@@ -20,10 +20,10 @@ import {
  *
  * A finding is a `typeof E` test for "object" beside a null exclusion of the same `E` in one run of
  * `&&` (`E !== null`, `E != null`, `E` or `!!E`) or, negated, of `||` (`E === null`, `E == null` or
- * `!E`); or a regex literal whose hex character class follows `0x` and is quantified `{64}`. Findings match
- * `inline-guard-ban.reviewed.json` by file and the run's text as a multiset, so a moved line needs no
- * edit and an edited expression needs a fresh review; `scripts/ci-cd/inline-guard-ratchet.test.ts`
- * refuses a new entry on a pull request.
+ * `!E`); or a regex literal whose hex character class follows `0x` and is quantified `{64}`, alone or
+ * as a group's only member. Findings match `inline-guard-ban.reviewed.json` by file and the run's text
+ * as a multiset, so a moved line needs no edit and an edited expression needs a fresh review;
+ * `scripts/ci-cd/inline-guard-ratchet.test.ts` refuses a new entry on a pull request.
  *
  * Blind spots: a guard split across statements (`if (x === null) return`, then `typeof x`), a
  * template expression, a pattern built by `new RegExp`, an alias of the operand.
@@ -131,6 +131,13 @@ function follows0x(pattern: string, end: number): boolean {
 	}
 }
 
+/** Where the class `open..close` ends its quantified atom: past the `)` of a group that holds the
+ *  class alone, since `(?:[0-9a-f]){64}` repeats the class as `[0-9a-f]{64}` does. */
+function atomEnd(pattern: string, open: number, close: number): number {
+	const alone = pattern[open - 1] === "(" || pattern.startsWith("(?:", open - 3)
+	return alone && pattern[close + 1] === ")" ? close + 2 : close + 1
+}
+
 /** A character class holding a hex range, after `0x` (group brackets aside) and quantified exactly
  *  `{64}`: the field shape `isHex32` names (a bare 64-digit digest has no helper). Plain string
  *  scanning: no pattern of its own for a ReDoS query to judge. */
@@ -139,9 +146,8 @@ function hasHexClass64(pattern: string): boolean {
 		const close = pattern.indexOf("]", open)
 		if (close === -1) return false
 		const range = pattern.slice(open + 1, close)
-		if (follows0x(pattern, open) && (range.includes("a-f") || range.includes("A-F")) && pattern.startsWith("{64}", close + 1)) {
-			return true
-		}
+		const hex = range.includes("a-f") || range.includes("A-F")
+		if (hex && follows0x(pattern, open) && pattern.startsWith("{64}", atomEnd(pattern, open, close))) return true
 	}
 	return false
 }
@@ -251,6 +257,8 @@ describe("inline guard ban (static)", () => {
 		["a digest with no 0x prefix", "x.ts", "const R = /^[0-9a-f]{64}$/", []],
 		["a grouped prefix", "x.ts", "const R = /^(?:0x)[0-9a-fA-F]{64}$/", ["isHex32 or HEX_32"]],
 		["a grouped class", "x.ts", "const R = /^0x(?:[0-9a-fA-F]{64})$/", ["isHex32 or HEX_32"]],
+		["a quantified group of the class alone", "x.ts", "const R = /^0x(?:[0-9a-fA-F]){64}$/", ["isHex32 or HEX_32"]],
+		["a quantified capture of the class alone", "x.ts", "const R = /^0x([0-9a-f]){64}$/", ["isHex32 or HEX_32"]],
 		["a repeated prefix", "x.ts", "const R = /^(0x[0-9a-f]){64}$/", []],
 	])("%s", (_case, file, source, hints) => {
 		expect(scan(file, source).map(({ hint }) => hint)).toEqual(hints)
