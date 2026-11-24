@@ -1,5 +1,3 @@
-/** The subscribe Worker's contract as the landing's forms read it. */
-
 export type SubscribeAnswer = "ok" | "invalid" | "retry"
 
 export type Fetch = (input: string, init: RequestInit) => Promise<Response>
@@ -9,10 +7,7 @@ export const RETRY_MESSAGE = "That didn't go through. Try again in a minute."
 // A stalled connection would otherwise hold the button disabled with nothing said.
 const TIMEOUT_MS = 20_000
 
-/**
- * Only `200 { "ok": true }` is `ok`, so a page served in the Worker's place never reads as success;
- * a 400 is `invalid`, and a transport failure or any other answer is worth a `retry`.
- */
+/** Only `200 { "ok": true }` is `ok`, so a page served in the Worker's place never reads as success. */
 export async function postSubscribe(
 	url: string,
 	request: { headers?: Record<string, string>; body: BodyInit },

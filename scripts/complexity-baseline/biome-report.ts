@@ -1,8 +1,5 @@
-/**
- * The one reader of Biome's JSON report for the baseline scripts. It decides no policy: each
- * caller states its own for a parse error, a path Biome printed with `./` and a diagnostic with no
- * position.
- */
+/** Biome's JSON report for the baseline scripts, kept raw (paths as printed, a missing position, parse
+ *  errors) so each caller states its own policy for them. */
 import { spawnSync } from "node:child_process"
 import { join } from "node:path"
 import { BASELINED_RULES, type BaselinedRule } from "./scan"
