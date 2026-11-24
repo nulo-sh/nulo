@@ -165,6 +165,7 @@ onBeforeUnmount(() => {
 					fallsBack
 					v-model="feeSettings"
 					@retryEstimate="estimates.refresh(0)"
+					@reread="estimates.pauseThisTask"
 				/>
 
 				<Flex v-snack-footer align="center" direction="column" gap="12">

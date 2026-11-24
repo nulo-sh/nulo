@@ -29,7 +29,7 @@ const authwitsServiceMock = {
 const journalMock = { subscribeJob: vi.fn(), disconnect: vi.fn() }
 
 const ESTIMATE = { maxFee: "1000", gasDetails: {} }
-/** The popup debounces each estimate by 500 ms. */
+/** Long enough for any estimate to land, a re-ask's 500 ms pause included. */
 async function estimatesLand() {
 	await vi.advanceTimersByTimeAsync(500)
 	await flushPromises()
@@ -105,7 +105,7 @@ const STUBS = {
 			estimateFailed: Boolean,
 			fallsBack: Boolean,
 		},
-		emits: ["update:modelValue", "retryEstimate"],
+		emits: ["update:modelValue", "retryEstimate", "reread"],
 		setup: () => ({ feeControlClick }),
 		template: `<div><button data-testid="set-fee" :data-estimate="feeEstimate?.maxFee" :data-falls-back="String(fallsBack)" :data-failed="String(estimateFailed)" @click="feeControlClick(); $emit('update:modelValue', { gasLimit: 100 })">fee</button><button data-testid="stub-retry" @click="$emit('retryEstimate')">retry</button></div>`,
 	},
@@ -305,6 +305,27 @@ describe("ChangeAuthwitsRegistryPopup — the fee check before proving", () => {
 		expect(second![4]).not.toBe(first![4])
 		expect(failed()).toBe("false")
 		expect(disabled(w)).toBe(false)
+	})
+})
+
+describe("ChangeAuthwitsRegistryPopup — when the fee estimate starts", () => {
+	test("the first estimate starts once its task ends; the card's re-read re-asks after the 500 ms pause", async () => {
+		const estimate = authwitsServiceMock.estimateRegistryToggleFee
+		const w = await mountAndOpen()
+		await vi.advanceTimersByTimeAsync(0)
+		await w.get('[data-testid="set-fee"]').trigger("click")
+		expect(estimate).not.toHaveBeenCalled()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(estimate).toHaveBeenCalledTimes(1)
+		await estimatesLand()
+		expect(w.get('[data-testid="set-fee"]').attributes("data-estimate")).toBe("1000")
+
+		w.getComponent(STUBS.FeeSettingsCard).vm.$emit("reread")
+		await w.get('[data-testid="set-fee"]').trigger("click")
+		await vi.advanceTimersByTimeAsync(499)
+		expect(estimate).toHaveBeenCalledTimes(1)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(estimate).toHaveBeenCalledTimes(2)
 	})
 })
 

@@ -135,6 +135,8 @@ const props = defineProps<{
 const emit = defineEmits<{
 	updateFeeSettings: [index: number, value: FeeSettings | undefined]
 	retryEstimate: [index: number]
+	/** The fee card's next settings re-ask after an answer. */
+	feeReread: [index: number]
 	retryPreview: [index: number]
 	/** The fee card's paying method, or null while none pays. */
 	updatePayer: [index: number, payer: FeePayerPick | null]
@@ -471,6 +473,7 @@ const advises = computed((): boolean => {
 				@update:modelValue="(value: FeeSettings | undefined) => emit('updateFeeSettings', index, value)"
 				@update:payer="(payer: FeePayerPick | null) => emit('updatePayer', index, payer)"
 				@retryEstimate="emit('retryEstimate', index)"
+				@reread="emit('feeReread', index)"
 			/>
 			<!-- Mounted with the card: a region created with its text in place may go unannounced. -->
 			<div role="status" aria-live="polite" aria-atomic="true" data-testid="execute-op-app-failure-live">

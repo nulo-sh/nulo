@@ -268,6 +268,7 @@ const {
 	rearm: rearmFeeEstimates,
 	cancelAll: cancelAllFeeEstimates,
 	dispose: disposeFeeEstimates,
+	pauseThisTask: pauseFeeEstimates,
 } = useFeeEstimationMap<number, { index: number; feeSettings: FeeSettings }, TransferFeeEstimate>({
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
@@ -819,6 +820,7 @@ onUnmounted(() => {
 							:appFailure="failedFeeEstimates[i] ? appFailures[i] : undefined"
 							@updateFeeSettings="handleFeeUpdate"
 							@retryEstimate="retryFeeEstimate"
+							@feeReread="pauseFeeEstimates"
 							@retryPreview="retryAuthwitPreview"
 							@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
 							@acknowledgeTokenFlag="acknowledgeTokenFlag"

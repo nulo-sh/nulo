@@ -1770,3 +1770,53 @@ describe("send page — a token's decimals against the wallet's bound, over the 
 		w.unmount()
 	})
 })
+
+describe("Send — when the fee estimate starts", () => {
+	const asked = () => mocks.estimateTransferFee.mock.calls.length
+	const amounts = () => mocks.estimateTransferFee.mock.calls.map((call) => call[6])
+	/** A person's next action comes in a later task: the timer turn that ends a task's mark runs first. */
+	const nextTask = () => vi.advanceTimersByTimeAsync(0)
+
+	test("a typed amount waits the 800 ms pause; a side picked during it starts at once, with that amount", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		await toForm(w)
+		await nextTask()
+		await w.get('[data-testid="send-amount-input"]').setValue("1.5")
+		await vi.advanceTimersByTimeAsync(799)
+		expect(asked()).toBe(0)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(amounts()).toEqual([1_500_000n])
+
+		await w.get('[data-testid="send-amount-input"]').setValue("1.25")
+		await vi.advanceTimersByTimeAsync(300)
+		expect(asked()).toBe(1)
+		await setSide(w, "to", "public")
+		await vi.advanceTimersByTimeAsync(0)
+		expect(amounts()).toEqual([1_500_000n, 1_250_000n])
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(asked()).toBe(2)
+		w.unmount()
+	})
+
+	test("Max on the amount already typed starts the waiting estimate at once; an address typed on the person step waits", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		await toForm(w)
+		await nextTask()
+		await w.get('[data-testid="send-amount-input"]').setValue("5")
+		await vi.advanceTimersByTimeAsync(300)
+		expect(asked()).toBe(0)
+		await w.get('[data-testid="send-amount-max"]').trigger("click")
+		await nextTask()
+		expect(amounts()).toEqual([5_000_000n])
+
+		// Back on the person step the amount stays, so a valid address typed there asks again.
+		await w.get('[data-testid="subpage-back"]').trigger("click")
+		await nextTask()
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await vi.advanceTimersByTimeAsync(799)
+		expect(asked()).toBe(1)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(asked()).toBe(2)
+		w.unmount()
+	})
+})

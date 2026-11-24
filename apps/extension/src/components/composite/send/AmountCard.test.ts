@@ -278,7 +278,7 @@ describe("composite/AmountCard", () => {
 		expect(emits[emits.length - 1]?.[0]).toBe("1,234,567.123456")
 	})
 
-	test("a blur's rest, a re-clamp and a write from the page each write the amount and none is an edit", async () => {
+	test("a blur's rest, a re-clamp and a write from the page each write the amount and none is an edit; only the rest is typing", async () => {
 		const w: ReturnType<typeof mountCard> = mountCard({
 			modelValue: "1000.123456789",
 			token: { symbol: "ETH", decimals: 18 },
@@ -289,6 +289,8 @@ describe("composite/AmountCard", () => {
 		await w.setProps({ modelValue: "" })
 		expect(w.emitted("update:modelValue")).toEqual([["1,000.123456789"], ["1,000.1234"]])
 		expect(w.emitted("edit")).toBeUndefined()
+		expect(w.emitted("typed")).toEqual([[]])
+		expect(w.emitted("picked")).toBeUndefined()
 	})
 
 	test("clamps to 0 decimals (token with no fractional units strips the dot)", async () => {
@@ -373,14 +375,20 @@ describe("composite/AmountCard — C3 fiat input", () => {
 			"onUpdate:fiatGuard": (v: unknown) => w.setProps({ fiatGuard: v }),
 		})
 		const edits = () => w.emitted("edit")?.length ?? 0
+		const count = () => ({ typed: w.emitted("typed")?.length ?? 0, picked: w.emitted("picked")?.length ?? 0 })
 		await w.get("input[data-testid='send-amount-input']").setValue("5")
+		expect(count()).toEqual({ typed: 1, picked: 0 })
 		await w.get("[data-testid='send-amount-max']").trigger("click")
 		expect(edits()).toBe(2)
 		await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
 		expect(edits()).toBe(2)
+		expect(count()).toEqual({ typed: 1, picked: 2 })
+		// A USD keystroke writes no amount until its conversion, which is the typing.
 		await w.get("input[data-testid='send-amount-fiat-input']").setValue("3")
+		expect(count()).toEqual({ typed: 1, picked: 2 })
 		await w.get("[data-testid='send-amount-max']").trigger("click")
 		expect(edits()).toBe(4)
+		expect(count()).toEqual({ typed: 1, picked: 3 })
 		expect(w.props("modelValue")).toBe("1000")
 	})
 
@@ -470,12 +478,15 @@ describe("composite/AmountCard — C3 fiat input", () => {
 			await input.setValue("120")
 			await input.trigger("input")
 			await vi.advanceTimersByTimeAsync(300)
+			// The typed figure's conversion is typing; Refresh quote's, a press, is not.
+			expect(w.emitted("typed")).toHaveLength(1)
 			;(w.vm as unknown as { refreezeQuote(): void }).refreezeQuote()
 			const guard = w.emitted("update:fiatGuard")?.at(-1)?.[0] as { frozenUsd: number }
 			expect(guard.frozenUsd).toBe(1.2)
 			await vi.advanceTimersByTimeAsync(300)
 			// $120 at $1.20 → exactly 100 tokens.
 			expect(w.emitted("update:modelValue")?.at(-1)).toEqual(["100"])
+			expect(w.emitted("typed")).toHaveLength(1)
 		} finally {
 			vi.useRealTimers()
 		}

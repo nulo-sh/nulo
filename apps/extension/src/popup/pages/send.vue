@@ -619,6 +619,8 @@ const {
 	estimate: scheduleFeeEstimate,
 	cancel: cancelFeeEstimate,
 	handoff: handoffFeeEstimate,
+	pauseThisTask: pauseFeeEstimate,
+	startWaiting: startWaitingFeeEstimate,
 } = useFeeEstimation({
 	debounceMs: 800,
 	estimate: (params, estimateToken, signal) => {
@@ -1003,7 +1005,10 @@ onBeforeUnmount(() => {
 		</Banner>
 
 		<div v-if="!personChosen" :class="$style.top">
+			<!-- Capture: the field writes its model in its own listener, and Vue's flush, which asks the
+			     estimate, runs before a bubbling listener would mark the keystroke as typing. -->
 			<SendPersonStep
+				@input.capture="pauseFeeEstimate"
 				v-model:searchTerm="searchTerm"
 				v-model:selectedContact="selectedContact"
 				:candidates="recipientCandidates"
@@ -1043,6 +1048,8 @@ onBeforeUnmount(() => {
 						ref="amountCardRef"
 						v-model="amountTerm"
 						@edit="spendSendAgain"
+						@typed="pauseFeeEstimate"
+						@picked="startWaitingFeeEstimate"
 						v-model:rested="amountRested"
 						v-model:usdFigure="amountFiat"
 						v-model:fiatMode="fiatMode"
@@ -1155,6 +1162,7 @@ onBeforeUnmount(() => {
 					v-model:notices="feeNotices"
 					v-model:remedy="feeRemedy"
 					@retryEstimate="requestEstimate"
+					@reread="pauseFeeEstimate"
 				/>
 			</Teleport>
 		</div>
