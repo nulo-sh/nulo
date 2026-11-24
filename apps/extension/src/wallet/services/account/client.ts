@@ -25,6 +25,7 @@ export class AccountServiceClient extends ServiceClient<Methods, Events> impleme
 // signature checks the name list in both directions against `Methods`.
 definePassthroughsExhaustive<Methods>()(AccountServiceClient.prototype, [
 	"getAccounts",
+	"getImportedAccounts",
 	"getAccount",
 	"createAccount",
 	"ensureDefaultAccount",
