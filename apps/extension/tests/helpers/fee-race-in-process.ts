@@ -15,8 +15,9 @@
  * - O1: a press the popup allowed names the snapshot of its operation's latest landed estimate (or
  *   none, after a failed one), meets that snapshot at its turn, and ends sent unless the person
  *   locked or cancelled since.
- * - O2: the popup never fails an estimate the worker answered queued, and once nothing holds the
- *   slot or the sequence every open surface's estimate has been granted.
+ * - O2: the popup never fails an estimate the worker answered queued, nor one a step landed that the
+ *   popup still waited on, and once nothing holds the slot or the sequence every open surface's
+ *   estimate has been granted.
  * - O3: the slot grants in arrival order; every journal row moves along the job table.
  * - O4: once every hold is released, the node's submissions, the journal's sent rows and the strip's
  *   transactions name the same hashes, and a send cancelled before its submit names none.
@@ -42,9 +43,10 @@ import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { applyFeeSelection } from "@/wallet/services/dapp-interaction/approval-delta"
 import { feeMultiplierFor, reuseCapRule } from "@/wallet/services/execution/estimate-reuse-shared"
 import { feeCapFor } from "@/wallet/services/execution/fee/fee-cap"
+import type { DappSendEstimation } from "@/wallet/services/execution/dapp-send-estimation"
 import type { FeeSettings, OperationAuthwitPreview, TransferFeeEstimate } from "@/wallet/services/execution/models"
 import type { ExecutionService } from "@/wallet/services/execution/service"
-import type { TransferFeeQueued } from "@/wallet/services/execution/spec"
+import { ESTIMATE_JOB_TTL_MS, type TransferFeeQueued } from "@/wallet/services/execution/spec"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
 import { fpcIdentityOf, type FpcInfo } from "@/wallet/services/fpc/spec"
 import type { OperationRecord } from "@/wallet/services/operation-journal/service"
@@ -82,6 +84,8 @@ export interface Faults {
 	cancelIgnored?: boolean
 	/** An accepted approval claims none of its snapshots. */
 	claimSkipped?: boolean
+	/** The worker fails every estimate a step lands, once its run has returned. */
+	landedRunFails?: boolean
 }
 
 /** A press as the oracles and the coverage read it. */
@@ -193,10 +197,17 @@ type Row = Record<string, unknown> & { hash: string; status: TxStatus; account: 
 
 interface ParkedRun {
 	decide: (verdict: "land" | "fail") => void
+	/** The token of the attempt the run answers. */
+	token?: string
 }
 
 /** One estimate attempt as the popup made it. */
 interface RunRecord {
+	token: string
+	/** What a step decided for the worker's run of this attempt. */
+	verdict?: "land" | "fail"
+	/** When the popup last asked: the worker admits the run then, and reaps it past its TTL. */
+	askedAt: number
 	answers: Array<"queued" | "result" | "error">
 	started: boolean
 	state: "asking" | "landed" | "failed"
@@ -442,9 +453,16 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 			authWitnesses: [],
 		},
 	}))
-	;(raw.dappSendEstimation as Record<string, unknown>).discoverNoFromAuthwits = underRun(() => [])
+	// Typed as the real method, so a change to the shape its callers read fails here at typecheck.
+	const discoverNone: DappSendEstimation["discoverNoFromAuthwits"] = underRun(async () => ({ signable: [], consumed: [] }))
+	;(raw.dappSendEstimation as Record<string, unknown>).discoverNoFromAuthwits = discoverNone
 
-	// Every estimate run parks at its start, holding the slot it took, until a step decides it.
+	// Every estimate run parks at its start, holding the slot it took, until a step decides it. The
+	// worker reports a run's start just before the parked call, so a parked run knows its attempt.
+	let startedToken: string | undefined
+	service.onEstimateStarted.add(({ estimateToken }) => {
+		startedToken = estimateToken
+	})
 	const parked: ParkedRun[] = []
 	const park = <A extends unknown[], R>(target: Record<string, unknown>, name: string) => {
 		const original = (target[name] as (...args: A) => Promise<R>).bind(target)
@@ -453,7 +471,8 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 			const verdict = new Promise<"land" | "fail">((resolve) => {
 				decide = resolve
 			})
-			const run: ParkedRun = { decide }
+			const run: ParkedRun = { decide, token: startedToken }
+			startedToken = undefined
 			parked.push(run)
 			bump()
 			const v = await verdict
@@ -462,7 +481,9 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 			if (v === "fail") throw new Error("simulation failed")
 			inEstimateRun++
 			try {
-				return await original(...args)
+				const result = await original(...args)
+				if (faults.landedRunFails) throw new Error("the worker failed a landed run")
+				return result
 			} finally {
 				inEstimateRun--
 			}
@@ -630,11 +651,12 @@ function attempt<T extends object>(
 	onQueued?: (answer: TransferFeeQueued) => void,
 	onStarted?: () => void,
 ): Promise<T> {
-	const run: RunRecord = { answers: [], started: false, state: "asking" }
+	const run: RunRecord = { token, askedAt: Date.now(), answers: [], started: false, state: "asking" }
 	s.runs.push(run)
 	race.bump()
 	const ask = async () => {
 		let answer: T | TransferFeeQueued
+		run.askedAt = Date.now()
 		try {
 			answer = await rpc()
 		} catch (error) {
@@ -668,6 +690,9 @@ function attempt<T extends object>(
 		},
 		(error: unknown) => {
 			run.state = "failed"
+			const reapable = Date.now() - run.askedAt > ESTIMATE_JOB_TTL_MS
+			if (run.verdict === "land" && !signal.aborted && !reapable)
+				race.red("O2", `${s.ref}'s estimate failed after a step landed it: ${messageOf(error)}`)
 			race.bump()
 			throw error
 		},
@@ -987,6 +1012,9 @@ const DRIVERS: Drivers = {
 		return latestOutcome(s)
 	},
 	openSend: async (race, p) => {
+		// The catalog drives one popup document, where opening Send replaces the page a refused or
+		// armed press left. Two Send documents share the worker's one `send` estimate flow: outside it.
+		for (const s of race.surfaces) if (s.surface === "send") s.close()
 		const s = openSend(race, `op${race.surfaces.length + 1}`, p.method, p.transfer)
 		race.surfaces.push(s)
 		await settle(race)
@@ -1073,6 +1101,9 @@ const DRIVERS: Drivers = {
 async function decideParked(race: Race, verdict: "land" | "fail"): Promise<Outcome> {
 	const run = race.parked[0]
 	if (!run) return "idle"
+	const answered = race.surfaces.flatMap((s) => s.runs).find((r) => r.token === run.token)
+	if (!answered) throw new DriverError("a parked run answers no attempt the popup made")
+	answered.verdict = verdict
 	run.decide(verdict)
 	await settle(race)
 	return verdict === "land" ? "landed" : "failed"
