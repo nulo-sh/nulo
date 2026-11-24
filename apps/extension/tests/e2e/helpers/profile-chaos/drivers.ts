@@ -32,7 +32,7 @@ import {
 	live,
 } from "./model"
 import { drainBeforeStop, restartBackground } from "./restart"
-import { bindProfile, type Ceremony, checkOutcome, checkSettle } from "./checkers"
+import { accountFileCeremonies, bindProfile, type Ceremony, checkOutcome, checkSettle } from "./checkers"
 import { credentialId, type Drive, type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
 import {
 	activeProfileId,
@@ -470,18 +470,10 @@ const importBackup: Drivers["importBackup"] = async (s, p, step, before) => {
 	return driven
 }
 
-/** A passkey profile's file asks one passkey: its own, the other one the step answers with, or
- *  none the authenticator refused. */
-function fileCeremonies(open: ModelProfile, p: ParamsMap["exportAccountFile"]): Ceremony[] {
-	if (p.variant === "refuse") return []
-	const credential = p.variant === "other" ? p.other : open.credential
-	return [{ kind: "get", credential: credential as CredentialRef }]
-}
-
 const exportAccountFile: Drivers["exportAccountFile"] = async (s, p, step, before) => {
 	const open = openBefore(before)
 	const driven = await exportAccount(s, open, p)
-	if (open.method === "passkey") await checkAnswers(s, s.anchor, step, driven, fileCeremonies(open, p))
+	if (open.method === "passkey") await checkAnswers(s, s.anchor, step, driven, accountFileCeremonies(open, p, driven.beforeSave === true))
 	return driven
 }
 
