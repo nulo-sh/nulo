@@ -13,7 +13,7 @@
 
 import { jsonStringify } from "@aztec-labs/foundation/json-rpc"
 import { NoRetryError, makeBackoff, retry } from "@aztec-labs/foundation/retry"
-import { ResponseTooLargeError, readBodyCapped } from "@nulo/wallet-core/utils"
+import { isObjectLike, ResponseTooLargeError, readBodyCapped } from "@nulo/wallet-core/utils"
 
 /** Default timeout per individual HTTP request (ms). */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000
@@ -51,9 +51,7 @@ export function withTransportFailure<E extends Error>(error: E, kind: TransportF
 }
 
 function kindOn(value: unknown): TransportFailure | undefined {
-	return typeof value === "object" && value !== null
-		? (value as { [TRANSPORT_FAILURE]?: TransportFailure })[TRANSPORT_FAILURE]
-		: undefined
+	return isObjectLike(value) ? (value as { [TRANSPORT_FAILURE]?: TransportFailure })[TRANSPORT_FAILURE] : undefined
 }
 
 /**
@@ -62,8 +60,8 @@ function kindOn(value: unknown): TransportFailure | undefined {
  * failed batch (so the entries of one failed request share it).
  */
 export function transportFailureOf(error: unknown): TransportFailure | undefined {
-	const cause = typeof error === "object" && error !== null ? (error as { cause?: unknown }).cause : undefined
-	const data = typeof cause === "object" && cause !== null ? (cause as { data?: unknown }).data : undefined
+	const cause = isObjectLike(error) ? error.cause : undefined
+	const data = isObjectLike(cause) ? cause.data : undefined
 	return kindOn(error) ?? kindOn(data)
 }
 
@@ -139,8 +137,8 @@ function mapBodyFailure(err: unknown, resp: Response, aborted: boolean): Error {
 }
 
 function rpcErrorOf(entry: unknown): { code?: unknown; message?: unknown } | undefined {
-	const error = typeof entry === "object" && entry !== null ? (entry as { error?: unknown }).error : undefined
-	return typeof error === "object" && error !== null ? error : undefined
+	const error = isObjectLike(entry) ? entry.error : undefined
+	return isObjectLike(error) ? error : undefined
 }
 
 /** Status classification for a non-ok response: 4xx (or an explicit noRetry)

@@ -1,0 +1,164 @@
+{
+	"apps/extension/src/composables/full-backup-restore.ts": [
+		{
+			"text": "typeof row === \"object\" && row !== null",
+			"why": "pending: same set as isObjectLike"
+		}
+	],
+	"apps/extension/src/content-script/approval-filter.ts": [
+		{
+			"text": "typeof value === \"object\" && value !== null",
+			"why": "content script: its bundle carries no workspace code, so it keeps a local isObjectLike"
+		}
+	],
+	"apps/extension/src/e2e/chrome-storage-token-seeds.ts": [
+		{
+			"text": "/^0x[0-9a-f]{64}$/",
+			"why": "lower case only: e2e seeds as the suite writes them"
+		}
+	],
+	"apps/extension/src/popup/pages/send-submit.ts": [
+		{
+			"text": "/^0x[0-9a-f]{64}$/i",
+			"why": "either case, and an 0X prefix: View is offered for any spelling of the hash"
+		}
+	],
+	"apps/extension/src/utils/full-backup-helpers.ts": [
+		{
+			"text": "typeof item !== \"object\" || item === null",
+			"why": "pending: same set as isObjectLike"
+		},
+		{
+			"text": "item && typeof item === \"object\" && idKey in item",
+			"why": "pending: same set as isObjectLike"
+		},
+		{
+			"text": "item && typeof item === \"object\" && idKey in item",
+			"why": "pending: same set as isObjectLike"
+		},
+		{
+			"text": "!row || typeof row !== \"object\"",
+			"why": "pending: same set as isObjectLike"
+		}
+	],
+	"apps/extension/src/wallet/services/account-state/normalize.ts": [
+		{
+			"text": "typeof entry === \"object\" && entry !== null && typeof (entry as { address?: unknown }).address === \"string\" && (entry as { address: string }).address.length > 0 && (entry as { address: string }).address.length <= 200",
+			"why": "pending: same set as isObjectLike"
+		},
+		{
+			"text": "typeof entry !== \"object\" || entry === null",
+			"why": "pending: same set as isObjectLike"
+		},
+		{
+			"text": "typeof item === \"object\" && item !== null",
+			"why": "pending: same set as isObjectLike"
+		}
+	],
+	"apps/extension/src/wallet/services/account/service.ts": [
+		{
+			"text": "typeof a === \"object\" && a !== null",
+			"why": "pending: same set as isObjectLike"
+		}
+	],
+	"apps/extension/src/wallet/services/backup/backup-migration-registry.ts": [
+		{
+			"text": "typeof el !== \"object\" || el === null || Array.isArray(el)",
+			"why": "pending: same set as isRecord"
+		},
+		{
+			"text": "typeof stored !== \"object\" || stored === null || Array.isArray(stored)",
+			"why": "pending: same set as isRecord"
+		},
+		{
+			"text": "typeof data !== \"object\" || data === null || Array.isArray(data)",
+			"why": "pending: same set as isRecord"
+		},
+		{
+			"text": "typeof row !== \"object\" || row === null || Array.isArray(row)",
+			"why": "pending: same set as isRecord"
+		},
+		{
+			"text": "typeof parsed !== \"object\" || parsed === null || Array.isArray(parsed)",
+			"why": "pending: same set as isRecord"
+		}
+	],
+	"apps/extension/src/wallet/services/backup/row-map-migration.ts": [
+		{
+			"text": "typeof row !== \"object\" || row === null || Array.isArray(row)",
+			"why": "pending: same set as isRecord"
+		},
+		{
+			"text": "typeof value !== \"object\" || value === null",
+			"why": "pending: same set as isObjectLike"
+		}
+	],
+	"apps/extension/src/wallet/services/backup/trust-gate.ts": [
+		{
+			"text": "typeof profile !== \"object\" || profile === null || Array.isArray(profile)",
+			"why": "pending: same set as isRecord"
+		},
+		{
+			"text": "typeof backup !== \"object\" || backup === null || Array.isArray(backup)",
+			"why": "pending: same set as isRecord"
+		}
+	],
+	"apps/extension/src/wallet/services/dapp-interaction/approval-delta.ts": [
+		{
+			"text": "/^0x[0-9a-f]{64}$/",
+			"why": "lower case only: a class id as the wallet read it"
+		}
+	],
+	"apps/extension/src/wallet/services/execution/dapp-send-executor.ts": [
+		{
+			"text": "typeof wait === \"object\" && wait !== null",
+			"why": "pending: same set as isObjectLike"
+		}
+	],
+	"apps/extension/src/wallet/services/token/seeder.ts": [
+		{
+			"text": "!raw || typeof raw !== \"object\" || Array.isArray(raw)",
+			"why": "pending: same set as isRecord"
+		},
+		{
+			"text": "!stored || typeof stored !== \"object\" || Array.isArray(stored)",
+			"why": "pending: same set as isRecord"
+		}
+	],
+	"apps/extension/src/wallet/services/token/service.ts": [
+		{
+			"text": "typeof raw !== \"object\" || raw === null",
+			"why": "pending: same set as isObjectLike"
+		}
+	],
+	"apps/extension/src/wallet/services/wallet-sdk/content-script-validator.ts": [
+		{
+			"text": "typeof value === \"object\" && value !== null && Object.keys(value).every((key) => keys.has(key))",
+			"why": "pending: same set as isObjectLike"
+		},
+		{
+			"text": "typeof message !== \"object\" || message === null",
+			"why": "pending: same set as isObjectLike"
+		}
+	],
+	"apps/extension/src/wallet/services/wallet-sdk/wallet-message.ts": [
+		{
+			"text": "typeof message !== \"object\" || message === null",
+			"why": "pending: same set as isObjectLike"
+		}
+	],
+	"packages/extension-messaging/src/errors.ts": [
+		{
+			"text": "/^0x[0-9a-fA-F]{64}$/",
+			"why": "pending: same set as isHex32"
+		},
+		{
+			"text": "typeof frame === \"object\" && frame !== null",
+			"why": "pending: same set as isObjectLike"
+		},
+		{
+			"text": "typeof details === \"object\" && details !== null",
+			"why": "pending: same set as isObjectLike"
+		}
+	]
+}

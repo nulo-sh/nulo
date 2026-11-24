@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { describe, expect, test } from "vitest"
-import { AUTH_ENTRY_ROUTES } from "@/popup/should-advance-to-general"
+import { AUTH_ENTRY_ROUTES } from "@/utils/should-advance-to-general"
 import { ProfileRowSchema } from "@/wallet/services/profile/profile-row"
 import { STORED_SHAPES } from "@/wallet/storage/stored-shapes"
 import {
@@ -19,6 +19,7 @@ import {
 	stopsRun,
 	UNPLANNED_RESTART,
 	GUARDED_NODE_REFUSAL,
+	ROUTED_STAND_IN_REFUSAL,
 	checkLeaks,
 	checkLogContinuity,
 	checkOutcome,
@@ -97,7 +98,9 @@ const listOf = (steps: { action: ActionName; params: unknown }[]): ListedStep[] 
 function citationMisses(cited: ReadonlyMap<string, string>): string[] {
 	return [...cited].flatMap(([source, fragment]) => {
 		const [, file, line] = /^code:(\S+):(\d+)$/.exec(source) ?? []
-		const path = file.startsWith("apps/") ? join(import.meta.dirname, "../../../..", file) : join(import.meta.dirname, "../..", file)
+		const path = /^(?:apps|packages)\//.test(file)
+			? join(import.meta.dirname, "../../../..", file)
+			: join(import.meta.dirname, "../..", file)
 		return existsSync(path) && readFileSync(path, "utf8").split("\n")[Number(line) - 1]?.includes(fragment) ? [] : [source]
 	})
 }
@@ -1519,6 +1522,42 @@ describe("O4, errors", () => {
 		] as const)("fails %s", (label, entries) => {
 			const verdict = checkErrors(entries as unknown as ErrorEntry[], [])
 			expect(shown(`O4 the refusal allowance ${label}`, verdict.violations).length).toBeGreaterThan(0)
+		})
+	})
+
+	describe("the routed refusal of a route of stand-ins", () => {
+		const NO_ENDPOINT = "No endpoint of this network can take the call"
+		const routed = (text: string): ErrorEntry => ({ kind: "log", level: "error", source: "pxe", text })
+		const refused = `["[READ] getLatestBlockNumber failed after 206ms",{"error":{"name":"Error","message":"${NO_ENDPOINT}"}}]`
+		const discovery = `["Failed to discover FPC 0x05",{"name":"Error","message":"${NO_ENDPOINT}"}]`
+
+		test("passes at any step, and counts what it let through", () => {
+			expect(checkErrors([routed(refused), routed(discovery)], [])).toEqual({
+				violations: [],
+				warns: {},
+				allowed: { [ROUTED_STAND_IN_REFUSAL.source]: 2 },
+			})
+		})
+
+		test.each([
+			[
+				"for Local Network's own failure when its lone node is down",
+				[routed('["[READ] getLatestBlockNumber failed after 9ms",{"error":{"name":"TypeError","message":"Failed to fetch"}}]')],
+			],
+			[
+				"for the transaction twin, which a lone route throws",
+				[routed('["send failed",{"error":{"message":"No endpoint of this network can take the transaction"}}]')],
+			],
+			[
+				"for an entry that also carries another error",
+				[routed(`["Failed to sync",{"message":"${NO_ENDPOINT}"},"TypeError: bad state"]`)],
+			],
+			["for a message that only contains it", [routed(`["Failed",{"message":"Simulation failed: ${NO_ENDPOINT}"}]`)]],
+			["for an unhandled rejection carrying it", [routed(`["unhandled rejection",{"error":{"message":"${NO_ENDPOINT}"}}]`)]],
+			["for a page error carrying it", [page(`Error: ${NO_ENDPOINT}`)]],
+		] as const)("fails %s", (label, entries) => {
+			const verdict = checkErrors(entries as unknown as ErrorEntry[], [])
+			expect(shown(`O4 the routed refusal ${label}`, verdict.violations).length).toBeGreaterThan(0)
 		})
 	})
 

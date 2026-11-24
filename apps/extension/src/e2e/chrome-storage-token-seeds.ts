@@ -1,3 +1,4 @@
+import { isObjectLike } from "@nulo/wallet-core/utils"
 import type { DefaultTokenSeed } from "@/wallet/services/token/default-tokens"
 
 /**
@@ -23,7 +24,7 @@ const SANDBOX_DISPLAY_NAME = "TestToken"
 const SANDBOX_CHAIN_ID = 0
 
 /** Aztec field elements as this repo writes them: 0x + 64 lowercase hex. */
-const FIELD_RE = /^0x[0-9a-f]{64}$/
+const LOWER_CASE_FIELD = /^0x[0-9a-f]{64}$/
 
 /**
  * Reads the e2e seed list from `chrome.storage.session`.
@@ -52,10 +53,10 @@ export class ChromeStorageTokenSeeds {
 		if (raw === undefined) return undefined
 		if (!Array.isArray(raw) || raw.length !== 1) return []
 		const entry = raw[0] as Partial<DefaultTokenSeed> | null
-		if (!entry || typeof entry !== "object") return []
+		if (!isObjectLike(entry)) return []
 		if (entry.chainId !== SANDBOX_CHAIN_ID) return []
-		if (typeof entry.contract !== "string" || !FIELD_RE.test(entry.contract)) return []
-		if (typeof entry.expectedClassId !== "string" || !FIELD_RE.test(entry.expectedClassId)) return []
+		if (typeof entry.contract !== "string" || !LOWER_CASE_FIELD.test(entry.contract)) return []
+		if (typeof entry.expectedClassId !== "string" || !LOWER_CASE_FIELD.test(entry.expectedClassId)) return []
 		return [
 			{
 				chainId: SANDBOX_CHAIN_ID,

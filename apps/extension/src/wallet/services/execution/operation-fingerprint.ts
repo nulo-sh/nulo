@@ -22,13 +22,14 @@
 import type { Action, FeeOptions } from "@nulo/wallet-bridge"
 import { fingerprintFeeSettings } from "./transfer-estimate-reuse"
 import type { FeeSettings } from "./spec"
+import { isPlainObject } from "@nulo/wallet-core/guards"
 
 const MAX_VALUE_DEPTH = 6
 
 /** Type-tagged, length-prefixed scalar/structure encoder. Returns null on any
  *  value outside the allowlist (functions, symbols, class instances, Maps,
  *  cycles-by-depth, …). */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 25 — recursive type-tagged encoding must reject unsupported shapes while canonicalizing arrays and objects
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 24 — recursive type-tagged encoding must reject unsupported shapes while canonicalizing arrays and objects
 function encodeValue(value: unknown, depth: number): string | null {
 	if (depth > MAX_VALUE_DEPTH) return null
 	if (value === null) return "z"
@@ -52,11 +53,11 @@ function encodeValue(value: unknown, depth: number): string | null {
 				}
 				return `a${parts.length}[${parts.join(",")}]`
 			}
-			if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) return null
-			const keys = Object.keys(value as Record<string, unknown>).sort()
+			if (!isPlainObject(value)) return null
+			const keys = Object.keys(value).sort()
 			const parts: string[] = []
 			for (const key of keys) {
-				const enc = encodeValue((value as Record<string, unknown>)[key], depth + 1)
+				const enc = encodeValue(value[key], depth + 1)
 				if (enc === null) return null
 				parts.push(`s${key.length}:${key}=${enc}`)
 			}

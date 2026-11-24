@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { computed, effectScope, nextTick, reactive, ref } from "vue"
-import {
-	buildFeeMethods,
-	type FeeScope,
-	type GasBalances,
-	isLiveFeeScope,
-	type RegisteredFpc,
-} from "@/popup/components/modules/send/fee-helpers"
+import { buildFeeMethods, type FeeScope, type GasBalances, isLiveFeeScope, type RegisteredFpc } from "@/utils/fee/fee-helpers"
 import type { FeePickUpdate } from "@/utils/fee-picks"
 import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import type { BalanceScope } from "@/stores/balances.store"

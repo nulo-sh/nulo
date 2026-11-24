@@ -13,6 +13,7 @@ import type { EntityStorage, MinimalStorageArea } from "@nulo/wallet-core/storag
 import { prefixedEntries } from "@nulo/wallet-core/storage"
 import { keyedSegment, openRow, type RowKeys, sealRow } from "@nulo/wallet-crypto"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
+import { isObjectLike, isRecord } from "@nulo/wallet-core/guards"
 
 /** The row keys of a profile opened in this worker, or `undefined`. Synchronous. */
 export type RowKeysSource = (profileId: string) => RowKeys | undefined
@@ -22,9 +23,9 @@ export type RowKeysSource = (profileId: string) => RowKeys | undefined
 export type SealedEnvelope = { profileId: string; sealed: string }
 
 export function parseEnvelope(parsed: unknown): SealedEnvelope | undefined {
-	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined
+	if (!isRecord(parsed)) return undefined
 	const keys = Object.keys(parsed)
-	const { profileId, sealed } = parsed as Record<string, unknown>
+	const { profileId, sealed } = parsed
 	if (keys.length !== 2 || typeof profileId !== "string" || typeof sealed !== "string") return undefined
 	return { profileId, sealed }
 }
@@ -139,7 +140,7 @@ export async function commitLegacyTogether(
 export type Located = { storageId: string; naturalId: string; owner: string | undefined; sealed: boolean }
 
 const defaultOwner = (row: unknown): string | undefined => {
-	const owner = typeof row === "object" && row !== null ? (row as { profileId?: unknown }).profileId : undefined
+	const owner = isObjectLike(row) ? row.profileId : undefined
 	return typeof owner === "string" ? owner : undefined
 }
 
@@ -464,7 +465,7 @@ export class SealedEntityStorage<T> {
 	public async adoptOwnerless(naturalId: string, text: string, profileId: string): Promise<boolean> {
 		const keys = this.keysFor(profileId)
 		const parsed = tryParse(text)
-		if (!this.options.ownerless || !keys || !parsed.ok || typeof parsed.value !== "object" || parsed.value === null) return false
+		if (!this.options.ownerless || !keys || !parsed.ok || !isObjectLike(parsed.value)) return false
 		if (parseEnvelope(parsed.value) || this.ownerOf(parsed.value, naturalId) !== undefined) return false
 		const adopted = JSON.stringify({ ...parsed.value, profileId })
 		const legacyKey = this.prefix + naturalId
@@ -510,7 +511,7 @@ export class SealedEntityStorage<T> {
 		const parsed = tryParse((await this.area.get(key))[key])
 		if (!parsed.ok || parseEnvelope(parsed.value)) return undefined
 		const owner = this.ownerOf(parsed.value, naturalId)
-		if (owner === undefined && (typeof parsed.value !== "object" || parsed.value === null)) return undefined
+		if (owner === undefined && !isObjectLike(parsed.value)) return undefined
 		return { owner }
 	}
 

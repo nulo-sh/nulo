@@ -2,6 +2,7 @@ import { ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { z } from "zod"
 import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { Lock } from "@/wallet/utils"
+import { isRecord } from "@nulo/wallet-core/guards"
 
 export const APP_REGISTRATIONS_PER_CHAIN = 32
 
@@ -23,7 +24,7 @@ export const RegistrationCountsSchema = z.record(z.string(), ChainCountsSchema)
 
 /** The stored counts; a chain's entry that does not parse reads as none. */
 export function decodeRegistrationCounts(stored: unknown): RegistrationCounts {
-	if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {}
+	if (!isRecord(stored)) return {}
 	return Object.fromEntries(
 		Object.entries(stored).flatMap(([chainId, raw]) => {
 			const parsed = ChainCountsSchema.safeParse(raw)

@@ -30,7 +30,7 @@ import { useGetStarted } from "@/composables/useGetStarted"
 import { useSeedStatus } from "@/composables/useSeedStatus"
 
 /** Utils */
-import { feeJuiceBridgeUrl } from "../components/modules/send/fee-helpers"
+import { feeJuiceBridgeUrl } from "@/utils/fee/fee-helpers"
 import { combineHoldings, gasHoldings, getStartedView, HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 
 /** Store */

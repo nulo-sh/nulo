@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import { drawsFeeWhole } from "../../../../../tests/helpers/fee-whole"
-import { UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
+import { UNVOUCHED_FEE_SENTENCE } from "@/utils/fee/publish-facts"
 import FeeLineText from "./FeeLineText.vue"
 
 const STUBS = { DottedTerm: { props: ["term", "testid"], template: '<span :data-testid="testid" :data-term="term"><slot /></span>' } }

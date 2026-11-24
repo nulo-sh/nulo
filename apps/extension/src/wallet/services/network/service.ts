@@ -15,7 +15,8 @@ import type { NodeFactory } from "@nulo/aztec-runtime/ports"
 import type { RoutedNode } from "@nulo/aztec-runtime/routing"
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
 import type { ILogger } from "@/wallet/logger"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { nextRandomId, randomIdNotIn } from "@/wallet/services/id-allocators"
@@ -244,7 +245,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	}
 
 	protected async init(services: ServiceCollection) {
-		this.profileService = services.get(ProfileService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
 		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
 		const warn: SealWarn = (...data) => this.logWarn(...data)
 		sealOnRowKeysReady(

@@ -1,6 +1,6 @@
 import { computed, type ComputedRef, reactive, ref, type Ref, watch, type WatchSource } from "vue"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
-import type { FeeMethodOption } from "@/popup/components/modules/send/fee-helpers"
+import type { FeeMethodOption } from "@/utils/fee/fee-helpers"
 
 /** The worker's reading of whether a sponsor can cover this estimate's fee. */
 export interface SponsorFundingVerdict {

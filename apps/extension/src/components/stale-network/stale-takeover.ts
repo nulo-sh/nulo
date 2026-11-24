@@ -3,11 +3,11 @@
  * snapshot of the shell's state, so every route and state is testable without mounting the shell.
  */
 import { neverOpened, runsUnattended } from "@/composables/useStaleNetwork"
+import { AUTH_ENTRY_ROUTES } from "@/utils/should-advance-to-general"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 
 /** The way out of a reset (Networks), every export, and the legal pages: an idle takeover yields. */
 const YIELDING = [/^\/popup\/settings\/networks(\/|$)/, /^\/popup\/settings\/security\/export(\/|$)/, /^\/popup\/legal(\/|$)/]
-const PRE_SESSION: ReadonlySet<string> = new Set(["popup-auth", "popup-register"])
 
 export interface TakeoverRoute {
 	name: string | undefined
@@ -29,7 +29,8 @@ export interface TakeoverInput {
 export const isDappWindow = (routeName: string | undefined): boolean => routeName?.startsWith("windows-") ?? false
 
 /** A route no full-screen surface covers: before a session, and in a dApp window. */
-export const isUncovered = (route: TakeoverRoute): boolean => isDappWindow(route.name) || PRE_SESSION.has(route.name ?? "")
+export const isUncovered = (route: TakeoverRoute): boolean =>
+	isDappWindow(route.name) || (AUTH_ENTRY_ROUTES as readonly string[]).includes(route.name ?? "")
 /** A route an idle full-screen surface yields to. */
 export const yieldsTo = (route: TakeoverRoute): boolean => YIELDING.some((r) => r.test(route.path))
 

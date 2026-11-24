@@ -25,16 +25,8 @@ import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { svc } from "../composition-harness"
-import {
-	DROPPED_GRACE_MS,
-	DROPPED_RECHECK_INTERVAL_MS,
-	DROPPED_RESURRECTION_WINDOW_MS,
-	TRANSACTION_STORAGE_ROOT,
-	TransactionService,
-	TxExecutionResult,
-	TxStatus,
-	type Tx,
-} from "./service"
+import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS } from "./inclusion"
+import { DROPPED_GRACE_MS, TRANSACTION_STORAGE_ROOT, TransactionService, TxExecutionResult, TxStatus, type Tx } from "./service"
 
 const ACCOUNT = "0xacc"
 const ENDPOINT = "https://rpc.example.test"

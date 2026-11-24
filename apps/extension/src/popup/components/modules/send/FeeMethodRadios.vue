@@ -8,7 +8,7 @@ import { FEE_JUICE_DECIMALS } from "@/utils/fee-estimation"
 import { GLOSSARY } from "@/utils/glossary"
 import { parseSide } from "@/utils/token-amount"
 import { formatUsdMicro, tokenAmountToUsdMicro } from "@/wallet/services/price/convert"
-import { menuOrder } from "./fee-helpers"
+import { menuOrder } from "@/utils/fee/fee-helpers"
 
 const props = defineProps({
 	modelValue: { type: Object, default: null },

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { Skeleton } from "@nulo/design"
-import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY } from "@/components/composite/send/publish-facts"
+import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY } from "@/utils/fee/publish-facts"
 import { drawsFeeWhole } from "../../../../../tests/helpers/fee-whole"
 import FeeCostReadout from "./FeeCostReadout.vue"
 

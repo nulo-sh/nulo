@@ -6,10 +6,13 @@ import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 import { normalizeError } from "@nulo/wallet-core/jobs"
 import type { ILogger } from "@/wallet/logger"
-import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
-import { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import type { NetworkService } from "@/wallet/services/network/service"
+import { NETWORK_SERVICE_NAME, networkInfoFrom } from "@/wallet/services/network/spec"
+import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
 import type { OperationContext, OperationOrigin } from "@/wallet/services/operation-journal/spec"
-import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
+import type { ProfileService, ProfileInfo } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import type { RunFence } from "@/wallet/services/profile/spec"
 import { type ExecutionFence, type ProfileDeletionState, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
@@ -17,9 +20,11 @@ import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { nextNumericId } from "@/wallet/services/id-allocators"
 import { assertRestoreEpoch, captureRestoreEpochs, restoreRowProfileId } from "@/wallet/services/restore-fence"
 import { restoreRows } from "@/wallet/services/restore-rows"
-import { AccountService } from "@/wallet/services/account/service"
+import type { AccountService } from "@/wallet/services/account/service"
+import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
 import { DEFAULT_SHALLOW_PXE_CLIENT_FACTORY, type ShallowPxeClient, type ShallowPxeClientFactory } from "@/wallet/services/pxe/shallow-port"
-import { TaskService, StepContent, type WrappedTask } from "@/wallet/services/task/service"
+import type { TaskService, WrappedTask } from "@/wallet/services/task/service"
+import { TASK_SERVICE_NAME, StepContent } from "@/wallet/services/task/spec"
 import { canonicalNumericStorageId, purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { ContractResolver, ensureRegistered } from "@/wallet/services/execution/contract-resolver"
 import { batchedViewSimulation } from "@/wallet/services/execution/helpers/batched-view-simulation"
@@ -31,7 +36,8 @@ import { EventHandler, raceTimeout } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { feeJuiceAddress, feeJuiceName, feeJuiceSymbol } from "@/wallet/utils/fee-juice"
 import { buildViewCall, type ViewFn } from "@/wallet/utils/fn"
-import { TokenListService } from "@/wallet/services/token-list/service"
+import type { TokenListService } from "@/wallet/services/token-list/service"
+import { TOKEN_LIST_SERVICE_NAME } from "@/wallet/services/token-list/spec"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 import { type DefaultTokenSeed, seedsFromList } from "./default-tokens"
 import { NAME_MAX_LENGTH, PinMismatchError, SYMBOL_MAX_LENGTH, TokenSeeder } from "./seeder"
@@ -141,7 +147,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	public static name = TOKEN_SERVICE_NAME
 
 	/** The list's stored copy must be loaded before the first seed pass reads it. */
-	public readonly dependencies = [TokenListService.name] as const
+	public readonly dependencies = [TOKEN_LIST_SERVICE_NAME] as const
 
 	public readonly onTokenAdded = new EventHandler<TokenAdded>()
 	public readonly onTokenDeleted = new EventHandler<TokenDeleted>()
@@ -169,7 +175,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	private tasks: TaskService = null!
 	private journal: OperationJournalService = null!
 	private tokenList: TokenListService = null!
-	/** Stateless; the execution service owns another. Depending on that service for it would be a cycle. */
+	/** Stateless; the execution service owns another. */
 	private readonly contractResolver: ContractResolver
 
 	public constructor(logger: ILogger, browserApi: BrowserApi, options: TokenServiceOptions = {}) {
@@ -183,12 +189,12 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 
 	protected async init(services: ServiceCollection) {
 		this.pxeService = this.pxeClientFactory(this.logger)
-		this.profiles = services.get(ProfileService.name)
-		this.networks = services.get(NetworkService.name)
-		this.accounts = services.get(AccountService.name)
-		this.tasks = services.get(TaskService.name)
-		this.journal = services.get(OperationJournalService.name)
-		this.tokenList = services.get(TokenListService.name)
+		this.profiles = services.get(PROFILE_SERVICE_NAME)
+		this.networks = services.get(NETWORK_SERVICE_NAME)
+		this.accounts = services.get(ACCOUNT_SERVICE_NAME)
+		this.tasks = services.get(TASK_SERVICE_NAME)
+		this.journal = services.get(OPERATION_JOURNAL_SERVICE_NAME)
+		this.tokenList = services.get(TOKEN_LIST_SERVICE_NAME)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networks.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
 		sealOnRowKeysReady(

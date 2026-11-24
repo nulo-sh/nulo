@@ -1,3 +1,4 @@
+import { isObjectLike } from "@nulo/wallet-core/utils"
 import type { IncomingPollGate, IncomingPollMatch } from "./incoming-poll-gate"
 import { waitForStorageRelease } from "./storage-gate"
 
@@ -61,7 +62,7 @@ export class ChromeStorageIncomingPollGate implements IncomingPollGate {
 	private async readHold(): Promise<HoldValue | null> {
 		const rec = await chrome.storage.session.get(INCOMING_POLL_HOLD_KEY)
 		const raw = rec[INCOMING_POLL_HOLD_KEY]
-		if (!raw || typeof raw !== "object") return null
+		if (!isObjectLike(raw)) return null
 		const h = raw as Partial<HoldValue>
 		if (
 			typeof h.profileId !== "string" ||

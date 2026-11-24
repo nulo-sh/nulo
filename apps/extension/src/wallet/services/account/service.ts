@@ -9,9 +9,10 @@ import { deriveAccountSeed, deriveSigningKeyFromSeed } from "@nulo/wallet-crypto
 import { LogLevel, type ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
-import { ProfileService } from "@/wallet/services/profile/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
-import { NetworkService } from "@/wallet/services/network/service"
+import type { NetworkService } from "@/wallet/services/network/service"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { isSealedText, type SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
@@ -44,7 +45,7 @@ import { StaleNetworkRepository } from "@/wallet/services/stale-network/reposito
 import { ERR_RESET_PENDING, type JournalAccount } from "@/wallet/services/stale-network/types"
 import { ImportedKeysRepository } from "./imported-keys-repository"
 import type { AccountIntegrityBlocked, AccountRuntimeMismatchDelegate } from "../account-integrity/types"
-import { ERR_UNATTENDED_LIVE_CHECK } from "@/wallet/services/network/spec"
+import { ERR_UNATTENDED_LIVE_CHECK, NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import {
 	ACCOUNT_FILE_UNREADABLE,
 	ACCOUNT_SERVICE_NAME,
@@ -207,10 +208,10 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	}
 
 	protected async init(services: ServiceCollection): Promise<void> {
-		this.profileService = services.get(ProfileService.name)
+		this.profileService = services.get(PROFILE_SERVICE_NAME)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile`,
 		// NOT a fire-and-forget `onProfileDeleted` subscriber.
-		this.networkService = services.get(NetworkService.name) as NetworkService
+		this.networkService = services.get(NETWORK_SERVICE_NAME) as NetworkService
 		this.networkService.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
 		sealOnRowKeysReady(
 			this.profileService,

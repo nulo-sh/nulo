@@ -1,6 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 /** How a log line's data renders as text: the log viewer, its CSV export and the request report. */
 import { LogLevel } from "@nulo/wallet-core/logger"
+import { isObjectLike } from "@nulo/wallet-core/utils"
 
 export function getLogLevelName(level: number): string {
 	switch (level) {
@@ -28,12 +29,12 @@ export function formatArg(arg: unknown, seen = new WeakSet<object>()): unknown {
 		return arg.map((item) => formatArg(item, seen))
 	}
 
-	if (typeof arg === "object" && arg !== null) {
+	if (isObjectLike(arg)) {
 		if (seen.has(arg)) return "[circular]"
 		try {
 			return JSON.stringify(arg, (_key, value: unknown) => {
 				if (typeof value === "bigint") return value.toString()
-				if (typeof value === "object" && value !== null) {
+				if (isObjectLike(value)) {
 					if (seen.has(value)) return "[circular]"
 					seen.add(value)
 				}

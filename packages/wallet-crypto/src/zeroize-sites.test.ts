@@ -62,8 +62,7 @@ describe("transient secret buffers are wiped after the crypto call settles", () 
 		const dek = asImportedKeysDek(new Uint8Array(32).fill(2))
 		const wrapped = await box.wrapPair(master, dek, "profile-1")
 		expect(wrapped.v).toBe(2)
-		// Order of `Buffer.from(view)` calls in wrapPair: token, salt, packed — the token copy is first.
-		expect(copies.length).toBeGreaterThanOrEqual(1)
+		expect(copies).toHaveLength(1)
 		expect(isZeroed(copies[0])).toBe(true)
 	})
 

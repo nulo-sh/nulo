@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
-import { FpcType } from "@/wallet/services/fpc/client"
+import { FpcType } from "@/wallet/services/fpc/spec"
 import {
 	buildFeeMethods,
 	buildSettings,
