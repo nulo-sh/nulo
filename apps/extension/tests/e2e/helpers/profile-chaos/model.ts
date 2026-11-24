@@ -354,7 +354,7 @@ const RESTORE_ASKS_PASSWORD = cite(
 )
 const RESTORE_ROLLS_BACK = cite(
 	"src/composables/full-backup-restore.ts",
-	946,
+	948,
 	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
 )
 const RESTORE_FINALIZES = cite(IMPORT, 343, "restoreRun = await finalizeWithReminder(")
