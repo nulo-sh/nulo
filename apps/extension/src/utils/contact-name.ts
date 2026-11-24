@@ -89,16 +89,25 @@ function foldToHexForm(name: string): string {
 	return unlookalike(unlookalike(name.toLowerCase()).normalize("NFKD").replace(COMBINING_MARK, "").toLowerCase())
 }
 
+const SEPARATORS = /[ \-_]/g
+/** The digit `0`, an `x` (Latin, Cyrillic or Greek once compatibility forms and case are folded),
+ *  then four or more letters or digits with a digit among them. Only letters come before the run's
+ *  first digit, so each `0x` backtracks over its own letter run alone. */
+const ZERO_X_RUN = /0[xхχ](?=[\p{L}0-9]{4})\p{L}*[0-9]/u
+
 /**
- * Whether a stored name reads as an address: once look-alike letters, compatibility forms and marks
- * are folded, it holds `0x` and four hex digits, or two hex runs joined by two or more dots, a run
- * being three hex digits or `0x` and one to three. Such a name is never stored from a person or a
- * contacts file, and one already stored is never printed in place of its address. Fixed-width runs keep the
- * match linear on any input.
+ * Whether a stored name reads as an address, whatever letters fill it. Once look-alike letters,
+ * compatibility forms and marks are folded, it holds `0x` and four hex digits, or two hex runs joined
+ * by two or more dots, a run being three hex digits or `0x` and one to three. With its spaces,
+ * hyphens and underscores taken out, it holds two dots in a row, or `ZERO_X_RUN`. Such a name is
+ * never stored from a person or a contacts file, and one already stored is never printed in place of
+ * its address. Every pattern matches in time linear in the name.
  */
 export function isAddressShapedName(name: string): boolean {
 	const folded = foldToHexForm(name)
-	return /0x[0-9a-f]{4}/.test(folded) || /(?:[0-9a-f]{3}|0x[0-9a-f]{1,3})\.{2,}[0-9a-f]{3}/.test(folded)
+	if (/0x[0-9a-f]{4}/.test(folded) || /(?:[0-9a-f]{3}|0x[0-9a-f]{1,3})\.{2,}[0-9a-f]{3}/.test(folded)) return true
+	const joined = name.replace(SEPARATORS, "")
+	return joined.includes("..") || ZERO_X_RUN.test(joined.normalize("NFKD").replace(COMBINING_MARK, "").toLowerCase())
 }
 
 /** Whether two names are the same contact name: the equality every duplicate check uses. */
