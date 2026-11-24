@@ -13,28 +13,41 @@ issues: none (decision page 210, P210-01 = A, signed by the owner 2026-11-24T18:
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-11-24.
+- **Status:** completed (pending the orchestrator's merge). Draft PR #2011 against `dev`, never marked ready; it closes no issue.
+- **Shipped:** the refreshed timings record, with `e2e-timings.ts` passing `--allow-escape-sequences`; the network pool at 7 shards and both PR smoke lanes at 4, for every caller; the unit tests as three legs of `_unit-tests.yml` for pr-quick, nightly and release, each piece once, placed per D8; the counts in the docs, the pins and `verify-cert-run.sh`, whose Quality and smoke job names are now derived from the workflows.
+- **Measured** (the table below, two samples, observed, not a new median): pr-quick 14.0 → 5.9 / 4.9 min, smoke Chrome 12.3 → 9.3 / 8.9, smoke Firefox 17.3 → 16.1 / 12.4, network Chrome 21.8 → 15.3 / 14.2, network Firefox 26.4 → 18.2 / 15.6. In B, without queueing, every lane is at or under its forecast. In A, the Firefox lanes waited 2.4 and 3.5 minutes for runners: the busy-hour queueing the page priced in. D8 landed after A and B; the close-out head's own runs measure it (PR body).
+- **Dispositions:** a recorded-time unit split not taken (D1, D8); no record change for the network Chrome excess (M2). **Known limits:** none. **Open items:** #2012 (regenerate the record once seven-shard runs accumulate), #2013 (`verify-cert-run.sh` cannot read job logs on gh 2.103).
+- **Lessons:** none promoted: `lessons.md` sits at its budget (8148 B), and the gh log flag lives in the `e2e-testing` skill. **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
+
 # ci-shards-1: seven network shards, four smoke shards, the unit tests three ways
 
 One arc (A1, branch `ci-shards-1-a1`), one **draft** PR against `dev` that is never marked ready. The owner picked option A of page 210: "Rebalance the network shards and go from five to seven, split smoke into four and the unit tests into three. Forecast: a PR's slowest lane from 26 to about 16 minutes and the quick checks from 14 to about 6, for $0 and nobody new to trust." This plan builds that shape and measures it; nothing beside it.
 
-## Before (medians of the last 20 green runs that ran their suites, 2026-11-24)
+## Before and after (minutes: run wall / slowest job)
 
-| lane | run wall p50 | slowest job p50 | jobs |
-|---|---|---|---|
-| pr-quick | 14.1 min | Unit tests 13.5 min (`test:all` 707 s, `test:release` 22 s, `test:ci-gating` 51 s) | 9 |
-| smoke Chrome | 11.9 | shard 2/3 11.4 | 5 |
-| smoke Firefox | 17.1 | shard 1/3 16.4 | 5 |
-| network Chrome | 21.3 | pool shard 2/5 19.4 | 13 |
-| network Firefox | 26.0 | pool shard 2/5 24.9 | 13 |
+Before: medians of each lane's last 20 green runs that ran their suites, read at 2026-11-24 ~19:00Z (runs of 14:48–18:31Z; the research's cohort, read at 13:35Z, gave 14.1 / 11.9 / 17.1 / 21.3 / 26.0 walls). After: A, this PR's `pull_request` runs at a3bd1603b; B, a `workflow_dispatch` of each lane at the same head (pr-quick's dispatch skips commitlint and forces the builds, so B is supporting evidence there). Same script for both: wall is last job end minus run start, attempt 1. In A the Firefox lanes' jobs queued 2.4 and 3.5 min for a runner; in B no job queued over 4 s.
 
-Network pool shard 2/5 runs 300–700 s longer than its siblings on every one of the 7 runs the refreshed record read: the record was a month old (2026-10-20). The refreshed record splits the pool to within 9 s at seven shards (Chrome 675–683 s, Firefox 748–757 s of file time) and smoke to within 6 s at four (Chrome 417–419, Firefox 635–641).
+| lane | before p50 (n=20) | A | B | forecast | jobs before → after |
+|---|---|---|---|---|---|
+| pr-quick | 14.0 / 12.1 | 5.9 / 5.4 | 4.9 / 4.5 | ~6 | 9 → 11 |
+| smoke Chrome | 12.3 / 11.2 | 9.3 / 8.5 | 8.9 / 8.6 | | 5 → 6 |
+| smoke Firefox | 17.3 / 16.3 | 16.1 / 12.0 | 12.4 / 12.1 | ~13.5 | 5 → 6 |
+| network Chrome | 21.8 / 20.8 | 15.3 / 14.9 | 14.2 / 13.8 | ~14 | 13 → 15 |
+| network Firefox | 26.4 / 25.6 | 18.2 / 15.4 | 15.6 / 15.2 | ~16 | 13 → 15 |
+
+A full PR starts 53 jobs, up from 45. Shard spreads (slowest minus fastest, A / B, s): unit legs 136 / 64, smoke Chrome 98 / 119, smoke Firefox 108 / 181, network Chrome 206 / 174, network Firefox 179 / 232 (M2).
+
+Before, network pool shard 2/5 ran 300–700 s longer than its siblings on every one of the 7 runs the refreshed record read: the record was a month old (2026-10-20). The refreshed record splits the pool to within 9 s at seven shards (Chrome 675–683 s, Firefox 748–757 s of file time) and smoke to within 6 s at four (Chrome 417–419, Firefox 635–641).
 
 ## Shape
 
 1. **Timings record** refreshed by `bun scripts/ci-cd/e2e-timings.ts`. gh 2.103 refuses to print a job log holding escape codes without `--allow-escape-sequences`, so the script passes it (D5); `classify()` already strips them.
 2. **Network pool: `1/7`…`7/7`** in `_extension-network-e2e-lane.yml`, the one file every caller shares. The dedicated jobs and `exclude_files` stay byte-identical.
 3. **Smoke: `1/4`…`4/4`** in both PR smoke lanes.
-4. **Unit tests: three legs** of one matrix job in `_unit-tests.yml` (D1–D4). Each leg runs `bun run --cwd apps/extension test -- --shard=<i>/3`, then exactly one other piece: leg 1 every other workspace (`bun run --filter '@nulo/*' --filter '!@nulo/extension' --if-present test`, the 17 workspaces `test:all` runs beside the extension), leg 2 `test:release`, leg 3 the live move-approval label and `test:ci-gating`, adjacent as today. Every leg sets up Node 24 after the workspace suites and before the script suites, today's order (C3). Same Bun, same configs, same guards; `fail-fast: false`; `timeout-minutes` stays 25.
+4. **Unit tests: three legs** of one matrix job in `_unit-tests.yml` (D1–D4). Each leg runs `bun run --cwd apps/extension test -- --shard=<i>/3`, then: leg 2 `test:release`; leg 3 every other workspace (`bun run --filter '@nulo/*' --filter '!@nulo/extension' --if-present test`, the 17 workspaces `test:all` runs beside the extension) and the live move-approval label with `test:ci-gating`, adjacent as today (D8). Every leg sets up Node 24 after the workspace suites and before the script suites, today's order (C3). Same Bun, same configs, same guards; `fail-fast: false`; `timeout-minutes` stays 25.
 5. **Every count that moves**: workflow comments and input examples, `verify-cert-run.sh`'s Quality and smoke job names (now derived and pinned like its network list, C4), `CI.md`, `.github/WORKFLOWS.md`, the e2e README § CI sharding (heading without its count, artifact names), `docker-ci-like.sh`'s default shard, the `e2e-testing` skill, `behavior-gating.test.ts`, `aggregators.test.ts`, `shard-sequencer.test.ts`.
 
 ## Invariants and their proofs
@@ -59,7 +72,7 @@ After: the PR's own runs, CI's job envelopes, at least two green first-attempt r
 ## Assumptions
 
 - **Facts**: F1 vitest 4.1.12 `BaseSequencer.shard` hashes `resolve(root, moduleId).slice(root.length)` (a truncation, not a relative path, for the `../../packages` files) and slices `calculateShardRange` (`coverage.DM_a_rWm.js:35-88`): a partition of one list whatever the keys, and CI's legs share one root and one SHA. Codex ran it on the selection: 1,062 files, 354 per leg, disjoint, unchanged by reversed order or a moved checkout. F2 `bun run --filter '!@nulo/extension'` excludes it (run locally: 17 workspaces, exit 0). F3 `bun run --filter` starts a workspace's script after its dependencies' (the CI log: the extension started at 11:56:07, one second after `aztec-runtime` ended); the split drops that ~58 s wait.
-- **Inferences**: I1 the hash split stays near-balanced: on today's log, modelling a file as its reported test time plus 1.1 s, the three legs carry 663 / 673 / 545 worker-seconds against 627 for a time-based split, an estimated ~25 s of wall, not a bound. Phase 3 measures it. I2 the forecasts (network ~14 / ~16, smoke Firefox ~13.5, quick ~6 min) add ~85 s of fixed cost per shard to the record's file time.
+- **Inferences**: I1 the hash split stays near-balanced: on today's log, modelling a file as its reported test time plus 1.1 s, the three legs carry 663 / 673 / 545 worker-seconds against 627 for a time-based split, an estimated ~25 s of wall, not a bound. Measured, it did not hold: the legs carried 713 / 725 / 353 worker-seconds (D8). I2 the forecasts (network ~14 / ~16, smoke Firefox ~13.5, quick ~6 min) add ~85 s of fixed cost per shard to the record's file time.
 - **Asks** (working assumption): A1 the unit legs are named `Vitest (shard i/3)`, matching the network suite's `(shard i/n)`.
 
 ## UI impact
@@ -81,10 +94,11 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - D1 vitest's own `--shard` on the extension suite over a recorded-time split: 1,059 files, the modelled gap is ~25 s of a ~4-minute leg (I1), and a time split needs a second record, a generator and a sequencer for the unit config.
 - D2 the split lives in `_unit-tests.yml` for all three callers: one definition of the unit suite, and each caller still reads one `needs.unit-tests.result`. A PR-only split would be a second copy to drift.
 - D3 the test-runtime bar: neither the engine bar (no Bun or runner change, the stopgap untouched) nor the same-engine dependency bar (no dependency moves). The split changes which job runs which file, so the inventory equality is the bar that applies.
-- D4 one extra piece per leg, by step `if: matrix.shard == 'i/3'`, rather than a fourth job (the pick is three) or a shard of every workspace (`bun test` workspaces and one-file suites cannot be cut three ways). Node 24 setup unconditional in each leg, at today's place, rather than on legs 2 and 3 only: one condition fewer, the same runtime for every suite.
+- D4 the extra pieces placed by step `if: matrix.shard == 'i/3'` (which leg: D8), rather than a fourth job (the pick is three) or a shard of every workspace (`bun test` workspaces and one-file suites cannot be cut three ways). Node 24 setup unconditional in each leg, at today's place, rather than on legs 2 and 3 only: one condition fewer, the same runtime for every suite.
 - D5 `--allow-escape-sequences` in `e2e-timings.ts`: without it the record cannot be refreshed with today's gh.
-- D6 the README heading becomes `CI sharding`, so the count lives in the text it describes, not in an anchor four files link.
+- D6 the README heading becomes `CI sharding`, so the count lives in the text it describes, not in an anchor `CI.md` links twice.
 - D7 `shard-sequencer.test.ts` reads each lane's count from its workflow, so the proof follows the matrix.
+- D8 (after measuring, M1) the other workspaces run on leg 3, not leg 1: vitest's hash leaves leg 3's third the lightest (353 s of worker time against 713 and 725), because the suite's two longest files hash 149 and 155 positions inside legs 2 and 1. Estimated slowest leg 324 → 286 s (A) and 270 → 250 s (B). A recorded-time unit split would change the unit vitest config, which this lane keeps.
 
 ## Audit verdicts
 
@@ -101,6 +115,8 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - R2 (medium) the skill's log command, with `--allow-escape-sequences`, would print a test's control sequences to a terminal: now piped through `cat -v`. `e2e-timings.ts` itself never prints the log.
 - R3 (low) a `workflow_dispatch` sample runs a different job set than a PR run: reported apart; I1 says estimate, not bound.
 - R4 (low) two comments said the workspace suites run on Node (most run on Bun): reworded; `shardCount`'s narrating doc-comment deleted.
+
+**Measurement consult, Codex (resumed, high).** M1 (moderate) move the 17-workspace step to the light leg: adopted as D8, after checking the heavy files sit 100–170 hash positions from the leg boundaries, so a new file moves a boundary by a third of a position and the light leg stays light. M2 (moderate) explain each spread over 2 minutes per file, not by the archived noise result: per-file residuals (measured minus recorded) correlate across A and B at 0.66 on network Chrome, all of the repeated excess on shard 6/7's send files (a grouping effect the five-shard record cannot hold yet: #2012); at 0.00 on network Firefox and 0.17 on smoke Firefox, run-to-run noise (the same shard moved by up to 155 s between A and B). No record change: regenerating now would read one seven-shard run per lane. M3 (high) report A and B apart with A's queue, say observed, not a new median, and name the baseline cohort: done above.
 
 ## Seeds (drafts, not run: the orchestrator owns execution)
 
