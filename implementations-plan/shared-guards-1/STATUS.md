@@ -17,3 +17,4 @@
 - 2026-11-24 01:35Z final gates on 189e67e5b green: lint, typecheck:all, test:ci-gating, test:all (one rerun: #1961 at load ~175); PR next
 - 2026-11-24 02:00Z arc 3 on `shared-guards-1-a3` off origin/dev e4f9011f8, beside #1942 and #1945 on the orchestrator's call; inventory rerun: no new site
 - 2026-11-24 02:40Z arc 3 implemented: 28 sites converted, baseline 32 → 4, K5 renamed and pinned (fails under `isHex32`), `applyRowTransform` 39 → 38; mutation pass: 8 array rows added; `./field` and `./errors` leaves after Storybook met a chunk cycle (D10); lint, typecheck:all, rescore, build-storybook green; review next
+- 2026-11-24 02:52Z arc 3 review converged: Codex r1 approve, Opus approve (2 nits accepted), cross-arc Codex conditional approve (3 accepted, `f758ebc37`), r2 approve; static gates next
