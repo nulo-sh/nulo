@@ -945,6 +945,7 @@
     "useSecretClipboardCopy": true,
     "useSecretCountdown": true,
     "useSeedStatus": true,
+    "useSendData": true,
     "useSendFeeSelection": true,
     "useSendReview": true,
     "useSendStageLine": true,
