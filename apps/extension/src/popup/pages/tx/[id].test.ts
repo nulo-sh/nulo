@@ -63,19 +63,19 @@ const settled = (origin: { type: OriginType; name?: string }, calls: unknown[]) 
 	calls,
 })
 /** A sent transfer's record; a restored backup can carry any `symbol`. */
-const transferRecord = (symbol: unknown = "TST") =>
+const transferRecord = (symbol: unknown = "TST", decimals = 18) =>
 	settled({ type: OriginType.UI }, [
 		{
 			contract: TOKEN,
 			method: "transfer_private_to_private",
-			args: [ACCOUNT, ACCOUNT, (10n ** 18n).toString(), "0"],
+			args: [ACCOUNT, ACCOUNT, (10n ** BigInt(decimals)).toString(), "0"],
 			transfers: [
 				{
-					token: { name: "Test", symbol, decimals: 18 },
+					token: { name: "Test", symbol, decimals },
 					type: TransferType.Private,
 					from: ACCOUNT,
 					to: ACCOUNT,
-					amount: (10n ** 18n).toString(),
+					amount: (10n ** BigInt(decimals)).toString(),
 				},
 			],
 		},
@@ -124,6 +124,11 @@ describe("the transaction page's time", () => {
 describe("the transaction page's amount", () => {
 	test("a sent transfer of one 18-decimal token reads 1 and its symbol while the token list loads", async () => {
 		const w = await mountPage(sentTransfer, new Promise(() => {}))
+		expect(amountBlock(w).text()).toMatch(/^1\s+TST$/)
+	})
+
+	test("a sent transfer of one 24-decimal token reads 1 and its symbol", async () => {
+		const w = await mountPage(transferRecord("TST", 24), Promise.resolve([{ ...listed, decimals: 24 }]))
 		expect(amountBlock(w).text()).toMatch(/^1\s+TST$/)
 	})
 

@@ -41,6 +41,7 @@ import { entityListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { feeJuiceBridgeUrl, feePayerOf } from "@/utils/fee/fee-helpers"
 import { formatBaseUnits } from "@/utils/amount"
+import { isValidDecimals } from "@/utils/token-amount"
 import { goBack } from "@/utils/page-back"
 import { sentenceName } from "@/utils/string"
 import { isKnownAddress, lastSendTo, parseSends, recentRecipients, sendWords, sentAgo } from "@/popup/components/modules/send/recent-sends"
@@ -262,7 +263,7 @@ const candidateFor = (address) => recipientCandidates.value.find((c) => c.addres
 const tokenById = (id) => tokens.value.find((t) => t.id === id)
 function sendText(send) {
 	const token = tokenById(send.tokenId)
-	if (!token) return ""
+	if (!token || !isValidDecimals(token.decimals)) return ""
 	// Every digit the press fills, so the words never round what it sends.
 	const amount = formatBaseUnits(send.amountRaw, token.decimals, { maxDecimals: token.decimals, thousandsSep: ",", decimalSep: "." })
 	return sendWords(amount, token.symbol, send.arrival)
@@ -294,13 +295,13 @@ function spendSendAgainFor(payee) {
 const spendSendAgain = () => spendSendAgainFor(shownPayee())
 
 /** The last send to this person, offered while the form does not already hold it and until it is used
- *  or passed over. A record that kept no sides, or whose token can no longer arrive on its side,
- *  offers nothing. */
+ *  or passed over. A record that kept no sides, whose token can no longer arrive on its side, or whose
+ *  token's decimals the wallet cannot use, offers nothing. */
 const sendAgain = computed(() => {
 	const payee = shownPayee()
 	const last = payee && !sendAgainSpent.has(payee) ? lastSendTo(pastSends.value, payee) : null
 	const token = last && tokenById(last.tokenId)
-	if (!last || last.arrival === null || !token) return null
+	if (!last || last.arrival === null || !token || !isValidDecimals(token.decimals)) return null
 	if (!canSwitchReceiver(token) && forcedSide(token) !== last.arrival) return null
 	const held =
 		activeToken.value?.id === last.tokenId &&
