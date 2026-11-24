@@ -152,13 +152,6 @@ const HAND_LISTS: Record<string, ListedStep[]> = {
 		PROOF,
 		MINE,
 	],
-	"a Send's estimate held past the wallet's estimate TTL is reaped, so the step that lands it fails it": [
-		openSend("fee_juice"),
-		PAST_WINDOW,
-		PAST_WINDOW,
-		openWindow("sponsor"),
-		LAND,
-	],
 	"three windows deep go out in press order, the later ones rebuilding behind the first": [
 		openWindow("sponsor"),
 		openWindow("fee_juice"),
@@ -275,6 +268,20 @@ describe("a PrivateFPC send beside another that holds the contract's notes", () 
 				["op1", "sent"],
 				["op2", "rebuild"],
 			])
+		},
+		RUN_MS,
+	)
+})
+
+describe("an estimate held past the wallet's estimate TTL", () => {
+	// The next admission reaps an estimate admitted longer ago than the TTL; O2 does not hold the
+	// wallet to a result for it.
+	test(
+		"is reaped, so the step that lands it fails it; one held under the TTL lands",
+		async () => {
+			const reaped = await green([openSend("fee_juice"), PAST_WINDOW, PAST_WINDOW, openWindow("sponsor"), LAND, askAgain("op1")])
+			const kept = await green([openSend("fee_juice"), PAST_WINDOW, openWindow("sponsor"), LAND, askAgain("op1")])
+			expect([outcomeAt(reaped, 5), outcomeAt(kept, 4)]).toEqual(["failed", "landed"])
 		},
 		RUN_MS,
 	)

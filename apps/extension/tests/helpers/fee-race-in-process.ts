@@ -1012,7 +1012,8 @@ const DRIVERS: Drivers = {
 		return latestOutcome(s)
 	},
 	openSend: async (race, p) => {
-		// The popup shows one Send page: opening it again replaces one a refused or armed press left.
+		// The catalog drives one popup document, where opening Send replaces the page a refused or
+		// armed press left. Two Send documents share the worker's one `send` estimate flow: outside it.
 		for (const s of race.surfaces) if (s.surface === "send") s.close()
 		const s = openSend(race, `op${race.surfaces.length + 1}`, p.method, p.transfer)
 		race.surfaces.push(s)
