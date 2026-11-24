@@ -327,6 +327,24 @@ describe("ChangeAuthwitsRegistryPopup — when the fee estimate starts", () => {
 		await vi.advanceTimersByTimeAsync(1)
 		expect(estimate).toHaveBeenCalledTimes(2)
 	})
+
+	test("reopened, it estimates once, for the settings its card publishes, never the last open's", async () => {
+		const estimate = authwitsServiceMock.estimateRegistryToggleFee
+		const w = await mountAndOpen()
+		await setFee(w)
+		expect(estimate).toHaveBeenCalledTimes(1)
+		await w.setProps({ show: false })
+		await flushPromises()
+
+		authwitsServiceMock.getRegistryEnabled.mockResolvedValueOnce(true)
+		await w.setProps({ show: true })
+		await flushPromises()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(estimate).toHaveBeenCalledTimes(1)
+		await w.get('[data-testid="set-fee"]').trigger("click")
+		await estimatesLand()
+		expect(estimate).toHaveBeenCalledTimes(2)
+	})
 })
 
 describe("ChangeAuthwitsRegistryPopup — a hide while the switch sends", () => {
