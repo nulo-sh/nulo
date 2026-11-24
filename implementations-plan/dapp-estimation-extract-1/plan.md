@@ -1,7 +1,7 @@
 ---
 plan: dapp-estimation-extract-1
 tier: mid
-status: approved by the final Codex pass; arc 1 next
+status: delivered (the PR that closes #1934, merge pending)
 issues: "#1934"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,28 @@ base: origin/dev at 967c626d1
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-24.
+- **Status:** delivered as the single PR against `dev` that closes #1934, with this close-out as
+  its final commits; it merges on the orchestrator's word.
+- **Shipped:** `DappSendEstimation` owns the dApp estimate, the NO_FROM preview and every write of
+  the reuse entry and the preview snapshot; the executor consumes them and calls four of its
+  methods at the four sites the table names. The frozen ranges differ by those four receivers
+  only. The facade holds a two-method `Pick`; the wiring pin checks the 16 deps and that both
+  halves share their caches. T2 covers the reused entry's re-stash. Mutants M1-M6 killed. E2E
+  green on Chrome and Firefox, proverless and prover-ON. Closes #1934.
+- **Dispositions:** D1-D5 as the ledger records; Codex round 1 (two low: one comment deleted, the
+  fee-race stub filed) and round 2 approve; Opus diff review O-findings all four accepted. The
+  lead added the Azguard notice to the new file. Commit and PR subjects say `dapp`: commitlint's
+  `subject-case` refuses `dApp`.
+- **Known limits:** none.
+- **Open items:** #1962 (the fee-race helper's `discoverNoFromAuthwits` stub returns `[]`, so no
+  `no_from` preview in the race lands; pre-existing, confirmed by a probe).
+- **Lessons:** none promoted; `lessons.md` is at its 8 KiB budget. The `-t` regular-expression
+  trap and the `subject-case` refusal are in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # dapp-estimation-extract-1: the dApp estimate and preview subsystem moves into its own class
 
