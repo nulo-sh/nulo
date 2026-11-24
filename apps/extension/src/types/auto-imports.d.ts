@@ -85,6 +85,7 @@ declare global {
   const ONBOARDING_COMPLETED_KEY: typeof import('../stores/app.store').ONBOARDING_COMPLETED_KEY
   const OWN_WINDOW_ROUTES: typeof import('../utils/own-window').OWN_WINDOW_ROUTES
   const PASSKEY_COPY: typeof import('../utils/passkey-copy').PASSKEY_COPY
+  const PENDING_SEND_REFUSAL: typeof import('../utils/pending-send').PENDING_SEND_REFUSAL
   const PHRASE_WORD_COUNT: typeof import('../utils/recovery-phrase').PHRASE_WORD_COUNT
   const PINNED_TOKENS_MAX: typeof import('../utils/pinned-tokens').PINNED_TOKENS_MAX
   const PINNED_TOKENS_MAX_CHAINS: typeof import('../utils/pinned-tokens').PINNED_TOKENS_MAX_CHAINS
@@ -571,6 +572,7 @@ declare global {
   const toRefs: typeof import('vue').toRefs
   const toRestoreError: typeof import('../utils/restore-error').toRestoreError
   const toValue: typeof import('vue').toValue
+  const toastPendingSendRefusal: typeof import('../utils/pending-send').toastPendingSendRefusal
   const tokenForReceipt: typeof import('../utils/received-display').tokenForReceipt
   const tokenHeroCandidates: typeof import('../utils/hero-fit').tokenHeroCandidates
   const tokenIconFor: typeof import('../utils/token-icon').tokenIconFor
@@ -1104,6 +1106,7 @@ declare module 'vue' {
     readonly ONBOARDING_COMPLETED_KEY: UnwrapRef<typeof import('../stores/app.store')['ONBOARDING_COMPLETED_KEY']>
     readonly OWN_WINDOW_ROUTES: UnwrapRef<typeof import('../utils/own-window')['OWN_WINDOW_ROUTES']>
     readonly PASSKEY_COPY: UnwrapRef<typeof import('../utils/passkey-copy')['PASSKEY_COPY']>
+    readonly PENDING_SEND_REFUSAL: UnwrapRef<typeof import('../utils/pending-send')['PENDING_SEND_REFUSAL']>
     readonly PHRASE_WORD_COUNT: UnwrapRef<typeof import('../utils/recovery-phrase')['PHRASE_WORD_COUNT']>
     readonly PINNED_TOKENS_MAX: UnwrapRef<typeof import('../utils/pinned-tokens')['PINNED_TOKENS_MAX']>
     readonly PINNED_TOKENS_MAX_CHAINS: UnwrapRef<typeof import('../utils/pinned-tokens')['PINNED_TOKENS_MAX_CHAINS']>
@@ -1590,6 +1593,7 @@ declare module 'vue' {
     readonly toRefs: UnwrapRef<typeof import('vue')['toRefs']>
     readonly toRestoreError: UnwrapRef<typeof import('../utils/restore-error')['toRestoreError']>
     readonly toValue: UnwrapRef<typeof import('vue')['toValue']>
+    readonly toastPendingSendRefusal: UnwrapRef<typeof import('../utils/pending-send')['toastPendingSendRefusal']>
     readonly tokenForReceipt: UnwrapRef<typeof import('../utils/received-display')['tokenForReceipt']>
     readonly tokenHeroCandidates: UnwrapRef<typeof import('../utils/hero-fit')['tokenHeroCandidates']>
     readonly tokenIconFor: UnwrapRef<typeof import('../utils/token-icon')['tokenIconFor']>

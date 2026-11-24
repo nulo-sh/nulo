@@ -10,6 +10,7 @@ import { isActivatingOtherThan } from "@/composables/useProfileBootstrap"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { entityListReducers } from "@/utils/entity-list"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { toastPendingSendRefusal } from "@/utils/pending-send"
 import { stringCompare } from "@/utils/string"
 
 /** Store */
@@ -63,7 +64,7 @@ const handleSelectProfile = async (profile) => {
 			else appStore.profile = profile
 		})
 		if (!switched) {
-			openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
+			toastPendingSendRefusal(openToast)
 			return
 		}
 		if (outcome === "gone") return

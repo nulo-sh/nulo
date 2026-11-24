@@ -7,6 +7,7 @@ import { nextAccountName, sameStoredName, storedNameKey } from "@/utils/account-
 import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { listOwnAccountRow } from "@/utils/account-rows"
 import { managers } from "@/utils/core"
+import { toastPendingSendRefusal } from "@/utils/pending-send"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -59,7 +60,7 @@ const handleCreateAccount = async () => {
 	// Creating an account SELECTS it, so it changes the active account exactly
 	// like a switch does — and a send in flight is still reading that.
 	if (appStore.hasInFlightSend) {
-		openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
+		toastPendingSendRefusal(openToast)
 		return
 	}
 
@@ -76,7 +77,7 @@ const handleCreateAccount = async () => {
 			appStore.account = appStore.accounts.find((a) => a.address === account.address) ?? account
 		})
 		if (!selected) {
-			openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
+			toastPendingSendRefusal(openToast)
 			emit("onClose")
 			return
 		}
