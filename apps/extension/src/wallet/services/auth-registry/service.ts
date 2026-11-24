@@ -427,6 +427,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const { network, scope, authwits, operation } = await this.revokeOperation(networkId, account, ids, feeSettings)
 
 		const task = this.taskService.startNewTask(
+			fence.profileId,
 			new RevokeAuthwitsContent(
 				authwits.map((authwit) => authwit.id),
 				authwits.map(authwitRowKey),
@@ -479,7 +480,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		const fence = await this.profileService.captureExecutionFence()
 		const network = await this.networkService.getNetwork(networkId)
 		const scope: AuthwitScope = { profileId: network.profileId, chainId: network.chainId, account }
-		const task = this.taskService.startNewTask(new StepContent(`${enabled ? "Enable" : "Disable"} auth registry`))
+		const task = this.taskService.startNewTask(fence.profileId, new StepContent(`${enabled ? "Enable" : "Disable"} auth registry`))
 		try {
 			const txHash = await this.executionService.executeSendTransaction(
 				registryToggleOperation(networkId, account, enabled, feeSettings),
@@ -519,7 +520,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	}
 
 	private async checkRegistry(network: Network, scope: AuthwitScope): Promise<void> {
-		const task = this.taskService.startNewTask(new StepContent("Sync auth registry"))
+		const task = this.taskService.startNewTask(scope.profileId, new StepContent("Sync auth registry"))
 		try {
 			const node = await this.networkService.getNodeFor(network)
 			await settleAll([this.syncAuthwits(network, node, scope, task), this.syncStatus(node, scope, task)])

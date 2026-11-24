@@ -38,7 +38,7 @@ function makeFacade() {
 		ensureInitialized: async () => {},
 		planner: { extractPrimaryMethod: () => "m" },
 		taskService: { startNewTask },
-		profileService: { captureExecutionFence },
+		profileService: { captureExecutionFence, getActiveProfile: async () => ({ id: "p1", name: "p1", type: "password" }) },
 		dappSendExecutor: { executeSendTransaction },
 		legal: { assertCurrent },
 		logDebug: () => {},

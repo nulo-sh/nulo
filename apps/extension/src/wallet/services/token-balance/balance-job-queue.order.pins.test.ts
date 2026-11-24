@@ -47,8 +47,8 @@ function makeHarness() {
 	} as unknown as BalanceRepository
 	let nextId = 1
 	const tasks = {
-		createNewTask: vi.fn(() => ({ id: `task-${nextId++}` })),
-		startNewTask: vi.fn(() => ({ id: `task-${nextId++}` })),
+		createNewTask: vi.fn(() => ({ id: `task-${nextId++}`, exists: true })),
+		startNewTask: vi.fn(() => ({ id: `task-${nextId++}`, exists: true })),
 		startTask: vi.fn(),
 		completeTask: vi.fn(() => {
 			log.push("completeTask")

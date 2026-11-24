@@ -20,7 +20,8 @@ import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { svc } from "../composition-harness"
-import { TaskService } from "@/wallet/services/task/service"
+import type { TaskService } from "@/wallet/services/task/service"
+import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { type FeeChoice, TransactionService, TxConfirmationTimeoutError } from "./service"
@@ -462,7 +463,7 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 		service = new TransactionService(new LoggerStore(new ConfigStore()), api)
 		services.add(service)
 		await services.start()
-		taskService = new TaskService(new LoggerStore(new ConfigStore()))
+		taskService = (await startedTaskService("p1")).tasks
 	})
 
 	afterEach(() => {
@@ -478,7 +479,7 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 
 	test("timeout: typed throw + subtask failed EXACTLY once + parent still completable (real TaskService)", async () => {
 		seedPending("0xhang")
-		const parent = taskService.startNewTask({ kind: 0 } as never)
+		const parent = taskService.startNewTask("p1", { kind: 0 } as never)
 		const failSpy = vi.spyOn(taskService, "failTask")
 		const run = service.waitForTx("0xhang", "p1", parent, 500)
 		const outcome = expect(run).rejects.toThrow(/not confirmed within 1s|not confirmed within 0s/)
@@ -491,7 +492,7 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 
 	test("drain: subtask completed EXACTLY once; parent completable", async () => {
 		seedPending("0xok")
-		const parent = taskService.startNewTask({ kind: 0 } as never)
+		const parent = taskService.startNewTask("p1", { kind: 0 } as never)
 		const completeSpy = vi.spyOn(taskService, "completeTask")
 		const run = service.waitForTx("0xok", "p1", parent, 5_000)
 		await vi.advanceTimersByTimeAsync(300)
@@ -505,7 +506,7 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 
 	test("mid-wait registry clear (profile switch): no throw, one swallowed settle", async () => {
 		seedPending("0xswitch")
-		const parent = taskService.startNewTask({ kind: 0 } as never)
+		const parent = taskService.startNewTask("p1", { kind: 0 } as never)
 		const run = service.waitForTx("0xswitch", "p1", parent, 5_000)
 		await vi.advanceTimersByTimeAsync(200)
 		;(taskService as unknown as { tasks: Map<string, unknown> }).tasks.clear() // profile switch
@@ -516,7 +517,7 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 
 	test("stale parent at entry: startSubtask throws → zero settles, the wait still completes", async () => {
 		seedPending("0xstale")
-		const parent = taskService.startNewTask({ kind: 0 } as never)
+		const parent = taskService.startNewTask("p1", { kind: 0 } as never)
 		;(taskService as unknown as { tasks: Map<string, unknown> }).tasks.clear() // parent gone BEFORE the wait
 		const completeSpy = vi.spyOn(taskService, "completeTask")
 		const failSpy = vi.spyOn(taskService, "failTask")

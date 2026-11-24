@@ -332,7 +332,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		this.planner = new OperationPlanner(this.profileService, this.tokenService)
 		this.resolver = new ContractResolver(this.logger)
 		this.authwit = new AuthwitDiscoverer(this.logger)
-		this.coordinator = new ExecutionCoordinator(this.taskService, this.logger, this.legal, this.proofGate, {
+		this.coordinator = new ExecutionCoordinator(this.logger, this.legal, this.proofGate, {
 			updateProvingBackend: (journalId, backend) => this.operationJournal.updateProvingBackend(journalId, backend),
 			provePhase: (journalId, phase, backend) => this.requests?.provePhase(journalId, phase, backend),
 		})
@@ -1004,6 +1004,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		authorizedFence?: ExecutionFence,
 	): Promise<OperationResult[]> {
 		await this.ensureInitialized()
+		const owner = await this.batchOwner(authorizedFence, parentTask)
 		if (operations.some((op) => BROADCASTING_OPERATION_KINDS.has(op.kind))) await this.legal.assertCurrent()
 		if (origin.type === OriginType.DAPP && !authorizedFence && operations.some((op) => FENCED_OPERATION_KINDS.has(op.kind))) {
 			throw new Error("a dApp send requires the fence of the session that authorized it")
@@ -1024,7 +1025,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			const content = new ExecuteOperationContent(operation.kind, this.planner.extractPrimaryMethod(operation))
 			const operationTask = parentTask
 				? parentTask.startSubtask(content)
-				: this.taskService.startNewTask(content, undefined, origin, hooks?.walletTraceId)
+				: this.taskService.startNewTask(owner, content, origin, hooks?.walletTraceId)
 
 			try {
 				const result = await this.dispatchOperation(
@@ -1047,6 +1048,14 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			}
 		}
 		return results
+	}
+
+	/** The profile a batch's root tasks belong to: its fence's, else the one active at entry, read once
+	 *  before the Terms check. A batch under a parent creates no root. */
+	private async batchOwner(authorizedFence?: ExecutionFence, parentTask?: WrappedTask): Promise<string | undefined> {
+		if (authorizedFence) return authorizedFence.profileId
+		if (parentTask) return undefined
+		return (await this.profileService.getActiveProfile())?.id
 	}
 
 	/** Level by reach: a Terms, scope, argument, capacity or unsupported-method refusal is expected,

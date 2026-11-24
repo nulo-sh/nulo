@@ -4,7 +4,7 @@
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Utils */
-import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
+import { clampDecimals, formatBaseUnits, parseAmountToBaseUnits, readAmountText } from "@/utils/amount"
 import { pluralize } from "@/utils/plural"
 import { sideBalanceText } from "./send-sides"
 import { fitHero } from "@/utils/hero-fit"
@@ -253,9 +253,8 @@ const modelRaw = computed(() => {
 	if (tokenDecimals.value === undefined) return null
 	const read = readAmountText(String(model.value ?? ""), { rested: rested.value })
 	if (!read.ok) return null
-	const [whole, fraction = ""] = read.plain.split(".")
-	const frac = fraction.slice(0, tokenDecimals.value).padEnd(tokenDecimals.value, "0")
-	return BigInt(whole || "0") * 10n ** BigInt(tokenDecimals.value) + BigInt(frac || "0")
+	// A token with no decimals clamps ".5" to "", which the parser refuses and the field reads as 0.
+	return parseAmountToBaseUnits(clampDecimals(read.plain, tokenDecimals.value) || "0", tokenDecimals.value)
 })
 
 /** Token-mode conversion line — LIVE quote (display-only; freezing applies to

@@ -20,7 +20,7 @@ import {
 	TASK_RETENTION_PERIOD_MS,
 	FINISHED_DAPP_ROOTS_KEPT,
 } from "./spec"
-import { WrappedTask } from "./wrapped-task"
+import { RefusedTask, WrappedTask } from "./wrapped-task"
 
 export * from "./spec"
 export * from "./wrapped-task"
@@ -52,18 +52,30 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 		this.profile ??= active?.id
 	}
 
-	private createTask(
+	/** The registry holds one profile's tasks: a root for another profile, or for none, never enters it. */
+	private createRoot(
+		owner: string | undefined,
 		content: ITaskContent,
-		parentId?: string,
-		origin?: TxOrigin,
-		status: TaskStatus = TaskStatus.Pending,
+		origin: TxOrigin | undefined,
+		status: TaskStatus,
 		walletTraceId?: string,
 	): WrappedTask {
-		const taskId = randomIdNotIn((id) => this.tasks.has(id))
+		if (owner === undefined || owner !== this.profile) return new RefusedTask(this, origin)
+		return this.createTask(content, undefined, origin, status, walletTraceId)
+	}
 
-		const parent = parentId ? this.getTaskById(parentId) : undefined
+	private createTask(
+		content: ITaskContent,
+		parent: Task | undefined,
+		origin: TxOrigin | undefined,
+		status: TaskStatus,
+		walletTraceId?: string,
+	): WrappedTask {
+		// A stale handle and the incoming-transfer outbox keep ids past a clear, so ids carry 64 random bits.
+		const taskId = randomIdNotIn((id) => this.tasks.has(id), 16)
+
 		if (parent?.finishedAt) {
-			throw new Error(`Cannot add task to finished parent ${parentId}`)
+			throw new Error(`Cannot add task to finished parent ${parent.id}`)
 		}
 		this.cleanupStaleTasks()
 
@@ -97,26 +109,30 @@ export class TaskService extends Service<Methods, Events> implements ServiceSpec
 	}
 
 	/**
-	 * Creates a new pending task of any level.
-	 * @param content - Task content
-	 * @param parentId - Optional parent task ID
-	 * @param origin - Optional origin of the task
-	 * @returns Created task wrapper
+	 * Creates a pending root task.
+	 * @param owner - The profile its creator acts for, as the fence, row or network it holds names it. A
+	 *   root for any profile but the registry's comes back as a {@link RefusedTask} and emits nothing.
 	 */
-	public createNewTask(content: ITaskContent, parentId?: string, origin?: TxOrigin): WrappedTask {
-		return this.createTask(content, parentId, origin, TaskStatus.Pending)
+	public createNewTask(owner: string | undefined, content: ITaskContent, origin?: TxOrigin): WrappedTask {
+		return this.createRoot(owner, content, origin, TaskStatus.Pending)
 	}
 
 	/**
-	 * Creates a new processing task of any level.
-	 * @param content - Task content
-	 * @param parentId - Optional parent task ID
-	 * @param origin - Optional origin of the task
-	 * @param walletTraceId - The dApp request a root task runs for
-	 * @returns Created task wrapper
+	 * Creates a processing root task; `owner` as for {@link createNewTask}.
+	 * @param walletTraceId - The dApp request it runs for
 	 */
-	public startNewTask(content: ITaskContent, parentId?: string, origin?: TxOrigin, walletTraceId?: string): WrappedTask {
-		return this.createTask(content, parentId, origin, TaskStatus.Processing, walletTraceId)
+	public startNewTask(owner: string | undefined, content: ITaskContent, origin?: TxOrigin, walletTraceId?: string): WrappedTask {
+		return this.createRoot(owner, content, origin, TaskStatus.Processing, walletTraceId)
+	}
+
+	/** Creates a pending subtask; throws on a parent the registry does not hold. */
+	public createSubtask(parentId: string, content: ITaskContent, origin?: TxOrigin): WrappedTask {
+		return this.createTask(content, this.getTaskById(parentId), origin, TaskStatus.Pending)
+	}
+
+	/** Creates a processing subtask; throws on a parent the registry does not hold. */
+	public startSubtask(parentId: string, content: ITaskContent, origin?: TxOrigin): WrappedTask {
+		return this.createTask(content, this.getTaskById(parentId), origin, TaskStatus.Processing)
 	}
 
 	private validateTaskBeforeFinish(task: Task): void {

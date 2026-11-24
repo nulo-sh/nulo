@@ -24,8 +24,10 @@ class TestResult implements ITaskResult {
 	constructor(public readonly testData: string) {}
 }
 
-/** `getActiveProfile` answers what a SW restart's silent restore left active. */
-const buildTestSetup = (getActiveProfile: () => Promise<ProfileInfo | undefined> = async () => undefined) => {
+const profile = (id: string): ProfileInfo => ({ id, name: id, type: "password" })
+
+/** `getActiveProfile` answers what a SW restart's silent restore left active; `A` unless a test says otherwise. */
+const buildTestSetup = (getActiveProfile: () => Promise<ProfileInfo | undefined> = async () => profile("A")) => {
 	const profileServiceMock = {
 		name: ProfileService.name,
 		onActiveProfileChanged: new EventHandler<ProfileInfo>(),
@@ -86,14 +88,12 @@ const createTestSetup = async (getActiveProfile?: () => Promise<ProfileInfo | un
 	return setup
 }
 
-const profile = (id: string): ProfileInfo => ({ id, name: id, type: "password" })
-
 describe("Task Tree Implementation", () => {
 	describe("Task Creation and Structure", () => {
 		test("should create pending root task", async () => {
 			const { service, rootStepContent, expectEvent } = await createTestSetup()
 
-			const pendingTask = service.createNewTask(rootStepContent)
+			const pendingTask = service.createNewTask("A", rootStepContent)
 
 			expect(pendingTask.task.parentId).toBeUndefined()
 			expect(pendingTask.task.content.kind).toBe(ContentKind.Step)
@@ -105,7 +105,7 @@ describe("Task Tree Implementation", () => {
 		test("should create processing root task", async () => {
 			const { service, rootStepContent, expectEvent } = await createTestSetup()
 
-			const processingTask = service.startNewTask(rootStepContent)
+			const processingTask = service.startNewTask("A", rootStepContent)
 
 			expect(processingTask.task.status).toBe(TaskStatus.Processing)
 			expect(processingTask.task.startedAt).toBeDefined()
@@ -116,7 +116,7 @@ describe("Task Tree Implementation", () => {
 		test("should create subtasks and maintain parent-child relationships", async () => {
 			const { service, rootStepContent, stepOne, stepTwo, expectEvent } = await createTestSetup()
 
-			const parentTask = service.createNewTask(rootStepContent)
+			const parentTask = service.createNewTask("A", rootStepContent)
 			const childOne = parentTask.createSubtask(stepOne)
 			const childTwo = parentTask.createSubtask(stepTwo)
 
@@ -134,20 +134,20 @@ describe("Task Tree Implementation", () => {
 		test("should handle creation errors", async () => {
 			const { service, rootStepContent, stepOne } = await createTestSetup()
 
-			const completedParent = service.startNewTask(rootStepContent)
+			const completedParent = service.startNewTask("A", rootStepContent)
 			completedParent.complete()
 
-			expect(() => service.createNewTask(stepOne, completedParent.id)).toThrow(
+			expect(() => service.createSubtask(completedParent.id, stepOne)).toThrow(
 				`Cannot add task to finished parent ${completedParent.id}`,
 			)
 
-			expect(() => service.createNewTask(stepOne, "non-existent")).toThrow("Invalid task id: non-existent")
+			expect(() => service.createSubtask("non-existent", stepOne)).toThrow("Invalid task id: non-existent")
 		})
 
 		test("should return root tasks from getTasks", async () => {
 			const { service } = await createTestSetup()
 
-			const rootTask = service.createNewTask(new StepContent("Root"))
+			const rootTask = service.createNewTask("A", new StepContent("Root"))
 			rootTask.createSubtask(new StepContent("Step One"))
 			const stepTwoTask = rootTask.createSubtask(new StepContent("Step Two"))
 			stepTwoTask.createSubtask(new StepContent("Step Two A"))
@@ -172,7 +172,7 @@ describe("Task Tree Implementation", () => {
 			const { service } = await createTestSetup()
 			const origin: TxOrigin = { type: OriginType.UI }
 
-			const rootTask = service.createNewTask(new StepContent("Root"), undefined, origin)
+			const rootTask = service.createNewTask("A", new StepContent("Root"), origin)
 			const subtask = rootTask.createSubtask(new StepContent("Subtask"))
 
 			expect(rootTask.origin).toBe(origin)
@@ -182,9 +182,9 @@ describe("Task Tree Implementation", () => {
 
 		test("a subtask takes its root's dApp request id, a root without one leaves it unset", async () => {
 			const { service } = await createTestSetup()
-			const traced = service.startNewTask(new StepContent("Root"), undefined, undefined, "1a2b3c4d")
+			const traced = service.startNewTask("A", new StepContent("Root"), undefined, "1a2b3c4d")
 			const step = traced.startSubtask(new StepContent("Step")).startSubtask(new StepContent("Inner"))
-			const plain = service.startNewTask(new StepContent("Other")).startSubtask(new StepContent("Step"))
+			const plain = service.startNewTask("A", new StepContent("Other")).startSubtask(new StepContent("Step"))
 			expect(step.task.walletTraceId).toBe("1a2b3c4d")
 			expect(plain.task.walletTraceId).toBeUndefined()
 		})
@@ -194,7 +194,7 @@ describe("Task Tree Implementation", () => {
 		test("should start task and change status from Pending to Processing", async () => {
 			const { service, expectEvent } = await createTestSetup()
 
-			const pendingTask = service.createNewTask(new StepContent("Pending Task"))
+			const pendingTask = service.createNewTask("A", new StepContent("Pending Task"))
 			pendingTask.start()
 
 			expect(pendingTask.task.status).toBe(TaskStatus.Processing)
@@ -205,7 +205,7 @@ describe("Task Tree Implementation", () => {
 		test("should throw error when starting non-pending task", async () => {
 			const { service, stepOne } = await createTestSetup()
 
-			const alreadyStartedTask = service.startNewTask(stepOne)
+			const alreadyStartedTask = service.startNewTask("A", stepOne)
 
 			expect(() => alreadyStartedTask.start()).toThrow(`Cannot start task ${alreadyStartedTask.id} that is not pending`)
 		})
@@ -213,7 +213,7 @@ describe("Task Tree Implementation", () => {
 		test("wrapper should provide status and completion queries", async () => {
 			const { service, rootStepContent } = await createTestSetup()
 
-			const task = service.createNewTask(rootStepContent)
+			const task = service.createNewTask("A", rootStepContent)
 			expect(task.status).toBe(TaskStatus.Pending)
 			expect(task.isFinished).toBe(false)
 
@@ -231,7 +231,7 @@ describe("Task Tree Implementation", () => {
 		test("should complete task with default result", async () => {
 			const { service, rootStepContent, expectEvent } = await createTestSetup()
 
-			const rootTask = service.startNewTask(rootStepContent)
+			const rootTask = service.startNewTask("A", rootStepContent)
 			rootTask.complete()
 
 			expect(rootTask.task.finishedAt).toBeDefined()
@@ -243,7 +243,7 @@ describe("Task Tree Implementation", () => {
 		test("should complete task with custom result", async () => {
 			const { service, rootStepContent } = await createTestSetup()
 
-			const rootTask = service.startNewTask(rootStepContent)
+			const rootTask = service.startNewTask("A", rootStepContent)
 			const customResult = new TestResult("test data")
 			rootTask.complete(customResult)
 
@@ -253,7 +253,7 @@ describe("Task Tree Implementation", () => {
 		test("should fail task with error", async () => {
 			const { service, rootStepContent, expectEvent } = await createTestSetup()
 
-			const task = service.startNewTask(rootStepContent)
+			const task = service.startNewTask("A", rootStepContent)
 			const error = "Validation failed"
 			task.fail(error)
 
@@ -267,7 +267,7 @@ describe("Task Tree Implementation", () => {
 		test("should throw error when completing task with unfinished subtasks", async () => {
 			const { service, rootStepContent, stepOne } = await createTestSetup()
 
-			const parentTask = service.startNewTask(rootStepContent)
+			const parentTask = service.startNewTask("A", rootStepContent)
 			const childTask = parentTask.createSubtask(stepOne)
 
 			expect(() => parentTask.complete()).toThrow(`Cannot finish task ${parentTask.id} with unfinished subtasks: ${childTask.id}`)
@@ -286,7 +286,7 @@ describe("Task Tree Implementation", () => {
 		test("should throw error when completing already finished task", async () => {
 			const { service, rootStepContent } = await createTestSetup()
 
-			const completedTask = service.startNewTask(rootStepContent)
+			const completedTask = service.startNewTask("A", rootStepContent)
 			completedTask.complete()
 
 			expect(() => completedTask.complete()).toThrow(`Cannot finish already finished task ${completedTask.id}`)
@@ -297,8 +297,8 @@ describe("Task Tree Implementation", () => {
 		test("should cancel pending and processing tasks", async () => {
 			const { service, rootStepContent, stepOne, expectEvent } = await createTestSetup()
 
-			const pendingTask = service.createNewTask(rootStepContent)
-			const processingTask = service.startNewTask(stepOne)
+			const pendingTask = service.createNewTask("A", rootStepContent)
+			const processingTask = service.startNewTask("A", stepOne)
 
 			pendingTask.cancel()
 			processingTask.cancel()
@@ -315,7 +315,7 @@ describe("Task Tree Implementation", () => {
 		test("should throw error when completing or failing pending tasks", async () => {
 			const { service, rootStepContent } = await createTestSetup()
 
-			const pendingTask = service.createNewTask(rootStepContent)
+			const pendingTask = service.createNewTask("A", rootStepContent)
 
 			expect(() => pendingTask.complete()).toThrow(`Cannot finish pending task ${pendingTask.id} since it is not started`)
 			expect(() => pendingTask.fail("error")).toThrow(`Cannot finish pending task ${pendingTask.id} since it is not started`)
@@ -326,12 +326,12 @@ describe("Task Tree Implementation", () => {
 		test("should cleanup expired tasks and keep active tasks", async () => {
 			const { service, rootStepContent, stepOne, stepTwo, expectEvent } = await createTestSetup()
 
-			const completedRoot = service.startNewTask(rootStepContent)
+			const completedRoot = service.startNewTask("A", rootStepContent)
 			const cancelledChild = completedRoot.startSubtask(stepOne)
 			cancelledChild.cancel()
 			completedRoot.complete()
 
-			const activeRoot = service.startNewTask(stepTwo)
+			const activeRoot = service.startNewTask("A", stepTwo)
 
 			// Capture task references before cleanup
 			const completedRootTask = completedRoot.task
@@ -351,7 +351,7 @@ describe("Task Tree Implementation", () => {
 		test("should throw error when requesting task that has been deleted", async () => {
 			const { service, rootStepContent } = await createTestSetup()
 
-			const task = service.startNewTask(rootStepContent)
+			const task = service.startNewTask("A", rootStepContent)
 			task.complete()
 			vi.setSystemTime(Date.now() + TASK_RETENTION_PERIOD_MS + 1000)
 
@@ -363,8 +363,8 @@ describe("Task Tree Implementation", () => {
 			const { service, switchToProfile } = await createTestSetup()
 
 			switchToProfile({ id: "A", name: "A", type: "password" })
-			service.createNewTask(new StepContent("T1"))
-			service.createNewTask(new StepContent("T2"))
+			service.createNewTask("A", new StepContent("T1"))
+			service.createNewTask("A", new StepContent("T2"))
 			expect((await service.getTasks()).length).toBe(2)
 
 			// Switch to a different profile - should clear
@@ -375,7 +375,7 @@ describe("Task Tree Implementation", () => {
 		test("failing a task the switch cleared throws as before, with the failure it recorded as its cause", async () => {
 			const { service, switchToProfile } = await createTestSetup()
 			switchToProfile({ id: "A", name: "A", type: "password" })
-			const task = service.startNewTask(new StepContent("T1"))
+			const task = service.startNewTask("A", new StepContent("T1"))
 			switchToProfile({ id: "B", name: "B", type: "password" })
 			const timeout = new Error("timed out")
 
@@ -394,7 +394,7 @@ describe("Task Tree Implementation", () => {
 		test("completing a task the switch cleared, past its broadcast, is a no-op", async () => {
 			const { service, switchToProfile } = await createTestSetup()
 			switchToProfile({ id: "A", name: "A", type: "password" })
-			const task = service.startNewTask(new StepContent("T1"))
+			const task = service.startNewTask("A", new StepContent("T1"))
 			switchToProfile({ id: "B", name: "B", type: "password" })
 			const onTaskUpdated = vi.fn()
 			service.onTaskUpdated.add(onTaskUpdated)
@@ -406,7 +406,7 @@ describe("Task Tree Implementation", () => {
 		test("completing a tracked task past its broadcast keeps every finishing rule", async () => {
 			const { service, switchToProfile, expectEvent } = await createTestSetup()
 			switchToProfile({ id: "A", name: "A", type: "password" })
-			const parent = service.startNewTask(new StepContent("T1"))
+			const parent = service.startNewTask("A", new StepContent("T1"))
 			const child = parent.startSubtask(new StepContent("T2"))
 
 			expect(() => parent.completeIfTracked()).toThrow(`Cannot finish task ${parent.id} with unfinished subtasks: ${child.id}`)
@@ -418,7 +418,7 @@ describe("Task Tree Implementation", () => {
 
 		test("after a silent restore, a switch to another profile clears the restored profile's tasks", async () => {
 			const { service, switchToProfile } = await createTestSetup(async () => profile("A"))
-			service.createNewTask(new StepContent("T1"))
+			service.createNewTask("A", new StepContent("T1"))
 
 			switchToProfile(profile("B"))
 			expect(await service.getTasks()).toEqual([])
@@ -426,7 +426,7 @@ describe("Task Tree Implementation", () => {
 
 		test("after a silent restore, a lock and an unlock to the same profile keep its tasks (control)", async () => {
 			const { service, switchToProfile } = await createTestSetup(async () => profile("A"))
-			service.createNewTask(new StepContent("T1"))
+			service.createNewTask("A", new StepContent("T1"))
 
 			switchToProfile(undefined)
 			switchToProfile(profile("A"))
@@ -440,7 +440,7 @@ describe("Task Tree Implementation", () => {
 				return profile("A")
 			})
 			await start()
-			service.createNewTask(new StepContent("T1"))
+			expect(service.createNewTask("B", new StepContent("T1")).exists).toBe(true)
 
 			switchToProfile(profile("A"))
 			expect(await service.getTasks()).toEqual([])
@@ -450,14 +450,86 @@ describe("Task Tree Implementation", () => {
 			const { service, switchToProfile } = await createTestSetup()
 
 			switchToProfile({ id: "A", name: "A", type: "password" })
-			service.createNewTask(new StepContent("T1"))
-			service.createNewTask(new StepContent("T2"))
+			service.createNewTask("A", new StepContent("T1"))
+			service.createNewTask("A", new StepContent("T2"))
 			expect((await service.getTasks()).length).toBe(2)
 
 			// Set to the same profile - no clearing
 			switchToProfile({ id: "A", name: "A", type: "password" })
 			expect((await service.getTasks()).length).toBe(2)
 		})
+	})
+})
+
+describe("a root task joins only its own profile's list", () => {
+	test("control: a root for the registry's profile is inserted and announced", async () => {
+		const { service, expectEvent } = await createTestSetup()
+		const task = service.startNewTask("A", new StepContent("T1"))
+
+		expect(task.exists).toBe(true)
+		expect((await service.getTasks()).map((t) => t.id)).toEqual([task.id])
+		expectEvent("onTaskCreated", task.task)
+	})
+
+	const restoredA = async (): Promise<ProfileInfo | undefined> => profile("A")
+	const noneRestored = async (): Promise<ProfileInfo | undefined> => undefined
+
+	test.each([
+		["another profile", restoredA, "B"],
+		["no owner while the registry holds a profile", restoredA, undefined],
+		["no owner before any profile", noneRestored, undefined],
+		["an owner before any profile", noneRestored, "A"],
+	] as const)("a root for %s is not inserted and announces nothing", async (_name, restored, owner) => {
+		const { service } = await createTestSetup(restored)
+		const announced = vi.fn()
+		service.onTaskCreated.add(announced)
+		service.onTaskUpdated.add(announced)
+
+		const started = service.startNewTask(owner, new StepContent("T1"))
+		const pending = service.createNewTask(owner, new StepContent("T2"))
+
+		expect([started.exists, pending.exists]).toEqual([false, false])
+		expect(await service.getTasks()).toEqual([])
+		expect(announced).not.toHaveBeenCalled()
+	})
+
+	test("a refused root's lifecycle reaches nothing, and its subtasks are refused alike", async () => {
+		const { service } = await createTestSetup()
+		const announced = vi.fn()
+		service.onTaskCreated.add(announced)
+		service.onTaskUpdated.add(announced)
+		const refused = service.startNewTask("B", new StepContent("T1"))
+
+		const child = refused.startSubtask(new StepContent("Step"))
+		expect(() => {
+			refused.createSubtask(new StepContent("Pending step"))
+			child.complete()
+			refused.start()
+			refused.completeIfTracked()
+			refused.fail(new Error("session ended"))
+			refused.cancel()
+			refused.complete()
+		}).not.toThrow()
+		expect(child.exists).toBe(false)
+		expect(await service.getTasks()).toEqual([])
+		expect(announced).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		["a parent a profile switch cleared", (service: TaskService) => service.startNewTask("A", new StepContent("T1")).id, true],
+		["an empty parent id", () => "", false],
+	])("a subtask under %s throws, inserting and announcing nothing", async (_name, parentOf, switches) => {
+		const { service, switchToProfile } = await createTestSetup()
+		const parentId = parentOf(service)
+		if (switches) switchToProfile(profile("B"))
+		const announced = vi.fn()
+		service.onTaskCreated.add(announced)
+		service.onTaskUpdated.add(announced)
+
+		expect(() => service.startSubtask(parentId, new StepContent("Step"))).toThrow(`Invalid task id: ${parentId}`)
+		expect(() => service.createSubtask(parentId, new StepContent("Step"))).toThrow(`Invalid task id: ${parentId}`)
+		expect(await service.getTasks()).toEqual([])
+		expect(announced).not.toHaveBeenCalled()
 	})
 })
 
@@ -472,11 +544,11 @@ describe("finished dApp roots kept", () => {
 			if (t.finishedAt !== undefined && !t.parentId) log.push(`finished ${t.id}`)
 		})
 		service.onTaskDeleted.add((t) => log.push(`deleted ${t.id}`))
-		const open = service.startNewTask(new StepContent("open"), undefined, DAPP)
-		const ui = service.startNewTask(new StepContent("ui"), undefined, { type: OriginType.UI })
+		const open = service.startNewTask("A", new StepContent("open"), DAPP)
+		const ui = service.startNewTask("A", new StepContent("ui"), { type: OriginType.UI })
 		ui.complete()
 		const trees = Array.from({ length: FINISHED_DAPP_ROOTS_KEPT + 50 }, (_, i) => {
-			const root = service.startNewTask(new StepContent(`r${i}`), undefined, DAPP)
+			const root = service.startNewTask("A", new StepContent(`r${i}`), DAPP)
 			const leaf = root.startSubtask(new StepContent(`s${i}`))
 			leaf.complete()
 			return { root, leaf }
@@ -505,13 +577,13 @@ describe("finished dApp roots kept", () => {
 
 	test("creating a task drops a root finished past the retention period, with no read in between", async () => {
 		const { service } = await createTestSetup()
-		const old = service.startNewTask(new StepContent("old"), undefined, DAPP)
+		const old = service.startNewTask("A", new StepContent("old"), DAPP)
 		old.complete()
 		vi.setSystemTime(Date.now() + TASK_RETENTION_PERIOD_MS + 1000)
 		const deleted = vi.fn()
 		service.onTaskDeleted.add(deleted)
 
-		service.startNewTask(new StepContent("new"))
+		service.startNewTask("A", new StepContent("new"))
 
 		expect(service.hasTask(old.id)).toBe(false)
 		expect(deleted).toHaveBeenCalledWith(expect.objectContaining({ id: old.id }))

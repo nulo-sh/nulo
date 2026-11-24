@@ -507,6 +507,16 @@ describe("composite/AmountCard — the amount in dollars, for the review", () =>
 		expect(figures(w).at(-1)).toBe("≈ $43.20")
 	})
 
+	test("a token with no decimals cuts a fraction: a bare one reads as nothing, never a throw", async () => {
+		const w = mountCard({ token: { symbol: "INT", decimals: 0 }, liveQuote: { usd: 1.5, fetchedAt: Date.now() }, modelValue: ".5" })
+		await nextTick()
+		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("1 INT ≈ $1.50")
+		expect(figures(w).at(-1) ?? null).toBeNull()
+		await w.setProps({ modelValue: "1.5" })
+		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("≈ $1.50")
+		expect(figures(w).at(-1)).toBe("≈ $1.50")
+	})
+
 	test("no price or no amount: none", async () => {
 		const unpriced = mountCard({ token: TOKEN, liveQuote: null, modelValue: "28.8" })
 		await nextTick()
