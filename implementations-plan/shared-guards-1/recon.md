@@ -49,6 +49,7 @@ Base: `origin/dev` at `4a333b343`. Sources: an AST inventory (TypeScript compile
 - #1942 edits `account/service.ts` at 130-138 and 285-297; arc 3 edits its import at 20 and the guard at 1080.
 - #1945 edits `token/seeder.ts` at 3 (an inserted import), 8, 37 and 659; `token/service.ts` at 6, 49 and 1078; `extension-messaging/src/errors.ts` near 429 and 807; and `token/seeder.test.ts` at 13 and 152. Arc 3 edits `seeder.ts` at 4, 119 and 144, `service.ts` at 35 and 937, `errors.ts` with three imports after line 15 and at 90 and 368-379, and adds its seeder test after line 371.
 - #1945 stacks on #1942's branch, so it restacks onto `dev` once #1942 lands; arc 3 changes nothing in that.
+- Arc 3's import in `backup/trust-gate.ts` moves three of its lines that `tests/e2e/helpers/profile-chaos/model.ts` cites by number (63, 75, 106 become 64, 76, 107); those three lines merge outside both conflict hunks the PRs already meet in that file, which are #1942's own citations.
 - Checked with `git merge-tree` against each PR's head: the only conflict either meets, `tests/e2e/helpers/profile-chaos/model.ts` (and `implementations-plan/index.md` for #1942), it meets against `dev` already.
 
 Closed `known-limit` issues searched ("guard", "isRecord", "hex", "duplicate", "inline"): none concerns an object guard; #372 (a token row stored in another hex spelling) concerns token-row keys, which no site here reads.
