@@ -2,8 +2,8 @@
 /**
  * `DappSendEstimation` — a dApp send's fee estimate and authorization preview, and the only writer
  * of what they leave for its confirm: the reuse entry and the preview snapshot. Its deps name no
- * lane, journal, coordinator or recorder, so it takes no slot, writes no record, proves nothing and
- * sends nothing.
+ * lane, journal, coordinator or recorder, so it takes no slot and writes no record; the node and PXE
+ * its builds return are only read and simulated.
  *
  * The confirm (`DappSendExecutor`) consumes both, and asks this class for what it must build exactly
  * as the estimate or the preview did: the reuse snapshot, the re-stash after a fee re-ask, and the

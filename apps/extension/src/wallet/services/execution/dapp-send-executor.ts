@@ -1,8 +1,8 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 /**
  * `DappSendExecutor` — the dApp-initiated send flows (standard,
- * aztec.js, NO_FROM/DefaultEntrypoint), moved verbatim off the execution
- * facade. Their estimate and authorization preview are `DappSendEstimation`'s.
+ * aztec.js, NO_FROM/DefaultEntrypoint). Their estimate and authorization
+ * preview are `DappSendEstimation`'s.
  *
  * ## Lane-shaped deps
  *

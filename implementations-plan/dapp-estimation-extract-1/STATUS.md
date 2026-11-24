@@ -6,3 +6,4 @@
 - 2026-11-23: final fresh Codex pass approve with changes (F1 accepted); resumed: approve. Plan committed.
 - 2026-11-24: arc 1 code committed; frozen ranges hold (4 receivers); mutants M1, M1b, M2, M3, M4, M5 killed; gates next.
 - 2026-11-24: local gates green; Codex round 1 approve (comment deleted, Azguard notice added); e2e running.
+- 2026-11-24: Codex loop converged (r2 approve); Opus review approve with changes (4 low, accepted); Chrome proverless e2e 11/11 green; Firefox and prover-ON next.

@@ -147,7 +147,7 @@ const pendingReceipt = (): TxReceipt => new PendingTxReceipt(TX_HASH, undefined 
 const minedReceipt = (status: TxStatus, result = TxExecutionResult.SUCCESS): TxReceipt =>
 	new MinedTxReceipt(TX_HASH, status as never, result, 0n, undefined as never, 1 as never, 1 as never, 0, 0 as never, undefined as never)
 
-/** One fake bag both halves read, so a change made through `h.deps` reaches each as it reached one class. */
+/** One fake bag both halves read, so a change made through `h.deps` reaches both. */
 type HarnessDeps = DappSendExecutorDeps & DappSendEstimationDeps
 
 function makeHarness(

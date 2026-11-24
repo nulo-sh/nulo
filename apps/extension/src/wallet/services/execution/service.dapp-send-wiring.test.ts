@@ -48,6 +48,8 @@ describe("ExecutionService: the dApp send's estimate and confirm halves", () => 
 		expect(estimation.previewSnapshots).toBe(fields.previewSnapshots)
 		expect(estimation.chainTip).toBe(fields.chainTipGate)
 		expect(executor.estimation).toBe(self.dappSendEstimation)
+		expect(executor.operationEstimateReuse).toBe(fields.operationEstimateReuse)
+		expect(executor.previewSnapshots).toBe(fields.previewSnapshots)
 		expect(executor.estimateWithDiscovery).toBe(estimation.estimateWithDiscovery)
 		expect(executor.buildAndEstimateValidated).toBe(estimation.buildAndEstimateValidated)
 	})

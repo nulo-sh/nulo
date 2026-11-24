@@ -21,3 +21,17 @@ Paths repo-relative to `apps/extension/src/wallet/services/execution/` unless ro
   confidence. Two low findings: the fee-race stub (pre-existing, already an open item) and the
   "clone to prevent mutation side effects" comment in `estimateOperationFee`, which narrates two
   copies nothing downstream mutates. Comment deleted.
+- Round 2 (resumed, same session): approve, high confidence, no new finding.
+
+## Opus 5.5 diff review (2026-11-24)
+
+- general-purpose agent: approve with changes, high confidence; four low findings, all accepted.
+  The wiring pin did not check that the executor shares both caches with the estimation: two
+  identity asserts added, each killing its mutant (the executor wired to a new `PreviewSnapshots`,
+  then to a new `OperationEstimateReuse`). The new file's header overclaimed past D5 ("proves
+  nothing and sends nothing"): now "the node and PXE its builds return are only read and
+  simulated" (checked: `pxe.simulateTx` and `node.getNodeInfo` only). Two comments narrated
+  history (the harness type's doc, "moved verbatim off the execution facade"): rewritten. One
+  README row split for sense.
+- The Chrome proverless e2e ran at `4a733cef2`; every later commit changes comments, docs and the
+  wiring pin only.

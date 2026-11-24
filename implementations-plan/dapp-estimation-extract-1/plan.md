@@ -342,6 +342,11 @@ Resumed on the fix: **approve**.
 **Arc 1, Codex fix loop round 1 (`gpt-6.1-sol`, high): approve**, two low findings. The fee-race
 stub's `[]` (pre-existing; the open item above, confirmed by a probe). A comment narrating two
 array copies in `estimateOperationFee`: deleted. The lead added the Azguard notice to the new file.
+Resumed (round 2): **approve**, no new finding.
+
+**Arc 1, Opus 5.5 diff review: approve with changes**, four low findings, all accepted. The wiring
+pin now checks the executor shares both caches (M6, both forms killed); the new file's header
+states D5's limit; two history-narrating comments rewritten; one README row split.
 
 ## Seeds
 
