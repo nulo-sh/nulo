@@ -20,11 +20,13 @@ describe("parseRawBalance", () => {
 })
 
 describe("isValidDecimals", () => {
-	test("integers 0..MAX_DECIMALS only", () => {
+	test("integers 0..MAX_DECIMALS only, the bound a token is added and read under", () => {
+		expect(MAX_DECIMALS).toBe(77)
 		expect(isValidDecimals(0)).toBe(true)
 		expect(isValidDecimals(18)).toBe(true)
-		expect(isValidDecimals(MAX_DECIMALS)).toBe(true)
-		expect(isValidDecimals(MAX_DECIMALS + 1)).toBe(false)
+		expect(isValidDecimals(24)).toBe(true)
+		expect(isValidDecimals(77)).toBe(true)
+		expect(isValidDecimals(78)).toBe(false)
 		expect(isValidDecimals(-1)).toBe(false)
 		expect(isValidDecimals(1.5)).toBe(false)
 		expect(isValidDecimals("18")).toBe(false)

@@ -163,6 +163,22 @@ describe("useIncomingSyncHealth", () => {
 		expect(client.getIncomingSyncHealth).toHaveBeenCalledTimes(2)
 	})
 
+	test("a fetch refused before the first connect is not recovered by that connect or a timer; the next reconnect reads again", async () => {
+		const { client, health } = setup(STALLED)
+		client.getIncomingSyncHealth.mockRejectedValueOnce(new Error("port closed"))
+		await health.refresh()
+		client.onConnected.invoke()
+		await flushPromises()
+		await vi.advanceTimersByTimeAsync(60_000)
+		expect(client.getIncomingSyncHealth).toHaveBeenCalledTimes(1)
+		expect(health.stalled.value).toBe(false)
+
+		client.onConnected.invoke()
+		await flushPromises()
+		expect(client.getIncomingSyncHealth).toHaveBeenCalledTimes(2)
+		expect(health.stalled.value).toBe(true)
+	})
+
 	test("retry asks the worker to scan now, flags retrying meanwhile, then refetches", async () => {
 		const { client, health } = setup(STALLED)
 		await health.refresh()

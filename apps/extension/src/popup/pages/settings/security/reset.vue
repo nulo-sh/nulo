@@ -16,6 +16,7 @@ import { managers, requireAccount, requireNetwork } from "@/utils/core"
 
 /** Utils */
 import { dashIfBlank, trimAddress } from "@/utils/string"
+import { getChainName } from "@/components/ui/utils.js"
 import { leaveFor } from "@/utils/page-back"
 import { postAuthRoute } from "@/utils/own-window"
 import { importedKey, readImportedAccounts } from "./imported-accounts"
@@ -63,14 +64,13 @@ const showMismatch = computed(() => mismatchSettled.value && cannotBecomeName.va
 const imported = ref(null)
 const importedReadFailed = ref(false)
 let importedReads = 0
-/** The list as it stands; it fails once the lock or a newer read overtakes it, and since `getAccounts`
- *  answers while locked, no account read starts after that. */
+/** The list as it stands; it fails once the lock or a newer read overtakes it, and since the account
+ *  read answers while locked, none starts after that. */
 const fetchImported = (read) => {
 	const live = () => read === importedReads && appStore.isLogined
 	const reads = {
 		getNetworks: () => requireNetwork().getNetworks(),
-		getAccounts: (id, chainId, all) =>
-			live() ? requireAccount().getAccounts(id, chainId, all) : Promise.reject(new Error("read overtaken")),
+		getImportedAccounts: (id) => (live() ? requireAccount().getImportedAccounts(id) : Promise.reject(new Error("read overtaken"))),
 		getPendingReset: () => managers.networkReset.getPendingReset(),
 		getStaleNetwork: (networkId) => managers.networkReset.getStaleNetwork(networkId),
 	}
@@ -90,6 +90,10 @@ const readImported = async () => {
 }
 managers.networkReset.onStaleNetworkChanged.add(readImported)
 const importedAccounts = computed(() => (appStore.isLogined ? (imported.value?.accounts ?? []) : []))
+const importedRowDescription = (account) => {
+	const address = trimAddress(account.address, 6, 4, "…")
+	return account.networked ? address : `${getChainName(account.chainId).toUpperCase()} · ${address}`
+}
 /** Full backup carries every imported account, but refuses while a reset is pending, whose journal-held
  *  accounts only the account export page reaches; that page takes password profiles only. */
 const exportFirstTo = computed(() => {
@@ -314,7 +318,7 @@ onBeforeUnmount(() => {
 					:key="`${account.chainId}:${account.address}`"
 					:title="dashIfBlank(account.name)"
 					titleVariant="name"
-					:description="trimAddress(account.address, 6, 4, '…')"
+					:description="importedRowDescription(account)"
 					descriptionVariant="meta"
 					raw
 					data-testid="reset-imported-account"

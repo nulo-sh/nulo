@@ -37,12 +37,12 @@ import type { IAccountContract } from "@nulo/aztec-runtime/account"
 import type { Network } from "@/wallet/services/network/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { IPXE } from "@/wallet/services/pxe/client"
-import type { TaskService, WrappedTask } from "@/wallet/services/task/service"
+import type { WrappedTask } from "@/wallet/services/task/service"
 import { StepContent } from "@/wallet/services/task/spec"
 import type { LegalAdmission } from "@/wallet/services/legal/spec"
 import { type ProofGate, NOOP_PROOF_GATE } from "@/e2e/proof-gate"
 import { DuplicateInitializationError, SessionEndedError } from "@nulo/extension-messaging/errors"
-import type { ProveBackend, SendExpiry } from "@nulo/wallet-core/jobs"
+import { PROVE_BACKENDS, type ProveBackend, type SendExpiry } from "@nulo/wallet-core/jobs"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import type { LastProveOutcome, ProveOutcomeHint, ProvePhaseName } from "./models"
 import type { SharedSendDeps } from "./shared-send-deps"
@@ -68,7 +68,7 @@ export const ProvePhaseEventSchema = z.object({
 	proveId: z.string().uuid(),
 	seq: z.number().int().nonnegative(),
 	phase: z.enum(PROVE_PHASES),
-	backend: z.enum(["presto", "browser"]).optional(),
+	backend: z.enum(PROVE_BACKENDS).optional(),
 })
 
 /** The journal seam the coordinator writes backend evidence through. */
@@ -200,7 +200,6 @@ export class ExecutionCoordinator {
 	private denialGeneration = 0
 
 	public constructor(
-		private readonly tasks: TaskService,
 		readonly _logger: ILogger,
 		/** Required, never defaulted: a coordinator built without it could broadcast unasked. */
 		private readonly legal: LegalAdmission,
@@ -257,18 +256,18 @@ export class ExecutionCoordinator {
 		opts: SimulateTxOpts & { stubAccountAddresses?: string[] },
 		parentTask?: WrappedTask,
 	): Promise<TxSimulationResult> {
-		const step = new StepContent("Simulating transaction")
-		const task = parentTask ? parentTask.startSubtask(step) : this.tasks.startNewTask(step)
+		// A step runs under its operation's task, or untracked: it is never a root.
+		const task = parentTask?.startSubtask(new StepContent("Simulating transaction"))
 		try {
 			// The stub list rides IPXE.simulateTx's third parameter, not the
 			// upstream opts object (the runtime schema-parses opts — an extra
 			// key there would be stripped or rejected).
 			const { stubAccountAddresses, ...simOpts } = opts
 			const simulatedTx = await pxe.simulateTx(txRequest, simOpts, stubAccountAddresses)
-			task.complete()
+			task?.complete()
 			return simulatedTx
 		} catch (error) {
-			task.fail(error)
+			task?.fail(error)
 			throw error
 		}
 	}
@@ -283,8 +282,7 @@ export class ExecutionCoordinator {
 		parentTask?: WrappedTask,
 		journalId?: string,
 	): Promise<TxProvingResult> {
-		const step = new StepContent("Generating proof")
-		const task = parentTask ? parentTask.startSubtask(step) : this.tasks.startNewTask(step)
+		const task = parentTask?.startSubtask(new StepContent("Generating proof"))
 		const proveId = crypto.randomUUID()
 		if (journalId !== undefined) this.attempts.set(proveId, { journalId, lastSeq: 0, denialGeneration: this.denialGeneration })
 		try {
@@ -294,10 +292,10 @@ export class ExecutionCoordinator {
 			// hold replaces prove duration without adding a cancel checkpoint.
 			await this.proofGate.wait()
 			const provedTx = await pxe.proveTx(txRequest, scopes, proveId)
-			task.complete()
+			task?.complete()
 			return provedTx
 		} catch (error) {
-			task.fail(error)
+			task?.fail(error)
 			throw error
 		} finally {
 			this.attempts.delete(proveId)
@@ -321,8 +319,7 @@ export class ExecutionCoordinator {
 		initializesAccount?: boolean,
 		onSent?: () => void,
 	): Promise<void> {
-		const step = new StepContent("Sending transaction")
-		const task = parentTask ? parentTask.startSubtask(step) : this.tasks.startNewTask(step)
+		const task = parentTask?.startSubtask(new StepContent("Sending transaction"))
 		try {
 			await this.legal.assertCurrent()
 			assertLive()
@@ -332,11 +329,11 @@ export class ExecutionCoordinator {
 				initializesAccount === true && isExistingNullifierError(error)
 					? new DuplicateInitializationError(undefined, { cause: errorMessageFromUnknown(error) })
 					: error
-			task.fail(classified)
+			task?.fail(classified)
 			throw classified
 		}
 		onSent?.()
-		task.completeIfTracked()
+		task?.completeIfTracked()
 	}
 
 	/** The shared prove → toTx → send → record → journal SUCCESS pipeline.

@@ -131,9 +131,15 @@ async function openProtectedAccountFile(body: string, password: string): Promise
  *  visibility, and an L1 the reset already verified, so a create after the purge never probes. */
 type CreateOverrides = { unattended?: boolean; index?: number; visible?: boolean; l1ChainId?: number }
 
+/** Address breaks ties so the order is total even when a hostile backup restored duplicate indices
+ *  (legitimate per-type indices are unique): nothing relies on insertion order. */
+const byIndexThenAddress = (a: Account, b: Account): number =>
+	a.index - b.index || (a.address < b.address ? -1 : a.address > b.address ? 1 : 0)
+
 export class AccountService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getAccounts",
+		"getImportedAccounts",
 		"getAccount",
 		"createAccount",
 		"ensureDefaultAccount",
@@ -286,13 +292,16 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// full-backup restore is NOT index order — so the default active account (accounts[0]) and the
 		// account list would otherwise be arbitrary. Every consumer only iterates/filters, so sorting here
 		// is the single source that keeps the first account deterministic across fresh and imported profiles.
-		return (
-			(await this.liveRows())
-				.filter((x) => x.profileId === profileId && x.chainId === chainId && (all || x.visible))
-				// Address is the tie-breaker so ordering is TOTAL even if a hostile backup restored duplicate
-				// indices (legitimate per-type indices are unique) — no reliance on insertion order anywhere.
-				.sort((a, b) => a.index - b.index || (a.address < b.address ? -1 : a.address > b.address ? 1 : 0))
-		)
+		return (await this.liveRows())
+			.filter((x) => x.profileId === profileId && x.chainId === chainId && (all || x.visible))
+			.sort(byIndexThenAddress)
+	}
+
+	public async getImportedAccounts(profileId: string): Promise<Account[]> {
+		await this.ensureInitialized()
+		return (await this.liveRows())
+			.filter((x) => x.profileId === profileId && x.type === AccountType.Imported)
+			.sort((a, b) => a.chainId - b.chainId || byIndexThenAddress(a, b))
 	}
 
 	public async getAccount(profileId: string, chainId: number, address: string): Promise<Account | undefined> {

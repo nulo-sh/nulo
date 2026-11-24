@@ -217,12 +217,14 @@ describe("rawRows, tokenAt, amountLabel, valueText, valueTitle", () => {
 		expect(tokenAt(undefined, 1, TOKEN)).toBeUndefined()
 	})
 
-	test("an amount carries the known token's units and symbol; an unknown contract or an empty symbol keeps the raw integer", () => {
+	test("an amount carries the known token's units and symbol; an unknown contract, an empty symbol or unusable decimals keep the raw integer", () => {
 		expect(amountLabel([USDC], 1, TOKEN, "5000000")).toEqual({ text: "5", symbol: "USDC" })
 		expect(amountLabel([USDC], 1, TOKEN, "1500000")).toEqual({ text: "1.5", symbol: "USDC" })
 		expect(amountLabel([USDC], 2, TOKEN, "5000000")).toEqual({ text: "5000000" })
 		expect(amountLabel(undefined, 1, TOKEN, "7")).toEqual({ text: "7" })
 		expect(amountLabel([{ ...USDC, symbol: BEL }], 1, TOKEN, "5000000")).toEqual({ text: "5000000" })
+		expect(amountLabel([{ ...USDC, decimals: 24 }], 1, TOKEN, (15n * 10n ** 23n).toString())).toEqual({ text: "1.5", symbol: "USDC" })
+		expect(amountLabel([{ ...USDC, decimals: 78 }], 1, TOKEN, "5000000")).toEqual({ text: "5000000" })
 	})
 
 	test("a scalar reads on one row, trimmed, and whole in the title when trimmed", () => {

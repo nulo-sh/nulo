@@ -424,7 +424,7 @@ function resolveLimitLimb(
 
 /** Wrap an estimate-fee block in a TaskService step for UI bookkeeping.
  *  Shared because every strategy does identical wrapping. */
-export function startEstimateTask(tasks: TaskService, parentTask?: WrappedTask): WrappedTask {
+export function startEstimateTask(tasks: TaskService, ctx: Pick<FeeStrategyContext, "fence" | "parentTask">): WrappedTask {
 	const step = new StepContent("Estimating fee")
-	return parentTask ? parentTask.startSubtask(step) : tasks.startNewTask(step)
+	return ctx.parentTask ? ctx.parentTask.startSubtask(step) : tasks.startNewTask(ctx.fence.profileId, step)
 }

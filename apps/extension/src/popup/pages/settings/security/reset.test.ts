@@ -44,7 +44,7 @@ const openToast = vi.hoisted(() => vi.fn())
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast }) }))
 const reads = vi.hoisted(() => ({
 	getNetworks: vi.fn(),
-	getAccounts: vi.fn(),
+	getImportedAccounts: vi.fn(),
 	getPendingReset: vi.fn(),
 	getStaleNetwork: vi.fn(),
 	onStaleNetworkChanged: { add: vi.fn(), remove: vi.fn() },
@@ -100,7 +100,7 @@ beforeEach(() => {
 	checkSelection.mockResolvedValue("present")
 	installChromeStorage({ [getStartedPhraseSavedKey(main.id)]: true }, { persist: false })
 	reads.getNetworks.mockResolvedValue([])
-	reads.getAccounts.mockResolvedValue([])
+	reads.getImportedAccounts.mockResolvedValue([])
 	reads.getPendingReset.mockResolvedValue(null)
 	reads.getStaleNetwork.mockResolvedValue(null)
 })
@@ -404,14 +404,11 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 			{ id: "tn", chainId: TESTNET },
 			{ id: "ln", chainId: LOCAL },
 		])
-		reads.getAccounts.mockImplementation(async (_p: string, chainId: number) =>
-			chainId === TESTNET
-				? [
-						row(TESTNET, `0x${"2e".repeat(32)}`, "Account 1", AccountType.Nulo_v1),
-						row(TESTNET, SAVINGS, "Savings", AccountType.Imported),
-					]
-				: [row(LOCAL, COLD, "Cold", AccountType.Imported)],
-		)
+		// The service's order, by chain id; the page lists by network order.
+		reads.getImportedAccounts.mockResolvedValue([
+			row(LOCAL, COLD, "Cold", AccountType.Imported),
+			row(TESTNET, SAVINGS, "Savings", AccountType.Imported),
+		])
 	}
 	const listed = (w: Awaited<ReturnType<typeof mountReady>>["w"]) =>
 		w.findAll('[data-testid="reset-imported-account"]').map((item) => [item.attributes("title"), item.attributes("description")])
@@ -434,6 +431,39 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		expect(w.get('[data-testid="reset-export-first"]').attributes("data-link")).toBe("/popup/settings/security/export/full")
 	})
 
+	test("an imported account on a chain with no network row is named by its chain id, and Delete goes once it is listed", async () => {
+		reads.getNetworks.mockResolvedValue([{ id: "tn", chainId: TESTNET }])
+		reads.getImportedAccounts.mockResolvedValue([
+			row(TESTNET, SAVINGS, "Savings", AccountType.Imported),
+			row(677692, COLD, "Cold", AccountType.Imported),
+		])
+		const { w } = await mountReady({ isLogined: true })
+		await flushPromises()
+		expect(listed(w)).toEqual([
+			["Savings", "0x04c0…03b4"],
+			["Cold", "AZTEC:677692 · 0x1d7a…4d19"],
+		])
+		expect(w.get('[data-testid="reset-export-first"]').attributes("data-link")).toBe("/popup/settings/security/export/full")
+		await deleteButton(w).trigger("click")
+		await flushPromises()
+		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
+	})
+
+	test("an account on a retired chain is named by its network and version; one on an unknown chain by its id", async () => {
+		const TRADING = `0x0f63${"0".repeat(56)}51e8`
+		reads.getNetworks.mockResolvedValue([{ id: "tn", chainId: TESTNET }])
+		reads.getImportedAccounts.mockResolvedValue([
+			row(2904119610, TRADING, "Trading", AccountType.Imported),
+			row(677692, COLD, "Cold", AccountType.Imported),
+		])
+		const { w } = await mountReady({ isLogined: true })
+		await flushPromises()
+		expect(listed(w)).toEqual([
+			["Trading", "TESTNET V6-RC.1 · 0x0f63…51e8"],
+			["Cold", "AZTEC:677692 · 0x1d7a…4d19"],
+		])
+	})
+
 	test("with no imported account there is no section, and Delete goes", async () => {
 		const { w } = await mountReady({ isLogined: true })
 		await flushPromises()
@@ -445,12 +475,12 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 
 	test("a press reads the list again: an account imported since refuses it until the page shows it, then Delete goes", async () => {
 		reads.getNetworks.mockResolvedValue([{ id: "tn", chainId: TESTNET }])
-		reads.getAccounts.mockResolvedValue([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
+		reads.getImportedAccounts.mockResolvedValue([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
 		const { w } = await mountReady({ isLogined: true })
 		await flushPromises()
 		expect(listed(w)).toEqual([["Savings", "0x04c0…03b4"]])
 
-		reads.getAccounts.mockResolvedValue([
+		reads.getImportedAccounts.mockResolvedValue([
 			row(TESTNET, SAVINGS, "Savings", AccountType.Imported),
 			row(TESTNET, COLD, "Cold", AccountType.Imported),
 		])
@@ -474,7 +504,7 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		const onChanged = reads.onStaleNetworkChanged.add.mock.calls[0]?.[0] as () => Promise<void>
 		const answers: Array<(networks: unknown[]) => void> = []
 		reads.getNetworks.mockImplementation(() => new Promise((resolve) => answers.push(resolve)))
-		reads.getAccounts.mockResolvedValue([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
+		reads.getImportedAccounts.mockResolvedValue([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
 		void onChanged()
 		void onChanged()
 		await flushPromises()
@@ -488,14 +518,15 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		expect(deleteButton(w).attributes("disabled")).toBeUndefined()
 	})
 
-	test("a lock during the read stops it before any account read", async () => {
+	test("a lock during the read drops its answer, and no account read starts after it", async () => {
 		let answer: (networks: unknown[]) => void = () => {}
 		reads.getNetworks.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+		reads.getImportedAccounts.mockResolvedValue([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
 		const { w, app } = await mountReady({ isLogined: true })
 		app.isLogined = false
 		answer([{ id: "tn", chainId: TESTNET }])
 		await flushPromises()
-		expect(reads.getAccounts).not.toHaveBeenCalled()
+		expect(reads.getImportedAccounts).toHaveBeenCalledOnce()
 		expect(w.find('[data-testid="reset-imported"]').exists()).toBe(false)
 	})
 
@@ -544,7 +575,7 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		const { w } = await mountReady()
 		await flushPromises()
 		expect(reads.getNetworks).not.toHaveBeenCalled()
-		expect(reads.getAccounts).not.toHaveBeenCalled()
+		expect(reads.getImportedAccounts).not.toHaveBeenCalled()
 		expect(reads.getPendingReset).not.toHaveBeenCalled()
 		expect(w.find('[data-testid="reset-imported"]').exists()).toBe(false)
 		await deleteButton(w).trigger("click")

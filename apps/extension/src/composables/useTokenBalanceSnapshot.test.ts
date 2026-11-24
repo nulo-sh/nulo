@@ -144,6 +144,20 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
 	})
 
+	test("a read refused before the first connect: that connect reads nothing; the one timed retry recovers it", async () => {
+		const s = setup()
+		s.client.getTokenBalances.mockRejectedValueOnce(new Error("port closed")).mockResolvedValue([row(1)])
+		expect(await s.snap.fetchTokenBalances()).toBe(false)
+		s.connect()
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
+		expect(s.state.value).toBe("unavailable")
+
+		await vi.advanceTimersByTimeAsync(2_000)
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(2)
+		expect(ids(s.rows)).toEqual([1])
+		expect(s.state.value).toBe("loaded")
+	})
+
 	test("a later connect while a read is out leaves that read to settle the run; once it has, a connect refetches", async () => {
 		const s = setup()
 		s.connect()

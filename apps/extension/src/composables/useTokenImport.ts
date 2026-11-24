@@ -1,4 +1,4 @@
-import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
+import { ContractNotFoundError, TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
 import { isFieldAddress } from "@nulo/wallet-bridge"
 import { ref } from "vue"
 import { useToast } from "@/composables/toast"
@@ -10,6 +10,7 @@ import type { TokenBalanceServiceClient } from "@/wallet/services/token-balance/
 import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 import type { TokenServiceClient } from "@/wallet/services/token/client"
 import type { TokenInfo } from "@/wallet/services/token/spec"
+import { MAX_DECIMALS } from "@/utils/token-amount"
 
 /** Why `value` cannot be imported beside `tokens`, or `null`; an empty value has no verdict yet. */
 export function contractVerdict(value: string | undefined, tokens: readonly { contract: string }[]): string | null {
@@ -48,10 +49,15 @@ const WAIT_TOASTS = {
 	error: "Token added. Couldn't load balance. We'll retry automatically.",
 } as const
 const NO_INTERFACE = "Couldn't auto-detect this token's interface. Try a contract whose ABI matches a known standard."
+const TOO_MANY_DECIMALS = `This token has more than ${MAX_DECIMALS} decimals. Nulo supports up to ${MAX_DECIMALS}.`
 
-/** Only a lookup the node answered empty has copy of its own; any other refusal's text is a developer's, for the log. */
-const refusalOf = (err: unknown) =>
-	err instanceof ContractNotFoundError ? "There is no token at this address on this network." : "Something went wrong. Try again."
+/** A lookup the node answered empty, and a token past the wallet's decimals, have copy of their own; any
+ *  other refusal's text is a developer's, for the log. */
+const refusalOf = (err: unknown) => {
+	if (err instanceof ContractNotFoundError) return "There is no token at this address on this network."
+	if (err instanceof TokenDecimalsOutOfRangeError) return TOO_MANY_DECIMALS
+	return "Something went wrong. Try again."
+}
 
 type WaitOutcome = keyof typeof WAIT_TOASTS | "aborted"
 type BalanceWait = ReturnType<typeof createBalanceWait>

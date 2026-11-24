@@ -173,6 +173,13 @@ describe("TokenList — fold", () => {
 		expect(w.find('[data-testid="holdings-fold"]').text()).toContain("2 hidden · 1 empty · 1 under $1")
 	})
 
+	test("a token with 24 decimals reads its amount through the real card, never a dash", async () => {
+		const w = mountList({ rows: [row(1, "BIG", { privateBalance: (15n * 10n ** 23n).toString(), decimals: 24 })] })
+		await flushPromises()
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("1.5")
+		expect(w.find('[data-malformed="true"]').exists()).toBe(false)
+	})
+
 	test("never-synced and malformed rows stay visible; a malformed row renders a dash through the real card", async () => {
 		const w = mountList({
 			rows: [

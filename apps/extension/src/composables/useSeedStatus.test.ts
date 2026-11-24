@@ -201,6 +201,21 @@ describe("useSeedStatus", () => {
 		expect(client.getSeedStatus).toHaveBeenCalledTimes(2)
 	})
 
+	test("a fetch refused before the first connect: that connect reads nothing; the one timed retry recovers it", async () => {
+		const { seed, client } = harness()
+		client.getSeedStatus.mockRejectedValueOnce(new Error("port closed"))
+		await seed.refresh()
+		client.onConnected.emit()
+		await flushPromises()
+		expect(client.getSeedStatus).toHaveBeenCalledTimes(1)
+		expect(client.ensureSeeding).toHaveBeenCalledTimes(1)
+		expect(seed.state.value).toBe("unavailable")
+
+		await vi.advanceTimersByTimeAsync(SEED_STATUS_RETRY_MS)
+		expect(client.getSeedStatus).toHaveBeenCalledTimes(2)
+		expect(seed.state.value).toBe("loaded")
+	})
+
 	test("a rejected kick is swallowed — the reconnect that follows re-issues it", async () => {
 		const { seed, client } = harness()
 		client.ensureSeeding.mockRejectedValueOnce(new Error("port closed"))

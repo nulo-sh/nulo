@@ -14,9 +14,8 @@
  * numbers rise — never as a general-purpose bypass. CI applies the same ratchet against the PR's
  * base branch, so a hand-edited manifest does not get past review either.
  */
-import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
+import { isBaselined, readBiomeReport } from "./biome-report"
 import { markerFor, parseObserved } from "./messages"
 import {
 	type BaselineManifest,
@@ -33,9 +32,6 @@ import {
 	toManifestEntries,
 } from "./scan"
 
-const CATEGORY_PREFIX = "lint/complexity/"
-/** This checkout's installed launcher, run on Bun; never one found through the working directory, `PATH` or a runner. */
-const BIOME = join(import.meta.dir, "..", "..", "node_modules", ".bin", "biome")
 const MANIFEST_PATH = "scripts/complexity-baseline/manifest.json"
 
 interface Finding {
@@ -45,26 +41,12 @@ interface Finding {
 }
 
 function lint(): { path: string; category: string; message: string; line: number }[] {
-	const res = spawnSync(process.execPath, ["--no-install", BIOME, "lint", "--reporter=json", "--max-diagnostics=none", "."], {
-		encoding: "utf8",
-		maxBuffer: 256 * 1024 * 1024,
+	// Parse errors are left to `bun run lint`, which fails on them.
+	const { budget } = readBiomeReport(["."], "baseline")
+	return budget.map((d) => {
+		if (d.line === undefined) throw new Error(`biome reported ${d.category} in ${d.path} with no position to put a marker above`)
+		return { ...d, line: d.line }
 	})
-	if (!res.stdout) throw new Error(`biome lint produced no output: ${res.stderr}`)
-	const report = JSON.parse(res.stdout)
-	const notPrinted = report.summary?.diagnosticsNotPrinted ?? 0
-	if (notPrinted > 0) throw new Error(`biome truncated ${notPrinted} diagnostic(s) — the baseline would be incomplete`)
-	return (report.diagnostics ?? [])
-		.filter((d: { category?: string }) => (d.category ?? "").startsWith(CATEGORY_PREFIX))
-		.map((d: { category: string; message: string; location: { path: string; start: { line: number } } }) => ({
-			path: d.location.path,
-			category: d.category.slice(CATEGORY_PREFIX.length),
-			message: d.message,
-			line: d.location.start.line,
-		}))
-}
-
-function isBaselined(category: string): category is BaselinedRule {
-	return (BASELINED_RULES as readonly string[]).includes(category)
 }
 
 const adopt = process.argv.includes("--adopt")

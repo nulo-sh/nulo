@@ -3,7 +3,8 @@ import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
-import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
+import { ContractNotFoundError, TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
+import { isValidDecimals } from "@/utils/token-amount"
 import { normalizeError } from "@nulo/wallet-core/jobs"
 import type { ILogger } from "@/wallet/logger"
 import type { NetworkService } from "@/wallet/services/network/service"
@@ -774,7 +775,10 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	): Promise<TokenInterface> {
 		await this.ensureInitialized()
 		const stepContent = new StepContent("Parsing token interface")
-		const task = parentTask ? parentTask.startSubtask(stepContent) : this.tasks.startNewTask(stepContent)
+		// A root step takes its network's profile; a subtask starts at once, under a parent that shows it.
+		const task = parentTask
+			? parentTask.startSubtask(stepContent)
+			: this.tasks.startNewTask((await this.networks.getNetwork(networkId)).profileId, stepContent)
 
 		try {
 			const network = await this.networks.getNetwork(networkId)
@@ -1081,6 +1085,8 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		// orphaned balance. Parsing here records it as a restoreError instead.
 		// A backup's class is only its claim; the row holds none until the refresh reads one from the chain.
 		const { classId: _claimed, ...parsed } = TokenSchema.parse({ ...token, id })
+		// The stored shape stays as wide as rows written before the bound; a backup row is held to it.
+		if (!isValidDecimals(parsed.decimals)) throw new TokenDecimalsOutOfRangeError()
 		const row: Token = { ...parsed, name: cleanName(parsed.name), symbol: cleanSymbol(parsed.symbol) }
 		assertRestoreEpoch(deletion, epochs, row.profileId)
 		// The chain sweep is LOCKLESS (see clearChainState), so a purge can

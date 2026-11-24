@@ -4,7 +4,7 @@
 import type { DiscoveredAuthwit } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { trimAddress } from "@/utils/string"
-import { type CallSurface, authwitTitle, rawRows } from "./call-surface"
+import { type CallSurface, authwitTitle, fieldCount, rawRows } from "./call-surface"
 import CallArguments from "./CallArguments.vue"
 import DetailsToggle from "./DetailsToggle.vue"
 import { safeWire } from "./humanize"
@@ -51,14 +51,15 @@ const emit = defineEmits<{ toggle: [] }>()
 				@click="emit('toggle')"
 			/>
 			<Flex v-if="open" :id="controls" data-testid="execute-discovered-authwit-details" direction="column" gap="2">
-				<!-- The line above states an unreadable reading at rest; a pending one it does not. -->
+				<!-- The line above states a pending or unreadable reading at rest. -->
 				<CallArguments
 					:surface="surface"
 					:contract="authwit.consumer"
 					:chainId="chainId"
 					:tokens="tokens"
 					prefix="execute-discovered-authwit"
-					:notice="surface.kind === 'pending'"
+					:notice="false"
+					:fields="fieldCount(authwit.args)"
 					:raw="rawRows(authwit.args, Number.POSITIVE_INFINITY)"
 				/>
 				<Flex justify="between" :class="$style.row">
