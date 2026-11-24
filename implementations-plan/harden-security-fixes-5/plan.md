@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-5
 tier: mid
-status: arcs 1 (#1943) and 2 (#1949) merged; arc 3 builds A3, the owner's pick of 2026-11-24
+status: completed
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,9 +14,21 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-11-24
+- **Status:** completed; three PRs against `dev`, no stack. Arc 1 (#1943, Phases 1-2) merged as `7a766e676`, arc 2 (#1949, Phases 3-5) as `6812f772f`. Arc 3 (Phase 6) carries this close-out, and its merge closes the plan.
+- **Shipped:** #1943: a discovery is admitted only under an id the wallet does not already hold as a live session or a pending discovery; three log lines carry categories (the error's class, the token id, which parts of the scope changed). #1949: discovery messages are paced per tab, a burst of 8 and one more each second; the worker keeps the 256 latest-finished dApp root tasks; an approval lands only on the discovery it was taken for; the batched view simulation's fallback line logs the error's class. Arc 3: a `batch` carries at most 1,024 calls and no `batch`; past that the app receives `InvalidWalletArgumentsError`, the -32602 `INVALID_PARAMS` reply, before any call runs. Nothing visible changed in any arc.
+- **Decided, nothing built:** OA-3, "Keep today's behaviour." (D11). OA-2, "Keep today's behaviour, recorded as a known limit beside #440, to reopen on a report of missing incoming transfers or silent arrivals after an endpoint change, or once the wallet reads chain tips from a second source." (D12).
+- **Dropped:** none of the plan's phases. The alternatives not taken are in the decision ledger.
+- **Known limits:** #1974 (a network's incoming history, scan positions and arrival floors are kept when its endpoint is replaced).
+- **Open items:** OA-1 (the approval window while an authorization's arguments are read): the owner chose none of its options and asked for a loading look like the skeleton loaders the wallet uses elsewhere (D13). It continues outside this plan, with that look drawn for a new decision page; the window's code is unchanged.
+- **Lessons:** none promoted. Arc 3 met no cross-task gotcha, and the one this plan met twice, a line the profile-chaos model cites moving under an edit, is named by that model's own test (`apps/extension/scripts/e2e/profile-chaos-model.test.ts`) when it fails.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; they are no live instructions.
+
 # harden-security-fixes-5: four boundary invariants at the dApp edge and the worker
 
-Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md), [lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-2.md](lessons/phase-2.md), [lessons/phase-3.md](lessons/phase-3.md). Live log: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md), [lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-2.md](lessons/phase-2.md), [lessons/phase-3.md](lessons/phase-3.md).
 
 This plan carries the lane's code changes. The owner answered A3 and the three questions in OWNER-ASKS.md on decision page 202 (2026-11-24, D10-D13); only A3 is built. Three arcs, one PR each against `dev`, no stack.
 
@@ -139,7 +151,7 @@ This plan carries the lane's code changes. The owner answered A3 and the three q
 ### Arc 1 gate
 1. `bun run audit:vue` from the root. Pass: exit 0.
 2. `bun run test:all` from the root. Pass: exit 0.
-3. With load1 under 150, from the root: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<connect and reconnect specs>` in one run, then the same with `NULO_E2E_BROWSER=firefox`. The spec list is the files that `git grep -l "discovery\|reconnect" apps/extension/tests/e2e/network` names, recorded in STATUS.md. Pass: green at retry 0 on both. Layers: network e2e.
+3. With load1 under 150, from the root: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<connect and reconnect specs>` in one run, then the same with `NULO_E2E_BROWSER=firefox`. The spec list is the files that `git grep -l "discovery\|reconnect" apps/extension/tests/e2e/network` names, recorded in [lessons/phase-1.md](lessons/phase-1.md#network-e2e-arcs-1-and-2). Pass: green at retry 0 on both. Layers: network e2e.
 
 ### Phase 3 — discovery work is paced (arc 2) ✓
 1. `discovery-pacing.test.ts` on a fake clock: a tab's burst passes and the next is refused; one passes again after the refill; a second tab of the same origin is served while the first is refused; after a refill, an entry for a tab never seen again is gone.
@@ -163,7 +175,7 @@ This plan carries the lane's code changes. The owner answered A3 and the three q
 **Validation gate.** From `apps/extension`: `bun --bun vitest run src/wallet/services/wallet-sdk/ src/wallet/services/execution/helpers/`; from the root: `bun run lint` and `bun run typecheck:all`. Pass: exit 0, and the new refusal cases fail on base while the controls pass on both.
 
 ### Arc 2 gate
-As arc 1's gate, at arc 2's head: `audit:vue`, `test:all`, `check:plans`, then the 23 network specs STATUS.md lists, proverless at retry 0, on Chrome and on Firefox, each run started with load1 under 150.
+As arc 1's gate, at arc 2's head: `audit:vue`, `test:all`, `check:plans`, then the 23 network specs arc 1's run covered, proverless at retry 0, on Chrome and on Firefox, each run started with load1 under 150.
 
 ### Phase 6 — the calls one batch carries (arc 3) ✓
 1. `dapp-grant.characterization.test.ts`, through the public dispatcher: a batch of 1,024 calls runs every call and one of 1,025 is refused before any runs; a batch inside a batch, one level and two levels down, is refused before any call runs; both refusals pin `InvalidWalletArgumentsError` and its message. Control: a batch shaped as the stock client sends it (`BatchCall.simulate`: utility calls, then one simulation) runs every call.

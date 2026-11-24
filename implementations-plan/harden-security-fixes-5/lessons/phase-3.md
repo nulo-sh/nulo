@@ -7,7 +7,11 @@
 - The composition test reads the refusal through `toWalletResponseError`, the mapping `wallet-message.ts` applies to every dApp reply, so it pins what the app receives.
 - Each refusal case fails against the base `method-descriptors.ts`; the stock-client control passes on both.
 
+## Arc 3 gate
+
+- Network e2e, proverless, retry 0, the three specs that send a dApp batch (`meta-batch`, `batch-mixed`, `batch-partial-failure`) at `19e809879`: Chrome 3 of 3 passed, 161 s for the run; Firefox 3 of 3 passed, 195 s.
+
 ## Review (Codex `gpt-6.1-sol`, high, one pass)
 
 - **Codex r1**: approve with fixes, no code point. Accepted: a lessons clause in the past tense, A3's rationale clause, P4's heading still saying the leg bound waits, the constant's comment restating its name, and the registry-sweep test name, which now reads "the popup-leg refusal", since a `batch` leg is refused too, with another class. Left unchanged, with the reason given back: the Security section's availability line and D6's reason (merged with arcs 1 and 2, neutral, and the section is one the plan standard requires) and the base-commit evidence lines (the standard's own proof).
-
+- **Codex r2** (resumed with the fix diff): approve, no new material point; one nit, a blank line at the end of this file, fixed.
