@@ -1,7 +1,7 @@
 ---
 plan: harden-security-fixes-5
 tier: mid
-status: arc 1 merged (#1943); arc 2 implemented, in review; A3 and OA-1 to OA-3 wait for the owner
+status: arcs 1 (#1943) and 2 (#1949) merged; arc 3 builds A3, the owner's pick of 2026-11-24
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -16,14 +16,15 @@ post_implementation_hardening: not scheduled
 
 # harden-security-fixes-5: four boundary invariants at the dApp edge and the worker
 
-Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md), [lessons/phase-1.md](lessons/phase-1.md). Live log: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md), [lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-2.md](lessons/phase-2.md), [lessons/phase-3.md](lessons/phase-3.md). Live log: [STATUS.md](STATUS.md).
 
-This plan carries the lane's code changes. Two owner decisions outside both arcs are in OWNER-ASKS.md; nothing here builds them. Two arcs, one PR each against `dev`, no stack.
+This plan carries the lane's code changes. The owner answered A3 and the three questions in OWNER-ASKS.md on decision page 202 (2026-11-24, D10-D13); only A3 is built. Three arcs, one PR each against `dev`, no stack.
 
 | Arc | Phases | Surface | Waits for |
 |---|---|---|---|
 | 1 | 1-2 | content admission (`wallet/services/wallet-sdk`), three log lines (`execution`, `token-balance`) | nothing |
 | 2 | 3-5 | discovery pacing and approval (`wallet-sdk`), the task registry (`task`), one log line (`execution`) | A1 and A2 approved; `harden-security-fixes-4` arc 2 merged (it changes `TaskService.init`) |
+| 3 | 6 | the calls one batch carries (`packages/wallet-bridge`, `argsBatch`) | the owner's pick of A3 |
 
 ## Outcome & Quality Bar
 
@@ -56,7 +57,7 @@ This plan carries the lane's code changes. Two owner decisions outside both arcs
 **Asks** (working assumption in brackets; the orchestrator may overrule):
 - A1. Discovery pacing [per tab a burst of 8 and one more each second]. Measured: one discovery per connect action (recon.md); the reconnect bucket after it passes 3 per 20 s plus a queue of 4 per origin, so a burst of 8 refuses nothing those gates admit. Past it a dApp sees what any refused discovery shows today: no answer, so its `discoverWallets` returns no wallet when its timeout ends (60 s by default); a retry a second later passes. Each tab has its own bucket, so restoring many tabs of one dApp is not affected. Revisit on a report of a dApp that cannot find the wallet. **The orchestrator's call (2026-11-23, provisional): approved as stated; revisit on that report.**
 - A2. Finished dApp roots kept [the 256 latest-finished; older finished ones are dropped at once, unfinished ones never]. Measured: a read's root tree holds one task of a few hundred bytes (an in-memory harness); a failed root also holds its error and its subtasks, so the bound is 256 trees, not a byte figure. Nobody observes the drop (I2). Revisit if a consumer starts reading finished dApp tasks. **The orchestrator's call (2026-11-23, provisional): approved, 256; revisit on that condition.**
-- A3. Legs per batch [at most 1,024; a nested `batch` refused]. Measured: aztec.js 6.0.0 `BatchCall.simulate` sends one batch of one `executeUtility` leg per utility call plus one `simulateTx` (`dest/contract/batch_call.js:70-101`), with no limit; the playground sends at most 3 legs; the SDK's batch schema cannot carry a nested batch. A leg limit narrows what `WalletSchema.batch` accepts, so it is a limit on the dApp-facing surface, for the orchestrator to approve or route to the owner. Past it the dApp gets `InvalidWalletArgumentsError` for its `batch`, as for any malformed batch today. Revisit on a report of a dApp, a `BatchCall` with many utility calls included, that batches more. The registry bound (P4) does not cover this: a batch's duration and its result array grow with its legs. **Waits for the owner's pick** (the orchestrator's call, 2026-11-23): a limit on legs narrows what the standard `batch` call accepts. Arc 2 builds neither the leg limit nor the nested-batch refusal and leaves `argsBatch` as it is; either would be a small change of its own (`argsBatch`, its test and the nested-batch characterization).
+- A3. Legs per batch [at most 1,024; a nested `batch` refused]. Measured: aztec.js 6.0.0 `BatchCall.simulate` sends one batch of one `executeUtility` leg per utility call plus one `simulateTx` (`dest/contract/batch_call.js:70-101`), with no limit; the playground sends at most 3 legs; the SDK's batch schema cannot carry a nested batch. A leg limit narrows what `WalletSchema.batch` accepts, so it is a limit on the dApp-facing surface, for the orchestrator to approve or route to the owner. Past it the dApp gets `InvalidWalletArgumentsError` for its `batch`, as for any malformed batch today. Revisit on a report of a dApp, a `BatchCall` with many utility calls included, that batches more. The registry bound (P4) does not cover this: a batch's duration and its result array grow with its legs. **The owner's pick (decision page 202, 2026-11-24): A, "At most 1,024 calls per batch, and a batch inside a batch is refused."** Arc 3 builds it (D10).
 - A4. [No screen, copy or layout changes, so each PR says "No visible change." and carries no frames.]
 - A5. [No new e2e scenario; arc 1 reruns the network connect and reconnect specs on Chrome and Firefox.]
 
@@ -73,7 +74,7 @@ This plan carries the lane's code changes. Two owner decisions outside both arcs
 
 **P4. The worker keeps a bounded number of finished dApp tasks.** (The leg bound waits for A3.)
 - `TaskService.createTask` runs `cleanupStaleTasks()` first. When a root task created for a dApp (`origin.type === OriginType.DAPP`) completes, fails or is cancelled, the service emits that update first, then drops the earliest-finished dApp roots beyond A2 (by `finishedAt`, ties by insertion order) through `deleteTaskTree`, so `onTaskDeleted` fires for each. Unfinished tasks and tasks of other origins keep today's 60-minute retention.
-- Not built until the owner picks A3: `argsBatch` refusing more than A3 legs and any leg named `batch`, through the dispatcher's existing arity refusal (`InvalidWalletArgumentsError`).
+- Arc 3: `argsBatch` refuses a batch of more than 1,024 calls, and any call named `batch`, through the dispatcher's existing arity refusal (`InvalidWalletArgumentsError`, -32602 `INVALID_PARAMS` to the app), before any call runs. A nested batch is refused by the batch that carries it, so no batch runs at a second depth.
 - The bound never reads a task's profile, so it neither depends on nor changes how a task created across a profile switch behaves.
 
 **P5. Two local changes arc 1's review left for this arc.**
@@ -91,11 +92,12 @@ This plan carries the lane's code changes. Two owner decisions outside both arcs
 | 3 | `wallet/services/wallet-sdk/discovery-pacing.ts` (new) and its `.test.ts`; `content-admission.ts`, `background.ts` (state), `background.transport.test.ts` |
 | 4 | `wallet/services/task/service.ts`, `spec.ts` and `service.test.ts`; `wallet/services/execution/finished-dapp-tasks.composition.test.ts` (new) |
 | 5 | `wallet-sdk/discovery-flow.ts`, `background.transport.test.ts`, and the handler stand-ins of seven wallet-sdk test files (they answer `getPendingDiscovery`); `execution/helpers/batched-view-simulation.ts` and its `.test.ts` |
+| 6 | `packages/wallet-bridge/src/method-descriptors.ts` (`argsBatch`), `dapp-grant.characterization.test.ts`, `README.md` (the guard ladder); `wallet/services/execution/finished-dapp-tasks.composition.test.ts` |
 
 ## Security & Adversarial Considerations
 
 - **Threat model.** A web page in any tab (content scripts run on every origin) sends discovery messages before any connection; a connected dApp sends calls and batches; a page may learn nothing of another tab's session ids, and the changes keep it so. A log export can leave the machine with a bug report.
-- **Invariants this plan makes hold.** (P1) a session or pending discovery keeps the tab it was first credited to: a discovery never reuses an id the handler holds; (P2) these three lines write no account address and no simulator text at any level; (P3) one tab's discovery messages cost the worker no storage read past A1's rate; (P4) the registry holds at most A2 finished dApp roots (a leg bound waits for A3); (P5) a decision taken for one discovery approves no other discovery under its id.
+- **Invariants this plan makes hold.** (P1) a session or pending discovery keeps the tab it was first credited to: a discovery never reuses an id the handler holds; (P2) these three lines write no account address and no simulator text at any level; (P3) one tab's discovery messages cost the worker no storage read past A1's rate; (P4) the registry holds at most A2 finished dApp roots, and one batch runs at most 1,024 calls; (P5) a decision taken for one discovery approves no other discovery under its id.
 - **Input validation.** P1 reads the id after the envelope schema has checked it. Refusals use existing wire classes; P1 and P3 answer nothing, as refused discoveries do today.
 - **Least privilege, crypto, supply chain.** No permission, key, dependency, workflow or package change.
 - **Domain risks.** Extension messaging: P1 writes nothing to any tab; the holding tab is never touched. Availability: P3 and P4 bound work and memory a page or a dApp can cause; neither bound can block the wallet's own UI paths. Logging: no level rises.
@@ -111,8 +113,12 @@ This plan carries the lane's code changes. Two owner decisions outside both arcs
 | D5 | P3 is its own small gate | reuse `VerifyAdmissionGate` | that gate's reservations, FIFO and deadlines model verify windows; a dropped discovery needs none of them |
 | D6 | P4 caps finished dApp roots by count | skip tasks for read-only dApp kinds; a shorter age for dApp roots (outline B) | `request-captures.ts` records stages from task updates; an age alone still lets a burst grow without bound |
 | D7 | P3 paces per tab, at the content admission (outline B's key) | per origin in `handleDiscovery` (first draft, Codex r1); a bucket across tabs | a page can move its own tab across origins it controls with no gesture, but needs a gesture to open a tab; at admission a refused discovery creates no upstream row and the unlock drain does not pay twice; a shared bucket lets one set of pages starve other dApps |
-| D8 | When A3 is picked, the nested-batch refusal goes in `argsBatch` (not built in arc 2) | add `batch` to `refusedInBatch` | the dApp then gets `InvalidWalletArgumentsError`, a wire class it can read; `refusedInBatch` throws a plain `Error` worded for popup methods |
+| D8 | The nested-batch refusal goes in `argsBatch` (built in arc 3) | add `batch` to `refusedInBatch` | the dApp then gets `InvalidWalletArgumentsError`, a wire class it can read; `refusedInBatch` throws a plain `Error` worded for popup methods |
 | D9 | P5 approves by the row's identity at the two approval sites only | also guard the refusals that name the id | a refusal under a freed id reaches only a tab that reused another tab's id, which no stock client does (I1), and that tab can retry under a fresh id |
+| D10 | A3, option A: "At most 1,024 calls per batch, and a batch inside a batch is refused." | no limit | the owner's pick, decision page 202, 2026-11-24 |
+| D11 | OA-3, option A: "Keep today's behaviour." Nothing is built | scrub the whole buffer, or lines at `info` and above | the owner's pick, decision page 202, 2026-11-24 |
+| D12 | OA-2, option C: "Keep today's behaviour, recorded as a known limit beside #440, to reopen on a report of missing incoming transfers or silent arrivals after an endpoint change, or once the wallet reads chain tips from a second source." Nothing is built; the record is #1974 | rebuild on replacement (A); reset a scan position above the tip (B) | the owner's pick, decision page 202, 2026-11-24 |
+| D13 | OA-1: none of the three options. The owner: "The problem is that the user needs to read "Reading arguments..." there is no "easy visual way" of just understanding "something is loading" unless he reads. Like the skeleton loaders we use on other places." The question continues outside this plan, with a loading look drawn for a new decision page; the window's code is unchanged | A, B or C as laid out | the owner's answer, decision page 202, 2026-11-24 |
 
 ## Phases
 
@@ -159,19 +165,30 @@ This plan carries the lane's code changes. Two owner decisions outside both arcs
 ### Arc 2 gate
 As arc 1's gate, at arc 2's head: `audit:vue`, `test:all`, `check:plans`, then the 23 network specs STATUS.md lists, proverless at retry 0, on Chrome and on Firefox, each run started with load1 under 150.
 
+### Phase 6 — the calls one batch carries (arc 3) ✓
+1. `dapp-grant.characterization.test.ts`, through the public dispatcher: a batch of 1,024 calls runs every call and one of 1,025 is refused before any runs; a batch inside a batch, one level and two levels down, is refused before any call runs; both refusals pin `InvalidWalletArgumentsError` and its message. Control: a batch shaped as the stock client sends it (`BatchCall.simulate`: utility calls, then one simulation) runs every call.
+2. `finished-dapp-tasks.composition.test.ts`, through the real dispatcher, `ExecutionService` and `TaskService`: both refusals reach the app as the -32602 `INVALID_PARAMS` reply and start no task.
+3. Change `argsBatch`; the guard ladder in `packages/wallet-bridge/README.md` names the limit.
+
+**Validation gate.** From `packages/wallet-bridge`: `bun --bun vitest run src/dapp-grant.characterization.test.ts src/method-descriptors.test.ts src/dispatcher.test.ts`; from `apps/extension`: `bun --bun vitest run src/wallet/services/execution/finished-dapp-tasks.composition.test.ts`. Pass: exit 0, and the refusal cases fail against the base `method-descriptors.ts` while the control passes on both.
+
+### Arc 3 gate
+At arc 3's head, one at a time at retry 0: `lint`, `typecheck:all`, `test:all`, `audit:vue`, `test:ci-gating`, `check:plans`; then the network specs that send a dApp batch (`meta-batch`, `batch-mixed`, `batch-partial-failure`), proverless, one run on Chrome and one on Firefox. No e2e scenario is added.
+
 ## Delivery
 
 - Arc 1: branch `harden-security-fixes-5-a1` off `origin/dev`, its first commit this plan's commit cherry-picked from `worktree-harden-security-fixes-5`. PR `fix(dapp): bind discovery ids to their first tab, category-only log lines` (72 characters).
 - Arc 2: branch `harden-security-fixes-5-a2` off `origin/dev` after #1943 and `harden-security-fixes-4` arc 2 merged. PR `fix(dapp): pace discovery per tab, keep a bounded set of finished app tasks` (75).
-- Both against `dev`, opened ready after their arc's review loop converges, no label at creation, no `Closes` line. The body describes each change and its invariant, the validation runs, and "No visible change."
-- Close-out: not in arc 2's PR. The plan stays open while A3 and OA-1 to OA-3 are with the owner; the close-out (Outcome block, lessons pass, `git mv` into `archive/` in its own commit, index line moved) lands once they are answered, after merging `origin/dev` and reading what changed in `index.md` and `lessons.md`.
+- Arc 3: branch `harden-security-fixes-5-a3` off `origin/dev` `9c913679b`. PR `fix(dapp): a batch carries at most 1,024 calls, and a batch inside a batch is refused` (85).
+- Each against `dev`, opened ready after its arc's review converges, no label at creation, no `Closes` line. The body describes each change and its invariant, the validation runs, and "No visible change."
+- Close-out: arc 3's final commits (Outcome block, lessons pass, `STATUS.md` deleted, `git mv` into `archive/` in its own commit, index line moved), after merging `origin/dev` and reading what changed in `index.md` and `lessons.md`.
 
 ## Post-implementation
 
 The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) as read at `fe2a12524`. Plan-specific values:
 
 - Step 1 is absent (`code_review: off`).
-- Step 2, per arc at its boundary: Codex `gpt-6.1-sol` at `high` (`~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`), resumed with each fix diff, hard stop at three rounds; each prompt carries the arc map ("arc N of 2") and the standard's two rules verbatim. One Opus 5.5 diff review (`Agent`, `general-purpose`, `model: opus`) beside the first round. Log every round in `lessons/phase-N.md` and below. After arc 2, one fresh Codex session over the net diff from `fe2a12524` asks for cross-arc issues.
+- Step 2, arcs 1 and 2 at their boundaries: Codex `gpt-6.1-sol` at `high` (`~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`), resumed with each fix diff, hard stop at three rounds; each prompt carries the arc map ("arc N of 2") and the standard's two rules verbatim. One Opus 5.5 diff review (`Agent`, `general-purpose`, `model: opus`) beside the first round. Log every round in `lessons/phase-N.md` and below. After arc 2, one fresh Codex session over the net diff from `fe2a12524` asks for cross-arc issues. Arc 3 is bounded work: one Codex pass over the plan and its diff, which also takes that cross-arc question over the three arcs' squash commits, then targeted verification of each material fix, hard stop at three rounds.
 - Step 3: `gh pr create` per arc, then `gh pr checks <n> --watch`. Add a label only when a path filter would skip a suite the change needs.
 - Step 4: as the Delivery section says.
 - Step 5, teardown after the close-out merges: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/harden-security-fixes-5/plan.md`, then `agent-worktree done harden-security-fixes-5 --merged`.
